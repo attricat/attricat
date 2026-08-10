@@ -107,8 +107,24 @@ enum EntityCommand {
         blueprint_id: Uuid,
         code: String,
     },
+    List {
+        #[arg(long)]
+        blueprint: String,
+        #[arg(long)]
+        related_from: Uuid,
+        #[arg(long)]
+        relationship: String,
+        #[arg(long)]
+        limit: Option<u32>,
+        #[arg(long)]
+        cursor: Option<Uuid>,
+    },
     Preview {
         entity_id: Uuid,
+        #[arg(long)]
+        relationship_depth: Option<u8>,
+        #[arg(long)]
+        relationship_limit: Option<u32>,
     },
 }
 
@@ -121,6 +137,16 @@ enum ValueCommand {
     },
     Current {
         entity_id: Uuid,
+    },
+    Replace {
+        entity_id: Uuid,
+        #[arg(long)]
+        file: PathBuf,
+    },
+    Remove {
+        entity_id: Uuid,
+        #[arg(long)]
+        file: PathBuf,
     },
 }
 
@@ -206,6 +232,21 @@ struct ValueInput {
     context_id: Option<Uuid>,
     value: Option<toml::Value>,
     target_entity_id: Option<Uuid>,
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct RelationshipFile {
+    relationships: Vec<RelationshipInput>,
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct RelationshipInput {
+    attribute_id: Option<Uuid>,
+    attribute_code: Option<String>,
+    context_id: Option<Uuid>,
+    target_entity_ids: Vec<Uuid>,
 }
 
 #[tokio::main]
@@ -356,15 +397,55 @@ async fn run(cli: Cli) -> Result<String, CliError> {
                 )
                 .await
             }
-            EntityCommand::Preview { entity_id } => {
+            EntityCommand::List {
+                blueprint,
+                related_from,
+                relationship,
+                limit,
+                cursor,
+            } => {
+                let mut query = url::form_urlencoded::Serializer::new(String::new());
+                query.append_pair("blueprint", &blueprint);
+                query.append_pair("related_from", &related_from.to_string());
+                query.append_pair("relationship", &relationship);
+                if let Some(limit) = limit {
+                    query.append_pair("limit", &limit.to_string());
+                }
+                if let Some(cursor) = cursor {
+                    query.append_pair("cursor", &cursor.to_string());
+                }
                 request(
                     &client,
                     &server,
                     Method::GET,
-                    &format!("/entities/{}/projections/preview", segment(entity_id)),
+                    &format!("/entities?{}", query.finish()),
                     None,
                 )
                 .await
+            }
+            EntityCommand::Preview {
+                entity_id,
+                relationship_depth,
+                relationship_limit,
+            } => {
+                let mut query = url::form_urlencoded::Serializer::new(String::new());
+                if let Some(depth) = relationship_depth {
+                    query.append_pair("relationship_depth", &depth.to_string());
+                }
+                if let Some(limit) = relationship_limit {
+                    query.append_pair("relationship_limit", &limit.to_string());
+                }
+                let query = query.finish();
+                let path = format!(
+                    "/entities/{}/projections/preview{}",
+                    segment(entity_id),
+                    if query.is_empty() {
+                        String::new()
+                    } else {
+                        format!("?{query}")
+                    }
+                );
+                request(&client, &server, Method::GET, &path, None).await
             }
         },
         Command::Value { command } => match command {
@@ -385,6 +466,26 @@ async fn run(cli: Cli) -> Result<String, CliError> {
                     Method::GET,
                     &format!("/entities/{}/values/current", segment(entity_id)),
                     None,
+                )
+                .await
+            }
+            ValueCommand::Replace { entity_id, file } => {
+                request(
+                    &client,
+                    &server,
+                    Method::POST,
+                    &format!("/entities/{}/relationships/replace", segment(entity_id)),
+                    Some(relationships_body_from_file(&file)?),
+                )
+                .await
+            }
+            ValueCommand::Remove { entity_id, file } => {
+                request(
+                    &client,
+                    &server,
+                    Method::POST,
+                    &format!("/entities/{}/relationships/remove", segment(entity_id)),
+                    Some(relationships_body_from_file(&file)?),
                 )
                 .await
             }
@@ -491,6 +592,37 @@ fn values_body(input: ValueFile) -> Result<Value, CliError> {
         })
         .collect::<Result<Vec<_>, _>>()?;
     Ok(json!({ "values": values }))
+}
+
+fn relationships_body_from_file(path: &PathBuf) -> Result<Value, CliError> {
+    let input: RelationshipFile = parse_toml_file(path)?;
+    relationships_body(input)
+}
+
+fn relationships_body(input: RelationshipFile) -> Result<Value, CliError> {
+    let relationships = input
+        .relationships
+        .into_iter()
+        .map(|relationship| {
+            let (attribute_key, attribute_value) =
+                match (relationship.attribute_id, relationship.attribute_code) {
+                    (Some(attribute_id), None) => ("attribute_id", json!(attribute_id)),
+                    (None, Some(attribute_code)) => ("attribute_code", json!(attribute_code)),
+                    _ => {
+                        return Err(CliError::Input(
+                            "provide exactly one of attribute_id or attribute_code".to_owned(),
+                        ));
+                    }
+                };
+            let mut output = json!({
+                "context_id": relationship.context_id,
+                "target_entity_ids": relationship.target_entity_ids,
+            });
+            output[attribute_key] = attribute_value;
+            Ok(output)
+        })
+        .collect::<Result<Vec<_>, _>>()?;
+    Ok(json!({ "relationships": relationships }))
 }
 
 fn parse_toml_file<T: for<'de> Deserialize<'de>>(path: &PathBuf) -> Result<T, CliError> {
@@ -618,6 +750,32 @@ target_entity_id = "00000000-0000-0000-0000-000000000002"
                     "attribute_code": "related_products",
                     "context_id": null,
                     "target_entity_id": "00000000-0000-0000-0000-000000000002"
+                }]
+            })
+        );
+    }
+
+    #[test]
+    fn converts_relationship_replacement_file_to_api_shape() {
+        let source = r#"
+[[relationships]]
+attribute_code = "categories"
+target_entity_ids = [
+  "00000000-0000-0000-0000-000000000002",
+  "00000000-0000-0000-0000-000000000003",
+]
+"#;
+        let input: RelationshipFile = toml::from_str(source).unwrap();
+        assert_eq!(
+            relationships_body(input).unwrap(),
+            json!({
+                "relationships": [{
+                    "attribute_code": "categories",
+                    "context_id": null,
+                    "target_entity_ids": [
+                        "00000000-0000-0000-0000-000000000002",
+                        "00000000-0000-0000-0000-000000000003"
+                    ]
                 }]
             })
         );

@@ -44,11 +44,19 @@ catalog context get en-GB
 catalog entity create --file product.toml
 catalog entity get <entity-id>
 catalog entity get-by-code <blueprint-id> <code>
-catalog entity preview <entity-id>
+catalog entity list --blueprint <code> --related-from <entity-id> --relationship <attribute-code> [--limit <limit>] [--cursor <cursor>]
+catalog entity preview <entity-id> [--relationship-depth <depth>] [--relationship-limit <limit>]
 
 catalog value append <entity-id> --file values.toml
 catalog value current <entity-id>
+catalog value replace <entity-id> --file relationships.toml
+catalog value remove <entity-id> --file relationships.toml
 ```
+
+`entity preview` resolves active relationship targets inline by default to one
+level. Set `--relationship-depth 0` for scalar values only, or request deeper
+traversal up to the API's configured maximum. `--relationship-limit` bounds
+inline targets per relationship; use `entity list` for paginated browsing.
 
 Blueprint files are sent unchanged as the API's TOML `definition`, preserving
 the raw-source hash. See `database.md` for the blueprint grammar.
@@ -91,6 +99,16 @@ target_entity_id = "00000000-0000-0000-0000-000000000004"
 
 Each value must provide exactly one of `attribute_code` or `attribute_id`. Codes
 are resolved against the source entity's pinned blueprint version.
+
+Relationship replacement and removal files use this shape. `replace` makes the
+listed targets the complete current set for each attribute; `remove` unlinks only
+listed currently linked targets.
+
+```toml
+[[relationships]]
+attribute_code = "categories"
+target_entity_ids = ["00000000-0000-0000-0000-000000000004"]
+```
 
 ## Errors
 

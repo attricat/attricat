@@ -32,11 +32,13 @@ from = "seo.meta_title"
                 EffectiveAttribute {
                     code: "meta_title".to_owned(),
                     value_type: "string".to_owned(),
+                    target_blueprint: None,
                     position: 0,
                 },
                 EffectiveAttribute {
                     code: "meta_description".to_owned(),
                     value_type: "string".to_owned(),
+                    target_blueprint: None,
                     position: 1,
                 },
             ],
@@ -79,4 +81,27 @@ code = "title"
 from = "seo.meta_title"
 "#;
     assert!(parse(invalid_selection).is_err());
+}
+
+#[test]
+fn compiles_relationship_target_blueprint() {
+    let source = r#"
+format_version = 1
+code = "product"
+name = "Product"
+kind = "entity"
+
+[[attributes]]
+code = "categories"
+value_type = "relationship"
+target_blueprint = "category"
+"#;
+    let compiled = compile(parse(source).unwrap(), &[], source).unwrap();
+    assert_eq!(
+        compiled.attributes[0].target_blueprint.as_deref(),
+        Some("category")
+    );
+
+    let invalid = source.replace("value_type = \"relationship\"", "value_type = \"string\"");
+    assert!(parse(&invalid).is_err());
 }

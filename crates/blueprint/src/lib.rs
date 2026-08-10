@@ -43,6 +43,7 @@ pub enum AttributeDeclaration {
     Local {
         code: String,
         value_type: String,
+        target_blueprint: Option<String>,
     },
     Selection {
         code: String,
@@ -63,6 +64,7 @@ pub struct ResolvedInclude {
 pub struct EffectiveAttribute {
     pub code: String,
     pub value_type: String,
+    pub target_blueprint: Option<String>,
     pub position: i64,
 }
 
@@ -119,6 +121,7 @@ struct RawBlueprintDefinition {
 struct RawAttributeDeclaration {
     code: String,
     value_type: Option<String>,
+    target_blueprint: Option<String>,
     from: Option<String>,
 }
 
@@ -156,12 +159,19 @@ pub fn parse(source: &str) -> Result<BlueprintDefinition, BlueprintError> {
         attributes.push(match (attribute.value_type, attribute.from) {
             (Some(value_type), None) => {
                 validate_non_empty(&value_type, "attribute value_type")?;
+                if attribute.target_blueprint.is_some() && value_type != "relationship" {
+                    return Err(BlueprintError::InvalidAttributeDeclaration(attribute.code));
+                }
+                if let Some(target_blueprint) = &attribute.target_blueprint {
+                    validate_non_empty(target_blueprint, "attribute target_blueprint")?;
+                }
                 AttributeDeclaration::Local {
                     code: attribute.code,
                     value_type,
+                    target_blueprint: attribute.target_blueprint,
                 }
             }
-            (None, Some(source)) => {
+            (None, Some(source)) if attribute.target_blueprint.is_none() => {
                 let (include_alias, attribute_code) = parse_selection(&attribute.code, &source)?;
                 AttributeDeclaration::Selection {
                     code: attribute.code,
@@ -211,8 +221,12 @@ pub fn compile(
 
     let mut attributes = Vec::with_capacity(definition.attributes.len());
     for (position, declaration) in definition.attributes.iter().enumerate() {
-        let (code, value_type) = match declaration {
-            AttributeDeclaration::Local { code, value_type } => (code.clone(), value_type.clone()),
+        let (code, value_type, target_blueprint) = match declaration {
+            AttributeDeclaration::Local {
+                code,
+                value_type,
+                target_blueprint,
+            } => (code.clone(), value_type.clone(), target_blueprint.clone()),
             AttributeDeclaration::Selection {
                 code,
                 include_alias,
@@ -229,12 +243,17 @@ pub fn compile(
                         alias: include_alias.clone(),
                         attribute: attribute_code.clone(),
                     })?;
-                (code.clone(), attribute.value_type.clone())
+                (
+                    code.clone(),
+                    attribute.value_type.clone(),
+                    attribute.target_blueprint.clone(),
+                )
             }
         };
         attributes.push(EffectiveAttribute {
             code,
             value_type,
+            target_blueprint,
             position: position as i64,
         });
     }

@@ -1,18 +1,18 @@
 use axum::{
     Json, Router,
-    extract::{Path, State},
+    extract::{Path, Query, State},
     http::StatusCode,
     response::{IntoResponse, Response},
     routing::{get, post},
 };
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 use uuid::Uuid;
 
 use crate::{
     model::{
         AppendAttributeValues, BlueprintWithAttributes, CreateAttributeContext, CreateBlueprint,
-        CreateEntity, Entity,
+        CreateEntity, Entity, EntityPreviewPage, RelationshipMutation,
     },
     repository::{CatalogRepository, RepositoryError},
 };
@@ -20,6 +20,9 @@ use crate::{
 #[derive(Clone)]
 pub struct AppState {
     pub repository: CatalogRepository,
+    pub max_preview_relationship_depth: u8,
+    pub max_preview_relationship_items: u32,
+    pub max_entity_page_size: u32,
 }
 
 pub fn router(state: AppState) -> Router {
@@ -42,7 +45,7 @@ pub fn router(state: AppState) -> Router {
         )
         .route("/contexts", post(create_context))
         .route("/contexts/{code}", get(get_context))
-        .route("/entities", post(create_entity))
+        .route("/entities", get(list_previews).post(create_entity))
         .route("/entities/{entity_id}", get(get_entity))
         .route(
             "/entities/by-code/{blueprint_id}/{code}",
@@ -53,6 +56,14 @@ pub fn router(state: AppState) -> Router {
             get(get_preview),
         )
         .route("/entities/{entity_id}/values", post(append_values))
+        .route(
+            "/entities/{entity_id}/relationships/replace",
+            post(replace_relationships),
+        )
+        .route(
+            "/entities/{entity_id}/relationships/remove",
+            post(remove_relationships),
+        )
         .route(
             "/entities/{entity_id}/values/current",
             get(get_current_values),
@@ -197,18 +208,53 @@ async fn get_entity_by_code(
 async fn get_preview(
     State(state): State<AppState>,
     Path(entity_id): Path<Uuid>,
+    Query(query): Query<PreviewQuery>,
 ) -> Result<Json<Value>, ApiError> {
-    let entity = state
+    let relationship_depth = query.relationship_depth.unwrap_or(1);
+    let relationship_limit = query.relationship_limit.unwrap_or(10);
+    if relationship_depth > state.max_preview_relationship_depth {
+        return Err(ApiError::invalid_input(format!(
+            "relationship_depth must not exceed {}",
+            state.max_preview_relationship_depth
+        )));
+    }
+    if relationship_limit == 0 || relationship_limit > state.max_preview_relationship_items {
+        return Err(ApiError::invalid_input(format!(
+            "relationship_limit must be between 1 and {}",
+            state.max_preview_relationship_items
+        )));
+    }
+    state
         .repository
-        .get_entity(entity_id)
+        .preview(entity_id, relationship_depth, relationship_limit.into())
         .await?
-        .ok_or_else(|| ApiError::not_found("entity"))?;
-    entity
-        .projections
-        .get("preview")
-        .cloned()
         .map(Json)
-        .ok_or_else(|| ApiError::internal("entity preview is missing"))
+        .ok_or_else(|| ApiError::not_found("entity"))
+}
+
+async fn list_previews(
+    State(state): State<AppState>,
+    Query(query): Query<ListPreviewsQuery>,
+) -> Result<Json<EntityPreviewPage>, ApiError> {
+    let limit = query.limit.unwrap_or(20);
+    if limit == 0 || limit > state.max_entity_page_size {
+        return Err(ApiError::invalid_input(format!(
+            "limit must be between 1 and {}",
+            state.max_entity_page_size
+        )));
+    }
+    Ok(Json(
+        state
+            .repository
+            .list_previews(
+                &query.blueprint,
+                query.related_from,
+                &query.relationship,
+                limit.into(),
+                query.cursor,
+            )
+            .await?,
+    ))
 }
 
 async fn append_values(
@@ -231,6 +277,53 @@ async fn get_current_values(
     }
 
     Ok(Json(state.repository.current_values(entity_id).await?))
+}
+
+async fn replace_relationships(
+    State(state): State<AppState>,
+    Path(entity_id): Path<Uuid>,
+    Json(input): Json<RelationshipMutation>,
+) -> Result<(StatusCode, Json<Vec<crate::model::AttributeValue>>), ApiError> {
+    Ok((
+        StatusCode::CREATED,
+        Json(
+            state
+                .repository
+                .replace_relationships(entity_id, input)
+                .await?,
+        ),
+    ))
+}
+
+async fn remove_relationships(
+    State(state): State<AppState>,
+    Path(entity_id): Path<Uuid>,
+    Json(input): Json<RelationshipMutation>,
+) -> Result<(StatusCode, Json<Vec<crate::model::AttributeValue>>), ApiError> {
+    Ok((
+        StatusCode::CREATED,
+        Json(
+            state
+                .repository
+                .remove_relationships(entity_id, input)
+                .await?,
+        ),
+    ))
+}
+
+#[derive(Deserialize)]
+struct PreviewQuery {
+    relationship_depth: Option<u8>,
+    relationship_limit: Option<u32>,
+}
+
+#[derive(Deserialize)]
+struct ListPreviewsQuery {
+    blueprint: String,
+    related_from: Uuid,
+    relationship: String,
+    limit: Option<u32>,
+    cursor: Option<Uuid>,
 }
 
 #[derive(Debug)]
@@ -256,6 +349,14 @@ impl ApiError {
             message: message.to_owned(),
         }
     }
+
+    fn invalid_input(message: String) -> Self {
+        Self {
+            status: StatusCode::UNPROCESSABLE_ENTITY,
+            code: "invalid_input",
+            message,
+        }
+    }
 }
 
 impl From<RepositoryError> for ApiError {
@@ -272,7 +373,13 @@ impl From<RepositoryError> for ApiError {
                 code: "attribute_kind_mismatch",
                 message: error.to_string(),
             },
+            RepositoryError::RelationshipTargetTypeMismatch => Self {
+                status: StatusCode::UNPROCESSABLE_ENTITY,
+                code: "relationship_target_type_mismatch",
+                message: error.to_string(),
+            },
             RepositoryError::InvalidProjections
+            | RepositoryError::InvalidPreview
             | RepositoryError::ReservedContextCode
             | RepositoryError::InvalidAttributeSelector => Self {
                 status: StatusCode::UNPROCESSABLE_ENTITY,

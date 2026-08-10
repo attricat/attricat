@@ -75,6 +75,8 @@ they are never independently authored or edited.
   blueprint TOML.
 - `value_type` is application-defined metadata. `relationship` has special EAV
   target semantics; other non-empty labels are scalar metadata for now.
+- Relationship attributes may declare `target_blueprint` in TOML. Its compiled
+  `target_blueprint_code` restricts targets to that entity blueprint family.
 
 ### `entities`
 
@@ -102,6 +104,9 @@ This is the canonical EAV fact table and an append-only value history.
 - `value` contains the scalar JSONB payload.
 - `relationship_target_entity_id` is nullable and references another entity when
   the attribute is a relationship type.
+- `active` records the current state of a relationship history entry. A false
+  entry is an immutable tombstone that unlinks its target; scalar values are
+  always active.
 - `created_at` records the insertion time.
 
 There is no `is_latest` field. Current values are derived from history, ordered by
@@ -157,11 +162,14 @@ creating and reading entities, appending attribute values, and reading the
 | `POST` | `/contexts` | Create a reusable attribute context. |
 | `GET` | `/contexts/{code}` | Read a context by code. |
 | `POST` | `/entities` | Create an entity pinned to an exact blueprint version. |
+| `GET` | `/entities?blueprint=category&related_from={id}&relationship=categories&limit=50&cursor={cursor}` | Page target entity previews through a reverse relationship filter. |
 | `GET` | `/entities/{entity_id}` | Read an active entity and its named projections. |
 | `GET` | `/entities/by-code/{blueprint_id}/{code}` | Read an active entity by blueprint and code. |
-| `GET` | `/entities/{entity_id}/projections/preview` | Read the automatic preview projection. |
+| `GET` | `/entities/{entity_id}/projections/preview?relationship_depth=1&relationship_limit=10` | Read the preview with bounded related entity values. |
 | `POST` | `/entities/{entity_id}/values` | Append scalar or relationship value history and rebuild preview. |
 | `GET` | `/entities/{entity_id}/values/current` | Read derived current scalar values and relationship edges. |
+| `POST` | `/entities/{entity_id}/relationships/replace` | Replace the current targets for each supplied relationship attribute. |
+| `POST` | `/entities/{entity_id}/relationships/remove` | Remove supplied current relationship targets. |
 | `GET` | `/health` | Confirm the migrated API is ready to serve requests. |
 
 Errors use this JSON shape:
@@ -187,7 +195,7 @@ for the automatic builder and is initialized for every entity:
 ```
 
 After every successful attribute-value append, the same transaction rebuilds
-`preview`. Every direct key under `preview` is a context code:
+the scalar `preview` cache. Every direct key under `preview` is a context code:
 
 ```json
 {
@@ -203,6 +211,50 @@ After every successful attribute-value append, the same transaction rebuilds
 under its attribute code and excludes relationship values. It preserves other
 named projections. Attribute-value writes lock the entity row, append history,
 rebuild `preview`, and commit atomically.
+
+Preview reads enrich this scalar cache with active relationship targets. The
+`relationship_depth` query parameter defaults to `1`; use `0` for scalar values
+only. `PREVIEW_MAX_RELATIONSHIP_DEPTH` defaults to `3`, and path-based cycle
+detection stops recursive traversal. `relationship_limit` bounds inline targets
+per relationship. It defaults to `10` and may not exceed
+`PREVIEW_MAX_RELATIONSHIP_ITEMS` (also `10` by default). Relationship previews
+use an envelope rather than a count:
+
+```json
+{
+  "categories": {
+    "items": [{ "id": "...", "code": "shirts", "name": "Shirts" }],
+    "truncated": true
+  }
+}
+```
+
+`truncated` is derived from fetching one extra current edge, not `COUNT(*)`.
+At depth `0`, relationship envelopes contain no items but remain truncated when
+an active edge exists, so clients know more data is available.
+
+## Paginated Entity Previews
+
+Use `GET /entities` to browse a high-cardinality relationship rather than
+increasing the inline preview limit. `blueprint`, `related_from`, and
+`relationship` are required. `limit` defaults to `20` and is capped by
+`ENTITY_MAX_PAGE_SIZE`, which defaults to `100`. The cursor is the final target
+entity ID from the preceding page.
+
+```json
+{
+  "items": [
+    {
+      "id": "...",
+      "code": "shirts",
+      "preview": { "default": { "name": "Shirts", "slug": "shirts" } }
+    }
+  ],
+  "next_cursor": "..."
+}
+```
+
+No count is returned. A null `next_cursor` means the final page was reached.
 
 ## Blueprint Compiler
 
@@ -249,6 +301,15 @@ A local attribute is authored directly:
 [[attributes]]
 code = "title"
 value_type = "string"
+```
+
+A typed relationship restricts its targets by stable blueprint code:
+
+```toml
+[[attributes]]
+code = "categories"
+value_type = "relationship"
+target_blueprint = "category"
 ```
 
 An attribute declaration contains exactly one of `from` or `value_type`. Selected

@@ -26,6 +26,7 @@ pub struct Attribute {
     pub blueprint_version: i64,
     pub code: String,
     pub value_type: String,
+    pub target_blueprint_code: Option<String>,
     pub position: i64,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
@@ -58,6 +59,7 @@ pub struct AttributeValue {
     pub attribute_id: Uuid,
     pub value: Value,
     pub relationship_target_entity_id: Option<Uuid>,
+    pub active: bool,
     pub context_id: Option<Uuid>,
     pub created_at: DateTime<Utc>,
 }
@@ -105,8 +107,34 @@ pub struct AppendAttributeValues {
     pub values: Vec<NewAttributeValue>,
 }
 
+#[derive(Clone, Debug, Deserialize)]
+pub struct RelationshipMutation {
+    pub relationships: Vec<RelationshipTargets>,
+}
+
+#[derive(Clone, Debug, Deserialize)]
+pub struct RelationshipTargets {
+    pub attribute_id: Option<Uuid>,
+    pub attribute_code: Option<String>,
+    pub context_id: Option<Uuid>,
+    pub target_entity_ids: Vec<Uuid>,
+}
+
 #[derive(Clone, Debug, Serialize)]
 pub struct BlueprintWithAttributes {
     pub blueprint: Blueprint,
     pub attributes: Vec<Attribute>,
+}
+
+#[derive(Clone, Debug, FromRow, Serialize)]
+pub struct EntityPreview {
+    pub id: Uuid,
+    pub code: String,
+    pub preview: Value,
+}
+
+#[derive(Clone, Debug, Serialize)]
+pub struct EntityPreviewPage {
+    pub items: Vec<EntityPreview>,
+    pub next_cursor: Option<Uuid>,
 }

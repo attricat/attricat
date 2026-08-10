@@ -1,0 +1,18 @@
+format_version = 1
+code = "product"
+name = "Product"
+kind = "entity"
+
+[[attributes]]
+code = "title"
+value_type = "string"
+
+[[attributes]]
+code = "categories"
+value_type = "relationship"
+target_blueprint = "category"
+
+[[attributes]]
+code = "colors"
+value_type = "relationship"
+target_blueprint = "color"
