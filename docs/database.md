@@ -46,11 +46,17 @@ not assign UUID defaults.
 
 ### `blueprints`
 
-Blueprints define entity types. A blueprint family is identified by `id`; every
-revision has a positive `version`, and `(id, version)` is the primary key.
+Blueprints define entity types and reusable mixins. A blueprint family is
+identified by `id`; every revision has a positive `version`, and `(id, version)`
+is the primary key.
 
-- `definition` stores the authored TOML definition.
-- `definition_hash` detects duplicate definition content within a blueprint family.
+- `definition` stores the authored TOML definition and is the source of truth.
+- `code`, `name`, `kind`, `includes`, `definition_hash`, and generated attributes
+  are compiler output derived from TOML.
+- `code` is repository-enforced as stable across revisions in one blueprint family.
+- `kind` is either `entity` or `mixin`; only entity blueprints can be instantiated.
+- `includes` is a generated direct-dependency JSONB cache, in TOML order.
+- `definition_hash` is the SHA-256 hash of the exact raw TOML source.
 - `deleted_at` implements soft deletion.
 - `blueprints_active_version_idx` supports selecting the newest non-deleted version.
 
@@ -59,13 +65,16 @@ greatest `version` for its `id`.
 
 ### `attributes`
 
-Attributes are metadata for individual blueprint versions.
+Attributes are compiler-generated metadata for individual blueprint versions;
+they are never independently authored or edited.
 
 - `blueprint_id` and `blueprint_version` form a composite foreign key to
   `blueprints`.
 - `(blueprint_id, blueprint_version, code)` is unique.
-- `value_type` is application-defined metadata. Validation of supported types is
-  intentionally deferred until repository/write behavior is implemented.
+- `position` is the effective attribute position declared in the consuming
+  blueprint TOML.
+- `value_type` is application-defined metadata. `relationship` has special EAV
+  target semantics; other non-empty labels are scalar metadata for now.
 
 ### `entities`
 
@@ -124,5 +133,155 @@ the same contextual and historical behavior as all other attribute values.
   relationship values.
 - JSONB GIN indexes exist for entity projections and context data.
 
-`updated_at` is application-managed. No trigger updates timestamps, and no
-repository or CRUD layer has been implemented yet.
+`updated_at` is application-managed. No trigger updates timestamps.
+
+## API and Projections
+
+The Axum API starts after embedded migrations complete. Set `BIND_ADDR` to choose
+its listener address; it defaults to `127.0.0.1:3000`.
+
+The initial API supports creating TOML-defined blueprint revisions and contexts,
+creating and reading entities, appending attribute values, and reading the
+`preview` projection.
+
+| Method | Path | Purpose |
+| --- | --- | --- |
+| `POST` | `/blueprints` | Create an initial blueprint revision from TOML. |
+| `POST` | `/blueprints/{blueprint_id}/versions` | Create the next TOML-defined blueprint revision. |
+| `GET` | `/blueprints/{blueprint_id}` | Read the current active blueprint revision and attributes. |
+| `POST` | `/contexts` | Create a reusable attribute context. |
+| `POST` | `/entities` | Create an entity pinned to an exact blueprint version. |
+| `GET` | `/entities/{entity_id}` | Read an active entity and its named projections. |
+| `GET` | `/entities/{entity_id}/projections/preview` | Read the automatic preview projection. |
+| `POST` | `/entities/{entity_id}/values` | Append scalar or relationship value history and rebuild preview. |
+
+Errors use this JSON shape:
+
+```json
+{
+  "error": {
+    "code": "attribute_not_applicable",
+    "message": "The attribute does not belong to this entity's blueprint version."
+  }
+}
+```
+
+`entities.projections` is a JSONB map of named projections. `preview` is reserved
+for the automatic builder and is initialized for every entity:
+
+```json
+{
+  "preview": {
+    "default": {}
+  }
+}
+```
+
+After every successful attribute-value append, the same transaction rebuilds
+`preview`. Every direct key under `preview` is a context code:
+
+```json
+{
+  "preview": {
+    "default": { "title": "Blue shirt" },
+    "en-GB": { "title": "Blue shirt (UK)" }
+  }
+}
+```
+
+`default` represents values without a context. Other keys are
+`attribute_contexts.code` values. The builder includes each current scalar value
+under its attribute code and excludes relationship values. It preserves other
+named projections. Attribute-value writes lock the entity row, append history,
+rebuild `preview`, and commit atomically.
+
+## Blueprint Compiler
+
+The pure `catalog-blueprint` crate parses and compiles blueprint TOML. It has no
+SQLx, PostgreSQL, Axum, or Tokio dependency. The API repository resolves pinned
+mixin revisions from PostgreSQL, passes them to the compiler, and persists only
+the resulting generated data.
+
+Every definition starts with:
+
+```toml
+format_version = 1
+code = "product"
+name = "Product"
+kind = "entity"
+```
+
+`kind` is either `entity` or `mixin`. A mixin may be included but cannot be used
+to create an entity.
+
+### Includes and Selection
+
+Includes are exact version-pinned dependencies:
+
+```toml
+[[includes]]
+alias = "seo"
+code = "seo"
+version = 2
+```
+
+An include exposes its effective attributes but does not automatically materialize
+them in the consuming blueprint. Each wanted mixin attribute must be selected:
+
+```toml
+[[attributes]]
+code = "meta_title"
+from = "seo.meta_title"
+```
+
+A local attribute is authored directly:
+
+```toml
+[[attributes]]
+code = "title"
+value_type = "string"
+```
+
+An attribute declaration contains exactly one of `from` or `value_type`. Selected
+attributes retain the selected source value type and are materialized as
+attributes owned by the consuming blueprint version. The effective order is the
+local `[[attributes]]` declaration order; includes do not append fields.
+
+The following definition materializes only `title` and `meta_title`; it does not
+materialize an unselected `meta_description` offered by `seo`:
+
+```toml
+format_version = 1
+code = "product"
+name = "Product"
+kind = "entity"
+
+[[includes]]
+alias = "seo"
+code = "seo"
+version = 2
+
+[[attributes]]
+code = "title"
+value_type = "string"
+
+[[attributes]]
+code = "meta_title"
+from = "seo.meta_title"
+```
+
+Unknown TOML keys, invalid selectors, missing mixins, non-mixin include targets,
+and malformed definitions return `422 invalid_blueprint_definition`. Newer mixin
+versions never affect existing consumers because every include names an exact
+version.
+
+### Projection Builder TODO
+
+- Read labels and projection directives from blueprint TOML.
+- Define relationship rendering, target selection, and cycle protection.
+- Define context fallback and request-specific context selection.
+- Add builders for `search` and other named projections based on real query needs.
+- Add repair/backfill commands that rebuild projections from EAV history.
+- Add an explicit, validated entity blueprint-version migration command that
+  rebuilds projections atomically. Creating a newer blueprint revision does not
+  alter entities pinned to prior versions.
