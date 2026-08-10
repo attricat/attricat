@@ -26,6 +26,8 @@ pub enum RepositoryError {
     ReservedContextCode,
     #[error("attribute does not belong to the entity blueprint version")]
     AttributeNotApplicable,
+    #[error("provide exactly one of attribute_id or attribute_code")]
+    InvalidAttributeSelector,
     #[error("attribute kind does not match the supplied value")]
     AttributeKindMismatch,
     #[error("projections must be a JSON object")]
@@ -440,38 +442,62 @@ impl CatalogRepository {
         entity: &Entity,
         value: NewAttributeValue,
     ) -> Result<AttributeValue, RepositoryError> {
-        let (attribute_id, context_id, payload, target_entity_id, is_relationship) = match value {
-            NewAttributeValue::Scalar {
-                attribute_id,
-                context_id,
-                value,
-            } => (attribute_id, context_id, value, None, false),
-            NewAttributeValue::Relationship {
-                attribute_id,
-                context_id,
-                target_entity_id,
-            } => (
-                attribute_id,
-                context_id,
-                Value::Null,
-                Some(target_entity_id),
-                true,
-            ),
-        };
+        let (attribute_id, attribute_code, context_id, payload, target_entity_id, is_relationship) =
+            match value {
+                NewAttributeValue::Scalar {
+                    attribute_id,
+                    attribute_code,
+                    context_id,
+                    value,
+                } => (attribute_id, attribute_code, context_id, value, None, false),
+                NewAttributeValue::Relationship {
+                    attribute_id,
+                    attribute_code,
+                    context_id,
+                    target_entity_id,
+                } => (
+                    attribute_id,
+                    attribute_code,
+                    context_id,
+                    Value::Null,
+                    Some(target_entity_id),
+                    true,
+                ),
+            };
 
-        let value_type = sqlx::query_scalar::<_, String>(
-            r#"SELECT value_type
-               FROM attributes
-               WHERE id = $1
-                 AND blueprint_id = $2
-                 AND blueprint_version = $3
-                 AND deleted_at IS NULL"#,
-        )
-        .bind(attribute_id)
-        .bind(entity.blueprint_id)
-        .bind(entity.blueprint_version)
-        .fetch_optional(&mut **transaction)
-        .await?
+        let (attribute_id, value_type) = match (attribute_id, attribute_code) {
+            (Some(attribute_id), None) => {
+                sqlx::query_as::<_, (Uuid, String)>(
+                    r#"SELECT id, value_type
+                   FROM attributes
+                   WHERE id = $1
+                     AND blueprint_id = $2
+                     AND blueprint_version = $3
+                     AND deleted_at IS NULL"#,
+                )
+                .bind(attribute_id)
+                .bind(entity.blueprint_id)
+                .bind(entity.blueprint_version)
+                .fetch_optional(&mut **transaction)
+                .await?
+            }
+            (None, Some(attribute_code)) => {
+                sqlx::query_as::<_, (Uuid, String)>(
+                    r#"SELECT id, value_type
+                   FROM attributes
+                   WHERE code = $1
+                     AND blueprint_id = $2
+                     AND blueprint_version = $3
+                     AND deleted_at IS NULL"#,
+                )
+                .bind(attribute_code)
+                .bind(entity.blueprint_id)
+                .bind(entity.blueprint_version)
+                .fetch_optional(&mut **transaction)
+                .await?
+            }
+            _ => return Err(RepositoryError::InvalidAttributeSelector),
+        }
         .ok_or(RepositoryError::AttributeNotApplicable)?;
 
         if (value_type == "relationship") != is_relationship {

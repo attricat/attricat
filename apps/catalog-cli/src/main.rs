@@ -201,7 +201,8 @@ struct ValueFile {
 #[serde(deny_unknown_fields)]
 struct ValueInput {
     kind: String,
-    attribute_id: Uuid,
+    attribute_id: Option<Uuid>,
+    attribute_code: Option<String>,
     context_id: Option<Uuid>,
     value: Option<toml::Value>,
     target_entity_id: Option<Uuid>,
@@ -436,42 +437,57 @@ fn values_body(input: ValueFile) -> Result<Value, CliError> {
     let values = input
         .values
         .into_iter()
-        .map(|value| match value.kind.as_str() {
-            "scalar" => {
-                if value.target_entity_id.is_some() {
+        .map(|value| {
+            let (attribute_key, attribute_value) = match (value.attribute_id, value.attribute_code)
+            {
+                (Some(attribute_id), None) => ("attribute_id", json!(attribute_id)),
+                (None, Some(attribute_code)) => ("attribute_code", json!(attribute_code)),
+                _ => {
                     return Err(CliError::Input(
-                        "scalar values must not include target_entity_id".to_owned(),
+                        "provide exactly one of attribute_id or attribute_code".to_owned(),
                     ));
                 }
-                let payload = value
-                    .value
-                    .ok_or_else(|| CliError::Input("scalar values require value".to_owned()))?;
-                Ok(json!({
-                    "kind": "scalar",
-                    "attribute_id": value.attribute_id,
-                    "context_id": value.context_id,
-                "value": toml_to_json(payload)?,
-                }))
-            }
-            "relationship" => {
-                if value.value.is_some() {
-                    return Err(CliError::Input(
-                        "relationship values must not include value".to_owned(),
-                    ));
+            };
+
+            match value.kind.as_str() {
+                "scalar" => {
+                    if value.target_entity_id.is_some() {
+                        return Err(CliError::Input(
+                            "scalar values must not include target_entity_id".to_owned(),
+                        ));
+                    }
+                    let payload = value
+                        .value
+                        .ok_or_else(|| CliError::Input("scalar values require value".to_owned()))?;
+                    let mut output = json!({
+                        "kind": "scalar",
+                        "context_id": value.context_id,
+                        "value": toml_to_json(payload)?,
+                    });
+                    output[attribute_key] = attribute_value;
+                    Ok(output)
                 }
-                let target_entity_id = value.target_entity_id.ok_or_else(|| {
-                    CliError::Input("relationship values require target_entity_id".to_owned())
-                })?;
-                Ok(json!({
-                    "kind": "relationship",
-                    "attribute_id": value.attribute_id,
-                    "context_id": value.context_id,
-                    "target_entity_id": target_entity_id,
-                }))
+                "relationship" => {
+                    if value.value.is_some() {
+                        return Err(CliError::Input(
+                            "relationship values must not include value".to_owned(),
+                        ));
+                    }
+                    let target_entity_id = value.target_entity_id.ok_or_else(|| {
+                        CliError::Input("relationship values require target_entity_id".to_owned())
+                    })?;
+                    let mut output = json!({
+                        "kind": "relationship",
+                        "context_id": value.context_id,
+                        "target_entity_id": target_entity_id,
+                    });
+                    output[attribute_key] = attribute_value;
+                    Ok(output)
+                }
+                _ => Err(CliError::Input(
+                    "value kind must be scalar or relationship".to_owned(),
+                )),
             }
-            _ => Err(CliError::Input(
-                "value kind must be scalar or relationship".to_owned(),
-            )),
         })
         .collect::<Result<Vec<_>, _>>()?;
     Ok(json!({ "values": values }))
@@ -586,6 +602,28 @@ value = "Blue shirt"
     }
 
     #[test]
+    fn converts_attribute_code_to_api_shape() {
+        let source = r#"
+[[values]]
+kind = "relationship"
+attribute_code = "related_products"
+target_entity_id = "00000000-0000-0000-0000-000000000002"
+"#;
+        let input: ValueFile = toml::from_str(source).unwrap();
+        assert_eq!(
+            values_body(input).unwrap(),
+            json!({
+                "values": [{
+                    "kind": "relationship",
+                    "attribute_code": "related_products",
+                    "context_id": null,
+                    "target_entity_id": "00000000-0000-0000-0000-000000000002"
+                }]
+            })
+        );
+    }
+
+    #[test]
     fn rejects_incompatible_value_fields_and_unknown_toml_keys() {
         let relationship_with_value = r#"
 [[values]]
@@ -595,6 +633,16 @@ target_entity_id = "00000000-0000-0000-0000-000000000002"
 value = "ignored before this validation"
 "#;
         let input: ValueFile = toml::from_str(relationship_with_value).unwrap();
+        assert!(matches!(values_body(input), Err(CliError::Input(_))));
+
+        let conflicting_selectors = r#"
+[[values]]
+kind = "scalar"
+attribute_id = "00000000-0000-0000-0000-000000000001"
+attribute_code = "title"
+value = "Blue shirt"
+"#;
+        let input: ValueFile = toml::from_str(conflicting_selectors).unwrap();
         assert!(matches!(values_body(input), Err(CliError::Input(_))));
 
         let unknown_key = r#"

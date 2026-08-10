@@ -272,7 +272,9 @@ impl From<RepositoryError> for ApiError {
                 code: "attribute_kind_mismatch",
                 message: error.to_string(),
             },
-            RepositoryError::InvalidProjections | RepositoryError::ReservedContextCode => Self {
+            RepositoryError::InvalidProjections
+            | RepositoryError::ReservedContextCode
+            | RepositoryError::InvalidAttributeSelector => Self {
                 status: StatusCode::UNPROCESSABLE_ENTITY,
                 code: "invalid_input",
                 message: error.to_string(),

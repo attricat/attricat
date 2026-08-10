@@ -80,14 +80,17 @@ Value file:
 ```toml
 [[values]]
 kind = "scalar"
-attribute_id = "00000000-0000-0000-0000-000000000002"
+attribute_code = "title"
 value = "Blue shirt"
 
 [[values]]
 kind = "relationship"
-attribute_id = "00000000-0000-0000-0000-000000000003"
+attribute_code = "related_products"
 target_entity_id = "00000000-0000-0000-0000-000000000004"
 ```
+
+Each value must provide exactly one of `attribute_code` or `attribute_id`. Codes
+are resolved against the source entity's pinned blueprint version.
 
 ## Errors
 

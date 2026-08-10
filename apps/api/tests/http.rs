@@ -149,15 +149,6 @@ value_type = "relationship"
         .await
         .unwrap();
     assert_eq!(resolved["blueprint"]["id"], blueprint["blueprint"]["id"]);
-    let relationship_attribute_id = blueprint["attributes"]
-        .as_array()
-        .unwrap()
-        .iter()
-        .find(|attribute| attribute["code"] == "related_products")
-        .unwrap()["id"]
-        .as_str()
-        .unwrap();
-
     let revision: Value = client
         .post(format!("{base_url}/blueprints/{blueprint_id}/versions"))
         .json(&json!({
@@ -274,7 +265,7 @@ value_type = "string"
             "values": [
                 {
                     "kind": "scalar",
-                    "attribute_id": title_attribute_id,
+                    "attribute_code": "title",
                     "context_id": null,
                     "value": "Blue shirt"
                 },
@@ -286,7 +277,7 @@ value_type = "string"
                 },
                 {
                     "kind": "relationship",
-                    "attribute_id": relationship_attribute_id,
+                    "attribute_code": "related_products",
                     "context_id": null,
                     "target_entity_id": target["id"]
                 }
@@ -477,6 +468,34 @@ value_type = "string"
             "error": {
                 "code": "attribute_not_applicable",
                 "message": "attribute does not belong to the entity blueprint version"
+            }
+        })
+    );
+
+    let response = client
+        .post(format!(
+            "{base_url}/entities/{}/values",
+            entity["id"].as_str().unwrap()
+        ))
+        .json(&json!({
+            "values": [{
+                "kind": "scalar",
+                "attribute_id": first["attributes"][0]["id"],
+                "attribute_code": "title",
+                "value": "invalid"
+            }]
+        }))
+        .send()
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::UNPROCESSABLE_ENTITY);
+    assert_eq!(
+        response.json::<Value>().await.unwrap(),
+        json!({
+            "error": {
+                "code": "invalid_input",
+                "message": "provide exactly one of attribute_id or attribute_code"
             }
         })
     );

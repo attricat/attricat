@@ -87,12 +87,14 @@ pub struct CreateAttributeContext {
 #[serde(tag = "kind", rename_all = "snake_case")]
 pub enum NewAttributeValue {
     Scalar {
-        attribute_id: Uuid,
+        attribute_id: Option<Uuid>,
+        attribute_code: Option<String>,
         context_id: Option<Uuid>,
         value: Value,
     },
     Relationship {
-        attribute_id: Uuid,
+        attribute_id: Option<Uuid>,
+        attribute_code: Option<String>,
         context_id: Option<Uuid>,
         target_entity_id: Uuid,
     },
