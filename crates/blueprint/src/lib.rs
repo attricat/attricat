@@ -44,6 +44,7 @@ pub enum AttributeDeclaration {
         code: String,
         value_type: String,
         target_blueprint: Option<String>,
+        tags: Vec<String>,
     },
     Selection {
         code: String,
@@ -65,6 +66,7 @@ pub struct EffectiveAttribute {
     pub code: String,
     pub value_type: String,
     pub target_blueprint: Option<String>,
+    pub tags: Vec<String>,
     pub position: i64,
 }
 
@@ -102,6 +104,10 @@ pub enum BlueprintError {
     UnknownIncludedAttribute { alias: String, attribute: String },
     #[error("resolved include '{0}' is missing or does not match its declaration")]
     InvalidResolvedInclude(String),
+    #[error("entity blueprints must define at least one scalar attribute tagged 'display'")]
+    MissingDisplayAttribute,
+    #[error("attribute '{0}' has an invalid tag")]
+    InvalidAttributeTag(String),
 }
 
 #[derive(Deserialize)]
@@ -122,6 +128,8 @@ struct RawAttributeDeclaration {
     code: String,
     value_type: Option<String>,
     target_blueprint: Option<String>,
+    #[serde(default)]
+    tags: Vec<String>,
     from: Option<String>,
 }
 
@@ -165,10 +173,17 @@ pub fn parse(source: &str) -> Result<BlueprintDefinition, BlueprintError> {
                 if let Some(target_blueprint) = &attribute.target_blueprint {
                     validate_non_empty(target_blueprint, "attribute target_blueprint")?;
                 }
+                let mut tags = HashSet::new();
+                for tag in &attribute.tags {
+                    if tag.trim().is_empty() || !tags.insert(tag.as_str()) {
+                        return Err(BlueprintError::InvalidAttributeTag(attribute.code));
+                    }
+                }
                 AttributeDeclaration::Local {
                     code: attribute.code,
                     value_type,
                     target_blueprint: attribute.target_blueprint,
+                    tags: attribute.tags,
                 }
             }
             (None, Some(source)) if attribute.target_blueprint.is_none() => {
@@ -221,12 +236,18 @@ pub fn compile(
 
     let mut attributes = Vec::with_capacity(definition.attributes.len());
     for (position, declaration) in definition.attributes.iter().enumerate() {
-        let (code, value_type, target_blueprint) = match declaration {
+        let (code, value_type, target_blueprint, tags) = match declaration {
             AttributeDeclaration::Local {
                 code,
                 value_type,
                 target_blueprint,
-            } => (code.clone(), value_type.clone(), target_blueprint.clone()),
+                tags,
+            } => (
+                code.clone(),
+                value_type.clone(),
+                target_blueprint.clone(),
+                tags.clone(),
+            ),
             AttributeDeclaration::Selection {
                 code,
                 include_alias,
@@ -247,6 +268,7 @@ pub fn compile(
                     code.clone(),
                     attribute.value_type.clone(),
                     attribute.target_blueprint.clone(),
+                    attribute.tags.clone(),
                 )
             }
         };
@@ -254,8 +276,17 @@ pub fn compile(
             code,
             value_type,
             target_blueprint,
+            tags,
             position: position as i64,
         });
+    }
+    if definition.kind == BlueprintKind::Entity
+        && !attributes.iter().any(|attribute| {
+            attribute.value_type != "relationship"
+                && attribute.tags.iter().any(|tag| tag == "display")
+        })
+    {
+        return Err(BlueprintError::MissingDisplayAttribute);
     }
 
     Ok(CompiledBlueprint {

@@ -6,6 +6,7 @@ kind = "entity"
 [[attributes]]
 code = "title"
 value_type = "string"
+tags = ["display"]
 
 [[attributes]]
 code = "categories"

@@ -1,6 +1,8 @@
 use std::collections::HashSet;
 
 use async_recursion::async_recursion;
+use base64::{Engine, engine::general_purpose::URL_SAFE_NO_PAD};
+use chrono::{DateTime, Utc};
 use serde_json::{Map, Value};
 use sqlx::{PgPool, Postgres, Transaction};
 use thiserror::Error;
@@ -11,8 +13,8 @@ use crate::{
     model::{
         AppendAttributeValues, Attribute, AttributeContext, AttributeValue, Blueprint,
         BlueprintWithAttributes, CreateAttributeContext, CreateBlueprint, CreateEntity, Entity,
-        EntityPreview, EntityPreviewPage, NewAttributeValue, RelationshipMutation,
-        RelationshipTargets,
+        EntityPreview, EntityPreviewPage, FormAttributeValue, NewAttributeValue,
+        RelationshipMutation, RelationshipTargets,
     },
     projection::PreviewProjectionBuilder,
 };
@@ -65,7 +67,6 @@ struct PreviewRelationship {
     attribute_code: String,
     context_code: Option<String>,
     target_id: Uuid,
-    target_code: String,
     target_projections: Value,
     relationship_position: i64,
 }
@@ -175,9 +176,9 @@ impl CatalogRepository {
         for attribute in compiled.attributes {
             attributes.push(
                 sqlx::query_as::<_, Attribute>(
-                    r#"INSERT INTO attributes (id, blueprint_id, blueprint_version, code, value_type, target_blueprint_code, position)
-                       VALUES ($1, $2, $3, $4, $5, $6, $7)
-                       RETURNING id, blueprint_id, blueprint_version, code, value_type, target_blueprint_code, position, created_at, updated_at, deleted_at"#,
+                    r#"INSERT INTO attributes (id, blueprint_id, blueprint_version, code, value_type, target_blueprint_code, tags, position)
+                       VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+                       RETURNING id, blueprint_id, blueprint_version, code, value_type, target_blueprint_code, tags, position, created_at, updated_at, deleted_at"#,
                 )
                 .bind(Uuid::new_v4())
                 .bind(blueprint_id)
@@ -185,6 +186,7 @@ impl CatalogRepository {
                 .bind(attribute.code)
                 .bind(attribute.value_type)
                 .bind(attribute.target_blueprint)
+                .bind(serde_json::to_value(attribute.tags).expect("attribute tags serialize"))
                 .bind(attribute.position)
                 .fetch_one(&mut **transaction)
                 .await?,
@@ -275,7 +277,7 @@ impl CatalogRepository {
         blueprint_version: i64,
     ) -> Result<Vec<Attribute>, RepositoryError> {
         Ok(sqlx::query_as::<_, Attribute>(
-            r#"SELECT id, blueprint_id, blueprint_version, code, value_type, target_blueprint_code, position, created_at, updated_at, deleted_at
+            r#"SELECT id, blueprint_id, blueprint_version, code, value_type, target_blueprint_code, tags, position, created_at, updated_at, deleted_at
                FROM attributes
                WHERE blueprint_id = $1 AND blueprint_version = $2 AND deleted_at IS NULL
                ORDER BY position"#,
@@ -346,17 +348,16 @@ impl CatalogRepository {
             .or_insert_with(empty_preview);
 
         sqlx::query_as::<_, Entity>(
-            r#"INSERT INTO entities (id, code, blueprint_id, blueprint_version, projections)
-               SELECT $1, $2, b.id, b.version, $3
+            r#"INSERT INTO entities (id, blueprint_id, blueprint_version, projections)
+               SELECT $1, b.id, b.version, $2
                FROM blueprints b
-               WHERE b.id = $4
-                 AND b.version = $5
+                WHERE b.id = $3
+                  AND b.version = $4
                  AND b.kind = 'entity'
                  AND b.deleted_at IS NULL
-               RETURNING id, code, blueprint_id, blueprint_version, projections, created_at, updated_at, deleted_at"#,
+                RETURNING id, blueprint_id, blueprint_version, projections, created_at, updated_at, deleted_at"#,
         )
         .bind(Uuid::new_v4())
-        .bind(input.code)
         .bind(Value::Object(projections.clone()))
         .bind(input.blueprint_id)
         .bind(input.blueprint_version)
@@ -365,29 +366,88 @@ impl CatalogRepository {
         .ok_or(RepositoryError::NotFound("blueprint version"))
     }
 
+    pub async fn create_entity_with_values(
+        &self,
+        blueprint_id: Uuid,
+        blueprint_version: i64,
+        values: Vec<NewAttributeValue>,
+    ) -> Result<Entity, RepositoryError> {
+        let mut transaction = self.pool.begin().await?;
+        let entity = self
+            .insert_entity(&mut transaction, blueprint_id, blueprint_version)
+            .await?;
+        for value in values {
+            self.insert_value(&mut transaction, &entity, value).await?;
+        }
+        let preview = PreviewProjectionBuilder::build(&mut transaction, entity.id).await?;
+        let entity = self
+            .store_preview(&mut transaction, entity.id, preview)
+            .await?;
+        transaction.commit().await?;
+        Ok(entity)
+    }
+
+    pub async fn update_entity_with_values(
+        &self,
+        entity_id: Uuid,
+        values: Vec<NewAttributeValue>,
+        relationships: Vec<RelationshipTargets>,
+    ) -> Result<Entity, RepositoryError> {
+        let mut transaction = self.pool.begin().await?;
+        let entity = self.lock_entity(&mut transaction, entity_id).await?;
+        for value in values {
+            self.insert_value(&mut transaction, &entity, value).await?;
+        }
+        self.replace_relationship_sets(&mut transaction, &entity, relationships)
+            .await?;
+        let preview = PreviewProjectionBuilder::build(&mut transaction, entity.id).await?;
+        let entity = self
+            .store_preview(&mut transaction, entity.id, preview)
+            .await?;
+        transaction.commit().await?;
+        Ok(entity)
+    }
+
+    pub async fn form_values(
+        &self,
+        entity_id: Uuid,
+    ) -> Result<Vec<FormAttributeValue>, RepositoryError> {
+        let rows = sqlx::query_as::<_, (String, Value, Option<Uuid>)>(
+            r#"SELECT a.code, av.value, av.relationship_target_entity_id
+               FROM attribute_values av
+               JOIN attributes a ON a.id = av.attribute_id
+               WHERE av.entity_id = $1
+                 AND av.latest
+                 AND (av.relationship_target_entity_id IS NULL OR av.active)
+               ORDER BY a.position, av.relationship_target_entity_id"#,
+        )
+        .bind(entity_id)
+        .fetch_all(&self.pool)
+        .await?;
+        Ok(rows
+            .into_iter()
+            .map(
+                |(attribute_code, value, target_entity_id)| match target_entity_id {
+                    Some(target_entity_id) => FormAttributeValue::Relationship {
+                        attribute_code,
+                        target_entity_id,
+                    },
+                    None => FormAttributeValue::Scalar {
+                        attribute_code,
+                        value,
+                    },
+                },
+            )
+            .collect())
+    }
+
     pub async fn get_entity(&self, entity_id: Uuid) -> Result<Option<Entity>, RepositoryError> {
         Ok(sqlx::query_as::<_, Entity>(
-            r#"SELECT id, code, blueprint_id, blueprint_version, projections, created_at, updated_at, deleted_at
+            r#"SELECT id, blueprint_id, blueprint_version, projections, created_at, updated_at, deleted_at
                FROM entities
                WHERE id = $1 AND deleted_at IS NULL"#,
         )
         .bind(entity_id)
-        .fetch_optional(&self.pool)
-        .await?)
-    }
-
-    pub async fn get_entity_by_code(
-        &self,
-        blueprint_id: Uuid,
-        code: &str,
-    ) -> Result<Option<Entity>, RepositoryError> {
-        Ok(sqlx::query_as::<_, Entity>(
-            r#"SELECT id, code, blueprint_id, blueprint_version, projections, created_at, updated_at, deleted_at
-               FROM entities
-               WHERE blueprint_id = $1 AND code = $2 AND deleted_at IS NULL"#,
-        )
-        .bind(blueprint_id)
-        .bind(code)
         .fetch_optional(&self.pool)
         .await?)
     }
@@ -452,7 +512,7 @@ impl CatalogRepository {
         let relationships = sqlx::query_as::<_, PreviewRelationship>(
             r#"WITH relationships AS (
                     SELECT a.code AS attribute_code, c.code AS context_code, target.id AS target_id,
-                           target.code AS target_code, target.projections AS target_projections,
+                            target.projections AS target_projections,
                            ROW_NUMBER() OVER (PARTITION BY a.id, av.context_id ORDER BY target.id)
                                AS relationship_position
                     FROM attribute_values av
@@ -464,7 +524,7 @@ impl CatalogRepository {
                       AND av.latest
                       AND av.active
                 )
-               SELECT attribute_code, context_code, target_id, target_code, target_projections, relationship_position
+               SELECT attribute_code, context_code, target_id, target_projections, relationship_position
                FROM relationships
                WHERE relationship_position <= $2
                ORDER BY attribute_code, context_code NULLS FIRST, relationship_position"#,
@@ -512,11 +572,14 @@ impl CatalogRepository {
             let target_values = target_values
                 .as_object_mut()
                 .ok_or(RepositoryError::InvalidPreview)?;
+            let display_attributes = self.display_attribute_codes(relationship.target_id).await?;
+            target_values.retain(|code, value| {
+                display_attributes.contains(code) || value.get("items").is_some()
+            });
             target_values.insert(
                 "id".to_owned(),
                 Value::String(relationship.target_id.to_string()),
             );
-            target_values.insert("code".to_owned(), Value::String(relationship.target_code));
 
             let targets = relationship_preview
                 .entry("items".to_owned())
@@ -529,6 +592,26 @@ impl CatalogRepository {
         Ok(preview)
     }
 
+    async fn display_attribute_codes(
+        &self,
+        entity_id: Uuid,
+    ) -> Result<HashSet<String>, RepositoryError> {
+        Ok(sqlx::query_scalar::<_, String>(
+            r#"SELECT a.code
+               FROM entities e
+               JOIN attributes a
+                 ON a.blueprint_id = e.blueprint_id
+                AND a.blueprint_version = e.blueprint_version
+                AND a.deleted_at IS NULL
+               WHERE e.id = $1 AND a.tags ? 'display'"#,
+        )
+        .bind(entity_id)
+        .fetch_all(&self.pool)
+        .await?
+        .into_iter()
+        .collect())
+    }
+
     pub async fn list_previews(
         &self,
         blueprint_code: &str,
@@ -538,7 +621,7 @@ impl CatalogRepository {
         cursor: Option<Uuid>,
     ) -> Result<EntityPreviewPage, RepositoryError> {
         let mut items = sqlx::query_as::<_, EntityPreview>(
-            r#"SELECT target.id, target.code, target.projections -> 'preview' AS preview
+            r#"SELECT target.id, target.created_at, target.projections -> 'preview' AS preview
                FROM attribute_values av
                JOIN attributes a ON a.id = av.attribute_id AND a.deleted_at IS NULL
                JOIN entities target ON target.id = av.relationship_target_entity_id
@@ -570,6 +653,57 @@ impl CatalogRepository {
         Ok(EntityPreviewPage { items, next_cursor })
     }
 
+    pub async fn search_entity_previews(
+        &self,
+        blueprint_id: Uuid,
+        blueprint_version: i64,
+        query: Option<&str>,
+        limit: i64,
+        cursor: Option<(DateTime<Utc>, Uuid)>,
+    ) -> Result<(Vec<EntityPreview>, Option<String>), RepositoryError> {
+        let sql = r#"SELECT e.id, e.created_at, e.projections -> 'preview' AS preview
+               FROM entities e
+               WHERE e.blueprint_id = $1
+                 AND e.blueprint_version = $2
+                 AND e.deleted_at IS NULL
+                 AND (
+                    $3::text IS NULL
+                     OR EXISTS (
+                        SELECT 1
+                        FROM attribute_values av
+                        WHERE av.entity_id = e.id
+                          AND av.relationship_target_entity_id IS NULL
+                          AND av.latest
+                          AND av.value #>> '{{}}' ILIKE '%' || $3 || '%'
+                    )
+                 )
+                 AND (
+                     $4::timestamptz IS NULL
+                     OR (e.created_at, e.id) > ($4, $5)
+                  )
+                ORDER BY e.created_at, e.id
+                LIMIT $6"#;
+        let (cursor_created_at, cursor_id) = cursor.unzip();
+        let mut items = sqlx::query_as::<_, EntityPreview>(sql)
+            .bind(blueprint_id)
+            .bind(blueprint_version)
+            .bind(query)
+            .bind(cursor_created_at)
+            .bind(cursor_id)
+            .bind(limit + 1)
+            .fetch_all(&self.pool)
+            .await?;
+        let next_cursor = if items.len() > limit as usize {
+            items.pop();
+            items
+                .last()
+                .map(|item| encode_search_cursor(item.created_at, item.id))
+        } else {
+            None
+        };
+        Ok((items, next_cursor))
+    }
+
     pub async fn append_values(
         &self,
         entity_id: Uuid,
@@ -577,7 +711,7 @@ impl CatalogRepository {
     ) -> Result<Vec<AttributeValue>, RepositoryError> {
         let mut transaction = self.pool.begin().await?;
         let entity = sqlx::query_as::<_, Entity>(
-            r#"SELECT id, code, blueprint_id, blueprint_version, projections, created_at, updated_at, deleted_at
+            r#"SELECT id, blueprint_id, blueprint_version, projections, created_at, updated_at, deleted_at
                FROM entities
                WHERE id = $1 AND deleted_at IS NULL
                FOR UPDATE"#,
@@ -693,6 +827,59 @@ impl CatalogRepository {
         Ok(values)
     }
 
+    async fn replace_relationship_sets(
+        &self,
+        transaction: &mut Transaction<'_, Postgres>,
+        entity: &Entity,
+        relationships: Vec<RelationshipTargets>,
+    ) -> Result<(), RepositoryError> {
+        for relationship in relationships {
+            let (attribute_id, target_blueprint_code) = self
+                .relationship_attribute(transaction, entity, &relationship)
+                .await?;
+            let targets: HashSet<_> = relationship.target_entity_ids.into_iter().collect();
+            for target_id in &targets {
+                self.validate_relationship_target(
+                    transaction,
+                    *target_id,
+                    target_blueprint_code.as_deref(),
+                )
+                .await?;
+            }
+            let current = self
+                .current_relationship_targets(
+                    transaction,
+                    entity.id,
+                    attribute_id,
+                    relationship.context_id,
+                )
+                .await?;
+            for target_id in current.difference(&targets) {
+                self.insert_relationship_value(
+                    transaction,
+                    entity.id,
+                    attribute_id,
+                    relationship.context_id,
+                    *target_id,
+                    false,
+                )
+                .await?;
+            }
+            for target_id in targets.difference(&current) {
+                self.insert_relationship_value(
+                    transaction,
+                    entity.id,
+                    attribute_id,
+                    relationship.context_id,
+                    *target_id,
+                    true,
+                )
+                .await?;
+            }
+        }
+        Ok(())
+    }
+
     async fn insert_value(
         &self,
         transaction: &mut Transaction<'_, Postgres>,
@@ -802,13 +989,53 @@ impl CatalogRepository {
         entity_id: Uuid,
     ) -> Result<Entity, RepositoryError> {
         sqlx::query_as::<_, Entity>(
-            r#"SELECT id, code, blueprint_id, blueprint_version, projections, created_at, updated_at, deleted_at
+            r#"SELECT id, blueprint_id, blueprint_version, projections, created_at, updated_at, deleted_at
                FROM entities WHERE id = $1 AND deleted_at IS NULL FOR UPDATE"#,
         )
         .bind(entity_id)
         .fetch_optional(&mut **transaction)
         .await?
         .ok_or(RepositoryError::NotFound("entity"))
+    }
+
+    async fn insert_entity(
+        &self,
+        transaction: &mut Transaction<'_, Postgres>,
+        blueprint_id: Uuid,
+        blueprint_version: i64,
+    ) -> Result<Entity, RepositoryError> {
+        sqlx::query_as::<_, Entity>(
+            r#"INSERT INTO entities (id, blueprint_id, blueprint_version, projections)
+               SELECT $1, b.id, b.version, $2
+               FROM blueprints b
+               WHERE b.id = $3 AND b.version = $4 AND b.kind = 'entity' AND b.deleted_at IS NULL
+                RETURNING id, blueprint_id, blueprint_version, projections, created_at, updated_at, deleted_at"#,
+        )
+        .bind(Uuid::new_v4())
+        .bind(empty_projections())
+        .bind(blueprint_id)
+        .bind(blueprint_version)
+        .fetch_optional(&mut **transaction)
+        .await?
+        .ok_or(RepositoryError::NotFound("blueprint version"))
+    }
+
+    async fn store_preview(
+        &self,
+        transaction: &mut Transaction<'_, Postgres>,
+        entity_id: Uuid,
+        preview: Value,
+    ) -> Result<Entity, RepositoryError> {
+        Ok(sqlx::query_as::<_, Entity>(
+            r#"UPDATE entities
+               SET projections = jsonb_set(projections, '{preview}', $2, true), updated_at = now()
+               WHERE id = $1
+                RETURNING id, blueprint_id, blueprint_version, projections, created_at, updated_at, deleted_at"#,
+        )
+        .bind(entity_id)
+        .bind(preview)
+        .fetch_one(&mut **transaction)
+        .await?)
     }
 
     async fn relationship_attribute(
@@ -942,6 +1169,17 @@ impl CatalogRepository {
             .await?;
         Ok(())
     }
+}
+
+pub(crate) fn decode_search_cursor(cursor: &str) -> Option<(DateTime<Utc>, Uuid)> {
+    let decoded = URL_SAFE_NO_PAD.decode(cursor).ok()?;
+    let value = String::from_utf8(decoded).ok()?;
+    let (created_at, id) = value.rsplit_once('\0')?;
+    Some((created_at.parse().ok()?, id.parse().ok()?))
+}
+
+fn encode_search_cursor(created_at: DateTime<Utc>, id: Uuid) -> String {
+    URL_SAFE_NO_PAD.encode(format!("{}\0{}", created_at.to_rfc3339(), id))
 }
 
 fn empty_preview() -> Value {

@@ -16,6 +16,7 @@ version = 2
 [[attributes]]
 code = "title"
 value_type = "string"
+tags = ["display"]
 
 [[attributes]]
 code = "meta_title"
@@ -33,12 +34,14 @@ from = "seo.meta_title"
                     code: "meta_title".to_owned(),
                     value_type: "string".to_owned(),
                     target_blueprint: None,
+                    tags: vec![],
                     position: 0,
                 },
                 EffectiveAttribute {
                     code: "meta_description".to_owned(),
                     value_type: "string".to_owned(),
                     target_blueprint: None,
+                    tags: vec![],
                     position: 1,
                 },
             ],
@@ -95,6 +98,11 @@ kind = "entity"
 code = "categories"
 value_type = "relationship"
 target_blueprint = "category"
+
+[[attributes]]
+code = "name"
+value_type = "string"
+tags = ["display"]
 "#;
     let compiled = compile(parse(source).unwrap(), &[], source).unwrap();
     assert_eq!(
@@ -104,4 +112,26 @@ target_blueprint = "category"
 
     let invalid = source.replace("value_type = \"relationship\"", "value_type = \"string\"");
     assert!(parse(&invalid).is_err());
+}
+
+#[test]
+fn requires_and_preserves_entity_display_tags() {
+    let missing_display = r#"
+format_version = 1
+code = "product"
+name = "Product"
+kind = "entity"
+
+[[attributes]]
+code = "title"
+value_type = "string"
+"#;
+    assert!(compile(parse(missing_display).unwrap(), &[], missing_display).is_err());
+
+    let source = missing_display.replace(
+        "value_type = \"string\"",
+        "value_type = \"string\"\ntags = [\"display\", \"searchable\"]",
+    );
+    let compiled = compile(parse(&source).unwrap(), &[], &source).unwrap();
+    assert_eq!(compiled.attributes[0].tags, ["display", "searchable"]);
 }

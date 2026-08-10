@@ -3,7 +3,7 @@ use axum::{
     extract::{Path, Query, State},
     http::StatusCode,
     response::{IntoResponse, Response},
-    routing::{get, post},
+    routing::{get, post, put},
 };
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
@@ -12,9 +12,10 @@ use uuid::Uuid;
 use crate::{
     model::{
         AppendAttributeValues, BlueprintWithAttributes, CreateAttributeContext, CreateBlueprint,
-        CreateEntity, Entity, EntityPreviewPage, RelationshipMutation,
+        CreateEntity, CreateEntityFormRequest, Entity, EntityFormResponse, EntityPreviewPage,
+        EntitySearchResponse, RelationshipMutation, SearchEntitiesRequest, UpdateEntityFormRequest,
     },
-    repository::{CatalogRepository, RepositoryError},
+    repository::{CatalogRepository, RepositoryError, decode_search_cursor},
 };
 
 #[derive(Clone)]
@@ -45,12 +46,12 @@ pub fn router(state: AppState) -> Router {
         )
         .route("/contexts", post(create_context))
         .route("/contexts/{code}", get(get_context))
+        .route("/v1/entities/search", post(search_entity_previews))
+        .route("/v1/entities", post(create_entity_form))
+        .route("/v1/entities/{entity_id}", put(update_entity_form))
+        .route("/v1/entities/{entity_id}/form", get(get_entity_form))
         .route("/entities", get(list_previews).post(create_entity))
         .route("/entities/{entity_id}", get(get_entity))
-        .route(
-            "/entities/by-code/{blueprint_id}/{code}",
-            get(get_entity_by_code),
-        )
         .route(
             "/entities/{entity_id}/projections/preview",
             get(get_preview),
@@ -193,18 +194,6 @@ async fn get_entity(
         .ok_or_else(|| ApiError::not_found("entity"))
 }
 
-async fn get_entity_by_code(
-    State(state): State<AppState>,
-    Path((blueprint_id, code)): Path<(Uuid, String)>,
-) -> Result<Json<Entity>, ApiError> {
-    state
-        .repository
-        .get_entity_by_code(blueprint_id, &code)
-        .await?
-        .map(Json)
-        .ok_or_else(|| ApiError::not_found("entity"))
-}
-
 async fn get_preview(
     State(state): State<AppState>,
     Path(entity_id): Path<Uuid>,
@@ -255,6 +244,149 @@ async fn list_previews(
             )
             .await?,
     ))
+}
+
+async fn search_entity_previews(
+    State(state): State<AppState>,
+    Json(input): Json<SearchEntitiesRequest>,
+) -> Result<Json<EntitySearchResponse>, ApiError> {
+    let blueprint_code = input.blueprint.code.trim();
+    if blueprint_code.is_empty() {
+        return Err(ApiError::invalid_input(
+            "blueprint.code must not be empty".to_owned(),
+        ));
+    }
+    if !input.filters.is_empty() {
+        return Err(ApiError::invalid_input(
+            "field filters are not supported by v1 search yet".to_owned(),
+        ));
+    }
+    let limit = input.page.size.unwrap_or(20);
+    if limit == 0 || limit > state.max_entity_page_size {
+        return Err(ApiError::invalid_input(format!(
+            "page.size must be between 1 and {}",
+            state.max_entity_page_size
+        )));
+    }
+    let blueprint = match input.blueprint.version {
+        Some(version) => {
+            state
+                .repository
+                .get_blueprint_by_code_and_version(blueprint_code, version)
+                .await?
+        }
+        None => {
+            state
+                .repository
+                .get_blueprint_by_code(blueprint_code)
+                .await?
+        }
+    }
+    .ok_or_else(|| ApiError::not_found("blueprint"))?;
+    let cursor = match input.page.cursor.as_deref() {
+        Some(cursor) => Some(
+            decode_search_cursor(cursor)
+                .ok_or_else(|| ApiError::invalid_input("page.cursor is invalid".to_owned()))?,
+        ),
+        None => None,
+    };
+    let query = input
+        .query
+        .as_deref()
+        .map(str::trim)
+        .filter(|value| !value.is_empty());
+    let (items, next_cursor) = state
+        .repository
+        .search_entity_previews(
+            blueprint.blueprint.id,
+            blueprint.blueprint.version,
+            query,
+            limit.into(),
+            cursor,
+        )
+        .await?;
+    Ok(Json(EntitySearchResponse {
+        blueprint,
+        items,
+        next_cursor,
+    }))
+}
+
+async fn create_entity_form(
+    State(state): State<AppState>,
+    Json(input): Json<CreateEntityFormRequest>,
+) -> Result<(StatusCode, Json<Entity>), ApiError> {
+    let blueprint = resolve_search_blueprint(&state, &input.blueprint).await?;
+    Ok((
+        StatusCode::CREATED,
+        Json(
+            state
+                .repository
+                .create_entity_with_values(
+                    blueprint.blueprint.id,
+                    blueprint.blueprint.version,
+                    input.values,
+                )
+                .await?,
+        ),
+    ))
+}
+
+async fn get_entity_form(
+    State(state): State<AppState>,
+    Path(entity_id): Path<Uuid>,
+) -> Result<Json<EntityFormResponse>, ApiError> {
+    let entity = state
+        .repository
+        .get_entity(entity_id)
+        .await?
+        .ok_or_else(|| ApiError::not_found("entity"))?;
+    let blueprint = state
+        .repository
+        .get_blueprint_revision(entity.blueprint_id, entity.blueprint_version)
+        .await?
+        .ok_or_else(|| ApiError::not_found("blueprint version"))?;
+    let values = state.repository.form_values(entity_id).await?;
+    Ok(Json(EntityFormResponse {
+        entity,
+        blueprint,
+        values,
+    }))
+}
+
+async fn update_entity_form(
+    State(state): State<AppState>,
+    Path(entity_id): Path<Uuid>,
+    Json(input): Json<UpdateEntityFormRequest>,
+) -> Result<Json<Entity>, ApiError> {
+    Ok(Json(
+        state
+            .repository
+            .update_entity_with_values(entity_id, input.values, input.relationships)
+            .await?,
+    ))
+}
+
+async fn resolve_search_blueprint(
+    state: &AppState,
+    blueprint: &crate::model::SearchBlueprint,
+) -> Result<BlueprintWithAttributes, ApiError> {
+    let code = blueprint.code.trim();
+    if code.is_empty() {
+        return Err(ApiError::invalid_input(
+            "blueprint.code must not be empty".to_owned(),
+        ));
+    }
+    match blueprint.version {
+        Some(version) => {
+            state
+                .repository
+                .get_blueprint_by_code_and_version(code, version)
+                .await?
+        }
+        None => state.repository.get_blueprint_by_code(code).await?,
+    }
+    .ok_or_else(|| ApiError::not_found("blueprint"))
 }
 
 async fn append_values(

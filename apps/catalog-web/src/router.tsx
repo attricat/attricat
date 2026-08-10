@@ -1,4 +1,5 @@
-import { useQuery } from '@tanstack/react-query'
+import { useMutation, useQuery } from '@tanstack/react-query'
+import { useForm } from '@tanstack/react-form'
 import {
   Link,
   Outlet,
@@ -8,10 +9,40 @@ import {
   useNavigate,
 } from '@tanstack/react-router'
 import { flexRender } from '@tanstack/react-table'
-import { getCoreRowModel, legacyCreateColumnHelper, type LegacyColumnDef, useLegacyTable } from '@tanstack/react-table/legacy'
-import { useState, type FormEvent } from 'react'
-import { getEntityPreview, searchEntities, type EntityItem } from './api'
-import { displayValue, parseExplorerSearch } from './search'
+import {
+  getCoreRowModel,
+  legacyCreateColumnHelper,
+  type LegacyColumnDef,
+  useLegacyTable,
+} from '@tanstack/react-table/legacy'
+import {
+  Alert,
+  Box,
+  Button,
+  Container,
+  Paper,
+  Stack,
+  Table,
+  TableBody,
+  TableCell,
+  TableContainer,
+  TableHead,
+  TableRow,
+  TextField,
+  Typography,
+} from '@mui/material'
+import {
+  createEntity,
+  getBlueprintByCode,
+  getEntityForm,
+  getEntityPreview,
+  searchEntities,
+  updateEntity,
+  type EntityItem,
+} from './api'
+import { EntityForm } from './EntityForm'
+import { valuesForForm } from './entity-form'
+import { displayValue, parseExplorerSearch, previewHeading } from './search'
 
 const rootRoute = createRootRoute({ component: () => <Outlet /> })
 
@@ -28,74 +59,406 @@ const previewRoute = createRoute({
   component: EntityPreview,
 })
 
-const routeTree = rootRoute.addChildren([indexRoute, previewRoute])
+const newEntityRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/entities/new',
+  component: NewEntity,
+})
+
+const editEntityRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/entities/$entityId/edit',
+  component: EditEntity,
+})
+
+const routeTree = rootRoute.addChildren([
+  indexRoute,
+  newEntityRoute,
+  editEntityRoute,
+  previewRoute,
+])
 export const router = createRouter({ routeTree })
 
 function Explorer() {
   const search = indexRoute.useSearch()
   const navigate = useNavigate({ from: indexRoute.fullPath })
-  const [blueprint, setBlueprint] = useState(search.blueprint ?? '')
-  const [version, setVersion] = useState(search.version?.toString() ?? '')
-  const [query, setQuery] = useState(search.query ?? '')
+  const form = useForm({
+    defaultValues: {
+      blueprint: search.blueprint ?? '',
+      version: search.version?.toString() ?? '',
+      query: search.query ?? '',
+    },
+    onSubmit: ({ value }) => {
+      void navigate({ to: '/', search: parseExplorerSearch(value) })
+    },
+  })
   const results = useQuery({
     queryKey: ['entities', search.blueprint, search.version, search.query],
-    queryFn: () => searchEntities(search.blueprint!, search.version, search.query ?? ''),
+    queryFn: () =>
+      searchEntities(search.blueprint!, search.version, search.query ?? ''),
     enabled: Boolean(search.blueprint),
   })
 
-  function submit(event: FormEvent) {
-    event.preventDefault()
-    const next = parseExplorerSearch({ blueprint, version, query })
-    void navigate({ to: '/', search: next })
-  }
-
   const columnHelper = legacyCreateColumnHelper<EntityItem>()
-  const columns: LegacyColumnDef<EntityItem, any>[] = [
-    columnHelper.accessor('code', { header: 'Code', cell: (info) => <Link to="/entities/$entityId" params={{ entityId: info.row.original.id }}>{info.getValue()}</Link> }),
-    ...(results.data?.blueprint.attributes ?? []).map((attribute) => columnHelper.display({
-      id: attribute.code,
-      header: attribute.code,
-      cell: (info) => displayValue(info.row.original.preview[attribute.code]),
-    })),
+  const columns: LegacyColumnDef<EntityItem, string>[] = [
+    columnHelper.accessor('id', {
+      header: 'ID',
+      cell: (info) => (
+        <Link
+          to="/entities/$entityId"
+          params={{ entityId: info.row.original.id }}
+        >
+          {info.getValue()}
+        </Link>
+      ),
+    }),
+    ...(results.data?.blueprint.attributes
+      .filter((attribute) => attribute.tags.includes('display'))
+      .map(
+        (attribute) =>
+          columnHelper.display({
+            id: attribute.code,
+            header: attribute.code,
+            cell: (info) =>
+              displayValue(info.row.original.preview[attribute.code]),
+          }) as LegacyColumnDef<EntityItem, string>,
+      ) ?? []),
   ]
-  const table = useLegacyTable({ data: results.data?.items ?? [], columns, getCoreRowModel: getCoreRowModel() })
+  const table = useLegacyTable({
+    data: results.data?.items ?? [],
+    columns: columns as never,
+    getCoreRowModel: getCoreRowModel(),
+  })
 
-  return <main className="shell">
-    <header>
-      <p className="eyebrow">Catalog</p>
-      <h1>Entity explorer</h1>
-      <p className="intro">Search a blueprint and inspect its current entity projections.</p>
-    </header>
-    <form className="search-form" onSubmit={submit}>
-      <label>Blueprint<input required value={blueprint} onChange={(event) => setBlueprint(event.target.value)} placeholder="product" /></label>
-      <label>Version <input inputMode="numeric" min="1" value={version} onChange={(event) => setVersion(event.target.value)} placeholder="Current" /></label>
-      <label className="query-field">Query<input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search terms" /></label>
-      <button type="submit">Search</button>
-    </form>
-    {!search.blueprint && <p className="empty">Enter a blueprint code to start exploring.</p>}
-    {results.isPending && <p className="empty">Loading entities...</p>}
-    {results.isError && <p className="error">{results.error.message}</p>}
-    {results.data && <section className="results" aria-live="polite">
-      <div className="result-meta"><strong>{results.data.blueprint.blueprint.code}</strong> v{results.data.blueprint.blueprint.version} · {results.data.items.length} result{results.data.items.length === 1 ? '' : 's'}</div>
-      <div className="table-wrap"><table>
-        <thead>{table.getHeaderGroups().map((group) => <tr key={group.id}>{group.headers.map((header) => <th key={header.id}>{header.isPlaceholder ? null : flexRender(header.column.columnDef.header, header.getContext())}</th>)}</tr>)}</thead>
-        <tbody>{table.getRowModel().rows.map((row) => <tr key={row.id}>{row.getVisibleCells().map((cell) => <td key={cell.id}>{flexRender(cell.column.columnDef.cell, cell.getContext())}</td>)}</tr>)}</tbody>
-      </table></div>
-      {results.data.items.length === 0 && <p className="empty">No entities matched this search.</p>}
-      {results.data.next_cursor && <p className="muted">More results are available. Pagination will be added with the search cursor.</p>}
-    </section>}
-  </main>
+  return (
+    <Container component="main" maxWidth="xl" sx={{ py: { xs: 4, md: 7 } }}>
+      <Typography
+        color="primary"
+        sx={{
+          fontWeight: 700,
+          letterSpacing: '.12em',
+          textTransform: 'uppercase',
+        }}
+        variant="overline"
+      >
+        Catalog
+      </Typography>
+      <Typography component="h1" variant="h2">
+        Entity explorer
+      </Typography>
+      <Typography color="text.secondary">
+        Search a blueprint and inspect its current entity projections.
+      </Typography>
+      <Button
+        component={Link}
+        to="/entities/new"
+        sx={{ mt: 2 }}
+        variant="contained"
+      >
+        Create entity
+      </Button>
+      <Paper
+        component="form"
+        onSubmit={(event) => {
+          event.preventDefault()
+          void form.handleSubmit()
+        }}
+        sx={{ mt: 4, p: 2.5 }}
+      >
+        <Stack direction={{ xs: 'column', md: 'row' }} spacing={2}>
+          <form.Field name="blueprint">
+            {(field) => (
+              <TextField
+                required
+                label="Blueprint"
+                onChange={(event) => field.handleChange(event.target.value)}
+                placeholder="product"
+                value={field.state.value}
+              />
+            )}
+          </form.Field>
+          <form.Field name="version">
+            {(field) => (
+              <TextField
+                inputMode="numeric"
+                label="Version"
+                onChange={(event) => field.handleChange(event.target.value)}
+                placeholder="Current"
+                value={field.state.value}
+              />
+            )}
+          </form.Field>
+          <form.Field name="query">
+            {(field) => (
+              <TextField
+                fullWidth
+                label="Query"
+                onChange={(event) => field.handleChange(event.target.value)}
+                placeholder="Search terms"
+                value={field.state.value}
+              />
+            )}
+          </form.Field>
+          <Button type="submit" variant="contained">
+            Search
+          </Button>
+        </Stack>
+      </Paper>
+      {!search.blueprint && (
+        <Typography sx={{ py: 3 }}>
+          Enter a blueprint code to start exploring.
+        </Typography>
+      )}
+      {results.isPending && (
+        <Typography sx={{ py: 3 }}>Loading entities...</Typography>
+      )}
+      {results.isError && (
+        <Alert severity="error" sx={{ mt: 3 }}>
+          {results.error.message}
+        </Alert>
+      )}
+      {results.data && (
+        <Paper component="section" sx={{ mt: 3 }}>
+          <Box sx={{ borderBottom: 1, borderColor: 'divider', p: 2 }}>
+            <Typography>
+              <strong>{results.data.blueprint.blueprint.code}</strong> v
+              {results.data.blueprint.blueprint.version} ·{' '}
+              {results.data.items.length} result
+              {results.data.items.length === 1 ? '' : 's'}
+            </Typography>
+          </Box>
+          <TableContainer>
+            <Table size="small">
+              <TableHead>
+                {table.getHeaderGroups().map((group) => (
+                  <TableRow key={group.id}>
+                    {group.headers.map((header) => (
+                      <TableCell key={header.id}>
+                        {header.isPlaceholder
+                          ? null
+                          : flexRender(
+                              header.column.columnDef.header,
+                              header.getContext(),
+                            )}
+                      </TableCell>
+                    ))}
+                  </TableRow>
+                ))}
+              </TableHead>
+              <TableBody>
+                {table.getRowModel().rows.map((row) => (
+                  <TableRow key={row.id}>
+                    {row.getVisibleCells().map((cell) => (
+                      <TableCell key={cell.id}>
+                        {flexRender(
+                          cell.column.columnDef.cell,
+                          cell.getContext(),
+                        )}
+                      </TableCell>
+                    ))}
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </TableContainer>
+          {results.data.items.length === 0 && (
+            <Typography sx={{ p: 2 }}>
+              No entities matched this search.
+            </Typography>
+          )}
+          {results.data.next_cursor && (
+            <Alert severity="info" sx={{ m: 2 }}>
+              More results are available. Pagination will be added with the
+              search cursor.
+            </Alert>
+          )}
+        </Paper>
+      )}
+    </Container>
+  )
 }
 
 function EntityPreview() {
   const { entityId } = previewRoute.useParams()
-  const preview = useQuery({ queryKey: ['entity-preview', entityId], queryFn: () => getEntityPreview(entityId) })
-  return <main className="shell detail">
-    <Link to="/" className="back">← Explorer</Link>
-    <p className="eyebrow">Entity preview</p>
-    <h1>{preview.data?.code ?? entityId}</h1>
-    {preview.isPending && <p className="empty">Loading preview...</p>}
-    {preview.isError && <p className="error">{preview.error.message}</p>}
-    {preview.data && <pre>{JSON.stringify(preview.data, null, 2)}</pre>}
-  </main>
+  const preview = useQuery({
+    queryKey: ['entity-preview', entityId],
+    queryFn: () => getEntityPreview(entityId),
+  })
+  const entityForm = useQuery({
+    queryKey: ['entity-form', entityId],
+    queryFn: () => getEntityForm(entityId),
+  })
+  return (
+    <Container component="main" maxWidth="lg" sx={{ py: { xs: 4, md: 7 } }}>
+      <Button component={Link} to="/" sx={{ mb: 4 }}>
+        Back to explorer
+      </Button>
+      <Typography
+        color="primary"
+        sx={{
+          fontWeight: 700,
+          letterSpacing: '.12em',
+          textTransform: 'uppercase',
+        }}
+        variant="overline"
+      >
+        Entity preview
+      </Typography>
+      <Typography component="h1" variant="h3">
+        {previewHeading(
+          preview.data,
+          entityForm.data?.blueprint.attributes ?? [],
+          entityId,
+        )}
+      </Typography>
+      <Box sx={{ mt: 1 }}>
+        <Link params={{ entityId }} to="/entities/$entityId/edit">
+          Edit entity
+        </Link>
+      </Box>
+      {preview.isPending && (
+        <Typography sx={{ py: 3 }}>Loading preview...</Typography>
+      )}
+      {preview.isError && (
+        <Alert severity="error" sx={{ mt: 3 }}>
+          {preview.error.message}
+        </Alert>
+      )}
+      {preview.data && (
+        <Paper component="pre" sx={{ mt: 3, overflow: 'auto', p: 3 }}>
+          {JSON.stringify(preview.data, null, 2)}
+        </Paper>
+      )}
+    </Container>
+  )
+}
+
+function NewEntity() {
+  const navigate = useNavigate({ from: newEntityRoute.fullPath })
+  const blueprint = useMutation({
+    mutationFn: ({ code, version }: { code: string; version?: number }) =>
+      getBlueprintByCode(code, version),
+  })
+  const create = useMutation({
+    mutationFn: ({
+      values,
+      relationships,
+    }: {
+      values: Parameters<typeof createEntity>[0]['values']
+      relationships: { attribute_code: string; target_entity_ids: string[] }[]
+    }) => {
+      const resolved = blueprint.data
+      if (!resolved)
+        throw new Error('Choose a blueprint before creating an entity')
+      return createEntity({
+        blueprint: {
+          code: resolved.blueprint.code,
+          version: resolved.blueprint.version,
+        },
+        values: [
+          ...values,
+          ...relationships.flatMap((relationship) =>
+            relationship.target_entity_ids.map((target_entity_id) => ({
+              kind: 'relationship' as const,
+              attribute_code: relationship.attribute_code,
+              target_entity_id,
+            })),
+          ),
+        ],
+      })
+    },
+    onSuccess: (entity) => {
+      void navigate({
+        to: '/entities/$entityId',
+        params: { entityId: entity.id },
+      })
+    },
+  })
+  return (
+    <EntityPage title="Create entity">
+      <EntityForm
+        blueprint={blueprint.data}
+        error={blueprint.error ?? create.error}
+        isLoadingBlueprint={blueprint.isPending || create.isPending}
+        onLoadBlueprint={(code, version) => blueprint.mutate({ code, version })}
+        onSubmit={(input) => create.mutate(input)}
+        submitLabel={blueprint.data ? 'Create entity' : 'Load blueprint'}
+      />
+    </EntityPage>
+  )
+}
+
+function EditEntity() {
+  const { entityId } = editEntityRoute.useParams()
+  const navigate = useNavigate({ from: editEntityRoute.fullPath })
+  const entityForm = useQuery({
+    queryKey: ['entity-form', entityId],
+    queryFn: () => getEntityForm(entityId),
+  })
+  const update = useMutation({
+    mutationFn: (input: Parameters<typeof updateEntity>[1]) =>
+      updateEntity(entityId, input),
+    onSuccess: (entity) => {
+      void navigate({
+        to: '/entities/$entityId',
+        params: { entityId: entity.id },
+      })
+    },
+  })
+  return (
+    <EntityPage title="Edit entity">
+      {entityForm.isPending && (
+        <Typography sx={{ mt: 4 }}>Loading entity...</Typography>
+      )}
+      {(entityForm.error || update.error) && (
+        <Alert severity="error" sx={{ mt: 4 }}>
+          {(entityForm.error ?? update.error)?.message}
+        </Alert>
+      )}
+      {entityForm.data && (
+        <EntityForm
+          key={entityForm.data.entity.id}
+          blueprint={entityForm.data.blueprint}
+          initialValues={valuesForForm(
+            entityForm.data.blueprint.attributes,
+            entityForm.data.values,
+          )}
+          isLoadingBlueprint={update.isPending}
+          onSubmit={(input) => update.mutate(input)}
+          submitLabel="Save changes"
+        />
+      )}
+    </EntityPage>
+  )
+}
+
+function EntityPage({
+  children,
+  title,
+}: {
+  children: import('react').ReactNode
+  title: string
+}) {
+  return (
+    <Container component="main" maxWidth="md" sx={{ py: { xs: 4, md: 7 } }}>
+      <Button component={Link} to="/" sx={{ mb: 4 }}>
+        Back to explorer
+      </Button>
+      <Typography
+        color="primary"
+        sx={{
+          fontWeight: 700,
+          letterSpacing: '.12em',
+          textTransform: 'uppercase',
+        }}
+        variant="overline"
+      >
+        Catalog
+      </Typography>
+      <Typography component="h1" variant="h3">
+        {title}
+      </Typography>
+      {children}
+    </Container>
+  )
 }

@@ -43,7 +43,6 @@ catalog context get en-GB
 
 catalog entity create --file product.toml
 catalog entity get <entity-id>
-catalog entity get-by-code <blueprint-id> <code>
 catalog entity list --blueprint <code> --related-from <entity-id> --relationship <attribute-code> [--limit <limit>] [--cursor <cursor>]
 catalog entity preview <entity-id> [--relationship-depth <depth>] [--relationship-limit <limit>]
 
@@ -66,7 +65,6 @@ the raw-source hash. See `database.md` for the blueprint grammar.
 Entity file:
 
 ```toml
-code = "shirt-001"
 blueprint_id = "00000000-0000-0000-0000-000000000001"
 blueprint_version = 1
 

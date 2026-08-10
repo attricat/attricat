@@ -103,10 +103,6 @@ enum EntityCommand {
     Get {
         entity_id: Uuid,
     },
-    GetByCode {
-        blueprint_id: Uuid,
-        code: String,
-    },
     List {
         #[arg(long)]
         blueprint: String,
@@ -211,7 +207,6 @@ struct ContextFile {
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
 struct EntityFile {
-    code: String,
     blueprint_id: Uuid,
     blueprint_version: i64,
     projections: Option<toml::Value>,
@@ -383,20 +378,6 @@ async fn run(cli: Cli) -> Result<String, CliError> {
                 )
                 .await
             }
-            EntityCommand::GetByCode { blueprint_id, code } => {
-                request(
-                    &client,
-                    &server,
-                    Method::GET,
-                    &format!(
-                        "/entities/by-code/{}/{}",
-                        segment(blueprint_id),
-                        segment(&code)
-                    ),
-                    None,
-                )
-                .await
-            }
             EntityCommand::List {
                 blueprint,
                 related_from,
@@ -519,7 +500,6 @@ fn context_body_from_file(path: &PathBuf) -> Result<Value, CliError> {
 fn entity_body_from_file(path: &PathBuf) -> Result<Value, CliError> {
     let input: EntityFile = parse_toml_file(path)?;
     let mut body = json!({
-        "code": input.code,
         "blueprint_id": input.blueprint_id,
         "blueprint_version": input.blueprint_version,
     });

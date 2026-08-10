@@ -77,13 +77,14 @@ they are never independently authored or edited.
   target semantics; other non-empty labels are scalar metadata for now.
 - Relationship attributes may declare `target_blueprint` in TOML. Its compiled
   `target_blueprint_code` restricts targets to that entity blueprint family.
+- `tags` is a JSONB array compiled from the attribute TOML. Entity blueprints
+  require at least one scalar attribute tagged `display`.
 
 ### `entities`
 
 Entities are catalog items.
 
 - Each entity references the exact blueprint version under which it was created.
-- An active entity code is unique within its blueprint family.
 - `projections` is a JSONB field reserved for future denormalized read models;
   EAV values remain the source of truth.
 
@@ -170,10 +171,13 @@ creating and reading entities, appending attribute values, and reading the
 | `POST` | `/entities` | Create an entity pinned to an exact blueprint version. |
 | `GET` | `/entities?blueprint=category&related_from={id}&relationship=categories&limit=50&cursor={cursor}` | Page target entity previews through a reverse relationship filter. |
 | `GET` | `/entities/{entity_id}` | Read an active entity and its named projections. |
-| `GET` | `/entities/by-code/{blueprint_id}/{code}` | Read an active entity by blueprint and code. |
 | `GET` | `/entities/{entity_id}/projections/preview?relationship_depth=1&relationship_limit=10` | Read the preview with bounded related entity values. |
 | `POST` | `/entities/{entity_id}/values` | Append scalar or relationship value history and rebuild preview. |
 | `GET` | `/entities/{entity_id}/values/current` | Read derived current scalar values and relationship edges. |
+| `POST` | `/v1/entities/search` | Search current scalar values within a resolved blueprint revision. |
+| `POST` | `/v1/entities` | Atomically create an entity with initial values. |
+| `GET` | `/v1/entities/{entity_id}/form` | Read an entity, pinned schema, and current form values. |
+| `PUT` | `/v1/entities/{entity_id}` | Append scalar changes and replace submitted relationship target sets atomically. |
 | `POST` | `/entities/{entity_id}/relationships/replace` | Replace the current targets for each supplied relationship attribute. |
 | `POST` | `/entities/{entity_id}/relationships/remove` | Remove supplied current relationship targets. |
 | `GET` | `/health` | Confirm the migrated API is ready to serve requests. |
@@ -229,7 +233,7 @@ use an envelope rather than a count:
 ```json
 {
   "categories": {
-    "items": [{ "id": "...", "code": "shirts", "name": "Shirts" }],
+    "items": [{ "id": "...", "name": "Shirts" }],
     "truncated": true
   }
 }
@@ -252,7 +256,6 @@ entity ID from the preceding page.
   "items": [
     {
       "id": "...",
-      "code": "shirts",
       "preview": { "default": { "name": "Shirts", "slug": "shirts" } }
     }
   ],
@@ -261,6 +264,26 @@ entity ID from the preceding page.
 ```
 
 No count is returned. A null `next_cursor` means the final page was reached.
+
+## V1 Entity Search
+
+`POST /v1/entities/search` resolves the supplied blueprint code to its current
+revision unless `blueprint.version` is provided. Results include only entities
+pinned to that exact revision. Text search is case-insensitive across current
+scalar values; relationship values are not searched.
+
+```json
+{
+  "blueprint": { "code": "product", "version": 1 },
+  "query": "blue shirt",
+  "filters": [],
+  "page": { "size": 25, "cursor": null }
+}
+```
+
+V1 uses ascending `created_at, id` ordering. `filters` must be empty until the
+blueprint value type system defines field operators. Cursors are opaque and
+bound to that ordering.
 
 ## Blueprint Compiler
 
@@ -307,6 +330,7 @@ A local attribute is authored directly:
 [[attributes]]
 code = "title"
 value_type = "string"
+tags = ["display"]
 ```
 
 A typed relationship restricts its targets by stable blueprint code:
@@ -340,6 +364,7 @@ version = 2
 [[attributes]]
 code = "title"
 value_type = "string"
+tags = ["display"]
 
 [[attributes]]
 code = "meta_title"

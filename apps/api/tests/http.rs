@@ -38,11 +38,10 @@ async fn create_blueprint(client: &Client, base_url: &str, definition: &str) -> 
         .unwrap()
 }
 
-async fn create_entity(client: &Client, base_url: &str, code: &str, blueprint: &Value) -> Value {
+async fn create_entity(client: &Client, base_url: &str, blueprint: &Value) -> Value {
     client
         .post(format!("{base_url}/entities"))
         .json(&json!({
-            "code": code,
             "blueprint_id": blueprint["blueprint"]["id"],
             "blueprint_version": blueprint["blueprint"]["version"],
         }))
@@ -108,6 +107,7 @@ version = 1
 [[attributes]]
 code = "title"
 value_type = "string"
+tags = ["display"]
 
 [[attributes]]
 code = "meta_title"
@@ -182,6 +182,7 @@ kind = "entity"
 [[attributes]]
 code = "sku"
 value_type = "string"
+tags = ["display"]
 "#
         }))
         .send()
@@ -244,7 +245,6 @@ value_type = "string"
     let source: Value = client
         .post(format!("{base_url}/entities"))
         .json(&json!({
-            "code": "source",
             "blueprint_id": blueprint_id,
             "blueprint_version": 1
         }))
@@ -264,7 +264,6 @@ value_type = "string"
     let target: Value = client
         .post(format!("{base_url}/entities"))
         .json(&json!({
-            "code": "target",
             "blueprint_id": blueprint_id,
             "blueprint_version": 1
         }))
@@ -312,22 +311,6 @@ value_type = "string"
     assert_eq!(
         client
             .get(format!(
-                "{base_url}/entities/by-code/{}/source",
-                blueprint_id
-            ))
-            .send()
-            .await
-            .unwrap()
-            .error_for_status()
-            .unwrap()
-            .json::<Value>()
-            .await
-            .unwrap()["id"],
-        source["id"]
-    );
-    assert_eq!(
-        client
-            .get(format!(
                 "{base_url}/entities/{}/values/current",
                 source["id"].as_str().unwrap()
             ))
@@ -362,7 +345,7 @@ value_type = "string"
             "default": {
                 "title": "Blue shirt",
                 "related_products": {
-                    "items": [{ "id": target["id"], "code": "target" }],
+                    "items": [{ "id": target["id"] }],
                     "truncated": false
                 }
             },
@@ -456,6 +439,118 @@ value_type = "string"
         3
     );
 
+    let search_page: Value = client
+        .post(format!("{base_url}/v1/entities/search"))
+        .json(&json!({
+            "blueprint": { "code": "product", "version": 1 },
+            "query": "red shirt",
+            "filters": [],
+            "page": { "size": 1, "cursor": null }
+        }))
+        .send()
+        .await
+        .unwrap()
+        .error_for_status()
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    assert_eq!(search_page["blueprint"]["blueprint"]["version"], 1);
+    assert_eq!(search_page["items"][0]["id"], source["id"]);
+    assert!(search_page["next_cursor"].is_null());
+
+    let created_from_form: Value = client
+        .post(format!("{base_url}/v1/entities"))
+        .json(&json!({
+            "blueprint": { "code": "product", "version": 1 },
+            "values": [{
+                "kind": "scalar",
+                "attribute_code": "title",
+                "value": "Created from form"
+            }]
+        }))
+        .send()
+        .await
+        .unwrap()
+        .error_for_status()
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    let form_entity_id = created_from_form["id"].as_str().unwrap();
+    let form: Value = client
+        .get(format!("{base_url}/v1/entities/{form_entity_id}/form"))
+        .send()
+        .await
+        .unwrap()
+        .error_for_status()
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    assert_eq!(
+        form["values"][0],
+        json!({ "kind": "scalar", "attribute_code": "title", "value": "Created from form" })
+    );
+
+    let updated: Value = client
+        .put(format!("{base_url}/v1/entities/{form_entity_id}"))
+        .json(&json!({
+            "values": [{
+                "kind": "scalar",
+                "attribute_code": "title",
+                "value": "Updated from form"
+            }]
+        }))
+        .send()
+        .await
+        .unwrap()
+        .error_for_status()
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    assert_eq!(
+        updated["projections"]["preview"]["default"]["title"],
+        "Updated from form"
+    );
+
+    client
+        .put(format!(
+            "{base_url}/v1/entities/{}",
+            source["id"].as_str().unwrap()
+        ))
+        .json(&json!({
+            "values": [],
+            "relationships": [{
+                "attribute_code": "related_products",
+                "target_entity_ids": []
+            }]
+        }))
+        .send()
+        .await
+        .unwrap()
+        .error_for_status()
+        .unwrap();
+    let removed_relationship_preview: Value = client
+        .get(format!(
+            "{base_url}/entities/{}/projections/preview",
+            source["id"].as_str().unwrap()
+        ))
+        .send()
+        .await
+        .unwrap()
+        .error_for_status()
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    assert!(
+        removed_relationship_preview["default"]
+            .get("related_products")
+            .is_none()
+    );
+
     server.abort();
 }
 
@@ -496,7 +591,6 @@ value_type = "boolean"
     let entity = client
         .post(format!("{base_url}/entities"))
         .json(&json!({
-            "code": "not-allowed",
             "blueprint_id": mixin["blueprint"]["id"],
             "blueprint_version": 1
         }))
@@ -525,6 +619,7 @@ kind = "entity"
 [[attributes]]
 code = "title"
 value_type = "string"
+tags = ["display"]
 "#,
     )
     .await;
@@ -540,13 +635,13 @@ kind = "entity"
 [[attributes]]
 code = "title"
 value_type = "string"
+tags = ["display"]
 "#,
     )
     .await;
     let entity: Value = client
         .post(format!("{base_url}/entities"))
         .json(&json!({
-            "code": "entity",
             "blueprint_id": first["blueprint"]["id"],
             "blueprint_version": 1
         }))
@@ -632,6 +727,7 @@ kind = "entity"
 [[attributes]]
 code = "name"
 value_type = "string"
+tags = ["display"]
 "#,
     )
     .await;
@@ -647,6 +743,7 @@ kind = "entity"
 [[attributes]]
 code = "name"
 value_type = "string"
+tags = ["display"]
 
 [[attributes]]
 code = "hex"
@@ -666,6 +763,7 @@ kind = "entity"
 [[attributes]]
 code = "title"
 value_type = "string"
+tags = ["display"]
 
 [[attributes]]
 code = "categories"
@@ -684,10 +782,10 @@ target_blueprint = "color"
         "category"
     );
 
-    let shirts = create_entity(&client, &base_url, "shirts", &category).await;
-    let sale = create_entity(&client, &base_url, "sale", &category).await;
-    let navy = create_entity(&client, &base_url, "navy", &color).await;
-    let shirt = create_entity(&client, &base_url, "shirt-001", &product).await;
+    let shirts = create_entity(&client, &base_url, &category).await;
+    let sale = create_entity(&client, &base_url, &category).await;
+    let navy = create_entity(&client, &base_url, &color).await;
+    let shirt = create_entity(&client, &base_url, &product).await;
     let shirt_id = shirt["id"].as_str().unwrap();
 
     for (entity, values) in [
@@ -778,7 +876,6 @@ target_blueprint = "color"
         2
     );
     assert_eq!(preview["default"]["categories"]["truncated"], false);
-    assert_eq!(preview["default"]["colors"]["items"][0]["hex"], "#1c2d4a");
     assert_eq!(preview["default"]["colors"]["items"][0]["name"], "Navy");
 
     let bounded_preview: Value = client
@@ -895,8 +992,8 @@ target_blueprint = "color"
         1
     );
     assert_eq!(
-        preview["default"]["categories"]["items"][0]["code"],
-        "shirts"
+        preview["default"]["categories"]["items"][0]["name"],
+        "Shirts"
     );
 
     server.abort();
