@@ -3,14 +3,21 @@ use std::{
     io::{self, Read},
     path::PathBuf,
     process::ExitCode,
+    time::Duration,
 };
 
 use clap::{Args, Parser, Subcommand};
+use futures_util::StreamExt;
 use reqwest::{Client, Method};
 use serde::Deserialize;
 use serde_json::{Value, json};
 use thiserror::Error;
 use url::Url;
+use uuid::Uuid;
+
+const CONNECT_TIMEOUT: Duration = Duration::from_secs(5);
+const REQUEST_TIMEOUT: Duration = Duration::from_secs(30);
+const MAX_RESPONSE_BYTES: usize = 1024 * 1024;
 
 #[derive(Parser)]
 #[command(name = "catalog", about = "JSON-first client for the Catalog API")]
@@ -46,15 +53,15 @@ enum Command {
 enum BlueprintCommand {
     Create(SourceInput),
     Revision {
-        blueprint_id: String,
+        blueprint_id: Uuid,
         #[command(flatten)]
         source: SourceInput,
     },
     Get {
-        blueprint_id: String,
+        blueprint_id: Uuid,
     },
     GetVersion {
-        blueprint_id: String,
+        blueprint_id: Uuid,
         version: i64,
     },
     Resolve {
@@ -94,26 +101,26 @@ enum EntityCommand {
         file: PathBuf,
     },
     Get {
-        entity_id: String,
+        entity_id: Uuid,
     },
     GetByCode {
-        blueprint_id: String,
+        blueprint_id: Uuid,
         code: String,
     },
     Preview {
-        entity_id: String,
+        entity_id: Uuid,
     },
 }
 
 #[derive(Subcommand)]
 enum ValueCommand {
     Append {
-        entity_id: String,
+        entity_id: Uuid,
         #[arg(long)]
         file: PathBuf,
     },
     Current {
-        entity_id: String,
+        entity_id: Uuid,
     },
 }
 
@@ -131,6 +138,8 @@ enum CliError {
     },
     #[error("server returned invalid JSON")]
     InvalidResponse,
+    #[error("server response exceeded {MAX_RESPONSE_BYTES} bytes")]
+    ResponseTooLarge,
 }
 
 impl CliError {
@@ -139,7 +148,7 @@ impl CliError {
             Self::Input(_) => 2,
             Self::Transport(_) => 3,
             Self::Api { .. } => 4,
-            Self::InvalidResponse => 5,
+            Self::InvalidResponse | Self::ResponseTooLarge => 5,
         }
     }
 
@@ -159,36 +168,43 @@ impl CliError {
             Self::InvalidResponse => {
                 json!({ "error": { "code": "invalid_response", "message": self.to_string(), "status": null } })
             }
+            Self::ResponseTooLarge => {
+                json!({ "error": { "code": "response_too_large", "message": self.to_string(), "status": null } })
+            }
         }
     }
 }
 
 #[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
 struct ContextFile {
     code: String,
     data: toml::Value,
 }
 
 #[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
 struct EntityFile {
     code: String,
-    blueprint_id: String,
+    blueprint_id: Uuid,
     blueprint_version: i64,
     projections: Option<toml::Value>,
 }
 
 #[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
 struct ValueFile {
     values: Vec<ValueInput>,
 }
 
 #[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
 struct ValueInput {
     kind: String,
-    attribute_id: String,
-    context_id: Option<String>,
+    attribute_id: Uuid,
+    context_id: Option<Uuid>,
     value: Option<toml::Value>,
-    target_entity_id: Option<String>,
+    target_entity_id: Option<Uuid>,
 }
 
 #[tokio::main]
@@ -209,7 +225,11 @@ async fn run(cli: Cli) -> Result<String, CliError> {
     let server = cli
         .server
         .unwrap_or_else(|| Url::parse("http://127.0.0.1:3000").expect("valid default URL"));
-    let client = Client::new();
+    let client = Client::builder()
+        .connect_timeout(CONNECT_TIMEOUT)
+        .timeout(REQUEST_TIMEOUT)
+        .build()
+        .map_err(|error| CliError::Transport(error.to_string()))?;
 
     match cli.command {
         Command::Health => request(&client, &server, Method::GET, "/health", None).await,
@@ -234,7 +254,7 @@ async fn run(cli: Cli) -> Result<String, CliError> {
                     &client,
                     &server,
                     Method::POST,
-                    &format!("/blueprints/{blueprint_id}/versions"),
+                    &format!("/blueprints/{}/versions", segment(blueprint_id)),
                     Some(json!({ "definition": definition })),
                 )
                 .await
@@ -244,7 +264,7 @@ async fn run(cli: Cli) -> Result<String, CliError> {
                     &client,
                     &server,
                     Method::GET,
-                    &format!("/blueprints/{blueprint_id}"),
+                    &format!("/blueprints/{}", segment(blueprint_id)),
                     None,
                 )
                 .await
@@ -257,15 +277,17 @@ async fn run(cli: Cli) -> Result<String, CliError> {
                     &client,
                     &server,
                     Method::GET,
-                    &format!("/blueprints/{blueprint_id}/versions/{version}"),
+                    &format!("/blueprints/{}/versions/{version}", segment(blueprint_id)),
                     None,
                 )
                 .await
             }
             BlueprintCommand::Resolve { code, version } => {
                 let path = match version {
-                    Some(version) => format!("/blueprints/by-code/{code}/versions/{version}"),
-                    None => format!("/blueprints/by-code/{code}"),
+                    Some(version) => {
+                        format!("/blueprints/by-code/{}/versions/{version}", segment(&code))
+                    }
+                    None => format!("/blueprints/by-code/{}", segment(&code)),
                 };
                 request(&client, &server, Method::GET, &path, None).await
             }
@@ -292,7 +314,7 @@ async fn run(cli: Cli) -> Result<String, CliError> {
                     &client,
                     &server,
                     Method::GET,
-                    &format!("/contexts/{code}"),
+                    &format!("/contexts/{}", segment(&code)),
                     None,
                 )
                 .await
@@ -314,7 +336,7 @@ async fn run(cli: Cli) -> Result<String, CliError> {
                     &client,
                     &server,
                     Method::GET,
-                    &format!("/entities/{entity_id}"),
+                    &format!("/entities/{}", segment(entity_id)),
                     None,
                 )
                 .await
@@ -324,7 +346,11 @@ async fn run(cli: Cli) -> Result<String, CliError> {
                     &client,
                     &server,
                     Method::GET,
-                    &format!("/entities/by-code/{blueprint_id}/{code}"),
+                    &format!(
+                        "/entities/by-code/{}/{}",
+                        segment(blueprint_id),
+                        segment(&code)
+                    ),
                     None,
                 )
                 .await
@@ -334,7 +360,7 @@ async fn run(cli: Cli) -> Result<String, CliError> {
                     &client,
                     &server,
                     Method::GET,
-                    &format!("/entities/{entity_id}/projections/preview"),
+                    &format!("/entities/{}/projections/preview", segment(entity_id)),
                     None,
                 )
                 .await
@@ -346,7 +372,7 @@ async fn run(cli: Cli) -> Result<String, CliError> {
                     &client,
                     &server,
                     Method::POST,
-                    &format!("/entities/{entity_id}/values"),
+                    &format!("/entities/{}/values", segment(entity_id)),
                     Some(values_body_from_file(&file)?),
                 )
                 .await
@@ -356,7 +382,7 @@ async fn run(cli: Cli) -> Result<String, CliError> {
                     &client,
                     &server,
                     Method::GET,
-                    &format!("/entities/{entity_id}/values/current"),
+                    &format!("/entities/{}/values/current", segment(entity_id)),
                     None,
                 )
                 .await
@@ -403,11 +429,20 @@ fn entity_body_from_file(path: &PathBuf) -> Result<Value, CliError> {
 
 fn values_body_from_file(path: &PathBuf) -> Result<Value, CliError> {
     let input: ValueFile = parse_toml_file(path)?;
+    values_body(input)
+}
+
+fn values_body(input: ValueFile) -> Result<Value, CliError> {
     let values = input
         .values
         .into_iter()
         .map(|value| match value.kind.as_str() {
             "scalar" => {
+                if value.target_entity_id.is_some() {
+                    return Err(CliError::Input(
+                        "scalar values must not include target_entity_id".to_owned(),
+                    ));
+                }
                 let payload = value
                     .value
                     .ok_or_else(|| CliError::Input("scalar values require value".to_owned()))?;
@@ -419,6 +454,11 @@ fn values_body_from_file(path: &PathBuf) -> Result<Value, CliError> {
                 }))
             }
             "relationship" => {
+                if value.value.is_some() {
+                    return Err(CliError::Input(
+                        "relationship values must not include value".to_owned(),
+                    ));
+                }
                 let target_entity_id = value.target_entity_id.ok_or_else(|| {
                     CliError::Input("relationship values require target_entity_id".to_owned())
                 })?;
@@ -454,9 +494,7 @@ async fn request(
     path: &str,
     body: Option<Value>,
 ) -> Result<String, CliError> {
-    let url = server
-        .join(path)
-        .map_err(|error| CliError::Input(format!("invalid API path: {error}")))?;
+    let url = endpoint(server, path)?;
     let mut request = client.request(method, url);
     if let Some(body) = body {
         request = request.json(&body);
@@ -466,10 +504,22 @@ async fn request(
         .await
         .map_err(|error| CliError::Transport(error.to_string()))?;
     let status = response.status();
-    let body = response
-        .text()
-        .await
-        .map_err(|error| CliError::Transport(error.to_string()))?;
+    if response
+        .content_length()
+        .is_some_and(|length| length > MAX_RESPONSE_BYTES as u64)
+    {
+        return Err(CliError::ResponseTooLarge);
+    }
+    let mut stream = response.bytes_stream();
+    let mut body = Vec::new();
+    while let Some(chunk) = stream.next().await {
+        let chunk = chunk.map_err(|error| CliError::Transport(error.to_string()))?;
+        if body.len() + chunk.len() > MAX_RESPONSE_BYTES {
+            return Err(CliError::ResponseTooLarge);
+        }
+        body.extend_from_slice(&chunk);
+    }
+    let body = String::from_utf8(body).map_err(|_| CliError::InvalidResponse)?;
 
     if status.is_success() {
         serde_json::from_str::<Value>(&body).map_err(|_| CliError::InvalidResponse)?;
@@ -494,6 +544,21 @@ async fn request(
     })
 }
 
+fn endpoint(server: &Url, path: &str) -> Result<Url, CliError> {
+    let mut base = server.clone();
+    let mut base_path = base.path().to_owned();
+    if !base_path.ends_with('/') {
+        base_path.push('/');
+        base.set_path(&base_path);
+    }
+    base.join(path.trim_start_matches('/'))
+        .map_err(|error| CliError::Input(format!("invalid API path: {error}")))
+}
+
+fn segment(value: impl std::fmt::Display) -> String {
+    url::form_urlencoded::byte_serialize(value.to_string().as_bytes()).collect()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -503,26 +568,51 @@ mod tests {
         let source = r#"
 [[values]]
 kind = "scalar"
-attribute_id = "attribute"
+attribute_id = "00000000-0000-0000-0000-000000000001"
 value = "Blue shirt"
 "#;
         let input: ValueFile = toml::from_str(source).unwrap();
-        let path = PathBuf::from("unused");
-        let _ = path;
-        let values = input
-            .values
-            .into_iter()
-            .map(|value| {
-                json!({
-                    "kind": value.kind,
-                    "attribute_id": value.attribute_id,
-                    "value": toml_to_json(value.value.unwrap()).unwrap(),
-                })
-            })
-            .collect::<Vec<_>>();
         assert_eq!(
-            values,
-            vec![json!({ "kind": "scalar", "attribute_id": "attribute", "value": "Blue shirt" })]
+            values_body(input).unwrap(),
+            json!({
+                "values": [{
+                    "kind": "scalar",
+                    "attribute_id": "00000000-0000-0000-0000-000000000001",
+                    "context_id": null,
+                    "value": "Blue shirt"
+                }]
+            })
+        );
+    }
+
+    #[test]
+    fn rejects_incompatible_value_fields_and_unknown_toml_keys() {
+        let relationship_with_value = r#"
+[[values]]
+kind = "relationship"
+attribute_id = "00000000-0000-0000-0000-000000000001"
+target_entity_id = "00000000-0000-0000-0000-000000000002"
+value = "ignored before this validation"
+"#;
+        let input: ValueFile = toml::from_str(relationship_with_value).unwrap();
+        assert!(matches!(values_body(input), Err(CliError::Input(_))));
+
+        let unknown_key = r#"
+code = "shirt-001"
+blueprint_id = "00000000-0000-0000-0000-000000000001"
+blueprint_version = 1
+blueprint_verison = 1
+"#;
+        assert!(toml::from_str::<EntityFile>(unknown_key).is_err());
+    }
+
+    #[test]
+    fn preserves_base_path_and_encodes_dynamic_segments() {
+        let server = Url::parse("https://example.test/catalog-api/").unwrap();
+        let url = endpoint(&server, &format!("/contexts/{}", segment("en/GB?#"))).unwrap();
+        assert_eq!(
+            url.as_str(),
+            "https://example.test/catalog-api/contexts/en%2FGB%3F%23"
         );
     }
 
