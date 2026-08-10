@@ -140,6 +140,8 @@ the same contextual and historical behavior as all other attribute values.
 The Axum API starts after embedded migrations complete. Set `BIND_ADDR` to choose
 its listener address; it defaults to `127.0.0.1:3000`.
 
+The JSON-first `catalog` client is documented in [cli.md](cli.md).
+
 The initial API supports creating TOML-defined blueprint revisions and contexts,
 creating and reading entities, appending attribute values, and reading the
 `preview` projection.
@@ -149,11 +151,18 @@ creating and reading entities, appending attribute values, and reading the
 | `POST` | `/blueprints` | Create an initial blueprint revision from TOML. |
 | `POST` | `/blueprints/{blueprint_id}/versions` | Create the next TOML-defined blueprint revision. |
 | `GET` | `/blueprints/{blueprint_id}` | Read the current active blueprint revision and attributes. |
+| `GET` | `/blueprints/{blueprint_id}/versions/{version}` | Read an exact active blueprint revision. |
+| `GET` | `/blueprints/by-code/{code}` | Read the current active blueprint by code. |
+| `GET` | `/blueprints/by-code/{code}/versions/{version}` | Read an exact blueprint revision by code. |
 | `POST` | `/contexts` | Create a reusable attribute context. |
+| `GET` | `/contexts/{code}` | Read a context by code. |
 | `POST` | `/entities` | Create an entity pinned to an exact blueprint version. |
 | `GET` | `/entities/{entity_id}` | Read an active entity and its named projections. |
+| `GET` | `/entities/by-code/{blueprint_id}/{code}` | Read an active entity by blueprint and code. |
 | `GET` | `/entities/{entity_id}/projections/preview` | Read the automatic preview projection. |
 | `POST` | `/entities/{entity_id}/values` | Append scalar or relationship value history and rebuild preview. |
+| `GET` | `/entities/{entity_id}/values/current` | Read derived current scalar values and relationship edges. |
+| `GET` | `/health` | Confirm the migrated API is ready to serve requests. |
 
 Errors use this JSON shape:
 

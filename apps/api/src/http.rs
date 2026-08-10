@@ -24,21 +24,44 @@ pub struct AppState {
 
 pub fn router(state: AppState) -> Router {
     Router::new()
+        .route("/health", get(health))
         .route("/blueprints", post(create_blueprint))
         .route(
             "/blueprints/{blueprint_id}/versions",
             post(create_blueprint_revision),
         )
         .route("/blueprints/{blueprint_id}", get(get_blueprint))
+        .route(
+            "/blueprints/{blueprint_id}/versions/{version}",
+            get(get_blueprint_revision),
+        )
+        .route("/blueprints/by-code/{code}", get(get_blueprint_by_code))
+        .route(
+            "/blueprints/by-code/{code}/versions/{version}",
+            get(get_blueprint_by_code_and_version),
+        )
         .route("/contexts", post(create_context))
+        .route("/contexts/{code}", get(get_context))
         .route("/entities", post(create_entity))
         .route("/entities/{entity_id}", get(get_entity))
+        .route(
+            "/entities/by-code/{blueprint_id}/{code}",
+            get(get_entity_by_code),
+        )
         .route(
             "/entities/{entity_id}/projections/preview",
             get(get_preview),
         )
         .route("/entities/{entity_id}/values", post(append_values))
+        .route(
+            "/entities/{entity_id}/values/current",
+            get(get_current_values),
+        )
         .with_state(state)
+}
+
+async fn health() -> Json<Value> {
+    Json(json!({ "status": "ok" }))
 }
 
 async fn create_blueprint(
@@ -79,6 +102,42 @@ async fn get_blueprint(
         .ok_or_else(|| ApiError::not_found("blueprint"))
 }
 
+async fn get_blueprint_revision(
+    State(state): State<AppState>,
+    Path((blueprint_id, version)): Path<(Uuid, i64)>,
+) -> Result<Json<BlueprintWithAttributes>, ApiError> {
+    state
+        .repository
+        .get_blueprint_revision(blueprint_id, version)
+        .await?
+        .map(Json)
+        .ok_or_else(|| ApiError::not_found("blueprint version"))
+}
+
+async fn get_blueprint_by_code(
+    State(state): State<AppState>,
+    Path(code): Path<String>,
+) -> Result<Json<BlueprintWithAttributes>, ApiError> {
+    state
+        .repository
+        .get_blueprint_by_code(&code)
+        .await?
+        .map(Json)
+        .ok_or_else(|| ApiError::not_found("blueprint"))
+}
+
+async fn get_blueprint_by_code_and_version(
+    State(state): State<AppState>,
+    Path((code, version)): Path<(String, i64)>,
+) -> Result<Json<BlueprintWithAttributes>, ApiError> {
+    state
+        .repository
+        .get_blueprint_by_code_and_version(&code, version)
+        .await?
+        .map(Json)
+        .ok_or_else(|| ApiError::not_found("blueprint version"))
+}
+
 async fn create_context(
     State(state): State<AppState>,
     Json(input): Json<CreateAttributeContext>,
@@ -87,6 +146,18 @@ async fn create_context(
         StatusCode::CREATED,
         Json(state.repository.create_context(input).await?),
     ))
+}
+
+async fn get_context(
+    State(state): State<AppState>,
+    Path(code): Path<String>,
+) -> Result<Json<crate::model::AttributeContext>, ApiError> {
+    state
+        .repository
+        .get_context_by_code(&code)
+        .await?
+        .map(Json)
+        .ok_or_else(|| ApiError::not_found("context"))
 }
 
 async fn create_entity(
@@ -106,6 +177,18 @@ async fn get_entity(
     state
         .repository
         .get_entity(entity_id)
+        .await?
+        .map(Json)
+        .ok_or_else(|| ApiError::not_found("entity"))
+}
+
+async fn get_entity_by_code(
+    State(state): State<AppState>,
+    Path((blueprint_id, code)): Path<(Uuid, String)>,
+) -> Result<Json<Entity>, ApiError> {
+    state
+        .repository
+        .get_entity_by_code(blueprint_id, &code)
         .await?
         .map(Json)
         .ok_or_else(|| ApiError::not_found("entity"))
@@ -137,6 +220,17 @@ async fn append_values(
         StatusCode::CREATED,
         Json(state.repository.append_values(entity_id, input).await?),
     ))
+}
+
+async fn get_current_values(
+    State(state): State<AppState>,
+    Path(entity_id): Path<Uuid>,
+) -> Result<Json<Vec<crate::model::AttributeValue>>, ApiError> {
+    if state.repository.get_entity(entity_id).await?.is_none() {
+        return Err(ApiError::not_found("entity"));
+    }
+
+    Ok(Json(state.repository.current_values(entity_id).await?))
 }
 
 #[derive(Debug)]

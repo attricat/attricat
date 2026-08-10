@@ -191,18 +191,61 @@ impl CatalogRepository {
         .fetch_optional(&self.pool)
         .await?;
 
-        match blueprint {
-            Some(blueprint) => {
-                let attributes = self
-                    .list_attributes(blueprint.id, blueprint.version)
-                    .await?;
-                Ok(Some(BlueprintWithAttributes {
-                    blueprint,
-                    attributes,
-                }))
-            }
-            None => Ok(None),
-        }
+        self.with_attributes(blueprint).await
+    }
+
+    pub async fn get_blueprint_revision(
+        &self,
+        blueprint_id: Uuid,
+        version: i64,
+    ) -> Result<Option<BlueprintWithAttributes>, RepositoryError> {
+        let blueprint = sqlx::query_as::<_, Blueprint>(
+            r#"SELECT id, code, name, kind, version, includes, created_at, updated_at, deleted_at, definition, definition_hash
+               FROM blueprints
+               WHERE id = $1 AND version = $2 AND deleted_at IS NULL"#,
+        )
+        .bind(blueprint_id)
+        .bind(version)
+        .fetch_optional(&self.pool)
+        .await?;
+
+        self.with_attributes(blueprint).await
+    }
+
+    pub async fn get_blueprint_by_code(
+        &self,
+        code: &str,
+    ) -> Result<Option<BlueprintWithAttributes>, RepositoryError> {
+        let blueprint = sqlx::query_as::<_, Blueprint>(
+            r#"SELECT id, code, name, kind, version, includes, created_at, updated_at, deleted_at, definition, definition_hash
+               FROM blueprints
+               WHERE code = $1 AND deleted_at IS NULL
+               ORDER BY version DESC
+               LIMIT 1"#,
+        )
+        .bind(code)
+        .fetch_optional(&self.pool)
+        .await?;
+
+        self.with_attributes(blueprint).await
+    }
+
+    pub async fn get_blueprint_by_code_and_version(
+        &self,
+        code: &str,
+        version: i64,
+    ) -> Result<Option<BlueprintWithAttributes>, RepositoryError> {
+        let blueprint = sqlx::query_as::<_, Blueprint>(
+            r#"SELECT id, code, name, kind, version, includes, created_at, updated_at, deleted_at, definition, definition_hash
+               FROM blueprints
+               WHERE code = $1 AND version = $2 AND deleted_at IS NULL"#,
+        )
+        .bind(code)
+        .bind(version)
+        .fetch_optional(&self.pool)
+        .await?;
+
+        self.with_attributes(blueprint).await
     }
 
     pub async fn list_attributes(
@@ -222,6 +265,24 @@ impl CatalogRepository {
         .await?)
     }
 
+    async fn with_attributes(
+        &self,
+        blueprint: Option<Blueprint>,
+    ) -> Result<Option<BlueprintWithAttributes>, RepositoryError> {
+        match blueprint {
+            Some(blueprint) => {
+                let attributes = self
+                    .list_attributes(blueprint.id, blueprint.version)
+                    .await?;
+                Ok(Some(BlueprintWithAttributes {
+                    blueprint,
+                    attributes,
+                }))
+            }
+            None => Ok(None),
+        }
+    }
+
     pub async fn create_context(
         &self,
         input: CreateAttributeContext,
@@ -239,6 +300,18 @@ impl CatalogRepository {
         .bind(input.code)
         .bind(input.data)
         .fetch_one(&self.pool)
+        .await?)
+    }
+
+    pub async fn get_context_by_code(
+        &self,
+        code: &str,
+    ) -> Result<Option<AttributeContext>, RepositoryError> {
+        Ok(sqlx::query_as::<_, AttributeContext>(
+            "SELECT id, code, data FROM attribute_contexts WHERE code = $1",
+        )
+        .bind(code)
+        .fetch_optional(&self.pool)
         .await?)
     }
 
@@ -279,6 +352,48 @@ impl CatalogRepository {
         )
         .bind(entity_id)
         .fetch_optional(&self.pool)
+        .await?)
+    }
+
+    pub async fn get_entity_by_code(
+        &self,
+        blueprint_id: Uuid,
+        code: &str,
+    ) -> Result<Option<Entity>, RepositoryError> {
+        Ok(sqlx::query_as::<_, Entity>(
+            r#"SELECT id, code, blueprint_id, blueprint_version, projections, created_at, updated_at, deleted_at
+               FROM entities
+               WHERE blueprint_id = $1 AND code = $2 AND deleted_at IS NULL"#,
+        )
+        .bind(blueprint_id)
+        .bind(code)
+        .fetch_optional(&self.pool)
+        .await?)
+    }
+
+    pub async fn current_values(
+        &self,
+        entity_id: Uuid,
+    ) -> Result<Vec<AttributeValue>, RepositoryError> {
+        Ok(sqlx::query_as::<_, AttributeValue>(
+            r#"SELECT DISTINCT ON (
+                    entity_id,
+                    attribute_id,
+                    context_id,
+                    relationship_target_entity_id
+                ) id, entity_id, attribute_id, value, relationship_target_entity_id, context_id, created_at
+               FROM attribute_values
+               WHERE entity_id = $1
+               ORDER BY
+                    entity_id,
+                    attribute_id,
+                    context_id,
+                    relationship_target_entity_id,
+                    created_at DESC,
+                    id DESC"#,
+        )
+        .bind(entity_id)
+        .fetch_all(&self.pool)
         .await?)
     }
 

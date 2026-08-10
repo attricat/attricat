@@ -40,6 +40,18 @@ async fn catalog_workflow_compiles_explicit_toml_selections_and_rebuilds_preview
     let (base_url, server) = start_server(pool).await;
     let client = Client::new();
 
+    assert_eq!(
+        client
+            .get(format!("{base_url}/health"))
+            .send()
+            .await
+            .unwrap()
+            .json::<Value>()
+            .await
+            .unwrap(),
+        json!({ "status": "ok" })
+    );
+
     let seo = create_blueprint(
         &client,
         &base_url,
@@ -125,6 +137,18 @@ value_type = "relationship"
         .unwrap()["id"]
         .as_str()
         .unwrap();
+
+    let resolved: Value = client
+        .get(format!("{base_url}/blueprints/by-code/product"))
+        .send()
+        .await
+        .unwrap()
+        .error_for_status()
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    assert_eq!(resolved["blueprint"]["id"], blueprint["blueprint"]["id"]);
     let relationship_attribute_id = blueprint["attributes"]
         .as_array()
         .unwrap()
@@ -168,6 +192,17 @@ value_type = "string"
         .await
         .unwrap();
     assert_eq!(current_blueprint["blueprint"]["version"], 2);
+    let first_revision: Value = client
+        .get(format!("{base_url}/blueprints/{blueprint_id}/versions/1"))
+        .send()
+        .await
+        .unwrap()
+        .error_for_status()
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    assert_eq!(first_revision["blueprint"]["version"], 1);
 
     let context: Value = client
         .post(format!("{base_url}/contexts"))
@@ -180,6 +215,19 @@ value_type = "string"
         .json()
         .await
         .unwrap();
+    assert_eq!(
+        client
+            .get(format!("{base_url}/contexts/en-GB"))
+            .send()
+            .await
+            .unwrap()
+            .error_for_status()
+            .unwrap()
+            .json::<Value>()
+            .await
+            .unwrap()["id"],
+        context["id"]
+    );
 
     let source: Value = client
         .post(format!("{base_url}/entities"))
@@ -248,6 +296,40 @@ value_type = "string"
         .await
         .unwrap();
     assert_eq!(response.status(), StatusCode::CREATED);
+
+    assert_eq!(
+        client
+            .get(format!(
+                "{base_url}/entities/by-code/{}/source",
+                blueprint_id
+            ))
+            .send()
+            .await
+            .unwrap()
+            .error_for_status()
+            .unwrap()
+            .json::<Value>()
+            .await
+            .unwrap()["id"],
+        source["id"]
+    );
+    assert_eq!(
+        client
+            .get(format!(
+                "{base_url}/entities/{}/values/current",
+                source["id"].as_str().unwrap()
+            ))
+            .send()
+            .await
+            .unwrap()
+            .error_for_status()
+            .unwrap()
+            .json::<Vec<Value>>()
+            .await
+            .unwrap()
+            .len(),
+        3
+    );
 
     let preview: Value = client
         .get(format!(
