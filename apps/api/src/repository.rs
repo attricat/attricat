@@ -398,14 +398,10 @@ impl CatalogRepository {
     ) -> Result<Vec<AttributeValue>, RepositoryError> {
         Ok(sqlx::query_as::<_, AttributeValue>(
             r#"SELECT id, entity_id, attribute_id, value, relationship_target_entity_id, context_id, active, created_at
-               FROM (
-                   SELECT DISTINCT ON (entity_id, attribute_id, context_id, relationship_target_entity_id)
-                       id, entity_id, attribute_id, value, relationship_target_entity_id, context_id, active, created_at
-                   FROM attribute_values
-                   WHERE entity_id = $1
-                   ORDER BY entity_id, attribute_id, context_id, relationship_target_entity_id, created_at DESC, id DESC
-               ) current
-               WHERE relationship_target_entity_id IS NULL OR active"#,
+               FROM attribute_values
+               WHERE entity_id = $1
+                 AND latest
+                 AND (relationship_target_entity_id IS NULL OR active)"#,
         )
         .bind(entity_id)
         .fetch_all(&self.pool)
@@ -454,23 +450,20 @@ impl CatalogRepository {
             return Err(RepositoryError::InvalidPreview);
         }
         let relationships = sqlx::query_as::<_, PreviewRelationship>(
-            r#"WITH current AS (
-                   SELECT DISTINCT ON (entity_id, attribute_id, context_id, relationship_target_entity_id)
-                        attribute_id, context_id, relationship_target_entity_id, active
-                   FROM attribute_values
-                   WHERE entity_id = $1 AND relationship_target_entity_id IS NOT NULL
-                   ORDER BY entity_id, attribute_id, context_id, relationship_target_entity_id, created_at DESC, id DESC
-               ), relationships AS (
-                   SELECT a.code AS attribute_code, c.code AS context_code, target.id AS target_id,
-                          target.code AS target_code, target.projections AS target_projections,
-                          ROW_NUMBER() OVER (PARTITION BY a.id, current.context_id ORDER BY target.id)
-                              AS relationship_position
-                   FROM current
-                   JOIN attributes a ON a.id = current.attribute_id AND a.deleted_at IS NULL
-                   JOIN entities target ON target.id = current.relationship_target_entity_id AND target.deleted_at IS NULL
-                   LEFT JOIN attribute_contexts c ON c.id = current.context_id
-                   WHERE current.active
-               )
+            r#"WITH relationships AS (
+                    SELECT a.code AS attribute_code, c.code AS context_code, target.id AS target_id,
+                           target.code AS target_code, target.projections AS target_projections,
+                           ROW_NUMBER() OVER (PARTITION BY a.id, av.context_id ORDER BY target.id)
+                               AS relationship_position
+                    FROM attribute_values av
+                    JOIN attributes a ON a.id = av.attribute_id AND a.deleted_at IS NULL
+                    JOIN entities target ON target.id = av.relationship_target_entity_id AND target.deleted_at IS NULL
+                    LEFT JOIN attribute_contexts c ON c.id = av.context_id
+                    WHERE av.entity_id = $1
+                      AND av.relationship_target_entity_id IS NOT NULL
+                      AND av.latest
+                      AND av.active
+                )
                SELECT attribute_code, context_code, target_id, target_code, target_projections, relationship_position
                FROM relationships
                WHERE relationship_position <= $2
@@ -546,20 +539,18 @@ impl CatalogRepository {
     ) -> Result<EntityPreviewPage, RepositoryError> {
         let mut items = sqlx::query_as::<_, EntityPreview>(
             r#"SELECT target.id, target.code, target.projections -> 'preview' AS preview
-               FROM (
-                   SELECT DISTINCT ON (av.relationship_target_entity_id)
-                       av.relationship_target_entity_id, av.active
-                   FROM attribute_values av
-                   JOIN attributes a ON a.id = av.attribute_id AND a.deleted_at IS NULL
-                   WHERE av.entity_id = $1
-                     AND a.code = $2
-                     AND av.relationship_target_entity_id IS NOT NULL
-                     AND ($3::uuid IS NULL OR av.relationship_target_entity_id > $3)
-                   ORDER BY av.relationship_target_entity_id, av.created_at DESC, av.id DESC
-               ) current
-               JOIN entities target ON target.id = current.relationship_target_entity_id
+               FROM attribute_values av
+               JOIN attributes a ON a.id = av.attribute_id AND a.deleted_at IS NULL
+               JOIN entities target ON target.id = av.relationship_target_entity_id
                JOIN blueprints b ON b.id = target.blueprint_id AND b.version = target.blueprint_version
-               WHERE current.active AND target.deleted_at IS NULL AND b.code = $4
+               WHERE av.entity_id = $1
+                 AND a.code = $2
+                 AND av.relationship_target_entity_id IS NOT NULL
+                 AND av.latest
+                 AND av.active
+                 AND ($3::uuid IS NULL OR av.relationship_target_entity_id > $3)
+                 AND target.deleted_at IS NULL
+                 AND b.code = $4
                ORDER BY target.id
                LIMIT $5"#,
         )
@@ -780,6 +771,15 @@ impl CatalogRepository {
             .await?;
         }
 
+        self.supersede_latest_value(
+            transaction,
+            entity.id,
+            attribute_id,
+            context_id,
+            target_entity_id,
+        )
+        .await?;
+
         Ok(sqlx::query_as::<_, AttributeValue>(
             r#"INSERT INTO attribute_values (
                     id, entity_id, attribute_id, context_id, value, relationship_target_entity_id, active
@@ -860,13 +860,14 @@ impl CatalogRepository {
         context_id: Option<Uuid>,
     ) -> Result<HashSet<Uuid>, RepositoryError> {
         Ok(sqlx::query_scalar::<_, Uuid>(
-            r#"SELECT relationship_target_entity_id FROM (
-                   SELECT DISTINCT ON (relationship_target_entity_id) relationship_target_entity_id, active
-                   FROM attribute_values
-                   WHERE entity_id = $1 AND attribute_id = $2 AND context_id IS NOT DISTINCT FROM $3
-                     AND relationship_target_entity_id IS NOT NULL
-                   ORDER BY relationship_target_entity_id, created_at DESC, id DESC
-               ) current WHERE active"#,
+            r#"SELECT relationship_target_entity_id
+               FROM attribute_values
+               WHERE entity_id = $1
+                 AND attribute_id = $2
+                 AND context_id IS NOT DISTINCT FROM $3
+                 AND relationship_target_entity_id IS NOT NULL
+                 AND latest
+                 AND active"#,
         )
         .bind(entity_id)
         .bind(attribute_id)
@@ -886,6 +887,15 @@ impl CatalogRepository {
         target_entity_id: Uuid,
         active: bool,
     ) -> Result<AttributeValue, RepositoryError> {
+        self.supersede_latest_value(
+            transaction,
+            entity_id,
+            attribute_id,
+            context_id,
+            Some(target_entity_id),
+        )
+        .await?;
+
         Ok(sqlx::query_as::<_, AttributeValue>(
             r#"INSERT INTO attribute_values (id, entity_id, attribute_id, context_id, value, relationship_target_entity_id, active)
                VALUES ($1, $2, $3, $4, 'null'::jsonb, $5, $6)
@@ -893,6 +903,32 @@ impl CatalogRepository {
         )
         .bind(Uuid::new_v4()).bind(entity_id).bind(attribute_id).bind(context_id)
         .bind(target_entity_id).bind(active).fetch_one(&mut **transaction).await?)
+    }
+
+    async fn supersede_latest_value(
+        &self,
+        transaction: &mut Transaction<'_, Postgres>,
+        entity_id: Uuid,
+        attribute_id: Uuid,
+        context_id: Option<Uuid>,
+        relationship_target_entity_id: Option<Uuid>,
+    ) -> Result<(), RepositoryError> {
+        sqlx::query(
+            r#"UPDATE attribute_values
+               SET latest = false
+               WHERE entity_id = $1
+                 AND attribute_id = $2
+                 AND context_id IS NOT DISTINCT FROM $3
+                 AND relationship_target_entity_id IS NOT DISTINCT FROM $4
+                 AND latest"#,
+        )
+        .bind(entity_id)
+        .bind(attribute_id)
+        .bind(context_id)
+        .bind(relationship_target_entity_id)
+        .execute(&mut **transaction)
+        .await?;
+        Ok(())
     }
 
     async fn touch_entity(

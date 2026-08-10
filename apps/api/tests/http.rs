@@ -58,7 +58,7 @@ async fn create_entity(client: &Client, base_url: &str, code: &str, blueprint: &
 
 #[sqlx::test]
 async fn catalog_workflow_compiles_explicit_toml_selections_and_rebuilds_preview(pool: PgPool) {
-    let (base_url, server) = start_server(pool).await;
+    let (base_url, server) = start_server(pool.clone()).await;
     let client = Client::new();
 
     assert_eq!(
@@ -368,6 +368,92 @@ value_type = "string"
             },
             "en-GB": { "title": "Blue shirt (UK)" }
         })
+    );
+
+    let replacement = client
+        .post(format!(
+            "{base_url}/entities/{}/values",
+            source["id"].as_str().unwrap()
+        ))
+        .json(&json!({
+            "values": [
+                {
+                    "kind": "scalar",
+                    "attribute_code": "title",
+                    "value": "Green shirt"
+                },
+                {
+                    "kind": "scalar",
+                    "attribute_code": "title",
+                    "value": "Red shirt"
+                }
+            ]
+        }))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(replacement.status(), StatusCode::CREATED);
+
+    let current_values: Vec<Value> = client
+        .get(format!(
+            "{base_url}/entities/{}/values/current",
+            source["id"].as_str().unwrap()
+        ))
+        .send()
+        .await
+        .unwrap()
+        .error_for_status()
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    let current_default_title: Vec<_> = current_values
+        .iter()
+        .filter(|value| {
+            value["attribute_id"] == title_attribute_id && value["context_id"].is_null()
+        })
+        .collect();
+    assert_eq!(current_default_title.len(), 1);
+    assert_eq!(current_default_title[0]["value"], "Red shirt");
+
+    let current_preview: Value = client
+        .get(format!(
+            "{base_url}/entities/{}/projections/preview?relationship_depth=0",
+            source["id"].as_str().unwrap()
+        ))
+        .send()
+        .await
+        .unwrap()
+        .error_for_status()
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    assert_eq!(current_preview["default"]["title"], "Red shirt");
+
+    let source_id: Uuid = source["id"].as_str().unwrap().parse().unwrap();
+    let title_attribute_id: Uuid = title_attribute_id.parse().unwrap();
+    assert_eq!(
+        sqlx::query_scalar::<_, i64>(
+            "SELECT COUNT(*) FROM attribute_values WHERE entity_id = $1 AND attribute_id = $2 AND context_id IS NULL AND relationship_target_entity_id IS NULL AND latest"
+        )
+        .bind(source_id)
+        .bind(title_attribute_id)
+        .fetch_one(&pool)
+        .await
+        .unwrap(),
+        1
+    );
+    assert_eq!(
+        sqlx::query_scalar::<_, i64>(
+            "SELECT COUNT(*) FROM attribute_values WHERE entity_id = $1 AND attribute_id = $2 AND context_id IS NULL AND relationship_target_entity_id IS NULL"
+        )
+        .bind(source_id)
+        .bind(title_attribute_id)
+        .fetch_one(&pool)
+        .await
+        .unwrap(),
+        3
     );
 
     server.abort();

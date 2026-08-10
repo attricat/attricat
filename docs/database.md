@@ -97,7 +97,9 @@ channel.
 
 ### `attribute_values`
 
-This is the canonical EAV fact table and an append-only value history.
+This is the canonical EAV fact table and value history. Value payloads are
+append-only; the `latest` current-state marker changes when an event is
+superseded.
 
 - Each row references one entity and one attribute.
 - `context_id` is optional and applies to scalar values and relationships alike.
@@ -107,10 +109,13 @@ This is the canonical EAV fact table and an append-only value history.
 - `active` records the current state of a relationship history entry. A false
   entry is an immutable tombstone that unlinks its target; scalar values are
   always active.
+- `latest` marks the newest event for its logical history key. Exactly one row
+  per key is latest.
 - `created_at` records the insertion time.
 
-There is no `is_latest` field. Current values are derived from history, ordered by
-`created_at DESC, id DESC` for deterministic ties.
+Current reads select `latest` rows directly. Relationship reads additionally
+require `active`, so the latest removal tombstone remains historical but is not
+returned as a current edge.
 
 For scalar values, the logical history key is:
 
@@ -134,8 +139,9 @@ the same contextual and historical behavior as all other attribute values.
 - Foreign keys protect blueprint, entity, attribute, context, and relationship
   target references.
 - Soft-deleted rows remain referentially valid for historical data.
-- Partial history indexes support current-state derivation for scalar and
-  relationship values.
+- Partial unique indexes enforce one latest scalar value and one latest
+  relationship event per logical history key.
+- Partial latest-row indexes support current scalar and relationship reads.
 - JSONB GIN indexes exist for entity projections and context data.
 
 `updated_at` is application-managed. No trigger updates timestamps.

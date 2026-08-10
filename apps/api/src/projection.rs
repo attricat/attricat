@@ -19,21 +19,21 @@ impl PreviewProjectionBuilder {
         entity_id: Uuid,
     ) -> Result<Value, RepositoryError> {
         let values = sqlx::query_as::<_, PreviewValue>(
-            r#"SELECT DISTINCT ON (av.attribute_id, av.context_id)
-                   a.code AS attribute_code,
-                   c.code AS context_code,
-                   av.value
-               FROM attribute_values av
+            r#"SELECT a.code AS attribute_code,
+                    c.code AS context_code,
+                    av.value
+                FROM attribute_values av
                JOIN entities e ON e.id = av.entity_id
                JOIN attributes a
                  ON a.id = av.attribute_id
                 AND a.blueprint_id = e.blueprint_id
                 AND a.blueprint_version = e.blueprint_version
                LEFT JOIN attribute_contexts c ON c.id = av.context_id
-               WHERE av.entity_id = $1
-                 AND av.relationship_target_entity_id IS NULL
-                 AND a.deleted_at IS NULL
-               ORDER BY av.attribute_id, av.context_id, av.created_at DESC, av.id DESC"#,
+                WHERE av.entity_id = $1
+                  AND av.relationship_target_entity_id IS NULL
+                  AND av.latest
+                  AND a.deleted_at IS NULL
+                ORDER BY a.position, c.code NULLS FIRST"#,
         )
         .bind(entity_id)
         .fetch_all(&mut **transaction)

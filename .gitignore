@@ -1,2 +1,4 @@
 /target
 .env
+/apps/catalog-web/node_modules
+/apps/catalog-web/dist
