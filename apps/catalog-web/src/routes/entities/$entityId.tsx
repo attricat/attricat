@@ -1,18 +1,25 @@
-import { useQuery } from '@tanstack/react-query'
-import { Link, createFileRoute } from '@tanstack/react-router'
-import { Alert, Box, Button, Container, Paper, Typography } from '@mui/material'
-import { getEntityPreview } from '../../api'
+import { useQuery } from '@tanstack/react-query';
+import { Link, createFileRoute } from '@tanstack/react-router';
+import {
+  Alert,
+  Box,
+  Button,
+  Container,
+  Paper,
+  Typography,
+} from '@mui/material';
+import { getEntityPreview } from '../../api';
 
 export const Route = createFileRoute('/entities/$entityId')({
-  component: EntityPreview,
-})
+  component: () => <EntityPreview />,
+});
 
-function EntityPreview() {
-  const { entityId } = Route.useParams()
+const EntityPreview = () => {
+  const { entityId } = Route.useParams();
   const preview = useQuery({
     queryKey: ['entity-preview', entityId],
     queryFn: () => getEntityPreview(entityId),
-  })
+  });
   return (
     <Container component="main" maxWidth="lg" sx={{ py: { xs: 4, md: 7 } }}>
       <Button component={Link} to="/" sx={{ mb: 4 }}>
@@ -51,5 +58,5 @@ function EntityPreview() {
         </Paper>
       )}
     </Container>
-  )
-}
+  );
+};

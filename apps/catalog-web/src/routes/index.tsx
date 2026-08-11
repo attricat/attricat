@@ -1,13 +1,13 @@
-import { useForm } from '@tanstack/react-form'
-import { useQuery } from '@tanstack/react-query'
-import { Link, createFileRoute, useNavigate } from '@tanstack/react-router'
-import { flexRender } from '@tanstack/react-table'
+import { useForm } from '@tanstack/react-form';
+import { useQuery } from '@tanstack/react-query';
+import { Link, createFileRoute, useNavigate } from '@tanstack/react-router';
+import { flexRender } from '@tanstack/react-table';
 import {
   getCoreRowModel,
   legacyCreateColumnHelper,
   type LegacyColumnDef,
   useLegacyTable,
-} from '@tanstack/react-table/legacy'
+} from '@tanstack/react-table/legacy';
 import {
   Alert,
   Box,
@@ -24,18 +24,18 @@ import {
   TableRow,
   TextField,
   Typography,
-} from '@mui/material'
-import { listEntityBlueprints, searchEntities, type EntityItem } from '../api'
-import { displayLabel, parseExplorerSearch } from '../search'
+} from '@mui/material';
+import { listEntityBlueprints, searchEntities, type EntityItem } from '../api';
+import { displayLabel, parseExplorerSearch } from '../search';
 
 export const Route = createFileRoute('/')({
   validateSearch: parseExplorerSearch,
-  component: Explorer,
-})
+  component: () => <Explorer />,
+});
 
-function Explorer() {
-  const search = Route.useSearch()
-  const navigate = useNavigate({ from: Route.fullPath })
+const Explorer = () => {
+  const search = Route.useSearch();
+  const navigate = useNavigate({ from: Route.fullPath });
   const form = useForm({
     defaultValues: {
       blueprint: search.blueprint ?? '',
@@ -43,21 +43,21 @@ function Explorer() {
       query: search.query ?? '',
     },
     onSubmit: ({ value }) => {
-      void navigate({ to: '/', search: parseExplorerSearch(value) })
+      void navigate({ to: '/', search: parseExplorerSearch(value) });
     },
-  })
+  });
   const results = useQuery({
     queryKey: ['entities', search.blueprint, search.version, search.query],
     queryFn: () =>
       searchEntities(search.blueprint!, search.version, search.query ?? ''),
     enabled: Boolean(search.blueprint),
-  })
+  });
   const blueprints = useQuery({
     queryKey: ['entity-blueprints'],
     queryFn: listEntityBlueprints,
-  })
+  });
 
-  const columnHelper = legacyCreateColumnHelper<EntityItem>()
+  const columnHelper = legacyCreateColumnHelper<EntityItem>();
   const columns: LegacyColumnDef<EntityItem, string>[] = [
     columnHelper.accessor('id', {
       header: 'ID',
@@ -76,12 +76,12 @@ function Explorer() {
       cell: (info) =>
         displayLabel(info.row.original.display, info.row.original.id),
     }) as LegacyColumnDef<EntityItem, string>,
-  ]
+  ];
   const table = useLegacyTable({
     data: results.data?.items ?? [],
     columns: columns as never,
     getCoreRowModel: getCoreRowModel(),
-  })
+  });
 
   return (
     <Container component="main" maxWidth="xl" sx={{ py: { xs: 4, md: 7 } }}>
@@ -113,8 +113,8 @@ function Explorer() {
       <Paper
         component="form"
         onSubmit={(event) => {
-          event.preventDefault()
-          void form.handleSubmit()
+          event.preventDefault();
+          void form.handleSubmit();
         }}
         sx={{ mt: 4, p: 2.5 }}
       >
@@ -125,8 +125,8 @@ function Explorer() {
                 required
                 label="Select a Blueprint"
                 onChange={(event) => {
-                  field.handleChange(event.target.value)
-                  form.setFieldValue('version', '')
+                  field.handleChange(event.target.value);
+                  form.setFieldValue('version', '');
                 }}
                 select
                 sx={{ width: 280 }}
@@ -238,5 +238,5 @@ function Explorer() {
         </Paper>
       )}
     </Container>
-  )
-}
+  );
+};

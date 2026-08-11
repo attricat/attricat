@@ -1,22 +1,22 @@
-import { useMutation, useQuery } from '@tanstack/react-query'
-import { createFileRoute, useNavigate } from '@tanstack/react-router'
-import { Alert, Typography } from '@mui/material'
-import { getEntityForm, updateEntity } from '../../../api'
-import { EntityForm } from '../../../EntityForm'
-import { EntityPage } from '../../../EntityPage'
-import { valuesForForm } from '../../../entity-form'
+import { useMutation, useQuery } from '@tanstack/react-query';
+import { createFileRoute, useNavigate } from '@tanstack/react-router';
+import { Alert, Typography } from '@mui/material';
+import { getEntityForm, updateEntity } from '../../../api';
+import { EntityForm } from '../../../EntityForm';
+import { EntityPage } from '../../../EntityPage';
+import { valuesForForm } from '../../../entity-form';
 
 export const Route = createFileRoute('/entities/$entityId/edit')({
-  component: EditEntity,
-})
+  component: () => <EditEntity />,
+});
 
-function EditEntity() {
-  const { entityId } = Route.useParams()
-  const navigate = useNavigate({ from: Route.fullPath })
+const EditEntity = () => {
+  const { entityId } = Route.useParams();
+  const navigate = useNavigate({ from: Route.fullPath });
   const entityForm = useQuery({
     queryKey: ['entity-form', entityId],
     queryFn: () => getEntityForm(entityId),
-  })
+  });
   const update = useMutation({
     mutationFn: (input: Parameters<typeof updateEntity>[1]) =>
       updateEntity(entityId, input),
@@ -24,9 +24,9 @@ function EditEntity() {
       void navigate({
         to: '/entities/$entityId',
         params: { entityId: entity.id },
-      })
+      });
     },
-  })
+  });
   return (
     <EntityPage title="Edit entity">
       {entityForm.isPending && (
@@ -51,5 +51,5 @@ function EditEntity() {
         />
       )}
     </EntityPage>
-  )
-}
+  );
+};

@@ -1,14 +1,14 @@
-import type { Attribute, NewAttributeValue, RelationshipTargets } from './api'
+import type { Attribute, NewAttributeValue, RelationshipTargets } from './api';
 
-export function valuesForForm(
+export const valuesForForm = (
   attributes: Attribute[],
   values: NewAttributeValue[],
-): Record<string, string> {
+): Record<string, string> => {
   return Object.fromEntries(
     attributes.map((attribute) => {
       const matching = values.filter(
         (value) => value.attribute_code === attribute.code,
-      )
+      );
       if (attribute.value_type === 'relationship') {
         return [
           attribute.code,
@@ -23,37 +23,37 @@ export function valuesForForm(
             )
             .map((value) => value.target_entity_id)
             .join(', '),
-        ]
+        ];
       }
       const scalar = matching.find(
         (value): value is Extract<NewAttributeValue, { kind: 'scalar' }> =>
           value.kind === 'scalar',
-      )
-      return [attribute.code, scalar?.value ?? '']
+      );
+      return [attribute.code, scalar?.value ?? ''];
     }),
-  )
-}
+  );
+};
 
-export function serializeAttributeValues(
+export const serializeAttributeValues = (
   attributes: Attribute[],
   fields: Record<string, string>,
-): NewAttributeValue[] {
+): NewAttributeValue[] => {
   return attributes.flatMap<NewAttributeValue>(
     (attribute): NewAttributeValue[] => {
-      const value = fields[attribute.code]?.trim()
-      if (!value) return []
-      if (attribute.value_type === 'relationship') return []
+      const value = fields[attribute.code]?.trim();
+      if (!value) return [];
+      if (attribute.value_type === 'relationship') return [];
       return [
         { kind: 'scalar' as const, attribute_code: attribute.code, value },
-      ]
+      ];
     },
-  )
-}
+  );
+};
 
-export function relationshipTargetsForForm(
+export const relationshipTargetsForForm = (
   attributes: Attribute[],
   fields: Record<string, string>,
-): RelationshipTargets[] {
+): RelationshipTargets[] => {
   return attributes
     .filter((attribute) => attribute.value_type === 'relationship')
     .map((attribute) => ({
@@ -62,5 +62,5 @@ export function relationshipTargetsForForm(
         .split(',')
         .map((targetEntityId) => targetEntityId.trim())
         .filter(Boolean),
-    }))
-}
+    }));
+};

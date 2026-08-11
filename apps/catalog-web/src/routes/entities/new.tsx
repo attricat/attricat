@@ -1,28 +1,30 @@
-import { useMutation } from '@tanstack/react-query'
-import { createFileRoute, useNavigate } from '@tanstack/react-router'
-import { createEntity, getBlueprintByCode } from '../../api'
-import { EntityForm } from '../../EntityForm'
-import { EntityPage } from '../../EntityPage'
+import { useMutation } from '@tanstack/react-query';
+import { createFileRoute, useNavigate } from '@tanstack/react-router';
+import { createEntity, getBlueprintByCode } from '../../api';
+import { EntityForm } from '../../EntityForm';
+import { EntityPage } from '../../EntityPage';
 
-export const Route = createFileRoute('/entities/new')({ component: NewEntity })
+export const Route = createFileRoute('/entities/new')({
+  component: () => <NewEntity />,
+});
 
-function NewEntity() {
-  const navigate = useNavigate({ from: Route.fullPath })
+const NewEntity = () => {
+  const navigate = useNavigate({ from: Route.fullPath });
   const blueprint = useMutation({
     mutationFn: ({ code, version }: { code: string; version?: number }) =>
       getBlueprintByCode(code, version),
-  })
+  });
   const create = useMutation({
     mutationFn: ({
       values,
       relationships,
     }: {
-      values: Parameters<typeof createEntity>[0]['values']
-      relationships: { attribute_code: string; target_entity_ids: string[] }[]
+      values: Parameters<typeof createEntity>[0]['values'];
+      relationships: { attribute_code: string; target_entity_ids: string[] }[];
     }) => {
-      const resolved = blueprint.data
+      const resolved = blueprint.data;
       if (!resolved)
-        throw new Error('Choose a blueprint before creating an entity')
+        throw new Error('Choose a blueprint before creating an entity');
       return createEntity({
         blueprint: {
           code: resolved.blueprint.code,
@@ -38,15 +40,15 @@ function NewEntity() {
             })),
           ),
         ],
-      })
+      });
     },
     onSuccess: (entity) => {
       void navigate({
         to: '/entities/$entityId',
         params: { entityId: entity.id },
-      })
+      });
     },
-  })
+  });
   return (
     <EntityPage title="Create entity">
       <EntityForm
@@ -58,5 +60,5 @@ function NewEntity() {
         submitLabel={blueprint.data ? 'Create entity' : 'Load blueprint'}
       />
     </EntityPage>
-  )
-}
+  );
+};

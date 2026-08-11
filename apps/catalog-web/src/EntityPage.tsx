@@ -1,14 +1,14 @@
-import { Link } from '@tanstack/react-router'
-import { Button, Container, Typography } from '@mui/material'
-import type { ReactNode } from 'react'
+import { Link } from '@tanstack/react-router';
+import { Button, Container, Typography } from '@mui/material';
+import type { ReactNode } from 'react';
 
-export function EntityPage({
+export const EntityPage = ({
   children,
   title,
 }: {
-  children: ReactNode
-  title: string
-}) {
+  children: ReactNode;
+  title: string;
+}) => {
   return (
     <Container component="main" maxWidth="md" sx={{ py: { xs: 4, md: 7 } }}>
       <Button component={Link} to="/" sx={{ mb: 4 }}>
@@ -30,5 +30,5 @@ export function EntityPage({
       </Typography>
       {children}
     </Container>
-  )
-}
+  );
+};

@@ -1,14 +1,14 @@
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it } from 'vitest';
 import {
   relationshipTargetsForForm,
   serializeAttributeValues,
   valuesForForm,
-} from './entity-form'
+} from './entity-form';
 
 const attributes = [
   { code: 'title', value_type: 'string' },
   { code: 'related_products', value_type: 'relationship' },
-]
+];
 
 describe('entity form values', () => {
   it('serializes scalar fields and complete relationship target sets', () => {
@@ -19,7 +19,7 @@ describe('entity form values', () => {
       }),
     ).toEqual([
       { kind: 'scalar', attribute_code: 'title', value: 'Summer shirt' },
-    ])
+    ]);
     expect(
       relationshipTargetsForForm(attributes, {
         related_products: 'uuid-one, uuid-two , ',
@@ -29,8 +29,8 @@ describe('entity form values', () => {
         attribute_code: 'related_products',
         target_entity_ids: ['uuid-one', 'uuid-two'],
       },
-    ])
-  })
+    ]);
+  });
 
   it('hydrates relationship values into a comma-separated field', () => {
     expect(
@@ -47,6 +47,9 @@ describe('entity form values', () => {
           target_entity_id: 'uuid-two',
         },
       ]),
-    ).toEqual({ title: 'Summer shirt', related_products: 'uuid-one, uuid-two' })
-  })
-})
+    ).toEqual({
+      title: 'Summer shirt',
+      related_products: 'uuid-one, uuid-two',
+    });
+  });
+});

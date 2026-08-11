@@ -1,5 +1,5 @@
-import { useForm } from '@tanstack/react-form'
-import { useQuery } from '@tanstack/react-query'
+import { useForm } from '@tanstack/react-form';
+import { useQuery } from '@tanstack/react-query';
 import {
   Alert,
   Button,
@@ -13,34 +13,34 @@ import {
   Stack,
   TextField,
   Typography,
-} from '@mui/material'
+} from '@mui/material';
 import {
   listEntityBlueprints,
   searchEntities,
   type Attribute,
   type BlueprintWithAttributes,
-} from './api'
+} from './api';
 import {
   relationshipTargetsForForm,
   serializeAttributeValues,
   valuesForForm,
-} from './entity-form'
-import { displayLabel, dropdownOptionLabel } from './search'
+} from './entity-form';
+import { displayLabel, dropdownOptionLabel } from './search';
 
 type EntityFormProps = {
-  blueprint?: BlueprintWithAttributes
-  initialValues?: ReturnType<typeof valuesForForm>
-  isLoadingBlueprint?: boolean
-  error?: Error | null
-  onLoadBlueprint?: (code: string, version?: number) => void
+  blueprint?: BlueprintWithAttributes;
+  initialValues?: ReturnType<typeof valuesForForm>;
+  isLoadingBlueprint?: boolean;
+  error?: Error | null;
+  onLoadBlueprint?: (code: string, version?: number) => void;
   onSubmit: (input: {
-    values: ReturnType<typeof serializeAttributeValues>
-    relationships: ReturnType<typeof relationshipTargetsForForm>
-  }) => void
-  submitLabel: string
-}
+    values: ReturnType<typeof serializeAttributeValues>;
+    relationships: ReturnType<typeof relationshipTargetsForForm>;
+  }) => void;
+  submitLabel: string;
+};
 
-export function EntityForm({
+export const EntityForm = ({
   blueprint,
   initialValues = {},
   isLoadingBlueprint = false,
@@ -48,12 +48,12 @@ export function EntityForm({
   onLoadBlueprint,
   onSubmit,
   submitLabel,
-}: EntityFormProps) {
+}: EntityFormProps) => {
   const blueprints = useQuery({
     queryKey: ['entity-blueprints'],
     queryFn: listEntityBlueprints,
     enabled: !blueprint,
-  })
+  });
   const form = useForm({
     defaultValues: {
       blueprintCode: blueprint?.blueprint.code ?? '',
@@ -61,8 +61,8 @@ export function EntityForm({
     },
     onSubmit: ({ value }) => {
       if (!blueprint && onLoadBlueprint) {
-        onLoadBlueprint(value.blueprintCode)
-        return
+        onLoadBlueprint(value.blueprintCode);
+        return;
       }
       if (blueprint) {
         onSubmit({
@@ -71,17 +71,17 @@ export function EntityForm({
             blueprint.attributes,
             value.fields,
           ),
-        })
+        });
       }
     },
-  })
+  });
 
   return (
     <Paper
       component="form"
       onSubmit={(event) => {
-        event.preventDefault()
-        void form.handleSubmit()
+        event.preventDefault();
+        void form.handleSubmit();
       }}
       sx={{ mt: 4, p: 3 }}
     >
@@ -122,12 +122,12 @@ export function EntityForm({
             {(field) => (
               <>
                 {blueprint.attributes.map((attribute) => {
-                  const value = field.state.value[attribute.code] ?? ''
+                  const value = field.state.value[attribute.code] ?? '';
                   const handleChange = (nextValue: string) =>
                     field.handleChange({
                       ...field.state.value,
                       [attribute.code]: nextValue,
-                    })
+                    });
                   return attribute.value_type === 'relationship' ? (
                     <RelationshipField
                       key={attribute.code}
@@ -143,7 +143,7 @@ export function EntityForm({
                       onChange={(event) => handleChange(event.target.value)}
                       value={value}
                     />
-                  )
+                  );
                 })}
               </>
             )}
@@ -155,24 +155,24 @@ export function EntityForm({
         </Button>
       </Stack>
     </Paper>
-  )
-}
+  );
+};
 
-function RelationshipField({
+const RelationshipField = ({
   attribute,
   onChange,
   value,
 }: {
-  attribute: Attribute
-  onChange: (value: string) => void
-  value: string
-}) {
-  const targetBlueprint = attribute.target_blueprint_code
+  attribute: Attribute;
+  onChange: (value: string) => void;
+  value: string;
+}) => {
+  const targetBlueprint = attribute.target_blueprint_code;
   const targets = useQuery({
     queryKey: ['relationship-targets', targetBlueprint],
     queryFn: () => searchEntities(targetBlueprint!, undefined, ''),
     enabled: Boolean(targetBlueprint),
-  })
+  });
   if (!targetBlueprint) {
     return (
       <TextField
@@ -182,30 +182,30 @@ function RelationshipField({
         onChange={(event) => onChange(event.target.value)}
         value={value}
       />
-    )
+    );
   }
 
   const selectedIds = value
     .split(',')
     .map((targetId) => targetId.trim())
-    .filter(Boolean)
-  const options = [...(targets.data?.items ?? [])]
+    .filter(Boolean);
+  const options = [...(targets.data?.items ?? [])];
   for (const targetId of selectedIds) {
     if (!options.some((target) => target.id === targetId)) {
       options.push({
         id: targetId,
         display: { default: targetId },
         preview: {},
-      })
+      });
     }
   }
-  const targetDisplay = targets.data?.blueprint.blueprint.display ?? {}
+  const targetDisplay = targets.data?.blueprint.blueprint.display ?? {};
   const targetLabel = (target: (typeof options)[number]) =>
     dropdownOptionLabel(target.preview, targetDisplay) ??
-    displayLabel(target.display, target.id)
+    displayLabel(target.display, target.id);
   const labels = new Map(
     options.map((target) => [target.id, targetLabel(target)]),
-  )
+  );
 
   return (
     <FormControl fullWidth>
@@ -240,5 +240,5 @@ function RelationshipField({
         </Typography>
       )}
     </FormControl>
-  )
-}
+  );
+};
