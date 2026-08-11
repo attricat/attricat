@@ -19,13 +19,13 @@ import {
   searchEntities,
   type Attribute,
   type BlueprintWithAttributes,
-} from './api';
+} from '../api';
 import {
   relationshipTargetsForForm,
   serializeAttributeValues,
   valuesForForm,
-} from './entity-form';
-import { displayLabel, dropdownOptionLabel } from './search';
+} from '../entity-form';
+import { displayLabel, dropdownOptionLabel } from '../entity-display';
 
 type EntityFormProps = {
   blueprint?: BlueprintWithAttributes;

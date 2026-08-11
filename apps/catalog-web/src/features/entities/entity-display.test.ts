@@ -1,26 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import {
-  displayLabel,
-  dropdownOptionLabel,
-  parseExplorerSearch,
-} from './search';
-
-describe('parseExplorerSearch', () => {
-  it('retains valid URL state and drops invalid version values', () => {
-    expect(
-      parseExplorerSearch({
-        blueprint: 'product',
-        version: '3',
-        query: 'shirt',
-      }),
-    ).toEqual({ blueprint: 'product', version: 3, query: 'shirt' });
-    expect(parseExplorerSearch({ blueprint: '', version: 'zero' })).toEqual({
-      blueprint: undefined,
-      version: undefined,
-      query: undefined,
-    });
-  });
-});
+import { displayLabel, dropdownOptionLabel } from './entity-display';
 
 describe('displayLabel', () => {
   it('uses the backend default label and falls back to the entity ID', () => {
