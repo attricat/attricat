@@ -1,6 +1,7 @@
 export type Attribute = {
   code: string
   value_type: string
+  target_blueprint_code?: string
   [key: string]: unknown
 }
 export type Blueprint = {

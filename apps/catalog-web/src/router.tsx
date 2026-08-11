@@ -171,19 +171,15 @@ function Explorer() {
             {(field) => (
               <TextField
                 required
-                label="Blueprint"
+                label="Select a Blueprint"
                 onChange={(event) => {
                   field.handleChange(event.target.value)
                   form.setFieldValue('version', '')
                 }}
                 select
-                slotProps={{ select: { displayEmpty: true } }}
                 sx={{ width: 280 }}
                 value={field.state.value}
               >
-                <MenuItem disabled value="">
-                  Select a blueprint
-                </MenuItem>
                 {blueprints.data?.map((blueprint) => (
                   <MenuItem key={blueprint.code} value={blueprint.code}>
                     {blueprint.name} ({blueprint.code})

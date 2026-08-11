@@ -1,5 +1,9 @@
 import { describe, expect, it } from 'vitest'
-import { displayLabel, parseExplorerSearch } from './search'
+import {
+  displayLabel,
+  dropdownOptionLabel,
+  parseExplorerSearch,
+} from './search'
 
 describe('parseExplorerSearch', () => {
   it('retains valid URL state and drops invalid version values', () => {
@@ -24,5 +28,14 @@ describe('displayLabel', () => {
       'Summer shirt',
     )
     expect(displayLabel({}, 'entity-id')).toBe('entity-id')
+  })
+
+  it('renders a dropdown option from its configured target fields', () => {
+    expect(
+      dropdownOptionLabel(
+        { default: { name: 'Navy', hex: '#1c2d4a' } },
+        { dropdown_option: { fields: ['name', 'hex'], separator: ' / ' } },
+      ),
+    ).toBe('Navy / #1c2d4a')
   })
 })
