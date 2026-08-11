@@ -12,6 +12,7 @@ import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as EntitiesEntityIdRouteImport } from './routes/entities/$entityId'
 import { Route as EntitiesNewRouteImport } from './routes/entities/new'
+import { Route as EntitiesEntityIdIndexRouteImport } from './routes/entities/$entityId/index'
 import { Route as EntitiesEntityIdEditRouteImport } from './routes/entities/$entityId/edit'
 
 const IndexRoute = IndexRouteImport.update({
@@ -29,6 +30,11 @@ const EntitiesNewRoute = EntitiesNewRouteImport.update({
   path: '/entities/new',
   getParentRoute: () => rootRouteImport,
 } as any)
+const EntitiesEntityIdIndexRoute = EntitiesEntityIdIndexRouteImport.update({
+  id: '/',
+  path: '/',
+  getParentRoute: () => EntitiesEntityIdRoute,
+} as any)
 const EntitiesEntityIdEditRoute = EntitiesEntityIdEditRouteImport.update({
   id: '/edit',
   path: '/edit',
@@ -40,12 +46,13 @@ export interface FileRoutesByFullPath {
   '/entities/$entityId': typeof EntitiesEntityIdRouteWithChildren
   '/entities/new': typeof EntitiesNewRoute
   '/entities/$entityId/edit': typeof EntitiesEntityIdEditRoute
+  '/entities/$entityId/': typeof EntitiesEntityIdIndexRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
-  '/entities/$entityId': typeof EntitiesEntityIdRouteWithChildren
   '/entities/new': typeof EntitiesNewRoute
   '/entities/$entityId/edit': typeof EntitiesEntityIdEditRoute
+  '/entities/$entityId': typeof EntitiesEntityIdIndexRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -53,19 +60,25 @@ export interface FileRoutesById {
   '/entities/$entityId': typeof EntitiesEntityIdRouteWithChildren
   '/entities/new': typeof EntitiesNewRoute
   '/entities/$entityId/edit': typeof EntitiesEntityIdEditRoute
+  '/entities/$entityId/': typeof EntitiesEntityIdIndexRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
   fullPaths:
-    '/' | '/entities/$entityId' | '/entities/new' | '/entities/$entityId/edit'
+    | '/'
+    | '/entities/$entityId'
+    | '/entities/new'
+    | '/entities/$entityId/edit'
+    | '/entities/$entityId/'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/entities/$entityId' | '/entities/new' | '/entities/$entityId/edit'
+  to: '/' | '/entities/new' | '/entities/$entityId/edit' | '/entities/$entityId'
   id:
     | '__root__'
     | '/'
     | '/entities/$entityId'
     | '/entities/new'
     | '/entities/$entityId/edit'
+    | '/entities/$entityId/'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -97,6 +110,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof EntitiesNewRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/entities/$entityId/': {
+      id: '/entities/$entityId/'
+      path: '/'
+      fullPath: '/entities/$entityId/'
+      preLoaderRoute: typeof EntitiesEntityIdIndexRouteImport
+      parentRoute: typeof EntitiesEntityIdRoute
+    }
     '/entities/$entityId/edit': {
       id: '/entities/$entityId/edit'
       path: '/edit'
@@ -109,10 +129,12 @@ declare module '@tanstack/react-router' {
 
 interface EntitiesEntityIdRouteChildren {
   EntitiesEntityIdEditRoute: typeof EntitiesEntityIdEditRoute
+  EntitiesEntityIdIndexRoute: typeof EntitiesEntityIdIndexRoute
 }
 
 const EntitiesEntityIdRouteChildren: EntitiesEntityIdRouteChildren = {
   EntitiesEntityIdEditRoute: EntitiesEntityIdEditRoute,
+  EntitiesEntityIdIndexRoute: EntitiesEntityIdIndexRoute,
 }
 
 const EntitiesEntityIdRouteWithChildren =
