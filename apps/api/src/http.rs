@@ -21,6 +21,9 @@ use crate::{
 #[derive(Clone)]
 pub struct AppState {
     pub repository: CatalogRepository,
+    // Preview expansion is request-controlled, so these limits keep cyclic or
+    // high-cardinality relationship graphs from turning one read into an
+    // unbounded amount of database work.
     pub max_preview_relationship_depth: u8,
     pub max_preview_relationship_items: u32,
     pub max_entity_page_size: u32,
@@ -49,6 +52,9 @@ pub fn router(state: AppState) -> Router {
         )
         .route("/contexts", post(create_context))
         .route("/contexts/{code}", get(get_context))
+        // The v1 routes are form-oriented composites. The older entity routes
+        // remain lower-level primitives for clients that manage values and
+        // relationships independently.
         .route("/v1/entities/search", post(search_entity_previews))
         .route("/v1/entities", post(create_entity_form))
         .route("/v1/entities/{entity_id}", put(update_entity_form))
@@ -277,6 +283,9 @@ async fn search_entity_previews(
             state.max_entity_page_size
         )));
     }
+    // Resolve once before querying so every returned entity shares the schema
+    // sent in the response. Falling back to the current version is deliberate
+    // for discovery; callers can pin a version for repeatable pagination.
     let blueprint = match input.blueprint.version {
         Some(version) => {
             state
@@ -292,6 +301,8 @@ async fn search_entity_previews(
         }
     }
     .ok_or_else(|| ApiError::not_found("blueprint"))?;
+    // Cursors encode the database ordering tuple rather than an offset, which
+    // avoids duplicate or skipped rows as earlier pages are inserted into.
     let cursor = match input.page.cursor.as_deref() {
         Some(cursor) => Some(
             decode_search_cursor(cursor)
@@ -350,6 +361,8 @@ async fn get_entity_form(
         .get_entity(entity_id)
         .await?
         .ok_or_else(|| ApiError::not_found("entity"))?;
+    // An entity stays bound to its creation revision. Loading the latest
+    // blueprint here could make old values invalid or hide fields in its form.
     let blueprint = state
         .repository
         .get_blueprint_revision(entity.blueprint_id, entity.blueprint_version)

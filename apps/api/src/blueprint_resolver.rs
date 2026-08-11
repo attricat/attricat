@@ -10,6 +10,8 @@ pub(crate) async fn compile_definition(
     transaction: &mut Transaction<'_, Postgres>,
     source: &str,
 ) -> Result<CompiledBlueprint, RepositoryError> {
+    // Track the active branch, not every visited include: reusing one pinned
+    // mixin is valid, while revisiting it before unwinding is a cycle.
     let mut resolving = HashSet::new();
     compile_source(transaction, source, &mut resolving).await
 }
@@ -31,6 +33,8 @@ async fn compile_source(
             )));
         }
 
+        // Includes name an exact revision so compiling a new mixin revision
+        // cannot change the effective schema of an existing blueprint.
         let included_source = sqlx::query_as::<_, IncludedBlueprint>(
             r#"SELECT kind, definition
                FROM blueprints

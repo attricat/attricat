@@ -39,12 +39,16 @@ impl PreviewProjectionBuilder {
         .fetch_all(&mut **transaction)
         .await?;
 
+        // Keep context-free values under an explicit key. This gives consumers
+        // a stable fallback without treating a missing context as special.
         let mut default = Map::new();
         let mut contexts = Map::new();
 
         for value in values {
             match value.context_code {
                 Some(context_code) => {
+                    // `default` denotes the absence of a context, so allowing
+                    // a stored context with that code would make reads ambiguous.
                     if context_code == "default" {
                         return Err(RepositoryError::ReservedContextCode);
                     }

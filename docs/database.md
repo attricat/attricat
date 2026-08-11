@@ -1,8 +1,9 @@
 # Database Model
 
 The API persists a versioned catalog using PostgreSQL 18 and SQLx migrations. The
-canonical write model is normalized EAV data. JSONB projections are retained for
-the existing domain model but are not generated or queried by the application yet.
+canonical write model is normalized EAV data. The API rebuilds the JSONB `preview`
+projection on value writes and uses it for preview and search reads; it remains a
+derived cache rather than the source of truth.
 
 ## Local Database
 

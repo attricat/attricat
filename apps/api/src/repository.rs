@@ -104,6 +104,9 @@ impl CatalogRepository {
     ) -> Result<BlueprintWithAttributes, RepositoryError> {
         let mut transaction = self.pool.begin().await?;
         let compiled = compile_definition(&mut transaction, &input.definition).await?;
+        // PostgreSQL cannot express uniqueness across all revisions with the
+        // versioned primary key. Serialize writers for this code so the
+        // existence check and first-revision insert are one logical operation.
         sqlx::query("SELECT pg_advisory_xact_lock(hashtext($1))")
             .bind(&compiled.code)
             .execute(&mut *transaction)
@@ -400,6 +403,8 @@ impl CatalogRepository {
         blueprint_version: i64,
         values: Vec<NewAttributeValue>,
     ) -> Result<Entity, RepositoryError> {
+        // Do not expose an entity before its initial values and derived preview
+        // agree; otherwise a concurrent reader can observe a partial create.
         let mut transaction = self.pool.begin().await?;
         let entity = self
             .insert_entity(&mut transaction, blueprint_id, blueprint_version)
@@ -422,6 +427,8 @@ impl CatalogRepository {
         relationships: Vec<RelationshipTargets>,
     ) -> Result<Entity, RepositoryError> {
         let mut transaction = self.pool.begin().await?;
+        // The row lock serializes writers for an entity. It protects both the
+        // one-latest-value invariant and the preview rebuilt from that state.
         let entity = self.lock_entity(&mut transaction, entity_id).await?;
         for value in values {
             self.insert_value(&mut transaction, &entity, value).await?;
@@ -559,6 +566,8 @@ impl CatalogRepository {
                ORDER BY attribute_code, context_code NULLS FIRST, relationship_position"#,
         )
         .bind(entity_id)
+        // Fetch one extra edge to report truncation without a separate count.
+        // At depth zero one edge is still enough to indicate that data exists.
         .bind(if relationship_depth == 0 { 1 } else { relationship_limit + 1 })
         .fetch_all(&self.pool)
         .await?;
@@ -785,6 +794,8 @@ impl CatalogRepository {
             let (attribute_id, target_blueprint_code) = self
                 .relationship_attribute(&mut transaction, &entity, &relationship)
                 .await?;
+            // Relationship writes are set operations; collapsing duplicate IDs
+            // makes a retried or malformed client payload idempotent.
             let targets: HashSet<_> = relationship.target_entity_ids.into_iter().collect();
             for target_id in &targets {
                 self.validate_relationship_target(
@@ -1155,6 +1166,8 @@ impl CatalogRepository {
         context_id: Option<Uuid>,
         relationship_target_entity_id: Option<Uuid>,
     ) -> Result<(), RepositoryError> {
+        // Preserve the event for history and move only the current-state marker.
+        // The caller holds the entity lock before this transition.
         sqlx::query(
             r#"UPDATE attribute_values
                SET latest = false
