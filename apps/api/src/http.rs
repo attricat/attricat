@@ -29,7 +29,10 @@ pub struct AppState {
 pub fn router(state: AppState) -> Router {
     Router::new()
         .route("/health", get(health))
-        .route("/blueprints", post(create_blueprint))
+        .route(
+            "/blueprints",
+            get(list_entity_blueprints).post(create_blueprint),
+        )
         .route(
             "/blueprints/{blueprint_id}/versions",
             post(create_blueprint_revision),
@@ -84,6 +87,12 @@ async fn create_blueprint(
         StatusCode::CREATED,
         Json(state.repository.create_blueprint(input).await?),
     ))
+}
+
+async fn list_entity_blueprints(
+    State(state): State<AppState>,
+) -> Result<Json<Vec<crate::model::Blueprint>>, ApiError> {
+    Ok(Json(state.repository.list_entity_blueprints().await?))
 }
 
 async fn create_blueprint_revision(

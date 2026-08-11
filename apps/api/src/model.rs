@@ -12,6 +12,7 @@ pub struct Blueprint {
     pub kind: String,
     pub version: i64,
     pub includes: Value,
+    pub display: Value,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
     pub deleted_at: Option<DateTime<Utc>>,
@@ -132,6 +133,7 @@ pub struct EntityPreview {
     #[serde(skip_serializing)]
     pub created_at: DateTime<Utc>,
     pub preview: Value,
+    pub display: Value,
 }
 
 #[derive(Clone, Debug, Serialize)]

@@ -59,7 +59,7 @@ describe('entity API client', () => {
     })
   })
 
-  it('uses the backend default sort', async () => {
+  it('uses the backend default ordering', async () => {
     respond({})
     await searchEntities('product', undefined, '')
     expect(fetchMock).toHaveBeenLastCalledWith('/api/v1/entities/search', {
@@ -69,7 +69,6 @@ describe('entity API client', () => {
         blueprint: { code: 'product' },
         query: '',
         filters: [],
-        sort: [],
         page: { size: 25, cursor: null },
       }),
     })

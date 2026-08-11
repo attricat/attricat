@@ -20,6 +20,7 @@ import {
   Box,
   Button,
   Container,
+  MenuItem,
   Paper,
   Stack,
   Table,
@@ -34,6 +35,7 @@ import {
 import {
   createEntity,
   getBlueprintByCode,
+  listEntityBlueprints,
   getEntityForm,
   getEntityPreview,
   searchEntities,
@@ -42,7 +44,7 @@ import {
 } from './api'
 import { EntityForm } from './EntityForm'
 import { valuesForForm } from './entity-form'
-import { displayValue, parseExplorerSearch, previewHeading } from './search'
+import { displayLabel, parseExplorerSearch } from './search'
 
 const rootRoute = createRootRoute({ component: () => <Outlet /> })
 
@@ -98,6 +100,10 @@ function Explorer() {
       searchEntities(search.blueprint!, search.version, search.query ?? ''),
     enabled: Boolean(search.blueprint),
   })
+  const blueprints = useQuery({
+    queryKey: ['entity-blueprints'],
+    queryFn: listEntityBlueprints,
+  })
 
   const columnHelper = legacyCreateColumnHelper<EntityItem>()
   const columns: LegacyColumnDef<EntityItem, string>[] = [
@@ -112,17 +118,12 @@ function Explorer() {
         </Link>
       ),
     }),
-    ...(results.data?.blueprint.attributes
-      .filter((attribute) => attribute.tags.includes('display'))
-      .map(
-        (attribute) =>
-          columnHelper.display({
-            id: attribute.code,
-            header: attribute.code,
-            cell: (info) =>
-              displayValue(info.row.original.preview[attribute.code]),
-          }) as LegacyColumnDef<EntityItem, string>,
-      ) ?? []),
+    columnHelper.display({
+      id: 'display',
+      header: 'Display',
+      cell: (info) =>
+        displayLabel(info.row.original.display, info.row.original.id),
+    }) as LegacyColumnDef<EntityItem, string>,
   ]
   const table = useLegacyTable({
     data: results.data?.items ?? [],
@@ -171,10 +172,24 @@ function Explorer() {
               <TextField
                 required
                 label="Blueprint"
-                onChange={(event) => field.handleChange(event.target.value)}
-                placeholder="product"
+                onChange={(event) => {
+                  field.handleChange(event.target.value)
+                  form.setFieldValue('version', '')
+                }}
+                select
+                slotProps={{ select: { displayEmpty: true } }}
+                sx={{ width: 280 }}
                 value={field.state.value}
-              />
+              >
+                <MenuItem disabled value="">
+                  Select a blueprint
+                </MenuItem>
+                {blueprints.data?.map((blueprint) => (
+                  <MenuItem key={blueprint.code} value={blueprint.code}>
+                    {blueprint.name} ({blueprint.code})
+                  </MenuItem>
+                ))}
+              </TextField>
             )}
           </form.Field>
           <form.Field name="version">
@@ -284,10 +299,6 @@ function EntityPreview() {
     queryKey: ['entity-preview', entityId],
     queryFn: () => getEntityPreview(entityId),
   })
-  const entityForm = useQuery({
-    queryKey: ['entity-form', entityId],
-    queryFn: () => getEntityForm(entityId),
-  })
   return (
     <Container component="main" maxWidth="lg" sx={{ py: { xs: 4, md: 7 } }}>
       <Button component={Link} to="/" sx={{ mb: 4 }}>
@@ -305,11 +316,7 @@ function EntityPreview() {
         Entity preview
       </Typography>
       <Typography component="h1" variant="h3">
-        {previewHeading(
-          preview.data,
-          entityForm.data?.blueprint.attributes ?? [],
-          entityId,
-        )}
+        {entityId}
       </Typography>
       <Box sx={{ mt: 1 }}>
         <Link params={{ entityId }} to="/entities/$entityId/edit">

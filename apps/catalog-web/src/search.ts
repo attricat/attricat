@@ -1,5 +1,3 @@
-import type { Attribute, EntityPreview } from './api'
-
 export type ExplorerSearch = {
   blueprint?: string
   version?: number
@@ -28,22 +26,9 @@ export function parseExplorerSearch(
   return { blueprint, version, query }
 }
 
-export function displayValue(value: unknown): string {
-  if (value === null || value === undefined) return '—'
-  if (typeof value === 'object') return JSON.stringify(value)
-  return String(value)
-}
-
-export function previewHeading(
-  preview: EntityPreview | undefined,
-  attributes: Attribute[],
+export function displayLabel(
+  display: Record<string, string> | undefined,
   entityId: string,
 ): string {
-  const displayAttribute = attributes.find((attribute) =>
-    attribute.tags.includes('display'),
-  )
-  const value = displayAttribute && preview?.default?.[displayAttribute.code]
-  return value === undefined || value === null || value === ''
-    ? entityId
-    : displayValue(value)
+  return display?.default || entityId
 }

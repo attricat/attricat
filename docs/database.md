@@ -51,11 +51,12 @@ identified by `id`; every revision has a positive `version`, and `(id, version)`
 is the primary key.
 
 - `definition` stores the authored TOML definition and is the source of truth.
-- `code`, `name`, `kind`, `includes`, `definition_hash`, and generated attributes
+- `code`, `name`, `kind`, `includes`, `display`, `definition_hash`, and generated attributes
   are compiler output derived from TOML.
 - `code` is repository-enforced as stable across revisions in one blueprint family.
 - `kind` is either `entity` or `mixin`; only entity blueprints can be instantiated.
 - `includes` is a generated direct-dependency JSONB cache, in TOML order.
+- `display` is generated JSONB display metadata keyed by display name.
 - `definition_hash` is the SHA-256 hash of the exact raw TOML source.
 - `deleted_at` implements soft deletion.
 - `blueprints_active_version_idx` supports selecting the newest non-deleted version.
@@ -77,8 +78,8 @@ they are never independently authored or edited.
   target semantics; other non-empty labels are scalar metadata for now.
 - Relationship attributes may declare `target_blueprint` in TOML. Its compiled
   `target_blueprint_code` restricts targets to that entity blueprint family.
-- `tags` is a JSONB array compiled from the attribute TOML. Entity blueprints
-  require at least one scalar attribute tagged `display`.
+- `tags` is a JSONB array compiled from the attribute TOML. Tags are generic,
+  unique, non-empty metadata with no reserved display tag.
 
 ### `entities`
 
@@ -233,7 +234,7 @@ use an envelope rather than a count:
 ```json
 {
   "categories": {
-    "items": [{ "id": "...", "name": "Shirts" }],
+    "items": [{ "id": "...", "display": "Shirts" }],
     "truncated": true
   }
 }
@@ -256,7 +257,8 @@ entity ID from the preceding page.
   "items": [
     {
       "id": "...",
-      "preview": { "default": { "name": "Shirts", "slug": "shirts" } }
+      "preview": { "default": { "name": "Shirts", "slug": "shirts" } },
+      "display": { "default": "Shirts" }
     }
   ],
   "next_cursor": "..."
@@ -330,7 +332,7 @@ A local attribute is authored directly:
 [[attributes]]
 code = "title"
 value_type = "string"
-tags = ["display"]
+tags = ["searchable"]
 ```
 
 A typed relationship restricts its targets by stable blueprint code:
@@ -356,6 +358,10 @@ code = "product"
 name = "Product"
 kind = "entity"
 
+[display.dropdown_option]
+fields = ["title", "meta_title"]
+separator = " · "
+
 [[includes]]
 alias = "seo"
 code = "seo"
@@ -364,7 +370,7 @@ version = 2
 [[attributes]]
 code = "title"
 value_type = "string"
-tags = ["display"]
+tags = ["searchable"]
 
 [[attributes]]
 code = "meta_title"
@@ -376,9 +382,28 @@ and malformed definitions return `422 invalid_blueprint_definition`. Newer mixin
 versions never affect existing consumers because every include names an exact
 version.
 
+### Display Labels
+
+Every entity blueprint must define `[display.dropdown_option]`. `fields` is a
+non-empty, unique list of effective scalar attribute codes; selected mixin
+attributes are valid references. `separator` is optional and defaults to ` · `.
+Other named `[display.<name>]` definitions use the same shape and are persisted,
+but `dropdown_option` is the server-rendered label contract.
+
+```toml
+[display.dropdown_option]
+fields = ["name", "sku"]
+separator = " / "
+```
+
+Blueprint API responses expose this compiled configuration as `blueprint.display`.
+Search and paginated entity preview rows expose `display` as a context-to-label
+map. A relationship target is rendered with one `display` string, using the
+relationship context and falling back to `default` scalar values for fields
+absent in that context. Missing or null fields are omitted from the joined label.
+
 ### Projection Builder TODO
 
-- Read labels and projection directives from blueprint TOML.
 - Define relationship rendering, target selection, and cycle protection.
 - Define context fallback and request-specific context selection.
 - Add builders for `search` and other named projections based on real query needs.

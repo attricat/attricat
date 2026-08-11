@@ -99,6 +99,9 @@ code = "product"
 name = "Product"
 kind = "entity"
 
+[display.dropdown_option]
+fields = ["title"]
+
 [[includes]]
 alias = "seo"
 code = "seo"
@@ -107,7 +110,7 @@ version = 1
 [[attributes]]
 code = "title"
 value_type = "string"
-tags = ["display"]
+tags = ["searchable"]
 
 [[attributes]]
 code = "meta_title"
@@ -125,6 +128,10 @@ value_type = "relationship"
         .unwrap();
     assert_eq!(blueprint["blueprint"]["code"], "product");
     assert_eq!(blueprint["blueprint"]["kind"], "entity");
+    assert_eq!(
+        blueprint["blueprint"]["display"],
+        json!({ "dropdown_option": { "fields": ["title"], "separator": " · " } })
+    );
     assert_eq!(
         blueprint["blueprint"]["includes"],
         json!([{ "alias": "seo", "code": "seo", "version": 1 }])
@@ -179,10 +186,13 @@ code = "product"
 name = "Product"
 kind = "entity"
 
+[display.dropdown_option]
+fields = ["sku"]
+
 [[attributes]]
 code = "sku"
 value_type = "string"
-tags = ["display"]
+tags = ["searchable"]
 "#
         }))
         .send()
@@ -345,7 +355,7 @@ tags = ["display"]
             "default": {
                 "title": "Blue shirt",
                 "related_products": {
-                    "items": [{ "id": target["id"] }],
+                    "items": [{ "id": target["id"], "display": "" }],
                     "truncated": false
                 }
             },
@@ -457,6 +467,10 @@ tags = ["display"]
         .unwrap();
     assert_eq!(search_page["blueprint"]["blueprint"]["version"], 1);
     assert_eq!(search_page["items"][0]["id"], source["id"]);
+    assert_eq!(
+        search_page["items"][0]["display"],
+        json!({ "default": "Red shirt", "en-GB": "Blue shirt (UK)" })
+    );
     assert!(search_page["next_cursor"].is_null());
 
     let created_from_form: Value = client
@@ -616,10 +630,13 @@ code = "first"
 name = "First"
 kind = "entity"
 
+[display.dropdown_option]
+fields = ["title"]
+
 [[attributes]]
 code = "title"
 value_type = "string"
-tags = ["display"]
+tags = ["searchable"]
 "#,
     )
     .await;
@@ -632,10 +649,13 @@ code = "second"
 name = "Second"
 kind = "entity"
 
+[display.dropdown_option]
+fields = ["title"]
+
 [[attributes]]
 code = "title"
 value_type = "string"
-tags = ["display"]
+tags = ["searchable"]
 "#,
     )
     .await;
@@ -724,10 +744,13 @@ code = "category"
 name = "Category"
 kind = "entity"
 
+[display.dropdown_option]
+fields = ["name"]
+
 [[attributes]]
 code = "name"
 value_type = "string"
-tags = ["display"]
+tags = ["searchable"]
 "#,
     )
     .await;
@@ -740,10 +763,13 @@ code = "color"
 name = "Color"
 kind = "entity"
 
+[display.dropdown_option]
+fields = ["name", "hex"]
+
 [[attributes]]
 code = "name"
 value_type = "string"
-tags = ["display"]
+tags = ["searchable"]
 
 [[attributes]]
 code = "hex"
@@ -760,10 +786,13 @@ code = "product"
 name = "Product"
 kind = "entity"
 
+[display.dropdown_option]
+fields = ["title"]
+
 [[attributes]]
 code = "title"
 value_type = "string"
-tags = ["display"]
+tags = ["searchable"]
 
 [[attributes]]
 code = "categories"
@@ -876,7 +905,10 @@ target_blueprint = "color"
         2
     );
     assert_eq!(preview["default"]["categories"]["truncated"], false);
-    assert_eq!(preview["default"]["colors"]["items"][0]["name"], "Navy");
+    assert_eq!(
+        preview["default"]["colors"]["items"][0]["display"],
+        "Navy · #1c2d4a"
+    );
 
     let bounded_preview: Value = client
         .get(format!(
@@ -992,7 +1024,7 @@ target_blueprint = "color"
         1
     );
     assert_eq!(
-        preview["default"]["categories"]["items"][0]["name"],
+        preview["default"]["categories"]["items"][0]["display"],
         "Shirts"
     );
 

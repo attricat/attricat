@@ -6,8 +6,8 @@ import {
 } from './entity-form'
 
 const attributes = [
-  { code: 'title', value_type: 'string', tags: ['display'] },
-  { code: 'related_products', value_type: 'relationship', tags: [] },
+  { code: 'title', value_type: 'string' },
+  { code: 'related_products', value_type: 'relationship' },
 ]
 
 describe('entity form values', () => {

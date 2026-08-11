@@ -8,6 +8,9 @@ code = "product"
 name = "Product"
 kind = "entity"
 
+[display.dropdown_option]
+fields = ["title"]
+
 [[includes]]
 alias = "seo"
 code = "seo"
@@ -65,6 +68,9 @@ format_version = 1
 code = "product"
 name = "Product"
 kind = "entity"
+
+[display.dropdown_option]
+fields = ["name"]
 unexpected = true
 
 [[attributes]]
@@ -94,6 +100,9 @@ code = "product"
 name = "Product"
 kind = "entity"
 
+[display.dropdown_option]
+fields = ["name"]
+
 [[attributes]]
 code = "categories"
 value_type = "relationship"
@@ -102,7 +111,7 @@ target_blueprint = "category"
 [[attributes]]
 code = "name"
 value_type = "string"
-tags = ["display"]
+tags = ["searchable"]
 "#;
     let compiled = compile(parse(source).unwrap(), &[], source).unwrap();
     assert_eq!(
@@ -115,7 +124,7 @@ tags = ["display"]
 }
 
 #[test]
-fn requires_and_preserves_entity_display_tags() {
+fn requires_valid_dropdown_option_display_and_preserves_generic_tags() {
     let missing_display = r#"
 format_version = 1
 code = "product"
@@ -130,8 +139,26 @@ value_type = "string"
 
     let source = missing_display.replace(
         "value_type = \"string\"",
-        "value_type = \"string\"\ntags = [\"display\", \"searchable\"]",
+        "value_type = \"string\"\ntags = [\"searchable\"]\n\n[display.dropdown_option]\nfields = [\"title\"]",
     );
     let compiled = compile(parse(&source).unwrap(), &[], &source).unwrap();
-    assert_eq!(compiled.attributes[0].tags, ["display", "searchable"]);
+    assert_eq!(compiled.attributes[0].tags, ["searchable"]);
+    assert_eq!(compiled.display["dropdown_option"].separator, " · ");
+
+    let relationship_display = source.replace("fields = [\"title\"]", "fields = [\"unknown\"]");
+    assert!(
+        compile(
+            parse(&relationship_display).unwrap(),
+            &[],
+            &relationship_display
+        )
+        .is_err()
+    );
+
+    let empty_fields = source.replace("fields = [\"title\"]", "fields = []");
+    assert!(compile(parse(&empty_fields).unwrap(), &[], &empty_fields).is_err());
+
+    let duplicate_fields =
+        source.replace("fields = [\"title\"]", "fields = [\"title\", \"title\"]");
+    assert!(compile(parse(&duplicate_fields).unwrap(), &[], &duplicate_fields).is_err());
 }

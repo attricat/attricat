@@ -1,12 +1,13 @@
 export type Attribute = {
   code: string
   value_type: string
-  tags: string[]
   [key: string]: unknown
 }
 export type Blueprint = {
   code: string
+  name: string
   version: number
+  display: Record<string, unknown>
   [key: string]: unknown
 }
 export type BlueprintWithAttributes = {
@@ -35,6 +36,7 @@ export type EntityFormResponse = {
 }
 export type EntityItem = {
   id: string
+  display: Record<string, string>
   preview: Record<string, unknown>
 }
 export type EntitySearchResponse = {
@@ -43,7 +45,23 @@ export type EntitySearchResponse = {
   next_cursor: string | null
 }
 
-export type EntityPreview = Record<string, Record<string, unknown>>
+export type RelationshipPreviewItem = {
+  id: string
+  display: string
+}
+export type RelationshipPreview = {
+  items: RelationshipPreviewItem[]
+  truncated: boolean
+}
+export type EntityPreviewValue =
+  | string
+  | number
+  | boolean
+  | null
+  | EntityPreviewValue[]
+  | { [key: string]: EntityPreviewValue }
+  | RelationshipPreview
+export type EntityPreview = Record<string, Record<string, EntityPreviewValue>>
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const response = await fetch(path, init)
@@ -66,10 +84,13 @@ export function searchEntities(
       },
       query,
       filters: [],
-      sort: [],
       page: { size: 25, cursor: null },
     }),
   })
+}
+
+export function listEntityBlueprints() {
+  return request<Blueprint[]>('/api/blueprints')
 }
 
 export function getEntityPreview(id: string) {

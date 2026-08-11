@@ -3,10 +3,12 @@ code = "product"
 name = "Product"
 kind = "entity"
 
+[display.dropdown_option]
+fields = ["title"]
+
 [[attributes]]
 code = "title"
 value_type = "string"
-tags = ["display"]
 
 [[attributes]]
 code = "categories"

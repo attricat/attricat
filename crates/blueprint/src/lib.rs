@@ -11,7 +11,20 @@ pub struct BlueprintDefinition {
     pub name: String,
     pub kind: BlueprintKind,
     pub includes: Vec<IncludeRef>,
+    pub display: HashMap<String, DisplayDefinition>,
     pub attributes: Vec<AttributeDeclaration>,
+}
+
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct DisplayDefinition {
+    pub fields: Vec<String>,
+    #[serde(default = "default_display_separator")]
+    pub separator: String,
+}
+
+fn default_display_separator() -> String {
+    " · ".to_owned()
 }
 
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
@@ -77,6 +90,7 @@ pub struct CompiledBlueprint {
     pub kind: BlueprintKind,
     pub raw_definition_hash: String,
     pub includes: Vec<IncludeRef>,
+    pub display: HashMap<String, DisplayDefinition>,
     pub attributes: Vec<EffectiveAttribute>,
 }
 
@@ -104,8 +118,14 @@ pub enum BlueprintError {
     UnknownIncludedAttribute { alias: String, attribute: String },
     #[error("resolved include '{0}' is missing or does not match its declaration")]
     InvalidResolvedInclude(String),
-    #[error("entity blueprints must define at least one scalar attribute tagged 'display'")]
-    MissingDisplayAttribute,
+    #[error("entity blueprints must define display.dropdown_option")]
+    MissingDropdownOptionDisplay,
+    #[error("display '{0}' must define at least one field")]
+    EmptyDisplayFields(String),
+    #[error("display '{display}' contains duplicate field '{field}'")]
+    DuplicateDisplayField { display: String, field: String },
+    #[error("display '{display}' references unknown or non-scalar attribute '{field}'")]
+    InvalidDisplayField { display: String, field: String },
     #[error("attribute '{0}' has an invalid tag")]
     InvalidAttributeTag(String),
 }
@@ -119,6 +139,8 @@ struct RawBlueprintDefinition {
     kind: BlueprintKind,
     #[serde(default)]
     includes: Vec<IncludeRef>,
+    #[serde(default)]
+    display: HashMap<String, DisplayDefinition>,
     attributes: Vec<RawAttributeDeclaration>,
 }
 
@@ -204,6 +226,7 @@ pub fn parse(source: &str) -> Result<BlueprintDefinition, BlueprintError> {
         name: raw.name,
         kind: raw.kind,
         includes: raw.includes,
+        display: raw.display,
         attributes,
     })
 }
@@ -281,12 +304,32 @@ pub fn compile(
         });
     }
     if definition.kind == BlueprintKind::Entity
-        && !attributes.iter().any(|attribute| {
-            attribute.value_type != "relationship"
-                && attribute.tags.iter().any(|tag| tag == "display")
-        })
+        && !definition.display.contains_key("dropdown_option")
     {
-        return Err(BlueprintError::MissingDisplayAttribute);
+        return Err(BlueprintError::MissingDropdownOptionDisplay);
+    }
+    for (name, display) in &definition.display {
+        if display.fields.is_empty() {
+            return Err(BlueprintError::EmptyDisplayFields(name.clone()));
+        }
+        let mut fields = HashSet::new();
+        for field in &display.fields {
+            if field.trim().is_empty() || !fields.insert(field) {
+                return Err(BlueprintError::DuplicateDisplayField {
+                    display: name.clone(),
+                    field: field.clone(),
+                });
+            }
+            if !attributes
+                .iter()
+                .any(|attribute| attribute.code == *field && attribute.value_type != "relationship")
+            {
+                return Err(BlueprintError::InvalidDisplayField {
+                    display: name.clone(),
+                    field: field.clone(),
+                });
+            }
+        }
     }
 
     Ok(CompiledBlueprint {
@@ -295,6 +338,7 @@ pub fn compile(
         kind: definition.kind,
         raw_definition_hash: raw_hash(source),
         includes: definition.includes,
+        display: definition.display,
         attributes,
     })
 }

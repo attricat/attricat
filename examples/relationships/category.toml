@@ -3,10 +3,12 @@ code = "category"
 name = "Category"
 kind = "entity"
 
+[display.dropdown_option]
+fields = ["name"]
+
 [[attributes]]
 code = "name"
 value_type = "string"
-tags = ["display"]
 
 [[attributes]]
 code = "slug"
