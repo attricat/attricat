@@ -9,4 +9,4 @@ export const entityQueryKeys = {
     version: number | undefined,
     query: string | undefined,
   ) => ['entities', blueprint, version, query] as const,
-};
+} as const;
