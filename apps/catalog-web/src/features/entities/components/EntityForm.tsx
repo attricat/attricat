@@ -135,6 +135,19 @@ export const EntityForm = ({
                       onChange={handleChange}
                       value={value}
                     />
+                  ) : attribute.value_type === 'boolean' ? (
+                    <TextField
+                      key={attribute.code}
+                      fullWidth
+                      select
+                      label={attribute.code}
+                      onChange={(event) => handleChange(event.target.value)}
+                      value={value}
+                    >
+                      <MenuItem value="">Not set</MenuItem>
+                      <MenuItem value="true">True</MenuItem>
+                      <MenuItem value="false">False</MenuItem>
+                    </TextField>
                   ) : (
                     <TextField
                       key={attribute.code}

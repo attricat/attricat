@@ -755,6 +755,31 @@ target_entity_id = "00000000-0000-0000-0000-000000000002"
     }
 
     #[test]
+    fn converts_toml_temporal_literals_to_iso_strings() {
+        let input: ValueFile = toml::from_str(
+            r#"
+[[values]]
+kind = "scalar"
+attribute_code = "available_on"
+value = 2026-08-12
+
+[[values]]
+kind = "scalar"
+attribute_code = "released_at"
+value = 2026-08-12T14:30:00Z
+"#,
+        )
+        .unwrap();
+        assert_eq!(
+            values_body(input).unwrap()["values"],
+            json!([
+                { "kind": "scalar", "attribute_code": "available_on", "context_id": null, "value": "2026-08-12" },
+                { "kind": "scalar", "attribute_code": "released_at", "context_id": null, "value": "2026-08-12T14:30:00Z" }
+            ])
+        );
+    }
+
+    #[test]
     fn converts_relationship_replacement_file_to_api_shape() {
         let source = r#"
 [[relationships]]

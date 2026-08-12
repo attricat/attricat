@@ -653,6 +653,10 @@ code = "available_on"
 value_type = "date"
 
 [[attributes]]
+code = "released_at"
+value_type = "datetime"
+
+[[attributes]]
 code = "cutoff"
 value_type = "time"
 "#,
@@ -668,6 +672,7 @@ value_type = "time"
             { "kind": "scalar", "attribute_code": "quantity", "value": 3 },
             { "kind": "scalar", "attribute_code": "available", "value": true },
             { "kind": "scalar", "attribute_code": "available_on", "value": "2026-08-12" },
+            { "kind": "scalar", "attribute_code": "released_at", "value": "2026-08-12T14:30:00Z" },
             { "kind": "scalar", "attribute_code": "cutoff", "value": { "time": "09:30:00", "time_zone": "America/New_York" } }
         ] }))
         .send()
@@ -688,7 +693,15 @@ value_type = "time"
         .unwrap();
     assert!(values.iter().any(|value| value["value"] == json!(true)));
     assert!(values.iter().any(|value| value["value"] == json!(12.50)));
-    assert!(values.iter().any(|value| value["value"] == json!({ "time": "09:30:00", "time_zone": "America/New_York" })));
+    assert!(
+        values
+            .iter()
+            .any(|value| value["value"] == json!("2026-08-12T14:30:00+00:00"))
+    );
+    assert!(
+        values.iter().any(|value| value["value"]
+            == json!({ "time": "09:30:00", "time_zone": "America/New_York" }))
+    );
     assert_eq!(
         sqlx::query_scalar::<_, rust_decimal::Decimal>(
             "SELECT SUM(value_number) FROM attribute_values WHERE entity_id = $1 AND latest"
@@ -709,6 +722,55 @@ value_type = "time"
         .unwrap(),
         true
     );
+
+    server.abort();
+}
+
+#[sqlx::test]
+async fn rejects_mismatched_native_value_storage_on_read(pool: PgPool) {
+    let (base_url, server) = start_server(pool.clone()).await;
+    let client = Client::new();
+    let blueprint = create_blueprint(
+        &client,
+        &base_url,
+        r#"
+format_version = 1
+code = "typed-read"
+name = "Typed read"
+kind = "entity"
+
+[display.dropdown_option]
+fields = ["title"]
+
+[[attributes]]
+code = "title"
+value_type = "string"
+"#,
+    )
+    .await;
+    let entity = create_entity(&client, &base_url, &blueprint).await;
+    let entity_id: Uuid = entity["id"].as_str().unwrap().parse().unwrap();
+    let attribute_id: Uuid = blueprint["attributes"][0]["id"]
+        .as_str()
+        .unwrap()
+        .parse()
+        .unwrap();
+    sqlx::query(
+        "INSERT INTO attribute_values (id, entity_id, attribute_id, value_number) VALUES ($1, $2, $3, 12.50)",
+    )
+    .bind(Uuid::new_v4())
+    .bind(entity_id)
+    .bind(attribute_id)
+    .execute(&pool)
+    .await
+    .unwrap();
+
+    let response = client
+        .get(format!("{base_url}/entities/{entity_id}/values/current"))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::INTERNAL_SERVER_ERROR);
 
     server.abort();
 }

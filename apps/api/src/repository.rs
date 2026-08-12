@@ -18,7 +18,6 @@ use crate::{
         EntityPreview, EntityPreviewPage, FormAttributeValue, NewAttributeValue,
         RelationshipMutation, RelationshipTargets,
     },
-    projection::PreviewProjectionBuilder,
 };
 
 #[derive(Clone)]
@@ -40,6 +39,8 @@ pub enum RepositoryError {
     AttributeKindMismatch,
     #[error("value does not match the attribute type")]
     AttributeValueTypeMismatch,
+    #[error("stored attribute value does not match its attribute type")]
+    InvalidStoredAttributeValue,
     #[error("relationship target does not match the attribute target blueprint")]
     RelationshipTargetTypeMismatch,
     #[error("projections must be a JSON object")]
@@ -84,6 +85,35 @@ struct EntityPreviewRow {
     blueprint_display: Value,
 }
 
+#[derive(sqlx::FromRow)]
+struct FormNativeValueRow {
+    attribute_code: String,
+    relationship_target_entity_id: Option<Uuid>,
+    #[sqlx(flatten)]
+    native: NativeValueRow,
+}
+
+#[derive(sqlx::FromRow)]
+struct CurrentNativeValueRow {
+    id: Uuid,
+    entity_id: Uuid,
+    attribute_id: Uuid,
+    relationship_target_entity_id: Option<Uuid>,
+    active: bool,
+    context_id: Option<Uuid>,
+    created_at: DateTime<Utc>,
+    #[sqlx(flatten)]
+    native: NativeValueRow,
+}
+
+#[derive(sqlx::FromRow)]
+struct ProjectionNativeValueRow {
+    attribute_code: String,
+    context_code: Option<String>,
+    #[sqlx(flatten)]
+    native: NativeValueRow,
+}
+
 enum NativeValue {
     Text(String),
     Number(Decimal),
@@ -94,22 +124,210 @@ enum NativeValue {
     Time(NaiveTime, String),
 }
 
-fn native_value(value_type: &str, value: Value) -> Result<NativeValue, RepositoryError> {
-    let invalid = || RepositoryError::AttributeValueTypeMismatch;
-    match value_type {
-        "string" => value.as_str().map(|value| NativeValue::Text(value.to_owned())).ok_or_else(invalid),
-        "number" => value.as_number().and_then(|value| value.to_string().parse().ok()).map(NativeValue::Number).ok_or_else(invalid),
-        "integer" => value.as_i64().map(NativeValue::Integer).ok_or_else(invalid),
-        "boolean" => value.as_bool().map(NativeValue::Boolean).ok_or_else(invalid),
-        "date" => value.as_str().and_then(|value| value.parse().ok()).map(NativeValue::Date).ok_or_else(invalid),
-        "datetime" => value.as_str().and_then(|value| value.parse().ok()).map(NativeValue::Datetime).ok_or_else(invalid),
-        "time" => {
-            let time = value.get("time").and_then(Value::as_str).and_then(|value| value.parse().ok()).ok_or_else(invalid)?;
-            let time_zone = value.get("time_zone").and_then(Value::as_str).filter(|value| value.parse::<Tz>().is_ok()).ok_or_else(invalid)?;
-            Ok(NativeValue::Time(time, time_zone.to_owned()))
+#[derive(Clone, Copy)]
+enum ValueType {
+    String,
+    Number,
+    Integer,
+    Boolean,
+    Date,
+    Datetime,
+    Time,
+}
+
+#[derive(sqlx::FromRow)]
+pub(crate) struct NativeValueRow {
+    pub(crate) value_type: String,
+    pub(crate) value_text: Option<String>,
+    pub(crate) value_number: Option<Decimal>,
+    pub(crate) value_integer: Option<i64>,
+    pub(crate) value_boolean: Option<bool>,
+    pub(crate) value_date: Option<NaiveDate>,
+    pub(crate) value_datetime: Option<DateTime<Utc>>,
+    pub(crate) value_time: Option<NaiveTime>,
+    pub(crate) value_time_zone: Option<String>,
+}
+
+impl ValueType {
+    fn parse(value_type: &str) -> Result<Self, RepositoryError> {
+        match value_type {
+            "string" => Ok(Self::String),
+            "number" => Ok(Self::Number),
+            "integer" => Ok(Self::Integer),
+            "boolean" => Ok(Self::Boolean),
+            "date" => Ok(Self::Date),
+            "datetime" => Ok(Self::Datetime),
+            "time" => Ok(Self::Time),
+            _ => Err(RepositoryError::AttributeValueTypeMismatch),
         }
-        _ => Err(RepositoryError::AttributeValueTypeMismatch),
     }
+}
+
+impl NativeValue {
+    fn parse(value_type: ValueType, value: Value) -> Result<Self, RepositoryError> {
+        let invalid = || RepositoryError::AttributeValueTypeMismatch;
+        match value_type {
+            ValueType::String => value
+                .as_str()
+                .map(|value| Self::Text(value.to_owned()))
+                .ok_or_else(invalid),
+            ValueType::Number => value
+                .as_number()
+                .and_then(|value| value.to_string().parse().ok())
+                .map(Self::Number)
+                .ok_or_else(invalid),
+            ValueType::Integer => value.as_i64().map(Self::Integer).ok_or_else(invalid),
+            ValueType::Boolean => value.as_bool().map(Self::Boolean).ok_or_else(invalid),
+            ValueType::Date => value
+                .as_str()
+                .and_then(|value| value.parse().ok())
+                .map(Self::Date)
+                .ok_or_else(invalid),
+            ValueType::Datetime => value
+                .as_str()
+                .and_then(|value| value.parse().ok())
+                .map(Self::Datetime)
+                .ok_or_else(invalid),
+            ValueType::Time => {
+                let time = value
+                    .get("time")
+                    .and_then(Value::as_str)
+                    .and_then(|value| value.parse().ok())
+                    .ok_or_else(invalid)?;
+                let time_zone = value
+                    .get("time_zone")
+                    .and_then(Value::as_str)
+                    .filter(|value| value.parse::<Tz>().is_ok())
+                    .ok_or_else(invalid)?;
+                Ok(Self::Time(time, time_zone.to_owned()))
+            }
+        }
+    }
+
+    fn json(&self) -> Value {
+        match self {
+            Self::Text(value) => Value::String(value.clone()),
+            Self::Number(value) => {
+                Value::Number(value.to_string().parse().expect("decimal is a JSON number"))
+            }
+            Self::Integer(value) => Value::from(*value),
+            Self::Boolean(value) => Value::Bool(*value),
+            Self::Date(value) => Value::String(value.to_string()),
+            Self::Datetime(value) => Value::String(value.to_rfc3339()),
+            Self::Time(time, time_zone) => {
+                serde_json::json!({ "time": time.to_string(), "time_zone": time_zone })
+            }
+        }
+    }
+
+    fn bind<'q, O>(
+        self,
+        query: sqlx::query::QueryAs<'q, Postgres, O, sqlx::postgres::PgArguments>,
+    ) -> sqlx::query::QueryAs<'q, Postgres, O, sqlx::postgres::PgArguments>
+    where
+        O: Send + Unpin,
+    {
+        match self {
+            Self::Text(value) => query
+                .bind(Some(value))
+                .bind(Option::<Decimal>::None)
+                .bind(Option::<i64>::None)
+                .bind(Option::<bool>::None)
+                .bind(Option::<NaiveDate>::None)
+                .bind(Option::<DateTime<Utc>>::None)
+                .bind(Option::<NaiveTime>::None)
+                .bind(Option::<String>::None),
+            Self::Number(value) => query
+                .bind(Option::<String>::None)
+                .bind(Some(value))
+                .bind(Option::<i64>::None)
+                .bind(Option::<bool>::None)
+                .bind(Option::<NaiveDate>::None)
+                .bind(Option::<DateTime<Utc>>::None)
+                .bind(Option::<NaiveTime>::None)
+                .bind(Option::<String>::None),
+            Self::Integer(value) => query
+                .bind(Option::<String>::None)
+                .bind(Option::<Decimal>::None)
+                .bind(Some(value))
+                .bind(Option::<bool>::None)
+                .bind(Option::<NaiveDate>::None)
+                .bind(Option::<DateTime<Utc>>::None)
+                .bind(Option::<NaiveTime>::None)
+                .bind(Option::<String>::None),
+            Self::Boolean(value) => query
+                .bind(Option::<String>::None)
+                .bind(Option::<Decimal>::None)
+                .bind(Option::<i64>::None)
+                .bind(Some(value))
+                .bind(Option::<NaiveDate>::None)
+                .bind(Option::<DateTime<Utc>>::None)
+                .bind(Option::<NaiveTime>::None)
+                .bind(Option::<String>::None),
+            Self::Date(value) => query
+                .bind(Option::<String>::None)
+                .bind(Option::<Decimal>::None)
+                .bind(Option::<i64>::None)
+                .bind(Option::<bool>::None)
+                .bind(Some(value))
+                .bind(Option::<DateTime<Utc>>::None)
+                .bind(Option::<NaiveTime>::None)
+                .bind(Option::<String>::None),
+            Self::Datetime(value) => query
+                .bind(Option::<String>::None)
+                .bind(Option::<Decimal>::None)
+                .bind(Option::<i64>::None)
+                .bind(Option::<bool>::None)
+                .bind(Option::<NaiveDate>::None)
+                .bind(Some(value))
+                .bind(Option::<NaiveTime>::None)
+                .bind(Option::<String>::None),
+            Self::Time(time, time_zone) => query
+                .bind(Option::<String>::None)
+                .bind(Option::<Decimal>::None)
+                .bind(Option::<i64>::None)
+                .bind(Option::<bool>::None)
+                .bind(Option::<NaiveDate>::None)
+                .bind(Option::<DateTime<Utc>>::None)
+                .bind(Some(time))
+                .bind(Some(time_zone)),
+        }
+    }
+}
+
+pub(crate) fn native_value_json(row: NativeValueRow) -> Result<Value, RepositoryError> {
+    let value_type = ValueType::parse(&row.value_type)
+        .map_err(|_| RepositoryError::InvalidStoredAttributeValue)?;
+    let populated = [
+        row.value_text.is_some(),
+        row.value_number.is_some(),
+        row.value_integer.is_some(),
+        row.value_boolean.is_some(),
+        row.value_date.is_some(),
+        row.value_datetime.is_some(),
+        row.value_time.is_some(),
+    ]
+    .into_iter()
+    .filter(|value| *value)
+    .count();
+    let value = match value_type {
+        ValueType::String => row.value_text.map(NativeValue::Text),
+        ValueType::Number => row.value_number.map(NativeValue::Number),
+        ValueType::Integer => row.value_integer.map(NativeValue::Integer),
+        ValueType::Boolean => row.value_boolean.map(NativeValue::Boolean),
+        ValueType::Date => row.value_date.map(NativeValue::Date),
+        ValueType::Datetime => row.value_datetime.map(NativeValue::Datetime),
+        ValueType::Time => row
+            .value_time
+            .zip(row.value_time_zone)
+            .filter(|(_, zone)| zone.parse::<Tz>().is_ok())
+            .map(|(time, zone)| NativeValue::Time(time, zone)),
+    }
+    .ok_or(RepositoryError::InvalidStoredAttributeValue)?;
+    if populated != 1 {
+        return Err(RepositoryError::InvalidStoredAttributeValue);
+    }
+    Ok(value.json())
 }
 
 impl CatalogRepository {
@@ -444,7 +662,7 @@ impl CatalogRepository {
         for value in values {
             self.insert_value(&mut transaction, &entity, value).await?;
         }
-        let preview = PreviewProjectionBuilder::build(&mut transaction, entity.id).await?;
+        let preview = Self::build_preview_projection(&mut transaction, entity.id).await?;
         let entity = self
             .store_preview(&mut transaction, entity.id, preview)
             .await?;
@@ -467,7 +685,7 @@ impl CatalogRepository {
         }
         self.replace_relationship_sets(&mut transaction, &entity, relationships)
             .await?;
-        let preview = PreviewProjectionBuilder::build(&mut transaction, entity.id).await?;
+        let preview = Self::build_preview_projection(&mut transaction, entity.id).await?;
         let entity = self
             .store_preview(&mut transaction, entity.id, preview)
             .await?;
@@ -479,17 +697,11 @@ impl CatalogRepository {
         &self,
         entity_id: Uuid,
     ) -> Result<Vec<FormAttributeValue>, RepositoryError> {
-        let rows = sqlx::query_as::<_, (String, Value, Option<Uuid>)>(
-            r#"SELECT a.code,
-                      COALESCE(CASE a.value_type
-                        WHEN 'string' THEN to_jsonb(av.value_text)
-                        WHEN 'number' THEN to_jsonb(av.value_number)
-                        WHEN 'integer' THEN to_jsonb(av.value_integer)
-                        WHEN 'boolean' THEN to_jsonb(av.value_boolean)
-                        WHEN 'date' THEN to_jsonb(av.value_date::text)
-                        WHEN 'datetime' THEN to_jsonb(av.value_datetime)
-                        WHEN 'time' THEN jsonb_build_object('time', av.value_time::text, 'time_zone', av.value_time_zone)
-                      END, 'null'::jsonb) AS value, av.relationship_target_entity_id
+        let rows = sqlx::query_as::<_, FormNativeValueRow>(
+            r#"SELECT a.code AS attribute_code, av.relationship_target_entity_id,
+                      a.value_type, av.value_text, av.value_number, av.value_integer,
+                      av.value_boolean, av.value_date, av.value_datetime, av.value_time,
+                      av.value_time_zone
                FROM attribute_values av
                JOIN attributes a ON a.id = av.attribute_id
                WHERE av.entity_id = $1
@@ -502,19 +714,19 @@ impl CatalogRepository {
         .await?;
         Ok(rows
             .into_iter()
-            .map(
-                |(attribute_code, value, target_entity_id)| match target_entity_id {
+            .map(|row| {
+                Ok(match row.relationship_target_entity_id {
                     Some(target_entity_id) => FormAttributeValue::Relationship {
-                        attribute_code,
+                        attribute_code: row.attribute_code,
                         target_entity_id,
                     },
                     None => FormAttributeValue::Scalar {
-                        attribute_code,
-                        value,
+                        attribute_code: row.attribute_code,
+                        value: native_value_json(row.native)?,
                     },
-                },
-            )
-            .collect())
+                })
+            })
+            .collect::<Result<_, RepositoryError>>()?)
     }
 
     pub async fn get_entity(&self, entity_id: Uuid) -> Result<Option<Entity>, RepositoryError> {
@@ -532,18 +744,11 @@ impl CatalogRepository {
         &self,
         entity_id: Uuid,
     ) -> Result<Vec<AttributeValue>, RepositoryError> {
-        Ok(sqlx::query_as::<_, AttributeValue>(
-            r#"SELECT av.id, av.entity_id, av.attribute_id,
-                      COALESCE(CASE a.value_type
-                        WHEN 'string' THEN to_jsonb(av.value_text)
-                        WHEN 'number' THEN to_jsonb(av.value_number)
-                        WHEN 'integer' THEN to_jsonb(av.value_integer)
-                        WHEN 'boolean' THEN to_jsonb(av.value_boolean)
-                        WHEN 'date' THEN to_jsonb(av.value_date::text)
-                        WHEN 'datetime' THEN to_jsonb(av.value_datetime)
-                        WHEN 'time' THEN jsonb_build_object('time', av.value_time::text, 'time_zone', av.value_time_zone)
-                      END, 'null'::jsonb) AS value,
-                      av.relationship_target_entity_id, av.context_id, av.active, av.created_at
+        let rows = sqlx::query_as::<_, CurrentNativeValueRow>(
+            r#"SELECT av.id, av.entity_id, av.attribute_id, av.relationship_target_entity_id,
+                      av.context_id, av.active, av.created_at, a.value_type, av.value_text,
+                      av.value_number, av.value_integer, av.value_boolean, av.value_date,
+                      av.value_datetime, av.value_time, av.value_time_zone
                 FROM attribute_values av
                 JOIN attributes a ON a.id = av.attribute_id
                 WHERE av.entity_id = $1
@@ -552,7 +757,25 @@ impl CatalogRepository {
         )
         .bind(entity_id)
         .fetch_all(&self.pool)
-        .await?)
+        .await?;
+        rows.into_iter()
+            .map(|row| {
+                Ok(AttributeValue {
+                    id: row.id,
+                    entity_id: row.entity_id,
+                    attribute_id: row.attribute_id,
+                    value: if row.relationship_target_entity_id.is_some() {
+                        Value::Null
+                    } else {
+                        native_value_json(row.native)?
+                    },
+                    relationship_target_entity_id: row.relationship_target_entity_id,
+                    active: row.active,
+                    context_id: row.context_id,
+                    created_at: row.created_at,
+                })
+            })
+            .collect()
     }
 
     pub async fn preview(
@@ -810,7 +1033,7 @@ impl CatalogRepository {
             values.push(self.insert_value(&mut transaction, &entity, value).await?);
         }
 
-        let preview = PreviewProjectionBuilder::build(&mut transaction, entity_id).await?;
+        let preview = Self::build_preview_projection(&mut transaction, entity_id).await?;
         sqlx::query(
             r#"UPDATE entities
                SET projections = jsonb_set(projections, '{preview}', $2, true), updated_at = now()
@@ -1047,7 +1270,7 @@ impl CatalogRepository {
         let native = if is_relationship {
             None
         } else {
-            Some(native_value(&value_type, payload)?)
+            Some(NativeValue::parse(ValueType::parse(&value_type)?, payload)?)
         };
 
         self.supersede_latest_value(
@@ -1059,34 +1282,34 @@ impl CatalogRepository {
         )
         .await?;
 
-        Ok(sqlx::query_as::<_, AttributeValue>(
+        let query = sqlx::query_as::<_, AttributeValue>(
             r#"INSERT INTO attribute_values (
                     id, entity_id, attribute_id, context_id, relationship_target_entity_id, active,
                     value_text, value_number, value_integer, value_boolean, value_date, value_datetime,
                     value_time, value_time_zone
                 ) VALUES ($1, $2, $3, $4, $5, true, $6, $7, $8, $9, $10, $11, $12, $13)
                 RETURNING id, entity_id, attribute_id,
-                    COALESCE(to_jsonb(value_text), to_jsonb(value_number), to_jsonb(value_integer),
-                        to_jsonb(value_boolean), to_jsonb(value_date::text), to_jsonb(value_datetime),
-                        CASE WHEN value_time IS NOT NULL THEN jsonb_build_object('time', value_time::text, 'time_zone', value_time_zone) END,
-                        'null'::jsonb) AS value,
+                    'null'::jsonb AS value,
                     relationship_target_entity_id, context_id, active, created_at"#,
         )
         .bind(Uuid::new_v4())
         .bind(entity.id)
         .bind(attribute_id)
         .bind(context_id)
-        .bind(target_entity_id)
-        .bind(match &native { Some(NativeValue::Text(value)) => Some(value), _ => None })
-        .bind(match &native { Some(NativeValue::Number(value)) => Some(*value), _ => None })
-        .bind(match &native { Some(NativeValue::Integer(value)) => Some(*value), _ => None })
-        .bind(match &native { Some(NativeValue::Boolean(value)) => Some(*value), _ => None })
-        .bind(match &native { Some(NativeValue::Date(value)) => Some(*value), _ => None })
-        .bind(match &native { Some(NativeValue::Datetime(value)) => Some(*value), _ => None })
-        .bind(match &native { Some(NativeValue::Time(value, _)) => Some(*value), _ => None })
-        .bind(match &native { Some(NativeValue::Time(_, value)) => Some(value), _ => None })
-        .fetch_one(&mut **transaction)
-        .await?)
+        .bind(target_entity_id);
+        let query = match native {
+            Some(native) => native.bind(query),
+            None => query
+                .bind(Option::<String>::None)
+                .bind(Option::<Decimal>::None)
+                .bind(Option::<i64>::None)
+                .bind(Option::<bool>::None)
+                .bind(Option::<NaiveDate>::None)
+                .bind(Option::<DateTime<Utc>>::None)
+                .bind(Option::<NaiveTime>::None)
+                .bind(Option::<String>::None),
+        };
+        Ok(query.fetch_one(&mut **transaction).await?)
     }
 
     async fn lock_entity(
@@ -1142,6 +1365,54 @@ impl CatalogRepository {
         .bind(preview)
         .fetch_one(&mut **transaction)
         .await?)
+    }
+
+    async fn build_preview_projection(
+        transaction: &mut Transaction<'_, Postgres>,
+        entity_id: Uuid,
+    ) -> Result<Value, RepositoryError> {
+        let values = sqlx::query_as::<_, ProjectionNativeValueRow>(
+            r#"SELECT a.code AS attribute_code, c.code AS context_code,
+                      a.value_type, av.value_text, av.value_number, av.value_integer,
+                      av.value_boolean, av.value_date, av.value_datetime, av.value_time,
+                      av.value_time_zone
+                FROM attribute_values av
+                JOIN entities e ON e.id = av.entity_id
+                JOIN attributes a ON a.id = av.attribute_id
+                 AND a.blueprint_id = e.blueprint_id
+                 AND a.blueprint_version = e.blueprint_version
+                LEFT JOIN attribute_contexts c ON c.id = av.context_id
+                WHERE av.entity_id = $1
+                  AND av.relationship_target_entity_id IS NULL
+                  AND av.latest
+                  AND a.deleted_at IS NULL
+                ORDER BY a.position, c.code NULLS FIRST"#,
+        )
+        .bind(entity_id)
+        .fetch_all(&mut **transaction)
+        .await?;
+        let mut default = Map::new();
+        let mut contexts = Map::new();
+        for value in values {
+            let values = match value.context_code {
+                Some(context_code) => {
+                    if context_code == "default" {
+                        return Err(RepositoryError::ReservedContextCode);
+                    }
+                    contexts
+                        .entry(context_code)
+                        .or_insert_with(|| Value::Object(Map::new()))
+                        .as_object_mut()
+                        .expect("projection contexts are objects")
+                }
+                None => &mut default,
+            };
+            values.insert(value.attribute_code, native_value_json(value.native)?);
+        }
+        let mut preview = Map::new();
+        preview.insert("default".to_owned(), Value::Object(default));
+        preview.extend(contexts);
+        Ok(Value::Object(preview))
     }
 
     async fn relationship_attribute(

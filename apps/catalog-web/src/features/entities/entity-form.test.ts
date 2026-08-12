@@ -10,6 +10,13 @@ const attributes = [
   { code: 'related_products', value_type: 'relationship' },
 ];
 
+const typedAttributes = [
+  { code: 'price', value_type: 'number' },
+  { code: 'stock', value_type: 'integer' },
+  { code: 'available', value_type: 'boolean' },
+  { code: 'cutoff', value_type: 'time' },
+] as const;
+
 describe('entity form values', () => {
   it('serializes scalar fields and complete relationship target sets', () => {
     expect(
@@ -51,5 +58,25 @@ describe('entity form values', () => {
       title: 'Summer shirt',
       related_products: 'uuid-one, uuid-two',
     });
+  });
+
+  it('serializes typed scalar values without coercing false to an omission', () => {
+    expect(
+      serializeAttributeValues(typedAttributes, {
+        price: '49.95',
+        stock: '24',
+        available: 'false',
+        cutoff: '09:30:00 America/New_York',
+      }),
+    ).toEqual([
+      { kind: 'scalar', attribute_code: 'price', value: 49.95 },
+      { kind: 'scalar', attribute_code: 'stock', value: 24 },
+      { kind: 'scalar', attribute_code: 'available', value: false },
+      {
+        kind: 'scalar',
+        attribute_code: 'cutoff',
+        value: { time: '09:30:00', time_zone: 'America/New_York' },
+      },
+    ]);
   });
 });

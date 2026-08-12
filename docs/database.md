@@ -156,6 +156,12 @@ the same contextual and historical behavior as all other attribute values.
 The Axum API starts after embedded migrations complete. Set `BIND_ADDR` to choose
 its listener address; it defaults to `127.0.0.1:3000`.
 
+`CatalogRepository` is the sole application boundary for catalog persistence.
+Only repository code reads or writes EAV facts, blueprint metadata, and entity
+projections. Projection rebuilds run in the same repository transaction as the
+EAV mutation. Direct catalog-table SQL is limited to migrations and storage
+assertions in tests.
+
 The JSON-first `catalog` client is documented in [cli.md](cli.md).
 
 The initial API supports creating TOML-defined blueprint revisions and contexts,
