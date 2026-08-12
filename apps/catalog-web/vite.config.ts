@@ -7,7 +7,7 @@ export default defineConfig({
   server: {
     proxy: {
       '/api': {
-        target: 'http://127.0.0.1:3000',
+        target: process.env.CATALOG_API_URL ?? 'http://127.0.0.1:3000',
         changeOrigin: true,
         rewrite: (path) => path.replace(/^\/api/, ''),
       },
@@ -15,5 +15,6 @@ export default defineConfig({
   },
   test: {
     environment: 'node',
+    exclude: ['e2e/**', 'node_modules/**'],
   },
 });

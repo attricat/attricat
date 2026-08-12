@@ -1,0 +1,77 @@
+import { PostgreSqlContainer } from '@testcontainers/postgresql';
+import { execFileSync, spawn, type ChildProcess } from 'node:child_process';
+
+const workspaceRoot = new URL('../../..', import.meta.url).pathname;
+const apiUrl = 'http://127.0.0.1:43100';
+const webUrl = 'http://127.0.0.1:4173';
+
+const waitFor = async (url: string) => {
+  const deadline = Date.now() + 120_000;
+  while (Date.now() < deadline) {
+    try {
+      if ((await fetch(url)).ok) return;
+    } catch {
+      // The process has not opened its listener yet.
+    }
+    await new Promise((resolve) => setTimeout(resolve, 500));
+  }
+  throw new Error(`Timed out waiting for ${url}`);
+};
+
+const start = (command: string, args: string[], env: NodeJS.ProcessEnv) =>
+  spawn(command, args, { cwd: workspaceRoot, env, stdio: 'inherit' });
+
+const stop = (process: ChildProcess) => {
+  if (!process.killed) process.kill('SIGTERM');
+};
+
+export default async () => {
+  // Testcontainers reads DOCKER_HOST rather than Docker CLI contexts. Resolve
+  // the active context so Colima and other non-default socket locations work.
+  if (!process.env.DOCKER_HOST) {
+    process.env.DOCKER_HOST = execFileSync(
+      'docker',
+      ['context', 'inspect', '--format', '{{.Endpoints.docker.Host}}'],
+      { encoding: 'utf8' },
+    ).trim();
+  }
+  // Colima cannot bind-mount its socket into Ryuk. This suite owns the
+  // container lifecycle and always stops PostgreSQL in global teardown.
+  process.env.TESTCONTAINERS_RYUK_DISABLED = 'true';
+  const database = await new PostgreSqlContainer('postgres:18-alpine').start();
+  const api = start('cargo', ['run', '-p', 'api'], {
+    ...process.env,
+    BIND_ADDR: '127.0.0.1:43100',
+    DATABASE_URL: database.getConnectionUri(),
+  });
+
+  try {
+    await waitFor(`${apiUrl}/health`);
+    const web = start(
+      'npm',
+      [
+        'run',
+        'dev',
+        '--prefix',
+        'apps/catalog-web',
+        '--',
+        '--host',
+        '127.0.0.1',
+        '--port',
+        '4173',
+      ],
+      { ...process.env, CATALOG_API_URL: apiUrl },
+    );
+    await waitFor(webUrl);
+
+    return async () => {
+      stop(web);
+      stop(api);
+      await database.stop();
+    };
+  } catch (error) {
+    stop(api);
+    await database.stop();
+    throw error;
+  }
+};

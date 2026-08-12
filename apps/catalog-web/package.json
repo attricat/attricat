@@ -7,6 +7,7 @@
     "dev": "vite",
     "build": "vite build && tsc -b",
     "test": "vitest run",
+    "test:e2e": "playwright test",
     "lint": "eslint .",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
@@ -27,7 +28,9 @@
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
+    "@playwright/test": "^1.62.1",
     "@tanstack/router-plugin": "^1.168.29",
+    "@testcontainers/postgresql": "^12.1.0",
     "@types/node": "^22.13.1",
     "@types/react": "^19.0.8",
     "@types/react-dom": "^19.0.3",
