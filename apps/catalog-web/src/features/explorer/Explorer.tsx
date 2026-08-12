@@ -178,7 +178,7 @@ export const Explorer = ({ search }: { search: ExplorerSearch }) => {
           Enter a blueprint code to start exploring.
         </Typography>
       )}
-      {results.isPending && (
+      {search.blueprint && results.isPending && (
         <Typography sx={{ py: 3 }}>Loading entities...</Typography>
       )}
       {results.isError && (
