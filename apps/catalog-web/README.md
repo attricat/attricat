@@ -1,5 +1,8 @@
 # Catalog Web
 
+See the repository's [frontend conventions](../../docs/frontend.md) for code
+structure, TypeScript, data-fetching, and testing expectations.
+
 ## End-to-End Tests
 
 The Playwright suite starts an isolated PostgreSQL container with Testcontainers,
