@@ -1,4 +1,5 @@
 import type { Attribute, NewAttributeValue, RelationshipTargets } from './api';
+import { scalarValueForField, valueForField } from './attribute-values';
 
 export const valuesForForm = (
   attributes: Attribute[],
@@ -29,15 +30,7 @@ export const valuesForForm = (
         (value): value is Extract<NewAttributeValue, { kind: 'scalar' }> =>
           value.kind === 'scalar',
       );
-      const value = scalar?.value;
-      return [
-        attribute.code,
-        typeof value === 'object' && value !== null
-          ? `${value.time} ${value.time_zone}`
-          : value === undefined
-            ? ''
-            : String(value),
-      ];
+      return [attribute.code, valueForField(scalar?.value)];
     }),
   );
 };
@@ -48,43 +41,12 @@ export const serializeAttributeValues = (
 ): NewAttributeValue[] => {
   return attributes.flatMap<NewAttributeValue>(
     (attribute): NewAttributeValue[] => {
-      const value = fields[attribute.code]?.trim();
-      if (!value) return [];
       if (attribute.value_type === 'relationship') return [];
-      if (attribute.value_type === 'boolean') {
-        return [
-          {
-            kind: 'scalar' as const,
-            attribute_code: attribute.code,
-            value: value === 'true',
-          },
-        ];
-      }
-      if (attribute.value_type === 'number') {
-        const number = Number(value);
-        return Number.isFinite(number)
-          ? [{ kind: 'scalar' as const, attribute_code: attribute.code, value: number }]
-          : [];
-      }
-      if (attribute.value_type === 'integer') {
-        const number = Number(value);
-        return Number.isSafeInteger(number)
-          ? [{ kind: 'scalar' as const, attribute_code: attribute.code, value: number }]
-          : [];
-      }
-      if (attribute.value_type === 'time') {
-        const [time, time_zone] = value.split(/\s+/, 2);
-        return time && time_zone
-          ? [
-              {
-                kind: 'scalar' as const,
-                attribute_code: attribute.code,
-                value: { time, time_zone },
-              },
-            ]
-          : [];
-      }
-      return [{ kind: 'scalar' as const, attribute_code: attribute.code, value }];
+      const scalar = scalarValueForField(
+        attribute,
+        fields[attribute.code] ?? '',
+      );
+      return scalar ? [scalar] : [];
     },
   );
 };
