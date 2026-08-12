@@ -5,11 +5,12 @@ import { getEntityForm, updateEntity } from './api';
 import { EntityForm } from './components/EntityForm';
 import { EntityPage } from './components/EntityPage';
 import { valuesForForm } from './entity-form';
+import { entityQueryKeys } from './query-keys';
 
 export const EditEntityPage = ({ entityId }: { entityId: string }) => {
   const navigate = useNavigate({ from: '/entities/$entityId/edit' });
   const entityForm = useQuery({
-    queryKey: ['entity-form', entityId],
+    queryKey: entityQueryKeys.form(entityId),
     queryFn: () => getEntityForm(entityId),
   });
   const update = useMutation({

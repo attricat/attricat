@@ -26,6 +26,7 @@ import {
   valuesForForm,
 } from '../entity-form';
 import { displayLabel, dropdownOptionLabel } from '../entity-display';
+import { entityQueryKeys } from '../query-keys';
 
 type EntityFormProps = {
   blueprint?: BlueprintWithAttributes;
@@ -50,7 +51,7 @@ export const EntityForm = ({
   submitLabel,
 }: EntityFormProps) => {
   const blueprints = useQuery({
-    queryKey: ['entity-blueprints'],
+    queryKey: entityQueryKeys.blueprints(),
     queryFn: listEntityBlueprints,
     enabled: !blueprint,
   });
@@ -204,7 +205,7 @@ const RelationshipField = ({
 }) => {
   const targetBlueprint = attribute.target_blueprint_code;
   const targets = useQuery({
-    queryKey: ['relationship-targets', targetBlueprint],
+    queryKey: entityQueryKeys.relationshipTargets(targetBlueprint),
     queryFn: () => searchEntities(targetBlueprint!, undefined, ''),
     enabled: Boolean(targetBlueprint),
   });

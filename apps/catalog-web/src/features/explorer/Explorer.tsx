@@ -31,6 +31,7 @@ import {
   type EntityItem,
 } from '../entities/api';
 import { displayLabel } from '../entities/entity-display';
+import { entityQueryKeys } from '../entities/query-keys';
 import type { ExplorerSearch } from './search';
 
 export const Explorer = ({ search }: { search: ExplorerSearch }) => {
@@ -53,13 +54,17 @@ export const Explorer = ({ search }: { search: ExplorerSearch }) => {
     },
   });
   const results = useQuery({
-    queryKey: ['entities', search.blueprint, search.version, search.query],
+    queryKey: entityQueryKeys.search(
+      search.blueprint,
+      search.version,
+      search.query,
+    ),
     queryFn: () =>
       searchEntities(search.blueprint!, search.version, search.query ?? ''),
     enabled: Boolean(search.blueprint),
   });
   const blueprints = useQuery({
-    queryKey: ['entity-blueprints'],
+    queryKey: entityQueryKeys.blueprints(),
     queryFn: listEntityBlueprints,
   });
 

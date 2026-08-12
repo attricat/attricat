@@ -9,10 +9,11 @@ import {
   Typography,
 } from '@mui/material';
 import { getEntityPreview } from './api';
+import { entityQueryKeys } from './query-keys';
 
 export const EntityPreviewPage = ({ entityId }: { entityId: string }) => {
   const preview = useQuery({
-    queryKey: ['entity-preview', entityId],
+    queryKey: entityQueryKeys.preview(entityId),
     queryFn: () => getEntityPreview(entityId),
   });
   return (
