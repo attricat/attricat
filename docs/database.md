@@ -29,6 +29,24 @@ Run migrations explicitly with:
 sqlx migrate run --source apps/api/migrations --database-url "$DATABASE_URL"
 ```
 
+## Web End-To-End Tests
+
+The web app's Playwright suite provisions a disposable PostgreSQL container with
+Testcontainers. It starts separate API and Vite processes and seeds fixture data
+through the API, so it never uses or changes the local development database.
+
+With a Docker-compatible runtime running, install Chromium once and run:
+
+```sh
+npx playwright install chromium --prefix apps/catalog-web
+npm run test:e2e --prefix apps/catalog-web
+```
+
+The test setup resolves the active Docker context automatically, including
+Colima. Ryuk is disabled for Colima compatibility because Colima cannot
+bind-mount its Docker socket into the cleanup sidecar; Playwright global teardown
+stops the E2E PostgreSQL container and child processes.
+
 ## Rust Model Mapping
 
 | Rust model | Database table | Notes |
