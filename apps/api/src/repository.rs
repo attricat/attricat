@@ -2,7 +2,9 @@ use std::collections::HashSet;
 
 use async_recursion::async_recursion;
 use base64::{Engine, engine::general_purpose::URL_SAFE_NO_PAD};
-use chrono::{DateTime, Utc};
+use chrono::{DateTime, NaiveDate, NaiveTime, Utc};
+use chrono_tz::Tz;
+use rust_decimal::Decimal;
 use serde_json::{Map, Value};
 use sqlx::{PgPool, Postgres, Transaction};
 use thiserror::Error;
@@ -36,6 +38,8 @@ pub enum RepositoryError {
     InvalidAttributeSelector,
     #[error("attribute kind does not match the supplied value")]
     AttributeKindMismatch,
+    #[error("value does not match the attribute type")]
+    AttributeValueTypeMismatch,
     #[error("relationship target does not match the attribute target blueprint")]
     RelationshipTargetTypeMismatch,
     #[error("projections must be a JSON object")]
@@ -78,6 +82,34 @@ struct EntityPreviewRow {
     created_at: DateTime<Utc>,
     preview: Value,
     blueprint_display: Value,
+}
+
+enum NativeValue {
+    Text(String),
+    Number(Decimal),
+    Integer(i64),
+    Boolean(bool),
+    Date(NaiveDate),
+    Datetime(DateTime<Utc>),
+    Time(NaiveTime, String),
+}
+
+fn native_value(value_type: &str, value: Value) -> Result<NativeValue, RepositoryError> {
+    let invalid = || RepositoryError::AttributeValueTypeMismatch;
+    match value_type {
+        "string" => value.as_str().map(|value| NativeValue::Text(value.to_owned())).ok_or_else(invalid),
+        "number" => value.as_number().and_then(|value| value.to_string().parse().ok()).map(NativeValue::Number).ok_or_else(invalid),
+        "integer" => value.as_i64().map(NativeValue::Integer).ok_or_else(invalid),
+        "boolean" => value.as_bool().map(NativeValue::Boolean).ok_or_else(invalid),
+        "date" => value.as_str().and_then(|value| value.parse().ok()).map(NativeValue::Date).ok_or_else(invalid),
+        "datetime" => value.as_str().and_then(|value| value.parse().ok()).map(NativeValue::Datetime).ok_or_else(invalid),
+        "time" => {
+            let time = value.get("time").and_then(Value::as_str).and_then(|value| value.parse().ok()).ok_or_else(invalid)?;
+            let time_zone = value.get("time_zone").and_then(Value::as_str).filter(|value| value.parse::<Tz>().is_ok()).ok_or_else(invalid)?;
+            Ok(NativeValue::Time(time, time_zone.to_owned()))
+        }
+        _ => Err(RepositoryError::AttributeValueTypeMismatch),
+    }
 }
 
 impl CatalogRepository {
@@ -448,7 +480,16 @@ impl CatalogRepository {
         entity_id: Uuid,
     ) -> Result<Vec<FormAttributeValue>, RepositoryError> {
         let rows = sqlx::query_as::<_, (String, Value, Option<Uuid>)>(
-            r#"SELECT a.code, av.value, av.relationship_target_entity_id
+            r#"SELECT a.code,
+                      COALESCE(CASE a.value_type
+                        WHEN 'string' THEN to_jsonb(av.value_text)
+                        WHEN 'number' THEN to_jsonb(av.value_number)
+                        WHEN 'integer' THEN to_jsonb(av.value_integer)
+                        WHEN 'boolean' THEN to_jsonb(av.value_boolean)
+                        WHEN 'date' THEN to_jsonb(av.value_date::text)
+                        WHEN 'datetime' THEN to_jsonb(av.value_datetime)
+                        WHEN 'time' THEN jsonb_build_object('time', av.value_time::text, 'time_zone', av.value_time_zone)
+                      END, 'null'::jsonb) AS value, av.relationship_target_entity_id
                FROM attribute_values av
                JOIN attributes a ON a.id = av.attribute_id
                WHERE av.entity_id = $1
@@ -492,11 +533,22 @@ impl CatalogRepository {
         entity_id: Uuid,
     ) -> Result<Vec<AttributeValue>, RepositoryError> {
         Ok(sqlx::query_as::<_, AttributeValue>(
-            r#"SELECT id, entity_id, attribute_id, value, relationship_target_entity_id, context_id, active, created_at
-               FROM attribute_values
-               WHERE entity_id = $1
-                 AND latest
-                 AND (relationship_target_entity_id IS NULL OR active)"#,
+            r#"SELECT av.id, av.entity_id, av.attribute_id,
+                      COALESCE(CASE a.value_type
+                        WHEN 'string' THEN to_jsonb(av.value_text)
+                        WHEN 'number' THEN to_jsonb(av.value_number)
+                        WHEN 'integer' THEN to_jsonb(av.value_integer)
+                        WHEN 'boolean' THEN to_jsonb(av.value_boolean)
+                        WHEN 'date' THEN to_jsonb(av.value_date::text)
+                        WHEN 'datetime' THEN to_jsonb(av.value_datetime)
+                        WHEN 'time' THEN jsonb_build_object('time', av.value_time::text, 'time_zone', av.value_time_zone)
+                      END, 'null'::jsonb) AS value,
+                      av.relationship_target_entity_id, av.context_id, av.active, av.created_at
+                FROM attribute_values av
+                JOIN attributes a ON a.id = av.attribute_id
+                WHERE av.entity_id = $1
+                  AND av.latest
+                  AND (av.relationship_target_entity_id IS NULL OR av.active)"#,
         )
         .bind(entity_id)
         .fetch_all(&self.pool)
@@ -697,7 +749,15 @@ impl CatalogRepository {
                         WHERE av.entity_id = e.id
                           AND av.relationship_target_entity_id IS NULL
                           AND av.latest
-                          AND av.value #>> '{{}}' ILIKE '%' || $3 || '%'
+                           AND COALESCE(
+                             av.value_text,
+                             av.value_number::text,
+                             av.value_integer::text,
+                             av.value_boolean::text,
+                             av.value_date::text,
+                             av.value_datetime::text,
+                             av.value_time::text
+                           ) ILIKE '%' || $3 || '%'
                     )
                  )
                  AND (
@@ -984,6 +1044,12 @@ impl CatalogRepository {
             .await?;
         }
 
+        let native = if is_relationship {
+            None
+        } else {
+            Some(native_value(&value_type, payload)?)
+        };
+
         self.supersede_latest_value(
             transaction,
             entity.id,
@@ -995,16 +1061,30 @@ impl CatalogRepository {
 
         Ok(sqlx::query_as::<_, AttributeValue>(
             r#"INSERT INTO attribute_values (
-                    id, entity_id, attribute_id, context_id, value, relationship_target_entity_id, active
-                ) VALUES ($1, $2, $3, $4, $5, $6, true)
-                RETURNING id, entity_id, attribute_id, value, relationship_target_entity_id, context_id, active, created_at"#,
+                    id, entity_id, attribute_id, context_id, relationship_target_entity_id, active,
+                    value_text, value_number, value_integer, value_boolean, value_date, value_datetime,
+                    value_time, value_time_zone
+                ) VALUES ($1, $2, $3, $4, $5, true, $6, $7, $8, $9, $10, $11, $12, $13)
+                RETURNING id, entity_id, attribute_id,
+                    COALESCE(to_jsonb(value_text), to_jsonb(value_number), to_jsonb(value_integer),
+                        to_jsonb(value_boolean), to_jsonb(value_date::text), to_jsonb(value_datetime),
+                        CASE WHEN value_time IS NOT NULL THEN jsonb_build_object('time', value_time::text, 'time_zone', value_time_zone) END,
+                        'null'::jsonb) AS value,
+                    relationship_target_entity_id, context_id, active, created_at"#,
         )
         .bind(Uuid::new_v4())
         .bind(entity.id)
         .bind(attribute_id)
         .bind(context_id)
-        .bind(payload)
         .bind(target_entity_id)
+        .bind(match &native { Some(NativeValue::Text(value)) => Some(value), _ => None })
+        .bind(match &native { Some(NativeValue::Number(value)) => Some(*value), _ => None })
+        .bind(match &native { Some(NativeValue::Integer(value)) => Some(*value), _ => None })
+        .bind(match &native { Some(NativeValue::Boolean(value)) => Some(*value), _ => None })
+        .bind(match &native { Some(NativeValue::Date(value)) => Some(*value), _ => None })
+        .bind(match &native { Some(NativeValue::Datetime(value)) => Some(*value), _ => None })
+        .bind(match &native { Some(NativeValue::Time(value, _)) => Some(*value), _ => None })
+        .bind(match &native { Some(NativeValue::Time(_, value)) => Some(value), _ => None })
         .fetch_one(&mut **transaction)
         .await?)
     }
@@ -1150,9 +1230,9 @@ impl CatalogRepository {
         .await?;
 
         Ok(sqlx::query_as::<_, AttributeValue>(
-            r#"INSERT INTO attribute_values (id, entity_id, attribute_id, context_id, value, relationship_target_entity_id, active)
-               VALUES ($1, $2, $3, $4, 'null'::jsonb, $5, $6)
-               RETURNING id, entity_id, attribute_id, value, relationship_target_entity_id, context_id, active, created_at"#,
+            r#"INSERT INTO attribute_values (id, entity_id, attribute_id, context_id, relationship_target_entity_id, active)
+               VALUES ($1, $2, $3, $4, $5, $6)
+               RETURNING id, entity_id, attribute_id, 'null'::jsonb AS value, relationship_target_entity_id, context_id, active, created_at"#,
         )
         .bind(Uuid::new_v4()).bind(entity_id).bind(attribute_id).bind(context_id)
         .bind(target_entity_id).bind(active).fetch_one(&mut **transaction).await?)

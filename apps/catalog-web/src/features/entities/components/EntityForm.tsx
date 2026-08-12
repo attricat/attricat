@@ -141,6 +141,28 @@ export const EntityForm = ({
                       fullWidth
                       label={attribute.code}
                       onChange={(event) => handleChange(event.target.value)}
+                      placeholder={
+                        attribute.value_type === 'time'
+                          ? '09:30:00 America/New_York'
+                          : undefined
+                      }
+                      slotProps={{
+                        htmlInput: {
+                          inputMode:
+                            attribute.value_type === 'number' ||
+                            attribute.value_type === 'integer'
+                              ? 'decimal'
+                              : undefined,
+                        },
+                      }}
+                      type={
+                        attribute.value_type === 'date'
+                          ? 'date'
+                          : attribute.value_type === 'number' ||
+                                  attribute.value_type === 'integer'
+                                ? 'number'
+                                : undefined
+                      }
                       value={value}
                     />
                   );

@@ -611,8 +611,27 @@ fn parse_toml_file<T: for<'de> Deserialize<'de>>(path: &PathBuf) -> Result<T, Cl
 }
 
 fn toml_to_json(value: toml::Value) -> Result<Value, CliError> {
-    serde_json::to_value(value)
-        .map_err(|error| CliError::Input(format!("could not convert TOML data: {error}")))
+    Ok(match value {
+        toml::Value::String(value) => Value::String(value),
+        toml::Value::Integer(value) => json!(value),
+        toml::Value::Float(value) => json!(value),
+        toml::Value::Boolean(value) => Value::Bool(value),
+        // TOML's serde representation makes temporal literals objects. The API
+        // accepts its canonical ISO 8601 text representation instead.
+        toml::Value::Datetime(value) => Value::String(value.to_string()),
+        toml::Value::Array(values) => Value::Array(
+            values
+                .into_iter()
+                .map(toml_to_json)
+                .collect::<Result<_, _>>()?,
+        ),
+        toml::Value::Table(values) => Value::Object(
+            values
+                .into_iter()
+                .map(|(key, value)| Ok((key, toml_to_json(value)?)))
+                .collect::<Result<_, CliError>>()?,
+        ),
+    })
 }
 
 async fn request(

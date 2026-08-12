@@ -617,6 +617,103 @@ value_type = "boolean"
 }
 
 #[sqlx::test]
+async fn stores_typed_scalar_values_in_native_columns(pool: PgPool) {
+    let (base_url, server) = start_server(pool.clone()).await;
+    let client = Client::new();
+    let blueprint = create_blueprint(
+        &client,
+        &base_url,
+        r#"
+format_version = 1
+code = "measurement"
+name = "Measurement"
+kind = "entity"
+
+[display.dropdown_option]
+fields = ["name"]
+
+[[attributes]]
+code = "name"
+value_type = "string"
+
+[[attributes]]
+code = "price"
+value_type = "number"
+
+[[attributes]]
+code = "quantity"
+value_type = "integer"
+
+[[attributes]]
+code = "available"
+value_type = "boolean"
+
+[[attributes]]
+code = "available_on"
+value_type = "date"
+
+[[attributes]]
+code = "cutoff"
+value_type = "time"
+"#,
+    )
+    .await;
+    let entity = create_entity(&client, &base_url, &blueprint).await;
+    let entity_id: Uuid = entity["id"].as_str().unwrap().parse().unwrap();
+    client
+        .post(format!("{base_url}/entities/{entity_id}/values"))
+        .json(&json!({ "values": [
+            { "kind": "scalar", "attribute_code": "name", "value": "Widget" },
+            { "kind": "scalar", "attribute_code": "price", "value": 12.50 },
+            { "kind": "scalar", "attribute_code": "quantity", "value": 3 },
+            { "kind": "scalar", "attribute_code": "available", "value": true },
+            { "kind": "scalar", "attribute_code": "available_on", "value": "2026-08-12" },
+            { "kind": "scalar", "attribute_code": "cutoff", "value": { "time": "09:30:00", "time_zone": "America/New_York" } }
+        ] }))
+        .send()
+        .await
+        .unwrap()
+        .error_for_status()
+        .unwrap();
+
+    let values: Vec<Value> = client
+        .get(format!("{base_url}/entities/{entity_id}/values/current"))
+        .send()
+        .await
+        .unwrap()
+        .error_for_status()
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    assert!(values.iter().any(|value| value["value"] == json!(true)));
+    assert!(values.iter().any(|value| value["value"] == json!(12.50)));
+    assert!(values.iter().any(|value| value["value"] == json!({ "time": "09:30:00", "time_zone": "America/New_York" })));
+    assert_eq!(
+        sqlx::query_scalar::<_, rust_decimal::Decimal>(
+            "SELECT SUM(value_number) FROM attribute_values WHERE entity_id = $1 AND latest"
+        )
+        .bind(entity_id)
+        .fetch_one(&pool)
+        .await
+        .unwrap(),
+        "12.50".parse().unwrap()
+    );
+    assert_eq!(
+        sqlx::query_scalar::<_, bool>(
+            "SELECT value_boolean FROM attribute_values WHERE entity_id = $1 AND latest AND value_boolean IS NOT NULL"
+        )
+        .bind(entity_id)
+        .fetch_one(&pool)
+        .await
+        .unwrap(),
+        true
+    );
+
+    server.abort();
+}
+
+#[sqlx::test]
 async fn rejects_values_from_another_blueprint_version(pool: PgPool) {
     let (base_url, server) = start_server(pool).await;
     let client = Client::new();

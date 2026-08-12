@@ -1,6 +1,14 @@
 export type Attribute = {
   code: string;
-  value_type: string;
+  value_type:
+    | 'string'
+    | 'number'
+    | 'integer'
+    | 'boolean'
+    | 'date'
+    | 'datetime'
+    | 'time'
+    | 'relationship';
   target_blueprint_code?: string;
   [key: string]: unknown;
 };
@@ -16,7 +24,11 @@ export type BlueprintWithAttributes = {
   attributes: Attribute[];
 };
 export type NewAttributeValue =
-  | { kind: 'scalar'; attribute_code: string; value: string }
+  | {
+      kind: 'scalar';
+      attribute_code: string;
+      value: string | number | boolean | { time: string; time_zone: string };
+    }
   | {
       kind: 'relationship';
       attribute_code: string;

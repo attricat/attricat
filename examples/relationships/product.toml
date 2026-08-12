@@ -11,6 +11,30 @@ code = "title"
 value_type = "string"
 
 [[attributes]]
+code = "price"
+value_type = "number"
+
+[[attributes]]
+code = "stock_on_hand"
+value_type = "integer"
+
+[[attributes]]
+code = "available"
+value_type = "boolean"
+
+[[attributes]]
+code = "available_on"
+value_type = "date"
+
+[[attributes]]
+code = "released_at"
+value_type = "datetime"
+
+[[attributes]]
+code = "order_cutoff"
+value_type = "time"
+
+[[attributes]]
 code = "categories"
 value_type = "relationship"
 target_blueprint = "category"

@@ -21,7 +21,15 @@ impl PreviewProjectionBuilder {
         let values = sqlx::query_as::<_, PreviewValue>(
             r#"SELECT a.code AS attribute_code,
                     c.code AS context_code,
-                    av.value
+                    COALESCE(CASE a.value_type
+                      WHEN 'string' THEN to_jsonb(av.value_text)
+                      WHEN 'number' THEN to_jsonb(av.value_number)
+                      WHEN 'integer' THEN to_jsonb(av.value_integer)
+                      WHEN 'boolean' THEN to_jsonb(av.value_boolean)
+                      WHEN 'date' THEN to_jsonb(av.value_date::text)
+                      WHEN 'datetime' THEN to_jsonb(av.value_datetime)
+                      WHEN 'time' THEN jsonb_build_object('time', av.value_time::text, 'time_zone', av.value_time_zone)
+                    END, 'null'::jsonb) AS value
                 FROM attribute_values av
                JOIN entities e ON e.id = av.entity_id
                JOIN attributes a

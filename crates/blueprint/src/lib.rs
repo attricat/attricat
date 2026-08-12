@@ -128,6 +128,8 @@ pub enum BlueprintError {
     InvalidDisplayField { display: String, field: String },
     #[error("attribute '{0}' has an invalid tag")]
     InvalidAttributeTag(String),
+    #[error("attribute '{code}' has unsupported value type '{value_type}'")]
+    UnsupportedValueType { code: String, value_type: String },
 }
 
 #[derive(Deserialize)]
@@ -189,6 +191,22 @@ pub fn parse(source: &str) -> Result<BlueprintDefinition, BlueprintError> {
         attributes.push(match (attribute.value_type, attribute.from) {
             (Some(value_type), None) => {
                 validate_non_empty(&value_type, "attribute value_type")?;
+                if !matches!(
+                    value_type.as_str(),
+                    "string"
+                        | "number"
+                        | "integer"
+                        | "boolean"
+                        | "date"
+                        | "datetime"
+                        | "time"
+                        | "relationship"
+                ) {
+                    return Err(BlueprintError::UnsupportedValueType {
+                        code: attribute.code,
+                        value_type,
+                    });
+                }
                 if attribute.target_blueprint.is_some() && value_type != "relationship" {
                     return Err(BlueprintError::InvalidAttributeDeclaration(attribute.code));
                 }

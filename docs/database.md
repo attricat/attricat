@@ -75,8 +75,9 @@ they are never independently authored or edited.
 - `(blueprint_id, blueprint_version, code)` is unique.
 - `position` is the effective attribute position declared in the consuming
   blueprint TOML.
-- `value_type` is application-defined metadata. `relationship` has special EAV
-  target semantics; other non-empty labels are scalar metadata for now.
+- `value_type` is one of `string`, `number`, `integer`, `boolean`, `date`,
+  `datetime`, `time`, or `relationship`. Scalar types map to native PostgreSQL
+  columns; `relationship` has special EAV target semantics.
 - Relationship attributes may declare `target_blueprint` in TOML. Its compiled
   `target_blueprint_code` restricts targets to that entity blueprint family.
 - `tags` is a JSONB array compiled from the attribute TOML. Tags are generic,
@@ -106,7 +107,8 @@ superseded.
 
 - Each row references one entity and one attribute.
 - `context_id` is optional and applies to scalar values and relationships alike.
-- `value` contains the scalar JSONB payload.
+- Scalar values are stored in their matching native typed column. The API
+  serializes those values as typed JSON.
 - `relationship_target_entity_id` is nullable and references another entity when
   the attribute is a relationship type.
 - `active` records the current state of a relationship history entry. A false

@@ -2,3 +2,33 @@
 kind = "scalar"
 attribute_code = "title"
 value = "Navy shirt"
+
+[[values]]
+kind = "scalar"
+attribute_code = "price"
+value = 49.95
+
+[[values]]
+kind = "scalar"
+attribute_code = "stock_on_hand"
+value = 24
+
+[[values]]
+kind = "scalar"
+attribute_code = "available"
+value = true
+
+[[values]]
+kind = "scalar"
+attribute_code = "available_on"
+value = 2026-08-12
+
+[[values]]
+kind = "scalar"
+attribute_code = "released_at"
+value = 2026-08-12T14:30:00Z
+
+[[values]]
+kind = "scalar"
+attribute_code = "order_cutoff"
+value = { time = "09:30:00", time_zone = "America/New_York" }

@@ -95,6 +95,19 @@ attribute_code = "related_products"
 target_entity_id = "00000000-0000-0000-0000-000000000004"
 ```
 
+Scalar payloads must match the blueprint attribute type. TOML maps naturally to
+the API's typed JSON values: quoted text for `string`, decimals for `number`,
+integers for `integer`, booleans for `boolean`, TOML dates and RFC 3339
+timestamps for `date` and `datetime`. A `time` value requires a wall-clock time
+and IANA timezone:
+
+```toml
+[[values]]
+kind = "scalar"
+attribute_code = "order_cutoff"
+value = { time = "09:30:00", time_zone = "America/New_York" }
+```
+
 Each value must provide exactly one of `attribute_code` or `attribute_id`. Codes
 are resolved against the source entity's pinned blueprint version.
 

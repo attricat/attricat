@@ -527,6 +527,11 @@ impl From<RepositoryError> for ApiError {
                 code: "attribute_kind_mismatch",
                 message: error.to_string(),
             },
+            RepositoryError::AttributeValueTypeMismatch => Self {
+                status: StatusCode::UNPROCESSABLE_ENTITY,
+                code: "attribute_value_type_mismatch",
+                message: error.to_string(),
+            },
             RepositoryError::RelationshipTargetTypeMismatch => Self {
                 status: StatusCode::UNPROCESSABLE_ENTITY,
                 code: "relationship_target_type_mismatch",

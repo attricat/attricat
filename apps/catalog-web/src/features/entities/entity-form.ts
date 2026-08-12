@@ -29,7 +29,15 @@ export const valuesForForm = (
         (value): value is Extract<NewAttributeValue, { kind: 'scalar' }> =>
           value.kind === 'scalar',
       );
-      return [attribute.code, scalar?.value ?? ''];
+      const value = scalar?.value;
+      return [
+        attribute.code,
+        typeof value === 'object' && value !== null
+          ? `${value.time} ${value.time_zone}`
+          : value === undefined
+            ? ''
+            : String(value),
+      ];
     }),
   );
 };
@@ -43,9 +51,40 @@ export const serializeAttributeValues = (
       const value = fields[attribute.code]?.trim();
       if (!value) return [];
       if (attribute.value_type === 'relationship') return [];
-      return [
-        { kind: 'scalar' as const, attribute_code: attribute.code, value },
-      ];
+      if (attribute.value_type === 'boolean') {
+        return [
+          {
+            kind: 'scalar' as const,
+            attribute_code: attribute.code,
+            value: value === 'true',
+          },
+        ];
+      }
+      if (attribute.value_type === 'number') {
+        const number = Number(value);
+        return Number.isFinite(number)
+          ? [{ kind: 'scalar' as const, attribute_code: attribute.code, value: number }]
+          : [];
+      }
+      if (attribute.value_type === 'integer') {
+        const number = Number(value);
+        return Number.isSafeInteger(number)
+          ? [{ kind: 'scalar' as const, attribute_code: attribute.code, value: number }]
+          : [];
+      }
+      if (attribute.value_type === 'time') {
+        const [time, time_zone] = value.split(/\s+/, 2);
+        return time && time_zone
+          ? [
+              {
+                kind: 'scalar' as const,
+                attribute_code: attribute.code,
+                value: { time, time_zone },
+              },
+            ]
+          : [];
+      }
+      return [{ kind: 'scalar' as const, attribute_code: attribute.code, value }];
     },
   );
 };

@@ -1,7 +1,9 @@
 # Related Categories And Colors
 
 Create the three blueprints, then create a category, color, and product entity
-using their returned blueprint IDs. Append the supplied scalar value files.
+using their returned blueprint IDs. Append the supplied scalar value files. The
+product example includes every native scalar type: string, number, integer,
+boolean, date, datetime, and a wall-clock time with an IANA timezone.
 
 Use a relationship file with the created target entity IDs:
 
