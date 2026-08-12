@@ -32,5 +32,14 @@ describe('attribute values', () => {
     expect(
       scalarValueForField({ code: 'stock', value_type: 'integer' }, '12.5'),
     ).toBeUndefined();
+    expect(
+      scalarValueForField({ code: 'release_date', value_type: 'date' }, 'tomorrow'),
+    ).toBeUndefined();
+    expect(
+      scalarValueForField(
+        { code: 'cutoff', value_type: 'time' },
+        '09:30 Not/A_Time_Zone',
+      ),
+    ).toBeUndefined();
   });
 });

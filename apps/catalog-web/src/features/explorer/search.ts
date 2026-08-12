@@ -1,27 +1,15 @@
-export type ExplorerSearch = {
-  blueprint?: string;
-  version?: number;
-  query?: string;
-};
+import { z } from 'zod';
+
+export const explorerSearchSchema = z.object({
+  blueprint: z.string().trim().min(1).optional().catch(undefined),
+  version: z.coerce.number().int().positive().optional().catch(undefined),
+  query: z.string().trim().min(1).optional().catch(undefined),
+});
+
+export type ExplorerSearch = z.infer<typeof explorerSearchSchema>;
 
 export const parseExplorerSearch = (
   input: Record<string, unknown>,
 ): ExplorerSearch => {
-  const blueprint =
-    typeof input.blueprint === 'string' && input.blueprint.trim()
-      ? input.blueprint
-      : undefined;
-  const query =
-    typeof input.query === 'string' && input.query.trim()
-      ? input.query
-      : undefined;
-  const versionValue =
-    typeof input.version === 'string' ? Number(input.version) : input.version;
-  const version =
-    typeof versionValue === 'number' &&
-    Number.isInteger(versionValue) &&
-    versionValue > 0
-      ? versionValue
-      : undefined;
-  return { blueprint, version, query };
+  return explorerSearchSchema.parse(input);
 };

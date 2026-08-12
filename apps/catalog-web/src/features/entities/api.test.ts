@@ -7,6 +7,15 @@ import {
   updateEntity,
 } from './api';
 
+const entityId = '123e4567-e89b-12d3-a456-426614174000';
+const blueprint = {
+  code: 'product',
+  name: 'Product',
+  version: 2,
+  display: {},
+};
+const blueprintWithAttributes = { blueprint, attributes: [] };
+
 const fetchMock = vi.fn();
 vi.stubGlobal('fetch', fetchMock);
 
@@ -20,23 +29,23 @@ const respond = (body: unknown) => {
 
 describe('entity API client', () => {
   it('loads blueprints and entity forms from their code-based routes', async () => {
-    respond({});
+    respond(blueprintWithAttributes);
     await getBlueprintByCode('summer sale', 2);
     expect(fetchMock).toHaveBeenCalledWith(
       '/api/blueprints/by-code/summer%20sale/versions/2',
       undefined,
     );
 
-    respond({});
-    await getEntityForm('entity/id');
+    respond({ entity: { id: entityId }, blueprint: blueprintWithAttributes, values: [] });
+    await getEntityForm(entityId);
     expect(fetchMock).toHaveBeenCalledWith(
-      '/api/v1/entities/entity%2Fid/form',
+      `/api/v1/entities/${entityId}/form`,
       undefined,
     );
   });
 
   it('posts and puts the entity payload contract', async () => {
-    respond({ id: 'created' });
+    respond({ id: entityId });
     await createEntity({
       blueprint: { code: 'product', version: 2 },
       values: [],
@@ -50,9 +59,9 @@ describe('entity API client', () => {
       }),
     });
 
-    respond({ id: 'updated' });
-    await updateEntity('updated', { values: [], relationships: [] });
-    expect(fetchMock).toHaveBeenLastCalledWith('/api/v1/entities/updated', {
+    respond({ id: entityId });
+    await updateEntity(entityId, { values: [], relationships: [] });
+    expect(fetchMock).toHaveBeenLastCalledWith(`/api/v1/entities/${entityId}`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ values: [], relationships: [] }),
@@ -60,7 +69,11 @@ describe('entity API client', () => {
   });
 
   it('uses the backend default ordering', async () => {
-    respond({});
+    respond({
+      blueprint: blueprintWithAttributes,
+      items: [],
+      next_cursor: null,
+    });
     await searchEntities('product', undefined, '');
     expect(fetchMock).toHaveBeenLastCalledWith('/api/v1/entities/search', {
       method: 'POST',
@@ -72,5 +85,18 @@ describe('entity API client', () => {
         page: { size: 25, cursor: null },
       }),
     });
+  });
+
+  it('rejects malformed successful responses', async () => {
+    respond({ id: 'not-a-uuid' });
+
+    await expect(
+      createEntity({ blueprint: { code: 'product' }, values: [] }),
+    ).rejects.toThrow('Invalid API response');
+  });
+
+  it('rejects invalid request inputs before fetching', async () => {
+    expect(() => getEntityForm('not-a-uuid')).toThrow('Invalid UUID');
+    expect(fetchMock).not.toHaveBeenCalled();
   });
 });

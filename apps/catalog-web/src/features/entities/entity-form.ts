@@ -1,8 +1,9 @@
+import { z } from 'zod';
 import type { Attribute, NewAttributeValue, RelationshipTargets } from './api';
 import { scalarValueForField, valueForField } from './attribute-values';
 
 export const valuesForForm = (
-  attributes: Attribute[],
+  attributes: readonly Attribute[],
   values: NewAttributeValue[],
 ): Record<string, string> => {
   return Object.fromEntries(
@@ -36,7 +37,7 @@ export const valuesForForm = (
 };
 
 export const serializeAttributeValues = (
-  attributes: Attribute[],
+  attributes: readonly Attribute[],
   fields: Record<string, string>,
 ): NewAttributeValue[] => {
   return attributes.flatMap<NewAttributeValue>(
@@ -52,16 +53,19 @@ export const serializeAttributeValues = (
 };
 
 export const relationshipTargetsForForm = (
-  attributes: Attribute[],
+  attributes: readonly Attribute[],
   fields: Record<string, string>,
 ): RelationshipTargets[] => {
   return attributes
     .filter((attribute) => attribute.value_type === 'relationship')
-    .map((attribute) => ({
-      attribute_code: attribute.code,
-      target_entity_ids: (fields[attribute.code] ?? '')
+    .flatMap((attribute) => {
+      const targetEntityIds = (fields[attribute.code] ?? '')
         .split(',')
         .map((targetEntityId) => targetEntityId.trim())
-        .filter(Boolean),
-    }));
+        .filter(Boolean);
+      const result = z.array(z.uuid()).safeParse(targetEntityIds);
+      return result.success
+        ? [{ attribute_code: attribute.code, target_entity_ids: result.data }]
+        : [];
+    });
 };
