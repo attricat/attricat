@@ -115,7 +115,7 @@ Contexts describe reusable dimensions such as `en-GB`, a currency, or a sales
 channel.
 
 - `code` is globally unique.
-- `data` holds permissive JSONB dimension data.
+- `data` is a JSON object with application-defined dimension metadata.
 
 ### `attribute_values`
 

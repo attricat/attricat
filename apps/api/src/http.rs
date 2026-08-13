@@ -562,6 +562,7 @@ impl From<RepositoryError> for ApiError {
             RepositoryError::InvalidProjections
             | RepositoryError::InvalidPreview
             | RepositoryError::ReservedContextCode
+            | RepositoryError::InvalidContextData
             | RepositoryError::InvalidAttributeSelector => Self {
                 status: StatusCode::UNPROCESSABLE_ENTITY,
                 code: "invalid_input",

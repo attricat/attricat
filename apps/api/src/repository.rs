@@ -31,6 +31,8 @@ pub enum RepositoryError {
     NotFound(&'static str),
     #[error("the context code 'default' is reserved")]
     ReservedContextCode,
+    #[error("context data must be a JSON object")]
+    InvalidContextData,
     #[error("attribute does not belong to the entity blueprint version")]
     AttributeNotApplicable,
     #[error("provide exactly one of attribute_id or attribute_code")]
@@ -594,6 +596,9 @@ impl CatalogRepository {
     ) -> Result<AttributeContext, RepositoryError> {
         if input.code == "default" {
             return Err(RepositoryError::ReservedContextCode);
+        }
+        if !input.data.is_object() {
+            return Err(RepositoryError::InvalidContextData);
         }
 
         Ok(sqlx::query_as::<_, AttributeContext>(

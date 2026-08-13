@@ -251,6 +251,19 @@ tags = ["searchable"]
             .unwrap()["id"],
         context["id"]
     );
+    for data in [json!([]), json!("en-GB"), Value::Null] {
+        let response = client
+            .post(format!("{base_url}/contexts"))
+            .json(&json!({ "code": Uuid::new_v4().to_string(), "data": data }))
+            .send()
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::UNPROCESSABLE_ENTITY);
+        assert_eq!(
+            response.json::<Value>().await.unwrap()["error"]["code"],
+            "invalid_input"
+        );
+    }
 
     let source: Value = client
         .post(format!("{base_url}/entities"))
