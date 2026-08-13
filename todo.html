@@ -1,0 +1,147 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Catalog Engine Roadmap</title>
+    <style>
+      :root {
+        color-scheme: light;
+        --ink: #14213d;
+        --muted: #64748b;
+        --line: #d7dee8;
+        --page: #f6f4ef;
+        --panel: #fffdfa;
+        --foundation: #b42318;
+        --pim: #175cd3;
+        --dam: #067647;
+        --platform: #7a3e9d;
+      }
+
+      * { box-sizing: border-box; }
+
+      body {
+        margin: 0;
+        background: var(--page);
+        color: var(--ink);
+        font: 16px/1.55 Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      }
+
+      main { max-width: 1040px; margin: 0 auto; padding: 56px 24px 80px; }
+      header { border-bottom: 2px solid var(--ink); padding-bottom: 26px; }
+      h1, h2, h3, p { margin-top: 0; }
+      h1 { font-size: clamp(2rem, 6vw, 3.5rem); letter-spacing: -0.05em; line-height: 1; margin-bottom: 16px; }
+      h2 { font-size: 1.4rem; letter-spacing: -0.025em; margin: 44px 0 14px; }
+      h3 { font-size: 1rem; margin-bottom: 6px; }
+      .lede { color: #334155; font-size: 1.12rem; max-width: 760px; }
+      .status { display: inline-block; background: #d1fadf; color: #05603a; font-size: .8rem; font-weight: 700; letter-spacing: .06em; padding: 3px 8px; text-transform: uppercase; }
+      .principle { border-left: 4px solid var(--ink); margin: 30px 0; padding: 12px 18px; background: #eaf0f7; }
+      .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 14px; }
+      .card { background: var(--panel); border: 1px solid var(--line); border-top: 4px solid var(--tone); padding: 18px; }
+      .foundation { --tone: var(--foundation); }
+      .pim { --tone: var(--pim); }
+      .dam { --tone: var(--dam); }
+      .platform { --tone: var(--platform); }
+      .priority { color: var(--tone); font-size: .74rem; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; }
+      .why { color: var(--muted); font-size: .92rem; margin-bottom: 0; }
+      table { border-collapse: collapse; width: 100%; background: var(--panel); }
+      th, td { border: 1px solid var(--line); padding: 11px 13px; text-align: left; vertical-align: top; }
+      th { background: #eaf0f7; font-size: .82rem; letter-spacing: .04em; text-transform: uppercase; }
+      code { background: #e9edf2; border-radius: 3px; font-size: .9em; padding: 1px 4px; }
+      footer { color: var(--muted); font-size: .88rem; margin-top: 44px; }
+      @media (max-width: 620px) { main { padding: 36px 16px 56px; } th, td { padding: 9px; } }
+    </style>
+  </head>
+  <body>
+    <main>
+      <header>
+        <span class="status">Engine roadmap</span>
+        <h1>Catalog PIM / DAM foundations</h1>
+        <p class="lede">The existing versioned EAV core is a sound PIM kernel: typed values, immutable history, version-pinned schemas, mixins, relationships, contextual overrides, and rebuildable projections. This roadmap identifies the missing primitives needed to support a full PIM/DAM without later structural rewrites.</p>
+      </header>
+
+      <aside class="principle"><strong>Design rule:</strong> add durable domain primitives before building product workflows on top of them. Context is a named catalogue scope with one parent and deterministic ancestor fallback; solve that hierarchy and assets/renditions before deep investment in channel publishing, localization, or media UI.</aside>
+
+      <h2>Foundation: add before broad adoption</h2>
+      <section class="grid">
+        <article class="card foundation">
+          <div class="priority">P0</div>
+          <h3>Tenant and identity boundary</h3>
+          <p>Introduce workspace/tenant ownership for every aggregate, plus principals and authorization scopes.</p>
+          <p class="why">Required for isolation, ownership, auditability, and any multi-team or external integration use.</p>
+        </article>
+        <article class="card foundation">
+          <div class="priority">P0</div>
+          <h3>Context hierarchy and fallback</h3>
+          <p>Add <code>parent_id</code> to contexts and resolve values from the requested scope through its ancestors. Model progressive specialization such as <code>default → PL → PL-b2c → PL-b2c-web</code>.</p>
+          <p class="why">This intentionally favors understandable named catalogue scopes over arbitrary multi-axis combinations. It avoids a context-composition table and gives authors a visible, editable fallback path.</p>
+        </article>
+        <article class="card foundation">
+          <div class="priority">P0</div>
+          <h3>Audit and provenance envelope</h3>
+          <p>Attach actor, source system, import job, idempotency/correlation key, reason, and effective timestamps to each mutation.</p>
+          <p class="why">Current immutable value history captures when and what, but not who or why.</p>
+        </article>
+        <article class="card foundation">
+          <div class="priority">P0</div>
+          <h3>Entity lifecycle and publish snapshots</h3>
+          <p>Model draft, approved, published, archived, effective dates, and channel publication separately from value history.</p>
+          <p class="why">Append-only facts do not define the exact approved state that a channel is allowed to consume.</p>
+        </article>
+      </section>
+
+      <h2>PIM primitives</h2>
+      <section class="grid">
+        <article class="card pim"><div class="priority">P1</div><h3>Attribute constraints and cardinality</h3><p>Schema-declare requiredness, uniqueness scope, min/max, pattern, precision, allowed options, and relationship cardinality. Support ordered multi-value scalar collections.</p></article>
+        <article class="card pim"><div class="priority">P1</div><h3>Domain value types</h3><p>Add rich text, enum/option, measurement plus unit, money, URL, JSON/object, and asset reference. Keep the type system extensible.</p></article>
+        <article class="card pim"><div class="priority">P1</div><h3>Relationship semantics</h3><p>Add edge order, edge metadata, inverses, target cardinality, and hierarchy/tree semantics while retaining contextual history. Define whether child scopes replace or incrementally inherit relationship sets.</p></article>
+        <article class="card pim"><div class="priority">P1</div><h3>Business identifiers</h3><p>Support schema-declared external IDs such as SKU, GTIN, supplier ID, and uniqueness policies. UUID remains internal identity.</p></article>
+        <article class="card pim"><div class="priority">P1</div><h3>Reference data</h3><p>Make option sets, controlled vocabularies, units, taxonomies, and classifications first-class versioned definitions.</p></article>
+        <article class="card pim"><div class="priority">P2</div><h3>Validation and computed values</h3><p>Add a completeness/rule engine per context and channel, then computed attributes with dependency tracking and rollups.</p></article>
+        <article class="card pim"><div class="priority">P2</div><h3>Entity schema migration</h3><p>Create a validated, explicit entity migration process between blueprint revisions, including projection rebuild and migration reporting.</p></article>
+      </section>
+
+      <h2>DAM primitives</h2>
+      <section class="grid">
+        <article class="card dam"><div class="priority">P0 if DAM is a target</div><h3>Asset aggregate and blob storage</h3><p>Store immutable original identity, object-storage locator, checksum, MIME type, byte size, dimensions/duration, and ingestion state. Do not represent media as only a URL or generic entity.</p></article>
+        <article class="card dam"><div class="priority">P1</div><h3>Asset versions and renditions</h3><p>Model original files, revisions, transformations, thumbnails, crops, transcoding, focal points, and channel-specific rendition selection.</p></article>
+        <article class="card dam"><div class="priority">P1</div><h3>Asset usage edges</h3><p>Attach assets with role, order, context, crop/focal-point metadata, and usage state. This depends on relationship edge metadata and ordering.</p></article>
+        <article class="card dam"><div class="priority">P1</div><h3>Extraction and enrichment</h3><p>Capture EXIF/IPTC/XMP, OCR/transcripts, technical metadata, generated labels, and the source/confidence of machine-generated metadata.</p></article>
+        <article class="card dam"><div class="priority">P1</div><h3>Rights and retention</h3><p>Model copyright, licenses, territories, expiry, embargoes, consent/releases, restrictions, deletion, and retention policy.</p></article>
+        <article class="card dam"><div class="priority">P1</div><h3>Processing jobs</h3><p>Provide upload/download contracts, deduplication, malware scanning, extraction and transform jobs, retries, and observable status.</p></article>
+      </section>
+
+      <h2>Platform and integration primitives</h2>
+      <section class="grid">
+        <article class="card platform"><div class="priority">P1</div><h3>Declarative projections</h3><p>Version named projections independently, rebuild them from canonical facts, and provide repair/backfill operations.</p></article>
+        <article class="card platform"><div class="priority">P1</div><h3>Context-aware query DSL</h3><p>Implement typed filters, sort, facets, full-text indexing, relation-aware filters, and explicit context selection/resolution.</p></article>
+        <article class="card platform"><div class="priority">P1</div><h3>Bulk import/export jobs</h3><p>Build staging, field mapping, validation reports, dry runs, idempotency, partial-failure policy, and source attribution into the engine.</p></article>
+        <article class="card platform"><div class="priority">P1</div><h3>Outbox and change feed</h3><p>Emit ordered domain events and reliable webhook/change-feed delivery for commerce, ERP, search, and media processing integrations.</p></article>
+        <article class="card platform"><div class="priority">P1</div><h3>Client concurrency contract</h3><p>Add optimistic revision/ETag checks and command idempotency. Database locks protect storage invariants but do not prevent client-side lost updates.</p></article>
+      </section>
+
+      <h2>Current strengths and documented gaps</h2>
+      <table>
+        <thead><tr><th>Area</th><th>Current position</th><th>Implication</th></tr></thead>
+        <tbody>
+          <tr><td>Schema</td><td>Versioned blueprints, mixins, and entities pinned to exact revisions.</td><td>Strong base; add an explicit entity migration primitive before revisions become routine.</td></tr>
+          <tr><td>Values</td><td>Typed native scalar storage, contextual values, relationships, and immutable history.</td><td>Extend the type system, collection semantics, and validation metadata.</td></tr>
+          <tr><td>Context</td><td>One optional reusable context record per fact.</td><td>Adopt named catalogue scopes with <code>parent_id</code> and nearest-ancestor fallback. This deliberately supports one inheritance path per scope rather than arbitrary dimension combinations.</td></tr>
+          <tr><td>Read model</td><td><code>preview</code> is a derived JSONB cache rebuilt transactionally.</td><td>Good pattern; generalize into versioned projection definitions and rebuild jobs.</td></tr>
+          <tr><td>Search</td><td>Cross-scalar text matching only; field filters are explicitly unsupported.</td><td>Add a typed query/indexing layer after attribute constraints are defined.</td></tr>
+          <tr><td>DAM</td><td>No first-class binary asset, rendition, rights, or processing model.</td><td>Requires new aggregates and storage/job primitives, not merely new blueprint types.</td></tr>
+        </tbody>
+      </table>
+
+      <h2>Context hierarchy implementation notes</h2>
+      <section class="grid">
+        <article class="card foundation"><div class="priority">Data model</div><h3>One parent, named scopes</h3><p>Add nullable <code>parent_id</code> to <code>attribute_contexts</code>. Reserve <code>default</code> as the sole root; every other scope has one parent. Keep codes stable and human-readable.</p></article>
+        <article class="card foundation"><div class="priority">Resolution</div><h3>Nearest ancestor wins</h3><p>For a requested scope, try its own value first, then each ancestor until <code>default</code>. Persist an ordered ancestor path only if recursive lookup becomes a read-path bottleneck.</p></article>
+        <article class="card foundation"><div class="priority">Integrity</div><h3>Protect inherited behavior</h3><p>Prevent cycles; forbid deletion with descendants or active values; audit parent changes because a reparenting changes resolved values without mutating value facts.</p></article>
+        <article class="card foundation"><div class="priority">Read contract</div><h3>Expose the source scope</h3><p>Resolved reads should return both the requested context and the context that supplied the value, so consumers can distinguish an override from inheritance.</p></article>
+      </section>
+
+      <footer>Evidence: <code>docs/database.md</code>, <code>docs/blueprints.md</code>, <code>apps/api/src/model.rs</code>, <code>apps/api/src/repository.rs</code>, and <code>crates/blueprint/src/lib.rs</code>.</footer>
+    </main>
+  </body>
+</html>
