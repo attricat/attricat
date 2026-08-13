@@ -27,6 +27,7 @@ import {
 } from '../entity-form';
 import { displayLabel, dropdownOptionLabel } from '../entity-display';
 import { entityQueryKeys } from '../query-keys';
+import { attributeValueTypes } from '../value-types';
 
 type EntityFormProps = {
   blueprint?: BlueprintWithAttributes;
@@ -129,14 +130,15 @@ export const EntityForm = ({
                       ...field.state.value,
                       [attribute.code]: nextValue,
                     });
-                  return attribute.value_type === 'relationship' ? (
+                  return attribute.value_type ===
+                    attributeValueTypes.relationship ? (
                     <RelationshipField
                       key={attribute.code}
                       attribute={attribute}
                       onChange={handleChange}
                       value={value}
                     />
-                  ) : attribute.value_type === 'boolean' ? (
+                  ) : attribute.value_type === attributeValueTypes.boolean ? (
                     <TextField
                       key={attribute.code}
                       fullWidth
@@ -156,26 +158,29 @@ export const EntityForm = ({
                       label={attribute.code}
                       onChange={(event) => handleChange(event.target.value)}
                       placeholder={
-                        attribute.value_type === 'time'
+                        attribute.value_type === attributeValueTypes.time
                           ? '09:30:00 America/New_York'
                           : undefined
                       }
                       slotProps={{
                         htmlInput: {
                           inputMode:
-                            attribute.value_type === 'number' ||
-                            attribute.value_type === 'integer'
+                            attribute.value_type ===
+                              attributeValueTypes.number ||
+                            attribute.value_type === attributeValueTypes.integer
                               ? 'decimal'
                               : undefined,
                         },
                       }}
                       type={
-                        attribute.value_type === 'date'
+                        attribute.value_type === attributeValueTypes.date
                           ? 'date'
-                          : attribute.value_type === 'number' ||
-                                  attribute.value_type === 'integer'
-                                ? 'number'
-                                : undefined
+                          : attribute.value_type ===
+                                attributeValueTypes.number ||
+                              attribute.value_type ===
+                                attributeValueTypes.integer
+                            ? 'number'
+                            : undefined
                       }
                       value={value}
                     />

@@ -1,17 +1,9 @@
 import { z } from 'zod';
+import { attributeValueKinds, attributeValueTypes } from './value-types';
 
 const uuidSchema = z.uuid();
 const jsonObjectSchema = z.record(z.string(), z.unknown());
-const valueTypeSchema = z.enum([
-  'string',
-  'number',
-  'integer',
-  'boolean',
-  'date',
-  'datetime',
-  'time',
-  'relationship',
-]);
+const valueTypeSchema = z.enum(attributeValueTypes);
 
 export const attributeSchema = z
   .object({
@@ -40,12 +32,12 @@ const scalarValueSchema = z.union([
 ]);
 export const newAttributeValueSchema = z.discriminatedUnion('kind', [
   z.object({
-    kind: z.literal('scalar'),
+    kind: z.literal(attributeValueKinds.scalar),
     attribute_code: z.string().min(1),
     value: scalarValueSchema,
   }),
   z.object({
-    kind: z.literal('relationship'),
+    kind: z.literal(attributeValueKinds.relationship),
     attribute_code: z.string().min(1),
     target_entity_id: uuidSchema,
   }),

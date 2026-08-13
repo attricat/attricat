@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import type { Attribute, NewAttributeValue, RelationshipTargets } from './api';
 import { scalarValueForField, valueForField } from './attribute-values';
+import { attributeValueKinds, attributeValueTypes } from './value-types';
 
 export const valuesForForm = (
   attributes: readonly Attribute[],
@@ -11,7 +12,7 @@ export const valuesForForm = (
       const matching = values.filter(
         (value) => value.attribute_code === attribute.code,
       );
-      if (attribute.value_type === 'relationship') {
+      if (attribute.value_type === attributeValueTypes.relationship) {
         return [
           attribute.code,
           matching
@@ -20,16 +21,20 @@ export const valuesForForm = (
                 value,
               ): value is Extract<
                 NewAttributeValue,
-                { kind: 'relationship' }
-              > => value.kind === 'relationship',
+                { kind: typeof attributeValueKinds.relationship }
+              > => value.kind === attributeValueKinds.relationship,
             )
             .map((value) => value.target_entity_id)
             .join(', '),
         ];
       }
       const scalar = matching.find(
-        (value): value is Extract<NewAttributeValue, { kind: 'scalar' }> =>
-          value.kind === 'scalar',
+        (
+          value,
+        ): value is Extract<
+          NewAttributeValue,
+          { kind: typeof attributeValueKinds.scalar }
+        > => value.kind === attributeValueKinds.scalar,
       );
       return [attribute.code, valueForField(scalar?.value)];
     }),
@@ -42,7 +47,7 @@ export const serializeAttributeValues = (
 ): NewAttributeValue[] => {
   return attributes.flatMap<NewAttributeValue>(
     (attribute): NewAttributeValue[] => {
-      if (attribute.value_type === 'relationship') return [];
+      if (attribute.value_type === attributeValueTypes.relationship) return [];
       const scalar = scalarValueForField(
         attribute,
         fields[attribute.code] ?? '',
@@ -57,7 +62,9 @@ export const relationshipTargetsForForm = (
   fields: Record<string, string>,
 ): RelationshipTargets[] => {
   return attributes
-    .filter((attribute) => attribute.value_type === 'relationship')
+    .filter(
+      (attribute) => attribute.value_type === attributeValueTypes.relationship,
+    )
     .flatMap((attribute) => {
       const targetEntityIds = (fields[attribute.code] ?? '')
         .split(',')

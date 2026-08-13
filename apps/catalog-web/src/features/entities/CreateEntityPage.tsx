@@ -3,6 +3,7 @@ import { useNavigate } from '@tanstack/react-router';
 import { createEntity, getBlueprintByCode } from './api';
 import { EntityForm } from './components/EntityForm';
 import { EntityPage } from './components/EntityPage';
+import { attributeValueKinds } from './value-types';
 
 export const CreateEntityPage = () => {
   const navigate = useNavigate({ from: '/entities/new' });
@@ -30,7 +31,7 @@ export const CreateEntityPage = () => {
           ...values,
           ...relationships.flatMap((relationship) =>
             relationship.target_entity_ids.map((target_entity_id) => ({
-              kind: 'relationship' as const,
+              kind: attributeValueKinds.relationship,
               attribute_code: relationship.attribute_code,
               target_entity_id,
             })),
