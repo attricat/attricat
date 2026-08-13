@@ -26,6 +26,7 @@ import {
   serializeAttributeValues,
   valuesForForm,
 } from '../entity-form';
+import { valueForField } from '../attribute-values';
 import { displayLabel, dropdownOptionLabel } from '../entity-display';
 import { entityQueryKeys } from '../query-keys';
 import { attributeValueTypes } from '../value-types';
@@ -172,11 +173,12 @@ export const EntityForm = ({
                     attribute.context_fallback !== 'none' &&
                     defaultValue?.kind === 'scalar';
                   const defaultOnly =
-                    contextId !== null && attribute.context_editable === 'default';
+                    contextId !== null &&
+                    attribute.context_editable === 'default';
                   const helperText = defaultOnly
                     ? 'Managed in Default'
                     : inherited
-                      ? `Using default: ${String(defaultValue.value)}`
+                      ? `Using default: ${valueForField(defaultValue.value)}`
                       : undefined;
                   const handleChange = (nextValue: string) =>
                     field.handleChange({
