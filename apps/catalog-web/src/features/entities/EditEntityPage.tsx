@@ -1,6 +1,6 @@
 import { useMutation, useQuery } from '@tanstack/react-query';
-import { useNavigate } from '@tanstack/react-router';
-import { Alert, MenuItem, TextField, Typography } from '@mui/material';
+import { Link, useNavigate } from '@tanstack/react-router';
+import { Alert, Box, MenuItem, TextField, Typography } from '@mui/material';
 import { useState } from 'react';
 import { getEntityForm, listContexts, updateEntity } from './api';
 import { EntityForm } from './components/EntityForm';
@@ -35,6 +35,11 @@ export const EditEntityPage = ({ entityId }: { entityId: string }) => {
   });
   return (
     <EntityPage title="Edit entity">
+      <Box sx={{ mt: 1 }}>
+        <Link params={{ entityId }} to="/entities/$entityId">
+          View preview
+        </Link>
+      </Box>
       {entityForm.isPending && (
         <Typography sx={{ mt: 4 }}>Loading entity...</Typography>
       )}
