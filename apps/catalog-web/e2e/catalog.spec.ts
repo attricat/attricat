@@ -91,6 +91,22 @@ test('creates an entity from a blueprint', async ({ page }) => {
   await expect(page.locator('pre')).toContainText(title);
 });
 
+test('creates a context from context management', async ({ page }) => {
+  const code = `market_${suffix()}`;
+
+  await page.goto('/');
+  await page.getByRole('link', { name: 'Manage contexts' }).click();
+  await expect(page).toHaveURL(/\/contexts$/);
+  await page.getByRole('link', { name: 'Create context' }).click();
+  await page.getByLabel('Code').fill(code);
+  await page.getByLabel('Metadata').fill('{"market":"US"}');
+  await page.getByRole('button', { name: 'Create context' }).click();
+
+  await expect(page).toHaveURL(/\/contexts$/);
+  await expect(page.getByText(code)).toBeVisible();
+  await expect(page.getByText('{"market":"US"}')).toBeVisible();
+});
+
 test('edits scalar values and replaces a typed relationship', async ({
   page,
 }) => {
@@ -113,6 +129,7 @@ test('edits scalar values and replaces a typed relationship', async ({
 
   await page.goto(`/entities/${entity.id}`);
   await page.getByRole('link', { name: 'Edit entity' }).click();
+  await expect(page.getByLabel('Context')).toHaveText('Default');
   await page.getByLabel('title').fill('After edit');
   await page.getByLabel('categories').click();
   await page.getByRole('option', { name: 'Sale' }).click();

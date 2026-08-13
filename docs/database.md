@@ -111,10 +111,11 @@ Entities are catalog items.
 
 ### `attribute_contexts`
 
-Contexts describe reusable dimensions such as `en-GB`, a currency, or a sales
+Contexts describe reusable dimensions such as `en_GB`, a currency, or a sales
 channel.
 
 - `code` is globally unique.
+- `code` contains only ASCII letters, numbers, and underscores.
 - `data` is a JSON object with application-defined dimension metadata.
 
 ### `attribute_values`

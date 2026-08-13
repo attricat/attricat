@@ -113,14 +113,14 @@ export const Explorer = ({ search }: { search: ExplorerSearch }) => {
       <Typography color="text.secondary">
         Search a blueprint and inspect its current entity projections.
       </Typography>
-      <Button
-        component={Link}
-        to="/entities/new"
-        sx={{ mt: 2 }}
-        variant="contained"
-      >
-        Create entity
-      </Button>
+      <Stack direction="row" spacing={2} sx={{ mt: 2 }}>
+        <Button component={Link} to="/entities/new" variant="contained">
+          Create entity
+        </Button>
+        <Button component={Link} to="/contexts" variant="outlined">
+          Manage contexts
+        </Button>
+      </Stack>
       <Paper
         component="form"
         onSubmit={(event) => {

@@ -31,6 +31,8 @@ pub enum RepositoryError {
     NotFound(&'static str),
     #[error("the context code 'default' is reserved")]
     ReservedContextCode,
+    #[error("context code must contain only letters, numbers, and underscores")]
+    InvalidContextCode,
     #[error("context data must be a JSON object")]
     InvalidContextData,
     #[error("context was not found")]
@@ -78,6 +80,7 @@ struct PreviewRelationship {
     target_id: Uuid,
     target_projections: Value,
     target_display: Value,
+    target_context_fallback: Value,
     relationship_position: i64,
 }
 
@@ -87,6 +90,7 @@ struct EntityPreviewRow {
     created_at: DateTime<Utc>,
     preview: Value,
     blueprint_display: Value,
+    blueprint_context_fallback: Value,
 }
 
 #[derive(sqlx::FromRow)]
@@ -600,6 +604,14 @@ impl CatalogRepository {
         if input.code == "default" {
             return Err(RepositoryError::ReservedContextCode);
         }
+        if input.code.is_empty()
+            || !input
+                .code
+                .chars()
+                .all(|character| character.is_ascii_alphanumeric() || character == '_')
+        {
+            return Err(RepositoryError::InvalidContextCode);
+        }
         if !input.data.is_object() {
             return Err(RepositoryError::InvalidContextData);
         }
@@ -847,6 +859,11 @@ impl CatalogRepository {
             r#"WITH relationships AS (
                     SELECT a.code AS attribute_code, c.code AS context_code, target.id AS target_id,
                             target.projections AS target_projections, b.display AS target_display,
+                            (SELECT COALESCE(jsonb_object_agg(attribute.code, attribute.context_fallback), '{}'::jsonb)
+                               FROM attributes attribute
+                              WHERE attribute.blueprint_id = target.blueprint_id
+                                AND attribute.blueprint_version = target.blueprint_version
+                                AND attribute.deleted_at IS NULL) AS target_context_fallback,
                            ROW_NUMBER() OVER (PARTITION BY a.id, av.context_id ORDER BY target.id)
                                AS relationship_position
                     FROM attribute_values av
@@ -859,7 +876,7 @@ impl CatalogRepository {
                       AND av.latest
                       AND av.active
                 )
-               SELECT attribute_code, context_code, target_id, target_projections, target_display, relationship_position
+               SELECT attribute_code, context_code, target_id, target_projections, target_display, target_context_fallback, relationship_position
                FROM relationships
                WHERE relationship_position <= $2
                ORDER BY attribute_code, context_code NULLS FIRST, relationship_position"#,
@@ -916,7 +933,12 @@ impl CatalogRepository {
             );
             target_values.insert(
                 "display".to_owned(),
-                display_label(&target_preview, &relationship.target_display, &context_code),
+                display_label(
+                    &target_preview,
+                    &relationship.target_display,
+                    &relationship.target_context_fallback,
+                    &context_code,
+                ),
             );
 
             let targets = relationship_preview
@@ -940,7 +962,12 @@ impl CatalogRepository {
     ) -> Result<EntityPreviewPage, RepositoryError> {
         let rows = sqlx::query_as::<_, EntityPreviewRow>(
             r#"SELECT target.id, target.created_at, target.projections -> 'preview' AS preview,
-                      b.display AS blueprint_display
+                      b.display AS blueprint_display,
+                      (SELECT COALESCE(jsonb_object_agg(attribute.code, attribute.context_fallback), '{}'::jsonb)
+                         FROM attributes attribute
+                        WHERE attribute.blueprint_id = target.blueprint_id
+                          AND attribute.blueprint_version = target.blueprint_version
+                          AND attribute.deleted_at IS NULL) AS blueprint_context_fallback
                FROM attribute_values av
                JOIN attributes a ON a.id = av.attribute_id AND a.deleted_at IS NULL
                JOIN entities target ON target.id = av.relationship_target_entity_id
@@ -982,7 +1009,12 @@ impl CatalogRepository {
         cursor: Option<(DateTime<Utc>, Uuid)>,
     ) -> Result<(Vec<EntityPreview>, Option<String>), RepositoryError> {
         let sql = r#"SELECT e.id, e.created_at, e.projections -> 'preview' AS preview,
-                      b.display AS blueprint_display
+                      b.display AS blueprint_display,
+                      (SELECT COALESCE(jsonb_object_agg(attribute.code, attribute.context_fallback), '{}'::jsonb)
+                         FROM attributes attribute
+                        WHERE attribute.blueprint_id = e.blueprint_id
+                          AND attribute.blueprint_version = e.blueprint_version
+                          AND attribute.deleted_at IS NULL) AS blueprint_context_fallback
                 FROM entities e
                 JOIN blueprints b ON b.id = e.blueprint_id AND b.version = e.blueprint_version
                WHERE e.blueprint_id = $1
@@ -1654,22 +1686,36 @@ fn entity_preview(row: EntityPreviewRow) -> EntityPreview {
     EntityPreview {
         id: row.id,
         created_at: row.created_at,
-        display: display_labels(&row.preview, &row.blueprint_display),
+        display: display_labels(
+            &row.preview,
+            &row.blueprint_display,
+            &row.blueprint_context_fallback,
+        ),
         preview: row.preview,
     }
 }
 
-fn display_labels(preview: &Value, display: &Value) -> Value {
+fn display_labels(preview: &Value, display: &Value, context_fallback: &Value) -> Value {
     let contexts = preview.as_object().cloned().unwrap_or_default();
     Value::Object(
         contexts
             .keys()
-            .map(|context| (context.clone(), display_label(preview, display, context)))
+            .map(|context| {
+                (
+                    context.clone(),
+                    display_label(preview, display, context_fallback, context),
+                )
+            })
             .collect(),
     )
 }
 
-fn display_label(preview: &Value, display: &Value, context_code: &str) -> Value {
+fn display_label(
+    preview: &Value,
+    display: &Value,
+    context_fallback: &Value,
+    context_code: &str,
+) -> Value {
     let Some(definition) = display.get("dropdown_option") else {
         return Value::String(String::new());
     };
@@ -1687,9 +1733,12 @@ fn display_label(preview: &Value, display: &Value, context_code: &str) -> Value 
             .iter()
             .filter_map(Value::as_str)
             .filter_map(|field| {
-                current
-                    .and_then(|values| values.get(field))
-                    .or_else(|| default.and_then(|values| values.get(field)))
+                current.and_then(|values| values.get(field)).or_else(|| {
+                    (context_code == "default"
+                        || context_fallback.get(field).and_then(Value::as_str) != Some("none"))
+                    .then(|| default.and_then(|values| values.get(field)))
+                    .flatten()
+                })
             })
             .filter(|value| !value.is_null())
             .map(display_value)

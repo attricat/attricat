@@ -38,7 +38,7 @@ catalog blueprint resolve <code>
 catalog blueprint resolve <code> --version <version>
 
 catalog context create --file locale.toml
-catalog context create --code en-GB --data '{"language":"en-GB"}'
+catalog context create --code en_GB --data '{"language":"en-GB"}'
 catalog context get en-GB
 
 catalog entity create --file product.toml

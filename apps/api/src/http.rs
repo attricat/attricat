@@ -573,6 +573,7 @@ impl From<RepositoryError> for ApiError {
             RepositoryError::InvalidProjections
             | RepositoryError::InvalidPreview
             | RepositoryError::ReservedContextCode
+            | RepositoryError::InvalidContextCode
             | RepositoryError::InvalidContextData
             | RepositoryError::InvalidContext
             | RepositoryError::InvalidAttributeSelector => Self {

@@ -162,7 +162,7 @@ export const EntityForm = ({
                   const inherited =
                     contextId !== null &&
                     !localValueExists &&
-                    attribute.context_fallback === 'default' &&
+                    attribute.context_fallback !== 'none' &&
                     defaultValue?.kind === 'scalar';
                   const handleChange = (nextValue: string) =>
                     field.handleChange({

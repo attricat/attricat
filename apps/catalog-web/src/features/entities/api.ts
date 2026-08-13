@@ -4,13 +4,16 @@ import { attributeValueKinds, attributeValueTypes } from './value-types';
 const uuidSchema = z.uuid();
 const jsonObjectSchema = z.record(z.string(), z.unknown());
 const valueTypeSchema = z.enum(attributeValueTypes);
+export const contextCodeSchema = z
+  .string()
+  .regex(/^[A-Za-z0-9_]+$/, 'Use only letters, numbers, and underscores');
 
 export const attributeSchema = z
   .object({
     code: z.string(),
     value_type: valueTypeSchema,
     target_blueprint_code: z.string().nullable().optional(),
-    context_fallback: z.enum(['default', 'none']).default('default'),
+    context_fallback: z.enum(['default', 'none']).optional(),
   })
   .passthrough();
 export const blueprintSchema = z
@@ -54,9 +57,13 @@ const attributeValueSelectorSchema = z.object({
   attribute_code: z.string().min(1),
   context_id: uuidSchema.nullable(),
 });
-const attributeContextSchema = z.object({
+export const attributeContextSchema = z.object({
   id: uuidSchema,
-  code: z.string(),
+  code: contextCodeSchema,
+  data: jsonObjectSchema,
+});
+export const createAttributeContextSchema = z.object({
+  code: contextCodeSchema,
   data: jsonObjectSchema,
 });
 export const entitySchema = z.object({ id: uuidSchema }).passthrough();
@@ -93,6 +100,10 @@ const searchEntitiesRequestSchema = z.object({
 const getBlueprintRequestSchema = z.object({
   code: z.string().min(1),
   version: z.number().int().positive().optional(),
+});
+const getBlueprintRevisionRequestSchema = z.object({
+  id: uuidSchema,
+  version: z.number().int().positive(),
 });
 const createEntityRequestSchema = z.object({
   blueprint: z.object({
@@ -163,12 +174,14 @@ export const listEntityBlueprints = () => {
 export const listContexts = () =>
   request('/api/contexts', z.array(attributeContextSchema));
 
-export const createContext = (code: string, data: Record<string, unknown>) =>
-  request('/api/contexts', attributeContextSchema, {
+export const createContext = (code: string, data: Record<string, unknown>) => {
+  const payload = createAttributeContextSchema.parse({ code, data });
+  return request('/api/contexts', attributeContextSchema, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ code, data }),
+    body: JSON.stringify(payload),
   });
+};
 
 export const getEntityPreview = (id: string) => {
   const entityId = uuidSchema.parse(id);
@@ -184,6 +197,14 @@ export const getBlueprintByCode = (code: string, version?: number) => {
     input.version === undefined ? '' : `/versions/${input.version}`
   }`;
   return request(path, blueprintWithAttributesSchema);
+};
+
+export const getBlueprintRevision = (id: string, version: number) => {
+  const input = getBlueprintRevisionRequestSchema.parse({ id, version });
+  return request(
+    `/api/blueprints/${encodeURIComponent(input.id)}/versions/${input.version}`,
+    blueprintWithAttributesSchema,
+  );
 };
 
 export const getEntityForm = (id: string) => {

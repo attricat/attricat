@@ -229,7 +229,7 @@ tags = ["searchable"]
 
     let context: Value = client
         .post(format!("{base_url}/contexts"))
-        .json(&json!({ "code": "en-GB", "data": { "language": "en-GB" } }))
+        .json(&json!({ "code": "en_GB", "data": { "language": "en-GB" } }))
         .send()
         .await
         .unwrap()
@@ -240,7 +240,7 @@ tags = ["searchable"]
         .unwrap();
     assert_eq!(
         client
-            .get(format!("{base_url}/contexts/en-GB"))
+            .get(format!("{base_url}/contexts/en_GB"))
             .send()
             .await
             .unwrap()
@@ -266,6 +266,19 @@ tags = ["searchable"]
         let response = client
             .post(format!("{base_url}/contexts"))
             .json(&json!({ "code": Uuid::new_v4().to_string(), "data": data }))
+            .send()
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::UNPROCESSABLE_ENTITY);
+        assert_eq!(
+            response.json::<Value>().await.unwrap()["error"]["code"],
+            "invalid_input"
+        );
+    }
+    for code in ["en-GB", "en GB", "en.GB", ""] {
+        let response = client
+            .post(format!("{base_url}/contexts"))
+            .json(&json!({ "code": code, "data": {} }))
             .send()
             .await
             .unwrap();
@@ -383,7 +396,7 @@ tags = ["searchable"]
                     "truncated": false
                 }
             },
-            "en-GB": { "title": "Blue shirt (UK)" }
+            "en_GB": { "title": "Blue shirt (UK)" }
         })
     );
     assert_eq!(preview["entity"]["id"], source["id"]);
@@ -502,7 +515,7 @@ tags = ["searchable"]
     assert_eq!(search_page["items"][0]["id"], source["id"]);
     assert_eq!(
         search_page["items"][0]["display"],
-        json!({ "default": "Red shirt", "en-GB": "Blue shirt (UK)" })
+        json!({ "default": "Red shirt", "en_GB": "Blue shirt (UK)" })
     );
     assert!(search_page["next_cursor"].is_null());
 
