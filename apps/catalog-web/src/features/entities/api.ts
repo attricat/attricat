@@ -10,6 +10,7 @@ export const attributeSchema = z
     code: z.string(),
     value_type: valueTypeSchema,
     target_blueprint_code: z.string().nullable().optional(),
+    context_fallback: z.enum(['default', 'none']).default('default'),
   })
   .passthrough();
 export const blueprintSchema = z
@@ -46,7 +47,17 @@ export const newAttributeValueSchema = z.discriminatedUnion('kind', [
 ]);
 export const relationshipTargetsSchema = z.object({
   attribute_code: z.string().min(1),
+  context_id: uuidSchema.nullable().optional(),
   target_entity_ids: z.array(uuidSchema),
+});
+const attributeValueSelectorSchema = z.object({
+  attribute_code: z.string().min(1),
+  context_id: uuidSchema.nullable(),
+});
+const attributeContextSchema = z.object({
+  id: uuidSchema,
+  code: z.string(),
+  data: jsonObjectSchema,
 });
 export const entitySchema = z.object({ id: uuidSchema }).passthrough();
 const entityItemSchema = z.object({
@@ -93,6 +104,7 @@ const createEntityRequestSchema = z.object({
 const updateEntityRequestSchema = z.object({
   values: z.array(newAttributeValueSchema),
   relationships: z.array(relationshipTargetsSchema),
+  remove_values: z.array(attributeValueSelectorSchema).default([]),
 });
 
 export type Attribute = z.infer<typeof attributeSchema>;
@@ -102,6 +114,7 @@ export type BlueprintWithAttributes = z.infer<
 >;
 export type NewAttributeValue = z.infer<typeof newAttributeValueSchema>;
 export type RelationshipTargets = z.infer<typeof relationshipTargetsSchema>;
+export type AttributeContext = z.infer<typeof attributeContextSchema>;
 export type Entity = z.infer<typeof entitySchema>;
 export type EntityItem = z.infer<typeof entityItemSchema>;
 export type EntitySearchResponse = z.infer<typeof entitySearchResponseSchema>;
@@ -146,6 +159,16 @@ export const searchEntities = (
 export const listEntityBlueprints = () => {
   return request('/api/blueprints', z.array(blueprintSchema));
 };
+
+export const listContexts = () =>
+  request('/api/contexts', z.array(attributeContextSchema));
+
+export const createContext = (code: string, data: Record<string, unknown>) =>
+  request('/api/contexts', attributeContextSchema, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ code, data }),
+  });
 
 export const getEntityPreview = (id: string) => {
   const entityId = uuidSchema.parse(id);

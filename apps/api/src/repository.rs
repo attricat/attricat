@@ -13,9 +13,9 @@ use uuid::Uuid;
 use crate::{
     blueprint_resolver::compile_definition,
     model::{
-        AppendAttributeValues, Attribute, AttributeContext, AttributeValue, Blueprint,
-        BlueprintWithAttributes, CreateAttributeContext, CreateBlueprint, CreateEntity, Entity,
-        EntityPreview, EntityPreviewPage, FormAttributeValue, NewAttributeValue,
+        AppendAttributeValues, Attribute, AttributeContext, AttributeValue, AttributeValueSelector,
+        Blueprint, BlueprintWithAttributes, CreateAttributeContext, CreateBlueprint, CreateEntity,
+        Entity, EntityPreview, EntityPreviewPage, FormAttributeValue, NewAttributeValue,
         RelationshipMutation, RelationshipTargets,
     },
 };
@@ -33,6 +33,8 @@ pub enum RepositoryError {
     ReservedContextCode,
     #[error("context data must be a JSON object")]
     InvalidContextData,
+    #[error("context was not found")]
+    InvalidContext,
     #[error("attribute does not belong to the entity blueprint version")]
     AttributeNotApplicable,
     #[error("provide exactly one of attribute_id or attribute_code")]
@@ -460,9 +462,9 @@ impl CatalogRepository {
         for attribute in compiled.attributes {
             attributes.push(
                 sqlx::query_as::<_, Attribute>(
-                    r#"INSERT INTO attributes (id, blueprint_id, blueprint_version, code, value_type, target_blueprint_code, tags, position)
-                       VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
-                       RETURNING id, blueprint_id, blueprint_version, code, value_type, target_blueprint_code, tags, position, created_at, updated_at, deleted_at"#,
+                    r#"INSERT INTO attributes (id, blueprint_id, blueprint_version, code, value_type, target_blueprint_code, tags, context_fallback, position)
+                       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+                       RETURNING id, blueprint_id, blueprint_version, code, value_type, target_blueprint_code, tags, context_fallback, position, created_at, updated_at, deleted_at"#,
                 )
                 .bind(Uuid::new_v4())
                 .bind(blueprint_id)
@@ -471,6 +473,7 @@ impl CatalogRepository {
                 .bind(attribute.value_type)
                 .bind(attribute.target_blueprint)
                 .bind(serde_json::to_value(attribute.tags).expect("attribute tags serialize"))
+                .bind(attribute.context_fallback)
                 .bind(attribute.position)
                 .fetch_one(&mut **transaction)
                 .await?,
@@ -561,7 +564,7 @@ impl CatalogRepository {
         blueprint_version: i64,
     ) -> Result<Vec<Attribute>, RepositoryError> {
         Ok(sqlx::query_as::<_, Attribute>(
-            r#"SELECT id, blueprint_id, blueprint_version, code, value_type, target_blueprint_code, tags, position, created_at, updated_at, deleted_at
+            r#"SELECT id, blueprint_id, blueprint_version, code, value_type, target_blueprint_code, tags, context_fallback, position, created_at, updated_at, deleted_at
                FROM attributes
                WHERE blueprint_id = $1 AND blueprint_version = $2 AND deleted_at IS NULL
                ORDER BY position"#,
@@ -625,6 +628,14 @@ impl CatalogRepository {
         .await?)
     }
 
+    pub async fn list_contexts(&self) -> Result<Vec<AttributeContext>, RepositoryError> {
+        Ok(sqlx::query_as::<_, AttributeContext>(
+            "SELECT id, code, data FROM attribute_contexts ORDER BY code",
+        )
+        .fetch_all(&self.pool)
+        .await?)
+    }
+
     pub async fn create_entity(&self, input: CreateEntity) -> Result<Entity, RepositoryError> {
         let mut projections = input.projections.unwrap_or_else(empty_projections);
         let projections = projections
@@ -681,6 +692,7 @@ impl CatalogRepository {
         entity_id: Uuid,
         values: Vec<NewAttributeValue>,
         relationships: Vec<RelationshipTargets>,
+        remove_values: Vec<AttributeValueSelector>,
     ) -> Result<Entity, RepositoryError> {
         let mut transaction = self.pool.begin().await?;
         // The row lock serializes writers for an entity. It protects both the
@@ -688,6 +700,10 @@ impl CatalogRepository {
         let entity = self.lock_entity(&mut transaction, entity_id).await?;
         for value in values {
             self.insert_value(&mut transaction, &entity, value).await?;
+        }
+        for selector in remove_values {
+            self.remove_scalar_value(&mut transaction, &entity, selector)
+                .await?;
         }
         self.replace_relationship_sets(&mut transaction, &entity, relationships)
             .await?;
@@ -1151,6 +1167,8 @@ impl CatalogRepository {
         relationships: Vec<RelationshipTargets>,
     ) -> Result<(), RepositoryError> {
         for relationship in relationships {
+            self.validate_context_id(transaction, relationship.context_id)
+                .await?;
             let (attribute_id, target_blueprint_code) = self
                 .relationship_attribute(transaction, entity, &relationship)
                 .await?;
@@ -1262,6 +1280,8 @@ impl CatalogRepository {
             }
             .ok_or(RepositoryError::AttributeNotApplicable)?;
 
+        self.validate_context_id(transaction, context_id).await?;
+
         if (value_type == "relationship") != is_relationship {
             return Err(RepositoryError::AttributeKindMismatch);
         }
@@ -1318,6 +1338,56 @@ impl CatalogRepository {
                 .bind(Option::<String>::None),
         };
         Ok(query.fetch_one(&mut **transaction).await?)
+    }
+
+    async fn remove_scalar_value(
+        &self,
+        transaction: &mut Transaction<'_, Postgres>,
+        entity: &Entity,
+        selector: AttributeValueSelector,
+    ) -> Result<(), RepositoryError> {
+        self.validate_context_id(transaction, selector.context_id)
+            .await?;
+        let attribute = sqlx::query_as::<_, (Uuid, String)>(
+            "SELECT id, value_type FROM attributes WHERE code = $1 AND blueprint_id = $2 AND blueprint_version = $3 AND deleted_at IS NULL",
+        )
+        .bind(selector.attribute_code)
+        .bind(entity.blueprint_id)
+        .bind(entity.blueprint_version)
+        .fetch_optional(&mut **transaction)
+        .await?
+        .ok_or(RepositoryError::AttributeNotApplicable)?;
+        if attribute.1 == "relationship" {
+            return Err(RepositoryError::AttributeKindMismatch);
+        }
+        sqlx::query(
+            "UPDATE attribute_values SET latest = false WHERE entity_id = $1 AND attribute_id = $2 AND context_id IS NOT DISTINCT FROM $3 AND relationship_target_entity_id IS NULL AND latest",
+        )
+        .bind(entity.id)
+        .bind(attribute.0)
+        .bind(selector.context_id)
+        .execute(&mut **transaction)
+        .await?;
+        Ok(())
+    }
+
+    async fn validate_context_id(
+        &self,
+        transaction: &mut Transaction<'_, Postgres>,
+        context_id: Option<Uuid>,
+    ) -> Result<(), RepositoryError> {
+        if let Some(context_id) = context_id {
+            let exists = sqlx::query_scalar::<_, bool>(
+                "SELECT EXISTS (SELECT 1 FROM attribute_contexts WHERE id = $1)",
+            )
+            .bind(context_id)
+            .fetch_one(&mut **transaction)
+            .await?;
+            if !exists {
+                return Err(RepositoryError::InvalidContext);
+            }
+        }
+        Ok(())
     }
 
     async fn lock_entity(

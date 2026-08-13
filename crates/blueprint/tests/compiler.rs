@@ -38,6 +38,7 @@ from = "seo.meta_title"
                     value_type: "string".to_owned(),
                     target_blueprint: None,
                     tags: vec![],
+                    context_fallback: "default".to_owned(),
                     position: 0,
                 },
                 EffectiveAttribute {
@@ -45,6 +46,7 @@ from = "seo.meta_title"
                     value_type: "string".to_owned(),
                     target_blueprint: None,
                     tags: vec![],
+                    context_fallback: "default".to_owned(),
                     position: 1,
                 },
             ],
@@ -55,10 +57,41 @@ from = "seo.meta_title"
 
     assert_eq!(compiled.attributes.len(), 2);
     assert_eq!(compiled.attributes[0].code, "title");
+    assert_eq!(compiled.attributes[0].context_fallback, "default");
     assert_eq!(compiled.attributes[0].position, 0);
     assert_eq!(compiled.attributes[1].code, "meta_title");
     assert_eq!(compiled.attributes[1].position, 1);
     assert_eq!(compiled.raw_definition_hash, raw_hash(source));
+}
+
+#[test]
+fn supports_context_fallback_on_all_attribute_types() {
+    let source = r#"
+format_version = 1
+code = "product"
+name = "Product"
+kind = "entity"
+
+[display.dropdown_option]
+fields = ["title"]
+
+[[attributes]]
+code = "title"
+value_type = "string"
+context_fallback = "none"
+
+[[attributes]]
+code = "related"
+value_type = "relationship"
+context_fallback = "none"
+"#;
+    let compiled = compile(parse(source).unwrap(), &[], source).unwrap();
+    assert!(
+        compiled
+            .attributes
+            .iter()
+            .all(|attribute| attribute.context_fallback == "none")
+    );
 }
 
 #[test]

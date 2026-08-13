@@ -6,11 +6,14 @@ import { attributeValueKinds, attributeValueTypes } from './value-types';
 export const valuesForForm = (
   attributes: readonly Attribute[],
   values: NewAttributeValue[],
+  contextId: string | null = null,
 ): Record<string, string> => {
   return Object.fromEntries(
     attributes.map((attribute) => {
       const matching = values.filter(
-        (value) => value.attribute_code === attribute.code,
+        (value) =>
+          value.attribute_code === attribute.code &&
+          (value.context_id ?? null) === contextId,
       );
       if (attribute.value_type === attributeValueTypes.relationship) {
         return [
@@ -44,6 +47,7 @@ export const valuesForForm = (
 export const serializeAttributeValues = (
   attributes: readonly Attribute[],
   fields: Record<string, string>,
+  contextId: string | null = null,
 ): NewAttributeValue[] => {
   return attributes.flatMap<NewAttributeValue>(
     (attribute): NewAttributeValue[] => {
@@ -52,7 +56,7 @@ export const serializeAttributeValues = (
         attribute,
         fields[attribute.code] ?? '',
       );
-      return scalar ? [scalar] : [];
+      return scalar ? [{ ...scalar, context_id: contextId }] : [];
     },
   );
 };
@@ -60,6 +64,7 @@ export const serializeAttributeValues = (
 export const relationshipTargetsForForm = (
   attributes: readonly Attribute[],
   fields: Record<string, string>,
+  contextId: string | null = null,
 ): RelationshipTargets[] => {
   return attributes
     .filter(
@@ -72,7 +77,13 @@ export const relationshipTargetsForForm = (
         .filter(Boolean);
       const result = z.array(z.uuid()).safeParse(targetEntityIds);
       return result.success
-        ? [{ attribute_code: attribute.code, target_entity_ids: result.data }]
+        ? [
+            {
+              attribute_code: attribute.code,
+              context_id: contextId,
+              target_entity_ids: result.data,
+            },
+          ]
         : [];
     });
 };

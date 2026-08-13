@@ -1,5 +1,6 @@
 export const entityQueryKeys = {
   blueprints: () => ['entity-blueprints'] as const,
+  contexts: () => ['attribute-contexts'] as const,
   relationshipTargets: (blueprint: string | null | undefined) =>
     ['relationship-targets', blueprint] as const,
   form: (entityId: string) => ['entity-form', entityId] as const,

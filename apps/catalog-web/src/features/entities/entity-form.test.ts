@@ -9,7 +9,7 @@ import type { Attribute } from './api';
 const attributes = [
   { code: 'title', value_type: 'string' },
   { code: 'related_products', value_type: 'relationship' },
- ] satisfies Attribute[];
+] satisfies Attribute[];
 const entityIdOne = '123e4567-e89b-12d3-a456-426614174000';
 const entityIdTwo = '123e4567-e89b-12d3-a456-426614174001';
 
@@ -28,7 +28,12 @@ describe('entity form values', () => {
         related_products: `${entityIdOne}, ${entityIdTwo} , `,
       }),
     ).toEqual([
-      { kind: 'scalar', attribute_code: 'title', value: 'Summer shirt' },
+      {
+        kind: 'scalar',
+        attribute_code: 'title',
+        context_id: null,
+        value: 'Summer shirt',
+      },
     ]);
     expect(
       relationshipTargetsForForm(attributes, {
@@ -37,7 +42,8 @@ describe('entity form values', () => {
     ).toEqual([
       {
         attribute_code: 'related_products',
-          target_entity_ids: [entityIdOne, entityIdTwo],
+        context_id: null,
+        target_entity_ids: [entityIdOne, entityIdTwo],
       },
     ]);
   });
@@ -80,12 +86,23 @@ describe('entity form values', () => {
         cutoff: '09:30:00 America/New_York',
       }),
     ).toEqual([
-      { kind: 'scalar', attribute_code: 'price', value: 49.95 },
-      { kind: 'scalar', attribute_code: 'stock', value: 24 },
-      { kind: 'scalar', attribute_code: 'available', value: false },
+      {
+        kind: 'scalar',
+        attribute_code: 'price',
+        context_id: null,
+        value: 49.95,
+      },
+      { kind: 'scalar', attribute_code: 'stock', context_id: null, value: 24 },
+      {
+        kind: 'scalar',
+        attribute_code: 'available',
+        context_id: null,
+        value: false,
+      },
       {
         kind: 'scalar',
         attribute_code: 'cutoff',
+        context_id: null,
         value: { time: '09:30:00', time_zone: 'America/New_York' },
       },
     ]);

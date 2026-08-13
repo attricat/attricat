@@ -19,6 +19,7 @@ import {
   searchEntities,
   type Attribute,
   type BlueprintWithAttributes,
+  type NewAttributeValue,
 } from '../api';
 import {
   relationshipTargetsForForm,
@@ -32,12 +33,15 @@ import { attributeValueTypes } from '../value-types';
 type EntityFormProps = {
   blueprint?: BlueprintWithAttributes;
   initialValues?: ReturnType<typeof valuesForForm>;
+  contextId?: string | null;
+  existingValues?: NewAttributeValue[];
   isLoadingBlueprint?: boolean;
   error?: Error | null;
   onLoadBlueprint?: (code: string, version?: number) => void;
   onSubmit: (input: {
     values: ReturnType<typeof serializeAttributeValues>;
     relationships: ReturnType<typeof relationshipTargetsForForm>;
+    remove_values: { attribute_code: string; context_id: string | null }[];
   }) => void;
   submitLabel: string;
 };
@@ -45,6 +49,8 @@ type EntityFormProps = {
 export const EntityForm = ({
   blueprint,
   initialValues = {},
+  contextId = null,
+  existingValues = [],
   isLoadingBlueprint = false,
   error,
   onLoadBlueprint,
@@ -68,11 +74,27 @@ export const EntityForm = ({
       }
       if (blueprint) {
         onSubmit({
-          values: serializeAttributeValues(blueprint.attributes, value.fields),
+          values: serializeAttributeValues(
+            blueprint.attributes,
+            value.fields,
+            contextId,
+          ),
           relationships: relationshipTargetsForForm(
             blueprint.attributes,
             value.fields,
+            contextId,
           ),
+          remove_values: existingValues
+            .filter(
+              (item) =>
+                item.kind === 'scalar' &&
+                (item.context_id ?? null) === contextId &&
+                !value.fields[item.attribute_code]?.trim(),
+            )
+            .map((item) => ({
+              attribute_code: item.attribute_code,
+              context_id: contextId,
+            })),
         });
       }
     },
@@ -125,6 +147,23 @@ export const EntityForm = ({
               <>
                 {blueprint.attributes.map((attribute) => {
                   const value = field.state.value[attribute.code] ?? '';
+                  const localValueExists = existingValues.some(
+                    (item) =>
+                      item.kind === 'scalar' &&
+                      item.attribute_code === attribute.code &&
+                      (item.context_id ?? null) === contextId,
+                  );
+                  const defaultValue = existingValues.find(
+                    (item) =>
+                      item.kind === 'scalar' &&
+                      item.attribute_code === attribute.code &&
+                      (item.context_id ?? null) === null,
+                  );
+                  const inherited =
+                    contextId !== null &&
+                    !localValueExists &&
+                    attribute.context_fallback === 'default' &&
+                    defaultValue?.kind === 'scalar';
                   const handleChange = (nextValue: string) =>
                     field.handleChange({
                       ...field.state.value,
@@ -142,6 +181,11 @@ export const EntityForm = ({
                     <TextField
                       key={attribute.code}
                       fullWidth
+                      helperText={
+                        inherited
+                          ? `Using default: ${String(defaultValue.value)}`
+                          : undefined
+                      }
                       select
                       label={attribute.code}
                       onChange={(event) => handleChange(event.target.value)}
@@ -155,6 +199,11 @@ export const EntityForm = ({
                     <TextField
                       key={attribute.code}
                       fullWidth
+                      helperText={
+                        inherited
+                          ? `Using default: ${String(defaultValue.value)}`
+                          : undefined
+                      }
                       label={attribute.code}
                       onChange={(event) => handleChange(event.target.value)}
                       placeholder={

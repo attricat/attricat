@@ -58,6 +58,7 @@ pub enum AttributeDeclaration {
         value_type: String,
         target_blueprint: Option<String>,
         tags: Vec<String>,
+        context_fallback: String,
     },
     Selection {
         code: String,
@@ -80,6 +81,7 @@ pub struct EffectiveAttribute {
     pub value_type: String,
     pub target_blueprint: Option<String>,
     pub tags: Vec<String>,
+    pub context_fallback: String,
     pub position: i64,
 }
 
@@ -130,6 +132,11 @@ pub enum BlueprintError {
     InvalidAttributeTag(String),
     #[error("attribute '{code}' has unsupported value type '{value_type}'")]
     UnsupportedValueType { code: String, value_type: String },
+    #[error("attribute '{code}' has invalid context_fallback '{context_fallback}'")]
+    InvalidContextFallback {
+        code: String,
+        context_fallback: String,
+    },
 }
 
 #[derive(Deserialize)]
@@ -154,7 +161,13 @@ struct RawAttributeDeclaration {
     target_blueprint: Option<String>,
     #[serde(default)]
     tags: Vec<String>,
+    #[serde(default = "default_context_fallback")]
+    context_fallback: String,
     from: Option<String>,
+}
+
+fn default_context_fallback() -> String {
+    "default".to_owned()
 }
 
 pub fn parse(source: &str) -> Result<BlueprintDefinition, BlueprintError> {
@@ -213,6 +226,12 @@ pub fn parse(source: &str) -> Result<BlueprintDefinition, BlueprintError> {
                 if let Some(target_blueprint) = &attribute.target_blueprint {
                     validate_non_empty(target_blueprint, "attribute target_blueprint")?;
                 }
+                if !matches!(attribute.context_fallback.as_str(), "default" | "none") {
+                    return Err(BlueprintError::InvalidContextFallback {
+                        code: attribute.code,
+                        context_fallback: attribute.context_fallback,
+                    });
+                }
                 let mut tags = HashSet::new();
                 for tag in &attribute.tags {
                     if tag.trim().is_empty() || !tags.insert(tag.as_str()) {
@@ -224,6 +243,7 @@ pub fn parse(source: &str) -> Result<BlueprintDefinition, BlueprintError> {
                     value_type,
                     target_blueprint: attribute.target_blueprint,
                     tags: attribute.tags,
+                    context_fallback: attribute.context_fallback,
                 }
             }
             (None, Some(source)) if attribute.target_blueprint.is_none() => {
@@ -277,17 +297,19 @@ pub fn compile(
 
     let mut attributes = Vec::with_capacity(definition.attributes.len());
     for (position, declaration) in definition.attributes.iter().enumerate() {
-        let (code, value_type, target_blueprint, tags) = match declaration {
+        let (code, value_type, target_blueprint, tags, context_fallback) = match declaration {
             AttributeDeclaration::Local {
                 code,
                 value_type,
                 target_blueprint,
                 tags,
+                context_fallback,
             } => (
                 code.clone(),
                 value_type.clone(),
                 target_blueprint.clone(),
                 tags.clone(),
+                context_fallback.clone(),
             ),
             AttributeDeclaration::Selection {
                 code,
@@ -310,6 +332,7 @@ pub fn compile(
                     attribute.value_type.clone(),
                     attribute.target_blueprint.clone(),
                     attribute.tags.clone(),
+                    attribute.context_fallback.clone(),
                 )
             }
         };
@@ -318,6 +341,7 @@ pub fn compile(
             value_type,
             target_blueprint,
             tags,
+            context_fallback,
             position: position as i64,
         });
     }

@@ -69,7 +69,11 @@ describe('entity API client', () => {
     expect(fetchMock).toHaveBeenLastCalledWith(`/api/v1/entities/${entityId}`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ values: [], relationships: [] }),
+      body: JSON.stringify({
+        values: [],
+        relationships: [],
+        remove_values: [],
+      }),
     });
   });
 

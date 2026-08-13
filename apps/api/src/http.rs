@@ -51,7 +51,7 @@ pub fn router(state: AppState) -> Router {
             "/blueprints/by-code/{code}/versions/{version}",
             get(get_blueprint_by_code_and_version),
         )
-        .route("/contexts", post(create_context))
+        .route("/contexts", get(list_contexts).post(create_context))
         .route("/contexts/{code}", get(get_context))
         // The v1 routes are form-oriented composites. The older entity routes
         // remain lower-level primitives for clients that manage values and
@@ -173,6 +173,12 @@ async fn create_context(
         StatusCode::CREATED,
         Json(state.repository.create_context(input).await?),
     ))
+}
+
+async fn list_contexts(
+    State(state): State<AppState>,
+) -> Result<Json<Vec<crate::model::AttributeContext>>, ApiError> {
+    Ok(Json(state.repository.list_contexts().await?))
 }
 
 async fn get_context(
@@ -403,7 +409,12 @@ async fn update_entity_form(
     Ok(Json(
         state
             .repository
-            .update_entity_with_values(entity_id, input.values, input.relationships)
+            .update_entity_with_values(
+                entity_id,
+                input.values,
+                input.relationships,
+                input.remove_values,
+            )
             .await?,
     ))
 }
@@ -563,6 +574,7 @@ impl From<RepositoryError> for ApiError {
             | RepositoryError::InvalidPreview
             | RepositoryError::ReservedContextCode
             | RepositoryError::InvalidContextData
+            | RepositoryError::InvalidContext
             | RepositoryError::InvalidAttributeSelector => Self {
                 status: StatusCode::UNPROCESSABLE_ENTITY,
                 code: "invalid_input",

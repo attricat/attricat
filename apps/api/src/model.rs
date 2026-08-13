@@ -29,6 +29,7 @@ pub struct Attribute {
     pub value_type: String,
     pub target_blueprint_code: Option<String>,
     pub tags: Value,
+    pub context_fallback: String,
     pub position: i64,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
@@ -121,6 +122,12 @@ pub struct RelationshipTargets {
     pub target_entity_ids: Vec<Uuid>,
 }
 
+#[derive(Clone, Debug, Deserialize)]
+pub struct AttributeValueSelector {
+    pub attribute_code: String,
+    pub context_id: Option<Uuid>,
+}
+
 #[derive(Clone, Debug, Serialize)]
 pub struct BlueprintWithAttributes {
     pub blueprint: Blueprint,
@@ -211,6 +218,8 @@ pub struct UpdateEntityFormRequest {
     pub values: Vec<NewAttributeValue>,
     #[serde(default)]
     pub relationships: Vec<RelationshipTargets>,
+    #[serde(default)]
+    pub remove_values: Vec<AttributeValueSelector>,
 }
 
 #[derive(Clone, Debug, Serialize)]

@@ -202,6 +202,7 @@ creating and reading entities, appending attribute values, and reading the
 | `GET` | `/blueprints/by-code/{code}` | Read the current active blueprint by code. |
 | `GET` | `/blueprints/by-code/{code}/versions/{version}` | Read an exact blueprint revision by code. |
 | `POST` | `/contexts` | Create a reusable attribute context. |
+| `GET` | `/contexts` | List reusable attribute contexts by code. |
 | `GET` | `/contexts/{code}` | Read a context by code. |
 | `POST` | `/entities` | Create an entity pinned to an exact blueprint version. |
 | `GET` | `/entities?blueprint=category&related_from={id}&relationship=categories&limit=50&cursor={cursor}` | Page target entity previews through a reverse relationship filter. |
@@ -298,6 +299,14 @@ identity alongside the contextual preview:
 
 `GET /v1/entities/{entity_id}` returns the pinned blueprint revision, editable
 values (including `context_id`), and the same scalar-only `context` shape.
+
+Attributes may declare `context_fallback = "default"` (the default) or
+`context_fallback = "none"`. In a non-default context, an absent value or
+relationship set inherits the default-context value only under the `default`
+policy. Blank contextual string form fields remove an existing override rather
+than storing an empty string. `PUT /v1/entities/{entity_id}` accepts
+`remove_values` selectors to atomically remove scalar overrides; relationship
+sets are removed by submitting an empty context-scoped target list.
 
 ## Paginated Entity Previews
 

@@ -53,7 +53,9 @@ export const CreateEntityPage = () => {
         error={blueprint.error ?? create.error}
         isLoadingBlueprint={blueprint.isPending || create.isPending}
         onLoadBlueprint={(code, version) => blueprint.mutate({ code, version })}
-        onSubmit={(input) => create.mutate(input)}
+        onSubmit={({ values, relationships }) =>
+          create.mutate({ values, relationships })
+        }
         submitLabel={blueprint.data ? 'Create entity' : 'Load blueprint'}
       />
     </EntityPage>

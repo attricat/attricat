@@ -251,6 +251,17 @@ tags = ["searchable"]
             .unwrap()["id"],
         context["id"]
     );
+    let contexts: Value = client
+        .get(format!("{base_url}/contexts"))
+        .send()
+        .await
+        .unwrap()
+        .error_for_status()
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    assert_eq!(contexts, json!([context]));
     for data in [json!([]), json!("en-GB"), Value::Null] {
         let response = client
             .post(format!("{base_url}/contexts"))
