@@ -810,7 +810,7 @@ async fn rejects_mismatched_native_value_storage_on_read(pool: PgPool) {
         &base_url,
         r#"
 format_version = 1
-code = "typed-read"
+code = "typed_read"
 name = "Typed read"
 kind = "entity"
 

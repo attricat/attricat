@@ -112,6 +112,8 @@ pub enum BlueprintError {
     DuplicateIncludeAlias(String),
     #[error("attribute code '{0}' is duplicated")]
     DuplicateAttributeCode(String),
+    #[error("{field} must contain only ASCII letters, numbers, and underscores")]
+    InvalidCode { field: &'static str },
     #[error("attribute '{0}' must define exactly one of value_type or from")]
     InvalidAttributeDeclaration(String),
     #[error("attribute '{code}' selects invalid source '{selection}'")]
@@ -188,7 +190,7 @@ pub fn parse(source: &str) -> Result<BlueprintDefinition, BlueprintError> {
     if raw.format_version != 1 {
         return Err(BlueprintError::UnsupportedFormatVersion(raw.format_version));
     }
-    validate_non_empty(&raw.code, "blueprint code")?;
+    validate_code(&raw.code, "blueprint code")?;
     validate_non_empty(&raw.name, "blueprint name")?;
     if raw.attributes.is_empty() {
         return Err(BlueprintError::EmptyAttributes);
@@ -197,7 +199,7 @@ pub fn parse(source: &str) -> Result<BlueprintDefinition, BlueprintError> {
     let mut aliases = HashSet::new();
     for include in &raw.includes {
         validate_non_empty(&include.alias, "include alias")?;
-        validate_non_empty(&include.code, "include code")?;
+        validate_code(&include.code, "include code")?;
         if include.version <= 0 {
             return Err(BlueprintError::EmptyField("include version"));
         }
@@ -209,7 +211,7 @@ pub fn parse(source: &str) -> Result<BlueprintDefinition, BlueprintError> {
     let mut codes = HashSet::new();
     let mut attributes = Vec::with_capacity(raw.attributes.len());
     for attribute in raw.attributes {
-        validate_non_empty(&attribute.code, "attribute code")?;
+        validate_code(&attribute.code, "attribute code")?;
         if !codes.insert(attribute.code.clone()) {
             return Err(BlueprintError::DuplicateAttributeCode(attribute.code));
         }
@@ -237,7 +239,7 @@ pub fn parse(source: &str) -> Result<BlueprintDefinition, BlueprintError> {
                     return Err(BlueprintError::InvalidAttributeDeclaration(attribute.code));
                 }
                 if let Some(target_blueprint) = &attribute.target_blueprint {
-                    validate_non_empty(target_blueprint, "attribute target_blueprint")?;
+                    validate_code(target_blueprint, "attribute target_blueprint")?;
                 }
                 if !matches!(attribute.context_fallback.as_str(), "default" | "none") {
                     return Err(BlueprintError::InvalidContextFallback {
@@ -421,6 +423,17 @@ pub fn raw_hash(source: &str) -> String {
 fn validate_non_empty(value: &str, field: &'static str) -> Result<(), BlueprintError> {
     if value.trim().is_empty() {
         return Err(BlueprintError::EmptyField(field));
+    }
+    Ok(())
+}
+
+fn validate_code(value: &str, field: &'static str) -> Result<(), BlueprintError> {
+    if value.is_empty()
+        || !value
+            .chars()
+            .all(|character| character.is_ascii_alphanumeric() || character == '_')
+    {
+        return Err(BlueprintError::InvalidCode { field });
     }
     Ok(())
 }

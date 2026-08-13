@@ -154,6 +154,32 @@ from = "seo.meta_title"
 }
 
 #[test]
+fn rejects_codes_outside_the_context_code_character_set() {
+    let source = r#"
+format_version = 1
+code = "product"
+name = "Product"
+kind = "entity"
+
+[display.dropdown_option]
+fields = ["title"]
+
+[[attributes]]
+code = "title"
+value_type = "string"
+"#;
+    for replacement in ["product-name", "product name", "product.name", ""] {
+        assert!(parse(&source.replacen("product", replacement, 1)).is_err());
+    }
+    for replacement in ["page-title", "page title", "page.title", ""] {
+        assert!(
+            parse(&source.replace("code = \"title\"", &format!("code = \"{replacement}\"")))
+                .is_err()
+        );
+    }
+}
+
+#[test]
 fn compiles_relationship_target_blueprint() {
     let source = r#"
 format_version = 1

@@ -13,6 +13,9 @@ kind = "entity"
 `kind` is either `entity` or `mixin`. Mixins can be included but cannot create
 entities.
 
+Blueprint codes, attribute codes, include codes, and relationship target
+blueprint codes contain only ASCII letters, numbers, and underscores.
+
 ## Attributes
 
 Every attribute declares exactly one of `value_type` or `from`. Supported value
