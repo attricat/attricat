@@ -51,6 +51,7 @@ enum Command {
 
 #[derive(Subcommand)]
 enum BlueprintCommand {
+    List,
     Create(SourceInput),
     Revision {
         blueprint_id: Uuid,
@@ -95,13 +96,29 @@ enum ContextCommand {
     Get {
         code: String,
     },
+    Update {
+        context_id: Uuid,
+        #[arg(long)]
+        parent_id: Uuid,
+        #[arg(long)]
+        data: String,
+    },
+    Delete {
+        context_id: Uuid,
+    },
 }
 
 #[derive(Subcommand)]
 enum EntityCommand {
     Create {
         #[arg(long)]
-        file: PathBuf,
+        blueprint: String,
+        #[arg(long)]
+        version: Option<i64>,
+        #[arg(long)]
+        values: PathBuf,
+        #[arg(long)]
+        context_id: Option<Uuid>,
     },
     Get {
         entity_id: Uuid,
@@ -124,6 +141,37 @@ enum EntityCommand {
         relationship_depth: Option<u8>,
         #[arg(long)]
         relationship_limit: Option<u32>,
+    },
+    ResolvedPreview {
+        entity_id: Uuid,
+        #[arg(long)]
+        context_id: Uuid,
+    },
+    Search {
+        #[arg(long)]
+        blueprint: String,
+        #[arg(long)]
+        version: Option<i64>,
+        #[arg(long, default_value = "")]
+        query: String,
+        #[arg(long, default_value_t = 25)]
+        size: u32,
+        #[arg(long)]
+        cursor: Option<String>,
+    },
+    Form {
+        entity_id: Uuid,
+    },
+    Update {
+        entity_id: Uuid,
+        #[arg(long)]
+        values: Option<PathBuf>,
+        #[arg(long)]
+        relationships: Option<PathBuf>,
+        #[arg(long)]
+        remove_values: Option<PathBuf>,
+        #[arg(long)]
+        context_id: Option<Uuid>,
     },
 }
 
@@ -216,14 +264,6 @@ struct ContextFile {
 
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
-struct EntityFile {
-    blueprint_id: Uuid,
-    blueprint_version: i64,
-    projections: Option<toml::Value>,
-}
-
-#[derive(Deserialize)]
-#[serde(deny_unknown_fields)]
 struct ValueFile {
     values: Vec<ValueInput>,
 }
@@ -243,6 +283,19 @@ struct ValueInput {
 #[serde(deny_unknown_fields)]
 struct RelationshipFile {
     relationships: Vec<RelationshipInput>,
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct RemoveValuesFile {
+    remove_values: Vec<RemoveValueInput>,
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct RemoveValueInput {
+    attribute_code: String,
+    context_id: Option<Uuid>,
 }
 
 #[derive(Deserialize)]
@@ -281,6 +334,9 @@ async fn run(cli: Cli) -> Result<String, CliError> {
     match cli.command {
         Command::Health => request(&client, &server, Method::GET, "/health", None).await,
         Command::Blueprint { command } => match command {
+            BlueprintCommand::List => {
+                request(&client, &server, Method::GET, "/blueprints", None).await
+            }
             BlueprintCommand::Create(source) => {
                 let definition = read_source(source)?;
                 request(
@@ -373,15 +429,49 @@ async fn run(cli: Cli) -> Result<String, CliError> {
                 )
                 .await
             }
+            ContextCommand::Update {
+                context_id,
+                parent_id,
+                data,
+            } => request(
+                &client,
+                &server,
+                Method::PUT,
+                &format!("/contexts/id/{}", segment(context_id)),
+                Some(json!({
+                    "parent_id": parent_id,
+                    "data": serde_json::from_str::<Value>(&data)
+                        .map_err(|error| CliError::Input(format!("invalid --data JSON: {error}")))?,
+                })),
+            )
+            .await,
+            ContextCommand::Delete { context_id } => {
+                request(
+                    &client,
+                    &server,
+                    Method::DELETE,
+                    &format!("/contexts/id/{}", segment(context_id)),
+                    None,
+                )
+                .await
+            }
         },
         Command::Entity { command } => match command {
-            EntityCommand::Create { file } => {
+            EntityCommand::Create {
+                blueprint,
+                version,
+                values,
+                context_id,
+            } => {
                 request(
                     &client,
                     &server,
                     Method::POST,
-                    "/entities",
-                    Some(entity_body_from_file(&file)?),
+                    "/v1/entities",
+                    Some(json!({
+                        "blueprint": { "code": blueprint, "version": version },
+                        "values": values_body_from_file(&values, context_id)?["values"].clone(),
+                    })),
                 )
                 .await
             }
@@ -444,6 +534,75 @@ async fn run(cli: Cli) -> Result<String, CliError> {
                     }
                 );
                 request(&client, &server, Method::GET, &path, None).await
+            }
+            EntityCommand::ResolvedPreview {
+                entity_id,
+                context_id,
+            } => {
+                request(
+                    &client,
+                    &server,
+                    Method::GET,
+                    &format!(
+                        "/entities/{}/resolved-preview?context_id={}",
+                        segment(entity_id),
+                        segment(context_id)
+                    ),
+                    None,
+                )
+                .await
+            }
+            EntityCommand::Search {
+                blueprint,
+                version,
+                query,
+                size,
+                cursor,
+            } => {
+                request(
+                    &client,
+                    &server,
+                    Method::POST,
+                    "/v1/entities/search",
+                    Some(json!({
+                        "blueprint": { "code": blueprint, "version": version },
+                        "query": query,
+                        "filters": [],
+                        "page": { "size": size, "cursor": cursor },
+                    })),
+                )
+                .await
+            }
+            EntityCommand::Form { entity_id } => {
+                request(
+                    &client,
+                    &server,
+                    Method::GET,
+                    &format!("/v1/entities/{}", segment(entity_id)),
+                    None,
+                )
+                .await
+            }
+            EntityCommand::Update {
+                entity_id,
+                values,
+                relationships,
+                remove_values,
+                context_id,
+            } => {
+                request(
+                    &client,
+                    &server,
+                    Method::PUT,
+                    &format!("/v1/entities/{}", segment(entity_id)),
+                    Some(form_update_body(
+                        values.as_ref(),
+                        relationships.as_ref(),
+                        remove_values.as_ref(),
+                        context_id,
+                    )?),
+                )
+                .await
             }
         },
         Command::Value { command } => match command {
@@ -526,18 +685,6 @@ fn context_body_from_file(path: &PathBuf) -> Result<Value, CliError> {
     Ok(
         json!({ "code": input.code, "data": toml_to_json(input.data)?, "parent_id": input.parent_id }),
     )
-}
-
-fn entity_body_from_file(path: &PathBuf) -> Result<Value, CliError> {
-    let input: EntityFile = parse_toml_file(path)?;
-    let mut body = json!({
-        "blueprint_id": input.blueprint_id,
-        "blueprint_version": input.blueprint_version,
-    });
-    if let Some(projections) = input.projections {
-        body["projections"] = toml_to_json(projections)?;
-    }
-    Ok(body)
 }
 
 fn values_body_from_file(path: &PathBuf, context_id: Option<Uuid>) -> Result<Value, CliError> {
@@ -642,6 +789,55 @@ fn relationships_body(
     Ok(json!({ "relationships": relationships }))
 }
 
+fn form_update_body(
+    values_path: Option<&PathBuf>,
+    relationships_path: Option<&PathBuf>,
+    remove_values_path: Option<&PathBuf>,
+    context_id: Option<Uuid>,
+) -> Result<Value, CliError> {
+    let values = match values_path {
+        Some(path) => values_body_from_file(path, context_id)?["values"].clone(),
+        None => Value::Array(Vec::new()),
+    };
+    if values
+        .as_array()
+        .is_some_and(|items| items.iter().any(|item| item["kind"] == "relationship"))
+    {
+        return Err(CliError::Input(
+            "--values accepts scalar values only; use --relationships for relationship sets"
+                .to_owned(),
+        ));
+    }
+    let relationships = match relationships_path {
+        Some(path) => relationships_body_from_file(path, context_id)?["relationships"].clone(),
+        None => Value::Array(Vec::new()),
+    };
+    let remove_values = match remove_values_path {
+        Some(path) => remove_values_body_from_file(path, context_id)?,
+        None => Value::Array(Vec::new()),
+    };
+    Ok(json!({ "values": values, "relationships": relationships, "remove_values": remove_values }))
+}
+
+fn remove_values_body_from_file(
+    path: &PathBuf,
+    default_context_id: Option<Uuid>,
+) -> Result<Value, CliError> {
+    let input: RemoveValuesFile = parse_toml_file(path)?;
+    Ok(Value::Array(
+        input
+            .remove_values
+            .into_iter()
+            .map(|value| {
+                json!({
+                    "attribute_code": value.attribute_code,
+                    "context_id": value.context_id.or(default_context_id),
+                })
+            })
+            .collect(),
+    ))
+}
+
 fn parse_toml_file<T: for<'de> Deserialize<'de>>(path: &PathBuf) -> Result<T, CliError> {
     let source = fs::read_to_string(path).map_err(|error| CliError::Input(error.to_string()))?;
     toml::from_str(&source).map_err(|error| CliError::Input(format!("invalid TOML: {error}")))
@@ -706,6 +902,9 @@ async fn request(
     let body = String::from_utf8(body).map_err(|_| CliError::InvalidResponse)?;
 
     if status.is_success() {
+        if status == reqwest::StatusCode::NO_CONTENT {
+            return Ok("null".to_owned());
+        }
         serde_json::from_str::<Value>(&body).map_err(|_| CliError::InvalidResponse)?;
         return Ok(body);
     }
@@ -843,6 +1042,43 @@ target_entity_ids = [
     }
 
     #[test]
+    fn combines_entity_update_files_into_the_form_contract() {
+        let values = tempfile::NamedTempFile::new().unwrap();
+        fs::write(
+            values.path(),
+            "[[values]]\nkind = \"scalar\"\nattribute_code = \"title\"\nvalue = \"Updated shirt\"\n",
+        )
+        .unwrap();
+        let removals = tempfile::NamedTempFile::new().unwrap();
+        fs::write(
+            removals.path(),
+            "[[remove_values]]\nattribute_code = \"subtitle\"\n",
+        )
+        .unwrap();
+        let context_id = Uuid::parse_str("00000000-0000-4000-8000-000000000001").unwrap();
+
+        assert_eq!(
+            form_update_body(
+                Some(&values.path().to_path_buf()),
+                None,
+                Some(&removals.path().to_path_buf()),
+                Some(context_id),
+            )
+            .unwrap(),
+            json!({
+                "values": [{
+                    "kind": "scalar",
+                    "attribute_code": "title",
+                    "context_id": context_id,
+                    "value": "Updated shirt"
+                }],
+                "relationships": [],
+                "remove_values": [{ "attribute_code": "subtitle", "context_id": context_id }]
+            })
+        );
+    }
+
+    #[test]
     fn rejects_incompatible_value_fields_and_unknown_toml_keys() {
         let relationship_with_value = r#"
 [[values]]
@@ -863,14 +1099,6 @@ value = "Blue shirt"
 "#;
         let input: ValueFile = toml::from_str(conflicting_selectors).unwrap();
         assert!(matches!(values_body(input, None), Err(CliError::Input(_))));
-
-        let unknown_key = r#"
-code = "shirt-001"
-blueprint_id = "00000000-0000-0000-0000-000000000001"
-blueprint_version = 1
-blueprint_verison = 1
-"#;
-        assert!(toml::from_str::<EntityFile>(unknown_key).is_err());
     }
 
     #[test]

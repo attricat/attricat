@@ -2,7 +2,12 @@ import { useMutation, useQuery } from '@tanstack/react-query';
 import { Link, useNavigate } from '@tanstack/react-router';
 import { Alert, Box, MenuItem, TextField, Typography } from '@mui/material';
 import { useState } from 'react';
-import { getEntityForm, listContexts, updateEntity } from './api';
+import {
+  getEntityForm,
+  getResolvedEntityPreview,
+  listContexts,
+  updateEntity,
+} from './api';
 import { EntityForm } from './components/EntityForm';
 import { EntityPage } from './components/EntityPage';
 import { valuesForForm } from './entity-form';
@@ -32,6 +37,13 @@ export const EditEntityPage = ({ entityId }: { entityId: string }) => {
   const contextId =
     selectedContext ||
     (contexts.data?.find((context) => context.code === 'default')?.id ?? null);
+  const resolvedPreview = useQuery({
+    queryKey: contextId
+      ? entityQueryKeys.resolvedPreview(entityId, contextId)
+      : ['entity-resolved-preview'],
+    queryFn: () => getResolvedEntityPreview(entityId, contextId!),
+    enabled: contextId !== null,
+  });
   return (
     <EntityPage title="Edit entity">
       <Box sx={{ mt: 1 }}>
@@ -42,11 +54,16 @@ export const EditEntityPage = ({ entityId }: { entityId: string }) => {
       {entityForm.isPending && (
         <Typography sx={{ mt: 4 }}>Loading entity...</Typography>
       )}
-      {(entityForm.error || update.error) && (
+        {(entityForm.error || update.error) && (
         <Alert severity="error" sx={{ mt: 4 }}>
           {(entityForm.error ?? update.error)?.message}
         </Alert>
-      )}
+        )}
+        {resolvedPreview.isError && (
+          <Alert severity="error" sx={{ mt: 4 }}>
+            {resolvedPreview.error.message}
+          </Alert>
+        )}
       {entityForm.data && (
         <>
           <TextField
@@ -55,7 +72,7 @@ export const EditEntityPage = ({ entityId }: { entityId: string }) => {
             label="Context"
             onChange={(event) => setSelectedContext(event.target.value)}
             sx={{ mt: 4 }}
-            value={selectedContext}
+            value={contextId ?? ''}
           >
             {contexts.data?.map((context) => (
               <MenuItem key={context.id} value={context.id}>
@@ -68,6 +85,7 @@ export const EditEntityPage = ({ entityId }: { entityId: string }) => {
             blueprint={entityForm.data.blueprint}
             contextId={contextId}
             existingValues={entityForm.data.values}
+            resolvedValues={resolvedPreview.data?.values}
             initialValues={valuesForForm(
               entityForm.data.blueprint.attributes,
               entityForm.data.values,

@@ -87,7 +87,7 @@ const resolvedEntityPreviewSchema = z.object({
   values: z.record(
     z.string(),
     z.object({
-      value: z.unknown(),
+      value: scalarValueSchema,
       source_context: z.object({ id: uuidSchema, code: z.string() }),
     }),
   ),

@@ -21,3 +21,4 @@ uuid = { version = "1", features = ["serde"] }
 
 [dev-dependencies]
 axum = "0.8"
+tempfile = "3"

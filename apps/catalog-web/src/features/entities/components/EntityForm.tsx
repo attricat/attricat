@@ -20,6 +20,7 @@ import {
   type Attribute,
   type BlueprintWithAttributes,
   type NewAttributeValue,
+  type ResolvedEntityPreview,
 } from '../api';
 import {
   relationshipTargetsForForm,
@@ -36,6 +37,7 @@ type EntityFormProps = {
   initialValues?: ReturnType<typeof valuesForForm>;
   contextId?: string | null;
   existingValues?: NewAttributeValue[];
+  resolvedValues?: ResolvedEntityPreview['values'];
   isLoadingBlueprint?: boolean;
   error?: Error | null;
   onLoadBlueprint?: (code: string, version?: number) => void;
@@ -52,6 +54,7 @@ export const EntityForm = ({
   initialValues = {},
   contextId = null,
   existingValues = [],
+  resolvedValues = {},
   isLoadingBlueprint = false,
   error,
   onLoadBlueprint,
@@ -161,14 +164,18 @@ export const EntityForm = ({
                       item.attribute_code === attribute.code &&
                       (item.context_id ?? null) === contextId,
                   );
-                  const inherited = false;
+                  const resolvedValue = resolvedValues[attribute.code];
+                  const inherited =
+                    !localValueExists &&
+                    resolvedValue !== undefined &&
+                    resolvedValue.source_context.id !== contextId;
                   const defaultOnly =
                     contextId !== null &&
                     attribute.context_editable === 'default';
                   const helperText = defaultOnly
                     ? 'Managed in Default'
                     : inherited
-                      ? 'Using an inherited value'
+                      ? `Using ${resolvedValue.source_context.code}: ${valueForField(resolvedValue.value)}`
                       : undefined;
                   const handleChange = (nextValue: string) =>
                     field.handleChange({

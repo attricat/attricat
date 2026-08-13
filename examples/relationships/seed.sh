@@ -7,30 +7,24 @@ run_catalog() { $catalog_bin "$@"; }
 
 default_id="$(run_catalog context get default | jq -r '.id')"
 
-category_blueprint="$(run_catalog blueprint create --file examples/relationships/category.toml | jq -r '.blueprint.id')"
-color_blueprint="$(run_catalog blueprint create --file examples/relationships/color.toml | jq -r '.blueprint.id')"
-product_blueprint="$(run_catalog blueprint create --file examples/relationships/product.toml | jq -r '.blueprint.id')"
+run_catalog blueprint create --file examples/relationships/category.toml >/dev/null
+run_catalog blueprint create --file examples/relationships/color.toml >/dev/null
+run_catalog blueprint create --file examples/relationships/product.toml >/dev/null
 
 pl_id="$(run_catalog context create --code PL --data '{"market":"PL"}' --parent-id "$default_id" | jq -r '.id')"
 pl_b2c_id="$(run_catalog context create --code PL-b2c --data '{"audience":"b2c"}' --parent-id "$pl_id" | jq -r '.id')"
 pl_b2c_web_id="$(run_catalog context create --code PL-b2c-web --data '{"channel":"web"}' --parent-id "$pl_b2c_id" | jq -r '.id')"
 
-entity_file="$(mktemp)"
 relationship_file="$(mktemp)"
-trap 'rm -f "$entity_file" "$relationship_file"' EXIT
+trap 'rm -f "$relationship_file"' EXIT
 
-create_entity() {
-  local blueprint_id="$1"
-  printf 'blueprint_id = "%s"\nblueprint_version = 1\n' "$blueprint_id" > "$entity_file"
-  run_catalog entity create --file "$entity_file" | jq -r '.id'
-}
-
-category_entity="$(create_entity "$category_blueprint")"
-run_catalog value append "$category_entity" --file examples/relationships/category-values.toml --context-id "$default_id" >/dev/null
-color_entity="$(create_entity "$color_blueprint")"
-run_catalog value append "$color_entity" --file examples/relationships/color-values.toml --context-id "$default_id" >/dev/null
-product_entity="$(create_entity "$product_blueprint")"
-run_catalog value append "$product_entity" --file examples/relationships/product-values.toml --context-id "$default_id" >/dev/null
+run_catalog entity create --blueprint category --values examples/relationships/category-values.toml --context-id "$default_id" >/dev/null
+run_catalog entity create --blueprint color --values examples/relationships/color-values.toml --context-id "$default_id" >/dev/null
+category_entity="$(run_catalog entity search --blueprint category --query Shirts | jq -r '.items[0].id')"
+color_entity="$(run_catalog entity search --blueprint color --query Navy | jq -r '.items[0].id')"
+test "$category_entity" != "null"
+test "$color_entity" != "null"
+product_entity="$(run_catalog entity create --blueprint product --values examples/relationships/product-values.toml --context-id "$default_id" | jq -r '.id')"
 run_catalog value append "$product_entity" --file examples/relationships/product-pl-values.toml --context-id "$pl_id" >/dev/null
 run_catalog value append "$product_entity" --file examples/relationships/product-pl-b2c-values.toml --context-id "$pl_b2c_id" >/dev/null
 

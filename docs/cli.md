@@ -29,6 +29,7 @@ cargo run -p catalog-cli -- health
 ```sh
 catalog health
 
+catalog blueprint list
 catalog blueprint create --file product.toml
 catalog blueprint create --stdin
 catalog blueprint revision <blueprint-id> --file product-v2.toml
@@ -41,11 +42,17 @@ catalog context list
 catalog context create --file locale.toml
 catalog context create --code en_GB --data '{"language":"en-GB"}' --parent-id <context-id>
 catalog context get en-GB
+catalog context update <context-id> --parent-id <context-id> --data '{"language":"en-GB"}'
+catalog context delete <context-id>
 
-catalog entity create --file product.toml
+catalog entity create --blueprint product --values values.toml [--version <version>] [--context-id <context-id>]
 catalog entity get <entity-id>
 catalog entity list --blueprint <code> --related-from <entity-id> --relationship <attribute-code> [--limit <limit>] [--cursor <cursor>]
 catalog entity preview <entity-id> [--relationship-depth <depth>] [--relationship-limit <limit>]
+catalog entity resolved-preview <entity-id> --context-id <context-id>
+catalog entity search --blueprint <code> [--version <version>] [--query <text>] [--size <size>] [--cursor <cursor>]
+catalog entity form <entity-id>
+catalog entity update <entity-id> [--values values.toml] [--relationships relationships.toml] [--remove-values removals.toml] [--context-id <context-id>]
 
 catalog value append <entity-id> --file values.toml --context-id <context-id>
 catalog value current <entity-id>
@@ -60,20 +67,16 @@ scalar values only, or request deeper traversal up to the API's configured
 maximum. `--relationship-limit` bounds inline targets per relationship; use
 `entity list` for paginated browsing.
 
+`entity resolved-preview` resolves scalar values for one requested context and
+includes the context that supplied each value. `entity form` returns the pinned
+blueprint, current direct facts, and form context. `entity update` uses the v1
+atomic form endpoint: scalar values append history, relationship files replace
+the supplied relationship sets, and removal files remove scalar overrides.
+
 Blueprint files are sent unchanged as the API's TOML `definition`, preserving
 the raw-source hash. See `database.md` for the blueprint grammar.
 
 ## Input Files
-
-Entity file:
-
-```toml
-blueprint_id = "00000000-0000-0000-0000-000000000001"
-blueprint_version = 1
-
-[projections]
-source = "fixture"
-```
 
 Context file:
 
@@ -130,12 +133,21 @@ attribute_code = "categories"
 target_entity_ids = ["00000000-0000-0000-0000-000000000004"]
 ```
 
+Scalar removals used by `entity update --remove-values` use:
+
+```toml
+[[remove_values]]
+attribute_code = "subtitle"
+```
+
 ## Example Seed
 
 The relationship example creates category, color, and product blueprints; typed
 scalar values; category and color relationships; and the context tree `default
 -> PL -> PL-b2c -> PL-b2c-web`. It demonstrates nearest-ancestor scalar
-fallback with Polish title and price overrides.
+fallback with Polish title and price overrides. It creates category and color
+entities first, retrieves their IDs through `entity search`, then creates the
+product and attaches those relationship targets.
 
 Build the client once, start the API, then run:
 
