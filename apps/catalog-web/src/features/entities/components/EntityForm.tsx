@@ -73,14 +73,18 @@ export const EntityForm = ({
         return;
       }
       if (blueprint) {
+        const editableAttributes = blueprint.attributes.filter(
+          (attribute) =>
+            contextId === null || attribute.context_editable !== 'default',
+        );
         onSubmit({
           values: serializeAttributeValues(
-            blueprint.attributes,
+            editableAttributes,
             value.fields,
             contextId,
           ),
           relationships: relationshipTargetsForForm(
-            blueprint.attributes,
+            editableAttributes,
             value.fields,
             contextId,
           ),
@@ -89,6 +93,9 @@ export const EntityForm = ({
               (item) =>
                 item.kind === 'scalar' &&
                 (item.context_id ?? null) === contextId &&
+                editableAttributes.some(
+                  (attribute) => attribute.code === item.attribute_code,
+                ) &&
                 !value.fields[item.attribute_code]?.trim(),
             )
             .map((item) => ({
@@ -164,6 +171,13 @@ export const EntityForm = ({
                     !localValueExists &&
                     attribute.context_fallback !== 'none' &&
                     defaultValue?.kind === 'scalar';
+                  const defaultOnly =
+                    contextId !== null && attribute.context_editable === 'default';
+                  const helperText = defaultOnly
+                    ? 'Managed in Default'
+                    : inherited
+                      ? `Using default: ${String(defaultValue.value)}`
+                      : undefined;
                   const handleChange = (nextValue: string) =>
                     field.handleChange({
                       ...field.state.value,
@@ -174,6 +188,7 @@ export const EntityForm = ({
                     <RelationshipField
                       key={attribute.code}
                       attribute={attribute}
+                      disabled={defaultOnly}
                       onChange={handleChange}
                       value={value}
                     />
@@ -181,11 +196,8 @@ export const EntityForm = ({
                     <TextField
                       key={attribute.code}
                       fullWidth
-                      helperText={
-                        inherited
-                          ? `Using default: ${String(defaultValue.value)}`
-                          : undefined
-                      }
+                      disabled={defaultOnly}
+                      helperText={helperText}
                       select
                       label={attribute.code}
                       onChange={(event) => handleChange(event.target.value)}
@@ -199,11 +211,8 @@ export const EntityForm = ({
                     <TextField
                       key={attribute.code}
                       fullWidth
-                      helperText={
-                        inherited
-                          ? `Using default: ${String(defaultValue.value)}`
-                          : undefined
-                      }
+                      disabled={defaultOnly}
+                      helperText={helperText}
                       label={attribute.code}
                       onChange={(event) => handleChange(event.target.value)}
                       placeholder={
@@ -250,10 +259,12 @@ export const EntityForm = ({
 
 const RelationshipField = ({
   attribute,
+  disabled = false,
   onChange,
   value,
 }: {
   attribute: Attribute;
+  disabled?: boolean;
   onChange: (value: string) => void;
   value: string;
 }) => {
@@ -267,6 +278,7 @@ const RelationshipField = ({
     return (
       <TextField
         fullWidth
+        disabled={disabled}
         label={attribute.code}
         helperText="Comma-separated entity UUIDs"
         onChange={(event) => onChange(event.target.value)}
@@ -301,6 +313,7 @@ const RelationshipField = ({
     <FormControl fullWidth>
       <InputLabel id={`${attribute.code}-label`}>{attribute.code}</InputLabel>
       <Select
+        disabled={disabled}
         multiple
         label={attribute.code}
         labelId={`${attribute.code}-label`}

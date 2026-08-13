@@ -119,6 +119,11 @@ from = "seo.meta_title"
 [[attributes]]
 code = "related_products"
 value_type = "relationship"
+
+[[attributes]]
+code = "stock"
+value_type = "integer"
+context_editable = "default"
 "#;
     let blueprint = create_blueprint(&client, &base_url, product_definition).await;
     let blueprint_id: Uuid = blueprint["blueprint"]["id"]
@@ -154,6 +159,7 @@ value_type = "relationship"
             json!({ "code": "title", "value_type": "string", "position": 0 }),
             json!({ "code": "meta_title", "value_type": "string", "position": 1 }),
             json!({ "code": "related_products", "value_type": "relationship", "position": 2 }),
+            json!({ "code": "stock", "value_type": "integer", "position": 3 }),
         ],
         "attribute output should be ordered and only selected mixin fields should materialize"
     );
@@ -303,6 +309,28 @@ tags = ["searchable"]
         .json()
         .await
         .unwrap();
+    let default_only_write = client
+        .post(format!(
+            "{base_url}/entities/{}/values",
+            source["id"].as_str().unwrap()
+        ))
+        .json(&json!({ "values": [{
+            "kind": "scalar",
+            "attribute_code": "stock",
+            "context_id": context["id"],
+            "value": 4
+        }] }))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(
+        default_only_write.status(),
+        StatusCode::UNPROCESSABLE_ENTITY
+    );
+    assert_eq!(
+        default_only_write.json::<Value>().await.unwrap()["error"]["code"],
+        "invalid_input"
+    );
     assert_eq!(
         source["projections"],
         json!({ "preview": { "default": {} } })

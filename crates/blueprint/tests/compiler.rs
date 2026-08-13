@@ -39,6 +39,7 @@ from = "seo.meta_title"
                     target_blueprint: None,
                     tags: vec![],
                     context_fallback: "default".to_owned(),
+                    context_editable: "all".to_owned(),
                     position: 0,
                 },
                 EffectiveAttribute {
@@ -47,6 +48,7 @@ from = "seo.meta_title"
                     target_blueprint: None,
                     tags: vec![],
                     context_fallback: "default".to_owned(),
+                    context_editable: "all".to_owned(),
                     position: 1,
                 },
             ],
@@ -58,6 +60,7 @@ from = "seo.meta_title"
     assert_eq!(compiled.attributes.len(), 2);
     assert_eq!(compiled.attributes[0].code, "title");
     assert_eq!(compiled.attributes[0].context_fallback, "default");
+    assert_eq!(compiled.attributes[0].context_editable, "all");
     assert_eq!(compiled.attributes[0].position, 0);
     assert_eq!(compiled.attributes[1].code, "meta_title");
     assert_eq!(compiled.attributes[1].position, 1);
@@ -92,6 +95,31 @@ context_fallback = "none"
             .iter()
             .all(|attribute| attribute.context_fallback == "none")
     );
+}
+
+#[test]
+fn supports_default_only_context_editing() {
+    let source = r#"
+format_version = 1
+code = "product"
+name = "Product"
+kind = "entity"
+
+[display.dropdown_option]
+fields = ["title"]
+
+[[attributes]]
+code = "title"
+value_type = "string"
+
+[[attributes]]
+code = "stock"
+value_type = "integer"
+context_editable = "default"
+"#;
+    let compiled = compile(parse(source).unwrap(), &[], source).unwrap();
+    assert_eq!(compiled.attributes[0].context_editable, "all");
+    assert_eq!(compiled.attributes[1].context_editable, "default");
 }
 
 #[test]

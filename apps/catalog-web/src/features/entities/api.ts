@@ -14,6 +14,7 @@ export const attributeSchema = z
     value_type: valueTypeSchema,
     target_blueprint_code: z.string().nullable().optional(),
     context_fallback: z.enum(['default', 'none']).optional(),
+    context_editable: z.enum(['all', 'default']).optional(),
   })
   .passthrough();
 export const blueprintSchema = z

@@ -576,6 +576,7 @@ impl From<RepositoryError> for ApiError {
             | RepositoryError::InvalidContextCode
             | RepositoryError::InvalidContextData
             | RepositoryError::InvalidContext
+            | RepositoryError::DefaultContextOnly
             | RepositoryError::InvalidAttributeSelector => Self {
                 status: StatusCode::UNPROCESSABLE_ENTITY,
                 code: "invalid_input",

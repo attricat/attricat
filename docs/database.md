@@ -301,13 +301,10 @@ identity alongside the contextual preview:
 `GET /v1/entities/{entity_id}` returns the pinned blueprint revision, editable
 values (including `context_id`), and the same scalar-only `context` shape.
 
-Attributes may declare `context_fallback = "default"` (the default) or
-`context_fallback = "none"`. In a non-default context, an absent value or
-relationship set inherits the default-context value only under the `default`
-policy. Blank contextual string form fields remove an existing override rather
-than storing an empty string. `PUT /v1/entities/{entity_id}` accepts
-`remove_values` selectors to atomically remove scalar overrides; relationship
-sets are removed by submitting an empty context-scoped target list.
+See [Blueprint Authoring](blueprints.md) for attribute context fallback and edit
+policies. `PUT /v1/entities/{entity_id}` accepts `remove_values` selectors to
+atomically remove scalar overrides; relationship sets are removed by submitting
+an empty context-scoped target list.
 
 ## Paginated Entity Previews
 
@@ -354,118 +351,9 @@ bound to that ordering.
 
 ## Blueprint Compiler
 
-The pure `catalog-blueprint` crate parses and compiles blueprint TOML. It has no
-SQLx, PostgreSQL, Axum, or Tokio dependency. The API repository resolves pinned
-mixin revisions from PostgreSQL, passes them to the compiler, and persists only
-the resulting generated data.
-
-Every definition starts with:
-
-```toml
-format_version = 1
-code = "product"
-name = "Product"
-kind = "entity"
-```
-
-`kind` is either `entity` or `mixin`. A mixin may be included but cannot be used
-to create an entity.
-
-### Includes and Selection
-
-Includes are exact version-pinned dependencies:
-
-```toml
-[[includes]]
-alias = "seo"
-code = "seo"
-version = 2
-```
-
-An include exposes its effective attributes but does not automatically materialize
-them in the consuming blueprint. Each wanted mixin attribute must be selected:
-
-```toml
-[[attributes]]
-code = "meta_title"
-from = "seo.meta_title"
-```
-
-A local attribute is authored directly:
-
-```toml
-[[attributes]]
-code = "title"
-value_type = "string"
-tags = ["searchable"]
-```
-
-A typed relationship restricts its targets by stable blueprint code:
-
-```toml
-[[attributes]]
-code = "categories"
-value_type = "relationship"
-target_blueprint = "category"
-```
-
-An attribute declaration contains exactly one of `from` or `value_type`. Selected
-attributes retain the selected source value type and are materialized as
-attributes owned by the consuming blueprint version. The effective order is the
-local `[[attributes]]` declaration order; includes do not append fields.
-
-The following definition materializes only `title` and `meta_title`; it does not
-materialize an unselected `meta_description` offered by `seo`:
-
-```toml
-format_version = 1
-code = "product"
-name = "Product"
-kind = "entity"
-
-[display.dropdown_option]
-fields = ["title", "meta_title"]
-separator = " · "
-
-[[includes]]
-alias = "seo"
-code = "seo"
-version = 2
-
-[[attributes]]
-code = "title"
-value_type = "string"
-tags = ["searchable"]
-
-[[attributes]]
-code = "meta_title"
-from = "seo.meta_title"
-```
-
-Unknown TOML keys, invalid selectors, missing mixins, non-mixin include targets,
-and malformed definitions return `422 invalid_blueprint_definition`. Newer mixin
-versions never affect existing consumers because every include names an exact
-version.
-
-### Display Labels
-
-Every entity blueprint must define `[display.dropdown_option]`. `fields` is a
-non-empty, unique list of effective scalar attribute codes; selected mixin
-attributes are valid references. `separator` is optional and defaults to ` · `.
-Other named `[display.<name>]` definitions use the same shape and are persisted,
-but `dropdown_option` is the server-rendered label contract.
-
-```toml
-[display.dropdown_option]
-fields = ["name", "sku"]
-separator = " / "
-```
-
-Blueprint API responses expose this compiled configuration as `blueprint.display`.
-Search and paginated entity preview rows expose `display` as a context-to-label
-map. A relationship target is rendered with one `display` string, using the
-relationship context and falling back to `default` scalar values for fields
-absent in that context. Missing or null fields are omitted from the joined label.
+The pure `catalog-blueprint` crate parses and compiles blueprint TOML without
+SQLx, PostgreSQL, Axum, or Tokio dependencies. See [Blueprint
+Authoring](blueprints.md) for the definition grammar and attribute policies.
 
 ### Projection Builder TODO
 

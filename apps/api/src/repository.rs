@@ -37,6 +37,8 @@ pub enum RepositoryError {
     InvalidContextData,
     #[error("context was not found")]
     InvalidContext,
+    #[error("attribute can only be edited in the default context")]
+    DefaultContextOnly,
     #[error("attribute does not belong to the entity blueprint version")]
     AttributeNotApplicable,
     #[error("provide exactly one of attribute_id or attribute_code")]
@@ -466,9 +468,9 @@ impl CatalogRepository {
         for attribute in compiled.attributes {
             attributes.push(
                 sqlx::query_as::<_, Attribute>(
-                    r#"INSERT INTO attributes (id, blueprint_id, blueprint_version, code, value_type, target_blueprint_code, tags, context_fallback, position)
-                       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
-                       RETURNING id, blueprint_id, blueprint_version, code, value_type, target_blueprint_code, tags, context_fallback, position, created_at, updated_at, deleted_at"#,
+                    r#"INSERT INTO attributes (id, blueprint_id, blueprint_version, code, value_type, target_blueprint_code, tags, context_fallback, context_editable, position)
+                       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+                       RETURNING id, blueprint_id, blueprint_version, code, value_type, target_blueprint_code, tags, context_fallback, context_editable, position, created_at, updated_at, deleted_at"#,
                 )
                 .bind(Uuid::new_v4())
                 .bind(blueprint_id)
@@ -478,6 +480,7 @@ impl CatalogRepository {
                 .bind(attribute.target_blueprint)
                 .bind(serde_json::to_value(attribute.tags).expect("attribute tags serialize"))
                 .bind(attribute.context_fallback)
+                .bind(attribute.context_editable)
                 .bind(attribute.position)
                 .fetch_one(&mut **transaction)
                 .await?,
@@ -568,7 +571,7 @@ impl CatalogRepository {
         blueprint_version: i64,
     ) -> Result<Vec<Attribute>, RepositoryError> {
         Ok(sqlx::query_as::<_, Attribute>(
-            r#"SELECT id, blueprint_id, blueprint_version, code, value_type, target_blueprint_code, tags, context_fallback, position, created_at, updated_at, deleted_at
+            r#"SELECT id, blueprint_id, blueprint_version, code, value_type, target_blueprint_code, tags, context_fallback, context_editable, position, created_at, updated_at, deleted_at
                FROM attributes
                WHERE blueprint_id = $1 AND blueprint_version = $2 AND deleted_at IS NULL
                ORDER BY position"#,
@@ -1130,9 +1133,10 @@ impl CatalogRepository {
         let entity = self.lock_entity(&mut transaction, entity_id).await?;
         let mut values = Vec::new();
         for relationship in input.relationships {
-            let (attribute_id, target_blueprint_code) = self
+            let (attribute_id, target_blueprint_code, context_editable) = self
                 .relationship_attribute(&mut transaction, &entity, &relationship)
                 .await?;
+            self.validate_context_editable(relationship.context_id, &context_editable)?;
             // Relationship writes are set operations; collapsing duplicate IDs
             // makes a retried or malformed client payload idempotent.
             let targets: HashSet<_> = relationship.target_entity_ids.into_iter().collect();
@@ -1201,9 +1205,10 @@ impl CatalogRepository {
         for relationship in relationships {
             self.validate_context_id(transaction, relationship.context_id)
                 .await?;
-            let (attribute_id, target_blueprint_code) = self
+            let (attribute_id, target_blueprint_code, context_editable) = self
                 .relationship_attribute(transaction, entity, &relationship)
                 .await?;
+            self.validate_context_editable(relationship.context_id, &context_editable)?;
             let targets: HashSet<_> = relationship.target_entity_ids.into_iter().collect();
             for target_id in &targets {
                 self.validate_relationship_target(
@@ -1276,11 +1281,11 @@ impl CatalogRepository {
                 ),
             };
 
-        let (attribute_id, value_type, target_blueprint_code) =
+        let (attribute_id, value_type, target_blueprint_code, context_editable) =
             match (attribute_id, attribute_code) {
                 (Some(attribute_id), None) => {
-                    sqlx::query_as::<_, (Uuid, String, Option<String>)>(
-                        r#"SELECT id, value_type, target_blueprint_code
+                    sqlx::query_as::<_, (Uuid, String, Option<String>, String)>(
+                        r#"SELECT id, value_type, target_blueprint_code, context_editable
                    FROM attributes
                    WHERE id = $1
                      AND blueprint_id = $2
@@ -1294,8 +1299,8 @@ impl CatalogRepository {
                     .await?
                 }
                 (None, Some(attribute_code)) => {
-                    sqlx::query_as::<_, (Uuid, String, Option<String>)>(
-                        r#"SELECT id, value_type, target_blueprint_code
+                    sqlx::query_as::<_, (Uuid, String, Option<String>, String)>(
+                        r#"SELECT id, value_type, target_blueprint_code, context_editable
                    FROM attributes
                    WHERE code = $1
                      AND blueprint_id = $2
@@ -1313,6 +1318,7 @@ impl CatalogRepository {
             .ok_or(RepositoryError::AttributeNotApplicable)?;
 
         self.validate_context_id(transaction, context_id).await?;
+        self.validate_context_editable(context_id, &context_editable)?;
 
         if (value_type == "relationship") != is_relationship {
             return Err(RepositoryError::AttributeKindMismatch);
@@ -1380,8 +1386,8 @@ impl CatalogRepository {
     ) -> Result<(), RepositoryError> {
         self.validate_context_id(transaction, selector.context_id)
             .await?;
-        let attribute = sqlx::query_as::<_, (Uuid, String)>(
-            "SELECT id, value_type FROM attributes WHERE code = $1 AND blueprint_id = $2 AND blueprint_version = $3 AND deleted_at IS NULL",
+        let attribute = sqlx::query_as::<_, (Uuid, String, String)>(
+            "SELECT id, value_type, context_editable FROM attributes WHERE code = $1 AND blueprint_id = $2 AND blueprint_version = $3 AND deleted_at IS NULL",
         )
         .bind(selector.attribute_code)
         .bind(entity.blueprint_id)
@@ -1392,6 +1398,7 @@ impl CatalogRepository {
         if attribute.1 == "relationship" {
             return Err(RepositoryError::AttributeKindMismatch);
         }
+        self.validate_context_editable(selector.context_id, &attribute.2)?;
         sqlx::query(
             "UPDATE attribute_values SET latest = false WHERE entity_id = $1 AND attribute_id = $2 AND context_id IS NOT DISTINCT FROM $3 AND relationship_target_entity_id IS NULL AND latest",
         )
@@ -1418,6 +1425,17 @@ impl CatalogRepository {
             if !exists {
                 return Err(RepositoryError::InvalidContext);
             }
+        }
+        Ok(())
+    }
+
+    fn validate_context_editable(
+        &self,
+        context_id: Option<Uuid>,
+        context_editable: &str,
+    ) -> Result<(), RepositoryError> {
+        if context_id.is_some() && context_editable == "default" {
+            return Err(RepositoryError::DefaultContextOnly);
         }
         Ok(())
     }
@@ -1530,20 +1548,20 @@ impl CatalogRepository {
         transaction: &mut Transaction<'_, Postgres>,
         entity: &Entity,
         relationship: &RelationshipTargets,
-    ) -> Result<(Uuid, Option<String>), RepositoryError> {
+    ) -> Result<(Uuid, Option<String>, String), RepositoryError> {
         let attribute = match (relationship.attribute_id, relationship.attribute_code.as_deref()) {
-            (Some(id), None) => sqlx::query_as::<_, (Uuid, String, Option<String>)>(
-                "SELECT id, value_type, target_blueprint_code FROM attributes WHERE id = $1 AND blueprint_id = $2 AND blueprint_version = $3 AND deleted_at IS NULL",
+            (Some(id), None) => sqlx::query_as::<_, (Uuid, String, Option<String>, String)>(
+                "SELECT id, value_type, target_blueprint_code, context_editable FROM attributes WHERE id = $1 AND blueprint_id = $2 AND blueprint_version = $3 AND deleted_at IS NULL",
             ).bind(id).bind(entity.blueprint_id).bind(entity.blueprint_version).fetch_optional(&mut **transaction).await?,
-            (None, Some(code)) => sqlx::query_as::<_, (Uuid, String, Option<String>)>(
-                "SELECT id, value_type, target_blueprint_code FROM attributes WHERE code = $1 AND blueprint_id = $2 AND blueprint_version = $3 AND deleted_at IS NULL",
+            (None, Some(code)) => sqlx::query_as::<_, (Uuid, String, Option<String>, String)>(
+                "SELECT id, value_type, target_blueprint_code, context_editable FROM attributes WHERE code = $1 AND blueprint_id = $2 AND blueprint_version = $3 AND deleted_at IS NULL",
             ).bind(code).bind(entity.blueprint_id).bind(entity.blueprint_version).fetch_optional(&mut **transaction).await?,
             _ => return Err(RepositoryError::InvalidAttributeSelector),
         }.ok_or(RepositoryError::AttributeNotApplicable)?;
         if attribute.1 != "relationship" {
             return Err(RepositoryError::AttributeKindMismatch);
         }
-        Ok((attribute.0, attribute.2))
+        Ok((attribute.0, attribute.2, attribute.3))
     }
 
     async fn validate_relationship_target(

@@ -30,6 +30,7 @@ pub struct Attribute {
     pub target_blueprint_code: Option<String>,
     pub tags: Value,
     pub context_fallback: String,
+    pub context_editable: String,
     pub position: i64,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,

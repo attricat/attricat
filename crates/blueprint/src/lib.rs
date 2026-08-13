@@ -59,6 +59,7 @@ pub enum AttributeDeclaration {
         target_blueprint: Option<String>,
         tags: Vec<String>,
         context_fallback: String,
+        context_editable: String,
     },
     Selection {
         code: String,
@@ -82,6 +83,7 @@ pub struct EffectiveAttribute {
     pub target_blueprint: Option<String>,
     pub tags: Vec<String>,
     pub context_fallback: String,
+    pub context_editable: String,
     pub position: i64,
 }
 
@@ -137,6 +139,11 @@ pub enum BlueprintError {
         code: String,
         context_fallback: String,
     },
+    #[error("attribute '{code}' has invalid context_editable '{context_editable}'")]
+    InvalidContextEditable {
+        code: String,
+        context_editable: String,
+    },
 }
 
 #[derive(Deserialize)]
@@ -163,11 +170,17 @@ struct RawAttributeDeclaration {
     tags: Vec<String>,
     #[serde(default = "default_context_fallback")]
     context_fallback: String,
+    #[serde(default = "default_context_editable")]
+    context_editable: String,
     from: Option<String>,
 }
 
 fn default_context_fallback() -> String {
     "default".to_owned()
+}
+
+fn default_context_editable() -> String {
+    "all".to_owned()
 }
 
 pub fn parse(source: &str) -> Result<BlueprintDefinition, BlueprintError> {
@@ -232,6 +245,12 @@ pub fn parse(source: &str) -> Result<BlueprintDefinition, BlueprintError> {
                         context_fallback: attribute.context_fallback,
                     });
                 }
+                if !matches!(attribute.context_editable.as_str(), "all" | "default") {
+                    return Err(BlueprintError::InvalidContextEditable {
+                        code: attribute.code,
+                        context_editable: attribute.context_editable,
+                    });
+                }
                 let mut tags = HashSet::new();
                 for tag in &attribute.tags {
                     if tag.trim().is_empty() || !tags.insert(tag.as_str()) {
@@ -244,6 +263,7 @@ pub fn parse(source: &str) -> Result<BlueprintDefinition, BlueprintError> {
                     target_blueprint: attribute.target_blueprint,
                     tags: attribute.tags,
                     context_fallback: attribute.context_fallback,
+                    context_editable: attribute.context_editable,
                 }
             }
             (None, Some(source)) if attribute.target_blueprint.is_none() => {
@@ -297,51 +317,59 @@ pub fn compile(
 
     let mut attributes = Vec::with_capacity(definition.attributes.len());
     for (position, declaration) in definition.attributes.iter().enumerate() {
-        let (code, value_type, target_blueprint, tags, context_fallback) = match declaration {
-            AttributeDeclaration::Local {
-                code,
-                value_type,
-                target_blueprint,
-                tags,
-                context_fallback,
-            } => (
-                code.clone(),
-                value_type.clone(),
-                target_blueprint.clone(),
-                tags.clone(),
-                context_fallback.clone(),
-            ),
-            AttributeDeclaration::Selection {
-                code,
-                include_alias,
-                attribute_code,
-            } => {
-                let include = resolved_by_alias
-                    .get(include_alias.as_str())
-                    .ok_or_else(|| BlueprintError::UnknownIncludeAlias(include_alias.clone()))?;
-                let attribute = include
-                    .attributes
-                    .iter()
-                    .find(|attribute| attribute.code == *attribute_code)
-                    .ok_or_else(|| BlueprintError::UnknownIncludedAttribute {
-                        alias: include_alias.clone(),
-                        attribute: attribute_code.clone(),
-                    })?;
-                (
+        let (code, value_type, target_blueprint, tags, context_fallback, context_editable) =
+            match declaration {
+                AttributeDeclaration::Local {
+                    code,
+                    value_type,
+                    target_blueprint,
+                    tags,
+                    context_fallback,
+                    context_editable,
+                } => (
                     code.clone(),
-                    attribute.value_type.clone(),
-                    attribute.target_blueprint.clone(),
-                    attribute.tags.clone(),
-                    attribute.context_fallback.clone(),
-                )
-            }
-        };
+                    value_type.clone(),
+                    target_blueprint.clone(),
+                    tags.clone(),
+                    context_fallback.clone(),
+                    context_editable.clone(),
+                ),
+                AttributeDeclaration::Selection {
+                    code,
+                    include_alias,
+                    attribute_code,
+                } => {
+                    let include =
+                        resolved_by_alias
+                            .get(include_alias.as_str())
+                            .ok_or_else(|| {
+                                BlueprintError::UnknownIncludeAlias(include_alias.clone())
+                            })?;
+                    let attribute = include
+                        .attributes
+                        .iter()
+                        .find(|attribute| attribute.code == *attribute_code)
+                        .ok_or_else(|| BlueprintError::UnknownIncludedAttribute {
+                            alias: include_alias.clone(),
+                            attribute: attribute_code.clone(),
+                        })?;
+                    (
+                        code.clone(),
+                        attribute.value_type.clone(),
+                        attribute.target_blueprint.clone(),
+                        attribute.tags.clone(),
+                        attribute.context_fallback.clone(),
+                        attribute.context_editable.clone(),
+                    )
+                }
+            };
         attributes.push(EffectiveAttribute {
             code,
             value_type,
             target_blueprint,
             tags,
             context_fallback,
+            context_editable,
             position: position as i64,
         });
     }
