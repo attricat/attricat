@@ -142,6 +142,19 @@ pub struct EntityPreviewPage {
     pub next_cursor: Option<Uuid>,
 }
 
+#[derive(Clone, Debug, Serialize)]
+pub struct EntityPreviewResponse {
+    pub entity: EntityIdentity,
+    pub context: Value,
+}
+
+#[derive(Clone, Debug, Serialize)]
+pub struct EntityIdentity {
+    pub id: Uuid,
+    pub blueprint_id: Uuid,
+    pub blueprint_version: i64,
+}
+
 #[derive(Clone, Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct SearchEntitiesRequest {
@@ -205,10 +218,12 @@ pub struct UpdateEntityFormRequest {
 pub enum FormAttributeValue {
     Scalar {
         attribute_code: String,
+        context_id: Option<Uuid>,
         value: Value,
     },
     Relationship {
         attribute_code: String,
+        context_id: Option<Uuid>,
         target_entity_id: Uuid,
     },
 }
@@ -218,4 +233,5 @@ pub struct EntityFormResponse {
     pub entity: Entity,
     pub blueprint: BlueprintWithAttributes,
     pub values: Vec<FormAttributeValue>,
+    pub context: Value,
 }

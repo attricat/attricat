@@ -52,10 +52,12 @@ catalog value replace <entity-id> --file relationships.toml
 catalog value remove <entity-id> --file relationships.toml
 ```
 
-`entity preview` resolves active relationship targets inline by default to one
-level. Set `--relationship-depth 0` for scalar values only, or request deeper
-traversal up to the API's configured maximum. `--relationship-limit` bounds
-inline targets per relationship; use `entity list` for paginated browsing.
+`entity preview` calls `/entities/{id}/preview` and resolves active relationship
+targets inline by default to one level. Its response contains `entity` metadata
+and a context-keyed preview under `context`. Set `--relationship-depth 0` for
+scalar values only, or request deeper traversal up to the API's configured
+maximum. `--relationship-limit` bounds inline targets per relationship; use
+`entity list` for paginated browsing.
 
 Blueprint files are sent unchanged as the API's TOML `definition`, preserving
 the raw-source hash. See `database.md` for the blueprint grammar.

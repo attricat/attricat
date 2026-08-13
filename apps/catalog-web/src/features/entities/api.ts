@@ -34,11 +34,13 @@ export const newAttributeValueSchema = z.discriminatedUnion('kind', [
   z.object({
     kind: z.literal(attributeValueKinds.scalar),
     attribute_code: z.string().min(1),
+    context_id: uuidSchema.nullable().optional(),
     value: scalarValueSchema,
   }),
   z.object({
     kind: z.literal(attributeValueKinds.relationship),
     attribute_code: z.string().min(1),
+    context_id: uuidSchema.nullable().optional(),
     target_entity_id: uuidSchema,
   }),
 ]);
@@ -52,7 +54,11 @@ const entityItemSchema = z.object({
   display: z.record(z.string(), z.string()),
   preview: jsonObjectSchema,
 });
-const entityPreviewSchema = z.record(z.string(), jsonObjectSchema);
+const entityContextSchema = z.record(z.string(), jsonObjectSchema);
+const entityPreviewSchema = z.object({
+  entity: entitySchema,
+  context: entityContextSchema,
+});
 const entitySearchResponseSchema = z.object({
   blueprint: blueprintWithAttributesSchema,
   items: z.array(entityItemSchema),
@@ -62,6 +68,7 @@ const entityFormResponseSchema = z.object({
   entity: entitySchema,
   blueprint: blueprintWithAttributesSchema,
   values: z.array(newAttributeValueSchema),
+  context: entityContextSchema,
 });
 const searchEntitiesRequestSchema = z.object({
   blueprint: z.object({
@@ -143,7 +150,7 @@ export const listEntityBlueprints = () => {
 export const getEntityPreview = (id: string) => {
   const entityId = uuidSchema.parse(id);
   return request(
-    `/api/entities/${encodeURIComponent(entityId)}/projections/preview`,
+    `/api/entities/${encodeURIComponent(entityId)}/preview`,
     entityPreviewSchema,
   );
 };
@@ -159,12 +166,14 @@ export const getBlueprintByCode = (code: string, version?: number) => {
 export const getEntityForm = (id: string) => {
   const entityId = uuidSchema.parse(id);
   return request(
-    `/api/v1/entities/${encodeURIComponent(entityId)}/form`,
+    `/api/v1/entities/${encodeURIComponent(entityId)}`,
     entityFormResponseSchema,
   );
 };
 
-export const createEntity = (input: z.input<typeof createEntityRequestSchema>) => {
+export const createEntity = (
+  input: z.input<typeof createEntityRequestSchema>,
+) => {
   const payload = createEntityRequestSchema.parse(input);
   return request('/api/v1/entities', entitySchema, {
     method: 'POST',

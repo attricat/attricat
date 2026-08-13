@@ -206,12 +206,12 @@ creating and reading entities, appending attribute values, and reading the
 | `POST` | `/entities` | Create an entity pinned to an exact blueprint version. |
 | `GET` | `/entities?blueprint=category&related_from={id}&relationship=categories&limit=50&cursor={cursor}` | Page target entity previews through a reverse relationship filter. |
 | `GET` | `/entities/{entity_id}` | Read an active entity and its named projections. |
-| `GET` | `/entities/{entity_id}/projections/preview?relationship_depth=1&relationship_limit=10` | Read the preview with bounded related entity values. |
+| `GET` | `/entities/{entity_id}/preview?relationship_depth=1&relationship_limit=10` | Read contextual preview values with bounded related entity values. |
 | `POST` | `/entities/{entity_id}/values` | Append scalar or relationship value history and rebuild preview. |
 | `GET` | `/entities/{entity_id}/values/current` | Read derived current scalar values and relationship edges. |
 | `POST` | `/v1/entities/search` | Search current scalar values within a resolved blueprint revision. |
 | `POST` | `/v1/entities` | Atomically create an entity with initial values. |
-| `GET` | `/v1/entities/{entity_id}/form` | Read an entity, pinned schema, and current form values. |
+| `GET` | `/v1/entities/{entity_id}` | Read an entity, pinned schema, current form values, and scalar contextual values. |
 | `PUT` | `/v1/entities/{entity_id}` | Append scalar changes and replace submitted relationship target sets atomically. |
 | `POST` | `/entities/{entity_id}/relationships/replace` | Replace the current targets for each supplied relationship attribute. |
 | `POST` | `/entities/{entity_id}/relationships/remove` | Remove supplied current relationship targets. |
@@ -229,7 +229,8 @@ Errors use this JSON shape:
 ```
 
 `entities.projections` is a JSONB map of named projections. `preview` is reserved
-for the automatic builder and is initialized for every entity:
+for the automatic builder and is initialized for every entity. API responses
+expose this projection as `context`:
 
 ```json
 {
@@ -277,6 +278,26 @@ use an envelope rather than a count:
 `truncated` is derived from fetching one extra current edge, not `COUNT(*)`.
 At depth `0`, relationship envelopes contain no items but remain truncated when
 an active edge exists, so clients know more data is available.
+
+`GET /entities/{entity_id}/preview` returns the entity's pinned blueprint
+identity alongside the contextual preview:
+
+```json
+{
+  "entity": {
+    "id": "...",
+    "blueprint_id": "...",
+    "blueprint_version": 3
+  },
+  "context": {
+    "default": { "title": "Blue shirt" },
+    "en-GB": { "title": "Blue shirt (UK)" }
+  }
+}
+```
+
+`GET /v1/entities/{entity_id}` returns the pinned blueprint revision, editable
+values (including `context_id`), and the same scalar-only `context` shape.
 
 ## Paginated Entity Previews
 

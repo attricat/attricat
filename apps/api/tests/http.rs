@@ -338,7 +338,7 @@ tags = ["searchable"]
 
     let preview: Value = client
         .get(format!(
-            "{base_url}/entities/{}/projections/preview",
+            "{base_url}/entities/{}/preview",
             source["id"].as_str().unwrap()
         ))
         .send()
@@ -350,7 +350,7 @@ tags = ["searchable"]
         .await
         .unwrap();
     assert_eq!(
-        preview,
+        preview["context"],
         json!({
             "default": {
                 "title": "Blue shirt",
@@ -361,6 +361,15 @@ tags = ["searchable"]
             },
             "en-GB": { "title": "Blue shirt (UK)" }
         })
+    );
+    assert_eq!(preview["entity"]["id"], source["id"]);
+    assert_eq!(
+        preview["entity"]["blueprint_id"],
+        blueprint["blueprint"]["id"]
+    );
+    assert_eq!(
+        preview["entity"]["blueprint_version"],
+        blueprint["blueprint"]["version"]
     );
 
     let replacement = client
@@ -411,7 +420,7 @@ tags = ["searchable"]
 
     let current_preview: Value = client
         .get(format!(
-            "{base_url}/entities/{}/projections/preview?relationship_depth=0",
+            "{base_url}/entities/{}/preview?relationship_depth=0",
             source["id"].as_str().unwrap()
         ))
         .send()
@@ -422,7 +431,7 @@ tags = ["searchable"]
         .json()
         .await
         .unwrap();
-    assert_eq!(current_preview["default"]["title"], "Red shirt");
+    assert_eq!(current_preview["context"]["default"]["title"], "Red shirt");
 
     let source_id: Uuid = source["id"].as_str().unwrap().parse().unwrap();
     let title_attribute_id: Uuid = title_attribute_id.parse().unwrap();
@@ -493,7 +502,7 @@ tags = ["searchable"]
         .unwrap();
     let form_entity_id = created_from_form["id"].as_str().unwrap();
     let form: Value = client
-        .get(format!("{base_url}/v1/entities/{form_entity_id}/form"))
+        .get(format!("{base_url}/v1/entities/{form_entity_id}"))
         .send()
         .await
         .unwrap()
@@ -504,8 +513,9 @@ tags = ["searchable"]
         .unwrap();
     assert_eq!(
         form["values"][0],
-        json!({ "kind": "scalar", "attribute_code": "title", "value": "Created from form" })
+        json!({ "kind": "scalar", "attribute_code": "title", "context_id": null, "value": "Created from form" })
     );
+    assert_eq!(form["context"]["default"]["title"], "Created from form");
 
     let updated: Value = client
         .put(format!("{base_url}/v1/entities/{form_entity_id}"))
@@ -548,7 +558,7 @@ tags = ["searchable"]
         .unwrap();
     let removed_relationship_preview: Value = client
         .get(format!(
-            "{base_url}/entities/{}/projections/preview",
+            "{base_url}/entities/{}/preview",
             source["id"].as_str().unwrap()
         ))
         .send()
@@ -560,7 +570,7 @@ tags = ["searchable"]
         .await
         .unwrap();
     assert!(
-        removed_relationship_preview["default"]
+        removed_relationship_preview["context"]["default"]
             .get("related_products")
             .is_none()
     );
@@ -1045,9 +1055,7 @@ target_blueprint = "color"
     assert_eq!(replace.status(), StatusCode::CREATED);
 
     let preview: Value = client
-        .get(format!(
-            "{base_url}/entities/{shirt_id}/projections/preview"
-        ))
+        .get(format!("{base_url}/entities/{shirt_id}/preview"))
         .send()
         .await
         .unwrap()
@@ -1057,21 +1065,24 @@ target_blueprint = "color"
         .await
         .unwrap();
     assert_eq!(
-        preview["default"]["categories"]["items"]
+        preview["context"]["default"]["categories"]["items"]
             .as_array()
             .unwrap()
             .len(),
         2
     );
-    assert_eq!(preview["default"]["categories"]["truncated"], false);
     assert_eq!(
-        preview["default"]["colors"]["items"][0]["display"],
+        preview["context"]["default"]["categories"]["truncated"],
+        false
+    );
+    assert_eq!(
+        preview["context"]["default"]["colors"]["items"][0]["display"],
         "Navy · #1c2d4a"
     );
 
     let bounded_preview: Value = client
         .get(format!(
-            "{base_url}/entities/{shirt_id}/projections/preview?relationship_limit=1"
+            "{base_url}/entities/{shirt_id}/preview?relationship_limit=1"
         ))
         .send()
         .await
@@ -1082,17 +1093,20 @@ target_blueprint = "color"
         .await
         .unwrap();
     assert_eq!(
-        bounded_preview["default"]["categories"]["items"]
+        bounded_preview["context"]["default"]["categories"]["items"]
             .as_array()
             .unwrap()
             .len(),
         1
     );
-    assert_eq!(bounded_preview["default"]["categories"]["truncated"], true);
+    assert_eq!(
+        bounded_preview["context"]["default"]["categories"]["truncated"],
+        true
+    );
 
     let scalar_preview: Value = client
         .get(format!(
-            "{base_url}/entities/{shirt_id}/projections/preview?relationship_depth=0"
+            "{base_url}/entities/{shirt_id}/preview?relationship_depth=0"
         ))
         .send()
         .await
@@ -1103,7 +1117,7 @@ target_blueprint = "color"
         .await
         .unwrap();
     assert_eq!(
-        scalar_preview,
+        scalar_preview["context"],
         json!({
             "default": {
                 "title": "Navy shirt",
@@ -1115,7 +1129,7 @@ target_blueprint = "color"
 
     let excessive_depth = client
         .get(format!(
-            "{base_url}/entities/{shirt_id}/projections/preview?relationship_depth=4"
+            "{base_url}/entities/{shirt_id}/preview?relationship_depth=4"
         ))
         .send()
         .await
@@ -1164,9 +1178,7 @@ target_blueprint = "color"
         .error_for_status()
         .unwrap();
     let preview: Value = client
-        .get(format!(
-            "{base_url}/entities/{shirt_id}/projections/preview"
-        ))
+        .get(format!("{base_url}/entities/{shirt_id}/preview"))
         .send()
         .await
         .unwrap()
@@ -1176,14 +1188,14 @@ target_blueprint = "color"
         .await
         .unwrap();
     assert_eq!(
-        preview["default"]["categories"]["items"]
+        preview["context"]["default"]["categories"]["items"]
             .as_array()
             .unwrap()
             .len(),
         1
     );
     assert_eq!(
-        preview["default"]["categories"]["items"][0]["display"],
+        preview["context"]["default"]["categories"]["items"][0]["display"],
         "Shirts"
     );
 

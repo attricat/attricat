@@ -50,7 +50,7 @@ export const EntityPreviewPage = ({ entityId }: { entityId: string }) => {
       )}
       {preview.data && (
         <Paper component="pre" sx={{ mt: 3, overflow: 'auto', p: 3 }}>
-          {JSON.stringify(preview.data, null, 2)}
+          {JSON.stringify(preview.data.context, null, 2)}
         </Paper>
       )}
     </Container>

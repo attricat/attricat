@@ -88,6 +88,7 @@ struct EntityPreviewRow {
 #[derive(sqlx::FromRow)]
 struct FormNativeValueRow {
     attribute_code: String,
+    context_id: Option<Uuid>,
     relationship_target_entity_id: Option<Uuid>,
     #[sqlx(flatten)]
     native: NativeValueRow,
@@ -698,7 +699,7 @@ impl CatalogRepository {
         entity_id: Uuid,
     ) -> Result<Vec<FormAttributeValue>, RepositoryError> {
         let rows = sqlx::query_as::<_, FormNativeValueRow>(
-            r#"SELECT a.code AS attribute_code, av.relationship_target_entity_id,
+            r#"SELECT a.code AS attribute_code, av.context_id, av.relationship_target_entity_id,
                       a.value_type, av.value_text, av.value_number, av.value_integer,
                       av.value_boolean, av.value_date, av.value_datetime, av.value_time,
                       av.value_time_zone
@@ -718,10 +719,12 @@ impl CatalogRepository {
                 Ok(match row.relationship_target_entity_id {
                     Some(target_entity_id) => FormAttributeValue::Relationship {
                         attribute_code: row.attribute_code,
+                        context_id: row.context_id,
                         target_entity_id,
                     },
                     None => FormAttributeValue::Scalar {
                         attribute_code: row.attribute_code,
+                        context_id: row.context_id,
                         value: native_value_json(row.native)?,
                     },
                 })

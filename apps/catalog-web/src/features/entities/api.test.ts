@@ -28,7 +28,7 @@ const respond = (body: unknown) => {
 };
 
 describe('entity API client', () => {
-  it('loads blueprints and entity forms from their code-based routes', async () => {
+  it('loads blueprints and entities from their code-based routes', async () => {
     respond(blueprintWithAttributes);
     await getBlueprintByCode('summer sale', 2);
     expect(fetchMock).toHaveBeenCalledWith(
@@ -36,10 +36,15 @@ describe('entity API client', () => {
       undefined,
     );
 
-    respond({ entity: { id: entityId }, blueprint: blueprintWithAttributes, values: [] });
+    respond({
+      entity: { id: entityId },
+      blueprint: blueprintWithAttributes,
+      values: [],
+      context: { default: {} },
+    });
     await getEntityForm(entityId);
     expect(fetchMock).toHaveBeenCalledWith(
-      `/api/v1/entities/${entityId}/form`,
+      `/api/v1/entities/${entityId}`,
       undefined,
     );
   });

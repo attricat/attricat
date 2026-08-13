@@ -418,7 +418,7 @@ async fn run(cli: Cli) -> Result<String, CliError> {
                 }
                 let query = query.finish();
                 let path = format!(
-                    "/entities/{}/projections/preview{}",
+                    "/entities/{}/preview{}",
                     segment(entity_id),
                     if query.is_empty() {
                         String::new()

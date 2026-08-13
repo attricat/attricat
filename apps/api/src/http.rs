@@ -3,7 +3,7 @@ use axum::{
     extract::{Path, Query, State},
     http::StatusCode,
     response::{IntoResponse, Response},
-    routing::{get, post, put},
+    routing::{get, post},
 };
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
@@ -12,8 +12,9 @@ use uuid::Uuid;
 use crate::{
     model::{
         AppendAttributeValues, BlueprintWithAttributes, CreateAttributeContext, CreateBlueprint,
-        CreateEntity, CreateEntityFormRequest, Entity, EntityFormResponse, EntityPreviewPage,
-        EntitySearchResponse, RelationshipMutation, SearchEntitiesRequest, UpdateEntityFormRequest,
+        CreateEntity, CreateEntityFormRequest, Entity, EntityFormResponse, EntityIdentity,
+        EntityPreviewPage, EntityPreviewResponse, EntitySearchResponse, RelationshipMutation,
+        SearchEntitiesRequest, UpdateEntityFormRequest,
     },
     repository::{CatalogRepository, RepositoryError, decode_search_cursor},
 };
@@ -57,14 +58,13 @@ pub fn router(state: AppState) -> Router {
         // relationships independently.
         .route("/v1/entities/search", post(search_entity_previews))
         .route("/v1/entities", post(create_entity_form))
-        .route("/v1/entities/{entity_id}", put(update_entity_form))
-        .route("/v1/entities/{entity_id}/form", get(get_entity_form))
+        .route(
+            "/v1/entities/{entity_id}",
+            get(get_entity_form).put(update_entity_form),
+        )
         .route("/entities", get(list_previews).post(create_entity))
         .route("/entities/{entity_id}", get(get_entity))
-        .route(
-            "/entities/{entity_id}/projections/preview",
-            get(get_preview),
-        )
+        .route("/entities/{entity_id}/preview", get(get_preview))
         .route("/entities/{entity_id}/values", post(append_values))
         .route(
             "/entities/{entity_id}/relationships/replace",
@@ -213,7 +213,7 @@ async fn get_preview(
     State(state): State<AppState>,
     Path(entity_id): Path<Uuid>,
     Query(query): Query<PreviewQuery>,
-) -> Result<Json<Value>, ApiError> {
+) -> Result<Json<EntityPreviewResponse>, ApiError> {
     let relationship_depth = query.relationship_depth.unwrap_or(1);
     let relationship_limit = query.relationship_limit.unwrap_or(10);
     if relationship_depth > state.max_preview_relationship_depth {
@@ -228,12 +228,24 @@ async fn get_preview(
             state.max_preview_relationship_items
         )));
     }
-    state
+    let context = state
         .repository
         .preview(entity_id, relationship_depth, relationship_limit.into())
         .await?
-        .map(Json)
-        .ok_or_else(|| ApiError::not_found("entity"))
+        .ok_or_else(|| ApiError::not_found("entity"))?;
+    let entity = state
+        .repository
+        .get_entity(entity_id)
+        .await?
+        .expect("preview only returns an existing entity");
+    Ok(Json(EntityPreviewResponse {
+        entity: EntityIdentity {
+            id: entity.id,
+            blueprint_id: entity.blueprint_id,
+            blueprint_version: entity.blueprint_version,
+        },
+        context,
+    }))
 }
 
 async fn list_previews(
@@ -370,6 +382,13 @@ async fn get_entity_form(
         .ok_or_else(|| ApiError::not_found("blueprint version"))?;
     let values = state.repository.form_values(entity_id).await?;
     Ok(Json(EntityFormResponse {
+        context: entity
+            .projections
+            .get("preview")
+            .cloned()
+            .ok_or(ApiError::internal(
+                "entity is missing its preview projection",
+            ))?,
         entity,
         blueprint,
         values,
