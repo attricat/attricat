@@ -56,6 +56,113 @@ async fn create_entity(client: &Client, base_url: &str, blueprint: &Value) -> Va
 }
 
 #[sqlx::test]
+async fn search_includes_all_blueprint_versions_and_marks_outdated_entities(pool: PgPool) {
+    let (base_url, server) = start_server(pool).await;
+    let client = Client::new();
+    let first = create_blueprint(
+        &client,
+        &base_url,
+        r#"
+format_version = 1
+code = "product"
+name = "Product"
+kind = "entity"
+
+[display.dropdown_option]
+fields = ["title"]
+
+[[attributes]]
+code = "title"
+value_type = "string"
+"#,
+    )
+    .await;
+    let first_entity = create_entity(&client, &base_url, &first).await;
+    let blueprint_id = first["blueprint"]["id"].as_str().unwrap();
+    let second: Value = client
+        .post(format!("{base_url}/blueprints/{blueprint_id}/versions"))
+        .json(&json!({
+            "definition": r#"
+format_version = 1
+code = "product"
+name = "Product"
+kind = "entity"
+
+[display.dropdown_option]
+fields = ["sku"]
+
+[[attributes]]
+code = "sku"
+value_type = "string"
+"#
+        }))
+        .send()
+        .await
+        .unwrap()
+        .error_for_status()
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    let second_entity = create_entity(&client, &base_url, &second).await;
+
+    let search = |version: Option<i64>| {
+        let client = client.clone();
+        let base_url = base_url.clone();
+        async move {
+            client
+                .post(format!("{base_url}/v1/entities/search"))
+                .json(&json!({
+                    "blueprint": { "code": "product", "version": version },
+                    "filters": [],
+                    "page": { "size": 25, "cursor": null }
+                }))
+                .send()
+                .await
+                .unwrap()
+                .error_for_status()
+                .unwrap()
+                .json::<Value>()
+                .await
+                .unwrap()
+        }
+    };
+
+    let all_versions = search(None).await;
+    assert_eq!(all_versions["blueprint"]["blueprint"]["version"], 2);
+    assert_eq!(all_versions["items"].as_array().unwrap().len(), 2);
+    assert!(
+        all_versions["items"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|item| {
+                item["id"] == first_entity["id"]
+                    && item["blueprint_version"] == 1
+                    && item["schema_outdated"] == true
+            })
+    );
+    assert!(
+        all_versions["items"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|item| {
+                item["id"] == second_entity["id"]
+                    && item["blueprint_version"] == 2
+                    && item["schema_outdated"] == false
+            })
+    );
+
+    let first_version = search(Some(1)).await;
+    assert_eq!(first_version["items"].as_array().unwrap().len(), 1);
+    assert_eq!(first_version["items"][0]["id"], first_entity["id"]);
+    assert_eq!(first_version["items"][0]["schema_outdated"], true);
+
+    server.abort();
+}
+
+#[sqlx::test]
 async fn catalog_workflow_compiles_explicit_toml_selections_and_rebuilds_preview(pool: PgPool) {
     let (base_url, server) = start_server(pool.clone()).await;
     let client = Client::new();
@@ -539,8 +646,9 @@ tags = ["searchable"]
         .json()
         .await
         .unwrap();
-    assert_eq!(search_page["blueprint"]["blueprint"]["version"], 1);
+    assert_eq!(search_page["blueprint"]["blueprint"]["version"], 2);
     assert_eq!(search_page["items"][0]["id"], source["id"]);
+    assert_eq!(search_page["items"][0]["schema_outdated"], true);
     assert_eq!(
         search_page["items"][0]["display"],
         json!({ "default": "Red shirt", "en_GB": "Blue shirt (UK)" })

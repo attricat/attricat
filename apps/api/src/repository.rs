@@ -89,6 +89,7 @@ struct PreviewRelationship {
 #[derive(sqlx::FromRow)]
 struct EntityPreviewRow {
     id: Uuid,
+    blueprint_version: i64,
     created_at: DateTime<Utc>,
     preview: Value,
     blueprint_display: Value,
@@ -964,7 +965,7 @@ impl CatalogRepository {
         cursor: Option<Uuid>,
     ) -> Result<EntityPreviewPage, RepositoryError> {
         let rows = sqlx::query_as::<_, EntityPreviewRow>(
-            r#"SELECT target.id, target.created_at, target.projections -> 'preview' AS preview,
+            r#"SELECT target.id, target.blueprint_version, target.created_at, target.projections -> 'preview' AS preview,
                       b.display AS blueprint_display,
                       (SELECT COALESCE(jsonb_object_agg(attribute.code, attribute.context_fallback), '{}'::jsonb)
                          FROM attributes attribute
@@ -1006,12 +1007,12 @@ impl CatalogRepository {
     pub async fn search_entity_previews(
         &self,
         blueprint_id: Uuid,
-        blueprint_version: i64,
+        blueprint_version: Option<i64>,
         query: Option<&str>,
         limit: i64,
         cursor: Option<(DateTime<Utc>, Uuid)>,
     ) -> Result<(Vec<EntityPreview>, Option<String>), RepositoryError> {
-        let sql = r#"SELECT e.id, e.created_at, e.projections -> 'preview' AS preview,
+        let sql = r#"SELECT e.id, e.blueprint_version, e.created_at, e.projections -> 'preview' AS preview,
                       b.display AS blueprint_display,
                       (SELECT COALESCE(jsonb_object_agg(attribute.code, attribute.context_fallback), '{}'::jsonb)
                          FROM attributes attribute
@@ -1020,8 +1021,8 @@ impl CatalogRepository {
                           AND attribute.deleted_at IS NULL) AS blueprint_context_fallback
                 FROM entities e
                 JOIN blueprints b ON b.id = e.blueprint_id AND b.version = e.blueprint_version
-               WHERE e.blueprint_id = $1
-                 AND e.blueprint_version = $2
+                WHERE e.blueprint_id = $1
+                  AND ($2::bigint IS NULL OR e.blueprint_version = $2)
                  AND e.deleted_at IS NULL
                  AND (
                     $3::text IS NULL
@@ -1703,6 +1704,8 @@ fn empty_projections() -> Value {
 fn entity_preview(row: EntityPreviewRow) -> EntityPreview {
     EntityPreview {
         id: row.id,
+        blueprint_version: row.blueprint_version,
+        schema_outdated: false,
         created_at: row.created_at,
         display: display_labels(
             &row.preview,

@@ -12,6 +12,7 @@ import {
   Alert,
   Box,
   Button,
+  Chip,
   Container,
   MenuItem,
   Paper,
@@ -87,6 +88,22 @@ export const Explorer = ({ search }: { search: ExplorerSearch }) => {
       cell: (info) =>
         displayLabel(info.row.original.display, info.row.original.id),
     }) as LegacyColumnDef<EntityItem, string>,
+    columnHelper.display({
+      id: 'schema',
+      header: 'Schema',
+      cell: (info) => {
+        const entity = info.row.original;
+        return (
+          <Chip
+            color={entity.schema_outdated ? 'warning' : 'success'}
+            label={`v${entity.blueprint_version} · ${
+              entity.schema_outdated ? 'Outdated' : 'Current'
+            }`}
+            size="small"
+          />
+        );
+      },
+    }) as LegacyColumnDef<EntityItem, unknown>,
   ];
   const table = useLegacyTable({
     data: results.data?.items ?? [],
@@ -111,7 +128,8 @@ export const Explorer = ({ search }: { search: ExplorerSearch }) => {
         Entity explorer
       </Typography>
       <Typography color="text.secondary">
-        Search a blueprint and inspect its current entity projections.
+        Search a blueprint and inspect its entity projections across all schema
+        versions.
       </Typography>
       <Stack direction="row" spacing={2} sx={{ mt: 2 }}>
         <Button component={Link} to="/entities/new" variant="contained">

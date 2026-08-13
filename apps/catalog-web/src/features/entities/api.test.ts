@@ -81,10 +81,22 @@ describe('entity API client', () => {
   it('uses the backend default ordering', async () => {
     respond({
       blueprint: blueprintWithAttributes,
-      items: [],
+      items: [
+        {
+          id: entityId,
+          blueprint_version: 1,
+          schema_outdated: true,
+          display: { default: 'Legacy product' },
+          preview: { default: { title: 'Legacy product' } },
+        },
+      ],
       next_cursor: null,
     });
-    await searchEntities('product', undefined, '');
+    const result = await searchEntities('product', undefined, '');
+    expect(result.items[0]).toMatchObject({
+      blueprint_version: 1,
+      schema_outdated: true,
+    });
     expect(fetchMock).toHaveBeenLastCalledWith('/api/v1/entities/search', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },

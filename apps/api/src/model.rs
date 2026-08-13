@@ -138,6 +138,8 @@ pub struct BlueprintWithAttributes {
 #[derive(Clone, Debug, FromRow, Serialize)]
 pub struct EntityPreview {
     pub id: Uuid,
+    pub blueprint_version: i64,
+    pub schema_outdated: bool,
     #[serde(skip_serializing)]
     pub created_at: DateTime<Utc>,
     pub preview: Value,

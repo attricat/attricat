@@ -301,24 +301,25 @@ async fn search_entity_previews(
             state.max_entity_page_size
         )));
     }
-    // Resolve once before querying so every returned entity shares the schema
-    // sent in the response. Falling back to the current version is deliberate
-    // for discovery; callers can pin a version for repeatable pagination.
-    let blueprint = match input.blueprint.version {
-        Some(version) => {
+    // Always resolve the current revision for the response and compatibility
+    // status. A requested version limits results but does not change the schema
+    // that discovery presents.
+    let current_blueprint = state
+        .repository
+        .get_blueprint_by_code(blueprint_code)
+        .await?
+        .ok_or_else(|| ApiError::not_found("blueprint"))?;
+    let selected_version = match input.blueprint.version {
+        Some(version) => Some(
             state
                 .repository
                 .get_blueprint_by_code_and_version(blueprint_code, version)
                 .await?
-        }
-        None => {
-            state
-                .repository
-                .get_blueprint_by_code(blueprint_code)
-                .await?
-        }
-    }
-    .ok_or_else(|| ApiError::not_found("blueprint"))?;
+                .map(|blueprint| blueprint.blueprint.version)
+                .ok_or_else(|| ApiError::not_found("blueprint"))?,
+        ),
+        None => None,
+    };
     // Cursors encode the database ordering tuple rather than an offset, which
     // avoids duplicate or skipped rows as earlier pages are inserted into.
     let cursor = match input.page.cursor.as_deref() {
@@ -333,18 +334,21 @@ async fn search_entity_previews(
         .as_deref()
         .map(str::trim)
         .filter(|value| !value.is_empty());
-    let (items, next_cursor) = state
+    let (mut items, next_cursor) = state
         .repository
         .search_entity_previews(
-            blueprint.blueprint.id,
-            blueprint.blueprint.version,
+            current_blueprint.blueprint.id,
+            selected_version,
             query,
             limit.into(),
             cursor,
         )
         .await?;
+    for item in &mut items {
+        item.schema_outdated = item.blueprint_version != current_blueprint.blueprint.version;
+    }
     Ok(Json(EntitySearchResponse {
-        blueprint,
+        blueprint: current_blueprint,
         items,
         next_cursor,
     }))

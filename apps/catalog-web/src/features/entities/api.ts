@@ -70,6 +70,8 @@ export const createAttributeContextSchema = z.object({
 export const entitySchema = z.object({ id: uuidSchema }).passthrough();
 const entityItemSchema = z.object({
   id: uuidSchema,
+  blueprint_version: z.number().int().positive(),
+  schema_outdated: z.boolean(),
   display: z.record(z.string(), z.string()),
   preview: jsonObjectSchema,
 });
