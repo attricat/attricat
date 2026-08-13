@@ -49,7 +49,7 @@ export const ContextsPage = () => {
               <ListItem divider key={context.id}>
                 <ListItemText
                   primary={context.code}
-                  secondary={JSON.stringify(context.data)}
+                  secondary={`${context.parent_id ? `Parent: ${contexts.data.find((parent) => parent.id === context.parent_id)?.code ?? 'unknown'} · ` : 'Root · '}${JSON.stringify(context.data)}`}
                 />
               </ListItem>
             ))}

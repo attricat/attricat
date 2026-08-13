@@ -17,6 +17,10 @@ describe('preview context resolution', () => {
         },
         'en_GB',
         attributes,
+        [
+          { id: '00000000-0000-0000-0000-000000000001', code: 'default', data: {}, parent_id: null },
+          { id: '00000000-0000-0000-0000-000000000002', code: 'en_GB', data: {}, parent_id: '00000000-0000-0000-0000-000000000001' },
+        ],
       ),
     ).toEqual({ title: 'Blue shirt (UK)' });
   });
@@ -27,6 +31,9 @@ describe('preview context resolution', () => {
         { default: { title: 'Blue shirt', regional_notice: 'UK terms' } },
         'en_GB',
         attributes,
+        [
+          { id: '00000000-0000-0000-0000-000000000001', code: 'default', data: {}, parent_id: null },
+        ],
       ),
     ).toEqual({ title: 'Blue shirt' });
   });

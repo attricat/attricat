@@ -119,7 +119,7 @@ describe('entity API client', () => {
 
   it('rejects invalid request inputs before fetching', async () => {
     expect(() => getEntityForm('not-a-uuid')).toThrow('Invalid UUID');
-    expect(() => createContext('en-GB', {})).toThrow('underscores');
+    expect(() => createContext('en GB', {}, entityId)).toThrow('hyphens');
     expect(fetchMock).not.toHaveBeenCalled();
   });
 });

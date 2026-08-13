@@ -71,10 +71,10 @@
           <p class="why">Required for isolation, ownership, auditability, and any multi-team or external integration use.</p>
         </article>
         <article class="card foundation">
-          <div class="priority">P0</div>
+          <div class="priority">Implemented</div>
           <h3>Context hierarchy and fallback</h3>
-          <p>Add <code>parent_id</code> to contexts and resolve values from the requested scope through its ancestors. Model progressive specialization such as <code>default → PL → PL-b2c → PL-b2c-web</code>.</p>
-          <p class="why">This intentionally favors understandable named catalogue scopes over arbitrary multi-axis combinations. It avoids a context-composition table and gives authors a visible, editable fallback path.</p>
+          <p>Contexts now have <code>parent_id</code>, a persisted <code>default</code> root, and one deterministic inheritance path. The seeded catalog models <code>default → PL → PL-b2c → PL-b2c-web</code>.</p>
+          <p class="why">Resolved scalar reads use nearest-ancestor wins and return the supplying context, so consumers can distinguish overrides from inheritance.</p>
         </article>
         <article class="card foundation">
           <div class="priority">P0</div>
@@ -126,7 +126,7 @@
         <tbody>
           <tr><td>Schema</td><td>Versioned blueprints, mixins, and entities pinned to exact revisions.</td><td>Strong base; add an explicit entity migration primitive before revisions become routine.</td></tr>
           <tr><td>Values</td><td>Typed native scalar storage, contextual values, relationships, and immutable history.</td><td>Extend the type system, collection semantics, and validation metadata.</td></tr>
-          <tr><td>Context</td><td>One optional reusable context record per fact.</td><td>Adopt named catalogue scopes with <code>parent_id</code> and nearest-ancestor fallback. This deliberately supports one inheritance path per scope rather than arbitrary dimension combinations.</td></tr>
+          <tr><td>Context</td><td>Persisted <code>default</code> root, one parent per named scope, and required context IDs on facts.</td><td>Resolved scalar previews use nearest-ancestor fallback with source-context provenance. Relationship-set inheritance remains to be defined.</td></tr>
           <tr><td>Read model</td><td><code>preview</code> is a derived JSONB cache rebuilt transactionally.</td><td>Good pattern; generalize into versioned projection definitions and rebuild jobs.</td></tr>
           <tr><td>Search</td><td>Cross-scalar text matching only; field filters are explicitly unsupported.</td><td>Add a typed query/indexing layer after attribute constraints are defined.</td></tr>
           <tr><td>DAM</td><td>No first-class binary asset, rendition, rights, or processing model.</td><td>Requires new aggregates and storage/job primitives, not merely new blueprint types.</td></tr>
@@ -135,10 +135,10 @@
 
       <h2>Context hierarchy implementation notes</h2>
       <section class="grid">
-        <article class="card foundation"><div class="priority">Data model</div><h3>One parent, named scopes</h3><p>Add nullable <code>parent_id</code> to <code>attribute_contexts</code>. Reserve <code>default</code> as the sole root; every other scope has one parent. Keep codes stable and human-readable.</p></article>
-        <article class="card foundation"><div class="priority">Resolution</div><h3>Nearest ancestor wins</h3><p>For a requested scope, try its own value first, then each ancestor until <code>default</code>. Persist an ordered ancestor path only if recursive lookup becomes a read-path bottleneck.</p></article>
-        <article class="card foundation"><div class="priority">Integrity</div><h3>Protect inherited behavior</h3><p>Prevent cycles; forbid deletion with descendants or active values; audit parent changes because a reparenting changes resolved values without mutating value facts.</p></article>
-        <article class="card foundation"><div class="priority">Read contract</div><h3>Expose the source scope</h3><p>Resolved reads should return both the requested context and the context that supplied the value, so consumers can distinguish an override from inheritance.</p></article>
+        <article class="card foundation"><div class="priority">Implemented</div><h3>One parent, named scopes</h3><p><code>attribute_contexts.parent_id</code> models a rooted tree. <code>default</code> is the protected sole root; every other scope has one parent and a stable human-readable code.</p></article>
+        <article class="card foundation"><div class="priority">Implemented</div><h3>Nearest ancestor wins</h3><p>Resolved scalar reads try the requested scope first and then each ancestor through <code>default</code>. Attributes with fallback disabled do not inherit.</p></article>
+        <article class="card foundation"><div class="priority">Implemented</div><h3>Protect inherited behavior</h3><p>Reparenting rejects cycles. Deletion rejects contexts with descendants or current values. Parent-change audit metadata remains part of the audit/provenance foundation.</p></article>
+        <article class="card foundation"><div class="priority">Implemented</div><h3>Expose the source scope</h3><p>Resolved preview reads return both the requested context and the context that supplied each value, making overrides and inheritance explicit.</p></article>
       </section>
 
       <footer>Evidence: <code>docs/database.md</code>, <code>docs/blueprints.md</code>, <code>apps/api/src/model.rs</code>, <code>apps/api/src/repository.rs</code>, and <code>crates/blueprint/src/lib.rs</code>.</footer>

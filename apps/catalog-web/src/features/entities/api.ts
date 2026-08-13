@@ -6,7 +6,7 @@ const jsonObjectSchema = z.record(z.string(), z.unknown());
 const valueTypeSchema = z.enum(attributeValueTypes);
 export const contextCodeSchema = z
   .string()
-  .regex(/^[A-Za-z0-9_]+$/, 'Use only letters, numbers, and underscores');
+  .regex(/^[A-Za-z0-9_-]+$/, 'Use only letters, numbers, hyphens, and underscores');
 
 export const attributeSchema = z
   .object({
@@ -62,10 +62,12 @@ export const attributeContextSchema = z.object({
   id: uuidSchema,
   code: contextCodeSchema,
   data: jsonObjectSchema,
+  parent_id: uuidSchema.nullable(),
 });
 export const createAttributeContextSchema = z.object({
   code: contextCodeSchema,
   data: jsonObjectSchema,
+  parent_id: uuidSchema,
 });
 export const entitySchema = z.object({ id: uuidSchema }).passthrough();
 const entityItemSchema = z.object({
@@ -79,6 +81,16 @@ const entityContextSchema = z.record(z.string(), jsonObjectSchema);
 const entityPreviewSchema = z.object({
   entity: entitySchema,
   context: entityContextSchema,
+});
+const resolvedEntityPreviewSchema = z.object({
+  requested_context: attributeContextSchema,
+  values: z.record(
+    z.string(),
+    z.object({
+      value: z.unknown(),
+      source_context: z.object({ id: uuidSchema, code: z.string() }),
+    }),
+  ),
 });
 const entitySearchResponseSchema = z.object({
   blueprint: blueprintWithAttributesSchema,
@@ -134,6 +146,7 @@ export type EntityItem = z.infer<typeof entityItemSchema>;
 export type EntitySearchResponse = z.infer<typeof entitySearchResponseSchema>;
 export type EntityFormResponse = z.infer<typeof entityFormResponseSchema>;
 export type EntityPreview = z.infer<typeof entityPreviewSchema>;
+export type ResolvedEntityPreview = z.infer<typeof resolvedEntityPreviewSchema>;
 
 const request = async <T>(
   path: string,
@@ -177,13 +190,39 @@ export const listEntityBlueprints = () => {
 export const listContexts = () =>
   request('/api/contexts', z.array(attributeContextSchema));
 
-export const createContext = (code: string, data: Record<string, unknown>) => {
-  const payload = createAttributeContextSchema.parse({ code, data });
+export const createContext = (
+  code: string,
+  data: Record<string, unknown>,
+  parentId: string,
+) => {
+  const payload = createAttributeContextSchema.parse({
+    code,
+    data,
+    parent_id: parentId,
+  });
   return request('/api/contexts', attributeContextSchema, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(payload),
   });
+};
+
+export const updateContext = (
+  id: string,
+  data: Record<string, unknown>,
+  parentId: string,
+) =>
+  request(`/api/contexts/id/${encodeURIComponent(id)}`, attributeContextSchema, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ data, parent_id: parentId }),
+  });
+
+export const deleteContext = async (id: string) => {
+  const response = await fetch(`/api/contexts/id/${encodeURIComponent(id)}`, {
+    method: 'DELETE',
+  });
+  if (!response.ok) throw new Error(`Request failed (${response.status})`);
 };
 
 export const getEntityPreview = (id: string) => {
@@ -193,6 +232,12 @@ export const getEntityPreview = (id: string) => {
     entityPreviewSchema,
   );
 };
+
+export const getResolvedEntityPreview = (id: string, contextId: string) =>
+  request(
+    `/api/entities/${encodeURIComponent(uuidSchema.parse(id))}/resolved-preview?context_id=${encodeURIComponent(uuidSchema.parse(contextId))}`,
+    resolvedEntityPreviewSchema,
+  );
 
 export const getBlueprintByCode = (code: string, version?: number) => {
   const input = getBlueprintRequestSchema.parse({ code, version });

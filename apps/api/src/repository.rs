@@ -16,7 +16,8 @@ use crate::{
         AppendAttributeValues, Attribute, AttributeContext, AttributeValue, AttributeValueSelector,
         Blueprint, BlueprintWithAttributes, CreateAttributeContext, CreateBlueprint, CreateEntity,
         Entity, EntityPreview, EntityPreviewPage, FormAttributeValue, NewAttributeValue,
-        RelationshipMutation, RelationshipTargets,
+        RelationshipMutation, RelationshipTargets, ResolvedEntityPreviewResponse,
+        UpdateAttributeContext,
     },
 };
 
@@ -31,12 +32,18 @@ pub enum RepositoryError {
     NotFound(&'static str),
     #[error("the context code 'default' is reserved")]
     ReservedContextCode,
-    #[error("context code must contain only letters, numbers, and underscores")]
+    #[error("context code must contain only letters, numbers, hyphens, and underscores")]
     InvalidContextCode,
     #[error("context data must be a JSON object")]
     InvalidContextData,
     #[error("context was not found")]
     InvalidContext,
+    #[error("the default context cannot be changed or deleted")]
+    DefaultContextProtected,
+    #[error("a context cannot be its own descendant")]
+    ContextCycle,
+    #[error("a context with descendants or active values cannot be deleted")]
+    ContextInUse,
     #[error("attribute can only be edited in the default context")]
     DefaultContextOnly,
     #[error("attribute does not belong to the entity blueprint version")]
@@ -121,7 +128,7 @@ struct CurrentNativeValueRow {
 #[derive(sqlx::FromRow)]
 struct ProjectionNativeValueRow {
     attribute_code: String,
-    context_code: Option<String>,
+    context_code: String,
     #[sqlx(flatten)]
     native: NativeValueRow,
 }
@@ -343,6 +350,7 @@ pub(crate) fn native_value_json(row: NativeValueRow) -> Result<Value, Repository
 }
 
 impl CatalogRepository {
+    const DEFAULT_CONTEXT_ID: Uuid = Uuid::from_u128(0x00000000000040008000000000000001);
     pub fn new(pool: PgPool) -> Self {
         Self { pool }
     }
@@ -609,10 +617,9 @@ impl CatalogRepository {
             return Err(RepositoryError::ReservedContextCode);
         }
         if input.code.is_empty()
-            || !input
-                .code
-                .chars()
-                .all(|character| character.is_ascii_alphanumeric() || character == '_')
+            || !input.code.chars().all(|character| {
+                character.is_ascii_alphanumeric() || character == '_' || character == '-'
+            })
         {
             return Err(RepositoryError::InvalidContextCode);
         }
@@ -620,14 +627,24 @@ impl CatalogRepository {
             return Err(RepositoryError::InvalidContextData);
         }
 
+        if !sqlx::query_scalar::<_, bool>(
+            "SELECT EXISTS (SELECT 1 FROM attribute_contexts WHERE id = $1)",
+        )
+        .bind(input.parent_id)
+        .fetch_one(&self.pool)
+        .await?
+        {
+            return Err(RepositoryError::InvalidContext);
+        }
         Ok(sqlx::query_as::<_, AttributeContext>(
-            r#"INSERT INTO attribute_contexts (id, code, data)
-               VALUES ($1, $2, $3)
-               RETURNING id, code, data"#,
+            r#"INSERT INTO attribute_contexts (id, code, data, parent_id)
+               VALUES ($1, $2, $3, $4)
+               RETURNING id, code, data, parent_id"#,
         )
         .bind(Uuid::new_v4())
         .bind(input.code)
         .bind(input.data)
+        .bind(input.parent_id)
         .fetch_one(&self.pool)
         .await?)
     }
@@ -637,7 +654,7 @@ impl CatalogRepository {
         code: &str,
     ) -> Result<Option<AttributeContext>, RepositoryError> {
         Ok(sqlx::query_as::<_, AttributeContext>(
-            "SELECT id, code, data FROM attribute_contexts WHERE code = $1",
+            "SELECT id, code, data, parent_id FROM attribute_contexts WHERE code = $1",
         )
         .bind(code)
         .fetch_optional(&self.pool)
@@ -646,9 +663,120 @@ impl CatalogRepository {
 
     pub async fn list_contexts(&self) -> Result<Vec<AttributeContext>, RepositoryError> {
         Ok(sqlx::query_as::<_, AttributeContext>(
-            "SELECT id, code, data FROM attribute_contexts ORDER BY code",
+            "SELECT id, code, data, parent_id FROM attribute_contexts ORDER BY code",
         )
         .fetch_all(&self.pool)
+        .await?)
+    }
+
+    pub async fn update_context(
+        &self,
+        id: Uuid,
+        input: UpdateAttributeContext,
+    ) -> Result<AttributeContext, RepositoryError> {
+        if id == Self::DEFAULT_CONTEXT_ID {
+            return Err(RepositoryError::DefaultContextProtected);
+        }
+        if !input.data.is_object() {
+            return Err(RepositoryError::InvalidContextData);
+        }
+        if !sqlx::query_scalar::<_, bool>(
+            "SELECT EXISTS (SELECT 1 FROM attribute_contexts WHERE id = $1)",
+        )
+        .bind(input.parent_id)
+        .fetch_one(&self.pool)
+        .await?
+        {
+            return Err(RepositoryError::InvalidContext);
+        }
+        let result = sqlx::query_as::<_, AttributeContext>(
+            r#"WITH RECURSIVE descendants AS (
+                    SELECT id FROM attribute_contexts WHERE id = $1
+                    UNION ALL
+                    SELECT c.id FROM attribute_contexts c JOIN descendants d ON c.parent_id = d.id
+                )
+                UPDATE attribute_contexts SET parent_id = $2, data = $3
+                WHERE id = $1 AND $2 NOT IN (SELECT id FROM descendants)
+                RETURNING id, code, data, parent_id"#,
+        )
+        .bind(id)
+        .bind(input.parent_id)
+        .bind(input.data)
+        .fetch_optional(&self.pool)
+        .await?;
+        result.ok_or(RepositoryError::ContextCycle)
+    }
+
+    pub async fn delete_context(&self, id: Uuid) -> Result<(), RepositoryError> {
+        if id == Self::DEFAULT_CONTEXT_ID {
+            return Err(RepositoryError::DefaultContextProtected);
+        }
+        let result = sqlx::query(
+            "DELETE FROM attribute_contexts c WHERE c.id = $1 AND NOT EXISTS (SELECT 1 FROM attribute_contexts child WHERE child.parent_id = c.id) AND NOT EXISTS (SELECT 1 FROM attribute_values value WHERE value.context_id = c.id AND value.latest)",
+        ).bind(id).execute(&self.pool).await?;
+        if result.rows_affected() == 0 {
+            return Err(RepositoryError::ContextInUse);
+        }
+        Ok(())
+    }
+
+    pub async fn resolved_preview(
+        &self,
+        entity_id: Uuid,
+        context_id: Uuid,
+    ) -> Result<Option<ResolvedEntityPreviewResponse>, RepositoryError> {
+        let entity = match self.get_entity(entity_id).await? {
+            Some(entity) => entity,
+            None => return Ok(None),
+        };
+        let requested_context = self
+            .get_context_by_id(context_id)
+            .await?
+            .ok_or(RepositoryError::InvalidContext)?;
+        let attributes = self
+            .list_attributes(entity.blueprint_id, entity.blueprint_version)
+            .await?;
+        let preview = entity
+            .projections
+            .get("preview")
+            .and_then(Value::as_object)
+            .ok_or(RepositoryError::InvalidPreview)?;
+        let contexts = self.list_contexts().await?;
+        let context_by_id: std::collections::HashMap<_, _> = contexts
+            .into_iter()
+            .map(|context| (context.id, context))
+            .collect();
+        let mut path = Vec::new();
+        let mut current = Some(requested_context.clone());
+        while let Some(context) = current {
+            current = context
+                .parent_id
+                .and_then(|parent_id| context_by_id.get(&parent_id).cloned());
+            path.push(context);
+        }
+        let values = attributes.into_iter().filter_map(|attribute| {
+            path.iter().enumerate().find_map(|(index, context)| {
+                if index > 0 && attribute.context_fallback == "none" { return None; }
+                preview.get(&context.code).and_then(Value::as_object).and_then(|values| values.get(&attribute.code)).map(|value| {
+                    (attribute.code.clone(), serde_json::json!({ "value": value, "source_context": { "id": context.id, "code": context.code } }))
+                })
+            })
+        }).collect::<Map<_, _>>();
+        Ok(Some(ResolvedEntityPreviewResponse {
+            requested_context,
+            values: Value::Object(values),
+        }))
+    }
+
+    async fn get_context_by_id(
+        &self,
+        id: Uuid,
+    ) -> Result<Option<AttributeContext>, RepositoryError> {
+        Ok(sqlx::query_as::<_, AttributeContext>(
+            "SELECT id, code, data, parent_id FROM attribute_contexts WHERE id = $1",
+        )
+        .bind(id)
+        .fetch_optional(&self.pool)
         .await?)
     }
 
@@ -1137,6 +1265,8 @@ impl CatalogRepository {
             let (attribute_id, target_blueprint_code, context_editable) = self
                 .relationship_attribute(&mut transaction, &entity, &relationship)
                 .await?;
+            self.validate_context_id(&mut transaction, relationship.context_id)
+                .await?;
             self.validate_context_editable(relationship.context_id, &context_editable)?;
             // Relationship writes are set operations; collapsing duplicate IDs
             // makes a retried or malformed client payload idempotent.
@@ -1416,16 +1546,15 @@ impl CatalogRepository {
         transaction: &mut Transaction<'_, Postgres>,
         context_id: Option<Uuid>,
     ) -> Result<(), RepositoryError> {
-        if let Some(context_id) = context_id {
-            let exists = sqlx::query_scalar::<_, bool>(
-                "SELECT EXISTS (SELECT 1 FROM attribute_contexts WHERE id = $1)",
-            )
-            .bind(context_id)
-            .fetch_one(&mut **transaction)
-            .await?;
-            if !exists {
-                return Err(RepositoryError::InvalidContext);
-            }
+        let context_id = context_id.ok_or(RepositoryError::InvalidContext)?;
+        let exists = sqlx::query_scalar::<_, bool>(
+            "SELECT EXISTS (SELECT 1 FROM attribute_contexts WHERE id = $1)",
+        )
+        .bind(context_id)
+        .fetch_one(&mut **transaction)
+        .await?;
+        if !exists {
+            return Err(RepositoryError::InvalidContext);
         }
         Ok(())
     }
@@ -1435,7 +1564,7 @@ impl CatalogRepository {
         context_id: Option<Uuid>,
         context_editable: &str,
     ) -> Result<(), RepositoryError> {
-        if context_id.is_some() && context_editable == "default" {
+        if context_id != Some(Self::DEFAULT_CONTEXT_ID) && context_editable == "default" {
             return Err(RepositoryError::DefaultContextOnly);
         }
         Ok(())
@@ -1510,12 +1639,12 @@ impl CatalogRepository {
                 JOIN attributes a ON a.id = av.attribute_id
                  AND a.blueprint_id = e.blueprint_id
                  AND a.blueprint_version = e.blueprint_version
-                LEFT JOIN attribute_contexts c ON c.id = av.context_id
+                JOIN attribute_contexts c ON c.id = av.context_id
                 WHERE av.entity_id = $1
                   AND av.relationship_target_entity_id IS NULL
                   AND av.latest
                   AND a.deleted_at IS NULL
-                ORDER BY a.position, c.code NULLS FIRST"#,
+                ORDER BY a.position, c.code"#,
         )
         .bind(entity_id)
         .fetch_all(&mut **transaction)
@@ -1523,18 +1652,14 @@ impl CatalogRepository {
         let mut default = Map::new();
         let mut contexts = Map::new();
         for value in values {
-            let values = match value.context_code {
-                Some(context_code) => {
-                    if context_code == "default" {
-                        return Err(RepositoryError::ReservedContextCode);
-                    }
-                    contexts
-                        .entry(context_code)
-                        .or_insert_with(|| Value::Object(Map::new()))
-                        .as_object_mut()
-                        .expect("projection contexts are objects")
-                }
-                None => &mut default,
+            let values = if value.context_code == "default" {
+                &mut default
+            } else {
+                contexts
+                    .entry(value.context_code)
+                    .or_insert_with(|| Value::Object(Map::new()))
+                    .as_object_mut()
+                    .expect("projection contexts are objects")
             };
             values.insert(value.attribute_code, native_value_json(value.native)?);
         }

@@ -53,6 +53,7 @@ pub struct AttributeContext {
     pub id: Uuid,
     pub code: String,
     pub data: Value,
+    pub parent_id: Option<Uuid>,
 }
 
 #[derive(Clone, Debug, Deserialize, FromRow, PartialEq, Serialize)]
@@ -85,6 +86,14 @@ pub struct CreateEntity {
 #[derive(Clone, Debug, Deserialize)]
 pub struct CreateAttributeContext {
     pub code: String,
+    pub data: Value,
+    pub parent_id: Uuid,
+}
+
+#[derive(Clone, Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct UpdateAttributeContext {
+    pub parent_id: Uuid,
     pub data: Value,
 }
 
@@ -156,6 +165,12 @@ pub struct EntityPreviewPage {
 pub struct EntityPreviewResponse {
     pub entity: EntityIdentity,
     pub context: Value,
+}
+
+#[derive(Clone, Debug, Serialize)]
+pub struct ResolvedEntityPreviewResponse {
+    pub requested_context: AttributeContext,
+    pub values: Value,
 }
 
 #[derive(Clone, Debug, Serialize)]

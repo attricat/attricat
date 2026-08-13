@@ -161,24 +161,14 @@ export const EntityForm = ({
                       item.attribute_code === attribute.code &&
                       (item.context_id ?? null) === contextId,
                   );
-                  const defaultValue = existingValues.find(
-                    (item) =>
-                      item.kind === 'scalar' &&
-                      item.attribute_code === attribute.code &&
-                      (item.context_id ?? null) === null,
-                  );
-                  const inherited =
-                    contextId !== null &&
-                    !localValueExists &&
-                    attribute.context_fallback !== 'none' &&
-                    defaultValue?.kind === 'scalar';
+                  const inherited = false;
                   const defaultOnly =
                     contextId !== null &&
                     attribute.context_editable === 'default';
                   const helperText = defaultOnly
                     ? 'Managed in Default'
                     : inherited
-                      ? `Using default: ${valueForField(defaultValue.value)}`
+                      ? 'Using an inherited value'
                       : undefined;
                   const handleChange = (nextValue: string) =>
                     field.handleChange({

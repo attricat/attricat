@@ -8,13 +8,9 @@ import { EntityPage } from './components/EntityPage';
 import { valuesForForm } from './entity-form';
 import { entityQueryKeys } from './query-keys';
 
-const defaultContextOption = 'default';
-
 export const EditEntityPage = ({ entityId }: { entityId: string }) => {
   const navigate = useNavigate({ from: '/entities/$entityId/edit' });
-  const [selectedContext, setSelectedContext] = useState(defaultContextOption);
-  const contextId =
-    selectedContext === defaultContextOption ? null : selectedContext;
+  const [selectedContext, setSelectedContext] = useState('');
   const entityForm = useQuery({
     queryKey: entityQueryKeys.form(entityId),
     queryFn: () => getEntityForm(entityId),
@@ -33,6 +29,9 @@ export const EditEntityPage = ({ entityId }: { entityId: string }) => {
     queryKey: entityQueryKeys.contexts(),
     queryFn: listContexts,
   });
+  const contextId =
+    selectedContext ||
+    (contexts.data?.find((context) => context.code === 'default')?.id ?? null);
   return (
     <EntityPage title="Edit entity">
       <Box sx={{ mt: 1 }}>
@@ -58,7 +57,6 @@ export const EditEntityPage = ({ entityId }: { entityId: string }) => {
             sx={{ mt: 4 }}
             value={selectedContext}
           >
-            <MenuItem value={defaultContextOption}>Default</MenuItem>
             {contexts.data?.map((context) => (
               <MenuItem key={context.id} value={context.id}>
                 {context.code}
@@ -66,7 +64,7 @@ export const EditEntityPage = ({ entityId }: { entityId: string }) => {
             ))}
           </TextField>
           <EntityForm
-            key={`${entityForm.data.entity.id}:${contextId}`}
+            key={`${entityForm.data.entity.id}:${contextId ?? ''}`}
             blueprint={entityForm.data.blueprint}
             contextId={contextId}
             existingValues={entityForm.data.values}

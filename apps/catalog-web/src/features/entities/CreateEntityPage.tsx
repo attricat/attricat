@@ -1,9 +1,10 @@
-import { useMutation } from '@tanstack/react-query';
+import { useMutation, useQuery } from '@tanstack/react-query';
 import { useNavigate } from '@tanstack/react-router';
-import { createEntity, getBlueprintByCode } from './api';
+import { createEntity, getBlueprintByCode, listContexts } from './api';
 import { EntityForm } from './components/EntityForm';
 import { EntityPage } from './components/EntityPage';
 import { attributeValueKinds } from './value-types';
+import { entityQueryKeys } from './query-keys';
 
 export const CreateEntityPage = () => {
   const navigate = useNavigate({ from: '/entities/new' });
@@ -11,6 +12,11 @@ export const CreateEntityPage = () => {
     mutationFn: ({ code, version }: { code: string; version?: number }) =>
       getBlueprintByCode(code, version),
   });
+  const contexts = useQuery({
+    queryKey: entityQueryKeys.contexts(),
+    queryFn: listContexts,
+  });
+  const defaultContextId = contexts.data?.find((context) => context.code === 'default')?.id;
   const create = useMutation({
     mutationFn: ({
       values,
@@ -22,17 +28,19 @@ export const CreateEntityPage = () => {
       const resolved = blueprint.data;
       if (!resolved)
         throw new Error('Choose a blueprint before creating an entity');
+      if (!defaultContextId) throw new Error('The default context is not available');
       return createEntity({
         blueprint: {
           code: resolved.blueprint.code,
           version: resolved.blueprint.version,
         },
         values: [
-          ...values,
+          ...values.map((value) => ({ ...value, context_id: defaultContextId })),
           ...relationships.flatMap((relationship) =>
             relationship.target_entity_ids.map((target_entity_id) => ({
               kind: attributeValueKinds.relationship,
               attribute_code: relationship.attribute_code,
+              context_id: defaultContextId,
               target_entity_id,
             })),
           ),
@@ -50,6 +58,7 @@ export const CreateEntityPage = () => {
     <EntityPage title="Create entity">
       <EntityForm
         blueprint={blueprint.data}
+        contextId={defaultContextId}
         error={blueprint.error ?? create.error}
         isLoadingBlueprint={blueprint.isPending || create.isPending}
         onLoadBlueprint={(code, version) => blueprint.mutate({ code, version })}

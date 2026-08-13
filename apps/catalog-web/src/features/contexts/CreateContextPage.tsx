@@ -1,5 +1,5 @@
 import { useForm } from '@tanstack/react-form';
-import { useMutation, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link, useNavigate } from '@tanstack/react-router';
 import {
   Alert,
@@ -7,25 +7,28 @@ import {
   Container,
   Paper,
   Stack,
-  TextField,
+  MenuItem, TextField,
   Typography,
 } from '@mui/material';
 import { useState } from 'react';
-import { createContext } from '../entities/api';
+import { createContext, listContexts } from '../entities/api';
 import { entityQueryKeys } from '../entities/query-keys';
 
 export const CreateContextPage = () => {
   const navigate = useNavigate({ from: '/contexts/new' });
   const queryClient = useQueryClient();
   const [validationError, setValidationError] = useState<string>();
+  const contexts = useQuery({ queryKey: entityQueryKeys.contexts(), queryFn: listContexts });
   const create = useMutation({
     mutationFn: ({
       code,
       data,
+      parentId,
     }: {
       code: string;
       data: Record<string, unknown>;
-    }) => createContext(code, data),
+      parentId: string;
+    }) => createContext(code, data, parentId),
     onSuccess: () => {
       void queryClient.invalidateQueries({
         queryKey: entityQueryKeys.contexts(),
@@ -34,7 +37,7 @@ export const CreateContextPage = () => {
     },
   });
   const form = useForm({
-    defaultValues: { code: '', data: '{}' },
+    defaultValues: { code: '', data: '{}', parentId: '' },
     onSubmit: ({ value }) => {
       setValidationError(undefined);
       try {
@@ -45,6 +48,7 @@ export const CreateContextPage = () => {
         create.mutate({
           code: value.code.trim(),
           data: data as Record<string, unknown>,
+          parentId: value.parentId,
         });
       } catch (error) {
         setValidationError(
@@ -78,6 +82,14 @@ export const CreateContextPage = () => {
                 required
                 value={field.state.value}
               />
+            )}
+          </form.Field>
+          <form.Field name="parentId">
+            {(field) => (
+              <TextField select label="Parent context" required value={field.state.value} onChange={(event) => field.handleChange(event.target.value)}>
+                <MenuItem value="">Select a parent</MenuItem>
+                {contexts.data?.map((context) => <MenuItem key={context.id} value={context.id}>{context.code}</MenuItem>)}
+              </TextField>
             )}
           </form.Field>
           <form.Field name="data">

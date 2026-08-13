@@ -81,13 +81,16 @@ struct SourceInput {
 
 #[derive(Subcommand)]
 enum ContextCommand {
+    List,
     Create {
-        #[arg(long, conflicts_with_all = ["code", "data"])]
+        #[arg(long, conflicts_with_all = ["code", "data", "parent_id"])]
         file: Option<PathBuf>,
         #[arg(long, requires = "data")]
         code: Option<String>,
         #[arg(long, requires = "code")]
         data: Option<String>,
+        #[arg(long, requires_all = ["code", "data"])]
+        parent_id: Option<Uuid>,
     },
     Get {
         code: String,
@@ -130,6 +133,8 @@ enum ValueCommand {
         entity_id: Uuid,
         #[arg(long)]
         file: PathBuf,
+        #[arg(long)]
+        context_id: Option<Uuid>,
     },
     Current {
         entity_id: Uuid,
@@ -138,11 +143,15 @@ enum ValueCommand {
         entity_id: Uuid,
         #[arg(long)]
         file: PathBuf,
+        #[arg(long)]
+        context_id: Option<Uuid>,
     },
     Remove {
         entity_id: Uuid,
         #[arg(long)]
         file: PathBuf,
+        #[arg(long)]
+        context_id: Option<Uuid>,
     },
 }
 
@@ -202,6 +211,7 @@ impl CliError {
 struct ContextFile {
     code: String,
     data: toml::Value,
+    parent_id: Uuid,
 }
 
 #[derive(Deserialize)]
@@ -330,17 +340,24 @@ async fn run(cli: Cli) -> Result<String, CliError> {
             }
         },
         Command::Context { command } => match command {
-            ContextCommand::Create { file, code, data } => {
-                let body = match (file, code, data) {
-                    (Some(file), None, None) => context_body_from_file(&file)?,
-                    (None, Some(code), Some(data)) => json!({
+            ContextCommand::List => request(&client, &server, Method::GET, "/contexts", None).await,
+            ContextCommand::Create {
+                file,
+                code,
+                data,
+                parent_id,
+            } => {
+                let body = match (file, code, data, parent_id) {
+                    (Some(file), None, None, None) => context_body_from_file(&file)?,
+                    (None, Some(code), Some(data), Some(parent_id)) => json!({
                         "code": code,
                         "data": serde_json::from_str::<Value>(&data)
                             .map_err(|error| CliError::Input(format!("invalid --data JSON: {error}")))?,
+                        "parent_id": parent_id,
                     }),
                     _ => {
                         return Err(CliError::Input(
-                            "provide --file or both --code and --data".to_owned(),
+                            "provide --file or --code, --data, and --parent-id".to_owned(),
                         ));
                     }
                 };
@@ -430,13 +447,17 @@ async fn run(cli: Cli) -> Result<String, CliError> {
             }
         },
         Command::Value { command } => match command {
-            ValueCommand::Append { entity_id, file } => {
+            ValueCommand::Append {
+                entity_id,
+                file,
+                context_id,
+            } => {
                 request(
                     &client,
                     &server,
                     Method::POST,
                     &format!("/entities/{}/values", segment(entity_id)),
-                    Some(values_body_from_file(&file)?),
+                    Some(values_body_from_file(&file, context_id)?),
                 )
                 .await
             }
@@ -450,23 +471,31 @@ async fn run(cli: Cli) -> Result<String, CliError> {
                 )
                 .await
             }
-            ValueCommand::Replace { entity_id, file } => {
+            ValueCommand::Replace {
+                entity_id,
+                file,
+                context_id,
+            } => {
                 request(
                     &client,
                     &server,
                     Method::POST,
                     &format!("/entities/{}/relationships/replace", segment(entity_id)),
-                    Some(relationships_body_from_file(&file)?),
+                    Some(relationships_body_from_file(&file, context_id)?),
                 )
                 .await
             }
-            ValueCommand::Remove { entity_id, file } => {
+            ValueCommand::Remove {
+                entity_id,
+                file,
+                context_id,
+            } => {
                 request(
                     &client,
                     &server,
                     Method::POST,
                     &format!("/entities/{}/relationships/remove", segment(entity_id)),
-                    Some(relationships_body_from_file(&file)?),
+                    Some(relationships_body_from_file(&file, context_id)?),
                 )
                 .await
             }
@@ -494,7 +523,9 @@ fn read_source(input: SourceInput) -> Result<String, CliError> {
 
 fn context_body_from_file(path: &PathBuf) -> Result<Value, CliError> {
     let input: ContextFile = parse_toml_file(path)?;
-    Ok(json!({ "code": input.code, "data": toml_to_json(input.data)? }))
+    Ok(
+        json!({ "code": input.code, "data": toml_to_json(input.data)?, "parent_id": input.parent_id }),
+    )
 }
 
 fn entity_body_from_file(path: &PathBuf) -> Result<Value, CliError> {
@@ -509,12 +540,12 @@ fn entity_body_from_file(path: &PathBuf) -> Result<Value, CliError> {
     Ok(body)
 }
 
-fn values_body_from_file(path: &PathBuf) -> Result<Value, CliError> {
+fn values_body_from_file(path: &PathBuf, context_id: Option<Uuid>) -> Result<Value, CliError> {
     let input: ValueFile = parse_toml_file(path)?;
-    values_body(input)
+    values_body(input, context_id)
 }
 
-fn values_body(input: ValueFile) -> Result<Value, CliError> {
+fn values_body(input: ValueFile, default_context_id: Option<Uuid>) -> Result<Value, CliError> {
     let values = input
         .values
         .into_iter()
@@ -542,7 +573,7 @@ fn values_body(input: ValueFile) -> Result<Value, CliError> {
                         .ok_or_else(|| CliError::Input("scalar values require value".to_owned()))?;
                     let mut output = json!({
                         "kind": "scalar",
-                        "context_id": value.context_id,
+                        "context_id": value.context_id.or(default_context_id),
                         "value": toml_to_json(payload)?,
                     });
                     output[attribute_key] = attribute_value;
@@ -559,7 +590,7 @@ fn values_body(input: ValueFile) -> Result<Value, CliError> {
                     })?;
                     let mut output = json!({
                         "kind": "relationship",
-                        "context_id": value.context_id,
+                        "context_id": value.context_id.or(default_context_id),
                         "target_entity_id": target_entity_id,
                     });
                     output[attribute_key] = attribute_value;
@@ -574,12 +605,18 @@ fn values_body(input: ValueFile) -> Result<Value, CliError> {
     Ok(json!({ "values": values }))
 }
 
-fn relationships_body_from_file(path: &PathBuf) -> Result<Value, CliError> {
+fn relationships_body_from_file(
+    path: &PathBuf,
+    context_id: Option<Uuid>,
+) -> Result<Value, CliError> {
     let input: RelationshipFile = parse_toml_file(path)?;
-    relationships_body(input)
+    relationships_body(input, context_id)
 }
 
-fn relationships_body(input: RelationshipFile) -> Result<Value, CliError> {
+fn relationships_body(
+    input: RelationshipFile,
+    default_context_id: Option<Uuid>,
+) -> Result<Value, CliError> {
     let relationships = input
         .relationships
         .into_iter()
@@ -595,7 +632,7 @@ fn relationships_body(input: RelationshipFile) -> Result<Value, CliError> {
                     }
                 };
             let mut output = json!({
-                "context_id": relationship.context_id,
+                "context_id": relationship.context_id.or(default_context_id),
                 "target_entity_ids": relationship.target_entity_ids,
             });
             output[attribute_key] = attribute_value;
@@ -720,7 +757,7 @@ value = "Blue shirt"
 "#;
         let input: ValueFile = toml::from_str(source).unwrap();
         assert_eq!(
-            values_body(input).unwrap(),
+            values_body(input, None).unwrap(),
             json!({
                 "values": [{
                     "kind": "scalar",
@@ -742,7 +779,7 @@ target_entity_id = "00000000-0000-0000-0000-000000000002"
 "#;
         let input: ValueFile = toml::from_str(source).unwrap();
         assert_eq!(
-            values_body(input).unwrap(),
+            values_body(input, None).unwrap(),
             json!({
                 "values": [{
                     "kind": "relationship",
@@ -771,7 +808,7 @@ value = 2026-08-12T14:30:00Z
         )
         .unwrap();
         assert_eq!(
-            values_body(input).unwrap()["values"],
+            values_body(input, None).unwrap()["values"],
             json!([
                 { "kind": "scalar", "attribute_code": "available_on", "context_id": null, "value": "2026-08-12" },
                 { "kind": "scalar", "attribute_code": "released_at", "context_id": null, "value": "2026-08-12T14:30:00Z" }
@@ -791,7 +828,7 @@ target_entity_ids = [
 "#;
         let input: RelationshipFile = toml::from_str(source).unwrap();
         assert_eq!(
-            relationships_body(input).unwrap(),
+            relationships_body(input, None).unwrap(),
             json!({
                 "relationships": [{
                     "attribute_code": "categories",
@@ -815,7 +852,7 @@ target_entity_id = "00000000-0000-0000-0000-000000000002"
 value = "ignored before this validation"
 "#;
         let input: ValueFile = toml::from_str(relationship_with_value).unwrap();
-        assert!(matches!(values_body(input), Err(CliError::Input(_))));
+        assert!(matches!(values_body(input, None), Err(CliError::Input(_))));
 
         let conflicting_selectors = r#"
 [[values]]
@@ -825,7 +862,7 @@ attribute_code = "title"
 value = "Blue shirt"
 "#;
         let input: ValueFile = toml::from_str(conflicting_selectors).unwrap();
-        assert!(matches!(values_body(input), Err(CliError::Input(_))));
+        assert!(matches!(values_body(input, None), Err(CliError::Input(_))));
 
         let unknown_key = r#"
 code = "shirt-001"

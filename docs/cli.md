@@ -37,8 +37,9 @@ catalog blueprint get-version <blueprint-id> <version>
 catalog blueprint resolve <code>
 catalog blueprint resolve <code> --version <version>
 
+catalog context list
 catalog context create --file locale.toml
-catalog context create --code en_GB --data '{"language":"en-GB"}'
+catalog context create --code en_GB --data '{"language":"en-GB"}' --parent-id <context-id>
 catalog context get en-GB
 
 catalog entity create --file product.toml
@@ -46,10 +47,10 @@ catalog entity get <entity-id>
 catalog entity list --blueprint <code> --related-from <entity-id> --relationship <attribute-code> [--limit <limit>] [--cursor <cursor>]
 catalog entity preview <entity-id> [--relationship-depth <depth>] [--relationship-limit <limit>]
 
-catalog value append <entity-id> --file values.toml
+catalog value append <entity-id> --file values.toml --context-id <context-id>
 catalog value current <entity-id>
-catalog value replace <entity-id> --file relationships.toml
-catalog value remove <entity-id> --file relationships.toml
+catalog value replace <entity-id> --file relationships.toml --context-id <context-id>
+catalog value remove <entity-id> --file relationships.toml --context-id <context-id>
 ```
 
 `entity preview` calls `/entities/{id}/preview` and resolves active relationship
@@ -78,6 +79,7 @@ Context file:
 
 ```toml
 code = "en-GB"
+parent_id = "00000000-0000-4000-8000-000000000001"
 
 [data]
 language = "en-GB"
@@ -113,6 +115,11 @@ value = { time = "09:30:00", time_zone = "America/New_York" }
 Each value must provide exactly one of `attribute_code` or `attribute_id`. Codes
 are resolved against the source entity's pinned blueprint version.
 
+Every value and relationship needs a context. Supply `--context-id` to use it
+for all entries in a file, or set `context_id` on an individual TOML entry. Use
+`catalog context list` or `catalog context get default` to obtain IDs. The
+persisted `default` root is `00000000-0000-4000-8000-000000000001`.
+
 Relationship replacement and removal files use this shape. `replace` makes the
 listed targets the complete current set for each attribute; `remove` unlinks only
 listed currently linked targets.
@@ -121,6 +128,20 @@ listed currently linked targets.
 [[relationships]]
 attribute_code = "categories"
 target_entity_ids = ["00000000-0000-0000-0000-000000000004"]
+```
+
+## Example Seed
+
+The relationship example creates category, color, and product blueprints; typed
+scalar values; category and color relationships; and the context tree `default
+-> PL -> PL-b2c -> PL-b2c-web`. It demonstrates nearest-ancestor scalar
+fallback with Polish title and price overrides.
+
+Build the client once, start the API, then run:
+
+```sh
+cargo build -p catalog-cli
+examples/relationships/seed.sh
 ```
 
 ## Errors

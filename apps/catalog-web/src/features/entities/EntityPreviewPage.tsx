@@ -11,8 +11,7 @@ import {
   Typography,
 } from '@mui/material';
 import { useState } from 'react';
-import { getBlueprintRevision, getEntityPreview } from './api';
-import { resolvePreviewContext } from './preview-context';
+import { getEntityPreview, getResolvedEntityPreview, listContexts } from './api';
 import { entityQueryKeys } from './query-keys';
 
 export const EntityPreviewPage = ({ entityId }: { entityId: string }) => {
@@ -21,19 +20,17 @@ export const EntityPreviewPage = ({ entityId }: { entityId: string }) => {
     queryKey: entityQueryKeys.preview(entityId),
     queryFn: () => getEntityPreview(entityId),
   });
-  const blueprint = useQuery({
-    queryKey: preview.data
-      ? entityQueryKeys.blueprintRevision(
-          preview.data.entity.blueprint_id,
-          preview.data.entity.blueprint_version,
-        )
-      : ['blueprint-revision'],
-    queryFn: () =>
-      getBlueprintRevision(
-        preview.data!.entity.blueprint_id,
-        preview.data!.entity.blueprint_version,
-      ),
-    enabled: Boolean(preview.data),
+  const contexts = useQuery({
+    queryKey: entityQueryKeys.contexts(),
+    queryFn: listContexts,
+  });
+  const selectedContextId = contexts.data?.find((context) => context.code === selectedContext)?.id;
+  const resolved = useQuery({
+    queryKey: selectedContextId
+      ? entityQueryKeys.resolvedPreview(entityId, selectedContextId)
+      : ['entity-resolved-preview'],
+    queryFn: () => getResolvedEntityPreview(entityId, selectedContextId!),
+    enabled: Boolean(selectedContextId),
   });
   return (
     <Container component="main" maxWidth="lg" sx={{ py: { xs: 4, md: 7 } }}>
@@ -77,22 +74,18 @@ export const EntityPreviewPage = ({ entityId }: { entityId: string }) => {
             sx={{ mt: 3 }}
             value={selectedContext}
           >
-            {Object.keys(preview.data.context).map((context) => (
-              <MenuItem key={context} value={context}>
-                {context === 'default' ? 'Default' : context}
+            {contexts.data?.map((context) => (
+              <MenuItem key={context.id} value={context.code}>
+                {context.code === 'default' ? 'Default' : context.code}
               </MenuItem>
             ))}
           </TextField>
-          {blueprint.isPending && <Typography sx={{ mt: 3 }}>Loading schema...</Typography>}
-          {blueprint.isError && <Alert severity="error" sx={{ mt: 3 }}>{blueprint.error.message}</Alert>}
-          {blueprint.data && (
-            <Paper component="pre" sx={{ mt: 3, overflow: 'auto', p: 3 }}>
-              {JSON.stringify(
-                resolvePreviewContext(
-                  preview.data.context,
-                  selectedContext,
-                  blueprint.data.attributes,
-                ),
+            {resolved.isPending && <Typography sx={{ mt: 3 }}>Resolving values...</Typography>}
+            {resolved.isError && <Alert severity="error" sx={{ mt: 3 }}>{resolved.error.message}</Alert>}
+            {resolved.data && (
+              <Paper component="pre" sx={{ mt: 3, overflow: 'auto', p: 3 }}>
+                {JSON.stringify(
+                  resolved.data,
                 null,
                 2,
               )}

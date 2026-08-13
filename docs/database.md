@@ -54,7 +54,7 @@ stops the E2E PostgreSQL container and child processes.
 | `Blueprint` | `blueprints` | A versioned entity-type definition. |
 | `Attribute` | `attributes` | An attribute definition belonging to one blueprint version. |
 | `Entity` | `entities` | A catalog item bound to a blueprint version. |
-| `AttributeContext` | `attribute_contexts` | A reusable dimension such as locale, currency, or channel. |
+| `AttributeContext` | `attribute_contexts` | A named catalog scope in a rooted fallback tree. |
 | `AttributeValue` | `attribute_values` | The canonical EAV fact and immutable value history. |
 
 Rust UUIDs map to PostgreSQL `UUID`, timestamps map to `TIMESTAMPTZ`, and JSON
@@ -111,12 +111,20 @@ Entities are catalog items.
 
 ### `attribute_contexts`
 
-Contexts describe reusable dimensions such as `en_GB`, a currency, or a sales
-channel.
+Contexts define named catalog scopes with one deterministic inheritance path.
+The persisted `default` context is the sole root; other contexts have exactly
+one parent. This supports progressive specialization such as `default -> PL ->
+PL-b2c -> PL-b2c-web` without a context-composition table.
 
 - `code` is globally unique.
-- `code` contains only ASCII letters, numbers, and underscores.
+- `code` contains only ASCII letters, numbers, hyphens, and underscores.
 - `data` is a JSON object with application-defined dimension metadata.
+- `parent_id` is null only for `default`; every other context references a
+  parent context.
+- `default` has the fixed valid v4 UUID
+  `00000000-0000-4000-8000-000000000001` and cannot be changed or deleted.
+- Reparenting rejects cycles. Deletion rejects contexts with descendants or
+  current values.
 
 ### `attribute_values`
 
@@ -125,7 +133,8 @@ append-only; the `latest` current-state marker changes when an event is
 superseded.
 
 - Each row references one entity and one attribute.
-- `context_id` is optional and applies to scalar values and relationships alike.
+- `context_id` is required and applies to scalar values and relationships alike.
+  Default-scope facts reference the persisted `default` context ID.
 - Scalar values are stored in their matching native typed column. The API
   serializes those values as typed JSON.
 - `relationship_target_entity_id` is nullable and references another entity when
@@ -205,10 +214,13 @@ creating and reading entities, appending attribute values, and reading the
 | `POST` | `/contexts` | Create a reusable attribute context. |
 | `GET` | `/contexts` | List reusable attribute contexts by code. |
 | `GET` | `/contexts/{code}` | Read a context by code. |
+| `PUT` | `/contexts/id/{id}` | Update context metadata or reparent a non-default context. |
+| `DELETE` | `/contexts/id/{id}` | Delete a childless context with no current values. |
 | `POST` | `/entities` | Create an entity pinned to an exact blueprint version. |
 | `GET` | `/entities?blueprint=category&related_from={id}&relationship=categories&limit=50&cursor={cursor}` | Page target entity previews through a reverse relationship filter. |
 | `GET` | `/entities/{entity_id}` | Read an active entity and its named projections. |
 | `GET` | `/entities/{entity_id}/preview?relationship_depth=1&relationship_limit=10` | Read contextual preview values with bounded related entity values. |
+| `GET` | `/entities/{entity_id}/resolved-preview?context_id={id}` | Resolve scalar values through a context's ancestor path with supplying-context provenance. |
 | `POST` | `/entities/{entity_id}/values` | Append scalar or relationship value history and rebuild preview. |
 | `GET` | `/entities/{entity_id}/values/current` | Read derived current scalar values and relationship edges. |
 | `POST` | `/v1/entities/search` | Search current scalar values within a resolved blueprint revision. |
@@ -254,11 +266,29 @@ the scalar `preview` cache. Every direct key under `preview` is a context code:
 }
 ```
 
-`default` represents values without a context. Other keys are
+`default` represents direct values in the persisted root context. Other keys are
 `attribute_contexts.code` values. The builder includes each current scalar value
-under its attribute code and excludes relationship values. It preserves other
-named projections. Attribute-value writes lock the entity row, append history,
-rebuild `preview`, and commit atomically.
+under its direct attribute context and excludes relationship values. It preserves
+other named projections. Attribute-value writes lock the entity row, append
+history, rebuild `preview`, and commit atomically.
+
+`preview` retains direct facts so it can be rebuilt from EAV history. Use the
+resolved preview endpoint when a consumer needs inheritance. It walks from the
+requested context toward `default`, uses the nearest scalar value for each
+attribute, observes an attribute's `context_fallback = "none"` policy, and
+returns the context that supplied every value:
+
+```json
+{
+  "requested_context": { "id": "...", "code": "PL-b2c-web", "data": {}, "parent_id": "..." },
+  "values": {
+    "title": {
+      "value": "Granatowa koszula dla niego",
+      "source_context": { "id": "...", "code": "PL-b2c" }
+    }
+  }
+}
+```
 
 Preview reads enrich this scalar cache with active relationship targets. The
 `relationship_depth` query parameter defaults to `1`; use `0` for scalar values
@@ -358,7 +388,8 @@ Authoring](blueprints.md) for the definition grammar and attribute policies.
 ### Projection Builder TODO
 
 - Define relationship rendering, target selection, and cycle protection.
-- Define context fallback and request-specific context selection.
+- Define hierarchy-aware relationship-set inheritance and request-specific
+  relationship context selection.
 - Add builders for `search` and other named projections based on real query needs.
 - Add repair/backfill commands that rebuild projections from EAV history.
 - Add an explicit, validated entity blueprint-version migration command that

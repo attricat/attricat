@@ -3,7 +3,7 @@ use axum::{
     extract::{Path, Query, State},
     http::StatusCode,
     response::{IntoResponse, Response},
-    routing::{get, post},
+    routing::{get, post, put},
 };
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
@@ -14,7 +14,8 @@ use crate::{
         AppendAttributeValues, BlueprintWithAttributes, CreateAttributeContext, CreateBlueprint,
         CreateEntity, CreateEntityFormRequest, Entity, EntityFormResponse, EntityIdentity,
         EntityPreviewPage, EntityPreviewResponse, EntitySearchResponse, RelationshipMutation,
-        SearchEntitiesRequest, UpdateEntityFormRequest,
+        ResolvedEntityPreviewResponse, SearchEntitiesRequest, UpdateAttributeContext,
+        UpdateEntityFormRequest,
     },
     repository::{CatalogRepository, RepositoryError, decode_search_cursor},
 };
@@ -53,6 +54,10 @@ pub fn router(state: AppState) -> Router {
         )
         .route("/contexts", get(list_contexts).post(create_context))
         .route("/contexts/{code}", get(get_context))
+        .route(
+            "/contexts/id/{id}",
+            put(update_context).delete(delete_context),
+        )
         // The v1 routes are form-oriented composites. The older entity routes
         // remain lower-level primitives for clients that manage values and
         // relationships independently.
@@ -65,6 +70,10 @@ pub fn router(state: AppState) -> Router {
         .route("/entities", get(list_previews).post(create_entity))
         .route("/entities/{entity_id}", get(get_entity))
         .route("/entities/{entity_id}/preview", get(get_preview))
+        .route(
+            "/entities/{entity_id}/resolved-preview",
+            get(get_resolved_preview),
+        )
         .route("/entities/{entity_id}/values", post(append_values))
         .route(
             "/entities/{entity_id}/relationships/replace",
@@ -193,6 +202,22 @@ async fn get_context(
         .ok_or_else(|| ApiError::not_found("context"))
 }
 
+async fn update_context(
+    State(state): State<AppState>,
+    Path(id): Path<Uuid>,
+    Json(input): Json<UpdateAttributeContext>,
+) -> Result<Json<crate::model::AttributeContext>, ApiError> {
+    Ok(Json(state.repository.update_context(id, input).await?))
+}
+
+async fn delete_context(
+    State(state): State<AppState>,
+    Path(id): Path<Uuid>,
+) -> Result<StatusCode, ApiError> {
+    state.repository.delete_context(id).await?;
+    Ok(StatusCode::NO_CONTENT)
+}
+
 async fn create_entity(
     State(state): State<AppState>,
     Json(input): Json<CreateEntity>,
@@ -252,6 +277,24 @@ async fn get_preview(
         },
         context,
     }))
+}
+
+#[derive(Deserialize)]
+struct ResolvedPreviewQuery {
+    context_id: Uuid,
+}
+
+async fn get_resolved_preview(
+    State(state): State<AppState>,
+    Path(entity_id): Path<Uuid>,
+    Query(query): Query<ResolvedPreviewQuery>,
+) -> Result<Json<ResolvedEntityPreviewResponse>, ApiError> {
+    state
+        .repository
+        .resolved_preview(entity_id, query.context_id)
+        .await?
+        .map(Json)
+        .ok_or_else(|| ApiError::not_found("entity"))
 }
 
 async fn list_previews(
@@ -580,6 +623,9 @@ impl From<RepositoryError> for ApiError {
             | RepositoryError::InvalidContextCode
             | RepositoryError::InvalidContextData
             | RepositoryError::InvalidContext
+            | RepositoryError::DefaultContextProtected
+            | RepositoryError::ContextCycle
+            | RepositoryError::ContextInUse
             | RepositoryError::DefaultContextOnly
             | RepositoryError::InvalidAttributeSelector => Self {
                 status: StatusCode::UNPROCESSABLE_ENTITY,
