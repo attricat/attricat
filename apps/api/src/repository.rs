@@ -754,7 +754,7 @@ impl CatalogRepository {
                 .and_then(|parent_id| context_by_id.get(&parent_id).cloned());
             path.push(context);
         }
-        let values = attributes.into_iter().filter_map(|attribute| {
+        let mut values = attributes.iter().filter_map(|attribute| {
             path.iter().enumerate().find_map(|(index, context)| {
                 if index > 0 && attribute.context_fallback == "none" { return None; }
                 preview.get(&context.code).and_then(Value::as_object).and_then(|values| values.get(&attribute.code)).map(|value| {
@@ -762,6 +762,32 @@ impl CatalogRepository {
                 })
             })
         }).collect::<Map<_, _>>();
+        let enriched_preview = self
+            .build_preview(entity.id, &entity.projections, 1, 10, &mut HashSet::new())
+            .await?;
+        let relationships = attributes
+            .iter()
+            .filter(|attribute| attribute.value_type == "relationship")
+            .filter_map(|attribute| {
+                path.iter().find_map(|context| {
+                    enriched_preview
+                        .get(&context.code)
+                        .and_then(Value::as_object)
+                        .and_then(|values| values.get(&attribute.code))
+                        .filter(|value| value.get("items").is_some())
+                        .map(|value| {
+                            (
+                                attribute.code.clone(),
+                                serde_json::json!({
+                                    "value": value,
+                                    "source_context": { "id": context.id, "code": context.code },
+                                }),
+                            )
+                        })
+                })
+            })
+            .collect::<Map<_, _>>();
+        values.extend(relationships);
         Ok(Some(ResolvedEntityPreviewResponse {
             requested_context,
             values: Value::Object(values),
@@ -906,6 +932,19 @@ impl CatalogRepository {
         .bind(entity_id)
         .fetch_optional(&self.pool)
         .await?)
+    }
+
+    pub async fn delete_entity(&self, entity_id: Uuid) -> Result<(), RepositoryError> {
+        let result = sqlx::query(
+            "UPDATE entities SET deleted_at = now(), updated_at = now() WHERE id = $1 AND deleted_at IS NULL",
+        )
+        .bind(entity_id)
+        .execute(&self.pool)
+        .await?;
+        if result.rows_affected() == 0 {
+            return Err(RepositoryError::NotFound("entity"));
+        }
+        Ok(())
     }
 
     pub async fn current_values(

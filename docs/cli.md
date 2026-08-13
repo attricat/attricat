@@ -47,6 +47,7 @@ catalog context delete <context-id>
 
 catalog entity create --blueprint product --values values.toml [--version <version>] [--context-id <context-id>]
 catalog entity get <entity-id>
+catalog entity delete <entity-id>
 catalog entity list --blueprint <code> --related-from <entity-id> --relationship <attribute-code> [--limit <limit>] [--cursor <cursor>]
 catalog entity preview <entity-id> [--relationship-depth <depth>] [--relationship-limit <limit>]
 catalog entity resolved-preview <entity-id> --context-id <context-id>
@@ -67,11 +68,14 @@ scalar values only, or request deeper traversal up to the API's configured
 maximum. `--relationship-limit` bounds inline targets per relationship; use
 `entity list` for paginated browsing.
 
-`entity resolved-preview` resolves scalar values for one requested context and
-includes the context that supplied each value. `entity form` returns the pinned
+`entity resolved-preview` resolves attributes for one requested context, including
+enriched relationship sets, and includes the context that supplied each value.
+`entity form` returns the pinned
 blueprint, current direct facts, and form context. `entity update` uses the v1
 atomic form endpoint: scalar values append history, relationship files replace
 the supplied relationship sets, and removal files remove scalar overrides.
+`entity delete` soft-deletes the entity. Its value and relationship history are
+retained, while normal reads and relationship previews no longer expose it.
 
 Blueprint files are sent unchanged as the API's TOML `definition`, preserving
 the raw-source hash. See `database.md` for the blueprint grammar.

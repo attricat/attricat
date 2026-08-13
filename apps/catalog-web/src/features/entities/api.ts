@@ -82,12 +82,13 @@ const entityPreviewSchema = z.object({
   entity: entitySchema,
   context: entityContextSchema,
 });
+const resolvedPreviewValueSchema = z.union([scalarValueSchema, jsonObjectSchema]);
 const resolvedEntityPreviewSchema = z.object({
   requested_context: attributeContextSchema,
   values: z.record(
     z.string(),
     z.object({
-      value: scalarValueSchema,
+      value: resolvedPreviewValueSchema,
       source_context: z.object({ id: uuidSchema, code: z.string() }),
     }),
   ),

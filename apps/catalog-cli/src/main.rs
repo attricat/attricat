@@ -123,6 +123,9 @@ enum EntityCommand {
     Get {
         entity_id: Uuid,
     },
+    Delete {
+        entity_id: Uuid,
+    },
     List {
         #[arg(long)]
         blueprint: String,
@@ -480,6 +483,16 @@ async fn run(cli: Cli) -> Result<String, CliError> {
                     &client,
                     &server,
                     Method::GET,
+                    &format!("/entities/{}", segment(entity_id)),
+                    None,
+                )
+                .await
+            }
+            EntityCommand::Delete { entity_id } => {
+                request(
+                    &client,
+                    &server,
+                    Method::DELETE,
                     &format!("/entities/{}", segment(entity_id)),
                     None,
                 )

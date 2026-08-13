@@ -56,6 +56,93 @@ async fn create_entity(client: &Client, base_url: &str, blueprint: &Value) -> Va
 }
 
 #[sqlx::test]
+async fn soft_deleted_entity_is_hidden_from_reads_and_relationship_previews(pool: PgPool) {
+    let (base_url, server) = start_server(pool).await;
+    let client = Client::new();
+    let category = create_blueprint(
+        &client,
+        &base_url,
+        "format_version = 1\ncode = \"deletablecategory\"\nname = \"Deletable category\"\nkind = \"entity\"\n\n[display.dropdown_option]\nfields = [\"name\"]\n\n[[attributes]]\ncode = \"name\"\nvalue_type = \"string\"\ntags = [\"searchable\"]",
+    )
+    .await;
+    let product = create_blueprint(
+        &client,
+        &base_url,
+        "format_version = 1\ncode = \"deletableproduct\"\nname = \"Deletable product\"\nkind = \"entity\"\n\n[display.dropdown_option]\nfields = [\"title\"]\n\n[[attributes]]\ncode = \"title\"\nvalue_type = \"string\"\ntags = [\"searchable\"]\n\n[[attributes]]\ncode = \"categories\"\nvalue_type = \"relationship\"\ntarget_blueprint = \"deletablecategory\"",
+    )
+    .await;
+    let default_context = client
+        .get(format!("{base_url}/contexts/default"))
+        .send()
+        .await
+        .unwrap()
+        .error_for_status()
+        .unwrap()
+        .json::<Value>()
+        .await
+        .unwrap();
+    let category_entity = create_entity(&client, &base_url, &category).await;
+    let product_entity = create_entity(&client, &base_url, &product).await;
+    let category_id = category_entity["id"].as_str().unwrap();
+    let product_id = product_entity["id"].as_str().unwrap();
+    client
+        .post(format!(
+            "{base_url}/entities/{product_id}/relationships/replace"
+        ))
+        .json(&json!({ "relationships": [{
+            "attribute_code": "categories",
+            "context_id": default_context["id"],
+            "target_entity_ids": [category_id],
+        }] }))
+        .send()
+        .await
+        .unwrap()
+        .error_for_status()
+        .unwrap();
+
+    assert_eq!(
+        client
+            .delete(format!("{base_url}/entities/{category_id}"))
+            .send()
+            .await
+            .unwrap()
+            .status(),
+        StatusCode::NO_CONTENT
+    );
+    assert_eq!(
+        client
+            .get(format!("{base_url}/entities/{category_id}"))
+            .send()
+            .await
+            .unwrap()
+            .status(),
+        StatusCode::NOT_FOUND
+    );
+    let preview: Value = client
+        .get(format!("{base_url}/entities/{product_id}/preview"))
+        .send()
+        .await
+        .unwrap()
+        .error_for_status()
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    assert!(preview["context"]["default"].get("categories").is_none());
+    assert_eq!(
+        client
+            .delete(format!("{base_url}/entities/{category_id}"))
+            .send()
+            .await
+            .unwrap()
+            .status(),
+        StatusCode::NOT_FOUND
+    );
+
+    server.abort();
+}
+
+#[sqlx::test]
 async fn search_includes_all_blueprint_versions_and_marks_outdated_entities(pool: PgPool) {
     let (base_url, server) = start_server(pool).await;
     let client = Client::new();
@@ -1370,6 +1457,56 @@ target_blueprint = "color"
     assert_eq!(
         preview["context"]["default"]["categories"]["items"][0]["display"],
         "Shirts"
+    );
+
+    let delete = client
+        .delete(format!(
+            "{base_url}/entities/{}",
+            shirts["id"].as_str().unwrap()
+        ))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(delete.status(), StatusCode::NO_CONTENT);
+    assert_eq!(
+        client
+            .get(format!(
+                "{base_url}/entities/{}",
+                shirts["id"].as_str().unwrap()
+            ))
+            .send()
+            .await
+            .unwrap()
+            .status(),
+        StatusCode::NOT_FOUND
+    );
+    let preview: Value = client
+        .get(format!("{base_url}/entities/{shirt_id}/preview"))
+        .send()
+        .await
+        .unwrap()
+        .error_for_status()
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    assert!(
+        preview["context"]["default"]["categories"]["items"]
+            .as_array()
+            .unwrap()
+            .is_empty()
+    );
+    assert_eq!(
+        client
+            .delete(format!(
+                "{base_url}/entities/{}",
+                shirts["id"].as_str().unwrap()
+            ))
+            .send()
+            .await
+            .unwrap()
+            .status(),
+        StatusCode::NOT_FOUND
     );
 
     server.abort();

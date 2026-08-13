@@ -85,7 +85,10 @@ export const EntityPreviewPage = ({ entityId }: { entityId: string }) => {
             {resolved.data && (
               <Paper component="pre" sx={{ mt: 3, overflow: 'auto', p: 3 }}>
                 {JSON.stringify(
-                  resolved.data,
+                  {
+                    requested_context: resolved.data.requested_context,
+                    values: resolved.data.values,
+                  },
                 null,
                 2,
               )}

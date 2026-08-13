@@ -68,7 +68,10 @@ pub fn router(state: AppState) -> Router {
             get(get_entity_form).put(update_entity_form),
         )
         .route("/entities", get(list_previews).post(create_entity))
-        .route("/entities/{entity_id}", get(get_entity))
+        .route(
+            "/entities/{entity_id}",
+            get(get_entity).delete(delete_entity),
+        )
         .route("/entities/{entity_id}/preview", get(get_preview))
         .route(
             "/entities/{entity_id}/resolved-preview",
@@ -238,6 +241,14 @@ async fn get_entity(
         .await?
         .map(Json)
         .ok_or_else(|| ApiError::not_found("entity"))
+}
+
+async fn delete_entity(
+    State(state): State<AppState>,
+    Path(entity_id): Path<Uuid>,
+) -> Result<StatusCode, ApiError> {
+    state.repository.delete_entity(entity_id).await?;
+    Ok(StatusCode::NO_CONTENT)
 }
 
 async fn get_preview(

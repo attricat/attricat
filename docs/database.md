@@ -220,7 +220,7 @@ creating and reading entities, appending attribute values, and reading the
 | `GET` | `/entities?blueprint=category&related_from={id}&relationship=categories&limit=50&cursor={cursor}` | Page target entity previews through a reverse relationship filter. |
 | `GET` | `/entities/{entity_id}` | Read an active entity and its named projections. |
 | `GET` | `/entities/{entity_id}/preview?relationship_depth=1&relationship_limit=10` | Read contextual preview values with bounded related entity values. |
-| `GET` | `/entities/{entity_id}/resolved-preview?context_id={id}` | Resolve scalar values through a context's ancestor path with supplying-context provenance. |
+| `GET` | `/entities/{entity_id}/resolved-preview?context_id={id}` | Resolve scalar and relationship attributes through a context's ancestor path with supplying-context provenance. |
 | `POST` | `/entities/{entity_id}/values` | Append scalar or relationship value history and rebuild preview. |
 | `GET` | `/entities/{entity_id}/values/current` | Read derived current scalar values and relationship edges. |
 | `POST` | `/v1/entities/search` | Search current scalar values within a resolved blueprint revision. |
@@ -274,9 +274,10 @@ history, rebuild `preview`, and commit atomically.
 
 `preview` retains direct facts so it can be rebuilt from EAV history. Use the
 resolved preview endpoint when a consumer needs inheritance. It walks from the
-requested context toward `default`, uses the nearest scalar value for each
-attribute, observes an attribute's `context_fallback = "none"` policy, and
-returns the context that supplied every value:
+requested context toward `default`, uses the nearest value or relationship set
+for each attribute, observes an attribute's `context_fallback = "none"` policy,
+and returns the context that supplied every attribute. Relationship values retain
+their enriched preview envelope:
 
 ```json
 {
@@ -285,6 +286,10 @@ returns the context that supplied every value:
     "title": {
       "value": "Granatowa koszula dla niego",
       "source_context": { "id": "...", "code": "PL-b2c" }
+    },
+    "categories": {
+      "value": { "items": [{ "id": "...", "display": "Shirts" }], "truncated": false },
+      "source_context": { "id": "...", "code": "default" }
     }
   }
 }
