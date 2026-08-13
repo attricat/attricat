@@ -137,6 +137,9 @@ superseded.
   Default-scope facts reference the persisted `default` context ID.
 - Scalar values are stored in their matching native typed column. The API
   serializes those values as typed JSON.
+- `value_json` is reserved for future structured attribute types. It is nullable
+  but currently must remain null; no application path reads or writes it.
+  Native scalar columns remain the only supported scalar storage.
 - `relationship_target_entity_id` is nullable and references another entity when
   the attribute is a relationship type.
 - `active` records the current state of a relationship history entry. A false
