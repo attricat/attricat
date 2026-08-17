@@ -337,7 +337,7 @@ async fn search_entity_previews(
     State(state): State<AppState>,
     Json(input): Json<SearchEntitiesRequest>,
 ) -> Result<Json<EntitySearchResponse>, ApiError> {
-    let blueprint_code = input.blueprint.code.trim();
+    let blueprint_code = &input.blueprint.code;
     if blueprint_code.is_empty() {
         return Err(ApiError::invalid_input(
             "blueprint.code must not be empty".to_owned(),
@@ -481,7 +481,7 @@ async fn resolve_search_blueprint(
     state: &AppState,
     blueprint: &crate::model::SearchBlueprint,
 ) -> Result<BlueprintWithAttributes, ApiError> {
-    let code = blueprint.code.trim();
+    let code = &blueprint.code;
     if code.is_empty() {
         return Err(ApiError::invalid_input(
             "blueprint.code must not be empty".to_owned(),
@@ -631,7 +631,7 @@ impl From<RepositoryError> for ApiError {
             RepositoryError::InvalidProjections
             | RepositoryError::InvalidPreview
             | RepositoryError::ReservedContextCode
-            | RepositoryError::InvalidContextCode
+            | RepositoryError::InvalidCode
             | RepositoryError::InvalidContextData
             | RepositoryError::InvalidContext
             | RepositoryError::DefaultContextProtected

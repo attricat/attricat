@@ -154,7 +154,7 @@ from = "seo.meta_title"
 }
 
 #[test]
-fn rejects_codes_outside_the_context_code_character_set() {
+fn validates_reference_codes_with_the_shared_character_set() {
     let source = r#"
 format_version = 1
 code = "product"
@@ -168,14 +168,46 @@ fields = ["title"]
 code = "title"
 value_type = "string"
 "#;
-    for replacement in ["product-name", "product name", "product.name", ""] {
+    for replacement in ["product-name", "product_name"] {
+        assert!(parse(&source.replacen("product", replacement, 1)).is_ok());
+    }
+    for replacement in ["product name", "product.name", "produit-été", ""] {
         assert!(parse(&source.replacen("product", replacement, 1)).is_err());
     }
-    for replacement in ["page-title", "page title", "page.title", ""] {
+    for replacement in ["page-title", "page_title"] {
+        assert!(
+            parse(&source.replace("code = \"title\"", &format!("code = \"{replacement}\"")))
+                .is_ok()
+        );
+    }
+    for replacement in ["page title", "page.title", "page.titlé", ""] {
         assert!(
             parse(&source.replace("code = \"title\"", &format!("code = \"{replacement}\"")))
                 .is_err()
         );
+    }
+}
+
+#[test]
+fn validates_include_aliases_with_the_shared_character_set() {
+    let source = r#"
+format_version = 1
+code = "product"
+name = "Product"
+kind = "entity"
+
+[[includes]]
+alias = "seo-metadata"
+code = "seo"
+version = 1
+
+[[attributes]]
+code = "meta_title"
+from = "seo-metadata.meta_title"
+"#;
+    assert!(parse(source).is_ok());
+    for alias in ["seo metadata", "seo.metadata", "seo-métadata", ""] {
+        assert!(parse(&source.replace("seo-metadata", alias)).is_err());
     }
 }
 

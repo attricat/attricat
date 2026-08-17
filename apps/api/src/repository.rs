@@ -2,6 +2,7 @@ use std::collections::HashSet;
 
 use async_recursion::async_recursion;
 use base64::{Engine, engine::general_purpose::URL_SAFE_NO_PAD};
+use catalog_validation::is_valid_code;
 use chrono::{DateTime, NaiveDate, NaiveTime, Utc};
 use chrono_tz::Tz;
 use rust_decimal::Decimal;
@@ -32,8 +33,8 @@ pub enum RepositoryError {
     NotFound(&'static str),
     #[error("the context code 'default' is reserved")]
     ReservedContextCode,
-    #[error("context code must contain only letters, numbers, hyphens, and underscores")]
-    InvalidContextCode,
+    #[error("code must contain only ASCII letters, numbers, hyphens, and underscores")]
+    InvalidCode,
     #[error("context data must be a JSON object")]
     InvalidContextData,
     #[error("context was not found")]
@@ -542,6 +543,7 @@ impl CatalogRepository {
         &self,
         code: &str,
     ) -> Result<Option<BlueprintWithAttributes>, RepositoryError> {
+        validate_code(code)?;
         let blueprint = sqlx::query_as::<_, Blueprint>(
             r#"SELECT id, code, name, kind, version, includes, display, created_at, updated_at, deleted_at, definition, definition_hash
                FROM blueprints
@@ -561,6 +563,7 @@ impl CatalogRepository {
         code: &str,
         version: i64,
     ) -> Result<Option<BlueprintWithAttributes>, RepositoryError> {
+        validate_code(code)?;
         let blueprint = sqlx::query_as::<_, Blueprint>(
             r#"SELECT id, code, name, kind, version, includes, display, created_at, updated_at, deleted_at, definition, definition_hash
                FROM blueprints
@@ -616,13 +619,7 @@ impl CatalogRepository {
         if input.code == "default" {
             return Err(RepositoryError::ReservedContextCode);
         }
-        if input.code.is_empty()
-            || !input.code.chars().all(|character| {
-                character.is_ascii_alphanumeric() || character == '_' || character == '-'
-            })
-        {
-            return Err(RepositoryError::InvalidContextCode);
-        }
+        validate_code(&input.code)?;
         if !input.data.is_object() {
             return Err(RepositoryError::InvalidContextData);
         }
@@ -653,6 +650,7 @@ impl CatalogRepository {
         &self,
         code: &str,
     ) -> Result<Option<AttributeContext>, RepositoryError> {
+        validate_code(code)?;
         Ok(sqlx::query_as::<_, AttributeContext>(
             "SELECT id, code, data, parent_id FROM attribute_contexts WHERE code = $1",
         )
@@ -1131,6 +1129,8 @@ impl CatalogRepository {
         limit: i64,
         cursor: Option<Uuid>,
     ) -> Result<EntityPreviewPage, RepositoryError> {
+        validate_code(blueprint_code)?;
+        validate_code(relationship)?;
         let rows = sqlx::query_as::<_, EntityPreviewRow>(
             r#"SELECT target.id, target.blueprint_version, target.created_at, target.projections -> 'preview' AS preview,
                       b.display AS blueprint_display,
@@ -1469,6 +1469,7 @@ impl CatalogRepository {
                     .await?
                 }
                 (None, Some(attribute_code)) => {
+                    validate_code(&attribute_code)?;
                     sqlx::query_as::<_, (Uuid, String, Option<String>, String)>(
                         r#"SELECT id, value_type, target_blueprint_code, context_editable
                    FROM attributes
@@ -1554,6 +1555,7 @@ impl CatalogRepository {
         entity: &Entity,
         selector: AttributeValueSelector,
     ) -> Result<(), RepositoryError> {
+        validate_code(&selector.attribute_code)?;
         self.validate_context_id(transaction, selector.context_id)
             .await?;
         let attribute = sqlx::query_as::<_, (Uuid, String, String)>(
@@ -1718,9 +1720,17 @@ impl CatalogRepository {
             (Some(id), None) => sqlx::query_as::<_, (Uuid, String, Option<String>, String)>(
                 "SELECT id, value_type, target_blueprint_code, context_editable FROM attributes WHERE id = $1 AND blueprint_id = $2 AND blueprint_version = $3 AND deleted_at IS NULL",
             ).bind(id).bind(entity.blueprint_id).bind(entity.blueprint_version).fetch_optional(&mut **transaction).await?,
-            (None, Some(code)) => sqlx::query_as::<_, (Uuid, String, Option<String>, String)>(
-                "SELECT id, value_type, target_blueprint_code, context_editable FROM attributes WHERE code = $1 AND blueprint_id = $2 AND blueprint_version = $3 AND deleted_at IS NULL",
-            ).bind(code).bind(entity.blueprint_id).bind(entity.blueprint_version).fetch_optional(&mut **transaction).await?,
+            (None, Some(code)) => {
+                validate_code(code)?;
+                sqlx::query_as::<_, (Uuid, String, Option<String>, String)>(
+                    "SELECT id, value_type, target_blueprint_code, context_editable FROM attributes WHERE code = $1 AND blueprint_id = $2 AND blueprint_version = $3 AND deleted_at IS NULL",
+                )
+                .bind(code)
+                .bind(entity.blueprint_id)
+                .bind(entity.blueprint_version)
+                .fetch_optional(&mut **transaction)
+                .await?
+            }
             _ => return Err(RepositoryError::InvalidAttributeSelector),
         }.ok_or(RepositoryError::AttributeNotApplicable)?;
         if attribute.1 != "relationship" {
@@ -1930,6 +1940,14 @@ fn display_label(
             .collect::<Vec<_>>()
             .join(separator),
     )
+}
+
+fn validate_code(value: &str) -> Result<(), RepositoryError> {
+    if is_valid_code(value) {
+        Ok(())
+    } else {
+        Err(RepositoryError::InvalidCode)
+    }
 }
 
 fn display_value(value: &Value) -> String {

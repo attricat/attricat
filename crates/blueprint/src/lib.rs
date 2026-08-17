@@ -1,5 +1,6 @@
 use std::collections::{HashMap, HashSet};
 
+use catalog_validation::is_valid_code;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use thiserror::Error;
@@ -112,7 +113,7 @@ pub enum BlueprintError {
     DuplicateIncludeAlias(String),
     #[error("attribute code '{0}' is duplicated")]
     DuplicateAttributeCode(String),
-    #[error("{field} must contain only ASCII letters, numbers, and underscores")]
+    #[error("{field} must contain only ASCII letters, numbers, hyphens, and underscores")]
     InvalidCode { field: &'static str },
     #[error("attribute '{0}' must define exactly one of value_type or from")]
     InvalidAttributeDeclaration(String),
@@ -198,7 +199,7 @@ pub fn parse(source: &str) -> Result<BlueprintDefinition, BlueprintError> {
 
     let mut aliases = HashSet::new();
     for include in &raw.includes {
-        validate_non_empty(&include.alias, "include alias")?;
+        validate_code(&include.alias, "include alias")?;
         validate_code(&include.code, "include code")?;
         if include.version <= 0 {
             return Err(BlueprintError::EmptyField("include version"));
@@ -428,11 +429,7 @@ fn validate_non_empty(value: &str, field: &'static str) -> Result<(), BlueprintE
 }
 
 fn validate_code(value: &str, field: &'static str) -> Result<(), BlueprintError> {
-    if value.is_empty()
-        || !value
-            .chars()
-            .all(|character| character.is_ascii_alphanumeric() || character == '_')
-    {
+    if !is_valid_code(value) {
         return Err(BlueprintError::InvalidCode { field });
     }
     Ok(())

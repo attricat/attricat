@@ -8,6 +8,7 @@ async-recursion = "1"
 axum = "0.8"
 base64 = "0.22"
 catalog-blueprint = { path = "../../crates/blueprint" }
+catalog-validation = { path = "../../crates/validation" }
 chrono = { version = "0.4", default-features = false, features = ["clock", "serde", "std"] }
 chrono-tz = "0.10"
 rust_decimal = { version = "1", features = ["serde"] }
