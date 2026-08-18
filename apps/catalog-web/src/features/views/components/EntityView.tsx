@@ -12,8 +12,14 @@ import {
 } from '@mui/material';
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import { useState, type ReactNode } from 'react';
-import type { Attribute, ViewDefinition, ViewNode } from '../../entities/api';
+import {
+  viewBlockTypes,
+  type Attribute,
+  type ViewDefinition,
+  type ViewNode,
+} from '../../entities/api';
 import { FieldErrorBoundary } from './boundaries/FieldErrorBoundary';
+import { resolveValueRenderer, resolveViewComponent } from './registry';
 import { AttributeValue } from './values/AttributeValue';
 
 type ResolvedValue = { value: unknown; source_context?: { code: string } };
@@ -31,10 +37,12 @@ const ValueField = ({
   attribute,
   resolved,
   renderEditor,
+  component,
 }: {
   attribute: Attribute;
   resolved?: ResolvedValue;
   renderEditor?: (attribute: Attribute) => ReactNode;
+  component?: { id: string; version: number } | null;
 }) => (
   <FieldErrorBoundary label={labelFor(attribute.code)}>
     <Stack spacing={0.5}>
@@ -45,7 +53,13 @@ const ValueField = ({
           <Typography sx={{ fontWeight: 700 }} variant="subtitle2">
             {labelFor(attribute.code)}
           </Typography>
-          <AttributeValue attribute={attribute} value={resolved?.value} />
+          {(() => {
+            const ValueRenderer =
+              resolveValueRenderer(component) ?? AttributeValue;
+            return (
+              <ValueRenderer attribute={attribute} value={resolved?.value} />
+            );
+          })()}
           {resolved?.source_context && (
             <Typography color="text.secondary" variant="caption">
               Using {resolved.source_context.code}
@@ -92,7 +106,7 @@ export const EntityView = ({
     attributes.map((attribute) => [attribute.code, attribute]),
   );
   const fallback: ViewNode[] = attributes.map((attribute) => ({
-    type: 'field',
+    type: viewBlockTypes.field,
     field: attribute.code,
   }));
   const renderNodes = (nodes: ViewNode[]): ReactNode => (
@@ -101,21 +115,28 @@ export const EntityView = ({
     </Stack>
   );
   const renderNode = (node: ViewNode, key: string): ReactNode => {
+    if (node.component && !resolveViewComponent(node.component)) {
+      return (
+        <FieldErrorBoundary key={key} label="view component">
+          Unable to render component.
+        </FieldErrorBoundary>
+      );
+    }
     if (skipComponentId && node.component?.id === skipComponentId) return null;
-    if (node.type === 'heading')
+    if (node.type === viewBlockTypes.heading)
       return (
         <Typography component="h2" key={key} variant="h5">
           {node.text}
         </Typography>
       );
-    if (node.type === 'text')
+    if (node.type === viewBlockTypes.text)
       return (
         <Typography color="text.secondary" key={key}>
           {node.text}
         </Typography>
       );
-    if (node.type === 'divider') return <Divider key={key} />;
-    if (node.type === 'grid')
+    if (node.type === viewBlockTypes.divider) return <Divider key={key} />;
+    if (node.type === viewBlockTypes.grid)
       return (
         <Box
           key={key}
@@ -130,19 +151,19 @@ export const EntityView = ({
           )}
         </Box>
       );
-    if (node.type === 'section')
+    if (node.type === viewBlockTypes.section)
       return (
         <Paper key={key} sx={{ p: 2.5 }}>
           {renderNodes(node.children)}
         </Paper>
       );
-    if (node.type === 'tabs')
+    if (node.type === viewBlockTypes.tabs)
       return (
         <Box key={key}>
           <ViewTabs render={renderNodes} tabs={node.tabs} />
         </Box>
       );
-    if (node.type === 'accordion')
+    if (node.type === viewBlockTypes.accordion)
       return (
         <Box key={key}>
           {node.sections.map((section) => (
@@ -157,7 +178,7 @@ export const EntityView = ({
           ))}
         </Box>
       );
-    if (node.type === 'stack')
+    if (node.type === viewBlockTypes.stack)
       return (
         <Stack key={key} spacing={2}>
           {node.children.map((child, index) =>
@@ -165,11 +186,15 @@ export const EntityView = ({
           )}
         </Stack>
       );
-    if (node.type === 'field' || node.type === 'relationship_list') {
+    if (
+      node.type === viewBlockTypes.field ||
+      node.type === viewBlockTypes.relationshipList
+    ) {
       const attribute = byCode.get(node.field);
       return attribute ? (
         <ValueField
           attribute={attribute}
+          component={node.component}
           key={key}
           renderEditor={renderEditor}
           resolved={values[attribute.code]}
@@ -178,6 +203,9 @@ export const EntityView = ({
     }
     return null;
   };
-  if (!view || view.type === 'table') return <>{renderNodes(fallback)}</>;
+
+  if (!view || view.type === viewBlockTypes.table)
+    return <>{renderNodes(fallback)}</>;
+
   return <>{renderNode(view, 'root')}</>;
 };

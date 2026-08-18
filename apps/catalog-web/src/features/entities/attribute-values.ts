@@ -2,17 +2,14 @@ import { z } from 'zod';
 import type { Attribute, NewAttributeValue } from './api';
 import { attributeValueKinds, attributeValueTypes } from './value-types';
 
-const timeZoneSchema = z.string().refine(
-  (value) => {
-    try {
-      Intl.DateTimeFormat(undefined, { timeZone: value });
-      return true;
-    } catch {
-      return false;
-    }
-  },
-  'Expected an IANA time zone',
-);
+const timeZoneSchema = z.string().refine((value) => {
+  try {
+    Intl.DateTimeFormat(undefined, { timeZone: value });
+    return true;
+  } catch {
+    return false;
+  }
+}, 'Expected an IANA time zone');
 
 const scalarValueSchemas = {
   [attributeValueTypes.string]: z.string(),

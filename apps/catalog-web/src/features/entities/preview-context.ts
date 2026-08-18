@@ -19,7 +19,11 @@ export const resolvePreviewContext = (
   return Object.fromEntries(
     attributes.flatMap((attribute) => {
       for (const [index, contextCode] of path.entries()) {
-        if ((!selectedExists || index > 0) && attribute.context_fallback === 'none') break;
+        if (
+          (!selectedExists || index > 0) &&
+          attribute.context_fallback === 'none'
+        )
+          break;
         const value = context[contextCode]?.[attribute.code];
         if (value !== undefined) return [[attribute.code, value]];
       }

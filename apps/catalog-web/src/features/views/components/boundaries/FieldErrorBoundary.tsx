@@ -16,7 +16,9 @@ export class FieldErrorBoundary extends Component<Props, State> {
 
   render() {
     if (this.state.failed) {
-      return <Alert severity="warning">Unable to render {this.props.label}.</Alert>;
+      return (
+        <Alert severity="warning">Unable to render {this.props.label}.</Alert>
+      );
     }
     return this.props.children;
   }

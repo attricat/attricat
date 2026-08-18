@@ -188,7 +188,8 @@ export const EntityForm = ({
                       ...field.state.value,
                       [attribute.code]: nextValue,
                     });
-                  return attribute.value_type === attributeValueTypes.relationship ? (
+                  return attribute.value_type ===
+                    attributeValueTypes.relationship ? (
                     <RelationshipField
                       attribute={attribute}
                       disabled={defaultOnly}

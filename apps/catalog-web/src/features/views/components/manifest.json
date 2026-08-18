@@ -1,9 +1,0 @@
-{"components":[
-  {"id":"catalog.field_display","version":1,"capabilities":["display"],"placements":["field"],"value_types":["string","number","integer","boolean","date","datetime","time"],"allowed_props":[]},
-  {"id":"catalog.field_edit","version":1,"capabilities":["edit"],"placements":["field"],"value_types":["string","number","integer","boolean","date","datetime","time"],"allowed_props":[]},
-  {"id":"catalog.relationship_list_display","version":1,"capabilities":["display"],"placements":["relationship_list"],"value_types":["relationship"],"allowed_props":[]},
-  {"id":"catalog.relationship_list_edit","version":1,"capabilities":["edit"],"placements":["relationship_list"],"value_types":["relationship"],"allowed_props":[]},
-  {"id":"catalog.table_display","version":1,"capabilities":["display"],"placements":["table"],"value_types":["string","number","integer","boolean","date","datetime","time"],"allowed_props":[]},
-  {"id":"catalog.table_edit","version":1,"capabilities":["edit"],"placements":["table"],"value_types":["string","number","integer","boolean","date","datetime","time"],"allowed_props":[]},
-  {"id":"catalog.entity_heading","version":1,"capabilities":["display"],"placements":["stack"],"value_types":[],"allowed_props":[]}
-]}

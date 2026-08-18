@@ -34,7 +34,8 @@ const createBlueprint = async (
 const createEntity = async (blueprint: Blueprint, values: NewValue[]) => {
   const contexts = await request<Context[]>('/contexts');
   const defaultContext = contexts.find((context) => context.code === 'default');
-  if (!defaultContext) throw new Error('E2E setup did not create the default context');
+  if (!defaultContext)
+    throw new Error('E2E setup did not create the default context');
   return request<Entity>('/v1/entities', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -43,7 +44,10 @@ const createEntity = async (blueprint: Blueprint, values: NewValue[]) => {
         code: blueprint.blueprint.code,
         version: blueprint.blueprint.version,
       },
-      values: values.map((value) => ({ ...value, context_id: defaultContext.id })),
+      values: values.map((value) => ({
+        ...value,
+        context_id: defaultContext.id,
+      })),
     }),
   });
 };

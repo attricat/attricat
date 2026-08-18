@@ -54,16 +54,16 @@ export const EditEntityPage = ({ entityId }: { entityId: string }) => {
       {entityForm.isPending && (
         <Typography sx={{ mt: 4 }}>Loading entity...</Typography>
       )}
-        {(entityForm.error || update.error) && (
+      {(entityForm.error || update.error) && (
         <Alert severity="error" sx={{ mt: 4 }}>
           {(entityForm.error ?? update.error)?.message}
         </Alert>
-        )}
-        {resolvedPreview.isError && (
-          <Alert severity="error" sx={{ mt: 4 }}>
-            {resolvedPreview.error.message}
-          </Alert>
-        )}
+      )}
+      {resolvedPreview.isError && (
+        <Alert severity="error" sx={{ mt: 4 }}>
+          {resolvedPreview.error.message}
+        </Alert>
+      )}
       {entityForm.data && (
         <>
           <TextField

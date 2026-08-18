@@ -18,7 +18,9 @@ describe('parseExplorerSearch', () => {
   });
 
   it('trims valid string values', () => {
-    expect(parseExplorerSearch({ blueprint: ' product ', query: ' shirt ' })).toEqual({
+    expect(
+      parseExplorerSearch({ blueprint: ' product ', query: ' shirt ' }),
+    ).toEqual({
       blueprint: 'product',
       query: 'shirt',
     });

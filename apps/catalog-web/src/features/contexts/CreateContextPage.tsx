@@ -7,7 +7,8 @@ import {
   Container,
   Paper,
   Stack,
-  MenuItem, TextField,
+  MenuItem,
+  TextField,
   Typography,
 } from '@mui/material';
 import { useState } from 'react';
@@ -18,7 +19,10 @@ export const CreateContextPage = () => {
   const navigate = useNavigate({ from: '/contexts/new' });
   const queryClient = useQueryClient();
   const [validationError, setValidationError] = useState<string>();
-  const contexts = useQuery({ queryKey: entityQueryKeys.contexts(), queryFn: listContexts });
+  const contexts = useQuery({
+    queryKey: entityQueryKeys.contexts(),
+    queryFn: listContexts,
+  });
   const create = useMutation({
     mutationFn: ({
       code,
@@ -86,9 +90,19 @@ export const CreateContextPage = () => {
           </form.Field>
           <form.Field name="parentId">
             {(field) => (
-              <TextField select label="Parent context" required value={field.state.value} onChange={(event) => field.handleChange(event.target.value)}>
+              <TextField
+                select
+                label="Parent context"
+                required
+                value={field.state.value}
+                onChange={(event) => field.handleChange(event.target.value)}
+              >
                 <MenuItem value="">Select a parent</MenuItem>
-                {(contexts.data ?? []).map((context) => <MenuItem key={context.id} value={context.id}>{context.code}</MenuItem>)}
+                {(contexts.data ?? []).map((context) => (
+                  <MenuItem key={context.id} value={context.id}>
+                    {context.code}
+                  </MenuItem>
+                ))}
               </TextField>
             )}
           </form.Field>

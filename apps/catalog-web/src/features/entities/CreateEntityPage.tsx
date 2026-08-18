@@ -16,7 +16,9 @@ export const CreateEntityPage = () => {
     queryKey: entityQueryKeys.contexts(),
     queryFn: listContexts,
   });
-  const defaultContextId = contexts.data?.find((context) => context.code === 'default')?.id;
+  const defaultContextId = contexts.data?.find(
+    (context) => context.code === 'default',
+  )?.id;
   const create = useMutation({
     mutationFn: ({
       values,
@@ -28,14 +30,18 @@ export const CreateEntityPage = () => {
       const resolved = blueprint.data;
       if (!resolved)
         throw new Error('Choose a blueprint before creating an entity');
-      if (!defaultContextId) throw new Error('The default context is not available');
+      if (!defaultContextId)
+        throw new Error('The default context is not available');
       return createEntity({
         blueprint: {
           code: resolved.blueprint.code,
           version: resolved.blueprint.version,
         },
         values: [
-          ...values.map((value) => ({ ...value, context_id: defaultContextId })),
+          ...values.map((value) => ({
+            ...value,
+            context_id: defaultContextId,
+          })),
           ...relationships.flatMap((relationship) =>
             relationship.target_entity_ids.map((target_entity_id) => ({
               kind: attributeValueKinds.relationship,

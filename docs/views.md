@@ -89,8 +89,15 @@ field = "price"
 component = { id = "catalog.field_edit", version = 1 }
 ```
 
-The manifest and React implementations live under
-`apps/catalog-web/src/features/views/components`. Component IDs use lowercase
-dotted namespaces. The compiler validates component version, props, placement,
-value type, and required `display` or `edit` capability. The frontend isolates
-each field renderer with an error boundary.
+Component IDs use lowercase dotted namespaces. The frontend registry lives at
+`apps/catalog-web/src/features/views/components/registry.ts`; each registered
+component has its own module in that directory. A module exports its typed
+definition and, when it has one, its React renderer. `EntityView` resolves a
+blueprint reference through this registry and isolates field renderers with an
+error boundary.
+
+The Rust blueprint compiler reads
+`apps/catalog-web/src/features/views/component-contract.json` to validate a
+component's version, props, placement, value type, and required `display` or
+`edit` capability. Keep this contract synchronized with the TypeScript
+definition. `registry.test.ts` verifies that their metadata is identical.

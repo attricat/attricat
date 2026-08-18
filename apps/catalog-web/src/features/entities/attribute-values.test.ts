@@ -4,20 +4,26 @@ import { scalarValueForField, valueForField } from './attribute-values';
 describe('attribute values', () => {
   it('formats API scalar values for form fields', () => {
     expect(valueForField(false)).toBe('false');
-    expect(valueForField({ time: '09:30:00', time_zone: 'America/New_York' })).toBe(
-      '09:30:00 America/New_York',
-    );
+    expect(
+      valueForField({ time: '09:30:00', time_zone: 'America/New_York' }),
+    ).toBe('09:30:00 America/New_York');
   });
 
   it('parses fields into their declared scalar types', () => {
     expect(
-      scalarValueForField({ code: 'available', value_type: 'boolean' }, 'false'),
+      scalarValueForField(
+        { code: 'available', value_type: 'boolean' },
+        'false',
+      ),
     ).toEqual({ kind: 'scalar', attribute_code: 'available', value: false });
     expect(
       scalarValueForField({ code: 'price', value_type: 'number' }, '49.95'),
     ).toEqual({ kind: 'scalar', attribute_code: 'price', value: 49.95 });
     expect(
-      scalarValueForField({ code: 'cutoff', value_type: 'time' }, '09:30 America/New_York'),
+      scalarValueForField(
+        { code: 'cutoff', value_type: 'time' },
+        '09:30 America/New_York',
+      ),
     ).toEqual({
       kind: 'scalar',
       attribute_code: 'cutoff',
@@ -33,7 +39,10 @@ describe('attribute values', () => {
       scalarValueForField({ code: 'stock', value_type: 'integer' }, '12.5'),
     ).toBeUndefined();
     expect(
-      scalarValueForField({ code: 'release_date', value_type: 'date' }, 'tomorrow'),
+      scalarValueForField(
+        { code: 'release_date', value_type: 'date' },
+        'tomorrow',
+      ),
     ).toBeUndefined();
     expect(
       scalarValueForField(

@@ -79,7 +79,7 @@ fields = ["name", "sku"]
 separator = " / "
 ```
 
-`separator` defaults to ` · `. Server-rendered labels respect each attribute's
+`separator` defaults to `·`. Server-rendered labels respect each attribute's
 `context_fallback` policy.
 
 ## Views
@@ -135,10 +135,13 @@ field = "price"
 component = { id = "catalog.field_edit", version = 1 }
 ```
 
-Component IDs use lowercase, underscore-separated dotted namespaces. The
-component manifest validates its version, allowed props, placement, value type,
-and requested view capability. Component implementations and their manifest
-live under `apps/catalog-web/src/features/views/components`.
+Component IDs use lowercase, underscore-separated dotted namespaces. React
+component definitions are assembled by the TypeScript registry at
+`apps/catalog-web/src/features/views/components/registry.ts`, with each
+definition in its own module. The Rust validation contract is
+`apps/catalog-web/src/features/views/component-contract.json`; it validates the
+version, allowed props, placement, value type, and requested view capability.
+The frontend registry test enforces matching metadata between the two.
 
 See [View Configuration](views.md) for the complete block grammar, heading
 configuration, and component contracts.

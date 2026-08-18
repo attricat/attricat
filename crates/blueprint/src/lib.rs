@@ -46,7 +46,7 @@ struct ComponentManifestEntry {
 
 static COMPONENT_MANIFEST: LazyLock<ComponentManifest> = LazyLock::new(|| {
     serde_json::from_str(include_str!(
-        "../../../apps/catalog-web/src/features/views/components/manifest.json"
+        "../../../apps/catalog-web/src/features/views/component-contract.json"
     ))
     .expect("component manifest must be valid JSON")
 });
