@@ -74,7 +74,7 @@ export const EditEntityPage = ({ entityId }: { entityId: string }) => {
             sx={{ mt: 4 }}
             value={contextId ?? ''}
           >
-            {contexts.data?.map((context) => (
+            {(contexts.data ?? []).map((context) => (
               <MenuItem key={context.id} value={context.id}>
                 {context.code}
               </MenuItem>

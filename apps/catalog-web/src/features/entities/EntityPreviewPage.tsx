@@ -95,7 +95,7 @@ export const EntityPreviewPage = ({ entityId }: { entityId: string }) => {
             sx={{ mt: 3 }}
             value={selectedContext}
           >
-            {contexts.data?.map((context) => (
+            {(contexts.data ?? []).map((context) => (
               <MenuItem key={context.id} value={context.code}>
                 {context.code === 'default' ? 'Default' : context.code}
               </MenuItem>

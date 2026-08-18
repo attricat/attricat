@@ -189,7 +189,7 @@ export const Explorer = ({ search }: { search: ExplorerSearch }) => {
                 sx={{ width: 280 }}
                 value={field.state.value}
               >
-                {blueprints.data?.map((blueprint) => (
+                {(blueprints.data ?? []).map((blueprint) => (
                   <MenuItem key={blueprint.code} value={blueprint.code}>
                     {blueprint.name} ({blueprint.code})
                   </MenuItem>

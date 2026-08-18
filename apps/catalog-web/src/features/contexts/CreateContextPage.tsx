@@ -88,7 +88,7 @@ export const CreateContextPage = () => {
             {(field) => (
               <TextField select label="Parent context" required value={field.state.value} onChange={(event) => field.handleChange(event.target.value)}>
                 <MenuItem value="">Select a parent</MenuItem>
-                {contexts.data?.map((context) => <MenuItem key={context.id} value={context.id}>{context.code}</MenuItem>)}
+                {(contexts.data ?? []).map((context) => <MenuItem key={context.id} value={context.id}>{context.code}</MenuItem>)}
               </TextField>
             )}
           </form.Field>

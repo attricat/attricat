@@ -1,9 +1,10 @@
 # Related Categories And Colors
 
-Create the three blueprints, then create a category, color, and product entity
-using their returned blueprint IDs. Append the supplied scalar value files. The
-product example includes every native scalar type: string, number, integer,
-boolean, date, datetime, and a wall-clock time with an IANA timezone.
+Create the three blueprints, then seed a category, color, two parent products,
+and two variants for each parent. Product variants use the self-referential
+`variants` relationship. The Navy shirt parent includes every native scalar
+type: string, number, integer, boolean, date, datetime, and a wall-clock time
+with an IANA timezone.
 
 Use a relationship file with the created target entity IDs:
 

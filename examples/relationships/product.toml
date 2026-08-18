@@ -74,6 +74,10 @@ type = "divider"
 type = "relationship_list"
 field = "colors"
 
+[[views.detail.children]]
+type = "relationship_list"
+field = "variants"
+
 [views.edit]
 type = "stack"
 
@@ -116,6 +120,10 @@ field = "categories"
 type = "relationship_list"
 field = "colors"
 
+[[views.edit.children]]
+type = "relationship_list"
+field = "variants"
+
 [views.table]
 type = "table"
 fields = ["title", "price", "stock_on_hand", "available"]
@@ -157,3 +165,8 @@ target_blueprint = "category"
 code = "colors"
 value_type = "relationship"
 target_blueprint = "color"
+
+[[attributes]]
+code = "variants"
+value_type = "relationship"
+target_blueprint = "product"

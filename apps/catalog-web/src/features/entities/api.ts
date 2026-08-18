@@ -6,7 +6,7 @@ const jsonObjectSchema = z.record(z.string(), z.unknown());
 const componentReferenceSchema = z.object({
   id: z.string().regex(/^[a-z][a-z0-9_]*(\.[a-z][a-z0-9_]*)*$/),
   version: z.number().int().positive(),
-  props: jsonObjectSchema.default({}),
+  props: jsonObjectSchema.nullish().transform((props) => props ?? {}),
 });
 const viewNodeSchema: z.ZodType<ViewNode> = z.lazy(() =>
   z.discriminatedUnion('type', [

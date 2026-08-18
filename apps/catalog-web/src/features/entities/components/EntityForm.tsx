@@ -137,7 +137,7 @@ export const EntityForm = ({
                   value={field.state.value}
                 >
                   <MenuItem value="">Select a blueprint</MenuItem>
-                  {blueprints.data?.map((option) => (
+                  {(blueprints.data ?? []).map((option) => (
                     <MenuItem key={option.code} value={option.code}>
                       {option.name} ({option.code})
                     </MenuItem>
