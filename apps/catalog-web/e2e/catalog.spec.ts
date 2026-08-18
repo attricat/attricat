@@ -15,6 +15,8 @@ const request = async <T>(path: string, init?: RequestInit): Promise<T> => {
 
 type Blueprint = { blueprint: { code: string; version: number } };
 type Entity = { id: string };
+type Context = { id: string; code: string };
+type NewValue = Record<string, unknown>;
 
 const createBlueprint = async (
   code: string,
@@ -29,8 +31,11 @@ const createBlueprint = async (
     }),
   });
 
-const createEntity = async (blueprint: Blueprint, values: unknown[]) =>
-  request<Entity>('/v1/entities', {
+const createEntity = async (blueprint: Blueprint, values: NewValue[]) => {
+  const contexts = await request<Context[]>('/contexts');
+  const defaultContext = contexts.find((context) => context.code === 'default');
+  if (!defaultContext) throw new Error('E2E setup did not create the default context');
+  return request<Entity>('/v1/entities', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
@@ -38,9 +43,10 @@ const createEntity = async (blueprint: Blueprint, values: unknown[]) =>
         code: blueprint.blueprint.code,
         version: blueprint.blueprint.version,
       },
-      values,
+      values: values.map((value) => ({ ...value, context_id: defaultContext.id })),
     }),
   });
+};
 
 const scalar = (attributeCode: string, value: string) => ({
   kind: 'scalar',
@@ -66,6 +72,7 @@ test('searches an entity and opens its preview', async ({ page }) => {
 
   await expect(page).toHaveURL(new RegExp(`blueprint=${code}.*query=red`));
   await expect(page.getByText('1 result')).toBeVisible();
+  await expect(page.getByRole('link', { name: entity.id })).toBeVisible();
   await page.getByRole('link', { name: entity.id }).click();
   await expect(page).toHaveURL(new RegExp(`/entities/${entity.id}$`));
   await expect(page.getByText(title)).toBeVisible();
@@ -99,6 +106,8 @@ test('creates a context from context management', async ({ page }) => {
   await expect(page).toHaveURL(/\/contexts$/);
   await page.getByRole('link', { name: 'Create context' }).click();
   await page.getByLabel('Code').fill(code);
+  await page.getByLabel('Parent context').click();
+  await page.getByRole('option', { name: 'default' }).click();
   await page.getByLabel('Metadata').fill('{"market":"US"}');
   await page.getByRole('button', { name: 'Create context' }).click();
 
@@ -129,7 +138,7 @@ test('edits scalar values and replaces a typed relationship', async ({
 
   await page.goto(`/entities/${entity.id}`);
   await page.getByRole('link', { name: 'Edit entity' }).click();
-  await expect(page.getByLabel('Context')).toHaveText('Default');
+  await expect(page.getByLabel('Context')).toHaveText('default');
   await page.getByLabel('title').fill('After edit');
   await page.getByLabel('categories').click();
   await page.getByRole('option', { name: 'Sale' }).click();
