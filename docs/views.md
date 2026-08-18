@@ -97,7 +97,7 @@ blueprint reference through this registry and isolates field renderers with an
 error boundary.
 
 The Rust blueprint compiler reads
-`apps/catalog-web/src/features/views/component-contract.json` to validate a
+`contracts/view-components.json` to validate a
 component's version, props, placement, value type, and required `display` or
 `edit` capability. Keep this contract synchronized with the TypeScript
 definition. `registry.test.ts` verifies that their metadata is identical.

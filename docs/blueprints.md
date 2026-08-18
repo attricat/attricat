@@ -139,7 +139,7 @@ Component IDs use lowercase, underscore-separated dotted namespaces. React
 component definitions are assembled by the TypeScript registry at
 `apps/catalog-web/src/features/views/components/registry.ts`, with each
 definition in its own module. The Rust validation contract is
-`apps/catalog-web/src/features/views/component-contract.json`; it validates the
+`contracts/view-components.json`; it validates the
 version, allowed props, placement, value type, and requested view capability.
 The frontend registry test enforces matching metadata between the two.
 

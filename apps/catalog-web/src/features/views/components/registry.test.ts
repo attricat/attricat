@@ -1,4 +1,4 @@
-import contract from '../component-contract.json';
+import contract from '../../../../../../contracts/view-components.json';
 import { describe, expect, it } from 'vitest';
 import { viewComponents } from './registry';
 
