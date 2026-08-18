@@ -7,10 +7,20 @@ describe('view component registry', () => {
     expect(
       viewComponents.map(
         ({
-          valueRenderer: _valueRenderer,
-          headingRenderer: _headingRenderer,
-          ...component
-        }) => component,
+          id,
+          version,
+          capabilities,
+          placements,
+          value_types,
+          allowed_props,
+        }) => ({
+          id,
+          version,
+          capabilities,
+          placements,
+          value_types,
+          allowed_props,
+        }),
       ),
     ).toEqual(contract.components);
   });
