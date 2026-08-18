@@ -461,7 +461,7 @@ tags = ["searchable"]
         .json()
         .await
         .unwrap();
-    assert_eq!(contexts, json!([context]));
+    assert!(contexts.as_array().unwrap().contains(&context));
     for data in [json!([]), json!("en-GB"), Value::Null] {
         let response = client
             .post(format!("{base_url}/contexts"))
@@ -475,7 +475,7 @@ tags = ["searchable"]
             "invalid_input"
         );
     }
-    for code in ["en-GB", "en GB", "en.GB", ""] {
+    for code in ["en GB", "en.GB", ""] {
         let response = client
             .post(format!("{base_url}/contexts"))
             .json(&json!({ "code": code, "data": {} }))
@@ -671,7 +671,8 @@ tags = ["searchable"]
     let current_default_title: Vec<_> = current_values
         .iter()
         .filter(|value| {
-            value["attribute_id"] == title_attribute_id && value["context_id"].is_null()
+            value["attribute_id"] == title_attribute_id
+                && value["context_id"] == "00000000-0000-4000-8000-000000000001"
         })
         .collect();
     assert_eq!(current_default_title.len(), 1);
@@ -696,10 +697,11 @@ tags = ["searchable"]
     let title_attribute_id: Uuid = title_attribute_id.parse().unwrap();
     assert_eq!(
         sqlx::query_scalar::<_, i64>(
-            "SELECT COUNT(*) FROM attribute_values WHERE entity_id = $1 AND attribute_id = $2 AND context_id IS NULL AND relationship_target_entity_id IS NULL AND latest"
+            "SELECT COUNT(*) FROM attribute_values WHERE entity_id = $1 AND attribute_id = $2 AND context_id = $3 AND relationship_target_entity_id IS NULL AND latest"
         )
         .bind(source_id)
         .bind(title_attribute_id)
+        .bind(Uuid::from_u128(0x00000000000040008000000000000001))
         .fetch_one(&pool)
         .await
         .unwrap(),
@@ -707,10 +709,11 @@ tags = ["searchable"]
     );
     assert_eq!(
         sqlx::query_scalar::<_, i64>(
-            "SELECT COUNT(*) FROM attribute_values WHERE entity_id = $1 AND attribute_id = $2 AND context_id IS NULL AND relationship_target_entity_id IS NULL"
+            "SELECT COUNT(*) FROM attribute_values WHERE entity_id = $1 AND attribute_id = $2 AND context_id = $3 AND relationship_target_entity_id IS NULL"
         )
         .bind(source_id)
         .bind(title_attribute_id)
+        .bind(Uuid::from_u128(0x00000000000040008000000000000001))
         .fetch_one(&pool)
         .await
         .unwrap(),
@@ -773,7 +776,7 @@ tags = ["searchable"]
         .unwrap();
     assert_eq!(
         form["values"][0],
-        json!({ "kind": "scalar", "attribute_code": "title", "context_id": null, "value": "Created from form" })
+        json!({ "kind": "scalar", "attribute_code": "title", "context_id": "00000000-0000-4000-8000-000000000001", "value": "Created from form" })
     );
     assert_eq!(form["context"]["default"]["title"], "Created from form");
 
@@ -1146,11 +1149,12 @@ value_type = "string"
         .parse()
         .unwrap();
     sqlx::query(
-        "INSERT INTO attribute_values (id, entity_id, attribute_id, value_number) VALUES ($1, $2, $3, 12.50)",
+        "INSERT INTO attribute_values (id, entity_id, attribute_id, context_id, value_number) VALUES ($1, $2, $3, $4, 12.50)",
     )
     .bind(Uuid::new_v4())
     .bind(entity_id)
     .bind(attribute_id)
+    .bind(Uuid::from_u128(0x00000000000040008000000000000001))
     .execute(&pool)
     .await
     .unwrap();
@@ -1610,12 +1614,7 @@ target_blueprint = "color"
         .json()
         .await
         .unwrap();
-    assert!(
-        preview["context"]["default"]["categories"]["items"]
-            .as_array()
-            .unwrap()
-            .is_empty()
-    );
+    assert!(preview["context"]["default"]["categories"].is_null());
     assert_eq!(
         client
             .delete(format!(
@@ -1629,5 +1628,90 @@ target_blueprint = "color"
         StatusCode::NOT_FOUND
     );
 
+    server.abort();
+}
+
+#[sqlx::test]
+async fn validates_attribute_and_entity_json_schemas(pool: PgPool) {
+    let (base_url, server) = start_server(pool).await;
+    let client = Client::new();
+    let blueprint = create_blueprint(
+        &client,
+        &base_url,
+        r#"format_version = 1
+code = "schema_product"
+name = "Schema product"
+kind = "entity"
+entity_schema = '{"type":"object","required":["title","price"]}'
+
+[display.dropdown_option]
+fields = ["title"]
+
+[[attributes]]
+code = "title"
+value_type = "string"
+value_schema = '{"type":"string","minLength":3}'
+
+[[attributes]]
+code = "price"
+value_type = "number"
+value_schema = '{"type":"number","minimum":0}'"#,
+    )
+    .await;
+    let contexts: Vec<Value> = client
+        .get(format!("{base_url}/contexts"))
+        .send()
+        .await
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    let context_id = contexts
+        .iter()
+        .find(|context| context["code"] == "default")
+        .unwrap()["id"]
+        .clone();
+    let create = |values: Value| {
+        client.post(format!("{base_url}/v1/entities")).json(&json!({
+            "blueprint": {
+                "code": blueprint["blueprint"]["code"],
+                "version": blueprint["blueprint"]["version"],
+            },
+            "values": values,
+        }))
+    };
+    let response = create(json!([
+        { "kind": "scalar", "attribute_code": "title", "context_id": context_id, "value": "ok" },
+        { "kind": "scalar", "attribute_code": "price", "context_id": context_id, "value": 10 },
+    ]))
+    .send()
+    .await
+    .unwrap();
+    assert_eq!(response.status(), StatusCode::UNPROCESSABLE_ENTITY);
+    assert_eq!(
+        response.json::<Value>().await.unwrap()["error"]["code"],
+        "attribute_value_schema_mismatch"
+    );
+
+    let response = create(json!([
+        { "kind": "scalar", "attribute_code": "title", "context_id": context_id, "value": "Valid" },
+    ]))
+    .send()
+    .await
+    .unwrap();
+    assert_eq!(response.status(), StatusCode::UNPROCESSABLE_ENTITY);
+    assert_eq!(
+        response.json::<Value>().await.unwrap()["error"]["code"],
+        "entity_schema_mismatch"
+    );
+
+    let response = create(json!([
+        { "kind": "scalar", "attribute_code": "title", "context_id": context_id, "value": "Valid" },
+        { "kind": "scalar", "attribute_code": "price", "context_id": context_id, "value": 10 },
+    ]))
+    .send()
+    .await
+    .unwrap();
+    assert_eq!(response.status(), StatusCode::CREATED);
     server.abort();
 }

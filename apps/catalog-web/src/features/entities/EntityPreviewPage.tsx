@@ -10,7 +10,7 @@ import {
   TextField,
   Typography,
 } from '@mui/material';
-import { useState } from 'react';
+import { createElement, useState } from 'react';
 import {
   getBlueprintRevision,
   getEntityPreview,
@@ -83,12 +83,12 @@ export const EntityPreviewPage = ({ entityId }: { entityId: string }) => {
         Entity preview
       </Typography>
       {resolved.data && blueprint.data && HeadingRenderer ? (
-        <HeadingRenderer
-          attributes={blueprint.data.attributes}
-          entityId={entityId}
-          values={resolved.data.values}
-          view={detailView}
-        />
+        createElement(HeadingRenderer, {
+          attributes: blueprint.data.attributes,
+          entityId,
+          values: resolved.data.values,
+          view: detailView,
+        })
       ) : (
         <Typography component="h1" variant="h3">
           {entityId}

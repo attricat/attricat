@@ -36,6 +36,7 @@ from = "seo.meta_title"
                 EffectiveAttribute {
                     code: "meta_title".to_owned(),
                     value_type: "string".to_owned(),
+                    value_schema: None,
                     target_blueprint: None,
                     tags: vec![],
                     context_fallback: "default".to_owned(),
@@ -45,6 +46,7 @@ from = "seo.meta_title"
                 EffectiveAttribute {
                     code: "meta_description".to_owned(),
                     value_type: "string".to_owned(),
+                    value_schema: None,
                     target_blueprint: None,
                     tags: vec![],
                     context_fallback: "default".to_owned(),
@@ -425,6 +427,68 @@ value_type = "string"
         ),
     ] {
         assert!(compile(parse(&invalid).unwrap(), &[], &invalid).is_err());
+    }
+}
+
+#[test]
+fn compiles_json_schema_contracts() {
+    let source = r#"
+format_version = 1
+code = "product"
+name = "Product"
+kind = "entity"
+entity_schema = '{"type":"object","required":["price"]}'
+
+[display.dropdown_option]
+fields = ["title"]
+
+[[attributes]]
+code = "title"
+value_type = "string"
+
+[[attributes]]
+code = "price"
+value_type = "number"
+value_schema = '{"type":"number","minimum":0}'
+"#;
+    let compiled = compile(parse(source).unwrap(), &[], source).unwrap();
+    assert_eq!(compiled.entity_schema.unwrap()["required"][0], "price");
+    assert_eq!(
+        compiled.attributes[1].value_schema.as_ref().unwrap()["minimum"],
+        0
+    );
+}
+
+#[test]
+fn rejects_invalid_json_schema_contracts() {
+    let source = r#"
+format_version = 1
+code = "product"
+name = "Product"
+kind = "entity"
+
+[display.dropdown_option]
+fields = ["title"]
+
+[[attributes]]
+code = "title"
+value_type = "string"
+"#;
+    for invalid in [
+        source.replace(
+            "value_type = \"string\"",
+            "value_type = \"string\"\nvalue_schema = \"not json\"",
+        ),
+        source.replace(
+            "kind = \"entity\"",
+            "kind = \"mixin\"\nentity_schema = '{\"type\":\"object\"}'",
+        ),
+        source.replace(
+            "value_type = \"string\"",
+            "value_type = \"relationship\"\nvalue_schema = '{\"type\":\"array\"}'",
+        ),
+    ] {
+        assert!(parse(&invalid).is_err());
     }
 }
 

@@ -29,6 +29,7 @@ export type {
   EntityItem,
   EntityPreview,
   EntitySearchResponse,
+  JsonSchema,
   NewAttributeValue,
   RelationshipTargets,
   ResolvedEntityPreview,

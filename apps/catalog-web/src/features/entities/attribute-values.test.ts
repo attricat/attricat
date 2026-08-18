@@ -51,4 +51,18 @@ describe('attribute values', () => {
       ),
     ).toBeUndefined();
   });
+
+  it('enforces an attribute JSON Schema after type normalization', () => {
+    const attribute = {
+      code: 'price',
+      value_type: 'number' as const,
+      value_schema: { type: 'number', minimum: 0 },
+    };
+    expect(scalarValueForField(attribute, '49.95')).toEqual({
+      kind: 'scalar',
+      attribute_code: 'price',
+      value: 49.95,
+    });
+    expect(scalarValueForField(attribute, '-1')).toBeUndefined();
+  });
 });

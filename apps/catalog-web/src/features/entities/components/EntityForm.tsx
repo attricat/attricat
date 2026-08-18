@@ -26,7 +26,6 @@ import {
   serializeAttributeValues,
   valuesForForm,
 } from '../entity-form';
-import { valueForField } from '../attribute-values';
 import { displayLabel, dropdownOptionLabel } from '../entity-display';
 import { entityQueryKeys } from '../query-keys';
 import { attributeValueTypes } from '../value-types';

@@ -22,12 +22,13 @@ const createBlueprint = async (
   code: string,
   name: string,
   attributes: string,
+  entitySchema?: string,
 ) =>
   request<Blueprint>('/blueprints', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
-      definition: `format_version = 1\ncode = "${code}"\nname = "${name}"\nkind = "entity"\n\n[display.dropdown_option]\nfields = ["title"]\n\n${attributes}`,
+      definition: `format_version = 1\ncode = "${code}"\nname = "${name}"\nkind = "entity"${entitySchema ? `\nentity_schema = '${entitySchema}'` : ''}\n\n[display.dropdown_option]\nfields = ["title"]\n\n${attributes}`,
     }),
   });
 
@@ -102,6 +103,32 @@ test('creates an entity from a blueprint', async ({ page }) => {
   await expect(page.getByText(title)).toBeVisible();
 });
 
+test('rejects a browser create that violates a blueprint schema', async ({
+  page,
+}) => {
+  const code = `product_schema_${suffix()}`;
+  await createBlueprint(
+    code,
+    'Schema products',
+    '[[attributes]]\ncode = "title"\nvalue_type = "string"\nvalue_schema = \'{"type":"string","minLength":3}\'\ntags = ["searchable"]',
+    '{"type":"object","required":["title"]}',
+  );
+
+  await page.goto('/entities/new');
+  await page.getByLabel('Blueprint').click();
+  await page.getByRole('option', { name: `Schema products (${code})` }).click();
+  await page.getByRole('button', { name: 'Load blueprint' }).click();
+  await page.getByLabel('title').fill('no');
+  await page.getByRole('button', { name: 'Create entity' }).click();
+
+  await expect(page).toHaveURL(/\/entities\/new$/);
+  await expect(page.getByText('Request failed (422)')).toBeVisible();
+
+  await page.getByLabel('title').fill('Valid title');
+  await page.getByRole('button', { name: 'Create entity' }).click();
+  await expect(page).toHaveURL(/\/entities\/[0-9a-f-]{36}$/);
+});
+
 test('creates a context from context management', async ({ page }) => {
   const code = `market_${suffix()}`;
 
@@ -130,9 +157,7 @@ test('edits scalar values and replaces a typed relationship', async ({
     'Edit categories',
     '[[attributes]]\ncode = "title"\nvalue_type = "string"\ntags = ["searchable"]',
   );
-  const categoryEntity = await createEntity(category, [
-    scalar('title', 'Sale'),
-  ]);
+  await createEntity(category, [scalar('title', 'Sale')]);
   const product = await createBlueprint(
     productCode,
     'Edit products',

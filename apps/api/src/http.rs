@@ -620,6 +620,16 @@ impl From<RepositoryError> for ApiError {
                 code: "attribute_value_type_mismatch",
                 message: error.to_string(),
             },
+            RepositoryError::AttributeValueSchemaMismatch { .. } => Self {
+                status: StatusCode::UNPROCESSABLE_ENTITY,
+                code: "attribute_value_schema_mismatch",
+                message: error.to_string(),
+            },
+            RepositoryError::EntitySchemaMismatch { .. } => Self {
+                status: StatusCode::UNPROCESSABLE_ENTITY,
+                code: "entity_schema_mismatch",
+                message: error.to_string(),
+            },
             RepositoryError::InvalidStoredAttributeValue => {
                 Self::internal("stored attribute value is invalid")
             }

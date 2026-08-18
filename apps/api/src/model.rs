@@ -14,6 +14,7 @@ pub struct Blueprint {
     pub includes: Value,
     pub display: Value,
     pub views: Value,
+    pub entity_schema: Option<Value>,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
     pub deleted_at: Option<DateTime<Utc>>,
@@ -28,6 +29,7 @@ pub struct Attribute {
     pub blueprint_version: i64,
     pub code: String,
     pub value_type: String,
+    pub value_schema: Option<Value>,
     pub target_blueprint_code: Option<String>,
     pub tags: Value,
     pub context_fallback: String,
@@ -88,7 +90,12 @@ pub struct CreateEntity {
 pub struct CreateAttributeContext {
     pub code: String,
     pub data: Value,
+    #[serde(default = "default_context_id")]
     pub parent_id: Uuid,
+}
+
+fn default_context_id() -> Uuid {
+    Uuid::from_u128(0x00000000000040008000000000000001)
 }
 
 #[derive(Clone, Debug, Deserialize)]

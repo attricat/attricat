@@ -56,6 +56,7 @@ export type ViewDefinition =
 
 export const uuidSchema = z.uuid();
 const jsonObjectSchema = z.record(z.string(), z.unknown());
+const jsonSchemaSchema = z.union([jsonObjectSchema, z.boolean()]);
 const componentReferenceSchema = z.object({
   id: z.string().regex(/^[a-z][a-z0-9_]*(\.[a-z][a-z0-9_]*)*$/),
   version: z.number().int().positive(),
@@ -171,6 +172,7 @@ export const attributeSchema = z
     target_blueprint_code: z.string().nullable().optional(),
     context_fallback: z.enum(['default', 'none']).optional(),
     context_editable: z.enum(['all', 'default']).optional(),
+    value_schema: jsonSchemaSchema.nullish(),
   })
   .passthrough();
 export const blueprintSchema = z
@@ -180,6 +182,7 @@ export const blueprintSchema = z
     version: z.number().int().positive(),
     display: jsonObjectSchema,
     views: viewsSchema.default({}),
+    entity_schema: jsonSchemaSchema.nullish(),
   })
   .passthrough();
 export const blueprintWithAttributesSchema = z.object({
@@ -302,6 +305,7 @@ export const updateEntityRequestSchema = z.object({
 
 export type Attribute = z.infer<typeof attributeSchema>;
 export type Blueprint = z.infer<typeof blueprintSchema>;
+export type JsonSchema = z.infer<typeof jsonSchemaSchema>;
 export type BlueprintWithAttributes = z.infer<
   typeof blueprintWithAttributesSchema
 >;

@@ -3,7 +3,7 @@ use std::{
     sync::LazyLock,
 };
 
-use catalog_validation::is_valid_code;
+use catalog_validation::{is_valid_code, validate_json_schema_definition};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use thiserror::Error;
@@ -17,6 +17,7 @@ pub struct BlueprintDefinition {
     pub includes: Vec<IncludeRef>,
     pub display: HashMap<String, DisplayDefinition>,
     pub views: HashMap<String, ViewDefinition>,
+    pub entity_schema: Option<serde_json::Value>,
     pub attributes: Vec<AttributeDeclaration>,
 }
 
@@ -45,10 +46,8 @@ struct ComponentManifestEntry {
 }
 
 static COMPONENT_MANIFEST: LazyLock<ComponentManifest> = LazyLock::new(|| {
-    serde_json::from_str(include_str!(
-        "../../../contracts/view-components.json"
-    ))
-    .expect("component manifest must be valid JSON")
+    serde_json::from_str(include_str!("../../../contracts/view-components.json"))
+        .expect("component manifest must be valid JSON")
 });
 
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
@@ -195,6 +194,7 @@ pub enum AttributeDeclaration {
     Local {
         code: String,
         value_type: String,
+        value_schema: Option<serde_json::Value>,
         target_blueprint: Option<String>,
         tags: Vec<String>,
         context_fallback: String,
@@ -219,6 +219,7 @@ pub struct ResolvedInclude {
 pub struct EffectiveAttribute {
     pub code: String,
     pub value_type: String,
+    pub value_schema: Option<serde_json::Value>,
     pub target_blueprint: Option<String>,
     pub tags: Vec<String>,
     pub context_fallback: String,
@@ -235,6 +236,7 @@ pub struct CompiledBlueprint {
     pub includes: Vec<IncludeRef>,
     pub display: HashMap<String, DisplayDefinition>,
     pub views: HashMap<String, ViewDefinition>,
+    pub entity_schema: Option<serde_json::Value>,
     pub attributes: Vec<EffectiveAttribute>,
 }
 
@@ -276,6 +278,12 @@ pub enum BlueprintError {
     InvalidAttributeTag(String),
     #[error("attribute '{code}' has unsupported value type '{value_type}'")]
     UnsupportedValueType { code: String, value_type: String },
+    #[error("attribute '{code}' cannot define a value schema for relationship values")]
+    RelationshipValueSchema { code: String },
+    #[error("{field} is not valid JSON Schema: {message}")]
+    InvalidJsonSchema { field: String, message: String },
+    #[error("only entity blueprints can define an entity schema")]
+    EntitySchemaOnMixin,
     #[error("attribute '{code}' has invalid context_fallback '{context_fallback}'")]
     InvalidContextFallback {
         code: String,
@@ -305,13 +313,17 @@ pub enum BlueprintError {
     },
     #[error("component '{id}' has unsupported prop '{prop}'")]
     InvalidComponentProp { id: String, prop: String },
-    #[error("component references are only allowed on table, field, relationship_list, and stack blocks")]
+    #[error(
+        "component references are only allowed on table, field, relationship_list, and stack blocks"
+    )]
     ComponentOnNonDataBlock,
     #[error("stack component in view '{view}' can only be used in views.detail")]
     StackComponentOutsideDetail { view: String },
     #[error("stack component in view '{view}' must have a scalar field as its first child")]
     StackComponentInvalidFirstChild { view: String },
-    #[error("stack component in view '{view}' only allows text and scalar field children after the first child")]
+    #[error(
+        "stack component in view '{view}' only allows text and scalar field children after the first child"
+    )]
     StackComponentInvalidChild { view: String },
     #[error("view '{view}' references unknown attribute '{field}'")]
     UnknownViewField { view: String, field: String },
@@ -334,6 +346,7 @@ struct RawBlueprintDefinition {
     display: HashMap<String, DisplayDefinition>,
     #[serde(default)]
     views: HashMap<String, ViewDefinition>,
+    entity_schema: Option<String>,
     attributes: Vec<RawAttributeDeclaration>,
 }
 
@@ -342,6 +355,7 @@ struct RawBlueprintDefinition {
 struct RawAttributeDeclaration {
     code: String,
     value_type: Option<String>,
+    value_schema: Option<String>,
     target_blueprint: Option<String>,
     #[serde(default)]
     tags: Vec<String>,
@@ -360,6 +374,27 @@ fn default_context_editable() -> String {
     "all".to_owned()
 }
 
+fn parse_json_schema(
+    source: Option<String>,
+    field: &str,
+) -> Result<Option<serde_json::Value>, BlueprintError> {
+    let Some(source) = source else {
+        return Ok(None);
+    };
+    let schema =
+        serde_json::from_str(&source).map_err(|error| BlueprintError::InvalidJsonSchema {
+            field: field.to_owned(),
+            message: error.to_string(),
+        })?;
+    validate_json_schema_definition(&schema).map_err(|message| {
+        BlueprintError::InvalidJsonSchema {
+            field: field.to_owned(),
+            message,
+        }
+    })?;
+    Ok(Some(schema))
+}
+
 pub fn parse(source: &str) -> Result<BlueprintDefinition, BlueprintError> {
     let raw: RawBlueprintDefinition = toml::from_str(source)?;
     if raw.format_version != 1 {
@@ -369,6 +404,10 @@ pub fn parse(source: &str) -> Result<BlueprintDefinition, BlueprintError> {
     validate_non_empty(&raw.name, "blueprint name")?;
     if raw.attributes.is_empty() {
         return Err(BlueprintError::EmptyAttributes);
+    }
+    let entity_schema = parse_json_schema(raw.entity_schema, "entity_schema")?;
+    if entity_schema.is_some() && raw.kind != BlueprintKind::Entity {
+        return Err(BlueprintError::EntitySchemaOnMixin);
     }
 
     let mut aliases = HashSet::new();
@@ -413,6 +452,15 @@ pub fn parse(source: &str) -> Result<BlueprintDefinition, BlueprintError> {
                 if attribute.target_blueprint.is_some() && value_type != "relationship" {
                     return Err(BlueprintError::InvalidAttributeDeclaration(attribute.code));
                 }
+                if value_type == "relationship" && attribute.value_schema.is_some() {
+                    return Err(BlueprintError::RelationshipValueSchema {
+                        code: attribute.code,
+                    });
+                }
+                let value_schema = parse_json_schema(
+                    attribute.value_schema,
+                    &format!("attribute '{}'.value_schema", attribute.code),
+                )?;
                 if let Some(target_blueprint) = &attribute.target_blueprint {
                     validate_code(target_blueprint, "attribute target_blueprint")?;
                 }
@@ -437,6 +485,7 @@ pub fn parse(source: &str) -> Result<BlueprintDefinition, BlueprintError> {
                 AttributeDeclaration::Local {
                     code: attribute.code,
                     value_type,
+                    value_schema,
                     target_blueprint: attribute.target_blueprint,
                     tags: attribute.tags,
                     context_fallback: attribute.context_fallback,
@@ -463,6 +512,7 @@ pub fn parse(source: &str) -> Result<BlueprintDefinition, BlueprintError> {
         includes: raw.includes,
         display: raw.display,
         views: raw.views,
+        entity_schema,
         attributes,
     })
 }
@@ -495,55 +545,63 @@ pub fn compile(
 
     let mut attributes = Vec::with_capacity(definition.attributes.len());
     for (position, declaration) in definition.attributes.iter().enumerate() {
-        let (code, value_type, target_blueprint, tags, context_fallback, context_editable) =
-            match declaration {
-                AttributeDeclaration::Local {
-                    code,
-                    value_type,
-                    target_blueprint,
-                    tags,
-                    context_fallback,
-                    context_editable,
-                } => (
+        let (
+            code,
+            value_type,
+            value_schema,
+            target_blueprint,
+            tags,
+            context_fallback,
+            context_editable,
+        ) = match declaration {
+            AttributeDeclaration::Local {
+                code,
+                value_type,
+                value_schema,
+                target_blueprint,
+                tags,
+                context_fallback,
+                context_editable,
+            } => (
+                code.clone(),
+                value_type.clone(),
+                value_schema.clone(),
+                target_blueprint.clone(),
+                tags.clone(),
+                context_fallback.clone(),
+                context_editable.clone(),
+            ),
+            AttributeDeclaration::Selection {
+                code,
+                include_alias,
+                attribute_code,
+            } => {
+                let include = resolved_by_alias
+                    .get(include_alias.as_str())
+                    .ok_or_else(|| BlueprintError::UnknownIncludeAlias(include_alias.clone()))?;
+                let attribute = include
+                    .attributes
+                    .iter()
+                    .find(|attribute| attribute.code == *attribute_code)
+                    .ok_or_else(|| BlueprintError::UnknownIncludedAttribute {
+                        alias: include_alias.clone(),
+                        attribute: attribute_code.clone(),
+                    })?;
+                (
                     code.clone(),
-                    value_type.clone(),
-                    target_blueprint.clone(),
-                    tags.clone(),
-                    context_fallback.clone(),
-                    context_editable.clone(),
-                ),
-                AttributeDeclaration::Selection {
-                    code,
-                    include_alias,
-                    attribute_code,
-                } => {
-                    let include =
-                        resolved_by_alias
-                            .get(include_alias.as_str())
-                            .ok_or_else(|| {
-                                BlueprintError::UnknownIncludeAlias(include_alias.clone())
-                            })?;
-                    let attribute = include
-                        .attributes
-                        .iter()
-                        .find(|attribute| attribute.code == *attribute_code)
-                        .ok_or_else(|| BlueprintError::UnknownIncludedAttribute {
-                            alias: include_alias.clone(),
-                            attribute: attribute_code.clone(),
-                        })?;
-                    (
-                        code.clone(),
-                        attribute.value_type.clone(),
-                        attribute.target_blueprint.clone(),
-                        attribute.tags.clone(),
-                        attribute.context_fallback.clone(),
-                        attribute.context_editable.clone(),
-                    )
-                }
-            };
+                    attribute.value_type.clone(),
+                    attribute.value_schema.clone(),
+                    attribute.target_blueprint.clone(),
+                    attribute.tags.clone(),
+                    attribute.context_fallback.clone(),
+                    attribute.context_editable.clone(),
+                )
+            }
+        };
         attributes.push(EffectiveAttribute {
             code,
             value_type,
+            value_schema,
             target_blueprint,
             tags,
             context_fallback,
@@ -591,6 +649,7 @@ pub fn compile(
         includes: definition.includes,
         display: definition.display,
         views: definition.views,
+        entity_schema: definition.entity_schema,
         attributes,
     })
 }
@@ -604,7 +663,12 @@ fn validate_view(
         ViewDefinition::Table { fields, component } => {
             for field in fields {
                 let attribute = validate_view_field(view, field, attributes, false)?;
-                validate_component(component.as_ref(), view, "table", Some(&attribute.value_type))?;
+                validate_component(
+                    component.as_ref(),
+                    view,
+                    "table",
+                    Some(&attribute.value_type),
+                )?;
             }
         }
         ViewDefinition::Stack {
@@ -692,7 +756,12 @@ fn validate_view_nodes(
         match node {
             ViewNode::Field { field, component } => {
                 let attribute = validate_view_field(view, field, attributes, false)?;
-                validate_component(component.as_ref(), view, "field", Some(&attribute.value_type))?;
+                validate_component(
+                    component.as_ref(),
+                    view,
+                    "field",
+                    Some(&attribute.value_type),
+                )?;
             }
             ViewNode::RelationshipList { field, component } => {
                 let attribute = validate_view_field(view, field, attributes, true)?;

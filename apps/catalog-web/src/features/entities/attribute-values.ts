@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import type { Attribute, NewAttributeValue } from './api';
+import { validatesJsonSchema } from './json-schema';
 import { attributeValueKinds, attributeValueTypes } from './value-types';
 
 const timeZoneSchema = z.string().refine((value) => {
@@ -51,7 +52,8 @@ export const scalarValueForField = (
     return undefined;
   const schema = scalarValueSchemas[attribute.value_type];
   const result = schema.safeParse(value);
-  return result.success
+  return result.success &&
+    validatesJsonSchema(result.data, attribute.value_schema)
     ? {
         kind: attributeValueKinds.scalar,
         attribute_code: attribute.code,

@@ -147,6 +147,14 @@ See [View Configuration](views.md) for the complete block grammar, heading
 configuration, and component contracts. See
 [Component Authoring](component-authoring.md) for the implementation workflow.
 
+## JSON Schema Validation
+
+Blueprint attributes can define scalar `value_schema` contracts and entity
+blueprints can define an `entity_schema` for cross-field validation. Both use
+JSON Schema Draft 2020-12 and are enforced by the API before values are stored.
+See [JSON Schema Validation](json-schema-validation.md) for authoring syntax,
+context behavior, and error handling.
+
 ## Validation
 
 Unknown keys, invalid selectors or policy values, missing mixins, and malformed

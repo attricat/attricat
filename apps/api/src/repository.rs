@@ -2,7 +2,7 @@ use std::collections::HashSet;
 
 use async_recursion::async_recursion;
 use base64::{Engine, engine::general_purpose::URL_SAFE_NO_PAD};
-use catalog_validation::is_valid_code;
+use catalog_validation::{is_valid_code, validate_json_schema};
 use chrono::{DateTime, NaiveDate, NaiveTime, Utc};
 use chrono_tz::Tz;
 use rust_decimal::Decimal;
@@ -55,6 +55,22 @@ pub enum RepositoryError {
     AttributeKindMismatch,
     #[error("value does not match the attribute type")]
     AttributeValueTypeMismatch,
+    #[error(
+        "value for attribute '{attribute}' does not match its schema at '{instance_path}': {message}"
+    )]
+    AttributeValueSchemaMismatch {
+        attribute: String,
+        instance_path: String,
+        message: String,
+    },
+    #[error(
+        "resolved entity values for context '{context}' do not match the entity schema at '{instance_path}': {message}"
+    )]
+    EntitySchemaMismatch {
+        context: String,
+        instance_path: String,
+        message: String,
+    },
     #[error("stored attribute value does not match its attribute type")]
     InvalidStoredAttributeValue,
     #[error("relationship target does not match the attribute target blueprint")]
@@ -359,7 +375,7 @@ impl CatalogRepository {
     pub async fn list_entity_blueprints(&self) -> Result<Vec<Blueprint>, RepositoryError> {
         Ok(sqlx::query_as::<_, Blueprint>(
             r#"SELECT DISTINCT ON (id)
-                    id, code, name, kind, version, display, views, includes, created_at, updated_at,
+                    id, code, name, kind, version, display, views, includes, entity_schema, created_at, updated_at,
                     deleted_at, definition, definition_hash
                FROM blueprints
                WHERE kind = 'entity' AND deleted_at IS NULL
@@ -463,9 +479,9 @@ impl CatalogRepository {
             ))
         })?;
         let blueprint = sqlx::query_as::<_, Blueprint>(
-            r#"INSERT INTO blueprints (id, code, name, kind, version, includes, display, views, definition, definition_hash)
-               VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
-               RETURNING id, code, name, kind, version, includes, display, views, created_at, updated_at, deleted_at, definition, definition_hash"#,
+            r#"INSERT INTO blueprints (id, code, name, kind, version, includes, display, views, entity_schema, definition, definition_hash)
+               VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+               RETURNING id, code, name, kind, version, includes, display, views, entity_schema, created_at, updated_at, deleted_at, definition, definition_hash"#,
         )
         .bind(blueprint_id)
         .bind(compiled.code)
@@ -475,6 +491,7 @@ impl CatalogRepository {
         .bind(includes)
         .bind(display)
         .bind(views)
+        .bind(compiled.entity_schema)
         .bind(definition)
         .bind(compiled.raw_definition_hash)
         .fetch_one(&mut **transaction)
@@ -484,15 +501,16 @@ impl CatalogRepository {
         for attribute in compiled.attributes {
             attributes.push(
                 sqlx::query_as::<_, Attribute>(
-                    r#"INSERT INTO attributes (id, blueprint_id, blueprint_version, code, value_type, target_blueprint_code, tags, context_fallback, context_editable, position)
-                       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
-                       RETURNING id, blueprint_id, blueprint_version, code, value_type, target_blueprint_code, tags, context_fallback, context_editable, position, created_at, updated_at, deleted_at"#,
+                    r#"INSERT INTO attributes (id, blueprint_id, blueprint_version, code, value_type, value_schema, target_blueprint_code, tags, context_fallback, context_editable, position)
+                       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+                       RETURNING id, blueprint_id, blueprint_version, code, value_type, value_schema, target_blueprint_code, tags, context_fallback, context_editable, position, created_at, updated_at, deleted_at"#,
                 )
                 .bind(Uuid::new_v4())
                 .bind(blueprint_id)
                 .bind(version)
                 .bind(attribute.code)
                 .bind(attribute.value_type)
+                .bind(attribute.value_schema)
                 .bind(attribute.target_blueprint)
                 .bind(serde_json::to_value(attribute.tags).expect("attribute tags serialize"))
                 .bind(attribute.context_fallback)
@@ -514,7 +532,7 @@ impl CatalogRepository {
         blueprint_id: Uuid,
     ) -> Result<Option<BlueprintWithAttributes>, RepositoryError> {
         let blueprint = sqlx::query_as::<_, Blueprint>(
-            r#"SELECT id, code, name, kind, version, includes, display, views, created_at, updated_at, deleted_at, definition, definition_hash
+            r#"SELECT id, code, name, kind, version, includes, display, views, entity_schema, created_at, updated_at, deleted_at, definition, definition_hash
                FROM blueprints
                WHERE id = $1 AND deleted_at IS NULL
                ORDER BY version DESC
@@ -533,7 +551,7 @@ impl CatalogRepository {
         version: i64,
     ) -> Result<Option<BlueprintWithAttributes>, RepositoryError> {
         let blueprint = sqlx::query_as::<_, Blueprint>(
-            r#"SELECT id, code, name, kind, version, includes, display, views, created_at, updated_at, deleted_at, definition, definition_hash
+            r#"SELECT id, code, name, kind, version, includes, display, views, entity_schema, created_at, updated_at, deleted_at, definition, definition_hash
                FROM blueprints
                WHERE id = $1 AND version = $2 AND deleted_at IS NULL"#,
         )
@@ -551,7 +569,7 @@ impl CatalogRepository {
     ) -> Result<Option<BlueprintWithAttributes>, RepositoryError> {
         validate_code(code)?;
         let blueprint = sqlx::query_as::<_, Blueprint>(
-            r#"SELECT id, code, name, kind, version, includes, display, views, created_at, updated_at, deleted_at, definition, definition_hash
+            r#"SELECT id, code, name, kind, version, includes, display, views, entity_schema, created_at, updated_at, deleted_at, definition, definition_hash
                FROM blueprints
                WHERE code = $1 AND deleted_at IS NULL
                ORDER BY version DESC
@@ -571,7 +589,7 @@ impl CatalogRepository {
     ) -> Result<Option<BlueprintWithAttributes>, RepositoryError> {
         validate_code(code)?;
         let blueprint = sqlx::query_as::<_, Blueprint>(
-            r#"SELECT id, code, name, kind, version, includes, display, views, created_at, updated_at, deleted_at, definition, definition_hash
+            r#"SELECT id, code, name, kind, version, includes, display, views, entity_schema, created_at, updated_at, deleted_at, definition, definition_hash
                FROM blueprints
                WHERE code = $1 AND version = $2 AND deleted_at IS NULL"#,
         )
@@ -589,7 +607,7 @@ impl CatalogRepository {
         blueprint_version: i64,
     ) -> Result<Vec<Attribute>, RepositoryError> {
         Ok(sqlx::query_as::<_, Attribute>(
-            r#"SELECT id, blueprint_id, blueprint_version, code, value_type, target_blueprint_code, tags, context_fallback, context_editable, position, created_at, updated_at, deleted_at
+            r#"SELECT id, blueprint_id, blueprint_version, code, value_type, value_schema, target_blueprint_code, tags, context_fallback, context_editable, position, created_at, updated_at, deleted_at
                FROM attributes
                WHERE blueprint_id = $1 AND blueprint_version = $2 AND deleted_at IS NULL
                ORDER BY position"#,
@@ -684,11 +702,17 @@ impl CatalogRepository {
         if !input.data.is_object() {
             return Err(RepositoryError::InvalidContextData);
         }
+        let mut transaction = self.pool.begin().await?;
+        // Reparenting changes resolved values for every entity. Serialize it
+        // against entity writes while validating the resulting context tree.
+        sqlx::query("LOCK TABLE entities IN SHARE ROW EXCLUSIVE MODE")
+            .execute(&mut *transaction)
+            .await?;
         if !sqlx::query_scalar::<_, bool>(
             "SELECT EXISTS (SELECT 1 FROM attribute_contexts WHERE id = $1)",
         )
         .bind(input.parent_id)
-        .fetch_one(&self.pool)
+        .fetch_one(&mut *transaction)
         .await?
         {
             return Err(RepositoryError::InvalidContext);
@@ -706,9 +730,20 @@ impl CatalogRepository {
         .bind(id)
         .bind(input.parent_id)
         .bind(input.data)
-        .fetch_optional(&self.pool)
+        .fetch_optional(&mut *transaction)
+        .await?
+        .ok_or(RepositoryError::ContextCycle)?;
+        let entities = sqlx::query_as::<_, Entity>(
+            "SELECT id, blueprint_id, blueprint_version, projections, created_at, updated_at, deleted_at FROM entities WHERE deleted_at IS NULL",
+        )
+        .fetch_all(&mut *transaction)
         .await?;
-        result.ok_or(RepositoryError::ContextCycle)
+        for entity in &entities {
+            self.validate_entity_schema(&mut transaction, entity)
+                .await?;
+        }
+        transaction.commit().await?;
+        Ok(result)
     }
 
     pub async fn delete_context(&self, id: Uuid) -> Result<(), RepositoryError> {
@@ -822,7 +857,8 @@ impl CatalogRepository {
             .entry("preview".to_owned())
             .or_insert_with(empty_preview);
 
-        sqlx::query_as::<_, Entity>(
+        let mut transaction = self.pool.begin().await?;
+        let entity = sqlx::query_as::<_, Entity>(
             r#"INSERT INTO entities (id, blueprint_id, blueprint_version, projections)
                SELECT $1, b.id, b.version, $2
                FROM blueprints b
@@ -836,9 +872,13 @@ impl CatalogRepository {
         .bind(Value::Object(projections.clone()))
         .bind(input.blueprint_id)
         .bind(input.blueprint_version)
-        .fetch_optional(&self.pool)
+        .fetch_optional(&mut *transaction)
         .await?
-        .ok_or(RepositoryError::NotFound("blueprint version"))
+        .ok_or(RepositoryError::NotFound("blueprint version"))?;
+        self.validate_entity_schema(&mut transaction, &entity)
+            .await?;
+        transaction.commit().await?;
+        Ok(entity)
     }
 
     pub async fn create_entity_with_values(
@@ -856,6 +896,8 @@ impl CatalogRepository {
         for value in values {
             self.insert_value(&mut transaction, &entity, value).await?;
         }
+        self.validate_entity_schema(&mut transaction, &entity)
+            .await?;
         let preview = Self::build_preview_projection(&mut transaction, entity.id).await?;
         let entity = self
             .store_preview(&mut transaction, entity.id, preview)
@@ -883,6 +925,8 @@ impl CatalogRepository {
                 .await?;
         }
         self.replace_relationship_sets(&mut transaction, &entity, relationships)
+            .await?;
+        self.validate_entity_schema(&mut transaction, &entity)
             .await?;
         let preview = Self::build_preview_projection(&mut transaction, entity.id).await?;
         let entity = self
@@ -1269,6 +1313,9 @@ impl CatalogRepository {
             values.push(self.insert_value(&mut transaction, &entity, value).await?);
         }
 
+        self.validate_entity_schema(&mut transaction, &entity)
+            .await?;
+
         let preview = Self::build_preview_projection(&mut transaction, entity_id).await?;
         sqlx::query(
             r#"UPDATE entities
@@ -1310,12 +1357,13 @@ impl CatalogRepository {
         let entity = self.lock_entity(&mut transaction, entity_id).await?;
         let mut values = Vec::new();
         for relationship in input.relationships {
+            let context_id = relationship.context_id.or(Some(Self::DEFAULT_CONTEXT_ID));
             let (attribute_id, target_blueprint_code, context_editable) = self
                 .relationship_attribute(&mut transaction, &entity, &relationship)
                 .await?;
-            self.validate_context_id(&mut transaction, relationship.context_id)
+            self.validate_context_id(&mut transaction, context_id)
                 .await?;
-            self.validate_context_editable(relationship.context_id, &context_editable)?;
+            self.validate_context_editable(context_id, &context_editable)?;
             // Relationship writes are set operations; collapsing duplicate IDs
             // makes a retried or malformed client payload idempotent.
             let targets: HashSet<_> = relationship.target_entity_ids.into_iter().collect();
@@ -1329,12 +1377,7 @@ impl CatalogRepository {
             }
 
             let current = self
-                .current_relationship_targets(
-                    &mut transaction,
-                    entity.id,
-                    attribute_id,
-                    relationship.context_id,
-                )
+                .current_relationship_targets(&mut transaction, entity.id, attribute_id, context_id)
                 .await?;
             let removals: Vec<_> = if replace {
                 current.difference(&targets).copied().collect()
@@ -1347,7 +1390,7 @@ impl CatalogRepository {
                         &mut transaction,
                         entity.id,
                         attribute_id,
-                        relationship.context_id,
+                        context_id,
                         target_id,
                         false,
                     )
@@ -1361,7 +1404,7 @@ impl CatalogRepository {
                             &mut transaction,
                             entity.id,
                             attribute_id,
-                            relationship.context_id,
+                            context_id,
                             *target_id,
                             true,
                         )
@@ -1370,6 +1413,8 @@ impl CatalogRepository {
                 }
             }
         }
+        self.validate_entity_schema(&mut transaction, &entity)
+            .await?;
         self.touch_entity(&mut transaction, entity_id).await?;
         transaction.commit().await?;
         Ok(values)
@@ -1382,12 +1427,12 @@ impl CatalogRepository {
         relationships: Vec<RelationshipTargets>,
     ) -> Result<(), RepositoryError> {
         for relationship in relationships {
-            self.validate_context_id(transaction, relationship.context_id)
-                .await?;
+            let context_id = relationship.context_id.or(Some(Self::DEFAULT_CONTEXT_ID));
+            self.validate_context_id(transaction, context_id).await?;
             let (attribute_id, target_blueprint_code, context_editable) = self
                 .relationship_attribute(transaction, entity, &relationship)
                 .await?;
-            self.validate_context_editable(relationship.context_id, &context_editable)?;
+            self.validate_context_editable(context_id, &context_editable)?;
             let targets: HashSet<_> = relationship.target_entity_ids.into_iter().collect();
             for target_id in &targets {
                 self.validate_relationship_target(
@@ -1398,19 +1443,14 @@ impl CatalogRepository {
                 .await?;
             }
             let current = self
-                .current_relationship_targets(
-                    transaction,
-                    entity.id,
-                    attribute_id,
-                    relationship.context_id,
-                )
+                .current_relationship_targets(transaction, entity.id, attribute_id, context_id)
                 .await?;
             for target_id in current.difference(&targets) {
                 self.insert_relationship_value(
                     transaction,
                     entity.id,
                     attribute_id,
-                    relationship.context_id,
+                    context_id,
                     *target_id,
                     false,
                 )
@@ -1421,7 +1461,7 @@ impl CatalogRepository {
                     transaction,
                     entity.id,
                     attribute_id,
-                    relationship.context_id,
+                    context_id,
                     *target_id,
                     true,
                 )
@@ -1459,12 +1499,14 @@ impl CatalogRepository {
                     true,
                 ),
             };
+        let context_id = context_id.or(Some(Self::DEFAULT_CONTEXT_ID));
 
-        let (attribute_id, value_type, target_blueprint_code, context_editable) =
-            match (attribute_id, attribute_code) {
+        let attribute_label = attribute_code.clone();
+        let (attribute_id, value_type, value_schema, target_blueprint_code, context_editable) =
+            match (attribute_id, attribute_code.as_deref()) {
                 (Some(attribute_id), None) => {
-                    sqlx::query_as::<_, (Uuid, String, Option<String>, String)>(
-                        r#"SELECT id, value_type, target_blueprint_code, context_editable
+                    sqlx::query_as::<_, (Uuid, String, Option<Value>, Option<String>, String)>(
+                        r#"SELECT id, value_type, value_schema, target_blueprint_code, context_editable
                    FROM attributes
                    WHERE id = $1
                      AND blueprint_id = $2
@@ -1479,8 +1521,8 @@ impl CatalogRepository {
                 }
                 (None, Some(attribute_code)) => {
                     validate_code(&attribute_code)?;
-                    sqlx::query_as::<_, (Uuid, String, Option<String>, String)>(
-                        r#"SELECT id, value_type, target_blueprint_code, context_editable
+                    sqlx::query_as::<_, (Uuid, String, Option<Value>, Option<String>, String)>(
+                        r#"SELECT id, value_type, value_schema, target_blueprint_code, context_editable
                    FROM attributes
                    WHERE code = $1
                      AND blueprint_id = $2
@@ -1518,6 +1560,25 @@ impl CatalogRepository {
         } else {
             Some(NativeValue::parse(ValueType::parse(&value_type)?, payload)?)
         };
+        if let (Some(schema), Some(native)) = (&value_schema, &native) {
+            if let Some(error) = validate_json_schema(schema, &native.json())
+                .map_err(|message| RepositoryError::AttributeValueSchemaMismatch {
+                    attribute: attribute_label
+                        .clone()
+                        .unwrap_or_else(|| attribute_id.to_string()),
+                    instance_path: String::new(),
+                    message,
+                })?
+                .into_iter()
+                .next()
+            {
+                return Err(RepositoryError::AttributeValueSchemaMismatch {
+                    attribute: attribute_label.unwrap_or_else(|| attribute_id.to_string()),
+                    instance_path: error.instance_path,
+                    message: error.message,
+                });
+            }
+        }
 
         self.supersede_latest_value(
             transaction,
@@ -1655,6 +1716,114 @@ impl CatalogRepository {
         .fetch_optional(&mut **transaction)
         .await?
         .ok_or(RepositoryError::NotFound("blueprint version"))
+    }
+
+    async fn validate_entity_schema(
+        &self,
+        transaction: &mut Transaction<'_, Postgres>,
+        entity: &Entity,
+    ) -> Result<(), RepositoryError> {
+        let entity_schema = sqlx::query_scalar::<_, Option<Value>>(
+            "SELECT entity_schema FROM blueprints WHERE id = $1 AND version = $2 AND deleted_at IS NULL",
+        )
+        .bind(entity.blueprint_id)
+        .bind(entity.blueprint_version)
+        .fetch_one(&mut **transaction)
+        .await?;
+        let Some(entity_schema) = entity_schema else {
+            return Ok(());
+        };
+
+        let attributes = self
+            .list_attributes(entity.blueprint_id, entity.blueprint_version)
+            .await?;
+        let contexts = sqlx::query_as::<_, AttributeContext>(
+            "SELECT id, code, data, parent_id FROM attribute_contexts ORDER BY code",
+        )
+        .fetch_all(&mut **transaction)
+        .await?;
+        let context_by_id: std::collections::HashMap<_, _> = contexts
+            .iter()
+            .map(|context| (context.id, context))
+            .collect();
+        let scalar_projection = Self::build_preview_projection(transaction, entity.id).await?;
+        let mut direct_values = scalar_projection
+            .as_object()
+            .cloned()
+            .ok_or(RepositoryError::InvalidPreview)?;
+        let relationships = sqlx::query_as::<_, (String, String, Uuid)>(
+            r#"SELECT a.code, c.code, av.relationship_target_entity_id
+               FROM attribute_values av
+               JOIN attributes a ON a.id = av.attribute_id
+               JOIN attribute_contexts c ON c.id = av.context_id
+               WHERE av.entity_id = $1
+                 AND a.blueprint_id = $2
+                 AND a.blueprint_version = $3
+                 AND av.relationship_target_entity_id IS NOT NULL
+                 AND av.latest
+                 AND av.active"#,
+        )
+        .bind(entity.id)
+        .bind(entity.blueprint_id)
+        .bind(entity.blueprint_version)
+        .fetch_all(&mut **transaction)
+        .await?;
+        for (attribute_code, context_code, target_id) in relationships {
+            let context = direct_values
+                .entry(context_code)
+                .or_insert_with(|| Value::Object(Map::new()))
+                .as_object_mut()
+                .ok_or(RepositoryError::InvalidPreview)?;
+            let targets = context
+                .entry(attribute_code)
+                .or_insert_with(|| Value::Array(Vec::new()))
+                .as_array_mut()
+                .ok_or(RepositoryError::InvalidPreview)?;
+            targets.push(Value::String(target_id.to_string()));
+        }
+
+        for context in &contexts {
+            let mut path = Vec::new();
+            let mut current = Some(context);
+            while let Some(item) = current {
+                current = item
+                    .parent_id
+                    .and_then(|parent_id| context_by_id.get(&parent_id).copied());
+                path.push(item);
+            }
+            let mut document = Map::new();
+            for attribute in &attributes {
+                for (index, source_context) in path.iter().enumerate() {
+                    if index > 0 && attribute.context_fallback == "none" {
+                        break;
+                    }
+                    if let Some(value) = direct_values
+                        .get(&source_context.code)
+                        .and_then(Value::as_object)
+                        .and_then(|values| values.get(&attribute.code))
+                    {
+                        document.insert(attribute.code.clone(), value.clone());
+                        break;
+                    }
+                }
+            }
+            if let Some(error) = validate_json_schema(&entity_schema, &Value::Object(document))
+                .map_err(|message| RepositoryError::EntitySchemaMismatch {
+                    context: context.code.clone(),
+                    instance_path: String::new(),
+                    message,
+                })?
+                .into_iter()
+                .next()
+            {
+                return Err(RepositoryError::EntitySchemaMismatch {
+                    context: context.code.clone(),
+                    instance_path: error.instance_path,
+                    message: error.message,
+                });
+            }
+        }
+        Ok(())
     }
 
     async fn store_preview(

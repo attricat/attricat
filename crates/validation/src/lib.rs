@@ -6,6 +6,37 @@ pub fn is_valid_code(value: &str) -> bool {
             .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'_' | b'-'))
 }
 
+#[derive(Debug, PartialEq)]
+pub struct JsonSchemaViolation {
+    pub instance_path: String,
+    pub message: String,
+}
+
+pub fn validate_json_schema_definition(schema: &serde_json::Value) -> Result<(), String> {
+    jsonschema::draft202012::options()
+        .should_validate_formats(true)
+        .build(schema)
+        .map(|_| ())
+        .map_err(|error| error.to_string())
+}
+
+pub fn validate_json_schema(
+    schema: &serde_json::Value,
+    instance: &serde_json::Value,
+) -> Result<Vec<JsonSchemaViolation>, String> {
+    let validator = jsonschema::draft202012::options()
+        .should_validate_formats(true)
+        .build(schema)
+        .map_err(|error| error.to_string())?;
+    Ok(validator
+        .iter_errors(instance)
+        .map(|error| JsonSchemaViolation {
+            instance_path: error.instance_path().as_str().to_owned(),
+            message: error.masked().to_string(),
+        })
+        .collect())
+}
+
 #[cfg(test)]
 mod tests {
     use super::is_valid_code;
