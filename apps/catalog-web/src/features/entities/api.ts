@@ -3,6 +3,36 @@ import { attributeValueKinds, attributeValueTypes } from './value-types';
 
 const uuidSchema = z.uuid();
 const jsonObjectSchema = z.record(z.string(), z.unknown());
+const componentReferenceSchema = z.object({
+  id: z.string().regex(/^[a-z][a-z0-9_]*(\.[a-z][a-z0-9_]*)*$/),
+  version: z.number().int().positive(),
+  props: jsonObjectSchema.default({}),
+});
+const viewNodeSchema: z.ZodType<ViewNode> = z.lazy(() =>
+  z.discriminatedUnion('type', [
+    z.object({ type: z.literal('stack'), children: z.array(viewNodeSchema), component: componentReferenceSchema.nullish() }),
+    z.object({ type: z.literal('grid'), children: z.array(viewNodeSchema), component: componentReferenceSchema.nullish() }),
+    z.object({ type: z.literal('section'), children: z.array(viewNodeSchema), component: componentReferenceSchema.nullish() }),
+    z.object({ type: z.literal('tabs'), tabs: z.array(z.object({ label: z.string(), children: z.array(viewNodeSchema) })), component: componentReferenceSchema.nullish() }),
+    z.object({ type: z.literal('accordion'), sections: z.array(z.object({ label: z.string(), children: z.array(viewNodeSchema) })), component: componentReferenceSchema.nullish() }),
+    z.object({ type: z.literal('heading'), text: z.string(), component: componentReferenceSchema.nullish() }),
+    z.object({ type: z.literal('text'), text: z.string(), component: componentReferenceSchema.nullish() }),
+    z.object({ type: z.literal('divider'), component: componentReferenceSchema.nullish() }),
+    z.object({ type: z.literal('field'), field: z.string(), component: componentReferenceSchema.nullish() }),
+    z.object({ type: z.literal('relationship_list'), field: z.string(), component: componentReferenceSchema.nullish() }),
+  ]),
+);
+const viewDefinitionSchema: z.ZodType<ViewDefinition> = z.lazy(() =>
+  z.union([
+    z.object({ type: z.literal('table'), fields: z.array(z.string()), component: componentReferenceSchema.nullish() }),
+    z.object({ type: z.literal('stack'), children: z.array(viewNodeSchema), component: componentReferenceSchema.nullish() }),
+    z.object({ type: z.literal('grid'), children: z.array(viewNodeSchema), component: componentReferenceSchema.nullish() }),
+    z.object({ type: z.literal('section'), children: z.array(viewNodeSchema), component: componentReferenceSchema.nullish() }),
+    z.object({ type: z.literal('tabs'), tabs: z.array(z.object({ label: z.string(), children: z.array(viewNodeSchema) })), component: componentReferenceSchema.nullish() }),
+    z.object({ type: z.literal('accordion'), sections: z.array(z.object({ label: z.string(), children: z.array(viewNodeSchema) })), component: componentReferenceSchema.nullish() }),
+  ]),
+);
+const viewsSchema = z.record(z.string(), viewDefinitionSchema);
 const valueTypeSchema = z.enum(attributeValueTypes);
 export const contextCodeSchema = z
   .string()
@@ -23,6 +53,7 @@ export const blueprintSchema = z
     name: z.string(),
     version: z.number().int().positive(),
     display: jsonObjectSchema,
+    views: viewsSchema.default({}),
   })
   .passthrough();
 export const blueprintWithAttributesSchema = z.object({
@@ -69,13 +100,17 @@ export const createAttributeContextSchema = z.object({
   data: jsonObjectSchema,
   parent_id: uuidSchema,
 });
-export const entitySchema = z.object({ id: uuidSchema }).passthrough();
+export const entitySchema = z.object({
+  id: uuidSchema,
+  blueprint_id: uuidSchema.optional(),
+  blueprint_version: z.number().int().positive().optional(),
+}).passthrough();
 const entityItemSchema = z.object({
   id: uuidSchema,
   blueprint_version: z.number().int().positive(),
   schema_outdated: z.boolean(),
   display: z.record(z.string(), z.string()),
-  preview: jsonObjectSchema,
+  preview: z.record(z.string(), jsonObjectSchema),
 });
 const entityContextSchema = z.record(z.string(), jsonObjectSchema);
 const entityPreviewSchema = z.object({
@@ -135,6 +170,21 @@ const updateEntityRequestSchema = z.object({
 });
 
 export type Attribute = z.infer<typeof attributeSchema>;
+export type ViewNode =
+  | { type: 'stack' | 'grid' | 'section'; children: ViewNode[]; component?: ComponentReference | null }
+  | { type: 'tabs'; tabs: { label: string; children: ViewNode[] }[]; component?: ComponentReference | null }
+  | { type: 'accordion'; sections: { label: string; children: ViewNode[] }[]; component?: ComponentReference | null }
+  | { type: 'heading' | 'text'; text: string; component?: ComponentReference | null }
+  | { type: 'divider'; component?: ComponentReference | null }
+  | { type: 'field' | 'relationship_list'; field: string; component?: ComponentReference | null };
+export type ViewDefinition =
+  | { type: 'table'; fields: string[]; component?: ComponentReference | null }
+  | Exclude<ViewNode, { type: 'heading' | 'text' | 'divider' | 'field' | 'relationship_list' }>;
+export type ComponentReference = {
+  id: string;
+  version: number;
+  props: Record<string, unknown>;
+};
 export type Blueprint = z.infer<typeof blueprintSchema>;
 export type BlueprintWithAttributes = z.infer<
   typeof blueprintWithAttributesSchema

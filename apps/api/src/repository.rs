@@ -359,7 +359,7 @@ impl CatalogRepository {
     pub async fn list_entity_blueprints(&self) -> Result<Vec<Blueprint>, RepositoryError> {
         Ok(sqlx::query_as::<_, Blueprint>(
             r#"SELECT DISTINCT ON (id)
-                    id, code, name, kind, version, display, includes, created_at, updated_at,
+                    id, code, name, kind, version, display, views, includes, created_at, updated_at,
                     deleted_at, definition, definition_hash
                FROM blueprints
                WHERE kind = 'entity' AND deleted_at IS NULL
@@ -457,10 +457,15 @@ impl CatalogRepository {
                 "could not serialize generated display definitions: {error}"
             ))
         })?;
+        let views = serde_json::to_value(&compiled.views).map_err(|error| {
+            RepositoryError::InvalidBlueprintDefinition(format!(
+                "could not serialize generated views: {error}"
+            ))
+        })?;
         let blueprint = sqlx::query_as::<_, Blueprint>(
-            r#"INSERT INTO blueprints (id, code, name, kind, version, includes, display, definition, definition_hash)
-               VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
-               RETURNING id, code, name, kind, version, includes, display, created_at, updated_at, deleted_at, definition, definition_hash"#,
+            r#"INSERT INTO blueprints (id, code, name, kind, version, includes, display, views, definition, definition_hash)
+               VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+               RETURNING id, code, name, kind, version, includes, display, views, created_at, updated_at, deleted_at, definition, definition_hash"#,
         )
         .bind(blueprint_id)
         .bind(compiled.code)
@@ -469,6 +474,7 @@ impl CatalogRepository {
         .bind(version)
         .bind(includes)
         .bind(display)
+        .bind(views)
         .bind(definition)
         .bind(compiled.raw_definition_hash)
         .fetch_one(&mut **transaction)
@@ -508,7 +514,7 @@ impl CatalogRepository {
         blueprint_id: Uuid,
     ) -> Result<Option<BlueprintWithAttributes>, RepositoryError> {
         let blueprint = sqlx::query_as::<_, Blueprint>(
-            r#"SELECT id, code, name, kind, version, includes, display, created_at, updated_at, deleted_at, definition, definition_hash
+            r#"SELECT id, code, name, kind, version, includes, display, views, created_at, updated_at, deleted_at, definition, definition_hash
                FROM blueprints
                WHERE id = $1 AND deleted_at IS NULL
                ORDER BY version DESC
@@ -527,7 +533,7 @@ impl CatalogRepository {
         version: i64,
     ) -> Result<Option<BlueprintWithAttributes>, RepositoryError> {
         let blueprint = sqlx::query_as::<_, Blueprint>(
-            r#"SELECT id, code, name, kind, version, includes, display, created_at, updated_at, deleted_at, definition, definition_hash
+            r#"SELECT id, code, name, kind, version, includes, display, views, created_at, updated_at, deleted_at, definition, definition_hash
                FROM blueprints
                WHERE id = $1 AND version = $2 AND deleted_at IS NULL"#,
         )
@@ -545,7 +551,7 @@ impl CatalogRepository {
     ) -> Result<Option<BlueprintWithAttributes>, RepositoryError> {
         validate_code(code)?;
         let blueprint = sqlx::query_as::<_, Blueprint>(
-            r#"SELECT id, code, name, kind, version, includes, display, created_at, updated_at, deleted_at, definition, definition_hash
+            r#"SELECT id, code, name, kind, version, includes, display, views, created_at, updated_at, deleted_at, definition, definition_hash
                FROM blueprints
                WHERE code = $1 AND deleted_at IS NULL
                ORDER BY version DESC
@@ -565,7 +571,7 @@ impl CatalogRepository {
     ) -> Result<Option<BlueprintWithAttributes>, RepositoryError> {
         validate_code(code)?;
         let blueprint = sqlx::query_as::<_, Blueprint>(
-            r#"SELECT id, code, name, kind, version, includes, display, created_at, updated_at, deleted_at, definition, definition_hash
+            r#"SELECT id, code, name, kind, version, includes, display, views, created_at, updated_at, deleted_at, definition, definition_hash
                FROM blueprints
                WHERE code = $1 AND version = $2 AND deleted_at IS NULL"#,
         )
@@ -767,7 +773,10 @@ impl CatalogRepository {
             .iter()
             .filter(|attribute| attribute.value_type == "relationship")
             .filter_map(|attribute| {
-                path.iter().find_map(|context| {
+                path.iter().enumerate().find_map(|(index, context)| {
+                    if index > 0 && attribute.context_fallback == "none" {
+                        return None;
+                    }
                     enriched_preview
                         .get(&context.code)
                         .and_then(Value::as_object)

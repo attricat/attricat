@@ -11,8 +11,10 @@ import {
   Typography,
 } from '@mui/material';
 import { useState } from 'react';
-import { getEntityPreview, getResolvedEntityPreview, listContexts } from './api';
+import { getBlueprintRevision, getEntityPreview, getResolvedEntityPreview, listContexts } from './api';
 import { entityQueryKeys } from './query-keys';
+import { EntityView } from '../views/components/EntityView';
+import { EntityHeading } from '../views/components/blocks/EntityHeading';
 
 export const EntityPreviewPage = ({ entityId }: { entityId: string }) => {
   const [selectedContext, setSelectedContext] = useState('default');
@@ -23,6 +25,20 @@ export const EntityPreviewPage = ({ entityId }: { entityId: string }) => {
   const contexts = useQuery({
     queryKey: entityQueryKeys.contexts(),
     queryFn: listContexts,
+  });
+  const blueprint = useQuery({
+    queryKey: preview.data?.entity.blueprint_id && preview.data.entity.blueprint_version
+      ? entityQueryKeys.blueprintRevision(
+          preview.data.entity.blueprint_id,
+          preview.data.entity.blueprint_version,
+        )
+      : ['blueprint-revision'],
+    queryFn: () =>
+      getBlueprintRevision(
+        preview.data!.entity.blueprint_id!,
+        preview.data!.entity.blueprint_version!,
+      ),
+    enabled: Boolean(preview.data?.entity.blueprint_id && preview.data.entity.blueprint_version),
   });
   const selectedContextId = contexts.data?.find((context) => context.code === selectedContext)?.id;
   const resolved = useQuery({
@@ -48,9 +64,14 @@ export const EntityPreviewPage = ({ entityId }: { entityId: string }) => {
       >
         Entity preview
       </Typography>
-      <Typography component="h1" variant="h3">
-        {entityId}
-      </Typography>
+      {resolved.data && blueprint.data ? (
+        <EntityHeading
+          attributes={blueprint.data.attributes}
+          entityId={entityId}
+          values={resolved.data.values}
+          view={blueprint.data.blueprint.views.detail}
+        />
+      ) : <Typography component="h1" variant="h3">{entityId}</Typography>}
       <Box sx={{ mt: 1 }}>
         <Link params={{ entityId }} to="/entities/$entityId/edit">
           Edit entity
@@ -80,18 +101,17 @@ export const EntityPreviewPage = ({ entityId }: { entityId: string }) => {
               </MenuItem>
             ))}
           </TextField>
-            {resolved.isPending && <Typography sx={{ mt: 3 }}>Resolving values...</Typography>}
-            {resolved.isError && <Alert severity="error" sx={{ mt: 3 }}>{resolved.error.message}</Alert>}
-            {resolved.data && (
-              <Paper component="pre" sx={{ mt: 3, overflow: 'auto', p: 3 }}>
-                {JSON.stringify(
-                  {
-                    requested_context: resolved.data.requested_context,
-                    values: resolved.data.values,
-                  },
-                null,
-                2,
-              )}
+          {resolved.isPending && <Typography sx={{ mt: 3 }}>Resolving values...</Typography>}
+          {resolved.isError && <Alert severity="error" sx={{ mt: 3 }}>{resolved.error.message}</Alert>}
+          {blueprint.isError && <Alert severity="error" sx={{ mt: 3 }}>{blueprint.error.message}</Alert>}
+          {resolved.data && blueprint.data && (
+            <Paper component="section" sx={{ mt: 3, p: { xs: 2, md: 3 } }}>
+              <EntityView
+                attributes={blueprint.data.attributes}
+                values={resolved.data.values}
+                view={blueprint.data.blueprint.views.detail}
+                skipComponentId="catalog.entity_heading"
+              />
             </Paper>
           )}
         </>

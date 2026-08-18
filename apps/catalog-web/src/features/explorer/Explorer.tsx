@@ -33,6 +33,7 @@ import {
 } from '../entities/api';
 import { displayLabel } from '../entities/entity-display';
 import { entityQueryKeys } from '../entities/query-keys';
+import { AttributeValue } from '../views/components/values/AttributeValue';
 import type { ExplorerSearch } from './search';
 
 export const Explorer = ({ search }: { search: ExplorerSearch }) => {
@@ -70,6 +71,16 @@ export const Explorer = ({ search }: { search: ExplorerSearch }) => {
   });
 
   const columnHelper = legacyCreateColumnHelper<EntityItem>();
+  const tableFields =
+    results.data?.blueprint.blueprint.views.table?.type === 'table'
+      ? results.data.blueprint.blueprint.views.table.fields
+      : [];
+  const attributes = new Map(
+    (results.data?.blueprint.attributes ?? []).map((attribute) => [
+      attribute.code,
+      attribute,
+    ]),
+  );
   const columns: LegacyColumnDef<EntityItem, string>[] = [
     columnHelper.accessor('id', {
       header: 'ID',
@@ -103,7 +114,24 @@ export const Explorer = ({ search }: { search: ExplorerSearch }) => {
           />
         );
       },
-    }) as LegacyColumnDef<EntityItem, unknown>,
+    }) as LegacyColumnDef<EntityItem, string>,
+    ...tableFields.flatMap((field) => {
+      const attribute = attributes.get(field);
+      if (!attribute) return [];
+      return [
+        columnHelper.display({
+          id: field,
+          header: field.replaceAll('_', ' '),
+          cell: (info) => (
+            <AttributeValue
+              attribute={attribute}
+              compact
+              value={info.row.original.preview.default?.[field]}
+            />
+          ),
+        }) as LegacyColumnDef<EntityItem, string>,
+      ];
+    }),
   ];
   const table = useLegacyTable({
     data: results.data?.items ?? [],

@@ -281,3 +281,207 @@ value_type = "string"
         source.replace("fields = [\"title\"]", "fields = [\"title\", \"title\"]");
     assert!(compile(parse(&duplicate_fields).unwrap(), &[], &duplicate_fields).is_err());
 }
+
+#[test]
+fn compiles_optional_recursive_views_with_component_references() {
+    let source = r#"
+format_version = 1
+code = "product"
+name = "Product"
+kind = "entity"
+
+[display.dropdown_option]
+fields = ["title"]
+
+[views.detail]
+type = "stack"
+children = [
+  { type = "heading", text = "Product" },
+  { type = "section", children = [
+    { type = "grid", children = [{ type = "field", field = "title", component = { id = "catalog.field_display", version = 1 } }] },
+    { type = "tabs", tabs = [{ label = "Details", children = [{ type = "text", text = "Information" }] }] },
+    { type = "accordion", sections = [{ label = "Related", children = [{ type = "relationship_list", field = "categories" }] }] },
+    { type = "divider" }
+  ] }
+]
+
+[views.index]
+type = "table"
+fields = ["title"]
+
+[[attributes]]
+code = "title"
+value_type = "string"
+
+[[attributes]]
+code = "categories"
+value_type = "relationship"
+"#;
+    let compiled = compile(parse(source).unwrap(), &[], source).unwrap();
+    assert_eq!(compiled.views.len(), 2);
+    assert_eq!(
+        compiled.views["detail"],
+        parse(source).unwrap().views["detail"]
+    );
+}
+
+#[test]
+fn rejects_invalid_view_fields_and_component_references() {
+    let source = r#"
+format_version = 1
+code = "product"
+name = "Product"
+kind = "entity"
+
+[display.dropdown_option]
+fields = ["title"]
+
+[views.index]
+type = "table"
+fields = ["categories"]
+
+[[attributes]]
+code = "title"
+value_type = "string"
+
+[[attributes]]
+code = "categories"
+value_type = "relationship"
+"#;
+    assert!(compile(parse(source).unwrap(), &[], source).is_err());
+
+    let invalid_component_id = source.replace(
+        "fields = [\"categories\"]",
+        "fields = [\"title\"]\ncomponent = { id = \"catalog.bad-id\", version = 1 }",
+    );
+    assert!(
+        compile(
+            parse(&invalid_component_id).unwrap(),
+            &[],
+            &invalid_component_id
+        )
+        .is_err()
+    );
+
+    let invalid_component_version = source.replace(
+        "fields = [\"categories\"]",
+        "fields = [\"title\"]\ncomponent = { id = \"catalog.table\", version = 0 }",
+    );
+    assert!(
+        compile(
+            parse(&invalid_component_version).unwrap(),
+            &[],
+            &invalid_component_version
+        )
+        .is_err()
+    );
+
+    let invalid_relationship_leaf = source.replace(
+        "type = \"table\"\nfields = [\"categories\"]",
+        "type = \"stack\"\nchildren = [{ type = \"relationship_list\", field = \"title\" }]",
+    );
+    assert!(
+        compile(
+            parse(&invalid_relationship_leaf).unwrap(),
+            &[],
+            &invalid_relationship_leaf
+        )
+        .is_err()
+    );
+}
+
+#[test]
+fn validates_component_manifest_applicability() {
+    let source = r#"
+format_version = 1
+code = "product"
+name = "Product"
+kind = "entity"
+
+[display.dropdown_option]
+fields = ["title"]
+
+[views.detail]
+type = "stack"
+children = [{ type = "field", field = "title", component = { id = "catalog.field_display", version = 1 } }]
+
+[[attributes]]
+code = "title"
+value_type = "string"
+"#;
+    assert!(compile(parse(source).unwrap(), &[], source).is_ok());
+
+    for invalid in [
+        source.replace("[views.detail]", "[views.edit]"),
+        source.replace("catalog.field_display", "catalog.table_display"),
+        source.replace("version = 1 }", "version = 2 }"),
+        source.replace(
+            "version = 1 }",
+            "version = 1, props = { label = \"Title\" } }",
+        ),
+        source.replace(
+            "children = [{ type = \"field\", field = \"title\", component = { id = \"catalog.field_display\", version = 1 } }]",
+            "component = { id = \"catalog.field_display\", version = 1 }\nchildren = []",
+        ),
+    ] {
+        assert!(compile(parse(&invalid).unwrap(), &[], &invalid).is_err());
+    }
+}
+
+#[test]
+fn validates_entity_heading_stack_component() {
+    let source = r#"
+format_version = 1
+code = "product"
+name = "Product"
+kind = "entity"
+
+[display.dropdown_option]
+fields = ["title"]
+
+[views.detail]
+type = "stack"
+component = { id = "catalog.entity_heading", version = 1 }
+children = [
+  { type = "field", field = "title" },
+  { type = "text", text = "SKU" },
+  { type = "field", field = "sku" }
+]
+
+[[attributes]]
+code = "title"
+value_type = "string"
+
+[[attributes]]
+code = "sku"
+value_type = "string"
+
+[[attributes]]
+code = "category"
+value_type = "relationship"
+"#;
+    assert!(compile(parse(source).unwrap(), &[], source).is_ok());
+
+    for invalid in [
+        source.replace("[views.detail]", "[views.edit]"),
+        source.replace(
+            "component = { id = \"catalog.entity_heading\", version = 1 }",
+            "component = { id = \"catalog.field_display\", version = 1 }",
+        ),
+        source.replace(
+            "{ type = \"field\", field = \"title\" }",
+            "{ type = \"text\", text = \"Product\" }",
+        ),
+        source.replace("field = \"title\"", "field = \"category\""),
+        source.replace(
+            "{ type = \"text\", text = \"SKU\" }",
+            "{ type = \"relationship_list\", field = \"category\" }",
+        ),
+        source.replace(
+            "{ type = \"text\", text = \"SKU\" }",
+            "{ type = \"grid\", children = [] }",
+        ),
+    ] {
+        assert!(compile(parse(&invalid).unwrap(), &[], &invalid).is_err());
+    }
+}

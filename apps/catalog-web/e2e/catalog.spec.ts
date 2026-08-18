@@ -68,7 +68,7 @@ test('searches an entity and opens its preview', async ({ page }) => {
   await expect(page.getByText('1 result')).toBeVisible();
   await page.getByRole('link', { name: entity.id }).click();
   await expect(page).toHaveURL(new RegExp(`/entities/${entity.id}$`));
-  await expect(page.locator('pre')).toContainText(title);
+  await expect(page.getByText(title)).toBeVisible();
 });
 
 test('creates an entity from a blueprint', async ({ page }) => {
@@ -88,7 +88,7 @@ test('creates an entity from a blueprint', async ({ page }) => {
   await page.getByRole('button', { name: 'Create entity' }).click();
 
   await expect(page).toHaveURL(/\/entities\/[0-9a-f-]{36}$/);
-  await expect(page.locator('pre')).toContainText(title);
+  await expect(page.getByText(title)).toBeVisible();
 });
 
 test('creates a context from context management', async ({ page }) => {
@@ -137,6 +137,6 @@ test('edits scalar values and replaces a typed relationship', async ({
   await page.getByRole('button', { name: 'Save changes' }).click();
 
   await expect(page).toHaveURL(new RegExp(`/entities/${entity.id}$`));
-  await expect(page.locator('pre')).toContainText('After edit');
-  await expect(page.locator('pre')).toContainText(categoryEntity.id);
+  await expect(page.getByText('After edit')).toBeVisible();
+  await expect(page.getByText('Sale')).toBeVisible();
 });

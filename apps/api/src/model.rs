@@ -13,6 +13,7 @@ pub struct Blueprint {
     pub version: i64,
     pub includes: Value,
     pub display: Value,
+    pub views: Value,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
     pub deleted_at: Option<DateTime<Utc>>,

@@ -82,6 +82,67 @@ separator = " / "
 `separator` defaults to ` · `. Server-rendered labels respect each attribute's
 `context_fallback` policy.
 
+## Views
+
+Entity blueprints can optionally define app views. Existing blueprints without
+views use the platform's schema-order fallback.
+
+```toml
+[views.detail]
+type = "stack"
+
+[[views.detail.children]]
+type = "tabs"
+
+[[views.detail.children.tabs]]
+label = "Overview"
+
+[[views.detail.children.tabs.children]]
+type = "field"
+field = "title"
+
+[[views.detail.children.tabs]]
+label = "Operations"
+
+[[views.detail.children.tabs.children]]
+type = "accordion"
+
+[[views.detail.children.tabs.children.sections]]
+label = "Stock"
+
+[[views.detail.children.tabs.children.sections.children]]
+type = "field"
+field = "stock_on_hand"
+
+[views.table]
+type = "table"
+fields = ["title", "stock_on_hand"]
+```
+
+`stack`, `grid`, `section`, `tabs`, and `accordion` are recursive layout
+blocks. `heading`, `text`, and `divider` are static blocks. `field` renders a
+typed attribute and `relationship_list` renders a relationship attribute.
+Table views currently support scalar fields only.
+
+`views.edit` uses the same layout blocks to order entity create/edit controls.
+Field, relationship-list, and table blocks may optionally reference a
+platform-registered component:
+
+```toml
+[[views.edit.children]]
+type = "field"
+field = "price"
+component = { id = "catalog.field_edit", version = 1 }
+```
+
+Component IDs use lowercase, underscore-separated dotted namespaces. The
+component manifest validates its version, allowed props, placement, value type,
+and requested view capability. Component implementations and their manifest
+live under `apps/catalog-web/src/features/views/components`.
+
+See [View Configuration](views.md) for the complete block grammar, heading
+configuration, and component contracts.
+
 ## Validation
 
 Unknown keys, invalid selectors or policy values, missing mixins, and malformed

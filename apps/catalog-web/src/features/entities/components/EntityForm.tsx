@@ -30,6 +30,7 @@ import { valueForField } from '../attribute-values';
 import { displayLabel, dropdownOptionLabel } from '../entity-display';
 import { entityQueryKeys } from '../query-keys';
 import { attributeValueTypes } from '../value-types';
+import { EntityView } from '../../views/components/EntityView';
 
 type EntityFormProps = {
   blueprint?: BlueprintWithAttributes;
@@ -157,8 +158,11 @@ export const EntityForm = ({
         {blueprint && (
           <form.Field name="fields">
             {(field) => (
-              <>
-                {blueprint.attributes.map((attribute) => {
+              <EntityView
+                attributes={blueprint.attributes}
+                values={resolvedValues}
+                view={blueprint.blueprint.views.edit}
+                renderEditor={(attribute) => {
                   const value = field.state.value[attribute.code] ?? '';
                   const localValueExists = existingValues.some(
                     (item) =>
@@ -184,10 +188,8 @@ export const EntityForm = ({
                       ...field.state.value,
                       [attribute.code]: nextValue,
                     });
-                  return attribute.value_type ===
-                    attributeValueTypes.relationship ? (
+                  return attribute.value_type === attributeValueTypes.relationship ? (
                     <RelationshipField
-                      key={attribute.code}
                       attribute={attribute}
                       disabled={defaultOnly}
                       onChange={handleChange}
@@ -195,7 +197,6 @@ export const EntityForm = ({
                     />
                   ) : attribute.value_type === attributeValueTypes.boolean ? (
                     <TextField
-                      key={attribute.code}
                       fullWidth
                       disabled={defaultOnly}
                       helperText={helperText}
@@ -210,7 +211,6 @@ export const EntityForm = ({
                     </TextField>
                   ) : (
                     <TextField
-                      key={attribute.code}
                       fullWidth
                       disabled={defaultOnly}
                       helperText={helperText}
@@ -244,8 +244,8 @@ export const EntityForm = ({
                       value={value}
                     />
                   );
-                })}
-              </>
+                }}
+              />
             )}
           </form.Field>
         )}
@@ -297,6 +297,8 @@ const RelationshipField = ({
     if (!options.some((target) => target.id === targetId)) {
       options.push({
         id: targetId,
+        blueprint_version: 0,
+        schema_outdated: false,
         display: { default: targetId },
         preview: {},
       });

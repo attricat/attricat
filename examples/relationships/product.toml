@@ -6,6 +6,120 @@ kind = "entity"
 [display.dropdown_option]
 fields = ["title"]
 
+[views.detail]
+type = "stack"
+
+[[views.detail.children]]
+type = "stack"
+component = { id = "catalog.entity_heading", version = 1 }
+
+[[views.detail.children.children]]
+type = "field"
+field = "title"
+
+[[views.detail.children.children]]
+type = "text"
+text = "Product details"
+
+[[views.detail.children]]
+type = "text"
+text = "Availability and linked catalog classifications."
+
+[[views.detail.children]]
+type = "tabs"
+
+[[views.detail.children.tabs]]
+label = "Overview"
+
+[[views.detail.children.tabs.children]]
+type = "grid"
+
+[[views.detail.children.tabs.children.children]]
+type = "field"
+field = "title"
+
+[[views.detail.children.tabs.children.children]]
+type = "field"
+field = "price"
+
+[[views.detail.children.tabs.children]]
+type = "relationship_list"
+field = "categories"
+
+[[views.detail.children.tabs]]
+label = "Operations"
+
+[[views.detail.children.tabs.children]]
+type = "accordion"
+
+[[views.detail.children.tabs.children.sections]]
+label = "Availability"
+
+[[views.detail.children.tabs.children.sections.children]]
+type = "field"
+field = "stock_on_hand"
+
+[[views.detail.children.tabs.children.sections.children]]
+type = "field"
+field = "available"
+
+[[views.detail.children.tabs.children.sections.children]]
+type = "field"
+field = "available_on"
+
+[[views.detail.children]]
+type = "divider"
+
+[[views.detail.children]]
+type = "relationship_list"
+field = "colors"
+
+[views.edit]
+type = "stack"
+
+[[views.edit.children]]
+type = "field"
+field = "title"
+
+[[views.edit.children]]
+type = "grid"
+
+[[views.edit.children.children]]
+type = "field"
+field = "price"
+
+[[views.edit.children.children]]
+type = "field"
+field = "stock_on_hand"
+
+[[views.edit.children]]
+type = "field"
+field = "available"
+
+[[views.edit.children]]
+type = "field"
+field = "available_on"
+
+[[views.edit.children]]
+type = "field"
+field = "released_at"
+
+[[views.edit.children]]
+type = "field"
+field = "order_cutoff"
+
+[[views.edit.children]]
+type = "relationship_list"
+field = "categories"
+
+[[views.edit.children]]
+type = "relationship_list"
+field = "colors"
+
+[views.table]
+type = "table"
+fields = ["title", "price", "stock_on_hand", "available"]
+
 [[attributes]]
 code = "title"
 value_type = "string"

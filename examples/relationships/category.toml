@@ -6,6 +6,36 @@ kind = "entity"
 [display.dropdown_option]
 fields = ["name"]
 
+[views.detail]
+type = "stack"
+
+[[views.detail.children]]
+type = "heading"
+text = "Category"
+
+[[views.detail.children]]
+type = "field"
+field = "name"
+
+[[views.detail.children]]
+type = "field"
+field = "slug"
+
+[views.edit]
+type = "stack"
+
+[[views.edit.children]]
+type = "field"
+field = "name"
+
+[[views.edit.children]]
+type = "field"
+field = "slug"
+
+[views.table]
+type = "table"
+fields = ["name", "slug"]
+
 [[attributes]]
 code = "name"
 value_type = "string"
