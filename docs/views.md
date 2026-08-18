@@ -101,3 +101,6 @@ The Rust blueprint compiler reads
 component's version, props, placement, value type, and required `display` or
 `edit` capability. Keep this contract synchronized with the TypeScript
 definition. `registry.test.ts` verifies that their metadata is identical.
+
+See [Component Authoring](component-authoring.md) for the implementation and
+verification workflow.

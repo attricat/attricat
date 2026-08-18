@@ -144,7 +144,8 @@ version, allowed props, placement, value type, and requested view capability.
 The frontend registry test enforces matching metadata between the two.
 
 See [View Configuration](views.md) for the complete block grammar, heading
-configuration, and component contracts.
+configuration, and component contracts. See
+[Component Authoring](component-authoring.md) for the implementation workflow.
 
 ## Validation
 
