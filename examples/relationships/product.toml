@@ -3,170 +3,95 @@ code = "product"
 name = "Product"
 kind = "entity"
 
+attributes = [
+  { code = "title", value_type = "string" },
+  { code = "price", value_type = "number" },
+  { code = "stock_on_hand", value_type = "integer" },
+  { code = "available", value_type = "boolean" },
+  { code = "available_on", value_type = "date" },
+  { code = "released_at", value_type = "datetime" },
+  { code = "order_cutoff", value_type = "time" },
+  { code = "categories", value_type = "relationship", target_blueprint = "category" },
+  { code = "colors", value_type = "relationship", target_blueprint = "color" },
+  { code = "variants", value_type = "relationship", target_blueprint = "product" },
+]
+
 [display.dropdown_option]
 fields = ["title"]
 
 [views.detail]
 type = "stack"
-
-[[views.detail.children]]
-type = "stack"
-component = { id = "catalog.entity_heading", version = 1 }
-
-[[views.detail.children.children]]
-type = "field"
-field = "title"
-
-[[views.detail.children.children]]
-type = "text"
-text = "Product details"
-
-[[views.detail.children]]
-type = "text"
-text = "Availability and linked catalog classifications."
-
-[[views.detail.children]]
-type = "tabs"
-
-[[views.detail.children.tabs]]
-label = "Overview"
-
-[[views.detail.children.tabs.children]]
-type = "grid"
-
-[[views.detail.children.tabs.children.children]]
-type = "field"
-field = "title"
-
-[[views.detail.children.tabs.children.children]]
-type = "field"
-field = "price"
-
-[[views.detail.children.tabs.children]]
-type = "relationship_list"
-field = "categories"
-
-[[views.detail.children.tabs]]
-label = "Operations"
-
-[[views.detail.children.tabs.children]]
-type = "accordion"
-
-[[views.detail.children.tabs.children.sections]]
-label = "Availability"
-
-[[views.detail.children.tabs.children.sections.children]]
-type = "field"
-field = "stock_on_hand"
-
-[[views.detail.children.tabs.children.sections.children]]
-type = "field"
-field = "available"
-
-[[views.detail.children.tabs.children.sections.children]]
-type = "field"
-field = "available_on"
-
-[[views.detail.children]]
-type = "divider"
-
-[[views.detail.children]]
-type = "relationship_list"
-field = "colors"
-
-[[views.detail.children]]
-type = "relationship_list"
-field = "variants"
+children = [
+  {
+    type = "stack",
+    component = { id = "catalog.entity_heading", version = 1 },
+    children = [
+      { type = "field", field = "title" },
+      { type = "text", text = "Product details" },
+    ],
+  },
+  { type = "text", text = "Availability and linked catalog classifications." },
+  {
+    type = "tabs",
+    tabs = [
+      {
+        label = "Overview",
+        children = [
+          {
+            type = "grid",
+            children = [
+              { type = "field", field = "title" },
+              { type = "field", field = "price" },
+            ],
+          },
+          { type = "relationship_list", field = "categories" },
+        ],
+      },
+      {
+        label = "Operations",
+        children = [
+          {
+            type = "accordion",
+            sections = [
+              {
+                label = "Availability",
+                children = [
+                  { type = "field", field = "stock_on_hand" },
+                  { type = "field", field = "available" },
+                  { type = "field", field = "available_on" },
+                ],
+              },
+            ],
+          },
+        ],
+      },
+    ],
+  },
+  { type = "divider" },
+  { type = "relationship_list", field = "colors" },
+  { type = "relationship_list", field = "variants" },
+]
 
 [views.edit]
 type = "stack"
-
-[[views.edit.children]]
-type = "field"
-field = "title"
-
-[[views.edit.children]]
-type = "grid"
-
-[[views.edit.children.children]]
-type = "field"
-field = "price"
-
-[[views.edit.children.children]]
-type = "field"
-field = "stock_on_hand"
-
-[[views.edit.children]]
-type = "field"
-field = "available"
-
-[[views.edit.children]]
-type = "field"
-field = "available_on"
-
-[[views.edit.children]]
-type = "field"
-field = "released_at"
-
-[[views.edit.children]]
-type = "field"
-field = "order_cutoff"
-
-[[views.edit.children]]
-type = "relationship_list"
-field = "categories"
-
-[[views.edit.children]]
-type = "relationship_list"
-field = "colors"
-
-[[views.edit.children]]
-type = "relationship_list"
-field = "variants"
+children = [
+  { type = "field", field = "title" },
+  {
+    type = "grid",
+    children = [
+      { type = "field", field = "price" },
+      { type = "field", field = "stock_on_hand" },
+    ],
+  },
+  { type = "field", field = "available" },
+  { type = "field", field = "available_on" },
+  { type = "field", field = "released_at" },
+  { type = "field", field = "order_cutoff" },
+  { type = "relationship_list", field = "categories" },
+  { type = "relationship_list", field = "colors" },
+  { type = "relationship_list", field = "variants" },
+]
 
 [views.table]
 type = "table"
 fields = ["title", "price", "stock_on_hand", "available"]
-
-[[attributes]]
-code = "title"
-value_type = "string"
-
-[[attributes]]
-code = "price"
-value_type = "number"
-
-[[attributes]]
-code = "stock_on_hand"
-value_type = "integer"
-
-[[attributes]]
-code = "available"
-value_type = "boolean"
-
-[[attributes]]
-code = "available_on"
-value_type = "date"
-
-[[attributes]]
-code = "released_at"
-value_type = "datetime"
-
-[[attributes]]
-code = "order_cutoff"
-value_type = "time"
-
-[[attributes]]
-code = "categories"
-value_type = "relationship"
-target_blueprint = "category"
-
-[[attributes]]
-code = "colors"
-value_type = "relationship"
-target_blueprint = "color"
-
-[[attributes]]
-code = "variants"
-value_type = "relationship"
-target_blueprint = "product"

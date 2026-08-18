@@ -3,43 +3,29 @@ code = "color"
 name = "Color"
 kind = "entity"
 
+attributes = [
+  { code = "name", value_type = "string" },
+  { code = "hex", value_type = "string" },
+]
+
 [display.dropdown_option]
 fields = ["name", "hex"]
 
 [views.detail]
 type = "stack"
-
-[[views.detail.children]]
-type = "heading"
-text = "Color"
-
-[[views.detail.children]]
-type = "field"
-field = "name"
-
-[[views.detail.children]]
-type = "field"
-field = "hex"
+children = [
+  { type = "heading", text = "Color" },
+  { type = "field", field = "name" },
+  { type = "field", field = "hex" },
+]
 
 [views.edit]
 type = "stack"
-
-[[views.edit.children]]
-type = "field"
-field = "name"
-
-[[views.edit.children]]
-type = "field"
-field = "hex"
+children = [
+  { type = "field", field = "name" },
+  { type = "field", field = "hex" },
+]
 
 [views.table]
 type = "table"
 fields = ["name", "hex"]
-
-[[attributes]]
-code = "name"
-value_type = "string"
-
-[[attributes]]
-code = "hex"
-value_type = "string"
