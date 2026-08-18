@@ -70,12 +70,14 @@ identified by `id`; every revision has a positive `version`, and `(id, version)`
 is the primary key.
 
 - `definition` stores the authored TOML definition and is the source of truth.
-- `code`, `name`, `kind`, `includes`, `display`, `definition_hash`, and generated attributes
+- `code`, `name`, `kind`, `includes`, `display`, `entity_schema`, `definition_hash`, and generated attributes
   are compiler output derived from TOML.
 - `code` is repository-enforced as stable across revisions in one blueprint family.
 - `kind` is either `entity` or `mixin`; only entity blueprints can be instantiated.
 - `includes` is a generated direct-dependency JSONB cache, in TOML order.
 - `display` is generated JSONB display metadata keyed by display name.
+- `entity_schema` is an optional JSON Schema Draft 2020-12 contract for the
+  fully resolved entity document. It is versioned with the blueprint.
 - `definition_hash` is the SHA-256 hash of the exact raw TOML source.
 - `deleted_at` implements soft deletion.
 - `blueprints_active_version_idx` supports selecting the newest non-deleted version.
@@ -96,6 +98,8 @@ they are never independently authored or edited.
 - `value_type` is one of `string`, `number`, `integer`, `boolean`, `date`,
   `datetime`, `time`, or `relationship`. Scalar types map to native PostgreSQL
   columns; `relationship` has special EAV target semantics.
+- `value_schema` is an optional JSON Schema Draft 2020-12 contract for one
+  normalized scalar value. It is versioned with the attribute definition.
 - Relationship attributes may declare `target_blueprint` in TOML. Its compiled
   `target_blueprint_code` restricts targets to that entity blueprint family.
 - `tags` is a JSONB array compiled from the attribute TOML. Tags are generic,
@@ -106,6 +110,9 @@ they are never independently authored or edited.
 Entities are catalog items.
 
 - Each entity references the exact blueprint version under which it was created.
+- Every value mutation validates the target attribute schema and the resolved
+  entity schema before it commits. This includes values written by server-side
+  computation.
 - `projections` is a JSONB field reserved for future denormalized read models;
   EAV values remain the source of truth.
 

@@ -22,6 +22,9 @@ These conventions apply to `apps/catalog-web`.
   `src/features`.
 - Use TanStack Form for form state and Material UI for interface components.
 - Validate API payloads with Zod before using them in the UI.
+- Blueprint responses can include JSON Schema contracts. Use the feature-local
+  Ajv helper for immediate form feedback, but treat server-side `422` schema
+  validation as authoritative.
 
 ## Testing
 

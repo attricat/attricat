@@ -16,6 +16,10 @@ blueprint references before they reach the client. The TypeScript registry is
 the frontend implementation source; the JSON file is its shared validation
 contract.
 
+Persisted value constraints do not belong to view components. Blueprints own
+attribute and entity JSON Schemas, which Rust enforces before values are stored.
+See [JSON Schema Validation](json-schema-validation.md) for that contract.
+
 ## Add A Component
 
 1. Create a component module under
@@ -57,6 +61,10 @@ The compiler enforces each of these fields, as well as `allowed_props`, against
 the component reference in a blueprint. Do not add props to `allowed_props`
 until the applicable renderer consumes them: component props are currently
 validated but are not passed to frontend renderers.
+
+`value_types` describes renderer applicability, not data integrity. A renderer
+must tolerate valid values for its declared attribute type; it cannot make a
+stored value valid or invalid.
 
 ## Renderers
 
