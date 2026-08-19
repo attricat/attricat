@@ -102,6 +102,85 @@ async fn data_health_completeness_counts_default_values(pool: PgPool) {
     server.abort();
 }
 
+#[sqlx::test]
+async fn blueprint_catalogue_lists_all_kinds_and_revision_history(pool: PgPool) {
+    let (base_url, server) = start_server(pool).await;
+    let client = Client::new();
+    let first: Value = client
+        .post(format!("{base_url}/blueprints"))
+        .json(&json!({
+            "definition": "format_version = 1\ncode = \"catalogued_entity\"\nname = \"Catalogued entity revision two\"\nkind = \"entity\"\n\n[display.dropdown_option]\nfields = [\"title\"]\n\n[[attributes]]\ncode = \"title\"\nvalue_type = \"string\""
+        }))
+        .send()
+        .await
+        .unwrap()
+        .error_for_status()
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    let blueprint_id = first["blueprint"]["id"].as_str().unwrap();
+    client
+        .post(format!("{base_url}/blueprints/{blueprint_id}/versions"))
+        .json(&json!({
+            "definition": "format_version = 1\ncode = \"catalogued_entity\"\nname = \"Catalogued entity\"\nkind = \"entity\"\n\n[display.dropdown_option]\nfields = [\"title\"]\n\n[[attributes]]\ncode = \"title\"\nvalue_type = \"string\""
+        }))
+        .send()
+        .await
+        .unwrap()
+        .error_for_status()
+        .unwrap();
+    create_blueprint(
+        &client,
+        &base_url,
+        "format_version = 1\ncode = \"catalogued_mixin\"\nname = \"Catalogued mixin\"\nkind = \"mixin\"\n\n[[attributes]]\ncode = \"label\"\nvalue_type = \"string\"",
+    )
+    .await;
+
+    let catalogue: Value = client
+        .get(format!("{base_url}/blueprints/catalogue"))
+        .send()
+        .await
+        .unwrap()
+        .error_for_status()
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    assert!(catalogue.as_array().unwrap().iter().any(|blueprint| {
+        blueprint["code"] == "catalogued_entity"
+            && blueprint["version"] == 2
+            && blueprint["status"] == "draft"
+    }));
+    assert!(catalogue
+        .as_array()
+        .unwrap()
+        .iter()
+        .any(|blueprint| blueprint["kind"] == "mixin"));
+
+    let revisions: Value = client
+        .get(format!("{base_url}/blueprints/{blueprint_id}/versions"))
+        .send()
+        .await
+        .unwrap()
+        .error_for_status()
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    assert_eq!(
+        revisions
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|blueprint| blueprint["version"].as_i64().unwrap())
+            .collect::<Vec<_>>(),
+        vec![2, 1]
+    );
+
+    server.abort();
+}
+
 async fn create_blueprint(client: &Client, base_url: &str, definition: &str) -> Value {
     let blueprint: Value = client
         .post(format!("{base_url}/blueprints"))

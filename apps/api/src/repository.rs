@@ -402,6 +402,34 @@ impl CatalogRepository {
         .await?)
     }
 
+    pub async fn list_blueprints(&self) -> Result<Vec<Blueprint>, RepositoryError> {
+        Ok(sqlx::query_as::<_, Blueprint>(
+            r#"SELECT DISTINCT ON (id)
+                    id, code, name, kind, version, display, views, includes, entity_schema, status, published_at, created_at, updated_at,
+                    deleted_at, definition, definition_hash
+               FROM blueprints
+               WHERE deleted_at IS NULL
+               ORDER BY id, version DESC"#,
+        )
+        .fetch_all(&self.pool)
+        .await?)
+    }
+
+    pub async fn list_blueprint_revisions(
+        &self,
+        blueprint_id: Uuid,
+    ) -> Result<Vec<Blueprint>, RepositoryError> {
+        Ok(sqlx::query_as::<_, Blueprint>(
+            r#"SELECT id, code, name, kind, version, includes, display, views, entity_schema, status, published_at, created_at, updated_at, deleted_at, definition, definition_hash
+               FROM blueprints
+               WHERE id = $1 AND deleted_at IS NULL
+               ORDER BY version DESC"#,
+        )
+        .bind(blueprint_id)
+        .fetch_all(&self.pool)
+        .await?)
+    }
+
     pub async fn create_blueprint(
         &self,
         input: CreateBlueprint,

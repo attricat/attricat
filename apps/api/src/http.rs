@@ -57,9 +57,10 @@ pub fn router(state: AppState) -> Router {
             "/blueprints",
             get(list_entity_blueprints).post(create_blueprint),
         )
+        .route("/blueprints/catalogue", get(list_blueprints))
         .route(
             "/blueprints/{blueprint_id}/versions",
-            post(create_blueprint_revision),
+            get(list_blueprint_revisions).post(create_blueprint_revision),
         )
         .route("/blueprints/{blueprint_id}", get(get_blueprint))
         .route(
@@ -270,6 +271,12 @@ async fn list_entity_blueprints(
     ))
 }
 
+async fn list_blueprints(
+    State(state): State<AppState>,
+) -> Result<Json<Vec<crate::model::Blueprint>>, ApiError> {
+    Ok(Json(state.repository.list_blueprints().await?))
+}
+
 #[derive(Default, Deserialize)]
 struct BlueprintQuery {
     #[serde(default)]
@@ -287,6 +294,15 @@ async fn create_blueprint_revision(
         .await?;
     invalidate_data_health(&state).await;
     Ok((StatusCode::CREATED, Json(blueprint)))
+}
+
+async fn list_blueprint_revisions(
+    State(state): State<AppState>,
+    Path(blueprint_id): Path<Uuid>,
+) -> Result<Json<Vec<crate::model::Blueprint>>, ApiError> {
+    Ok(Json(
+        state.repository.list_blueprint_revisions(blueprint_id).await?,
+    ))
 }
 
 async fn get_blueprint(
