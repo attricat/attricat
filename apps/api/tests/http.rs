@@ -1713,5 +1713,19 @@ value_schema = '{"type":"number","minimum":0}'"#,
     .await
     .unwrap();
     assert_eq!(response.status(), StatusCode::CREATED);
+    let entity: Value = response.json().await.unwrap();
+    let response = client
+        .put(format!("{base_url}/v1/entities/{}", entity["id"].as_str().unwrap()))
+        .json(&json!({
+            "values": [{ "kind": "scalar", "attribute_code": "price", "context_id": context_id, "value": -1 }]
+        }))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::UNPROCESSABLE_ENTITY);
+    assert_eq!(
+        response.json::<Value>().await.unwrap()["error"]["code"],
+        "attribute_value_schema_mismatch"
+    );
     server.abort();
 }

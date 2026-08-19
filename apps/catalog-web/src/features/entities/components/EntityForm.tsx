@@ -22,6 +22,7 @@ import {
   type NewAttributeValue,
 } from '../api';
 import {
+  hasInvalidScalarField,
   relationshipTargetsForForm,
   serializeAttributeValues,
   valuesForForm,
@@ -29,6 +30,7 @@ import {
 import { displayLabel, dropdownOptionLabel } from '../entity-display';
 import { entityQueryKeys } from '../query-keys';
 import { attributeValueTypes } from '../value-types';
+import { scalarValueForField } from '../attribute-values';
 import { EntityView } from '../../views/components/EntityView';
 
 type EntityFormProps = {
@@ -83,6 +85,7 @@ export const EntityForm = ({
           (attribute) =>
             contextId === null || attribute.context_editable !== 'default',
         );
+        if (hasInvalidScalarField(editableAttributes, value.fields)) return;
         onSubmit({
           values: serializeAttributeValues(
             editableAttributes,
@@ -177,11 +180,18 @@ export const EntityForm = ({
                   const defaultOnly =
                     contextId !== null &&
                     attribute.context_editable === 'default';
+                  const invalid =
+                    attribute.value_type !== attributeValueTypes.relationship &&
+                    Boolean(value.trim()) &&
+                    !scalarValueForField(attribute, value);
                   const helperText = defaultOnly
                     ? 'Managed in Default'
                     : inherited
                       ? `Using ${resolvedValue.source_context.code}: ${typeof resolvedValue.value === 'object' ? JSON.stringify(resolvedValue.value) : String(resolvedValue.value)}`
                       : undefined;
+                  const fieldHelperText = invalid
+                    ? 'Enter a value that meets this field\'s requirements.'
+                    : helperText;
                   const handleChange = (nextValue: string) =>
                     field.handleChange({
                       ...field.state.value,
@@ -199,7 +209,7 @@ export const EntityForm = ({
                     <TextField
                       fullWidth
                       disabled={defaultOnly}
-                      helperText={helperText}
+                      helperText={fieldHelperText}
                       select
                       label={attribute.code}
                       onChange={(event) => handleChange(event.target.value)}
@@ -213,7 +223,8 @@ export const EntityForm = ({
                     <TextField
                       fullWidth
                       disabled={defaultOnly}
-                      helperText={helperText}
+                      error={invalid}
+                      helperText={fieldHelperText}
                       label={attribute.code}
                       onChange={(event) => handleChange(event.target.value)}
                       placeholder={

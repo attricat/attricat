@@ -61,6 +61,17 @@ export const serializeAttributeValues = (
   );
 };
 
+export const hasInvalidScalarField = (
+  attributes: readonly Attribute[],
+  fields: Record<string, string>,
+): boolean =>
+  attributes.some(
+    (attribute) =>
+      attribute.value_type !== attributeValueTypes.relationship &&
+      Boolean(fields[attribute.code]?.trim()) &&
+      !scalarValueForField(attribute, fields[attribute.code]),
+  );
+
 export const relationshipTargetsForForm = (
   attributes: readonly Attribute[],
   fields: Record<string, string>,
