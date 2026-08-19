@@ -19,6 +19,7 @@ import {
 } from '@mui/material';
 import { lazy, Suspense, useState } from 'react';
 import { getBlueprintRevision, listBlueprintRevisions } from './api';
+import { BlueprintViewsPreview } from './BlueprintViewsPreview';
 import { blueprintQueryKeys } from './query-keys';
 
 const TomlEditor = lazy(() =>
@@ -247,6 +248,7 @@ export const BlueprintDetailPage = ({
                 <Tab label="Includes" />
                 <Tab label="Display" />
                 <Tab label="Views" />
+                <Tab label="View definition" />
                 <Tab label="Entity schema" />
                 <Tab label={`Attributes (${left.data.attributes.length})`} />
               </Tabs>
@@ -264,18 +266,24 @@ export const BlueprintDetailPage = ({
                   />
                 )}
                 {dataTab === 2 && (
+                  <BlueprintViewsPreview
+                    attributes={left.data.attributes}
+                    views={left.data.blueprint.views}
+                  />
+                )}
+                {dataTab === 3 && (
                   <JsonMetadata
                     label="Views"
                     value={left.data.blueprint.views}
                   />
                 )}
-                {dataTab === 3 && (
+                {dataTab === 4 && (
                   <JsonMetadata
                     label="Entity schema"
                     value={left.data.blueprint.entity_schema}
                   />
                 )}
-                {dataTab === 4 && (
+                {dataTab === 5 && (
                   <Box sx={{ overflowX: 'auto' }}>
                     <Table size="small">
                       <TableHead>

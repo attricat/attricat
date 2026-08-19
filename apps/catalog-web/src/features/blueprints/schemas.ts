@@ -1,4 +1,8 @@
 import { z } from 'zod';
+import {
+  attributeSchema as entityAttributeSchema,
+  blueprintSchema as entityBlueprintSchema,
+} from '../entities/schemas';
 
 const jsonValueSchema: z.ZodType<unknown> = z.lazy(() =>
   z.union([
@@ -19,7 +23,7 @@ export const blueprintSchema = z.object({
   version: z.number().int().positive(),
   includes: jsonValueSchema,
   display: jsonValueSchema,
-  views: jsonValueSchema,
+  views: entityBlueprintSchema.shape.views,
   entity_schema: jsonValueSchema.nullable(),
   status: z.string(),
   published_at: z.string().nullable(),
@@ -30,17 +34,13 @@ export const blueprintSchema = z.object({
   definition_hash: z.string(),
 });
 
-export const attributeSchema = z.object({
+export const attributeSchema = entityAttributeSchema.extend({
   id: z.uuid(),
   blueprint_id: z.uuid(),
   blueprint_version: z.number().int().positive(),
-  code: z.string(),
-  value_type: z.string(),
-  value_schema: jsonValueSchema.nullable(),
-  target_blueprint_code: z.string().nullable(),
-  tags: jsonValueSchema,
-  context_fallback: z.string(),
-  context_editable: z.string(),
+  tags: z.array(z.string()),
+  context_fallback: z.enum(['default', 'none']),
+  context_editable: z.enum(['all', 'default']),
   position: z.number().int(),
   created_at: z.string(),
   updated_at: z.string(),
