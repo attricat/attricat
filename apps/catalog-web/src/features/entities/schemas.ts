@@ -273,6 +273,18 @@ const entityFormResponseSchema = z.object({
   values: z.array(newAttributeValueSchema),
   context: entityContextSchema,
 });
+const migrationIssueSchema = z.object({
+  attribute_code: z.string().nullable(),
+  message: z.string(),
+});
+export const entityMigrationPreviewSchema = z.object({
+  migration_id: uuidSchema,
+  source_version: z.number().int().positive(),
+  target: blueprintWithAttributesSchema,
+  values: z.array(newAttributeValueSchema),
+  status: z.enum(['ready', 'needs_input', 'blocked']),
+  issues: z.array(migrationIssueSchema),
+});
 export const searchEntitiesRequestSchema = z.object({
   blueprint: z.object({
     code: z.string().min(1),
@@ -302,6 +314,12 @@ export const updateEntityRequestSchema = z.object({
   relationships: z.array(relationshipTargetsSchema),
   remove_values: z.array(attributeValueSelectorSchema).default([]),
 });
+export const migrateEntityRequestSchema = z.object({
+  migration_id: uuidSchema,
+  expected_target_version: z.number().int().positive(),
+  values: z.array(newAttributeValueSchema),
+  relationships: z.array(relationshipTargetsSchema),
+});
 
 export type Attribute = z.infer<typeof attributeSchema>;
 export type Blueprint = z.infer<typeof blueprintSchema>;
@@ -318,6 +336,9 @@ export type EntitySearchResponse = z.infer<typeof entitySearchResponseSchema>;
 export type EntityFormResponse = z.infer<typeof entityFormResponseSchema>;
 export type EntityPreview = z.infer<typeof entityPreviewSchema>;
 export type ResolvedEntityPreview = z.infer<typeof resolvedEntityPreviewSchema>;
+export type EntityMigrationPreview = z.infer<
+  typeof entityMigrationPreviewSchema
+>;
 
 export {
   entityFormResponseSchema,

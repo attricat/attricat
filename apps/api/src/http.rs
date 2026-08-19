@@ -13,9 +13,9 @@ use crate::{
     model::{
         AppendAttributeValues, BlueprintWithAttributes, CreateAttributeContext, CreateBlueprint,
         CreateEntity, CreateEntityFormRequest, Entity, EntityFormResponse, EntityIdentity,
-        EntityPreviewPage, EntityPreviewResponse, EntitySearchResponse, RelationshipMutation,
-        ResolvedEntityPreviewResponse, SearchEntitiesRequest, UpdateAttributeContext,
-        UpdateEntityFormRequest,
+        EntityPreviewPage, EntityPreviewResponse, EntitySearchResponse, MigrateEntityRequest,
+        RelationshipMutation, ResolvedEntityPreviewResponse, SearchEntitiesRequest,
+        UpdateAttributeContext, UpdateEntityFormRequest,
     },
     repository::{CatalogRepository, RepositoryError, decode_search_cursor},
 };
@@ -66,6 +66,14 @@ pub fn router(state: AppState) -> Router {
         .route(
             "/v1/entities/{entity_id}",
             get(get_entity_form).put(update_entity_form),
+        )
+        .route(
+            "/v1/entities/{entity_id}/blueprint-migration/preview",
+            post(preview_entity_migration),
+        )
+        .route(
+            "/v1/entities/{entity_id}/blueprint-migration",
+            post(migrate_entity_to_latest),
         )
         .route("/entities", get(list_previews).post(create_entity))
         .route(
@@ -477,6 +485,28 @@ async fn update_entity_form(
     ))
 }
 
+async fn preview_entity_migration(
+    State(state): State<AppState>,
+    Path(entity_id): Path<Uuid>,
+) -> Result<Json<crate::model::EntityMigrationPreview>, ApiError> {
+    Ok(Json(
+        state.repository.preview_entity_migration(entity_id).await?,
+    ))
+}
+
+async fn migrate_entity_to_latest(
+    State(state): State<AppState>,
+    Path(entity_id): Path<Uuid>,
+    Json(input): Json<MigrateEntityRequest>,
+) -> Result<Json<Entity>, ApiError> {
+    Ok(Json(
+        state
+            .repository
+            .migrate_entity_to_latest(entity_id, input)
+            .await?,
+    ))
+}
+
 async fn resolve_search_blueprint(
     state: &AppState,
     blueprint: &crate::model::SearchBlueprint,
@@ -628,6 +658,21 @@ impl From<RepositoryError> for ApiError {
             RepositoryError::EntitySchemaMismatch { .. } => Self {
                 status: StatusCode::UNPROCESSABLE_ENTITY,
                 code: "entity_schema_mismatch",
+                message: error.to_string(),
+            },
+            RepositoryError::EntityBlueprintCurrent => Self {
+                status: StatusCode::CONFLICT,
+                code: "entity_blueprint_current",
+                message: error.to_string(),
+            },
+            RepositoryError::MigrationTargetChanged => Self {
+                status: StatusCode::CONFLICT,
+                code: "migration_target_changed",
+                message: error.to_string(),
+            },
+            RepositoryError::MigrationNotApplicable => Self {
+                status: StatusCode::UNPROCESSABLE_ENTITY,
+                code: "migration_not_applicable",
                 message: error.to_string(),
             },
             RepositoryError::InvalidStoredAttributeValue => {

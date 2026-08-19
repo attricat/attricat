@@ -1,4 +1,4 @@
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 
 use async_recursion::async_recursion;
 use base64::{Engine, engine::general_purpose::URL_SAFE_NO_PAD};
@@ -16,9 +16,9 @@ use crate::{
     model::{
         AppendAttributeValues, Attribute, AttributeContext, AttributeValue, AttributeValueSelector,
         Blueprint, BlueprintWithAttributes, CreateAttributeContext, CreateBlueprint, CreateEntity,
-        Entity, EntityPreview, EntityPreviewPage, FormAttributeValue, NewAttributeValue,
-        RelationshipMutation, RelationshipTargets, ResolvedEntityPreviewResponse,
-        UpdateAttributeContext,
+        Entity, EntityMigrationPreview, EntityPreview, EntityPreviewPage, FormAttributeValue,
+        MigrateEntityRequest, MigrationIssue, NewAttributeValue, RelationshipMutation,
+        RelationshipTargets, ResolvedEntityPreviewResponse, UpdateAttributeContext,
     },
 };
 
@@ -83,6 +83,12 @@ pub enum RepositoryError {
     InvalidBlueprintDefinition(String),
     #[error("blueprint code is already owned by another blueprint")]
     BlueprintCodeTaken,
+    #[error("entity is already on the latest blueprint revision")]
+    EntityBlueprintCurrent,
+    #[error("the latest blueprint revision changed; refresh the migration preview")]
+    MigrationTargetChanged,
+    #[error("migration does not apply to this entity")]
+    MigrationNotApplicable,
     #[error(transparent)]
     Database(#[from] sqlx::Error),
 }
@@ -936,6 +942,231 @@ impl CatalogRepository {
         Ok(entity)
     }
 
+    pub async fn preview_entity_migration(
+        &self,
+        entity_id: Uuid,
+    ) -> Result<EntityMigrationPreview, RepositoryError> {
+        let entity = self
+            .get_entity(entity_id)
+            .await?
+            .ok_or(RepositoryError::NotFound("entity"))?;
+        let target = self
+            .get_current_blueprint(entity.blueprint_id)
+            .await?
+            .ok_or(RepositoryError::NotFound("blueprint"))?;
+        if target.blueprint.version == entity.blueprint_version {
+            return Err(RepositoryError::EntityBlueprintCurrent);
+        }
+        let source_attributes = self
+            .list_attributes(entity.blueprint_id, entity.blueprint_version)
+            .await?;
+        let values = self.form_values(entity_id).await?;
+        let target_attributes: HashMap<_, _> = target
+            .attributes
+            .iter()
+            .map(|attribute| (attribute.code.as_str(), attribute))
+            .collect();
+        let mut issues = Vec::new();
+        for source in &source_attributes {
+            if values.iter().any(|value| match value {
+                FormAttributeValue::Scalar { attribute_code, .. }
+                | FormAttributeValue::Relationship { attribute_code, .. } => {
+                    attribute_code == &source.code
+                }
+            }) {
+                match target_attributes.get(source.code.as_str()) {
+                    Some(target) if target.value_type == source.value_type => {}
+                    Some(_) => issues.push(MigrationIssue {
+                        attribute_code: Some(source.code.clone()),
+                        message: "The attribute value type changed in the target revision"
+                            .to_owned(),
+                    }),
+                    None => issues.push(MigrationIssue {
+                        attribute_code: Some(source.code.clone()),
+                        message: "The attribute was removed in the target revision".to_owned(),
+                    }),
+                }
+            }
+        }
+        let present: HashSet<_> = values
+            .iter()
+            .filter_map(|value| match value {
+                FormAttributeValue::Scalar { attribute_code, .. } => Some(attribute_code.as_str()),
+                FormAttributeValue::Relationship { .. } => None,
+            })
+            .collect();
+        if let Some(required) = target
+            .blueprint
+            .entity_schema
+            .as_ref()
+            .and_then(|schema| schema.get("required"))
+            .and_then(Value::as_array)
+        {
+            for field in required.iter().filter_map(Value::as_str) {
+                if !present.contains(field) {
+                    issues.push(MigrationIssue {
+                        attribute_code: Some(field.to_owned()),
+                        message: "A value is required by the target entity schema".to_owned(),
+                    });
+                }
+            }
+        }
+        let status = if issues
+            .iter()
+            .any(|issue| issue.message.contains("changed") || issue.message.contains("removed"))
+        {
+            "blocked"
+        } else if issues.is_empty() {
+            "ready"
+        } else {
+            "needs_input"
+        };
+        let migration_id = Uuid::new_v4();
+        sqlx::query(
+            r#"INSERT INTO entity_blueprint_migrations
+                   (id, entity_id, blueprint_id, source_version, target_version, status, issues)
+               VALUES ($1, $2, $3, $4, $5, $6, $7)"#,
+        )
+        .bind(migration_id)
+        .bind(entity.id)
+        .bind(entity.blueprint_id)
+        .bind(entity.blueprint_version)
+        .bind(target.blueprint.version)
+        .bind(status)
+        .bind(serde_json::to_value(&issues).expect("migration issues serialize"))
+        .execute(&self.pool)
+        .await?;
+        Ok(EntityMigrationPreview {
+            migration_id,
+            source_version: entity.blueprint_version,
+            target,
+            values,
+            status: status.to_owned(),
+            issues,
+        })
+    }
+
+    pub async fn migrate_entity_to_latest(
+        &self,
+        entity_id: Uuid,
+        input: MigrateEntityRequest,
+    ) -> Result<Entity, RepositoryError> {
+        let migration_input = serde_json::to_value(&input).expect("migration input serializes");
+        let mut transaction = self.pool.begin().await?;
+        let entity = self.lock_entity(&mut transaction, entity_id).await?;
+        let migration = sqlx::query_as::<_, (Uuid, i64, i64, String)>(
+            "SELECT entity_id, source_version, target_version, status FROM entity_blueprint_migrations WHERE id = $1 FOR UPDATE",
+        )
+        .bind(input.migration_id)
+        .fetch_optional(&mut *transaction)
+        .await?
+        .ok_or(RepositoryError::MigrationNotApplicable)?;
+        if migration.0 != entity.id || migration.1 != entity.blueprint_version {
+            return Err(RepositoryError::MigrationNotApplicable);
+        }
+        let target_version = sqlx::query_scalar::<_, i64>(
+            "SELECT version FROM blueprints WHERE id = $1 AND deleted_at IS NULL ORDER BY version DESC LIMIT 1",
+        )
+        .bind(entity.blueprint_id)
+        .fetch_one(&mut *transaction)
+        .await?;
+        if target_version != input.expected_target_version || target_version != migration.2 {
+            sqlx::query("UPDATE entity_blueprint_migrations SET status = 'superseded', completed_at = now() WHERE id = $1")
+                .bind(input.migration_id)
+                .execute(&mut *transaction)
+                .await?;
+            transaction.commit().await?;
+            return Err(RepositoryError::MigrationTargetChanged);
+        }
+        if migration.3 == "blocked" {
+            return Err(RepositoryError::MigrationNotApplicable);
+        }
+        let source_values = self
+            .form_values_in_transaction(&mut transaction, entity.id)
+            .await?;
+        let target_attributes = self
+            .list_attributes_in_transaction(&mut transaction, entity.blueprint_id, target_version)
+            .await?;
+        let target_by_code: HashMap<_, _> = target_attributes
+            .iter()
+            .map(|attribute| (attribute.code.as_str(), attribute))
+            .collect();
+        let mut carried_values = Vec::new();
+        let mut carried_relationships: HashMap<(String, Option<Uuid>), Vec<Uuid>> = HashMap::new();
+        for value in source_values {
+            match value {
+                FormAttributeValue::Scalar {
+                    attribute_code,
+                    context_id,
+                    value,
+                } => {
+                    if target_by_code.contains_key(attribute_code.as_str()) {
+                        carried_values.push(NewAttributeValue::Scalar {
+                            attribute_id: None,
+                            attribute_code: Some(attribute_code),
+                            context_id,
+                            value,
+                        });
+                    }
+                }
+                FormAttributeValue::Relationship {
+                    attribute_code,
+                    context_id,
+                    target_entity_id,
+                } => {
+                    if target_by_code.contains_key(attribute_code.as_str()) {
+                        carried_relationships
+                            .entry((attribute_code, context_id))
+                            .or_default()
+                            .push(target_entity_id);
+                    }
+                }
+            }
+        }
+        let target_entity = sqlx::query_as::<_, Entity>(
+            r#"UPDATE entities SET blueprint_version = $2, updated_at = now()
+               WHERE id = $1
+               RETURNING id, blueprint_id, blueprint_version, projections, created_at, updated_at, deleted_at"#,
+        )
+        .bind(entity.id)
+        .bind(target_version)
+        .fetch_one(&mut *transaction)
+        .await?;
+        for value in carried_values.into_iter().chain(input.values) {
+            self.insert_value(&mut transaction, &target_entity, value)
+                .await?;
+        }
+        let carried_relationships = carried_relationships
+            .into_iter()
+            .map(
+                |((attribute_code, context_id), target_entity_ids)| RelationshipTargets {
+                    attribute_id: None,
+                    attribute_code: Some(attribute_code),
+                    context_id,
+                    target_entity_ids,
+                },
+            )
+            .chain(input.relationships)
+            .collect();
+        self.replace_relationship_sets(&mut transaction, &target_entity, carried_relationships)
+            .await?;
+        self.validate_entity_schema(&mut transaction, &target_entity)
+            .await?;
+        let preview = Self::build_preview_projection(&mut transaction, entity.id).await?;
+        let target_entity = self
+            .store_preview(&mut transaction, entity.id, preview)
+            .await?;
+        sqlx::query(
+            "UPDATE entity_blueprint_migrations SET status = 'migrated', input = $2, started_at = COALESCE(started_at, now()), completed_at = now() WHERE id = $1",
+        )
+        .bind(input.migration_id)
+        .bind(migration_input)
+        .execute(&mut *transaction)
+        .await?;
+        transaction.commit().await?;
+        Ok(target_entity)
+    }
+
     pub async fn form_values(
         &self,
         entity_id: Uuid,
@@ -947,7 +1178,10 @@ impl CatalogRepository {
                       av.value_time_zone
                FROM attribute_values av
                JOIN attributes a ON a.id = av.attribute_id
+               JOIN entities e ON e.id = av.entity_id
                WHERE av.entity_id = $1
+                 AND a.blueprint_id = e.blueprint_id
+                 AND a.blueprint_version = e.blueprint_version
                  AND av.latest
                  AND (av.relationship_target_entity_id IS NULL OR av.active)
                ORDER BY a.position, av.relationship_target_entity_id"#,
@@ -972,6 +1206,67 @@ impl CatalogRepository {
                 })
             })
             .collect::<Result<_, RepositoryError>>()?)
+    }
+
+    async fn form_values_in_transaction(
+        &self,
+        transaction: &mut Transaction<'_, Postgres>,
+        entity_id: Uuid,
+    ) -> Result<Vec<FormAttributeValue>, RepositoryError> {
+        let rows = sqlx::query_as::<_, FormNativeValueRow>(
+            r#"SELECT a.code AS attribute_code, av.context_id, av.relationship_target_entity_id,
+                      a.value_type, av.value_text, av.value_number, av.value_integer,
+                      av.value_boolean, av.value_date, av.value_datetime, av.value_time,
+                      av.value_time_zone
+               FROM attribute_values av
+               JOIN attributes a ON a.id = av.attribute_id
+               JOIN entities e ON e.id = av.entity_id
+               WHERE av.entity_id = $1
+                 AND a.blueprint_id = e.blueprint_id
+                 AND a.blueprint_version = e.blueprint_version
+                 AND av.latest
+                 AND (av.relationship_target_entity_id IS NULL OR av.active)
+               ORDER BY a.position, av.relationship_target_entity_id"#,
+        )
+        .bind(entity_id)
+        .fetch_all(&mut **transaction)
+        .await?;
+        rows.into_iter()
+            .map(|row| {
+                Ok(match row.relationship_target_entity_id {
+                    Some(target_entity_id) => FormAttributeValue::Relationship {
+                        attribute_code: row.attribute_code,
+                        context_id: row.context_id,
+                        target_entity_id,
+                    },
+                    None => FormAttributeValue::Scalar {
+                        attribute_code: row.attribute_code,
+                        context_id: row.context_id,
+                        value: native_value_json(row.native)?,
+                    },
+                })
+            })
+            .collect()
+    }
+
+    async fn list_attributes_in_transaction(
+        &self,
+        transaction: &mut Transaction<'_, Postgres>,
+        blueprint_id: Uuid,
+        blueprint_version: i64,
+    ) -> Result<Vec<Attribute>, RepositoryError> {
+        Ok(sqlx::query_as::<_, Attribute>(
+            r#"SELECT id, blueprint_id, blueprint_version, code, value_type, value_schema,
+                      target_blueprint_code, tags, context_fallback, context_editable,
+                      position, created_at, updated_at, deleted_at
+               FROM attributes
+               WHERE blueprint_id = $1 AND blueprint_version = $2 AND deleted_at IS NULL
+               ORDER BY position"#,
+        )
+        .bind(blueprint_id)
+        .bind(blueprint_version)
+        .fetch_all(&mut **transaction)
+        .await?)
     }
 
     pub async fn get_entity(&self, entity_id: Uuid) -> Result<Option<Entity>, RepositoryError> {

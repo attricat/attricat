@@ -3,6 +3,7 @@
 const server = (process.env.CATALOG_SERVER ?? 'http://127.0.0.1:3000').replace(/\/$/, '');
 const productCount = Math.max(Number.parseInt(process.env.PRODUCT_COUNT ?? '100', 10) || 100, 100);
 const defaultContextId = '00000000-0000-4000-8000-000000000001';
+const blueprintsOnly = process.env.SEED_BLUEPRINTS_ONLY === '1';
 
 const seoBlueprint = `
 format_version = 1
@@ -115,9 +116,11 @@ children = [
 [views.edit]
 type = "stack"
 children = [
-  { type = "field", field = "title", component = { id = "catalog.field_edit", version = 1 } },
+  { type = "grid", children = [{ type = "field", field = "title", component = { id = "catalog.field_edit", version = 1 } }, { type = "field", field = "sku" }] },
   { type = "grid", children = [{ type = "field", field = "price" }, { type = "field", field = "stock_on_hand" }] },
   { type = "field", field = "description" },
+  { type = "accordion", sections = [{ label = "Availability", children = [{ type = "field", field = "available" }, { type = "field", field = "available_on" }, { type = "field", field = "released_at" }, { type = "field", field = "order_cutoff" }] }] },
+  { type = "section", children = [{ type = "field", field = "meta_title" }, { type = "field", field = "meta_description" }] },
   { type = "relationship_list", field = "categories", component = { id = "catalog.relationship_list_edit", version = 1 } },
   { type = "relationship_list", field = "colors" },
   { type = "relationship_list", field = "variants" },
@@ -210,7 +213,12 @@ const request = async (path, options = {}) => {
 
 const ensureBlueprint = async (code, definition) => {
   try {
-    return await request(`/blueprints/by-code/${code}`);
+    const current = await request(`/blueprints/by-code/${code}`);
+    if (current.blueprint.definition === definition) return current;
+    return request(`/blueprints/${current.blueprint.id}/versions`, {
+      method: 'POST',
+      body: JSON.stringify({ definition }),
+    });
   } catch (error) {
     if (!error.message.includes('(404)')) throw error;
     return request('/blueprints', { method: 'POST', body: JSON.stringify({ definition }) });
@@ -265,6 +273,10 @@ const run = async () => {
     ensureBlueprint('seed_color', colorBlueprint),
   ]);
   await ensureBlueprint('seed_product', productBlueprint);
+  if (blueprintsOnly) {
+    console.log('Ensured seed blueprint revisions.');
+    return;
+  }
 
   const regional = await ensureContext('seed-us', { market: 'US' }, defaultContextId);
   const web = await ensureContext('seed-us-web', { channel: 'web' }, regional.id);

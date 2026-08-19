@@ -415,6 +415,8 @@ Authoring](blueprints.md) for the definition grammar and attribute policies.
   relationship context selection.
 - Add builders for `search` and other named projections based on real query needs.
 - Add repair/backfill commands that rebuild projections from EAV history.
-- Add an explicit, validated entity blueprint-version migration command that
-  rebuilds projections atomically. Creating a newer blueprint revision does not
-  alter entities pinned to prior versions.
+- Entity blueprint migrations copy compatible current values to target-revision
+  attributes, validate and rebuild projections atomically, and record their
+  lifecycle in `entity_blueprint_migrations`. Creating a newer blueprint
+  revision does not alter entities pinned to prior versions; users explicitly
+  preview and upgrade each entity to the latest revision.

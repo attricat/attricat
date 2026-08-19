@@ -176,6 +176,19 @@ enum EntityCommand {
         #[arg(long)]
         context_id: Option<Uuid>,
     },
+    Migrate {
+        entity_id: Uuid,
+    },
+    MigrateBulk {
+        #[arg(long)]
+        blueprint: String,
+        #[arg(long)]
+        from_version: i64,
+        #[arg(long, default_value_t = 100)]
+        size: u32,
+        #[arg(long)]
+        dry_run: bool,
+    },
 }
 
 #[derive(Subcommand)]
@@ -617,6 +630,16 @@ async fn run(cli: Cli) -> Result<String, CliError> {
                 )
                 .await
             }
+            EntityCommand::Migrate { entity_id } => {
+                let result = migrate_entity(&client, &server, entity_id, false).await?;
+                serde_json::to_string(&result).map_err(|_| CliError::InvalidResponse)
+            }
+            EntityCommand::MigrateBulk {
+                blueprint,
+                from_version,
+                size,
+                dry_run,
+            } => migrate_entities(&client, &server, &blueprint, from_version, size, dry_run).await,
         },
         Command::Value { command } => match command {
             ValueCommand::Append {
@@ -673,6 +696,128 @@ async fn run(cli: Cli) -> Result<String, CliError> {
             }
         },
     }
+}
+
+async fn migrate_entity(
+    client: &Client,
+    server: &Url,
+    entity_id: Uuid,
+    dry_run: bool,
+) -> Result<Value, CliError> {
+    let preview = request_value(
+        client,
+        server,
+        Method::POST,
+        &format!(
+            "/v1/entities/{}/blueprint-migration/preview",
+            segment(entity_id)
+        ),
+        None,
+    )
+    .await?;
+    let status = preview["status"]
+        .as_str()
+        .ok_or(CliError::InvalidResponse)?;
+    if status != "ready" || dry_run {
+        return Ok(json!({
+            "entity_id": entity_id,
+            "status": status,
+            "issues": preview["issues"],
+        }));
+    }
+    let migration_id = preview["migration_id"]
+        .as_str()
+        .ok_or(CliError::InvalidResponse)?;
+    let target_version = preview["target"]["blueprint"]["version"]
+        .as_i64()
+        .ok_or(CliError::InvalidResponse)?;
+    request_value(
+        client,
+        server,
+        Method::POST,
+        &format!("/v1/entities/{}/blueprint-migration", segment(entity_id)),
+        Some(json!({
+            "migration_id": migration_id,
+            "expected_target_version": target_version,
+            "values": [],
+            "relationships": [],
+        })),
+    )
+    .await
+}
+
+async fn migrate_entities(
+    client: &Client,
+    server: &Url,
+    blueprint: &str,
+    from_version: i64,
+    size: u32,
+    dry_run: bool,
+) -> Result<String, CliError> {
+    if from_version <= 0 {
+        return Err(CliError::Input(
+            "--from-version must be positive".to_owned(),
+        ));
+    }
+    if size == 0 {
+        return Err(CliError::Input("--size must be positive".to_owned()));
+    }
+    let mut cursor = None;
+    let mut migrated = 0;
+    let mut ready = 0;
+    let mut needs_input = Vec::new();
+    let mut blocked = Vec::new();
+    let mut failed = Vec::new();
+    loop {
+        let page = request_value(
+            client,
+            server,
+            Method::POST,
+            "/v1/entities/search",
+            Some(json!({
+                "blueprint": { "code": blueprint, "version": from_version },
+                "query": "",
+                "filters": [],
+                "page": { "size": size, "cursor": cursor },
+            })),
+        )
+        .await?;
+        let items = page["items"].as_array().ok_or(CliError::InvalidResponse)?;
+        for item in items {
+            let entity_id = item["id"]
+                .as_str()
+                .ok_or(CliError::InvalidResponse)?
+                .parse::<Uuid>()
+                .map_err(|_| CliError::InvalidResponse)?;
+            match migrate_entity(client, server, entity_id, dry_run).await {
+                Ok(result) => match result["status"].as_str() {
+                    Some("ready") => ready += 1,
+                    Some("needs_input") => needs_input.push(result),
+                    Some("blocked") => blocked.push(result),
+                    _ => migrated += 1,
+                },
+                Err(error) => failed.push(json!({
+                    "entity_id": entity_id,
+                    "error": error.json()["error"],
+                })),
+            }
+        }
+        cursor = page["next_cursor"].as_str().map(ToOwned::to_owned);
+        if cursor.is_none() {
+            break;
+        }
+    }
+    serde_json::to_string(&json!({
+        "blueprint": blueprint,
+        "from_version": from_version,
+        "dry_run": dry_run,
+        "migrated": migrated,
+        "ready": ready,
+        "needs_input": needs_input,
+        "blocked": blocked,
+        "failed": failed,
+    }))
+    .map_err(|_| CliError::InvalidResponse)
 }
 
 fn read_source(input: SourceInput) -> Result<String, CliError> {
@@ -938,6 +1083,17 @@ async fn request(
         code,
         message,
     })
+}
+
+async fn request_value(
+    client: &Client,
+    server: &Url,
+    method: Method,
+    path: &str,
+    body: Option<Value>,
+) -> Result<Value, CliError> {
+    let response = request(client, server, method, path, body).await?;
+    serde_json::from_str(&response).map_err(|_| CliError::InvalidResponse)
 }
 
 fn endpoint(server: &Url, path: &str) -> Result<Url, CliError> {

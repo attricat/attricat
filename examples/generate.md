@@ -16,11 +16,21 @@ number of parent products and is clamped to a minimum of 100:
 CATALOG_SERVER=http://127.0.0.1:3000 PRODUCT_COUNT=150 node examples/generate.mjs
 ```
 
+Set `SEED_BLUEPRINTS_ONLY=1` to create updated blueprint revisions without
+creating entities or contexts:
+
+```sh
+SEED_BLUEPRINTS_ONLY=1 node examples/generate.mjs
+```
+
 The generator creates or reuses the `seed_product_seo`, `seed_category`,
 `seed_color`, and `seed_product` blueprints. The product blueprint demonstrates
 mixins and version-pinned includes, selected attributes, tags, scalar and entity
 JSON Schema validation, display configuration, context policies, all native
 scalar types, constrained relationships, and configured views and components.
+When a seed blueprint definition changes, the generator creates a new blueprint
+revision. Existing entities remain pinned to their original revision and can be
+upgraded through the entity migration flow.
 
 Each run creates six categories, six colors, at least 100 parent products, and
 two variants for every parent. Products and variants receive category and color

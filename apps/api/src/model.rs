@@ -105,7 +105,7 @@ pub struct UpdateAttributeContext {
     pub data: Value,
 }
 
-#[derive(Clone, Debug, Deserialize)]
+#[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(tag = "kind", rename_all = "snake_case")]
 pub enum NewAttributeValue {
     Scalar {
@@ -132,7 +132,7 @@ pub struct RelationshipMutation {
     pub relationships: Vec<RelationshipTargets>,
 }
 
-#[derive(Clone, Debug, Deserialize)]
+#[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct RelationshipTargets {
     pub attribute_id: Option<Uuid>,
     pub attribute_code: Option<String>,
@@ -269,4 +269,31 @@ pub struct EntityFormResponse {
     pub blueprint: BlueprintWithAttributes,
     pub values: Vec<FormAttributeValue>,
     pub context: Value,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct MigrateEntityRequest {
+    pub migration_id: Uuid,
+    pub expected_target_version: i64,
+    #[serde(default)]
+    pub values: Vec<NewAttributeValue>,
+    #[serde(default)]
+    pub relationships: Vec<RelationshipTargets>,
+}
+
+#[derive(Clone, Debug, Serialize)]
+pub struct MigrationIssue {
+    pub attribute_code: Option<String>,
+    pub message: String,
+}
+
+#[derive(Clone, Debug, Serialize)]
+pub struct EntityMigrationPreview {
+    pub migration_id: Uuid,
+    pub source_version: i64,
+    pub target: BlueprintWithAttributes,
+    pub values: Vec<FormAttributeValue>,
+    pub status: String,
+    pub issues: Vec<MigrationIssue>,
 }

@@ -6,6 +6,7 @@ import {
   createAttributeContextSchema,
   createEntityRequestSchema,
   entityFormResponseSchema,
+  entityMigrationPreviewSchema,
   entityPreviewSchema,
   entitySchema,
   entitySearchResponseSchema,
@@ -13,6 +14,7 @@ import {
   getBlueprintRevisionRequestSchema,
   resolvedEntityPreviewSchema,
   searchEntitiesRequestSchema,
+  migrateEntityRequestSchema,
   updateEntityRequestSchema,
   uuidSchema,
 } from './schemas';
@@ -26,6 +28,7 @@ export type {
   ComponentReference,
   Entity,
   EntityFormResponse,
+  EntityMigrationPreview,
   EntityItem,
   EntityPreview,
   EntitySearchResponse,
@@ -163,6 +166,30 @@ export const updateEntity = (
     entitySchema,
     {
       method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    },
+  );
+};
+
+export const previewEntityMigration = (id: string) =>
+  request(
+    `/api/v1/entities/${encodeURIComponent(uuidSchema.parse(id))}/blueprint-migration/preview`,
+    entityMigrationPreviewSchema,
+    { method: 'POST' },
+  );
+
+export const migrateEntity = (
+  id: string,
+  input: z.input<typeof migrateEntityRequestSchema>,
+) => {
+  const entityId = uuidSchema.parse(id);
+  const payload = migrateEntityRequestSchema.parse(input);
+  return request(
+    `/api/v1/entities/${encodeURIComponent(entityId)}/blueprint-migration`,
+    entitySchema,
+    {
+      method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload),
     },

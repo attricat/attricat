@@ -54,6 +54,8 @@ catalog entity resolved-preview <entity-id> --context-id <context-id>
 catalog entity search --blueprint <code> [--version <version>] [--query <text>] [--size <size>] [--cursor <cursor>]
 catalog entity form <entity-id>
 catalog entity update <entity-id> [--values values.toml] [--relationships relationships.toml] [--remove-values removals.toml] [--context-id <context-id>]
+catalog entity migrate <entity-id>
+catalog entity migrate-bulk --blueprint <code> --from-version <version> [--size <size>] [--dry-run]
 
 catalog value append <entity-id> --file values.toml --context-id <context-id>
 catalog value current <entity-id>
@@ -76,6 +78,28 @@ atomic form endpoint: scalar values append history, relationship files replace
 the supplied relationship sets, and removal files remove scalar overrides.
 `entity delete` soft-deletes the entity. Its value and relationship history are
 retained, while normal reads and relationship previews no longer expose it.
+
+## Blueprint Migrations
+
+`entity migrate` previews an entity against the latest active revision of its
+blueprint and migrates it when all current values are compatible. The API copies
+current values to the target revision, validates them, rebuilds projections, and
+records the migration atomically.
+
+`entity migrate-bulk` pages entities pinned to `--from-version` and runs that
+same operation for each entity. It never chooses a target revision: every
+entity targets the latest active revision. Use `--dry-run` to classify entities
+without migrating them. The command returns a JSON summary with `ready`,
+`needs_input`, `blocked`, and `failed` entries. It skips `needs_input` and
+`blocked` entities, so provide missing or corrected values through the edit UI
+before rerunning the bulk command.
+
+For example, after creating `seed_product` v2:
+
+```sh
+catalog entity migrate-bulk --blueprint seed_product --from-version 1 --dry-run
+catalog entity migrate-bulk --blueprint seed_product --from-version 1
+```
 
 Blueprint files are sent unchanged as the API's TOML `definition`, preserving
 the raw-source hash. See `database.md` for the blueprint grammar.
