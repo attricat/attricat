@@ -138,6 +138,11 @@ export const getBlueprintRevision = (id: string, version: number) => {
     blueprintWithAttributesSchema,
   );
 };
+export const getCurrentBlueprint = (id: string) =>
+  request(
+    `/api/blueprints/${encodeURIComponent(uuidSchema.parse(id))}`,
+    blueprintWithAttributesSchema,
+  );
 export const getEntityForm = (id: string) => {
   const entityId = uuidSchema.parse(id);
   return request(

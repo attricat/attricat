@@ -16,6 +16,7 @@ import { Route as EntitiesEntityIdRouteImport } from './routes/entities/$entityI
 import { Route as EntitiesNewRouteImport } from './routes/entities/new'
 import { Route as EntitiesEntityIdIndexRouteImport } from './routes/entities/$entityId/index'
 import { Route as EntitiesEntityIdEditRouteImport } from './routes/entities/$entityId/edit'
+import { Route as EntitiesEntityIdMigrateRouteImport } from './routes/entities/$entityId/migrate'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
@@ -52,6 +53,11 @@ const EntitiesEntityIdEditRoute = EntitiesEntityIdEditRouteImport.update({
   path: '/edit',
   getParentRoute: () => EntitiesEntityIdRoute,
 } as any)
+const EntitiesEntityIdMigrateRoute = EntitiesEntityIdMigrateRouteImport.update({
+  id: '/migrate',
+  path: '/migrate',
+  getParentRoute: () => EntitiesEntityIdRoute,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
@@ -60,6 +66,7 @@ export interface FileRoutesByFullPath {
   '/entities/new': typeof EntitiesNewRoute
   '/contexts/': typeof ContextsIndexRoute
   '/entities/$entityId/edit': typeof EntitiesEntityIdEditRoute
+  '/entities/$entityId/migrate': typeof EntitiesEntityIdMigrateRoute
   '/entities/$entityId/': typeof EntitiesEntityIdIndexRoute
 }
 export interface FileRoutesByTo {
@@ -68,6 +75,7 @@ export interface FileRoutesByTo {
   '/entities/new': typeof EntitiesNewRoute
   '/contexts': typeof ContextsIndexRoute
   '/entities/$entityId/edit': typeof EntitiesEntityIdEditRoute
+  '/entities/$entityId/migrate': typeof EntitiesEntityIdMigrateRoute
   '/entities/$entityId': typeof EntitiesEntityIdIndexRoute
 }
 export interface FileRoutesById {
@@ -78,6 +86,7 @@ export interface FileRoutesById {
   '/entities/new': typeof EntitiesNewRoute
   '/contexts/': typeof ContextsIndexRoute
   '/entities/$entityId/edit': typeof EntitiesEntityIdEditRoute
+  '/entities/$entityId/migrate': typeof EntitiesEntityIdMigrateRoute
   '/entities/$entityId/': typeof EntitiesEntityIdIndexRoute
 }
 export interface FileRouteTypes {
@@ -89,6 +98,7 @@ export interface FileRouteTypes {
     | '/entities/new'
     | '/contexts/'
     | '/entities/$entityId/edit'
+    | '/entities/$entityId/migrate'
     | '/entities/$entityId/'
   fileRoutesByTo: FileRoutesByTo
   to:
@@ -97,6 +107,7 @@ export interface FileRouteTypes {
     | '/entities/new'
     | '/contexts'
     | '/entities/$entityId/edit'
+    | '/entities/$entityId/migrate'
     | '/entities/$entityId'
   id:
     | '__root__'
@@ -106,6 +117,7 @@ export interface FileRouteTypes {
     | '/entities/new'
     | '/contexts/'
     | '/entities/$entityId/edit'
+    | '/entities/$entityId/migrate'
     | '/entities/$entityId/'
   fileRoutesById: FileRoutesById
 }
@@ -168,16 +180,25 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof EntitiesEntityIdEditRouteImport
       parentRoute: typeof EntitiesEntityIdRoute
     }
+    '/entities/$entityId/migrate': {
+      id: '/entities/$entityId/migrate'
+      path: '/migrate'
+      fullPath: '/entities/$entityId/migrate'
+      preLoaderRoute: typeof EntitiesEntityIdMigrateRouteImport
+      parentRoute: typeof EntitiesEntityIdRoute
+    }
   }
 }
 
 interface EntitiesEntityIdRouteChildren {
   EntitiesEntityIdEditRoute: typeof EntitiesEntityIdEditRoute
+  EntitiesEntityIdMigrateRoute: typeof EntitiesEntityIdMigrateRoute
   EntitiesEntityIdIndexRoute: typeof EntitiesEntityIdIndexRoute
 }
 
 const EntitiesEntityIdRouteChildren: EntitiesEntityIdRouteChildren = {
   EntitiesEntityIdEditRoute: EntitiesEntityIdEditRoute,
+  EntitiesEntityIdMigrateRoute: EntitiesEntityIdMigrateRoute,
   EntitiesEntityIdIndexRoute: EntitiesEntityIdIndexRoute,
 }
 

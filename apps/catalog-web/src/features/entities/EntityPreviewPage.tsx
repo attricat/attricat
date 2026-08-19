@@ -1,5 +1,7 @@
 import { useQuery } from '@tanstack/react-query';
 import { Link } from '@tanstack/react-router';
+import CheckCircleOutlinedIcon from '@mui/icons-material/CheckCircleOutlined';
+import WarningAmberOutlinedIcon from '@mui/icons-material/WarningAmberOutlined';
 import {
   Alert,
   Box,
@@ -13,6 +15,7 @@ import {
 import { createElement, useState } from 'react';
 import {
   getBlueprintRevision,
+  getCurrentBlueprint,
   getEntityPreview,
   getResolvedEntityPreview,
   listContexts,
@@ -52,6 +55,13 @@ export const EntityPreviewPage = ({ entityId }: { entityId: string }) => {
       preview.data?.entity.blueprint_id &&
       preview.data.entity.blueprint_version,
     ),
+  });
+  const currentBlueprint = useQuery({
+    queryKey: entityQueryKeys.currentBlueprint(
+      preview.data?.entity.blueprint_id ?? '',
+    ),
+    queryFn: () => getCurrentBlueprint(preview.data!.entity.blueprint_id!),
+    enabled: Boolean(preview.data?.entity.blueprint_id),
   });
   const selectedContextId = contexts.data?.find(
     (context) => context.code === selectedContext,
@@ -98,6 +108,44 @@ export const EntityPreviewPage = ({ entityId }: { entityId: string }) => {
         <Link params={{ entityId }} to="/entities/$entityId/edit">
           Edit entity
         </Link>
+        {currentBlueprint.data && preview.data && (
+          <>
+            {' | '}
+            {currentBlueprint.data.blueprint.version >
+            preview.data.entity.blueprint_version ? (
+              <>
+                <Typography
+                  color="warning.main"
+                  component="span"
+                  sx={{
+                    display: 'inline-flex',
+                    gap: 0.5,
+                    verticalAlign: 'middle',
+                  }}
+                >
+                  <WarningAmberOutlinedIcon fontSize="small" />
+                  Schema is outdated
+                </Typography>
+                {' | '}
+                <Link params={{ entityId }} to="/entities/$entityId/migrate">
+                  Upgrade blueprint
+                </Link>
+              </>
+            ) : (
+              <Typography
+                component="span"
+                sx={{
+                  display: 'inline-flex',
+                  gap: 0.5,
+                  verticalAlign: 'middle',
+                }}
+              >
+                <CheckCircleOutlinedIcon color="success" fontSize="small" />
+                Matches current schema
+              </Typography>
+            )}
+          </>
+        )}
       </Box>
       {preview.isPending && (
         <Typography sx={{ py: 3 }}>Loading preview...</Typography>

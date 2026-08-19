@@ -90,7 +90,7 @@ format_version = 1
 code = "seed_product"
 name = "Seed Product"
 kind = "entity"
-entity_schema = '{"type":"object","required":["title","sku","price"]}'
+entity_schema = '{"type":"object","required":["title","sku","price","launch_code"]}'
 
 [[includes]]
 alias = "seo"
@@ -116,11 +116,11 @@ children = [
 [views.edit]
 type = "stack"
 children = [
-  { type = "grid", children = [{ type = "field", field = "title", component = { id = "catalog.field_edit", version = 1 } }, { type = "field", field = "sku" }] },
+  { type = "grid", children = [{ type = "field", field = "title", component = { id = "catalog.field_edit", version = 1 } }, { type = "field", field = "sku" }, { type = "field", field = "launch_code" }] },
   { type = "grid", children = [{ type = "field", field = "price" }, { type = "field", field = "stock_on_hand" }] },
   { type = "field", field = "description" },
   { type = "accordion", sections = [{ label = "Availability", children = [{ type = "field", field = "available" }, { type = "field", field = "available_on" }, { type = "field", field = "released_at" }, { type = "field", field = "order_cutoff" }] }] },
-  { type = "section", children = [{ type = "field", field = "meta_title" }, { type = "field", field = "meta_description" }] },
+  { type = "section", children = [{ type = "field", field = "meta_title" }] },
   { type = "relationship_list", field = "categories", component = { id = "catalog.relationship_list_edit", version = 1 } },
   { type = "relationship_list", field = "colors" },
   { type = "relationship_list", field = "variants" },
@@ -149,17 +149,20 @@ context_fallback = "none"
 [[attributes]]
 code = "price"
 value_type = "number"
-value_schema = '{"type":"number","minimum":0}'
+value_schema = '{"type":"number","minimum":100}'
 
 [[attributes]]
 code = "stock_on_hand"
-value_type = "integer"
-value_schema = '{"type":"integer","minimum":0}'
+value_type = "string"
 context_editable = "default"
 
 [[attributes]]
 code = "available"
 value_type = "boolean"
+
+[[attributes]]
+code = "launch_code"
+value_type = "string"
 
 [[attributes]]
 code = "available_on"
@@ -178,13 +181,9 @@ code = "meta_title"
 from = "seo.meta_title"
 
 [[attributes]]
-code = "meta_description"
-from = "seo.meta_description"
-
-[[attributes]]
 code = "categories"
 value_type = "relationship"
-target_blueprint = "seed_category"
+target_blueprint = "seed_color"
 
 [[attributes]]
 code = "colors"
@@ -255,13 +254,13 @@ const productValues = (name, sku, index) => {
     scalar('sku', sku),
     scalar('description', `A generated ${name.toLowerCase()} for manual catalog testing.`),
     scalar('price', price),
-    scalar('stock_on_hand', 5 + (index % 60)),
+    scalar('stock_on_hand', String(5 + (index % 60))),
     scalar('available', index % 7 !== 0),
+    scalar('launch_code', `LAUNCH-${String(index).padStart(4, '0')}`),
     scalar('available_on', `2026-${String((index % 12) + 1).padStart(2, '0')}-${String((index % 27) + 1).padStart(2, '0')}`),
     scalar('released_at', `2026-${String((index % 12) + 1).padStart(2, '0')}-15T10:30:00Z`),
     scalar('order_cutoff', { time: '16:30:00', time_zone: 'America/New_York' }),
     scalar('meta_title', `${name} | Seed Store`),
-    scalar('meta_description', `Browse the generated ${name.toLowerCase()}.`),
   ];
 };
 

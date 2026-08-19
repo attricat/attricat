@@ -1,5 +1,6 @@
 import { useForm } from '@tanstack/react-form';
 import { useQuery } from '@tanstack/react-query';
+import InfoOutlinedIcon from '@mui/icons-material/InfoOutlined';
 import {
   Alert,
   Button,
@@ -12,6 +13,7 @@ import {
   Select,
   Stack,
   TextField,
+  Tooltip,
   Typography,
 } from '@mui/material';
 import {
@@ -37,6 +39,7 @@ type EntityFormProps = {
   blueprint?: BlueprintWithAttributes;
   initialValues?: ReturnType<typeof valuesForForm>;
   contextId?: string | null;
+  defaultContextId?: string | null;
   existingValues?: NewAttributeValue[];
   resolvedValues?: Record<
     string,
@@ -44,6 +47,7 @@ type EntityFormProps = {
   >;
   isLoadingBlueprint?: boolean;
   showAllAttributes?: boolean;
+  highlightedAttributes?: readonly string[];
   error?: Error | null;
   onLoadBlueprint?: (code: string, version?: number) => void;
   onSubmit: (input: {
@@ -58,10 +62,12 @@ export const EntityForm = ({
   blueprint,
   initialValues = {},
   contextId = null,
+  defaultContextId = null,
   existingValues = [],
   resolvedValues = {},
   isLoadingBlueprint = false,
   showAllAttributes = false,
+  highlightedAttributes = [],
   error,
   onLoadBlueprint,
   onSubmit,
@@ -85,7 +91,8 @@ export const EntityForm = ({
       if (blueprint) {
         const editableAttributes = blueprint.attributes.filter(
           (attribute) =>
-            contextId === null || attribute.context_editable !== 'default',
+            contextId === defaultContextId ||
+            attribute.context_editable !== 'default',
         );
         if (hasInvalidScalarField(editableAttributes, value.fields)) return;
         onSubmit({
@@ -182,19 +189,21 @@ export const EntityForm = ({
                     resolvedValue !== undefined &&
                     resolvedValue.source_context.id !== contextId;
                   const defaultOnly =
-                    contextId !== null &&
+                    contextId !== defaultContextId &&
                     attribute.context_editable === 'default';
                   const invalid =
                     attribute.value_type !== attributeValueTypes.relationship &&
                     Boolean(value.trim()) &&
                     !scalarValueForField(attribute, value);
+                  const requiresMigrationReview =
+                    highlightedAttributes.includes(attribute.code);
                   const helperText = defaultOnly
                     ? 'Managed in Default'
                     : inherited
                       ? `Using ${resolvedValue.source_context.code}: ${typeof resolvedValue.value === 'object' ? JSON.stringify(resolvedValue.value) : String(resolvedValue.value)}`
                       : undefined;
                   const fieldHelperText = invalid
-                    ? 'Enter a value that meets this field\'s requirements.'
+                    ? "Enter a value that meets this field's requirements."
                     : helperText;
                   const handleChange = (nextValue: string) =>
                     field.handleChange({
@@ -206,58 +215,66 @@ export const EntityForm = ({
                     <RelationshipField
                       attribute={attribute}
                       disabled={defaultOnly}
+                      showMigrationBadge={requiresMigrationReview}
                       onChange={handleChange}
                       value={value}
                     />
                   ) : attribute.value_type === attributeValueTypes.boolean ? (
-                    <TextField
-                      fullWidth
-                      disabled={defaultOnly}
-                      helperText={fieldHelperText}
-                      select
-                      label={attribute.code}
-                      onChange={(event) => handleChange(event.target.value)}
-                      value={value}
-                    >
-                      <MenuItem value="">Not set</MenuItem>
-                      <MenuItem value="true">True</MenuItem>
-                      <MenuItem value="false">False</MenuItem>
-                    </TextField>
+                    <>
+                      {requiresMigrationReview && <MigrationBadge />}
+                      <TextField
+                        fullWidth
+                        disabled={defaultOnly}
+                        helperText={fieldHelperText}
+                        select
+                        label={attribute.code}
+                        onChange={(event) => handleChange(event.target.value)}
+                        value={value}
+                      >
+                        <MenuItem value="">Not set</MenuItem>
+                        <MenuItem value="true">True</MenuItem>
+                        <MenuItem value="false">False</MenuItem>
+                      </TextField>
+                    </>
                   ) : (
-                    <TextField
-                      fullWidth
-                      disabled={defaultOnly}
-                      error={invalid}
-                      helperText={fieldHelperText}
-                      label={attribute.code}
-                      onChange={(event) => handleChange(event.target.value)}
-                      placeholder={
-                        attribute.value_type === attributeValueTypes.time
-                          ? '09:30:00 America/New_York'
-                          : undefined
-                      }
-                      slotProps={{
-                        htmlInput: {
-                          inputMode:
-                            attribute.value_type ===
-                              attributeValueTypes.number ||
-                            attribute.value_type === attributeValueTypes.integer
-                              ? 'decimal'
-                              : undefined,
-                        },
-                      }}
-                      type={
-                        attribute.value_type === attributeValueTypes.date
-                          ? 'date'
-                          : attribute.value_type ===
+                    <>
+                      {requiresMigrationReview && <MigrationBadge />}
+                      <TextField
+                        fullWidth
+                        disabled={defaultOnly}
+                        error={invalid}
+                        helperText={fieldHelperText}
+                        label={attribute.code}
+                        onChange={(event) => handleChange(event.target.value)}
+                        placeholder={
+                          attribute.value_type === attributeValueTypes.time
+                            ? '09:30:00 America/New_York'
+                            : undefined
+                        }
+                        slotProps={{
+                          htmlInput: {
+                            inputMode:
+                              attribute.value_type ===
                                 attributeValueTypes.number ||
                               attribute.value_type ===
                                 attributeValueTypes.integer
-                            ? 'number'
-                            : undefined
-                      }
-                      value={value}
-                    />
+                                ? 'decimal'
+                                : undefined,
+                          },
+                        }}
+                        type={
+                          attribute.value_type === attributeValueTypes.date
+                            ? 'date'
+                            : attribute.value_type ===
+                                  attributeValueTypes.number ||
+                                attribute.value_type ===
+                                  attributeValueTypes.integer
+                              ? 'number'
+                              : undefined
+                        }
+                        value={value}
+                      />
+                    </>
                   );
                 }}
               />
@@ -273,14 +290,22 @@ export const EntityForm = ({
   );
 };
 
+const MigrationBadge = () => (
+  <Tooltip title="Review is necessary for this field to migrate to the current schema version.">
+    <InfoOutlinedIcon color="info" fontSize="small" />
+  </Tooltip>
+);
+
 const RelationshipField = ({
   attribute,
   disabled = false,
+  showMigrationBadge = false,
   onChange,
   value,
 }: {
   attribute: Attribute;
   disabled?: boolean;
+  showMigrationBadge?: boolean;
   onChange: (value: string) => void;
   value: string;
 }) => {
@@ -292,14 +317,17 @@ const RelationshipField = ({
   });
   if (!targetBlueprint) {
     return (
-      <TextField
-        fullWidth
-        disabled={disabled}
-        label={attribute.code}
-        helperText="Comma-separated entity UUIDs"
-        onChange={(event) => onChange(event.target.value)}
-        value={value}
-      />
+      <Stack spacing={0.5}>
+        {showMigrationBadge && <MigrationBadge />}
+        <TextField
+          fullWidth
+          disabled={disabled}
+          label={attribute.code}
+          helperText="Comma-separated entity UUIDs"
+          onChange={(event) => onChange(event.target.value)}
+          value={value}
+        />
+      </Stack>
     );
   }
 
@@ -328,38 +356,41 @@ const RelationshipField = ({
   );
 
   return (
-    <FormControl fullWidth>
-      <InputLabel id={`${attribute.code}-label`}>{attribute.code}</InputLabel>
-      <Select
-        disabled={disabled}
-        multiple
-        label={attribute.code}
-        labelId={`${attribute.code}-label`}
-        onChange={(event) =>
-          onChange((event.target.value as string[]).join(', '))
-        }
-        renderValue={(selected) =>
-          (selected as string[])
-            .map((targetId) => labels.get(targetId) ?? targetId)
-            .join(', ')
-        }
-        value={selectedIds}
-      >
-        {options.map((target) => (
-          <MenuItem key={target.id} value={target.id}>
-            <Checkbox checked={selectedIds.includes(target.id)} />
-            <ListItemText primary={targetLabel(target)} />
-          </MenuItem>
-        ))}
-      </Select>
-      {targets.isPending && (
-        <Typography variant="caption">Loading options...</Typography>
-      )}
-      {targets.isError && (
-        <Typography color="error" variant="caption">
-          Could not load {targetBlueprint} entities.
-        </Typography>
-      )}
-    </FormControl>
+    <Stack spacing={0.5}>
+      {showMigrationBadge && <MigrationBadge />}
+      <FormControl fullWidth>
+        <InputLabel id={`${attribute.code}-label`}>{attribute.code}</InputLabel>
+        <Select
+          disabled={disabled}
+          multiple
+          label={attribute.code}
+          labelId={`${attribute.code}-label`}
+          onChange={(event) =>
+            onChange((event.target.value as string[]).join(', '))
+          }
+          renderValue={(selected) =>
+            (selected as string[])
+              .map((targetId) => labels.get(targetId) ?? targetId)
+              .join(', ')
+          }
+          value={selectedIds}
+        >
+          {options.map((target) => (
+            <MenuItem key={target.id} value={target.id}>
+              <Checkbox checked={selectedIds.includes(target.id)} />
+              <ListItemText primary={targetLabel(target)} />
+            </MenuItem>
+          ))}
+        </Select>
+        {targets.isPending && (
+          <Typography variant="caption">Loading options...</Typography>
+        )}
+        {targets.isError && (
+          <Typography color="error" variant="caption">
+            Could not load {targetBlueprint} entities.
+          </Typography>
+        )}
+      </FormControl>
+    </Stack>
   );
 };

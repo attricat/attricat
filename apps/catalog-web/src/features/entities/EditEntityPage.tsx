@@ -1,26 +1,14 @@
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQuery } from '@tanstack/react-query';
 import { Link, useNavigate } from '@tanstack/react-router';
-import {
-  Alert,
-  Box,
-  Button,
-  Checkbox,
-  Dialog,
-  DialogContent,
-  DialogTitle,
-  FormControlLabel,
-  FormGroup,
-  MenuItem,
-  TextField,
-  Typography,
-} from '@mui/material';
+import CheckCircleOutlinedIcon from '@mui/icons-material/CheckCircleOutlined';
+import WarningAmberOutlinedIcon from '@mui/icons-material/WarningAmberOutlined';
+import { Alert, Box, MenuItem, TextField, Typography } from '@mui/material';
 import { useState } from 'react';
 import {
   getEntityForm,
+  getCurrentBlueprint,
   getResolvedEntityPreview,
   listContexts,
-  migrateEntity,
-  previewEntityMigration,
   updateEntity,
 } from './api';
 import { EntityForm } from './components/EntityForm';
@@ -30,9 +18,7 @@ import { entityQueryKeys } from './query-keys';
 
 export const EditEntityPage = ({ entityId }: { entityId: string }) => {
   const navigate = useNavigate({ from: '/entities/$entityId/edit' });
-  const queryClient = useQueryClient();
   const [selectedContext, setSelectedContext] = useState('');
-  const [discardAttributes, setDiscardAttributes] = useState<string[]>([]);
   const entityForm = useQuery({
     queryKey: entityQueryKeys.form(entityId),
     queryFn: () => getEntityForm(entityId),
@@ -47,38 +33,12 @@ export const EditEntityPage = ({ entityId }: { entityId: string }) => {
       });
     },
   });
-  const migrationPreview = useMutation({
-    mutationFn: () => previewEntityMigration(entityId),
-    onSuccess: () => setDiscardAttributes([]),
-  });
-  const migrate = useMutation({
-    mutationFn: ({
-      values,
-      relationships,
-    }: {
-      values: Parameters<typeof migrateEntity>[1]['values'];
-      relationships: Parameters<typeof migrateEntity>[1]['relationships'];
-    }) => {
-      if (!migrationPreview.data)
-        throw new Error('Load the migration preview before upgrading');
-      return migrateEntity(entityId, {
-        migration_id: migrationPreview.data.migration_id,
-        expected_target_version: migrationPreview.data.target.blueprint.version,
-        values,
-        relationships,
-        discard_attributes: discardAttributes,
-      });
-    },
-    onSuccess: () => {
-      migrationPreview.reset();
-      setDiscardAttributes([]);
-      void queryClient.invalidateQueries({
-        queryKey: entityQueryKeys.form(entityId),
-      });
-      void queryClient.invalidateQueries({
-        queryKey: entityQueryKeys.resolvedPreview(entityId, contextId!),
-      });
-    },
+  const currentBlueprint = useQuery({
+    queryKey: entityQueryKeys.currentBlueprint(
+      entityForm.data?.entity.blueprint_id ?? '',
+    ),
+    queryFn: () => getCurrentBlueprint(entityForm.data!.entity.blueprint_id),
+    enabled: entityForm.data !== undefined,
   });
   const contexts = useQuery({
     queryKey: entityQueryKeys.contexts(),
@@ -87,6 +47,8 @@ export const EditEntityPage = ({ entityId }: { entityId: string }) => {
   const contextId =
     selectedContext ||
     (contexts.data?.find((context) => context.code === 'default')?.id ?? null);
+  const defaultContextId =
+    contexts.data?.find((context) => context.code === 'default')?.id ?? null;
   const resolvedPreview = useQuery({
     queryKey: contextId
       ? entityQueryKeys.resolvedPreview(entityId, contextId)
@@ -100,19 +62,39 @@ export const EditEntityPage = ({ entityId }: { entityId: string }) => {
         <Link params={{ entityId }} to="/entities/$entityId">
           View preview
         </Link>
+        {' | '}
+        {currentBlueprint.data &&
+          entityForm.data &&
+          (currentBlueprint.data.blueprint.version >
+          entityForm.data.entity.blueprint_version ? (
+            <>
+              <Typography
+                color="warning.main"
+                component="span"
+                sx={{
+                  display: 'inline-flex',
+                  gap: 0.5,
+                  verticalAlign: 'middle',
+                }}
+              >
+                <WarningAmberOutlinedIcon fontSize="small" />
+                Schema is outdated
+              </Typography>
+              {' | '}
+              <Link params={{ entityId }} to="/entities/$entityId/migrate">
+                Upgrade blueprint
+              </Link>
+            </>
+          ) : (
+            <Typography
+              component="span"
+              sx={{ display: 'inline-flex', gap: 0.5, verticalAlign: 'middle' }}
+            >
+              <CheckCircleOutlinedIcon color="success" fontSize="small" />
+              Matches current schema
+            </Typography>
+          ))}
       </Box>
-      {entityForm.data && (
-        <Button
-          disabled={migrationPreview.isPending}
-          onClick={() => migrationPreview.mutate()}
-          sx={{ mt: 2 }}
-          variant="outlined"
-        >
-          {migrationPreview.isPending
-            ? 'Checking upgrade...'
-            : 'Upgrade blueprint'}
-        </Button>
-      )}
       {entityForm.isPending && (
         <Typography sx={{ mt: 4 }}>Loading entity...</Typography>
       )}
@@ -124,11 +106,6 @@ export const EditEntityPage = ({ entityId }: { entityId: string }) => {
       {resolvedPreview.isError && (
         <Alert severity="error" sx={{ mt: 4 }}>
           {resolvedPreview.error.message}
-        </Alert>
-      )}
-      {migrationPreview.error && (
-        <Alert severity="error" sx={{ mt: 4 }}>
-          {migrationPreview.error.message}
         </Alert>
       )}
       {entityForm.data && (
@@ -151,6 +128,7 @@ export const EditEntityPage = ({ entityId }: { entityId: string }) => {
             key={`${entityForm.data.entity.id}:${contextId ?? ''}`}
             blueprint={entityForm.data.blueprint}
             contextId={contextId}
+            defaultContextId={defaultContextId}
             existingValues={entityForm.data.values}
             resolvedValues={resolvedPreview.data?.values}
             initialValues={valuesForForm(
@@ -164,94 +142,6 @@ export const EditEntityPage = ({ entityId }: { entityId: string }) => {
           />
         </>
       )}
-      <Dialog
-        fullWidth
-        maxWidth="md"
-        onClose={() => {
-          migrationPreview.reset();
-          setDiscardAttributes([]);
-        }}
-        open={migrationPreview.data !== undefined}
-      >
-        <DialogTitle>
-          Upgrade from v{migrationPreview.data?.source_version} to v
-          {migrationPreview.data?.target.blueprint.version}
-        </DialogTitle>
-        <DialogContent>
-          {migrationPreview.data?.issues.map((issue) => (
-            <Alert
-              key={`${issue.attribute_code}:${issue.message}`}
-              severity="warning"
-              sx={{ mt: 2 }}
-            >
-              {issue.attribute_code ? `${issue.attribute_code}: ` : ''}
-              {issue.message}
-            </Alert>
-          ))}
-          {migrationPreview.data?.issues.some(
-            (issue) =>
-              issue.attribute_code && issue.kind !== 'missing_required',
-          ) && (
-            <FormGroup sx={{ mt: 2 }}>
-              {migrationPreview.data.issues
-                .filter(
-                  (issue): issue is typeof issue & { attribute_code: string } =>
-                    issue.attribute_code !== null &&
-                    issue.kind !== 'missing_required',
-                )
-                .map((issue) => (
-                  <FormControlLabel
-                    control={
-                      <Checkbox
-                        checked={discardAttributes.includes(
-                          issue.attribute_code,
-                        )}
-                        onChange={(event) =>
-                          setDiscardAttributes((attributes) =>
-                            event.target.checked
-                              ? [...attributes, issue.attribute_code]
-                              : attributes.filter(
-                                  (attribute) =>
-                                    attribute !== issue.attribute_code,
-                                ),
-                          )
-                        }
-                      />
-                    }
-                    key={issue.attribute_code}
-                    label={`Discard the previous ${issue.attribute_code} value instead of carrying it forward`}
-                  />
-                ))}
-            </FormGroup>
-          )}
-          {migrationPreview.data?.status === 'blocked' && (
-            <Alert severity="error" sx={{ mt: 2 }}>
-              This entity cannot be upgraded until the incompatible values are
-              resolved.
-            </Alert>
-          )}
-          {migrationPreview.data &&
-            migrationPreview.data.status !== 'blocked' && (
-              <EntityForm
-                blueprint={migrationPreview.data.target}
-                contextId={contextId}
-                error={migrate.error}
-                existingValues={migrationPreview.data.values}
-                initialValues={valuesForForm(
-                  migrationPreview.data.target.attributes,
-                  migrationPreview.data.values,
-                  contextId,
-                )}
-                isLoadingBlueprint={migrate.isPending}
-                onSubmit={({ values, relationships }) =>
-                  migrate.mutate({ values, relationships })
-                }
-                showAllAttributes
-                submitLabel="Upgrade entity"
-              />
-            )}
-        </DialogContent>
-      </Dialog>
     </EntityPage>
   );
 };

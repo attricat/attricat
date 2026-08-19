@@ -65,6 +65,7 @@ export const CreateEntityPage = () => {
       <EntityForm
         blueprint={blueprint.data}
         contextId={defaultContextId}
+        defaultContextId={defaultContextId}
         error={blueprint.error ?? create.error}
         isLoadingBlueprint={blueprint.isPending || create.isPending}
         onLoadBlueprint={(code, version) => blueprint.mutate({ code, version })}
