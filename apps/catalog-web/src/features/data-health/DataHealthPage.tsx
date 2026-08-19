@@ -213,6 +213,26 @@ export const DataHealthPage = ({ search }: { search: DataHealthSearch }) => {
           ))}
         </Stack>
       )}
+      <Paper sx={{ mt: 4, p: 2 }}>
+        <Typography variant="h5">Storage</Typography>
+        <SectionError error={storage.error} />
+        <Table size="small">
+          <TableHead>
+            <TableRow>
+              <TableCell>Table</TableCell>
+              <TableCell align="right">Total size</TableCell>
+            </TableRow>
+          </TableHead>
+          <TableBody>
+            {(storage.data ?? []).map((item) => (
+              <TableRow key={item.table}>
+                <TableCell>{item.table}</TableCell>
+                <TableCell align="right">{formatBytes(item.bytes)}</TableCell>
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
+      </Paper>
       <Paper sx={{ mt: 4, overflowX: 'auto' }}>
         <Box sx={{ p: 2 }}>
           <Typography variant="h5">Blueprint health</Typography>
@@ -379,26 +399,6 @@ export const DataHealthPage = ({ search }: { search: DataHealthSearch }) => {
           </Table>
         </AccordionDetails>
       </Accordion>
-      <Paper sx={{ mt: 4, p: 2 }}>
-        <Typography variant="h5">Storage</Typography>
-        <SectionError error={storage.error} />
-        <Table size="small">
-          <TableHead>
-            <TableRow>
-              <TableCell>Table</TableCell>
-              <TableCell align="right">Total size</TableCell>
-            </TableRow>
-          </TableHead>
-          <TableBody>
-            {(storage.data ?? []).map((item) => (
-              <TableRow key={item.table}>
-                <TableCell>{item.table}</TableCell>
-                <TableCell align="right">{formatBytes(item.bytes)}</TableCell>
-              </TableRow>
-            ))}
-          </TableBody>
-        </Table>
-      </Paper>
     </Container>
   );
 };
