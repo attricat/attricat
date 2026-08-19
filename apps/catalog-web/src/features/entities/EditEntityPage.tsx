@@ -4,9 +4,12 @@ import {
   Alert,
   Box,
   Button,
+  Checkbox,
   Dialog,
   DialogContent,
   DialogTitle,
+  FormControlLabel,
+  FormGroup,
   MenuItem,
   TextField,
   Typography,
@@ -29,6 +32,7 @@ export const EditEntityPage = ({ entityId }: { entityId: string }) => {
   const navigate = useNavigate({ from: '/entities/$entityId/edit' });
   const queryClient = useQueryClient();
   const [selectedContext, setSelectedContext] = useState('');
+  const [discardAttributes, setDiscardAttributes] = useState<string[]>([]);
   const entityForm = useQuery({
     queryKey: entityQueryKeys.form(entityId),
     queryFn: () => getEntityForm(entityId),
@@ -45,6 +49,7 @@ export const EditEntityPage = ({ entityId }: { entityId: string }) => {
   });
   const migrationPreview = useMutation({
     mutationFn: () => previewEntityMigration(entityId),
+    onSuccess: () => setDiscardAttributes([]),
   });
   const migrate = useMutation({
     mutationFn: ({
@@ -61,10 +66,12 @@ export const EditEntityPage = ({ entityId }: { entityId: string }) => {
         expected_target_version: migrationPreview.data.target.blueprint.version,
         values,
         relationships,
+        discard_attributes: discardAttributes,
       });
     },
     onSuccess: () => {
       migrationPreview.reset();
+      setDiscardAttributes([]);
       void queryClient.invalidateQueries({
         queryKey: entityQueryKeys.form(entityId),
       });
@@ -160,7 +167,10 @@ export const EditEntityPage = ({ entityId }: { entityId: string }) => {
       <Dialog
         fullWidth
         maxWidth="md"
-        onClose={() => migrationPreview.reset()}
+        onClose={() => {
+          migrationPreview.reset();
+          setDiscardAttributes([]);
+        }}
         open={migrationPreview.data !== undefined}
       >
         <DialogTitle>
@@ -178,6 +188,42 @@ export const EditEntityPage = ({ entityId }: { entityId: string }) => {
               {issue.message}
             </Alert>
           ))}
+          {migrationPreview.data?.issues.some(
+            (issue) =>
+              issue.attribute_code && issue.kind !== 'missing_required',
+          ) && (
+            <FormGroup sx={{ mt: 2 }}>
+              {migrationPreview.data.issues
+                .filter(
+                  (issue): issue is typeof issue & { attribute_code: string } =>
+                    issue.attribute_code !== null &&
+                    issue.kind !== 'missing_required',
+                )
+                .map((issue) => (
+                  <FormControlLabel
+                    control={
+                      <Checkbox
+                        checked={discardAttributes.includes(
+                          issue.attribute_code,
+                        )}
+                        onChange={(event) =>
+                          setDiscardAttributes((attributes) =>
+                            event.target.checked
+                              ? [...attributes, issue.attribute_code]
+                              : attributes.filter(
+                                  (attribute) =>
+                                    attribute !== issue.attribute_code,
+                                ),
+                          )
+                        }
+                      />
+                    }
+                    key={issue.attribute_code}
+                    label={`Discard the previous ${issue.attribute_code} value instead of carrying it forward`}
+                  />
+                ))}
+            </FormGroup>
+          )}
           {migrationPreview.data?.status === 'blocked' && (
             <Alert severity="error" sx={{ mt: 2 }}>
               This entity cannot be upgraded until the incompatible values are
@@ -200,6 +246,7 @@ export const EditEntityPage = ({ entityId }: { entityId: string }) => {
                 onSubmit={({ values, relationships }) =>
                   migrate.mutate({ values, relationships })
                 }
+                showAllAttributes
                 submitLabel="Upgrade entity"
               />
             )}

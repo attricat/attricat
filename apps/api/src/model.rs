@@ -280,11 +280,14 @@ pub struct MigrateEntityRequest {
     pub values: Vec<NewAttributeValue>,
     #[serde(default)]
     pub relationships: Vec<RelationshipTargets>,
+    #[serde(default)]
+    pub discard_attributes: Vec<String>,
 }
 
 #[derive(Clone, Debug, Serialize)]
 pub struct MigrationIssue {
     pub attribute_code: Option<String>,
+    pub kind: String,
     pub message: String,
 }
 

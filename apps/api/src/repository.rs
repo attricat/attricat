@@ -89,6 +89,8 @@ pub enum RepositoryError {
     MigrationTargetChanged,
     #[error("migration does not apply to this entity")]
     MigrationNotApplicable,
+    #[error("migration needs resolutions for: {}", .0.join(", "))]
+    MigrationNeedsResolution(Vec<String>),
     #[error(transparent)]
     Database(#[from] sqlx::Error),
 }
@@ -967,24 +969,57 @@ impl CatalogRepository {
             .map(|attribute| (attribute.code.as_str(), attribute))
             .collect();
         let mut issues = Vec::new();
-        for source in &source_attributes {
-            if values.iter().any(|value| match value {
+        for value in &values {
+            let attribute_code = match value {
                 FormAttributeValue::Scalar { attribute_code, .. }
-                | FormAttributeValue::Relationship { attribute_code, .. } => {
-                    attribute_code == &source.code
-                }
-            }) {
-                match target_attributes.get(source.code.as_str()) {
-                    Some(target) if target.value_type == source.value_type => {}
-                    Some(_) => issues.push(MigrationIssue {
+                | FormAttributeValue::Relationship { attribute_code, .. } => attribute_code,
+            };
+            let source = source_attributes
+                .iter()
+                .find(|attribute| attribute.code == *attribute_code)
+                .expect("form values belong to the source blueprint");
+            match target_attributes.get(source.code.as_str()) {
+                None => issues.push(MigrationIssue {
+                    attribute_code: Some(source.code.clone()),
+                    kind: "removed".to_owned(),
+                    message: "The attribute was removed in the target revision".to_owned(),
+                }),
+                Some(target) if target.value_type != source.value_type => {
+                    issues.push(MigrationIssue {
                         attribute_code: Some(source.code.clone()),
+                        kind: "value_type_changed".to_owned(),
                         message: "The attribute value type changed in the target revision"
                             .to_owned(),
-                    }),
-                    None => issues.push(MigrationIssue {
+                    });
+                }
+                Some(target)
+                    if source.value_type == "relationship"
+                        && target.target_blueprint_code != source.target_blueprint_code =>
+                {
+                    issues.push(MigrationIssue {
                         attribute_code: Some(source.code.clone()),
-                        message: "The attribute was removed in the target revision".to_owned(),
-                    }),
+                        kind: "relationship_target_changed".to_owned(),
+                        message: "The relationship target blueprint changed in the target revision"
+                            .to_owned(),
+                    });
+                }
+                Some(target) => {
+                    if let (Some(schema), FormAttributeValue::Scalar { value, .. }) =
+                        (&target.value_schema, value)
+                    {
+                        if !validate_json_schema(schema, value)
+                            .map_err(RepositoryError::invalid_blueprint_definition)?
+                            .is_empty()
+                        {
+                            issues.push(MigrationIssue {
+                                attribute_code: Some(source.code.clone()),
+                                kind: "attribute_schema_mismatch".to_owned(),
+                                message:
+                                    "The stored value does not meet the target attribute schema"
+                                        .to_owned(),
+                            });
+                        }
+                    }
                 }
             }
         }
@@ -1006,17 +1041,13 @@ impl CatalogRepository {
                 if !present.contains(field) {
                     issues.push(MigrationIssue {
                         attribute_code: Some(field.to_owned()),
+                        kind: "missing_required".to_owned(),
                         message: "A value is required by the target entity schema".to_owned(),
                     });
                 }
             }
         }
-        let status = if issues
-            .iter()
-            .any(|issue| issue.message.contains("changed") || issue.message.contains("removed"))
-        {
-            "blocked"
-        } else if issues.is_empty() {
+        let status = if issues.is_empty() {
             "ready"
         } else {
             "needs_input"
@@ -1084,15 +1115,48 @@ impl CatalogRepository {
         let source_values = self
             .form_values_in_transaction(&mut transaction, entity.id)
             .await?;
+        let source_attributes = self
+            .list_attributes_in_transaction(
+                &mut transaction,
+                entity.blueprint_id,
+                entity.blueprint_version,
+            )
+            .await?;
         let target_attributes = self
             .list_attributes_in_transaction(&mut transaction, entity.blueprint_id, target_version)
             .await?;
+        let source_by_code: HashMap<_, _> = source_attributes
+            .iter()
+            .map(|attribute| (attribute.code.as_str(), attribute))
+            .collect();
         let target_by_code: HashMap<_, _> = target_attributes
             .iter()
             .map(|attribute| (attribute.code.as_str(), attribute))
             .collect();
+        let supplied_scalar_attributes: HashSet<_> = input
+            .values
+            .iter()
+            .filter_map(|value| match value {
+                NewAttributeValue::Scalar {
+                    attribute_code: Some(attribute_code),
+                    ..
+                } => Some(attribute_code.as_str()),
+                _ => None,
+            })
+            .collect();
+        let supplied_relationship_attributes: HashSet<_> = input
+            .relationships
+            .iter()
+            .filter_map(|relationship| relationship.attribute_code.as_deref())
+            .collect();
+        let discarded_attributes: HashSet<_> = input
+            .discard_attributes
+            .iter()
+            .map(String::as_str)
+            .collect();
         let mut carried_values = Vec::new();
         let mut carried_relationships: HashMap<(String, Option<Uuid>), Vec<Uuid>> = HashMap::new();
+        let mut unresolved = HashSet::new();
         for value in source_values {
             match value {
                 FormAttributeValue::Scalar {
@@ -1100,7 +1164,26 @@ impl CatalogRepository {
                     context_id,
                     value,
                 } => {
-                    if target_by_code.contains_key(attribute_code.as_str()) {
+                    let source = source_by_code
+                        .get(attribute_code.as_str())
+                        .expect("form values belong to the source blueprint");
+                    let incompatible = match target_by_code.get(attribute_code.as_str()) {
+                        None => true,
+                        Some(target) if target.value_type != source.value_type => true,
+                        Some(target) => target.value_schema.as_ref().is_some_and(|schema| {
+                            !validate_json_schema(schema, &value)
+                                .expect("compiled blueprint schema is valid")
+                                .is_empty()
+                        }),
+                    };
+                    if discarded_attributes.contains(attribute_code.as_str()) {
+                        continue;
+                    }
+                    if incompatible {
+                        if !supplied_scalar_attributes.contains(attribute_code.as_str()) {
+                            unresolved.insert(attribute_code);
+                        }
+                    } else {
                         carried_values.push(NewAttributeValue::Scalar {
                             attribute_id: None,
                             attribute_code: Some(attribute_code),
@@ -1114,7 +1197,24 @@ impl CatalogRepository {
                     context_id,
                     target_entity_id,
                 } => {
-                    if target_by_code.contains_key(attribute_code.as_str()) {
+                    let source = source_by_code
+                        .get(attribute_code.as_str())
+                        .expect("form values belong to the source blueprint");
+                    let incompatible = match target_by_code.get(attribute_code.as_str()) {
+                        None => true,
+                        Some(target) => {
+                            target.value_type != source.value_type
+                                || target.target_blueprint_code != source.target_blueprint_code
+                        }
+                    };
+                    if discarded_attributes.contains(attribute_code.as_str()) {
+                        continue;
+                    }
+                    if incompatible {
+                        if !supplied_relationship_attributes.contains(attribute_code.as_str()) {
+                            unresolved.insert(attribute_code);
+                        }
+                    } else {
                         carried_relationships
                             .entry((attribute_code, context_id))
                             .or_default()
@@ -1122,6 +1222,18 @@ impl CatalogRepository {
                     }
                 }
             }
+        }
+        if !unresolved.is_empty() {
+            let unresolved: Vec<_> = unresolved.into_iter().collect();
+            sqlx::query(
+                "UPDATE entity_blueprint_migrations SET status = 'needs_input', input = $2 WHERE id = $1",
+            )
+            .bind(input.migration_id)
+            .bind(migration_input)
+            .execute(&mut *transaction)
+            .await?;
+            transaction.commit().await?;
+            return Err(RepositoryError::MigrationNeedsResolution(unresolved));
         }
         let target_entity = sqlx::query_as::<_, Entity>(
             r#"UPDATE entities SET blueprint_version = $2, updated_at = now()

@@ -43,6 +43,7 @@ type EntityFormProps = {
     { value: unknown; source_context: { id: string; code: string } }
   >;
   isLoadingBlueprint?: boolean;
+  showAllAttributes?: boolean;
   error?: Error | null;
   onLoadBlueprint?: (code: string, version?: number) => void;
   onSubmit: (input: {
@@ -60,6 +61,7 @@ export const EntityForm = ({
   existingValues = [],
   resolvedValues = {},
   isLoadingBlueprint = false,
+  showAllAttributes = false,
   error,
   onLoadBlueprint,
   onSubmit,
@@ -163,7 +165,9 @@ export const EntityForm = ({
               <EntityView
                 attributes={blueprint.attributes}
                 values={resolvedValues}
-                view={blueprint.blueprint.views.edit}
+                view={
+                  showAllAttributes ? undefined : blueprint.blueprint.views.edit
+                }
                 renderEditor={(attribute) => {
                   const value = field.state.value[attribute.code] ?? '';
                   const localValueExists = existingValues.some(

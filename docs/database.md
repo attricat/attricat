@@ -420,3 +420,9 @@ Authoring](blueprints.md) for the definition grammar and attribute policies.
   lifecycle in `entity_blueprint_migrations`. Creating a newer blueprint
   revision does not alter entities pinned to prior versions; users explicitly
   preview and upgrade each entity to the latest revision.
+- Migration previews identify removed attributes, changed value types, changed
+  relationship targets, stricter attribute schemas, and missing required
+  fields. Users can supply a target-revision replacement in the migration form
+  or explicitly discard the incompatible source value. Source-revision history
+  remains intact in either case. The migration form renders every target
+  attribute, including fields omitted from the target edit layout.

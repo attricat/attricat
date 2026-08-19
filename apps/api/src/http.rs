@@ -675,6 +675,11 @@ impl From<RepositoryError> for ApiError {
                 code: "migration_not_applicable",
                 message: error.to_string(),
             },
+            RepositoryError::MigrationNeedsResolution(_) => Self {
+                status: StatusCode::UNPROCESSABLE_ENTITY,
+                code: "migration_needs_resolution",
+                message: error.to_string(),
+            },
             RepositoryError::InvalidStoredAttributeValue => {
                 Self::internal("stored attribute value is invalid")
             }

@@ -275,6 +275,13 @@ const entityFormResponseSchema = z.object({
 });
 const migrationIssueSchema = z.object({
   attribute_code: z.string().nullable(),
+  kind: z.enum([
+    'removed',
+    'value_type_changed',
+    'relationship_target_changed',
+    'attribute_schema_mismatch',
+    'missing_required',
+  ]),
   message: z.string(),
 });
 export const entityMigrationPreviewSchema = z.object({
@@ -319,6 +326,7 @@ export const migrateEntityRequestSchema = z.object({
   expected_target_version: z.number().int().positive(),
   values: z.array(newAttributeValueSchema),
   relationships: z.array(relationshipTargetsSchema),
+  discard_attributes: z.array(z.string()),
 });
 
 export type Attribute = z.infer<typeof attributeSchema>;
