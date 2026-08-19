@@ -211,16 +211,24 @@ const request = async (path, options = {}) => {
 };
 
 const ensureBlueprint = async (code, definition) => {
+  const publish = (blueprint) => request(
+    `/blueprints/${blueprint.blueprint.id}/versions/${blueprint.blueprint.version}/publish`,
+    { method: 'POST' },
+  );
   try {
-    const current = await request(`/blueprints/by-code/${code}`);
-    if (current.blueprint.definition === definition) return current;
-    return request(`/blueprints/${current.blueprint.id}/versions`, {
+    const current = await request(`/blueprints/by-code/${code}?include_drafts=true`);
+    if (current.blueprint.definition === definition) {
+      return current.blueprint.status === 'published' ? current : publish(current);
+    }
+    const draft = await request(`/blueprints/${current.blueprint.id}/versions`, {
       method: 'POST',
       body: JSON.stringify({ definition }),
     });
+    return publish(draft);
   } catch (error) {
     if (!error.message.includes('(404)')) throw error;
-    return request('/blueprints', { method: 'POST', body: JSON.stringify({ definition }) });
+    const draft = await request('/blueprints', { method: 'POST', body: JSON.stringify({ definition }) });
+    return publish(draft);
   }
 };
 

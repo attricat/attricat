@@ -157,6 +157,12 @@ export const MigrateEntityPage = ({ entityId }: { entityId: string }) => {
             existingValues={migrationValues}
             highlightedAttributes={Object.keys(migrationReviewMessages)}
             migrationReviewMessages={migrationReviewMessages}
+            requiredAttributes={preview.data.issues
+              .filter((issue) => issue.kind === 'missing_required')
+              .map((issue) => issue.attribute_code)
+              .filter((attributeCode): attributeCode is string =>
+                Boolean(attributeCode),
+              )}
             initialValues={valuesForForm(
               preview.data.target.attributes,
               migrationValues,

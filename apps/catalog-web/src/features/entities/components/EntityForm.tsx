@@ -49,6 +49,7 @@ type EntityFormProps = {
   showAllAttributes?: boolean;
   highlightedAttributes?: readonly string[];
   migrationReviewMessages?: Readonly<Record<string, string>>;
+  requiredAttributes?: readonly string[];
   error?: Error | null;
   onLoadBlueprint?: (code: string, version?: number) => void;
   onSubmit: (input: {
@@ -70,6 +71,7 @@ export const EntityForm = ({
   showAllAttributes = false,
   highlightedAttributes = [],
   migrationReviewMessages = {},
+  requiredAttributes = [],
   error,
   onLoadBlueprint,
   onSubmit,
@@ -96,6 +98,12 @@ export const EntityForm = ({
             contextId === defaultContextId ||
             attribute.context_editable !== 'default',
         );
+        if (
+          requiredAttributes.some(
+            (attributeCode) => !value.fields[attributeCode]?.trim(),
+          )
+        )
+          return;
         if (hasInvalidScalarField(editableAttributes, value.fields)) return;
         onSubmit({
           values: serializeAttributeValues(
@@ -197,6 +205,9 @@ export const EntityForm = ({
                     attribute.value_type !== attributeValueTypes.relationship &&
                     Boolean(value.trim()) &&
                     !scalarValueForField(attribute, value);
+                  const missingRequired =
+                    requiredAttributes.includes(attribute.code) &&
+                    !value.trim();
                   const requiresMigrationReview =
                     highlightedAttributes.includes(attribute.code);
                   const migrationReviewMessage =
@@ -208,7 +219,9 @@ export const EntityForm = ({
                       : undefined;
                   const fieldHelperText = invalid
                     ? "Enter a value that meets this field's requirements."
-                    : helperText;
+                    : missingRequired
+                      ? 'A value is required for the target schema.'
+                      : helperText;
                   const handleChange = (nextValue: string) =>
                     field.handleChange({
                       ...field.state.value,
@@ -221,6 +234,7 @@ export const EntityForm = ({
                       disabled={defaultOnly}
                       showMigrationBadge={requiresMigrationReview}
                       migrationReviewMessage={migrationReviewMessage}
+                      error={missingRequired}
                       onChange={handleChange}
                       value={value}
                     />
@@ -232,6 +246,7 @@ export const EntityForm = ({
                       <TextField
                         fullWidth
                         disabled={defaultOnly}
+                        error={missingRequired}
                         helperText={fieldHelperText}
                         select
                         label={attribute.code}
@@ -251,7 +266,7 @@ export const EntityForm = ({
                       <TextField
                         fullWidth
                         disabled={defaultOnly}
-                        error={invalid}
+                        error={invalid || missingRequired}
                         helperText={fieldHelperText}
                         label={attribute.code}
                         onChange={(event) => handleChange(event.target.value)}
@@ -315,6 +330,7 @@ const RelationshipField = ({
   disabled = false,
   showMigrationBadge = false,
   migrationReviewMessage,
+  error = false,
   onChange,
   value,
 }: {
@@ -322,6 +338,7 @@ const RelationshipField = ({
   disabled?: boolean;
   showMigrationBadge?: boolean;
   migrationReviewMessage?: string;
+  error?: boolean;
   onChange: (value: string) => void;
   value: string;
 }) => {
@@ -340,8 +357,13 @@ const RelationshipField = ({
         <TextField
           fullWidth
           disabled={disabled}
+          error={error}
           label={attribute.code}
-          helperText="Comma-separated entity UUIDs"
+          helperText={
+            error
+              ? 'A value is required for the target schema.'
+              : 'Comma-separated entity UUIDs'
+          }
           onChange={(event) => onChange(event.target.value)}
           value={value}
         />
@@ -378,7 +400,7 @@ const RelationshipField = ({
       {showMigrationBadge && (
         <MigrationBadge message={migrationReviewMessage} />
       )}
-      <FormControl fullWidth>
+      <FormControl error={error} fullWidth>
         <InputLabel id={`${attribute.code}-label`}>{attribute.code}</InputLabel>
         <Select
           disabled={disabled}
@@ -408,6 +430,11 @@ const RelationshipField = ({
         {targets.isError && (
           <Typography color="error" variant="caption">
             Could not load {targetBlueprint} entities.
+          </Typography>
+        )}
+        {error && (
+          <Typography color="error" variant="caption">
+            A value is required for the target schema.
           </Typography>
         )}
       </FormControl>

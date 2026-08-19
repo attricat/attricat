@@ -103,9 +103,23 @@ async fn data_health_completeness_counts_default_values(pool: PgPool) {
 }
 
 async fn create_blueprint(client: &Client, base_url: &str, definition: &str) -> Value {
-    client
+    let blueprint: Value = client
         .post(format!("{base_url}/blueprints"))
         .json(&json!({ "definition": definition }))
+        .send()
+        .await
+        .unwrap()
+        .error_for_status()
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    client
+        .post(format!(
+            "{base_url}/blueprints/{}/versions/{}/publish",
+            blueprint["blueprint"]["id"].as_str().unwrap(),
+            blueprint["blueprint"]["version"].as_i64().unwrap(),
+        ))
         .send()
         .await
         .unwrap()
@@ -261,6 +275,19 @@ code = "sku"
 value_type = "string"
 "#
         }))
+        .send()
+        .await
+        .unwrap()
+        .error_for_status()
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    let second: Value = client
+        .post(format!(
+            "{base_url}/blueprints/{blueprint_id}/versions/{}/publish",
+            second["blueprint"]["version"].as_i64().unwrap(),
+        ))
         .send()
         .await
         .unwrap()
@@ -482,6 +509,15 @@ tags = ["searchable"]
         .await
         .unwrap();
     assert_eq!(revision["blueprint"]["version"], 2);
+    client
+        .post(format!(
+            "{base_url}/blueprints/{blueprint_id}/versions/2/publish"
+        ))
+        .send()
+        .await
+        .unwrap()
+        .error_for_status()
+        .unwrap();
     let current_blueprint: Value = client
         .get(format!("{base_url}/blueprints/{blueprint_id}"))
         .send()

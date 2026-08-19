@@ -29,13 +29,14 @@ cargo run -p catalog-cli -- health
 ```sh
 catalog health
 
-catalog blueprint list
+catalog blueprint list [--include-drafts]
 catalog blueprint create --file product.toml
 catalog blueprint create --stdin
 catalog blueprint revision <blueprint-id> --file product-v2.toml
+catalog blueprint publish <blueprint-id> <version>
 catalog blueprint get <blueprint-id>
 catalog blueprint get-version <blueprint-id> <version>
-catalog blueprint resolve <code>
+catalog blueprint resolve <code> [--include-drafts]
 catalog blueprint resolve <code> --version <version>
 
 catalog context list
@@ -91,8 +92,8 @@ same operation for each entity. It never chooses a target revision: every
 entity targets the latest active revision. Use `--dry-run` to classify entities
 without migrating them. The command returns a JSON summary with `ready`,
 `needs_input`, `blocked`, and `failed` entries. It skips `needs_input` and
-`blocked` entities, so provide missing or corrected values through the edit UI
-before rerunning the bulk command.
+`blocked` entities. Resolve missing, incompatible, or conditionally required
+values through the entity upgrade page before rerunning the bulk command.
 
 For example, after creating `seed_product` v2:
 
@@ -103,6 +104,17 @@ catalog entity migrate-bulk --blueprint seed_product --from-version 1
 
 Blueprint files are sent unchanged as the API's TOML `definition`, preserving
 the raw-source hash. See `database.md` for the blueprint grammar.
+
+Blueprint creation and revision commands create drafts. Publish a revision
+explicitly before using it for entities or migrations:
+
+```sh
+catalog blueprint publish <blueprint-id> <version>
+```
+
+Default blueprint listing and resolution return only published revisions. Use
+`catalog blueprint list --include-drafts` to inspect drafts; exact
+`blueprint get-version` reads are also draft-visible.
 
 ## Input Files
 

@@ -15,6 +15,8 @@ pub struct Blueprint {
     pub display: Value,
     pub views: Value,
     pub entity_schema: Option<Value>,
+    pub status: String,
+    pub published_at: Option<DateTime<Utc>>,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
     pub deleted_at: Option<DateTime<Utc>>,

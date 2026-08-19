@@ -66,6 +66,10 @@ pub fn router(state: AppState) -> Router {
             "/blueprints/{blueprint_id}/versions/{version}",
             get(get_blueprint_revision),
         )
+        .route(
+            "/blueprints/{blueprint_id}/versions/{version}/publish",
+            post(publish_blueprint_revision),
+        )
         .route("/blueprints/by-code/{code}", get(get_blueprint_by_code))
         .route(
             "/blueprints/by-code/{code}/versions/{version}",
@@ -256,8 +260,20 @@ async fn create_blueprint(
 
 async fn list_entity_blueprints(
     State(state): State<AppState>,
+    Query(query): Query<BlueprintQuery>,
 ) -> Result<Json<Vec<crate::model::Blueprint>>, ApiError> {
-    Ok(Json(state.repository.list_entity_blueprints().await?))
+    Ok(Json(
+        state
+            .repository
+            .list_entity_blueprints(query.include_drafts)
+            .await?,
+    ))
+}
+
+#[derive(Default, Deserialize)]
+struct BlueprintQuery {
+    #[serde(default)]
+    include_drafts: bool,
 }
 
 async fn create_blueprint_revision(
@@ -297,14 +313,32 @@ async fn get_blueprint_revision(
         .ok_or_else(|| ApiError::not_found("blueprint version"))
 }
 
+async fn publish_blueprint_revision(
+    State(state): State<AppState>,
+    Path((blueprint_id, version)): Path<(Uuid, i64)>,
+) -> Result<Json<BlueprintWithAttributes>, ApiError> {
+    let blueprint = state
+        .repository
+        .publish_blueprint_revision(blueprint_id, version)
+        .await?;
+    invalidate_data_health(&state).await;
+    Ok(Json(blueprint))
+}
+
 async fn get_blueprint_by_code(
     State(state): State<AppState>,
     Path(code): Path<String>,
+    Query(query): Query<BlueprintQuery>,
 ) -> Result<Json<BlueprintWithAttributes>, ApiError> {
-    state
-        .repository
-        .get_blueprint_by_code(&code)
-        .await?
+    let blueprint = if query.include_drafts {
+        state
+            .repository
+            .get_blueprint_by_code_including_drafts(&code)
+            .await?
+    } else {
+        state.repository.get_blueprint_by_code(&code).await?
+    };
+    blueprint
         .map(Json)
         .ok_or_else(|| ApiError::not_found("blueprint"))
 }
@@ -656,7 +690,7 @@ async fn resolve_search_blueprint(
         Some(version) => {
             state
                 .repository
-                .get_blueprint_by_code_and_version(code, version)
+                .get_published_blueprint_by_code_and_version(code, version)
                 .await?
         }
         None => state.repository.get_blueprint_by_code(code).await?,
@@ -839,6 +873,11 @@ impl From<RepositoryError> for ApiError {
             RepositoryError::BlueprintCodeTaken => Self {
                 status: StatusCode::CONFLICT,
                 code: "conflict",
+                message: error.to_string(),
+            },
+            RepositoryError::BlueprintNotPublished => Self {
+                status: StatusCode::UNPROCESSABLE_ENTITY,
+                code: "blueprint_not_published",
                 message: error.to_string(),
             },
             RepositoryError::Database(sqlx::Error::Database(database_error))

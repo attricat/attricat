@@ -51,12 +51,19 @@ enum Command {
 
 #[derive(Subcommand)]
 enum BlueprintCommand {
-    List,
+    List {
+        #[arg(long)]
+        include_drafts: bool,
+    },
     Create(SourceInput),
     Revision {
         blueprint_id: Uuid,
         #[command(flatten)]
         source: SourceInput,
+    },
+    Publish {
+        blueprint_id: Uuid,
+        version: i64,
     },
     Get {
         blueprint_id: Uuid,
@@ -69,6 +76,8 @@ enum BlueprintCommand {
         code: String,
         #[arg(long)]
         version: Option<i64>,
+        #[arg(long)]
+        include_drafts: bool,
     },
 }
 
@@ -350,8 +359,19 @@ async fn run(cli: Cli) -> Result<String, CliError> {
     match cli.command {
         Command::Health => request(&client, &server, Method::GET, "/health", None).await,
         Command::Blueprint { command } => match command {
-            BlueprintCommand::List => {
-                request(&client, &server, Method::GET, "/blueprints", None).await
+            BlueprintCommand::List { include_drafts } => {
+                request(
+                    &client,
+                    &server,
+                    Method::GET,
+                    if include_drafts {
+                        "/blueprints?include_drafts=true"
+                    } else {
+                        "/blueprints"
+                    },
+                    None,
+                )
+                .await
             }
             BlueprintCommand::Create(source) => {
                 let definition = read_source(source)?;
@@ -378,6 +398,22 @@ async fn run(cli: Cli) -> Result<String, CliError> {
                 )
                 .await
             }
+            BlueprintCommand::Publish {
+                blueprint_id,
+                version,
+            } => {
+                request(
+                    &client,
+                    &server,
+                    Method::POST,
+                    &format!(
+                        "/blueprints/{}/versions/{version}/publish",
+                        segment(blueprint_id)
+                    ),
+                    None,
+                )
+                .await
+            }
             BlueprintCommand::Get { blueprint_id } => {
                 request(
                     &client,
@@ -401,12 +437,24 @@ async fn run(cli: Cli) -> Result<String, CliError> {
                 )
                 .await
             }
-            BlueprintCommand::Resolve { code, version } => {
+            BlueprintCommand::Resolve {
+                code,
+                version,
+                include_drafts,
+            } => {
                 let path = match version {
                     Some(version) => {
                         format!("/blueprints/by-code/{}/versions/{version}", segment(&code))
                     }
-                    None => format!("/blueprints/by-code/{}", segment(&code)),
+                    None => format!(
+                        "/blueprints/by-code/{}{}",
+                        segment(&code),
+                        if include_drafts {
+                            "?include_drafts=true"
+                        } else {
+                            ""
+                        }
+                    ),
                 };
                 request(&client, &server, Method::GET, &path, None).await
             }

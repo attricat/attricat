@@ -209,6 +209,20 @@ payloads or interpreting EAV values directly.
 
 The JSON-first `catalog` client is documented in [cli.md](cli.md).
 
+## Blueprint Publication
+
+Every blueprint revision begins as a draft, including version 1. A draft is
+available for exact-revision inspection and may include pinned draft mixins, but
+it cannot create entities or become an entity migration target. Publish it with
+`POST /blueprints/{blueprint_id}/versions/{version}/publish` once every pinned
+include is already published.
+
+The current revision is the highest published version. Publishing a new revision
+does not change existing entities: they remain pinned to their prior published
+revision until migrated explicitly. Data-health current-version calculations,
+entity creation, search resolution, and migration previews all use the highest
+published revision.
+
 The initial API supports creating TOML-defined blueprint revisions and contexts,
 creating and reading entities, appending attribute values, and reading the
 `preview` projection.
@@ -426,3 +440,15 @@ Authoring](blueprints.md) for the definition grammar and attribute policies.
   or explicitly discard the incompatible source value. Source-revision history
   remains intact in either case. The migration form renders every target
   attribute, including fields omitted from the target edit layout.
+- The entity edit and preview pages show whether the pinned revision matches
+  the current blueprint. Outdated entities link to a dedicated upgrade page;
+  current entities show a confirmation instead. Field-specific migration
+  issues appear in the affected field's information tooltip with its prior
+  value. Only issues without a target field, such as removed attributes,
+  remain page-level warnings.
+- Required migration fields are derived by validating the entity's candidate
+  target document against the complete target JSON Schema. This includes
+  requirements activated by composed or conditional schemas, such as `allOf`
+  and `if`/`then`, when the validator reports the missing target attribute.
+  The upgrade form marks those fields as required and blocks submission until
+  they are supplied.

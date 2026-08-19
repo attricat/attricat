@@ -31,6 +31,8 @@ scalar types, constrained relationships, and configured views and components.
 When a seed blueprint definition changes, the generator creates a new blueprint
 revision. Existing entities remain pinned to their original revision and can be
 upgraded through the entity migration flow.
+Seed revisions are published automatically after their pinned mixin revisions,
+so generated entities always use published blueprints.
 
 Each run creates six categories, six colors, at least 100 parent products, and
 two variants for every parent. Products and variants receive category and color
