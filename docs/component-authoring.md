@@ -57,10 +57,11 @@ implementation, so increment the version when making an incompatible change.
 selects the supported view block type: `field`, `relationship_list`, `table`,
 or `stack`. `value_types` limits the attribute types for data placements.
 
-The compiler enforces each of these fields, as well as `allowed_props`, against
-the component reference in a blueprint. Do not add props to `allowed_props`
-until the applicable renderer consumes them: component props are currently
-validated but are not passed to frontend renderers.
+The compiler enforces capabilities, placements, and value types against the
+component reference. When `props` is an object, it also rejects keys outside
+`allowed_props`; component props must therefore be an object. Do not add props
+to `allowed_props` until the applicable renderer consumes them: component props
+are currently validated but are not passed to frontend renderers.
 
 `value_types` describes renderer applicability, not data integrity. A renderer
 must tolerate valid values for its declared attribute type; it cannot make a

@@ -3,7 +3,7 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Catalog Engine Roadmap</title>
+    <title>Catalog Engine Roadmap (Planning)</title>
     <style>
       :root {
         color-scheme: light;
@@ -55,7 +55,7 @@
   <body>
     <main>
       <header>
-        <span class="status">Engine roadmap</span>
+        <span class="status">Internal planning roadmap, reviewed 2026-08-19</span>
         <h1>Catalog PIM / DAM foundations</h1>
         <p class="lede">The existing versioned EAV core is a sound PIM kernel: typed values, immutable history, version-pinned schemas, mixins, relationships, contextual overrides, and rebuildable projections. This roadmap identifies the missing primitives needed to support a full PIM/DAM without later structural rewrites.</p>
       </header>
@@ -98,7 +98,7 @@
         <article class="card pim"><div class="priority">P1</div><h3>Business identifiers</h3><p>Support schema-declared external IDs such as SKU, GTIN, supplier ID, and uniqueness policies. UUID remains internal identity.</p></article>
         <article class="card pim"><div class="priority">P1</div><h3>Reference data</h3><p>Make option sets, controlled vocabularies, units, taxonomies, and classifications first-class versioned definitions.</p></article>
         <article class="card pim"><div class="priority">P2</div><h3>Validation and computed values</h3><p>Add a completeness/rule engine per context and channel, then computed attributes with dependency tracking and rollups.</p></article>
-        <article class="card pim"><div class="priority">P2</div><h3>Entity schema migration</h3><p>Create a validated, explicit entity migration process between blueprint revisions, including projection rebuild and migration reporting.</p></article>
+          <article class="card pim"><div class="priority">Implemented baseline</div><h3>Entity schema migration</h3><p>A validated, explicit entity migration process between blueprint revisions is available, including projection rebuild and migration reporting. Future work can expand migration transforms and richer reporting.</p></article>
       </section>
 
       <h2>DAM primitives</h2>
@@ -126,7 +126,7 @@
         <tbody>
           <tr><td>Schema</td><td>Versioned blueprints, mixins, and entities pinned to exact revisions.</td><td>Strong base; add an explicit entity migration primitive before revisions become routine.</td></tr>
           <tr><td>Values</td><td>Typed native scalar storage, contextual values, relationships, and immutable history.</td><td>Extend the type system, collection semantics, and validation metadata.</td></tr>
-          <tr><td>Context</td><td>Persisted <code>default</code> root, one parent per named scope, and required context IDs on facts.</td><td>Resolved scalar previews use nearest-ancestor fallback with source-context provenance. Relationship-set inheritance remains to be defined.</td></tr>
+          <tr><td>Context</td><td>Persisted <code>default</code> root, one parent per named scope, and required context IDs on facts.</td><td>Resolved previews use nearest-ancestor fallback with source-context provenance for scalar values and relationship sets.</td></tr>
           <tr><td>Read model</td><td><code>preview</code> is a derived JSONB cache rebuilt transactionally.</td><td>Good pattern; generalize into versioned projection definitions and rebuild jobs.</td></tr>
           <tr><td>Search</td><td>Cross-scalar text matching only; field filters are explicitly unsupported.</td><td>Add a typed query/indexing layer after attribute constraints are defined.</td></tr>
           <tr><td>DAM</td><td>No first-class binary asset, rendition, rights, or processing model.</td><td>Requires new aggregates and storage/job primitives, not merely new blueprint types.</td></tr>

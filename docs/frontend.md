@@ -30,8 +30,5 @@ These conventions apply to `apps/catalog-web`.
 
 - Run unit tests with `npm test --prefix apps/catalog-web`.
 - Run the Playwright suite with `npm run test:e2e --prefix apps/catalog-web`.
-- The E2E suite uses Testcontainers with an isolated PostgreSQL database and
-  starts its own API and Vite processes. Do not point it at or seed the
-  development database.
-- The suite resolves the active Docker context automatically. With Colima, make
-  sure `colima status` reports a running Docker runtime.
+- See [the documentation index](index.md#test-the-web-app) for E2E setup and
+  Docker/Colima behavior. Do not point it at or seed the development database.

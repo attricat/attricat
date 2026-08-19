@@ -82,14 +82,14 @@ retained, while normal reads and relationship previews no longer expose it.
 
 ## Blueprint Migrations
 
-`entity migrate` previews an entity against the latest active revision of its
+`entity migrate` previews an entity against the latest published revision of its
 blueprint and migrates it when all current values are compatible. The API copies
 current values to the target revision, validates them, rebuilds projections, and
 records the migration atomically.
 
 `entity migrate-bulk` pages entities pinned to `--from-version` and runs that
 same operation for each entity. It never chooses a target revision: every
-entity targets the latest active revision. Use `--dry-run` to classify entities
+entity targets the latest published revision. Use `--dry-run` to classify entities
 without migrating them. The command returns a JSON summary with `ready`,
 `needs_input`, `blocked`, and `failed` entries. It skips `needs_input` and
 `blocked` entities. Resolve missing, incompatible, or conditionally required
@@ -103,7 +103,7 @@ catalog entity migrate-bulk --blueprint seed_product --from-version 1
 ```
 
 Blueprint files are sent unchanged as the API's TOML `definition`, preserving
-the raw-source hash. See `database.md` for the blueprint grammar.
+the raw-source hash. See [Blueprint Authoring](blueprints.md) for the grammar.
 
 Blueprint creation and revision commands create drafts. Publish a revision
 explicitly before using it for entities or migrations:

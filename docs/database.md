@@ -5,47 +5,7 @@ canonical write model is normalized EAV data. The API rebuilds the JSONB `previe
 projection on value writes and uses it for preview and search reads; it remains a
 derived cache rather than the source of truth.
 
-## Local Database
-
-Start PostgreSQL 18 from the workspace root:
-
-```sh
-docker compose -f apps/api/compose.yml up -d
-```
-
-The default connection string is:
-
-```dotenv
-DATABASE_URL=postgres://postgres:postgres@localhost:5432/catalog
-```
-
-Copy `.env.example` to `.env` and adjust `DATABASE_URL` when necessary. The API
-loads `.env`, connects to PostgreSQL, and applies embedded SQLx migrations during
-startup.
-
-Run migrations explicitly with:
-
-```sh
-sqlx migrate run --source apps/api/migrations --database-url "$DATABASE_URL"
-```
-
-## Web End-To-End Tests
-
-The web app's Playwright suite provisions a disposable PostgreSQL container with
-Testcontainers. It starts separate API and Vite processes and seeds fixture data
-through the API, so it never uses or changes the local development database.
-
-With a Docker-compatible runtime running, install Chromium once and run:
-
-```sh
-npx playwright install chromium --prefix apps/catalog-web
-npm run test:e2e --prefix apps/catalog-web
-```
-
-The test setup resolves the active Docker context automatically, including
-Colima. Ryuk is disabled for Colima compatibility because Colima cannot
-bind-mount its Docker socket into the cleanup sidecar; Playwright global teardown
-stops the E2E PostgreSQL container and child processes.
+For local setup, migrations, and E2E testing, see [Getting Started](index.md#getting-started).
 
 ## Rust Model Mapping
 
@@ -80,10 +40,10 @@ is the primary key.
   fully resolved entity document. It is versioned with the blueprint.
 - `definition_hash` is the SHA-256 hash of the exact raw TOML source.
 - `deleted_at` implements soft deletion.
-- `blueprints_active_version_idx` supports selecting the newest non-deleted version.
+- `blueprints_active_version_idx` supports selecting the newest published version.
 
-The current blueprint is derived, not stored: it is the non-deleted row with the
-greatest `version` for its `id`.
+The current blueprint is derived, not stored: it is the published, non-deleted
+row with the greatest `version` for its `id`.
 
 ### `attributes`
 
@@ -152,8 +112,9 @@ superseded.
 - `active` records the current state of a relationship history entry. A false
   entry is an immutable tombstone that unlinks its target; scalar values are
   always active.
-- `latest` marks the newest event for its logical history key. Exactly one row
-  per key is latest.
+- `latest` marks the newest event for its logical history key. A logical key has
+  at most one latest row. Scalar override removal clears its latest row without
+  adding a tombstone, so it can have no latest row.
 - `created_at` records the insertion time.
 
 Current reads select `latest` rows directly. Relationship reads additionally
@@ -189,10 +150,7 @@ the same contextual and historical behavior as all other attribute values.
 
 `updated_at` is application-managed. No trigger updates timestamps.
 
-## API and Projections
-
-The Axum API starts after embedded migrations complete. Set `BIND_ADDR` to choose
-its listener address; it defaults to `127.0.0.1:3000`.
+## Projections
 
 `CatalogRepository` is the sole application boundary for catalog persistence.
 Only repository code reads or writes EAV facts, blueprint metadata, and entity
@@ -207,7 +165,9 @@ the entity feature, `api.ts` owns HTTP request and response contracts,
 Components render those feature helpers rather than constructing catalog
 payloads or interpreting EAV values directly.
 
-The JSON-first `catalog` client is documented in [cli.md](cli.md).
+The JSON-first `catalog` client is documented in [cli.md](cli.md). HTTP routes,
+configuration, and operational limits are documented in [API Reference](api.md)
+and [Configuration Reference](configuration.md).
 
 ## Blueprint Publication
 
@@ -222,38 +182,6 @@ does not change existing entities: they remain pinned to their prior published
 revision until migrated explicitly. Data-health current-version calculations,
 entity creation, search resolution, and migration previews all use the highest
 published revision.
-
-The initial API supports creating TOML-defined blueprint revisions and contexts,
-creating and reading entities, appending attribute values, and reading the
-`preview` projection.
-
-| Method   | Path                                                                                              | Purpose                                                                                                         |
-| -------- | ------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------- |
-| `POST`   | `/blueprints`                                                                                     | Create an initial blueprint revision from TOML.                                                                 |
-| `POST`   | `/blueprints/{blueprint_id}/versions`                                                             | Create the next TOML-defined blueprint revision.                                                                |
-| `GET`    | `/blueprints/{blueprint_id}`                                                                      | Read the current active blueprint revision and attributes.                                                      |
-| `GET`    | `/blueprints/{blueprint_id}/versions/{version}`                                                   | Read an exact active blueprint revision.                                                                        |
-| `GET`    | `/blueprints/by-code/{code}`                                                                      | Read the current active blueprint by code.                                                                      |
-| `GET`    | `/blueprints/by-code/{code}/versions/{version}`                                                   | Read an exact blueprint revision by code.                                                                       |
-| `POST`   | `/contexts`                                                                                       | Create a reusable attribute context.                                                                            |
-| `GET`    | `/contexts`                                                                                       | List reusable attribute contexts by code.                                                                       |
-| `GET`    | `/contexts/{code}`                                                                                | Read a context by code.                                                                                         |
-| `PUT`    | `/contexts/id/{id}`                                                                               | Update context metadata or reparent a non-default context.                                                      |
-| `DELETE` | `/contexts/id/{id}`                                                                               | Delete a childless context with no current values.                                                              |
-| `POST`   | `/entities`                                                                                       | Create an entity pinned to an exact blueprint version.                                                          |
-| `GET`    | `/entities?blueprint=category&related_from={id}&relationship=categories&limit=50&cursor={cursor}` | Page target entity previews through a reverse relationship filter.                                              |
-| `GET`    | `/entities/{entity_id}`                                                                           | Read an active entity and its named projections.                                                                |
-| `GET`    | `/entities/{entity_id}/preview?relationship_depth=1&relationship_limit=10`                        | Read contextual preview values with bounded related entity values.                                              |
-| `GET`    | `/entities/{entity_id}/resolved-preview?context_id={id}`                                          | Resolve scalar and relationship attributes through a context's ancestor path with supplying-context provenance. |
-| `POST`   | `/entities/{entity_id}/values`                                                                    | Append scalar or relationship value history and rebuild preview.                                                |
-| `GET`    | `/entities/{entity_id}/values/current`                                                            | Read derived current scalar values and relationship edges.                                                      |
-| `POST`   | `/v1/entities/search`                                                                             | Search current scalar values within a resolved blueprint revision.                                              |
-| `POST`   | `/v1/entities`                                                                                    | Atomically create an entity with initial values.                                                                |
-| `GET`    | `/v1/entities/{entity_id}`                                                                        | Read an entity, pinned schema, current form values, and scalar contextual values.                               |
-| `PUT`    | `/v1/entities/{entity_id}`                                                                        | Append scalar changes and replace submitted relationship target sets atomically.                                |
-| `POST`   | `/entities/{entity_id}/relationships/replace`                                                     | Replace the current targets for each supplied relationship attribute.                                           |
-| `POST`   | `/entities/{entity_id}/relationships/remove`                                                      | Remove supplied current relationship targets.                                                                   |
-| `GET`    | `/health`                                                                                         | Confirm the migrated API is ready to serve requests.                                                            |
 
 Errors use this JSON shape:
 
@@ -422,33 +350,9 @@ The pure `catalog-blueprint` crate parses and compiles blueprint TOML without
 SQLx, PostgreSQL, Axum, or Tokio dependencies. See [Blueprint
 Authoring](blueprints.md) for the definition grammar and attribute policies.
 
-### Projection Builder TODO
+## Known Limitations
 
-- Define relationship rendering, target selection, and cycle protection.
-- Define hierarchy-aware relationship-set inheritance and request-specific
-  relationship context selection.
-- Add builders for `search` and other named projections based on real query needs.
-- Add repair/backfill commands that rebuild projections from EAV history.
-- Entity blueprint migrations copy compatible current values to target-revision
-  attributes, validate and rebuild projections atomically, and record their
-  lifecycle in `entity_blueprint_migrations`. Creating a newer blueprint
-  revision does not alter entities pinned to prior versions; users explicitly
-  preview and upgrade each entity to the latest revision.
-- Migration previews identify removed attributes, changed value types, changed
-  relationship targets, stricter attribute schemas, and missing required
-  fields. Users can supply a target-revision replacement in the migration form
-  or explicitly discard the incompatible source value. Source-revision history
-  remains intact in either case. The migration form renders every target
-  attribute, including fields omitted from the target edit layout.
-- The entity edit and preview pages show whether the pinned revision matches
-  the current blueprint. Outdated entities link to a dedicated upgrade page;
-  current entities show a confirmation instead. Field-specific migration
-  issues appear in the affected field's information tooltip with its prior
-  value. Only issues without a target field, such as removed attributes,
-  remain page-level warnings.
-- Required migration fields are derived by validating the entity's candidate
-  target document against the complete target JSON Schema. This includes
-  requirements activated by composed or conditional schemas, such as `allOf`
-  and `if`/`then`, when the validator reports the missing target attribute.
-  The upgrade form marks those fields as required and blocks submission until
-  they are supplied.
+- `preview` is the only automatic projection. Search is a separate current-value
+  query and there are no projection repair or backfill commands yet.
+- Search supports case-insensitive text matching across scalar values only;
+  typed filters, sorting, and facets are not yet available.

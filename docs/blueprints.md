@@ -14,7 +14,7 @@ kind = "entity"
 entities.
 
 Blueprint codes, attribute codes, include codes, and relationship target
-blueprint codes contain only ASCII letters, numbers, and underscores.
+blueprint codes contain only ASCII letters, numbers, hyphens, and underscores.
 
 ## Attributes
 
