@@ -144,21 +144,19 @@ Scalar removals used by `entity update --remove-values` use:
 attribute_code = "subtitle"
 ```
 
-## Example Seed
+## Manual Test Data
 
-The relationship example creates category, color, and product blueprints; typed
-scalar values; category and color relationships; and the context tree `default
--> PL -> PL-b2c -> PL-b2c-web`. It demonstrates nearest-ancestor scalar
-fallback with Polish title and price overrides. It creates category and color
-entities first, retrieves their IDs through `entity search`, then creates the
-product and attaches those relationship targets.
-
-Build the client once, start the API, then run:
+The Node.js generator creates at least 100 parent products and two variants for
+each parent, alongside categories, colors, relationships, contexts, and
+blueprints that exercise the supported blueprint features. Start the API, then
+run:
 
 ```sh
-cargo build -p catalog-cli
-examples/relationships/seed.sh
+node examples/generate.mjs
 ```
+
+See [`examples/generate.md`](../examples/generate.md) for configuration and a
+complete description of the generated data.
 
 ## Errors
 
