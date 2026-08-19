@@ -1,3 +1,9 @@
+use std::{
+    collections::HashMap,
+    sync::Arc,
+    time::{Duration, Instant},
+};
+
 use axum::{
     Json, Router,
     extract::{Path, Query, State},
@@ -7,6 +13,7 @@ use axum::{
 };
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
+use tokio::sync::Mutex;
 use uuid::Uuid;
 
 use crate::{
@@ -29,11 +36,23 @@ pub struct AppState {
     pub max_preview_relationship_depth: u8,
     pub max_preview_relationship_items: u32,
     pub max_entity_page_size: u32,
+    pub data_health_cache_ttl_seconds: u64,
+    pub data_health_cache: DataHealthCache,
 }
+
+pub type DataHealthCache = Arc<Mutex<HashMap<String, (Instant, Value)>>>;
 
 pub fn router(state: AppState) -> Router {
     Router::new()
         .route("/health", get(health))
+        .route("/data-health/summary", get(data_health_summary))
+        .route("/data-health/blueprints", get(data_health_blueprints))
+        .route("/data-health/freshness", get(data_health_freshness))
+        .route("/data-health/completeness", get(data_health_completeness))
+        .route("/data-health/contexts", get(data_health_contexts))
+        .route("/data-health/relationships", get(data_health_relationships))
+        .route("/data-health/storage", get(data_health_storage))
+        .route("/data-health/refresh", post(refresh_data_health))
         .route(
             "/blueprints",
             get(list_entity_blueprints).post(create_blueprint),
@@ -105,14 +124,134 @@ async fn health() -> Json<Value> {
     Json(json!({ "status": "ok" }))
 }
 
+#[derive(Deserialize)]
+struct DataHealthQuery {
+    stale_after_days: Option<u16>,
+}
+
+fn stale_after_days(query: DataHealthQuery) -> Result<u16, ApiError> {
+    let days = query.stale_after_days.unwrap_or(90);
+    if !(1..=3650).contains(&days) {
+        return Err(ApiError::invalid_input(
+            "stale_after_days must be between 1 and 3650".to_owned(),
+        ));
+    }
+    Ok(days)
+}
+
+async fn cached_data_health<T>(
+    state: &AppState,
+    key: String,
+    load: impl std::future::Future<Output = Result<T, RepositoryError>>,
+) -> Result<Json<Value>, ApiError>
+where
+    T: Serialize,
+{
+    if state.data_health_cache_ttl_seconds > 0 {
+        if let Some((created_at, value)) = state.data_health_cache.lock().await.get(&key).cloned() {
+            if created_at.elapsed() < Duration::from_secs(state.data_health_cache_ttl_seconds) {
+                return Ok(Json(value));
+            }
+        }
+    }
+    let value = serde_json::to_value(load.await?).expect("data health response serializes");
+    if state.data_health_cache_ttl_seconds > 0 {
+        state
+            .data_health_cache
+            .lock()
+            .await
+            .insert(key, (Instant::now(), value.clone()));
+    }
+    Ok(Json(value))
+}
+
+async fn invalidate_data_health(state: &AppState) {
+    state.data_health_cache.lock().await.clear();
+}
+
+async fn data_health_summary(
+    State(state): State<AppState>,
+    Query(query): Query<DataHealthQuery>,
+) -> Result<Json<Value>, ApiError> {
+    let days = stale_after_days(query)?;
+    cached_data_health(
+        &state,
+        format!("summary:{days}"),
+        state.repository.data_health_summary(days.into()),
+    )
+    .await
+}
+
+async fn data_health_blueprints(
+    State(state): State<AppState>,
+    Query(query): Query<DataHealthQuery>,
+) -> Result<Json<Value>, ApiError> {
+    let days = stale_after_days(query)?;
+    cached_data_health(
+        &state,
+        format!("blueprints:{days}"),
+        state.repository.data_health_blueprints(days.into()),
+    )
+    .await
+}
+
+async fn data_health_freshness(State(state): State<AppState>) -> Result<Json<Value>, ApiError> {
+    cached_data_health(
+        &state,
+        "freshness".to_owned(),
+        state.repository.data_health_freshness(),
+    )
+    .await
+}
+
+async fn data_health_completeness(State(state): State<AppState>) -> Result<Json<Value>, ApiError> {
+    cached_data_health(
+        &state,
+        "completeness".to_owned(),
+        state.repository.data_health_completeness(),
+    )
+    .await
+}
+
+async fn data_health_contexts(State(state): State<AppState>) -> Result<Json<Value>, ApiError> {
+    cached_data_health(
+        &state,
+        "contexts".to_owned(),
+        state.repository.data_health_contexts(),
+    )
+    .await
+}
+
+async fn data_health_relationships(State(state): State<AppState>) -> Result<Json<Value>, ApiError> {
+    cached_data_health(
+        &state,
+        "relationships".to_owned(),
+        state.repository.data_health_relationships(),
+    )
+    .await
+}
+
+async fn data_health_storage(State(state): State<AppState>) -> Result<Json<Value>, ApiError> {
+    cached_data_health(
+        &state,
+        "storage".to_owned(),
+        state.repository.data_health_storage(),
+    )
+    .await
+}
+
+async fn refresh_data_health(State(state): State<AppState>) -> StatusCode {
+    invalidate_data_health(&state).await;
+    StatusCode::NO_CONTENT
+}
+
 async fn create_blueprint(
     State(state): State<AppState>,
     Json(input): Json<CreateBlueprint>,
 ) -> Result<(StatusCode, Json<BlueprintWithAttributes>), ApiError> {
-    Ok((
-        StatusCode::CREATED,
-        Json(state.repository.create_blueprint(input).await?),
-    ))
+    let blueprint = state.repository.create_blueprint(input).await?;
+    invalidate_data_health(&state).await;
+    Ok((StatusCode::CREATED, Json(blueprint)))
 }
 
 async fn list_entity_blueprints(
@@ -126,15 +265,12 @@ async fn create_blueprint_revision(
     Path(blueprint_id): Path<Uuid>,
     Json(input): Json<CreateBlueprint>,
 ) -> Result<(StatusCode, Json<BlueprintWithAttributes>), ApiError> {
-    Ok((
-        StatusCode::CREATED,
-        Json(
-            state
-                .repository
-                .create_blueprint_revision(blueprint_id, input)
-                .await?,
-        ),
-    ))
+    let blueprint = state
+        .repository
+        .create_blueprint_revision(blueprint_id, input)
+        .await?;
+    invalidate_data_health(&state).await;
+    Ok((StatusCode::CREATED, Json(blueprint)))
 }
 
 async fn get_blueprint(
@@ -189,10 +325,9 @@ async fn create_context(
     State(state): State<AppState>,
     Json(input): Json<CreateAttributeContext>,
 ) -> Result<(StatusCode, Json<crate::model::AttributeContext>), ApiError> {
-    Ok((
-        StatusCode::CREATED,
-        Json(state.repository.create_context(input).await?),
-    ))
+    let context = state.repository.create_context(input).await?;
+    invalidate_data_health(&state).await;
+    Ok((StatusCode::CREATED, Json(context)))
 }
 
 async fn list_contexts(
@@ -218,7 +353,9 @@ async fn update_context(
     Path(id): Path<Uuid>,
     Json(input): Json<UpdateAttributeContext>,
 ) -> Result<Json<crate::model::AttributeContext>, ApiError> {
-    Ok(Json(state.repository.update_context(id, input).await?))
+    let context = state.repository.update_context(id, input).await?;
+    invalidate_data_health(&state).await;
+    Ok(Json(context))
 }
 
 async fn delete_context(
@@ -226,6 +363,7 @@ async fn delete_context(
     Path(id): Path<Uuid>,
 ) -> Result<StatusCode, ApiError> {
     state.repository.delete_context(id).await?;
+    invalidate_data_health(&state).await;
     Ok(StatusCode::NO_CONTENT)
 }
 
@@ -233,10 +371,9 @@ async fn create_entity(
     State(state): State<AppState>,
     Json(input): Json<CreateEntity>,
 ) -> Result<(StatusCode, Json<Entity>), ApiError> {
-    Ok((
-        StatusCode::CREATED,
-        Json(state.repository.create_entity(input).await?),
-    ))
+    let entity = state.repository.create_entity(input).await?;
+    invalidate_data_health(&state).await;
+    Ok((StatusCode::CREATED, Json(entity)))
 }
 
 async fn get_entity(
@@ -256,6 +393,7 @@ async fn delete_entity(
     Path(entity_id): Path<Uuid>,
 ) -> Result<StatusCode, ApiError> {
     state.repository.delete_entity(entity_id).await?;
+    invalidate_data_health(&state).await;
     Ok(StatusCode::NO_CONTENT)
 }
 
@@ -421,19 +559,16 @@ async fn create_entity_form(
     Json(input): Json<CreateEntityFormRequest>,
 ) -> Result<(StatusCode, Json<Entity>), ApiError> {
     let blueprint = resolve_search_blueprint(&state, &input.blueprint).await?;
-    Ok((
-        StatusCode::CREATED,
-        Json(
-            state
-                .repository
-                .create_entity_with_values(
-                    blueprint.blueprint.id,
-                    blueprint.blueprint.version,
-                    input.values,
-                )
-                .await?,
-        ),
-    ))
+    let entity = state
+        .repository
+        .create_entity_with_values(
+            blueprint.blueprint.id,
+            blueprint.blueprint.version,
+            input.values,
+        )
+        .await?;
+    invalidate_data_health(&state).await;
+    Ok((StatusCode::CREATED, Json(entity)))
 }
 
 async fn get_entity_form(
@@ -472,26 +607,26 @@ async fn update_entity_form(
     Path(entity_id): Path<Uuid>,
     Json(input): Json<UpdateEntityFormRequest>,
 ) -> Result<Json<Entity>, ApiError> {
-    Ok(Json(
-        state
-            .repository
-            .update_entity_with_values(
-                entity_id,
-                input.values,
-                input.relationships,
-                input.remove_values,
-            )
-            .await?,
-    ))
+    let entity = state
+        .repository
+        .update_entity_with_values(
+            entity_id,
+            input.values,
+            input.relationships,
+            input.remove_values,
+        )
+        .await?;
+    invalidate_data_health(&state).await;
+    Ok(Json(entity))
 }
 
 async fn preview_entity_migration(
     State(state): State<AppState>,
     Path(entity_id): Path<Uuid>,
 ) -> Result<Json<crate::model::EntityMigrationPreview>, ApiError> {
-    Ok(Json(
-        state.repository.preview_entity_migration(entity_id).await?,
-    ))
+    let preview = state.repository.preview_entity_migration(entity_id).await?;
+    invalidate_data_health(&state).await;
+    Ok(Json(preview))
 }
 
 async fn migrate_entity_to_latest(
@@ -499,12 +634,12 @@ async fn migrate_entity_to_latest(
     Path(entity_id): Path<Uuid>,
     Json(input): Json<MigrateEntityRequest>,
 ) -> Result<Json<Entity>, ApiError> {
-    Ok(Json(
-        state
-            .repository
-            .migrate_entity_to_latest(entity_id, input)
-            .await?,
-    ))
+    let entity = state
+        .repository
+        .migrate_entity_to_latest(entity_id, input)
+        .await?;
+    invalidate_data_health(&state).await;
+    Ok(Json(entity))
 }
 
 async fn resolve_search_blueprint(
@@ -534,10 +669,9 @@ async fn append_values(
     Path(entity_id): Path<Uuid>,
     Json(input): Json<AppendAttributeValues>,
 ) -> Result<(StatusCode, Json<Vec<crate::model::AttributeValue>>), ApiError> {
-    Ok((
-        StatusCode::CREATED,
-        Json(state.repository.append_values(entity_id, input).await?),
-    ))
+    let values = state.repository.append_values(entity_id, input).await?;
+    invalidate_data_health(&state).await;
+    Ok((StatusCode::CREATED, Json(values)))
 }
 
 async fn get_current_values(
@@ -556,15 +690,12 @@ async fn replace_relationships(
     Path(entity_id): Path<Uuid>,
     Json(input): Json<RelationshipMutation>,
 ) -> Result<(StatusCode, Json<Vec<crate::model::AttributeValue>>), ApiError> {
-    Ok((
-        StatusCode::CREATED,
-        Json(
-            state
-                .repository
-                .replace_relationships(entity_id, input)
-                .await?,
-        ),
-    ))
+    let values = state
+        .repository
+        .replace_relationships(entity_id, input)
+        .await?;
+    invalidate_data_health(&state).await;
+    Ok((StatusCode::CREATED, Json(values)))
 }
 
 async fn remove_relationships(
@@ -572,15 +703,12 @@ async fn remove_relationships(
     Path(entity_id): Path<Uuid>,
     Json(input): Json<RelationshipMutation>,
 ) -> Result<(StatusCode, Json<Vec<crate::model::AttributeValue>>), ApiError> {
-    Ok((
-        StatusCode::CREATED,
-        Json(
-            state
-                .repository
-                .remove_relationships(entity_id, input)
-                .await?,
-        ),
-    ))
+    let values = state
+        .repository
+        .remove_relationships(entity_id, input)
+        .await?;
+    invalidate_data_health(&state).await;
+    Ok((StatusCode::CREATED, Json(values)))
 }
 
 #[derive(Deserialize)]

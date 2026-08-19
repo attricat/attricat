@@ -166,6 +166,9 @@ export const Explorer = ({ search }: { search: ExplorerSearch }) => {
         <Button component={Link} to="/contexts" variant="outlined">
           Manage contexts
         </Button>
+        <Button component={Link} to="/data-health" variant="outlined">
+          Data health
+        </Button>
       </Stack>
       <Paper
         component="form"

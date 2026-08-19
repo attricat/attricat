@@ -300,3 +300,62 @@ pub struct EntityMigrationPreview {
     pub status: String,
     pub issues: Vec<MigrationIssue>,
 }
+
+#[derive(Clone, Debug, FromRow, Serialize)]
+pub struct DataHealthSummary {
+    pub active_entities: i64,
+    pub entity_blueprints: i64,
+    pub contexts: i64,
+    pub outdated_entities: i64,
+    pub stale_entities: i64,
+    pub deleted_relationship_targets: i64,
+}
+
+#[derive(Clone, Debug, FromRow, Serialize)]
+pub struct BlueprintHealth {
+    pub code: String,
+    pub name: String,
+    pub current_version: i64,
+    pub active_entities: i64,
+    pub outdated_entities: i64,
+    pub stale_entities: i64,
+    pub oldest_updated_at: Option<DateTime<Utc>>,
+    pub newest_updated_at: Option<DateTime<Utc>>,
+}
+
+#[derive(Clone, Debug, FromRow, Serialize)]
+pub struct FreshnessBand {
+    pub label: String,
+    pub entities: i64,
+}
+
+#[derive(Clone, Debug, FromRow, Serialize)]
+pub struct ContextHealth {
+    pub code: String,
+    pub direct_entities: i64,
+    pub direct_values: i64,
+}
+
+#[derive(Clone, Debug, FromRow, Serialize)]
+pub struct RelationshipHealth {
+    pub attribute_code: String,
+    pub source_blueprint: String,
+    pub active_edges: i64,
+    pub deleted_targets: i64,
+}
+
+#[derive(Clone, Debug, FromRow, Serialize)]
+pub struct StorageHealth {
+    pub table: String,
+    pub bytes: i64,
+}
+
+#[derive(Clone, Debug, FromRow, Serialize)]
+pub struct CompletenessHealth {
+    pub code: String,
+    pub name: String,
+    pub current_version: i64,
+    pub active_entities: i64,
+    pub outdated_entities: i64,
+    pub default_complete_entities: i64,
+}

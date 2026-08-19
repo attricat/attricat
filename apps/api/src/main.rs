@@ -41,6 +41,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             max_preview_relationship_depth,
             max_preview_relationship_items,
             max_entity_page_size,
+            data_health_cache_ttl_seconds: std::env::var("DATA_HEALTH_CACHE_TTL_SECONDS")
+                .unwrap_or_else(|_| "300".to_owned())
+                .parse()?,
+            data_health_cache: Default::default(),
         }),
     )
     .await?;
