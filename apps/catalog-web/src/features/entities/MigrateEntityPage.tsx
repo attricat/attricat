@@ -29,6 +29,43 @@ export const MigrateEntityPage = ({ entityId }: { entityId: string }) => {
   });
   const defaultContextId =
     contexts.data?.find((context) => context.code === 'default')?.id ?? null;
+  const targetAttributeCodes = new Set(
+    preview.data?.target.attributes.map((attribute) => attribute.code) ?? [],
+  );
+  const inlineIssues = (preview.data?.issues ?? []).filter(
+    (issue) =>
+      issue.attribute_code !== null &&
+      targetAttributeCodes.has(issue.attribute_code),
+  );
+  const standaloneIssues = (preview.data?.issues ?? []).filter(
+    (issue) => !inlineIssues.includes(issue),
+  );
+  const migrationValues = (preview.data?.values ?? []).filter(
+    (value) =>
+      !inlineIssues.some(
+        (issue) =>
+          issue.kind === 'relationship_target_changed' &&
+          issue.attribute_code === value.attribute_code,
+      ),
+  );
+  const migrationReviewMessages = Object.fromEntries(
+    inlineIssues.map((issue) => {
+      const currentValue = preview
+        .data!.values.filter(
+          (value) => value.attribute_code === issue.attribute_code,
+        )
+        .map((value) =>
+          value.kind === 'scalar'
+            ? valueForField(value.value)
+            : value.target_entity_id,
+        )
+        .join(', ');
+      return [
+        issue.attribute_code!,
+        `${issue.message}${currentValue ? ` Current value: ${currentValue}.` : ''}`,
+      ];
+    }),
+  );
   const migrate = useMutation({
     mutationFn: ({
       values,
@@ -74,7 +111,7 @@ export const MigrateEntityPage = ({ entityId }: { entityId: string }) => {
             Upgrade from v{preview.data.source_version} to v
             {preview.data.target.blueprint.version}
           </Typography>
-          {preview.data.issues.map((issue) => (
+          {standaloneIssues.map((issue) => (
             <Alert
               key={`${issue.attribute_code}:${issue.message}`}
               severity="warning"
@@ -82,25 +119,10 @@ export const MigrateEntityPage = ({ entityId }: { entityId: string }) => {
             >
               {issue.attribute_code ? `${issue.attribute_code}: ` : ''}
               {issue.message}
-              {issue.attribute_code && (
-                <Box component="span" sx={{ display: 'block', mt: 0.5 }}>
-                  Current value:{' '}
-                  {preview.data.values
-                    .filter(
-                      (value) => value.attribute_code === issue.attribute_code,
-                    )
-                    .map((value) =>
-                      value.kind === 'scalar'
-                        ? valueForField(value.value)
-                        : value.target_entity_id,
-                    )
-                    .join(', ') || 'Not set'}
-                </Box>
-              )}
             </Alert>
           ))}
           <FormGroup sx={{ mt: 2 }}>
-            {preview.data.issues
+            {standaloneIssues
               .filter(
                 (issue): issue is typeof issue & { attribute_code: string } =>
                   issue.attribute_code !== null && issue.kind === 'removed',
@@ -132,15 +154,12 @@ export const MigrateEntityPage = ({ entityId }: { entityId: string }) => {
             contextId={defaultContextId}
             defaultContextId={defaultContextId}
             error={migrate.error}
-            existingValues={preview.data.values}
-            highlightedAttributes={preview.data.issues
-              .map((issue) => issue.attribute_code)
-              .filter((attributeCode): attributeCode is string =>
-                Boolean(attributeCode),
-              )}
+            existingValues={migrationValues}
+            highlightedAttributes={Object.keys(migrationReviewMessages)}
+            migrationReviewMessages={migrationReviewMessages}
             initialValues={valuesForForm(
               preview.data.target.attributes,
-              preview.data.values,
+              migrationValues,
               defaultContextId,
             )}
             isLoadingBlueprint={migrate.isPending}

@@ -48,6 +48,7 @@ type EntityFormProps = {
   isLoadingBlueprint?: boolean;
   showAllAttributes?: boolean;
   highlightedAttributes?: readonly string[];
+  migrationReviewMessages?: Readonly<Record<string, string>>;
   error?: Error | null;
   onLoadBlueprint?: (code: string, version?: number) => void;
   onSubmit: (input: {
@@ -68,6 +69,7 @@ export const EntityForm = ({
   isLoadingBlueprint = false,
   showAllAttributes = false,
   highlightedAttributes = [],
+  migrationReviewMessages = {},
   error,
   onLoadBlueprint,
   onSubmit,
@@ -197,6 +199,8 @@ export const EntityForm = ({
                     !scalarValueForField(attribute, value);
                   const requiresMigrationReview =
                     highlightedAttributes.includes(attribute.code);
+                  const migrationReviewMessage =
+                    migrationReviewMessages[attribute.code];
                   const helperText = defaultOnly
                     ? 'Managed in Default'
                     : inherited
@@ -216,12 +220,15 @@ export const EntityForm = ({
                       attribute={attribute}
                       disabled={defaultOnly}
                       showMigrationBadge={requiresMigrationReview}
+                      migrationReviewMessage={migrationReviewMessage}
                       onChange={handleChange}
                       value={value}
                     />
                   ) : attribute.value_type === attributeValueTypes.boolean ? (
                     <>
-                      {requiresMigrationReview && <MigrationBadge />}
+                      {requiresMigrationReview && (
+                        <MigrationBadge message={migrationReviewMessage} />
+                      )}
                       <TextField
                         fullWidth
                         disabled={defaultOnly}
@@ -238,7 +245,9 @@ export const EntityForm = ({
                     </>
                   ) : (
                     <>
-                      {requiresMigrationReview && <MigrationBadge />}
+                      {requiresMigrationReview && (
+                        <MigrationBadge message={migrationReviewMessage} />
+                      )}
                       <TextField
                         fullWidth
                         disabled={defaultOnly}
@@ -290,8 +299,13 @@ export const EntityForm = ({
   );
 };
 
-const MigrationBadge = () => (
-  <Tooltip title="Review is necessary for this field to migrate to the current schema version.">
+const MigrationBadge = ({ message }: { message?: string }) => (
+  <Tooltip
+    title={
+      message ??
+      'Review is necessary for this field to migrate to the current schema version.'
+    }
+  >
     <InfoOutlinedIcon color="info" fontSize="small" />
   </Tooltip>
 );
@@ -300,12 +314,14 @@ const RelationshipField = ({
   attribute,
   disabled = false,
   showMigrationBadge = false,
+  migrationReviewMessage,
   onChange,
   value,
 }: {
   attribute: Attribute;
   disabled?: boolean;
   showMigrationBadge?: boolean;
+  migrationReviewMessage?: string;
   onChange: (value: string) => void;
   value: string;
 }) => {
@@ -318,7 +334,9 @@ const RelationshipField = ({
   if (!targetBlueprint) {
     return (
       <Stack spacing={0.5}>
-        {showMigrationBadge && <MigrationBadge />}
+        {showMigrationBadge && (
+          <MigrationBadge message={migrationReviewMessage} />
+        )}
         <TextField
           fullWidth
           disabled={disabled}
@@ -357,7 +375,9 @@ const RelationshipField = ({
 
   return (
     <Stack spacing={0.5}>
-      {showMigrationBadge && <MigrationBadge />}
+      {showMigrationBadge && (
+        <MigrationBadge message={migrationReviewMessage} />
+      )}
       <FormControl fullWidth>
         <InputLabel id={`${attribute.code}-label`}>{attribute.code}</InputLabel>
         <Select
