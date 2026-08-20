@@ -350,6 +350,8 @@ pub enum BlueprintError {
     NonScalarViewField { view: String, field: String },
     #[error("view '{view}' relationship_list '{field}' must be a relationship")]
     NonRelationshipViewField { view: String, field: String },
+    #[error("view '{view}' hierarchy field '{field}' must target its own blueprint")]
+    HierarchyFieldMustTargetOwnBlueprint { view: String, field: String },
     #[error("view '{view}' incoming_relationship_list label must not be empty")]
     EmptyIncomingRelationshipLabel { view: String },
     #[error("view '{view}' incoming_relationship_list must specify at least one relationship")]
@@ -670,7 +672,7 @@ pub fn compile(
         }
     }
     for (name, view) in &definition.views {
-        validate_view(name, view, &attributes)?;
+        validate_view(name, view, &attributes, &definition.code)?;
     }
 
     Ok(CompiledBlueprint {
@@ -752,6 +754,7 @@ fn validate_view(
     view: &str,
     definition: &ViewDefinition,
     attributes: &[EffectiveAttribute],
+    blueprint_code: &str,
 ) -> Result<(), BlueprintError> {
     match definition {
         ViewDefinition::Table { fields, component } => {
@@ -770,7 +773,7 @@ fn validate_view(
             component,
         } => {
             validate_stack_component(component.as_ref(), view, children, attributes)?;
-            validate_view_nodes(view, children, attributes)?;
+            validate_view_nodes(view, children, attributes, blueprint_code)?;
         }
         ViewDefinition::Grid {
             children,
@@ -781,12 +784,12 @@ fn validate_view(
             component,
         } => {
             validate_non_data_component(component.as_ref())?;
-            validate_view_nodes(view, children, attributes)?;
+            validate_view_nodes(view, children, attributes, blueprint_code)?;
         }
         ViewDefinition::Tabs { tabs, component } => {
             validate_non_data_component(component.as_ref())?;
             for tab in tabs {
-                validate_view_nodes(view, &tab.children, attributes)?;
+                validate_view_nodes(view, &tab.children, attributes, blueprint_code)?;
             }
         }
         ViewDefinition::Accordion {
@@ -795,7 +798,7 @@ fn validate_view(
         } => {
             validate_non_data_component(component.as_ref())?;
             for section in sections {
-                validate_view_nodes(view, &section.children, attributes)?;
+                validate_view_nodes(view, &section.children, attributes, blueprint_code)?;
             }
         }
     }
@@ -806,6 +809,7 @@ fn validate_view_nodes(
     view: &str,
     nodes: &[ViewNode],
     attributes: &[EffectiveAttribute],
+    blueprint_code: &str,
 ) -> Result<(), BlueprintError> {
     for node in nodes {
         match node {
@@ -814,7 +818,7 @@ fn validate_view_nodes(
                 component,
             } => {
                 validate_stack_component(component.as_ref(), view, children, attributes)?;
-                validate_view_nodes(view, children, attributes)?;
+                validate_view_nodes(view, children, attributes, blueprint_code)?;
             }
             ViewNode::Grid {
                 children,
@@ -825,12 +829,12 @@ fn validate_view_nodes(
                 component,
             } => {
                 validate_non_data_component(component.as_ref())?;
-                validate_view_nodes(view, children, attributes)?;
+                validate_view_nodes(view, children, attributes, blueprint_code)?;
             }
             ViewNode::Tabs { tabs, component } => {
                 validate_non_data_component(component.as_ref())?;
                 for tab in tabs {
-                    validate_view_nodes(view, &tab.children, attributes)?;
+                    validate_view_nodes(view, &tab.children, attributes, blueprint_code)?;
                 }
             }
             ViewNode::Accordion {
@@ -839,7 +843,7 @@ fn validate_view_nodes(
             } => {
                 validate_non_data_component(component.as_ref())?;
                 for section in sections {
-                    validate_view_nodes(view, &section.children, attributes)?;
+                    validate_view_nodes(view, &section.children, attributes, blueprint_code)?;
                 }
             }
             ViewNode::Heading { component, .. }
@@ -867,6 +871,20 @@ fn validate_view_nodes(
                     "relationship_list",
                     Some(&attribute.value_type),
                 )?;
+                if component.as_ref().is_some_and(|component| {
+                    component.id == "catalog.relationship_hierarchy"
+                        && component
+                            .props
+                            .get("parent_field")
+                            .and_then(serde_json::Value::as_str)
+                            .is_none()
+                }) && attribute.target_blueprint.as_deref() != Some(blueprint_code)
+                {
+                    return Err(BlueprintError::HierarchyFieldMustTargetOwnBlueprint {
+                        view: view.to_owned(),
+                        field: field.clone(),
+                    });
+                }
             }
             ViewNode::IncomingRelationshipList {
                 label,

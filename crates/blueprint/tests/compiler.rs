@@ -654,3 +654,38 @@ value_type = "relationship"
         assert!(compile(parse(&invalid).unwrap(), &[], &invalid).is_err());
     }
 }
+
+#[test]
+fn validates_self_referential_hierarchy_component() {
+    let source = r#"
+format_version = 1
+code = "category"
+name = "Category"
+kind = "entity"
+
+[display.dropdown_option]
+fields = ["title"]
+
+[views.detail]
+type = "stack"
+children = [
+  { type = "relationship_list", field = "parent", component = { id = "catalog.relationship_hierarchy", version = 1 } }
+]
+
+[[attributes]]
+code = "title"
+value_type = "string"
+
+[[attributes]]
+code = "parent"
+value_type = "relationship"
+target_blueprint = "category"
+"#;
+    compile(parse(source).unwrap(), &[], source).unwrap();
+
+    let invalid = source.replace(
+        "target_blueprint = \"category\"",
+        "target_blueprint = \"product\"",
+    );
+    assert!(compile(parse(&invalid).unwrap(), &[], &invalid).is_err());
+}

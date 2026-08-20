@@ -169,6 +169,7 @@ pub fn router(state: AppState) -> Router {
             "/entities/{entity_id}/resolved-preview",
             get(get_resolved_preview),
         )
+        .route("/entities/{entity_id}/hierarchy", get(get_entity_hierarchy))
         .route("/entities/{entity_id}/values", post(append_values))
         .route(
             "/entities/{entity_id}/values/history",
@@ -556,6 +557,31 @@ struct ResolvedPreviewQuery {
     context_id: Uuid,
 }
 
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct HierarchyQuery {
+    context_id: Uuid,
+    field: String,
+}
+
+async fn get_entity_hierarchy(
+    State(state): State<AppState>,
+    ApiPath(entity_id): ApiPath<Uuid>,
+    ApiQuery(query): ApiQuery<HierarchyQuery>,
+) -> Result<Json<crate::model::EntityHierarchyResponse>, ApiError> {
+    state
+        .repository
+        .hierarchy(
+            entity_id,
+            query.context_id,
+            &query.field,
+            state.max_preview_relationship_depth,
+        )
+        .await?
+        .map(Json)
+        .ok_or_else(|| ApiError::not_found("entity"))
+}
+
 async fn get_resolved_preview(
     State(state): State<AppState>,
     ApiPath(entity_id): ApiPath<Uuid>,
@@ -563,7 +589,7 @@ async fn get_resolved_preview(
 ) -> Result<Json<ResolvedEntityPreviewResponse>, ApiError> {
     state
         .repository
-        .resolved_preview(entity_id, query.context_id)
+        .resolved_preview(entity_id, query.context_id, 1)
         .await?
         .map(Json)
         .ok_or_else(|| ApiError::not_found("entity"))
@@ -1019,6 +1045,7 @@ impl From<RepositoryError> for ApiError {
                 message: error.to_string(),
             },
             RepositoryError::InvalidPreview
+            | RepositoryError::InvalidHierarchyRelationship
             | RepositoryError::ReservedContextCode
             | RepositoryError::InvalidCode
             | RepositoryError::InvalidContextData

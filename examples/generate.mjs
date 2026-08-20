@@ -95,8 +95,21 @@ const run = async () => {
 
   const regional = await ensureContext('seed-us', { market: 'US' }, defaultContextId);
   const web = await ensureContext('seed-us-web', { channel: 'web' }, regional.id);
-  const categoryIds = await Promise.all(['Apparel', 'Footwear', 'Accessories', 'Outdoor', 'Home', 'Technology']
-    .map(async (name) => (await createEntity('category', [scalar('name', name), scalar('slug', name.toLowerCase())])).id));
+  const categories = await Promise.all([
+    ['Apparel', null], ['Footwear', 'Apparel'], ['Accessories', 'Apparel'],
+    ['Outdoor', null], ['Home', null], ['Technology', null],
+  ].map(async ([name, parent]) => ({
+    id: (await createEntity('category', [scalar('name', name), scalar('slug', name.toLowerCase())])).id,
+    name,
+    parent,
+  })));
+  const categoryIds = categories.map(({ id }) => id);
+  await Promise.all(categories.flatMap(({ id, parent }) => {
+    const parentId = categories.find((category) => category.name === parent)?.id;
+    return parentId ? [replaceRelationships(id, [
+      { attribute_code: 'parent_category', context_id: defaultContextId, target_entity_ids: [parentId] },
+    ])] : [];
+  }));
   const colorIds = await Promise.all([['Black', '#111111'], ['Navy', '#172554'], ['Red', '#dc2626'], ['Green', '#15803d'], ['Sand', '#d6c7a1'], ['White', '#f8fafc']]
     .map(async ([name, hex]) => (await createEntity('color', [scalar('name', name), scalar('hex', hex)])).id));
 

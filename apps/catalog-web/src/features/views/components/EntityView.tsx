@@ -15,6 +15,7 @@ import { createElement, useState, type ReactNode } from 'react';
 import {
   viewBlockTypes,
   type Attribute,
+  type ComponentReference,
   type ViewDefinition,
   type ViewNode,
 } from '../../entities/api';
@@ -34,6 +35,7 @@ type Props = {
   values: Record<string, ResolvedValue>;
   renderEditor?: (attribute: Attribute) => ReactNode;
   skipComponentId?: string;
+  contextId?: string;
   entityId?: string;
 };
 
@@ -44,11 +46,15 @@ const ValueField = ({
   resolved,
   renderEditor,
   component,
+  contextId,
+  entityId,
 }: {
   attribute: Attribute;
   resolved?: ResolvedValue;
   renderEditor?: (attribute: Attribute) => ReactNode;
-  component?: { id: string; version: number } | null;
+  component?: ComponentReference | null;
+  contextId?: string;
+  entityId?: string;
 }) => (
   <FieldErrorBoundary label={labelFor(attribute.code)}>
     <Stack spacing={0.5}>
@@ -63,7 +69,13 @@ const ValueField = ({
             const ValueRenderer =
               resolveValueRenderer(component) ?? AttributeValue;
             return (
-              <ValueRenderer attribute={attribute} value={resolved?.value} />
+              <ValueRenderer
+                attribute={attribute}
+                component={component}
+                contextId={contextId}
+                entityId={entityId}
+                value={resolved?.value}
+              />
             );
           })()}
           {resolved?.source_context && (
@@ -107,6 +119,7 @@ export const EntityView = ({
   values,
   renderEditor,
   skipComponentId,
+  contextId,
   entityId,
 }: Props) => {
   const byCode = new Map(
@@ -214,6 +227,8 @@ export const EntityView = ({
         <ValueField
           attribute={attribute}
           component={node.component}
+          contextId={contextId}
+          entityId={entityId}
           key={key}
           renderEditor={renderEditor}
           resolved={values[attribute.code]}

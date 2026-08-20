@@ -5,6 +5,7 @@ import {
   blueprintWithAttributesSchema,
   createAttributeContextSchema,
   createEntityRequestSchema,
+  entityHierarchySchema,
   entityFormResponseSchema,
   entityMigrationPreviewSchema,
   entitySchema,
@@ -144,6 +145,15 @@ export const getResolvedEntityPreview = (id: string, contextId: string) =>
   request(
     `/api/entities/${encodeURIComponent(uuidSchema.parse(id))}/resolved-preview?context_id=${encodeURIComponent(uuidSchema.parse(contextId))}`,
     resolvedEntityPreviewSchema,
+  );
+export const getEntityHierarchy = (
+  id: string,
+  contextId: string,
+  field: string,
+) =>
+  request(
+    `/api/entities/${encodeURIComponent(uuidSchema.parse(id))}/hierarchy?context_id=${encodeURIComponent(uuidSchema.parse(contextId))}&field=${encodeURIComponent(field)}`,
+    entityHierarchySchema,
   );
 export const getBlueprintByCode = (code: string, version?: number) => {
   const input = getBlueprintRequestSchema.parse({ code, version });

@@ -299,6 +299,12 @@ export const incomingRelationshipsPageSchema = z.object({
   items: z.array(incomingRelationshipItemSchema),
   next_cursor: z.string().nullable(),
 });
+export const entityHierarchySchema = z.object({
+  items: z.array(z.object({ id: uuidSchema, display: z.string() })),
+  truncated: z.boolean(),
+  multiple_parents: z.boolean(),
+  cycle_detected: z.boolean(),
+});
 const entityFormResponseSchema = z.object({
   entity: entitySchema,
   blueprint: blueprintWithAttributesSchema,

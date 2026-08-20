@@ -95,6 +95,14 @@
       "placements": ["stack"],
       "value_types": [],
       "allowed_props": []
+    },
+    {
+      "id": "catalog.relationship_hierarchy",
+      "version": 1,
+      "capabilities": ["display"],
+      "placements": ["relationship_list"],
+      "value_types": ["relationship"],
+      "allowed_props": ["parent_field"]
     }
   ]
 }

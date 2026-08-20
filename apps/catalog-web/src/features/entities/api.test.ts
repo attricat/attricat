@@ -5,6 +5,7 @@ import {
   createContext,
   getBlueprintByCode,
   getEntityForm,
+  getEntityHierarchy,
   getIncomingRelationships,
   getResolvedEntityPreview,
   searchEntities,
@@ -173,6 +174,22 @@ describe('entity API client', () => {
 
     expect(fetchMock).toHaveBeenLastCalledWith(
       `/api/entities/${entityId}/resolved-preview?context_id=${entityId}`,
+      undefined,
+    );
+  });
+
+  it('loads a hierarchy for one self-referential relationship', async () => {
+    respond({
+      items: [{ id: entityId, display: 'Catalog' }],
+      truncated: false,
+      multiple_parents: false,
+      cycle_detected: false,
+    });
+
+    await getEntityHierarchy(entityId, entityId, 'parent category');
+
+    expect(fetchMock).toHaveBeenLastCalledWith(
+      `/api/entities/${entityId}/hierarchy?context_id=${entityId}&field=parent%20category`,
       undefined,
     );
   });

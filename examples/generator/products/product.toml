@@ -20,7 +20,7 @@ children = [
   { type = "section", children = [{ type = "grid", children = [{ type = "field", field = "price", component = { id = "catalog.field_display", version = 1 } }, { type = "field", field = "stock_on_hand" }] }] },
   { type = "tabs", tabs = [{ label = "Availability", children = [{ type = "accordion", sections = [{ label = "Schedule", children = [{ type = "field", field = "available_on" }, { type = "field", field = "released_at" }, { type = "field", field = "order_cutoff" }] }] }] }] },
   { type = "divider" },
-  { type = "relationship_list", field = "categories", component = { id = "catalog.relationship_list_display", version = 1 } },
+  { type = "relationship_list", field = "categories", component = { id = "catalog.relationship_hierarchy", version = 1, props = { parent_field = "parent_category" } } },
   { type = "relationship_list", field = "colors" },
   { type = "relationship_list", field = "variants" },
   { type = "incoming_relationship_list", label = "Parent products", page_size = 25, relationships = [{ source_blueprint = "product", field = "variants" }], component = { id = "catalog.incoming_relationship_list_display", version = 1 } },

@@ -11,6 +11,7 @@ separator = " / "
 type = "stack"
 children = [
   { type = "heading", text = "Category" },
+  { type = "relationship_list", field = "parent_category", component = { id = "catalog.relationship_hierarchy", version = 1 } },
   { type = "field", field = "name" },
   { type = "incoming_relationship_list", label = "Products in this category", page_size = 25, relationships = [{ source_blueprint = "product", field = "categories" }], component = { id = "catalog.incoming_relationship_list_display", version = 1 } },
 ]
@@ -27,6 +28,12 @@ fields = ["name", "slug"]
 code = "name"
 value_type = "string"
 tags = ["searchable"]
+
+[[attributes]]
+code = "parent_category"
+value_type = "relationship"
+target_blueprint = "category"
+context_fallback = "none"
 
 [[attributes]]
 code = "slug"

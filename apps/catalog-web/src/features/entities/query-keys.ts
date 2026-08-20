@@ -11,6 +11,8 @@ export const entityQueryKeys = {
     ['entity-migration-preview', entityId] as const,
   resolvedPreview: (entityId: string, contextId: string) =>
     ['entity-resolved-preview', entityId, contextId] as const,
+  hierarchy: (entityId: string, contextId: string, field: string) =>
+    ['entity-hierarchy', entityId, contextId, field] as const,
   incomingRelationships: (
     entityId: string,
     relationships: { source_blueprint: string; field: string }[],

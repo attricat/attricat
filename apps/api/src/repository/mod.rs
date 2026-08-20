@@ -19,10 +19,11 @@ use crate::{
     model::{
         AppendAttributeValues, Attribute, AttributeContext, AttributeValue, AttributeValueHistory,
         AttributeValueSelector, Blueprint, BlueprintWithAttributes, CreateBlueprint, Entity,
-        EntityIdentity, EntityMigrationPreview, EntityPreview, EntityPreviewPage,
-        FormAttributeValue, IncomingRelationshipItem, IncomingRelationshipSelector,
-        IncomingRelationshipsPage, MigrateEntityRequest, MigrationIssue, NewAttributeValue,
-        RelationshipMutation, RelationshipTargets, ResolvedEntityPreviewResponse,
+        EntityHierarchyItem, EntityHierarchyResponse, EntityIdentity, EntityMigrationPreview,
+        EntityPreview, EntityPreviewPage, FormAttributeValue, IncomingRelationshipItem,
+        IncomingRelationshipSelector, IncomingRelationshipsPage, MigrateEntityRequest,
+        MigrationIssue, NewAttributeValue, RelationshipMutation, RelationshipTargets,
+        ResolvedEntityPreviewResponse,
     },
 };
 
@@ -83,6 +84,8 @@ pub enum RepositoryError {
     RelationshipTargetTypeMismatch,
     #[error("entity preview must be a JSON object organized by context")]
     InvalidPreview,
+    #[error("hierarchy field must be a self-targeting relationship")]
+    InvalidHierarchyRelationship,
     #[error("invalid blueprint definition: {0}")]
     InvalidBlueprintDefinition(String),
     #[error("blueprint code is already owned by another blueprint")]
@@ -829,6 +832,7 @@ impl CatalogRepository {
         &self,
         entity_id: Uuid,
         context_id: Uuid,
+        relationship_depth: u8,
     ) -> Result<Option<ResolvedEntityPreviewResponse>, RepositoryError> {
         let entity = match self.get_entity(entity_id).await? {
             Some(entity) => entity,
@@ -868,7 +872,13 @@ impl CatalogRepository {
             })
         }).collect::<Map<_, _>>();
         let enriched_preview = self
-            .build_preview(entity.id, &entity.projections, 1, 10, &mut HashSet::new())
+            .build_preview(
+                entity.id,
+                &entity.projections,
+                relationship_depth,
+                10,
+                &mut HashSet::new(),
+            )
             .await?;
         let relationships = attributes
             .iter()
@@ -904,6 +914,104 @@ impl CatalogRepository {
             },
             requested_context,
             values: Value::Object(values),
+        }))
+    }
+
+    pub async fn hierarchy(
+        &self,
+        entity_id: Uuid,
+        context_id: Uuid,
+        field: &str,
+        relationship_depth: u8,
+    ) -> Result<Option<EntityHierarchyResponse>, RepositoryError> {
+        let Some(entity) = self.get_entity(entity_id).await? else {
+            return Ok(None);
+        };
+        let blueprint = self
+            .get_blueprint_revision(entity.blueprint_id, entity.blueprint_version)
+            .await?
+            .ok_or(RepositoryError::NotFound("blueprint version"))?;
+        let attribute = blueprint
+            .attributes
+            .iter()
+            .find(|attribute| attribute.code == field)
+            .ok_or(RepositoryError::AttributeNotApplicable)?;
+        if attribute.value_type != "relationship"
+            || attribute.target_blueprint_code.as_deref() != Some(&blueprint.blueprint.code)
+        {
+            return Err(RepositoryError::InvalidHierarchyRelationship);
+        }
+
+        let resolved = self
+            .resolved_preview(entity_id, context_id, relationship_depth)
+            .await?
+            .ok_or(RepositoryError::NotFound("entity"))?;
+        let requested_context = resolved.requested_context.code;
+        let current_display = display_label(
+            entity.projections.get("preview").unwrap_or(&Value::Null),
+            &blueprint.blueprint.display,
+            &serde_json::json!({}),
+            &requested_context,
+        )
+        .as_str()
+        .unwrap_or_default()
+        .to_owned();
+
+        let mut items = vec![EntityHierarchyItem {
+            id: entity.id,
+            display: current_display,
+        }];
+        let mut relationship = resolved
+            .values
+            .get(field)
+            .and_then(|value| value.get("value"));
+        let mut visited = HashSet::from([entity.id]);
+        let mut multiple_parents = false;
+        let mut truncated = false;
+        let mut cycle_detected = false;
+
+        for _ in 0..relationship_depth {
+            let Some(value) = relationship else { break };
+            if value.get("truncated").and_then(Value::as_bool) == Some(true) {
+                truncated = true;
+            }
+            let Some(targets) = value.get("items").and_then(Value::as_array) else {
+                break;
+            };
+            if targets.len() > 1 {
+                multiple_parents = true;
+            }
+            let Some(target) = targets.first() else { break };
+            let Some(id) = target
+                .get("id")
+                .and_then(Value::as_str)
+                .and_then(|id| Uuid::parse_str(id).ok())
+            else {
+                break;
+            };
+            if !visited.insert(id) {
+                cycle_detected = true;
+                break;
+            }
+            items.push(EntityHierarchyItem {
+                id,
+                display: target
+                    .get("display")
+                    .and_then(Value::as_str)
+                    .unwrap_or_default()
+                    .to_owned(),
+            });
+            relationship = target.get(field);
+        }
+        if relationship.is_some() && items.len() > relationship_depth.into() {
+            truncated = true;
+        }
+        items.reverse();
+        Ok(Some(EntityHierarchyResponse {
+            items,
+            truncated,
+            multiple_parents,
+            cycle_detected,
         }))
     }
 

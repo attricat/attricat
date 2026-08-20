@@ -223,6 +223,20 @@ pub struct ResolvedEntityPreviewResponse {
 }
 
 #[derive(Clone, Debug, Serialize)]
+pub struct EntityHierarchyItem {
+    pub id: Uuid,
+    pub display: String,
+}
+
+#[derive(Clone, Debug, Serialize)]
+pub struct EntityHierarchyResponse {
+    pub items: Vec<EntityHierarchyItem>,
+    pub truncated: bool,
+    pub multiple_parents: bool,
+    pub cycle_detected: bool,
+}
+
+#[derive(Clone, Debug, Serialize)]
 pub struct EntityIdentity {
     pub id: Uuid,
     pub blueprint_id: Uuid,

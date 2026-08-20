@@ -1,5 +1,10 @@
 import type { ComponentType } from 'react';
-import type { Attribute, ViewDefinition, ViewNode } from '../../entities/api';
+import type {
+  Attribute,
+  ComponentReference,
+  ViewDefinition,
+  ViewNode,
+} from '../../entities/api';
 
 type Capability = 'display' | 'edit';
 type Placement =
@@ -11,6 +16,9 @@ type Placement =
 
 export type ValueRenderer = ComponentType<{
   attribute: Attribute;
+  component?: ComponentReference | null;
+  contextId?: string;
+  entityId?: string;
   value: unknown;
 }>;
 

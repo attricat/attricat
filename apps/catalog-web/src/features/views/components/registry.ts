@@ -7,6 +7,7 @@ import { incomingRelationshipListDisplayComponent } from './IncomingRelationship
 import { tableDisplayComponent } from './TableDisplay';
 import { tableEditComponent } from './TableEdit';
 import { entityHeadingComponent } from './blocks/EntityHeadingConfig';
+import { relationshipHierarchyComponent } from './RelationshipHierarchy';
 import type {
   HeadingRenderer,
   IncomingRelationshipRenderer,
@@ -23,6 +24,7 @@ export const viewComponents = [
   tableDisplayComponent,
   tableEditComponent,
   entityHeadingComponent,
+  relationshipHierarchyComponent,
 ] satisfies readonly ViewComponentDefinition[];
 
 export type RegisteredViewComponent = (typeof viewComponents)[number];
