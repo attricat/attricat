@@ -780,6 +780,7 @@ target_blueprint = "facet_category"
     )
     .await;
     let root = create_entity(&client, &base_url, &category).await;
+    let alternate_root = create_entity(&client, &base_url, &category).await;
     let child = create_entity(&client, &base_url, &category).await;
     let first = create_entity(&client, &base_url, &product).await;
     let second = create_entity(&client, &base_url, &product).await;
@@ -804,6 +805,10 @@ target_blueprint = "facet_category"
             json!([{ "kind": "scalar", "attribute_code": "name", "value": "Child" }]),
         ),
         (
+            &alternate_root,
+            json!([{ "kind": "scalar", "attribute_code": "name", "value": "Alternate root" }]),
+        ),
+        (
             &first,
             json!([{ "kind": "scalar", "attribute_code": "title", "value": "First" }]),
         ),
@@ -825,7 +830,11 @@ target_blueprint = "facet_category"
             .unwrap();
     }
     for (entity, field, targets) in [
-        (&child, "parent", vec![root["id"].clone()]),
+        (
+            &child,
+            "parent",
+            vec![root["id"].clone(), alternate_root["id"].clone()],
+        ),
         (&first, "categories", vec![child["id"].clone()]),
         (&second, "categories", vec![root["id"].clone()]),
     ] {
@@ -877,7 +886,24 @@ target_blueprint = "facet_category"
         .unwrap();
     assert_eq!(root_item["count"], 2);
     assert_eq!(child_item["count"], 1);
-    assert_eq!(child_item["parent_ids"], json!([root["id"]]));
+    assert_eq!(child_item["parent_ids"].as_array().unwrap().len(), 2);
+
+    let hierarchy: Value = client
+        .get(format!(
+            "{base_url}/entities/{}/hierarchy?context_id={}&field=parent",
+            child["id"].as_str().unwrap(),
+            context["id"].as_str().unwrap(),
+        ))
+        .send()
+        .await
+        .unwrap()
+        .error_for_status()
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    assert_eq!(hierarchy["paths"].as_array().unwrap().len(), 2);
+    assert!(hierarchy["multiple_parents"].as_bool().unwrap());
 
     let text_filtered: Value = client
         .post(format!("{base_url}/v1/entities/search"))

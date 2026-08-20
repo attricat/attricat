@@ -313,6 +313,7 @@ export const incomingRelationshipsPageSchema = z.object({
 });
 export const entityHierarchySchema = z.object({
   items: z.array(z.object({ id: uuidSchema, display: z.string() })),
+  paths: z.array(z.array(z.object({ id: uuidSchema, display: z.string() }))),
   truncated: z.boolean(),
   multiple_parents: z.boolean(),
   cycle_detected: z.boolean(),

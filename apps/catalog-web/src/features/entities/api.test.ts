@@ -213,6 +213,7 @@ describe('entity API client', () => {
   it('loads a hierarchy for one self-referential relationship', async () => {
     respond({
       items: [{ id: entityId, display: 'Catalog' }],
+      paths: [[{ id: entityId, display: 'Catalog' }]],
       truncated: false,
       multiple_parents: false,
       cycle_detected: false,

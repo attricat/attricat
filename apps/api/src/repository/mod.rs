@@ -965,58 +965,33 @@ impl CatalogRepository {
         .unwrap_or_default()
         .to_owned();
 
-        let mut items = vec![EntityHierarchyItem {
+        let items = vec![EntityHierarchyItem {
             id: entity.id,
             display: current_display,
         }];
-        let mut relationship = resolved
+        let relationship = resolved
             .values
             .get(field)
             .and_then(|value| value.get("value"));
-        let mut visited = HashSet::from([entity.id]);
         let mut multiple_parents = false;
         let mut truncated = false;
         let mut cycle_detected = false;
-
-        for _ in 0..relationship_depth {
-            let Some(value) = relationship else { break };
-            if value.get("truncated").and_then(Value::as_bool) == Some(true) {
-                truncated = true;
-            }
-            let Some(targets) = value.get("items").and_then(Value::as_array) else {
-                break;
-            };
-            if targets.len() > 1 {
-                multiple_parents = true;
-            }
-            let Some(target) = targets.first() else { break };
-            let Some(id) = target
-                .get("id")
-                .and_then(Value::as_str)
-                .and_then(|id| Uuid::parse_str(id).ok())
-            else {
-                break;
-            };
-            if !visited.insert(id) {
-                cycle_detected = true;
-                break;
-            }
-            items.push(EntityHierarchyItem {
-                id,
-                display: target
-                    .get("display")
-                    .and_then(Value::as_str)
-                    .unwrap_or_default()
-                    .to_owned(),
-            });
-            relationship = target.get(field);
-        }
-        if relationship.is_some() && items.len() > relationship_depth.into() {
-            truncated = true;
-        }
-        items.reverse();
+        let mut paths = Vec::new();
+        collect_hierarchy_paths(
+            relationship,
+            field,
+            items.clone(),
+            HashSet::from([entity.id]),
+            relationship_depth,
+            &mut paths,
+            &mut multiple_parents,
+            &mut truncated,
+            &mut cycle_detected,
+        );
+        let default_path = paths.first().cloned().unwrap_or(items);
         Ok(Some(EntityHierarchyResponse {
-            items,
+            items: default_path,
+            paths,
             truncated,
             multiple_parents,
             cycle_detected,
@@ -3078,6 +3053,97 @@ fn incoming_relationship_item(row: IncomingRelationshipRow) -> IncomingRelations
             &row.blueprint_display,
             &row.blueprint_context_fallback,
         ),
+    }
+}
+
+const MAX_HIERARCHY_PATHS: usize = 20;
+
+#[allow(clippy::too_many_arguments)]
+fn collect_hierarchy_paths(
+    relationship: Option<&Value>,
+    field: &str,
+    path: Vec<EntityHierarchyItem>,
+    visited: HashSet<Uuid>,
+    remaining_depth: u8,
+    paths: &mut Vec<Vec<EntityHierarchyItem>>,
+    multiple_parents: &mut bool,
+    truncated: &mut bool,
+    cycle_detected: &mut bool,
+) {
+    if paths.len() == MAX_HIERARCHY_PATHS {
+        *truncated = true;
+        return;
+    }
+    let Some(relationship) = relationship else {
+        let mut path = path;
+        path.reverse();
+        paths.push(path);
+        return;
+    };
+    if relationship.get("truncated").and_then(Value::as_bool) == Some(true) {
+        *truncated = true;
+    }
+    let Some(targets) = relationship.get("items").and_then(Value::as_array) else {
+        let mut path = path;
+        path.reverse();
+        paths.push(path);
+        return;
+    };
+    if targets.len() > 1 {
+        *multiple_parents = true;
+    }
+    if targets.is_empty() {
+        let mut path = path;
+        path.reverse();
+        paths.push(path);
+        return;
+    }
+    if remaining_depth == 0 {
+        *truncated = true;
+        let mut path = path;
+        path.reverse();
+        paths.push(path);
+        return;
+    }
+
+    for target in targets {
+        let Some(id) = target
+            .get("id")
+            .and_then(Value::as_str)
+            .and_then(|id| Uuid::parse_str(id).ok())
+        else {
+            *truncated = true;
+            continue;
+        };
+        if visited.contains(&id) {
+            *cycle_detected = true;
+            let mut path = path.clone();
+            path.reverse();
+            paths.push(path);
+            continue;
+        }
+        let mut next_path = path.clone();
+        next_path.push(EntityHierarchyItem {
+            id,
+            display: target
+                .get("display")
+                .and_then(Value::as_str)
+                .unwrap_or_default()
+                .to_owned(),
+        });
+        let mut next_visited = visited.clone();
+        next_visited.insert(id);
+        collect_hierarchy_paths(
+            target.get(field),
+            field,
+            next_path,
+            next_visited,
+            remaining_depth - 1,
+            paths,
+            multiple_parents,
+            truncated,
+            cycle_detected,
+        );
     }
 }
 

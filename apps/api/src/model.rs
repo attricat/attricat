@@ -231,6 +231,7 @@ pub struct EntityHierarchyItem {
 #[derive(Clone, Debug, Serialize)]
 pub struct EntityHierarchyResponse {
     pub items: Vec<EntityHierarchyItem>,
+    pub paths: Vec<Vec<EntityHierarchyItem>>,
     pub truncated: bool,
     pub multiple_parents: bool,
     pub cycle_detected: bool,
