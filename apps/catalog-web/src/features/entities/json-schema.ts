@@ -1,4 +1,4 @@
-import Ajv from 'ajv';
+import Ajv, { type ErrorObject } from 'ajv';
 import type { JsonSchema } from './schemas';
 
 const ajv = new Ajv({ strict: false });
@@ -10,16 +10,25 @@ export const validatesJsonSchema = (
   return jsonSchemaValidationMessage(value, schema) === undefined;
 };
 
+export const jsonSchemaValidationErrors = (
+  value: unknown,
+  schema: JsonSchema | null | undefined,
+): ErrorObject[] | undefined => {
+  if (schema == null) return [];
+
+  try {
+    if (ajv.validate(schema, value)) return [];
+    return ajv.errors ?? [];
+  } catch {
+    return undefined;
+  }
+};
+
 export const jsonSchemaValidationMessage = (
   value: unknown,
   schema: JsonSchema | null | undefined,
 ): string | undefined => {
-  if (schema == null) return undefined;
-
-  try {
-    if (ajv.validate(schema, value)) return undefined;
-    return ajv.errors?.[0]?.message ?? 'Does not meet the schema requirements.';
-  } catch {
-    return 'Does not meet the schema requirements.';
-  }
+  const errors = jsonSchemaValidationErrors(value, schema);
+  if (errors === undefined) return 'Does not meet the schema requirements.';
+  return errors[0]?.message;
 };

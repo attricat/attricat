@@ -100,6 +100,14 @@ test('renders an entity heading component from its detail view', async ({ page }
 test('rejects a browser create that violates a blueprint schema', async ({
   page,
 }) => {
+  let createRequests = 0;
+  page.on('request', (request) => {
+    if (
+      request.method() === 'POST' &&
+      new URL(request.url()).pathname === '/api/v1/entities'
+    )
+      createRequests += 1;
+  });
   const code = `product_schema_${suffix()}`;
   await createEntityBlueprint(
     code,
@@ -116,12 +124,13 @@ test('rejects a browser create that violates a blueprint schema', async ({
   await page.getByRole('option', { name: `Schema products (${code})` }).click();
   await page.getByRole('button', { name: 'Load blueprint' }).click();
   await page.getByLabel('title').fill('no');
-  await page.getByRole('button', { name: 'Create entity' }).click();
 
-  await expect(page).toHaveURL(/\/entities\/new$/);
   await expect(
     page.getByText('must NOT have fewer than 3 characters'),
   ).toBeVisible();
+  await page.getByRole('button', { name: 'Create entity' }).click();
+  await expect(page).toHaveURL(/\/entities\/new$/);
+  expect(createRequests).toBe(0);
 
   await page.getByLabel('title').fill('Valid title');
   await page.getByRole('button', { name: 'Create entity' }).click();
@@ -132,7 +141,7 @@ test('creates a context from context management', async ({ page }) => {
   const code = `market_${suffix()}`;
 
   await page.goto('/');
-  await page.getByRole('link', { name: 'Manage contexts' }).click();
+  await page.getByRole('link', { name: 'Contexts' }).click();
   await expect(page).toHaveURL(/\/contexts$/);
   await page.getByRole('link', { name: 'Create context' }).click();
   await page.getByLabel('Code').fill(code);

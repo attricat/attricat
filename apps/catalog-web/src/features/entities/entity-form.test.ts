@@ -146,7 +146,7 @@ describe('entity form values', () => {
     ).toBe(true);
   });
 
-  it('validates the entity schema after typed values are parsed', () => {
+  it('maps entity schema property failures to their fields', () => {
     expect(
       validateEntityForm(
         [{ code: 'price', value_type: 'number' }],
@@ -157,6 +157,19 @@ describe('entity form values', () => {
           properties: { price: { minimum: 3 } },
         },
       ),
-    ).toEqual({ fieldErrors: {}, formError: 'must be >= 3' });
+    ).toEqual({ fieldErrors: { price: 'must be >= 3' } });
+  });
+
+  it('maps required entity schema properties to their fields', () => {
+    expect(
+      validateEntityForm(
+        [{ code: 'title', value_type: 'string' }],
+        {},
+        [],
+        { type: 'object', required: ['title'] },
+      ),
+    ).toEqual({
+      fieldErrors: { title: "must have required property 'title'" },
+    });
   });
 });

@@ -6,7 +6,7 @@ import type {
   RelationshipTargets,
 } from './api';
 import { scalarValueForField, valueForField } from './attribute-values';
-import { jsonSchemaValidationMessage } from './json-schema';
+import { jsonSchemaValidationErrors } from './json-schema';
 import { attributeValueKinds, attributeValueTypes } from './value-types';
 
 export type EntityFormValidation = {
@@ -123,8 +123,34 @@ export const validateEntityForm = (
   }
 
   if (Object.keys(fieldErrors).length > 0) return { fieldErrors };
-  const formError = jsonSchemaValidationMessage(document, entitySchema);
+  const schemaErrors = jsonSchemaValidationErrors(document, entitySchema);
+  if (schemaErrors === undefined)
+    return {
+      fieldErrors,
+      formError: 'Does not meet the schema requirements.',
+    };
+  const formError = schemaErrors
+    .map((error) => {
+      const attributeCode = attributeCodeForSchemaError(error);
+      if (attributeCode && attributes.some((attribute) => attribute.code === attributeCode)) {
+        fieldErrors[attributeCode] ??= error.message ?? 'Does not meet the schema requirements.';
+        return undefined;
+      }
+      return error.message ?? 'Does not meet the schema requirements.';
+    })
+    .find(Boolean);
   return formError ? { fieldErrors, formError } : { fieldErrors };
+};
+
+const attributeCodeForSchemaError = (error: {
+  instancePath: string;
+  keyword: string;
+  params: Record<string, unknown>;
+}): string | undefined => {
+  if (error.keyword === 'required' && typeof error.params.missingProperty === 'string')
+    return error.params.missingProperty;
+  const [segment] = error.instancePath.split('/').filter(Boolean);
+  return segment?.replaceAll('~1', '/').replaceAll('~0', '~');
 };
 
 const relationshipIdsForField = (value: string): string[] =>

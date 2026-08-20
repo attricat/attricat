@@ -74,6 +74,19 @@ export const EntityForm = ({
     queryFn: listEntityBlueprints,
     enabled: !blueprint,
   });
+  const validateFields = (fields: Record<string, string>) => {
+    if (!blueprint) return { fieldErrors: {} };
+    const editableAttributes = blueprint.attributes.filter(
+      (attribute) =>
+        contextId === defaultContextId || attribute.context_editable !== 'default',
+    );
+    return validateEntityForm(
+      editableAttributes,
+      fields,
+      requiredAttributes,
+      contextId === defaultContextId ? blueprint.blueprint.entity_schema : undefined,
+    );
+  };
   const form = useForm({
     defaultValues: {
       blueprintCode: blueprint?.blueprint.code ?? '',
@@ -90,14 +103,7 @@ export const EntityForm = ({
             contextId === defaultContextId ||
             attribute.context_editable !== 'default',
         );
-        const validation = validateEntityForm(
-          editableAttributes,
-          value.fields,
-          requiredAttributes,
-          contextId === defaultContextId
-            ? blueprint.blueprint.entity_schema
-            : undefined,
-        );
+        const validation = validateFields(value.fields);
         setFieldErrors(validation.fieldErrors);
         setFormError(validation.formError);
         if (
@@ -211,16 +217,14 @@ export const EntityForm = ({
                       ? `Using ${resolvedValue.source_context.code}: ${typeof resolvedValue.value === 'object' ? JSON.stringify(resolvedValue.value) : String(resolvedValue.value)}`
                       : undefined;
                   const handleChange = (nextValue: string) => {
-                    setFieldErrors((errors) => {
-                      const remaining = { ...errors };
-                      delete remaining[attribute.code];
-                      return remaining;
-                    });
-                    setFormError(undefined);
-                    field.handleChange({
+                    const nextFields = {
                       ...field.state.value,
                       [attribute.code]: nextValue,
-                    });
+                    };
+                    const validation = validateFields(nextFields);
+                    setFieldErrors(validation.fieldErrors);
+                    setFormError(validation.formError);
+                    field.handleChange(nextFields);
                   };
                   return (
                     <EntityAttributeEditor
