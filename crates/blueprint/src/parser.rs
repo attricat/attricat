@@ -1,0 +1,227 @@
+use std::collections::{HashMap, HashSet};
+
+use catalog_validation::{is_valid_code, validate_json_schema_definition};
+use serde::Deserialize;
+
+use crate::{
+    AttributeDeclaration, BlueprintDefinition, BlueprintError, BlueprintKind, IncludeRef,
+    ViewDefinition,
+};
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct RawBlueprintDefinition {
+    format_version: u32,
+    code: String,
+    name: String,
+    kind: BlueprintKind,
+    #[serde(default)]
+    includes: Vec<IncludeRef>,
+    #[serde(default)]
+    views: HashMap<String, ViewDefinition>,
+    entity_schema: Option<String>,
+    attributes: Vec<RawAttributeDeclaration>,
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct RawAttributeDeclaration {
+    code: String,
+    value_type: Option<String>,
+    value_schema: Option<String>,
+    target_blueprint: Option<String>,
+    #[serde(default)]
+    tags: Vec<String>,
+    #[serde(default = "default_context_fallback")]
+    context_fallback: String,
+    #[serde(default = "default_context_editable")]
+    context_editable: String,
+    from: Option<String>,
+}
+
+fn default_context_fallback() -> String {
+    "default".to_owned()
+}
+
+fn default_context_editable() -> String {
+    "all".to_owned()
+}
+
+pub fn parse(source: &str) -> Result<BlueprintDefinition, BlueprintError> {
+    let raw: RawBlueprintDefinition = toml::from_str(source)?;
+    if raw.format_version != 1 {
+        return Err(BlueprintError::UnsupportedFormatVersion(raw.format_version));
+    }
+    validate_code(&raw.code, "blueprint code")?;
+    validate_non_empty(&raw.name, "blueprint name")?;
+    if raw.attributes.is_empty() {
+        return Err(BlueprintError::EmptyAttributes);
+    }
+    let entity_schema = parse_json_schema(raw.entity_schema, "entity_schema")?;
+    if entity_schema.is_some() && raw.kind != BlueprintKind::Entity {
+        return Err(BlueprintError::EntitySchemaOnMixin);
+    }
+
+    let mut aliases = HashSet::new();
+    for include in &raw.includes {
+        validate_code(&include.alias, "include alias")?;
+        validate_code(&include.code, "include code")?;
+        if include.version <= 0 {
+            return Err(BlueprintError::EmptyField("include version"));
+        }
+        if !aliases.insert(include.alias.clone()) {
+            return Err(BlueprintError::DuplicateIncludeAlias(include.alias.clone()));
+        }
+    }
+
+    let mut codes = HashSet::new();
+    let mut attributes = Vec::with_capacity(raw.attributes.len());
+    for attribute in raw.attributes {
+        validate_code(&attribute.code, "attribute code")?;
+        if !codes.insert(attribute.code.clone()) {
+            return Err(BlueprintError::DuplicateAttributeCode(attribute.code));
+        }
+
+        attributes.push(match (attribute.value_type, attribute.from) {
+            (Some(value_type), None) => {
+                validate_non_empty(&value_type, "attribute value_type")?;
+                if !matches!(
+                    value_type.as_str(),
+                    "string"
+                        | "number"
+                        | "integer"
+                        | "boolean"
+                        | "date"
+                        | "datetime"
+                        | "time"
+                        | "relationship"
+                ) {
+                    return Err(BlueprintError::UnsupportedValueType {
+                        code: attribute.code,
+                        value_type,
+                    });
+                }
+                if attribute.target_blueprint.is_some() && value_type != "relationship" {
+                    return Err(BlueprintError::InvalidAttributeDeclaration(attribute.code));
+                }
+                if value_type == "relationship" && attribute.value_schema.is_some() {
+                    return Err(BlueprintError::RelationshipValueSchema {
+                        code: attribute.code,
+                    });
+                }
+                let value_schema = parse_json_schema(
+                    attribute.value_schema,
+                    &format!("attribute '{}'.value_schema", attribute.code),
+                )?;
+                if let Some(target_blueprint) = &attribute.target_blueprint {
+                    validate_code(target_blueprint, "attribute target_blueprint")?;
+                }
+                if !matches!(attribute.context_fallback.as_str(), "default" | "none") {
+                    return Err(BlueprintError::InvalidContextFallback {
+                        code: attribute.code,
+                        context_fallback: attribute.context_fallback,
+                    });
+                }
+                if !matches!(attribute.context_editable.as_str(), "all" | "default") {
+                    return Err(BlueprintError::InvalidContextEditable {
+                        code: attribute.code,
+                        context_editable: attribute.context_editable,
+                    });
+                }
+                let mut tags = HashSet::new();
+                for tag in &attribute.tags {
+                    if tag.trim().is_empty() || !tags.insert(tag.as_str()) {
+                        return Err(BlueprintError::InvalidAttributeTag(attribute.code));
+                    }
+                }
+                AttributeDeclaration::Local {
+                    code: attribute.code,
+                    value_type,
+                    value_schema,
+                    target_blueprint: attribute.target_blueprint,
+                    tags: attribute.tags,
+                    context_fallback: attribute.context_fallback,
+                    context_editable: attribute.context_editable,
+                }
+            }
+            (None, Some(source)) if attribute.target_blueprint.is_none() => {
+                let (include_alias, attribute_code) = parse_selection(&attribute.code, &source)?;
+                AttributeDeclaration::Selection {
+                    code: attribute.code,
+                    include_alias,
+                    attribute_code,
+                }
+            }
+            _ => return Err(BlueprintError::InvalidAttributeDeclaration(attribute.code)),
+        });
+    }
+
+    Ok(BlueprintDefinition {
+        format_version: raw.format_version,
+        code: raw.code,
+        name: raw.name,
+        kind: raw.kind,
+        includes: raw.includes,
+        views: raw.views,
+        entity_schema,
+        attributes,
+    })
+}
+
+fn parse_json_schema(
+    source: Option<String>,
+    field: &str,
+) -> Result<Option<serde_json::Value>, BlueprintError> {
+    let Some(source) = source else {
+        return Ok(None);
+    };
+    let schema =
+        serde_json::from_str(&source).map_err(|error| BlueprintError::InvalidJsonSchema {
+            field: field.to_owned(),
+            message: error.to_string(),
+        })?;
+    validate_json_schema_definition(&schema).map_err(|message| {
+        BlueprintError::InvalidJsonSchema {
+            field: field.to_owned(),
+            message,
+        }
+    })?;
+    Ok(Some(schema))
+}
+
+pub(crate) fn validate_code(value: &str, field: &'static str) -> Result<(), BlueprintError> {
+    if !is_valid_code(value) {
+        return Err(BlueprintError::InvalidCode { field });
+    }
+    Ok(())
+}
+
+fn validate_non_empty(value: &str, field: &'static str) -> Result<(), BlueprintError> {
+    if value.trim().is_empty() {
+        return Err(BlueprintError::EmptyField(field));
+    }
+    Ok(())
+}
+
+fn parse_selection(code: &str, source: &str) -> Result<(String, String), BlueprintError> {
+    let Some((include_alias, attribute_code)) = source.split_once('.') else {
+        return Err(BlueprintError::InvalidSelection {
+            code: code.to_owned(),
+            selection: source.to_owned(),
+        });
+    };
+    if include_alias.is_empty() || attribute_code.is_empty() || attribute_code.contains('.') {
+        return Err(BlueprintError::InvalidSelection {
+            code: code.to_owned(),
+            selection: source.to_owned(),
+        });
+    }
+    if code != attribute_code {
+        return Err(BlueprintError::InvalidSelection {
+            code: code.to_owned(),
+            selection: source.to_owned(),
+        });
+    }
+
+    Ok((include_alias.to_owned(), attribute_code.to_owned()))
+}
