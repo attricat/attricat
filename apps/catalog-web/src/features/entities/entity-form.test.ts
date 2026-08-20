@@ -3,6 +3,7 @@ import {
   hasInvalidScalarField,
   relationshipTargetsForForm,
   serializeAttributeValues,
+  validateEntityForm,
   valuesForForm,
 } from './entity-form';
 import type { Attribute } from './api';
@@ -55,6 +56,27 @@ describe('entity form values', () => {
         related_products: 'not-a-uuid',
       }),
     ).toEqual([]);
+  });
+
+  it('reports malformed relationship IDs instead of allowing omission', () => {
+    expect(
+      validateEntityForm(attributes, {
+        related_products: `${entityIdOne}, not-a-uuid`,
+      }),
+    ).toEqual({
+      fieldErrors: {
+        related_products: 'Enter comma-separated entity UUIDs.',
+      },
+    });
+  });
+
+  it('allows empty optional relationships and trims valid UUID lists', () => {
+    expect(
+      validateEntityForm(attributes, {
+        related_products: ` ${entityIdOne}, ${entityIdTwo}, `,
+      }),
+    ).toEqual({ fieldErrors: {} });
+    expect(validateEntityForm(attributes, {})).toEqual({ fieldErrors: {} });
   });
 
   it('hydrates relationship values into a comma-separated field', () => {
@@ -122,5 +144,19 @@ describe('entity form values', () => {
         { price: '-1' },
       ),
     ).toBe(true);
+  });
+
+  it('validates the entity schema after typed values are parsed', () => {
+    expect(
+      validateEntityForm(
+        [{ code: 'price', value_type: 'number' }],
+        { price: '2' },
+        [],
+        {
+          type: 'object',
+          properties: { price: { minimum: 3 } },
+        },
+      ),
+    ).toEqual({ fieldErrors: {}, formError: 'must be >= 3' });
   });
 });

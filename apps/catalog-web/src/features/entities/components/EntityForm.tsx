@@ -1,39 +1,29 @@
 import { useForm } from '@tanstack/react-form';
 import { useQuery } from '@tanstack/react-query';
-import InfoOutlinedIcon from '@mui/icons-material/InfoOutlined';
 import {
   Alert,
   Button,
-  Checkbox,
-  FormControl,
-  InputLabel,
-  ListItemText,
   MenuItem,
   Paper,
-  Select,
   Stack,
   TextField,
-  Tooltip,
   Typography,
 } from '@mui/material';
 import {
   listEntityBlueprints,
-  searchEntities,
-  type Attribute,
   type BlueprintWithAttributes,
   type NewAttributeValue,
 } from '../api';
 import {
-  hasInvalidScalarField,
   relationshipTargetsForForm,
   serializeAttributeValues,
+  validateEntityForm,
   valuesForForm,
 } from '../entity-form';
-import { displayLabel, dropdownOptionLabel } from '../entity-display';
 import { entityQueryKeys } from '../query-keys';
-import { attributeValueTypes } from '../value-types';
-import { scalarValueForField } from '../attribute-values';
 import { EntityView } from '../../views/components/EntityView';
+import { useState } from 'react';
+import { EntityAttributeEditor } from './EntityAttributeEditor';
 
 type EntityFormProps = {
   blueprint?: BlueprintWithAttributes;
@@ -77,6 +67,8 @@ export const EntityForm = ({
   onSubmit,
   submitLabel,
 }: EntityFormProps) => {
+  const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
+  const [formError, setFormError] = useState<string>();
   const blueprints = useQuery({
     queryKey: entityQueryKeys.blueprints(),
     queryFn: listEntityBlueprints,
@@ -98,13 +90,21 @@ export const EntityForm = ({
             contextId === defaultContextId ||
             attribute.context_editable !== 'default',
         );
+        const validation = validateEntityForm(
+          editableAttributes,
+          value.fields,
+          requiredAttributes,
+          contextId === defaultContextId
+            ? blueprint.blueprint.entity_schema
+            : undefined,
+        );
+        setFieldErrors(validation.fieldErrors);
+        setFormError(validation.formError);
         if (
-          requiredAttributes.some(
-            (attributeCode) => !value.fields[attributeCode]?.trim(),
-          )
+          Object.keys(validation.fieldErrors).length > 0 ||
+          validation.formError
         )
           return;
-        if (hasInvalidScalarField(editableAttributes, value.fields)) return;
         onSubmit({
           values: serializeAttributeValues(
             editableAttributes,
@@ -201,13 +201,6 @@ export const EntityForm = ({
                   const defaultOnly =
                     contextId !== defaultContextId &&
                     attribute.context_editable === 'default';
-                  const invalid =
-                    attribute.value_type !== attributeValueTypes.relationship &&
-                    Boolean(value.trim()) &&
-                    !scalarValueForField(attribute, value);
-                  const missingRequired =
-                    requiredAttributes.includes(attribute.code) &&
-                    !value.trim();
                   const requiresMigrationReview =
                     highlightedAttributes.includes(attribute.code);
                   const migrationReviewMessage =
@@ -217,227 +210,42 @@ export const EntityForm = ({
                     : inherited
                       ? `Using ${resolvedValue.source_context.code}: ${typeof resolvedValue.value === 'object' ? JSON.stringify(resolvedValue.value) : String(resolvedValue.value)}`
                       : undefined;
-                  const fieldHelperText = invalid
-                    ? "Enter a value that meets this field's requirements."
-                    : missingRequired
-                      ? 'A value is required for the target schema.'
-                      : helperText;
-                  const handleChange = (nextValue: string) =>
+                  const handleChange = (nextValue: string) => {
+                    setFieldErrors((errors) => {
+                      const remaining = { ...errors };
+                      delete remaining[attribute.code];
+                      return remaining;
+                    });
+                    setFormError(undefined);
                     field.handleChange({
                       ...field.state.value,
                       [attribute.code]: nextValue,
                     });
-                  return attribute.value_type ===
-                    attributeValueTypes.relationship ? (
-                    <RelationshipField
+                  };
+                  return (
+                    <EntityAttributeEditor
                       attribute={attribute}
                       disabled={defaultOnly}
-                      showMigrationBadge={requiresMigrationReview}
+                      error={fieldErrors[attribute.code]}
+                      helperText={helperText}
                       migrationReviewMessage={migrationReviewMessage}
-                      error={missingRequired}
                       onChange={handleChange}
+                      showMigrationBadge={requiresMigrationReview}
                       value={value}
                     />
-                  ) : attribute.value_type === attributeValueTypes.boolean ? (
-                    <>
-                      {requiresMigrationReview && (
-                        <MigrationBadge message={migrationReviewMessage} />
-                      )}
-                      <TextField
-                        fullWidth
-                        disabled={defaultOnly}
-                        error={missingRequired}
-                        helperText={fieldHelperText}
-                        select
-                        label={attribute.code}
-                        onChange={(event) => handleChange(event.target.value)}
-                        value={value}
-                      >
-                        <MenuItem value="">Not set</MenuItem>
-                        <MenuItem value="true">True</MenuItem>
-                        <MenuItem value="false">False</MenuItem>
-                      </TextField>
-                    </>
-                  ) : (
-                    <>
-                      {requiresMigrationReview && (
-                        <MigrationBadge message={migrationReviewMessage} />
-                      )}
-                      <TextField
-                        fullWidth
-                        disabled={defaultOnly}
-                        error={invalid || missingRequired}
-                        helperText={fieldHelperText}
-                        label={attribute.code}
-                        onChange={(event) => handleChange(event.target.value)}
-                        placeholder={
-                          attribute.value_type === attributeValueTypes.time
-                            ? '09:30:00 America/New_York'
-                            : undefined
-                        }
-                        slotProps={{
-                          htmlInput: {
-                            inputMode:
-                              attribute.value_type ===
-                                attributeValueTypes.number ||
-                              attribute.value_type ===
-                                attributeValueTypes.integer
-                                ? 'decimal'
-                                : undefined,
-                          },
-                        }}
-                        type={
-                          attribute.value_type === attributeValueTypes.date
-                            ? 'date'
-                            : attribute.value_type ===
-                                  attributeValueTypes.number ||
-                                attribute.value_type ===
-                                  attributeValueTypes.integer
-                              ? 'number'
-                              : undefined
-                        }
-                        value={value}
-                      />
-                    </>
                   );
                 }}
               />
             )}
           </form.Field>
         )}
-        {error && <Alert severity="error">{error.message}</Alert>}
+        {(error || formError) && (
+          <Alert severity="error">{error?.message ?? formError}</Alert>
+        )}
         <Button disabled={isLoadingBlueprint} type="submit" variant="contained">
           {isLoadingBlueprint ? 'Loading blueprint...' : submitLabel}
         </Button>
       </Stack>
     </Paper>
-  );
-};
-
-const MigrationBadge = ({ message }: { message?: string }) => (
-  <Tooltip
-    title={
-      message ??
-      'Review is necessary for this field to migrate to the current schema version.'
-    }
-  >
-    <InfoOutlinedIcon color="info" fontSize="small" />
-  </Tooltip>
-);
-
-const RelationshipField = ({
-  attribute,
-  disabled = false,
-  showMigrationBadge = false,
-  migrationReviewMessage,
-  error = false,
-  onChange,
-  value,
-}: {
-  attribute: Attribute;
-  disabled?: boolean;
-  showMigrationBadge?: boolean;
-  migrationReviewMessage?: string;
-  error?: boolean;
-  onChange: (value: string) => void;
-  value: string;
-}) => {
-  const targetBlueprint = attribute.target_blueprint_code;
-  const targets = useQuery({
-    queryKey: entityQueryKeys.relationshipTargets(targetBlueprint),
-    queryFn: () => searchEntities(targetBlueprint!, undefined, ''),
-    enabled: Boolean(targetBlueprint),
-  });
-  if (!targetBlueprint) {
-    return (
-      <Stack spacing={0.5}>
-        {showMigrationBadge && (
-          <MigrationBadge message={migrationReviewMessage} />
-        )}
-        <TextField
-          fullWidth
-          disabled={disabled}
-          error={error}
-          label={attribute.code}
-          helperText={
-            error
-              ? 'A value is required for the target schema.'
-              : 'Comma-separated entity UUIDs'
-          }
-          onChange={(event) => onChange(event.target.value)}
-          value={value}
-        />
-      </Stack>
-    );
-  }
-
-  const selectedIds = value
-    .split(',')
-    .map((targetId) => targetId.trim())
-    .filter(Boolean);
-  const options = [...(targets.data?.items ?? [])];
-  for (const targetId of selectedIds) {
-    if (!options.some((target) => target.id === targetId)) {
-      options.push({
-        id: targetId,
-        blueprint_version: 0,
-        schema_outdated: false,
-        display: { default: targetId },
-        preview: {},
-      });
-    }
-  }
-  const targetDisplay = targets.data?.blueprint.blueprint.display ?? {};
-  const targetLabel = (target: (typeof options)[number]) =>
-    dropdownOptionLabel(target.preview, targetDisplay) ??
-    displayLabel(target.display, target.id);
-  const labels = new Map(
-    options.map((target) => [target.id, targetLabel(target)]),
-  );
-
-  return (
-    <Stack spacing={0.5}>
-      {showMigrationBadge && (
-        <MigrationBadge message={migrationReviewMessage} />
-      )}
-      <FormControl error={error} fullWidth>
-        <InputLabel id={`${attribute.code}-label`}>{attribute.code}</InputLabel>
-        <Select
-          disabled={disabled}
-          multiple
-          label={attribute.code}
-          labelId={`${attribute.code}-label`}
-          onChange={(event) =>
-            onChange((event.target.value as string[]).join(', '))
-          }
-          renderValue={(selected) =>
-            (selected as string[])
-              .map((targetId) => labels.get(targetId) ?? targetId)
-              .join(', ')
-          }
-          value={selectedIds}
-        >
-          {options.map((target) => (
-            <MenuItem key={target.id} value={target.id}>
-              <Checkbox checked={selectedIds.includes(target.id)} />
-              <ListItemText primary={targetLabel(target)} />
-            </MenuItem>
-          ))}
-        </Select>
-        {targets.isPending && (
-          <Typography variant="caption">Loading options...</Typography>
-        )}
-        {targets.isError && (
-          <Typography color="error" variant="caption">
-            Could not load {targetBlueprint} entities.
-          </Typography>
-        )}
-        {error && (
-          <Typography color="error" variant="caption">
-            A value is required for the target schema.
-          </Typography>
-        )}
-      </FormControl>
-    </Stack>
   );
 };

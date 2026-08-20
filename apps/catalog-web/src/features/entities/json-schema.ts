@@ -7,11 +7,19 @@ export const validatesJsonSchema = (
   value: unknown,
   schema: JsonSchema | null | undefined,
 ) => {
-  if (schema == null) return true;
+  return jsonSchemaValidationMessage(value, schema) === undefined;
+};
+
+export const jsonSchemaValidationMessage = (
+  value: unknown,
+  schema: JsonSchema | null | undefined,
+): string | undefined => {
+  if (schema == null) return undefined;
 
   try {
-    return ajv.validate(schema, value);
+    if (ajv.validate(schema, value)) return undefined;
+    return ajv.errors?.[0]?.message ?? 'Does not meet the schema requirements.';
   } catch {
-    return false;
+    return 'Does not meet the schema requirements.';
   }
 };

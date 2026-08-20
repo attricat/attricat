@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
+  ApiRequestError,
   createEntity,
   createContext,
   getBlueprintByCode,
@@ -26,6 +27,14 @@ afterEach(() => {
 
 const respond = (body: unknown) => {
   fetchMock.mockResolvedValue({ ok: true, json: () => Promise.resolve(body) });
+};
+
+const respondError = (status: number, body: unknown) => {
+  fetchMock.mockResolvedValue({
+    ok: false,
+    status,
+    json: () => Promise.resolve(body),
+  });
 };
 
 describe('entity API client', () => {
@@ -115,6 +124,32 @@ describe('entity API client', () => {
     await expect(
       createEntity({ blueprint: { code: 'product' }, values: [] }),
     ).rejects.toThrow('Invalid API response');
+  });
+
+  it('preserves structured server validation errors', async () => {
+    respondError(422, {
+      error: {
+        code: 'entity_schema_mismatch',
+        message: 'title is required',
+      },
+    });
+
+    await expect(
+      createEntity({ blueprint: { code: 'product' }, values: [] }),
+    ).rejects.toMatchObject<ApiRequestError>({
+      name: 'ApiRequestError',
+      status: 422,
+      code: 'entity_schema_mismatch',
+      message: 'title is required',
+    });
+  });
+
+  it('falls back to a status message for malformed error responses', async () => {
+    respondError(500, { unexpected: true });
+
+    await expect(
+      createEntity({ blueprint: { code: 'product' }, values: [] }),
+    ).rejects.toThrow('Request failed (500)');
   });
 
   it('rejects invalid request inputs before fetching', async () => {

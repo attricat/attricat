@@ -119,7 +119,9 @@ test('rejects a browser create that violates a blueprint schema', async ({
   await page.getByRole('button', { name: 'Create entity' }).click();
 
   await expect(page).toHaveURL(/\/entities\/new$/);
-  await expect(page.getByText('Request failed (422)')).toBeVisible();
+  await expect(
+    page.getByText('must NOT have fewer than 3 characters'),
+  ).toBeVisible();
 
   await page.getByLabel('title').fill('Valid title');
   await page.getByRole('button', { name: 'Create entity' }).click();
