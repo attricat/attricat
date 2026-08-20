@@ -18,8 +18,8 @@ use crate::{
     blueprint_resolver::compile_definition,
     model::{
         AppendAttributeValues, Attribute, AttributeContext, AttributeValue, AttributeValueHistory,
-        AttributeValueSelector, Blueprint, BlueprintWithAttributes, CreateBlueprint, CreateEntity,
-        Entity, EntityMigrationPreview, EntityPreview, EntityPreviewPage, FormAttributeValue,
+        AttributeValueSelector, Blueprint, BlueprintWithAttributes, CreateBlueprint, Entity,
+        EntityMigrationPreview, EntityPreview, EntityPreviewPage, FormAttributeValue,
         MigrateEntityRequest, MigrationIssue, NewAttributeValue, RelationshipMutation,
         RelationshipTargets, ResolvedEntityPreviewResponse,
     },
@@ -80,8 +80,6 @@ pub enum RepositoryError {
     InvalidStoredAttributeValue,
     #[error("relationship target does not match the attribute target blueprint")]
     RelationshipTargetTypeMismatch,
-    #[error("projections must be a JSON object")]
-    InvalidProjections,
     #[error("entity preview must be a JSON object organized by context")]
     InvalidPreview,
     #[error("invalid blueprint definition: {0}")]
@@ -890,39 +888,6 @@ impl CatalogRepository {
             requested_context,
             values: Value::Object(values),
         }))
-    }
-
-    pub async fn create_entity(&self, input: CreateEntity) -> Result<Entity, RepositoryError> {
-        let mut projections = input.projections.unwrap_or_else(empty_projections);
-        let projections = projections
-            .as_object_mut()
-            .ok_or(RepositoryError::InvalidProjections)?;
-        projections
-            .entry("preview".to_owned())
-            .or_insert_with(empty_preview);
-
-        let mut transaction = self.pool.begin().await?;
-        let entity = sqlx::query_as::<_, Entity>(
-            r#"INSERT INTO entities (id, blueprint_id, blueprint_version, projections)
-               SELECT $1, b.id, b.version, $2
-               FROM blueprints b
-                WHERE b.id = $3
-                  AND b.version = $4
-                 AND b.kind = 'entity'
-                 AND b.deleted_at IS NULL
-                RETURNING id, blueprint_id, blueprint_version, projections, created_at, updated_at, deleted_at"#,
-        )
-        .bind(Uuid::new_v4())
-        .bind(Value::Object(projections.clone()))
-        .bind(input.blueprint_id)
-        .bind(input.blueprint_version)
-        .fetch_optional(&mut *transaction)
-        .await?
-        .ok_or(RepositoryError::NotFound("blueprint version"))?;
-        self.validate_entity_schema(&mut transaction, &entity)
-            .await?;
-        transaction.commit().await?;
-        Ok(entity)
     }
 
     pub async fn create_entity_with_values(

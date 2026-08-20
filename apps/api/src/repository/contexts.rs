@@ -105,6 +105,15 @@ impl CatalogRepository {
         if id == Self::DEFAULT_CONTEXT_ID {
             return Err(RepositoryError::DefaultContextProtected);
         }
+        let context_exists = sqlx::query_scalar::<_, bool>(
+            "SELECT EXISTS (SELECT 1 FROM attribute_contexts WHERE id = $1)",
+        )
+        .bind(id)
+        .fetch_one(&self.pool)
+        .await?;
+        if !context_exists {
+            return Err(RepositoryError::NotFound("context"));
+        }
         let result = sqlx::query("DELETE FROM attribute_contexts c WHERE c.id = $1 AND NOT EXISTS (SELECT 1 FROM attribute_contexts child WHERE child.parent_id = c.id) AND NOT EXISTS (SELECT 1 FROM attribute_values value WHERE value.context_id = c.id)")
             .bind(id).execute(&self.pool).await?;
         if result.rows_affected() == 0 {

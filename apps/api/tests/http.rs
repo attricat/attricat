@@ -228,11 +228,13 @@ async fn blueprint_catalogue_lists_all_kinds_and_revision_history(pool: PgPool) 
             && blueprint["version"] == 2
             && blueprint["status"] == "draft"
     }));
-    assert!(catalogue
-        .as_array()
-        .unwrap()
-        .iter()
-        .any(|blueprint| blueprint["kind"] == "mixin"));
+    assert!(
+        catalogue
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|blueprint| blueprint["kind"] == "mixin")
+    );
 
     let revisions: Value = client
         .get(format!("{base_url}/blueprints/{blueprint_id}/versions"))
@@ -287,10 +289,13 @@ async fn create_blueprint(client: &Client, base_url: &str, definition: &str) -> 
 
 async fn create_entity(client: &Client, base_url: &str, blueprint: &Value) -> Value {
     client
-        .post(format!("{base_url}/entities"))
+        .post(format!("{base_url}/v1/entities"))
         .json(&json!({
-            "blueprint_id": blueprint["blueprint"]["id"],
-            "blueprint_version": blueprint["blueprint"]["version"],
+            "blueprint": {
+                "code": blueprint["blueprint"]["code"],
+                "version": blueprint["blueprint"]["version"],
+            },
+            "values": [],
         }))
         .send()
         .await
@@ -300,6 +305,52 @@ async fn create_entity(client: &Client, base_url: &str, blueprint: &Value) -> Va
         .json()
         .await
         .unwrap()
+}
+
+#[sqlx::test]
+async fn legacy_entity_creation_route_is_unavailable(pool: PgPool) {
+    let (base_url, server) = start_server(pool).await;
+    let client = Client::new();
+    let response = client
+        .post(format!("{base_url}/entities"))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::METHOD_NOT_ALLOWED);
+
+    server.abort();
+}
+
+#[sqlx::test]
+async fn extractor_failures_use_the_api_error_shape(pool: PgPool) {
+    let (base_url, server) = start_server(pool).await;
+    let client = Client::new();
+
+    let invalid_path = client
+        .get(format!("{base_url}/entities/not-a-uuid"))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(invalid_path.status(), StatusCode::BAD_REQUEST);
+    assert_eq!(
+        invalid_path.json::<Value>().await.unwrap()["error"]["code"],
+        "bad_request"
+    );
+
+    let malformed_body = client
+        .post(format!("{base_url}/blueprints"))
+        .header("content-type", "application/json")
+        .body("{")
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(malformed_body.status(), StatusCode::BAD_REQUEST);
+    assert_eq!(
+        malformed_body.json::<Value>().await.unwrap()["error"]["code"],
+        "bad_request"
+    );
+
+    server.abort();
 }
 
 #[sqlx::test]
@@ -758,20 +809,7 @@ tags = ["searchable"]
         );
     }
 
-    let source: Value = client
-        .post(format!("{base_url}/entities"))
-        .json(&json!({
-            "blueprint_id": blueprint_id,
-            "blueprint_version": 1
-        }))
-        .send()
-        .await
-        .unwrap()
-        .error_for_status()
-        .unwrap()
-        .json()
-        .await
-        .unwrap();
+    let source = create_entity(&client, &base_url, &blueprint).await;
     let default_only_write = client
         .post(format!(
             "{base_url}/entities/{}/values",
@@ -799,20 +837,7 @@ tags = ["searchable"]
         json!({ "preview": { "default": {} } })
     );
 
-    let target: Value = client
-        .post(format!("{base_url}/entities"))
-        .json(&json!({
-            "blueprint_id": blueprint_id,
-            "blueprint_version": 1
-        }))
-        .send()
-        .await
-        .unwrap()
-        .error_for_status()
-        .unwrap()
-        .json()
-        .await
-        .unwrap();
+    let target = create_entity(&client, &base_url, &blueprint).await;
 
     let response = client
         .post(format!(
@@ -1145,10 +1170,13 @@ value_type = "boolean"
     )
     .await;
     let entity = client
-        .post(format!("{base_url}/entities"))
+        .post(format!("{base_url}/v1/entities"))
         .json(&json!({
-            "blueprint_id": mixin["blueprint"]["id"],
-            "blueprint_version": 1
+            "blueprint": {
+                "code": mixin["blueprint"]["code"],
+                "version": mixin["blueprint"]["version"],
+            },
+            "values": [],
         }))
         .send()
         .await
@@ -1481,18 +1509,7 @@ tags = ["searchable"]
 "#,
     )
     .await;
-    let entity: Value = client
-        .post(format!("{base_url}/entities"))
-        .json(&json!({
-            "blueprint_id": first["blueprint"]["id"],
-            "blueprint_version": 1
-        }))
-        .send()
-        .await
-        .unwrap()
-        .json()
-        .await
-        .unwrap();
+    let entity = create_entity(&client, &base_url, &first).await;
 
     let response = client
         .post(format!(

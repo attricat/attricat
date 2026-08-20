@@ -94,14 +94,6 @@ pub struct CreateBlueprint {
 
 #[derive(Clone, Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
-pub struct CreateEntity {
-    pub blueprint_id: Uuid,
-    pub blueprint_version: i64,
-    #[serde(default)]
-    pub projections: Option<Value>,
-}
-
-#[derive(Clone, Debug, Deserialize)]
 pub struct CreateAttributeContext {
     pub code: String,
     pub data: Value,
@@ -121,6 +113,7 @@ pub struct UpdateAttributeContext {
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
 #[serde(tag = "kind", rename_all = "snake_case")]
 pub enum NewAttributeValue {
     Scalar {
@@ -138,16 +131,19 @@ pub enum NewAttributeValue {
 }
 
 #[derive(Clone, Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct AppendAttributeValues {
     pub values: Vec<NewAttributeValue>,
 }
 
 #[derive(Clone, Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct RelationshipMutation {
     pub relationships: Vec<RelationshipTargets>,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
 pub struct RelationshipTargets {
     pub attribute_id: Option<Uuid>,
     pub attribute_code: Option<String>,
@@ -156,6 +152,7 @@ pub struct RelationshipTargets {
 }
 
 #[derive(Clone, Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct AttributeValueSelector {
     pub attribute_code: String,
     pub context_id: Option<Uuid>,

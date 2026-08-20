@@ -21,7 +21,7 @@ The API is JSON over HTTP. Successful responses are JSON; failures use an
 | `GET`, `POST` | `/contexts` | List or create contexts. |
 | `GET` | `/contexts/{code}` | Read a context. |
 | `PUT`, `DELETE` | `/contexts/id/{id}` | Update or delete a context. |
-| `GET`, `POST` | `/entities` | Browse relationship targets or create an entity with the lower-level API. |
+| `GET` | `/entities` | Browse relationship targets. |
 | `GET`, `DELETE` | `/entities/{id}` | Read or soft-delete an entity. |
 | `GET` | `/entities/{id}/preview` | Read direct contextual preview values. |
 | `GET` | `/entities/{id}/resolved-preview` | Resolve values through a requested context's ancestors. |

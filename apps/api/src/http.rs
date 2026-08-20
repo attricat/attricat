@@ -6,12 +6,12 @@ use std::{
 
 use axum::{
     Json, Router,
-    extract::{Path, Query, State},
+    extract::{FromRequest, FromRequestParts, Path, Query, Request, State},
     http::StatusCode,
     response::{IntoResponse, Response},
     routing::{get, post, put},
 };
-use serde::{Deserialize, Serialize};
+use serde::{Deserialize, Serialize, de::DeserializeOwned};
 use serde_json::{Value, json};
 use tokio::sync::Mutex;
 use uuid::Uuid;
@@ -19,10 +19,10 @@ use uuid::Uuid;
 use crate::{
     model::{
         AppendAttributeValues, BlueprintWithAttributes, CreateAttributeContext, CreateBlueprint,
-        CreateEntity, CreateEntityFormRequest, Entity, EntityFormResponse, EntityIdentity,
-        EntityPreviewPage, EntityPreviewResponse, EntitySearchResponse, MigrateEntityRequest,
-        RelationshipMutation, ResolvedEntityPreviewResponse, SearchEntitiesRequest,
-        UpdateAttributeContext, UpdateEntityFormRequest,
+        CreateEntityFormRequest, Entity, EntityFormResponse, EntityIdentity, EntityPreviewPage,
+        EntityPreviewResponse, EntitySearchResponse, MigrateEntityRequest, RelationshipMutation,
+        ResolvedEntityPreviewResponse, SearchEntitiesRequest, UpdateAttributeContext,
+        UpdateEntityFormRequest,
     },
     repository::{CatalogRepository, RepositoryError, decode_search_cursor},
 };
@@ -41,6 +41,61 @@ pub struct AppState {
 }
 
 pub type DataHealthCache = Arc<Mutex<HashMap<String, (Instant, Value)>>>;
+
+struct ApiJson<T>(T);
+struct ApiPath<T>(T);
+struct ApiQuery<T>(T);
+
+impl<S, T> FromRequest<S> for ApiJson<T>
+where
+    S: Send + Sync,
+    T: DeserializeOwned + Send,
+{
+    type Rejection = ApiError;
+
+    async fn from_request(req: Request, state: &S) -> Result<Self, Self::Rejection> {
+        Json::<T>::from_request(req, state)
+            .await
+            .map(|Json(value)| Self(value))
+            .map_err(ApiError::from_json_rejection)
+    }
+}
+
+impl<S, T> FromRequestParts<S> for ApiPath<T>
+where
+    S: Send + Sync,
+    T: DeserializeOwned + Send,
+{
+    type Rejection = ApiError;
+
+    async fn from_request_parts(
+        parts: &mut axum::http::request::Parts,
+        state: &S,
+    ) -> Result<Self, Self::Rejection> {
+        Path::<T>::from_request_parts(parts, state)
+            .await
+            .map(|Path(value)| Self(value))
+            .map_err(ApiError::from_path_rejection)
+    }
+}
+
+impl<S, T> FromRequestParts<S> for ApiQuery<T>
+where
+    S: Send + Sync,
+    T: DeserializeOwned + Send,
+{
+    type Rejection = ApiError;
+
+    async fn from_request_parts(
+        parts: &mut axum::http::request::Parts,
+        state: &S,
+    ) -> Result<Self, Self::Rejection> {
+        Query::<T>::from_request_parts(parts, state)
+            .await
+            .map(|Query(value)| Self(value))
+            .map_err(ApiError::from_query_rejection)
+    }
+}
 
 pub fn router(state: AppState) -> Router {
     Router::new()
@@ -82,9 +137,8 @@ pub fn router(state: AppState) -> Router {
             "/contexts/id/{id}",
             put(update_context).delete(delete_context),
         )
-        // The v1 routes are form-oriented composites. The older entity routes
-        // remain lower-level primitives for clients that manage values and
-        // relationships independently.
+        // The v1 routes are the entity creation and editing surface. The older
+        // entity routes remain read and value/relationship primitives.
         .route("/v1/entities/search", post(search_entity_previews))
         .route("/v1/entities", post(create_entity_form))
         .route(
@@ -99,7 +153,7 @@ pub fn router(state: AppState) -> Router {
             "/v1/entities/{entity_id}/blueprint-migration",
             post(migrate_entity_to_latest),
         )
-        .route("/entities", get(list_previews).post(create_entity))
+        .route("/entities", get(list_previews))
         .route(
             "/entities/{entity_id}",
             get(get_entity).delete(delete_entity),
@@ -138,6 +192,7 @@ async fn health() -> Json<Value> {
 }
 
 #[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
 struct DataHealthQuery {
     stale_after_days: Option<u16>,
 }
@@ -184,7 +239,7 @@ async fn invalidate_data_health(state: &AppState) {
 
 async fn data_health_summary(
     State(state): State<AppState>,
-    Query(query): Query<DataHealthQuery>,
+    ApiQuery(query): ApiQuery<DataHealthQuery>,
 ) -> Result<Json<Value>, ApiError> {
     let days = stale_after_days(query)?;
     cached_data_health(
@@ -197,7 +252,7 @@ async fn data_health_summary(
 
 async fn data_health_blueprints(
     State(state): State<AppState>,
-    Query(query): Query<DataHealthQuery>,
+    ApiQuery(query): ApiQuery<DataHealthQuery>,
 ) -> Result<Json<Value>, ApiError> {
     let days = stale_after_days(query)?;
     cached_data_health(
@@ -260,7 +315,7 @@ async fn refresh_data_health(State(state): State<AppState>) -> StatusCode {
 
 async fn create_blueprint(
     State(state): State<AppState>,
-    Json(input): Json<CreateBlueprint>,
+    ApiJson(input): ApiJson<CreateBlueprint>,
 ) -> Result<(StatusCode, Json<BlueprintWithAttributes>), ApiError> {
     let blueprint = state.repository.create_blueprint(input).await?;
     invalidate_data_health(&state).await;
@@ -269,7 +324,7 @@ async fn create_blueprint(
 
 async fn list_entity_blueprints(
     State(state): State<AppState>,
-    Query(query): Query<BlueprintQuery>,
+    ApiQuery(query): ApiQuery<BlueprintQuery>,
 ) -> Result<Json<Vec<crate::model::Blueprint>>, ApiError> {
     Ok(Json(
         state
@@ -286,6 +341,7 @@ async fn list_blueprints(
 }
 
 #[derive(Default, Deserialize)]
+#[serde(deny_unknown_fields)]
 struct BlueprintQuery {
     #[serde(default)]
     include_drafts: bool,
@@ -293,8 +349,8 @@ struct BlueprintQuery {
 
 async fn create_blueprint_revision(
     State(state): State<AppState>,
-    Path(blueprint_id): Path<Uuid>,
-    Json(input): Json<CreateBlueprint>,
+    ApiPath(blueprint_id): ApiPath<Uuid>,
+    ApiJson(input): ApiJson<CreateBlueprint>,
 ) -> Result<(StatusCode, Json<BlueprintWithAttributes>), ApiError> {
     let blueprint = state
         .repository
@@ -306,16 +362,19 @@ async fn create_blueprint_revision(
 
 async fn list_blueprint_revisions(
     State(state): State<AppState>,
-    Path(blueprint_id): Path<Uuid>,
+    ApiPath(blueprint_id): ApiPath<Uuid>,
 ) -> Result<Json<Vec<crate::model::Blueprint>>, ApiError> {
     Ok(Json(
-        state.repository.list_blueprint_revisions(blueprint_id).await?,
+        state
+            .repository
+            .list_blueprint_revisions(blueprint_id)
+            .await?,
     ))
 }
 
 async fn get_blueprint(
     State(state): State<AppState>,
-    Path(blueprint_id): Path<Uuid>,
+    ApiPath(blueprint_id): ApiPath<Uuid>,
 ) -> Result<Json<BlueprintWithAttributes>, ApiError> {
     state
         .repository
@@ -327,7 +386,7 @@ async fn get_blueprint(
 
 async fn get_blueprint_revision(
     State(state): State<AppState>,
-    Path((blueprint_id, version)): Path<(Uuid, i64)>,
+    ApiPath((blueprint_id, version)): ApiPath<(Uuid, i64)>,
 ) -> Result<Json<BlueprintWithAttributes>, ApiError> {
     state
         .repository
@@ -339,7 +398,7 @@ async fn get_blueprint_revision(
 
 async fn publish_blueprint_revision(
     State(state): State<AppState>,
-    Path((blueprint_id, version)): Path<(Uuid, i64)>,
+    ApiPath((blueprint_id, version)): ApiPath<(Uuid, i64)>,
 ) -> Result<Json<BlueprintWithAttributes>, ApiError> {
     let blueprint = state
         .repository
@@ -351,8 +410,8 @@ async fn publish_blueprint_revision(
 
 async fn get_blueprint_by_code(
     State(state): State<AppState>,
-    Path(code): Path<String>,
-    Query(query): Query<BlueprintQuery>,
+    ApiPath(code): ApiPath<String>,
+    ApiQuery(query): ApiQuery<BlueprintQuery>,
 ) -> Result<Json<BlueprintWithAttributes>, ApiError> {
     let blueprint = if query.include_drafts {
         state
@@ -369,7 +428,7 @@ async fn get_blueprint_by_code(
 
 async fn get_blueprint_by_code_and_version(
     State(state): State<AppState>,
-    Path((code, version)): Path<(String, i64)>,
+    ApiPath((code, version)): ApiPath<(String, i64)>,
 ) -> Result<Json<BlueprintWithAttributes>, ApiError> {
     state
         .repository
@@ -381,7 +440,7 @@ async fn get_blueprint_by_code_and_version(
 
 async fn create_context(
     State(state): State<AppState>,
-    Json(input): Json<CreateAttributeContext>,
+    ApiJson(input): ApiJson<CreateAttributeContext>,
 ) -> Result<(StatusCode, Json<crate::model::AttributeContext>), ApiError> {
     let context = state.repository.create_context(input).await?;
     invalidate_data_health(&state).await;
@@ -396,7 +455,7 @@ async fn list_contexts(
 
 async fn get_context(
     State(state): State<AppState>,
-    Path(code): Path<String>,
+    ApiPath(code): ApiPath<String>,
 ) -> Result<Json<crate::model::AttributeContext>, ApiError> {
     state
         .repository
@@ -408,8 +467,8 @@ async fn get_context(
 
 async fn update_context(
     State(state): State<AppState>,
-    Path(id): Path<Uuid>,
-    Json(input): Json<UpdateAttributeContext>,
+    ApiPath(id): ApiPath<Uuid>,
+    ApiJson(input): ApiJson<UpdateAttributeContext>,
 ) -> Result<Json<crate::model::AttributeContext>, ApiError> {
     let context = state.repository.update_context(id, input).await?;
     invalidate_data_health(&state).await;
@@ -418,25 +477,16 @@ async fn update_context(
 
 async fn delete_context(
     State(state): State<AppState>,
-    Path(id): Path<Uuid>,
+    ApiPath(id): ApiPath<Uuid>,
 ) -> Result<StatusCode, ApiError> {
     state.repository.delete_context(id).await?;
     invalidate_data_health(&state).await;
     Ok(StatusCode::NO_CONTENT)
 }
 
-async fn create_entity(
-    State(state): State<AppState>,
-    Json(input): Json<CreateEntity>,
-) -> Result<(StatusCode, Json<Entity>), ApiError> {
-    let entity = state.repository.create_entity(input).await?;
-    invalidate_data_health(&state).await;
-    Ok((StatusCode::CREATED, Json(entity)))
-}
-
 async fn get_entity(
     State(state): State<AppState>,
-    Path(entity_id): Path<Uuid>,
+    ApiPath(entity_id): ApiPath<Uuid>,
 ) -> Result<Json<Entity>, ApiError> {
     state
         .repository
@@ -448,7 +498,7 @@ async fn get_entity(
 
 async fn delete_entity(
     State(state): State<AppState>,
-    Path(entity_id): Path<Uuid>,
+    ApiPath(entity_id): ApiPath<Uuid>,
 ) -> Result<StatusCode, ApiError> {
     state.repository.delete_entity(entity_id).await?;
     invalidate_data_health(&state).await;
@@ -457,8 +507,8 @@ async fn delete_entity(
 
 async fn get_preview(
     State(state): State<AppState>,
-    Path(entity_id): Path<Uuid>,
-    Query(query): Query<PreviewQuery>,
+    ApiPath(entity_id): ApiPath<Uuid>,
+    ApiQuery(query): ApiQuery<PreviewQuery>,
 ) -> Result<Json<EntityPreviewResponse>, ApiError> {
     let relationship_depth = query.relationship_depth.unwrap_or(1);
     let relationship_limit = query.relationship_limit.unwrap_or(10);
@@ -483,7 +533,7 @@ async fn get_preview(
         .repository
         .get_entity(entity_id)
         .await?
-        .expect("preview only returns an existing entity");
+        .ok_or_else(|| ApiError::not_found("entity"))?;
     Ok(Json(EntityPreviewResponse {
         entity: EntityIdentity {
             id: entity.id,
@@ -495,14 +545,15 @@ async fn get_preview(
 }
 
 #[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
 struct ResolvedPreviewQuery {
     context_id: Uuid,
 }
 
 async fn get_resolved_preview(
     State(state): State<AppState>,
-    Path(entity_id): Path<Uuid>,
-    Query(query): Query<ResolvedPreviewQuery>,
+    ApiPath(entity_id): ApiPath<Uuid>,
+    ApiQuery(query): ApiQuery<ResolvedPreviewQuery>,
 ) -> Result<Json<ResolvedEntityPreviewResponse>, ApiError> {
     state
         .repository
@@ -514,7 +565,7 @@ async fn get_resolved_preview(
 
 async fn list_previews(
     State(state): State<AppState>,
-    Query(query): Query<ListPreviewsQuery>,
+    ApiQuery(query): ApiQuery<ListPreviewsQuery>,
 ) -> Result<Json<EntityPreviewPage>, ApiError> {
     let limit = query.limit.unwrap_or(20);
     if limit == 0 || limit > state.max_entity_page_size {
@@ -539,7 +590,7 @@ async fn list_previews(
 
 async fn search_entity_previews(
     State(state): State<AppState>,
-    Json(input): Json<SearchEntitiesRequest>,
+    ApiJson(input): ApiJson<SearchEntitiesRequest>,
 ) -> Result<Json<EntitySearchResponse>, ApiError> {
     let blueprint_code = &input.blueprint.code;
     if blueprint_code.is_empty() {
@@ -614,7 +665,7 @@ async fn search_entity_previews(
 
 async fn create_entity_form(
     State(state): State<AppState>,
-    Json(input): Json<CreateEntityFormRequest>,
+    ApiJson(input): ApiJson<CreateEntityFormRequest>,
 ) -> Result<(StatusCode, Json<Entity>), ApiError> {
     let blueprint = resolve_search_blueprint(&state, &input.blueprint).await?;
     let entity = state
@@ -631,7 +682,7 @@ async fn create_entity_form(
 
 async fn get_entity_form(
     State(state): State<AppState>,
-    Path(entity_id): Path<Uuid>,
+    ApiPath(entity_id): ApiPath<Uuid>,
 ) -> Result<Json<EntityFormResponse>, ApiError> {
     let entity = state
         .repository
@@ -662,8 +713,8 @@ async fn get_entity_form(
 
 async fn update_entity_form(
     State(state): State<AppState>,
-    Path(entity_id): Path<Uuid>,
-    Json(input): Json<UpdateEntityFormRequest>,
+    ApiPath(entity_id): ApiPath<Uuid>,
+    ApiJson(input): ApiJson<UpdateEntityFormRequest>,
 ) -> Result<Json<Entity>, ApiError> {
     let entity = state
         .repository
@@ -680,17 +731,16 @@ async fn update_entity_form(
 
 async fn preview_entity_migration(
     State(state): State<AppState>,
-    Path(entity_id): Path<Uuid>,
+    ApiPath(entity_id): ApiPath<Uuid>,
 ) -> Result<Json<crate::model::EntityMigrationPreview>, ApiError> {
     let preview = state.repository.preview_entity_migration(entity_id).await?;
-    invalidate_data_health(&state).await;
     Ok(Json(preview))
 }
 
 async fn migrate_entity_to_latest(
     State(state): State<AppState>,
-    Path(entity_id): Path<Uuid>,
-    Json(input): Json<MigrateEntityRequest>,
+    ApiPath(entity_id): ApiPath<Uuid>,
+    ApiJson(input): ApiJson<MigrateEntityRequest>,
 ) -> Result<Json<Entity>, ApiError> {
     let entity = state
         .repository
@@ -724,8 +774,8 @@ async fn resolve_search_blueprint(
 
 async fn append_values(
     State(state): State<AppState>,
-    Path(entity_id): Path<Uuid>,
-    Json(input): Json<AppendAttributeValues>,
+    ApiPath(entity_id): ApiPath<Uuid>,
+    ApiJson(input): ApiJson<AppendAttributeValues>,
 ) -> Result<(StatusCode, Json<Vec<crate::model::AttributeValue>>), ApiError> {
     let values = state.repository.append_values(entity_id, input).await?;
     invalidate_data_health(&state).await;
@@ -734,7 +784,7 @@ async fn append_values(
 
 async fn get_current_values(
     State(state): State<AppState>,
-    Path(entity_id): Path<Uuid>,
+    ApiPath(entity_id): ApiPath<Uuid>,
 ) -> Result<Json<Vec<crate::model::AttributeValue>>, ApiError> {
     if state.repository.get_entity(entity_id).await?.is_none() {
         return Err(ApiError::not_found("entity"));
@@ -745,7 +795,7 @@ async fn get_current_values(
 
 async fn get_value_history(
     State(state): State<AppState>,
-    Path(entity_id): Path<Uuid>,
+    ApiPath(entity_id): ApiPath<Uuid>,
 ) -> Result<Json<Vec<crate::model::AttributeValueHistory>>, ApiError> {
     if state.repository.get_entity(entity_id).await?.is_none() {
         return Err(ApiError::not_found("entity"));
@@ -755,7 +805,7 @@ async fn get_value_history(
 
 async fn restore_value(
     State(state): State<AppState>,
-    Path((entity_id, history_id)): Path<(Uuid, Uuid)>,
+    ApiPath((entity_id, history_id)): ApiPath<(Uuid, Uuid)>,
 ) -> Result<(StatusCode, Json<crate::model::AttributeValue>), ApiError> {
     let value = state
         .repository
@@ -767,8 +817,8 @@ async fn restore_value(
 
 async fn replace_relationships(
     State(state): State<AppState>,
-    Path(entity_id): Path<Uuid>,
-    Json(input): Json<RelationshipMutation>,
+    ApiPath(entity_id): ApiPath<Uuid>,
+    ApiJson(input): ApiJson<RelationshipMutation>,
 ) -> Result<(StatusCode, Json<Vec<crate::model::AttributeValue>>), ApiError> {
     let values = state
         .repository
@@ -780,8 +830,8 @@ async fn replace_relationships(
 
 async fn remove_relationships(
     State(state): State<AppState>,
-    Path(entity_id): Path<Uuid>,
-    Json(input): Json<RelationshipMutation>,
+    ApiPath(entity_id): ApiPath<Uuid>,
+    ApiJson(input): ApiJson<RelationshipMutation>,
 ) -> Result<(StatusCode, Json<Vec<crate::model::AttributeValue>>), ApiError> {
     let values = state
         .repository
@@ -792,12 +842,14 @@ async fn remove_relationships(
 }
 
 #[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
 struct PreviewQuery {
     relationship_depth: Option<u8>,
     relationship_limit: Option<u32>,
 }
 
 #[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
 struct ListPreviewsQuery {
     blueprint: String,
     related_from: Uuid,
@@ -836,6 +888,36 @@ impl ApiError {
             code: "invalid_input",
             message,
         }
+    }
+
+    fn bad_request(message: &'static str) -> Self {
+        Self {
+            status: StatusCode::BAD_REQUEST,
+            code: "bad_request",
+            message: message.to_owned(),
+        }
+    }
+
+    fn from_json_rejection(rejection: axum::extract::rejection::JsonRejection) -> Self {
+        use axum::extract::rejection::JsonRejection;
+
+        match rejection {
+            JsonRejection::JsonDataError(_) => Self::invalid_input(
+                "request body does not match the expected JSON shape".to_owned(),
+            ),
+            JsonRejection::JsonSyntaxError(_)
+            | JsonRejection::MissingJsonContentType(_)
+            | JsonRejection::BytesRejection(_) => Self::bad_request("request body is malformed"),
+            _ => Self::bad_request("request body is malformed"),
+        }
+    }
+
+    fn from_path_rejection(_: axum::extract::rejection::PathRejection) -> Self {
+        Self::bad_request("path parameters are invalid")
+    }
+
+    fn from_query_rejection(_: axum::extract::rejection::QueryRejection) -> Self {
+        Self::bad_request("query parameters are invalid")
     }
 }
 
@@ -896,8 +978,7 @@ impl From<RepositoryError> for ApiError {
                 code: "relationship_target_type_mismatch",
                 message: error.to_string(),
             },
-            RepositoryError::InvalidProjections
-            | RepositoryError::InvalidPreview
+            RepositoryError::InvalidPreview
             | RepositoryError::ReservedContextCode
             | RepositoryError::InvalidCode
             | RepositoryError::InvalidContextData
