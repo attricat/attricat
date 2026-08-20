@@ -33,7 +33,7 @@ export const createEntityBlueprint = async (
   options: { entitySchema?: string; views?: string } = {},
 ) => {
   const blueprint = await createBlueprint(
-    `format_version = 1\ncode = "${code}"\nname = "${name}"\nkind = "entity"${options.entitySchema ? `\nentity_schema = '${options.entitySchema}'` : ''}\n\n[display.dropdown_option]\nfields = ["title"]\n\n${attributes}${options.views ? `\n\n${options.views}` : ''}`,
+    `format_version = 1\ncode = "${code}"\nname = "${name}"\nkind = "entity"${options.entitySchema ? `\nentity_schema = '${options.entitySchema}'` : ''}\n\n[views.dropdown_option]\ntype = "dropdown_option"\nfields = ["title"]\n\n${attributes}${options.views ? `\n\n${options.views}` : ''}`,
   );
   return publishRevision(blueprint);
 };

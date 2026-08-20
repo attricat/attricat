@@ -122,7 +122,7 @@ struct PreviewRelationship {
     context_code: Option<String>,
     target_id: Uuid,
     target_projections: Value,
-    target_display: Value,
+    target_views: Value,
     target_context_fallback: Value,
     relationship_position: i64,
 }
@@ -133,7 +133,7 @@ struct EntityPreviewRow {
     blueprint_version: i64,
     created_at: DateTime<Utc>,
     preview: Value,
-    blueprint_display: Value,
+    blueprint_views: Value,
     blueprint_context_fallback: Value,
 }
 
@@ -141,7 +141,7 @@ struct EntityPreviewRow {
 struct RelationshipTreeNodeRow {
     id: Uuid,
     preview: Value,
-    display: Value,
+    views: Value,
     context_fallback: Value,
 }
 
@@ -152,7 +152,7 @@ struct IncomingRelationshipRow {
     blueprint_version: i64,
     created_at: DateTime<Utc>,
     preview: Value,
-    blueprint_display: Value,
+    blueprint_views: Value,
     blueprint_context_fallback: Value,
 }
 
@@ -456,7 +456,7 @@ impl CatalogRepository {
     ) -> Result<Vec<Blueprint>, RepositoryError> {
         Ok(sqlx::query_as::<_, Blueprint>(
             r#"SELECT DISTINCT ON (id)
-                    id, code, name, kind, version, display, views, includes, entity_schema, status, published_at, created_at, updated_at,
+                     id, code, name, kind, version, views, includes, entity_schema, status, published_at, created_at, updated_at,
                     deleted_at, definition, definition_hash
                FROM blueprints
                WHERE kind = 'entity' AND deleted_at IS NULL
@@ -471,7 +471,7 @@ impl CatalogRepository {
     pub async fn list_blueprints(&self) -> Result<Vec<Blueprint>, RepositoryError> {
         Ok(sqlx::query_as::<_, Blueprint>(
             r#"SELECT DISTINCT ON (id)
-                    id, code, name, kind, version, display, views, includes, entity_schema, status, published_at, created_at, updated_at,
+                     id, code, name, kind, version, views, includes, entity_schema, status, published_at, created_at, updated_at,
                     deleted_at, definition, definition_hash
                FROM blueprints
                WHERE deleted_at IS NULL
@@ -486,7 +486,7 @@ impl CatalogRepository {
         blueprint_id: Uuid,
     ) -> Result<Vec<Blueprint>, RepositoryError> {
         Ok(sqlx::query_as::<_, Blueprint>(
-            r#"SELECT id, code, name, kind, version, includes, display, views, entity_schema, status, published_at, created_at, updated_at, deleted_at, definition, definition_hash
+            r#"SELECT id, code, name, kind, version, includes, views, entity_schema, status, published_at, created_at, updated_at, deleted_at, definition, definition_hash
                FROM blueprints
                WHERE id = $1 AND deleted_at IS NULL
                ORDER BY version DESC"#,
@@ -579,20 +579,15 @@ impl CatalogRepository {
                 "could not serialize generated includes: {error}"
             ))
         })?;
-        let display = serde_json::to_value(&compiled.display).map_err(|error| {
-            RepositoryError::InvalidBlueprintDefinition(format!(
-                "could not serialize generated display definitions: {error}"
-            ))
-        })?;
         let views = serde_json::to_value(&compiled.views).map_err(|error| {
             RepositoryError::InvalidBlueprintDefinition(format!(
                 "could not serialize generated views: {error}"
             ))
         })?;
         let blueprint = sqlx::query_as::<_, Blueprint>(
-            r#"INSERT INTO blueprints (id, code, name, kind, version, includes, display, views, entity_schema, status, definition, definition_hash)
-               VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, 'draft', $10, $11)
-               RETURNING id, code, name, kind, version, includes, display, views, entity_schema, status, published_at, created_at, updated_at, deleted_at, definition, definition_hash"#,
+            r#"INSERT INTO blueprints (id, code, name, kind, version, includes, views, entity_schema, status, definition, definition_hash)
+               VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 'draft', $9, $10)
+               RETURNING id, code, name, kind, version, includes, views, entity_schema, status, published_at, created_at, updated_at, deleted_at, definition, definition_hash"#,
         )
         .bind(blueprint_id)
         .bind(compiled.code)
@@ -600,7 +595,6 @@ impl CatalogRepository {
         .bind(compiled.kind.as_str())
         .bind(version)
         .bind(includes)
-        .bind(display)
         .bind(views)
         .bind(compiled.entity_schema)
         .bind(definition)
@@ -643,7 +637,7 @@ impl CatalogRepository {
         blueprint_id: Uuid,
     ) -> Result<Option<BlueprintWithAttributes>, RepositoryError> {
         let blueprint = sqlx::query_as::<_, Blueprint>(
-            r#"SELECT id, code, name, kind, version, includes, display, views, entity_schema, status, published_at, created_at, updated_at, deleted_at, definition, definition_hash
+            r#"SELECT id, code, name, kind, version, includes, views, entity_schema, status, published_at, created_at, updated_at, deleted_at, definition, definition_hash
                FROM blueprints
                WHERE id = $1 AND status = 'published' AND deleted_at IS NULL
                ORDER BY version DESC
@@ -662,7 +656,7 @@ impl CatalogRepository {
         version: i64,
     ) -> Result<Option<BlueprintWithAttributes>, RepositoryError> {
         let blueprint = sqlx::query_as::<_, Blueprint>(
-            r#"SELECT id, code, name, kind, version, includes, display, views, entity_schema, status, published_at, created_at, updated_at, deleted_at, definition, definition_hash
+            r#"SELECT id, code, name, kind, version, includes, views, entity_schema, status, published_at, created_at, updated_at, deleted_at, definition, definition_hash
                FROM blueprints
                WHERE id = $1 AND version = $2 AND deleted_at IS NULL"#,
         )
@@ -680,7 +674,7 @@ impl CatalogRepository {
     ) -> Result<Option<BlueprintWithAttributes>, RepositoryError> {
         validate_code(code)?;
         let blueprint = sqlx::query_as::<_, Blueprint>(
-            r#"SELECT id, code, name, kind, version, includes, display, views, entity_schema, status, published_at, created_at, updated_at, deleted_at, definition, definition_hash
+            r#"SELECT id, code, name, kind, version, includes, views, entity_schema, status, published_at, created_at, updated_at, deleted_at, definition, definition_hash
                FROM blueprints
                WHERE code = $1 AND status = 'published' AND deleted_at IS NULL
                ORDER BY version DESC
@@ -699,7 +693,7 @@ impl CatalogRepository {
     ) -> Result<Option<BlueprintWithAttributes>, RepositoryError> {
         validate_code(code)?;
         let blueprint = sqlx::query_as::<_, Blueprint>(
-            r#"SELECT id, code, name, kind, version, includes, display, views, entity_schema, status, published_at, created_at, updated_at, deleted_at, definition, definition_hash
+            r#"SELECT id, code, name, kind, version, includes, views, entity_schema, status, published_at, created_at, updated_at, deleted_at, definition, definition_hash
                FROM blueprints
                WHERE code = $1 AND deleted_at IS NULL
                ORDER BY version DESC
@@ -718,7 +712,7 @@ impl CatalogRepository {
     ) -> Result<Option<BlueprintWithAttributes>, RepositoryError> {
         validate_code(code)?;
         let blueprint = sqlx::query_as::<_, Blueprint>(
-            r#"SELECT id, code, name, kind, version, includes, display, views, entity_schema, status, published_at, created_at, updated_at, deleted_at, definition, definition_hash
+            r#"SELECT id, code, name, kind, version, includes, views, entity_schema, status, published_at, created_at, updated_at, deleted_at, definition, definition_hash
                FROM blueprints
                WHERE code = $1 AND version = $2 AND deleted_at IS NULL"#,
         )
@@ -737,7 +731,7 @@ impl CatalogRepository {
     ) -> Result<Option<BlueprintWithAttributes>, RepositoryError> {
         validate_code(code)?;
         let blueprint = sqlx::query_as::<_, Blueprint>(
-            r#"SELECT id, code, name, kind, version, includes, display, views, entity_schema, status, published_at, created_at, updated_at, deleted_at, definition, definition_hash
+            r#"SELECT id, code, name, kind, version, includes, views, entity_schema, status, published_at, created_at, updated_at, deleted_at, definition, definition_hash
                FROM blueprints
                WHERE code = $1 AND version = $2 AND status = 'published' AND deleted_at IS NULL"#,
         )
@@ -755,7 +749,7 @@ impl CatalogRepository {
     ) -> Result<BlueprintWithAttributes, RepositoryError> {
         let mut transaction = self.pool.begin().await?;
         let blueprint = sqlx::query_as::<_, Blueprint>(
-            r#"SELECT id, code, name, kind, version, includes, display, views, entity_schema, status, published_at, created_at, updated_at, deleted_at, definition, definition_hash
+            r#"SELECT id, code, name, kind, version, includes, views, entity_schema, status, published_at, created_at, updated_at, deleted_at, definition, definition_hash
                FROM blueprints
                WHERE id = $1 AND version = $2 AND deleted_at IS NULL
                FOR UPDATE"#,
@@ -957,7 +951,7 @@ impl CatalogRepository {
         let requested_context = resolved.requested_context.code;
         let current_display = display_label(
             entity.projections.get("preview").unwrap_or(&Value::Null),
-            &blueprint.blueprint.display,
+            &blueprint.blueprint.views,
             &serde_json::json!({}),
             &requested_context,
         )
@@ -1704,7 +1698,7 @@ impl CatalogRepository {
         let relationships = sqlx::query_as::<_, PreviewRelationship>(
             r#"WITH relationships AS (
                     SELECT a.code AS attribute_code, c.code AS context_code, target.id AS target_id,
-                            target.projections AS target_projections, b.display AS target_display,
+                            target.projections AS target_projections, b.views AS target_views,
                             (SELECT COALESCE(jsonb_object_agg(attribute.code, attribute.context_fallback), '{}'::jsonb)
                                FROM attributes attribute
                               WHERE attribute.blueprint_id = target.blueprint_id
@@ -1721,7 +1715,7 @@ impl CatalogRepository {
                       AND av.relationship_target_entity_id IS NOT NULL
                        AND av.active
                 )
-               SELECT attribute_code, context_code, target_id, target_projections, target_display, target_context_fallback, relationship_position
+               SELECT attribute_code, context_code, target_id, target_projections, target_views, target_context_fallback, relationship_position
                FROM relationships
                WHERE relationship_position <= $2
                ORDER BY attribute_code, context_code NULLS FIRST, relationship_position"#,
@@ -1780,7 +1774,7 @@ impl CatalogRepository {
                 "display".to_owned(),
                 display_label(
                     &target_preview,
-                    &relationship.target_display,
+                    &relationship.target_views,
                     &relationship.target_context_fallback,
                     &context_code,
                 ),
@@ -1809,7 +1803,7 @@ impl CatalogRepository {
         validate_code(relationship)?;
         let rows = sqlx::query_as::<_, EntityPreviewRow>(
             r#"SELECT target.id, target.blueprint_version, target.created_at, target.projections -> 'preview' AS preview,
-                      b.display AS blueprint_display,
+                      b.views AS blueprint_views,
                       (SELECT COALESCE(jsonb_object_agg(attribute.code, attribute.context_fallback), '{}'::jsonb)
                          FROM attributes attribute
                         WHERE attribute.blueprint_id = target.blueprint_id
@@ -1866,7 +1860,7 @@ impl CatalogRepository {
         let rows = sqlx::query_as::<_, IncomingRelationshipRow>(
             r#"SELECT source.id, b.code AS blueprint_code, source.blueprint_version,
                       source.created_at, source.projections -> 'preview' AS preview,
-                      b.display AS blueprint_display,
+                      b.views AS blueprint_views,
                       (SELECT COALESCE(jsonb_object_agg(attribute.code, attribute.context_fallback), '{}'::jsonb)
                          FROM attributes attribute
                         WHERE attribute.blueprint_id = source.blueprint_id
@@ -1931,7 +1925,7 @@ impl CatalogRepository {
         matching_entity_ids: Option<&[Uuid]>,
     ) -> Result<(Vec<EntityPreview>, Option<String>), RepositoryError> {
         let sql = r#"SELECT e.id, e.blueprint_version, e.created_at, e.projections -> 'preview' AS preview,
-                      b.display AS blueprint_display,
+                      b.views AS blueprint_views,
                       (SELECT COALESCE(jsonb_object_agg(attribute.code, attribute.context_fallback), '{}'::jsonb)
                          FROM attributes attribute
                         WHERE attribute.blueprint_id = e.blueprint_id
@@ -2005,7 +1999,7 @@ impl CatalogRepository {
             return Err(RepositoryError::InvalidContext);
         }
         let nodes = sqlx::query_as::<_, RelationshipTreeNodeRow>(
-            r#"SELECT e.id, e.projections -> 'preview' AS preview, b.display,
+            r#"SELECT e.id, e.projections -> 'preview' AS preview, b.views,
                       (SELECT COALESCE(jsonb_object_agg(a.code, a.context_fallback), '{}'::jsonb)
                          FROM attributes a
                         WHERE a.blueprint_id = e.blueprint_id
@@ -2099,7 +2093,7 @@ impl CatalogRepository {
                         parent_ids: parents_by_child.remove(&node.id).unwrap_or_default(),
                         display: display_label(
                             &node.preview,
-                            &node.display,
+                            &node.views,
                             &node.context_fallback,
                             &requested_context.code,
                         )
@@ -3027,7 +3021,7 @@ fn entity_preview(row: EntityPreviewRow) -> EntityPreview {
         created_at: row.created_at,
         display: display_labels(
             &row.preview,
-            &row.blueprint_display,
+            &row.blueprint_views,
             &row.blueprint_context_fallback,
         ),
         preview: row.preview,
@@ -3050,7 +3044,7 @@ fn incoming_relationship_item(row: IncomingRelationshipRow) -> IncomingRelations
         created_at: row.created_at,
         display: display_labels(
             &row.preview,
-            &row.blueprint_display,
+            &row.blueprint_views,
             &row.blueprint_context_fallback,
         ),
     }
@@ -3147,7 +3141,7 @@ fn collect_hierarchy_paths(
     }
 }
 
-fn display_labels(preview: &Value, display: &Value, context_fallback: &Value) -> Value {
+fn display_labels(preview: &Value, views: &Value, context_fallback: &Value) -> Value {
     let contexts = preview.as_object().cloned().unwrap_or_default();
     Value::Object(
         contexts
@@ -3155,7 +3149,7 @@ fn display_labels(preview: &Value, display: &Value, context_fallback: &Value) ->
             .map(|context| {
                 (
                     context.clone(),
-                    display_label(preview, display, context_fallback, context),
+                    display_label(preview, views, context_fallback, context),
                 )
             })
             .collect(),
@@ -3164,11 +3158,11 @@ fn display_labels(preview: &Value, display: &Value, context_fallback: &Value) ->
 
 fn display_label(
     preview: &Value,
-    display: &Value,
+    views: &Value,
     context_fallback: &Value,
     context_code: &str,
 ) -> Value {
-    let Some(definition) = display.get("dropdown_option") else {
+    let Some(definition) = views.get("dropdown_option") else {
         return Value::String(String::new());
     };
     let Some(fields) = definition.get("fields").and_then(Value::as_array) else {

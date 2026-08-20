@@ -234,7 +234,6 @@ export const BlueprintDetailPage = ({
                 variant="scrollable"
               >
                 <Tab label="Includes" />
-                <Tab label="Display" />
                 <Tab label="Views" />
                 <Tab label="View definition" />
                 <Tab label="Entity schema" />
@@ -248,30 +247,24 @@ export const BlueprintDetailPage = ({
                   />
                 )}
                 {dataTab === 1 && (
-                  <JsonMetadata
-                    label="Display"
-                    value={left.data.blueprint.display}
-                  />
-                )}
-                {dataTab === 2 && (
                   <BlueprintViewsPreview
                     attributes={left.data.attributes}
                     views={left.data.blueprint.views}
                   />
                 )}
-                {dataTab === 3 && (
+                {dataTab === 2 && (
                   <JsonMetadata
                     label="Views"
                     value={left.data.blueprint.views}
                   />
                 )}
-                {dataTab === 4 && (
+                {dataTab === 3 && (
                   <JsonMetadata
                     label="Entity schema"
                     value={left.data.blueprint.entity_schema}
                   />
                 )}
-                {dataTab === 5 && (
+                {dataTab === 4 && (
                   <Box sx={{ overflowX: 'auto' }}>
                     <Table size="small">
                       <TableHead>

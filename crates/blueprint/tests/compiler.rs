@@ -1,5 +1,5 @@
 use catalog_blueprint::{
-    BlueprintError, EffectiveAttribute, ResolvedInclude, compile, parse, raw_hash,
+    BlueprintError, EffectiveAttribute, ResolvedInclude, ViewDefinition, compile, parse, raw_hash,
 };
 
 #[test]
@@ -11,7 +11,8 @@ name = "Product"
 kind = "entity"
 entity_schema = '{"type":"object","required":["meta_title"]}'
 
-[display.dropdown_option]
+[views.dropdown_option]
+type = "dropdown_option"
 fields = ["title"]
 
 [[includes]]
@@ -80,7 +81,8 @@ code = "product"
 name = "Product"
 kind = "entity"
 
-[display.dropdown_option]
+[views.dropdown_option]
+type = "dropdown_option"
 fields = ["title"]
 
 [[attributes]]
@@ -110,7 +112,8 @@ code = "product"
 name = "Product"
 kind = "entity"
 
-[display.dropdown_option]
+[views.dropdown_option]
+type = "dropdown_option"
 fields = ["title"]
 
 [[attributes]]
@@ -135,7 +138,8 @@ code = "product"
 name = "Product"
 kind = "entity"
 
-[display.dropdown_option]
+[views.dropdown_option]
+type = "dropdown_option"
 fields = ["name"]
 unexpected = true
 
@@ -166,7 +170,8 @@ code = "product"
 name = "Product"
 kind = "entity"
 
-[display.dropdown_option]
+[views.dropdown_option]
+type = "dropdown_option"
 fields = ["title"]
 
 [[attributes]]
@@ -224,7 +229,8 @@ code = "product"
 name = "Product"
 kind = "entity"
 
-[display.dropdown_option]
+[views.dropdown_option]
+type = "dropdown_option"
 fields = ["name"]
 
 [[attributes]]
@@ -248,7 +254,7 @@ tags = ["searchable"]
 }
 
 #[test]
-fn requires_valid_dropdown_option_display_and_preserves_generic_tags() {
+fn requires_valid_dropdown_option_view_and_preserves_generic_tags() {
     let missing_display = r#"
 format_version = 1
 code = "product"
@@ -263,11 +269,14 @@ value_type = "string"
 
     let source = missing_display.replace(
         "value_type = \"string\"",
-        "value_type = \"string\"\ntags = [\"searchable\"]\n\n[display.dropdown_option]\nfields = [\"title\"]",
+        "value_type = \"string\"\ntags = [\"searchable\"]\n\n[views.dropdown_option]\ntype = \"dropdown_option\"\nfields = [\"title\"]",
     );
     let compiled = compile(parse(&source).unwrap(), &[], &source).unwrap();
     assert_eq!(compiled.attributes[0].tags, ["searchable"]);
-    assert_eq!(compiled.display["dropdown_option"].separator, " · ");
+    assert!(matches!(
+        compiled.views["dropdown_option"],
+        ViewDefinition::DropdownOption { ref separator, .. } if separator == " · "
+    ));
 
     let relationship_display = source.replace("fields = [\"title\"]", "fields = [\"unknown\"]");
     assert!(
@@ -295,7 +304,8 @@ code = "product"
 name = "Product"
 kind = "entity"
 
-[display.dropdown_option]
+[views.dropdown_option]
+type = "dropdown_option"
 fields = ["title"]
 
 [views.detail]
@@ -323,7 +333,7 @@ code = "categories"
 value_type = "relationship"
 "#;
     let compiled = compile(parse(source).unwrap(), &[], source).unwrap();
-    assert_eq!(compiled.views.len(), 2);
+    assert_eq!(compiled.views.len(), 3);
     assert_eq!(
         compiled.views["detail"],
         parse(source).unwrap().views["detail"]
@@ -338,7 +348,8 @@ code = "category"
 name = "Category"
 kind = "entity"
 
-[display.dropdown_option]
+[views.dropdown_option]
+type = "dropdown_option"
 fields = ["name"]
 
 [views.detail]
@@ -372,7 +383,8 @@ code = "product"
 name = "Product"
 kind = "entity"
 
-[display.dropdown_option]
+[views.dropdown_option]
+type = "dropdown_option"
 fields = ["title"]
 
 [views.index]
@@ -437,7 +449,8 @@ code = "product"
 name = "Product"
 kind = "entity"
 
-[display.dropdown_option]
+[views.dropdown_option]
+type = "dropdown_option"
 fields = ["title"]
 
 [views.detail]
@@ -476,7 +489,8 @@ name = "Product"
 kind = "entity"
 entity_schema = '{"type":"object","required":["price"]}'
 
-[display.dropdown_option]
+[views.dropdown_option]
+type = "dropdown_option"
 fields = ["title"]
 
 [[attributes]]
@@ -505,7 +519,8 @@ name = "Product"
 kind = "entity"
 entity_schema = '__SCHEMA__'
 
-[display.dropdown_option]
+[views.dropdown_option]
+type = "dropdown_option"
 fields = ["title"]
 
 [[attributes]]
@@ -549,7 +564,8 @@ name = "Schedule"
 kind = "entity"
 entity_schema = '{"type":"object","properties":{"cutoff":{"type":"object","required":["time"],"properties":{"time":{"type":"string"}}}}}'
 
-[display.dropdown_option]
+[views.dropdown_option]
+type = "dropdown_option"
 fields = ["title"]
 
 [[attributes]]
@@ -572,7 +588,8 @@ code = "product"
 name = "Product"
 kind = "entity"
 
-[display.dropdown_option]
+[views.dropdown_option]
+type = "dropdown_option"
 fields = ["title"]
 
 [[attributes]]
@@ -605,7 +622,8 @@ code = "product"
 name = "Product"
 kind = "entity"
 
-[display.dropdown_option]
+[views.dropdown_option]
+type = "dropdown_option"
 fields = ["title"]
 
 [views.detail]
@@ -663,7 +681,8 @@ code = "category"
 name = "Category"
 kind = "entity"
 
-[display.dropdown_option]
+[views.dropdown_option]
+type = "dropdown_option"
 fields = ["title"]
 
 [views.detail]

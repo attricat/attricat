@@ -12,7 +12,6 @@ pub struct Blueprint {
     pub kind: String,
     pub version: i64,
     pub includes: Value,
-    pub display: Value,
     pub views: Value,
     pub entity_schema: Option<Value>,
     pub status: String,

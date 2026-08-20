@@ -2,6 +2,7 @@ import { z } from 'zod';
 import { attributeValueKinds, attributeValueTypes } from './value-types';
 
 export const viewBlockTypes = {
+  dropdownOption: 'dropdown_option',
   stack: 'stack',
   grid: 'grid',
   section: 'section',
@@ -56,6 +57,11 @@ export type ViewNode =
       component?: ComponentReference | null;
     };
 export type ViewDefinition =
+  | {
+      type: 'dropdown_option';
+      fields: string[];
+      separator?: string;
+    }
   | { type: 'table'; fields: string[]; component?: ComponentReference | null }
   | Exclude<
       ViewNode,
@@ -147,6 +153,11 @@ const viewNodeSchema: z.ZodType<ViewNode> = z.lazy(() =>
 const viewDefinitionSchema: z.ZodType<ViewDefinition> = z.lazy(() =>
   z.union([
     z.object({
+      type: z.literal(viewBlockTypes.dropdownOption),
+      fields: z.array(z.string()),
+      separator: z.string().optional(),
+    }),
+    z.object({
       type: z.literal(viewBlockTypes.table),
       fields: z.array(z.string()),
       component: componentReferenceSchema.nullish(),
@@ -205,7 +216,6 @@ export const blueprintSchema = z
     code: z.string(),
     name: z.string(),
     version: z.number().int().positive(),
-    display: jsonObjectSchema,
     views: viewsSchema.default({}),
     entity_schema: jsonSchemaSchema.nullish(),
   })

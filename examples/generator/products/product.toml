@@ -9,7 +9,8 @@ alias = "seo"
 code = "product_seo"
 version = 1
 
-[display.dropdown_option]
+[views.dropdown_option]
+type = "dropdown_option"
 fields = ["title", "sku"]
 separator = " / "
 

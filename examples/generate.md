@@ -27,7 +27,7 @@ The generator loads its blueprint definitions from `examples/generator/products/
 creates or reuses the `product_seo`, `category`, `color`, and `product`
 blueprints. The product blueprint demonstrates
 mixins and version-pinned includes, selected attributes, tags, scalar and entity
-JSON Schema validation, display configuration, context policies, all native
+JSON Schema validation, dropdown-option and screen views, context policies, all native
 scalar types, constrained relationships, and configured views and components.
 Category, color, and product detail views also demonstrate lazy,
 cursor-paginated incoming relationship lists.

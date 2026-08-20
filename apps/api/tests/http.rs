@@ -80,7 +80,7 @@ async fn data_health_completeness_counts_default_values(pool: PgPool) {
     let blueprint = create_blueprint(
         &client,
         &base_url,
-        "format_version = 1\ncode = \"health_product\"\nname = \"Health product\"\nkind = \"entity\"\n\n[display.dropdown_option]\nfields = [\"title\"]\n\n[[attributes]]\ncode = \"title\"\nvalue_type = \"string\"",
+        "format_version = 1\ncode = \"health_product\"\nname = \"Health product\"\nkind = \"entity\"\n\n[views.dropdown_option]\ntype = \"dropdown_option\"\nfields = [\"title\"]\n\n[[attributes]]\ncode = \"title\"\nvalue_type = \"string\"",
     )
     .await;
     create_entity(&client, &base_url, &blueprint).await;
@@ -110,7 +110,7 @@ async fn restores_a_scalar_value_from_synchronous_history(pool: PgPool) {
     let blueprint = create_blueprint(
         &client,
         &base_url,
-        "format_version = 1\ncode = \"restorable_product\"\nname = \"Restorable product\"\nkind = \"entity\"\n\n[display.dropdown_option]\nfields = [\"title\"]\n\n[[attributes]]\ncode = \"title\"\nvalue_type = \"string\"",
+        "format_version = 1\ncode = \"restorable_product\"\nname = \"Restorable product\"\nkind = \"entity\"\n\n[views.dropdown_option]\ntype = \"dropdown_option\"\nfields = [\"title\"]\n\n[[attributes]]\ncode = \"title\"\nvalue_type = \"string\"",
     )
     .await;
     let entity = create_entity(&client, &base_url, &blueprint).await;
@@ -186,7 +186,7 @@ async fn blueprint_catalogue_lists_all_kinds_and_revision_history(pool: PgPool) 
     let first: Value = client
         .post(format!("{base_url}/blueprints"))
         .json(&json!({
-            "definition": "format_version = 1\ncode = \"catalogued_entity\"\nname = \"Catalogued entity revision two\"\nkind = \"entity\"\n\n[display.dropdown_option]\nfields = [\"title\"]\n\n[[attributes]]\ncode = \"title\"\nvalue_type = \"string\""
+            "definition": "format_version = 1\ncode = \"catalogued_entity\"\nname = \"Catalogued entity revision two\"\nkind = \"entity\"\n\n[views.dropdown_option]\ntype = \"dropdown_option\"\nfields = [\"title\"]\n\n[[attributes]]\ncode = \"title\"\nvalue_type = \"string\""
         }))
         .send()
         .await
@@ -200,7 +200,7 @@ async fn blueprint_catalogue_lists_all_kinds_and_revision_history(pool: PgPool) 
     client
         .post(format!("{base_url}/blueprints/{blueprint_id}/versions"))
         .json(&json!({
-            "definition": "format_version = 1\ncode = \"catalogued_entity\"\nname = \"Catalogued entity\"\nkind = \"entity\"\n\n[display.dropdown_option]\nfields = [\"title\"]\n\n[[attributes]]\ncode = \"title\"\nvalue_type = \"string\""
+            "definition": "format_version = 1\ncode = \"catalogued_entity\"\nname = \"Catalogued entity\"\nkind = \"entity\"\n\n[views.dropdown_option]\ntype = \"dropdown_option\"\nfields = [\"title\"]\n\n[[attributes]]\ncode = \"title\"\nvalue_type = \"string\""
         }))
         .send()
         .await
@@ -321,7 +321,8 @@ code = "category"
 name = "Category"
 kind = "entity"
 
-[display.dropdown_option]
+[views.dropdown_option]
+type = "dropdown_option"
 fields = ["name"]
 
 [[attributes]]
@@ -368,7 +369,8 @@ code = "category"
 name = "Category"
 kind = "entity"
 
-[display.dropdown_option]
+[views.dropdown_option]
+type = "dropdown_option"
 fields = ["name"]
 
 [[attributes]]
@@ -386,7 +388,8 @@ code = "product"
 name = "Product"
 kind = "entity"
 
-[display.dropdown_option]
+[views.dropdown_option]
+type = "dropdown_option"
 fields = ["title"]
 
 [[attributes]]
@@ -527,13 +530,13 @@ async fn soft_deleted_entity_is_hidden_from_reads_and_relationship_previews(pool
     let category = create_blueprint(
         &client,
         &base_url,
-        "format_version = 1\ncode = \"deletablecategory\"\nname = \"Deletable category\"\nkind = \"entity\"\n\n[display.dropdown_option]\nfields = [\"name\"]\n\n[[attributes]]\ncode = \"name\"\nvalue_type = \"string\"\ntags = [\"searchable\"]",
+        "format_version = 1\ncode = \"deletablecategory\"\nname = \"Deletable category\"\nkind = \"entity\"\n\n[views.dropdown_option]\ntype = \"dropdown_option\"\nfields = [\"name\"]\n\n[[attributes]]\ncode = \"name\"\nvalue_type = \"string\"\ntags = [\"searchable\"]",
     )
     .await;
     let product = create_blueprint(
         &client,
         &base_url,
-        "format_version = 1\ncode = \"deletableproduct\"\nname = \"Deletable product\"\nkind = \"entity\"\n\n[display.dropdown_option]\nfields = [\"title\"]\n\n[[attributes]]\ncode = \"title\"\nvalue_type = \"string\"\ntags = [\"searchable\"]\n\n[[attributes]]\ncode = \"categories\"\nvalue_type = \"relationship\"\ntarget_blueprint = \"deletablecategory\"",
+        "format_version = 1\ncode = \"deletableproduct\"\nname = \"Deletable product\"\nkind = \"entity\"\n\n[views.dropdown_option]\ntype = \"dropdown_option\"\nfields = [\"title\"]\n\n[[attributes]]\ncode = \"title\"\nvalue_type = \"string\"\ntags = [\"searchable\"]\n\n[[attributes]]\ncode = \"categories\"\nvalue_type = \"relationship\"\ntarget_blueprint = \"deletablecategory\"",
     )
     .await;
     let default_context = client
@@ -620,7 +623,8 @@ code = "product"
 name = "Product"
 kind = "entity"
 
-[display.dropdown_option]
+[views.dropdown_option]
+type = "dropdown_option"
 fields = ["title"]
 
 [[attributes]]
@@ -640,7 +644,8 @@ code = "product"
 name = "Product"
 kind = "entity"
 
-[display.dropdown_option]
+[views.dropdown_option]
+type = "dropdown_option"
 fields = ["sku"]
 
 [[attributes]]
@@ -742,7 +747,8 @@ code = "facet_category"
 name = "Facet category"
 kind = "entity"
 
-[display.dropdown_option]
+[views.dropdown_option]
+type = "dropdown_option"
 fields = ["name"]
 
 [[attributes]]
@@ -765,7 +771,8 @@ code = "facet_product"
 name = "Facet product"
 kind = "entity"
 
-[display.dropdown_option]
+[views.dropdown_option]
+type = "dropdown_option"
 fields = ["title"]
 
 [[attributes]]
@@ -981,7 +988,8 @@ code = "product"
 name = "Product"
 kind = "entity"
 
-[display.dropdown_option]
+[views.dropdown_option]
+type = "dropdown_option"
 fields = ["title"]
 
 [[includes]]
@@ -1016,8 +1024,8 @@ context_editable = "default"
     assert_eq!(blueprint["blueprint"]["code"], "product");
     assert_eq!(blueprint["blueprint"]["kind"], "entity");
     assert_eq!(
-        blueprint["blueprint"]["display"],
-        json!({ "dropdown_option": { "fields": ["title"], "separator": " · " } })
+        blueprint["blueprint"]["views"]["dropdown_option"],
+        json!({ "type": "dropdown_option", "fields": ["title"], "separator": " · " })
     );
     assert_eq!(
         blueprint["blueprint"]["includes"],
@@ -1074,7 +1082,8 @@ code = "product"
 name = "Product"
 kind = "entity"
 
-[display.dropdown_option]
+[views.dropdown_option]
+type = "dropdown_option"
 fields = ["sku"]
 
 [[attributes]]
@@ -1576,7 +1585,8 @@ code = "product-type"
 name = "Product type"
 kind = "entity"
 
-[display.dropdown_option]
+[views.dropdown_option]
+type = "dropdown_option"
 fields = ["display-name"]
 
 [[attributes]]
@@ -1696,7 +1706,8 @@ code = "measurement"
 name = "Measurement"
 kind = "entity"
 
-[display.dropdown_option]
+[views.dropdown_option]
+type = "dropdown_option"
 fields = ["name"]
 
 [[attributes]]
@@ -1806,7 +1817,8 @@ code = "typed_read"
 name = "Typed read"
 kind = "entity"
 
-[display.dropdown_option]
+[views.dropdown_option]
+type = "dropdown_option"
 fields = ["title"]
 
 [[attributes]]
@@ -1857,7 +1869,8 @@ code = "first"
 name = "First"
 kind = "entity"
 
-[display.dropdown_option]
+[views.dropdown_option]
+type = "dropdown_option"
 fields = ["title"]
 
 [[attributes]]
@@ -1876,7 +1889,8 @@ code = "second"
 name = "Second"
 kind = "entity"
 
-[display.dropdown_option]
+[views.dropdown_option]
+type = "dropdown_option"
 fields = ["title"]
 
 [[attributes]]
@@ -1960,7 +1974,8 @@ code = "category"
 name = "Category"
 kind = "entity"
 
-[display.dropdown_option]
+[views.dropdown_option]
+type = "dropdown_option"
 fields = ["name"]
 
 [[attributes]]
@@ -1979,7 +1994,8 @@ code = "color"
 name = "Color"
 kind = "entity"
 
-[display.dropdown_option]
+[views.dropdown_option]
+type = "dropdown_option"
 fields = ["name", "hex"]
 
 [[attributes]]
@@ -2002,7 +2018,8 @@ code = "product"
 name = "Product"
 kind = "entity"
 
-[display.dropdown_option]
+[views.dropdown_option]
+type = "dropdown_option"
 fields = ["title"]
 
 [[attributes]]
@@ -2359,7 +2376,8 @@ name = "Schema product"
 kind = "entity"
 entity_schema = '{"type":"object","required":["title","price"]}'
 
-[display.dropdown_option]
+[views.dropdown_option]
+type = "dropdown_option"
 fields = ["title"]
 
 [[attributes]]

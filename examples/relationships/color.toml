@@ -8,7 +8,8 @@ attributes = [
   { code = "hex", value_type = "string" },
 ]
 
-[display.dropdown_option]
+[views.dropdown_option]
+type = "dropdown_option"
 fields = ["name", "hex"]
 
 [views.detail]

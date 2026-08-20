@@ -23,7 +23,8 @@ code = "${code}"
 name = "Migrated product"
 kind = "entity"
 
-[display.dropdown_option]
+[views.dropdown_option]
+type = "dropdown_option"
 fields = ["title"]
 
 [[attributes]]

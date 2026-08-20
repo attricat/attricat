@@ -20,7 +20,8 @@ code = "${code}"
 name = "Catalogue product revision"
 kind = "entity"
 
-[display.dropdown_option]
+[views.dropdown_option]
+type = "dropdown_option"
 fields = ["sku"]
 
 [[attributes]]

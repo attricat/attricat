@@ -15,7 +15,6 @@ pub struct BlueprintDefinition {
     pub name: String,
     pub kind: BlueprintKind,
     pub includes: Vec<IncludeRef>,
-    pub display: HashMap<String, DisplayDefinition>,
     pub views: HashMap<String, ViewDefinition>,
     pub entity_schema: Option<serde_json::Value>,
     pub attributes: Vec<AttributeDeclaration>,
@@ -72,8 +71,13 @@ pub struct IncomingRelationship {
 }
 
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
-#[serde(tag = "type", rename_all = "snake_case")]
+#[serde(tag = "type", rename_all = "snake_case", deny_unknown_fields)]
 pub enum ViewDefinition {
+    DropdownOption {
+        fields: Vec<String>,
+        #[serde(default = "default_display_separator")]
+        separator: String,
+    },
     Table {
         fields: Vec<String>,
         #[serde(default)]
@@ -107,7 +111,7 @@ pub enum ViewDefinition {
 }
 
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
-#[serde(tag = "type", rename_all = "snake_case")]
+#[serde(tag = "type", rename_all = "snake_case", deny_unknown_fields)]
 pub enum ViewNode {
     Stack {
         children: Vec<ViewNode>,
@@ -165,14 +169,6 @@ pub enum ViewNode {
         #[serde(default)]
         component: Option<ComponentReference>,
     },
-}
-
-#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
-#[serde(deny_unknown_fields)]
-pub struct DisplayDefinition {
-    pub fields: Vec<String>,
-    #[serde(default = "default_display_separator")]
-    pub separator: String,
 }
 
 fn default_display_separator() -> String {
@@ -248,7 +244,6 @@ pub struct CompiledBlueprint {
     pub kind: BlueprintKind,
     pub raw_definition_hash: String,
     pub includes: Vec<IncludeRef>,
-    pub display: HashMap<String, DisplayDefinition>,
     pub views: HashMap<String, ViewDefinition>,
     pub entity_schema: Option<serde_json::Value>,
     pub attributes: Vec<EffectiveAttribute>,
@@ -280,14 +275,12 @@ pub enum BlueprintError {
     UnknownIncludedAttribute { alias: String, attribute: String },
     #[error("resolved include '{0}' is missing or does not match its declaration")]
     InvalidResolvedInclude(String),
-    #[error("entity blueprints must define display.dropdown_option")]
-    MissingDropdownOptionDisplay,
-    #[error("display '{0}' must define at least one field")]
-    EmptyDisplayFields(String),
-    #[error("display '{display}' contains duplicate field '{field}'")]
-    DuplicateDisplayField { display: String, field: String },
-    #[error("display '{display}' references unknown or non-scalar attribute '{field}'")]
-    InvalidDisplayField { display: String, field: String },
+    #[error("entity blueprints must define views.dropdown_option")]
+    MissingDropdownOptionView,
+    #[error("views.dropdown_option must define at least one field")]
+    EmptyDropdownOptionFields,
+    #[error("views.dropdown_option contains duplicate field '{0}'")]
+    DuplicateDropdownOptionField(String),
     #[error("attribute '{0}' has an invalid tag")]
     InvalidAttributeTag(String),
     #[error("attribute '{code}' has unsupported value type '{value_type}'")]
@@ -371,8 +364,6 @@ struct RawBlueprintDefinition {
     kind: BlueprintKind,
     #[serde(default)]
     includes: Vec<IncludeRef>,
-    #[serde(default)]
-    display: HashMap<String, DisplayDefinition>,
     #[serde(default)]
     views: HashMap<String, ViewDefinition>,
     entity_schema: Option<String>,
@@ -539,7 +530,6 @@ pub fn parse(source: &str) -> Result<BlueprintDefinition, BlueprintError> {
         name: raw.name,
         kind: raw.kind,
         includes: raw.includes,
-        display: raw.display,
         views: raw.views,
         entity_schema,
         attributes,
@@ -643,33 +633,9 @@ pub fn compile(
             validate_entity_schema_attributes(schema, &attributes)?;
         }
     }
-    if definition.kind == BlueprintKind::Entity
-        && !definition.display.contains_key("dropdown_option")
+    if definition.kind == BlueprintKind::Entity && !definition.views.contains_key("dropdown_option")
     {
-        return Err(BlueprintError::MissingDropdownOptionDisplay);
-    }
-    for (name, display) in &definition.display {
-        if display.fields.is_empty() {
-            return Err(BlueprintError::EmptyDisplayFields(name.clone()));
-        }
-        let mut fields = HashSet::new();
-        for field in &display.fields {
-            if field.trim().is_empty() || !fields.insert(field) {
-                return Err(BlueprintError::DuplicateDisplayField {
-                    display: name.clone(),
-                    field: field.clone(),
-                });
-            }
-            if !attributes
-                .iter()
-                .any(|attribute| attribute.code == *field && attribute.value_type != "relationship")
-            {
-                return Err(BlueprintError::InvalidDisplayField {
-                    display: name.clone(),
-                    field: field.clone(),
-                });
-            }
-        }
+        return Err(BlueprintError::MissingDropdownOptionView);
     }
     for (name, view) in &definition.views {
         validate_view(name, view, &attributes, &definition.code)?;
@@ -681,7 +647,6 @@ pub fn compile(
         kind: definition.kind,
         raw_definition_hash: raw_hash(source),
         includes: definition.includes,
-        display: definition.display,
         views: definition.views,
         entity_schema: definition.entity_schema,
         attributes,
@@ -757,6 +722,18 @@ fn validate_view(
     blueprint_code: &str,
 ) -> Result<(), BlueprintError> {
     match definition {
+        ViewDefinition::DropdownOption { fields, .. } => {
+            if fields.is_empty() {
+                return Err(BlueprintError::EmptyDropdownOptionFields);
+            }
+            let mut unique_fields = HashSet::new();
+            for field in fields {
+                if field.trim().is_empty() || !unique_fields.insert(field) {
+                    return Err(BlueprintError::DuplicateDropdownOptionField(field.clone()));
+                }
+                validate_view_field(view, field, attributes, false)?;
+            }
+        }
         ViewDefinition::Table { fields, component } => {
             for field in fields {
                 let attribute = validate_view_field(view, field, attributes, false)?;

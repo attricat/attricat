@@ -77,17 +77,18 @@ code = "meta_title"
 from = "seo.meta_title"
 ```
 
-## Display Labels
+## Dropdown Options
 
-Entity blueprints must define a scalar display label:
+Entity blueprints must define how they appear in relationship dropdowns:
 
 ```toml
-[display.dropdown_option]
+[views.dropdown_option]
+type = "dropdown_option"
 fields = ["name", "sku"]
 separator = " / "
 ```
 
-`separator` defaults to `·`. Server-rendered labels respect each attribute's
+`separator` defaults to `·`. Server-rendered dropdown labels respect each attribute's
 `context_fallback` policy.
 
 ## Views

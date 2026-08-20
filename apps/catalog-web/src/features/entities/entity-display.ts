@@ -7,9 +7,9 @@ export const displayLabel = (
 
 export const dropdownOptionLabel = (
   preview: Record<string, unknown>,
-  display: Record<string, unknown>,
+  views: Record<string, unknown>,
 ): string | undefined => {
-  const definition = dropdownOptionSchema.safeParse(display.dropdown_option);
+  const definition = dropdownOptionSchema.safeParse(views.dropdown_option);
   const parsedPreview = previewSchema.safeParse(preview);
   if (!definition.success || !parsedPreview.success) return undefined;
   const values = parsedPreview.data.default;

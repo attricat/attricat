@@ -63,9 +63,9 @@ export const RelationshipField = ({
       });
     }
   }
-  const targetDisplay = targets.data?.blueprint.blueprint.display ?? {};
+  const targetViews = targets.data?.blueprint.blueprint.views ?? {};
   const targetLabel = (target: (typeof options)[number]) =>
-    dropdownOptionLabel(target.preview, targetDisplay) ??
+    dropdownOptionLabel(target.preview, targetViews) ??
     displayLabel(target.display, target.id);
   const labels = new Map(
     options.map((target) => [target.id, targetLabel(target)]),

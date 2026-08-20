@@ -86,7 +86,7 @@ const RenderedView = ({
   values: ReturnType<typeof sandboxValuesForFields>;
   view: ViewDefinition;
 }) => {
-  if (view.type === 'table')
+  if (view.type === 'table' || view.type === 'dropdown_option')
     return (
       <TableViewPreview
         attributes={attributes}

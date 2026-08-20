@@ -9,7 +9,12 @@ export const entityHeadingComponentId = 'catalog.entity_heading';
 export const findEntityHeading = (
   view: ViewDefinition | undefined,
 ): ViewNode | undefined => {
-  if (!view || view.type === viewBlockTypes.table) return undefined;
+  if (
+    !view ||
+    view.type === viewBlockTypes.table ||
+    view.type === viewBlockTypes.dropdownOption
+  )
+    return undefined;
   const visit = (node: ViewNode): ViewNode | undefined => {
     if (
       node.type === viewBlockTypes.stack &&

@@ -16,7 +16,8 @@ attributes = [
   { code = "variants", value_type = "relationship", target_blueprint = "product" },
 ]
 
-[display.dropdown_option]
+[views.dropdown_option]
+type = "dropdown_option"
 fields = ["title"]
 
 [views.detail]

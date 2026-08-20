@@ -13,7 +13,13 @@ describe('displayLabel', () => {
     expect(
       dropdownOptionLabel(
         { default: { name: 'Navy', hex: '#1c2d4a' } },
-        { dropdown_option: { fields: ['name', 'hex'], separator: ' / ' } },
+        {
+          dropdown_option: {
+            type: 'dropdown_option',
+            fields: ['name', 'hex'],
+            separator: ' / ',
+          },
+        },
       ),
     ).toBe('Navy / #1c2d4a');
   });

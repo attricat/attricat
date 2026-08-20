@@ -3,7 +3,8 @@ code = "color"
 name = "Color"
 kind = "entity"
 
-[display.dropdown_option]
+[views.dropdown_option]
+type = "dropdown_option"
 fields = ["name", "hex"]
 separator = " / "
 

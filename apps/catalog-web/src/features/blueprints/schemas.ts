@@ -22,7 +22,6 @@ export const blueprintSchema = z.object({
   kind: z.string(),
   version: z.number().int().positive(),
   includes: jsonValueSchema,
-  display: jsonValueSchema,
   views: entityBlueprintSchema.shape.views,
   entity_schema: jsonValueSchema.nullable(),
   status: z.string(),

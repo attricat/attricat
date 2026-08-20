@@ -43,7 +43,8 @@ code = "${code}"
 name = "Versioned products"
 kind = "entity"
 
-[display.dropdown_option]
+[views.dropdown_option]
+type = "dropdown_option"
 fields = ["title"]
 
 [[attributes]]

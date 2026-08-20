@@ -30,12 +30,12 @@ identified by `id`; every revision has a positive `version`, and `(id, version)`
 is the primary key.
 
 - `definition` stores the authored TOML definition and is the source of truth.
-- `code`, `name`, `kind`, `includes`, `display`, `entity_schema`, `definition_hash`, and generated attributes
+- `code`, `name`, `kind`, `includes`, `views`, `entity_schema`, `definition_hash`, and generated attributes
   are compiler output derived from TOML.
 - `code` is repository-enforced as stable across revisions in one blueprint family.
 - `kind` is either `entity` or `mixin`; only entity blueprints can be instantiated.
 - `includes` is a generated direct-dependency JSONB cache, in TOML order.
-- `display` is generated JSONB display metadata keyed by display name.
+- `views` is generated JSONB view metadata keyed by view name.
 - `entity_schema` is an optional JSON Schema Draft 2020-12 contract for the
   fully resolved entity document. It is versioned with the blueprint.
 - `definition_hash` is the SHA-256 hash of the exact raw TOML source.
