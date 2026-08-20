@@ -310,9 +310,6 @@ export const Explorer = ({ search }: { search: ExplorerSearch }) => {
           }}
         >
           <Paper component="aside" sx={{ alignSelf: 'start', p: 2 }}>
-            <Typography component="h2" variant="subtitle1">
-              Relationship facet
-            </Typography>
             <TextField
               fullWidth
               label="Relationship"

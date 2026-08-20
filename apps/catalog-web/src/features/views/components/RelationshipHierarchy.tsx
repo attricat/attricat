@@ -65,22 +65,17 @@ export const RelationshipHierarchy = ({
         <Breadcrumbs
           aria-label="Hierarchy"
           key={items.map((item) => item.id).join(':')}
+          sx={{ fontSize: '0.875rem' }}
         >
-          {items.map((item, index) =>
-            index === items.length - 1 ? (
-              <Typography color="text.primary" key={item.id}>
-                {item.display || item.id}
-              </Typography>
-            ) : (
-              <Link
-                key={item.id}
-                params={{ entityId: item.id }}
-                to="/entities/$entityId"
-              >
-                {item.display || item.id}
-              </Link>
-            ),
-          )}
+          {items.map((item) => (
+            <Link
+              key={item.id}
+              params={{ entityId: item.id }}
+              to="/entities/$entityId"
+            >
+              {item.display || item.id}
+            </Link>
+          ))}
         </Breadcrumbs>
       ))}
     </Stack>
