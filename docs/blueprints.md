@@ -53,6 +53,14 @@ value_type = "relationship"
 target_blueprint = "category"
 ```
 
+## Entity Schema
+
+Entity blueprints may define an `entity_schema` JSON Schema contract. Root
+`required`, `properties`, `dependentRequired`, and `dependentSchemas` entries
+must name attributes materialized by the blueprint, including selected include
+attributes. Nested schema properties describe an attribute's value and are not
+treated as blueprint attribute codes.
+
 ## Includes
 
 Includes are exact version-pinned dependencies. Select each mixin attribute that

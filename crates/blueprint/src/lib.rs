@@ -284,6 +284,11 @@ pub enum BlueprintError {
     InvalidJsonSchema { field: String, message: String },
     #[error("only entity blueprints can define an entity schema")]
     EntitySchemaOnMixin,
+    #[error("entity schema {keyword} references unknown attribute '{attribute}'")]
+    EntitySchemaUnknownAttribute {
+        keyword: &'static str,
+        attribute: String,
+    },
     #[error("attribute '{code}' has invalid context_fallback '{context_fallback}'")]
     InvalidContextFallback {
         code: String,
@@ -609,6 +614,11 @@ pub fn compile(
             position: position as i64,
         });
     }
+    if definition.kind == BlueprintKind::Entity {
+        if let Some(schema) = &definition.entity_schema {
+            validate_entity_schema_attributes(schema, &attributes)?;
+        }
+    }
     if definition.kind == BlueprintKind::Entity
         && !definition.display.contains_key("dropdown_option")
     {
@@ -652,6 +662,68 @@ pub fn compile(
         entity_schema: definition.entity_schema,
         attributes,
     })
+}
+
+fn validate_entity_schema_attributes(
+    schema: &serde_json::Value,
+    attributes: &[EffectiveAttribute],
+) -> Result<(), BlueprintError> {
+    let Some(schema) = schema.as_object() else {
+        return Ok(());
+    };
+    let attribute_codes: HashSet<_> = attributes
+        .iter()
+        .map(|attribute| attribute.code.as_str())
+        .collect();
+    let validate_attribute = |keyword: &'static str, attribute: &str| {
+        if attribute_codes.contains(attribute) {
+            Ok(())
+        } else {
+            Err(BlueprintError::EntitySchemaUnknownAttribute {
+                keyword,
+                attribute: attribute.to_owned(),
+            })
+        }
+    };
+
+    if let Some(required) = schema.get("required").and_then(serde_json::Value::as_array) {
+        for attribute in required.iter().filter_map(serde_json::Value::as_str) {
+            validate_attribute("required", attribute)?;
+        }
+    }
+    if let Some(properties) = schema
+        .get("properties")
+        .and_then(serde_json::Value::as_object)
+    {
+        for attribute in properties.keys() {
+            validate_attribute("properties", attribute)?;
+        }
+    }
+    if let Some(dependent_required) = schema
+        .get("dependentRequired")
+        .and_then(serde_json::Value::as_object)
+    {
+        for (attribute, dependencies) in dependent_required {
+            validate_attribute("dependentRequired", attribute)?;
+            for dependency in dependencies
+                .as_array()
+                .into_iter()
+                .flatten()
+                .filter_map(serde_json::Value::as_str)
+            {
+                validate_attribute("dependentRequired", dependency)?;
+            }
+        }
+    }
+    if let Some(dependent_schemas) = schema
+        .get("dependentSchemas")
+        .and_then(serde_json::Value::as_object)
+    {
+        for attribute in dependent_schemas.keys() {
+            validate_attribute("dependentSchemas", attribute)?;
+        }
+    }
+    Ok(())
 }
 
 fn validate_view(

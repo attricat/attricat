@@ -1,4 +1,6 @@
-use catalog_blueprint::{EffectiveAttribute, ResolvedInclude, compile, parse, raw_hash};
+use catalog_blueprint::{
+    BlueprintError, EffectiveAttribute, ResolvedInclude, compile, parse, raw_hash,
+};
 
 #[test]
 fn compiles_only_explicitly_selected_mixin_attributes_in_local_order() {
@@ -7,6 +9,7 @@ format_version = 1
 code = "product"
 name = "Product"
 kind = "entity"
+entity_schema = '{"type":"object","required":["meta_title"]}'
 
 [display.dropdown_option]
 fields = ["title"]
@@ -457,6 +460,74 @@ value_schema = '{"type":"number","minimum":0}'
         compiled.attributes[1].value_schema.as_ref().unwrap()["minimum"],
         0
     );
+}
+
+#[test]
+fn rejects_entity_schema_references_to_unknown_attributes() {
+    let source = r#"
+format_version = 1
+code = "product"
+name = "Product"
+kind = "entity"
+entity_schema = '__SCHEMA__'
+
+[display.dropdown_option]
+fields = ["title"]
+
+[[attributes]]
+code = "title"
+value_type = "string"
+"#;
+
+    for (schema, keyword) in [
+        (r#"{"type":"object","required":["unknown"]}"#, "required"),
+        (
+            r#"{"type":"object","properties":{"unknown":{"type":"string"}}}"#,
+            "properties",
+        ),
+        (
+            r#"{"type":"object","dependentRequired":{"title":["unknown"]}}"#,
+            "dependentRequired",
+        ),
+        (
+            r#"{"type":"object","dependentSchemas":{"unknown":{"type":"object"}}}"#,
+            "dependentSchemas",
+        ),
+    ] {
+        let blueprint = source.replace("__SCHEMA__", schema);
+        let error = compile(parse(&blueprint).unwrap(), &[], &blueprint).unwrap_err();
+        assert!(matches!(
+            error,
+            BlueprintError::EntitySchemaUnknownAttribute {
+                keyword: actual_keyword,
+                attribute,
+            } if actual_keyword == keyword && attribute == "unknown"
+        ));
+    }
+}
+
+#[test]
+fn allows_nested_entity_schema_value_properties() {
+    let source = r#"
+format_version = 1
+code = "schedule"
+name = "Schedule"
+kind = "entity"
+entity_schema = '{"type":"object","properties":{"cutoff":{"type":"object","required":["time"],"properties":{"time":{"type":"string"}}}}}'
+
+[display.dropdown_option]
+fields = ["title"]
+
+[[attributes]]
+code = "title"
+value_type = "string"
+
+[[attributes]]
+code = "cutoff"
+value_type = "time"
+"#;
+
+    assert!(compile(parse(source).unwrap(), &[], source).is_ok());
 }
 
 #[test]
