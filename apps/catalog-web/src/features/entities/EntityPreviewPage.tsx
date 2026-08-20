@@ -23,9 +23,9 @@ import {
 import { entityQueryKeys } from './query-keys';
 import { EntityView } from '../views/components/EntityView';
 import {
-  entityHeadingComponent,
+  entityHeadingComponentId,
   findEntityHeading,
-} from '../views/components/blocks/EntityHeading';
+} from '../views/components/blocks/EntityHeadingDefinition';
 import { resolveHeadingRenderer } from '../views/components/registry';
 
 export const EntityPreviewPage = ({ entityId }: { entityId: string }) => {
@@ -190,7 +190,7 @@ export const EntityPreviewPage = ({ entityId }: { entityId: string }) => {
                 attributes={blueprint.data.attributes}
                 values={resolved.data.values}
                 view={detailView}
-                skipComponentId={entityHeadingComponent.id}
+                skipComponentId={entityHeadingComponentId}
               />
             </Paper>
           )}

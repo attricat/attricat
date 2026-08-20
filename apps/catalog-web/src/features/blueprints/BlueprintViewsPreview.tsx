@@ -18,9 +18,9 @@ import type { Attribute, Blueprint, ViewDefinition } from '../entities/api';
 import { attributeValueTypes } from '../entities/value-types';
 import { EntityView } from '../views/components/EntityView';
 import {
-  entityHeadingComponent,
+  entityHeadingComponentId,
   findEntityHeading,
-} from '../views/components/blocks/EntityHeading';
+} from '../views/components/blocks/EntityHeadingDefinition';
 import { resolveHeadingRenderer } from '../views/components/registry';
 import { AttributeValue } from '../views/components/values/AttributeValue';
 import { sandboxValuesForFields } from './sandbox-values';
@@ -107,7 +107,7 @@ const RenderedView = ({
         })}
       <EntityView
         attributes={attributes}
-        skipComponentId={entityHeadingComponent.id}
+        skipComponentId={entityHeadingComponentId}
         values={values}
         view={view}
       />

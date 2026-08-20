@@ -1,41 +1,13 @@
 import { Box, Typography } from '@mui/material';
 import {
-  viewBlockTypes,
   type Attribute,
   type ViewDefinition,
-  type ViewNode,
 } from '../../../entities/api';
 import { FieldErrorBoundary } from '../boundaries/FieldErrorBoundary';
-import { formatAttributeValue } from '../values/AttributeValue';
-import type { ViewComponentDefinition } from '../component-types';
+import { formatAttributeValue } from '../values/format-attribute-value';
+import { findEntityHeading } from './EntityHeadingDefinition';
 
 type ResolvedValue = { value: unknown };
-
-export const findEntityHeading = (
-  view: ViewDefinition | undefined,
-): ViewNode | undefined => {
-  if (!view || view.type === viewBlockTypes.table) return undefined;
-  const visit = (node: ViewNode): ViewNode | undefined => {
-    if (
-      node.type === viewBlockTypes.stack &&
-      node.component?.id === entityHeadingComponent.id
-    )
-      return node;
-    if ('children' in node) return node.children.map(visit).find(Boolean);
-    if (node.type === viewBlockTypes.tabs)
-      return node.tabs
-        .flatMap((tab) => tab.children)
-        .map(visit)
-        .find(Boolean);
-    if (node.type === viewBlockTypes.accordion)
-      return node.sections
-        .flatMap((section) => section.children)
-        .map(visit)
-        .find(Boolean);
-    return undefined;
-  };
-  return visit(view);
-};
 
 export const EntityHeading = ({
   attributes,
@@ -49,8 +21,7 @@ export const EntityHeading = ({
   view?: ViewDefinition;
 }) => {
   const heading = findEntityHeading(view);
-  const title =
-    heading?.type === viewBlockTypes.stack ? heading.children[0] : undefined;
+  const title = heading?.type === 'stack' ? heading.children[0] : undefined;
   const titleAttribute =
     title?.type === viewBlockTypes.field
       ? attributes.find((attribute) => attribute.code === title.field)
@@ -72,7 +43,7 @@ export const EntityHeading = ({
           {formatAttributeValue(titleAttribute, titleValue)}
         </Typography>
       </FieldErrorBoundary>
-      {heading?.type === viewBlockTypes.stack &&
+      {heading?.type === 'stack' &&
         heading.children.slice(1).map((child, index) => {
           if (child.type === viewBlockTypes.text)
             return (
@@ -96,13 +67,3 @@ export const EntityHeading = ({
     </Box>
   );
 };
-
-export const entityHeadingComponent = {
-  id: 'catalog.entity_heading',
-  version: 1,
-  capabilities: ['display'],
-  placements: ['stack'],
-  value_types: [],
-  allowed_props: [],
-  headingRenderer: EntityHeading,
-} satisfies ViewComponentDefinition;

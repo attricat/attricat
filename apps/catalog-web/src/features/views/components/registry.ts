@@ -5,7 +5,7 @@ import { relationshipListDisplayComponent } from './RelationshipListDisplay';
 import { relationshipListEditComponent } from './RelationshipListEdit';
 import { tableDisplayComponent } from './TableDisplay';
 import { tableEditComponent } from './TableEdit';
-import { entityHeadingComponent } from './blocks/EntityHeading';
+import { entityHeadingComponent } from './blocks/EntityHeadingConfig';
 import type {
   HeadingRenderer,
   ValueRenderer,

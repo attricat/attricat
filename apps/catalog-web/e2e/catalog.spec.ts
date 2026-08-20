@@ -1,68 +1,15 @@
 import { expect, test } from '@playwright/test';
-
-const apiUrl = 'http://127.0.0.1:43100';
-const suffix = () => crypto.randomUUID().slice(0, 8);
-
-const request = async <T>(path: string, init?: RequestInit): Promise<T> => {
-  const response = await fetch(`${apiUrl}${path}`, init);
-  if (!response.ok) {
-    throw new Error(
-      `E2E setup request failed: ${response.status} ${await response.text()}`,
-    );
-  }
-  return response.json() as Promise<T>;
-};
-
-type Blueprint = { blueprint: { code: string; version: number } };
-type Entity = { id: string };
-type Context = { id: string; code: string };
-type NewValue = Record<string, unknown>;
-
-const createBlueprint = async (
-  code: string,
-  name: string,
-  attributes: string,
-  entitySchema?: string,
-) =>
-  request<Blueprint>('/blueprints', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      definition: `format_version = 1\ncode = "${code}"\nname = "${name}"\nkind = "entity"${entitySchema ? `\nentity_schema = '${entitySchema}'` : ''}\n\n[display.dropdown_option]\nfields = ["title"]\n\n${attributes}`,
-    }),
-  });
-
-const createEntity = async (blueprint: Blueprint, values: NewValue[]) => {
-  const contexts = await request<Context[]>('/contexts');
-  const defaultContext = contexts.find((context) => context.code === 'default');
-  if (!defaultContext)
-    throw new Error('E2E setup did not create the default context');
-  return request<Entity>('/v1/entities', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      blueprint: {
-        code: blueprint.blueprint.code,
-        version: blueprint.blueprint.version,
-      },
-      values: values.map((value) => ({
-        ...value,
-        context_id: defaultContext.id,
-      })),
-    }),
-  });
-};
-
-const scalar = (attributeCode: string, value: string) => ({
-  kind: 'scalar',
-  attribute_code: attributeCode,
-  value,
-});
+import {
+  createEntity,
+  createEntityBlueprint,
+  scalar,
+  suffix,
+} from './helpers';
 
 test('searches an entity and opens its preview', async ({ page }) => {
   const code = `product_search_${suffix()}`;
   const title = 'Red shirt';
-  const blueprint = await createBlueprint(
+  const blueprint = await createEntityBlueprint(
     code,
     'Search products',
     '[[attributes]]\ncode = "title"\nvalue_type = "string"\ntags = ["searchable"]',
@@ -86,7 +33,7 @@ test('searches an entity and opens its preview', async ({ page }) => {
 test('creates an entity from a blueprint', async ({ page }) => {
   const code = `product_create_${suffix()}`;
   const title = 'Created in browser';
-  await createBlueprint(
+  await createEntityBlueprint(
     code,
     'Create products',
     '[[attributes]]\ncode = "title"\nvalue_type = "string"\ntags = ["searchable"]',
@@ -103,15 +50,46 @@ test('creates an entity from a blueprint', async ({ page }) => {
   await expect(page.getByText(title)).toBeVisible();
 });
 
+test('creates an entity with typed scalar values', async ({ page }) => {
+  const code = `typed_create_${suffix()}`;
+  await createEntityBlueprint(
+    code,
+    'Typed products',
+    '[[attributes]]\ncode = "title"\nvalue_type = "string"\n\n[[attributes]]\ncode = "price"\nvalue_type = "number"\n\n[[attributes]]\ncode = "quantity"\nvalue_type = "integer"\n\n[[attributes]]\ncode = "available"\nvalue_type = "boolean"\n\n[[attributes]]\ncode = "launch_date"\nvalue_type = "date"\n\n[[attributes]]\ncode = "opening_time"\nvalue_type = "time"',
+  );
+
+  await page.goto('/entities/new');
+  await page.getByLabel('Blueprint').click();
+  await page.getByRole('option', { name: `Typed products (${code})` }).click();
+  await page.getByRole('button', { name: 'Load blueprint' }).click();
+  await page.getByLabel('title').fill('Typed product');
+  await page.getByLabel('price').fill('19.95');
+  await page.getByLabel('quantity').fill('4');
+  await page.getByLabel('available').click();
+  await page.getByRole('option', { name: 'True' }).click();
+  await page.getByLabel('launch_date').fill('2026-08-20');
+  await page.getByLabel('opening_time').fill('09:30:00 America/New_York');
+  await page.getByRole('button', { name: 'Create entity' }).click();
+
+  await expect(page).toHaveURL(/\/entities\/[0-9a-f-]{36}$/);
+  await expect(page.getByText('Typed product')).toBeVisible();
+  await expect(page.getByText('19.95')).toBeVisible();
+  await expect(page.getByText('4', { exact: true })).toBeVisible();
+  await expect(page.getByText('Yes')).toBeVisible();
+});
+
 test('rejects a browser create that violates a blueprint schema', async ({
   page,
 }) => {
   const code = `product_schema_${suffix()}`;
-  await createBlueprint(
+  await createEntityBlueprint(
     code,
     'Schema products',
-    '[[attributes]]\ncode = "title"\nvalue_type = "string"\nvalue_schema = \'{"type":"string","minLength":3}\'\ntags = ["searchable"]',
-    '{"type":"object","required":["title"]}',
+    '[[attributes]]\ncode = "title"\nvalue_type = "string"\ntags = ["searchable"]',
+    {
+      entitySchema:
+        '{"type":"object","required":["title"],"properties":{"title":{"minLength":3}}}',
+    },
   );
 
   await page.goto('/entities/new');
@@ -152,13 +130,13 @@ test('edits scalar values and replaces a typed relationship', async ({
 }) => {
   const categoryCode = `category_edit_${suffix()}`;
   const productCode = `product_edit_${suffix()}`;
-  const category = await createBlueprint(
+  const category = await createEntityBlueprint(
     categoryCode,
     'Edit categories',
     '[[attributes]]\ncode = "title"\nvalue_type = "string"\ntags = ["searchable"]',
   );
   await createEntity(category, [scalar('title', 'Sale')]);
-  const product = await createBlueprint(
+  const product = await createEntityBlueprint(
     productCode,
     'Edit products',
     `[[attributes]]\ncode = "title"\nvalue_type = "string"\ntags = ["searchable"]\n\n[[attributes]]\ncode = "categories"\nvalue_type = "relationship"\ntarget_blueprint = "${categoryCode}"`,
