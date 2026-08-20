@@ -219,7 +219,7 @@ export const Explorer = ({ search }: { search: ExplorerSearch }) => {
   return (
     <PageContainer>
       <PageHeader
-        description="Search a blueprint and inspect its entity projections across all schema versions."
+        description="Search and browse your catalog."
         title="Entity explorer"
       />
       <Stack direction="row" spacing={2} sx={{ mt: 3 }}>
