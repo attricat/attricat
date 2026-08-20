@@ -1,0 +1,28 @@
+format_version = 1
+code = "color"
+name = "Color"
+kind = "entity"
+
+[display.dropdown_option]
+fields = ["name", "hex"]
+separator = " / "
+
+[views.detail]
+type = "stack"
+children = [{ type = "heading", text = "Color" }, { type = "field", field = "name" }]
+
+[views.edit]
+type = "stack"
+children = [{ type = "field", field = "name" }, { type = "field", field = "hex" }]
+
+[views.table]
+type = "table"
+fields = ["name", "hex"]
+
+[[attributes]]
+code = "name"
+value_type = "string"
+
+[[attributes]]
+code = "hex"
+value_type = "string"

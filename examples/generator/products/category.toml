@@ -1,0 +1,29 @@
+format_version = 1
+code = "category"
+name = "Category"
+kind = "entity"
+
+[display.dropdown_option]
+fields = ["name", "slug"]
+separator = " / "
+
+[views.detail]
+type = "stack"
+children = [{ type = "heading", text = "Category" }, { type = "field", field = "name" }]
+
+[views.edit]
+type = "stack"
+children = [{ type = "field", field = "name" }, { type = "field", field = "slug" }]
+
+[views.table]
+type = "table"
+fields = ["name", "slug"]
+
+[[attributes]]
+code = "name"
+value_type = "string"
+tags = ["searchable"]
+
+[[attributes]]
+code = "slug"
+value_type = "string"

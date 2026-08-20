@@ -1,0 +1,109 @@
+format_version = 1
+code = "product"
+name = "Product"
+kind = "entity"
+entity_schema = '{"type":"object","required":["title","sku","price","launch_code"]}'
+
+[[includes]]
+alias = "seo"
+code = "product_seo"
+version = 1
+
+[display.dropdown_option]
+fields = ["title", "sku"]
+separator = " / "
+
+[views.detail]
+type = "stack"
+children = [
+  { type = "stack", component = { id = "catalog.entity_heading", version = 1 }, children = [{ type = "field", field = "title" }, { type = "text", text = "Generated catalog product" }] },
+  { type = "section", children = [{ type = "grid", children = [{ type = "field", field = "price", component = { id = "catalog.field_display", version = 1 } }, { type = "field", field = "stock_on_hand" }] }] },
+  { type = "tabs", tabs = [{ label = "Availability", children = [{ type = "accordion", sections = [{ label = "Schedule", children = [{ type = "field", field = "available_on" }, { type = "field", field = "released_at" }, { type = "field", field = "order_cutoff" }] }] }] }] },
+  { type = "divider" },
+  { type = "relationship_list", field = "categories", component = { id = "catalog.relationship_list_display", version = 1 } },
+  { type = "relationship_list", field = "colors" },
+  { type = "relationship_list", field = "variants" },
+]
+
+[views.edit]
+type = "stack"
+children = [
+  { type = "grid", children = [{ type = "field", field = "title", component = { id = "catalog.field_edit", version = 1 } }, { type = "field", field = "sku" }, { type = "field", field = "launch_code" }] },
+  { type = "grid", children = [{ type = "field", field = "price" }, { type = "field", field = "stock_on_hand" }] },
+  { type = "field", field = "description" },
+  { type = "accordion", sections = [{ label = "Availability", children = [{ type = "field", field = "available" }, { type = "field", field = "available_on" }, { type = "field", field = "released_at" }, { type = "field", field = "order_cutoff" }] }] },
+  { type = "section", children = [{ type = "field", field = "meta_title" }] },
+  { type = "relationship_list", field = "categories", component = { id = "catalog.relationship_list_edit", version = 1 } },
+  { type = "relationship_list", field = "colors" },
+  { type = "relationship_list", field = "variants" },
+]
+
+[views.table]
+type = "table"
+fields = ["title", "sku", "price", "stock_on_hand", "available"]
+component = { id = "catalog.table_display", version = 1 }
+
+[[attributes]]
+code = "title"
+value_type = "string"
+tags = ["display", "searchable"]
+
+[[attributes]]
+code = "sku"
+value_type = "string"
+context_editable = "default"
+
+[[attributes]]
+code = "description"
+value_type = "string"
+context_fallback = "none"
+
+[[attributes]]
+code = "price"
+value_type = "number"
+value_schema = '{"type":"number","minimum":100}'
+
+[[attributes]]
+code = "stock_on_hand"
+value_type = "string"
+context_editable = "default"
+
+[[attributes]]
+code = "available"
+value_type = "boolean"
+
+[[attributes]]
+code = "launch_code"
+value_type = "string"
+
+[[attributes]]
+code = "available_on"
+value_type = "date"
+
+[[attributes]]
+code = "released_at"
+value_type = "datetime"
+
+[[attributes]]
+code = "order_cutoff"
+value_type = "time"
+
+[[attributes]]
+code = "meta_title"
+from = "seo.meta_title"
+
+[[attributes]]
+code = "categories"
+value_type = "relationship"
+target_blueprint = "category"
+
+[[attributes]]
+code = "colors"
+value_type = "relationship"
+target_blueprint = "color"
+
+[[attributes]]
+code = "variants"
+value_type = "relationship"
+target_blueprint = "product"
+context_fallback = "none"

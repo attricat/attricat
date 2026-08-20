@@ -23,15 +23,16 @@ creating entities or contexts:
 SEED_BLUEPRINTS_ONLY=1 node examples/generate.mjs
 ```
 
-The generator creates or reuses the `seed_product_seo`, `seed_category`,
-`seed_color`, and `seed_product` blueprints. The product blueprint demonstrates
+The generator loads its blueprint definitions from `examples/generator/products/` and
+creates or reuses the `product_seo`, `category`, `color`, and `product`
+blueprints. The product blueprint demonstrates
 mixins and version-pinned includes, selected attributes, tags, scalar and entity
 JSON Schema validation, display configuration, context policies, all native
 scalar types, constrained relationships, and configured views and components.
-When a seed blueprint definition changes, the generator creates a new blueprint
+When a generated blueprint definition changes, the generator creates a new blueprint
 revision. Existing entities remain pinned to their original revision and can be
 upgraded through the entity migration flow.
-Seed revisions are published automatically after their pinned mixin revisions,
+Generated revisions are published automatically after their pinned mixin revisions,
 so generated entities always use published blueprints.
 
 Each run creates six categories, six colors, at least 100 parent products, and
