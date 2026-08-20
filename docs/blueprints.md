@@ -158,8 +158,8 @@ children = [
 ```
 
 Each selector names a source blueprint and one of its relationship fields. A
-source entity matched by multiple selectors appears once, with all matching
-relationship labels. Selecting an item opens that source entity.
+source entity matched by multiple selectors appears once. Selecting an item
+opens that source entity.
 
 `views.edit` uses the same layout blocks to order entity create/edit controls.
 Field, relationship-list, and table blocks may optionally reference a

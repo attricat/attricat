@@ -19,10 +19,10 @@ use crate::{
     model::{
         AppendAttributeValues, Attribute, AttributeContext, AttributeValue, AttributeValueHistory,
         AttributeValueSelector, Blueprint, BlueprintWithAttributes, CreateBlueprint, Entity,
-        EntityMigrationPreview, EntityPreview, EntityPreviewPage, FormAttributeValue,
-        IncomingRelationshipItem, IncomingRelationshipSelector, IncomingRelationshipsPage,
-        MigrateEntityRequest, MigrationIssue, NewAttributeValue, RelationshipMutation,
-        RelationshipTargets, ResolvedEntityPreviewResponse,
+        EntityIdentity, EntityMigrationPreview, EntityPreview, EntityPreviewPage,
+        FormAttributeValue, IncomingRelationshipItem, IncomingRelationshipSelector,
+        IncomingRelationshipsPage, MigrateEntityRequest, MigrationIssue, NewAttributeValue,
+        RelationshipMutation, RelationshipTargets, ResolvedEntityPreviewResponse,
     },
 };
 
@@ -143,7 +143,6 @@ struct IncomingRelationshipRow {
     preview: Value,
     blueprint_display: Value,
     blueprint_context_fallback: Value,
-    relationship_labels: Vec<String>,
 }
 
 #[derive(sqlx::FromRow)]
@@ -898,6 +897,11 @@ impl CatalogRepository {
             .collect::<Map<_, _>>();
         values.extend(relationships);
         Ok(Some(ResolvedEntityPreviewResponse {
+            entity: EntityIdentity {
+                id: entity.id,
+                blueprint_id: entity.blueprint_id,
+                blueprint_version: entity.blueprint_version,
+            },
             requested_context,
             values: Value::Object(values),
         }))
@@ -1769,36 +1773,32 @@ impl CatalogRepository {
             .map_err(|error| RepositoryError::InvalidBlueprintDefinition(error.to_string()))?;
         let (cursor_created_at, cursor_id) = cursor.unzip();
         let rows = sqlx::query_as::<_, IncomingRelationshipRow>(
-            r#"WITH matching_sources AS (
-                    SELECT source.id, b.code AS blueprint_code, source.blueprint_version,
-                           source.created_at, source.projections -> 'preview' AS preview,
-                           b.display AS blueprint_display,
-                           (SELECT COALESCE(jsonb_object_agg(attribute.code, attribute.context_fallback), '{}'::jsonb)
-                              FROM attributes attribute
-                             WHERE attribute.blueprint_id = source.blueprint_id
-                               AND attribute.blueprint_version = source.blueprint_version
-                               AND attribute.deleted_at IS NULL) AS blueprint_context_fallback,
-                           array_agg(DISTINCT b.code || '.' || a.code ORDER BY b.code || '.' || a.code)
-                               AS relationship_labels
-                    FROM attribute_values av
-                    JOIN attributes a ON a.id = av.attribute_id AND a.deleted_at IS NULL
-                    JOIN entities source ON source.id = av.entity_id AND source.deleted_at IS NULL
-                    JOIN blueprints b ON b.id = source.blueprint_id AND b.version = source.blueprint_version
-                    JOIN LATERAL jsonb_to_recordset($2::jsonb)
-                        AS selector(source_blueprint text, field text)
-                        ON selector.source_blueprint = b.code AND selector.field = a.code
-                    WHERE av.relationship_target_entity_id = $1
-                      AND av.active
-                      AND a.value_type = 'relationship'
-                    GROUP BY source.id, b.code, source.blueprint_version, source.created_at,
-                             source.projections, b.display
-                )
-                SELECT id, blueprint_code, blueprint_version, created_at, preview, blueprint_display,
-                       blueprint_context_fallback, relationship_labels
-                FROM matching_sources
-                WHERE ($3::timestamptz IS NULL OR (created_at, id) > ($3, $4))
-                ORDER BY created_at, id
-                LIMIT $5"#,
+            r#"SELECT source.id, b.code AS blueprint_code, source.blueprint_version,
+                      source.created_at, source.projections -> 'preview' AS preview,
+                      b.display AS blueprint_display,
+                      (SELECT COALESCE(jsonb_object_agg(attribute.code, attribute.context_fallback), '{}'::jsonb)
+                         FROM attributes attribute
+                        WHERE attribute.blueprint_id = source.blueprint_id
+                          AND attribute.blueprint_version = source.blueprint_version
+                          AND attribute.deleted_at IS NULL) AS blueprint_context_fallback
+               FROM entities source
+               JOIN blueprints b ON b.id = source.blueprint_id AND b.version = source.blueprint_version
+               WHERE source.deleted_at IS NULL
+                 AND EXISTS (
+                     SELECT 1
+                     FROM attribute_values av
+                     JOIN attributes a ON a.id = av.attribute_id AND a.deleted_at IS NULL
+                     JOIN LATERAL jsonb_to_recordset($2::jsonb)
+                         AS selector(source_blueprint text, field text)
+                         ON selector.source_blueprint = b.code AND selector.field = a.code
+                     WHERE av.entity_id = source.id
+                       AND av.relationship_target_entity_id = $1
+                       AND av.active
+                       AND a.value_type = 'relationship'
+                 )
+                 AND ($3::timestamptz IS NULL OR (source.created_at, source.id) > ($3, $4))
+               ORDER BY source.created_at, source.id
+               LIMIT $5"#,
         )
         .bind(entity_id)
         .bind(selectors)
@@ -1824,7 +1824,6 @@ impl CatalogRepository {
                     blueprint_code: item.blueprint_code,
                     blueprint_version: item.blueprint_version,
                     display: item.display,
-                    relationship_labels: item.relationship_labels,
                 })
                 .collect(),
             next_cursor,
@@ -2739,7 +2738,6 @@ struct IncomingRelationshipPreview {
     blueprint_version: i64,
     created_at: DateTime<Utc>,
     display: Value,
-    relationship_labels: Vec<String>,
 }
 
 fn incoming_relationship_item(row: IncomingRelationshipRow) -> IncomingRelationshipPreview {
@@ -2753,7 +2751,6 @@ fn incoming_relationship_item(row: IncomingRelationshipRow) -> IncomingRelations
             &row.blueprint_display,
             &row.blueprint_context_fallback,
         ),
-        relationship_labels: row.relationship_labels,
     }
 }
 

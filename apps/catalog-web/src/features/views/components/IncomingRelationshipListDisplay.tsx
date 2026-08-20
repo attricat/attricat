@@ -94,16 +94,8 @@ export const IncomingRelationshipListDisplay = ({
                           gap: 0.5,
                           mt: 0.5,
                         }}
-                      >
-                        <Chip label={item.blueprint_code} size="small" />
-                        {item.relationship_labels.map((label) => (
-                          <Chip
-                            key={label}
-                            label={label}
-                            size="small"
-                            variant="outlined"
-                          />
-                        ))}
+                        >
+                          <Chip label={item.blueprint_code} size="small" />
                       </Box>
                     }
                   />

@@ -7,7 +7,6 @@ import {
   createEntityRequestSchema,
   entityFormResponseSchema,
   entityMigrationPreviewSchema,
-  entityPreviewSchema,
   entitySchema,
   entitySearchResponseSchema,
   getBlueprintRequestSchema,
@@ -31,7 +30,6 @@ export type {
   EntityFormResponse,
   EntityMigrationPreview,
   EntityItem,
-  EntityPreview,
   EntitySearchResponse,
   IncomingRelationshipsPage,
   JsonSchema,
@@ -141,13 +139,6 @@ export const deleteContext = async (id: string) => {
     method: 'DELETE',
   });
   if (!response.ok) throw new Error(`Request failed (${response.status})`);
-};
-export const getEntityPreview = (id: string) => {
-  const entityId = uuidSchema.parse(id);
-  return request(
-    `/api/entities/${encodeURIComponent(entityId)}/preview`,
-    entityPreviewSchema,
-  );
 };
 export const getResolvedEntityPreview = (id: string, contextId: string) =>
   request(

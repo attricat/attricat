@@ -6,6 +6,7 @@ import {
   getBlueprintByCode,
   getEntityForm,
   getIncomingRelationships,
+  getResolvedEntityPreview,
   searchEntities,
   updateEntity,
 } from './api';
@@ -127,7 +128,6 @@ describe('entity API client', () => {
           blueprint_code: 'product',
           blueprint_version: 1,
           display: { default: 'Navy shirt' },
-          relationship_labels: ['product.categories'],
         },
       ],
       next_cursor: 'next-page',
@@ -150,6 +150,30 @@ describe('entity API client', () => {
           page: { size: 10, cursor: null },
         }),
       },
+    );
+  });
+
+  it('loads resolved previews with the entity revision identity', async () => {
+    respond({
+      entity: {
+        id: entityId,
+        blueprint_id: entityId,
+        blueprint_version: 1,
+      },
+      requested_context: {
+        id: entityId,
+        code: 'default',
+        data: {},
+        parent_id: null,
+      },
+      values: {},
+    });
+
+    await getResolvedEntityPreview(entityId, entityId);
+
+    expect(fetchMock).toHaveBeenLastCalledWith(
+      `/api/entities/${entityId}/resolved-preview?context_id=${entityId}`,
+      undefined,
     );
   });
 

@@ -201,7 +201,6 @@ pub struct IncomingRelationshipItem {
     pub blueprint_code: String,
     pub blueprint_version: i64,
     pub display: Value,
-    pub relationship_labels: Vec<String>,
 }
 
 #[derive(Clone, Debug, Serialize)]
@@ -218,6 +217,7 @@ pub struct EntityPreviewResponse {
 
 #[derive(Clone, Debug, Serialize)]
 pub struct ResolvedEntityPreviewResponse {
+    pub entity: EntityIdentity,
     pub requested_context: AttributeContext,
     pub values: Value,
 }

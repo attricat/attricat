@@ -269,15 +269,12 @@ const entityItemSchema = z.object({
   preview: z.record(z.string(), jsonObjectSchema),
 });
 const entityContextSchema = z.record(z.string(), jsonObjectSchema);
-const entityPreviewSchema = z.object({
-  entity: entitySchema,
-  context: entityContextSchema,
-});
 const resolvedPreviewValueSchema = z.union([
   scalarValueSchema,
   jsonObjectSchema,
 ]);
 const resolvedEntityPreviewSchema = z.object({
+  entity: entitySchema,
   requested_context: attributeContextSchema,
   values: z.record(
     z.string(),
@@ -297,7 +294,6 @@ const incomingRelationshipItemSchema = z.object({
   blueprint_code: z.string(),
   blueprint_version: z.number().int().positive(),
   display: z.record(z.string(), z.string()),
-  relationship_labels: z.array(z.string()),
 });
 export const incomingRelationshipsPageSchema = z.object({
   items: z.array(incomingRelationshipItemSchema),
@@ -381,7 +377,6 @@ export type IncomingRelationshipsPage = z.infer<
   typeof incomingRelationshipsPageSchema
 >;
 export type EntityFormResponse = z.infer<typeof entityFormResponseSchema>;
-export type EntityPreview = z.infer<typeof entityPreviewSchema>;
 export type ResolvedEntityPreview = z.infer<typeof resolvedEntityPreviewSchema>;
 export type EntityMigrationPreview = z.infer<
   typeof entityMigrationPreviewSchema
@@ -389,7 +384,6 @@ export type EntityMigrationPreview = z.infer<
 
 export {
   entityFormResponseSchema,
-  entityPreviewSchema,
   entitySearchResponseSchema,
   getBlueprintRequestSchema,
   getBlueprintRevisionRequestSchema,

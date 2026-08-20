@@ -16,7 +16,6 @@ import { PageHeader } from '../../components/PageHeader';
 import {
   getBlueprintRevision,
   getCurrentBlueprint,
-  getEntityPreview,
   getResolvedEntityPreview,
   listContexts,
 } from './api';
@@ -30,38 +29,9 @@ import { resolveHeadingRenderer } from '../views/components/registry';
 
 export const EntityPreviewPage = ({ entityId }: { entityId: string }) => {
   const [selectedContext, setSelectedContext] = useState('default');
-  const preview = useQuery({
-    queryKey: entityQueryKeys.preview(entityId),
-    queryFn: () => getEntityPreview(entityId),
-  });
   const contexts = useQuery({
     queryKey: entityQueryKeys.contexts(),
     queryFn: listContexts,
-  });
-  const blueprint = useQuery({
-    queryKey:
-      preview.data?.entity.blueprint_id && preview.data.entity.blueprint_version
-        ? entityQueryKeys.blueprintRevision(
-            preview.data.entity.blueprint_id,
-            preview.data.entity.blueprint_version,
-          )
-        : ['blueprint-revision'],
-    queryFn: () =>
-      getBlueprintRevision(
-        preview.data!.entity.blueprint_id!,
-        preview.data!.entity.blueprint_version!,
-      ),
-    enabled: Boolean(
-      preview.data?.entity.blueprint_id &&
-      preview.data.entity.blueprint_version,
-    ),
-  });
-  const currentBlueprint = useQuery({
-    queryKey: entityQueryKeys.currentBlueprint(
-      preview.data?.entity.blueprint_id ?? '',
-    ),
-    queryFn: () => getCurrentBlueprint(preview.data!.entity.blueprint_id!),
-    enabled: Boolean(preview.data?.entity.blueprint_id),
   });
   const selectedContextId = contexts.data?.find(
     (context) => context.code === selectedContext,
@@ -72,6 +42,30 @@ export const EntityPreviewPage = ({ entityId }: { entityId: string }) => {
       : ['entity-resolved-preview'],
     queryFn: () => getResolvedEntityPreview(entityId, selectedContextId!),
     enabled: Boolean(selectedContextId),
+  });
+  const blueprint = useQuery({
+    queryKey: resolved.data
+      ? entityQueryKeys.blueprintRevision(
+          resolved.data.entity.blueprint_id!,
+          resolved.data.entity.blueprint_version!,
+        )
+      : ['blueprint-revision'],
+    queryFn: () =>
+      getBlueprintRevision(
+        resolved.data!.entity.blueprint_id!,
+        resolved.data!.entity.blueprint_version!,
+      ),
+    enabled: Boolean(
+      resolved.data?.entity.blueprint_id &&
+      resolved.data.entity.blueprint_version,
+    ),
+  });
+  const currentBlueprint = useQuery({
+    queryKey: entityQueryKeys.currentBlueprint(
+      resolved.data?.entity.blueprint_id ?? '',
+    ),
+    queryFn: () => getCurrentBlueprint(resolved.data!.entity.blueprint_id!),
+    enabled: Boolean(resolved.data?.entity.blueprint_id),
   });
   const detailView = blueprint.data?.blueprint.views.detail;
   const heading = findEntityHeading(detailView);
@@ -91,11 +85,11 @@ export const EntityPreviewPage = ({ entityId }: { entityId: string }) => {
         <Link params={{ entityId }} to="/entities/$entityId/edit">
           Edit entity
         </Link>
-        {currentBlueprint.data && preview.data && (
+        {currentBlueprint.data && resolved.data && (
           <>
             {' | '}
             {currentBlueprint.data.blueprint.version >
-            preview.data.entity.blueprint_version ? (
+            resolved.data.entity.blueprint_version ? (
               <>
                 <Typography
                   color="warning.main"
@@ -130,15 +124,10 @@ export const EntityPreviewPage = ({ entityId }: { entityId: string }) => {
           </>
         )}
       </Box>
-      {preview.isPending && (
-        <Typography sx={{ py: 3 }}>Loading preview...</Typography>
+      {contexts.isPending && (
+        <Typography sx={{ py: 3 }}>Loading contexts...</Typography>
       )}
-      {preview.isError && (
-        <Alert severity="error" sx={{ mt: 3 }}>
-          {preview.error.message}
-        </Alert>
-      )}
-      {preview.data && (
+      {contexts.data && (
         <>
           <TextField
             select

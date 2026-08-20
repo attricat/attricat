@@ -309,6 +309,53 @@ async fn create_entity(client: &Client, base_url: &str, blueprint: &Value) -> Va
 }
 
 #[sqlx::test]
+async fn resolved_preview_includes_entity_identity(pool: PgPool) {
+    let (base_url, server) = start_server(pool).await;
+    let client = Client::new();
+    let blueprint = create_blueprint(
+        &client,
+        &base_url,
+        r#"
+format_version = 1
+code = "category"
+name = "Category"
+kind = "entity"
+
+[display.dropdown_option]
+fields = ["name"]
+
+[[attributes]]
+code = "name"
+value_type = "string"
+"#,
+    )
+    .await;
+    let entity = create_entity(&client, &base_url, &blueprint).await;
+    let entity_id = entity["id"].as_str().unwrap();
+    let resolved: Value = client
+        .get(format!(
+            "{base_url}/entities/{entity_id}/resolved-preview?context_id=00000000-0000-4000-8000-000000000001"
+        ))
+        .send()
+        .await
+        .unwrap()
+        .error_for_status()
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+
+    assert_eq!(resolved["entity"]["id"], entity["id"]);
+    assert_eq!(
+        resolved["entity"]["blueprint_id"],
+        blueprint["blueprint"]["id"]
+    );
+    assert_eq!(resolved["entity"]["blueprint_version"], 1);
+
+    server.abort();
+}
+
+#[sqlx::test]
 async fn incoming_relationships_are_deduplicated_and_paginated(pool: PgPool) {
     let (base_url, server) = start_server(pool).await;
     let client = Client::new();
@@ -404,10 +451,6 @@ target_blueprint = "category"
         .await
         .unwrap();
     assert_eq!(first["items"].as_array().unwrap().len(), 1);
-    assert_eq!(
-        first["items"][0]["relationship_labels"],
-        json!(["product.categories", "product.featured_category"])
-    );
 
     let second: Value = client
         .post(format!(
