@@ -23,6 +23,7 @@ use crate::{
         EntityPreview, EntityPreviewPage, FormAttributeValue, IncomingRelationshipItem,
         IncomingRelationshipSelector, IncomingRelationshipsPage, MigrateEntityRequest,
         MigrationIssue, NewAttributeValue, RelationshipMutation, RelationshipTargets,
+        RelationshipTreeFacetChildItem, RelationshipTreeFacetChildrenResponse,
         RelationshipTreeFacetItem, RelationshipTreeFacetResponse, ResolvedEntityPreviewResponse,
     },
 };
@@ -143,6 +144,16 @@ struct RelationshipTreeNodeRow {
     preview: Value,
     views: Value,
     context_fallback: Value,
+}
+
+#[derive(sqlx::FromRow)]
+struct RelationshipTreeChildRow {
+    id: Uuid,
+    preview: Value,
+    display: Value,
+    context_fallback: Value,
+    count: i64,
+    has_children: bool,
 }
 
 #[derive(sqlx::FromRow)]
@@ -2085,6 +2096,151 @@ impl CatalogRepository {
             },
             matching_entity_ids,
         ))
+    }
+
+    pub async fn relationship_tree_facet_children(
+        &self,
+        source_blueprint_id: Uuid,
+        source_blueprint_version: Option<i64>,
+        query: Option<&str>,
+        source_field: &str,
+        target_blueprint_id: Uuid,
+        hierarchy_field: &str,
+        context_id: Uuid,
+        parent_id: Option<Uuid>,
+        cursor: Option<Uuid>,
+        limit: i64,
+    ) -> Result<RelationshipTreeFacetChildrenResponse, RepositoryError> {
+        let requested_context = self
+            .get_context_by_id(context_id)
+            .await?
+            .ok_or(RepositoryError::InvalidContext)?;
+        let rows = sqlx::query_as::<_, RelationshipTreeChildRow>(
+            r#"WITH RECURSIVE context_path AS (
+                    SELECT id, parent_id, 0 AS depth FROM attribute_contexts WHERE id = $7
+                    UNION ALL
+                    SELECT c.id, c.parent_id, path.depth + 1
+                    FROM attribute_contexts c JOIN context_path path ON c.id = path.parent_id
+                ), source_edges AS (
+                    SELECT DISTINCT source.id AS source_id, av.relationship_target_entity_id AS target_id
+                    FROM entities source
+                    JOIN LATERAL (
+                        SELECT av.context_id
+                        FROM attribute_values av
+                        JOIN attributes a ON a.id = av.attribute_id
+                         AND a.blueprint_id = source.blueprint_id AND a.blueprint_version = source.blueprint_version
+                        JOIN context_path path ON path.id = av.context_id
+                        WHERE av.entity_id = source.id AND av.active
+                          AND av.relationship_target_entity_id IS NOT NULL
+                          AND a.code = $4 AND (path.depth = 0 OR a.context_fallback <> 'none')
+                        ORDER BY path.depth LIMIT 1
+                    ) chosen ON true
+                    JOIN attribute_values av ON av.entity_id = source.id AND av.context_id = chosen.context_id
+                    JOIN attributes a ON a.id = av.attribute_id
+                     AND a.blueprint_id = source.blueprint_id AND a.blueprint_version = source.blueprint_version
+                    JOIN entities target ON target.id = av.relationship_target_entity_id
+                    WHERE source.blueprint_id = $1
+                      AND ($2::bigint IS NULL OR source.blueprint_version = $2)
+                      AND source.deleted_at IS NULL AND target.deleted_at IS NULL
+                      AND target.blueprint_id = $5 AND a.code = $4 AND av.active
+                      AND av.relationship_target_entity_id IS NOT NULL
+                      AND ($3::text IS NULL OR EXISTS (
+                          SELECT 1 FROM attribute_values value
+                          WHERE value.entity_id = source.id
+                            AND value.relationship_target_entity_id IS NULL
+                            AND COALESCE(value.value_text, value.value_number::text,
+                                value.value_integer::text, value.value_boolean::text,
+                                value.value_date::text, value.value_datetime::text,
+                                value.value_time::text) ILIKE '%' || $3 || '%'
+                      ))
+                ), parent_edges AS (
+                    SELECT DISTINCT child.id AS child_id, av.relationship_target_entity_id AS parent_id
+                    FROM entities child
+                    JOIN LATERAL (
+                        SELECT av.context_id
+                        FROM attribute_values av
+                        JOIN attributes a ON a.id = av.attribute_id
+                         AND a.blueprint_id = child.blueprint_id AND a.blueprint_version = child.blueprint_version
+                        JOIN context_path path ON path.id = av.context_id
+                        WHERE av.entity_id = child.id AND av.active
+                          AND av.relationship_target_entity_id IS NOT NULL
+                          AND a.code = $6 AND (path.depth = 0 OR a.context_fallback <> 'none')
+                        ORDER BY path.depth LIMIT 1
+                    ) chosen ON true
+                    JOIN attribute_values av ON av.entity_id = child.id AND av.context_id = chosen.context_id
+                    JOIN attributes a ON a.id = av.attribute_id
+                     AND a.blueprint_id = child.blueprint_id AND a.blueprint_version = child.blueprint_version
+                    JOIN entities parent ON parent.id = av.relationship_target_entity_id
+                    WHERE child.blueprint_id = $5 AND child.deleted_at IS NULL
+                      AND parent.blueprint_id = $5 AND parent.deleted_at IS NULL
+                      AND a.code = $6 AND av.active AND av.relationship_target_entity_id IS NOT NULL
+                ), ancestors AS (
+                    SELECT source_id, target_id AS node_id, ARRAY[target_id] AS path FROM source_edges
+                    UNION ALL
+                    SELECT ancestors.source_id, edges.parent_id, ancestors.path || edges.parent_id
+                    FROM ancestors JOIN parent_edges edges ON edges.child_id = ancestors.node_id
+                    WHERE NOT edges.parent_id = ANY(ancestors.path)
+                ), counts AS (
+                    SELECT node_id, COUNT(DISTINCT source_id)::bigint AS count
+                    FROM ancestors GROUP BY node_id
+                )
+                SELECT entity.id, entity.projections -> 'preview' AS preview, blueprint.views AS display,
+                       (SELECT COALESCE(jsonb_object_agg(attribute.code, attribute.context_fallback), '{}'::jsonb)
+                          FROM attributes attribute
+                         WHERE attribute.blueprint_id = entity.blueprint_id
+                           AND attribute.blueprint_version = entity.blueprint_version
+                           AND attribute.deleted_at IS NULL) AS context_fallback,
+                       COALESCE(counts.count, 0) AS count,
+                       EXISTS (SELECT 1 FROM parent_edges edge WHERE edge.parent_id = entity.id) AS has_children
+                FROM entities entity
+                JOIN blueprints blueprint ON blueprint.id = entity.blueprint_id AND blueprint.version = entity.blueprint_version
+                LEFT JOIN counts ON counts.node_id = entity.id
+                WHERE entity.blueprint_id = $5 AND entity.deleted_at IS NULL
+                  AND ($8::uuid IS NULL
+                       AND NOT EXISTS (SELECT 1 FROM parent_edges edge WHERE edge.child_id = entity.id)
+                       OR $8::uuid IS NOT NULL AND EXISTS (
+                           SELECT 1 FROM parent_edges edge
+                           WHERE edge.child_id = entity.id AND edge.parent_id = $8
+                       ))
+                  AND ($9::uuid IS NULL OR entity.id > $9)
+                ORDER BY entity.id LIMIT $10"#,
+        )
+        .bind(source_blueprint_id)
+        .bind(source_blueprint_version)
+        .bind(query)
+        .bind(source_field)
+        .bind(target_blueprint_id)
+        .bind(hierarchy_field)
+        .bind(context_id)
+        .bind(parent_id)
+        .bind(cursor)
+        .bind(limit + 1)
+        .fetch_all(&self.pool)
+        .await?;
+        let mut items: Vec<_> = rows
+            .into_iter()
+            .map(|row| RelationshipTreeFacetChildItem {
+                id: row.id,
+                display: display_label(
+                    &row.preview,
+                    &row.display,
+                    &row.context_fallback,
+                    &requested_context.code,
+                )
+                .as_str()
+                .unwrap_or_default()
+                .to_owned(),
+                count: row.count,
+                has_children: row.has_children,
+            })
+            .collect();
+        let next_cursor = if items.len() > limit as usize {
+            items.pop();
+            items.last().map(|item| item.id)
+        } else {
+            None
+        };
+        Ok(RelationshipTreeFacetChildrenResponse { items, next_cursor })
     }
 
     async fn resolved_relationship_edges(

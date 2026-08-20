@@ -7,6 +7,7 @@ import {
   getEntityForm,
   getEntityHierarchy,
   getIncomingRelationships,
+  getRelationshipTreeFacetChildren,
   getResolvedEntityPreview,
   searchEntities,
   updateEntity,
@@ -151,6 +152,40 @@ describe('entity API client', () => {
         page: { size: 25, cursor: null },
       }),
     });
+  });
+
+  it('loads a paginated relationship-tree child page', async () => {
+    respond({
+      items: [
+        { id: entityId, display: 'Clothing', count: 4, has_children: true },
+      ],
+      next_cursor: null,
+    });
+
+    await getRelationshipTreeFacetChildren({
+      blueprint: { code: 'product' },
+      source_relationship_field: 'categories',
+      hierarchy_field: 'parent',
+      context_id: entityId,
+      parent_id: entityId,
+      cursor: null,
+    });
+
+    expect(fetchMock).toHaveBeenLastCalledWith(
+      '/api/v1/entities/facets/relationship-tree/children',
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          blueprint: { code: 'product' },
+          source_relationship_field: 'categories',
+          hierarchy_field: 'parent',
+          context_id: entityId,
+          parent_id: entityId,
+          cursor: null,
+        }),
+      },
+    );
   });
 
   it('loads incoming relationship pages with the configured selectors', async () => {

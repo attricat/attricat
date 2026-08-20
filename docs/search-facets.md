@@ -91,29 +91,27 @@ Add `relationship_tree_facet` to `POST /v1/entities/search`:
 }
 ```
 
-The response retains `items` and `next_cursor` and adds an optional flat facet
-graph. The client uses `parent_ids` to render it as a tree.
+The search response retains `items` and `next_cursor`. The facet tree is loaded
+separately so searching does not transfer an entire taxonomy.
 
 ```json
 {
-  "relationship_tree_facet": {
-    "items": [
-      {
-        "id": "e8b7a8d3-c954-4c0f-b658-0f686ba466a3",
-        "parent_ids": [],
-        "display": "Clothing",
-        "count": 42
-      }
-    ]
-  }
+  "items": []
 }
 ```
 
+`POST /v1/entities/facets/relationship-tree/children` accepts the search
+blueprint/query, facet fields and context, plus an optional `parent_id` and
+cursor. It returns one configured-size page of direct children with `count`,
+`has_children`, and `next_cursor`. The client requests a page only when a node
+is expanded and uses `next_cursor` for that node's **Load more** action.
+
 ## Performance
 
-The API loads category nodes and effective relationship edges in bulk. It does
-not issue a request per tree node. It aggregates the complete matching result
-set rather than the current page, so counts are stable across pagination.
+The API aggregates complete matching result sets in PostgreSQL so counts remain
+stable across entity pagination, but only returns the requested root or child
+page. `RELATIONSHIP_FACET_MAX_NODES` sets the server-side maximum number of
+nodes returned for each page (default: 100).
 
 Large taxonomies should retain indexes for relationship target lookups. The
 current relationship target index supports the facet's source and parent edge

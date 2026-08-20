@@ -298,18 +298,17 @@ const entitySearchResponseSchema = z.object({
   blueprint: blueprintWithAttributesSchema,
   items: z.array(entityItemSchema),
   next_cursor: z.string().nullable(),
-  relationship_tree_facet: z
-    .object({
-      items: z.array(
-        z.object({
-          id: uuidSchema,
-          parent_ids: z.array(uuidSchema),
-          display: z.string(),
-          count: z.number().int().nonnegative(),
-        }),
-      ),
-    })
-    .optional(),
+});
+export const relationshipTreeFacetChildrenResponseSchema = z.object({
+  items: z.array(
+    z.object({
+      id: uuidSchema,
+      display: z.string(),
+      count: z.number().int().nonnegative(),
+      has_children: z.boolean(),
+    }),
+  ),
+  next_cursor: uuidSchema.nullable(),
 });
 const incomingRelationshipItemSchema = z.object({
   id: uuidSchema,
@@ -410,6 +409,9 @@ export type AttributeContext = z.infer<typeof attributeContextSchema>;
 export type Entity = z.infer<typeof entitySchema>;
 export type EntityItem = z.infer<typeof entityItemSchema>;
 export type EntitySearchResponse = z.infer<typeof entitySearchResponseSchema>;
+export type RelationshipTreeFacetChildrenResponse = z.infer<
+  typeof relationshipTreeFacetChildrenResponseSchema
+>;
 export type IncomingRelationshipsPage = z.infer<
   typeof incomingRelationshipsPageSchema
 >;

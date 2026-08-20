@@ -13,6 +13,7 @@ import {
   getBlueprintRequestSchema,
   getBlueprintRevisionRequestSchema,
   incomingRelationshipsPageSchema,
+  relationshipTreeFacetChildrenResponseSchema,
   resolvedEntityPreviewSchema,
   searchEntitiesRequestSchema,
   migrateEntityRequestSchema,
@@ -36,6 +37,7 @@ export type {
   JsonSchema,
   NewAttributeValue,
   RelationshipTargets,
+  RelationshipTreeFacetChildrenResponse,
   ResolvedEntityPreview,
   ViewDefinition,
   ViewNode,
@@ -107,6 +109,25 @@ export const searchEntities = (
     body: JSON.stringify(payload),
   });
 };
+
+export const getRelationshipTreeFacetChildren = (input: {
+  blueprint: { code: string; version?: number };
+  query?: string;
+  source_relationship_field: string;
+  hierarchy_field: string;
+  context_id: string;
+  parent_id?: string;
+  cursor?: string | null;
+}) =>
+  request(
+    '/api/v1/entities/facets/relationship-tree/children',
+    relationshipTreeFacetChildrenResponseSchema,
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(input),
+    },
+  );
 
 export const listEntityBlueprints = () =>
   request('/api/blueprints', z.array(blueprintSchema));

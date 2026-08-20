@@ -28,6 +28,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let max_incoming_relationship_page_size = std::env::var("INCOMING_RELATIONSHIP_MAX_PAGE_SIZE")
         .unwrap_or_else(|_| "50".to_owned())
         .parse()?;
+    let max_relationship_facet_nodes = std::env::var("RELATIONSHIP_FACET_MAX_NODES")
+        .unwrap_or_else(|_| "100".to_owned())
+        .parse()?;
     let pool = PgPoolOptions::new()
         .max_connections(5)
         .connect(&database_url)
@@ -52,6 +55,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             max_preview_relationship_items,
             max_entity_page_size,
             max_incoming_relationship_page_size,
+            max_relationship_facet_nodes,
             data_health_cache_ttl_seconds: std::env::var("DATA_HEALTH_CACHE_TTL_SECONDS")
                 .unwrap_or_else(|_| "300".to_owned())
                 .parse()?,

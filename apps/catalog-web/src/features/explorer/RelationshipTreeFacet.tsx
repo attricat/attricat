@@ -1,5 +1,6 @@
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import ChevronRightIcon from '@mui/icons-material/ChevronRight';
+import { useQueries } from '@tanstack/react-query';
 import {
   Accordion,
   AccordionDetails,
@@ -14,17 +15,24 @@ import {
   Typography,
 } from '@mui/material';
 import { useState } from 'react';
-import type { AttributeContext } from '../entities/api';
+import {
+  getRelationshipTreeFacetChildren,
+  type AttributeContext,
+} from '../entities/api';
+import { entityQueryKeys } from '../entities/query-keys';
 
 export type RelationshipTreeFacetItem = {
   id: string;
-  parent_ids: string[];
   display: string;
   count: number;
+  has_children: boolean;
 };
 
 type Props = {
-  items?: RelationshipTreeFacetItem[];
+  blueprint: string;
+  version?: number;
+  query?: string;
+  sourceField: string;
   hierarchyFields: string[];
   hierarchyField?: string;
   contexts: AttributeContext[];
@@ -36,7 +44,10 @@ type Props = {
 };
 
 export const RelationshipTreeFacet = ({
-  items,
+  blueprint,
+  version,
+  query,
+  sourceField,
   hierarchyFields,
   hierarchyField,
   contexts,
@@ -47,20 +58,66 @@ export const RelationshipTreeFacet = ({
   onSelectedIdsChange,
 }: Props) => {
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
-  const selected = new Set(selectedIds);
-  const byParent = new Map<string, RelationshipTreeFacetItem[]>();
-  const itemIds = new Set(items?.map((item) => item.id));
-  for (const item of items ?? []) {
-    for (const parentId of item.parent_ids) {
-      const children = byParent.get(parentId) ?? [];
-      children.push(item);
-      byParent.set(parentId, children);
-    }
-  }
-  const roots = (items ?? []).filter(
-    (item) => !item.parent_ids.some((parentId) => itemIds.has(parentId)),
+  const [cursors, setCursors] = useState<Map<string, (string | null)[]>>(
+    new Map([['root', [null]]]),
   );
-  const visibleRoots = roots.length ? roots : (items ?? []);
+  const selected = new Set(selectedIds);
+  const pages = [...cursors.entries()].flatMap(([parentKey, pageCursors]) =>
+    pageCursors.map((cursor) => ({
+      parentId: parentKey === 'root' ? undefined : parentKey,
+      cursor,
+    })),
+  );
+  const results = useQueries({
+    queries: pages.map(({ parentId, cursor }) => ({
+      queryKey: entityQueryKeys.relationshipTreeFacetChildren(
+        blueprint,
+        version,
+        query,
+        sourceField,
+        hierarchyField ?? '',
+        contextCode ?? '',
+        parentId,
+        cursor,
+      ),
+      queryFn: () =>
+        getRelationshipTreeFacetChildren({
+          blueprint: {
+            code: blueprint,
+            ...(version === undefined ? {} : { version }),
+          },
+          ...(query ? { query } : {}),
+          source_relationship_field: sourceField,
+          hierarchy_field: hierarchyField!,
+          context_id: contexts.find((context) => context.code === contextCode)!
+            .id,
+          ...(parentId === undefined ? {} : { parent_id: parentId }),
+          cursor,
+        }),
+      enabled: Boolean(hierarchyField && contextCode),
+    })),
+  });
+  const byParent = new Map<string, RelationshipTreeFacetItem[]>();
+  const nextCursorByParent = new Map<string, string | null>();
+  pages.forEach(({ parentId }, index) => {
+    const page = results[index]?.data;
+    if (!page) return;
+    const key = parentId ?? 'root';
+    const items = byParent.get(key) ?? [];
+    items.push(...page.items);
+    byParent.set(key, items);
+    nextCursorByParent.set(key, page.next_cursor);
+  });
+  const loadMore = (parentId: string | undefined) => {
+    const key = parentId ?? 'root';
+    const cursor = nextCursorByParent.get(key);
+    if (!cursor) return;
+    setCursors((current) => {
+      const next = new Map(current);
+      next.set(key, [...(next.get(key) ?? []), cursor]);
+      return next;
+    });
+  };
   const toggleSelected = (id: string) => {
     const next = new Set(selected);
     if (next.has(id)) next.delete(id);
@@ -72,7 +129,7 @@ export const RelationshipTreeFacet = ({
     ancestry: Set<string>,
   ) => {
     const children = byParent.get(item.id) ?? [];
-    const canExpand = children.length > 0 && !ancestry.has(item.id);
+    const canExpand = item.has_children && !ancestry.has(item.id);
     const open = expanded.has(item.id);
     return (
       <Box key={item.id}>
@@ -88,7 +145,13 @@ export const RelationshipTreeFacet = ({
                   setExpanded((current) => {
                     const next = new Set(current);
                     if (next.has(item.id)) next.delete(item.id);
-                    else next.add(item.id);
+                    else {
+                      next.add(item.id);
+                      setCursors((current) => {
+                        if (current.has(item.id)) return current;
+                        return new Map(current).set(item.id, [null]);
+                      });
+                    }
                     return next;
                   });
                 }}
@@ -128,6 +191,17 @@ export const RelationshipTreeFacet = ({
             {children.map((child) =>
               renderNode(child, new Set(ancestry).add(item.id)),
             )}
+            {nextCursorByParent.get(item.id) && (
+              <ListItem disableGutters>
+                <Box
+                  component="button"
+                  onClick={() => loadMore(item.id)}
+                  type="button"
+                >
+                  Load more
+                </Box>
+              </ListItem>
+            )}
           </List>
         )}
       </Box>
@@ -136,11 +210,22 @@ export const RelationshipTreeFacet = ({
 
   return (
     <>
-      {items && (
-        <List dense disablePadding>
-          {visibleRoots.map((item) => renderNode(item, new Set()))}
-        </List>
-      )}
+      <List dense disablePadding>
+        {(byParent.get('root') ?? []).map((item) =>
+          renderNode(item, new Set()),
+        )}
+        {nextCursorByParent.get('root') && (
+          <ListItem disableGutters>
+            <Box
+              component="button"
+              onClick={() => loadMore(undefined)}
+              type="button"
+            >
+              Load more
+            </Box>
+          </ListItem>
+        )}
+      </List>
       <Accordion disableGutters elevation={0} sx={{ mt: 1 }}>
         <AccordionSummary expandIcon={<ExpandMoreIcon />}>
           <Typography variant="body2">Tree options</Typography>

@@ -31,4 +31,25 @@ export const entityQueryKeys = {
       selected_target_ids: string[];
     },
   ) => ['entities', blueprint, version, query, relationshipTreeFacet] as const,
+  relationshipTreeFacetChildren: (
+    blueprint: string,
+    version: number | undefined,
+    query: string | undefined,
+    sourceField: string,
+    hierarchyField: string,
+    contextId: string,
+    parentId: string | undefined,
+    cursor: string | null,
+  ) =>
+    [
+      'relationship-tree-facet-children',
+      blueprint,
+      version,
+      query,
+      sourceField,
+      hierarchyField,
+      contextId,
+      parentId,
+      cursor,
+    ] as const,
 } as const;

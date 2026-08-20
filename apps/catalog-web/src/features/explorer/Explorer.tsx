@@ -349,13 +349,13 @@ export const Explorer = ({ search }: { search: ExplorerSearch }) => {
                   This relationship target has no self-referencing relationship.
                 </Typography>
               )}
-            {hierarchyField && (
+            {hierarchyField && sourceRelationship && (
               <RelationshipTreeFacet
+                blueprint={search.blueprint!}
                 contextCode={contextCode}
                 contexts={contexts.data ?? []}
                 hierarchyField={hierarchyField}
                 hierarchyFields={hierarchyFields}
-                items={results.data.relationship_tree_facet?.items}
                 onContextChange={(facetContext) =>
                   updateFacet({ facetContext, categories: undefined })
                 }
@@ -366,6 +366,9 @@ export const Explorer = ({ search }: { search: ExplorerSearch }) => {
                   updateFacet({ categories })
                 }
                 selectedIds={search.categories ?? []}
+                query={search.query}
+                sourceField={sourceRelationship.code}
+                version={search.version}
               />
             )}
           </Paper>

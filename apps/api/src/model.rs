@@ -282,6 +282,35 @@ pub struct RelationshipTreeFacetResponse {
 
 #[derive(Clone, Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
+pub struct RelationshipTreeFacetChildrenRequest {
+    pub blueprint: SearchBlueprint,
+    #[serde(default)]
+    pub query: Option<String>,
+    pub source_relationship_field: String,
+    pub hierarchy_field: String,
+    pub context_id: Uuid,
+    #[serde(default)]
+    pub parent_id: Option<Uuid>,
+    #[serde(default)]
+    pub cursor: Option<Uuid>,
+}
+
+#[derive(Clone, Debug, Serialize)]
+pub struct RelationshipTreeFacetChildItem {
+    pub id: Uuid,
+    pub display: String,
+    pub count: i64,
+    pub has_children: bool,
+}
+
+#[derive(Clone, Debug, Serialize)]
+pub struct RelationshipTreeFacetChildrenResponse {
+    pub items: Vec<RelationshipTreeFacetChildItem>,
+    pub next_cursor: Option<Uuid>,
+}
+
+#[derive(Clone, Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct SearchBlueprint {
     pub code: String,
     pub version: Option<i64>,
@@ -307,8 +336,6 @@ pub struct EntitySearchResponse {
     pub blueprint: BlueprintWithAttributes,
     pub items: Vec<EntityPreview>,
     pub next_cursor: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub relationship_tree_facet: Option<RelationshipTreeFacetResponse>,
 }
 
 #[derive(Clone, Debug, Deserialize)]

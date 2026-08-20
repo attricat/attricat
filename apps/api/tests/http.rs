@@ -19,6 +19,7 @@ async fn start_server(pool: PgPool) -> (String, JoinHandle<()>) {
         max_preview_relationship_items: 10,
         max_entity_page_size: 100,
         max_incoming_relationship_page_size: 50,
+        max_relationship_facet_nodes: 100,
         data_health_cache_ttl_seconds: 0,
         data_health_cache: Default::default(),
     });
@@ -880,20 +881,6 @@ target_blueprint = "facet_category"
         .await
         .unwrap();
     assert_eq!(search["items"].as_array().unwrap().len(), 2);
-    let facet_items = search["relationship_tree_facet"]["items"]
-        .as_array()
-        .unwrap();
-    let root_item = facet_items
-        .iter()
-        .find(|item| item["id"] == root["id"])
-        .unwrap();
-    let child_item = facet_items
-        .iter()
-        .find(|item| item["id"] == child["id"])
-        .unwrap();
-    assert_eq!(root_item["count"], 2);
-    assert_eq!(child_item["count"], 1);
-    assert_eq!(child_item["parent_ids"].as_array().unwrap().len(), 2);
 
     let hierarchy: Value = client
         .get(format!(
@@ -933,13 +920,61 @@ target_blueprint = "facet_category"
         .await
         .unwrap();
     assert_eq!(text_filtered["items"].as_array().unwrap().len(), 1);
-    let text_root_item = text_filtered["relationship_tree_facet"]["items"]
+
+    let root_page: Value = client
+        .post(format!(
+            "{base_url}/v1/entities/facets/relationship-tree/children"
+        ))
+        .json(&json!({
+            "blueprint": { "code": "facet_product" },
+            "source_relationship_field": "categories",
+            "hierarchy_field": "parent",
+            "context_id": context["id"],
+        }))
+        .send()
+        .await
+        .unwrap()
+        .error_for_status()
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    assert_eq!(root_page["next_cursor"], Value::Null);
+    let root_item = root_page["items"]
         .as_array()
         .unwrap()
         .iter()
         .find(|item| item["id"] == root["id"])
         .unwrap();
-    assert_eq!(text_root_item["count"], 1);
+    assert_eq!(root_item["count"], 2);
+    assert_eq!(root_item["has_children"], true);
+
+    let child_page: Value = client
+        .post(format!(
+            "{base_url}/v1/entities/facets/relationship-tree/children"
+        ))
+        .json(&json!({
+            "blueprint": { "code": "facet_product" },
+            "source_relationship_field": "categories",
+            "hierarchy_field": "parent",
+            "context_id": context["id"],
+            "parent_id": root["id"],
+        }))
+        .send()
+        .await
+        .unwrap()
+        .error_for_status()
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    assert!(
+        child_page["items"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|item| item["id"] == child["id"])
+    );
 
     server.abort();
 }

@@ -22,6 +22,7 @@ use crate::{
         CreateEntityFormRequest, Entity, EntityFormResponse, EntityIdentity, EntityPreviewPage,
         EntityPreviewResponse, EntitySearchResponse, IncomingRelationshipsPage,
         IncomingRelationshipsRequest, MigrateEntityRequest, RelationshipMutation,
+        RelationshipTreeFacetChildrenRequest, RelationshipTreeFacetChildrenResponse,
         ResolvedEntityPreviewResponse, SearchEntitiesRequest, UpdateAttributeContext,
         UpdateEntityFormRequest,
     },
@@ -38,6 +39,7 @@ pub struct AppState {
     pub max_preview_relationship_items: u32,
     pub max_entity_page_size: u32,
     pub max_incoming_relationship_page_size: u32,
+    pub max_relationship_facet_nodes: u32,
     pub data_health_cache_ttl_seconds: u64,
     pub data_health_cache: DataHealthCache,
 }
@@ -142,6 +144,10 @@ pub fn router(state: AppState) -> Router {
         // The v1 routes are the entity creation and editing surface. The older
         // entity routes remain read and value/relationship primitives.
         .route("/v1/entities/search", post(search_entity_previews))
+        .route(
+            "/v1/entities/facets/relationship-tree/children",
+            post(relationship_tree_facet_children),
+        )
         .route("/v1/entities", post(create_entity_form))
         .route(
             "/v1/entities/{entity_id}",
@@ -675,7 +681,7 @@ async fn search_entity_previews(
         .as_deref()
         .map(str::trim)
         .filter(|value| !value.is_empty());
-    let (relationship_tree_facet, matching_entity_ids) = match input.relationship_tree_facet {
+    let matching_entity_ids = match input.relationship_tree_facet {
         Some(facet) => {
             let source = current_blueprint
                 .attributes
@@ -725,21 +731,25 @@ async fn search_entity_previews(
                 .repository
                 .search_matching_entity_ids(current_blueprint.blueprint.id, selected_version, query)
                 .await?;
-            let (tree, matching) = state
-                .repository
-                .relationship_tree_facet(
-                    current_blueprint.blueprint.id,
-                    &facet.source_relationship_field,
-                    target.blueprint.id,
-                    &facet.hierarchy_field,
-                    facet.context_id,
-                    &facet.selected_target_ids,
-                    &matching_entity_ids,
-                )
-                .await?;
-            (Some(tree), matching)
+            if facet.selected_target_ids.is_empty() {
+                None
+            } else {
+                let (_, matching) = state
+                    .repository
+                    .relationship_tree_facet(
+                        current_blueprint.blueprint.id,
+                        &facet.source_relationship_field,
+                        target.blueprint.id,
+                        &facet.hierarchy_field,
+                        facet.context_id,
+                        &facet.selected_target_ids,
+                        &matching_entity_ids,
+                    )
+                    .await?;
+                matching
+            }
         }
-        None => (None, None),
+        None => None,
     };
     let (mut items, next_cursor) = state
         .repository
@@ -759,8 +769,90 @@ async fn search_entity_previews(
         blueprint: current_blueprint,
         items,
         next_cursor,
-        relationship_tree_facet,
     }))
+}
+
+async fn relationship_tree_facet_children(
+    State(state): State<AppState>,
+    ApiJson(input): ApiJson<RelationshipTreeFacetChildrenRequest>,
+) -> Result<Json<RelationshipTreeFacetChildrenResponse>, ApiError> {
+    if input.blueprint.code.is_empty() {
+        return Err(ApiError::invalid_input(
+            "blueprint.code must not be empty".to_owned(),
+        ));
+    }
+    let source = state
+        .repository
+        .get_blueprint_by_code(&input.blueprint.code)
+        .await?
+        .ok_or_else(|| ApiError::not_found("blueprint"))?;
+    let source_version = match input.blueprint.version {
+        Some(version) => Some(
+            state
+                .repository
+                .get_blueprint_by_code_and_version(&input.blueprint.code, version)
+                .await?
+                .ok_or_else(|| ApiError::not_found("blueprint"))?
+                .blueprint
+                .version,
+        ),
+        None => None,
+    };
+    let relationship = source
+        .attributes
+        .iter()
+        .find(|attribute| attribute.code == input.source_relationship_field)
+        .filter(|attribute| attribute.value_type == "relationship")
+        .ok_or_else(|| {
+            ApiError::invalid_input(
+                "source_relationship_field must be a relationship attribute".to_owned(),
+            )
+        })?;
+    let target_code = relationship
+        .target_blueprint_code
+        .as_deref()
+        .ok_or_else(|| {
+            ApiError::invalid_input("source_relationship_field has no target blueprint".to_owned())
+        })?;
+    let target = state
+        .repository
+        .get_blueprint_by_code(target_code)
+        .await?
+        .ok_or_else(|| ApiError::not_found("target blueprint"))?;
+    let hierarchy = target
+        .attributes
+        .iter()
+        .find(|attribute| attribute.code == input.hierarchy_field)
+        .ok_or_else(|| ApiError::invalid_input("hierarchy_field is not an attribute".to_owned()))?;
+    if hierarchy.value_type != "relationship"
+        || hierarchy.target_blueprint_code.as_deref() != Some(target_code)
+    {
+        return Err(ApiError::invalid_input(
+            "hierarchy_field must be a self-targeting relationship".to_owned(),
+        ));
+    }
+    let query = input
+        .query
+        .as_deref()
+        .map(str::trim)
+        .filter(|value| !value.is_empty());
+    Ok(Json(
+        state
+            .repository
+            .relationship_tree_facet_children(
+                source.blueprint.id,
+                source_version,
+                query,
+                &input.source_relationship_field,
+                target.blueprint.id,
+                &input.hierarchy_field,
+                input.context_id,
+                input.parent_id,
+                input.cursor,
+                state.max_relationship_facet_nodes.into(),
+            )
+            .await?,
+    ))
 }
 
 async fn create_entity_form(
