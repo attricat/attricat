@@ -4,7 +4,6 @@ import {
   Alert,
   Box,
   Chip,
-  Container,
   Paper,
   Stack,
   Table,
@@ -16,6 +15,8 @@ import {
   Typography,
 } from '@mui/material';
 import { useState } from 'react';
+import { PageContainer } from '../../components/PageContainer';
+import { PageHeader } from '../../components/PageHeader';
 import { listBlueprints } from './api';
 import { blueprintQueryKeys } from './query-keys';
 
@@ -44,25 +45,11 @@ export const BlueprintsPage = () => {
   });
 
   return (
-    <Container component="main" maxWidth="xl" sx={{ py: { xs: 4, md: 7 } }}>
-      <Typography
-        color="primary"
-        sx={{
-          fontWeight: 700,
-          letterSpacing: '.12em',
-          textTransform: 'uppercase',
-        }}
-        variant="overline"
-      >
-        Catalog
-      </Typography>
-      <Typography component="h1" variant="h2">
-        Blueprints
-      </Typography>
-      <Typography color="text.secondary">
-        Inspect every entity and mixin blueprint, including unpublished
-        revisions.
-      </Typography>
+    <PageContainer>
+      <PageHeader
+        description="Inspect every entity and mixin blueprint, including unpublished revisions."
+        title="Blueprints"
+      />
       <TextField
         label="Filter blueprints"
         onChange={(event) => setQuery(event.target.value)}
@@ -147,6 +134,6 @@ export const BlueprintsPage = () => {
           )}
         </Paper>
       )}
-    </Container>
+    </PageContainer>
   );
 };

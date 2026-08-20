@@ -3,7 +3,6 @@ import {
   Alert,
   Box,
   Chip,
-  Container,
   MenuItem,
   Paper,
   Stack,
@@ -18,6 +17,8 @@ import {
   Typography,
 } from '@mui/material';
 import { lazy, Suspense, useState } from 'react';
+import { PageContainer } from '../../components/PageContainer';
+import { PageHeader } from '../../components/PageHeader';
 import { getBlueprintRevision, listBlueprintRevisions } from './api';
 import { BlueprintViewsPreview } from './BlueprintViewsPreview';
 import { blueprintQueryKeys } from './query-keys';
@@ -83,27 +84,14 @@ export const BlueprintDetailPage = ({
   const blueprint = revisionItems[0];
 
   return (
-    <Container component="main" maxWidth="xl" sx={{ py: { xs: 4, md: 7 } }}>
+    <PageContainer>
       {revisions.isPending && <Typography>Loading blueprint...</Typography>}
       {revisions.isError && (
         <Alert severity="error">{revisions.error.message}</Alert>
       )}
       {blueprint && (
         <>
-          <Typography
-            color="primary"
-            sx={{
-              fontWeight: 700,
-              letterSpacing: '.12em',
-              textTransform: 'uppercase',
-            }}
-            variant="overline"
-          >
-            Blueprint
-          </Typography>
-          <Typography component="h1" variant="h2">
-            {blueprint.name}
-          </Typography>
+          <PageHeader eyebrow="Blueprint" title={blueprint.name} />
           <Stack direction="row" spacing={1} sx={{ flexWrap: 'wrap', mt: 1 }}>
             <Chip label={blueprint.code} variant="outlined" />
             <Chip label={blueprint.kind} variant="outlined" />
@@ -325,6 +313,6 @@ export const BlueprintDetailPage = ({
           )}
         </>
       )}
-    </Container>
+    </PageContainer>
   );
 };

@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { Link, useNavigate } from '@tanstack/react-router';
+import { useNavigate } from '@tanstack/react-router';
 import {
   Accordion,
   AccordionDetails,
@@ -9,7 +9,6 @@ import {
   Box,
   Button,
   Chip,
-  Container,
   FormControl,
   InputLabel,
   MenuItem,
@@ -25,6 +24,8 @@ import {
   Typography,
 } from '@mui/material';
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
+import { PageContainer } from '../../components/PageContainer';
+import { PageHeader } from '../../components/PageHeader';
 import {
   getDataHealthBlueprints,
   getDataHealthCompleteness,
@@ -113,81 +114,62 @@ export const DataHealthPage = ({ search }: { search: DataHealthSearch }) => {
   };
 
   return (
-    <Container component="main" maxWidth="xl" sx={{ py: { xs: 4, md: 7 } }}>
-      <Button component={Link} to="/" sx={{ mb: 4 }}>
-        Back to explorer
-      </Button>
-      <Stack
-        direction={{ xs: 'column', sm: 'row' }}
-        spacing={2}
-        sx={{ justifyContent: 'space-between' }}
-      >
-        <Box>
-          <Typography
-            color="primary"
-            sx={{
-              fontWeight: 700,
-              letterSpacing: '.12em',
-              textTransform: 'uppercase',
-            }}
-            variant="overline"
+    <PageContainer>
+      <PageHeader
+        actions={
+          <Stack
+            direction={{ xs: 'column', sm: 'row' }}
+            spacing={2}
+            sx={{ alignItems: { sm: 'center' } }}
           >
-            Catalog
-          </Typography>
-          <Typography component="h1" variant="h2">
-            Data health
-          </Typography>
-          <Typography color="text.secondary">
-            Monitor catalog currency, freshness, correctness, and storage
-            growth.
-          </Typography>
-        </Box>
-        <Stack direction="row" spacing={2} sx={{ alignItems: 'center' }}>
-          <FormControl size="small" sx={{ minWidth: 160 }}>
-            <InputLabel id="stale-after-label">Stale after</InputLabel>
-            <Select
-              label="Stale after"
-              labelId="stale-after-label"
-              value={customThreshold ? 'custom' : staleAfterDays}
-              onChange={(event) => {
-                if (event.target.value === 'custom') {
-                  setCustomThreshold(true);
-                  return;
-                }
-                setCustomThreshold(false);
-                void navigate({
-                  search: { staleAfterDays: Number(event.target.value) },
-                });
-              }}
-            >
-              {[30, 90, 180, 365].map((days) => (
-                <MenuItem key={days} value={days}>
-                  {days} days
-                </MenuItem>
-              ))}
-              <MenuItem value="custom">Custom</MenuItem>
-            </Select>
-          </FormControl>
-          {customThreshold && (
-            <TextField
-              defaultValue={staleAfterDays}
-              label="Days"
-              onBlur={(event) => {
-                const days = Number(event.target.value);
-                if (Number.isInteger(days) && days >= 1 && days <= 3650)
-                  void navigate({ search: { staleAfterDays: days } });
-              }}
-              size="small"
-              slotProps={{ htmlInput: { min: 1, max: 3650 } }}
-              type="number"
-              sx={{ width: 110 }}
-            />
-          )}
-          <Button onClick={refresh} variant="outlined">
-            Refresh
-          </Button>
-        </Stack>
-      </Stack>
+            <FormControl size="small" sx={{ minWidth: 160 }}>
+              <InputLabel id="stale-after-label">Stale after</InputLabel>
+              <Select
+                label="Stale after"
+                labelId="stale-after-label"
+                value={customThreshold ? 'custom' : staleAfterDays}
+                onChange={(event) => {
+                  if (event.target.value === 'custom') {
+                    setCustomThreshold(true);
+                    return;
+                  }
+                  setCustomThreshold(false);
+                  void navigate({
+                    search: { staleAfterDays: Number(event.target.value) },
+                  });
+                }}
+              >
+                {[30, 90, 180, 365].map((days) => (
+                  <MenuItem key={days} value={days}>
+                    {days} days
+                  </MenuItem>
+                ))}
+                <MenuItem value="custom">Custom</MenuItem>
+              </Select>
+            </FormControl>
+            {customThreshold && (
+              <TextField
+                defaultValue={staleAfterDays}
+                label="Days"
+                onBlur={(event) => {
+                  const days = Number(event.target.value);
+                  if (Number.isInteger(days) && days >= 1 && days <= 3650)
+                    void navigate({ search: { staleAfterDays: days } });
+                }}
+                size="small"
+                slotProps={{ htmlInput: { min: 1, max: 3650 } }}
+                type="number"
+                sx={{ width: 110 }}
+              />
+            )}
+            <Button onClick={refresh} variant="outlined">
+              Refresh
+            </Button>
+          </Stack>
+        }
+        description="Monitor catalog currency, freshness, correctness, and storage growth."
+        title="Data health"
+      />
       <SectionError error={summary.error} />
       {summary.data && (
         <Stack
@@ -399,6 +381,6 @@ export const DataHealthPage = ({ search }: { search: DataHealthSearch }) => {
           </Table>
         </AccordionDetails>
       </Accordion>
-    </Container>
+    </PageContainer>
   );
 };

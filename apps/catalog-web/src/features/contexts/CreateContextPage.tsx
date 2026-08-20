@@ -4,14 +4,14 @@ import { Link, useNavigate } from '@tanstack/react-router';
 import {
   Alert,
   Button,
-  Container,
   Paper,
   Stack,
   MenuItem,
   TextField,
-  Typography,
 } from '@mui/material';
 import { useState } from 'react';
+import { PageContainer } from '../../components/PageContainer';
+import { PageHeader } from '../../components/PageHeader';
 import { createContext, listContexts } from '../entities/api';
 import { entityQueryKeys } from '../entities/query-keys';
 
@@ -62,13 +62,11 @@ export const CreateContextPage = () => {
     },
   });
   return (
-    <Container component="main" maxWidth="sm" sx={{ py: { xs: 4, md: 7 } }}>
+    <PageContainer maxWidth="sm">
       <Button component={Link} to="/contexts" sx={{ mb: 4 }}>
         Back to contexts
       </Button>
-      <Typography component="h1" variant="h3">
-        Create context
-      </Typography>
+      <PageHeader title="Create context" titleVariant="h3" />
       <Paper
         component="form"
         onSubmit={(event) => {
@@ -128,6 +126,6 @@ export const CreateContextPage = () => {
           </Button>
         </Stack>
       </Paper>
-    </Container>
+    </PageContainer>
   );
 };

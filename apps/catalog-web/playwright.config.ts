@@ -13,5 +13,22 @@ export default defineConfig({
     trace: 'on-first-retry',
   },
   globalSetup: './e2e/global-setup.ts',
-  projects: [{ name: 'chromium', use: { ...devices['Desktop Chrome'] } }],
+  projects: [
+    {
+      name: 'chromium',
+      testIgnore: 'navigation.spec.ts',
+      use: { ...devices['Desktop Chrome'] },
+    },
+    {
+      name: 'mobile-chromium',
+      testMatch: 'navigation.spec.ts',
+      use: {
+        browserName: 'chromium',
+        channel: 'chrome',
+        hasTouch: true,
+        isMobile: true,
+        viewport: { width: 390, height: 844 },
+      },
+    },
+  ],
 });

@@ -3,13 +3,14 @@ import { Link } from '@tanstack/react-router';
 import {
   Alert,
   Button,
-  Container,
   List,
   ListItem,
   ListItemText,
   Paper,
   Typography,
 } from '@mui/material';
+import { PageContainer } from '../../components/PageContainer';
+import { PageHeader } from '../../components/PageHeader';
 import { listContexts } from '../entities/api';
 import { entityQueryKeys } from '../entities/query-keys';
 
@@ -19,13 +20,8 @@ export const ContextsPage = () => {
     queryFn: listContexts,
   });
   return (
-    <Container component="main" maxWidth="md" sx={{ py: { xs: 4, md: 7 } }}>
-      <Button component={Link} to="/" sx={{ mb: 4 }}>
-        Back to explorer
-      </Button>
-      <Typography component="h1" variant="h3">
-        Contexts
-      </Typography>
+    <PageContainer maxWidth="md">
+      <PageHeader title="Contexts" />
       <Button
         component={Link}
         sx={{ mt: 3 }}
@@ -61,6 +57,6 @@ export const ContextsPage = () => {
           </List>
         </Paper>
       )}
-    </Container>
+    </PageContainer>
   );
 };

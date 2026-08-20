@@ -13,7 +13,6 @@ import {
   Box,
   Button,
   Chip,
-  Container,
   MenuItem,
   Paper,
   Stack,
@@ -26,6 +25,8 @@ import {
   TextField,
   Typography,
 } from '@mui/material';
+import { PageContainer } from '../../components/PageContainer';
+import { PageHeader } from '../../components/PageHeader';
 import {
   listEntityBlueprints,
   searchEntities,
@@ -140,37 +141,14 @@ export const Explorer = ({ search }: { search: ExplorerSearch }) => {
   });
 
   return (
-    <Container component="main" maxWidth="xl" sx={{ py: { xs: 4, md: 7 } }}>
-      <Typography
-        color="primary"
-        sx={{
-          fontWeight: 700,
-          letterSpacing: '.12em',
-          textTransform: 'uppercase',
-        }}
-        variant="overline"
-      >
-        Catalog
-      </Typography>
-      <Typography component="h1" variant="h2">
-        Entity explorer
-      </Typography>
-      <Typography color="text.secondary">
-        Search a blueprint and inspect its entity projections across all schema
-        versions.
-      </Typography>
-      <Stack direction="row" spacing={2} sx={{ mt: 2 }}>
+    <PageContainer>
+      <PageHeader
+        description="Search a blueprint and inspect its entity projections across all schema versions."
+        title="Entity explorer"
+      />
+      <Stack direction="row" spacing={2} sx={{ mt: 3 }}>
         <Button component={Link} to="/entities/new" variant="contained">
           Create entity
-        </Button>
-        <Button component={Link} to="/contexts" variant="outlined">
-          Manage contexts
-        </Button>
-        <Button component={Link} to="/blueprints" variant="outlined">
-          Browse blueprints
-        </Button>
-        <Button component={Link} to="/data-health" variant="outlined">
-          Data health
         </Button>
       </Stack>
       <Paper
@@ -300,6 +278,6 @@ export const Explorer = ({ search }: { search: ExplorerSearch }) => {
           )}
         </Paper>
       )}
-    </Container>
+    </PageContainer>
   );
 };

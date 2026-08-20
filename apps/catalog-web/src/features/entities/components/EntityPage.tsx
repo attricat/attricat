@@ -1,6 +1,6 @@
-import { Link } from '@tanstack/react-router';
-import { Button, Container, Typography } from '@mui/material';
 import type { ReactNode } from 'react';
+import { PageContainer } from '../../../components/PageContainer';
+import { PageHeader } from '../../../components/PageHeader';
 
 export const EntityPage = ({
   children,
@@ -10,25 +10,9 @@ export const EntityPage = ({
   title: string;
 }) => {
   return (
-    <Container component="main" maxWidth="md" sx={{ py: { xs: 4, md: 7 } }}>
-      <Button component={Link} to="/" sx={{ mb: 4 }}>
-        Back to explorer
-      </Button>
-      <Typography
-        color="primary"
-        sx={{
-          fontWeight: 700,
-          letterSpacing: '.12em',
-          textTransform: 'uppercase',
-        }}
-        variant="overline"
-      >
-        Catalog
-      </Typography>
-      <Typography component="h1" variant="h3">
-        {title}
-      </Typography>
+    <PageContainer maxWidth="md">
+      <PageHeader title={title} titleVariant="h3" />
       {children}
-    </Container>
+    </PageContainer>
   );
 };

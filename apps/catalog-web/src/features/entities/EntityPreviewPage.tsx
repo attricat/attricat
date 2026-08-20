@@ -5,14 +5,14 @@ import WarningAmberOutlinedIcon from '@mui/icons-material/WarningAmberOutlined';
 import {
   Alert,
   Box,
-  Button,
-  Container,
   MenuItem,
   Paper,
   TextField,
   Typography,
 } from '@mui/material';
 import { createElement, useState } from 'react';
+import { PageContainer } from '../../components/PageContainer';
+import { PageHeader } from '../../components/PageHeader';
 import {
   getBlueprintRevision,
   getCurrentBlueprint,
@@ -77,33 +77,16 @@ export const EntityPreviewPage = ({ entityId }: { entityId: string }) => {
   const heading = findEntityHeading(detailView);
   const HeadingRenderer = resolveHeadingRenderer(heading?.component);
   return (
-    <Container component="main" maxWidth="lg" sx={{ py: { xs: 4, md: 7 } }}>
-      <Button component={Link} to="/" sx={{ mb: 4 }}>
-        Back to explorer
-      </Button>
-      <Typography
-        color="primary"
-        sx={{
-          fontWeight: 700,
-          letterSpacing: '.12em',
-          textTransform: 'uppercase',
-        }}
-        variant="overline"
-      >
-        Entity preview
-      </Typography>
-      {resolved.data && blueprint.data && HeadingRenderer ? (
-        createElement(HeadingRenderer, {
-          attributes: blueprint.data.attributes,
-          entityId,
-          values: resolved.data.values,
-          view: detailView,
-        })
-      ) : (
-        <Typography component="h1" variant="h3">
-          {entityId}
-        </Typography>
-      )}
+    <PageContainer maxWidth="lg">
+      <PageHeader eyebrow="Entity preview" />
+      {resolved.data && blueprint.data && HeadingRenderer
+        ? createElement(HeadingRenderer, {
+            attributes: blueprint.data.attributes,
+            entityId,
+            values: resolved.data.values,
+            view: detailView,
+          })
+        : null}
       <Box sx={{ mt: 1 }}>
         <Link params={{ entityId }} to="/entities/$entityId/edit">
           Edit entity
@@ -196,6 +179,6 @@ export const EntityPreviewPage = ({ entityId }: { entityId: string }) => {
           )}
         </>
       )}
-    </Container>
+    </PageContainer>
   );
 };
