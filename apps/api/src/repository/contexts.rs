@@ -74,6 +74,15 @@ impl CatalogRepository {
         sqlx::query("LOCK TABLE entities IN SHARE ROW EXCLUSIVE MODE")
             .execute(&mut *transaction)
             .await?;
+        let context_exists = sqlx::query_scalar::<_, bool>(
+            "SELECT EXISTS (SELECT 1 FROM attribute_contexts WHERE id = $1)",
+        )
+        .bind(id)
+        .fetch_one(&mut *transaction)
+        .await?;
+        if !context_exists {
+            return Err(RepositoryError::NotFound("context"));
+        }
         let parent_exists = sqlx::query_scalar::<_, bool>(
             "SELECT EXISTS (SELECT 1 FROM attribute_contexts WHERE id = $1)",
         )

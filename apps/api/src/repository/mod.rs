@@ -178,6 +178,19 @@ struct CurrentNativeValueRow {
     native: NativeValueRow,
 }
 
+const FORM_VALUES_SQL: &str = r#"SELECT a.code AS attribute_code, av.context_id, av.relationship_target_entity_id,
+                  a.value_type, av.value_text, av.value_number, av.value_integer,
+                  av.value_boolean, av.value_date, av.value_datetime, av.value_time,
+                  av.value_time_zone
+           FROM attribute_values av
+           JOIN attributes a ON a.id = av.attribute_id
+           JOIN entities e ON e.id = av.entity_id
+           WHERE av.entity_id = $1
+             AND a.blueprint_id = e.blueprint_id
+             AND a.blueprint_version = e.blueprint_version
+             AND (av.relationship_target_entity_id IS NULL OR av.active)
+           ORDER BY a.position, av.relationship_target_entity_id"#;
+
 #[derive(sqlx::FromRow)]
 struct HistoryNativeValueRow {
     id: Uuid,
@@ -414,6 +427,27 @@ pub(crate) fn native_value_json(row: NativeValueRow) -> Result<Value, Repository
         return Err(RepositoryError::InvalidStoredAttributeValue);
     }
     Ok(value.json())
+}
+
+fn form_attribute_values(
+    rows: Vec<FormNativeValueRow>,
+) -> Result<Vec<FormAttributeValue>, RepositoryError> {
+    rows.into_iter()
+        .map(|row| {
+            Ok(match row.relationship_target_entity_id {
+                Some(target_entity_id) => FormAttributeValue::Relationship {
+                    attribute_code: row.attribute_code,
+                    context_id: row.context_id,
+                    target_entity_id,
+                },
+                None => FormAttributeValue::Scalar {
+                    attribute_code: row.attribute_code,
+                    context_id: row.context_id,
+                    value: native_value_json(row.native)?,
+                },
+            })
+        })
+        .collect()
 }
 
 fn history_attribute_value(
@@ -1407,40 +1441,11 @@ impl CatalogRepository {
         &self,
         entity_id: Uuid,
     ) -> Result<Vec<FormAttributeValue>, RepositoryError> {
-        let rows = sqlx::query_as::<_, FormNativeValueRow>(
-            r#"SELECT a.code AS attribute_code, av.context_id, av.relationship_target_entity_id,
-                      a.value_type, av.value_text, av.value_number, av.value_integer,
-                      av.value_boolean, av.value_date, av.value_datetime, av.value_time,
-                      av.value_time_zone
-               FROM attribute_values av
-               JOIN attributes a ON a.id = av.attribute_id
-               JOIN entities e ON e.id = av.entity_id
-               WHERE av.entity_id = $1
-                 AND a.blueprint_id = e.blueprint_id
-                 AND a.blueprint_version = e.blueprint_version
-                  AND (av.relationship_target_entity_id IS NULL OR av.active)
-               ORDER BY a.position, av.relationship_target_entity_id"#,
-        )
-        .bind(entity_id)
-        .fetch_all(&self.pool)
-        .await?;
-        Ok(rows
-            .into_iter()
-            .map(|row| {
-                Ok(match row.relationship_target_entity_id {
-                    Some(target_entity_id) => FormAttributeValue::Relationship {
-                        attribute_code: row.attribute_code,
-                        context_id: row.context_id,
-                        target_entity_id,
-                    },
-                    None => FormAttributeValue::Scalar {
-                        attribute_code: row.attribute_code,
-                        context_id: row.context_id,
-                        value: native_value_json(row.native)?,
-                    },
-                })
-            })
-            .collect::<Result<_, RepositoryError>>()?)
+        let rows = sqlx::query_as::<_, FormNativeValueRow>(FORM_VALUES_SQL)
+            .bind(entity_id)
+            .fetch_all(&self.pool)
+            .await?;
+        form_attribute_values(rows)
     }
 
     async fn form_values_in_transaction(
@@ -1448,39 +1453,11 @@ impl CatalogRepository {
         transaction: &mut Transaction<'_, Postgres>,
         entity_id: Uuid,
     ) -> Result<Vec<FormAttributeValue>, RepositoryError> {
-        let rows = sqlx::query_as::<_, FormNativeValueRow>(
-            r#"SELECT a.code AS attribute_code, av.context_id, av.relationship_target_entity_id,
-                      a.value_type, av.value_text, av.value_number, av.value_integer,
-                      av.value_boolean, av.value_date, av.value_datetime, av.value_time,
-                      av.value_time_zone
-               FROM attribute_values av
-               JOIN attributes a ON a.id = av.attribute_id
-               JOIN entities e ON e.id = av.entity_id
-               WHERE av.entity_id = $1
-                 AND a.blueprint_id = e.blueprint_id
-                 AND a.blueprint_version = e.blueprint_version
-                  AND (av.relationship_target_entity_id IS NULL OR av.active)
-               ORDER BY a.position, av.relationship_target_entity_id"#,
-        )
-        .bind(entity_id)
-        .fetch_all(&mut **transaction)
-        .await?;
-        rows.into_iter()
-            .map(|row| {
-                Ok(match row.relationship_target_entity_id {
-                    Some(target_entity_id) => FormAttributeValue::Relationship {
-                        attribute_code: row.attribute_code,
-                        context_id: row.context_id,
-                        target_entity_id,
-                    },
-                    None => FormAttributeValue::Scalar {
-                        attribute_code: row.attribute_code,
-                        context_id: row.context_id,
-                        value: native_value_json(row.native)?,
-                    },
-                })
-            })
-            .collect()
+        let rows = sqlx::query_as::<_, FormNativeValueRow>(FORM_VALUES_SQL)
+            .bind(entity_id)
+            .fetch_all(&mut **transaction)
+            .await?;
+        form_attribute_values(rows)
     }
 
     async fn list_attributes_in_transaction(
