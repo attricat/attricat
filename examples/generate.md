@@ -6,7 +6,7 @@ HTTP API. It uses Node.js 18 or later and has no package dependencies.
 Start the development services, then run it from the repository root:
 
 ```sh
-node examples/generate.mjs
+just generate
 ```
 
 Set `CATALOG_SERVER` to target another API URL. `PRODUCT_COUNT` controls the
@@ -20,7 +20,7 @@ Set `SEED_BLUEPRINTS_ONLY=1` to create updated blueprint revisions without
 creating entities or contexts:
 
 ```sh
-SEED_BLUEPRINTS_ONLY=1 node examples/generate.mjs
+SEED_BLUEPRINTS_ONLY=1 just generate
 ```
 
 The generator loads its blueprint definitions from `examples/generator/products/` and

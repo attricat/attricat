@@ -19,7 +19,11 @@ children = [
 
 [views.edit]
 type = "stack"
-children = [{ type = "field", field = "name" }, { type = "field", field = "slug" }]
+children = [
+  { type = "field", field = "name" },
+  { type = "field", field = "slug" },
+  { type = "relationship_list", field = "parent_category", component = { id = "catalog.relationship_list_edit", version = 1 } },
+]
 
 [views.table]
 type = "table"

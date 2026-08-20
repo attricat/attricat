@@ -13,7 +13,7 @@
 The API applies embedded SQLx migrations when it starts. To run them manually:
 
 ```sh
-sqlx migrate run --source apps/api/migrations --database-url "$DATABASE_URL"
+just migrate
 ```
 
 Stop the application processes with `Ctrl-C`. PostgreSQL persists until you

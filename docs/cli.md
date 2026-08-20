@@ -188,7 +188,7 @@ blueprints that exercise the supported blueprint features. Start the API, then
 run:
 
 ```sh
-node examples/generate.mjs
+just generate
 ```
 
 See [`examples/generate.md`](../examples/generate.md) for configuration and a
