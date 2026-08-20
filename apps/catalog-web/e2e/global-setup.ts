@@ -1,9 +1,8 @@
 import { PostgreSqlContainer } from '@testcontainers/postgresql';
 import { execFileSync, spawn, type ChildProcess } from 'node:child_process';
+import { e2eApiPort, e2eApiUrl, e2eWebPort, e2eWebUrl } from './ports.ts';
 
 const workspaceRoot = new URL('../../..', import.meta.url).pathname;
-const apiUrl = 'http://127.0.0.1:43100';
-const webUrl = 'http://127.0.0.1:4173';
 
 const waitFor = async (url: string) => {
   const deadline = Date.now() + 120_000;
@@ -41,12 +40,12 @@ export default async () => {
   const database = await new PostgreSqlContainer('postgres:18-alpine').start();
   const api = start('cargo', ['run', '-p', 'api'], {
     ...process.env,
-    BIND_ADDR: '127.0.0.1:43100',
+    BIND_ADDR: `127.0.0.1:${e2eApiPort}`,
     DATABASE_URL: database.getConnectionUri(),
   });
 
   try {
-    await waitFor(`${apiUrl}/health`);
+    await waitFor(`${e2eApiUrl}/health`);
     const web = start(
       'npm',
       [
@@ -58,11 +57,11 @@ export default async () => {
         '--host',
         '127.0.0.1',
         '--port',
-        '4173',
+        e2eWebPort,
       ],
-      { ...process.env, CATALOG_API_URL: apiUrl },
+      { ...process.env, CATALOG_API_URL: e2eApiUrl },
     );
-    await waitFor(webUrl);
+    await waitFor(e2eWebUrl);
 
     return async () => {
       stop(web);

@@ -4,11 +4,11 @@
 
 1. Install a Docker-compatible runtime, Rust, Node.js 18 or newer, `just`,
    `process-compose`, and `watchexec`.
-2. From the repository root, run `cp .env.example .env` and
-   `npm install --prefix apps/catalog-web`.
-3. Run `just dev`. It starts PostgreSQL and watches the API and web app.
-4. Verify the API at `http://127.0.0.1:3000/health` and open the Vite URL
-   shown in the process output, normally `http://127.0.0.1:5173`.
+2. From the repository root, run `npm install --prefix apps/catalog-web`.
+3. Run `just dev`. It creates `.env` from `.env.example`, assigns persistent
+   ports for this worktree, starts PostgreSQL, and watches the API and web app.
+4. Open the worktree-specific Vite URL printed by `just dev`; the selected
+   ports are also recorded in the ignored `.catalog-worktree` file.
 
 The API applies embedded SQLx migrations when it starts. To run them manually:
 
@@ -17,7 +17,7 @@ sqlx migrate run --source apps/api/migrations --database-url "$DATABASE_URL"
 ```
 
 Stop the application processes with `Ctrl-C`. PostgreSQL persists until you
-run `docker compose -f apps/api/compose.yml down`.
+run `just down`.
 
 See [Configuration](configuration.md) for connection, proxy, and API limit
 settings.
@@ -53,7 +53,8 @@ settings.
 ## Test The Web App
 
 The Playwright suite provisions an isolated PostgreSQL container and launches
-separate API and Vite processes; it never changes the development database.
+separate API and Vite processes on fresh ports; it never changes the development
+database.
 
 ```sh
 npx playwright install chromium --prefix apps/catalog-web

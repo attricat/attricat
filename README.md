@@ -10,17 +10,17 @@ Install a Docker-compatible container runtime, Rust, Node.js 18 or newer,
 `just`, `process-compose`, and `watchexec`. Then, from the repository root:
 
 ```sh
-cp .env.example .env
 npm install --prefix apps/catalog-web
 just dev
 ```
 
-The API listens on `http://127.0.0.1:3000` and the web application is served
-by Vite (normally `http://127.0.0.1:5173`). Stop `process-compose` with
-`Ctrl-C`; the PostgreSQL container remains available until stopped with:
+`just dev` assigns persistent, worktree-specific ports, writes them to the
+ignored `.catalog-worktree` file, and creates `.env` from `.env.example`. It
+prints the web URL when it starts. Stop `process-compose` with `Ctrl-C`; the
+PostgreSQL container remains available until stopped with:
 
 ```sh
-docker compose -f apps/api/compose.yml down
+just down
 ```
 
 See [Getting Started](docs/index.md#getting-started) for database, migration,

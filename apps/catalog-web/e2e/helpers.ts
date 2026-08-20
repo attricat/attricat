@@ -1,4 +1,4 @@
-const apiUrl = 'http://127.0.0.1:43100';
+import { e2eApiUrl } from './ports.ts';
 
 export type Blueprint = {
   blueprint: { id: string; code: string; version: number };
@@ -13,7 +13,7 @@ export const request = async <T>(
   path: string,
   init?: RequestInit,
 ): Promise<T> => {
-  const response = await fetch(`${apiUrl}${path}`, init);
+  const response = await fetch(`${e2eApiUrl}${path}`, init);
   if (!response.ok) {
     throw new Error(
       `E2E setup request failed: ${response.status} ${await response.text()}`,

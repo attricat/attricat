@@ -1,7 +1,9 @@
 # Configuration Reference
 
-The API loads `.env` from the working directory at startup. Copy
-`.env.example` to `.env` for local development.
+The API loads `.env` from the working directory at startup. `just setup` and
+`just dev` create it from `.env.example` with persistent, worktree-specific
+ports. Those port assignments are recorded in the ignored `.catalog-worktree`
+file.
 
 | Setting | Default | Used by | Purpose |
 | --- | --- | --- | --- |
@@ -16,6 +18,7 @@ The API loads `.env` from the working directory at startup. Copy
 | `POSTGRES_USER` | `postgres` | Docker Compose | Local PostgreSQL user. |
 | `POSTGRES_PASSWORD` | `postgres` | Docker Compose | Local PostgreSQL password. |
 | `POSTGRES_PORT` | `5432` | Docker Compose | Host port mapped to PostgreSQL. |
+| `WEB_PORT` | `5173` | Vite | Listener port for the development web app. |
 
 `CATALOG_SERVER` overrides the CLI's API URL. The CLI otherwise targets
 `http://127.0.0.1:3000`.
