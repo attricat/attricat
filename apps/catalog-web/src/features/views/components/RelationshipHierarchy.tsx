@@ -1,7 +1,7 @@
-import { useQuery } from '@tanstack/react-query';
+import { useQueries } from '@tanstack/react-query';
 import { Link } from '@tanstack/react-router';
 import { Breadcrumbs, Button, Menu, MenuItem, Typography } from '@mui/material';
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { getEntityHierarchy } from '../../entities/api';
 import { entityQueryKeys } from '../../entities/query-keys';
 import type { ViewComponentDefinition } from './component-types';
@@ -19,34 +19,52 @@ export const RelationshipHierarchy = ({
   entityId?: string;
   value: unknown;
 }) => {
-  const [selectedPath, setSelectedPath] = useState(0);
+  const [selection, setSelection] = useState({ pathKey: '', index: 0 });
   const [pathMenuAnchor, setPathMenuAnchor] = useState<HTMLElement | null>(
     null,
   );
   const parentField = component?.props.parent_field;
-  const targetId =
+  const targetIds =
     typeof parentField === 'string'
-      ? (value as { items?: { id?: string }[] } | undefined)?.items?.[0]?.id
-      : entityId;
+      ? [
+          ...new Set(
+            (value as { items?: { id?: string }[] } | undefined)?.items
+              ?.map((item) => item.id)
+              .filter((id): id is string => Boolean(id)) ?? [],
+          ),
+        ]
+      : entityId
+        ? [entityId]
+        : [];
   const hierarchyField =
     typeof parentField === 'string' ? parentField : attribute.code;
-  const hierarchy = useQuery({
-    queryKey: entityQueryKeys.hierarchy(
-      targetId ?? '',
-      contextId ?? '',
-      hierarchyField,
-    ),
-    queryFn: () => getEntityHierarchy(targetId!, contextId!, hierarchyField),
-    enabled: Boolean(targetId && contextId),
+  const pathKey = `${targetIds.join(':')}:${contextId ?? ''}:${hierarchyField}`;
+  const hierarchies = useQueries({
+    queries: targetIds.map((targetId) => ({
+      queryKey: entityQueryKeys.hierarchy(
+        targetId,
+        contextId ?? '',
+        hierarchyField,
+      ),
+      queryFn: () => getEntityHierarchy(targetId, contextId!, hierarchyField),
+      enabled: Boolean(contextId),
+    })),
   });
-  useEffect(() => {
-    setSelectedPath(0);
-  }, [targetId, contextId, hierarchyField]);
-  if (hierarchy.isPending) return <Typography>Loading hierarchy...</Typography>;
-  if (hierarchy.isError)
-    return <Typography color="error">{hierarchy.error.message}</Typography>;
-  const paths = hierarchy.data?.paths ?? [];
-  const items = paths[selectedPath] ?? hierarchy.data?.items ?? [];
+  if (hierarchies.some((hierarchy) => hierarchy.isPending))
+    return <Typography>Loading hierarchy...</Typography>;
+  const failedHierarchy = hierarchies.find((hierarchy) => hierarchy.isError);
+  if (failedHierarchy)
+    return (
+      <Typography color="error">{failedHierarchy.error.message}</Typography>
+    );
+  const paths = hierarchies.flatMap(
+    (hierarchy) => hierarchy.data?.paths ?? [hierarchy.data?.items ?? []],
+  );
+  const selectedPath =
+    selection.pathKey === pathKey && selection.index < paths.length
+      ? selection.index
+      : 0;
+  const items = paths[selectedPath] ?? [];
   if (!items.length)
     return (
       <Typography color="text.secondary">No hierarchy available.</Typography>
@@ -92,7 +110,7 @@ export const RelationshipHierarchy = ({
           <MenuItem
             key={path.map((item) => item.id).join(':')}
             onClick={() => {
-              setSelectedPath(index);
+              setSelection({ pathKey, index });
               setPathMenuAnchor(null);
             }}
             selected={index === selectedPath}
