@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from '@tanstack/react-router';
 import {
   Accordion,
@@ -7,20 +7,14 @@ import {
   AccordionSummary,
   Alert,
   Box,
-  Button,
   Chip,
-  FormControl,
-  InputLabel,
-  MenuItem,
   Paper,
-  Select,
   Stack,
   Table,
   TableBody,
   TableCell,
   TableHead,
   TableRow,
-  TextField,
   Typography,
 } from '@mui/material';
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
@@ -37,6 +31,7 @@ import {
   refreshDataHealth,
 } from './api';
 import { dataHealthQueryKeys } from './query-keys';
+import { DataHealthControls } from './DataHealthControls';
 import type { DataHealthSearch } from './schemas';
 
 const formatDate = (value: string | null) =>
@@ -63,9 +58,6 @@ export const DataHealthPage = ({ search }: { search: DataHealthSearch }) => {
   const staleAfterDays = search.staleAfterDays ?? 90;
   const navigate = useNavigate({ from: '/data-health' });
   const queryClient = useQueryClient();
-  const [customThreshold, setCustomThreshold] = useState(
-    ![30, 90, 180, 365].includes(staleAfterDays),
-  );
   const [showCompleteness, setShowCompleteness] = useState(false);
   const [showContexts, setShowContexts] = useState(false);
   const [showRelationships, setShowRelationships] = useState(false);
@@ -107,65 +99,24 @@ export const DataHealthPage = ({ search }: { search: DataHealthSearch }) => {
     enabled: showRelationships,
     staleTime: 30_000,
   });
-  const refresh = () => {
-    void refreshDataHealth().then(() =>
-      queryClient.invalidateQueries({ queryKey: ['data-health'] }),
-    );
-  };
+  const refresh = useMutation({
+    mutationFn: refreshDataHealth,
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['data-health'] }),
+  });
 
   return (
     <PageContainer>
       <PageHeader
         actions={
-          <Stack
-            direction={{ xs: 'column', sm: 'row' }}
-            spacing={2}
-            sx={{ alignItems: { sm: 'center' } }}
-          >
-            <FormControl size="small" sx={{ minWidth: 160 }}>
-              <InputLabel id="stale-after-label">Stale after</InputLabel>
-              <Select
-                label="Stale after"
-                labelId="stale-after-label"
-                value={customThreshold ? 'custom' : staleAfterDays}
-                onChange={(event) => {
-                  if (event.target.value === 'custom') {
-                    setCustomThreshold(true);
-                    return;
-                  }
-                  setCustomThreshold(false);
-                  void navigate({
-                    search: { staleAfterDays: Number(event.target.value) },
-                  });
-                }}
-              >
-                {[30, 90, 180, 365].map((days) => (
-                  <MenuItem key={days} value={days}>
-                    {days} days
-                  </MenuItem>
-                ))}
-                <MenuItem value="custom">Custom</MenuItem>
-              </Select>
-            </FormControl>
-            {customThreshold && (
-              <TextField
-                defaultValue={staleAfterDays}
-                label="Days"
-                onBlur={(event) => {
-                  const days = Number(event.target.value);
-                  if (Number.isInteger(days) && days >= 1 && days <= 3650)
-                    void navigate({ search: { staleAfterDays: days } });
-                }}
-                size="small"
-                slotProps={{ htmlInput: { min: 1, max: 3650 } }}
-                type="number"
-                sx={{ width: 110 }}
-              />
-            )}
-            <Button onClick={refresh} variant="outlined">
-              Refresh
-            </Button>
-          </Stack>
+          <DataHealthControls
+            isRefreshing={refresh.isPending}
+            onRefresh={() => refresh.mutate()}
+            onStaleAfterDaysChange={(days) => {
+              void navigate({ search: { staleAfterDays: days } });
+            }}
+            refreshError={refresh.error}
+            staleAfterDays={staleAfterDays}
+          />
         }
         description="Monitor catalog currency, freshness, correctness, and storage growth."
         title="Data health"

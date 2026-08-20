@@ -1,28 +1,10 @@
-import { useForm } from '@tanstack/react-form';
 import { keepPreviousData, useQuery } from '@tanstack/react-query';
 import { Link, useNavigate } from '@tanstack/react-router';
-import { flexRender } from '@tanstack/react-table';
-import {
-  getCoreRowModel,
-  legacyCreateColumnHelper,
-  type LegacyColumnDef,
-  useLegacyTable,
-} from '@tanstack/react-table/legacy';
 import {
   Alert,
   Box,
   Button,
-  Chip,
-  MenuItem,
-  Paper,
   Stack,
-  Table,
-  TableBody,
-  TableCell,
-  TableContainer,
-  TableHead,
-  TableRow,
-  TextField,
   Typography,
 } from '@mui/material';
 import { PageContainer } from '../../components/PageContainer';
@@ -32,41 +14,15 @@ import {
   getBlueprintByCode,
   listContexts,
   searchEntities,
-  type EntityItem,
 } from '../entities/api';
-import { displayLabel } from '../entities/entity-display';
 import { entityQueryKeys } from '../entities/query-keys';
-import { AttributeValue } from '../views/components/values/AttributeValue';
+import { ExplorerFacetSidebar } from './ExplorerFacetSidebar';
+import { ExplorerResultsTable } from './ExplorerResultsTable';
+import { ExplorerSearchForm } from './ExplorerSearchForm';
 import type { ExplorerSearch } from './search';
-import { RelationshipTreeFacet } from './RelationshipTreeFacet';
 
 export const Explorer = ({ search }: { search: ExplorerSearch }) => {
   const navigate = useNavigate({ from: '/' });
-  const form = useForm({
-    defaultValues: {
-      blueprint: search.blueprint ?? '',
-      version: search.version?.toString() ?? '',
-      query: search.query ?? '',
-    },
-    onSubmit: ({ value }) => {
-      void navigate({
-        to: '/',
-        search: {
-          ...(value.blueprint === search.blueprint
-            ? search
-            : {
-                facetField: undefined,
-                facetHierarchy: undefined,
-                facetContext: undefined,
-                categories: undefined,
-              }),
-          blueprint: value.blueprint || undefined,
-          version: value.version ? Number(value.version) : undefined,
-          query: value.query || undefined,
-        },
-      });
-    },
-  });
   const contexts = useQuery({
     queryKey: entityQueryKeys.contexts(),
     queryFn: listContexts,
@@ -151,75 +107,6 @@ export const Explorer = ({ search }: { search: ExplorerSearch }) => {
     });
   };
 
-  const columnHelper = legacyCreateColumnHelper<EntityItem>();
-  const tableFields =
-    results.data?.blueprint.blueprint.views.table?.type === 'table'
-      ? results.data.blueprint.blueprint.views.table.fields
-      : [];
-  const attributes = new Map(
-    (results.data?.blueprint.attributes ?? []).map((attribute) => [
-      attribute.code,
-      attribute,
-    ]),
-  );
-  const columns: LegacyColumnDef<EntityItem, string>[] = [
-    columnHelper.accessor('id', {
-      header: 'ID',
-      cell: (info) => (
-        <Link
-          to="/entities/$entityId"
-          params={{ entityId: info.row.original.id }}
-        >
-          {info.getValue()}
-        </Link>
-      ),
-    }),
-    columnHelper.display({
-      id: 'display',
-      header: 'Display',
-      cell: (info) =>
-        displayLabel(info.row.original.display, info.row.original.id),
-    }) as LegacyColumnDef<EntityItem, string>,
-    columnHelper.display({
-      id: 'schema',
-      header: 'Schema',
-      cell: (info) => {
-        const entity = info.row.original;
-        return (
-          <Chip
-            color={entity.schema_outdated ? 'warning' : 'success'}
-            label={`v${entity.blueprint_version} · ${
-              entity.schema_outdated ? 'Outdated' : 'Current'
-            }`}
-            size="small"
-          />
-        );
-      },
-    }) as LegacyColumnDef<EntityItem, string>,
-    ...tableFields.flatMap((field) => {
-      const attribute = attributes.get(field);
-      if (!attribute) return [];
-      return [
-        columnHelper.display({
-          id: field,
-          header: field.replaceAll('_', ' '),
-          cell: (info) => (
-            <AttributeValue
-              attribute={attribute}
-              compact
-              value={info.row.original.preview.default?.[field]}
-            />
-          ),
-        }) as LegacyColumnDef<EntityItem, string>,
-      ];
-    }),
-  ];
-  const table = useLegacyTable({
-    data: results.data?.items ?? [],
-    columns: columns as never,
-    getCoreRowModel: getCoreRowModel(),
-  });
-
   return (
     <PageContainer>
       <PageHeader
@@ -231,63 +118,26 @@ export const Explorer = ({ search }: { search: ExplorerSearch }) => {
           Create entity
         </Button>
       </Stack>
-      <Paper
-        component="form"
-        onSubmit={(event) => {
-          event.preventDefault();
-          void form.handleSubmit();
+      <ExplorerSearchForm
+        blueprints={blueprints.data ?? []}
+        onSubmit={(value) => {
+          void navigate({
+            to: '/',
+            search: {
+              ...(value.blueprint === search.blueprint
+                ? search
+                : {
+                    facetField: undefined,
+                    facetHierarchy: undefined,
+                    facetContext: undefined,
+                    categories: undefined,
+                  }),
+              ...value,
+            },
+          });
         }}
-        sx={{ mt: 4, p: 2.5 }}
-      >
-        <Stack direction={{ xs: 'column', md: 'row' }} spacing={2}>
-          <form.Field name="blueprint">
-            {(field) => (
-              <TextField
-                required
-                label="Select a Blueprint"
-                onChange={(event) => {
-                  field.handleChange(event.target.value);
-                  form.setFieldValue('version', '');
-                }}
-                select
-                sx={{ width: 280 }}
-                value={field.state.value}
-              >
-                {(blueprints.data ?? []).map((blueprint) => (
-                  <MenuItem key={blueprint.code} value={blueprint.code}>
-                    {blueprint.name} ({blueprint.code})
-                  </MenuItem>
-                ))}
-              </TextField>
-            )}
-          </form.Field>
-          <form.Field name="version">
-            {(field) => (
-              <TextField
-                inputMode="numeric"
-                label="Version"
-                onChange={(event) => field.handleChange(event.target.value)}
-                placeholder="Current"
-                value={field.state.value}
-              />
-            )}
-          </form.Field>
-          <form.Field name="query">
-            {(field) => (
-              <TextField
-                fullWidth
-                label="Query"
-                onChange={(event) => field.handleChange(event.target.value)}
-                placeholder="Search terms"
-                value={field.state.value}
-              />
-            )}
-          </form.Field>
-          <Button type="submit" variant="contained">
-            Search
-          </Button>
-        </Stack>
-      </Paper>
+        search={search}
+      />
       {!search.blueprint && (
         <Typography sx={{ py: 3 }}>
           Enter a blueprint code to start exploring.
@@ -313,124 +163,22 @@ export const Explorer = ({ search }: { search: ExplorerSearch }) => {
             mt: 3,
           }}
         >
-          <Paper component="aside" sx={{ alignSelf: 'start', p: 2 }}>
-            <TextField
-              fullWidth
-              label="Relationship"
-              onChange={(event) =>
-                updateFacet({
-                  facetField: event.target.value || undefined,
-                  facetHierarchy: undefined,
-                  facetContext: undefined,
-                  categories: undefined,
-                })
-              }
-              select
-              size="small"
-              sx={{ mt: 1.5 }}
-              value={search.facetField ?? ''}
-            >
-              <MenuItem value="">None</MenuItem>
-              {relationshipFields.map((attribute) => (
-                <MenuItem key={attribute.code} value={attribute.code}>
-                  {attribute.code}
-                </MenuItem>
-              ))}
-            </TextField>
-            {search.facetField && targetBlueprint.isPending && (
-              <Typography color="text.secondary" sx={{ mt: 2 }} variant="body2">
-                Loading category tree...
-              </Typography>
-            )}
-            {search.facetField &&
-              !targetBlueprint.isPending &&
-              !hierarchyFields.length && (
-                <Typography
-                  color="text.secondary"
-                  sx={{ mt: 2 }}
-                  variant="body2"
-                >
-                  This relationship target has no self-referencing relationship.
-                </Typography>
-              )}
-            {hierarchyField && sourceRelationship && (
-              <RelationshipTreeFacet
-                blueprint={search.blueprint!}
-                contextCode={contextCode}
-                contexts={contexts.data ?? []}
-                hierarchyField={hierarchyField}
-                hierarchyFields={hierarchyFields}
-                onContextChange={(facetContext) =>
-                  updateFacet({ facetContext, categories: undefined })
-                }
-                onHierarchyFieldChange={(facetHierarchy) =>
-                  updateFacet({ facetHierarchy, categories: undefined })
-                }
-                onSelectedIdsChange={(categories) =>
-                  updateFacet({ categories })
-                }
-                selectedIds={search.categories ?? []}
-                query={search.query}
-                sourceField={sourceRelationship.code}
-                version={search.version}
-              />
-            )}
-          </Paper>
-          <Paper component="section">
-            <Box sx={{ borderBottom: 1, borderColor: 'divider', p: 2 }}>
-              <Typography>
-                <strong>{results.data.blueprint.blueprint.code}</strong> v
-                {results.data.blueprint.blueprint.version} ·{' '}
-                {results.data.items.length} result
-                {results.data.items.length === 1 ? '' : 's'}
-              </Typography>
-            </Box>
-            <TableContainer>
-              <Table size="small">
-                <TableHead>
-                  {table.getHeaderGroups().map((group) => (
-                    <TableRow key={group.id}>
-                      {group.headers.map((header) => (
-                        <TableCell key={header.id}>
-                          {header.isPlaceholder
-                            ? null
-                            : flexRender(
-                                header.column.columnDef.header,
-                                header.getContext(),
-                              )}
-                        </TableCell>
-                      ))}
-                    </TableRow>
-                  ))}
-                </TableHead>
-                <TableBody>
-                  {table.getRowModel().rows.map((row) => (
-                    <TableRow key={row.id}>
-                      {row.getVisibleCells().map((cell) => (
-                        <TableCell key={cell.id}>
-                          {flexRender(
-                            cell.column.columnDef.cell,
-                            cell.getContext(),
-                          )}
-                        </TableCell>
-                      ))}
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            </TableContainer>
-            {results.data.items.length === 0 && (
-              <Typography sx={{ p: 2 }}>
-                No entities matched this search.
-              </Typography>
-            )}
-            {results.data.next_cursor && (
-              <Alert severity="info" sx={{ m: 2 }}>
-                More results are available. Pagination will be added with the
-                search cursor.
-              </Alert>
-            )}
-          </Paper>
+          <ExplorerFacetSidebar
+            blueprint={search.blueprint}
+            contextCode={contextCode}
+            contexts={contexts.data ?? []}
+            hierarchyField={hierarchyField}
+            hierarchyFields={hierarchyFields}
+            isTargetBlueprintPending={targetBlueprint.isPending}
+            onUpdate={updateFacet}
+            query={search.query}
+            relationshipFields={relationshipFields}
+            searchFacetField={search.facetField}
+            selectedIds={search.categories ?? []}
+            sourceRelationship={sourceRelationship}
+            version={search.version}
+          />
+          <ExplorerResultsTable results={results.data} />
         </Box>
       )}
     </PageContainer>

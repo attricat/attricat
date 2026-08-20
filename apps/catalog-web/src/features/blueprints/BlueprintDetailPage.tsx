@@ -21,19 +21,13 @@ import { PageContainer } from '../../components/PageContainer';
 import { PageHeader } from '../../components/PageHeader';
 import { getBlueprintRevision, listBlueprintRevisions } from './api';
 import { BlueprintViewsPreview } from './BlueprintViewsPreview';
+import { formatBlueprintDateTime } from './date-time';
 import { blueprintQueryKeys } from './query-keys';
+import { RevisionHistory } from './RevisionHistory';
 
 const TomlEditor = lazy(() =>
   import('./TomlEditor').then(({ TomlEditor }) => ({ default: TomlEditor })),
 );
-
-const dateTime = (value: string | null) =>
-  value
-    ? new Intl.DateTimeFormat(undefined, {
-        dateStyle: 'medium',
-        timeStyle: 'short',
-      }).format(new Date(value))
-    : 'Not published';
 
 const JsonMetadata = ({ label, value }: { label: string; value: unknown }) => (
   <Box>
@@ -106,49 +100,9 @@ export const BlueprintDetailPage = ({
             <Box component="span" sx={{ fontFamily: 'monospace' }}>
               {blueprint.id}
             </Box>
-            {' · '}Updated: {dateTime(blueprint.updated_at)}
+            {' · '}Updated: {formatBlueprintDateTime(blueprint.updated_at)}
           </Typography>
-          <Paper component="section" sx={{ mt: 3, p: 2.5 }}>
-            <Typography component="h2" variant="h6">
-              Revision history
-            </Typography>
-            <Box sx={{ overflowX: 'auto', mt: 1 }}>
-              <Table size="small">
-                <TableHead>
-                  <TableRow>
-                    <TableCell>Version</TableCell>
-                    <TableCell>Status</TableCell>
-                    <TableCell>Created</TableCell>
-                    <TableCell>Published</TableCell>
-                    <TableCell>Definition hash</TableCell>
-                  </TableRow>
-                </TableHead>
-                <TableBody>
-                  {revisionItems.map((revision) => (
-                    <TableRow key={revision.version}>
-                      <TableCell>v{revision.version}</TableCell>
-                      <TableCell>
-                        <Chip
-                          color={
-                            revision.status === 'published'
-                              ? 'success'
-                              : 'warning'
-                          }
-                          label={revision.status}
-                          size="small"
-                        />
-                      </TableCell>
-                      <TableCell>{dateTime(revision.created_at)}</TableCell>
-                      <TableCell>{dateTime(revision.published_at)}</TableCell>
-                      <TableCell sx={{ fontFamily: 'monospace' }}>
-                        {revision.definition_hash}
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            </Box>
-          </Paper>
+          <RevisionHistory revisions={revisionItems} />
           <Paper component="section" sx={{ mt: 3, p: 2.5 }}>
             <Typography component="h2" variant="h6">
               Compare definitions
