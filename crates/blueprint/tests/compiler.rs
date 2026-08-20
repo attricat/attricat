@@ -331,6 +331,40 @@ value_type = "relationship"
 }
 
 #[test]
+fn compiles_incoming_relationship_lists() {
+    let source = r#"
+format_version = 1
+code = "category"
+name = "Category"
+kind = "entity"
+
+[display.dropdown_option]
+fields = ["name"]
+
+[views.detail]
+type = "stack"
+children = [{ type = "incoming_relationship_list", label = "Products in this category", page_size = 10, relationships = [{ source_blueprint = "product", field = "categories" }], component = { id = "catalog.incoming_relationship_list_display", version = 1 } }]
+
+[[attributes]]
+code = "name"
+value_type = "string"
+"#;
+    assert!(compile(parse(source).unwrap(), &[], source).is_ok());
+
+    for invalid in [
+        source.replace("page_size = 10", "page_size = 0"),
+        source.replace("label = \"Products in this category\"", "label = \" \""),
+        source.replace("[views.detail]", "[views.edit]"),
+        source.replace(
+            "relationships = [{ source_blueprint = \"product\", field = \"categories\" }]",
+            "relationships = []",
+        ),
+    ] {
+        assert!(compile(parse(&invalid).unwrap(), &[], &invalid).is_err());
+    }
+}
+
+#[test]
 fn rejects_invalid_view_fields_and_component_references() {
     let source = r#"
 format_version = 1

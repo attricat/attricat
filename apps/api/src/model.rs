@@ -181,6 +181,35 @@ pub struct EntityPreviewPage {
     pub next_cursor: Option<Uuid>,
 }
 
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct IncomingRelationshipSelector {
+    pub source_blueprint: String,
+    pub field: String,
+}
+
+#[derive(Clone, Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct IncomingRelationshipsRequest {
+    pub relationships: Vec<IncomingRelationshipSelector>,
+    pub page: SearchPage,
+}
+
+#[derive(Clone, Debug, Serialize)]
+pub struct IncomingRelationshipItem {
+    pub id: Uuid,
+    pub blueprint_code: String,
+    pub blueprint_version: i64,
+    pub display: Value,
+    pub relationship_labels: Vec<String>,
+}
+
+#[derive(Clone, Debug, Serialize)]
+pub struct IncomingRelationshipsPage {
+    pub items: Vec<IncomingRelationshipItem>,
+    pub next_cursor: Option<String>,
+}
+
 #[derive(Clone, Debug, Serialize)]
 pub struct EntityPreviewResponse {
     pub entity: EntityIdentity,

@@ -9,7 +9,11 @@ separator = " / "
 
 [views.detail]
 type = "stack"
-children = [{ type = "heading", text = "Category" }, { type = "field", field = "name" }]
+children = [
+  { type = "heading", text = "Category" },
+  { type = "field", field = "name" },
+  { type = "incoming_relationship_list", label = "Products in this category", page_size = 25, relationships = [{ source_blueprint = "product", field = "categories" }], component = { id = "catalog.incoming_relationship_list_display", version = 1 } },
+]
 
 [views.edit]
 type = "stack"

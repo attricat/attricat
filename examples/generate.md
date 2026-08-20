@@ -29,6 +29,8 @@ blueprints. The product blueprint demonstrates
 mixins and version-pinned includes, selected attributes, tags, scalar and entity
 JSON Schema validation, display configuration, context policies, all native
 scalar types, constrained relationships, and configured views and components.
+Category, color, and product detail views also demonstrate lazy,
+cursor-paginated incoming relationship lists.
 When a generated blueprint definition changes, the generator creates a new blueprint
 revision. Existing entities remain pinned to their original revision and can be
 upgraded through the entity migration flow.

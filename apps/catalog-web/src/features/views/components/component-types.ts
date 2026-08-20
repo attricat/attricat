@@ -1,8 +1,13 @@
 import type { ComponentType } from 'react';
-import type { Attribute, ViewDefinition } from '../../entities/api';
+import type { Attribute, ViewDefinition, ViewNode } from '../../entities/api';
 
 type Capability = 'display' | 'edit';
-type Placement = 'field' | 'relationship_list' | 'table' | 'stack';
+type Placement =
+  | 'field'
+  | 'relationship_list'
+  | 'incoming_relationship_list'
+  | 'table'
+  | 'stack';
 
 export type ValueRenderer = ComponentType<{
   attribute: Attribute;
@@ -16,6 +21,11 @@ export type HeadingRenderer = ComponentType<{
   view?: ViewDefinition;
 }>;
 
+export type IncomingRelationshipRenderer = ComponentType<{
+  entityId: string;
+  node: Extract<ViewNode, { type: 'incoming_relationship_list' }>;
+}>;
+
 export type ViewComponentDefinition = {
   id: string;
   version: number;
@@ -25,4 +35,5 @@ export type ViewComponentDefinition = {
   allowed_props: readonly string[];
   valueRenderer?: ValueRenderer;
   headingRenderer?: HeadingRenderer;
+  incomingRelationshipRenderer?: IncomingRelationshipRenderer;
 };

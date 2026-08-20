@@ -20,7 +20,8 @@ use crate::{
     model::{
         AppendAttributeValues, BlueprintWithAttributes, CreateAttributeContext, CreateBlueprint,
         CreateEntityFormRequest, Entity, EntityFormResponse, EntityIdentity, EntityPreviewPage,
-        EntityPreviewResponse, EntitySearchResponse, MigrateEntityRequest, RelationshipMutation,
+        EntityPreviewResponse, EntitySearchResponse, IncomingRelationshipsPage,
+        IncomingRelationshipsRequest, MigrateEntityRequest, RelationshipMutation,
         ResolvedEntityPreviewResponse, SearchEntitiesRequest, UpdateAttributeContext,
         UpdateEntityFormRequest,
     },
@@ -36,6 +37,7 @@ pub struct AppState {
     pub max_preview_relationship_depth: u8,
     pub max_preview_relationship_items: u32,
     pub max_entity_page_size: u32,
+    pub max_incoming_relationship_page_size: u32,
     pub data_health_cache_ttl_seconds: u64,
     pub data_health_cache: DataHealthCache,
 }
@@ -144,6 +146,10 @@ pub fn router(state: AppState) -> Router {
         .route(
             "/v1/entities/{entity_id}",
             get(get_entity_form).put(update_entity_form),
+        )
+        .route(
+            "/v1/entities/{entity_id}/incoming-relationships",
+            post(list_incoming_relationships),
         )
         .route(
             "/v1/entities/{entity_id}/blueprint-migration/preview",
@@ -727,6 +733,40 @@ async fn update_entity_form(
         .await?;
     invalidate_data_health(&state).await;
     Ok(Json(entity))
+}
+
+async fn list_incoming_relationships(
+    State(state): State<AppState>,
+    ApiPath(entity_id): ApiPath<Uuid>,
+    ApiJson(input): ApiJson<IncomingRelationshipsRequest>,
+) -> Result<Json<IncomingRelationshipsPage>, ApiError> {
+    if input.relationships.is_empty() {
+        return Err(ApiError::invalid_input(
+            "relationships must not be empty".to_owned(),
+        ));
+    }
+    let requested_limit = input.page.size.unwrap_or(20);
+    if requested_limit == 0 {
+        return Err(ApiError::invalid_input(
+            "page.size must be greater than zero".to_owned(),
+        ));
+    }
+    // Blueprint page sizes are presentation preferences; this setting is the
+    // server-side bound on database work for any one page.
+    let limit = requested_limit.min(state.max_incoming_relationship_page_size);
+    let cursor = match input.page.cursor.as_deref() {
+        Some(cursor) => Some(
+            decode_search_cursor(cursor)
+                .ok_or_else(|| ApiError::invalid_input("page.cursor is invalid".to_owned()))?,
+        ),
+        None => None,
+    };
+    Ok(Json(
+        state
+            .repository
+            .incoming_relationships(entity_id, input.relationships, limit.into(), cursor)
+            .await?,
+    ))
 }
 
 async fn preview_entity_migration(

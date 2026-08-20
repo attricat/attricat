@@ -5,6 +5,7 @@ import {
   createContext,
   getBlueprintByCode,
   getEntityForm,
+  getIncomingRelationships,
   searchEntities,
   updateEntity,
 } from './api';
@@ -116,6 +117,40 @@ describe('entity API client', () => {
         page: { size: 25, cursor: null },
       }),
     });
+  });
+
+  it('loads incoming relationship pages with the configured selectors', async () => {
+    respond({
+      items: [
+        {
+          id: entityId,
+          blueprint_code: 'product',
+          blueprint_version: 1,
+          display: { default: 'Navy shirt' },
+          relationship_labels: ['product.categories'],
+        },
+      ],
+      next_cursor: 'next-page',
+    });
+
+    await getIncomingRelationships(
+      entityId,
+      [{ source_blueprint: 'product', field: 'categories' }],
+      10,
+      null,
+    );
+
+    expect(fetchMock).toHaveBeenLastCalledWith(
+      `/api/v1/entities/${entityId}/incoming-relationships`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          relationships: [{ source_blueprint: 'product', field: 'categories' }],
+          page: { size: 10, cursor: null },
+        }),
+      },
+    );
   });
 
   it('rejects malformed successful responses', async () => {

@@ -11,7 +11,7 @@ import {
   Typography,
 } from '@mui/material';
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
-import { useState, type ReactNode } from 'react';
+import { createElement, useState, type ReactNode } from 'react';
 import {
   viewBlockTypes,
   type Attribute,
@@ -19,8 +19,13 @@ import {
   type ViewNode,
 } from '../../entities/api';
 import { FieldErrorBoundary } from './boundaries/FieldErrorBoundary';
-import { resolveValueRenderer, resolveViewComponent } from './registry';
+import {
+  resolveIncomingRelationshipRenderer,
+  resolveValueRenderer,
+  resolveViewComponent,
+} from './registry';
 import { AttributeValue } from './values/AttributeValue';
+import { IncomingRelationshipListDisplay } from './IncomingRelationshipListDisplay';
 
 type ResolvedValue = { value: unknown; source_context?: { code: string } };
 type Props = {
@@ -29,6 +34,7 @@ type Props = {
   values: Record<string, ResolvedValue>;
   renderEditor?: (attribute: Attribute) => ReactNode;
   skipComponentId?: string;
+  entityId?: string;
 };
 
 const labelFor = (field: string) => field.replaceAll('_', ' ');
@@ -101,6 +107,7 @@ export const EntityView = ({
   values,
   renderEditor,
   skipComponentId,
+  entityId,
 }: Props) => {
   const byCode = new Map(
     attributes.map((attribute) => [attribute.code, attribute]),
@@ -186,6 +193,18 @@ export const EntityView = ({
           )}
         </Stack>
       );
+    if (node.type === viewBlockTypes.incomingRelationshipList) {
+      if (!entityId)
+        return (
+          <Typography color="text.secondary" key={key}>
+            {node.label} is available on entity previews.
+          </Typography>
+        );
+      const Renderer =
+        resolveIncomingRelationshipRenderer(node.component) ??
+        IncomingRelationshipListDisplay;
+      return createElement(Renderer, { entityId, key, node });
+    }
     if (
       node.type === viewBlockTypes.field ||
       node.type === viewBlockTypes.relationshipList

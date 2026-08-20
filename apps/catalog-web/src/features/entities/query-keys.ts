@@ -12,6 +12,11 @@ export const entityQueryKeys = {
   preview: (entityId: string) => ['entity-preview', entityId] as const,
   resolvedPreview: (entityId: string, contextId: string) =>
     ['entity-resolved-preview', entityId, contextId] as const,
+  incomingRelationships: (
+    entityId: string,
+    relationships: { source_blueprint: string; field: string }[],
+    pageSize: number,
+  ) => ['incoming-relationships', entityId, relationships, pageSize] as const,
   search: (
     blueprint: string | undefined,
     version: number | undefined,

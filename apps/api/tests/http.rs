@@ -18,6 +18,7 @@ async fn start_server(pool: PgPool) -> (String, JoinHandle<()>) {
         max_preview_relationship_depth: 3,
         max_preview_relationship_items: 10,
         max_entity_page_size: 100,
+        max_incoming_relationship_page_size: 50,
         data_health_cache_ttl_seconds: 0,
         data_health_cache: Default::default(),
     });
@@ -305,6 +306,129 @@ async fn create_entity(client: &Client, base_url: &str, blueprint: &Value) -> Va
         .json()
         .await
         .unwrap()
+}
+
+#[sqlx::test]
+async fn incoming_relationships_are_deduplicated_and_paginated(pool: PgPool) {
+    let (base_url, server) = start_server(pool).await;
+    let client = Client::new();
+    let category = create_blueprint(
+        &client,
+        &base_url,
+        r#"
+format_version = 1
+code = "category"
+name = "Category"
+kind = "entity"
+
+[display.dropdown_option]
+fields = ["name"]
+
+[[attributes]]
+code = "name"
+value_type = "string"
+"#,
+    )
+    .await;
+    let product = create_blueprint(
+        &client,
+        &base_url,
+        r#"
+format_version = 1
+code = "product"
+name = "Product"
+kind = "entity"
+
+[display.dropdown_option]
+fields = ["title"]
+
+[[attributes]]
+code = "title"
+value_type = "string"
+
+[[attributes]]
+code = "categories"
+value_type = "relationship"
+target_blueprint = "category"
+
+[[attributes]]
+code = "featured_category"
+value_type = "relationship"
+target_blueprint = "category"
+"#,
+    )
+    .await;
+    let target = create_entity(&client, &base_url, &category).await;
+    let target_id = target["id"].as_str().unwrap();
+    let sources = [
+        create_entity(&client, &base_url, &product).await,
+        create_entity(&client, &base_url, &product).await,
+    ];
+    for source in &sources {
+        let source_id = source["id"].as_str().unwrap();
+        client
+            .put(format!("{base_url}/v1/entities/{source_id}"))
+            .json(&json!({
+                "values": [],
+                "relationships": [
+                    { "attribute_code": "categories", "target_entity_ids": [target["id"]] },
+                    { "attribute_code": "featured_category", "target_entity_ids": [target["id"]] }
+                ],
+                "remove_values": []
+            }))
+            .send()
+            .await
+            .unwrap()
+            .error_for_status()
+            .unwrap();
+    }
+
+    let request = json!({
+        "relationships": [
+            { "source_blueprint": "product", "field": "categories" },
+            { "source_blueprint": "product", "field": "featured_category" }
+        ],
+        "page": { "size": 1, "cursor": null }
+    });
+    let first: Value = client
+        .post(format!(
+            "{base_url}/v1/entities/{target_id}/incoming-relationships"
+        ))
+        .json(&request)
+        .send()
+        .await
+        .unwrap()
+        .error_for_status()
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    assert_eq!(first["items"].as_array().unwrap().len(), 1);
+    assert_eq!(
+        first["items"][0]["relationship_labels"],
+        json!(["product.categories", "product.featured_category"])
+    );
+
+    let second: Value = client
+        .post(format!(
+            "{base_url}/v1/entities/{target_id}/incoming-relationships"
+        ))
+        .json(&json!({
+            "relationships": request["relationships"],
+            "page": { "size": 1, "cursor": first["next_cursor"] }
+        }))
+        .send()
+        .await
+        .unwrap()
+        .error_for_status()
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    assert_eq!(second["items"].as_array().unwrap().len(), 1);
+    assert!(second["next_cursor"].is_null());
+
+    server.abort();
 }
 
 #[sqlx::test]

@@ -65,6 +65,13 @@ pub struct ViewSection {
 }
 
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct IncomingRelationship {
+    pub source_blueprint: String,
+    pub field: String,
+}
+
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum ViewDefinition {
     Table {
@@ -148,6 +155,13 @@ pub enum ViewNode {
     },
     RelationshipList {
         field: String,
+        #[serde(default)]
+        component: Option<ComponentReference>,
+    },
+    IncomingRelationshipList {
+        label: String,
+        relationships: Vec<IncomingRelationship>,
+        page_size: u32,
         #[serde(default)]
         component: Option<ComponentReference>,
     },
@@ -319,7 +333,7 @@ pub enum BlueprintError {
     #[error("component '{id}' has unsupported prop '{prop}'")]
     InvalidComponentProp { id: String, prop: String },
     #[error(
-        "component references are only allowed on table, field, relationship_list, and stack blocks"
+        "component references are only allowed on table, field, relationship_list, incoming_relationship_list, and stack blocks"
     )]
     ComponentOnNonDataBlock,
     #[error("stack component in view '{view}' can only be used in views.detail")]
@@ -336,6 +350,14 @@ pub enum BlueprintError {
     NonScalarViewField { view: String, field: String },
     #[error("view '{view}' relationship_list '{field}' must be a relationship")]
     NonRelationshipViewField { view: String, field: String },
+    #[error("view '{view}' incoming_relationship_list label must not be empty")]
+    EmptyIncomingRelationshipLabel { view: String },
+    #[error("view '{view}' incoming_relationship_list must specify at least one relationship")]
+    EmptyIncomingRelationships { view: String },
+    #[error("view '{view}' incoming_relationship_list page_size must be greater than zero")]
+    InvalidIncomingRelationshipPageSize { view: String },
+    #[error("incoming_relationship_list can only be used in views.detail")]
+    IncomingRelationshipListOutsideDetail,
 }
 
 #[derive(Deserialize)]
@@ -823,7 +845,9 @@ fn validate_view_nodes(
             ViewNode::Heading { component, .. }
             | ViewNode::Text { component, .. }
             | ViewNode::Divider { component } => validate_non_data_component(component.as_ref())?,
-            ViewNode::Field { .. } | ViewNode::RelationshipList { .. } => {}
+            ViewNode::Field { .. }
+            | ViewNode::RelationshipList { .. }
+            | ViewNode::IncomingRelationshipList { .. } => {}
         }
         match node {
             ViewNode::Field { field, component } => {
@@ -843,6 +867,36 @@ fn validate_view_nodes(
                     "relationship_list",
                     Some(&attribute.value_type),
                 )?;
+            }
+            ViewNode::IncomingRelationshipList {
+                label,
+                relationships,
+                page_size,
+                component,
+            } => {
+                if view != "detail" {
+                    return Err(BlueprintError::IncomingRelationshipListOutsideDetail);
+                }
+                if label.trim().is_empty() {
+                    return Err(BlueprintError::EmptyIncomingRelationshipLabel {
+                        view: view.to_owned(),
+                    });
+                }
+                if relationships.is_empty() {
+                    return Err(BlueprintError::EmptyIncomingRelationships {
+                        view: view.to_owned(),
+                    });
+                }
+                if *page_size == 0 {
+                    return Err(BlueprintError::InvalidIncomingRelationshipPageSize {
+                        view: view.to_owned(),
+                    });
+                }
+                for relationship in relationships {
+                    validate_code(&relationship.source_blueprint, "source_blueprint")?;
+                    validate_code(&relationship.field, "field")?;
+                }
+                validate_component(component.as_ref(), view, "incoming_relationship_list", None)?;
             }
             _ => {}
         }

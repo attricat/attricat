@@ -23,6 +23,7 @@ children = [
   { type = "relationship_list", field = "categories", component = { id = "catalog.relationship_list_display", version = 1 } },
   { type = "relationship_list", field = "colors" },
   { type = "relationship_list", field = "variants" },
+  { type = "incoming_relationship_list", label = "Parent products", page_size = 25, relationships = [{ source_blueprint = "product", field = "variants" }], component = { id = "catalog.incoming_relationship_list_display", version = 1 } },
 ]
 
 [views.edit]

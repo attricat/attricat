@@ -171,6 +171,7 @@ export const EntityPreviewPage = ({ entityId }: { entityId: string }) => {
             <Paper component="section" sx={{ mt: 3, p: { xs: 2, md: 3 } }}>
               <EntityView
                 attributes={blueprint.data.attributes}
+                entityId={entityId}
                 values={resolved.data.values}
                 view={detailView}
                 skipComponentId={entityHeadingComponentId}

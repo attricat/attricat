@@ -132,6 +132,35 @@ blocks. `heading`, `text`, and `divider` are static blocks. `field` renders a
 typed attribute and `relationship_list` renders a relationship attribute.
 Table views currently support scalar fields only.
 
+### Incoming Relationships
+
+`incoming_relationship_list` displays entities that reference the current
+entity through configured relationship fields. It opens a modal and does not
+request linked entities until the user opens it. Results are cursor-paginated;
+`page_size` controls each requested page and is bounded by the API's
+`INCOMING_RELATIONSHIP_MAX_PAGE_SIZE` setting.
+
+```toml
+[views.detail]
+type = "stack"
+children = [
+  { type = "field", field = "name" },
+  {
+    type = "incoming_relationship_list",
+    label = "Products in this category",
+    page_size = 10,
+    relationships = [
+      { source_blueprint = "product", field = "categories" },
+    ],
+    component = { id = "catalog.incoming_relationship_list_display", version = 1 },
+  },
+]
+```
+
+Each selector names a source blueprint and one of its relationship fields. A
+source entity matched by multiple selectors appears once, with all matching
+relationship labels. Selecting an item opens that source entity.
+
 `views.edit` uses the same layout blocks to order entity create/edit controls.
 Field, relationship-list, and table blocks may optionally reference a
 platform-registered component:

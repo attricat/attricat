@@ -3,11 +3,13 @@ import { fieldDisplayComponent } from './FieldDisplay';
 import { fieldEditComponent } from './FieldEdit';
 import { relationshipListDisplayComponent } from './RelationshipListDisplay';
 import { relationshipListEditComponent } from './RelationshipListEdit';
+import { incomingRelationshipListDisplayComponent } from './IncomingRelationshipListDisplay';
 import { tableDisplayComponent } from './TableDisplay';
 import { tableEditComponent } from './TableEdit';
 import { entityHeadingComponent } from './blocks/EntityHeadingConfig';
 import type {
   HeadingRenderer,
+  IncomingRelationshipRenderer,
   ValueRenderer,
   ViewComponentDefinition,
 } from './component-types';
@@ -17,6 +19,7 @@ export const viewComponents = [
   fieldEditComponent,
   relationshipListDisplayComponent,
   relationshipListEditComponent,
+  incomingRelationshipListDisplayComponent,
   tableDisplayComponent,
   tableEditComponent,
   entityHeadingComponent,
@@ -48,3 +51,8 @@ export const resolveHeadingRenderer = (
   component: Pick<ComponentReference, 'id' | 'version'> | null | undefined,
 ): HeadingRenderer | undefined =>
   resolveViewComponent(component)?.headingRenderer;
+
+export const resolveIncomingRelationshipRenderer = (
+  component: Pick<ComponentReference, 'id' | 'version'> | null | undefined,
+): IncomingRelationshipRenderer | undefined =>
+  resolveViewComponent(component)?.incomingRelationshipRenderer;

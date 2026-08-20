@@ -12,6 +12,7 @@ export const viewBlockTypes = {
   divider: 'divider',
   field: 'field',
   relationshipList: 'relationship_list',
+  incomingRelationshipList: 'incoming_relationship_list',
   table: 'table',
 } as const;
 
@@ -46,12 +47,27 @@ export type ViewNode =
       type: 'field' | 'relationship_list';
       field: string;
       component?: ComponentReference | null;
+    }
+  | {
+      type: 'incoming_relationship_list';
+      label: string;
+      relationships: { source_blueprint: string; field: string }[];
+      page_size: number;
+      component?: ComponentReference | null;
     };
 export type ViewDefinition =
   | { type: 'table'; fields: string[]; component?: ComponentReference | null }
   | Exclude<
       ViewNode,
-      { type: 'heading' | 'text' | 'divider' | 'field' | 'relationship_list' }
+      {
+        type:
+          | 'heading'
+          | 'text'
+          | 'divider'
+          | 'field'
+          | 'relationship_list'
+          | 'incoming_relationship_list';
+      }
     >;
 
 export const uuidSchema = z.uuid();
@@ -115,6 +131,15 @@ const viewNodeSchema: z.ZodType<ViewNode> = z.lazy(() =>
     z.object({
       type: z.literal(viewBlockTypes.relationshipList),
       field: z.string(),
+      component: componentReferenceSchema.nullish(),
+    }),
+    z.object({
+      type: z.literal(viewBlockTypes.incomingRelationshipList),
+      label: z.string(),
+      relationships: z.array(
+        z.object({ source_blueprint: z.string(), field: z.string() }),
+      ),
+      page_size: z.number().int().positive(),
       component: componentReferenceSchema.nullish(),
     }),
   ]),
@@ -267,6 +292,17 @@ const entitySearchResponseSchema = z.object({
   items: z.array(entityItemSchema),
   next_cursor: z.string().nullable(),
 });
+const incomingRelationshipItemSchema = z.object({
+  id: uuidSchema,
+  blueprint_code: z.string(),
+  blueprint_version: z.number().int().positive(),
+  display: z.record(z.string(), z.string()),
+  relationship_labels: z.array(z.string()),
+});
+export const incomingRelationshipsPageSchema = z.object({
+  items: z.array(incomingRelationshipItemSchema),
+  next_cursor: z.string().nullable(),
+});
 const entityFormResponseSchema = z.object({
   entity: entitySchema,
   blueprint: blueprintWithAttributesSchema,
@@ -341,6 +377,9 @@ export type AttributeContext = z.infer<typeof attributeContextSchema>;
 export type Entity = z.infer<typeof entitySchema>;
 export type EntityItem = z.infer<typeof entityItemSchema>;
 export type EntitySearchResponse = z.infer<typeof entitySearchResponseSchema>;
+export type IncomingRelationshipsPage = z.infer<
+  typeof incomingRelationshipsPageSchema
+>;
 export type EntityFormResponse = z.infer<typeof entityFormResponseSchema>;
 export type EntityPreview = z.infer<typeof entityPreviewSchema>;
 export type ResolvedEntityPreview = z.infer<typeof resolvedEntityPreviewSchema>;

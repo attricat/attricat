@@ -49,6 +49,14 @@
       "allowed_props": []
     },
     {
+      "id": "catalog.incoming_relationship_list_display",
+      "version": 1,
+      "capabilities": ["display"],
+      "placements": ["incoming_relationship_list"],
+      "value_types": [],
+      "allowed_props": []
+    },
+    {
       "id": "catalog.table_display",
       "version": 1,
       "capabilities": ["display"],

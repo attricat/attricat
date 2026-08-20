@@ -12,6 +12,7 @@ import {
   entitySearchResponseSchema,
   getBlueprintRequestSchema,
   getBlueprintRevisionRequestSchema,
+  incomingRelationshipsPageSchema,
   resolvedEntityPreviewSchema,
   searchEntitiesRequestSchema,
   migrateEntityRequestSchema,
@@ -32,6 +33,7 @@ export type {
   EntityItem,
   EntityPreview,
   EntitySearchResponse,
+  IncomingRelationshipsPage,
   JsonSchema,
   NewAttributeValue,
   RelationshipTargets,
@@ -176,6 +178,24 @@ export const getEntityForm = (id: string) => {
     entityFormResponseSchema,
   );
 };
+export const getIncomingRelationships = (
+  id: string,
+  relationships: { source_blueprint: string; field: string }[],
+  pageSize: number,
+  cursor: string | null,
+) =>
+  request(
+    `/api/v1/entities/${encodeURIComponent(uuidSchema.parse(id))}/incoming-relationships`,
+    incomingRelationshipsPageSchema,
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        relationships,
+        page: { size: pageSize, cursor },
+      }),
+    },
+  );
 export const createEntity = (
   input: z.input<typeof createEntityRequestSchema>,
 ) => {
