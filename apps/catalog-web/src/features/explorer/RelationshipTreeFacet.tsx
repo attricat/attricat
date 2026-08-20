@@ -14,7 +14,7 @@ import {
   TextField,
   Typography,
 } from '@mui/material';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import {
   getRelationshipTreeFacetChildren,
   type AttributeContext,
@@ -61,6 +61,19 @@ export const RelationshipTreeFacet = ({
   const [cursors, setCursors] = useState<Map<string, (string | null)[]>>(
     new Map([['root', [null]]]),
   );
+  const facetKey = [
+    blueprint,
+    version ?? '',
+    query ?? '',
+    sourceField,
+    hierarchyField ?? '',
+    contextCode ?? '',
+  ].join('|');
+
+  useEffect(() => {
+    setExpanded(new Set());
+    setCursors(new Map([['root', [null]]]));
+  }, [facetKey]);
   const selected = new Set(selectedIds);
   const pages = [...cursors.entries()].flatMap(([parentKey, pageCursors]) =>
     pageCursors.map((cursor) => ({

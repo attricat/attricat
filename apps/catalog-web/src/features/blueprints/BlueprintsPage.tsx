@@ -18,15 +18,8 @@ import { useState } from 'react';
 import { PageContainer } from '../../components/PageContainer';
 import { PageHeader } from '../../components/PageHeader';
 import { listBlueprints } from './api';
+import { formatBlueprintDateTime } from './date-time';
 import { blueprintQueryKeys } from './query-keys';
-
-const dateTime = (value: string | null) =>
-  value
-    ? new Intl.DateTimeFormat(undefined, {
-        dateStyle: 'medium',
-        timeStyle: 'short',
-      }).format(new Date(value))
-    : 'Not published';
 
 export const BlueprintsPage = () => {
   const [query, setQuery] = useState('');
@@ -120,8 +113,12 @@ export const BlueprintsPage = () => {
                         size="small"
                       />
                     </TableCell>
-                    <TableCell>{dateTime(blueprint.published_at)}</TableCell>
-                    <TableCell>{dateTime(blueprint.updated_at)}</TableCell>
+                    <TableCell>
+                      {formatBlueprintDateTime(blueprint.published_at)}
+                    </TableCell>
+                    <TableCell>
+                      {formatBlueprintDateTime(blueprint.updated_at)}
+                    </TableCell>
                   </TableRow>
                 ))}
               </TableBody>
