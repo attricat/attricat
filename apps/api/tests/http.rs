@@ -103,6 +103,82 @@ async fn data_health_completeness_counts_default_values(pool: PgPool) {
 }
 
 #[sqlx::test]
+async fn restores_a_scalar_value_from_synchronous_history(pool: PgPool) {
+    let (base_url, server) = start_server(pool.clone()).await;
+    let client = Client::new();
+    let blueprint = create_blueprint(
+        &client,
+        &base_url,
+        "format_version = 1\ncode = \"restorable_product\"\nname = \"Restorable product\"\nkind = \"entity\"\n\n[display.dropdown_option]\nfields = [\"title\"]\n\n[[attributes]]\ncode = \"title\"\nvalue_type = \"string\"",
+    )
+    .await;
+    let entity = create_entity(&client, &base_url, &blueprint).await;
+    let entity_id = entity["id"].as_str().unwrap();
+
+    for title in ["Original title", "Replacement title"] {
+        client
+            .post(format!("{base_url}/entities/{entity_id}/values"))
+            .json(&json!({ "values": [{
+                "kind": "scalar", "attribute_code": "title", "value": title
+            }] }))
+            .send()
+            .await
+            .unwrap()
+            .error_for_status()
+            .unwrap();
+    }
+
+    let history: Vec<Value> = client
+        .get(format!("{base_url}/entities/{entity_id}/values/history"))
+        .send()
+        .await
+        .unwrap()
+        .error_for_status()
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    assert_eq!(history.len(), 1);
+    assert_eq!(history[0]["value"], "Original title");
+    let history_id = history[0]["id"].as_str().unwrap();
+
+    client
+        .post(format!(
+            "{base_url}/entities/{entity_id}/values/history/{history_id}/restore"
+        ))
+        .send()
+        .await
+        .unwrap()
+        .error_for_status()
+        .unwrap();
+
+    let current: Vec<Value> = client
+        .get(format!("{base_url}/entities/{entity_id}/values/current"))
+        .send()
+        .await
+        .unwrap()
+        .error_for_status()
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    assert_eq!(current.len(), 1);
+    assert_eq!(current[0]["value"], "Original title");
+    assert_eq!(
+        sqlx::query_scalar::<_, i64>(
+            "SELECT COUNT(*) FROM attribute_value_history WHERE entity_id = $1"
+        )
+        .bind(entity_id.parse::<Uuid>().unwrap())
+        .fetch_one(&pool)
+        .await
+        .unwrap(),
+        2
+    );
+
+    server.abort();
+}
+
+#[sqlx::test]
 async fn blueprint_catalogue_lists_all_kinds_and_revision_history(pool: PgPool) {
     let (base_url, server) = start_server(pool).await;
     let client = Client::new();
@@ -890,7 +966,7 @@ tags = ["searchable"]
     let title_attribute_id: Uuid = title_attribute_id.parse().unwrap();
     assert_eq!(
         sqlx::query_scalar::<_, i64>(
-            "SELECT COUNT(*) FROM attribute_values WHERE entity_id = $1 AND attribute_id = $2 AND context_id = $3 AND relationship_target_entity_id IS NULL AND latest"
+            "SELECT COUNT(*) FROM attribute_values WHERE entity_id = $1 AND attribute_id = $2 AND context_id = $3 AND relationship_target_entity_id IS NULL"
         )
         .bind(source_id)
         .bind(title_attribute_id)
@@ -902,7 +978,7 @@ tags = ["searchable"]
     );
     assert_eq!(
         sqlx::query_scalar::<_, i64>(
-            "SELECT COUNT(*) FROM attribute_values WHERE entity_id = $1 AND attribute_id = $2 AND context_id = $3 AND relationship_target_entity_id IS NULL"
+            "SELECT COUNT(*) FROM attribute_value_history WHERE entity_id = $1 AND attribute_id = $2 AND context_id = $3 AND relationship_target_entity_id IS NULL"
         )
         .bind(source_id)
         .bind(title_attribute_id)
@@ -910,7 +986,7 @@ tags = ["searchable"]
         .fetch_one(&pool)
         .await
         .unwrap(),
-        3
+        2
     );
 
     let search_page: Value = client
@@ -1290,7 +1366,7 @@ value_type = "time"
     );
     assert_eq!(
         sqlx::query_scalar::<_, rust_decimal::Decimal>(
-            "SELECT SUM(value_number) FROM attribute_values WHERE entity_id = $1 AND latest"
+            "SELECT SUM(value_number) FROM attribute_values WHERE entity_id = $1"
         )
         .bind(entity_id)
         .fetch_one(&pool)
@@ -1300,7 +1376,7 @@ value_type = "time"
     );
     assert_eq!(
         sqlx::query_scalar::<_, bool>(
-            "SELECT value_boolean FROM attribute_values WHERE entity_id = $1 AND latest AND value_boolean IS NOT NULL"
+            "SELECT value_boolean FROM attribute_values WHERE entity_id = $1 AND value_boolean IS NOT NULL"
         )
         .bind(entity_id)
         .fetch_one(&pool)
@@ -1776,6 +1852,48 @@ target_blueprint = "color"
         "Shirts"
     );
 
+    let history: Vec<Value> = client
+        .get(format!("{base_url}/entities/{shirt_id}/values/history"))
+        .send()
+        .await
+        .unwrap()
+        .error_for_status()
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    let removed_sale = history
+        .iter()
+        .find(|value| value["relationship_target_entity_id"] == sale["id"])
+        .unwrap();
+    client
+        .post(format!(
+            "{base_url}/entities/{shirt_id}/values/history/{}/restore",
+            removed_sale["id"].as_str().unwrap()
+        ))
+        .send()
+        .await
+        .unwrap()
+        .error_for_status()
+        .unwrap();
+    let restored_preview: Value = client
+        .get(format!("{base_url}/entities/{shirt_id}/preview"))
+        .send()
+        .await
+        .unwrap()
+        .error_for_status()
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    assert_eq!(
+        restored_preview["context"]["default"]["categories"]["items"]
+            .as_array()
+            .unwrap()
+            .len(),
+        2
+    );
+
     let delete = client
         .delete(format!(
             "{base_url}/entities/{}",
@@ -1807,7 +1925,17 @@ target_blueprint = "color"
         .json()
         .await
         .unwrap();
-    assert!(preview["context"]["default"]["categories"].is_null());
+    assert_eq!(
+        preview["context"]["default"]["categories"]["items"]
+            .as_array()
+            .unwrap()
+            .len(),
+        1
+    );
+    assert_eq!(
+        preview["context"]["default"]["categories"]["items"][0]["display"],
+        "Sale"
+    );
     assert_eq!(
         client
             .delete(format!(

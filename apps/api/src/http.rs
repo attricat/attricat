@@ -111,6 +111,14 @@ pub fn router(state: AppState) -> Router {
         )
         .route("/entities/{entity_id}/values", post(append_values))
         .route(
+            "/entities/{entity_id}/values/history",
+            get(get_value_history),
+        )
+        .route(
+            "/entities/{entity_id}/values/history/{history_id}/restore",
+            post(restore_value),
+        )
+        .route(
             "/entities/{entity_id}/relationships/replace",
             post(replace_relationships),
         )
@@ -733,6 +741,28 @@ async fn get_current_values(
     }
 
     Ok(Json(state.repository.current_values(entity_id).await?))
+}
+
+async fn get_value_history(
+    State(state): State<AppState>,
+    Path(entity_id): Path<Uuid>,
+) -> Result<Json<Vec<crate::model::AttributeValueHistory>>, ApiError> {
+    if state.repository.get_entity(entity_id).await?.is_none() {
+        return Err(ApiError::not_found("entity"));
+    }
+    Ok(Json(state.repository.value_history(entity_id).await?))
+}
+
+async fn restore_value(
+    State(state): State<AppState>,
+    Path((entity_id, history_id)): Path<(Uuid, Uuid)>,
+) -> Result<(StatusCode, Json<crate::model::AttributeValue>), ApiError> {
+    let value = state
+        .repository
+        .restore_value(entity_id, history_id)
+        .await?;
+    invalidate_data_health(&state).await;
+    Ok((StatusCode::CREATED, Json(value)))
 }
 
 async fn replace_relationships(

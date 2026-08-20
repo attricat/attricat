@@ -14,7 +14,7 @@ use uuid::Uuid;
 use crate::{
     blueprint_resolver::compile_definition,
     model::{
-        AppendAttributeValues, Attribute, AttributeContext, AttributeValue, AttributeValueSelector,
+        AppendAttributeValues, Attribute, AttributeContext, AttributeValue, AttributeValueHistory, AttributeValueSelector,
         Blueprint, BlueprintHealth, BlueprintWithAttributes, CompletenessHealth, ContextHealth,
         CreateAttributeContext, CreateBlueprint, CreateEntity, DataHealthSummary, Entity,
         EntityMigrationPreview, EntityPreview, EntityPreviewPage, FormAttributeValue,
@@ -150,6 +150,20 @@ struct CurrentNativeValueRow {
     active: bool,
     context_id: Option<Uuid>,
     created_at: DateTime<Utc>,
+    #[sqlx(flatten)]
+    native: NativeValueRow,
+}
+
+#[derive(sqlx::FromRow)]
+struct HistoryNativeValueRow {
+    id: Uuid,
+    entity_id: Uuid,
+    attribute_id: Uuid,
+    relationship_target_entity_id: Option<Uuid>,
+    active: bool,
+    context_id: Option<Uuid>,
+    created_at: DateTime<Utc>,
+    archived_at: DateTime<Utc>,
     #[sqlx(flatten)]
     native: NativeValueRow,
 }
@@ -378,10 +392,38 @@ pub(crate) fn native_value_json(row: NativeValueRow) -> Result<Value, Repository
     Ok(value.json())
 }
 
+fn history_attribute_value(
+    row: HistoryNativeValueRow,
+) -> Result<AttributeValueHistory, RepositoryError> {
+    Ok(AttributeValueHistory {
+        id: row.id,
+        entity_id: row.entity_id,
+        attribute_id: row.attribute_id,
+        value: if row.relationship_target_entity_id.is_some() {
+            Value::Null
+        } else {
+            native_value_json(row.native)?
+        },
+        relationship_target_entity_id: row.relationship_target_entity_id,
+        active: row.active,
+        context_id: row.context_id,
+        created_at: row.created_at,
+        archived_at: row.archived_at,
+    })
+}
+
 impl CatalogRepository {
     const DEFAULT_CONTEXT_ID: Uuid = Uuid::from_u128(0x00000000000040008000000000000001);
     pub fn new(pool: PgPool) -> Self {
         Self { pool }
+    }
+
+    pub async fn purge_value_history(&self, retention_days: i64) -> Result<(), RepositoryError> {
+        sqlx::query("SELECT purge_attribute_value_history($1 * interval '1 day')")
+            .bind(retention_days)
+            .execute(&self.pool)
+            .await?;
+        Ok(())
     }
 
     pub async fn list_entity_blueprints(
@@ -769,7 +811,7 @@ impl CatalogRepository {
                     (SELECT count(*) FROM attribute_contexts) AS contexts,
                     (SELECT count(*) FROM entities e JOIN current_blueprints b ON b.id = e.blueprint_id WHERE e.deleted_at IS NULL AND e.blueprint_version <> b.version) AS outdated_entities,
                     (SELECT count(*) FROM entities WHERE deleted_at IS NULL AND updated_at < now() - ($1 * interval '1 day')) AS stale_entities,
-                    (SELECT count(*) FROM attribute_values av JOIN entities target ON target.id = av.relationship_target_entity_id WHERE av.latest AND av.active AND av.relationship_target_entity_id IS NOT NULL AND target.deleted_at IS NOT NULL) AS deleted_relationship_targets"#,
+                    (SELECT count(*) FROM attribute_values av JOIN entities target ON target.id = av.relationship_target_entity_id WHERE av.active AND av.relationship_target_entity_id IS NOT NULL AND target.deleted_at IS NOT NULL) AS deleted_relationship_targets"#,
         )
         .bind(stale_after_days)
         .fetch_one(&self.pool)
@@ -827,7 +869,7 @@ impl CatalogRepository {
             r#"SELECT c.code, count(DISTINCT av.entity_id)::bigint AS direct_entities,
                       count(av.id)::bigint AS direct_values
                FROM attribute_contexts c
-               LEFT JOIN attribute_values av ON av.context_id = c.id AND av.latest AND av.active
+                LEFT JOIN attribute_values av ON av.context_id = c.id AND av.active
                GROUP BY c.id, c.code
                ORDER BY direct_values DESC, c.code"#,
         )
@@ -868,7 +910,7 @@ impl CatalogRepository {
                         AND required.blueprint_id = e.blueprint_id
                         AND required.blueprint_version = e.blueprint_version
                     JOIN default_context ON default_context.id = av.context_id
-                    WHERE av.latest AND (av.relationship_target_entity_id IS NULL OR av.active)
+                    WHERE av.relationship_target_entity_id IS NULL OR av.active
                 ), direct_satisfied AS (
                     SELECT entity_id, context_id, count(*)::bigint AS attributes
                     FROM current_values
@@ -907,7 +949,7 @@ impl CatalogRepository {
                JOIN attributes a ON a.id = av.attribute_id
                JOIN blueprints b ON b.id = a.blueprint_id AND b.version = a.blueprint_version
                JOIN entities target ON target.id = av.relationship_target_entity_id
-               WHERE av.latest AND av.active AND av.relationship_target_entity_id IS NOT NULL
+                WHERE av.active AND av.relationship_target_entity_id IS NOT NULL
                GROUP BY a.code, b.code
                ORDER BY deleted_targets DESC, active_edges DESC, b.code, a.code
                LIMIT 50"#,
@@ -1062,7 +1104,7 @@ impl CatalogRepository {
             return Err(RepositoryError::DefaultContextProtected);
         }
         let result = sqlx::query(
-            "DELETE FROM attribute_contexts c WHERE c.id = $1 AND NOT EXISTS (SELECT 1 FROM attribute_contexts child WHERE child.parent_id = c.id) AND NOT EXISTS (SELECT 1 FROM attribute_values value WHERE value.context_id = c.id AND value.latest)",
+            "DELETE FROM attribute_contexts c WHERE c.id = $1 AND NOT EXISTS (SELECT 1 FROM attribute_contexts child WHERE child.parent_id = c.id) AND NOT EXISTS (SELECT 1 FROM attribute_values value WHERE value.context_id = c.id)",
         ).bind(id).execute(&self.pool).await?;
         if result.rows_affected() == 0 {
             return Err(RepositoryError::ContextInUse);
@@ -1557,6 +1599,8 @@ impl CatalogRepository {
             transaction.commit().await?;
             return Err(RepositoryError::MigrationNeedsResolution(unresolved));
         }
+        self.archive_all_current_values(&mut transaction, entity.id)
+            .await?;
         let target_entity = sqlx::query_as::<_, Entity>(
             r#"UPDATE entities SET blueprint_version = $2, updated_at = now()
                WHERE id = $1
@@ -1616,8 +1660,7 @@ impl CatalogRepository {
                WHERE av.entity_id = $1
                  AND a.blueprint_id = e.blueprint_id
                  AND a.blueprint_version = e.blueprint_version
-                 AND av.latest
-                 AND (av.relationship_target_entity_id IS NULL OR av.active)
+                  AND (av.relationship_target_entity_id IS NULL OR av.active)
                ORDER BY a.position, av.relationship_target_entity_id"#,
         )
         .bind(entity_id)
@@ -1658,8 +1701,7 @@ impl CatalogRepository {
                WHERE av.entity_id = $1
                  AND a.blueprint_id = e.blueprint_id
                  AND a.blueprint_version = e.blueprint_version
-                 AND av.latest
-                 AND (av.relationship_target_entity_id IS NULL OR av.active)
+                  AND (av.relationship_target_entity_id IS NULL OR av.active)
                ORDER BY a.position, av.relationship_target_entity_id"#,
         )
         .bind(entity_id)
@@ -1739,7 +1781,6 @@ impl CatalogRepository {
                 FROM attribute_values av
                 JOIN attributes a ON a.id = av.attribute_id
                 WHERE av.entity_id = $1
-                  AND av.latest
                   AND (av.relationship_target_entity_id IS NULL OR av.active)"#,
         )
         .bind(entity_id)
@@ -1763,6 +1804,96 @@ impl CatalogRepository {
                 })
             })
             .collect()
+    }
+
+    pub async fn value_history(
+        &self,
+        entity_id: Uuid,
+    ) -> Result<Vec<AttributeValueHistory>, RepositoryError> {
+        let rows = sqlx::query_as::<_, HistoryNativeValueRow>(
+            r#"SELECT h.id, h.entity_id, h.attribute_id, h.relationship_target_entity_id,
+                      h.active, h.context_id, h.created_at, h.archived_at, a.value_type,
+                      h.value_text, h.value_number, h.value_integer, h.value_boolean,
+                      h.value_date, h.value_datetime, h.value_time, h.value_time_zone
+               FROM attribute_value_history h
+               JOIN attributes a ON a.id = h.attribute_id
+               WHERE h.entity_id = $1
+               ORDER BY h.archived_at DESC, h.id DESC"#,
+        )
+        .bind(entity_id)
+        .fetch_all(&self.pool)
+        .await?;
+        rows.into_iter().map(history_attribute_value).collect()
+    }
+
+    pub async fn restore_value(
+        &self,
+        entity_id: Uuid,
+        history_id: Uuid,
+    ) -> Result<AttributeValue, RepositoryError> {
+        let mut transaction = self.pool.begin().await?;
+        let entity = self.lock_entity(&mut transaction, entity_id).await?;
+        let history = sqlx::query_as::<_, HistoryNativeValueRow>(
+            r#"SELECT h.id, h.entity_id, h.attribute_id, h.relationship_target_entity_id,
+                      h.active, h.context_id, h.created_at, h.archived_at, a.value_type,
+                      h.value_text, h.value_number, h.value_integer, h.value_boolean,
+                      h.value_date, h.value_datetime, h.value_time, h.value_time_zone
+               FROM attribute_value_history h
+               JOIN attributes a ON a.id = h.attribute_id
+               WHERE h.id = $1 AND h.entity_id = $2
+               FOR UPDATE"#,
+        )
+        .bind(history_id)
+        .bind(entity_id)
+        .fetch_optional(&mut *transaction)
+        .await?
+        .ok_or(RepositoryError::NotFound("attribute value history"))?;
+
+        let value = match history.relationship_target_entity_id {
+            Some(target_entity_id) if history.active => {
+                self.insert_value(
+                    &mut transaction,
+                    &entity,
+                    NewAttributeValue::Relationship {
+                        attribute_id: Some(history.attribute_id),
+                        attribute_code: None,
+                        context_id: history.context_id,
+                        target_entity_id,
+                    },
+                )
+                .await?
+            }
+            Some(target_entity_id) => self
+                .archive_current_value(
+                    &mut transaction,
+                    entity.id,
+                    history.attribute_id,
+                    history.context_id,
+                    Some(target_entity_id),
+                )
+                .await?
+                .ok_or(RepositoryError::NotFound("current relationship value"))?,
+            None => {
+                self.insert_value(
+                    &mut transaction,
+                    &entity,
+                    NewAttributeValue::Scalar {
+                        attribute_id: Some(history.attribute_id),
+                        attribute_code: None,
+                        context_id: history.context_id,
+                        value: native_value_json(history.native)?,
+                    },
+                )
+                .await?
+            }
+        };
+        self.validate_entity_schema(&mut transaction, &entity)
+            .await?;
+        let preview = Self::build_preview_projection(&mut transaction, entity.id).await?;
+        self.store_preview(&mut transaction, entity.id, preview)
+            .await?;
+        transaction.commit().await?;
+        Ok(value)
     }
 
     pub async fn preview(
@@ -1824,8 +1955,7 @@ impl CatalogRepository {
                     LEFT JOIN attribute_contexts c ON c.id = av.context_id
                     WHERE av.entity_id = $1
                       AND av.relationship_target_entity_id IS NOT NULL
-                      AND av.latest
-                      AND av.active
+                       AND av.active
                 )
                SELECT attribute_code, context_code, target_id, target_projections, target_display, target_context_fallback, relationship_position
                FROM relationships
@@ -1928,8 +2058,7 @@ impl CatalogRepository {
                WHERE av.entity_id = $1
                  AND a.code = $2
                  AND av.relationship_target_entity_id IS NOT NULL
-                 AND av.latest
-                 AND av.active
+                  AND av.active
                  AND ($3::uuid IS NULL OR av.relationship_target_entity_id > $3)
                  AND target.deleted_at IS NULL
                  AND b.code = $4
@@ -1980,8 +2109,7 @@ impl CatalogRepository {
                         FROM attribute_values av
                         WHERE av.entity_id = e.id
                           AND av.relationship_target_entity_id IS NULL
-                          AND av.latest
-                           AND COALESCE(
+                            AND COALESCE(
                              av.value_text,
                              av.value_number::text,
                              av.value_integer::text,
@@ -2309,7 +2437,7 @@ impl CatalogRepository {
             }
         }
 
-        self.supersede_latest_value(
+        self.archive_current_value(
             transaction,
             entity.id,
             attribute_id,
@@ -2370,13 +2498,13 @@ impl CatalogRepository {
             return Err(RepositoryError::AttributeKindMismatch);
         }
         self.validate_context_editable(selector.context_id, &attribute.2)?;
-        sqlx::query(
-            "UPDATE attribute_values SET latest = false WHERE entity_id = $1 AND attribute_id = $2 AND context_id IS NOT DISTINCT FROM $3 AND relationship_target_entity_id IS NULL AND latest",
+        self.archive_current_value(
+            transaction,
+            entity.id,
+            attribute.0,
+            selector.context_id,
+            None,
         )
-        .bind(entity.id)
-        .bind(attribute.0)
-        .bind(selector.context_id)
-        .execute(&mut **transaction)
         .await?;
         Ok(())
     }
@@ -2489,8 +2617,7 @@ impl CatalogRepository {
                  AND a.blueprint_id = $2
                  AND a.blueprint_version = $3
                  AND av.relationship_target_entity_id IS NOT NULL
-                 AND av.latest
-                 AND av.active"#,
+                  AND av.active"#,
         )
         .bind(entity.id)
         .bind(entity.blueprint_id)
@@ -2590,7 +2717,6 @@ impl CatalogRepository {
                 JOIN attribute_contexts c ON c.id = av.context_id
                 WHERE av.entity_id = $1
                   AND av.relationship_target_entity_id IS NULL
-                  AND av.latest
                   AND a.deleted_at IS NULL
                 ORDER BY a.position, c.code"#,
         )
@@ -2680,8 +2806,7 @@ impl CatalogRepository {
                  AND attribute_id = $2
                  AND context_id IS NOT DISTINCT FROM $3
                  AND relationship_target_entity_id IS NOT NULL
-                 AND latest
-                 AND active"#,
+                  AND active"#,
         )
         .bind(entity_id)
         .bind(attribute_id)
@@ -2701,14 +2826,33 @@ impl CatalogRepository {
         target_entity_id: Uuid,
         active: bool,
     ) -> Result<AttributeValue, RepositoryError> {
-        self.supersede_latest_value(
-            transaction,
-            entity_id,
-            attribute_id,
-            context_id,
-            Some(target_entity_id),
-        )
-        .await?;
+        let archived = self
+            .archive_current_value(
+                transaction,
+                entity_id,
+                attribute_id,
+                context_id,
+                Some(target_entity_id),
+            )
+            .await?;
+
+        if !active {
+            return Ok(archived
+                .map(|mut value| {
+                    value.active = false;
+                    value
+                })
+                .unwrap_or(AttributeValue {
+                    id: Uuid::new_v4(),
+                    entity_id,
+                    attribute_id,
+                    value: Value::Null,
+                    relationship_target_entity_id: Some(target_entity_id),
+                    active: false,
+                    context_id,
+                    created_at: Utc::now(),
+                }));
+        }
 
         Ok(sqlx::query_as::<_, AttributeValue>(
             r#"INSERT INTO attribute_values (id, entity_id, attribute_id, context_id, relationship_target_entity_id, active)
@@ -2719,29 +2863,72 @@ impl CatalogRepository {
         .bind(target_entity_id).bind(active).fetch_one(&mut **transaction).await?)
     }
 
-    async fn supersede_latest_value(
+    async fn archive_current_value(
         &self,
         transaction: &mut Transaction<'_, Postgres>,
         entity_id: Uuid,
         attribute_id: Uuid,
         context_id: Option<Uuid>,
         relationship_target_entity_id: Option<Uuid>,
-    ) -> Result<(), RepositoryError> {
-        // Preserve the event for history and move only the current-state marker.
-        // The caller holds the entity lock before this transition.
-        sqlx::query(
-            r#"UPDATE attribute_values
-               SET latest = false
-               WHERE entity_id = $1
-                 AND attribute_id = $2
-                 AND context_id IS NOT DISTINCT FROM $3
-                 AND relationship_target_entity_id IS NOT DISTINCT FROM $4
-                 AND latest"#,
+    ) -> Result<Option<AttributeValue>, RepositoryError> {
+        sqlx::query("SELECT ensure_attribute_value_history_partition(now())")
+            .execute(&mut **transaction)
+            .await?;
+        sqlx::query_as::<_, AttributeValue>(
+            r#"WITH archived AS (
+                    DELETE FROM attribute_values
+                    WHERE entity_id = $1
+                      AND attribute_id = $2
+                      AND context_id IS NOT DISTINCT FROM $3
+                      AND relationship_target_entity_id IS NOT DISTINCT FROM $4
+                    RETURNING *
+                ), stored AS (
+                    INSERT INTO attribute_value_history (
+                        id, entity_id, attribute_id, context_id, relationship_target_entity_id, active,
+                        value_text, value_number, value_integer, value_boolean, value_date, value_datetime,
+                        value_time, value_time_zone, value_json, created_at
+                    )
+                    SELECT id, entity_id, attribute_id, context_id, relationship_target_entity_id, active,
+                           value_text, value_number, value_integer, value_boolean, value_date, value_datetime,
+                           value_time, value_time_zone, value_json, created_at
+                    FROM archived
+                )
+                SELECT id, entity_id, attribute_id, 'null'::jsonb AS value,
+                       relationship_target_entity_id, context_id, active, created_at
+                FROM archived"#,
         )
         .bind(entity_id)
         .bind(attribute_id)
         .bind(context_id)
         .bind(relationship_target_entity_id)
+        .fetch_optional(&mut **transaction)
+        .await
+        .map_err(Into::into)
+    }
+
+    async fn archive_all_current_values(
+        &self,
+        transaction: &mut Transaction<'_, Postgres>,
+        entity_id: Uuid,
+    ) -> Result<(), RepositoryError> {
+        sqlx::query("SELECT ensure_attribute_value_history_partition(now())")
+            .execute(&mut **transaction)
+            .await?;
+        sqlx::query(
+            r#"WITH archived AS (
+                    DELETE FROM attribute_values WHERE entity_id = $1 RETURNING *
+                )
+                INSERT INTO attribute_value_history (
+                    id, entity_id, attribute_id, context_id, relationship_target_entity_id, active,
+                    value_text, value_number, value_integer, value_boolean, value_date, value_datetime,
+                    value_time, value_time_zone, value_json, created_at
+                )
+                SELECT id, entity_id, attribute_id, context_id, relationship_target_entity_id, active,
+                       value_text, value_number, value_integer, value_boolean, value_date, value_datetime,
+                       value_time, value_time_zone, value_json, created_at
+                FROM archived"#,
+        )
+        .bind(entity_id)
         .execute(&mut **transaction)
         .await?;
         Ok(())

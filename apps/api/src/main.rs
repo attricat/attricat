@@ -32,6 +32,13 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     MIGRATOR.run(&pool).await?;
 
+    let history_retention_days = std::env::var("ATTRIBUTE_VALUE_HISTORY_RETENTION_DAYS")
+        .unwrap_or_else(|_| "90".to_owned())
+        .parse()?;
+    CatalogRepository::new(pool.clone())
+        .purge_value_history(history_retention_days)
+        .await?;
+
     let listener = tokio::net::TcpListener::bind(bind_addr).await?;
     println!("API listening on http://{}", listener.local_addr()?);
     axum::serve(

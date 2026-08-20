@@ -73,6 +73,19 @@ pub struct AttributeValue {
     pub created_at: DateTime<Utc>,
 }
 
+#[derive(Clone, Debug, Deserialize, Serialize)]
+pub struct AttributeValueHistory {
+    pub id: Uuid,
+    pub entity_id: Uuid,
+    pub attribute_id: Uuid,
+    pub value: Value,
+    pub relationship_target_entity_id: Option<Uuid>,
+    pub active: bool,
+    pub context_id: Option<Uuid>,
+    pub created_at: DateTime<Utc>,
+    pub archived_at: DateTime<Utc>,
+}
+
 #[derive(Clone, Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct CreateBlueprint {
