@@ -675,6 +675,72 @@ async fn search_entity_previews(
         .as_deref()
         .map(str::trim)
         .filter(|value| !value.is_empty());
+    let (relationship_tree_facet, matching_entity_ids) = match input.relationship_tree_facet {
+        Some(facet) => {
+            let source = current_blueprint
+                .attributes
+                .iter()
+                .find(|attribute| attribute.code == facet.source_relationship_field)
+                .ok_or_else(|| {
+                    ApiError::invalid_input(
+                        "relationship_tree_facet.source_relationship_field is not an attribute"
+                            .to_owned(),
+                    )
+                })?;
+            if source.value_type != "relationship" {
+                return Err(ApiError::invalid_input(
+                    "relationship_tree_facet.source_relationship_field must be a relationship"
+                        .to_owned(),
+                ));
+            }
+            let target_code = source.target_blueprint_code.as_deref().ok_or_else(|| {
+                ApiError::invalid_input(
+                    "relationship_tree_facet.source_relationship_field has no target blueprint"
+                        .to_owned(),
+                )
+            })?;
+            let target = state
+                .repository
+                .get_blueprint_by_code(target_code)
+                .await?
+                .ok_or_else(|| ApiError::not_found("target blueprint"))?;
+            let hierarchy = target
+                .attributes
+                .iter()
+                .find(|attribute| attribute.code == facet.hierarchy_field)
+                .ok_or_else(|| {
+                    ApiError::invalid_input(
+                        "relationship_tree_facet.hierarchy_field is not an attribute".to_owned(),
+                    )
+                })?;
+            if hierarchy.value_type != "relationship"
+                || hierarchy.target_blueprint_code.as_deref() != Some(target_code)
+            {
+                return Err(ApiError::invalid_input(
+                    "relationship_tree_facet.hierarchy_field must be a self-targeting relationship"
+                        .to_owned(),
+                ));
+            }
+            let matching_entity_ids = state
+                .repository
+                .search_matching_entity_ids(current_blueprint.blueprint.id, selected_version, query)
+                .await?;
+            let (tree, matching) = state
+                .repository
+                .relationship_tree_facet(
+                    current_blueprint.blueprint.id,
+                    &facet.source_relationship_field,
+                    target.blueprint.id,
+                    &facet.hierarchy_field,
+                    facet.context_id,
+                    &facet.selected_target_ids,
+                    &matching_entity_ids,
+                )
+                .await?;
+            (Some(tree), matching)
+        }
+        None => (None, None),
+    };
     let (mut items, next_cursor) = state
         .repository
         .search_entity_previews(
@@ -683,6 +749,7 @@ async fn search_entity_previews(
             query,
             limit.into(),
             cursor,
+            matching_entity_ids.as_deref(),
         )
         .await?;
     for item in &mut items {
@@ -692,6 +759,7 @@ async fn search_entity_previews(
         blueprint: current_blueprint,
         items,
         next_cursor,
+        relationship_tree_facet,
     }))
 }
 

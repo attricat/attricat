@@ -288,6 +288,18 @@ const entitySearchResponseSchema = z.object({
   blueprint: blueprintWithAttributesSchema,
   items: z.array(entityItemSchema),
   next_cursor: z.string().nullable(),
+  relationship_tree_facet: z
+    .object({
+      items: z.array(
+        z.object({
+          id: uuidSchema,
+          parent_ids: z.array(uuidSchema),
+          display: z.string(),
+          count: z.number().int().nonnegative(),
+        }),
+      ),
+    })
+    .optional(),
 });
 const incomingRelationshipItemSchema = z.object({
   id: uuidSchema,
@@ -337,6 +349,14 @@ export const searchEntitiesRequestSchema = z.object({
   }),
   query: z.string(),
   filters: z.array(z.never()),
+  relationship_tree_facet: z
+    .object({
+      source_relationship_field: z.string().min(1),
+      hierarchy_field: z.string().min(1),
+      context_id: uuidSchema,
+      selected_target_ids: z.array(uuidSchema),
+    })
+    .optional(),
   page: z.object({ size: z.number().int().positive(), cursor: z.null() }),
 });
 const getBlueprintRequestSchema = z.object({

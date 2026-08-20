@@ -4,6 +4,10 @@ export const explorerSearchSchema = z.object({
   blueprint: z.string().trim().min(1).optional().catch(undefined),
   version: z.coerce.number().int().positive().optional().catch(undefined),
   query: z.string().trim().min(1).optional().catch(undefined),
+  facetField: z.string().trim().min(1).optional().catch(undefined),
+  facetHierarchy: z.string().trim().min(1).optional().catch(undefined),
+  facetContext: z.string().trim().min(1).optional().catch(undefined),
+  categories: z.array(z.string().uuid()).optional().catch(undefined),
 });
 
 export type ExplorerSearch = z.infer<typeof explorerSearchSchema>;

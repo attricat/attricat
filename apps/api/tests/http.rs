@@ -728,6 +728,190 @@ value_type = "string"
 }
 
 #[sqlx::test]
+async fn search_returns_contextual_relationship_tree_facet_and_filters_selected_subtrees(
+    pool: PgPool,
+) {
+    let (base_url, server) = start_server(pool).await;
+    let client = Client::new();
+    let category = create_blueprint(
+        &client,
+        &base_url,
+        r#"
+format_version = 1
+code = "facet_category"
+name = "Facet category"
+kind = "entity"
+
+[display.dropdown_option]
+fields = ["name"]
+
+[[attributes]]
+code = "name"
+value_type = "string"
+
+[[attributes]]
+code = "parent"
+value_type = "relationship"
+target_blueprint = "facet_category"
+"#,
+    )
+    .await;
+    let product = create_blueprint(
+        &client,
+        &base_url,
+        r#"
+format_version = 1
+code = "facet_product"
+name = "Facet product"
+kind = "entity"
+
+[display.dropdown_option]
+fields = ["title"]
+
+[[attributes]]
+code = "title"
+value_type = "string"
+
+[[attributes]]
+code = "categories"
+value_type = "relationship"
+target_blueprint = "facet_category"
+"#,
+    )
+    .await;
+    let root = create_entity(&client, &base_url, &category).await;
+    let child = create_entity(&client, &base_url, &category).await;
+    let first = create_entity(&client, &base_url, &product).await;
+    let second = create_entity(&client, &base_url, &product).await;
+    let context: Value = client
+        .post(format!("{base_url}/contexts"))
+        .json(&json!({ "code": "facet_context", "data": {} }))
+        .send()
+        .await
+        .unwrap()
+        .error_for_status()
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    for (entity, values) in [
+        (
+            &root,
+            json!([{ "kind": "scalar", "attribute_code": "name", "value": "Root" }]),
+        ),
+        (
+            &child,
+            json!([{ "kind": "scalar", "attribute_code": "name", "value": "Child" }]),
+        ),
+        (
+            &first,
+            json!([{ "kind": "scalar", "attribute_code": "title", "value": "First" }]),
+        ),
+        (
+            &second,
+            json!([{ "kind": "scalar", "attribute_code": "title", "value": "Second" }]),
+        ),
+    ] {
+        client
+            .post(format!(
+                "{base_url}/entities/{}/values",
+                entity["id"].as_str().unwrap()
+            ))
+            .json(&json!({ "values": values }))
+            .send()
+            .await
+            .unwrap()
+            .error_for_status()
+            .unwrap();
+    }
+    for (entity, field, targets) in [
+        (&child, "parent", vec![root["id"].clone()]),
+        (&first, "categories", vec![child["id"].clone()]),
+        (&second, "categories", vec![root["id"].clone()]),
+    ] {
+        client
+            .put(format!(
+                "{base_url}/v1/entities/{}",
+                entity["id"].as_str().unwrap()
+            ))
+            .json(&json!({
+                "relationships": [{ "attribute_code": field, "target_entity_ids": targets }]
+            }))
+            .send()
+            .await
+            .unwrap()
+            .error_for_status()
+            .unwrap();
+    }
+
+    let search: Value = client
+        .post(format!("{base_url}/v1/entities/search"))
+        .json(&json!({
+            "blueprint": { "code": "facet_product" },
+            "relationship_tree_facet": {
+                "source_relationship_field": "categories",
+                "hierarchy_field": "parent",
+                "context_id": context["id"],
+                "selected_target_ids": [root["id"]]
+            }
+        }))
+        .send()
+        .await
+        .unwrap()
+        .error_for_status()
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    assert_eq!(search["items"].as_array().unwrap().len(), 2);
+    let facet_items = search["relationship_tree_facet"]["items"]
+        .as_array()
+        .unwrap();
+    let root_item = facet_items
+        .iter()
+        .find(|item| item["id"] == root["id"])
+        .unwrap();
+    let child_item = facet_items
+        .iter()
+        .find(|item| item["id"] == child["id"])
+        .unwrap();
+    assert_eq!(root_item["count"], 2);
+    assert_eq!(child_item["count"], 1);
+    assert_eq!(child_item["parent_ids"], json!([root["id"]]));
+
+    let text_filtered: Value = client
+        .post(format!("{base_url}/v1/entities/search"))
+        .json(&json!({
+            "blueprint": { "code": "facet_product" },
+            "query": "First",
+            "relationship_tree_facet": {
+                "source_relationship_field": "categories",
+                "hierarchy_field": "parent",
+                "context_id": context["id"],
+                "selected_target_ids": []
+            }
+        }))
+        .send()
+        .await
+        .unwrap()
+        .error_for_status()
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    assert_eq!(text_filtered["items"].as_array().unwrap().len(), 1);
+    let text_root_item = text_filtered["relationship_tree_facet"]["items"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|item| item["id"] == root["id"])
+        .unwrap();
+    assert_eq!(text_root_item["count"], 1);
+
+    server.abort();
+}
+
+#[sqlx::test]
 async fn catalog_workflow_compiles_explicit_toml_selections_and_rebuilds_preview(pool: PgPool) {
     let (base_url, server) = start_server(pool.clone()).await;
     let client = Client::new();

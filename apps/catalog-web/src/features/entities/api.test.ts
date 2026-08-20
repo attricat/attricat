@@ -121,6 +121,38 @@ describe('entity API client', () => {
     });
   });
 
+  it('posts relationship-tree facet selections', async () => {
+    respond({
+      blueprint: blueprintWithAttributes,
+      items: [],
+      next_cursor: null,
+    });
+
+    await searchEntities('product', undefined, '', {
+      source_relationship_field: 'categories',
+      hierarchy_field: 'parent',
+      context_id: entityId,
+      selected_target_ids: [entityId],
+    });
+
+    expect(fetchMock).toHaveBeenLastCalledWith('/api/v1/entities/search', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        blueprint: { code: 'product' },
+        query: '',
+        filters: [],
+        relationship_tree_facet: {
+          source_relationship_field: 'categories',
+          hierarchy_field: 'parent',
+          context_id: entityId,
+          selected_target_ids: [entityId],
+        },
+        page: { size: 25, cursor: null },
+      }),
+    });
+  });
+
   it('loads incoming relationship pages with the configured selectors', async () => {
     respond({
       items: [

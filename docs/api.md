@@ -45,3 +45,7 @@ The API is JSON over HTTP. Successful responses are JSON; failures use an
 
 Blueprint creation and revision routes create drafts. Only published revisions
 can create entities or serve as migration targets. See [Blueprint Publication](database.md#blueprint-publication).
+
+`POST /v1/entities/search` optionally accepts a relationship tree facet. See
+[Relationship Tree Facets](search-facets.md) for its request and response
+contract.

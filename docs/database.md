@@ -348,6 +348,9 @@ V1 uses ascending `created_at, id` ordering. `filters` must be empty until the
 blueprint value type system defines field operators. Cursors are opaque and
 bound to that ordering.
 
+Search also supports an optional relationship tree facet for contextual
+hierarchy filtering and roll-up counts. See [Relationship Tree Facets](search-facets.md).
+
 ## Blueprint Compiler
 
 The pure `catalog-blueprint` crate parses and compiles blueprint TOML without
@@ -359,4 +362,4 @@ Authoring](blueprints.md) for the definition grammar and attribute policies.
 - `preview` is the only automatic projection. Search is a separate current-value
   query and there are no projection repair or backfill commands yet.
 - Search supports case-insensitive text matching across scalar values only;
-  typed filters, sorting, and facets are not yet available.
+  typed filters and sorting are not yet available.

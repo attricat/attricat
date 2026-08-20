@@ -84,6 +84,12 @@ export const searchEntities = (
   blueprint: string,
   version: number | undefined,
   query: string,
+  relationshipTreeFacet?: {
+    source_relationship_field: string;
+    hierarchy_field: string;
+    context_id: string;
+    selected_target_ids: string[];
+  },
 ) => {
   const payload = searchEntitiesRequestSchema.parse({
     blueprint: {
@@ -92,6 +98,7 @@ export const searchEntities = (
     },
     query,
     filters: [],
+    relationship_tree_facet: relationshipTreeFacet,
     page: { size: 25, cursor: null },
   });
   return request('/api/v1/entities/search', entitySearchResponseSchema, {

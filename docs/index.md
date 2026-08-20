@@ -35,6 +35,8 @@ settings.
 
 - [Catalog CLI](cli.md): automation and command-line workflows.
 - [API reference](api.md): HTTP routes and API behavior.
+- [Relationship tree facets](search-facets.md): filter explorer results through
+  a contextual hierarchy with roll-up counts.
 - [Relationships walkthrough](../examples/relationships/README.md): create
   blueprints, entities, contextual values, and relationships end to end.
 - [Manual test-data generator](../examples/generate.md): create a larger,
