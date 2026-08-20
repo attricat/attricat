@@ -1,5 +1,6 @@
 import { Box, Typography } from '@mui/material';
 import {
+  viewBlockTypes,
   type Attribute,
   type ViewDefinition,
 } from '../../../entities/api';

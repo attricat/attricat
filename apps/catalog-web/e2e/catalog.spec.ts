@@ -78,6 +78,25 @@ test('creates an entity with typed scalar values', async ({ page }) => {
   await expect(page.getByText('Yes')).toBeVisible();
 });
 
+test('renders an entity heading component from its detail view', async ({ page }) => {
+  const code = `heading_product_${suffix()}`;
+  const blueprint = await createEntityBlueprint(
+    code,
+    'Heading products',
+    '[[attributes]]\ncode = "title"\nvalue_type = "string"\ntags = ["searchable"]',
+    {
+      views:
+        '[views.detail]\ntype = "stack"\ncomponent = { id = "catalog.entity_heading", version = 1 }\nchildren = [{ type = "field", field = "title" }, { type = "text", text = "Generated catalog product" }]',
+    },
+  );
+  const entity = await createEntity(blueprint, [scalar('title', 'Product 001')]);
+
+  await page.goto(`/entities/${entity.id}`);
+
+  await expect(page.getByRole('heading', { name: 'Product 001' })).toBeVisible();
+  await expect(page.getByText('Generated catalog product')).toBeVisible();
+});
+
 test('rejects a browser create that violates a blueprint schema', async ({
   page,
 }) => {
