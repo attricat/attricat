@@ -72,7 +72,7 @@ export const Explorer = ({ search }: { search: ExplorerSearch }) => {
     queryFn: listContexts,
   });
   const selectedBlueprint = useQuery({
-    queryKey: ['explorer-blueprint', search.blueprint, search.version],
+    queryKey: entityQueryKeys.blueprintByCode(search.blueprint, search.version),
     queryFn: () => getBlueprintByCode(search.blueprint!, search.version),
     enabled: Boolean(search.blueprint),
   });
@@ -83,8 +83,9 @@ export const Explorer = ({ search }: { search: ExplorerSearch }) => {
       attribute.target_blueprint_code,
   );
   const targetBlueprint = useQuery({
-    queryKey: entityQueryKeys.relationshipTargets(
+    queryKey: entityQueryKeys.blueprintByCode(
       sourceRelationship?.target_blueprint_code,
+      undefined,
     ),
     queryFn: () =>
       getBlueprintByCode(sourceRelationship!.target_blueprint_code!),

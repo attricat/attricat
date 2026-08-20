@@ -3,6 +3,8 @@ export const entityQueryKeys = {
   contexts: () => ['attribute-contexts'] as const,
   blueprintRevision: (id: string, version: number) =>
     ['blueprint-revision', id, version] as const,
+  blueprintByCode: (code: string | undefined, version: number | undefined) =>
+    ['blueprint-by-code', code, version] as const,
   currentBlueprint: (id: string) => ['current-blueprint', id] as const,
   relationshipTargets: (blueprint: string | null | undefined) =>
     ['relationship-targets', blueprint] as const,
