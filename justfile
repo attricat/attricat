@@ -7,3 +7,8 @@ dev: setup
 
 down: setup
     set -a; . ./.env; set +a; docker compose --env-file .env --project-name catalog-$POSTGRES_PORT -f apps/api/compose.yml down
+
+reset-db: setup
+    set -a; . ./.env; set +a; sqlx database drop -y --database-url "$DATABASE_URL"
+    set -a; . ./.env; set +a; sqlx database create --database-url "$DATABASE_URL"
+    set -a; . ./.env; set +a; sqlx migrate run --source apps/api/migrations --database-url "$DATABASE_URL"
