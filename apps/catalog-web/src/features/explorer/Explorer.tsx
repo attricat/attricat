@@ -1,5 +1,5 @@
 import { useForm } from '@tanstack/react-form';
-import { useQuery } from '@tanstack/react-query';
+import { keepPreviousData, useQuery } from '@tanstack/react-query';
 import { Link, useNavigate } from '@tanstack/react-router';
 import { flexRender } from '@tanstack/react-table';
 import {
@@ -130,6 +130,10 @@ export const Explorer = ({ search }: { search: ExplorerSearch }) => {
         relationshipTreeFacet,
       ),
     enabled: Boolean(search.blueprint),
+    // Facet selections change this query's key. Preserve the current explorer
+    // while the filtered result page is fetched instead of replacing it with a
+    // full-page loading state.
+    placeholderData: keepPreviousData,
   });
   const blueprints = useQuery({
     queryKey: entityQueryKeys.blueprints(),
