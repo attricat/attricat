@@ -1,10 +1,5 @@
 import { expect, test } from '@playwright/test';
-import {
-  createEntity,
-  createEntityBlueprint,
-  scalar,
-  suffix,
-} from './helpers';
+import { createEntity, createEntityBlueprint, scalar, suffix } from './helpers';
 
 test('searches an entity and opens its preview', async ({ page }) => {
   const code = `product_search_${suffix()}`;
@@ -78,7 +73,9 @@ test('creates an entity with typed scalar values', async ({ page }) => {
   await expect(page.getByText('Yes')).toBeVisible();
 });
 
-test('renders an entity heading component from its detail view', async ({ page }) => {
+test('renders an entity heading component from its detail view', async ({
+  page,
+}) => {
   const code = `heading_product_${suffix()}`;
   const blueprint = await createEntityBlueprint(
     code,
@@ -89,11 +86,15 @@ test('renders an entity heading component from its detail view', async ({ page }
         '[views.detail]\ntype = "stack"\ncomponent = { id = "catalog.entity_heading", version = 1 }\nchildren = [{ type = "field", field = "title" }, { type = "text", text = "Generated catalog product" }]',
     },
   );
-  const entity = await createEntity(blueprint, [scalar('title', 'Product 001')]);
+  const entity = await createEntity(blueprint, [
+    scalar('title', 'Product 001'),
+  ]);
 
   await page.goto(`/entities/${entity.id}`);
 
-  await expect(page.getByRole('heading', { name: 'Product 001' })).toBeVisible();
+  await expect(
+    page.getByRole('heading', { name: 'Product 001' }),
+  ).toBeVisible();
   await expect(page.getByText('Generated catalog product')).toBeVisible();
 });
 

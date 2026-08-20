@@ -23,7 +23,10 @@ export const findEntityHeading = (
       return node;
     if ('children' in node) return node.children.map(visit).find(Boolean);
     if (node.type === viewBlockTypes.tabs)
-      return node.tabs.flatMap((tab) => tab.children).map(visit).find(Boolean);
+      return node.tabs
+        .flatMap((tab) => tab.children)
+        .map(visit)
+        .find(Boolean);
     if (node.type === viewBlockTypes.accordion)
       return node.sections
         .flatMap((section) => section.children)

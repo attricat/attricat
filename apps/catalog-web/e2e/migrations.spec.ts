@@ -8,14 +8,18 @@ import {
   suffix,
 } from './helpers';
 
-test('upgrades an outdated entity to the current blueprint revision', async ({ page }) => {
+test('upgrades an outdated entity to the current blueprint revision', async ({
+  page,
+}) => {
   const code = `migrate_${suffix()}`;
   const first = await createEntityBlueprint(
     code,
     'Migrated product',
     '[[attributes]]\ncode = "title"\nvalue_type = "string"',
   );
-  const entity = await createEntity(first, [scalar('title', 'Existing product')]);
+  const entity = await createEntity(first, [
+    scalar('title', 'Existing product'),
+  ]);
   const second = await createRevision(
     first.blueprint.id,
     `format_version = 1

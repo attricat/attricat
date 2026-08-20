@@ -94,8 +94,8 @@ export const IncomingRelationshipListDisplay = ({
                           gap: 0.5,
                           mt: 0.5,
                         }}
-                        >
-                          <Chip label={item.blueprint_code} size="small" />
+                      >
+                        <Chip label={item.blueprint_code} size="small" />
                       </Box>
                     }
                   />

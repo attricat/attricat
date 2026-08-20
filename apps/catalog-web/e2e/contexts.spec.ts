@@ -8,15 +8,23 @@ import {
   suffix,
 } from './helpers';
 
-test('resolves inherited values and saves a context-specific override', async ({ page }) => {
+test('resolves inherited values and saves a context-specific override', async ({
+  page,
+}) => {
   const code = `contextual_${suffix()}`;
   const blueprint = await createEntityBlueprint(
     code,
     'Contextual product',
     '[[attributes]]\ncode = "title"\nvalue_type = "string"\n\n[[attributes]]\ncode = "stock"\nvalue_type = "integer"\ncontext_editable = "default"',
   );
-  const entity = await createEntity(blueprint, [scalar('title', 'Default title'), scalar('stock', 5)]);
-  const context = await createContext(`uk_${suffix()}`, (await defaultContext()).id);
+  const entity = await createEntity(blueprint, [
+    scalar('title', 'Default title'),
+    scalar('stock', 5),
+  ]);
+  const context = await createContext(
+    `uk_${suffix()}`,
+    (await defaultContext()).id,
+  );
 
   await page.goto(`/entities/${entity.id}`);
   await page.getByLabel('Context').click();

@@ -162,12 +162,10 @@ describe('entity form values', () => {
 
   it('maps required entity schema properties to their fields', () => {
     expect(
-      validateEntityForm(
-        [{ code: 'title', value_type: 'string' }],
-        {},
-        [],
-        { type: 'object', required: ['title'] },
-      ),
+      validateEntityForm([{ code: 'title', value_type: 'string' }], {}, [], {
+        type: 'object',
+        required: ['title'],
+      }),
     ).toEqual({
       fieldErrors: { title: "must have required property 'title'" },
     });

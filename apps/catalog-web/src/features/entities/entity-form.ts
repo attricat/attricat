@@ -132,8 +132,12 @@ export const validateEntityForm = (
   const formError = schemaErrors
     .map((error) => {
       const attributeCode = attributeCodeForSchemaError(error);
-      if (attributeCode && attributes.some((attribute) => attribute.code === attributeCode)) {
-        fieldErrors[attributeCode] ??= error.message ?? 'Does not meet the schema requirements.';
+      if (
+        attributeCode &&
+        attributes.some((attribute) => attribute.code === attributeCode)
+      ) {
+        fieldErrors[attributeCode] ??=
+          error.message ?? 'Does not meet the schema requirements.';
         return undefined;
       }
       return error.message ?? 'Does not meet the schema requirements.';
@@ -147,7 +151,10 @@ const attributeCodeForSchemaError = (error: {
   keyword: string;
   params: Record<string, unknown>;
 }): string | undefined => {
-  if (error.keyword === 'required' && typeof error.params.missingProperty === 'string')
+  if (
+    error.keyword === 'required' &&
+    typeof error.params.missingProperty === 'string'
+  )
     return error.params.missingProperty;
   const [segment] = error.instancePath.split('/').filter(Boolean);
   return segment?.replaceAll('~1', '/').replaceAll('~0', '~');

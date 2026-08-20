@@ -41,8 +41,12 @@ value_type = "string"`,
   await page.getByLabel('Filter blueprints').fill(code);
   await page.getByRole('link', { name: 'Catalogue product revision' }).click();
 
-  await expect(page.getByRole('heading', { name: 'Catalogue product revision' })).toBeVisible();
-  await expect(page.getByRole('heading', { name: 'Revision history' })).toBeVisible();
+  await expect(
+    page.getByRole('heading', { name: 'Catalogue product revision' }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole('heading', { name: 'Revision history' }),
+  ).toBeVisible();
   await expect(page.getByRole('cell', { name: 'v2' })).toBeVisible();
   await page.getByLabel('Left version').click();
   await page.getByRole('option', { name: 'v1 (published)' }).click();

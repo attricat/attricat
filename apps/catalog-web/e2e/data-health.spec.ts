@@ -8,7 +8,9 @@ import {
   suffix,
 } from './helpers';
 
-test('shows health sections, custom stale threshold, and refreshes data', async ({ page }) => {
+test('shows health sections, custom stale threshold, and refreshes data', async ({
+  page,
+}) => {
   const code = `health_${suffix()}`;
   const blueprint = await createEntityBlueprint(
     code,
@@ -17,12 +19,19 @@ test('shows health sections, custom stale threshold, and refreshes data', async 
     { entitySchema: '{"type":"object","required":["title"]}' },
   );
   await createEntity(blueprint, [scalar('title', 'Health check')]);
-  const context = await createContext(`health_context_${suffix()}`, (await defaultContext()).id);
+  const context = await createContext(
+    `health_context_${suffix()}`,
+    (await defaultContext()).id,
+  );
 
   await page.goto('/data-health');
-  await expect(page.getByRole('heading', { name: 'Data health' })).toBeVisible();
+  await expect(
+    page.getByRole('heading', { name: 'Data health' }),
+  ).toBeVisible();
   await expect(page.getByText(`Healthy product (${code}) v1`)).toBeVisible();
-  await expect(page.getByRole('heading', { name: 'Freshness distribution' })).toBeVisible();
+  await expect(
+    page.getByRole('heading', { name: 'Freshness distribution' }),
+  ).toBeVisible();
   await expect(page.getByRole('heading', { name: 'Storage' })).toBeVisible();
 
   await page.getByLabel('Stale after').click();

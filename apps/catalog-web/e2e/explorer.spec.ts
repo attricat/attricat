@@ -8,7 +8,9 @@ import {
   suffix,
 } from './helpers';
 
-test('shows explorer empty states and configured table fields', async ({ page }) => {
+test('shows explorer empty states and configured table fields', async ({
+  page,
+}) => {
   const code = `explorer_${suffix()}`;
   const blueprint = await createEntityBlueprint(
     code,
@@ -16,15 +18,24 @@ test('shows explorer empty states and configured table fields', async ({ page })
     '[[attributes]]\ncode = "title"\nvalue_type = "string"\ntags = ["searchable"]\n\n[[attributes]]\ncode = "stock"\nvalue_type = "integer"',
     { views: '[views.table]\ntype = "table"\nfields = ["title", "stock"]' },
   );
-  await createEntity(blueprint, [scalar('title', 'Table product'), scalar('stock', 12)]);
+  await createEntity(blueprint, [
+    scalar('title', 'Table product'),
+    scalar('stock', 12),
+  ]);
 
   await page.goto('/');
-  await expect(page.getByText('Enter a blueprint code to start exploring.')).toBeVisible();
+  await expect(
+    page.getByText('Enter a blueprint code to start exploring.'),
+  ).toBeVisible();
   await page.getByLabel('Select a Blueprint').click();
-  await page.getByRole('option', { name: `Explorer products (${code})` }).click();
+  await page
+    .getByRole('option', { name: `Explorer products (${code})` })
+    .click();
   await page.getByLabel('Query').fill('missing');
   await page.getByRole('button', { name: 'Search' }).click();
-  await expect(page.getByText('No entities matched this search.')).toBeVisible();
+  await expect(
+    page.getByText('No entities matched this search.'),
+  ).toBeVisible();
 
   await page.getByLabel('Query').fill('table');
   await page.getByRole('button', { name: 'Search' }).click();
@@ -36,7 +47,9 @@ test('shows explorer empty states and configured table fields', async ({ page })
   await expect(page.getByText('12', { exact: true })).toBeVisible();
 });
 
-test('searches a requested blueprint version and identifies outdated entities', async ({ page }) => {
+test('searches a requested blueprint version and identifies outdated entities', async ({
+  page,
+}) => {
   const code = `versions_${suffix()}`;
   const firstDefinition = `format_version = 1
 code = "${code}"
@@ -51,7 +64,11 @@ fields = ["title"]
 code = "title"
 value_type = "string"
 tags = ["searchable"]`;
-  const first = await createEntityBlueprint(code, 'Versioned products', '[[attributes]]\ncode = "title"\nvalue_type = "string"\ntags = ["searchable"]');
+  const first = await createEntityBlueprint(
+    code,
+    'Versioned products',
+    '[[attributes]]\ncode = "title"\nvalue_type = "string"\ntags = ["searchable"]',
+  );
   const oldEntity = await createEntity(first, [scalar('title', 'Old product')]);
   const second = await createRevision(
     first.blueprint.id,

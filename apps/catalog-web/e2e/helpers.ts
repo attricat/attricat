@@ -9,7 +9,10 @@ export type NewValue = Record<string, unknown>;
 
 export const suffix = () => crypto.randomUUID().slice(0, 8);
 
-export const request = async <T>(path: string, init?: RequestInit): Promise<T> => {
+export const request = async <T>(
+  path: string,
+  init?: RequestInit,
+): Promise<T> => {
   const response = await fetch(`${apiUrl}${path}`, init);
   if (!response.ok) {
     throw new Error(
@@ -65,7 +68,10 @@ export const createContext = (code: string, parentId: string, data = {}) =>
     body: JSON.stringify({ code, parent_id: parentId, data }),
   });
 
-export const createEntity = async (blueprint: Blueprint, values: NewValue[] = []) => {
+export const createEntity = async (
+  blueprint: Blueprint,
+  values: NewValue[] = [],
+) => {
   const context = await defaultContext();
   return request<Entity>('/v1/entities', {
     method: 'POST',
@@ -86,7 +92,10 @@ export const scalar = (attributeCode: string, value: unknown) => ({
   value,
 });
 
-export const relationship = (attributeCode: string, targetEntityId: string) => ({
+export const relationship = (
+  attributeCode: string,
+  targetEntityId: string,
+) => ({
   kind: 'relationship',
   attribute_code: attributeCode,
   target_entity_id: targetEntityId,

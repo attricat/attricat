@@ -27,13 +27,15 @@ const navigationItems = [
 export const drawerWidth = 264;
 
 export const SideNavigation = ({ onNavigate }: { onNavigate?: () => void }) => {
-  const pathname = useRouterState({ select: (state) => state.location.pathname });
+  const pathname = useRouterState({
+    select: (state) => state.location.pathname,
+  });
 
   return (
     <Box sx={{ width: drawerWidth }}>
       <Box sx={{ px: 3, py: 2.5 }}>
         <Typography color="primary" sx={{ fontWeight: 700 }} variant="h6">
-        Catalog
+          Catalog
         </Typography>
         <Typography color="text.secondary" variant="body2">
           Data management

@@ -78,13 +78,16 @@ export const EntityForm = ({
     if (!blueprint) return { fieldErrors: {} };
     const editableAttributes = blueprint.attributes.filter(
       (attribute) =>
-        contextId === defaultContextId || attribute.context_editable !== 'default',
+        contextId === defaultContextId ||
+        attribute.context_editable !== 'default',
     );
     return validateEntityForm(
       editableAttributes,
       fields,
       requiredAttributes,
-      contextId === defaultContextId ? blueprint.blueprint.entity_schema : undefined,
+      contextId === defaultContextId
+        ? blueprint.blueprint.entity_schema
+        : undefined,
     );
   };
   const form = useForm({
