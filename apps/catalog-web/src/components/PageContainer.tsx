@@ -3,14 +3,14 @@ import type { ReactNode } from 'react';
 
 export const PageContainer = ({
   children,
-  maxWidth = 'xl',
+  maxWidth = false,
 }: {
   children: ReactNode;
-  maxWidth?: 'sm' | 'md' | 'lg' | 'xl';
+  maxWidth?: false | 'sm' | 'md' | 'lg' | 'xl';
 }) => (
   <Container
     maxWidth={maxWidth}
-    sx={{ ml: 0, mr: 'auto', py: { xs: 3, md: 5 } }}
+    sx={{ ml: 0, mr: 'auto', py: { xs: 2, md: 3 } }}
   >
     {children}
   </Container>

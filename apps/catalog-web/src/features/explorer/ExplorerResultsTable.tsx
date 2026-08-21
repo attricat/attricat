@@ -132,7 +132,15 @@ export const ExplorerResultsTable = ({
       <TableContainer
         aria-label="Explorer results"
         ref={tableContainerRef}
-        sx={{ height: { xs: 480, md: 600 }, overflowY: 'auto' }}
+        sx={{
+          // On desktop this leaves room for the sticky search form and result
+          // summary while using the rest of the viewport for rows.
+          height: {
+            xs: 'calc(100dvh - 220px)',
+            md: 'calc(100dvh - 165px)',
+          },
+          overflowY: 'auto',
+        }}
       >
         <Table size="small" stickyHeader>
           <TableHead>
@@ -164,7 +172,10 @@ export const ExplorerResultsTable = ({
               if (virtualRow.index === rows.length) {
                 return (
                   <TableRow data-index={virtualRow.index} key="load-more">
-                    <TableCell colSpan={columns.length}>
+                    <TableCell
+                      colSpan={columns.length}
+                      sx={{ py: 2, textAlign: 'center' }}
+                    >
                       <LoadMoreButton
                         isLoading={isFetchingNextPage}
                         onLoadMore={onLoadMore}

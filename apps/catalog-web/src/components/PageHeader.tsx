@@ -16,7 +16,7 @@ export const PageHeader = ({
 }) => (
   <Stack
     direction={{ xs: 'column', sm: actions ? 'row' : 'column' }}
-    spacing={2}
+    spacing={1.5}
     sx={{ justifyContent: 'space-between' }}
   >
     <Box>
@@ -25,7 +25,9 @@ export const PageHeader = ({
           color="primary"
           sx={{
             fontWeight: 700,
-            letterSpacing: '.12em',
+            fontSize: '0.6875rem',
+            letterSpacing: '.1em',
+            lineHeight: 1.3,
             textTransform: 'uppercase',
           }}
           variant="overline"

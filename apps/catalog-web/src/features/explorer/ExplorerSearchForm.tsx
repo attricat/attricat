@@ -14,13 +14,12 @@ export const ExplorerSearchForm = ({ blueprints, search, onSubmit }: Props) => {
   const form = useForm({
     defaultValues: {
       blueprint: search.blueprint ?? '',
-      version: search.version?.toString() ?? '',
       query: search.query ?? '',
     },
     onSubmit: ({ value }) => {
       onSubmit({
         blueprint: value.blueprint || undefined,
-        version: value.version ? Number(value.version) : undefined,
+        version: undefined,
         query: value.query || undefined,
       });
     },
@@ -29,10 +28,9 @@ export const ExplorerSearchForm = ({ blueprints, search, onSubmit }: Props) => {
   useEffect(() => {
     form.reset({
       blueprint: search.blueprint ?? '',
-      version: search.version?.toString() ?? '',
       query: search.query ?? '',
     });
-  }, [form, search.blueprint, search.query, search.version]);
+  }, [form, search.blueprint, search.query]);
 
   return (
     <Paper
@@ -41,18 +39,21 @@ export const ExplorerSearchForm = ({ blueprints, search, onSubmit }: Props) => {
         event.preventDefault();
         void form.handleSubmit();
       }}
-      sx={{ mt: 4, p: 2.5 }}
+      sx={{
+        mt: 2.5,
+        p: 1.5,
+        position: 'sticky',
+        top: 0,
+        zIndex: 2,
+      }}
     >
-      <Stack direction={{ xs: 'column', md: 'row' }} spacing={2}>
+      <Stack direction={{ xs: 'column', md: 'row' }} spacing={1.5}>
         <form.Field name="blueprint">
           {(field) => (
             <TextField
               required
               label="Select a Blueprint"
-              onChange={(event) => {
-                field.handleChange(event.target.value);
-                form.setFieldValue('version', '');
-              }}
+              onChange={(event) => field.handleChange(event.target.value)}
               select
               sx={{ width: 280 }}
               value={field.state.value}
@@ -63,17 +64,6 @@ export const ExplorerSearchForm = ({ blueprints, search, onSubmit }: Props) => {
                 </MenuItem>
               ))}
             </TextField>
-          )}
-        </form.Field>
-        <form.Field name="version">
-          {(field) => (
-            <TextField
-              inputMode="numeric"
-              label="Version"
-              onChange={(event) => field.handleChange(event.target.value)}
-              placeholder="Current"
-              value={field.state.value}
-            />
           )}
         </form.Field>
         <form.Field name="query">
