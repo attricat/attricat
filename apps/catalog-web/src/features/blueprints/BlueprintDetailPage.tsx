@@ -1,5 +1,9 @@
+import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import { useQuery } from '@tanstack/react-query';
 import {
+  Accordion,
+  AccordionDetails,
+  AccordionSummary,
   Alert,
   Box,
   Chip,
@@ -103,77 +107,6 @@ export const BlueprintDetailPage = ({
             {' · '}Updated: {formatBlueprintDateTime(blueprint.updated_at)}
           </Typography>
           <RevisionHistory revisions={revisionItems} />
-          <Paper component="section" sx={{ mt: 3, p: 2.5 }}>
-            <Typography component="h2" variant="h6">
-              Compare definitions
-            </Typography>
-            <Typography color="text.secondary" sx={{ mt: 0.5 }}>
-              Choose two revisions to inspect their immutable TOML definitions
-              side by side.
-            </Typography>
-            <Stack
-              direction={{ xs: 'column', sm: 'row' }}
-              spacing={2}
-              sx={{ mt: 2 }}
-            >
-              <TextField
-                label="Left version"
-                onChange={(event) =>
-                  setLeftSelection(Number(event.target.value))
-                }
-                select
-                value={leftVersion ?? ''}
-              >
-                {revisionItems.map((revision) => (
-                  <MenuItem key={revision.version} value={revision.version}>
-                    v{revision.version} ({revision.status})
-                  </MenuItem>
-                ))}
-              </TextField>
-              <TextField
-                label="Right version"
-                onChange={(event) =>
-                  setRightSelection(Number(event.target.value))
-                }
-                select
-                value={rightVersion ?? ''}
-              >
-                {revisionItems.map((revision) => (
-                  <MenuItem key={revision.version} value={revision.version}>
-                    v{revision.version} ({revision.status})
-                  </MenuItem>
-                ))}
-              </TextField>
-            </Stack>
-            {(left.isError || right.isError) && (
-              <Alert severity="error" sx={{ mt: 2 }}>
-                {left.error?.message ?? right.error?.message}
-              </Alert>
-            )}
-            <Box
-              sx={{
-                display: 'grid',
-                gap: 2,
-                gridTemplateColumns: { xs: '1fr', lg: '1fr 1fr' },
-                mt: 3,
-              }}
-            >
-              <Suspense fallback={<Typography>Loading editor...</Typography>}>
-                {left.data && (
-                  <TomlEditor
-                    title={`Version ${left.data.blueprint.version} · ${left.data.blueprint.status}`}
-                    value={left.data.blueprint.definition}
-                  />
-                )}
-                {right.data && (
-                  <TomlEditor
-                    title={`Version ${right.data.blueprint.version} · ${right.data.blueprint.status}`}
-                    value={right.data.blueprint.definition}
-                  />
-                )}
-              </Suspense>
-            </Box>
-          </Paper>
           {left.data && (
             <Paper component="section" sx={{ mt: 3, p: 2.5 }}>
               <Typography component="h2" variant="h6">
@@ -187,14 +120,14 @@ export const BlueprintDetailPage = ({
                 value={dataTab}
                 variant="scrollable"
               >
-                <Tab label="Includes" />
+                <Tab label={`Attributes (${left.data.attributes.length})`} />
                 <Tab label="Views" />
                 <Tab label="View definition" />
                 <Tab label="Entity schema" />
-                <Tab label={`Attributes (${left.data.attributes.length})`} />
+                <Tab label="Includes" />
               </Tabs>
               <Box sx={{ mt: 2 }}>
-                {dataTab === 0 && (
+                {dataTab === 4 && (
                   <JsonMetadata
                     label="Includes"
                     value={left.data.blueprint.includes}
@@ -218,7 +151,7 @@ export const BlueprintDetailPage = ({
                     value={left.data.blueprint.entity_schema}
                   />
                 )}
-                {dataTab === 4 && (
+                {dataTab === 0 && (
                   <Box sx={{ overflowX: 'auto' }}>
                     <Table size="small">
                       <TableHead>
@@ -258,6 +191,81 @@ export const BlueprintDetailPage = ({
               </Box>
             </Paper>
           )}
+          <Accordion component="section" sx={{ mt: 3 }}>
+            <AccordionSummary expandIcon={<ExpandMoreIcon />}>
+              <Typography component="h2" variant="h6">
+                Compare definitions
+              </Typography>
+            </AccordionSummary>
+            <AccordionDetails>
+              <Typography color="text.secondary">
+                Choose two revisions to inspect their immutable TOML definitions
+                side by side.
+              </Typography>
+              <Stack
+                direction={{ xs: 'column', sm: 'row' }}
+                spacing={2}
+                sx={{ mt: 2 }}
+              >
+                <TextField
+                  label="Left version"
+                  onChange={(event) =>
+                    setLeftSelection(Number(event.target.value))
+                  }
+                  select
+                  value={leftVersion ?? ''}
+                >
+                  {revisionItems.map((revision) => (
+                    <MenuItem key={revision.version} value={revision.version}>
+                      v{revision.version} ({revision.status})
+                    </MenuItem>
+                  ))}
+                </TextField>
+                <TextField
+                  label="Right version"
+                  onChange={(event) =>
+                    setRightSelection(Number(event.target.value))
+                  }
+                  select
+                  value={rightVersion ?? ''}
+                >
+                  {revisionItems.map((revision) => (
+                    <MenuItem key={revision.version} value={revision.version}>
+                      v{revision.version} ({revision.status})
+                    </MenuItem>
+                  ))}
+                </TextField>
+              </Stack>
+              {(left.isError || right.isError) && (
+                <Alert severity="error" sx={{ mt: 2 }}>
+                  {left.error?.message ?? right.error?.message}
+                </Alert>
+              )}
+              <Box
+                sx={{
+                  display: 'grid',
+                  gap: 2,
+                  gridTemplateColumns: { xs: '1fr', lg: '1fr 1fr' },
+                  mt: 3,
+                }}
+              >
+                <Suspense fallback={<Typography>Loading editor...</Typography>}>
+                  {left.data && (
+                    <TomlEditor
+                      title={`Version ${left.data.blueprint.version} · ${left.data.blueprint.status}`}
+                      value={left.data.blueprint.definition}
+                    />
+                  )}
+                  {right.data && (
+                    <TomlEditor
+                      title={`Version ${right.data.blueprint.version} · ${right.data.blueprint.status}`}
+                      value={right.data.blueprint.definition}
+                    />
+                  )}
+                </Suspense>
+              </Box>
+            </AccordionDetails>
+          </Accordion>
         </>
       )}
     </PageContainer>
