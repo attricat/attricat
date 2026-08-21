@@ -33,12 +33,11 @@ export const EditEntityPage = ({ entityId }: { entityId: string }) => {
       });
     },
   });
+  const blueprintId = entityForm.data?.entity.blueprint_id;
   const currentBlueprint = useQuery({
-    queryKey: entityQueryKeys.currentBlueprint(
-      entityForm.data?.entity.blueprint_id ?? '',
-    ),
-    queryFn: () => getCurrentBlueprint(entityForm.data!.entity.blueprint_id),
-    enabled: entityForm.data !== undefined,
+    queryKey: entityQueryKeys.currentBlueprint(blueprintId ?? ''),
+    queryFn: () => getCurrentBlueprint(blueprintId!),
+    enabled: Boolean(blueprintId),
   });
   const contexts = useQuery({
     queryKey: entityQueryKeys.contexts(),
@@ -66,7 +65,7 @@ export const EditEntityPage = ({ entityId }: { entityId: string }) => {
         {currentBlueprint.data &&
           entityForm.data &&
           (currentBlueprint.data.blueprint.version >
-          entityForm.data.entity.blueprint_version ? (
+          (entityForm.data.entity.blueprint_version ?? Infinity) ? (
             <>
               <Typography
                 color="warning.main"

@@ -15,7 +15,7 @@ import type {
   ViewComponentDefinition,
 } from './component-types';
 
-export const viewComponents = [
+export const viewComponents: readonly ViewComponentDefinition[] = [
   fieldDisplayComponent,
   fieldEditComponent,
   relationshipListDisplayComponent,

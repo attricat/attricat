@@ -45,7 +45,9 @@ export const valueForField = (
 export const scalarValueForField = (
   attribute: Attribute,
   fieldValue: string,
-): NewAttributeValue | undefined => {
+):
+  | Extract<NewAttributeValue, { kind: typeof attributeValueKinds.scalar }>
+  | undefined => {
   const value = fieldValue.trim();
   if (!value) return undefined;
   if (attribute.value_type === attributeValueTypes.relationship)

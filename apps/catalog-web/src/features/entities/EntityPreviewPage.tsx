@@ -89,7 +89,7 @@ export const EntityPreviewPage = ({ entityId }: { entityId: string }) => {
           <>
             {' | '}
             {currentBlueprint.data.blueprint.version >
-            resolved.data.entity.blueprint_version ? (
+            (resolved.data.entity.blueprint_version ?? Infinity) ? (
               <>
                 <Typography
                   color="warning.main"

@@ -238,7 +238,11 @@ export const EntityView = ({
     return null;
   };
 
-  if (!view || view.type === viewBlockTypes.table)
+  if (
+    !view ||
+    view.type === viewBlockTypes.table ||
+    view.type === viewBlockTypes.dropdownOption
+  )
     return <>{renderNodes(fallback)}</>;
 
   return <>{renderNode(view, 'root')}</>;
