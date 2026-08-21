@@ -5,6 +5,7 @@ use std::net::SocketAddr;
 use api::{
     http::{AppState, router},
     repository::CatalogRepository,
+    telemetry::init_metrics,
 };
 pub use reqwest::{Client, StatusCode};
 pub use serde_json::{Value, json};
@@ -13,16 +14,24 @@ pub use tokio::{net::TcpListener, task::JoinHandle};
 pub use uuid::Uuid;
 
 pub async fn start_server(pool: PgPool) -> (String, JoinHandle<()>) {
+    start_server_with_data_health_cache_ttl(pool, 0).await
+}
+
+pub async fn start_server_with_data_health_cache_ttl(
+    pool: PgPool,
+    data_health_cache_ttl_seconds: u64,
+) -> (String, JoinHandle<()>) {
     let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
     let address: SocketAddr = listener.local_addr().unwrap();
     let router = router(AppState {
         repository: CatalogRepository::new(pool),
+        metrics: init_metrics().unwrap(),
         max_preview_relationship_depth: 3,
         max_preview_relationship_items: 10,
         max_entity_page_size: 100,
         max_incoming_relationship_page_size: 50,
         max_relationship_facet_nodes: 100,
-        data_health_cache_ttl_seconds: 0,
+        data_health_cache_ttl_seconds,
         data_health_cache: Default::default(),
     });
     let server = tokio::spawn(async move { axum::serve(listener, router).await.unwrap() });

@@ -9,6 +9,7 @@ The API is JSON over HTTP. Successful responses are JSON; failures use an
 | Method | Path | Purpose |
 | --- | --- | --- |
 | `GET` | `/health` | Confirm the migrated API is ready. |
+| `GET` | `/metrics` | Scrape Prometheus service metrics. |
 | `GET` | `/blueprints` | List published entity blueprints. |
 | `GET` | `/blueprints/catalogue` | List blueprint families and revisions. |
 | `POST` | `/blueprints` | Create the first draft revision from TOML. |
@@ -49,3 +50,34 @@ can create entities or serve as migration targets. See [Blueprint Publication](d
 `POST /v1/entities/search` optionally accepts a relationship tree facet. See
 [Relationship Tree Facets](search-facets.md) for its request and response
 contract.
+
+## Request performance
+
+Every API response includes a standard `Server-Timing` header. Chrome DevTools
+shows these values in **Network → Timing**, so a developer can inspect the
+server work for an individual request without any extra tooling.
+
+- `app;dur=<milliseconds>` is the total time spent handling the API request.
+- Data-health responses also include `cache;desc=HIT`, `MISS`, or `BYPASS`.
+  `BYPASS` means `DATA_HEALTH_CACHE_TTL_SECONDS` is zero and caching is
+  disabled.
+
+The header intentionally contains aggregate timings only; it never exposes SQL,
+request bodies, identifiers, or other request data. The Vite development proxy
+makes API calls same-origin. Deployments that call the API from another origin
+must configure `Timing-Allow-Origin` separately if browser Resource Timing API
+access is required.
+
+## Metrics and traces
+
+`GET /metrics` serves Prometheus text exposition. It provides
+`catalog_http_requests_total` and `catalog_http_request_duration_seconds`, both
+labeled only by method, matched route template, and response status. Data-health
+cache decisions are exposed as `catalog_data_health_cache_total` with a bounded
+`status` label. Scrape this endpoint from the private monitoring network rather
+than exposing it publicly.
+
+The API emits structured `tracing` events for startup, database migrations, and
+each HTTP request. Request spans include the method, matched route template,
+response status, and duration; 5xx responses are emitted at error level. Set
+`RUST_LOG` (for example, `RUST_LOG=api=debug`) to control output verbosity.

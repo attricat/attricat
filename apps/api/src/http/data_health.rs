@@ -1,6 +1,11 @@
 use super::{AppState, error::ApiError, extractors::ApiQuery};
 use crate::repository::RepositoryError;
-use axum::{Json, extract::State, http::StatusCode};
+use axum::{
+    Json,
+    extract::State,
+    http::{HeaderName, HeaderValue, StatusCode},
+    response::{IntoResponse, Response},
+};
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 use std::time::Duration;
@@ -26,26 +31,46 @@ async fn cached_data_health<T>(
     state: &AppState,
     key: String,
     load: impl std::future::Future<Output = Result<T, RepositoryError>>,
-) -> Result<Json<Value>, ApiError>
+) -> Result<Response, ApiError>
 where
     T: Serialize,
 {
-    if state.data_health_cache_ttl_seconds > 0 {
+    let (value, cache_status) = if state.data_health_cache_ttl_seconds > 0 {
         if let Some((created_at, value)) = state.data_health_cache.lock().await.get(&key).cloned() {
             if created_at.elapsed() < Duration::from_secs(state.data_health_cache_ttl_seconds) {
-                return Ok(Json(value));
+                (value, "HIT")
+            } else {
+                let value =
+                    serde_json::to_value(load.await?).expect("data health response serializes");
+                (value, "MISS")
             }
+        } else {
+            let value = serde_json::to_value(load.await?).expect("data health response serializes");
+            (value, "MISS")
         }
-    }
-    let value = serde_json::to_value(load.await?).expect("data health response serializes");
-    if state.data_health_cache_ttl_seconds > 0 {
+    } else {
+        let value = serde_json::to_value(load.await?).expect("data health response serializes");
+        (value, "BYPASS")
+    };
+    if state.data_health_cache_ttl_seconds > 0 && cache_status == "MISS" {
         state
             .data_health_cache
             .lock()
             .await
             .insert(key, (std::time::Instant::now(), value.clone()));
     }
-    Ok(Json(value))
+    metrics::counter!("catalog_data_health_cache_total", "status" => cache_status).increment(1);
+    let mut response = Json(value).into_response();
+    response.headers_mut().append(
+        HeaderName::from_static("server-timing"),
+        HeaderValue::from_static(match cache_status {
+            "HIT" => "cache;desc=HIT",
+            "MISS" => "cache;desc=MISS",
+            "BYPASS" => "cache;desc=BYPASS",
+            _ => unreachable!("cache status is fixed above"),
+        }),
+    );
+    Ok(response)
 }
 pub(super) async fn invalidate_data_health(state: &AppState) {
     state.data_health_cache.lock().await.clear();
@@ -53,7 +78,7 @@ pub(super) async fn invalidate_data_health(state: &AppState) {
 pub(super) async fn data_health_summary(
     State(state): State<AppState>,
     ApiQuery(query): ApiQuery<DataHealthQuery>,
-) -> Result<Json<Value>, ApiError> {
+) -> Result<Response, ApiError> {
     let days = stale_after_days(query)?;
     cached_data_health(
         &state,
@@ -65,7 +90,7 @@ pub(super) async fn data_health_summary(
 pub(super) async fn data_health_blueprints(
     State(state): State<AppState>,
     ApiQuery(query): ApiQuery<DataHealthQuery>,
-) -> Result<Json<Value>, ApiError> {
+) -> Result<Response, ApiError> {
     let days = stale_after_days(query)?;
     cached_data_health(
         &state,
@@ -76,7 +101,7 @@ pub(super) async fn data_health_blueprints(
 }
 pub(super) async fn data_health_freshness(
     State(state): State<AppState>,
-) -> Result<Json<Value>, ApiError> {
+) -> Result<Response, ApiError> {
     cached_data_health(
         &state,
         "freshness".to_owned(),
@@ -86,7 +111,7 @@ pub(super) async fn data_health_freshness(
 }
 pub(super) async fn data_health_completeness(
     State(state): State<AppState>,
-) -> Result<Json<Value>, ApiError> {
+) -> Result<Response, ApiError> {
     cached_data_health(
         &state,
         "completeness".to_owned(),
@@ -96,7 +121,7 @@ pub(super) async fn data_health_completeness(
 }
 pub(super) async fn data_health_contexts(
     State(state): State<AppState>,
-) -> Result<Json<Value>, ApiError> {
+) -> Result<Response, ApiError> {
     cached_data_health(
         &state,
         "contexts".to_owned(),
@@ -106,7 +131,7 @@ pub(super) async fn data_health_contexts(
 }
 pub(super) async fn data_health_relationships(
     State(state): State<AppState>,
-) -> Result<Json<Value>, ApiError> {
+) -> Result<Response, ApiError> {
     cached_data_health(
         &state,
         "relationships".to_owned(),
@@ -116,7 +141,7 @@ pub(super) async fn data_health_relationships(
 }
 pub(super) async fn data_health_storage(
     State(state): State<AppState>,
-) -> Result<Json<Value>, ApiError> {
+) -> Result<Response, ApiError> {
     cached_data_health(
         &state,
         "storage".to_owned(),

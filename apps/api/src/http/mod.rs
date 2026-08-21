@@ -10,16 +10,23 @@ use std::{collections::HashMap, sync::Arc, time::Instant};
 
 use axum::{
     Router,
+    extract::State,
+    http::{HeaderName, HeaderValue},
+    middleware::{self, Next},
+    response::{IntoResponse, Response},
     routing::{get, post, put},
 };
+use metrics_exporter_prometheus::PrometheusHandle;
 use serde_json::Value;
 use tokio::sync::Mutex;
+use tracing::{Instrument, field::Empty};
 
 use crate::repository::CatalogRepository;
 
 #[derive(Clone)]
 pub struct AppState {
     pub repository: CatalogRepository,
+    pub metrics: PrometheusHandle,
     // Preview expansion is request-controlled, so these limits keep cyclic or
     // high-cardinality relationship graphs from turning one read into an
     // unbounded amount of database work.
@@ -34,8 +41,53 @@ pub struct AppState {
 
 pub type DataHealthCache = Arc<Mutex<HashMap<String, (Instant, Value)>>>;
 
+async fn server_timing(request: axum::extract::Request, next: Next) -> Response {
+    let method = request.method().to_string();
+    let route = request
+        .extensions()
+        .get::<axum::extract::MatchedPath>()
+        .map(|path| path.as_str().to_owned())
+        .unwrap_or_else(|| "unmatched".to_owned());
+    let span = tracing::info_span!(
+        "http.request",
+        method = %method,
+        route = %route,
+        status = Empty,
+        duration_ms = Empty
+    );
+    let started_at = Instant::now();
+    let mut response = next.run(request).instrument(span.clone()).await;
+    let status = response.status().as_u16();
+    let duration_ms = started_at.elapsed().as_secs_f64() * 1_000.0;
+    span.record("status", status)
+        .record("duration_ms", duration_ms);
+    metrics::counter!("catalog_http_requests_total", "method" => method.clone(), "route" => route.clone(), "status" => status.to_string()).increment(1);
+    metrics::histogram!("catalog_http_request_duration_seconds", "method" => method, "route" => route).record(duration_ms / 1_000.0);
+    if status >= 500 {
+        tracing::error!(parent: &span, status, duration_ms, "request failed");
+    } else {
+        tracing::info!(parent: &span, status, duration_ms, "request completed");
+    }
+    let duration_ms = started_at.elapsed().as_secs_f64() * 1_000.0;
+    let server_timing = HeaderName::from_static("server-timing");
+    let value = match response
+        .headers()
+        .get(&server_timing)
+        .and_then(|value| value.to_str().ok())
+    {
+        Some(existing) => format!("{existing}, app;dur={duration_ms:.2}"),
+        None => format!("app;dur={duration_ms:.2}"),
+    };
+    response.headers_mut().insert(
+        server_timing,
+        HeaderValue::from_str(&value).expect("server timing values are valid header values"),
+    );
+    response
+}
+
 pub fn router(state: AppState) -> Router {
     Router::new()
+        .route("/metrics", get(metrics))
         .route("/health", get(data_health::health))
         .route(
             "/data-health/summary",
@@ -171,4 +223,13 @@ pub fn router(state: AppState) -> Router {
             get(entities::get_current_values),
         )
         .with_state(state)
+        .layer(middleware::from_fn(server_timing))
+}
+
+async fn metrics(State(state): State<AppState>) -> Response {
+    (
+        [("content-type", "text/plain; version=0.0.4; charset=utf-8")],
+        state.metrics.render(),
+    )
+        .into_response()
 }

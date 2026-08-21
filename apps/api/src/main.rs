@@ -4,12 +4,15 @@ use api::{
     MIGRATOR,
     http::{AppState, router},
     repository::CatalogRepository,
+    telemetry::{init_metrics, init_tracing},
 };
 use sqlx::postgres::PgPoolOptions;
 
 #[tokio::main]
-async fn main() -> Result<(), Box<dyn std::error::Error>> {
+async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     dotenvy::dotenv().ok();
+    init_tracing()?;
+    let metrics = init_metrics()?;
 
     let database_url =
         std::env::var("DATABASE_URL").map_err(|_| "DATABASE_URL must be set to start the API")?;
@@ -36,6 +39,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .connect(&database_url)
         .await?;
 
+    tracing::info!("running database migrations");
     MIGRATOR.run(&pool).await?;
 
     let history_retention_days = std::env::var("ATTRIBUTE_VALUE_HISTORY_RETENTION_DAYS")
@@ -46,11 +50,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .await?;
 
     let listener = tokio::net::TcpListener::bind(bind_addr).await?;
-    println!("API listening on http://{}", listener.local_addr()?);
+    tracing::info!(address = %listener.local_addr()?, "API listening");
     axum::serve(
         listener,
         router(AppState {
             repository: CatalogRepository::new(pool),
+            metrics,
             max_preview_relationship_depth,
             max_preview_relationship_items,
             max_entity_page_size,
