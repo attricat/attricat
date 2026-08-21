@@ -8,7 +8,7 @@ import {
   Stack,
   TextField,
 } from '@mui/material';
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 
 type Props = {
   staleAfterDays: number;
@@ -18,7 +18,11 @@ type Props = {
   onRefresh: () => void;
 };
 
-export const DataHealthControls = ({
+export const DataHealthControls = (props: Props) => (
+  <DataHealthControlsForm key={props.staleAfterDays} {...props} />
+);
+
+const DataHealthControlsForm = ({
   staleAfterDays,
   isRefreshing,
   refreshError,
@@ -28,10 +32,6 @@ export const DataHealthControls = ({
   const [customThreshold, setCustomThreshold] = useState(
     ![30, 90, 180, 365].includes(staleAfterDays),
   );
-
-  useEffect(() => {
-    setCustomThreshold(![30, 90, 180, 365].includes(staleAfterDays));
-  }, [staleAfterDays]);
 
   return (
     <>
@@ -82,7 +82,11 @@ export const DataHealthControls = ({
           {isRefreshing ? 'Refreshing...' : 'Refresh'}
         </Button>
       </Stack>
-      {refreshError && <Alert severity="error" sx={{ mt: 2 }}>{refreshError.message}</Alert>}
+      {refreshError && (
+        <Alert severity="error" sx={{ mt: 2 }}>
+          {refreshError.message}
+        </Alert>
+      )}
     </>
   );
 };

@@ -86,6 +86,7 @@ export const searchEntities = (
   blueprint: string,
   version: number | undefined,
   query: string,
+  cursor: string | null = null,
   relationshipTreeFacet?: {
     source_relationship_field: string;
     hierarchy_field: string;
@@ -101,7 +102,7 @@ export const searchEntities = (
     query,
     filters: [],
     relationship_tree_facet: relationshipTreeFacet,
-    page: { size: 25, cursor: null },
+    page: { size: 25, cursor },
   });
   return request('/api/v1/entities/search', entitySearchResponseSchema, {
     method: 'POST',

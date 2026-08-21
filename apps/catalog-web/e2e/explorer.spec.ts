@@ -47,6 +47,48 @@ test('shows explorer empty states and configured table fields', async ({
   await expect(page.getByText('12', { exact: true })).toBeVisible();
 });
 
+test('loads additional explorer search pages', async ({ page }) => {
+  const code = `pagination_${suffix()}`;
+  const blueprint = await createEntityBlueprint(
+    code,
+    'Paginated products',
+    '[[attributes]]\ncode = "title"\nvalue_type = "string"\ntags = ["searchable"]',
+  );
+  for (let index = 0; index < 52; index += 1) {
+    await createEntity(blueprint, [
+      scalar('title', `Pagination product ${index}`),
+    ]);
+  }
+
+  let searchRequests = 0;
+  await page.route('**/api/v1/entities/search', async (route) => {
+    searchRequests += 1;
+    await new Promise((resolve) => setTimeout(resolve, 300));
+    await route.continue();
+  });
+  await page.goto(`/?blueprint=${code}&query=Pagination`);
+
+  await expect(page.getByText(/25 results$/)).toBeVisible();
+  const resultsContainer = page.getByLabel('Explorer results');
+  await resultsContainer.evaluate((element) => {
+    element.scrollTop = element.scrollHeight;
+  });
+  const loadMore = page.getByRole('button', { name: 'Load more' });
+  await expect(loadMore).toBeVisible();
+  await loadMore.click();
+  await expect(page.getByRole('button', { name: 'Loading...' })).toBeDisabled();
+  await expect.poll(() => searchRequests).toBe(2);
+  await expect(page.getByText(/50 results$/)).toBeVisible();
+  expect(await resultsContainer.getByRole('row').count()).toBeLessThan(51);
+  await resultsContainer.evaluate((element) => {
+    element.scrollTop = element.scrollHeight;
+  });
+  await expect(loadMore).toBeVisible();
+  await loadMore.click();
+  await expect(page.getByText(/52 results$/)).toBeVisible();
+  await expect(loadMore).toBeHidden();
+});
+
 test('searches a requested blueprint version and identifies outdated entities', async ({
   page,
 }) => {

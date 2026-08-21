@@ -14,6 +14,7 @@ import {
   Typography,
 } from '@mui/material';
 import { useState } from 'react';
+import { LoadMoreButton } from '../../../components/LoadMoreButton';
 import { getIncomingRelationships } from '../../entities/api';
 import { displayLabel } from '../../entities/entity-display';
 import { entityQueryKeys } from '../../entities/query-keys';
@@ -106,12 +107,10 @@ export const IncomingRelationshipListDisplay = ({
         </DialogContent>
         <DialogActions>
           {results.hasNextPage && (
-            <Button
-              disabled={results.isFetchingNextPage}
-              onClick={() => void results.fetchNextPage()}
-            >
-              {results.isFetchingNextPage ? 'Loading...' : 'Load more'}
-            </Button>
+            <LoadMoreButton
+              isLoading={results.isFetchingNextPage}
+              onLoadMore={() => void results.fetchNextPage()}
+            />
           )}
           <Button onClick={() => setOpen(false)}>Close</Button>
         </DialogActions>
