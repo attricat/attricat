@@ -21,8 +21,7 @@ export const formatAttributeValue = (attribute: Attribute, value: unknown) => {
     value !== null
   ) {
     const time = (value as { time?: unknown; time_zone?: unknown }).time;
-    const zone = (value as { time_zone?: unknown; time_zone?: unknown })
-      .time_zone;
+    const zone = (value as { time_zone?: unknown }).time_zone;
     return typeof time === 'string' && typeof zone === 'string'
       ? `${time} ${zone}`
       : 'Invalid time';

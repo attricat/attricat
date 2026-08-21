@@ -38,7 +38,7 @@ export const Explorer = ({ search }: { search: ExplorerSearch }) => {
   );
   const targetBlueprint = useQuery({
     queryKey: entityQueryKeys.blueprintByCode(
-      sourceRelationship?.target_blueprint_code,
+      sourceRelationship?.target_blueprint_code ?? undefined,
       undefined,
     ),
     queryFn: () =>
@@ -169,7 +169,7 @@ export const Explorer = ({ search }: { search: ExplorerSearch }) => {
           }}
         >
           <ExplorerFacetSidebar
-            blueprint={search.blueprint}
+            blueprint={search.blueprint ?? ''}
             contextCode={contextCode}
             contexts={contexts.data ?? []}
             hierarchyField={hierarchyField}

@@ -1,6 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
-  ApiRequestError,
   createEntity,
   createContext,
   getBlueprintByCode,
@@ -301,7 +300,7 @@ describe('entity API client', () => {
 
     await expect(
       createEntity({ blueprint: { code: 'product' }, values: [] }),
-    ).rejects.toMatchObject<ApiRequestError>({
+    ).rejects.toMatchObject({
       name: 'ApiRequestError',
       status: 422,
       code: 'entity_schema_mismatch',
