@@ -1,5 +1,6 @@
 setup:
     node scripts/setup-worktree.mjs
+    npm install --prefix apps/catalog-web
 
 dev: setup
     set -a; . ./.env; set +a; docker compose --env-file .env --project-name catalog-$POSTGRES_PORT -f apps/api/compose.yml up -d
