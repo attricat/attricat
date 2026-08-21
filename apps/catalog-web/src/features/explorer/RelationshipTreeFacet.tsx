@@ -14,7 +14,8 @@ import {
   TextField,
   Typography,
 } from '@mui/material';
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
+import { LoadMoreButton } from '../../components/LoadMoreButton';
 import {
   getRelationshipTreeFacetChildren,
   type AttributeContext,
@@ -43,7 +44,21 @@ type Props = {
   onSelectedIdsChange: (ids: string[]) => void;
 };
 
-export const RelationshipTreeFacet = ({
+export const RelationshipTreeFacet = (props: Props) => (
+  <RelationshipTreeFacetContent
+    key={[
+      props.blueprint,
+      props.version ?? '',
+      props.query ?? '',
+      props.sourceField,
+      props.hierarchyField ?? '',
+      props.contextCode ?? '',
+    ].join('|')}
+    {...props}
+  />
+);
+
+const RelationshipTreeFacetContent = ({
   blueprint,
   version,
   query,
@@ -61,19 +76,6 @@ export const RelationshipTreeFacet = ({
   const [cursors, setCursors] = useState<Map<string, (string | null)[]>>(
     new Map([['root', [null]]]),
   );
-  const facetKey = [
-    blueprint,
-    version ?? '',
-    query ?? '',
-    sourceField,
-    hierarchyField ?? '',
-    contextCode ?? '',
-  ].join('|');
-
-  useEffect(() => {
-    setExpanded(new Set());
-    setCursors(new Map([['root', [null]]]));
-  }, [facetKey]);
   const selected = new Set(selectedIds);
   const pages = [...cursors.entries()].flatMap(([parentKey, pageCursors]) =>
     pageCursors.map((cursor) => ({
@@ -130,6 +132,13 @@ export const RelationshipTreeFacet = ({
       next.set(key, [...(next.get(key) ?? []), cursor]);
       return next;
     });
+  };
+  const isLoadingMore = (parentId: string | undefined) => {
+    for (let index = pages.length - 1; index >= 0; index -= 1) {
+      if (pages[index].parentId === parentId)
+        return results[index]?.isFetching ?? false;
+    }
+    return false;
   };
   const toggleSelected = (id: string) => {
     const next = new Set(selected);
@@ -206,13 +215,10 @@ export const RelationshipTreeFacet = ({
             )}
             {nextCursorByParent.get(item.id) && (
               <ListItem disableGutters>
-                <Box
-                  component="button"
-                  onClick={() => loadMore(item.id)}
-                  type="button"
-                >
-                  Load more
-                </Box>
+                <LoadMoreButton
+                  isLoading={isLoadingMore(item.id)}
+                  onLoadMore={() => loadMore(item.id)}
+                />
               </ListItem>
             )}
           </List>
@@ -229,13 +235,10 @@ export const RelationshipTreeFacet = ({
         )}
         {nextCursorByParent.get('root') && (
           <ListItem disableGutters>
-            <Box
-              component="button"
-              onClick={() => loadMore(undefined)}
-              type="button"
-            >
-              Load more
-            </Box>
+            <LoadMoreButton
+              isLoading={isLoadingMore(undefined)}
+              onLoadMore={() => loadMore(undefined)}
+            />
           </ListItem>
         )}
       </List>

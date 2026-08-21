@@ -30,7 +30,7 @@ export const RelationshipField = ({
   const targetBlueprint = attribute.target_blueprint_code;
   const targets = useQuery({
     queryKey: entityQueryKeys.relationshipTargets(targetBlueprint),
-    queryFn: () => searchEntities(targetBlueprint!, undefined, ''),
+    queryFn: () => searchEntities(targetBlueprint!, undefined, '', null),
     enabled: Boolean(targetBlueprint),
   });
   if (!targetBlueprint) {

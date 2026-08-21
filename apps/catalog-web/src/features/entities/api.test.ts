@@ -105,7 +105,7 @@ describe('entity API client', () => {
       ],
       next_cursor: null,
     });
-    const result = await searchEntities('product', undefined, '');
+    const result = await searchEntities('product', undefined, '', null);
     expect(result.items[0]).toMatchObject({
       blueprint_version: 1,
       schema_outdated: true,
@@ -122,6 +122,27 @@ describe('entity API client', () => {
     });
   });
 
+  it('posts an opaque search cursor for subsequent pages', async () => {
+    respond({
+      blueprint: blueprintWithAttributes,
+      items: [],
+      next_cursor: null,
+    });
+
+    await searchEntities('product', undefined, '', 'opaque-next-cursor');
+
+    expect(fetchMock).toHaveBeenLastCalledWith('/api/v1/entities/search', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        blueprint: { code: 'product' },
+        query: '',
+        filters: [],
+        page: { size: 25, cursor: 'opaque-next-cursor' },
+      }),
+    });
+  });
+
   it('posts relationship-tree facet selections', async () => {
     respond({
       blueprint: blueprintWithAttributes,
@@ -129,7 +150,7 @@ describe('entity API client', () => {
       next_cursor: null,
     });
 
-    await searchEntities('product', undefined, '', {
+    await searchEntities('product', undefined, '', null, {
       source_relationship_field: 'categories',
       hierarchy_field: 'parent',
       context_id: entityId,

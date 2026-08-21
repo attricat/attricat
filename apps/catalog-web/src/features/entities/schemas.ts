@@ -367,7 +367,10 @@ export const searchEntitiesRequestSchema = z.object({
       selected_target_ids: z.array(uuidSchema),
     })
     .optional(),
-  page: z.object({ size: z.number().int().positive(), cursor: z.null() }),
+  page: z.object({
+    size: z.number().int().positive(),
+    cursor: z.string().nullable(),
+  }),
 });
 const getBlueprintRequestSchema = z.object({
   code: z.string().min(1),

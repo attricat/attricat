@@ -1,12 +1,10 @@
-import { keepPreviousData, useQuery } from '@tanstack/react-query';
-import { Link, useNavigate } from '@tanstack/react-router';
 import {
-  Alert,
-  Box,
-  Button,
-  Stack,
-  Typography,
-} from '@mui/material';
+  keepPreviousData,
+  useInfiniteQuery,
+  useQuery,
+} from '@tanstack/react-query';
+import { Link, useNavigate } from '@tanstack/react-router';
+import { Alert, Box, Button, Stack, Typography } from '@mui/material';
 import { PageContainer } from '../../components/PageContainer';
 import { PageHeader } from '../../components/PageHeader';
 import {
@@ -71,26 +69,32 @@ export const Explorer = ({ search }: { search: ExplorerSearch }) => {
           selected_target_ids: search.categories ?? [],
         }
       : undefined;
-  const results = useQuery({
+  const results = useInfiniteQuery({
     queryKey: entityQueryKeys.search(
       search.blueprint,
       search.version,
       search.query,
       relationshipTreeFacet,
     ),
-    queryFn: () =>
+    queryFn: ({ pageParam }) =>
       searchEntities(
         search.blueprint!,
         search.version,
         search.query ?? '',
+        pageParam,
         relationshipTreeFacet,
       ),
+    initialPageParam: null as string | null,
+    getNextPageParam: (page) => page.next_cursor,
     enabled: Boolean(search.blueprint),
     // Facet selections change this query's key. Preserve the current explorer
     // while the filtered result page is fetched instead of replacing it with a
     // full-page loading state.
     placeholderData: keepPreviousData,
   });
+  const resultPages = results.data?.pages ?? [];
+  const resultItems = resultPages.flatMap((page) => page.items);
+  const resultBlueprint = resultPages[0]?.blueprint;
   const blueprints = useQuery({
     queryKey: entityQueryKeys.blueprints(),
     queryFn: listEntityBlueprints,
@@ -178,7 +182,21 @@ export const Explorer = ({ search }: { search: ExplorerSearch }) => {
             sourceRelationship={sourceRelationship}
             version={search.version}
           />
-          <ExplorerResultsTable results={results.data} />
+          {resultBlueprint && (
+            <ExplorerResultsTable
+              blueprint={resultBlueprint}
+              key={JSON.stringify([
+                search.blueprint,
+                search.version,
+                search.query,
+                relationshipTreeFacet,
+              ])}
+              hasNextPage={results.hasNextPage}
+              isFetchingNextPage={results.isFetchingNextPage}
+              items={resultItems}
+              onLoadMore={() => void results.fetchNextPage()}
+            />
+          )}
         </Box>
       )}
     </PageContainer>
