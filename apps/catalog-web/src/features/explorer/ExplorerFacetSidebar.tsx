@@ -38,7 +38,17 @@ export const ExplorerFacetSidebar = ({
   version,
   onUpdate,
 }: Props) => (
-  <Paper component="aside" sx={{ alignSelf: 'start', p: 2 }}>
+  <Paper
+    component="aside"
+    sx={{
+      alignSelf: 'start',
+      maxHeight: { md: 'calc(100dvh - 104px)' },
+      overflowY: { md: 'auto' },
+      p: 2,
+      position: { md: 'sticky' },
+      top: { md: 88 },
+    }}
+  >
     <TextField
       fullWidth
       label="Relationship"

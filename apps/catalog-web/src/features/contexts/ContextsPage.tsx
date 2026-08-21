@@ -21,15 +21,14 @@ export const ContextsPage = () => {
   });
   return (
     <PageContainer maxWidth="md">
-      <PageHeader title="Contexts" />
-      <Button
-        component={Link}
-        sx={{ mt: 3 }}
-        to="/contexts/new"
-        variant="contained"
-      >
-        Create context
-      </Button>
+      <PageHeader
+        actions={
+          <Button component={Link} to="/contexts/new" variant="contained">
+            Create context
+          </Button>
+        }
+        title="Contexts"
+      />
       {contexts.isPending && (
         <Typography sx={{ mt: 3 }}>Loading contexts...</Typography>
       )}

@@ -4,7 +4,7 @@ import {
   useQuery,
 } from '@tanstack/react-query';
 import { Link, useNavigate } from '@tanstack/react-router';
-import { Alert, Box, Button, Stack, Typography } from '@mui/material';
+import { Alert, Box, Button, Typography } from '@mui/material';
 import { PageContainer } from '../../components/PageContainer';
 import { PageHeader } from '../../components/PageHeader';
 import {
@@ -114,14 +114,14 @@ export const Explorer = ({ search }: { search: ExplorerSearch }) => {
   return (
     <PageContainer>
       <PageHeader
+        actions={
+          <Button component={Link} to="/entities/new" variant="contained">
+            Create entity
+          </Button>
+        }
         description="Search and browse your catalog."
         title="Entity explorer"
       />
-      <Stack direction="row" spacing={2} sx={{ mt: 3 }}>
-        <Button component={Link} to="/entities/new" variant="contained">
-          Create entity
-        </Button>
-      </Stack>
       <ExplorerSearchForm
         blueprints={blueprints.data ?? []}
         onSubmit={(value) => {
@@ -137,6 +137,7 @@ export const Explorer = ({ search }: { search: ExplorerSearch }) => {
                     categories: undefined,
                   }),
               ...value,
+              version: undefined,
             },
           });
         }}

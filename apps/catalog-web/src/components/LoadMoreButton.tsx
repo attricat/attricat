@@ -12,7 +12,10 @@ export const LoadMoreButton = ({
   <Button
     aria-busy={isLoading || undefined}
     disabled={disabled || isLoading}
+    fullWidth
     onClick={onLoadMore}
+    size="medium"
+    variant="contained"
   >
     {isLoading ? 'Loading...' : 'Load more'}
   </Button>
