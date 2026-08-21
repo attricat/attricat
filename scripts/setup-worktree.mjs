@@ -1,11 +1,21 @@
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import net from "node:net";
 
+/**
+ * Provision this worktree's development environment.
+ *
+ * Each worktree receives stable, otherwise-unused PostgreSQL, API, and web
+ * ports in `.catalog-worktree`. The assignments are reused on later runs so
+ * `just dev` can be stopped and restarted without changing its URLs. The
+ * script creates `.env` from `.env.example` when necessary, while preserving
+ * existing non-port configuration in an existing `.env` file.
+ */
 const stateFile = new URL("../.catalog-worktree", import.meta.url);
 const envFile = new URL("../.env", import.meta.url);
 const exampleEnvFile = new URL("../.env.example", import.meta.url);
 const portNames = ["POSTGRES_PORT", "API_PORT", "WEB_PORT"];
 
+/** Parse simple KEY=VALUE entries from .env-style files. */
 const parseEnv = (contents) =>
   Object.fromEntries(
     contents
@@ -15,6 +25,7 @@ const parseEnv = (contents) =>
       .map((match) => [match[1], match[2]]),
   );
 
+/** Ask the OS for an available loopback TCP port, then release it for use. */
 const availablePort = () =>
   new Promise((resolve, reject) => {
     const server = net.createServer();
@@ -25,6 +36,7 @@ const availablePort = () =>
     });
   });
 
+/** Replace or append one unquoted .env entry without changing other lines. */
 const setEnvValue = (contents, name, value) => {
   const lines = contents.trimEnd().split("\n");
   const index = lines.findIndex((line) => line.startsWith(`${name}=`));
@@ -36,6 +48,7 @@ const setEnvValue = (contents, name, value) => {
   return `${lines.join("\n")}\n`;
 };
 
+// Keep generated port assignments out of version control but stable per worktree.
 let ports = existsSync(stateFile)
   ? parseEnv(readFileSync(stateFile, "utf8"))
   : {};
@@ -51,6 +64,7 @@ if (!portNames.every((name) => ports[name])) {
   );
 }
 
+// Only connection and listener settings are managed here; retain user overrides.
 let env = existsSync(envFile)
   ? readFileSync(envFile, "utf8")
   : readFileSync(exampleEnvFile, "utf8");

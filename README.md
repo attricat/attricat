@@ -10,7 +10,6 @@ Install a Docker-compatible container runtime, Rust, Node.js 18 or newer,
 `just`, `process-compose`, and `watchexec`. Then, from the repository root:
 
 ```sh
-npm install --prefix apps/catalog-web
 just dev
 ```
 

@@ -4,10 +4,10 @@
 
 1. Install a Docker-compatible runtime, Rust, Node.js 18 or newer, `just`,
    `process-compose`, and `watchexec`.
-2. From the repository root, run `npm install --prefix apps/catalog-web`.
-3. Run `just dev`. It creates `.env` from `.env.example`, assigns persistent
-   ports for this worktree, starts PostgreSQL, and watches the API and web app.
-4. Open the worktree-specific Vite URL printed by `just dev`; the selected
+2. Run `just dev`. Its setup step installs the frontend dependencies, creates
+   `.env` from `.env.example`, assigns persistent ports for this worktree,
+   starts PostgreSQL, and watches the API and web app.
+3. Open the worktree-specific Vite URL printed by `just dev`; the selected
    ports are also recorded in the ignored `.catalog-worktree` file.
 
 The API applies embedded SQLx migrations when it starts. To run them manually:
