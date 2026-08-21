@@ -9,6 +9,7 @@ file.
 | --- | --- | --- | --- |
 | `DATABASE_URL` | Required | API and SQLx | PostgreSQL connection string. |
 | `BIND_ADDR` | `127.0.0.1:3000` | API | Listener address. |
+| `RUST_LOG` | `info` | API | Structured tracing filter (for example, `api=debug`). |
 | `PREVIEW_MAX_RELATIONSHIP_DEPTH` | `3` | API | Maximum recursive relationship preview depth. |
 | `PREVIEW_MAX_RELATIONSHIP_ITEMS` | `10` | API | Maximum inline targets per relationship. |
 | `ENTITY_MAX_PAGE_SIZE` | `100` | API | Maximum page size for relationship browsing. |
