@@ -78,7 +78,7 @@ pub(super) async fn login(
 }
 
 pub(super) async fn current_session(
-    AuthenticatedPrincipal(user_id): AuthenticatedPrincipal,
+    AuthenticatedPrincipal(user_id, _): AuthenticatedPrincipal,
 ) -> Json<SessionResponse> {
     Json(SessionResponse { user_id })
 }
@@ -96,7 +96,7 @@ pub(super) async fn logout(
 
 pub(super) async fn renew(
     State(state): State<AppState>,
-    AuthenticatedPrincipal(user_id): AuthenticatedPrincipal,
+    AuthenticatedPrincipal(user_id, _): AuthenticatedPrincipal,
     AuthenticatedSession(previous): AuthenticatedSession,
 ) -> Result<Response, ApiError> {
     let (session, csrf, expires_at) = issue_session();

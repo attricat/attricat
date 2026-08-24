@@ -4,11 +4,15 @@ use axum::{
     middleware::Next,
     response::Response,
 };
+use sha2::Digest;
 use uuid::Uuid;
 
 use super::{AppState, error::ApiError};
 use crate::account::{SessionDigest, SessionSecret};
 
+const USER_HEADER: &str = "x-catalog-user-id";
+const WORKSPACE_HEADER: &str = "x-catalog-workspace-id";
+const AUTHORIZATION_HEADER: &str = "authorization";
 const SESSION_COOKIE: &str = "catalog_session";
 const CSRF_HEADER: &str = "x-catalog-csrf";
 
@@ -16,15 +20,15 @@ const CSRF_HEADER: &str = "x-catalog-csrf";
 /// evaluation, never constructed from an unvalidated handler argument.
 #[allow(dead_code)]
 #[derive(Clone, Copy, Debug)]
-pub(super) struct AuthenticatedPrincipal(pub Uuid);
+pub(super) struct AuthenticatedPrincipal(pub Uuid, pub Option<Uuid>);
 
-/// The deployment-selected workspace for the authenticated session.
+/// The deployment-selected workspace for the authenticated credential.
 #[allow(dead_code)]
 #[derive(Clone, Copy, Debug)]
 pub(super) struct ActiveWorkspace(pub Uuid);
 
-/// The digest is retained only in request extensions so logout and renewal can
-/// revoke it without carrying a raw browser credential through handlers.
+/// The session digest is retained only to revoke the current browser session;
+/// raw cookie credentials never reach a handler.
 #[derive(Clone)]
 pub(super) struct AuthenticatedSession(pub SessionDigest);
 
@@ -91,23 +95,33 @@ pub(super) async fn authorize(
         return Ok(next.run(request).await);
     }
 
-    let (principal, session_digest) = if state.allow_trusted_headers {
-        let principal = request
+    let bearer = request
+        .headers()
+        .get(AUTHORIZATION_HEADER)
+        .and_then(|value| value.to_str().ok())
+        .and_then(|value| value.strip_prefix("Bearer "));
+    let (principal, workspace, token_id, session_digest) = if let Some(secret) = bearer {
+        let digest = sha2::Sha256::digest(secret.as_bytes());
+        state
+            .repository
+            .authenticate_personal_api_token(&digest)
+            .await?
+            .map(|(token_id, user_id, workspace_id)| (user_id, workspace_id, Some(token_id), None))
+            .ok_or_else(ApiError::unauthenticated)?
+    } else if state.allow_trusted_headers {
+        let user_id = request
             .headers()
-            .get("x-catalog-user-id")
+            .get(USER_HEADER)
             .and_then(|value| value.to_str().ok())
-            .and_then(|value| value.parse::<Uuid>().ok())
+            .and_then(|value| value.parse().ok())
             .ok_or_else(ApiError::unauthenticated)?;
-        let workspace = request
+        let workspace_id = request
             .headers()
-            .get("x-catalog-workspace-id")
+            .get(WORKSPACE_HEADER)
             .and_then(|value| value.to_str().ok())
-            .and_then(|value| value.parse::<Uuid>().ok())
+            .and_then(|value| value.parse().ok())
             .ok_or_else(ApiError::unauthenticated)?;
-        if workspace != state.workspace_id {
-            return Err(ApiError::forbidden());
-        }
-        (principal, None)
+        (user_id, workspace_id, None, None)
     } else {
         let raw_session = cookie_value(
             request
@@ -139,9 +153,16 @@ pub(super) async fn authorize(
                 return Err(ApiError::csrf_failed());
             }
         }
-        (session.user_id, Some(session_digest))
+        (
+            session.user_id,
+            state.workspace_id,
+            None,
+            Some(session_digest),
+        )
     };
-    let workspace = state.workspace_id;
+    if workspace != state.workspace_id {
+        return Err(ApiError::forbidden());
+    }
     let matched = request
         .extensions()
         .get::<axum::extract::MatchedPath>()
@@ -169,13 +190,22 @@ pub(super) async fn authorize(
         {
             return Err(ApiError::forbidden());
         }
+        if let Some(token_id) = token_id {
+            if !state
+                .repository
+                .personal_api_token_permits(token_id, policy.permission)
+                .await?
+            {
+                return Err(ApiError::forbidden());
+            }
+        }
     } else if !path.starts_with("/auth/") {
         return Err(ApiError::forbidden());
     }
 
     request
         .extensions_mut()
-        .insert(AuthenticatedPrincipal(principal));
+        .insert(AuthenticatedPrincipal(principal, token_id));
     request.extensions_mut().insert(ActiveWorkspace(workspace));
     if let Some(session_digest) = session_digest {
         request
@@ -208,6 +238,12 @@ fn policy(method: &Method, path: &str) -> Option<Policy> {
     } else {
         "blueprints.write"
     };
+    if path == "/personal-access-tokens" || path.starts_with("/personal-access-tokens/") {
+        return Some(Policy {
+            permission: "tokens.manage",
+            target: TargetKind::None,
+        });
+    }
     if path == "/metrics" {
         return Some(Policy {
             permission: "data_health.read",

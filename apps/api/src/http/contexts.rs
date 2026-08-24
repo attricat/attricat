@@ -18,7 +18,7 @@ pub(super) async fn create_context(
 }
 pub(super) async fn list_contexts(
     State(state): State<AppState>,
-    AuthenticatedPrincipal(user_id): AuthenticatedPrincipal,
+    AuthenticatedPrincipal(user_id, _): AuthenticatedPrincipal,
     ActiveWorkspace(workspace_id): ActiveWorkspace,
 ) -> Result<Json<Vec<AttributeContext>>, ApiError> {
     Ok(Json(

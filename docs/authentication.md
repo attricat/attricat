@@ -5,6 +5,21 @@ Catalog keeps account identity separate from authentication providers. The `user
 adds local-password credentials, email-action persistence, and browser sessions.
 External identity adapters remain separate follow-up work.
 
+## External-provider identity adapter seam
+
+External providers (including future OIDC and SAML adapters) are isolated from
+Catalog accounts by `external_identities`. The stable provider key is the exact
+verified `(issuer, subject)` pair, which is globally unique and links to one
+ordinary internal `users.id`. Provider-specific identifiers and claims never
+appear on `users` or `workspace_memberships`.
+
+An adapter validates its protocol callback before resolving the verified pair
+with `find_external_identity_user`. It must not merge identities by email. A
+new provider identity may be linked only by an explicit authenticated
+account-linking action through `link_external_identity`. The resulting user
+uses the same sessions, invalidation, membership, and RBAC evaluation as a
+local account.
+
 ## Local credentials
 
 A user has at most one `local_password_credentials` row. It stores an Argon2id PHC
@@ -61,3 +76,18 @@ path-scoped to `/`. `SESSION_COOKIE_SECURE=false` is exclusively for local HTTP
 development and test servers. Every cookie-authenticated unsafe request must send
 `X-Catalog-Csrf` equal to the current CSRF cookie. Login attempts are durably limited
 to five failures per normalized email in fifteen minutes.
+
+## Personal API tokens
+
+`POST /personal-access-tokens` issues an opaque `cat_pat_...` bearer secret for
+an authenticated principal with `tokens.manage`. The secret is returned exactly
+once; storage contains only its SHA-256 digest. Requests authenticate it using
+`Authorization: Bearer <secret>`, and its workspace is selected by the token,
+not a caller-controlled header.
+
+Tokens have a label, non-empty explicit permission subset, optional expiry,
+revocation time, and last-used time. `GET /personal-access-tokens` deliberately
+returns metadata only and `DELETE /personal-access-tokens/{id}` revokes only the
+caller's token. Token permissions restrict the owner’s RBAC grants rather than
+replace them, so a token cannot exceed its owner’s grants or bypass scoped
+roles. The CLI reads the bearer secret from `CATALOG_TOKEN` (or `--token`).

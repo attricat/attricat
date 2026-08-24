@@ -24,6 +24,9 @@ const MAX_RESPONSE_BYTES: usize = 1024 * 1024;
 struct Cli {
     #[arg(long, env = "CATALOG_SERVER")]
     server: Option<Url>,
+    /// Personal API token. It is sent only as an HTTP Bearer credential.
+    #[arg(long, env = "CATALOG_TOKEN", hide_env_values = true)]
+    token: Option<String>,
     #[command(subcommand)]
     command: Command,
 }
@@ -350,9 +353,19 @@ async fn run(cli: Cli) -> Result<String, CliError> {
     let server = cli
         .server
         .unwrap_or_else(|| Url::parse("http://127.0.0.1:3000").expect("valid default URL"));
-    let client = Client::builder()
+    let mut client = Client::builder()
         .connect_timeout(CONNECT_TIMEOUT)
-        .timeout(REQUEST_TIMEOUT)
+        .timeout(REQUEST_TIMEOUT);
+    if let Some(token) = cli.token {
+        let mut headers = reqwest::header::HeaderMap::new();
+        let value =
+            reqwest::header::HeaderValue::from_str(&format!("Bearer {token}")).map_err(|_| {
+                CliError::Input("CATALOG_TOKEN contains invalid header characters".to_owned())
+            })?;
+        headers.insert(reqwest::header::AUTHORIZATION, value);
+        client = client.default_headers(headers);
+    }
+    let client = client
         .build()
         .map_err(|error| CliError::Transport(error.to_string()))?;
 
@@ -1357,6 +1370,7 @@ value = "Blue shirt"
 
         let body = run(Cli {
             server: Some(Url::parse(&format!("http://{address}")).unwrap()),
+            token: None,
             command: Command::Health,
         })
         .await

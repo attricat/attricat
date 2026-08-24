@@ -28,8 +28,8 @@ settings.
   views, and validation.
 - [Database model](database.md): persisted model, value history, projections,
   contexts, and publication behavior.
-- [Local account lifecycle](authentication.md): password credential and
-  verified-email/reset security boundary.
+- [Authentication and identity adapters](authentication.md): local password
+  lifecycle plus the provider-neutral external identity seam.
 - [JSON Schema validation](json-schema-validation.md): attribute and entity
   validation contracts.
 

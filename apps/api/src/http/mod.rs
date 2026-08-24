@@ -1,3 +1,4 @@
+mod audit;
 mod auth;
 mod blueprints;
 mod contexts;
@@ -7,6 +8,7 @@ mod entity_reads;
 mod error;
 mod extractors;
 mod sessions;
+mod tokens;
 
 use std::{collections::HashMap, sync::Arc, time::Instant};
 
@@ -42,9 +44,7 @@ pub struct AppState {
     pub max_relationship_facet_nodes: u32,
     pub data_health_cache_ttl_seconds: u64,
     pub data_health_cache: DataHealthCache,
-    /// Secure is required outside local HTTP development and test servers.
     pub session_cookie_secure: bool,
-    /// Explicit test-only compatibility boundary for legacy integration tests.
     pub allow_trusted_headers: bool,
 }
 
@@ -133,6 +133,14 @@ pub fn router(state: AppState) -> Router {
         .route(
             "/data-health/refresh",
             post(data_health::refresh_data_health),
+        )
+        .route(
+            "/personal-access-tokens",
+            get(tokens::list).post(tokens::create),
+        )
+        .route(
+            "/personal-access-tokens/{token_id}",
+            axum::routing::delete(tokens::revoke),
         )
         .route(
             "/blueprints",
@@ -235,6 +243,7 @@ pub fn router(state: AppState) -> Router {
             "/entities/{entity_id}/values/current",
             get(entities::get_current_values),
         )
+        .layer(middleware::from_fn_with_state(state.clone(), audit::record))
         .layer(middleware::from_fn_with_state(
             state.clone(),
             auth::authorize,
