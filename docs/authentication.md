@@ -80,3 +80,18 @@ There is no email provider or HTTP endpoint in this release. A delivery adapter 
 send the opaque secret without recording it in logs, telemetry, database rows, or API
 responses. Cookie sessions and their invalidation contract are intentionally deferred
 to the browser-authentication work.
+
+## Personal API tokens
+
+`POST /personal-access-tokens` issues an opaque `cat_pat_...` bearer secret for
+an authenticated principal with `tokens.manage`. The secret is returned exactly
+once; storage contains only its SHA-256 digest. Requests authenticate it using
+`Authorization: Bearer <secret>`, and its workspace is selected by the token,
+not a caller-controlled header.
+
+Tokens have a label, non-empty explicit permission subset, optional expiry,
+revocation time, and last-used time. `GET /personal-access-tokens` deliberately
+returns metadata only and `DELETE /personal-access-tokens/{id}` revokes only the
+caller's token. Token permissions restrict the owner’s RBAC grants rather than
+replace them, so a token cannot exceed its owner’s grants or bypass scoped
+roles. The CLI reads the bearer secret from `CATALOG_TOKEN` (or `--token`).

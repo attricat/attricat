@@ -7,6 +7,7 @@ mod entities;
 mod entity_reads;
 mod error;
 mod extractors;
+mod tokens;
 
 use std::{collections::HashMap, sync::Arc, time::Instant};
 
@@ -125,6 +126,14 @@ pub fn router(state: AppState) -> Router {
         .route(
             "/data-health/refresh",
             post(data_health::refresh_data_health),
+        )
+        .route(
+            "/personal-access-tokens",
+            get(tokens::list).post(tokens::create),
+        )
+        .route(
+            "/personal-access-tokens/{token_id}",
+            axum::routing::delete(tokens::revoke),
         )
         .route(
             "/blueprints",

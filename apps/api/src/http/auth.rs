@@ -4,18 +4,20 @@ use axum::{
     middleware::Next,
     response::Response,
 };
+use sha2::Digest;
 use uuid::Uuid;
 
 use super::{AppState, error::ApiError};
 
 const USER_HEADER: &str = "x-catalog-user-id";
 const WORKSPACE_HEADER: &str = "x-catalog-workspace-id";
+const AUTHORIZATION_HEADER: &str = "authorization";
 
 /// Verified request identity. It is inserted only after membership and policy
 /// evaluation, never constructed from an unvalidated handler argument.
 #[allow(dead_code)]
 #[derive(Clone, Copy, Debug)]
-pub(super) struct AuthenticatedPrincipal(pub Uuid);
+pub(super) struct AuthenticatedPrincipal(pub Uuid, pub Option<Uuid>);
 
 /// The workspace selected by the authenticated request headers.
 #[allow(dead_code)]
@@ -73,21 +75,36 @@ pub(super) async fn authorize(
         return Ok(next.run(request).await);
     }
 
-    let principal = request
+    let bearer = request
         .headers()
-        .get(USER_HEADER)
+        .get(AUTHORIZATION_HEADER)
         .and_then(|value| value.to_str().ok())
-        .and_then(|value| value.parse().ok())
-        .ok_or_else(ApiError::unauthenticated)?;
-    let workspace = request
-        .headers()
-        .get(WORKSPACE_HEADER)
-        .and_then(|value| value.to_str().ok())
-        .and_then(|value| value.parse().ok())
-        .ok_or_else(ApiError::unauthenticated)?;
+        .and_then(|value| value.strip_prefix("Bearer "));
+    let (principal, workspace, token_id) = if let Some(secret) = bearer {
+        let digest = sha2::Sha256::digest(secret.as_bytes());
+        state
+            .repository
+            .authenticate_personal_api_token(&digest)
+            .await?
+            .map(|(token_id, user_id, workspace_id)| (user_id, workspace_id, Some(token_id)))
+            .ok_or_else(ApiError::unauthenticated)?
+    } else {
+        let user_id = request
+            .headers()
+            .get(USER_HEADER)
+            .and_then(|value| value.to_str().ok())
+            .and_then(|value| value.parse().ok())
+            .ok_or_else(ApiError::unauthenticated)?;
+        let workspace_id = request
+            .headers()
+            .get(WORKSPACE_HEADER)
+            .and_then(|value| value.to_str().ok())
+            .and_then(|value| value.parse().ok())
+            .ok_or_else(ApiError::unauthenticated)?;
+        (user_id, workspace_id, None)
+    };
     // Catalog repositories use the deployment-configured RLS workspace. Do
-    // not accept a header that would authorize one workspace then read another
-    // connection's configured tenant.
+    // not accept a credential that would authorize one workspace then read another.
     if workspace != state.workspace_id {
         return Err(ApiError::forbidden());
     }
@@ -119,10 +136,19 @@ pub(super) async fn authorize(
     {
         return Err(ApiError::forbidden());
     }
+    if let Some(token_id) = token_id {
+        if !state
+            .repository
+            .personal_api_token_permits(token_id, policy.permission)
+            .await?
+        {
+            return Err(ApiError::forbidden());
+        }
+    }
 
     request
         .extensions_mut()
-        .insert(AuthenticatedPrincipal(principal));
+        .insert(AuthenticatedPrincipal(principal, token_id));
     request.extensions_mut().insert(ActiveWorkspace(workspace));
     Ok(next.run(request).await)
 }
@@ -143,6 +169,12 @@ fn policy(method: &Method, path: &str) -> Option<Policy> {
     } else {
         "blueprints.write"
     };
+    if path == "/personal-access-tokens" || path.starts_with("/personal-access-tokens/") {
+        return Some(Policy {
+            permission: "tokens.manage",
+            target: TargetKind::None,
+        });
+    }
     if path == "/metrics" {
         return Some(Policy {
             permission: "data_health.read",
