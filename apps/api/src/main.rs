@@ -2,6 +2,7 @@ use std::net::SocketAddr;
 
 use api::{
     MIGRATOR,
+    account::{Password, hash_password},
     http::{AppState, router},
     repository::CatalogRepository,
     telemetry::{init_metrics, init_tracing},
@@ -48,6 +49,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         .ok()
         .map(|value| value.parse())
         .transpose()?;
+    let bootstrap_owner_password = std::env::var("CATALOG_BOOTSTRAP_OWNER_PASSWORD").ok();
+    let e2e_fixture = std::env::var("CATALOG_E2E_FIXTURE_EMAIL")
+        .ok()
+        .zip(std::env::var("CATALOG_E2E_FIXTURE_PASSWORD").ok());
     if bootstrap_owner_email.is_empty() || !bootstrap_owner_email.contains('@') {
         return Err("CATALOG_BOOTSTRAP_OWNER_EMAIL must be a valid email address".into());
     }
@@ -85,6 +90,25 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         .bind(&bootstrap_owner_email)
         .execute(&maintenance_pool)
         .await?;
+    if let Some(password) = bootstrap_owner_password {
+        create_bootstrap_password(&maintenance_pool, &bootstrap_owner_email, password).await?;
+    }
+    // The browser E2E harness needs an independent principal for server-side
+    // fixture setup, because login rotation deliberately invalidates a user's
+    // prior browser session. This is unavailable unless both test-only values
+    // are explicitly configured.
+    if let Some((email, password)) = e2e_fixture {
+        let email = email.trim().to_lowercase();
+        sqlx::query("SELECT bootstrap_workspace_owner($1, $2, $3, $4, $5)")
+            .bind(workspace_id)
+            .bind(Uuid::new_v4())
+            .bind(Uuid::new_v4())
+            .bind(Uuid::new_v4())
+            .bind(&email)
+            .execute(&maintenance_pool)
+            .await?;
+        create_bootstrap_password(&maintenance_pool, &email, password).await?;
+    }
     let history_retention_days = std::env::var("ATTRIBUTE_VALUE_HISTORY_RETENTION_DAYS")
         .unwrap_or_else(|_| "90".to_owned())
         .parse()?;
@@ -129,9 +153,29 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
                 .unwrap_or_else(|_| "300".to_owned())
                 .parse()?,
             data_health_cache: Default::default(),
+            session_cookie_secure: std::env::var("SESSION_COOKIE_SECURE")
+                .map(|value| value != "false")
+                .unwrap_or(true),
+            allow_trusted_headers: false,
         }),
     )
     .await?;
 
+    Ok(())
+}
+
+async fn create_bootstrap_password(
+    pool: &sqlx::PgPool,
+    email: &str,
+    password: String,
+) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    let password_hash = hash_password(&Password::new(password))?;
+    sqlx::query(
+        "INSERT INTO local_password_credentials (user_id, password_hash) SELECT id, $2 FROM users WHERE email = $1 ON CONFLICT (user_id) DO NOTHING",
+    )
+    .bind(email)
+    .bind(password_hash.as_phc())
+    .execute(pool)
+    .await?;
     Ok(())
 }

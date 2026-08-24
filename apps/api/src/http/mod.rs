@@ -6,6 +6,7 @@ mod entities;
 mod entity_reads;
 mod error;
 mod extractors;
+mod sessions;
 
 use std::{collections::HashMap, sync::Arc, time::Instant};
 
@@ -41,6 +42,10 @@ pub struct AppState {
     pub max_relationship_facet_nodes: u32,
     pub data_health_cache_ttl_seconds: u64,
     pub data_health_cache: DataHealthCache,
+    /// Secure is required outside local HTTP development and test servers.
+    pub session_cookie_secure: bool,
+    /// Explicit test-only compatibility boundary for legacy integration tests.
+    pub allow_trusted_headers: bool,
 }
 
 pub type DataHealthCache = Arc<Mutex<HashMap<String, (Instant, Value)>>>;
@@ -93,6 +98,10 @@ pub fn router(state: AppState) -> Router {
     Router::new()
         .route("/metrics", get(metrics))
         .route("/health", get(data_health::health))
+        .route("/auth/login", post(sessions::login))
+        .route("/auth/session", get(sessions::current_session))
+        .route("/auth/logout", post(sessions::logout))
+        .route("/auth/renew", post(sessions::renew))
         .route(
             "/data-health/summary",
             get(data_health::data_health_summary),

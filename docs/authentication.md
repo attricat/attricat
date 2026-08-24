@@ -1,10 +1,9 @@
-# Local Account Lifecycle
+# Browser Authentication
 
 Catalog keeps account identity separate from authentication providers. The `users` and
 `workspace_memberships` tables contain no provider-specific identifier. This release
-adds the local-password and email-action persistence boundary; browser sessions,
-cookie transport, login/logout endpoints, and external identity adapters remain
-separate follow-up work.
+adds local-password credentials, email-action persistence, and browser sessions.
+External identity adapters remain separate follow-up work.
 
 ## Local credentials
 
@@ -44,7 +43,21 @@ look up a password credential, issue/revoke lifecycle actions, and consume valid
 verification or password actions. Adapters must pass only the password hash and token
 digest to those functions.
 
-There is no email provider or HTTP endpoint in this release. A delivery adapter must
-send the opaque secret without recording it in logs, telemetry, database rows, or API
-responses. Cookie sessions and their invalidation contract are intentionally deferred
-to the browser-authentication work.
+There is no email provider. A delivery adapter must send the opaque secret without
+recording it in logs, telemetry, database rows, or API responses.
+
+## Browser sessions
+
+`POST /auth/login` verifies a local password and sets an opaque `catalog_session`
+HttpOnly cookie plus a separate `catalog_csrf` synchronizer-token cookie. The API
+stores SHA-256 digests only. `POST /auth/renew` atomically revokes the old identifier
+and replaces both values; login also revokes older workspace sessions. `POST
+/auth/logout` revokes the current session and clears both cookies. Sessions expire
+after eight hours and are revoked on account/password changes, membership changes,
+and role-grant changes.
+
+Production cookies are `Secure`, `HttpOnly` (session only), `SameSite=Lax`, and
+path-scoped to `/`. `SESSION_COOKIE_SECURE=false` is exclusively for local HTTP
+development and test servers. Every cookie-authenticated unsafe request must send
+`X-Catalog-Csrf` equal to the current CSRF cookie. Login attempts are durably limited
+to five failures per normalized email in fifteen minutes.

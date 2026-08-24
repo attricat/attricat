@@ -12,7 +12,9 @@ file.
 | `CATALOG_WORKSPACE_ID` | Bootstrap `default` workspace UUID | API | Trusted server-selected catalog workspace and RLS boundary. |
 | `CATALOG_BOOTSTRAP_WORKSPACE_NAME` | `Default workspace` | API | Display name recorded while initializing the configured workspace. |
 | `CATALOG_BOOTSTRAP_OWNER_EMAIL` | `owner@example.test` | API | Initial owner email. Startup trims and lowercases it before idempotently creating the bootstrap user, membership, and owner grant. Set a real deployment email; it is never an API input. |
-| `CATALOG_BOOTSTRAP_OWNER_ID` | Random UUID | API | Optional stable UUID for the bootstrap owner. Useful only for trusted local development and E2E proxy setup; production identity is injected by the trusted upstream. |
+| `CATALOG_BOOTSTRAP_OWNER_ID` | Random UUID | API | Optional stable UUID for the bootstrap owner. |
+| `CATALOG_BOOTSTRAP_OWNER_PASSWORD` | Unset | API | Optional one-time local password for a newly bootstrapped owner. It is hashed before persistence and never updates an existing credential. |
+| `SESSION_COOKIE_SECURE` | `true` | API | Adds `Secure` to browser session and CSRF cookies. Set `false` only for local HTTP development or test servers. |
 | `RUST_LOG` | `info` | API | Structured tracing filter (for example, `api=debug`). |
 | `PREVIEW_MAX_RELATIONSHIP_DEPTH` | `3` | API | Maximum recursive relationship preview depth. |
 | `PREVIEW_MAX_RELATIONSHIP_ITEMS` | `10` | API | Maximum inline targets per relationship. |
@@ -27,17 +29,15 @@ file.
 
 ## Request authorization
 
-All catalog API routes except `/health` require trusted upstream-injected
-`X-Catalog-User-Id` and `X-Catalog-Workspace-Id` UUID headers. The API verifies
-that the user has an active membership and a role grant with the route's
-required permission; malformed or absent identity is `401`, while a valid
-identity without a matching grant is `403`.
+All catalog API routes except `/health` and `POST /auth/login` require an
+active browser session cookie. The API verifies its active membership and role
+grant for each request; absent or invalid sessions are `401`, while a valid
+identity without a matching grant is `403`. Unsafe requests must additionally
+provide the `X-Catalog-Csrf` synchronizer token.
 
-The request workspace header must equal `CATALOG_WORKSPACE_ID`. This release
-keeps the existing connection-level RLS workspace boundary, so deployments run
-one API instance per workspace rather than routing a shared pool across header
-selected workspaces. Rejecting a mismatched header prevents authorization in
-one workspace from ever reading the configured workspace's rows.
+Browser sessions are scoped to `CATALOG_WORKSPACE_ID`. Deployments still run one
+API instance per workspace rather than routing a shared pool across
+client-selected workspaces.
 
 `CATALOG_SERVER` overrides the CLI's API URL. The CLI otherwise targets
 `http://127.0.0.1:3000`.

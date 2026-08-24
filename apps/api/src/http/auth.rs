@@ -7,9 +7,10 @@ use axum::{
 use uuid::Uuid;
 
 use super::{AppState, error::ApiError};
+use crate::account::{SessionDigest, SessionSecret};
 
-const USER_HEADER: &str = "x-catalog-user-id";
-const WORKSPACE_HEADER: &str = "x-catalog-workspace-id";
+const SESSION_COOKIE: &str = "catalog_session";
+const CSRF_HEADER: &str = "x-catalog-csrf";
 
 /// Verified request identity. It is inserted only after membership and policy
 /// evaluation, never constructed from an unvalidated handler argument.
@@ -17,10 +18,27 @@ const WORKSPACE_HEADER: &str = "x-catalog-workspace-id";
 #[derive(Clone, Copy, Debug)]
 pub(super) struct AuthenticatedPrincipal(pub Uuid);
 
-/// The workspace selected by the authenticated request headers.
+/// The deployment-selected workspace for the authenticated session.
 #[allow(dead_code)]
 #[derive(Clone, Copy, Debug)]
 pub(super) struct ActiveWorkspace(pub Uuid);
+
+/// The digest is retained only in request extensions so logout and renewal can
+/// revoke it without carrying a raw browser credential through handlers.
+#[derive(Clone)]
+pub(super) struct AuthenticatedSession(pub SessionDigest);
+
+impl FromRequestParts<AppState> for AuthenticatedSession {
+    type Rejection = ApiError;
+
+    async fn from_request_parts(parts: &mut Parts, _: &AppState) -> Result<Self, Self::Rejection> {
+        parts
+            .extensions
+            .get::<Self>()
+            .cloned()
+            .ok_or_else(ApiError::unauthenticated)
+    }
+}
 
 impl FromRequestParts<AppState> for AuthenticatedPrincipal {
     type Rejection = ApiError;
@@ -69,54 +87,89 @@ pub(super) async fn authorize(
     next: Next,
 ) -> Result<Response, ApiError> {
     let path = request.uri().path();
-    if path == "/health" {
+    if path == "/health" || path == "/auth/login" {
         return Ok(next.run(request).await);
     }
 
-    let principal = request
-        .headers()
-        .get(USER_HEADER)
-        .and_then(|value| value.to_str().ok())
-        .and_then(|value| value.parse().ok())
+    let (principal, session_digest) = if state.allow_trusted_headers {
+        let principal = request
+            .headers()
+            .get("x-catalog-user-id")
+            .and_then(|value| value.to_str().ok())
+            .and_then(|value| value.parse::<Uuid>().ok())
+            .ok_or_else(ApiError::unauthenticated)?;
+        let workspace = request
+            .headers()
+            .get("x-catalog-workspace-id")
+            .and_then(|value| value.to_str().ok())
+            .and_then(|value| value.parse::<Uuid>().ok())
+            .ok_or_else(ApiError::unauthenticated)?;
+        if workspace != state.workspace_id {
+            return Err(ApiError::forbidden());
+        }
+        (principal, None)
+    } else {
+        let raw_session = cookie_value(
+            request
+                .headers()
+                .get("cookie")
+                .and_then(|value| value.to_str().ok()),
+            SESSION_COOKIE,
+        )
         .ok_or_else(ApiError::unauthenticated)?;
-    let workspace = request
-        .headers()
-        .get(WORKSPACE_HEADER)
-        .and_then(|value| value.to_str().ok())
-        .and_then(|value| value.parse().ok())
-        .ok_or_else(ApiError::unauthenticated)?;
-    // Catalog repositories use the deployment-configured RLS workspace. Do
-    // not accept a header that would authorize one workspace then read another
-    // connection's configured tenant.
-    if workspace != state.workspace_id {
-        return Err(ApiError::forbidden());
-    }
+        let session_secret = SessionSecret::from_delivery_value(raw_session)
+            .map_err(|_| ApiError::unauthenticated())?;
+        let session_digest = session_secret.digest();
+        let session = state
+            .repository
+            .validate_browser_session(&session_digest, state.workspace_id)
+            .await?
+            .ok_or_else(ApiError::unauthenticated)?;
+        if !matches!(
+            *request.method(),
+            Method::GET | Method::HEAD | Method::OPTIONS
+        ) {
+            let csrf = request
+                .headers()
+                .get(CSRF_HEADER)
+                .and_then(|value| value.to_str().ok())
+                .and_then(|value| SessionSecret::from_delivery_value(value.to_owned()).ok())
+                .ok_or_else(ApiError::csrf_failed)?;
+            if !session.csrf_digest.matches(&csrf) {
+                return Err(ApiError::csrf_failed());
+            }
+        }
+        (session.user_id, Some(session_digest))
+    };
+    let workspace = state.workspace_id;
     let matched = request
         .extensions()
         .get::<axum::extract::MatchedPath>()
         .map(|matched| matched.as_str())
         .unwrap_or(path);
-    let policy = policy(request.method(), matched).ok_or_else(ApiError::forbidden)?;
-    let (target_id, target_code) = target(path, policy.target);
-    if !state
-        .repository
-        .is_active_principal(principal, workspace)
-        .await?
-    {
-        return Err(ApiError::unauthenticated());
-    }
-
-    if !state
-        .repository
-        .is_authorized(
-            principal,
-            workspace,
-            policy.permission,
-            target_id,
-            target_code.as_deref(),
-        )
-        .await?
-    {
+    if let Some(policy) = policy(request.method(), matched) {
+        let (target_id, target_code) = target(path, policy.target);
+        if !state
+            .repository
+            .is_active_principal(principal, workspace)
+            .await?
+        {
+            return Err(ApiError::unauthenticated());
+        }
+        if !state
+            .repository
+            .is_authorized(
+                principal,
+                workspace,
+                policy.permission,
+                target_id,
+                target_code.as_deref(),
+            )
+            .await?
+        {
+            return Err(ApiError::forbidden());
+        }
+    } else if !path.starts_with("/auth/") {
         return Err(ApiError::forbidden());
     }
 
@@ -124,7 +177,19 @@ pub(super) async fn authorize(
         .extensions_mut()
         .insert(AuthenticatedPrincipal(principal));
     request.extensions_mut().insert(ActiveWorkspace(workspace));
+    if let Some(session_digest) = session_digest {
+        request
+            .extensions_mut()
+            .insert(AuthenticatedSession(session_digest));
+    }
     Ok(next.run(request).await)
+}
+
+fn cookie_value(header: Option<&str>, name: &str) -> Option<String> {
+    header?
+        .split(';')
+        .filter_map(|part| part.trim().split_once('='))
+        .find_map(|(key, value)| (key == name).then(|| value.to_owned()))
 }
 
 fn policy(method: &Method, path: &str) -> Option<Policy> {

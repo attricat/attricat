@@ -29,6 +29,7 @@ mod entity_migration;
 mod entity_projection;
 mod entity_search;
 mod health;
+mod sessions;
 mod values;
 
 pub(crate) use entity_search::decode_search_cursor;

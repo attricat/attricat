@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { apiFetch } from '../auth/request';
 import {
   attributeContextSchema,
   blueprintSchema,
@@ -64,7 +65,7 @@ const request = async <T>(
   schema: z.ZodType<T>,
   init?: RequestInit,
 ): Promise<T> => {
-  const response = await fetch(path, init);
+  const response = await apiFetch(path, init);
   if (!response.ok) {
     const body = await response.json().catch(() => undefined);
     const error = apiErrorSchema.safeParse(body);
@@ -165,9 +166,12 @@ export const updateContext = (
     },
   );
 export const deleteContext = async (id: string) => {
-  const response = await fetch(`/api/contexts/id/${encodeURIComponent(id)}`, {
-    method: 'DELETE',
-  });
+  const response = await apiFetch(
+    `/api/contexts/id/${encodeURIComponent(id)}`,
+    {
+      method: 'DELETE',
+    },
+  );
   if (!response.ok) throw new Error(`Request failed (${response.status})`);
 };
 export const getResolvedEntityPreview = (id: string, contextId: string) =>

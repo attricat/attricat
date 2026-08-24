@@ -1,10 +1,15 @@
 import { PostgreSqlContainer } from '@testcontainers/postgresql';
+import { chromium } from '@playwright/test';
 import { execFileSync, spawn, type ChildProcess } from 'node:child_process';
 import { e2eApiPort, e2eApiUrl, e2eWebPort, e2eWebUrl } from './ports.ts';
 
 const workspaceRoot = new URL('../../..', import.meta.url).pathname;
-const bootstrapWorkspaceId = '00000000-0000-4000-8000-000000000002';
 const bootstrapOwnerId = '00000000-0000-4000-8000-000000000201';
+const bootstrapOwnerEmail = 'owner@example.test';
+const bootstrapOwnerPassword = 'e2e-only-owner-password';
+const fixtureEmail = 'fixture@example.test';
+const fixturePassword = 'e2e-only-fixture-password';
+const storageStatePath = new URL('.auth.json', import.meta.url).pathname;
 
 const waitFor = async (url: string) => {
   const deadline = Date.now() + 120_000;
@@ -45,6 +50,11 @@ export default async () => {
     BIND_ADDR: `127.0.0.1:${e2eApiPort}`,
     DATABASE_URL: database.getConnectionUri(),
     CATALOG_BOOTSTRAP_OWNER_ID: bootstrapOwnerId,
+    CATALOG_BOOTSTRAP_OWNER_EMAIL: bootstrapOwnerEmail,
+    CATALOG_BOOTSTRAP_OWNER_PASSWORD: bootstrapOwnerPassword,
+    SESSION_COOKIE_SECURE: 'false',
+    CATALOG_E2E_FIXTURE_EMAIL: fixtureEmail,
+    CATALOG_E2E_FIXTURE_PASSWORD: fixturePassword,
   });
 
   try {
@@ -65,11 +75,19 @@ export default async () => {
       {
         ...process.env,
         CATALOG_API_URL: e2eApiUrl,
-        CATALOG_TRUSTED_USER_ID: bootstrapOwnerId,
-        CATALOG_TRUSTED_WORKSPACE_ID: bootstrapWorkspaceId,
       },
     );
     await waitFor(e2eWebUrl);
+    const browser = await chromium.launch();
+    const context = await browser.newContext();
+    const page = await context.newPage();
+    await page.goto(`${e2eWebUrl}/login`);
+    await page.getByLabel('Email').fill(bootstrapOwnerEmail);
+    await page.getByLabel('Password').fill(bootstrapOwnerPassword);
+    await page.getByRole('button', { name: 'Sign in' }).click();
+    await page.waitForURL(`${e2eWebUrl}/`);
+    await context.storageState({ path: storageStatePath });
+    await browser.close();
 
     return async () => {
       stop(web);

@@ -11,6 +11,7 @@
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as DataHealthRouteImport } from './routes/data-health'
+import { Route as LoginRouteImport } from './routes/login'
 import { Route as BlueprintsIndexRouteImport } from './routes/blueprints/index'
 import { Route as BlueprintsBlueprintIdRouteImport } from './routes/blueprints/$blueprintId'
 import { Route as ContextsIndexRouteImport } from './routes/contexts/index'
@@ -29,6 +30,11 @@ const IndexRoute = IndexRouteImport.update({
 const DataHealthRoute = DataHealthRouteImport.update({
   id: '/data-health',
   path: '/data-health',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const LoginRoute = LoginRouteImport.update({
+  id: '/login',
+  path: '/login',
   getParentRoute: () => rootRouteImport,
 } as any)
 const BlueprintsIndexRoute = BlueprintsIndexRouteImport.update({
@@ -80,6 +86,7 @@ const EntitiesEntityIdMigrateRoute = EntitiesEntityIdMigrateRouteImport.update({
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/data-health': typeof DataHealthRoute
+  '/login': typeof LoginRoute
   '/blueprints/$blueprintId': typeof BlueprintsBlueprintIdRoute
   '/contexts/new': typeof ContextsNewRoute
   '/entities/$entityId': typeof EntitiesEntityIdRouteWithChildren
@@ -93,6 +100,7 @@ export interface FileRoutesByFullPath {
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/data-health': typeof DataHealthRoute
+  '/login': typeof LoginRoute
   '/blueprints/$blueprintId': typeof BlueprintsBlueprintIdRoute
   '/contexts/new': typeof ContextsNewRoute
   '/entities/new': typeof EntitiesNewRoute
@@ -106,6 +114,7 @@ export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
   '/data-health': typeof DataHealthRoute
+  '/login': typeof LoginRoute
   '/blueprints/$blueprintId': typeof BlueprintsBlueprintIdRoute
   '/contexts/new': typeof ContextsNewRoute
   '/entities/$entityId': typeof EntitiesEntityIdRouteWithChildren
@@ -121,6 +130,7 @@ export interface FileRouteTypes {
   fullPaths:
     | '/'
     | '/data-health'
+    | '/login'
     | '/blueprints/$blueprintId'
     | '/contexts/new'
     | '/entities/$entityId'
@@ -134,6 +144,7 @@ export interface FileRouteTypes {
   to:
     | '/'
     | '/data-health'
+    | '/login'
     | '/blueprints/$blueprintId'
     | '/contexts/new'
     | '/entities/new'
@@ -146,6 +157,7 @@ export interface FileRouteTypes {
     | '__root__'
     | '/'
     | '/data-health'
+    | '/login'
     | '/blueprints/$blueprintId'
     | '/contexts/new'
     | '/entities/$entityId'
@@ -160,6 +172,7 @@ export interface FileRouteTypes {
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   DataHealthRoute: typeof DataHealthRoute
+  LoginRoute: typeof LoginRoute
   BlueprintsBlueprintIdRoute: typeof BlueprintsBlueprintIdRoute
   ContextsNewRoute: typeof ContextsNewRoute
   EntitiesEntityIdRoute: typeof EntitiesEntityIdRouteWithChildren
@@ -182,6 +195,13 @@ declare module '@tanstack/react-router' {
       path: '/data-health'
       fullPath: '/data-health'
       preLoaderRoute: typeof DataHealthRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/login': {
+      id: '/login'
+      path: '/login'
+      fullPath: '/login'
+      preLoaderRoute: typeof LoginRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/blueprints/': {
@@ -268,6 +288,7 @@ const EntitiesEntityIdRouteWithChildren =
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   DataHealthRoute: DataHealthRoute,
+  LoginRoute: LoginRoute,
   BlueprintsBlueprintIdRoute: BlueprintsBlueprintIdRoute,
   ContextsNewRoute: ContextsNewRoute,
   EntitiesEntityIdRoute: EntitiesEntityIdRouteWithChildren,
