@@ -29,9 +29,11 @@ mod entity_migration;
 mod entity_projection;
 mod entity_search;
 mod health;
+mod tokens;
 mod values;
 
 pub(crate) use entity_search::decode_search_cursor;
+pub(crate) use tokens::PersonalApiToken;
 
 #[derive(Clone)]
 /// The stable catalog persistence facade. Feature modules add inherent methods
