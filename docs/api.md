@@ -25,6 +25,11 @@ Catalog data remains scoped to the trusted server-selected
 a deployment therefore serves one workspace rather than using a request header
 to route a shared database pool. See [Configuration](configuration.md#request-authorization).
 
+The local password and email-action persistence boundary is documented in
+[Local Account Lifecycle](authentication.md). It does not add HTTP endpoints or
+browser sessions; those remain separate work from this trusted upstream
+authorization boundary.
+
 ## Routes
 
 | Method | Path | Purpose |
