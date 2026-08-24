@@ -44,6 +44,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         .unwrap_or_else(|_| "owner@example.test".to_owned())
         .trim()
         .to_lowercase();
+    let bootstrap_owner_id = std::env::var("CATALOG_BOOTSTRAP_OWNER_ID")
+        .ok()
+        .map(|value| value.parse())
+        .transpose()?;
     if bootstrap_owner_email.is_empty() || !bootstrap_owner_email.contains('@') {
         return Err("CATALOG_BOOTSTRAP_OWNER_EMAIL must be a valid email address".into());
     }
@@ -75,7 +79,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     // a fresh installation receives its initial durable owner grant.
     sqlx::query("SELECT bootstrap_workspace_owner($1, $2, $3, $4, $5)")
         .bind(workspace_id)
-        .bind(Uuid::new_v4())
+        .bind(bootstrap_owner_id.unwrap_or_else(Uuid::new_v4))
         .bind(Uuid::new_v4())
         .bind(Uuid::new_v4())
         .bind(&bootstrap_owner_email)
