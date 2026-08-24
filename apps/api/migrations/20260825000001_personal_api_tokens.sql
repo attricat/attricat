@@ -54,9 +54,9 @@ BEGIN
         SELECT 1 FROM unnest(p_permissions) requested(permission_code)
         WHERE NOT EXISTS (
             SELECT 1 FROM workspace_memberships membership
-            JOIN role_grants grant ON grant.membership_id = membership.id
-              AND grant.workspace_id = membership.workspace_id
-            JOIN role_permissions permission ON permission.role_id = grant.role_id
+            JOIN role_grants role_grant ON role_grant.membership_id = membership.id
+              AND role_grant.workspace_id = membership.workspace_id
+            JOIN role_permissions permission ON permission.role_id = role_grant.role_id
             WHERE membership.user_id = p_user_id AND membership.workspace_id = p_workspace_id
               AND membership.state = 'active' AND permission.permission_code = requested.permission_code
         )
