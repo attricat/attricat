@@ -48,6 +48,7 @@ value_type = "string"`,
     page.getByRole('heading', { name: 'Revision history' }),
   ).toBeVisible();
   await expect(page.getByRole('cell', { name: 'v2' })).toBeVisible();
+  await page.getByRole('button', { name: 'Compare definitions' }).click();
   await page.getByLabel('Left version').click();
   await page.getByRole('option', { name: 'v1 (published)' }).click();
   await expect(page.getByText('code = "title"').first()).toBeVisible();
