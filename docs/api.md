@@ -4,6 +4,8 @@ The API is JSON over HTTP. Successful responses are JSON; failures use an
 `error` object with a machine-readable code, message, and HTTP status. The
 [CLI](cli.md) is the preferred interface for shell automation.
 
+All catalog routes are workspace-scoped. During the tenancy bootstrap phase the API selects the workspace from trusted `CATALOG_WORKSPACE_ID` server configuration; request bodies, query parameters, and headers cannot select a workspace. Later authentication supplies the active workspace per request without changing catalog payloads.
+
 ## Routes
 
 | Method | Path | Purpose |

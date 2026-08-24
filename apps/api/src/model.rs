@@ -5,6 +5,17 @@ use sqlx::FromRow;
 use uuid::Uuid;
 
 #[derive(Clone, Debug, Deserialize, FromRow, PartialEq, Serialize)]
+pub struct Workspace {
+    pub id: Uuid,
+    pub slug: String,
+    pub name: String,
+    pub bootstrap_owner_email: Option<String>,
+    pub created_at: DateTime<Utc>,
+    pub updated_at: DateTime<Utc>,
+    pub deleted_at: Option<DateTime<Utc>>,
+}
+
+#[derive(Clone, Debug, Deserialize, FromRow, PartialEq, Serialize)]
 pub struct Blueprint {
     pub id: Uuid,
     pub code: String,

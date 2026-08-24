@@ -7,6 +7,7 @@ use api::{
     telemetry::{init_metrics, init_tracing},
 };
 use sqlx::postgres::PgPoolOptions;
+use uuid::Uuid;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
@@ -34,19 +35,65 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     let max_relationship_facet_nodes = std::env::var("RELATIONSHIP_FACET_MAX_NODES")
         .unwrap_or_else(|_| "100".to_owned())
         .parse()?;
-    let pool = PgPoolOptions::new()
-        .max_connections(5)
+    let workspace_id = std::env::var("CATALOG_WORKSPACE_ID")
+        .unwrap_or_else(|_| "00000000-0000-4000-8000-000000000002".to_owned())
+        .parse::<Uuid>()?;
+    let bootstrap_workspace_name = std::env::var("CATALOG_BOOTSTRAP_WORKSPACE_NAME")
+        .unwrap_or_else(|_| "Default workspace".to_owned());
+    let bootstrap_owner_email = std::env::var("CATALOG_BOOTSTRAP_OWNER_EMAIL")
+        .unwrap_or_else(|_| "owner@example.test".to_owned());
+    if bootstrap_owner_email.trim().is_empty() || !bootstrap_owner_email.contains('@') {
+        return Err("CATALOG_BOOTSTRAP_OWNER_EMAIL must be a valid email address".into());
+    }
+    // Migration and retention maintenance need DDL privileges. Request-serving
+    // connections are deliberately created only after that work is complete
+    // and switch to the non-owner role provisioned by the tenancy migration.
+    let maintenance_pool = PgPoolOptions::new()
+        .max_connections(1)
         .connect(&database_url)
         .await?;
-
     tracing::info!("running database migrations");
-    MIGRATOR.run(&pool).await?;
-
+    MIGRATOR.run(&maintenance_pool).await?;
+    // The identity/membership migration consumes this durable bootstrap owner
+    // record to create the initial owner grant. It is set only by deployment
+    // configuration, never by a catalog request.
+    let bootstrap_workspace = sqlx::query(
+        "UPDATE workspaces SET name = $2, bootstrap_owner_email = $3, updated_at = now() WHERE id = $1 AND deleted_at IS NULL",
+    )
+    .bind(workspace_id)
+    .bind(bootstrap_workspace_name)
+    .bind(bootstrap_owner_email)
+    .execute(&maintenance_pool)
+    .await?;
+    if bootstrap_workspace.rows_affected() != 1 {
+        return Err("CATALOG_WORKSPACE_ID does not identify an active workspace".into());
+    }
     let history_retention_days = std::env::var("ATTRIBUTE_VALUE_HISTORY_RETENTION_DAYS")
         .unwrap_or_else(|_| "90".to_owned())
         .parse()?;
-    CatalogRepository::new(pool.clone())
+    CatalogRepository::new(maintenance_pool.clone())
         .purge_value_history(history_retention_days)
+        .await?;
+    maintenance_pool.close().await;
+
+    let pool = PgPoolOptions::new()
+        .max_connections(5)
+        // Workspace selection is server configuration, never an HTTP payload.
+        // Issue #18 replaces this bootstrap selection with an authenticated
+        // active-workspace extractor while retaining this connection boundary.
+        .after_connect(move |connection, _| {
+            Box::pin(async move {
+                sqlx::query("SELECT set_config('catalog.workspace_id', $1, false)")
+                    .bind(workspace_id.to_string())
+                    .execute(&mut *connection)
+                    .await?;
+                sqlx::query("SET ROLE catalog_api")
+                    .execute(connection)
+                    .await?;
+                Ok(())
+            })
+        })
+        .connect(&database_url)
         .await?;
 
     let listener = tokio::net::TcpListener::bind(bind_addr).await?;
