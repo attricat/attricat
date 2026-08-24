@@ -5,7 +5,7 @@ use support::*;
 #[sqlx::test]
 async fn restores_a_scalar_value_from_synchronous_history(pool: PgPool) {
     let (base_url, server) = start_server(pool.clone()).await;
-    let client = Client::new();
+    let client = authenticated_client();
     let blueprint = create_blueprint(
         &client,
         &base_url,
@@ -81,7 +81,7 @@ async fn restores_a_scalar_value_from_synchronous_history(pool: PgPool) {
 #[sqlx::test]
 async fn stores_typed_scalar_values_in_native_columns(pool: PgPool) {
     let (base_url, server) = start_server(pool.clone()).await;
-    let client = Client::new();
+    let client = authenticated_client();
     let blueprint = create_blueprint(
         &client,
         &base_url,
@@ -192,7 +192,7 @@ value_type = "time"
 #[sqlx::test]
 async fn rejects_mismatched_native_value_storage_on_read(pool: PgPool) {
     let (base_url, server) = start_server(pool.clone()).await;
-    let client = Client::new();
+    let client = authenticated_client();
     let blueprint = create_blueprint(
         &client,
         &base_url,
@@ -243,7 +243,7 @@ value_type = "string"
 #[sqlx::test]
 async fn rejects_values_from_another_blueprint_version(pool: PgPool) {
     let (base_url, server) = start_server(pool).await;
-    let client = Client::new();
+    let client = authenticated_client();
 
     let first = create_blueprint(
         &client,

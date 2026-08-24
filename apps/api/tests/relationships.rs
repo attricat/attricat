@@ -5,7 +5,7 @@ use support::*;
 #[sqlx::test]
 async fn typed_category_and_color_relationships_can_be_replaced_and_removed(pool: PgPool) {
     let (base_url, server) = start_server(pool).await;
-    let client = Client::new();
+    let client = authenticated_client();
     let category = create_blueprint(
         &client,
         &base_url,

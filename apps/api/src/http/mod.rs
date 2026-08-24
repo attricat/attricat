@@ -1,3 +1,4 @@
+mod auth;
 mod blueprints;
 mod contexts;
 mod data_health;
@@ -20,12 +21,15 @@ use metrics_exporter_prometheus::PrometheusHandle;
 use serde_json::Value;
 use tokio::sync::Mutex;
 use tracing::{Instrument, field::Empty};
+use uuid::Uuid;
 
 use crate::repository::CatalogRepository;
 
 #[derive(Clone)]
 pub struct AppState {
     pub repository: CatalogRepository,
+    /// Deployment-selected workspace used by the RLS connection boundary.
+    pub workspace_id: Uuid,
     pub metrics: PrometheusHandle,
     // Preview expansion is request-controlled, so these limits keep cyclic or
     // high-cardinality relationship graphs from turning one read into an
@@ -222,6 +226,10 @@ pub fn router(state: AppState) -> Router {
             "/entities/{entity_id}/values/current",
             get(entities::get_current_values),
         )
+        .layer(middleware::from_fn_with_state(
+            state.clone(),
+            auth::authorize,
+        ))
         .with_state(state)
         .layer(middleware::from_fn(server_timing))
 }

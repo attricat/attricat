@@ -130,6 +130,42 @@ impl CatalogRepository {
             .await?;
         Ok(())
     }
+
+    pub async fn is_active_principal(
+        &self,
+        user_id: Uuid,
+        workspace_id: Uuid,
+    ) -> Result<bool, RepositoryError> {
+        Ok(
+            sqlx::query_scalar("SELECT catalog_request_principal_active($1, $2)")
+                .bind(user_id)
+                .bind(workspace_id)
+                .fetch_one(&self.pool)
+                .await?,
+        )
+    }
+
+    /// Checks the durable membership/grant graph in one database operation so
+    /// callers cannot learn whether an out-of-scope target exists.
+    pub async fn is_authorized(
+        &self,
+        user_id: Uuid,
+        workspace_id: Uuid,
+        permission: &str,
+        target_id: Option<Uuid>,
+        target_code: Option<&str>,
+    ) -> Result<bool, RepositoryError> {
+        Ok(
+            sqlx::query_scalar("SELECT catalog_authorize_request($1, $2, $3, $4, $5)")
+                .bind(user_id)
+                .bind(workspace_id)
+                .bind(permission)
+                .bind(target_id)
+                .bind(target_code)
+                .fetch_one(&self.pool)
+                .await?,
+        )
+    }
 }
 
 pub(crate) fn validate_code(value: &str) -> Result<(), RepositoryError> {

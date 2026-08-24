@@ -5,7 +5,7 @@ use support::*;
 #[sqlx::test]
 async fn resolved_preview_includes_entity_identity(pool: PgPool) {
     let (base_url, server) = start_server(pool).await;
-    let client = Client::new();
+    let client = authenticated_client();
     let blueprint = create_blueprint(
         &client,
         &base_url,
@@ -53,7 +53,7 @@ value_type = "string"
 #[sqlx::test]
 async fn incoming_relationships_are_deduplicated_and_paginated(pool: PgPool) {
     let (base_url, server) = start_server(pool).await;
-    let client = Client::new();
+    let client = authenticated_client();
     let category = create_blueprint(
         &client,
         &base_url,
@@ -174,7 +174,7 @@ target_blueprint = "category"
 #[sqlx::test]
 async fn legacy_entity_creation_route_is_unavailable(pool: PgPool) {
     let (base_url, server) = start_server(pool).await;
-    let client = Client::new();
+    let client = authenticated_client();
     let response = client
         .post(format!("{base_url}/entities"))
         .send()
@@ -188,7 +188,7 @@ async fn legacy_entity_creation_route_is_unavailable(pool: PgPool) {
 #[sqlx::test]
 async fn extractor_failures_use_the_api_error_shape(pool: PgPool) {
     let (base_url, server) = start_server(pool).await;
-    let client = Client::new();
+    let client = authenticated_client();
 
     let invalid_path = client
         .get(format!("{base_url}/entities/not-a-uuid"))
@@ -220,7 +220,7 @@ async fn extractor_failures_use_the_api_error_shape(pool: PgPool) {
 #[sqlx::test]
 async fn soft_deleted_entity_is_hidden_from_reads_and_relationship_previews(pool: PgPool) {
     let (base_url, server) = start_server(pool).await;
-    let client = Client::new();
+    let client = authenticated_client();
     let category = create_blueprint(
         &client,
         &base_url,

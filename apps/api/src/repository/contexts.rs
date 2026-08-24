@@ -58,6 +58,20 @@ impl CatalogRepository {
         .await?)
     }
 
+    pub async fn list_authorized_contexts(
+        &self,
+        user_id: Uuid,
+        workspace_id: Uuid,
+    ) -> Result<Vec<AttributeContext>, RepositoryError> {
+        Ok(query_as::<_, AttributeContext>(
+            "SELECT id, code, data, parent_id FROM catalog_authorized_contexts($1, $2)",
+        )
+        .bind(user_id)
+        .bind(workspace_id)
+        .fetch_all(&self.pool)
+        .await?)
+    }
+
     pub async fn update_context(
         &self,
         id: Uuid,

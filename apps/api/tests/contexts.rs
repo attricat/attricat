@@ -5,7 +5,7 @@ use support::*;
 #[sqlx::test]
 async fn updating_an_unknown_context_returns_not_found(pool: PgPool) {
     let (base_url, server) = start_server(pool).await;
-    let client = Client::new();
+    let client = authenticated_client();
 
     let response = client
         .put(format!("{base_url}/contexts/id/{}", Uuid::new_v4()))

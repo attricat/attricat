@@ -4,7 +4,26 @@ The API is JSON over HTTP. Successful responses are JSON; failures use an
 `error` object with a machine-readable code, message, and HTTP status. The
 [CLI](cli.md) is the preferred interface for shell automation.
 
-All catalog routes are workspace-scoped. During the tenancy bootstrap phase the API selects the workspace from trusted `CATALOG_WORKSPACE_ID` server configuration; request bodies, query parameters, and headers cannot select a workspace. Later authentication supplies the active workspace per request without changing catalog payloads.
+## Authorization
+
+`GET /health` is public. Every other route requires trusted upstream-injected
+`X-Catalog-User-Id` and `X-Catalog-Workspace-Id` UUID headers. Missing or
+malformed credentials return `401`; an authenticated principal without the
+required permission or scope returns `403` without revealing whether a target
+exists.
+
+Permissions are evaluated from active workspace membership role grants:
+blueprint reads/writes/publishing require `blueprints.read`, `blueprints.write`,
+and `blueprints.publish`; entity operations require `entities.read`,
+`entities.write`, or `entities.delete`; context operations require
+`contexts.read` or `contexts.write`; data-health and metrics require
+`data_health.read`. A context-subtree grant applies to its root and descendants,
+never its ancestors or siblings.
+
+Catalog data remains scoped to the trusted server-selected
+`CATALOG_WORKSPACE_ID` RLS boundary. The workspace header must equal that value;
+a deployment therefore serves one workspace rather than using a request header
+to route a shared database pool. See [Configuration](configuration.md#request-authorization).
 
 ## Routes
 
