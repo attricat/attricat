@@ -38,6 +38,7 @@ test('resolves inherited values and saves a context-specific override', async ({
   await expect(page.getByLabel('stock')).toBeDisabled();
   await page.getByLabel('title').fill('UK title');
   await page.getByRole('button', { name: 'Save changes' }).click();
+  await expect(page).toHaveURL(new RegExp(`/entities/${entity.id}$`));
   await page.getByLabel('Context').click();
   await page.getByRole('option', { name: context.code }).click();
   await expect(page.getByText('UK title')).toBeVisible();

@@ -14,12 +14,13 @@ export const ExplorerSearchForm = ({ blueprints, search, onSubmit }: Props) => {
   const form = useForm({
     defaultValues: {
       blueprint: search.blueprint ?? '',
+      version: search.version?.toString() ?? '',
       query: search.query ?? '',
     },
     onSubmit: ({ value }) => {
       onSubmit({
         blueprint: value.blueprint || undefined,
-        version: undefined,
+        version: value.version ? Number(value.version) : undefined,
         query: value.query || undefined,
       });
     },
@@ -28,9 +29,10 @@ export const ExplorerSearchForm = ({ blueprints, search, onSubmit }: Props) => {
   useEffect(() => {
     form.reset({
       blueprint: search.blueprint ?? '',
+      version: search.version?.toString() ?? '',
       query: search.query ?? '',
     });
-  }, [form, search.blueprint, search.query]);
+  }, [form, search.blueprint, search.query, search.version]);
 
   return (
     <Paper
@@ -64,6 +66,17 @@ export const ExplorerSearchForm = ({ blueprints, search, onSubmit }: Props) => {
                 </MenuItem>
               ))}
             </TextField>
+          )}
+        </form.Field>
+        <form.Field name="version">
+          {(field) => (
+            <TextField
+              inputProps={{ min: 1, step: 1 }}
+              label="Version"
+              onChange={(event) => field.handleChange(event.target.value)}
+              type="number"
+              value={field.state.value}
+            />
           )}
         </form.Field>
         <form.Field name="query">

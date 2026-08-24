@@ -137,7 +137,6 @@ export const Explorer = ({ search }: { search: ExplorerSearch }) => {
                     categories: undefined,
                   }),
               ...value,
-              version: undefined,
             },
           });
         }}
