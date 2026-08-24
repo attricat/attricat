@@ -41,6 +41,7 @@ async fn identity_memberships_seeded_roles_and_scoped_grants(pool: PgPool) {
         "entities.write",
         "members.manage",
         "roles.grant",
+        "roles.manage",
         "tokens.manage",
         "workspace.manage",
     ])
