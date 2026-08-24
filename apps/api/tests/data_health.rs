@@ -5,7 +5,7 @@ use support::*;
 #[sqlx::test]
 async fn data_health_sections_return_an_empty_catalog(pool: PgPool) {
     let (base_url, server) = start_server(pool).await;
-    let client = Client::new();
+    let client = authenticated_client();
 
     let summary_response = client
         .get(format!(
@@ -57,7 +57,7 @@ async fn data_health_sections_return_an_empty_catalog(pool: PgPool) {
 #[sqlx::test]
 async fn data_health_cache_reports_miss_then_hit_in_server_timing(pool: PgPool) {
     let (base_url, server) = start_server_with_data_health_cache_ttl(pool, 300).await;
-    let client = Client::new();
+    let client = authenticated_client();
 
     for expected_cache_status in ["MISS", "HIT"] {
         let response = client
@@ -83,7 +83,7 @@ async fn data_health_cache_reports_miss_then_hit_in_server_timing(pool: PgPool) 
 #[sqlx::test]
 async fn metrics_endpoint_exposes_low_cardinality_request_metrics(pool: PgPool) {
     let (base_url, server) = start_server(pool).await;
-    let client = Client::new();
+    let client = authenticated_client();
 
     client
         .get(format!("{base_url}/health"))
@@ -113,7 +113,7 @@ async fn metrics_endpoint_exposes_low_cardinality_request_metrics(pool: PgPool) 
 #[sqlx::test]
 async fn data_health_completeness_counts_default_values(pool: PgPool) {
     let (base_url, server) = start_server(pool).await;
-    let client = Client::new();
+    let client = authenticated_client();
     let blueprint = create_blueprint(
         &client,
         &base_url,

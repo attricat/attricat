@@ -15,6 +15,20 @@ pub(super) struct ApiError {
     message: String,
 }
 impl ApiError {
+    pub(super) fn unauthenticated() -> Self {
+        Self {
+            status: StatusCode::UNAUTHORIZED,
+            code: "unauthenticated",
+            message: "authentication is required".to_owned(),
+        }
+    }
+    pub(super) fn forbidden() -> Self {
+        Self {
+            status: StatusCode::FORBIDDEN,
+            code: "forbidden",
+            message: "you are not authorized to perform this action".to_owned(),
+        }
+    }
     pub(super) fn not_found(resource: &'static str) -> Self {
         Self {
             status: StatusCode::NOT_FOUND,

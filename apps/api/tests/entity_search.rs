@@ -5,7 +5,7 @@ use support::*;
 #[sqlx::test]
 async fn search_includes_all_blueprint_versions_and_marks_outdated_entities(pool: PgPool) {
     let (base_url, server) = start_server(pool).await;
-    let client = Client::new();
+    let client = authenticated_client();
     let first = create_blueprint(
         &client,
         &base_url,
@@ -129,7 +129,7 @@ async fn search_returns_contextual_relationship_tree_facet_and_filters_selected_
     pool: PgPool,
 ) {
     let (base_url, server) = start_server(pool).await;
-    let client = Client::new();
+    let client = authenticated_client();
     let category = create_blueprint(
         &client,
         &base_url,

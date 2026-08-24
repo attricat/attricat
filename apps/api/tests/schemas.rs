@@ -5,7 +5,7 @@ use support::*;
 #[sqlx::test]
 async fn validates_attribute_and_entity_json_schemas(pool: PgPool) {
     let (base_url, server) = start_server(pool).await;
-    let client = Client::new();
+    let client = authenticated_client();
     let blueprint = create_blueprint(
         &client,
         &base_url,

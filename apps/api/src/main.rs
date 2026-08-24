@@ -91,9 +91,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
 
     let pool = PgPoolOptions::new()
         .max_connections(5)
-        // Workspace selection is server configuration, never an HTTP payload.
-        // Issue #18 replaces this bootstrap selection with an authenticated
-        // active-workspace extractor while retaining this connection boundary.
+        // RLS is configured per deployment pool. HTTP authorization rejects a
+        // different requested workspace before a repository query can run.
         .after_connect(move |connection, _| {
             Box::pin(async move {
                 sqlx::query("SELECT set_config('catalog.workspace_id', $1, false)")
@@ -115,6 +114,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         listener,
         router(AppState {
             repository: CatalogRepository::new(pool),
+            workspace_id,
             metrics,
             max_preview_relationship_depth,
             max_preview_relationship_items,

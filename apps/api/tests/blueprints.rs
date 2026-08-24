@@ -5,7 +5,7 @@ use support::*;
 #[sqlx::test]
 async fn blueprint_catalogue_lists_all_kinds_and_revision_history(pool: PgPool) {
     let (base_url, server) = start_server(pool).await;
-    let client = Client::new();
+    let client = authenticated_client();
     let first: Value = client
         .post(format!("{base_url}/blueprints"))
         .json(&json!({
@@ -86,7 +86,7 @@ async fn blueprint_catalogue_lists_all_kinds_and_revision_history(pool: PgPool) 
 #[sqlx::test]
 async fn rejects_invalid_toml_and_mixin_entity_creation(pool: PgPool) {
     let (base_url, server) = start_server(pool).await;
-    let client = Client::new();
+    let client = authenticated_client();
 
     let invalid = client
         .post(format!("{base_url}/blueprints"))

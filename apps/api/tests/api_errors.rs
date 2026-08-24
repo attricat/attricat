@@ -5,7 +5,7 @@ use support::*;
 #[sqlx::test]
 async fn rejects_unsafe_reference_codes_in_api_requests(pool: PgPool) {
     let (base_url, server) = start_server(pool).await;
-    let client = Client::new();
+    let client = authenticated_client();
     let blueprint = create_blueprint(
         &client,
         &base_url,
