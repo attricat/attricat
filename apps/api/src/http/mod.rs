@@ -1,3 +1,4 @@
+mod audit;
 mod auth;
 mod blueprints;
 mod contexts;
@@ -226,6 +227,7 @@ pub fn router(state: AppState) -> Router {
             "/entities/{entity_id}/values/current",
             get(entities::get_current_values),
         )
+        .layer(middleware::from_fn_with_state(state.clone(), audit::record))
         .layer(middleware::from_fn_with_state(
             state.clone(),
             auth::authorize,

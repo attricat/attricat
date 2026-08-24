@@ -131,6 +131,37 @@ impl CatalogRepository {
         Ok(())
     }
 
+    #[allow(clippy::too_many_arguments)]
+    pub async fn record_audit_event(
+        &self,
+        workspace_id: Uuid,
+        actor_user_id: Option<Uuid>,
+        request_id: Uuid,
+        correlation_id: Uuid,
+        action: &str,
+        authorization_scope: Value,
+        target: Value,
+        outcome: &str,
+        metadata: Value,
+    ) -> Result<(), RepositoryError> {
+        sqlx::query(
+            "INSERT INTO audit_events (id, workspace_id, actor_user_id, request_id, correlation_id, action, authorization_scope, target, outcome, metadata) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)",
+        )
+        .bind(Uuid::new_v4())
+        .bind(workspace_id)
+        .bind(actor_user_id)
+        .bind(request_id)
+        .bind(correlation_id)
+        .bind(action)
+        .bind(authorization_scope)
+        .bind(target)
+        .bind(outcome)
+        .bind(metadata)
+        .execute(&self.pool)
+        .await?;
+        Ok(())
+    }
+
     pub async fn is_active_principal(
         &self,
         user_id: Uuid,
