@@ -10,6 +10,7 @@ export default defineConfig({
   reporter: process.env.CI ? 'github' : 'list',
   use: {
     baseURL: e2eWebUrl,
+    storageState: './e2e/.auth.json',
     screenshot: 'only-on-failure',
     trace: 'on-first-retry',
   },

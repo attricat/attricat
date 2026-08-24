@@ -29,6 +29,7 @@ mod entity_migration;
 mod entity_projection;
 mod entity_search;
 mod health;
+mod sessions;
 mod tokens;
 mod values;
 

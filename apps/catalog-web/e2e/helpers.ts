@@ -1,7 +1,24 @@
 import { e2eApiUrl } from './ports.ts';
 
-const bootstrapWorkspaceId = '00000000-0000-4000-8000-000000000002';
-const bootstrapOwnerId = '00000000-0000-4000-8000-000000000201';
+const fixtureEmail = 'fixture@example.test';
+const fixturePassword = 'e2e-only-fixture-password';
+
+// Fixture setup uses a second seeded principal so login rotation never revokes
+// the browser owner's session saved by global setup.
+const authenticatedHeaders = async () => {
+  const login = await fetch(`${e2eApiUrl}/auth/login`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email: fixtureEmail, password: fixturePassword }),
+  });
+  if (!login.ok) throw new Error(`E2E fixture login failed: ${login.status}`);
+  const cookies = login.headers
+    .getSetCookie()
+    .map((value) => value.split(';', 1)[0]);
+  const csrf = cookies.find((cookie) => cookie.startsWith('catalog_csrf='));
+  if (!csrf) throw new Error('E2E fixture login did not issue a CSRF cookie');
+  return { cookie: cookies.join('; '), csrf: csrf.split('=', 2)[1] };
+};
 
 export type Blueprint = {
   blueprint: { id: string; code: string; version: number };
@@ -17,8 +34,13 @@ export const request = async <T>(
   init?: RequestInit,
 ): Promise<T> => {
   const headers = new Headers(init?.headers);
-  headers.set('X-Catalog-User-Id', bootstrapOwnerId);
-  headers.set('X-Catalog-Workspace-Id', bootstrapWorkspaceId);
+  const auth = await authenticatedHeaders();
+  headers.set('Cookie', auth.cookie);
+  if (
+    !['GET', 'HEAD', 'OPTIONS'].includes((init?.method ?? 'GET').toUpperCase())
+  ) {
+    headers.set('X-Catalog-Csrf', auth.csrf);
+  }
   const response = await fetch(`${e2eApiUrl}${path}`, { ...init, headers });
   if (!response.ok) {
     throw new Error(

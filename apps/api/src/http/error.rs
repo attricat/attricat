@@ -22,6 +22,27 @@ impl ApiError {
             message: "authentication is required".to_owned(),
         }
     }
+    pub(super) fn csrf_failed() -> Self {
+        Self {
+            status: StatusCode::FORBIDDEN,
+            code: "csrf_failed",
+            message: "a valid CSRF token is required".to_owned(),
+        }
+    }
+    pub(super) fn rate_limited() -> Self {
+        Self {
+            status: StatusCode::TOO_MANY_REQUESTS,
+            code: "rate_limited",
+            message: "too many login attempts; try again later".to_owned(),
+        }
+    }
+    pub(super) fn invalid_credentials() -> Self {
+        Self {
+            status: StatusCode::UNAUTHORIZED,
+            code: "invalid_credentials",
+            message: "invalid email or password".to_owned(),
+        }
+    }
     pub(super) fn forbidden() -> Self {
         Self {
             status: StatusCode::FORBIDDEN,

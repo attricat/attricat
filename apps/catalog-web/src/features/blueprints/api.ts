@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { apiFetch } from '../auth/request';
 import {
   blueprintSchema,
   blueprintWithAttributesSchema,
@@ -9,7 +10,7 @@ import {
 export type { Attribute, Blueprint, BlueprintWithAttributes } from './schemas';
 
 const request = async <T>(path: string, schema: z.ZodType<T>): Promise<T> => {
-  const response = await fetch(path);
+  const response = await apiFetch(path);
   if (!response.ok) throw new Error(`Request failed (${response.status})`);
   const result = schema.safeParse(await response.json());
   if (!result.success)

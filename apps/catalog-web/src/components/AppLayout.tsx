@@ -1,8 +1,15 @@
 import MenuIcon from '@mui/icons-material/Menu';
-import { Outlet } from '@tanstack/react-router';
+import {
+  Navigate,
+  Outlet,
+  useNavigate,
+  useRouterState,
+} from '@tanstack/react-router';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   AppBar,
   Box,
+  Button,
   Drawer,
   IconButton,
   Toolbar,
@@ -11,13 +18,32 @@ import {
   useTheme,
 } from '@mui/material';
 import { useState } from 'react';
+import { currentSession, logout } from '../features/auth/api';
 import { drawerWidth, SideNavigation } from './SideNavigation';
 
 export const AppLayout = () => {
+  const pathname = useRouterState({
+    select: (state) => state.location.pathname,
+  });
+  const navigate = useNavigate();
+  const queryClient = useQueryClient();
+  const session = useQuery({
+    queryKey: ['auth', 'session'],
+    queryFn: currentSession,
+    retry: false,
+  });
   const theme = useTheme();
   const isDesktop = useMediaQuery(theme.breakpoints.up('md'));
   const [mobileOpen, setMobileOpen] = useState(false);
   const closeMobileNavigation = () => setMobileOpen(false);
+  const signOut = async () => {
+    await logout();
+    queryClient.setQueryData(['auth', 'session'], null);
+    await navigate({ to: '/login' });
+  };
+  if (pathname === '/login') return <Outlet />;
+  if (session.isPending) return null;
+  if (!session.data) return <Navigate to="/login" />;
 
   return (
     <Box sx={{ display: 'flex', minHeight: '100dvh' }}>
@@ -42,9 +68,16 @@ export const AppLayout = () => {
               >
                 <MenuIcon />
               </IconButton>
-              <Typography component="div" sx={{ ml: 1 }} variant="h6">
+              <Typography
+                component="div"
+                sx={{ flexGrow: 1, ml: 1 }}
+                variant="h6"
+              >
                 Catalog
               </Typography>
+              <Button color="inherit" onClick={signOut}>
+                Sign out
+              </Button>
             </Toolbar>
           </AppBar>
           <Drawer
@@ -65,6 +98,11 @@ export const AppLayout = () => {
           pt: { xs: 7, md: 0 },
         }}
       >
+        {isDesktop && (
+          <Box sx={{ display: 'flex', justifyContent: 'flex-end', p: 1 }}>
+            <Button onClick={signOut}>Sign out</Button>
+          </Box>
+        )}
         <Outlet />
       </Box>
     </Box>

@@ -18,12 +18,24 @@ pub async fn start_server(pool: PgPool) -> (String, JoinHandle<()>) {
     start_server_with_data_health_cache_ttl(pool, 0).await
 }
 
+pub async fn start_session_server(pool: PgPool) -> (String, JoinHandle<()>) {
+    start_server_with_auth_mode(pool, 0, false).await
+}
+
 pub const BOOTSTRAP_WORKSPACE_ID: &str = "00000000-0000-4000-8000-000000000002";
 pub const BOOTSTRAP_OWNER_ID: &str = "00000000-0000-4000-8000-000000000201";
 
 pub async fn start_server_with_data_health_cache_ttl(
     pool: PgPool,
     data_health_cache_ttl_seconds: u64,
+) -> (String, JoinHandle<()>) {
+    start_server_with_auth_mode(pool, data_health_cache_ttl_seconds, true).await
+}
+
+async fn start_server_with_auth_mode(
+    pool: PgPool,
+    data_health_cache_ttl_seconds: u64,
+    allow_trusted_headers: bool,
 ) -> (String, JoinHandle<()>) {
     let workspace_id = BOOTSTRAP_WORKSPACE_ID.parse::<Uuid>().unwrap();
     let owner_id = BOOTSTRAP_OWNER_ID.parse::<Uuid>().unwrap();
@@ -68,6 +80,8 @@ pub async fn start_server_with_data_health_cache_ttl(
         max_relationship_facet_nodes: 100,
         data_health_cache_ttl_seconds,
         data_health_cache: Default::default(),
+        session_cookie_secure: false,
+        allow_trusted_headers,
     });
     let server = tokio::spawn(async move { axum::serve(listener, router).await.unwrap() });
 

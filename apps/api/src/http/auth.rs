@@ -8,10 +8,13 @@ use sha2::Digest;
 use uuid::Uuid;
 
 use super::{AppState, error::ApiError};
+use crate::account::{SessionDigest, SessionSecret};
 
 const USER_HEADER: &str = "x-catalog-user-id";
 const WORKSPACE_HEADER: &str = "x-catalog-workspace-id";
 const AUTHORIZATION_HEADER: &str = "authorization";
+const SESSION_COOKIE: &str = "catalog_session";
+const CSRF_HEADER: &str = "x-catalog-csrf";
 
 /// Verified request identity. It is inserted only after membership and policy
 /// evaluation, never constructed from an unvalidated handler argument.
@@ -19,10 +22,27 @@ const AUTHORIZATION_HEADER: &str = "authorization";
 #[derive(Clone, Copy, Debug)]
 pub(super) struct AuthenticatedPrincipal(pub Uuid, pub Option<Uuid>);
 
-/// The workspace selected by the authenticated request headers.
+/// The deployment-selected workspace for the authenticated credential.
 #[allow(dead_code)]
 #[derive(Clone, Copy, Debug)]
 pub(super) struct ActiveWorkspace(pub Uuid);
+
+/// The session digest is retained only to revoke the current browser session;
+/// raw cookie credentials never reach a handler.
+#[derive(Clone)]
+pub(super) struct AuthenticatedSession(pub SessionDigest);
+
+impl FromRequestParts<AppState> for AuthenticatedSession {
+    type Rejection = ApiError;
+
+    async fn from_request_parts(parts: &mut Parts, _: &AppState) -> Result<Self, Self::Rejection> {
+        parts
+            .extensions
+            .get::<Self>()
+            .cloned()
+            .ok_or_else(ApiError::unauthenticated)
+    }
+}
 
 impl FromRequestParts<AppState> for AuthenticatedPrincipal {
     type Rejection = ApiError;
@@ -71,7 +91,7 @@ pub(super) async fn authorize(
     next: Next,
 ) -> Result<Response, ApiError> {
     let path = request.uri().path();
-    if path == "/health" {
+    if path == "/health" || path == "/auth/login" {
         return Ok(next.run(request).await);
     }
 
@@ -80,15 +100,15 @@ pub(super) async fn authorize(
         .get(AUTHORIZATION_HEADER)
         .and_then(|value| value.to_str().ok())
         .and_then(|value| value.strip_prefix("Bearer "));
-    let (principal, workspace, token_id) = if let Some(secret) = bearer {
+    let (principal, workspace, token_id, session_digest) = if let Some(secret) = bearer {
         let digest = sha2::Sha256::digest(secret.as_bytes());
         state
             .repository
             .authenticate_personal_api_token(&digest)
             .await?
-            .map(|(token_id, user_id, workspace_id)| (user_id, workspace_id, Some(token_id)))
+            .map(|(token_id, user_id, workspace_id)| (user_id, workspace_id, Some(token_id), None))
             .ok_or_else(ApiError::unauthenticated)?
-    } else {
+    } else if state.allow_trusted_headers {
         let user_id = request
             .headers()
             .get(USER_HEADER)
@@ -101,10 +121,45 @@ pub(super) async fn authorize(
             .and_then(|value| value.to_str().ok())
             .and_then(|value| value.parse().ok())
             .ok_or_else(ApiError::unauthenticated)?;
-        (user_id, workspace_id, None)
+        (user_id, workspace_id, None, None)
+    } else {
+        let raw_session = cookie_value(
+            request
+                .headers()
+                .get("cookie")
+                .and_then(|value| value.to_str().ok()),
+            SESSION_COOKIE,
+        )
+        .ok_or_else(ApiError::unauthenticated)?;
+        let session_secret = SessionSecret::from_delivery_value(raw_session)
+            .map_err(|_| ApiError::unauthenticated())?;
+        let session_digest = session_secret.digest();
+        let session = state
+            .repository
+            .validate_browser_session(&session_digest, state.workspace_id)
+            .await?
+            .ok_or_else(ApiError::unauthenticated)?;
+        if !matches!(
+            *request.method(),
+            Method::GET | Method::HEAD | Method::OPTIONS
+        ) {
+            let csrf = request
+                .headers()
+                .get(CSRF_HEADER)
+                .and_then(|value| value.to_str().ok())
+                .and_then(|value| SessionSecret::from_delivery_value(value.to_owned()).ok())
+                .ok_or_else(ApiError::csrf_failed)?;
+            if !session.csrf_digest.matches(&csrf) {
+                return Err(ApiError::csrf_failed());
+            }
+        }
+        (
+            session.user_id,
+            state.workspace_id,
+            None,
+            Some(session_digest),
+        )
     };
-    // Catalog repositories use the deployment-configured RLS workspace. Do
-    // not accept a credential that would authorize one workspace then read another.
     if workspace != state.workspace_id {
         return Err(ApiError::forbidden());
     }
@@ -113,44 +168,58 @@ pub(super) async fn authorize(
         .get::<axum::extract::MatchedPath>()
         .map(|matched| matched.as_str())
         .unwrap_or(path);
-    let policy = policy(request.method(), matched).ok_or_else(ApiError::forbidden)?;
-    let (target_id, target_code) = target(path, policy.target);
-    if !state
-        .repository
-        .is_active_principal(principal, workspace)
-        .await?
-    {
-        return Err(ApiError::unauthenticated());
-    }
-
-    if !state
-        .repository
-        .is_authorized(
-            principal,
-            workspace,
-            policy.permission,
-            target_id,
-            target_code.as_deref(),
-        )
-        .await?
-    {
-        return Err(ApiError::forbidden());
-    }
-    if let Some(token_id) = token_id {
+    if let Some(policy) = policy(request.method(), matched) {
+        let (target_id, target_code) = target(path, policy.target);
         if !state
             .repository
-            .personal_api_token_permits(token_id, policy.permission)
+            .is_active_principal(principal, workspace)
+            .await?
+        {
+            return Err(ApiError::unauthenticated());
+        }
+        if !state
+            .repository
+            .is_authorized(
+                principal,
+                workspace,
+                policy.permission,
+                target_id,
+                target_code.as_deref(),
+            )
             .await?
         {
             return Err(ApiError::forbidden());
         }
+        if let Some(token_id) = token_id {
+            if !state
+                .repository
+                .personal_api_token_permits(token_id, policy.permission)
+                .await?
+            {
+                return Err(ApiError::forbidden());
+            }
+        }
+    } else if !path.starts_with("/auth/") {
+        return Err(ApiError::forbidden());
     }
 
     request
         .extensions_mut()
         .insert(AuthenticatedPrincipal(principal, token_id));
     request.extensions_mut().insert(ActiveWorkspace(workspace));
+    if let Some(session_digest) = session_digest {
+        request
+            .extensions_mut()
+            .insert(AuthenticatedSession(session_digest));
+    }
     Ok(next.run(request).await)
+}
+
+fn cookie_value(header: Option<&str>, name: &str) -> Option<String> {
+    header?
+        .split(';')
+        .filter_map(|part| part.trim().split_once('='))
+        .find_map(|(key, value)| (key == name).then(|| value.to_owned()))
 }
 
 fn policy(method: &Method, path: &str) -> Option<Policy> {

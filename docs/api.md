@@ -6,10 +6,12 @@ The API is JSON over HTTP. Successful responses are JSON; failures use an
 
 ## Authorization
 
-`GET /health` is public. Every other route requires trusted upstream-injected
-`X-Catalog-User-Id` and `X-Catalog-Workspace-Id` UUID headers. Missing or
-malformed credentials return `401`; an authenticated principal without the
-required permission or scope returns `403` without revealing whether a target
+`GET /health` and `POST /auth/login` are public. Browser requests authenticate
+with the opaque HttpOnly `catalog_session` cookie created by login; missing,
+expired, rotated, or revoked sessions return `401`. Unsafe cookie-authenticated
+requests must also supply `X-Catalog-Csrf` with the readable `catalog_csrf`
+synchronizer token or receive `403`. An authenticated principal without the
+required permission or scope receives `403` without revealing whether a target
 exists.
 
 Permissions are evaluated from active workspace membership role grants:
@@ -25,10 +27,10 @@ Catalog data remains scoped to the trusted server-selected
 a deployment therefore serves one workspace rather than using a request header
 to route a shared database pool. See [Configuration](configuration.md#request-authorization).
 
-The local password and email-action persistence boundary is documented in
-[Local Account Lifecycle](authentication.md). It does not add HTTP endpoints or
-browser sessions; those remain separate work from this trusted upstream
-authorization boundary.
+`POST /auth/renew` atomically rotates the browser session, `POST /auth/logout`
+revokes it, and `GET /auth/session` returns the active user identity. The local
+password, cookie, CSRF, expiry, and revocation contract is documented in
+[Browser Authentication](authentication.md).
 
 ## Routes
 

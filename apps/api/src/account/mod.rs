@@ -6,6 +6,7 @@
 
 mod credentials;
 mod lifecycle;
+mod sessions;
 
 pub use credentials::{Password, PasswordHash, PasswordHashError, hash_password};
 pub use lifecycle::{
@@ -13,3 +14,4 @@ pub use lifecycle::{
     ActionVerification, CredentialVersion, IssuedLifecycleAction, LifecycleAction,
     LifecycleActionError, LifecycleActionPurpose, LifecycleActionPurposeError, SecurityVersion,
 };
+pub use sessions::{SessionDigest, SessionSecret, SessionSecretError};
