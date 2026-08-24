@@ -33,6 +33,7 @@ and test instructions.
 - [API reference](docs/api.md)
 - [Configuration reference](docs/configuration.md)
 - [Database model](docs/database.md)
+- [Local account lifecycle](docs/authentication.md)
 - [Manual test-data generator](examples/generate.md)
 - [Relationships walkthrough](examples/relationships/README.md)
 

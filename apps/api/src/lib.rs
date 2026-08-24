@@ -1,3 +1,4 @@
+pub mod account;
 mod blueprint_resolver;
 pub mod http;
 pub mod model;

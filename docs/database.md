@@ -13,7 +13,9 @@ For local setup, migrations, and E2E testing, see [Getting Started](index.md#get
 | Rust model         | Database table       | Notes                                                       |
 | ------------------ | -------------------- | ----------------------------------------------------------- |
 | `Workspace`        | `workspaces`         | Tenant ownership boundary for all catalog aggregates.       |
-| `User`             | `users`              | Provider-neutral account identity.                          |
+| `User`             | `users`              | Provider-neutral account identity and lifecycle state.      |
+| `LocalPasswordCredential` | `local_password_credentials` | Optional Argon2id credential, one per user.          |
+| `UserLifecycleActionToken` | `user_lifecycle_action_tokens` | Hash-only, expiring, one-time email action.          |
 | `WorkspaceMembership` | `workspace_memberships` | A user's single membership in a workspace.              |
 | `RoleGrant`        | `role_grants`        | Additive role assignment at one authorization scope.        |
 | `Blueprint`        | `blueprints`         | A versioned entity-type definition.                         |
@@ -36,7 +38,9 @@ Catalog tables carry a required `workspace_id`. Composite foreign keys keep blue
 
 ### Identity and seeded RBAC
 
-`users` are provider-neutral and store one canonical email: it is trimmed and lowercased before persistence, and unique in that normalized form. Credentials and external provider identities are intentionally separate follow-up concerns.
+`users` are provider-neutral and store one canonical email: it is trimmed and lowercased before persistence, and unique in that normalized form. `email_verified_at` and `security_version` capture account lifecycle state without placing a credential or provider identifier on the user.
+
+`local_password_credentials` has one optional row per user. It stores an Argon2id PHC hash, timestamps, and a monotonically increasing credential version; plaintext passwords are never persisted. `user_lifecycle_action_tokens` stores only a SHA-256 digest of an opaque, delivered secret. Tokens are purpose-bound (`email_verification`, `password_setup`, or `password_reset`), expire, are consumed once, and are invalidated by relevant security or credential changes. See [Local Account Lifecycle](authentication.md) for the security contract and deferred transport boundaries.
 
 A user can have one `workspace_memberships` row per workspace and may belong to many workspaces. The central `permissions` catalog is mapped to immutable system roles: `owner`, `admin`, `editor`, and `viewer`. `role_grants` attach a role to a membership; their permissions are additive and each grant has exactly one scope: the workspace itself, a blueprint family, an entity, or an attribute-context subtree. Database triggers reject malformed scopes and targets from another workspace.
 
