@@ -19,6 +19,7 @@ For local setup, migrations, and E2E testing, see [Getting Started](index.md#get
 | `UserLifecycleActionToken` | `user_lifecycle_action_tokens` | Hash-only, expiring, one-time email action.          |
 | `WorkspaceMembership` | `workspace_memberships` | A user's single membership in a workspace.              |
 | `RoleGrant`        | `role_grants`        | Additive role assignment at one authorization scope.        |
+| `AuditEvent`       | `audit_events`       | Redacted, immutable security and catalog write evidence.    |
 | `Blueprint`        | `blueprints`         | A versioned entity-type definition.                         |
 | `Attribute`        | `attributes`         | An attribute definition belonging to one blueprint version. |
 | `Entity`           | `entities`           | A catalog item bound to a blueprint version.                |
@@ -46,6 +47,10 @@ Catalog tables carry a required `workspace_id`. Composite foreign keys keep blue
 A user can have one `workspace_memberships` row per workspace and may belong to many workspaces. The central `permissions` catalog is mapped to immutable system roles: `owner`, `admin`, `editor`, and `viewer`. `role_grants` attach a role to a membership; their permissions are additive and each grant has exactly one scope: the workspace itself, a blueprint family, an entity, or an attribute-context subtree. Database triggers reject malformed scopes and targets from another workspace.
 
 An owner grant must be workspace-scoped, and database triggers preserve at least one active owner per workspace. Startup consumes the configured bootstrap-owner email after migrations to create that initial user, membership, and owner grant idempotently. Authentication and API authorization remain later work.
+
+### Audit events
+
+`audit_events` is append-only evidence for catalog writes and security lifecycle changes. Events retain actor user/token identifiers when available, workspace, request and correlation IDs, action, authorization scope, target, outcome, and JSON metadata. HTTP metadata is derived from server-controlled routes; the redaction boundary removes password, secret, token, authorization, credential, and API-key fields. Database lifecycle triggers retain identifiers and safe state only, never password hashes or token digests. This issue intentionally exposes no audit-read API or UI.
 
 ### `blueprints`
 
