@@ -11,7 +11,7 @@ file.
 | `BIND_ADDR` | `127.0.0.1:3000` | API | Listener address. |
 | `CATALOG_WORKSPACE_ID` | Bootstrap `default` workspace UUID | API | Trusted server-selected catalog workspace. Clients cannot select it in request bodies; authenticated active-workspace selection will replace this bootstrap setting. |
 | `CATALOG_BOOTSTRAP_WORKSPACE_NAME` | `Default workspace` | API | Display name recorded while initializing the configured workspace. |
-| `CATALOG_BOOTSTRAP_OWNER_EMAIL` | `owner@example.test` | API | Initial owner email recorded durably for the later identity/membership bootstrap migration. Set a real deployment email; it is never an API input. |
+| `CATALOG_BOOTSTRAP_OWNER_EMAIL` | `owner@example.test` | API | Initial owner email. Startup trims and lowercases it before idempotently creating the bootstrap user, membership, and owner grant. Set a real deployment email; it is never an API input. |
 | `RUST_LOG` | `info` | API | Structured tracing filter (for example, `api=debug`). |
 | `PREVIEW_MAX_RELATIONSHIP_DEPTH` | `3` | API | Maximum recursive relationship preview depth. |
 | `PREVIEW_MAX_RELATIONSHIP_ITEMS` | `10` | API | Maximum inline targets per relationship. |

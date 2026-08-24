@@ -41,8 +41,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     let bootstrap_workspace_name = std::env::var("CATALOG_BOOTSTRAP_WORKSPACE_NAME")
         .unwrap_or_else(|_| "Default workspace".to_owned());
     let bootstrap_owner_email = std::env::var("CATALOG_BOOTSTRAP_OWNER_EMAIL")
-        .unwrap_or_else(|_| "owner@example.test".to_owned());
-    if bootstrap_owner_email.trim().is_empty() || !bootstrap_owner_email.contains('@') {
+        .unwrap_or_else(|_| "owner@example.test".to_owned())
+        .trim()
+        .to_lowercase();
+    if bootstrap_owner_email.is_empty() || !bootstrap_owner_email.contains('@') {
         return Err("CATALOG_BOOTSTRAP_OWNER_EMAIL must be a valid email address".into());
     }
     // Migration and retention maintenance need DDL privileges. Request-serving
@@ -62,12 +64,23 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     )
     .bind(workspace_id)
     .bind(bootstrap_workspace_name)
-    .bind(bootstrap_owner_email)
+    .bind(&bootstrap_owner_email)
     .execute(&maintenance_pool)
     .await?;
     if bootstrap_workspace.rows_affected() != 1 {
         return Err("CATALOG_WORKSPACE_ID does not identify an active workspace".into());
     }
+    // The migration defines the identity/RBAC schema, but configuration is
+    // available only after migrations. Bootstrap the configured owner here so
+    // a fresh installation receives its initial durable owner grant.
+    sqlx::query("SELECT bootstrap_workspace_owner($1, $2, $3, $4, $5)")
+        .bind(workspace_id)
+        .bind(Uuid::new_v4())
+        .bind(Uuid::new_v4())
+        .bind(Uuid::new_v4())
+        .bind(&bootstrap_owner_email)
+        .execute(&maintenance_pool)
+        .await?;
     let history_retention_days = std::env::var("ATTRIBUTE_VALUE_HISTORY_RETENTION_DAYS")
         .unwrap_or_else(|_| "90".to_owned())
         .parse()?;

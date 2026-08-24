@@ -13,6 +13,9 @@ For local setup, migrations, and E2E testing, see [Getting Started](index.md#get
 | Rust model         | Database table       | Notes                                                       |
 | ------------------ | -------------------- | ----------------------------------------------------------- |
 | `Workspace`        | `workspaces`         | Tenant ownership boundary for all catalog aggregates.       |
+| `User`             | `users`              | Provider-neutral account identity.                          |
+| `WorkspaceMembership` | `workspace_memberships` | A user's single membership in a workspace.              |
+| `RoleGrant`        | `role_grants`        | Additive role assignment at one authorization scope.        |
 | `Blueprint`        | `blueprints`         | A versioned entity-type definition.                         |
 | `Attribute`        | `attributes`         | An attribute definition belonging to one blueprint version. |
 | `Entity`           | `entities`           | A catalog item bound to a blueprint version.                |
@@ -30,6 +33,14 @@ not assign UUID defaults.
 Workspaces are the durable tenant boundary. Their UUID is immutable; `slug` is a stable unique identifier for administration, not a client-controlled authorization input. The bootstrap/default workspace uses UUID `00000000-0000-4000-8000-000000000002`. Bootstrap-owner metadata is retained for the later identity/membership bootstrap step.
 
 Catalog tables carry a required `workspace_id`. Composite foreign keys keep blueprint revisions, attributes, entities, contexts, values, history, relationships, and migration records in the same workspace. Row-level policies run request connections as the non-owner `catalog_api` database role and use the server-configured workspace ID, preventing an accidental unqualified query from crossing the tenant boundary.
+
+### Identity and seeded RBAC
+
+`users` are provider-neutral and store one canonical email: it is trimmed and lowercased before persistence, and unique in that normalized form. Credentials and external provider identities are intentionally separate follow-up concerns.
+
+A user can have one `workspace_memberships` row per workspace and may belong to many workspaces. The central `permissions` catalog is mapped to immutable system roles: `owner`, `admin`, `editor`, and `viewer`. `role_grants` attach a role to a membership; their permissions are additive and each grant has exactly one scope: the workspace itself, a blueprint family, an entity, or an attribute-context subtree. Database triggers reject malformed scopes and targets from another workspace.
+
+An owner grant must be workspace-scoped, and database triggers preserve at least one active owner per workspace. Startup consumes the configured bootstrap-owner email after migrations to create that initial user, membership, and owner grant idempotently. Authentication and API authorization remain later work.
 
 ### `blueprints`
 
