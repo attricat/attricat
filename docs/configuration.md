@@ -12,6 +12,7 @@ file.
 | `CATALOG_WORKSPACE_ID` | Bootstrap `default` workspace UUID | API | Trusted server-selected catalog workspace and RLS boundary. |
 | `CATALOG_BOOTSTRAP_WORKSPACE_NAME` | `Default workspace` | API | Display name recorded while initializing the configured workspace. |
 | `CATALOG_BOOTSTRAP_OWNER_EMAIL` | `owner@example.test` | API | Initial owner email. Startup trims and lowercases it before idempotently creating the bootstrap user, membership, and owner grant. Set a real deployment email; it is never an API input. |
+| `CATALOG_BOOTSTRAP_OWNER_ID` | Random UUID | API | Optional stable UUID for the bootstrap owner. Useful only for trusted local development and E2E proxy setup; production identity is injected by the trusted upstream. |
 | `RUST_LOG` | `info` | API | Structured tracing filter (for example, `api=debug`). |
 | `PREVIEW_MAX_RELATIONSHIP_DEPTH` | `3` | API | Maximum recursive relationship preview depth. |
 | `PREVIEW_MAX_RELATIONSHIP_ITEMS` | `10` | API | Maximum inline targets per relationship. |
