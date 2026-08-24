@@ -1,5 +1,8 @@
 import { e2eApiUrl } from './ports.ts';
 
+const bootstrapWorkspaceId = '00000000-0000-4000-8000-000000000002';
+const bootstrapOwnerId = '00000000-0000-4000-8000-000000000201';
+
 export type Blueprint = {
   blueprint: { id: string; code: string; version: number };
 };
@@ -13,7 +16,10 @@ export const request = async <T>(
   path: string,
   init?: RequestInit,
 ): Promise<T> => {
-  const response = await fetch(`${e2eApiUrl}${path}`, init);
+  const headers = new Headers(init?.headers);
+  headers.set('X-Catalog-User-Id', bootstrapOwnerId);
+  headers.set('X-Catalog-Workspace-Id', bootstrapWorkspaceId);
+  const response = await fetch(`${e2eApiUrl}${path}`, { ...init, headers });
   if (!response.ok) {
     throw new Error(
       `E2E setup request failed: ${response.status} ${await response.text()}`,

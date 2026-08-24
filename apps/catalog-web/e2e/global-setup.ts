@@ -3,6 +3,8 @@ import { execFileSync, spawn, type ChildProcess } from 'node:child_process';
 import { e2eApiPort, e2eApiUrl, e2eWebPort, e2eWebUrl } from './ports.ts';
 
 const workspaceRoot = new URL('../../..', import.meta.url).pathname;
+const bootstrapWorkspaceId = '00000000-0000-4000-8000-000000000002';
+const bootstrapOwnerId = '00000000-0000-4000-8000-000000000201';
 
 const waitFor = async (url: string) => {
   const deadline = Date.now() + 120_000;
@@ -42,6 +44,7 @@ export default async () => {
     ...process.env,
     BIND_ADDR: `127.0.0.1:${e2eApiPort}`,
     DATABASE_URL: database.getConnectionUri(),
+    CATALOG_BOOTSTRAP_OWNER_ID: bootstrapOwnerId,
   });
 
   try {
@@ -59,7 +62,12 @@ export default async () => {
         '--port',
         e2eWebPort,
       ],
-      { ...process.env, CATALOG_API_URL: e2eApiUrl },
+      {
+        ...process.env,
+        CATALOG_API_URL: e2eApiUrl,
+        CATALOG_TRUSTED_USER_ID: bootstrapOwnerId,
+        CATALOG_TRUSTED_WORKSPACE_ID: bootstrapWorkspaceId,
+      },
     );
     await waitFor(e2eWebUrl);
 

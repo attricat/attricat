@@ -1,5 +1,6 @@
 use super::{
     AppState,
+    auth::{ActiveWorkspace, AuthenticatedPrincipal},
     data_health::invalidate_data_health,
     error::ApiError,
     extractors::{ApiJson, ApiPath},
@@ -17,8 +18,15 @@ pub(super) async fn create_context(
 }
 pub(super) async fn list_contexts(
     State(state): State<AppState>,
+    AuthenticatedPrincipal(user_id): AuthenticatedPrincipal,
+    ActiveWorkspace(workspace_id): ActiveWorkspace,
 ) -> Result<Json<Vec<AttributeContext>>, ApiError> {
-    Ok(Json(state.repository.list_contexts().await?))
+    Ok(Json(
+        state
+            .repository
+            .list_authorized_contexts(user_id, workspace_id)
+            .await?,
+    ))
 }
 pub(super) async fn get_context(
     State(state): State<AppState>,

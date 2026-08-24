@@ -7,6 +7,7 @@ use api::{
     repository::CatalogRepository,
     telemetry::init_metrics,
 };
+use reqwest::header::{HeaderMap, HeaderValue};
 pub use reqwest::{Client, StatusCode};
 pub use serde_json::{Value, json};
 pub use sqlx::PgPool;
@@ -17,14 +18,48 @@ pub async fn start_server(pool: PgPool) -> (String, JoinHandle<()>) {
     start_server_with_data_health_cache_ttl(pool, 0).await
 }
 
+pub const BOOTSTRAP_WORKSPACE_ID: &str = "00000000-0000-4000-8000-000000000002";
+pub const BOOTSTRAP_OWNER_ID: &str = "00000000-0000-4000-8000-000000000201";
+
 pub async fn start_server_with_data_health_cache_ttl(
     pool: PgPool,
     data_health_cache_ttl_seconds: u64,
 ) -> (String, JoinHandle<()>) {
+    let workspace_id = BOOTSTRAP_WORKSPACE_ID.parse::<Uuid>().unwrap();
+    let owner_id = BOOTSTRAP_OWNER_ID.parse::<Uuid>().unwrap();
+    let membership_id = Uuid::from_u128(0x00000000000040008000000000000202);
+    sqlx::query("INSERT INTO users (id, email) VALUES ($1, 'api-test-owner@example.test') ON CONFLICT (id) DO NOTHING")
+        .bind(owner_id)
+        .execute(&pool)
+        .await
+        .unwrap();
+    sqlx::query("INSERT INTO workspace_memberships (id, workspace_id, user_id) VALUES ($1, $2, $3) ON CONFLICT (workspace_id, user_id) DO NOTHING")
+        .bind(membership_id)
+        .bind(workspace_id)
+        .bind(owner_id)
+        .execute(&pool)
+        .await
+        .unwrap();
+    let membership_id = sqlx::query_scalar::<_, Uuid>(
+        "SELECT id FROM workspace_memberships WHERE workspace_id = $1 AND user_id = $2",
+    )
+    .bind(workspace_id)
+    .bind(owner_id)
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    sqlx::query("INSERT INTO role_grants (id, workspace_id, membership_id, role_id, scope_type, scope_target_id) VALUES ($1, $2, $3, '00000000-0000-4000-8000-000000000101', 'workspace', $2) ON CONFLICT DO NOTHING")
+        .bind(Uuid::from_u128(0x00000000000040008000000000000203))
+        .bind(workspace_id)
+        .bind(membership_id)
+        .execute(&pool)
+        .await
+        .unwrap();
     let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
     let address: SocketAddr = listener.local_addr().unwrap();
     let router = router(AppState {
         repository: CatalogRepository::new(pool),
+        workspace_id,
         metrics: init_metrics().unwrap(),
         max_preview_relationship_depth: 3,
         max_preview_relationship_items: 10,
@@ -37,6 +72,19 @@ pub async fn start_server_with_data_health_cache_ttl(
     let server = tokio::spawn(async move { axum::serve(listener, router).await.unwrap() });
 
     (format!("http://{address}"), server)
+}
+
+pub fn authenticated_client() -> Client {
+    let mut headers = HeaderMap::new();
+    headers.insert(
+        "x-catalog-user-id",
+        HeaderValue::from_static(BOOTSTRAP_OWNER_ID),
+    );
+    headers.insert(
+        "x-catalog-workspace-id",
+        HeaderValue::from_static(BOOTSTRAP_WORKSPACE_ID),
+    );
+    Client::builder().default_headers(headers).build().unwrap()
 }
 
 pub async fn create_blueprint(client: &Client, base_url: &str, definition: &str) -> Value {

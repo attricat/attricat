@@ -5,7 +5,7 @@ use support::*;
 #[sqlx::test]
 async fn catalog_workflow_compiles_explicit_toml_selections_and_rebuilds_preview(pool: PgPool) {
     let (base_url, server) = start_server(pool.clone()).await;
-    let client = Client::new();
+    let client = authenticated_client();
 
     assert_eq!(
         client
