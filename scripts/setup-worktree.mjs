@@ -90,6 +90,16 @@ env = setEnvValue(
   "PASSWORD_RESET_URL",
   `http://127.0.0.1:${ports.WEB_PORT}/password-reset/confirm`,
 );
+env = setEnvValue(
+  env,
+  "WORKSPACE_INVITATION_URL",
+  `http://127.0.0.1:${ports.WEB_PORT}/invitations/accept`,
+);
+env = setEnvValue(
+  env,
+  "WORKSPACE_ONBOARDING_URL",
+  `http://127.0.0.1:${ports.WEB_PORT}/onboarding`,
+);
 writeFileSync(envFile, env);
 
 console.log(`Development web application: http://127.0.0.1:${ports.WEB_PORT}`);

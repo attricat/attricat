@@ -1,14 +1,11 @@
 import { useForm } from '@tanstack/react-form';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { Link } from '@tanstack/react-router';
+import { Link, useNavigate } from '@tanstack/react-router';
 import {
   Alert,
   Box,
   Button,
   Checkbox,
-  Dialog,
-  DialogContent,
-  DialogTitle,
   FormControlLabel,
   List,
   ListItem,
@@ -24,6 +21,8 @@ import { currentSession } from '../auth/api';
 import {
   acceptInvitation,
   createInvitation,
+  createWorkspaceUser,
+  completeOnboarding,
   createRole,
   duplicateRole,
   ensureActiveScopeTarget,
@@ -38,7 +37,6 @@ import {
   revokeInvitation,
   revokeMemberRole,
   selectedScopeTarget,
-  revokeToken,
   setMemberState,
   transferOwnership,
   updateRole,
@@ -56,36 +54,6 @@ const sections: { label: string; section: Section; to: string }[] = [
     to: '/workspace/invitations',
   },
 ];
-
-const SecretDialog = ({
-  secret,
-  onClose,
-}: {
-  secret?: string;
-  onClose: () => void;
-}) => (
-  <Dialog onClose={onClose} open={Boolean(secret)}>
-    <DialogTitle>Copy this secret now</DialogTitle>
-    <DialogContent>
-      <Stack spacing={2} sx={{ minWidth: 360 }}>
-        <Alert severity="warning">
-          This secret is shown only once. Store it securely before closing this
-          dialog.
-        </Alert>
-        <TextField
-          slotProps={{ input: { readOnly: true } }}
-          value={secret ?? ''}
-        />
-        <Button
-          onClick={() => navigator.clipboard?.writeText(secret ?? '')}
-          variant="contained"
-        >
-          Copy secret
-        </Button>
-      </Stack>
-    </DialogContent>
-  </Dialog>
-);
 
 const ScopeFields = ({
   form,
@@ -565,7 +533,6 @@ const Invitations = ({
   workspaceId?: string;
 }) => {
   const client = useQueryClient();
-  const [secret, setSecret] = useState<string>();
   const [error, setError] = useState<string>();
   const invitations = useQuery({
     enabled: canManage,
@@ -608,12 +575,11 @@ const Invitations = ({
             workspaceQueryKeys.grantTargets(value.scope_type),
           ),
         );
-        const result = await createInvitation({
+        await createInvitation({
           email: value.email,
           ...input,
           expires_at: expiresAt.toISOString(),
         });
-        setSecret(result.secret);
         refresh();
       } catch (reason) {
         setError(
@@ -622,6 +588,18 @@ const Invitations = ({
             : 'Could not create invitation',
         );
       }
+    },
+  });
+  const userForm = useForm({
+    defaultValues: { email: '', display_name: '', role_id: '', scope_type: 'workspace' as ScopeType, scope_target_id: workspaceId ?? '', expires_at: '' },
+    onSubmit: async ({ value }) => {
+      try {
+        const expiresAt = new Date(value.expires_at);
+        if (Number.isNaN(expiresAt.getTime()) || expiresAt <= new Date()) throw new Error('Invitation expiry must be in the future.');
+        const input = ensureActiveScopeTarget({ role_id: value.role_id, scope_type: value.scope_type, scope_target_id: value.scope_type === 'workspace' ? (workspaceId ?? '') : value.scope_target_id }, workspaceId, client.getQueryData(workspaceQueryKeys.grantTargets(value.scope_type)));
+        await createWorkspaceUser({ email: value.email, display_name: value.display_name || undefined, ...input, expires_at: expiresAt.toISOString() });
+        refresh();
+      } catch (reason) { setError(reason instanceof Error ? reason.message : 'Could not create user'); }
     },
   });
   if (!canManage) {
@@ -633,7 +611,6 @@ const Invitations = ({
   }
   return (
     <Stack spacing={2} sx={{ mt: 3 }}>
-      <SecretDialog onClose={() => setSecret(undefined)} secret={secret} />
       {error && <Alert severity="error">{error}</Alert>}
       {invitations.isError && (
         <Alert severity="error">{invitations.error.message}</Alert>
@@ -669,6 +646,18 @@ const Invitations = ({
           ))}
         </List>
       </Paper>
+      <Paper component="form" onSubmit={(event) => { event.preventDefault(); userForm.handleSubmit(); }} sx={{ p: 2 }}>
+        <Stack spacing={2}>
+          <Typography variant="h6">Create user and invite</Typography>
+          <Alert severity="info">Catalog sends a one-time onboarding link to this email address. The link is not displayed here or returned by the API.</Alert>
+          <userForm.Field name="email">{(field) => <TextField label="Email" type="email" value={field.state.value} onChange={(event) => field.handleChange(event.target.value)} />}</userForm.Field>
+          <userForm.Field name="display_name">{(field) => <TextField label="Display name (optional)" value={field.state.value} onChange={(event) => field.handleChange(event.target.value)} />}</userForm.Field>
+          <userForm.Field name="role_id">{(field) => <TextField label="Role" select value={field.state.value} onChange={(event) => field.handleChange(event.target.value)}>{roles.data?.map((role) => <MenuItem key={role.id} value={role.id}>{role.code}</MenuItem>)}</TextField>}</userForm.Field>
+          <ScopeFields form={userForm} workspaceId={workspaceId} />
+          <userForm.Field name="expires_at">{(field) => <TextField label="Expires at" type="datetime-local" slotProps={{ inputLabel: { shrink: true } }} value={field.state.value} onChange={(event) => field.handleChange(event.target.value)} />}</userForm.Field>
+          <Button type="submit" variant="contained">Create user and invite</Button>
+        </Stack>
+      </Paper>
       <Paper
         component="form"
         onSubmit={(event) => {
@@ -678,7 +667,7 @@ const Invitations = ({
         sx={{ p: 2 }}
       >
         <Stack spacing={2}>
-          <Typography variant="h6">Invite member</Typography>
+          <Typography variant="h6">Invite existing user</Typography>
           <form.Field name="email">
             {(field) => (
               <TextField
@@ -726,8 +715,42 @@ const Invitations = ({
   );
 };
 
+export const PasswordSetupPage = () => {
+  const navigate = useNavigate();
+  const [invitationSecret, setInvitationSecret] = useState(
+    () => new URLSearchParams(window.location.search).get('invitation_secret') ?? '',
+  );
+  const [onboardingSecret, setOnboardingSecret] = useState(
+    () => new URLSearchParams(window.location.search).get('onboarding_secret') ?? '',
+  );
+  const [password, setPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [message, setMessage] = useState<string>();
+  const submit = async () => {
+    try {
+      if (password.length < 12) throw new Error('Password must be at least 12 characters.');
+      if (password !== confirmPassword) throw new Error('Passwords do not match.');
+      await completeOnboarding({ invitation_secret: invitationSecret, onboarding_secret: onboardingSecret, password });
+      await navigate({ to: '/' });
+    } catch (reason) { setMessage(reason instanceof Error ? reason.message : 'Could not complete onboarding'); }
+  };
+  return <Box sx={{ maxWidth: 500, mx: 'auto', p: 3 }}>
+    <Typography variant="h4">Set up your workspace account</Typography>
+    <Stack spacing={2} sx={{ mt: 3 }}>
+      <TextField autoComplete="off" label="Invitation secret" onChange={(event) => setInvitationSecret(event.target.value)} type="password" value={invitationSecret} />
+      <TextField autoComplete="off" label="Password setup secret" onChange={(event) => setOnboardingSecret(event.target.value)} type="password" value={onboardingSecret} />
+      <TextField autoComplete="new-password" label="Password" onChange={(event) => setPassword(event.target.value)} type="password" value={password} />
+      <TextField autoComplete="new-password" label="Confirm password" onChange={(event) => setConfirmPassword(event.target.value)} type="password" value={confirmPassword} />
+      {message && <Alert severity={message.startsWith('Password set') ? 'success' : 'error'}>{message}</Alert>}
+      <Button onClick={submit} variant="contained">Set password and join workspace</Button>
+    </Stack>
+  </Box>;
+};
+
 export const AcceptInvitationPage = () => {
-  const [secret, setSecret] = useState('');
+  const [secret, setSecret] = useState(
+    () => new URLSearchParams(window.location.search).get('secret') ?? '',
+  );
   const [message, setMessage] = useState<string>();
   const submit = async () => {
     try {

@@ -46,7 +46,8 @@ export const AppLayout = () => {
     pathname === '/login' ||
     pathname.startsWith('/login/') ||
     pathname === '/password-reset' ||
-    pathname.startsWith('/password-reset/')
+    pathname.startsWith('/password-reset/') ||
+    pathname === '/onboarding'
   )
     return <Outlet />;
   if (session.isPending) return null;

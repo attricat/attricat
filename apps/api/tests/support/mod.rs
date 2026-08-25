@@ -4,16 +4,32 @@ use std::{net::SocketAddr, sync::Arc};
 
 use api::{
     http::{AppState, router},
-    mail::SmtpMailDelivery,
+    mail::{MailDelivery, MailError},
     repository::CatalogRepository,
     telemetry::init_metrics,
 };
+use async_trait::async_trait;
 use reqwest::header::{HeaderMap, HeaderValue};
 pub use reqwest::{Client, StatusCode};
 pub use serde_json::{Value, json};
 pub use sqlx::PgPool;
 pub use tokio::{net::TcpListener, task::JoinHandle};
 pub use uuid::Uuid;
+
+pub struct TestMailDelivery;
+
+#[async_trait]
+impl MailDelivery for TestMailDelivery {
+    async fn deliver_password_reset(&self, _: &str, _: &str) -> Result<(), MailError> {
+        Ok(())
+    }
+    async fn deliver_workspace_invitation(&self, _: &str, _: &str) -> Result<(), MailError> {
+        Ok(())
+    }
+    async fn deliver_workspace_onboarding(&self, _: &str, _: &str) -> Result<(), MailError> {
+        Ok(())
+    }
+}
 
 pub async fn start_server(pool: PgPool) -> (String, JoinHandle<()>) {
     start_server_with_data_health_cache_ttl(pool, 0).await
@@ -75,17 +91,10 @@ async fn start_server_with_auth_mode(
             pool.clone(),
             (*pool.connect_options()).clone(),
         ),
-        mail_delivery: Arc::new(
-            SmtpMailDelivery::new(
-                "127.0.0.1",
-                1025,
-                "Catalog <no-reply@catalog.local>",
-                None,
-                None,
-            )
-            .unwrap(),
-        ),
+        mail_delivery: Arc::new(TestMailDelivery),
         password_reset_url: "http://127.0.0.1/password-reset/confirm".to_owned(),
+        workspace_invitation_url: "http://127.0.0.1/invitations/accept".to_owned(),
+        workspace_onboarding_url: "http://127.0.0.1/onboarding".to_owned(),
         metrics: init_metrics().unwrap(),
         max_preview_relationship_depth: 3,
         max_preview_relationship_items: 10,

@@ -144,6 +144,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     )?);
     let password_reset_url = std::env::var("PASSWORD_RESET_URL")
         .unwrap_or_else(|_| "http://127.0.0.1:5173/password-reset/confirm".to_owned());
+    let workspace_invitation_url = std::env::var("WORKSPACE_INVITATION_URL")
+        .unwrap_or_else(|_| "http://127.0.0.1:5173/invitations/accept".to_owned());
+    let workspace_onboarding_url = std::env::var("WORKSPACE_ONBOARDING_URL")
+        .unwrap_or_else(|_| "http://127.0.0.1:5173/onboarding".to_owned());
 
     let listener = tokio::net::TcpListener::bind(bind_addr).await?;
     tracing::info!(address = %listener.local_addr()?, "API listening");
@@ -153,6 +157,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
             repository: CatalogRepository::with_workspace_pool_factory(pool, connect_options),
             mail_delivery,
             password_reset_url,
+            workspace_invitation_url,
+            workspace_onboarding_url,
             metrics,
             max_preview_relationship_depth,
             max_preview_relationship_items,

@@ -33,6 +33,8 @@ pub struct AppState {
     pub repository: CatalogRepository,
     pub mail_delivery: Arc<dyn MailDelivery>,
     pub password_reset_url: String,
+    pub workspace_invitation_url: String,
+    pub workspace_onboarding_url: String,
     pub metrics: PrometheusHandle,
     // Preview expansion is request-controlled, so these limits keep cyclic or
     // high-cardinality relationship graphs from turning one read into an
@@ -184,6 +186,8 @@ pub fn router(state: AppState) -> Router {
             "/workspace/invitations",
             get(members::list_invitations).post(members::create_invitation),
         )
+        .route("/workspace/users", post(members::create_workspace_user))
+        .route("/onboarding/complete", post(members::complete_onboarding))
         .route(
             "/workspace/invitations/{invitation_id}",
             axum::routing::delete(members::revoke_invitation),

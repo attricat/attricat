@@ -1,7 +1,7 @@
 use chrono::{DateTime, Utc};
 use serde::Serialize;
 use serde_json::Value;
-use sqlx::Row;
+use sqlx::{Postgres, Row, Transaction};
 use uuid::Uuid;
 
 use super::{CatalogRepository, RepositoryError};
@@ -36,7 +36,136 @@ pub struct WorkspaceInvitation {
     pub created_at: DateTime<Utc>,
 }
 
+pub struct CreatedWorkspaceUser {
+    pub user_id: Uuid,
+    pub invitation_id: Option<Uuid>,
+    pub needs_password_setup: bool,
+}
+
+pub struct CompletedWorkspaceOnboarding {
+    pub membership_id: Uuid,
+    pub user_id: Uuid,
+    pub workspace_id: Uuid,
+}
+
 impl CatalogRepository {
+    pub async fn create_workspace_user(
+        &self,
+        actor_id: Uuid,
+        workspace_id: Uuid,
+        email: &str,
+        display_name: Option<&str>,
+        invitation: Option<(Uuid, Uuid, String, Uuid, Vec<u8>, DateTime<Utc>)>,
+        action_digest: Option<Vec<u8>>,
+    ) -> Result<CreatedWorkspaceUser, RepositoryError> {
+        self.require_member_permission(actor_id, workspace_id, "members.manage")
+            .await?;
+        if email != email.trim().to_lowercase() || !email.contains('@') {
+            return Err(RepositoryError::InvitationInvalid);
+        }
+        if invitation.is_none() && action_digest.is_some() {
+            return Err(RepositoryError::InvitationInvalid);
+        }
+        let mut tx = self.pool.begin().await?;
+        let user = sqlx::query("INSERT INTO users (id, email, display_name, email_verified_at) VALUES ($1, $2, NULLIF(btrim($3), ''), clock_timestamp()) ON CONFLICT (email) DO UPDATE SET display_name = COALESCE(users.display_name, EXCLUDED.display_name) RETURNING id, state, email_verified_at, security_version")
+            .bind(Uuid::new_v4()).bind(email).bind(display_name).fetch_one(&mut *tx).await?;
+        let user_id: Uuid = user.try_get("id")?;
+        let active = user.try_get::<String, _>("state")? == "active";
+        let verified = user
+            .try_get::<Option<DateTime<Utc>>, _>("email_verified_at")?
+            .is_some();
+        let security_version: i32 = user.try_get("security_version")?;
+        let credential_exists: bool = sqlx::query_scalar(
+            "SELECT EXISTS (SELECT 1 FROM local_password_credentials WHERE user_id = $1)",
+        )
+        .bind(user_id)
+        .fetch_one(&mut *tx)
+        .await?;
+        let Some((
+            invitation_id,
+            role_id,
+            scope_type,
+            scope_target_id,
+            invitation_digest,
+            expires_at,
+        )) = invitation
+        else {
+            self.commit_mutation(tx).await?;
+            return Ok(CreatedWorkspaceUser {
+                user_id,
+                invitation_id: None,
+                needs_password_setup: !credential_exists,
+            });
+        };
+        if invitation_digest.len() != 32
+            || expires_at <= Utc::now()
+            || !self
+                .scope_is_valid(workspace_id, role_id, &scope_type, scope_target_id)
+                .await?
+            || !self
+                .role_is_delegable(actor_id, workspace_id, role_id)
+                .await?
+            || (role_id == OWNER_ROLE_ID && !self.active_owner(actor_id, workspace_id).await?)
+        {
+            return Err(RepositoryError::InvitationInvalid);
+        }
+        sqlx::query("INSERT INTO workspace_invitations (id, workspace_id, invitee_email, inviter_user_id, role_id, scope_type, scope_target_id, token_digest, expires_at) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)")
+            .bind(invitation_id).bind(workspace_id).bind(email).bind(actor_id).bind(role_id).bind(&scope_type).bind(scope_target_id).bind(invitation_digest).bind(expires_at).execute(&mut *tx).await?;
+        if !credential_exists {
+            let action_digest = action_digest
+                .filter(|digest| digest.len() == 32)
+                .ok_or(RepositoryError::InvitationInvalid)?;
+            if !active || !verified {
+                return Err(RepositoryError::InvitationInvalid);
+            }
+            sqlx::query("INSERT INTO user_lifecycle_action_tokens (id, user_id, purpose, token_digest, issued_security_version, issued_credential_version, expires_at) VALUES ($1,$2,'password_setup',$3,$4,0,$5)")
+                .bind(Uuid::new_v4()).bind(user_id).bind(&action_digest).bind(security_version).bind(expires_at).execute(&mut *tx).await?;
+            sqlx::query("INSERT INTO workspace_invitation_onboarding (invitation_id, workspace_id, user_id, action_token_digest) VALUES ($1,$2,$3,$4)")
+                .bind(invitation_id).bind(workspace_id).bind(user_id).bind(action_digest).execute(&mut *tx).await?;
+        }
+        self.commit_mutation(tx).await?;
+        Ok(CreatedWorkspaceUser {
+            user_id,
+            invitation_id: Some(invitation_id),
+            needs_password_setup: !credential_exists,
+        })
+    }
+
+    pub async fn complete_workspace_onboarding(
+        &self,
+        invitation_digest: &[u8],
+        action_digest: &[u8],
+        password_hash: &str,
+    ) -> Result<CompletedWorkspaceOnboarding, RepositoryError> {
+        if invitation_digest.len() != 32 || action_digest.len() != 32 {
+            return Err(RepositoryError::InvitationInvalid);
+        }
+        let mut tx: Transaction<'_, Postgres> = self.pool.begin().await?;
+        let row = sqlx::query("SELECT i.id invitation_id, i.workspace_id, i.role_id, i.scope_type, i.scope_target_id, o.user_id, u.security_version FROM workspace_invitations i JOIN workspace_invitation_onboarding o ON o.invitation_id = i.id AND o.workspace_id = i.workspace_id JOIN user_lifecycle_action_tokens a ON a.token_digest = o.action_token_digest AND a.user_id = o.user_id AND a.purpose = 'password_setup' JOIN users u ON u.id = o.user_id WHERE i.token_digest = $1 AND o.action_token_digest = $2 AND i.accepted_at IS NULL AND i.revoked_at IS NULL AND i.expires_at > clock_timestamp() AND a.consumed_at IS NULL AND a.revoked_at IS NULL AND a.expires_at > clock_timestamp() AND a.issued_security_version = u.security_version AND u.state = 'active' AND u.email_verified_at IS NOT NULL FOR UPDATE OF i, o, a, u")
+            .bind(invitation_digest).bind(action_digest).fetch_optional(&mut *tx).await?.ok_or(RepositoryError::InvitationInvalid)?;
+        let user_id: Uuid = row.try_get("user_id")?;
+        let workspace_id: Uuid = row.try_get("workspace_id")?;
+        let action_consumed = sqlx::query("UPDATE user_lifecycle_action_tokens SET consumed_at = clock_timestamp() WHERE token_digest = $1 AND consumed_at IS NULL AND revoked_at IS NULL")
+            .bind(action_digest).execute(&mut *tx).await?.rows_affected() == 1;
+        if !action_consumed {
+            return Err(RepositoryError::InvitationInvalid);
+        }
+        sqlx::query("INSERT INTO local_password_credentials (user_id, password_hash, credential_version) VALUES ($1,$2,1)")
+            .bind(user_id).bind(password_hash).execute(&mut *tx).await?;
+        let membership_id: Uuid = sqlx::query_scalar("INSERT INTO workspace_memberships (id, workspace_id, user_id, state) VALUES ($1,$2,$3,'active') ON CONFLICT (workspace_id,user_id) DO UPDATE SET state = 'active', updated_at = clock_timestamp() RETURNING id")
+            .bind(Uuid::new_v4()).bind(workspace_id).bind(user_id).fetch_one(&mut *tx).await?;
+        sqlx::query("INSERT INTO role_grants (id, workspace_id, membership_id, role_id, scope_type, scope_target_id) VALUES ($1,$2,$3,$4,$5,$6) ON CONFLICT (workspace_id,membership_id,role_id,scope_type,scope_target_id) DO NOTHING")
+            .bind(Uuid::new_v4()).bind(workspace_id).bind(membership_id).bind(row.try_get::<Uuid,_>("role_id")?).bind(row.try_get::<String,_>("scope_type")?).bind(row.try_get::<Uuid,_>("scope_target_id")?).execute(&mut *tx).await?;
+        sqlx::query("UPDATE workspace_invitations SET accepted_at = clock_timestamp(), accepted_by_user_id = $1 WHERE id = $2 AND accepted_at IS NULL")
+            .bind(user_id).bind(row.try_get::<Uuid,_>("invitation_id")?).execute(&mut *tx).await?;
+        self.commit_mutation(tx).await?;
+        Ok(CompletedWorkspaceOnboarding {
+            membership_id,
+            user_id,
+            workspace_id,
+        })
+    }
+
     async fn require_member_permission(
         &self,
         actor_id: Uuid,
@@ -344,6 +473,8 @@ impl CatalogRepository {
         let mut tx = self.pool.begin().await?;
         let revoked = sqlx::query("UPDATE workspace_invitations SET revoked_at = clock_timestamp() WHERE id = $1 AND workspace_id = $2 AND accepted_at IS NULL AND revoked_at IS NULL").bind(id).bind(workspace_id).execute(&mut *tx).await?.rows_affected() == 1;
         if revoked {
+            sqlx::query("UPDATE user_lifecycle_action_tokens action SET revoked_at = clock_timestamp() FROM workspace_invitation_onboarding onboarding WHERE onboarding.invitation_id = $1 AND action.token_digest = onboarding.action_token_digest AND action.consumed_at IS NULL AND action.revoked_at IS NULL")
+                .bind(id).execute(&mut *tx).await?;
             self.commit_mutation(tx).await?;
         }
         Ok(revoked)

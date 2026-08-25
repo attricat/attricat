@@ -21,7 +21,7 @@ use crate::account::{
 
 const SESSION_COOKIE: &str = "catalog_session";
 const CSRF_COOKIE: &str = "catalog_csrf";
-const SESSION_LIFETIME_HOURS: i64 = 8;
+pub(super) const SESSION_LIFETIME_HOURS: i64 = 8;
 const PASSWORD_RESET_LIFETIME_MINUTES: i64 = 30;
 
 #[derive(Deserialize)]
@@ -63,6 +63,13 @@ pub(super) struct SessionResponse {
     /// The human-facing identifier for the session-bound workspace.
     login_identifier: String,
     capabilities: SessionCapabilities,
+}
+
+#[derive(Serialize)]
+pub(super) struct OnboardingSessionResponse {
+    #[serde(flatten)]
+    session: SessionResponse,
+    membership_id: Uuid,
 }
 
 #[derive(Serialize)]
@@ -269,7 +276,7 @@ pub(super) async fn renew(
     .await
 }
 
-fn issue_session() -> (SessionSecret, SessionSecret, chrono::DateTime<Utc>) {
+pub(super) fn issue_session() -> (SessionSecret, SessionSecret, chrono::DateTime<Utc>) {
     (
         SessionSecret::generate(),
         SessionSecret::generate(),
@@ -281,7 +288,7 @@ fn digest_login_key(value: &str) -> SessionDigest {
     SessionDigest::from_slice(&Sha256::digest(value.as_bytes())).expect("sha256 is 32 bytes")
 }
 
-async fn session_response(
+pub(super) async fn session_response(
     state: &AppState,
     user_id: Uuid,
     workspace_id: Uuid,
@@ -295,6 +302,44 @@ async fn session_response(
         session_response_payload_with_identifier(state, user_id, workspace_id, login_identifier)
             .await?,
     )
+    .into_response();
+    response.headers_mut().append(
+        SET_COOKIE,
+        cookie(
+            SESSION_COOKIE,
+            session.expose_for_delivery(),
+            true,
+            secure,
+            lifetime_hours,
+        ),
+    );
+    response.headers_mut().append(
+        SET_COOKIE,
+        cookie(
+            CSRF_COOKIE,
+            csrf.expose_for_delivery(),
+            false,
+            secure,
+            lifetime_hours,
+        ),
+    );
+    Ok(response)
+}
+
+pub(super) async fn onboarding_session_response(
+    state: &AppState,
+    user_id: Uuid,
+    workspace_id: Uuid,
+    membership_id: Uuid,
+    session: &SessionSecret,
+    csrf: &SessionSecret,
+    secure: bool,
+    lifetime_hours: i64,
+) -> Result<Response, ApiError> {
+    let mut response = Json(OnboardingSessionResponse {
+        session: session_response_payload(state, user_id, workspace_id).await?,
+        membership_id,
+    })
     .into_response();
     response.headers_mut().append(
         SET_COOKIE,
