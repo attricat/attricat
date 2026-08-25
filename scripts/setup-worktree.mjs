@@ -5,7 +5,7 @@ import net from "node:net";
  * Provision this worktree's development environment.
  *
  * Each worktree receives stable, otherwise-unused PostgreSQL, API, and web
- * ports in `.catalog-worktree`. The assignments are reused on later runs so
+ * ports, Mailpit SMTP, and Mailpit UI ports in `.catalog-worktree`. The assignments are reused on later runs so
  * `just dev` can be stopped and restarted without changing its URLs. The
  * script creates `.env` from `.env.example` when necessary, while preserving
  * existing non-port configuration in an existing `.env` file.
@@ -13,7 +13,13 @@ import net from "node:net";
 const stateFile = new URL("../.catalog-worktree", import.meta.url);
 const envFile = new URL("../.env", import.meta.url);
 const exampleEnvFile = new URL("../.env.example", import.meta.url);
-const portNames = ["POSTGRES_PORT", "API_PORT", "WEB_PORT"];
+const portNames = [
+  "POSTGRES_PORT",
+  "API_PORT",
+  "WEB_PORT",
+  "MAILPIT_SMTP_PORT",
+  "MAILPIT_UI_PORT",
+];
 
 /** Parse simple KEY=VALUE entries from .env-style files. */
 const parseEnv = (contents) =>
@@ -78,6 +84,12 @@ env = setEnvValue(env, "BIND_ADDR", `127.0.0.1:${ports.API_PORT}`);
 env = setEnvValue(env, "CATALOG_API_URL", `http://127.0.0.1:${ports.API_PORT}`);
 env = setEnvValue(env, "POSTGRES_PORT", ports.POSTGRES_PORT);
 env = setEnvValue(env, "WEB_PORT", ports.WEB_PORT);
+env = setEnvValue(env, "SMTP_PORT", ports.MAILPIT_SMTP_PORT);
+env = setEnvValue(
+  env,
+  "PASSWORD_RESET_URL",
+  `http://127.0.0.1:${ports.WEB_PORT}/password-reset/confirm`,
+);
 writeFileSync(envFile, env);
 
 console.log(`Development web application: http://127.0.0.1:${ports.WEB_PORT}`);

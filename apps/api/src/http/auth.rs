@@ -111,7 +111,12 @@ pub(super) async fn authorize(
     next: Next,
 ) -> Result<Response, ApiError> {
     let path = request.uri().path();
-    if path == "/health" || path == "/auth/login" || path == "/auth/discover" {
+    if path == "/health"
+        || path == "/auth/login"
+        || path == "/auth/discover"
+        || path == "/auth/password-reset"
+        || path == "/auth/password-reset/confirm"
+    {
         return Ok(next.run(request).await);
     }
 

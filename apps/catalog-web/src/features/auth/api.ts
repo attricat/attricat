@@ -49,6 +49,25 @@ export const login = async (
   return sessionSchema.parse(await response.json());
 };
 
+export const requestPasswordReset = async (email: string) => {
+  const response = await apiFetch('/api/auth/password-reset', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email }),
+  });
+  if (!response.ok) throw new Error('Unable to request a password reset');
+};
+
+export const confirmPasswordReset = async (token: string, password: string) => {
+  const response = await apiFetch('/api/auth/password-reset/confirm', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ token, password }),
+  });
+  if (!response.ok)
+    throw new Error('This password reset link is invalid or expired');
+};
+
 export const currentSession = async () => {
   const response = await apiFetch('/api/auth/session');
   if (!response.ok) return null;

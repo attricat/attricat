@@ -22,6 +22,8 @@ import { Route as EntitiesNewRouteImport } from './routes/entities/new'
 import { Route as InvitationsAcceptRouteImport } from './routes/invitations/accept'
 import { Route as LoginIndexRouteImport } from './routes/login/index'
 import { Route as LoginIdentifierRouteImport } from './routes/login/$identifier'
+import { Route as PasswordResetIndexRouteImport } from './routes/password-reset/index'
+import { Route as PasswordResetConfirmRouteImport } from './routes/password-reset/confirm'
 import { Route as WorkspaceIndexRouteImport } from './routes/workspace/index'
 import { Route as WorkspaceInvitationsRouteImport } from './routes/workspace/invitations'
 import { Route as WorkspaceMembersRouteImport } from './routes/workspace/members'
@@ -95,6 +97,16 @@ const LoginIdentifierRoute = LoginIdentifierRouteImport.update({
   path: '/$identifier',
   getParentRoute: () => LoginRoute,
 } as any)
+const PasswordResetIndexRoute = PasswordResetIndexRouteImport.update({
+  id: '/password-reset/',
+  path: '/password-reset/',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const PasswordResetConfirmRoute = PasswordResetConfirmRouteImport.update({
+  id: '/password-reset/confirm',
+  path: '/password-reset/confirm',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const WorkspaceIndexRoute = WorkspaceIndexRouteImport.update({
   id: '/workspace/',
   path: '/workspace/',
@@ -142,12 +154,14 @@ export interface FileRoutesByFullPath {
   '/entities/new': typeof EntitiesNewRoute
   '/invitations/accept': typeof InvitationsAcceptRoute
   '/login/$identifier': typeof LoginIdentifierRoute
+  '/password-reset/confirm': typeof PasswordResetConfirmRoute
   '/workspace/invitations': typeof WorkspaceInvitationsRoute
   '/workspace/members': typeof WorkspaceMembersRoute
   '/workspace/roles': typeof WorkspaceRolesRoute
   '/blueprints/': typeof BlueprintsIndexRoute
   '/contexts/': typeof ContextsIndexRoute
   '/login/': typeof LoginIndexRoute
+  '/password-reset/': typeof PasswordResetIndexRoute
   '/workspace/': typeof WorkspaceIndexRoute
   '/entities/$entityId/edit': typeof EntitiesEntityIdEditRoute
   '/entities/$entityId/migrate': typeof EntitiesEntityIdMigrateRoute
@@ -162,12 +176,14 @@ export interface FileRoutesByTo {
   '/entities/new': typeof EntitiesNewRoute
   '/invitations/accept': typeof InvitationsAcceptRoute
   '/login/$identifier': typeof LoginIdentifierRoute
+  '/password-reset/confirm': typeof PasswordResetConfirmRoute
   '/workspace/invitations': typeof WorkspaceInvitationsRoute
   '/workspace/members': typeof WorkspaceMembersRoute
   '/workspace/roles': typeof WorkspaceRolesRoute
   '/blueprints': typeof BlueprintsIndexRoute
   '/contexts': typeof ContextsIndexRoute
   '/login': typeof LoginIndexRoute
+  '/password-reset': typeof PasswordResetIndexRoute
   '/workspace': typeof WorkspaceIndexRoute
   '/entities/$entityId/edit': typeof EntitiesEntityIdEditRoute
   '/entities/$entityId/migrate': typeof EntitiesEntityIdMigrateRoute
@@ -185,12 +201,14 @@ export interface FileRoutesById {
   '/entities/new': typeof EntitiesNewRoute
   '/invitations/accept': typeof InvitationsAcceptRoute
   '/login/$identifier': typeof LoginIdentifierRoute
+  '/password-reset/confirm': typeof PasswordResetConfirmRoute
   '/workspace/invitations': typeof WorkspaceInvitationsRoute
   '/workspace/members': typeof WorkspaceMembersRoute
   '/workspace/roles': typeof WorkspaceRolesRoute
   '/blueprints/': typeof BlueprintsIndexRoute
   '/contexts/': typeof ContextsIndexRoute
   '/login/': typeof LoginIndexRoute
+  '/password-reset/': typeof PasswordResetIndexRoute
   '/workspace/': typeof WorkspaceIndexRoute
   '/entities/$entityId/edit': typeof EntitiesEntityIdEditRoute
   '/entities/$entityId/migrate': typeof EntitiesEntityIdMigrateRoute
@@ -209,12 +227,14 @@ export interface FileRouteTypes {
     | '/entities/new'
     | '/invitations/accept'
     | '/login/$identifier'
+    | '/password-reset/confirm'
     | '/workspace/invitations'
     | '/workspace/members'
     | '/workspace/roles'
     | '/blueprints/'
     | '/contexts/'
     | '/login/'
+    | '/password-reset/'
     | '/workspace/'
     | '/entities/$entityId/edit'
     | '/entities/$entityId/migrate'
@@ -229,12 +249,14 @@ export interface FileRouteTypes {
     | '/entities/new'
     | '/invitations/accept'
     | '/login/$identifier'
+    | '/password-reset/confirm'
     | '/workspace/invitations'
     | '/workspace/members'
     | '/workspace/roles'
     | '/blueprints'
     | '/contexts'
     | '/login'
+    | '/password-reset'
     | '/workspace'
     | '/entities/$entityId/edit'
     | '/entities/$entityId/migrate'
@@ -251,12 +273,14 @@ export interface FileRouteTypes {
     | '/entities/new'
     | '/invitations/accept'
     | '/login/$identifier'
+    | '/password-reset/confirm'
     | '/workspace/invitations'
     | '/workspace/members'
     | '/workspace/roles'
     | '/blueprints/'
     | '/contexts/'
     | '/login/'
+    | '/password-reset/'
     | '/workspace/'
     | '/entities/$entityId/edit'
     | '/entities/$entityId/migrate'
@@ -273,11 +297,13 @@ export interface RootRouteChildren {
   EntitiesEntityIdRoute: typeof EntitiesEntityIdRouteWithChildren
   EntitiesNewRoute: typeof EntitiesNewRoute
   InvitationsAcceptRoute: typeof InvitationsAcceptRoute
+  PasswordResetConfirmRoute: typeof PasswordResetConfirmRoute
   WorkspaceInvitationsRoute: typeof WorkspaceInvitationsRoute
   WorkspaceMembersRoute: typeof WorkspaceMembersRoute
   WorkspaceRolesRoute: typeof WorkspaceRolesRoute
   BlueprintsIndexRoute: typeof BlueprintsIndexRoute
   ContextsIndexRoute: typeof ContextsIndexRoute
+  PasswordResetIndexRoute: typeof PasswordResetIndexRoute
   WorkspaceIndexRoute: typeof WorkspaceIndexRoute
 }
 
@@ -374,6 +400,20 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof LoginIdentifierRouteImport
       parentRoute: typeof LoginRoute
     }
+    '/password-reset/': {
+      id: '/password-reset/'
+      path: '/password-reset'
+      fullPath: '/password-reset/'
+      preLoaderRoute: typeof PasswordResetIndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/password-reset/confirm': {
+      id: '/password-reset/confirm'
+      path: '/password-reset/confirm'
+      fullPath: '/password-reset/confirm'
+      preLoaderRoute: typeof PasswordResetConfirmRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/workspace/': {
       id: '/workspace/'
       path: '/workspace'
@@ -463,11 +503,13 @@ const rootRouteChildren: RootRouteChildren = {
   EntitiesEntityIdRoute: EntitiesEntityIdRouteWithChildren,
   EntitiesNewRoute: EntitiesNewRoute,
   InvitationsAcceptRoute: InvitationsAcceptRoute,
+  PasswordResetConfirmRoute: PasswordResetConfirmRoute,
   WorkspaceInvitationsRoute: WorkspaceInvitationsRoute,
   WorkspaceMembersRoute: WorkspaceMembersRoute,
   WorkspaceRolesRoute: WorkspaceRolesRoute,
   BlueprintsIndexRoute: BlueprintsIndexRoute,
   ContextsIndexRoute: ContextsIndexRoute,
+  PasswordResetIndexRoute: PasswordResetIndexRoute,
   WorkspaceIndexRoute: WorkspaceIndexRoute,
 }
 export const routeTree = rootRouteImport

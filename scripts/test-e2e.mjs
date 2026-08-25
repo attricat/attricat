@@ -20,7 +20,9 @@ const setup = spawnSync(process.execPath, ["scripts/setup-worktree.mjs"], {
 });
 if (setup.status !== 0) process.exit(setup.status ?? 1);
 
-const [apiPort, webPort] = await Promise.all([
+const [apiPort, webPort, mailpitSmtpPort, mailpitUiPort] = await Promise.all([
+  availablePort(),
+  availablePort(),
   availablePort(),
   availablePort(),
 ]);
@@ -33,6 +35,8 @@ const playwright = spawn(
       ...process.env,
       CATALOG_E2E_API_PORT: String(apiPort),
       CATALOG_E2E_WEB_PORT: String(webPort),
+      CATALOG_E2E_MAILPIT_SMTP_PORT: String(mailpitSmtpPort),
+      CATALOG_E2E_MAILPIT_UI_PORT: String(mailpitUiPort),
     },
     stdio: "inherit",
   },

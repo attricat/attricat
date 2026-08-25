@@ -42,7 +42,12 @@ export const AppLayout = () => {
     queryClient.setQueryData(['auth', 'session'], null);
     await navigate({ to: '/login' });
   };
-  if (pathname === '/login' || pathname.startsWith('/login/'))
+  if (
+    pathname === '/login' ||
+    pathname.startsWith('/login/') ||
+    pathname === '/password-reset' ||
+    pathname.startsWith('/password-reset/')
+  )
     return <Outlet />;
   if (session.isPending) return null;
   if (!session.data) {

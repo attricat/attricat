@@ -23,7 +23,9 @@ just down
 ```
 
 See [Getting Started](docs/index.md#getting-started) for database, migration,
-and test instructions.
+and test instructions. Mailpit also starts with the local stack; source
+`.catalog-worktree` and open `http://127.0.0.1:$MAILPIT_UI_PORT` to inspect
+local email.
 
 ## Sign in locally
 

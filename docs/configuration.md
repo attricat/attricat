@@ -26,6 +26,17 @@ file.
 | `POSTGRES_PASSWORD` | `postgres` | Docker Compose | Local PostgreSQL password. |
 | `POSTGRES_PORT` | `5432` | Docker Compose | Host port mapped to PostgreSQL. |
 | `WEB_PORT` | `5173` | Vite | Listener port for the development web app. |
+| `SMTP_HOST` | `127.0.0.1` | API local development | Mailpit SMTP host. |
+| `SMTP_PORT` | `1025` | API local development | Mailpit SMTP port; `just setup` sets it to the worktree-specific port. |
+| `MAIL_FROM` | `Catalog <no-reply@catalog.local>` | API local development | Sender address for lifecycle email. |
+| `PASSWORD_RESET_URL` | Local web confirmation URL | API local development | Absolute web URL used in reset email; `just setup` uses the worktree's `WEB_PORT`. |
+| `MAILPIT_SMTP_PORT` | `1025` | Docker Compose | Worktree-specific host port mapped to Mailpit SMTP. |
+| `MAILPIT_UI_PORT` | `8025` | Docker Compose | Worktree-specific host port for Mailpit's UI and REST API. |
+
+Mailpit is a local-development and E2E adapter only; it is not production mail
+configuration. Source `.catalog-worktree` after `just dev`, open
+`http://127.0.0.1:$MAILPIT_UI_PORT` for manual inspection, and use its REST API
+for E2E mailbox retrieval. Production mail delivery is deliberately deferred.
 
 ## Request authorization
 

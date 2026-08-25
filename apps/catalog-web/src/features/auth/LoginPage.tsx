@@ -100,6 +100,9 @@ export const PasswordLoginPage = ({ identifier }: { identifier: string }) => {
         )}
       </form.Field>
       {error && <Typography color="error">{error}</Typography>}
+      <Button component={Link} to="/password-reset" variant="text">
+        Forgot password?
+      </Button>
       <Button type="submit" variant="contained">
         Sign in
       </Button>

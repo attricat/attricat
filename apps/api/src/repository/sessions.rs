@@ -2,7 +2,7 @@ use chrono::{DateTime, Utc};
 use sqlx::Row;
 use uuid::Uuid;
 
-use crate::account::{PasswordHash, SessionDigest};
+use crate::account::{ActionTokenDigest, PasswordHash, SessionDigest};
 
 use super::{CatalogRepository, RepositoryError};
 
@@ -10,6 +10,7 @@ pub struct LocalLoginCredential {
     pub user_id: Uuid,
     pub password_hash: PasswordHash,
     pub active: bool,
+    pub email_verified: bool,
     pub security_version: i32,
     pub credential_version: i32,
 }
@@ -73,7 +74,7 @@ impl CatalogRepository {
         email: &str,
     ) -> Result<Option<LocalLoginCredential>, RepositoryError> {
         let row = sqlx::query(
-            "SELECT credential.user_id, credential.password_hash, user_account.state AS user_state, user_account.security_version, credential.credential_version FROM local_password_credentials credential JOIN users user_account ON user_account.id = credential.user_id WHERE user_account.email = lower(btrim($1))",
+            "SELECT credential.user_id, credential.password_hash, user_account.state AS user_state, user_account.email_verified_at, user_account.security_version, credential.credential_version FROM local_password_credentials credential JOIN users user_account ON user_account.id = credential.user_id WHERE user_account.email = lower(btrim($1))",
         )
         .bind(email)
         .fetch_optional(&self.pool)
@@ -86,12 +87,86 @@ impl CatalogRepository {
                     sqlx::Error::Protocol("stored password hash is invalid".into())
                 })?,
                 active: row.try_get::<String, _>("user_state")? == "active",
+                email_verified: row
+                    .try_get::<Option<DateTime<Utc>>, _>("email_verified_at")?
+                    .is_some(),
                 security_version: row.try_get("security_version")?,
                 credential_version: row.try_get("credential_version")?,
             })
         })
         .transpose()
         .map_err(RepositoryError::from)
+    }
+
+    /// Atomically consumes a password-reset action, changes the password, and
+    /// invalidates every session and outstanding lifecycle action for its user.
+    pub async fn consume_password_reset(
+        &self,
+        digest: &ActionTokenDigest,
+        password_hash: &PasswordHash,
+    ) -> Result<(), RepositoryError> {
+        let mut tx = self.pool.begin().await?;
+        let token_user_id: Uuid = sqlx::query_scalar(
+            "SELECT user_id FROM user_lifecycle_action_tokens WHERE token_digest = $1 AND purpose = 'password_reset'",
+        )
+        .bind(digest.as_ref())
+        .fetch_optional(&mut *tx)
+        .await?
+        .ok_or(RepositoryError::NotFound("lifecycle token"))?;
+        let user =
+            sqlx::query("SELECT state, security_version FROM users WHERE id = $1 FOR UPDATE")
+                .bind(token_user_id)
+                .fetch_optional(&mut *tx)
+                .await?
+                .ok_or(RepositoryError::NotFound("lifecycle token"))?;
+        let token = sqlx::query("SELECT issued_security_version, issued_credential_version, expires_at, consumed_at, revoked_at FROM user_lifecycle_action_tokens WHERE token_digest = $1 AND purpose = 'password_reset' FOR UPDATE")
+            .bind(digest.as_ref())
+            .fetch_optional(&mut *tx)
+            .await?
+            .ok_or(RepositoryError::NotFound("lifecycle token"))?;
+        let credential_version: i32 = sqlx::query_scalar(
+            "SELECT credential_version FROM local_password_credentials WHERE user_id = $1 FOR UPDATE",
+        )
+        .bind(token_user_id)
+        .fetch_optional(&mut *tx)
+        .await?
+        .ok_or(RepositoryError::NotFound("lifecycle token"))?;
+        let valid = user.try_get::<String, _>("state")? == "active"
+            && token
+                .try_get::<Option<DateTime<Utc>>, _>("consumed_at")?
+                .is_none()
+            && token
+                .try_get::<Option<DateTime<Utc>>, _>("revoked_at")?
+                .is_none()
+            && token.try_get::<DateTime<Utc>, _>("expires_at")? > Utc::now()
+            && token.try_get::<i32, _>("issued_security_version")?
+                == user.try_get::<i32, _>("security_version")?
+            && token.try_get::<i32, _>("issued_credential_version")? == credential_version;
+        if !valid {
+            return Err(RepositoryError::NotFound("lifecycle token"));
+        }
+        sqlx::query("UPDATE user_lifecycle_action_tokens SET consumed_at = clock_timestamp() WHERE token_digest = $1")
+            .bind(digest.as_ref())
+            .execute(&mut *tx)
+            .await?;
+        sqlx::query("UPDATE local_password_credentials SET password_hash = $1, credential_version = credential_version + 1, updated_at = clock_timestamp() WHERE user_id = $2")
+            .bind(password_hash.as_phc())
+            .bind(token_user_id)
+            .execute(&mut *tx)
+            .await?;
+        sqlx::query("UPDATE users SET security_version = security_version + 1, updated_at = clock_timestamp() WHERE id = $1")
+            .bind(token_user_id)
+            .execute(&mut *tx)
+            .await?;
+        sqlx::query("UPDATE browser_sessions SET revoked_at = clock_timestamp() WHERE user_id = $1 AND revoked_at IS NULL")
+            .bind(token_user_id)
+            .execute(&mut *tx)
+            .await?;
+        sqlx::query("UPDATE user_lifecycle_action_tokens SET revoked_at = clock_timestamp() WHERE user_id = $1 AND consumed_at IS NULL AND revoked_at IS NULL")
+            .bind(token_user_id)
+            .execute(&mut *tx)
+            .await?;
+        self.commit_mutation(tx).await
     }
 
     pub async fn reserve_login_attempt(

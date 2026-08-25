@@ -1,6 +1,7 @@
 pub mod account;
 mod blueprint_resolver;
 pub mod http;
+pub mod mail;
 pub mod model;
 pub mod repository;
 pub mod telemetry;
