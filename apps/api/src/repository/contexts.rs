@@ -17,24 +17,29 @@ impl CatalogRepository {
             return Err(RepositoryError::InvalidContextData);
         }
         let parent_exists = sqlx::query_scalar::<_, bool>(
-            "SELECT EXISTS (SELECT 1 FROM attribute_contexts WHERE id = $1)",
+            "SELECT EXISTS (SELECT 1 FROM attribute_contexts WHERE id = $1 AND workspace_id = $2)",
         )
         .bind(input.parent_id)
+        .bind(self.workspace_id.unwrap_or(Self::DEFAULT_WORKSPACE_ID))
         .fetch_one(&self.pool)
         .await?;
         if !parent_exists {
             return Err(RepositoryError::InvalidContext);
         }
-        Ok(query_as::<_, AttributeContext>(
-            r#"INSERT INTO attribute_contexts (id, code, data, parent_id)
-            VALUES ($1, $2, $3, $4) RETURNING id, code, data, parent_id"#,
+        let mut transaction = self.pool.begin().await?;
+        let context = query_as::<_, AttributeContext>(
+            r#"INSERT INTO attribute_contexts (id, workspace_id, code, data, parent_id)
+            VALUES ($1, $2, $3, $4, $5) RETURNING id, code, data, parent_id"#,
         )
         .bind(Uuid::new_v4())
+        .bind(self.workspace_id.unwrap_or(Self::DEFAULT_WORKSPACE_ID))
         .bind(input.code)
         .bind(input.data)
         .bind(input.parent_id)
-        .fetch_one(&self.pool)
-        .await?)
+        .fetch_one(&mut *transaction)
+        .await?;
+        self.commit_mutation(transaction).await?;
+        Ok(context)
     }
 
     pub async fn get_context_by_code(
@@ -43,17 +48,19 @@ impl CatalogRepository {
     ) -> Result<Option<AttributeContext>, RepositoryError> {
         validate_code(code)?;
         Ok(query_as::<_, AttributeContext>(
-            "SELECT id, code, data, parent_id FROM attribute_contexts WHERE code = $1",
+            "SELECT id, code, data, parent_id FROM attribute_contexts WHERE code = $1 AND workspace_id = $2",
         )
         .bind(code)
+        .bind(self.workspace_id.unwrap_or(Self::DEFAULT_WORKSPACE_ID))
         .fetch_optional(&self.pool)
         .await?)
     }
 
     pub async fn list_contexts(&self) -> Result<Vec<AttributeContext>, RepositoryError> {
         Ok(query_as::<_, AttributeContext>(
-            "SELECT id, code, data, parent_id FROM attribute_contexts ORDER BY code",
+            "SELECT id, code, data, parent_id FROM attribute_contexts WHERE workspace_id = $1 ORDER BY code",
         )
+        .bind(self.workspace_id.unwrap_or(Self::DEFAULT_WORKSPACE_ID))
         .fetch_all(&self.pool)
         .await?)
     }
@@ -63,13 +70,31 @@ impl CatalogRepository {
         user_id: Uuid,
         workspace_id: Uuid,
     ) -> Result<Vec<AttributeContext>, RepositoryError> {
-        Ok(query_as::<_, AttributeContext>(
-            "SELECT id, code, data, parent_id FROM catalog_authorized_contexts($1, $2)",
+        if !self.is_active_principal(user_id, workspace_id).await? {
+            return Ok(Vec::new());
+        }
+        let contexts = query_as::<_, AttributeContext>(
+            "SELECT id, code, data, parent_id FROM attribute_contexts WHERE workspace_id = $1 ORDER BY code",
         )
-        .bind(user_id)
         .bind(workspace_id)
         .fetch_all(&self.pool)
-        .await?)
+        .await?;
+        let mut authorized = Vec::new();
+        for context in contexts {
+            if self
+                .is_authorized(
+                    user_id,
+                    workspace_id,
+                    "contexts.read",
+                    Some(context.id),
+                    None,
+                )
+                .await?
+            {
+                authorized.push(context);
+            }
+        }
+        Ok(authorized)
     }
 
     pub async fn update_context(
@@ -89,38 +114,41 @@ impl CatalogRepository {
             .execute(&mut *transaction)
             .await?;
         let context_exists = sqlx::query_scalar::<_, bool>(
-            "SELECT EXISTS (SELECT 1 FROM attribute_contexts WHERE id = $1)",
+            "SELECT EXISTS (SELECT 1 FROM attribute_contexts WHERE id = $1 AND workspace_id = $2)",
         )
         .bind(id)
+        .bind(self.workspace_id.unwrap_or(Self::DEFAULT_WORKSPACE_ID))
         .fetch_one(&mut *transaction)
         .await?;
         if !context_exists {
             return Err(RepositoryError::NotFound("context"));
         }
         let parent_exists = sqlx::query_scalar::<_, bool>(
-            "SELECT EXISTS (SELECT 1 FROM attribute_contexts WHERE id = $1)",
+            "SELECT EXISTS (SELECT 1 FROM attribute_contexts WHERE id = $1 AND workspace_id = $2)",
         )
         .bind(input.parent_id)
+        .bind(self.workspace_id.unwrap_or(Self::DEFAULT_WORKSPACE_ID))
         .fetch_one(&mut *transaction)
         .await?;
         if !parent_exists {
             return Err(RepositoryError::InvalidContext);
         }
         let result = query_as::<_, AttributeContext>(r#"WITH RECURSIVE descendants AS (
-                SELECT id FROM attribute_contexts WHERE id = $1
-                UNION ALL SELECT c.id FROM attribute_contexts c JOIN descendants d ON c.parent_id = d.id
+                SELECT id FROM attribute_contexts WHERE id = $1 AND workspace_id = $4
+                UNION ALL SELECT c.id FROM attribute_contexts c JOIN descendants d ON c.parent_id = d.id AND c.workspace_id = $4
             ) UPDATE attribute_contexts SET parent_id = $2, data = $3
-              WHERE id = $1 AND $2 NOT IN (SELECT id FROM descendants)
+              WHERE id = $1 AND workspace_id = $4 AND $2 NOT IN (SELECT id FROM descendants)
               RETURNING id, code, data, parent_id"#)
-            .bind(id).bind(input.parent_id).bind(input.data).fetch_optional(&mut *transaction).await?
+            .bind(id).bind(input.parent_id).bind(input.data).bind(self.workspace_id.unwrap_or(Self::DEFAULT_WORKSPACE_ID)).fetch_optional(&mut *transaction).await?
             .ok_or(RepositoryError::ContextCycle)?;
-        let entities = query_as::<_, Entity>("SELECT id, blueprint_id, blueprint_version, projections, created_at, updated_at, deleted_at FROM entities WHERE deleted_at IS NULL")
+        let entities = query_as::<_, Entity>("SELECT id, blueprint_id, blueprint_version, projections, created_at, updated_at, deleted_at FROM entities WHERE workspace_id = $1 AND deleted_at IS NULL")
+            .bind(self.workspace_id.unwrap_or(Self::DEFAULT_WORKSPACE_ID))
             .fetch_all(&mut *transaction).await?;
         for entity in &entities {
             self.validate_entity_schema(&mut transaction, entity)
                 .await?;
         }
-        transaction.commit().await?;
+        self.commit_mutation(transaction).await?;
         Ok(result)
     }
 
@@ -129,19 +157,22 @@ impl CatalogRepository {
             return Err(RepositoryError::DefaultContextProtected);
         }
         let context_exists = sqlx::query_scalar::<_, bool>(
-            "SELECT EXISTS (SELECT 1 FROM attribute_contexts WHERE id = $1)",
+            "SELECT EXISTS (SELECT 1 FROM attribute_contexts WHERE id = $1 AND workspace_id = $2)",
         )
         .bind(id)
+        .bind(self.workspace_id.unwrap_or(Self::DEFAULT_WORKSPACE_ID))
         .fetch_one(&self.pool)
         .await?;
         if !context_exists {
             return Err(RepositoryError::NotFound("context"));
         }
-        let result = sqlx::query("DELETE FROM attribute_contexts c WHERE c.id = $1 AND NOT EXISTS (SELECT 1 FROM attribute_contexts child WHERE child.parent_id = c.id) AND NOT EXISTS (SELECT 1 FROM attribute_values value WHERE value.context_id = c.id)")
-            .bind(id).execute(&self.pool).await?;
+        let mut transaction = self.pool.begin().await?;
+        let result = sqlx::query("DELETE FROM attribute_contexts c WHERE c.id = $1 AND c.workspace_id = $2 AND NOT EXISTS (SELECT 1 FROM attribute_contexts child WHERE child.parent_id = c.id AND child.workspace_id = c.workspace_id) AND NOT EXISTS (SELECT 1 FROM attribute_values value WHERE value.context_id = c.id AND value.workspace_id = c.workspace_id)")
+            .bind(id).bind(self.workspace_id.unwrap_or(Self::DEFAULT_WORKSPACE_ID)).execute(&mut *transaction).await?;
         if result.rows_affected() == 0 {
             return Err(RepositoryError::ContextInUse);
         }
+        self.commit_mutation(transaction).await?;
         Ok(())
     }
 
@@ -150,9 +181,10 @@ impl CatalogRepository {
         id: Uuid,
     ) -> Result<Option<AttributeContext>, RepositoryError> {
         Ok(query_as::<_, AttributeContext>(
-            "SELECT id, code, data, parent_id FROM attribute_contexts WHERE id = $1",
+            "SELECT id, code, data, parent_id FROM attribute_contexts WHERE id = $1 AND workspace_id = $2",
         )
         .bind(id)
+        .bind(self.workspace_id.unwrap_or(Self::DEFAULT_WORKSPACE_ID))
         .fetch_optional(&self.pool)
         .await?)
     }

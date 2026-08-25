@@ -14,9 +14,9 @@ ordinary internal `users.id`. Provider-specific identifiers and claims never
 appear on `users` or `workspace_memberships`.
 
 An adapter validates its protocol callback before resolving the verified pair
-with `find_external_identity_user`. It must not merge identities by email. A
+through the Rust account repository. It must not merge identities by email. A
 new provider identity may be linked only by an explicit authenticated
-account-linking action through `link_external_identity`. The resulting user
+account-linking action through that repository. The resulting user
 uses the same sessions, invalidation, membership, and RBAC evaluation as a
 local account.
 
@@ -52,11 +52,11 @@ requests cannot replay a link.
 
 ## Persistence boundary
 
-The request database role has no direct access to global `users`, credentials, or
-action-token tables. It uses narrowly scoped database functions to create an account,
-look up a password credential, issue/revoke lifecycle actions, and consume valid
-verification or password actions. Adapters must pass only the password hash and token
-digest to those functions.
+The Rust account repository owns access to global `users`, credentials, and
+action-token tables. It creates accounts, looks up password credentials, issues or
+revokes lifecycle actions, and consumes valid verification or password actions in
+explicit transactions. Adapters pass only password hashes and token digests to that
+application layer; database migrations contain no authorization or lifecycle functions.
 
 There is no email provider. A delivery adapter must send the opaque secret without
 recording it in logs, telemetry, database rows, or API responses.

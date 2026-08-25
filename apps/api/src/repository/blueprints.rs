@@ -19,9 +19,11 @@ impl CatalogRepository {
                FROM blueprints
                WHERE kind = 'entity' AND deleted_at IS NULL
                  AND ($1 OR status = 'published')
+                 AND workspace_id = $2
                ORDER BY id, version DESC"#,
         )
         .bind(include_drafts)
+        .bind(self.workspace_id.unwrap_or(Self::DEFAULT_WORKSPACE_ID))
         .fetch_all(&self.pool)
         .await?)
     }
@@ -32,9 +34,10 @@ impl CatalogRepository {
                      id, code, name, kind, version, views, includes, entity_schema, status, published_at, created_at, updated_at,
                     deleted_at, definition, definition_hash
                FROM blueprints
-               WHERE deleted_at IS NULL
+               WHERE deleted_at IS NULL AND workspace_id = $1
                ORDER BY id, version DESC"#,
         )
+        .bind(self.workspace_id.unwrap_or(Self::DEFAULT_WORKSPACE_ID))
         .fetch_all(&self.pool)
         .await?)
     }
@@ -46,10 +49,11 @@ impl CatalogRepository {
         Ok(sqlx::query_as::<_, Blueprint>(
             r#"SELECT id, code, name, kind, version, includes, views, entity_schema, status, published_at, created_at, updated_at, deleted_at, definition, definition_hash
                FROM blueprints
-               WHERE id = $1 AND deleted_at IS NULL
+               WHERE id = $1 AND workspace_id = $2 AND deleted_at IS NULL
                ORDER BY version DESC"#,
         )
         .bind(blueprint_id)
+        .bind(self.workspace_id.unwrap_or(Self::DEFAULT_WORKSPACE_ID))
         .fetch_all(&self.pool)
         .await?)
     }
@@ -59,7 +63,12 @@ impl CatalogRepository {
         input: CreateBlueprint,
     ) -> Result<BlueprintWithAttributes, RepositoryError> {
         let mut transaction = self.pool.begin().await?;
-        let compiled = compile_definition(&mut transaction, &input.definition).await?;
+        let compiled = compile_definition(
+            &mut transaction,
+            self.workspace_id.unwrap_or(Self::DEFAULT_WORKSPACE_ID),
+            &input.definition,
+        )
+        .await?;
         // PostgreSQL cannot express uniqueness across all revisions with the
         // versioned primary key. Serialize writers for this code so the
         // existence check and first-revision insert are one logical operation.
@@ -67,12 +76,14 @@ impl CatalogRepository {
             .bind(&compiled.code)
             .execute(&mut *transaction)
             .await?;
-        let code_exists =
-            sqlx::query_scalar::<_, Uuid>("SELECT id FROM blueprints WHERE code = $1 LIMIT 1")
-                .bind(&compiled.code)
-                .fetch_optional(&mut *transaction)
-                .await?
-                .is_some();
+        let code_exists = sqlx::query_scalar::<_, Uuid>(
+            "SELECT id FROM blueprints WHERE code = $1 AND workspace_id = $2 LIMIT 1",
+        )
+        .bind(&compiled.code)
+        .bind(self.workspace_id.unwrap_or(Self::DEFAULT_WORKSPACE_ID))
+        .fetch_optional(&mut *transaction)
+        .await?
+        .is_some();
         if code_exists {
             return Err(RepositoryError::BlueprintCodeTaken);
         }
@@ -86,7 +97,7 @@ impl CatalogRepository {
                 compiled,
             )
             .await?;
-        transaction.commit().await?;
+        self.commit_mutation(transaction).await?;
         Ok(result)
     }
 
@@ -97,14 +108,20 @@ impl CatalogRepository {
     ) -> Result<BlueprintWithAttributes, RepositoryError> {
         let mut transaction = self.pool.begin().await?;
         let latest = sqlx::query_as::<_, LatestBlueprint>(
-            "SELECT version, code FROM blueprints WHERE id = $1 ORDER BY version DESC LIMIT 1 FOR UPDATE",
+            "SELECT version, code FROM blueprints WHERE id = $1 AND workspace_id = $2 ORDER BY version DESC LIMIT 1 FOR UPDATE",
         )
         .bind(blueprint_id)
+        .bind(self.workspace_id.unwrap_or(Self::DEFAULT_WORKSPACE_ID))
         .fetch_optional(&mut *transaction)
         .await?
         .ok_or(RepositoryError::NotFound("blueprint"))?;
 
-        let compiled = compile_definition(&mut transaction, &input.definition).await?;
+        let compiled = compile_definition(
+            &mut transaction,
+            self.workspace_id.unwrap_or(Self::DEFAULT_WORKSPACE_ID),
+            &input.definition,
+        )
+        .await?;
         if latest.code.as_deref() != Some(compiled.code.as_str()) {
             return Err(RepositoryError::InvalidBlueprintDefinition(
                 "blueprint code cannot change across revisions".to_owned(),
@@ -120,7 +137,7 @@ impl CatalogRepository {
                 compiled,
             )
             .await?;
-        transaction.commit().await?;
+        self.commit_mutation(transaction).await?;
         Ok(result)
     }
 
@@ -143,11 +160,12 @@ impl CatalogRepository {
             ))
         })?;
         let blueprint = sqlx::query_as::<_, Blueprint>(
-            r#"INSERT INTO blueprints (id, code, name, kind, version, includes, views, entity_schema, status, definition, definition_hash)
-               VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 'draft', $9, $10)
+            r#"INSERT INTO blueprints (id, workspace_id, code, name, kind, version, includes, views, entity_schema, status, definition, definition_hash)
+               VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, 'draft', $10, $11)
                RETURNING id, code, name, kind, version, includes, views, entity_schema, status, published_at, created_at, updated_at, deleted_at, definition, definition_hash"#,
         )
         .bind(blueprint_id)
+        .bind(self.workspace_id.unwrap_or(Self::DEFAULT_WORKSPACE_ID))
         .bind(compiled.code)
         .bind(compiled.name)
         .bind(compiled.kind.as_str())
@@ -164,11 +182,12 @@ impl CatalogRepository {
         for attribute in compiled.attributes {
             attributes.push(
                 sqlx::query_as::<_, Attribute>(
-                    r#"INSERT INTO attributes (id, blueprint_id, blueprint_version, code, value_type, value_schema, target_blueprint_code, tags, context_fallback, context_editable, position)
-                       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+                    r#"INSERT INTO attributes (id, workspace_id, blueprint_id, blueprint_version, code, value_type, value_schema, target_blueprint_code, tags, context_fallback, context_editable, position)
+                       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
                        RETURNING id, blueprint_id, blueprint_version, code, value_type, value_schema, target_blueprint_code, tags, context_fallback, context_editable, position, created_at, updated_at, deleted_at"#,
                 )
                 .bind(Uuid::new_v4())
+                .bind(self.workspace_id.unwrap_or(Self::DEFAULT_WORKSPACE_ID))
                 .bind(blueprint_id)
                 .bind(version)
                 .bind(attribute.code)
@@ -197,11 +216,12 @@ impl CatalogRepository {
         let blueprint = sqlx::query_as::<_, Blueprint>(
             r#"SELECT id, code, name, kind, version, includes, views, entity_schema, status, published_at, created_at, updated_at, deleted_at, definition, definition_hash
                FROM blueprints
-               WHERE id = $1 AND status = 'published' AND deleted_at IS NULL
+               WHERE id = $1 AND workspace_id = $2 AND status = 'published' AND deleted_at IS NULL
                ORDER BY version DESC
                LIMIT 1"#,
         )
         .bind(blueprint_id)
+        .bind(self.workspace_id.unwrap_or(Self::DEFAULT_WORKSPACE_ID))
         .fetch_optional(&self.pool)
         .await?;
 
@@ -216,10 +236,11 @@ impl CatalogRepository {
         let blueprint = sqlx::query_as::<_, Blueprint>(
             r#"SELECT id, code, name, kind, version, includes, views, entity_schema, status, published_at, created_at, updated_at, deleted_at, definition, definition_hash
                FROM blueprints
-               WHERE id = $1 AND version = $2 AND deleted_at IS NULL"#,
+               WHERE id = $1 AND version = $2 AND workspace_id = $3 AND deleted_at IS NULL"#,
         )
         .bind(blueprint_id)
         .bind(version)
+        .bind(self.workspace_id.unwrap_or(Self::DEFAULT_WORKSPACE_ID))
         .fetch_optional(&self.pool)
         .await?;
 
@@ -234,11 +255,12 @@ impl CatalogRepository {
         let blueprint = sqlx::query_as::<_, Blueprint>(
             r#"SELECT id, code, name, kind, version, includes, views, entity_schema, status, published_at, created_at, updated_at, deleted_at, definition, definition_hash
                FROM blueprints
-               WHERE code = $1 AND status = 'published' AND deleted_at IS NULL
+               WHERE code = $1 AND status = 'published' AND workspace_id = $2 AND deleted_at IS NULL
                ORDER BY version DESC
                LIMIT 1"#,
         )
         .bind(code)
+        .bind(self.workspace_id.unwrap_or(Self::DEFAULT_WORKSPACE_ID))
         .fetch_optional(&self.pool)
         .await?;
 
@@ -253,11 +275,12 @@ impl CatalogRepository {
         let blueprint = sqlx::query_as::<_, Blueprint>(
             r#"SELECT id, code, name, kind, version, includes, views, entity_schema, status, published_at, created_at, updated_at, deleted_at, definition, definition_hash
                FROM blueprints
-               WHERE code = $1 AND deleted_at IS NULL
+               WHERE code = $1 AND workspace_id = $2 AND deleted_at IS NULL
                ORDER BY version DESC
                LIMIT 1"#,
         )
         .bind(code)
+        .bind(self.workspace_id.unwrap_or(Self::DEFAULT_WORKSPACE_ID))
         .fetch_optional(&self.pool)
         .await?;
         self.with_attributes(blueprint).await
@@ -272,10 +295,11 @@ impl CatalogRepository {
         let blueprint = sqlx::query_as::<_, Blueprint>(
             r#"SELECT id, code, name, kind, version, includes, views, entity_schema, status, published_at, created_at, updated_at, deleted_at, definition, definition_hash
                FROM blueprints
-               WHERE code = $1 AND version = $2 AND deleted_at IS NULL"#,
+               WHERE code = $1 AND version = $2 AND workspace_id = $3 AND deleted_at IS NULL"#,
         )
         .bind(code)
         .bind(version)
+        .bind(self.workspace_id.unwrap_or(Self::DEFAULT_WORKSPACE_ID))
         .fetch_optional(&self.pool)
         .await?;
 
@@ -291,10 +315,11 @@ impl CatalogRepository {
         let blueprint = sqlx::query_as::<_, Blueprint>(
             r#"SELECT id, code, name, kind, version, includes, views, entity_schema, status, published_at, created_at, updated_at, deleted_at, definition, definition_hash
                FROM blueprints
-               WHERE code = $1 AND version = $2 AND status = 'published' AND deleted_at IS NULL"#,
+               WHERE code = $1 AND version = $2 AND status = 'published' AND workspace_id = $3 AND deleted_at IS NULL"#,
         )
         .bind(code)
         .bind(version)
+        .bind(self.workspace_id.unwrap_or(Self::DEFAULT_WORKSPACE_ID))
         .fetch_optional(&self.pool)
         .await?;
         self.with_attributes(blueprint).await
@@ -309,11 +334,12 @@ impl CatalogRepository {
         let blueprint = sqlx::query_as::<_, Blueprint>(
             r#"SELECT id, code, name, kind, version, includes, views, entity_schema, status, published_at, created_at, updated_at, deleted_at, definition, definition_hash
                FROM blueprints
-               WHERE id = $1 AND version = $2 AND deleted_at IS NULL
+               WHERE id = $1 AND version = $2 AND workspace_id = $3 AND deleted_at IS NULL
                FOR UPDATE"#,
         )
         .bind(blueprint_id)
         .bind(version)
+        .bind(self.workspace_id.unwrap_or(Self::DEFAULT_WORKSPACE_ID))
         .fetch_optional(&mut *transaction)
         .await?
         .ok_or(RepositoryError::NotFound("blueprint version"))?;
@@ -326,6 +352,7 @@ impl CatalogRepository {
                            SELECT 1
                            FROM blueprints included
                            WHERE included.code = include ->> 'code'
+                             AND included.workspace_id = $2
                              AND included.version = (include ->> 'version')::bigint
                              AND included.kind = 'mixin'
                              AND included.status = 'published'
@@ -334,20 +361,22 @@ impl CatalogRepository {
                    )"#,
             )
             .bind(&blueprint.includes)
+            .bind(self.workspace_id.unwrap_or(Self::DEFAULT_WORKSPACE_ID))
             .fetch_one(&mut *transaction)
             .await?;
             if !includes_published {
                 return Err(RepositoryError::BlueprintNotPublished);
             }
             sqlx::query(
-                "UPDATE blueprints SET status = 'published', published_at = now(), updated_at = now() WHERE id = $1 AND version = $2",
+                "UPDATE blueprints SET status = 'published', published_at = now(), updated_at = now() WHERE id = $1 AND version = $2 AND workspace_id = $3",
             )
             .bind(blueprint_id)
             .bind(version)
+            .bind(self.workspace_id.unwrap_or(Self::DEFAULT_WORKSPACE_ID))
             .execute(&mut *transaction)
             .await?;
         }
-        transaction.commit().await?;
+        self.commit_mutation(transaction).await?;
         self.get_blueprint_revision(blueprint_id, version)
             .await?
             .ok_or(RepositoryError::NotFound("blueprint version"))
@@ -361,11 +390,12 @@ impl CatalogRepository {
         Ok(sqlx::query_as::<_, Attribute>(
             r#"SELECT id, blueprint_id, blueprint_version, code, value_type, value_schema, target_blueprint_code, tags, context_fallback, context_editable, position, created_at, updated_at, deleted_at
                FROM attributes
-               WHERE blueprint_id = $1 AND blueprint_version = $2 AND deleted_at IS NULL
+               WHERE blueprint_id = $1 AND blueprint_version = $2 AND workspace_id = $3 AND deleted_at IS NULL
                ORDER BY position"#,
         )
         .bind(blueprint_id)
         .bind(blueprint_version)
+        .bind(self.workspace_id.unwrap_or(Self::DEFAULT_WORKSPACE_ID))
         .fetch_all(&self.pool)
         .await?)
     }

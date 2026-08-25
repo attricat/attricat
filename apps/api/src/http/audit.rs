@@ -7,27 +7,19 @@ use axum::{
 use serde_json::{Map, Value, json};
 use uuid::Uuid;
 
-use super::{
-    AppState,
-    auth::{ActiveWorkspace, AuthenticatedPrincipal, ScopedRepository},
-};
+use super::{AppState, auth::AuthenticatedPrincipal};
+use crate::repository::AuditContext;
 
 const REQUEST_ID_HEADER: &str = "x-request-id";
 const CORRELATION_ID_HEADER: &str = "x-correlation-id";
 
-/// Records every catalog write attempt after its authorization middleware has
-/// produced a response. Metadata is constructed only from server-controlled
-/// route information; `redact_metadata` is retained as a guard for future
-/// caller-supplied metadata.
-pub(super) async fn record(
-    State(_state): State<AppState>,
-    request: Request,
-    next: Next,
-) -> Response {
-    if !is_mutation(request.method()) {
-        return next.run(request).await;
-    }
-
+/// Creates server-derived metadata that repository transactions persist before
+/// committing a successful mutation. Authorization failures never reach a
+/// scoped repository and are intentionally not audited.
+pub(super) fn request_context(
+    request: &Request,
+    principal: AuthenticatedPrincipal,
+) -> AuditContext {
     let request_id = parse_or_generate_id(
         request
             .headers()
@@ -40,15 +32,6 @@ pub(super) async fn record(
             .get(CORRELATION_ID_HEADER)
             .and_then(|value| value.to_str().ok()),
     );
-    let actor_user_id = request
-        .extensions()
-        .get::<AuthenticatedPrincipal>()
-        .map(|principal| principal.0);
-    let workspace_id = request
-        .extensions()
-        .get::<ActiveWorkspace>()
-        .map(|workspace| workspace.0);
-    let repository = request.extensions().get::<ScopedRepository>().cloned();
     let route = request
         .extensions()
         .get::<axum::extract::MatchedPath>()
@@ -56,43 +39,27 @@ pub(super) async fn record(
         .unwrap_or_else(|| "unmatched".to_owned());
     let method = request.method().clone();
     let (authorization_scope, target) = audit_context(&method, &route, request.uri().path());
-    let action = action(&method, &route);
-    let response = next.run(request).await;
-    let outcome = match response.status().as_u16() {
-        200..=399 => "success",
-        401 | 403 => "denied",
-        _ => "failure",
-    };
-
-    // A request without a trusted workspace is not allowed to create an event:
-    // RLS would reject it anyway and retaining an untrusted tenant identifier
-    // would be worse than losing a malformed request's telemetry.
-    if let (Some(workspace_id), Some(ScopedRepository(repository))) = (workspace_id, repository) {
-        if let Err(error) = repository
-            .record_audit_event(
-                workspace_id,
-                actor_user_id,
-                request_id,
-                correlation_id,
-                &action,
-                authorization_scope,
-                target,
-                outcome,
-                redact_metadata(json!({ "method": method.as_str(), "route": route })),
-            )
-            .await
-        {
-            tracing::error!(%error, %request_id, "could not persist audit event");
-        }
+    AuditContext {
+        actor_user_id: Some(principal.0),
+        actor_token_id: principal.1,
+        request_id,
+        correlation_id,
+        action: action(&method, &route),
+        authorization_scope,
+        target,
+        metadata: redact_metadata(json!({ "method": method.as_str(), "route": route })),
     }
-    response
 }
 
-fn is_mutation(method: &Method) -> bool {
-    matches!(
-        *method,
-        Method::POST | Method::PUT | Method::PATCH | Method::DELETE
-    )
+/// Success audits are transaction-owned by repositories. This layer is kept as
+/// a pass-through so routes retain their middleware composition without a
+/// second, post-commit best-effort audit write.
+pub(super) async fn record(
+    State(_state): State<AppState>,
+    request: Request,
+    next: Next,
+) -> Response {
+    next.run(request).await
 }
 
 fn parse_or_generate_id(value: Option<&str>) -> Uuid {
@@ -117,8 +84,8 @@ fn action(method: &Method, route: &str) -> String {
     format!("catalog.{resource}.{verb}")
 }
 
-fn audit_context(method: &Method, route: &str, path: &str) -> (Value, Value) {
-    let permission = if route.starts_with("/blueprints") {
+fn audit_permission(method: &Method, route: &str) -> &'static str {
+    if route.starts_with("/blueprints") {
         if route.ends_with("/publish") {
             "blueprints.publish"
         } else {
@@ -126,11 +93,22 @@ fn audit_context(method: &Method, route: &str, path: &str) -> (Value, Value) {
         }
     } else if route.starts_with("/contexts") {
         "contexts.write"
+    } else if route.starts_with("/personal-access-tokens") {
+        "tokens.manage"
+    } else if route.starts_with("/workspace/members") || route.starts_with("/workspace/invitations")
+    {
+        "members.manage"
+    } else if route.starts_with("/workspace/roles") {
+        "roles.manage"
     } else if method == Method::DELETE {
         "entities.delete"
     } else {
         "entities.write"
-    };
+    }
+}
+
+fn audit_context(method: &Method, route: &str, path: &str) -> (Value, Value) {
+    let permission = audit_permission(method, route);
     let segments: Vec<_> = path
         .split('/')
         .filter(|segment| !segment.is_empty())
@@ -188,6 +166,22 @@ fn is_secret_key(key: &str) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn mutation_audit_permissions_match_workspace_management_routes() {
+        assert_eq!(
+            audit_permission(&Method::POST, "/personal-access-tokens"),
+            "tokens.manage"
+        );
+        assert_eq!(
+            audit_permission(&Method::PATCH, "/workspace/members/{id}"),
+            "members.manage"
+        );
+        assert_eq!(
+            audit_permission(&Method::DELETE, "/workspace/roles/{id}"),
+            "roles.manage"
+        );
+    }
 
     #[test]
     fn redacts_secrets_recursively_without_losing_safe_metadata() {

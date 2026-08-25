@@ -30,7 +30,7 @@ impl CatalogRepository {
         &self,
         login_identifier: &str,
     ) -> Result<Option<DiscoveredWorkspace>, RepositoryError> {
-        let row = sqlx::query("SELECT id, login_identifier FROM discover_workspace_login($1)")
+        let row = sqlx::query("SELECT id, login_identifier FROM workspaces WHERE login_identifier = lower(btrim($1)) AND deleted_at IS NULL")
             .bind(login_identifier)
             .fetch_optional(&self.pool)
             .await?;
@@ -60,12 +60,12 @@ impl CatalogRepository {
         &self,
         key: &SessionDigest,
     ) -> Result<bool, RepositoryError> {
-        Ok(
-            sqlx::query_scalar("SELECT reserve_workspace_discovery_attempt($1)")
-                .bind(key.as_ref())
-                .fetch_one(&self.pool)
-                .await?,
-        )
+        let mut tx = self.pool.begin().await?;
+        let allowed = sqlx::query_scalar::<_, bool>(
+            "INSERT INTO workspace_discovery_rate_limits (key_digest, window_started_at, attempts) VALUES ($1, clock_timestamp(), 1) ON CONFLICT (key_digest) DO UPDATE SET attempts = CASE WHEN workspace_discovery_rate_limits.window_started_at <= clock_timestamp() - interval '15 minutes' THEN 1 ELSE workspace_discovery_rate_limits.attempts + 1 END, window_started_at = CASE WHEN workspace_discovery_rate_limits.window_started_at <= clock_timestamp() - interval '15 minutes' THEN clock_timestamp() ELSE workspace_discovery_rate_limits.window_started_at END RETURNING attempts <= 20",
+        ).bind(key.as_ref()).fetch_one(&mut *tx).await?;
+        self.commit_mutation(tx).await?;
+        Ok(allowed)
     }
 
     pub async fn local_login_credential(
@@ -73,7 +73,7 @@ impl CatalogRepository {
         email: &str,
     ) -> Result<Option<LocalLoginCredential>, RepositoryError> {
         let row = sqlx::query(
-            "SELECT user_id, password_hash, user_state, security_version, credential_version FROM find_local_password_credential($1)",
+            "SELECT credential.user_id, credential.password_hash, user_account.state AS user_state, user_account.security_version, credential.credential_version FROM local_password_credentials credential JOIN users user_account ON user_account.id = credential.user_id WHERE user_account.email = lower(btrim($1))",
         )
         .bind(email)
         .fetch_optional(&self.pool)
@@ -98,19 +98,21 @@ impl CatalogRepository {
         &self,
         key: &SessionDigest,
     ) -> Result<bool, RepositoryError> {
-        Ok(
-            sqlx::query_scalar("SELECT reserve_browser_login_attempt($1)")
-                .bind(key.as_ref())
-                .fetch_one(&self.pool)
-                .await?,
-        )
+        let mut tx = self.pool.begin().await?;
+        let allowed = sqlx::query_scalar::<_, bool>(
+            "INSERT INTO browser_login_rate_limits (key_digest, window_started_at, failures) VALUES ($1, clock_timestamp(), 1) ON CONFLICT (key_digest) DO UPDATE SET failures = CASE WHEN browser_login_rate_limits.window_started_at <= clock_timestamp() - interval '15 minutes' THEN 1 ELSE browser_login_rate_limits.failures + 1 END, window_started_at = CASE WHEN browser_login_rate_limits.window_started_at <= clock_timestamp() - interval '15 minutes' THEN clock_timestamp() ELSE browser_login_rate_limits.window_started_at END RETURNING failures <= 5",
+        ).bind(key.as_ref()).fetch_one(&mut *tx).await?;
+        self.commit_mutation(tx).await?;
+        Ok(allowed)
     }
 
     pub async fn clear_login_failures(&self, key: &SessionDigest) -> Result<(), RepositoryError> {
-        sqlx::query("SELECT clear_browser_login_failures($1)")
+        let mut tx = self.pool.begin().await?;
+        sqlx::query("DELETE FROM browser_login_rate_limits WHERE key_digest = $1")
             .bind(key.as_ref())
-            .execute(&self.pool)
+            .execute(&mut *tx)
             .await?;
+        self.commit_mutation(tx).await?;
         Ok(())
     }
 
@@ -123,17 +125,15 @@ impl CatalogRepository {
         csrf: &SessionDigest,
         expires_at: DateTime<Utc>,
     ) -> Result<(), RepositoryError> {
-        sqlx::query("SELECT issue_browser_login_session($1, $2, $3, $4, $5, $6, $7, $8)")
-            .bind(id)
-            .bind(credential.user_id)
-            .bind(workspace_id)
-            .bind(credential.security_version)
-            .bind(credential.credential_version)
-            .bind(session.as_ref())
-            .bind(csrf.as_ref())
-            .bind(expires_at)
-            .execute(&self.pool)
+        let mut tx = self.pool.begin().await?;
+        let result = sqlx::query("INSERT INTO browser_sessions (id, user_id, workspace_id, issued_security_version, issued_credential_version, session_digest, csrf_digest, expires_at) SELECT $1, $2, $3, $4, $5, $6, $7, $8 WHERE EXISTS (SELECT 1 FROM users u JOIN local_password_credentials c ON c.user_id = u.id JOIN workspace_memberships m ON m.user_id = u.id WHERE u.id = $2 AND u.state = 'active' AND u.security_version = $4 AND c.credential_version = $5 AND m.workspace_id = $3 AND m.state = 'active')")
+            .bind(id).bind(credential.user_id).bind(workspace_id).bind(credential.security_version).bind(credential.credential_version).bind(session.as_ref()).bind(csrf.as_ref()).bind(expires_at)
+            .execute(&mut *tx)
             .await?;
+        if result.rows_affected() != 1 {
+            return Err(RepositoryError::NotFound("active credential or membership"));
+        }
+        self.commit_mutation(tx).await?;
         Ok(())
     }
 
@@ -142,7 +142,7 @@ impl CatalogRepository {
         session: &SessionDigest,
     ) -> Result<Option<ValidBrowserSession>, RepositoryError> {
         let row = sqlx::query(
-            "SELECT user_id, workspace_id, csrf_digest FROM validate_browser_session($1)",
+            "SELECT s.user_id, s.workspace_id, s.csrf_digest FROM browser_sessions s JOIN users u ON u.id = s.user_id JOIN local_password_credentials c ON c.user_id = u.id JOIN workspace_memberships m ON m.user_id = u.id AND m.workspace_id = s.workspace_id WHERE s.session_digest = $1 AND s.revoked_at IS NULL AND s.expires_at > clock_timestamp() AND u.state = 'active' AND u.security_version = s.issued_security_version AND c.credential_version = s.issued_credential_version AND m.state = 'active'",
         )
         .bind(session.as_ref())
         .fetch_optional(&self.pool)
@@ -168,15 +168,18 @@ impl CatalogRepository {
         workspace_id: Uuid,
         expires_at: DateTime<Utc>,
     ) -> Result<(), RepositoryError> {
-        sqlx::query("SELECT rotate_browser_session($1, $2, $3, $4, $5, $6)")
-            .bind(previous.as_ref())
-            .bind(id)
-            .bind(session.as_ref())
-            .bind(csrf.as_ref())
-            .bind(workspace_id)
-            .bind(expires_at)
-            .execute(&self.pool)
-            .await?;
+        let mut tx = self.pool.begin().await?;
+        let previous_row = sqlx::query("SELECT user_id, issued_security_version, issued_credential_version FROM browser_sessions WHERE session_digest = $1 AND workspace_id = $2 AND revoked_at IS NULL AND expires_at > clock_timestamp() FOR UPDATE")
+            .bind(previous.as_ref()).bind(workspace_id).fetch_optional(&mut *tx).await?;
+        let Some(previous_row) = previous_row else {
+            return Err(RepositoryError::NotFound("browser session"));
+        };
+        let user_id: Uuid = previous_row.try_get("user_id")?;
+        sqlx::query("UPDATE browser_sessions SET revoked_at = clock_timestamp(), rotated_at = clock_timestamp() WHERE session_digest = $1")
+            .bind(previous.as_ref()).execute(&mut *tx).await?;
+        sqlx::query("INSERT INTO browser_sessions (id, user_id, workspace_id, issued_security_version, issued_credential_version, session_digest, csrf_digest, expires_at) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)")
+            .bind(id).bind(user_id).bind(workspace_id).bind(previous_row.try_get::<i32, _>("issued_security_version")?).bind(previous_row.try_get::<i32, _>("issued_credential_version")?).bind(session.as_ref()).bind(csrf.as_ref()).bind(expires_at).execute(&mut *tx).await?;
+        self.commit_mutation(tx).await?;
         Ok(())
     }
 
@@ -185,11 +188,138 @@ impl CatalogRepository {
         session: &SessionDigest,
         workspace_id: Uuid,
     ) -> Result<(), RepositoryError> {
-        sqlx::query("SELECT revoke_browser_session($1, $2)")
+        let mut tx = self.pool.begin().await?;
+        sqlx::query("UPDATE browser_sessions SET revoked_at = clock_timestamp() WHERE session_digest = $1 AND workspace_id = $2 AND revoked_at IS NULL")
             .bind(session.as_ref())
             .bind(workspace_id)
-            .execute(&self.pool)
+            .execute(&mut *tx)
             .await?;
+        self.commit_mutation(tx).await?;
+        Ok(())
+    }
+
+    pub async fn link_external_identity(
+        &self,
+        user_id: Uuid,
+        issuer: &str,
+        subject: &str,
+    ) -> Result<(), RepositoryError> {
+        if issuer.trim() != issuer
+            || issuer.is_empty()
+            || subject.trim() != subject
+            || subject.is_empty()
+        {
+            return Err(RepositoryError::NotFound("external identity"));
+        }
+        let mut tx = self.pool.begin().await?;
+        sqlx::query(
+            "INSERT INTO external_identities (issuer, subject, user_id) VALUES ($1, $2, $3)",
+        )
+        .bind(issuer)
+        .bind(subject)
+        .bind(user_id)
+        .execute(&mut *tx)
+        .await?;
+        self.commit_mutation(tx).await?;
+        Ok(())
+    }
+
+    pub async fn external_identity_user(
+        &self,
+        issuer: &str,
+        subject: &str,
+    ) -> Result<Option<Uuid>, RepositoryError> {
+        Ok(sqlx::query_scalar(
+            "SELECT user_id FROM external_identities WHERE issuer = $1 AND subject = $2",
+        )
+        .bind(issuer)
+        .bind(subject)
+        .fetch_optional(&self.pool)
+        .await?)
+    }
+
+    pub async fn issue_lifecycle_token(
+        &self,
+        id: Uuid,
+        user_id: Uuid,
+        purpose: &str,
+        digest: &[u8],
+        expires_at: DateTime<Utc>,
+    ) -> Result<(), RepositoryError> {
+        if !matches!(
+            purpose,
+            "email_verification" | "password_setup" | "password_reset"
+        ) || digest.len() != 32
+            || expires_at <= Utc::now()
+        {
+            return Err(RepositoryError::NotFound("lifecycle token"));
+        }
+        let mut tx = self.pool.begin().await?;
+        let user = sqlx::query(
+            "SELECT security_version, email_verified_at, state FROM users WHERE id = $1 FOR UPDATE",
+        )
+        .bind(user_id)
+        .fetch_optional(&mut *tx)
+        .await?
+        .ok_or(RepositoryError::NotFound("active user"))?;
+        if user.try_get::<String, _>("state")? != "active"
+            || (matches!(purpose, "password_setup" | "password_reset")
+                && user
+                    .try_get::<Option<DateTime<Utc>>, _>("email_verified_at")?
+                    .is_none())
+        {
+            return Err(RepositoryError::NotFound("lifecycle token"));
+        }
+        let credential_version: i32 = sqlx::query_scalar(
+            "SELECT credential_version FROM local_password_credentials WHERE user_id = $1",
+        )
+        .bind(user_id)
+        .fetch_optional(&mut *tx)
+        .await?
+        .unwrap_or(0);
+        if (purpose == "password_setup" && credential_version != 0)
+            || (purpose == "password_reset" && credential_version == 0)
+        {
+            return Err(RepositoryError::NotFound("lifecycle token"));
+        }
+        sqlx::query("UPDATE user_lifecycle_action_tokens SET revoked_at = clock_timestamp() WHERE user_id = $1 AND purpose = $2 AND consumed_at IS NULL AND revoked_at IS NULL").bind(user_id).bind(purpose).execute(&mut *tx).await?;
+        sqlx::query("INSERT INTO user_lifecycle_action_tokens (id, user_id, purpose, token_digest, issued_security_version, issued_credential_version, expires_at) VALUES ($1,$2,$3,$4,$5,$6,$7)").bind(id).bind(user_id).bind(purpose).bind(digest).bind(user.try_get::<i32,_>("security_version")?).bind(credential_version).bind(expires_at).execute(&mut *tx).await?;
+        self.commit_mutation(tx).await?;
+        Ok(())
+    }
+
+    pub async fn consume_lifecycle_token(
+        &self,
+        digest: &[u8],
+        purpose: &str,
+    ) -> Result<Uuid, RepositoryError> {
+        let mut tx = self.pool.begin().await?;
+        let user_id: Uuid = sqlx::query_scalar("SELECT user_id FROM user_lifecycle_action_tokens WHERE token_digest = $1 AND purpose = $2 FOR UPDATE").bind(digest).bind(purpose).fetch_optional(&mut *tx).await?.ok_or(RepositoryError::NotFound("lifecycle token"))?;
+        let valid: bool = sqlx::query_scalar("SELECT EXISTS (SELECT 1 FROM user_lifecycle_action_tokens t JOIN users u ON u.id = t.user_id LEFT JOIN local_password_credentials c ON c.user_id = t.user_id WHERE t.token_digest = $1 AND t.purpose = $2 AND t.consumed_at IS NULL AND t.revoked_at IS NULL AND t.expires_at > clock_timestamp() AND u.state = 'active' AND t.issued_security_version = u.security_version AND t.issued_credential_version = coalesce(c.credential_version, 0))").bind(digest).bind(purpose).fetch_one(&mut *tx).await?;
+        if !valid {
+            return Err(RepositoryError::NotFound("lifecycle token"));
+        }
+        sqlx::query("UPDATE user_lifecycle_action_tokens SET consumed_at = clock_timestamp() WHERE token_digest = $1 AND consumed_at IS NULL").bind(digest).execute(&mut *tx).await?;
+        self.commit_mutation(tx).await?;
+        Ok(user_id)
+    }
+
+    pub async fn revoke_lifecycle_tokens(
+        &self,
+        user_id: Uuid,
+        purpose: Option<&str>,
+    ) -> Result<(), RepositoryError> {
+        if purpose.is_some_and(|p| {
+            !matches!(
+                p,
+                "email_verification" | "password_setup" | "password_reset"
+            )
+        }) {
+            return Err(RepositoryError::NotFound("lifecycle purpose"));
+        }
+        let mut tx = self.pool.begin().await?;
+        sqlx::query("UPDATE user_lifecycle_action_tokens SET revoked_at = clock_timestamp() WHERE user_id = $1 AND ($2::text IS NULL OR purpose = $2) AND consumed_at IS NULL AND revoked_at IS NULL").bind(user_id).bind(purpose).execute(&mut *tx).await?;
+        self.commit_mutation(tx).await?;
         Ok(())
     }
 }

@@ -82,14 +82,15 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     // The migration defines the identity/RBAC schema, but configuration is
     // available only after migrations. Bootstrap the configured owner here so
     // a fresh installation receives its initial durable owner grant.
-    sqlx::query("SELECT bootstrap_workspace_owner($1, $2, $3, $4, $5)")
-        .bind(workspace_id)
-        .bind(bootstrap_owner_id.unwrap_or_else(Uuid::new_v4))
-        .bind(Uuid::new_v4())
-        .bind(Uuid::new_v4())
-        .bind(&bootstrap_owner_email)
-        .execute(&maintenance_pool)
-        .await?;
+    bootstrap_workspace_owner(
+        &maintenance_pool,
+        workspace_id,
+        bootstrap_owner_id.unwrap_or_else(Uuid::new_v4),
+        Uuid::new_v4(),
+        Uuid::new_v4(),
+        &bootstrap_owner_email,
+    )
+    .await?;
     if let Some(password) = bootstrap_owner_password {
         create_bootstrap_password(&maintenance_pool, &bootstrap_owner_email, password).await?;
     }
@@ -99,14 +100,15 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     // are explicitly configured.
     if let Some((email, password)) = e2e_fixture {
         let email = email.trim().to_lowercase();
-        sqlx::query("SELECT bootstrap_workspace_owner($1, $2, $3, $4, $5)")
-            .bind(workspace_id)
-            .bind(Uuid::new_v4())
-            .bind(Uuid::new_v4())
-            .bind(Uuid::new_v4())
-            .bind(&email)
-            .execute(&maintenance_pool)
-            .await?;
+        bootstrap_workspace_owner(
+            &maintenance_pool,
+            workspace_id,
+            Uuid::new_v4(),
+            Uuid::new_v4(),
+            Uuid::new_v4(),
+            &email,
+        )
+        .await?;
         create_bootstrap_password(&maintenance_pool, &email, password).await?;
     }
     let history_retention_days = std::env::var("ATTRIBUTE_VALUE_HISTORY_RETENTION_DAYS")
@@ -123,14 +125,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     let connect_options = PgConnectOptions::from_str(&database_url)?;
     let pool = PgPoolOptions::new()
         .max_connections(5)
-        .after_connect(|connection, _| {
-            Box::pin(async move {
-                sqlx::query("SET ROLE catalog_api")
-                    .execute(connection)
-                    .await?;
-                Ok(())
-            })
-        })
         .connect_with(connect_options.clone())
         .await?;
 
@@ -159,6 +153,45 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     .await?;
 
     Ok(())
+}
+
+async fn bootstrap_workspace_owner(
+    pool: &sqlx::PgPool,
+    workspace_id: Uuid,
+    user_id: Uuid,
+    membership_id: Uuid,
+    grant_id: Uuid,
+    email: &str,
+) -> Result<(), sqlx::Error> {
+    let mut tx = pool.begin().await?;
+    let email = email.trim().to_lowercase();
+    sqlx::query("SELECT id FROM workspaces WHERE id = $1 FOR UPDATE")
+        .bind(workspace_id)
+        .execute(&mut *tx)
+        .await?;
+    let owner_exists: bool = sqlx::query_scalar("SELECT EXISTS (SELECT 1 FROM role_grants g JOIN workspace_memberships m ON m.id = g.membership_id WHERE g.workspace_id = $1 AND g.role_id = '00000000-0000-4000-8000-000000000101'::uuid AND m.state = 'active')").bind(workspace_id).fetch_one(&mut *tx).await?;
+    if !owner_exists {
+        sqlx::query("INSERT INTO users (id, email) VALUES ($1, $2) ON CONFLICT (email) DO NOTHING")
+            .bind(user_id)
+            .bind(&email)
+            .execute(&mut *tx)
+            .await?;
+        let persisted_user: Uuid =
+            sqlx::query_scalar("SELECT id FROM users WHERE email = $1 FOR UPDATE")
+                .bind(&email)
+                .fetch_one(&mut *tx)
+                .await?;
+        sqlx::query("INSERT INTO workspace_memberships (id, workspace_id, user_id) VALUES ($1, $2, $3) ON CONFLICT (workspace_id, user_id) DO NOTHING").bind(membership_id).bind(workspace_id).bind(persisted_user).execute(&mut *tx).await?;
+        let membership: Uuid = sqlx::query_scalar(
+            "SELECT id FROM workspace_memberships WHERE workspace_id = $1 AND user_id = $2",
+        )
+        .bind(workspace_id)
+        .bind(persisted_user)
+        .fetch_one(&mut *tx)
+        .await?;
+        sqlx::query("INSERT INTO role_grants (id, workspace_id, membership_id, role_id, scope_type, scope_target_id) VALUES ($1, $2, $3, '00000000-0000-4000-8000-000000000101'::uuid, 'workspace', $2) ON CONFLICT DO NOTHING").bind(grant_id).bind(workspace_id).bind(membership).execute(&mut *tx).await?;
+    }
+    tx.commit().await
 }
 
 async fn create_bootstrap_password(

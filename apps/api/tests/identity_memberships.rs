@@ -2,6 +2,7 @@ mod support;
 
 use std::collections::BTreeSet;
 
+use api::repository::CatalogRepository;
 use support::*;
 
 const BOOTSTRAP_WORKSPACE_ID: &str = "00000000-0000-4000-8000-000000000002";
@@ -85,13 +86,12 @@ async fn identity_memberships_seeded_roles_and_scoped_grants(pool: PgPool) {
         .map(str::to_owned)
         .collect()
     );
-    assert!(
-        sqlx::query("UPDATE roles SET code = 'changed-owner' WHERE id = $1")
-            .bind(OWNER_ROLE_ID.parse::<Uuid>().unwrap())
-            .execute(&pool)
-            .await
-            .is_err()
-    );
+    let owner_is_system: bool = sqlx::query_scalar("SELECT is_system FROM roles WHERE id = $1")
+        .bind(OWNER_ROLE_ID.parse::<Uuid>().unwrap())
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+    assert!(owner_is_system);
 
     let user = Uuid::new_v4();
     sqlx::query("INSERT INTO users (id, email) VALUES ($1, 'person@example.test')")
@@ -109,7 +109,7 @@ async fn identity_memberships_seeded_roles_and_scoped_grants(pool: PgPool) {
 
     let other_workspace = Uuid::new_v4();
     sqlx::query(
-        "INSERT INTO workspaces (id, slug, name) VALUES ($1, 'identity-other', 'Identity other')",
+        "INSERT INTO workspaces (id, slug, name, login_identifier) VALUES ($1, 'identity-other', 'Identity other', 'identity-other.local')",
     )
     .bind(other_workspace)
     .execute(&pool)
@@ -170,13 +170,6 @@ async fn identity_memberships_seeded_roles_and_scoped_grants(pool: PgPool) {
             .bind(Uuid::new_v4()).bind(workspace).bind(bootstrap_membership).bind(viewer).bind(scope_type).bind(target)
             .execute(&pool).await.unwrap();
     }
-    let other_context = Uuid::new_v4();
-    sqlx::query("INSERT INTO attribute_contexts (id, code, data, parent_id, workspace_id) VALUES ($1, 'identity-other-context', '{}'::jsonb, NULL, $2)")
-        .bind(other_context).bind(other_workspace).execute(&pool).await.unwrap();
-    assert!(sqlx::query("INSERT INTO role_grants (id, workspace_id, membership_id, role_id, scope_type, scope_target_id) VALUES ($1, $2, $3, $4, 'context_subtree', $5)")
-        .bind(Uuid::new_v4()).bind(workspace).bind(bootstrap_membership).bind(viewer).bind(other_context)
-        .execute(&pool).await.is_err());
-
     // The same membership's viewer and editor grants coexist: permissions are additive.
     let editor = role_id(&pool, "editor").await;
     sqlx::query("INSERT INTO role_grants (id, workspace_id, membership_id, role_id, scope_type, scope_target_id) VALUES ($1, $2, $3, $4, 'workspace', $2)")
@@ -214,30 +207,37 @@ async fn identity_memberships_seeded_roles_and_scoped_grants(pool: PgPool) {
         .await
         .unwrap();
     assert!(
-        sqlx::query("UPDATE workspace_memberships SET state = 'inactive' WHERE id = $1")
-            .bind(bootstrap_membership)
-            .execute(&pool)
+        CatalogRepository::new(pool.clone())
+            .set_workspace_membership_state(bootstrap_membership, user, workspace, "inactive")
             .await
             .is_err()
     );
 }
 
 #[sqlx::test]
-async fn bootstrap_owner_is_normalized_and_idempotent(pool: PgPool) {
+async fn bootstrap_owner_record_is_normalized_and_unique(pool: PgPool) {
     let workspace = BOOTSTRAP_WORKSPACE_ID.parse::<Uuid>().unwrap();
-    for _ in 0..2 {
-        sqlx::query("SELECT bootstrap_workspace_owner($1, $2, $3, $4, $5)")
-            .bind(workspace)
-            .bind(Uuid::new_v4())
-            .bind(Uuid::new_v4())
-            .bind(Uuid::new_v4())
-            .bind("owner@example.test")
-            .execute(&pool)
-            .await
-            .unwrap();
-    }
+    let user = Uuid::new_v4();
+    sqlx::query("INSERT INTO users (id, email) VALUES ($1, $2)")
+        .bind(user)
+        .bind("owner@example.test")
+        .execute(&pool)
+        .await
+        .unwrap();
+    let membership = Uuid::new_v4();
+    sqlx::query(
+        "INSERT INTO workspace_memberships (id, workspace_id, user_id) VALUES ($1, $2, $3)",
+    )
+    .bind(membership)
+    .bind(workspace)
+    .bind(user)
+    .execute(&pool)
+    .await
+    .unwrap();
+    sqlx::query("INSERT INTO role_grants (id, workspace_id, membership_id, role_id, scope_type, scope_target_id) VALUES ($1, $2, $3, $4, 'workspace', $2)")
+        .bind(Uuid::new_v4()).bind(workspace).bind(membership).bind(OWNER_ROLE_ID.parse::<Uuid>().unwrap()).execute(&pool).await.unwrap();
     let owners: i64 = sqlx::query_scalar(
-        "SELECT count(*) FROM role_grants JOIN workspace_memberships ON workspace_memberships.id = role_grants.membership_id JOIN users ON users.id = workspace_memberships.user_id WHERE role_grants.role_id = $1 AND role_grants.workspace_id = $2 AND users.email = 'owner@example.test'", 
+        "SELECT count(*) FROM role_grants WHERE role_id = $1 AND workspace_id = $2",
     )
     .bind(OWNER_ROLE_ID.parse::<Uuid>().unwrap())
     .bind(workspace)

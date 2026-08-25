@@ -30,7 +30,7 @@ impl CatalogRepository {
         let entity = self
             .store_preview(&mut transaction, entity.id, preview)
             .await?;
-        transaction.commit().await?;
+        self.commit_mutation(transaction).await?;
         Ok(entity)
     }
 
@@ -60,7 +60,7 @@ impl CatalogRepository {
         let entity = self
             .store_preview(&mut transaction, entity.id, preview)
             .await?;
-        transaction.commit().await?;
+        self.commit_mutation(transaction).await?;
         Ok(entity)
     }
 
@@ -68,23 +68,27 @@ impl CatalogRepository {
         Ok(sqlx::query_as::<_, Entity>(
             r#"SELECT id, blueprint_id, blueprint_version, projections, created_at, updated_at, deleted_at
                FROM entities
-               WHERE id = $1 AND deleted_at IS NULL"#,
+               WHERE id = $1 AND workspace_id = $2 AND deleted_at IS NULL"#,
         )
         .bind(entity_id)
+        .bind(self.workspace_id.unwrap_or(Self::DEFAULT_WORKSPACE_ID))
         .fetch_optional(&self.pool)
         .await?)
     }
 
     pub async fn delete_entity(&self, entity_id: Uuid) -> Result<(), RepositoryError> {
+        let mut transaction = self.pool.begin().await?;
         let result = sqlx::query(
-            "UPDATE entities SET deleted_at = now(), updated_at = now() WHERE id = $1 AND deleted_at IS NULL",
+            "UPDATE entities SET deleted_at = now(), updated_at = now() WHERE id = $1 AND workspace_id = $2 AND deleted_at IS NULL",
         )
         .bind(entity_id)
-        .execute(&self.pool)
+        .bind(self.workspace_id.unwrap_or(Self::DEFAULT_WORKSPACE_ID))
+        .execute(&mut *transaction)
         .await?;
         if result.rows_affected() == 0 {
             return Err(RepositoryError::NotFound("entity"));
         }
+        self.commit_mutation(transaction).await?;
         Ok(())
     }
 
@@ -97,10 +101,11 @@ impl CatalogRepository {
         let entity = sqlx::query_as::<_, Entity>(
             r#"SELECT id, blueprint_id, blueprint_version, projections, created_at, updated_at, deleted_at
                FROM entities
-               WHERE id = $1 AND deleted_at IS NULL
+               WHERE id = $1 AND workspace_id = $2 AND deleted_at IS NULL
                FOR UPDATE"#,
         )
         .bind(entity_id)
+        .bind(self.workspace_id.unwrap_or(Self::DEFAULT_WORKSPACE_ID))
         .fetch_optional(&mut *transaction)
         .await?
         .ok_or(RepositoryError::NotFound("entity"))?;
@@ -117,14 +122,15 @@ impl CatalogRepository {
         sqlx::query(
             r#"UPDATE entities
                SET projections = jsonb_set(projections, '{preview}', $2, true), updated_at = now()
-               WHERE id = $1"#,
+               WHERE id = $1 AND workspace_id = $3"#,
         )
         .bind(entity_id)
         .bind(preview)
+        .bind(self.workspace_id.unwrap_or(Self::DEFAULT_WORKSPACE_ID))
         .execute(&mut *transaction)
         .await?;
 
-        transaction.commit().await?;
+        self.commit_mutation(transaction).await?;
         Ok(values)
     }
 
@@ -213,7 +219,7 @@ impl CatalogRepository {
         self.validate_entity_schema(&mut transaction, &entity)
             .await?;
         self.touch_entity(&mut transaction, entity_id).await?;
-        transaction.commit().await?;
+        self.commit_mutation(transaction).await?;
         Ok(values)
     }
 
@@ -388,15 +394,16 @@ impl CatalogRepository {
 
         let query = sqlx::query_as::<_, AttributeValue>(
             r#"INSERT INTO attribute_values (
-                    id, entity_id, attribute_id, context_id, relationship_target_entity_id, active,
+                    id, workspace_id, entity_id, attribute_id, context_id, relationship_target_entity_id, active,
                     value_text, value_number, value_integer, value_boolean, value_date, value_datetime,
                     value_time, value_time_zone
-                ) VALUES ($1, $2, $3, $4, $5, true, $6, $7, $8, $9, $10, $11, $12, $13)
+                ) VALUES ($1, $2, $3, $4, $5, $6, true, $7, $8, $9, $10, $11, $12, $13, $14)
                 RETURNING id, entity_id, attribute_id,
                     'null'::jsonb AS value,
                     relationship_target_entity_id, context_id, active, created_at"#,
         )
         .bind(Uuid::new_v4())
+        .bind(self.workspace_id.unwrap_or(Self::DEFAULT_WORKSPACE_ID))
         .bind(entity.id)
         .bind(attribute_id)
         .bind(context_id)
@@ -456,9 +463,10 @@ impl CatalogRepository {
     ) -> Result<(), RepositoryError> {
         let context_id = context_id.ok_or(RepositoryError::InvalidContext)?;
         let exists = sqlx::query_scalar::<_, bool>(
-            "SELECT EXISTS (SELECT 1 FROM attribute_contexts WHERE id = $1)",
+            "SELECT EXISTS (SELECT 1 FROM attribute_contexts WHERE id = $1 AND workspace_id = $2)",
         )
         .bind(context_id)
+        .bind(self.workspace_id.unwrap_or(Self::DEFAULT_WORKSPACE_ID))
         .fetch_one(&mut **transaction)
         .await?;
         if !exists {
@@ -485,9 +493,10 @@ impl CatalogRepository {
     ) -> Result<Entity, RepositoryError> {
         sqlx::query_as::<_, Entity>(
             r#"SELECT id, blueprint_id, blueprint_version, projections, created_at, updated_at, deleted_at
-               FROM entities WHERE id = $1 AND deleted_at IS NULL FOR UPDATE"#,
+               FROM entities WHERE id = $1 AND workspace_id = $2 AND deleted_at IS NULL FOR UPDATE"#,
         )
         .bind(entity_id)
+        .bind(self.workspace_id.unwrap_or(Self::DEFAULT_WORKSPACE_ID))
         .fetch_optional(&mut **transaction)
         .await?
         .ok_or(RepositoryError::NotFound("entity"))
@@ -500,13 +509,14 @@ impl CatalogRepository {
         blueprint_version: i64,
     ) -> Result<Entity, RepositoryError> {
         sqlx::query_as::<_, Entity>(
-            r#"INSERT INTO entities (id, blueprint_id, blueprint_version, projections)
-               SELECT $1, b.id, b.version, $2
+            r#"INSERT INTO entities (id, workspace_id, blueprint_id, blueprint_version, projections)
+               SELECT $1, $2, b.id, b.version, $3
                FROM blueprints b
-                WHERE b.id = $3 AND b.version = $4 AND b.kind = 'entity' AND b.status = 'published' AND b.deleted_at IS NULL
+                WHERE b.id = $4 AND b.version = $5 AND b.workspace_id = $2 AND b.kind = 'entity' AND b.status = 'published' AND b.deleted_at IS NULL
                 RETURNING id, blueprint_id, blueprint_version, projections, created_at, updated_at, deleted_at"#,
         )
         .bind(Uuid::new_v4())
+        .bind(self.workspace_id.unwrap_or(Self::DEFAULT_WORKSPACE_ID))
         .bind(empty_projections())
         .bind(blueprint_id)
         .bind(blueprint_version)
@@ -535,8 +545,9 @@ impl CatalogRepository {
             .list_attributes(entity.blueprint_id, entity.blueprint_version)
             .await?;
         let contexts = sqlx::query_as::<_, AttributeContext>(
-            "SELECT id, code, data, parent_id FROM attribute_contexts ORDER BY code",
+            "SELECT id, code, data, parent_id FROM attribute_contexts WHERE workspace_id = $1 ORDER BY code",
         )
+        .bind(self.workspace_id.unwrap_or(Self::DEFAULT_WORKSPACE_ID))
         .fetch_all(&mut **transaction)
         .await?;
         let context_by_id: std::collections::HashMap<_, _> = contexts
@@ -659,9 +670,10 @@ impl CatalogRepository {
     ) -> Result<(), RepositoryError> {
         let target = sqlx::query_scalar::<_, String>(
             r#"SELECT b.code FROM entities e JOIN blueprints b ON b.id = e.blueprint_id AND b.version = e.blueprint_version
-               WHERE e.id = $1 AND e.deleted_at IS NULL"#,
+               WHERE e.id = $1 AND e.workspace_id = $2 AND e.deleted_at IS NULL"#,
         )
         .bind(target_entity_id)
+        .bind(self.workspace_id.unwrap_or(Self::DEFAULT_WORKSPACE_ID))
         .fetch_optional(&mut **transaction)
         .await?
         .ok_or(RepositoryError::NotFound("relationship target entity"))?;
@@ -734,11 +746,11 @@ impl CatalogRepository {
         }
 
         Ok(sqlx::query_as::<_, AttributeValue>(
-            r#"INSERT INTO attribute_values (id, entity_id, attribute_id, context_id, relationship_target_entity_id, active)
-               VALUES ($1, $2, $3, $4, $5, $6)
+            r#"INSERT INTO attribute_values (id, workspace_id, entity_id, attribute_id, context_id, relationship_target_entity_id, active)
+               VALUES ($1, $2, $3, $4, $5, $6, $7)
                RETURNING id, entity_id, attribute_id, 'null'::jsonb AS value, relationship_target_entity_id, context_id, active, created_at"#,
         )
-        .bind(Uuid::new_v4()).bind(entity_id).bind(attribute_id).bind(context_id)
+        .bind(Uuid::new_v4()).bind(self.workspace_id.unwrap_or(Self::DEFAULT_WORKSPACE_ID)).bind(entity_id).bind(attribute_id).bind(context_id)
         .bind(target_entity_id).bind(active).fetch_one(&mut **transaction).await?)
     }
 
@@ -750,24 +762,22 @@ impl CatalogRepository {
         context_id: Option<Uuid>,
         relationship_target_entity_id: Option<Uuid>,
     ) -> Result<Option<AttributeValue>, RepositoryError> {
-        sqlx::query("SELECT ensure_attribute_value_history_partition(now())")
-            .execute(&mut **transaction)
-            .await?;
         sqlx::query_as::<_, AttributeValue>(
             r#"WITH archived AS (
                     DELETE FROM attribute_values
                     WHERE entity_id = $1
+                      AND workspace_id = $5
                       AND attribute_id = $2
                       AND context_id IS NOT DISTINCT FROM $3
                       AND relationship_target_entity_id IS NOT DISTINCT FROM $4
                     RETURNING *
                 ), stored AS (
                     INSERT INTO attribute_value_history (
-                        id, entity_id, attribute_id, context_id, relationship_target_entity_id, active,
+                        id, workspace_id, entity_id, attribute_id, context_id, relationship_target_entity_id, active,
                         value_text, value_number, value_integer, value_boolean, value_date, value_datetime,
                         value_time, value_time_zone, value_json, created_at
                     )
-                    SELECT id, entity_id, attribute_id, context_id, relationship_target_entity_id, active,
+                    SELECT id, workspace_id, entity_id, attribute_id, context_id, relationship_target_entity_id, active,
                            value_text, value_number, value_integer, value_boolean, value_date, value_datetime,
                            value_time, value_time_zone, value_json, created_at
                     FROM archived
@@ -780,6 +790,7 @@ impl CatalogRepository {
         .bind(attribute_id)
         .bind(context_id)
         .bind(relationship_target_entity_id)
+        .bind(self.workspace_id.unwrap_or(Self::DEFAULT_WORKSPACE_ID))
         .fetch_optional(&mut **transaction)
         .await
         .map_err(Into::into)
@@ -790,24 +801,22 @@ impl CatalogRepository {
         transaction: &mut Transaction<'_, Postgres>,
         entity_id: Uuid,
     ) -> Result<(), RepositoryError> {
-        sqlx::query("SELECT ensure_attribute_value_history_partition(now())")
-            .execute(&mut **transaction)
-            .await?;
         sqlx::query(
             r#"WITH archived AS (
-                    DELETE FROM attribute_values WHERE entity_id = $1 RETURNING *
+                    DELETE FROM attribute_values WHERE entity_id = $1 AND workspace_id = $2 RETURNING *
                 )
                 INSERT INTO attribute_value_history (
-                    id, entity_id, attribute_id, context_id, relationship_target_entity_id, active,
+                    id, workspace_id, entity_id, attribute_id, context_id, relationship_target_entity_id, active,
                     value_text, value_number, value_integer, value_boolean, value_date, value_datetime,
                     value_time, value_time_zone, value_json, created_at
                 )
-                SELECT id, entity_id, attribute_id, context_id, relationship_target_entity_id, active,
+                SELECT id, workspace_id, entity_id, attribute_id, context_id, relationship_target_entity_id, active,
                        value_text, value_number, value_integer, value_boolean, value_date, value_datetime,
                        value_time, value_time_zone, value_json, created_at
                 FROM archived"#,
         )
         .bind(entity_id)
+        .bind(self.workspace_id.unwrap_or(Self::DEFAULT_WORKSPACE_ID))
         .execute(&mut **transaction)
         .await?;
         Ok(())
@@ -818,8 +827,9 @@ impl CatalogRepository {
         transaction: &mut Transaction<'_, Postgres>,
         entity_id: Uuid,
     ) -> Result<(), RepositoryError> {
-        sqlx::query("UPDATE entities SET updated_at = now() WHERE id = $1")
+        sqlx::query("UPDATE entities SET updated_at = now() WHERE id = $1 AND workspace_id = $2")
             .bind(entity_id)
+            .bind(self.workspace_id.unwrap_or(Self::DEFAULT_WORKSPACE_ID))
             .execute(&mut **transaction)
             .await?;
         Ok(())

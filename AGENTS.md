@@ -23,3 +23,12 @@ Do not assume the default Vite or API ports; parallel worktrees receive unique
 ports. Use `just down` to stop the worktree database.
 
 Use SQLx for all migration operations.
+
+## Database policy
+
+SQL migrations are declarative only. They may define tables, columns, indexes,
+foreign keys, `NOT NULL`, `UNIQUE`, and `CHECK` constraints, plus required types
+and extensions. Never add SQL functions, procedures, triggers, views, RLS
+policies, or `DO` blocks. Business authorization, validation, state transitions,
+audit behavior, rate limiting, and retention live in Rust repository/application
+code and use explicit transactions.
