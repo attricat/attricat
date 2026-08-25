@@ -8,6 +8,7 @@ mod entity_reads;
 mod error;
 mod extractors;
 mod members;
+mod roles;
 mod sessions;
 mod tokens;
 
@@ -135,6 +136,26 @@ pub fn router(state: AppState) -> Router {
             "/data-health/refresh",
             post(data_health::refresh_data_health),
         )
+        .route("/workspace/roles", get(roles::list).post(roles::create))
+        .route(
+            "/workspace/assignable-roles",
+            get(roles::list_assignable_roles),
+        )
+        .route("/workspace/permissions", get(roles::list_permissions))
+        .route(
+            "/workspace/token-permissions",
+            get(roles::list_token_permissions),
+        )
+        .route(
+            "/workspace/grant-targets/{scope_type}",
+            get(roles::list_grant_targets),
+        )
+        .route("/workspace/roles/{role_id}", put(roles::update))
+        .route(
+            "/workspace/roles/{role_id}/duplicate",
+            post(roles::duplicate),
+        )
+        .route("/workspace/roles/{role_id}/retire", post(roles::retire))
         .route("/workspace/members", get(members::list_members))
         .route(
             "/workspace/members/{member_id}",

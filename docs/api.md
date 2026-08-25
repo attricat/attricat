@@ -28,7 +28,7 @@ a deployment therefore serves one workspace rather than using a request header
 to route a shared database pool. See [Configuration](configuration.md#request-authorization).
 
 `POST /auth/renew` atomically rotates the browser session, `POST /auth/logout`
-revokes it, and `GET /auth/session` returns the active user identity. The local
+revokes it, and `GET /auth/session` returns the active user identity and the deployment-selected `workspace_id`. The local
 password, cookie, CSRF, expiry, and revocation contract is documented in
 [Browser Authentication](authentication.md).
 
@@ -38,6 +38,15 @@ password, cookie, CSRF, expiry, and revocation contract is documented in
 | --- | --- | --- |
 | `GET` | `/health` | Confirm the migrated API is ready. |
 | `GET` | `/metrics` | Scrape Prometheus service metrics. |
+| `GET` | `/workspace/roles` | List fixed and workspace-local roles with permissions (`roles.manage`). |
+| `POST` | `/workspace/roles` | Create a workspace-local role. |
+| `PUT` | `/workspace/roles/{role_id}` | Update a workspace-local role. Fixed roles are immutable. |
+| `POST` | `/workspace/roles/{role_id}/duplicate` | Duplicate a fixed or local role as a custom role. |
+| `POST` | `/workspace/roles/{role_id}/retire` | Retire a custom role, optionally replacing its grants. |
+| `GET` | `/workspace/permissions` | List permissions available for custom roles (`roles.manage`). |
+| `GET` | `/workspace/assignable-roles` | List roles available to member and invitation management (`members.manage`). |
+| `GET` | `/workspace/token-permissions` | List the caller's permissions available to personal-token management (`tokens.manage`). |
+| `GET` | `/workspace/grant-targets/{scope_type}` | List workspace-owned grant targets for a scope (`members.manage`); ownership is checked again when granting. |
 | `GET` | `/workspace/members` | List members and additive grants (`members.manage`). |
 | `PUT` | `/workspace/members/{member_id}` | Set member state to `active` or `inactive`. |
 | `POST` | `/workspace/members/{member_id}/grants` | Add a role grant at one requested scope. |
@@ -46,6 +55,8 @@ password, cookie, CSRF, expiry, and revocation contract is documented in
 | `GET`, `POST` | `/workspace/invitations` | List or create expiring email invitations. |
 | `DELETE` | `/workspace/invitations/{invitation_id}` | Revoke a pending invitation. |
 | `POST` | `/workspace/invitations/accept` | Accept `{ "secret": "cat_inv_..." }` as the verified intended account. |
+| `GET`, `POST` | `/personal-access-tokens` | List or issue a personal token; creation returns its secret exactly once. |
+| `DELETE` | `/personal-access-tokens/{token_id}` | Revoke a personal token. |
 | `GET` | `/blueprints` | List published entity blueprints. |
 | `GET` | `/blueprints/catalogue` | List blueprint families and revisions. |
 | `POST` | `/blueprints` | Create the first draft revision from TOML. |

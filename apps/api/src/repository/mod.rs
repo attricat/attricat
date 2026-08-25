@@ -30,12 +30,14 @@ mod entity_projection;
 mod entity_search;
 mod health;
 mod members;
+mod roles;
 mod sessions;
 mod tokens;
 mod values;
 
 pub(crate) use entity_search::decode_search_cursor;
 pub(crate) use members::{WorkspaceInvitation, WorkspaceMember};
+pub(crate) use roles::{Permission, WorkspaceGrantTarget, WorkspaceRole};
 pub(crate) use tokens::PersonalApiToken;
 
 #[derive(Clone)]

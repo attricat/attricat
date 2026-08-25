@@ -18,6 +18,12 @@ import { Route as ContextsIndexRouteImport } from './routes/contexts/index'
 import { Route as ContextsNewRouteImport } from './routes/contexts/new'
 import { Route as EntitiesEntityIdRouteImport } from './routes/entities/$entityId'
 import { Route as EntitiesNewRouteImport } from './routes/entities/new'
+import { Route as InvitationsAcceptRouteImport } from './routes/invitations/accept'
+import { Route as WorkspaceIndexRouteImport } from './routes/workspace/index'
+import { Route as WorkspaceInvitationsRouteImport } from './routes/workspace/invitations'
+import { Route as WorkspaceMembersRouteImport } from './routes/workspace/members'
+import { Route as WorkspaceRolesRouteImport } from './routes/workspace/roles'
+import { Route as WorkspaceTokensRouteImport } from './routes/workspace/tokens'
 import { Route as EntitiesEntityIdIndexRouteImport } from './routes/entities/$entityId/index'
 import { Route as EntitiesEntityIdEditRouteImport } from './routes/entities/$entityId/edit'
 import { Route as EntitiesEntityIdMigrateRouteImport } from './routes/entities/$entityId/migrate'
@@ -67,6 +73,36 @@ const EntitiesNewRoute = EntitiesNewRouteImport.update({
   path: '/entities/new',
   getParentRoute: () => rootRouteImport,
 } as any)
+const InvitationsAcceptRoute = InvitationsAcceptRouteImport.update({
+  id: '/invitations/accept',
+  path: '/invitations/accept',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const WorkspaceIndexRoute = WorkspaceIndexRouteImport.update({
+  id: '/workspace/',
+  path: '/workspace/',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const WorkspaceInvitationsRoute = WorkspaceInvitationsRouteImport.update({
+  id: '/workspace/invitations',
+  path: '/workspace/invitations',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const WorkspaceMembersRoute = WorkspaceMembersRouteImport.update({
+  id: '/workspace/members',
+  path: '/workspace/members',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const WorkspaceRolesRoute = WorkspaceRolesRouteImport.update({
+  id: '/workspace/roles',
+  path: '/workspace/roles',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const WorkspaceTokensRoute = WorkspaceTokensRouteImport.update({
+  id: '/workspace/tokens',
+  path: '/workspace/tokens',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const EntitiesEntityIdIndexRoute = EntitiesEntityIdIndexRouteImport.update({
   id: '/',
   path: '/',
@@ -91,8 +127,14 @@ export interface FileRoutesByFullPath {
   '/contexts/new': typeof ContextsNewRoute
   '/entities/$entityId': typeof EntitiesEntityIdRouteWithChildren
   '/entities/new': typeof EntitiesNewRoute
+  '/invitations/accept': typeof InvitationsAcceptRoute
+  '/workspace/invitations': typeof WorkspaceInvitationsRoute
+  '/workspace/members': typeof WorkspaceMembersRoute
+  '/workspace/roles': typeof WorkspaceRolesRoute
+  '/workspace/tokens': typeof WorkspaceTokensRoute
   '/blueprints/': typeof BlueprintsIndexRoute
   '/contexts/': typeof ContextsIndexRoute
+  '/workspace/': typeof WorkspaceIndexRoute
   '/entities/$entityId/edit': typeof EntitiesEntityIdEditRoute
   '/entities/$entityId/migrate': typeof EntitiesEntityIdMigrateRoute
   '/entities/$entityId/': typeof EntitiesEntityIdIndexRoute
@@ -104,8 +146,14 @@ export interface FileRoutesByTo {
   '/blueprints/$blueprintId': typeof BlueprintsBlueprintIdRoute
   '/contexts/new': typeof ContextsNewRoute
   '/entities/new': typeof EntitiesNewRoute
+  '/invitations/accept': typeof InvitationsAcceptRoute
+  '/workspace/invitations': typeof WorkspaceInvitationsRoute
+  '/workspace/members': typeof WorkspaceMembersRoute
+  '/workspace/roles': typeof WorkspaceRolesRoute
+  '/workspace/tokens': typeof WorkspaceTokensRoute
   '/blueprints': typeof BlueprintsIndexRoute
   '/contexts': typeof ContextsIndexRoute
+  '/workspace': typeof WorkspaceIndexRoute
   '/entities/$entityId/edit': typeof EntitiesEntityIdEditRoute
   '/entities/$entityId/migrate': typeof EntitiesEntityIdMigrateRoute
   '/entities/$entityId': typeof EntitiesEntityIdIndexRoute
@@ -119,8 +167,14 @@ export interface FileRoutesById {
   '/contexts/new': typeof ContextsNewRoute
   '/entities/$entityId': typeof EntitiesEntityIdRouteWithChildren
   '/entities/new': typeof EntitiesNewRoute
+  '/invitations/accept': typeof InvitationsAcceptRoute
+  '/workspace/invitations': typeof WorkspaceInvitationsRoute
+  '/workspace/members': typeof WorkspaceMembersRoute
+  '/workspace/roles': typeof WorkspaceRolesRoute
+  '/workspace/tokens': typeof WorkspaceTokensRoute
   '/blueprints/': typeof BlueprintsIndexRoute
   '/contexts/': typeof ContextsIndexRoute
+  '/workspace/': typeof WorkspaceIndexRoute
   '/entities/$entityId/edit': typeof EntitiesEntityIdEditRoute
   '/entities/$entityId/migrate': typeof EntitiesEntityIdMigrateRoute
   '/entities/$entityId/': typeof EntitiesEntityIdIndexRoute
@@ -135,8 +189,14 @@ export interface FileRouteTypes {
     | '/contexts/new'
     | '/entities/$entityId'
     | '/entities/new'
+    | '/invitations/accept'
+    | '/workspace/invitations'
+    | '/workspace/members'
+    | '/workspace/roles'
+    | '/workspace/tokens'
     | '/blueprints/'
     | '/contexts/'
+    | '/workspace/'
     | '/entities/$entityId/edit'
     | '/entities/$entityId/migrate'
     | '/entities/$entityId/'
@@ -148,8 +208,14 @@ export interface FileRouteTypes {
     | '/blueprints/$blueprintId'
     | '/contexts/new'
     | '/entities/new'
+    | '/invitations/accept'
+    | '/workspace/invitations'
+    | '/workspace/members'
+    | '/workspace/roles'
+    | '/workspace/tokens'
     | '/blueprints'
     | '/contexts'
+    | '/workspace'
     | '/entities/$entityId/edit'
     | '/entities/$entityId/migrate'
     | '/entities/$entityId'
@@ -162,8 +228,14 @@ export interface FileRouteTypes {
     | '/contexts/new'
     | '/entities/$entityId'
     | '/entities/new'
+    | '/invitations/accept'
+    | '/workspace/invitations'
+    | '/workspace/members'
+    | '/workspace/roles'
+    | '/workspace/tokens'
     | '/blueprints/'
     | '/contexts/'
+    | '/workspace/'
     | '/entities/$entityId/edit'
     | '/entities/$entityId/migrate'
     | '/entities/$entityId/'
@@ -177,8 +249,14 @@ export interface RootRouteChildren {
   ContextsNewRoute: typeof ContextsNewRoute
   EntitiesEntityIdRoute: typeof EntitiesEntityIdRouteWithChildren
   EntitiesNewRoute: typeof EntitiesNewRoute
+  InvitationsAcceptRoute: typeof InvitationsAcceptRoute
+  WorkspaceInvitationsRoute: typeof WorkspaceInvitationsRoute
+  WorkspaceMembersRoute: typeof WorkspaceMembersRoute
+  WorkspaceRolesRoute: typeof WorkspaceRolesRoute
+  WorkspaceTokensRoute: typeof WorkspaceTokensRoute
   BlueprintsIndexRoute: typeof BlueprintsIndexRoute
   ContextsIndexRoute: typeof ContextsIndexRoute
+  WorkspaceIndexRoute: typeof WorkspaceIndexRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -246,6 +324,48 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof EntitiesNewRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/invitations/accept': {
+      id: '/invitations/accept'
+      path: '/invitations/accept'
+      fullPath: '/invitations/accept'
+      preLoaderRoute: typeof InvitationsAcceptRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/workspace/': {
+      id: '/workspace/'
+      path: '/workspace'
+      fullPath: '/workspace/'
+      preLoaderRoute: typeof WorkspaceIndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/workspace/invitations': {
+      id: '/workspace/invitations'
+      path: '/workspace/invitations'
+      fullPath: '/workspace/invitations'
+      preLoaderRoute: typeof WorkspaceInvitationsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/workspace/members': {
+      id: '/workspace/members'
+      path: '/workspace/members'
+      fullPath: '/workspace/members'
+      preLoaderRoute: typeof WorkspaceMembersRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/workspace/roles': {
+      id: '/workspace/roles'
+      path: '/workspace/roles'
+      fullPath: '/workspace/roles'
+      preLoaderRoute: typeof WorkspaceRolesRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/workspace/tokens': {
+      id: '/workspace/tokens'
+      path: '/workspace/tokens'
+      fullPath: '/workspace/tokens'
+      preLoaderRoute: typeof WorkspaceTokensRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/entities/$entityId/': {
       id: '/entities/$entityId/'
       path: '/'
@@ -293,8 +413,14 @@ const rootRouteChildren: RootRouteChildren = {
   ContextsNewRoute: ContextsNewRoute,
   EntitiesEntityIdRoute: EntitiesEntityIdRouteWithChildren,
   EntitiesNewRoute: EntitiesNewRoute,
+  InvitationsAcceptRoute: InvitationsAcceptRoute,
+  WorkspaceInvitationsRoute: WorkspaceInvitationsRoute,
+  WorkspaceMembersRoute: WorkspaceMembersRoute,
+  WorkspaceRolesRoute: WorkspaceRolesRoute,
+  WorkspaceTokensRoute: WorkspaceTokensRoute,
   BlueprintsIndexRoute: BlueprintsIndexRoute,
   ContextsIndexRoute: ContextsIndexRoute,
+  WorkspaceIndexRoute: WorkspaceIndexRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
