@@ -82,8 +82,10 @@ env = setEnvValue(
 );
 env = setEnvValue(env, "BIND_ADDR", `127.0.0.1:${ports.API_PORT}`);
 env = setEnvValue(env, "CATALOG_API_URL", `http://127.0.0.1:${ports.API_PORT}`);
-env = setEnvValue(env, "POSTGRES_PORT", ports.POSTGRES_PORT);
 env = setEnvValue(env, "WEB_PORT", ports.WEB_PORT);
+env = setEnvValue(env, "POSTGRES_PORT", ports.POSTGRES_PORT);
+env = setEnvValue(env, "MAILPIT_SMTP_PORT", ports.MAILPIT_SMTP_PORT);
+env = setEnvValue(env, "MAILPIT_UI_PORT", ports.MAILPIT_UI_PORT);
 env = setEnvValue(env, "SMTP_PORT", ports.MAILPIT_SMTP_PORT);
 env = setEnvValue(
   env,
