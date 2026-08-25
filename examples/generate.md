@@ -5,6 +5,8 @@ HTTP API. It uses Node.js 18 or later and has no package dependencies.
 
 Start the development services, then run it from the repository root:
 
+Set required `CATALOG_TOKEN` for authorization. You can get your token in the profile section of the app.
+
 ```sh
 just generate
 ```

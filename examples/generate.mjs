@@ -7,12 +7,14 @@ const productCount = Math.max(Number.parseInt(process.env.PRODUCT_COUNT ?? '100'
 const defaultContextId = '00000000-0000-4000-8000-000000000001';
 const blueprintsOnly = process.env.SEED_BLUEPRINTS_ONLY === '1';
 
+const CATALOG_TOKEN = `${process.env.CATALOG_TOKEN}`.trim();
+
 const definition = (file) => readFile(new URL(`./generator/products/${file}`, import.meta.url), 'utf8');
 
 const request = async (path, options = {}) => {
   const response = await fetch(`${server}${path}`, {
     ...options,
-    headers: { 'content-type': 'application/json', ...options.headers },
+    headers: { 'content-type': 'application/json', 'authorization': `Bearer ${CATALOG_TOKEN }`, ...options.headers },
   });
   const body = await response.json().catch(() => null);
   if (!response.ok) {

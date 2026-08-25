@@ -37,7 +37,6 @@ import {
   revokeInvitation,
   revokeMemberRole,
   selectedScopeTarget,
-  setMemberState,
   transferOwnership,
   updateRole,
   type ScopeType,
