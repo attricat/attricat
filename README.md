@@ -25,6 +25,13 @@ just down
 See [Getting Started](docs/index.md#getting-started) for database, migration,
 and test instructions.
 
+## Sign in locally
+
+Open `/login` and enter the bootstrap workspace identifier `default.local`, then
+select **Continue**. Sign in with the bootstrap-owner email configured in `.env`
+(`CATALOG_BOOTSTRAP_OWNER_EMAIL`) and its password. The workspace UUID is an
+internal database/configuration identifier; clients do not select it directly.
+
 ## Documentation
 
 - [Documentation index](docs/index.md)

@@ -4,6 +4,9 @@ test('signs in and signs out through browser cookies', async ({ page }) => {
   await page.context().clearCookies();
   await page.goto('/');
   await expect(page).toHaveURL(/\/login$/);
+  await page.getByLabel('Workspace').fill('default.local');
+  await page.getByRole('button', { name: 'Continue' }).click();
+  await expect(page).toHaveURL(/\/login\/default\.local$/);
 
   await page.getByLabel('Email').fill('fixture@example.test');
   await page.getByLabel('Password').fill('e2e-only-fixture-password');
