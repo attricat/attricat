@@ -1,9 +1,10 @@
 #![allow(dead_code, unused_imports)]
 
-use std::net::SocketAddr;
+use std::{net::SocketAddr, sync::Arc};
 
 use api::{
     http::{AppState, router},
+    mail::SmtpMailDelivery,
     repository::CatalogRepository,
     telemetry::init_metrics,
 };
@@ -74,6 +75,17 @@ async fn start_server_with_auth_mode(
             pool.clone(),
             (*pool.connect_options()).clone(),
         ),
+        mail_delivery: Arc::new(
+            SmtpMailDelivery::new(
+                "127.0.0.1",
+                1025,
+                "Catalog <no-reply@catalog.local>",
+                None,
+                None,
+            )
+            .unwrap(),
+        ),
+        password_reset_url: "http://127.0.0.1/password-reset/confirm".to_owned(),
         metrics: init_metrics().unwrap(),
         max_preview_relationship_depth: 3,
         max_preview_relationship_items: 10,

@@ -14,7 +14,7 @@ mod tokens;
 
 use std::{collections::HashMap, sync::Arc, time::Instant};
 
-use crate::repository::CatalogRepository;
+use crate::{mail::MailDelivery, repository::CatalogRepository};
 use axum::{
     Router,
     extract::State,
@@ -31,6 +31,8 @@ use tracing::{Instrument, field::Empty};
 #[derive(Clone)]
 pub struct AppState {
     pub repository: CatalogRepository,
+    pub mail_delivery: Arc<dyn MailDelivery>,
+    pub password_reset_url: String,
     pub metrics: PrometheusHandle,
     // Preview expansion is request-controlled, so these limits keep cyclic or
     // high-cardinality relationship graphs from turning one read into an
@@ -98,6 +100,14 @@ pub fn router(state: AppState) -> Router {
         .route("/health", get(data_health::health))
         .route("/auth/discover", post(sessions::discover))
         .route("/auth/login", post(sessions::login))
+        .route(
+            "/auth/password-reset",
+            post(sessions::request_password_reset),
+        )
+        .route(
+            "/auth/password-reset/confirm",
+            post(sessions::confirm_password_reset),
+        )
         .route("/auth/session", get(sessions::current_session))
         .route("/auth/logout", post(sessions::logout))
         .route("/auth/renew", post(sessions::renew))

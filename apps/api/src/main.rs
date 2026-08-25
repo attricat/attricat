@@ -1,9 +1,10 @@
-use std::{net::SocketAddr, str::FromStr};
+use std::{net::SocketAddr, str::FromStr, sync::Arc};
 
 use api::{
     MIGRATOR,
     account::{Password, hash_password},
     http::{AppState, router},
+    mail::SmtpMailDelivery,
     repository::CatalogRepository,
     telemetry::{init_metrics, init_tracing},
 };
@@ -128,12 +129,30 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         .connect_with(connect_options.clone())
         .await?;
 
+    let smtp_host = std::env::var("SMTP_HOST").unwrap_or_else(|_| "127.0.0.1".to_owned());
+    let smtp_port = std::env::var("SMTP_PORT")
+        .unwrap_or_else(|_| "1025".to_owned())
+        .parse()?;
+    let mail_from = std::env::var("MAIL_FROM")
+        .unwrap_or_else(|_| "Catalog <no-reply@catalog.local>".to_owned());
+    let mail_delivery = Arc::new(SmtpMailDelivery::new(
+        &smtp_host,
+        smtp_port,
+        &mail_from,
+        std::env::var("SMTP_USERNAME").ok(),
+        std::env::var("SMTP_PASSWORD").ok(),
+    )?);
+    let password_reset_url = std::env::var("PASSWORD_RESET_URL")
+        .unwrap_or_else(|_| "http://127.0.0.1:5173/password-reset/confirm".to_owned());
+
     let listener = tokio::net::TcpListener::bind(bind_addr).await?;
     tracing::info!(address = %listener.local_addr()?, "API listening");
     axum::serve(
         listener,
         router(AppState {
             repository: CatalogRepository::with_workspace_pool_factory(pool, connect_options),
+            mail_delivery,
+            password_reset_url,
             metrics,
             max_preview_relationship_depth,
             max_preview_relationship_items,
@@ -205,6 +224,14 @@ async fn create_bootstrap_password(
     )
     .bind(email)
     .bind(password_hash.as_phc())
+    .execute(pool)
+    .await?;
+    // Bootstrap passwords are supplied by trusted deployment configuration, so
+    // their configured owner addresses are verified before reset links can issue.
+    sqlx::query(
+        "UPDATE users SET email_verified_at = COALESCE(email_verified_at, now()) WHERE email = $1",
+    )
+    .bind(email)
     .execute(pool)
     .await?;
     Ok(())

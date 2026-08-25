@@ -58,8 +58,12 @@ revokes lifecycle actions, and consumes valid verification or password actions i
 explicit transactions. Adapters pass only password hashes and token digests to that
 application layer; database migrations contain no authorization or lifecycle functions.
 
-There is no email provider. A delivery adapter must send the opaque secret without
-recording it in logs, telemetry, database rows, or API responses.
+The local-development and E2E delivery adapter sends through Mailpit SMTP. It
+builds reset links from `PASSWORD_RESET_URL` and must not record opaque secrets
+in logs, telemetry, database rows, or API responses. Mailpit's web UI is for
+local inspection; E2E retrieves captured messages and URLs through Mailpit's
+REST API. It is not production email delivery: replacing this boundary with a
+production provider remains a follow-up.
 
 ## Workspace sign-in routing
 
@@ -79,6 +83,18 @@ The server resolves the identifier and issues a session for that workspace;
 clients never select a workspace ID. The web UI uses `/login` then the stable
 workspace-specific `/login/:identifier` credential URL so password managers
 can retain separate native username/current-password credentials.
+
+## Password reset
+
+`POST /auth/password-reset` accepts an email and always returns `204 No Content`,
+regardless of account eligibility, to resist account enumeration. Eligible active
+users with verified email and a local credential receive a 30-minute, one-time
+`password_reset` link. `POST /auth/password-reset/confirm` accepts its opaque
+token and a new password, hashes it with Argon2id, and atomically consumes the
+link. Invalid, expired, revoked, or replayed links produce the same generic
+validation error. Reset never creates a browser session; users sign in normally
+afterward. The credential/security version changes revoke existing sessions and
+outstanding lifecycle links.
 
 Custom domains, SSO enforcement/configuration, SCIM/JIT provisioning, MFA,
 passkeys, and switching workspaces after login are explicitly deferred.

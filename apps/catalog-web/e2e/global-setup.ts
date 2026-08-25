@@ -1,7 +1,15 @@
 import { PostgreSqlContainer } from '@testcontainers/postgresql';
 import { chromium } from '@playwright/test';
 import { execFileSync, spawn, type ChildProcess } from 'node:child_process';
-import { e2eApiPort, e2eApiUrl, e2eWebPort, e2eWebUrl } from './ports.ts';
+import {
+  e2eApiPort,
+  e2eApiUrl,
+  e2eMailpitSmtpPort,
+  e2eMailpitUiPort,
+  e2eMailpitUrl,
+  e2eWebPort,
+  e2eWebUrl,
+} from './ports.ts';
 
 const workspaceRoot = new URL('../../..', import.meta.url).pathname;
 const bootstrapOwnerId = '00000000-0000-4000-8000-000000000201';
@@ -45,6 +53,19 @@ export default async () => {
   // container lifecycle and always stops PostgreSQL in global teardown.
   process.env.TESTCONTAINERS_RYUK_DISABLED = 'true';
   const database = await new PostgreSqlContainer('postgres:18-alpine').start();
+  const mailpit = start(
+    'docker',
+    [
+      'run',
+      '--rm',
+      '-p',
+      `127.0.0.1:${e2eMailpitSmtpPort}:1025`,
+      '-p',
+      `127.0.0.1:${e2eMailpitUiPort}:8025`,
+      'axllent/mailpit:v1.28',
+    ],
+    process.env,
+  );
   const api = start('cargo', ['run', '-p', 'api'], {
     ...process.env,
     BIND_ADDR: `127.0.0.1:${e2eApiPort}`,
@@ -55,9 +76,13 @@ export default async () => {
     SESSION_COOKIE_SECURE: 'false',
     CATALOG_E2E_FIXTURE_EMAIL: fixtureEmail,
     CATALOG_E2E_FIXTURE_PASSWORD: fixturePassword,
+    SMTP_HOST: '127.0.0.1',
+    SMTP_PORT: e2eMailpitSmtpPort,
+    PASSWORD_RESET_URL: `${e2eWebUrl}/password-reset/confirm`,
   });
 
   try {
+    await waitFor(`${e2eMailpitUrl}/api/v1/messages`);
     await waitFor(`${e2eApiUrl}/health`);
     const web = start(
       'npm',
@@ -95,10 +120,12 @@ export default async () => {
     return async () => {
       stop(web);
       stop(api);
+      stop(mailpit);
       await database.stop();
     };
   } catch (error) {
     stop(api);
+    stop(mailpit);
     await database.stop();
     throw error;
   }

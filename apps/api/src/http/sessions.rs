@@ -14,11 +14,15 @@ use super::{
     auth::{ActiveWorkspace, AuthenticatedPrincipal, AuthenticatedSession},
     error::ApiError,
 };
-use crate::account::{Password, SessionDigest, SessionSecret};
+use crate::account::{
+    ActionTokenSecret, IssuedLifecycleAction, LifecycleActionPurpose, Password, SessionDigest,
+    SessionSecret, hash_password,
+};
 
 const SESSION_COOKIE: &str = "catalog_session";
 const CSRF_COOKIE: &str = "catalog_csrf";
 const SESSION_LIFETIME_HOURS: i64 = 8;
+const PASSWORD_RESET_LIFETIME_MINUTES: i64 = 30;
 
 #[derive(Deserialize)]
 pub(super) struct LoginRequest {
@@ -30,6 +34,17 @@ pub(super) struct LoginRequest {
 #[derive(Deserialize)]
 pub(super) struct DiscoveryRequest {
     login_identifier: String,
+}
+
+#[derive(Deserialize)]
+pub(super) struct PasswordResetRequest {
+    email: String,
+}
+
+#[derive(Deserialize)]
+pub(super) struct PasswordResetConfirmation {
+    token: String,
+    password: String,
 }
 
 #[derive(Serialize)]
@@ -80,6 +95,69 @@ pub(super) async fn discover(
         // This is deliberately extensible for OIDC, SAML, and passkeys.
         sign_in_methods: vec!["local_password"],
     }))
+}
+
+/// Always returns 204 so callers cannot determine whether an address has a
+/// resettable local credential. Opaque token values only cross the mail boundary.
+pub(super) async fn request_password_reset(
+    State(state): State<AppState>,
+    Json(request): Json<PasswordResetRequest>,
+) -> Result<axum::http::StatusCode, ApiError> {
+    let email = request.email.trim().to_lowercase();
+    let credential = state.repository.local_login_credential(&email).await?;
+    let Some(credential) =
+        credential.filter(|credential| credential.active && credential.email_verified)
+    else {
+        return Ok(axum::http::StatusCode::NO_CONTENT);
+    };
+    let issued = IssuedLifecycleAction::issue(
+        LifecycleActionPurpose::PasswordReset,
+        Utc::now() + Duration::minutes(PASSWORD_RESET_LIFETIME_MINUTES),
+        crate::account::SecurityVersion::new(credential.security_version.into()),
+        Some(crate::account::CredentialVersion::new(
+            credential.credential_version.into(),
+        )),
+    );
+    state
+        .repository
+        .issue_lifecycle_token(
+            Uuid::new_v4(),
+            credential.user_id,
+            LifecycleActionPurpose::PasswordReset.as_str(),
+            issued.action.token_digest().as_ref(),
+            issued.action.expires_at(),
+        )
+        .await?;
+    let reset_url = format!(
+        "{}?token={}",
+        state.password_reset_url,
+        issued.secret.expose_for_delivery()
+    );
+    state
+        .mail_delivery
+        .deliver_password_reset(&email, &reset_url)
+        .await
+        .map_err(|_| ApiError::internal("password reset email could not be delivered"))?;
+    Ok(axum::http::StatusCode::NO_CONTENT)
+}
+
+pub(super) async fn confirm_password_reset(
+    State(state): State<AppState>,
+    Json(request): Json<PasswordResetConfirmation>,
+) -> Result<axum::http::StatusCode, ApiError> {
+    let secret = ActionTokenSecret::from_delivery_value(request.token).map_err(|_| {
+        ApiError::invalid_input("password reset link is invalid or expired".to_owned())
+    })?;
+    let password_hash = hash_password(&Password::new(request.password))
+        .map_err(|_| ApiError::invalid_input("password could not be set".to_owned()))?;
+    state
+        .repository
+        .consume_password_reset(&secret.digest(), &password_hash)
+        .await
+        .map_err(|_| {
+            ApiError::invalid_input("password reset link is invalid or expired".to_owned())
+        })?;
+    Ok(axum::http::StatusCode::NO_CONTENT)
 }
 
 pub(super) async fn login(
