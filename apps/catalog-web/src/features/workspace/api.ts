@@ -155,6 +155,23 @@ export const transferOwnership = (id: string) =>
     method: 'POST',
   });
 
+const createdUserSchema = z.object({
+  user_id: uuid,
+  invitation: invitationSchema.nullable(),
+});
+const createUserInputSchema = invitationInputSchema.extend({
+  display_name: z.string().min(1).optional(),
+});
+
+export const createWorkspaceUser = (
+  input: z.input<typeof createUserInputSchema>,
+) => request('/api/workspace/users', createdUserSchema, json('POST', createUserInputSchema.parse(input)));
+export const completeOnboarding = (input: {
+  invitation_secret: string;
+  onboarding_secret: string;
+  password: string;
+}) => request('/api/onboarding/complete', z.object({ membership_id: uuid }), json('POST', input));
+
 export const listInvitations = () =>
   request('/api/workspace/invitations', z.array(invitationSchema));
 export const createInvitation = (
@@ -162,7 +179,7 @@ export const createInvitation = (
 ) =>
   request(
     '/api/workspace/invitations',
-    invitationSchema.extend({ secret: z.string().startsWith('cat_inv_') }),
+    invitationSchema,
     json('POST', invitationInputSchema.parse(input)),
   );
 export const revokeInvitation = (id: string) =>

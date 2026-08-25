@@ -12,6 +12,7 @@ import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as DataHealthRouteImport } from './routes/data-health'
 import { Route as LoginRouteImport } from './routes/login'
+import { Route as OnboardingRouteImport } from './routes/onboarding'
 import { Route as ProfileRouteImport } from './routes/profile'
 import { Route as BlueprintsIndexRouteImport } from './routes/blueprints/index'
 import { Route as BlueprintsBlueprintIdRouteImport } from './routes/blueprints/$blueprintId'
@@ -45,6 +46,11 @@ const DataHealthRoute = DataHealthRouteImport.update({
 const LoginRoute = LoginRouteImport.update({
   id: '/login',
   path: '/login',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const OnboardingRoute = OnboardingRouteImport.update({
+  id: '/onboarding',
+  path: '/onboarding',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ProfileRoute = ProfileRouteImport.update({
@@ -147,6 +153,7 @@ export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/data-health': typeof DataHealthRoute
   '/login': typeof LoginRouteWithChildren
+  '/onboarding': typeof OnboardingRoute
   '/profile': typeof ProfileRoute
   '/blueprints/$blueprintId': typeof BlueprintsBlueprintIdRoute
   '/contexts/new': typeof ContextsNewRoute
@@ -170,6 +177,7 @@ export interface FileRoutesByFullPath {
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/data-health': typeof DataHealthRoute
+  '/onboarding': typeof OnboardingRoute
   '/profile': typeof ProfileRoute
   '/blueprints/$blueprintId': typeof BlueprintsBlueprintIdRoute
   '/contexts/new': typeof ContextsNewRoute
@@ -194,6 +202,7 @@ export interface FileRoutesById {
   '/': typeof IndexRoute
   '/data-health': typeof DataHealthRoute
   '/login': typeof LoginRouteWithChildren
+  '/onboarding': typeof OnboardingRoute
   '/profile': typeof ProfileRoute
   '/blueprints/$blueprintId': typeof BlueprintsBlueprintIdRoute
   '/contexts/new': typeof ContextsNewRoute
@@ -220,6 +229,7 @@ export interface FileRouteTypes {
     | '/'
     | '/data-health'
     | '/login'
+    | '/onboarding'
     | '/profile'
     | '/blueprints/$blueprintId'
     | '/contexts/new'
@@ -243,6 +253,7 @@ export interface FileRouteTypes {
   to:
     | '/'
     | '/data-health'
+    | '/onboarding'
     | '/profile'
     | '/blueprints/$blueprintId'
     | '/contexts/new'
@@ -266,6 +277,7 @@ export interface FileRouteTypes {
     | '/'
     | '/data-health'
     | '/login'
+    | '/onboarding'
     | '/profile'
     | '/blueprints/$blueprintId'
     | '/contexts/new'
@@ -291,6 +303,7 @@ export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   DataHealthRoute: typeof DataHealthRoute
   LoginRoute: typeof LoginRouteWithChildren
+  OnboardingRoute: typeof OnboardingRoute
   ProfileRoute: typeof ProfileRoute
   BlueprintsBlueprintIdRoute: typeof BlueprintsBlueprintIdRoute
   ContextsNewRoute: typeof ContextsNewRoute
@@ -328,6 +341,13 @@ declare module '@tanstack/react-router' {
       path: '/login'
       fullPath: '/login'
       preLoaderRoute: typeof LoginRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/onboarding': {
+      id: '/onboarding'
+      path: '/onboarding'
+      fullPath: '/onboarding'
+      preLoaderRoute: typeof OnboardingRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/profile': {
@@ -497,6 +517,7 @@ const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   DataHealthRoute: DataHealthRoute,
   LoginRoute: LoginRouteWithChildren,
+  OnboardingRoute: OnboardingRoute,
   ProfileRoute: ProfileRoute,
   BlueprintsBlueprintIdRoute: BlueprintsBlueprintIdRoute,
   ContextsNewRoute: ContextsNewRoute,

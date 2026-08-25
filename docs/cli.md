@@ -62,6 +62,47 @@ catalog value append <entity-id> --file values.toml --context-id <context-id>
 catalog value current <entity-id>
 catalog value replace <entity-id> --file relationships.toml --context-id <context-id>
 catalog value remove <entity-id> --file relationships.toml --context-id <context-id>
+
+catalog workspace member list
+catalog workspace member set-state <member-id> --state active|inactive
+catalog workspace member grant <member-id> --role-id <role-id> --scope-type <scope> --scope-target-id <id>
+catalog workspace member revoke-grant <member-id> <grant-id>
+catalog workspace member transfer-ownership <member-id>
+catalog workspace role list
+catalog workspace role permission list
+catalog workspace role assignable-role list
+catalog workspace role create --code <code> --permissions <json-or-file>
+catalog workspace role update <role-id> --code <code> --permissions <json-or-file>
+catalog workspace role duplicate <role-id> [--code <code>]
+catalog workspace role retire <role-id> [--replacement-role-id <role-id>]
+catalog workspace invitation list
+catalog workspace invitation create --email <email> --role-id <role-id> --scope-type <scope> --scope-target-id <id> --expires-at <rfc3339>
+catalog workspace invitation revoke <invitation-id>
+catalog workspace invitation accept --secret-stdin
+catalog workspace user create --email <email> [--display-name <name>] [--invite-role-id <role-id> --scope-type <scope> --scope-target-id <id> --expires-at <rfc3339>]
+catalog workspace user set-password --onboarding-secret-stdin --invitation-secret-stdin --password-stdin
+
+catalog token list
+catalog token create --label <label> --permissions <json-or-file> [--expires-at <rfc3339>]
+catalog token revoke <token-id>
+```
+
+## Workspace administration
+
+Pass a personal API token with `--token` or `CATALOG_TOKEN`. Workspace commands
+always operate on the workspace selected by that bearer credential; they never
+accept a workspace ID or tenant header. `--permissions` accepts either a JSON
+array (for example, `'["entities.read"]'`) or a path to a JSON file. Personal
+API-token secrets are emitted only in their successful JSON response. Workspace
+invitation and onboarding links are delivered by the configured mail adapter and
+are never emitted by the CLI. Use `catalog workspace invitation accept --secret-stdin`
+only when consuming the secret from the delivered link without placing it in shell
+history or argv:
+
+```sh
+printf '%s' "$CATALOG_INVITATION_SECRET" | catalog --token "$CATALOG_TOKEN" workspace invitation accept --secret-stdin
+# Password setup reads onboarding secret, invitation secret, then password from separate stdin lines.
+printf '%s\n%s\n%s\n' "$ONBOARDING_SECRET" "$INVITATION_SECRET" "$PASSWORD" | catalog workspace user set-password --onboarding-secret-stdin --invitation-secret-stdin --password-stdin
 ```
 
 `entity preview` calls `/entities/{id}/preview` and resolves active relationship

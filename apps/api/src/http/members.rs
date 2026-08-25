@@ -1,9 +1,10 @@
-use axum::{Json, extract::State, http::StatusCode};
+use axum::{Json, extract::State, http::StatusCode, response::Response};
 use base64::{Engine, engine::general_purpose::URL_SAFE_NO_PAD};
 use chrono::{DateTime, Utc};
 use rand::RngCore;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
+use url::Url;
 use uuid::Uuid;
 
 use super::{
@@ -12,7 +13,10 @@ use super::{
     error::ApiError,
     extractors::{ApiJson, ApiPath},
 };
-use crate::repository::{WorkspaceInvitation, WorkspaceMember};
+use crate::{
+    account::{Password, hash_password},
+    repository::{WorkspaceInvitation, WorkspaceMember},
+};
 
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -27,7 +31,6 @@ pub(super) struct CreateInvitationRequest {
 pub(super) struct CreatedInvitation {
     #[serde(flatten)]
     invitation: InvitationResponse,
-    secret: String,
 }
 #[derive(Serialize)]
 pub(super) struct InvitationResponse {
@@ -58,6 +61,195 @@ pub(super) struct GrantRoleRequest {
 #[derive(Serialize)]
 pub(super) struct GrantedRole {
     id: Uuid,
+}
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+pub(super) struct CreateWorkspaceUserRequest {
+    email: String,
+    display_name: Option<String>,
+    role_id: Option<Uuid>,
+    scope_type: Option<String>,
+    scope_target_id: Option<Uuid>,
+    expires_at: Option<DateTime<Utc>>,
+}
+#[derive(Serialize)]
+pub(super) struct CreatedWorkspaceUser {
+    user_id: Uuid,
+    invitation: Option<InvitationResponse>,
+}
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+pub(super) struct CompleteOnboardingRequest {
+    invitation_secret: String,
+    onboarding_secret: String,
+    password: String,
+}
+pub(super) async fn create_workspace_user(
+    State(state): State<AppState>,
+    super::auth::ScopedRepository(repository): super::auth::ScopedRepository,
+    AuthenticatedPrincipal(actor, _): AuthenticatedPrincipal,
+    ActiveWorkspace(workspace): ActiveWorkspace,
+    ApiJson(input): ApiJson<CreateWorkspaceUserRequest>,
+) -> Result<(StatusCode, Json<CreatedWorkspaceUser>), ApiError> {
+    let email = input.email.trim().to_lowercase();
+    let invite_fields = (
+        input.role_id,
+        input.scope_type,
+        input.scope_target_id,
+        input.expires_at,
+    );
+    let (role_id, scope_type, scope_target_id, expires_at) = match invite_fields {
+        (None, None, None, None) => {
+            let user = repository
+                .create_workspace_user(
+                    actor,
+                    workspace,
+                    &email,
+                    input.display_name.as_deref(),
+                    None,
+                    None,
+                )
+                .await?;
+            return Ok((
+                StatusCode::CREATED,
+                Json(CreatedWorkspaceUser {
+                    user_id: user.user_id,
+                    invitation: None,
+                }),
+            ));
+        }
+        (Some(role_id), Some(scope_type), Some(scope_target_id), Some(expires_at)) => {
+            (role_id, scope_type, scope_target_id, expires_at)
+        }
+        _ => {
+            return Err(ApiError::invalid_input(
+                "role_id, scope_type, scope_target_id, and expires_at must be supplied together"
+                    .to_owned(),
+            ));
+        }
+    };
+    let invitation_secret = opaque_secret("cat_inv_");
+    let onboarding_secret = opaque_secret("cat_onb_");
+    let user = repository
+        .create_workspace_user(
+            actor,
+            workspace,
+            &email,
+            input.display_name.as_deref(),
+            Some((
+                Uuid::new_v4(),
+                role_id,
+                scope_type,
+                scope_target_id,
+                Sha256::digest(invitation_secret.as_bytes()).to_vec(),
+                expires_at,
+            )),
+            Some(Sha256::digest(onboarding_secret.as_bytes()).to_vec()),
+        )
+        .await?;
+    let invitation = repository
+        .list_workspace_invitations(actor, workspace)
+        .await?
+        .into_iter()
+        .find(|item| Some(item.id) == user.invitation_id)
+        .expect("atomically created invitation is visible");
+    let delivery_url = if user.needs_password_setup {
+        action_url(
+            &state.workspace_onboarding_url,
+            &[
+                ("onboarding_secret", &onboarding_secret),
+                ("invitation_secret", &invitation_secret),
+            ],
+        )?
+    } else {
+        action_url(
+            &state.workspace_invitation_url,
+            &[("secret", &invitation_secret)],
+        )?
+    };
+    if user.needs_password_setup {
+        state
+            .mail_delivery
+            .deliver_workspace_onboarding(&email, &delivery_url)
+            .await
+    } else {
+        state
+            .mail_delivery
+            .deliver_workspace_invitation(&email, &delivery_url)
+            .await
+    }
+    .map_err(|_| ApiError::internal("workspace invitation email could not be delivered"))?;
+    Ok((
+        StatusCode::CREATED,
+        Json(CreatedWorkspaceUser {
+            user_id: user.user_id,
+            invitation: Some(InvitationResponse { invitation }),
+        }),
+    ))
+}
+
+pub(super) async fn complete_onboarding(
+    State(state): State<AppState>,
+    ApiJson(input): ApiJson<CompleteOnboardingRequest>,
+) -> Result<Response, ApiError> {
+    if input.password.len() < 12 {
+        return Err(ApiError::invalid_input(
+            "password must be at least 12 characters".to_owned(),
+        ));
+    }
+    let password_hash = hash_password(&Password::new(input.password))
+        .map_err(|_| ApiError::internal("could not set password"))?;
+    let onboarding = state
+        .repository
+        .complete_workspace_onboarding(
+            &Sha256::digest(input.invitation_secret.as_bytes()),
+            &Sha256::digest(input.onboarding_secret.as_bytes()),
+            password_hash.as_phc(),
+        )
+        .await?;
+    let account = state.repository.user_account(onboarding.user_id).await?;
+    let credential = state
+        .repository
+        .local_login_credential(&account.email)
+        .await?
+        .ok_or_else(ApiError::unauthenticated)?;
+    let (session, csrf, expires_at) = super::sessions::issue_session();
+    state
+        .repository
+        .issue_login_session(
+            Uuid::new_v4(),
+            &credential,
+            onboarding.workspace_id,
+            &session.digest(),
+            &csrf.digest(),
+            expires_at,
+        )
+        .await?;
+    super::sessions::onboarding_session_response(
+        &state,
+        onboarding.user_id,
+        onboarding.workspace_id,
+        onboarding.membership_id,
+        &session,
+        &csrf,
+        state.session_cookie_secure,
+        super::sessions::SESSION_LIFETIME_HOURS,
+    )
+    .await
+}
+
+fn action_url(base: &str, parameters: &[(&str, &str)]) -> Result<String, ApiError> {
+    let mut url =
+        Url::parse(base).map_err(|_| ApiError::internal("workspace action URL is invalid"))?;
+    url.query_pairs_mut()
+        .extend_pairs(parameters.iter().copied());
+    Ok(url.into())
+}
+
+fn opaque_secret(prefix: &str) -> String {
+    let mut bytes = [0u8; 32];
+    rand::rngs::OsRng.fill_bytes(&mut bytes);
+    format!("{prefix}{}", URL_SAFE_NO_PAD.encode(bytes))
 }
 
 pub(super) async fn list_members(
@@ -137,7 +329,7 @@ pub(super) async fn transfer_ownership(
 }
 
 pub(super) async fn create_invitation(
-    State(_state): State<AppState>,
+    State(state): State<AppState>,
     super::auth::ScopedRepository(repository): super::auth::ScopedRepository,
     AuthenticatedPrincipal(actor, _): AuthenticatedPrincipal,
     ActiveWorkspace(workspace): ActiveWorkspace,
@@ -169,11 +361,16 @@ pub(super) async fn create_invitation(
         .into_iter()
         .find(|item| item.id == id)
         .expect("new invitation is visible");
+    let delivery_url = action_url(&state.workspace_invitation_url, &[("secret", &secret)])?;
+    state
+        .mail_delivery
+        .deliver_workspace_invitation(&email, &delivery_url)
+        .await
+        .map_err(|_| ApiError::internal("workspace invitation email could not be delivered"))?;
     Ok((
         StatusCode::CREATED,
         Json(CreatedInvitation {
             invitation: InvitationResponse { invitation },
-            secret,
         }),
     ))
 }

@@ -116,6 +116,7 @@ pub(super) async fn authorize(
         || path == "/auth/discover"
         || path == "/auth/password-reset"
         || path == "/auth/password-reset/confirm"
+        || path == "/onboarding/complete"
     {
         return Ok(next.run(request).await);
     }
@@ -297,7 +298,8 @@ fn policy(method: &Method, path: &str) -> Option<Policy> {
             target: TargetKind::None,
         });
     }
-    if path == "/workspace/members"
+    if path == "/workspace/users"
+        || path == "/workspace/members"
         || path.starts_with("/workspace/members/")
         || path == "/workspace/invitations"
         || path.starts_with("/workspace/invitations/")
