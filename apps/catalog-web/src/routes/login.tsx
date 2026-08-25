@@ -1,6 +1,5 @@
-import { createFileRoute } from '@tanstack/react-router';
-import { WorkspaceLoginPage } from '../features/auth/LoginPage';
+import { Outlet, createFileRoute } from '@tanstack/react-router';
 
 export const Route = createFileRoute('/login')({
-  component: WorkspaceLoginPage,
+  component: Outlet,
 });
