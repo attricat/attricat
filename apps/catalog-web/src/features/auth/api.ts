@@ -1,7 +1,17 @@
 import { z } from 'zod';
 import { apiFetch } from './request';
 
-const sessionSchema = z.object({ user_id: z.uuid() });
+const sessionSchema = z.object({
+  user_id: z.uuid(),
+  workspace_id: z.uuid(),
+  capabilities: z
+    .object({
+      members_manage: z.boolean(),
+      roles_manage: z.boolean(),
+      tokens_manage: z.boolean(),
+    })
+    .optional(),
+});
 
 export const login = async (email: string, password: string) => {
   const response = await apiFetch('/api/auth/login', {

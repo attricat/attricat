@@ -15,7 +15,14 @@ export const LoginPage = () => {
       try {
         await login(value.email, value.password);
         await queryClient.invalidateQueries({ queryKey: ['auth', 'session'] });
-        await navigate({ to: '/' });
+        const returnTo = sessionStorage.getItem('catalog.return-to');
+        sessionStorage.removeItem('catalog.return-to');
+        await navigate({
+          to:
+            returnTo?.startsWith('/') && !returnTo.startsWith('//')
+              ? returnTo
+              : '/',
+        });
       } catch (reason) {
         setError(
           reason instanceof Error ? reason.message : 'Unable to sign in',

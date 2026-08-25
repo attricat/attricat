@@ -244,6 +244,27 @@ fn policy(method: &Method, path: &str) -> Option<Policy> {
     if path == "/workspace/invitations/accept" {
         return None;
     }
+    if path == "/workspace/assignable-roles" || path.starts_with("/workspace/grant-targets/") {
+        return Some(Policy {
+            permission: "members.manage",
+            target: TargetKind::None,
+        });
+    }
+    if path == "/workspace/token-permissions" {
+        return Some(Policy {
+            permission: "tokens.manage",
+            target: TargetKind::None,
+        });
+    }
+    if path == "/workspace/roles"
+        || path == "/workspace/permissions"
+        || path.starts_with("/workspace/roles/")
+    {
+        return Some(Policy {
+            permission: "roles.manage",
+            target: TargetKind::None,
+        });
+    }
     if path == "/workspace/members"
         || path.starts_with("/workspace/members/")
         || path == "/workspace/invitations"

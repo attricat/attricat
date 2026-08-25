@@ -198,6 +198,18 @@ impl From<RepositoryError> for ApiError {
                     message: "a record with the same unique value already exists".to_owned(),
                 }
             }
+            RepositoryError::Database(sqlx::Error::Database(database_error))
+                if database_error.code().as_deref() == Some("P0001")
+                    && database_error.message().starts_with("actor may not") =>
+            {
+                Self::forbidden()
+            }
+            RepositoryError::Database(sqlx::Error::Database(database_error))
+                if database_error.code().as_deref() == Some("P0001")
+                    && is_workspace_validation_error(database_error.message()) =>
+            {
+                Self::invalid_input(database_error.message().to_owned())
+            }
             RepositoryError::Database(_) => Self::internal("database operation failed"),
         }
     }
@@ -211,6 +223,40 @@ struct ErrorDetail<'a> {
     code: &'a str,
     message: &'a str,
 }
+fn is_workspace_validation_error(message: &str) -> bool {
+    [
+        "role does not belong",
+        "role does not exist",
+        "workspace-local role does not exist",
+        "source role does not exist",
+        "replacement role does not exist",
+        "scope must target",
+        "grants must target",
+        "blueprint family does not belong",
+        "entity does not belong",
+        "context does not belong",
+        "invalid invitation scope",
+        "invalid grant scope",
+        "owner invitations must be workspace scoped",
+        "owner grants must be workspace scoped",
+        "only an active owner",
+        "only a workspace owner",
+        "workspace must retain at least one active owner",
+        "target membership is not active",
+        "ownership target must be",
+        "role permissions exceed",
+        "role contains an unknown permission",
+        "role code must",
+        "only workspace-local roles may be retired",
+        "role has active grants",
+        "token expiry must be in the future",
+        "token permissions",
+        "invitation digest or expiry is invalid",
+    ]
+    .iter()
+    .any(|expected| message.contains(expected))
+}
+
 impl IntoResponse for ApiError {
     fn into_response(self) -> Response {
         (

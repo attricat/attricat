@@ -43,7 +43,13 @@ export const AppLayout = () => {
   };
   if (pathname === '/login') return <Outlet />;
   if (session.isPending) return null;
-  if (!session.data) return <Navigate to="/login" />;
+  if (!session.data) {
+    sessionStorage.setItem(
+      'catalog.return-to',
+      `${window.location.pathname}${window.location.search}${window.location.hash}`,
+    );
+    return <Navigate to="/login" />;
+  }
 
   return (
     <Box sx={{ display: 'flex', minHeight: '100dvh' }}>

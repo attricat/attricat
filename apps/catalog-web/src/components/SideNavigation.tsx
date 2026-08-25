@@ -2,7 +2,10 @@ import AssessmentOutlinedIcon from '@mui/icons-material/AssessmentOutlined';
 import CategoryOutlinedIcon from '@mui/icons-material/CategoryOutlined';
 import FolderOutlinedIcon from '@mui/icons-material/FolderOutlined';
 import TravelExploreOutlinedIcon from '@mui/icons-material/TravelExploreOutlined';
+import ManageAccountsOutlinedIcon from '@mui/icons-material/ManageAccountsOutlined';
+import { useQuery } from '@tanstack/react-query';
 import { Link, useRouterState } from '@tanstack/react-router';
+import { currentSession } from '../features/auth/api';
 import {
   Box,
   Divider,
@@ -22,6 +25,11 @@ const navigationItems = [
     label: 'Data health',
     to: '/data-health',
   },
+  {
+    icon: <ManageAccountsOutlinedIcon />,
+    label: 'Workspace management',
+    to: '/workspace/members',
+  },
 ] as const;
 
 export const drawerWidth = 264;
@@ -30,6 +38,15 @@ export const SideNavigation = ({ onNavigate }: { onNavigate?: () => void }) => {
   const pathname = useRouterState({
     select: (state) => state.location.pathname,
   });
+  const session = useQuery({
+    queryKey: ['auth', 'session'],
+    queryFn: currentSession,
+  });
+  const canManageWorkspace = Boolean(
+    session.data?.capabilities?.members_manage ||
+    session.data?.capabilities?.roles_manage ||
+    session.data?.capabilities?.tokens_manage,
+  );
 
   return (
     <Box sx={{ width: drawerWidth }}>
@@ -43,22 +60,26 @@ export const SideNavigation = ({ onNavigate }: { onNavigate?: () => void }) => {
       </Box>
       <Divider />
       <List sx={{ px: 1, py: 1.5 }}>
-        {navigationItems.map((item) => (
-          <ListItemButton
-            component={Link}
-            key={item.to}
-            onClick={onNavigate}
-            selected={
-              item.to === '/'
-                ? pathname === item.to
-                : pathname.startsWith(item.to)
-            }
-            to={item.to}
-          >
-            <ListItemIcon>{item.icon}</ListItemIcon>
-            <ListItemText primary={item.label} />
-          </ListItemButton>
-        ))}
+        {navigationItems
+          .filter(
+            (item) => item.to !== '/workspace/members' || canManageWorkspace,
+          )
+          .map((item) => (
+            <ListItemButton
+              component={Link}
+              key={item.to}
+              onClick={onNavigate}
+              selected={
+                item.to === '/'
+                  ? pathname === item.to
+                  : pathname.startsWith(item.to)
+              }
+              to={item.to}
+            >
+              <ListItemIcon>{item.icon}</ListItemIcon>
+              <ListItemText primary={item.label} />
+            </ListItemButton>
+          ))}
       </List>
     </Box>
   );

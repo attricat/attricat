@@ -1,0 +1,252 @@
+import { z } from 'zod';
+import { apiFetch } from '../auth/request';
+
+const uuid = z.uuid();
+const scopeTypeSchema = z.enum([
+  'workspace',
+  'blueprint_family',
+  'entity',
+  'context_subtree',
+]);
+const grantSchema = z.object({
+  id: uuid,
+  role_id: uuid,
+  role_code: z.string(),
+  scope_type: scopeTypeSchema,
+  scope_target_id: uuid,
+});
+const memberSchema = z.object({
+  id: uuid,
+  user_id: uuid,
+  email: z.string().email(),
+  display_name: z.string().nullable(),
+  state: z.enum(['active', 'inactive']),
+  created_at: z.string(),
+  updated_at: z.string(),
+  grants: z.array(grantSchema),
+});
+const invitationSchema = z.object({
+  id: uuid,
+  invitee_email: z.string().email(),
+  inviter_user_id: uuid,
+  inviter_email: z.string().email(),
+  role_id: uuid,
+  role_code: z.string(),
+  scope_type: scopeTypeSchema,
+  scope_target_id: uuid,
+  expires_at: z.string(),
+  accepted_at: z.string().nullable(),
+  accepted_by_user_id: uuid.nullable(),
+  revoked_at: z.string().nullable(),
+  created_at: z.string(),
+});
+const roleSchema = z.object({
+  id: uuid,
+  code: z.string(),
+  is_system: z.boolean(),
+  permissions: z.array(z.string()),
+  created_at: z.string(),
+});
+const permissionSchema = z.object({
+  code: z.string(),
+  description: z.string(),
+});
+const grantTargetSchema = z.object({ id: uuid, label: z.string() });
+const tokenSchema = z.object({
+  id: uuid,
+  label: z.string(),
+  permissions: z.array(z.string()),
+  expires_at: z.string().nullable(),
+  revoked_at: z.string().nullable(),
+  last_used_at: z.string().nullable(),
+  created_at: z.string(),
+});
+const apiErrorSchema = z.object({ error: z.object({ message: z.string() }) });
+
+const permissionCodesSchema = z
+  .array(z.string())
+  .refine(
+    (permissions) => new Set(permissions).size === permissions.length,
+    'Permissions must be unique',
+  );
+const tokenPermissionCodesSchema = permissionCodesSchema.min(1);
+const grantInputSchema = z.object({
+  role_id: uuid,
+  scope_type: scopeTypeSchema,
+  scope_target_id: uuid,
+});
+const invitationInputSchema = grantInputSchema.extend({
+  email: z.string().email(),
+  expires_at: z.string().datetime({ offset: true }),
+});
+const tokenInputSchema = z.object({
+  label: z.string().trim().min(1).max(120),
+  permissions: tokenPermissionCodesSchema,
+  expires_at: z.string().datetime({ offset: true }).optional(),
+});
+const roleInputSchema = z.object({
+  code: z.string().regex(/^[a-z][a-z0-9_-]*$/),
+  permissions: permissionCodesSchema,
+});
+
+export type WorkspaceMember = z.infer<typeof memberSchema>;
+export type WorkspaceRole = z.infer<typeof roleSchema>;
+export type Permission = z.infer<typeof permissionSchema>;
+export type GrantTarget = z.infer<typeof grantTargetSchema>;
+export type ScopeType = z.infer<typeof scopeTypeSchema>;
+export type GrantInput = z.infer<typeof grantInputSchema>;
+
+export const ensureActiveScopeTarget = (
+  input: GrantInput,
+  workspaceId: string | undefined,
+  targets: readonly GrantTarget[] | undefined,
+) => {
+  const parsed = grantInputSchema.parse(input);
+  if (parsed.scope_type === 'workspace') {
+    if (!workspaceId || parsed.scope_target_id !== uuid.parse(workspaceId)) {
+      throw new Error('Workspace scope must target the active workspace.');
+    }
+    return parsed;
+  }
+  if (!targets?.some((target) => target.id === parsed.scope_target_id)) {
+    throw new Error(
+      'Choose a target from the selected scope before submitting.',
+    );
+  }
+  return parsed;
+};
+
+const request = async <T>(
+  path: string,
+  schema: z.ZodType<T>,
+  init?: RequestInit,
+) => {
+  const response = await apiFetch(path, init);
+  if (!response.ok) {
+    const parsed = apiErrorSchema.safeParse(
+      await response.json().catch(() => null),
+    );
+    throw new Error(
+      parsed.success
+        ? parsed.data.error.message
+        : `Request failed (${response.status})`,
+    );
+  }
+  return schema.parse(await response.json());
+};
+const noContent = async (path: string, init: RequestInit) => {
+  const response = await apiFetch(path, init);
+  if (!response.ok) throw new Error(`Request failed (${response.status})`);
+};
+const json = (method: string, value: unknown): RequestInit => ({
+  method,
+  headers: { 'Content-Type': 'application/json' },
+  body: JSON.stringify(value),
+});
+
+export const listMembers = () =>
+  request('/api/workspace/members', z.array(memberSchema));
+export const setMemberState = (id: string, state: 'active' | 'inactive') =>
+  noContent(`/api/workspace/members/${uuid.parse(id)}`, json('PUT', { state }));
+export const grantMemberRole = (memberId: string, input: GrantInput) =>
+  request(
+    `/api/workspace/members/${uuid.parse(memberId)}/grants`,
+    z.object({ id: uuid }),
+    json('POST', grantInputSchema.parse(input)),
+  );
+export const revokeMemberRole = (memberId: string, grantId: string) =>
+  noContent(
+    `/api/workspace/members/${uuid.parse(memberId)}/grants/${uuid.parse(grantId)}`,
+    { method: 'DELETE' },
+  );
+export const transferOwnership = (id: string) =>
+  noContent(`/api/workspace/members/${uuid.parse(id)}/transfer-ownership`, {
+    method: 'POST',
+  });
+
+export const listInvitations = () =>
+  request('/api/workspace/invitations', z.array(invitationSchema));
+export const createInvitation = (
+  input: z.input<typeof invitationInputSchema>,
+) =>
+  request(
+    '/api/workspace/invitations',
+    invitationSchema.extend({ secret: z.string().startsWith('cat_inv_') }),
+    json('POST', invitationInputSchema.parse(input)),
+  );
+export const revokeInvitation = (id: string) =>
+  noContent(`/api/workspace/invitations/${uuid.parse(id)}`, {
+    method: 'DELETE',
+  });
+export const acceptInvitation = (secret: string) =>
+  request(
+    '/api/workspace/invitations/accept',
+    z.object({ membership_id: uuid }),
+    json('POST', { secret: z.string().min(1).parse(secret) }),
+  );
+
+export const listRoles = () =>
+  request('/api/workspace/roles', z.array(roleSchema));
+export const listAssignableRoles = () =>
+  request('/api/workspace/assignable-roles', z.array(roleSchema));
+export const listPermissions = () =>
+  request('/api/workspace/permissions', z.array(permissionSchema));
+export const listTokenPermissions = () =>
+  request('/api/workspace/token-permissions', z.array(permissionSchema));
+export const listGrantTargets = (scope: ScopeType) =>
+  request(
+    `/api/workspace/grant-targets/${scopeTypeSchema.parse(scope)}`,
+    z.array(grantTargetSchema),
+  );
+export const createRole = (input: z.input<typeof roleInputSchema>) =>
+  request(
+    '/api/workspace/roles',
+    z.object({ id: uuid }),
+    json('POST', roleInputSchema.parse(input)),
+  );
+export const updateRole = (
+  id: string,
+  input: z.input<typeof roleInputSchema>,
+) =>
+  noContent(
+    `/api/workspace/roles/${uuid.parse(id)}`,
+    json('PUT', roleInputSchema.parse(input)),
+  );
+export const duplicateRole = (id: string, code: string) =>
+  request(
+    `/api/workspace/roles/${uuid.parse(id)}/duplicate`,
+    z.object({ id: uuid }),
+    json('POST', {
+      code: z
+        .string()
+        .regex(/^[a-z][a-z0-9_-]*$/)
+        .parse(code),
+    }),
+  );
+export const retireRole = (id: string, replacement_role_id?: string) =>
+  noContent(
+    `/api/workspace/roles/${uuid.parse(id)}/retire`,
+    json('POST', {
+      ...(replacement_role_id
+        ? { replacement_role_id: uuid.parse(replacement_role_id) }
+        : {}),
+    }),
+  );
+
+export const listTokens = () =>
+  request('/api/personal-access-tokens', z.array(tokenSchema));
+export const createToken = (input: z.input<typeof tokenInputSchema>) => {
+  const parsed = tokenInputSchema.parse(input);
+  if (parsed.expires_at && new Date(parsed.expires_at) <= new Date()) {
+    throw new Error('Token expiry must be in the future.');
+  }
+  return request(
+    '/api/personal-access-tokens',
+    tokenSchema.extend({ secret: z.string().startsWith('cat_pat_') }),
+    json('POST', parsed),
+  );
+};
+export const revokeToken = (id: string) =>
+  noContent(`/api/personal-access-tokens/${uuid.parse(id)}`, {
+    method: 'DELETE',
+  });

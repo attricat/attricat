@@ -11,7 +11,7 @@ use uuid::Uuid;
 
 use super::{
     AppState,
-    auth::{AuthenticatedPrincipal, AuthenticatedSession},
+    auth::{ActiveWorkspace, AuthenticatedPrincipal, AuthenticatedSession},
     error::ApiError,
 };
 use crate::account::{Password, SessionDigest, SessionSecret};
@@ -29,6 +29,16 @@ pub(super) struct LoginRequest {
 #[derive(Serialize)]
 pub(super) struct SessionResponse {
     user_id: Uuid,
+    /// This is the deployment-selected workspace for this API instance.
+    workspace_id: Uuid,
+    capabilities: SessionCapabilities,
+}
+
+#[derive(Serialize)]
+pub(super) struct SessionCapabilities {
+    members_manage: bool,
+    roles_manage: bool,
+    tokens_manage: bool,
 }
 
 pub(super) async fn login(
@@ -68,19 +78,28 @@ pub(super) async fn login(
             expires_at,
         )
         .await?;
-    Ok(session_response(
+    session_response(
+        &state,
         credential.user_id,
+        state.workspace_id,
         &session,
         &csrf,
         state.session_cookie_secure,
         SESSION_LIFETIME_HOURS,
-    ))
+    )
+    .await
 }
 
 pub(super) async fn current_session(
+    State(state): State<AppState>,
     AuthenticatedPrincipal(user_id, _): AuthenticatedPrincipal,
-) -> Json<SessionResponse> {
-    Json(SessionResponse { user_id })
+    ActiveWorkspace(workspace_id): ActiveWorkspace,
+) -> Result<Json<SessionResponse>, ApiError> {
+    Ok(Json(SessionResponse {
+        user_id,
+        workspace_id,
+        capabilities: session_capabilities(&state, user_id, workspace_id).await?,
+    }))
 }
 
 pub(super) async fn logout(
@@ -111,13 +130,16 @@ pub(super) async fn renew(
             expires_at,
         )
         .await?;
-    Ok(session_response(
+    session_response(
+        &state,
         user_id,
+        state.workspace_id,
         &session,
         &csrf,
         state.session_cookie_secure,
         SESSION_LIFETIME_HOURS,
-    ))
+    )
+    .await
 }
 
 fn issue_session() -> (SessionSecret, SessionSecret, chrono::DateTime<Utc>) {
@@ -132,14 +154,21 @@ fn digest_login_key(email: &str) -> SessionDigest {
     SessionDigest::from_slice(&Sha256::digest(email.as_bytes())).expect("sha256 is 32 bytes")
 }
 
-fn session_response(
+async fn session_response(
+    state: &AppState,
     user_id: Uuid,
+    workspace_id: Uuid,
     session: &SessionSecret,
     csrf: &SessionSecret,
     secure: bool,
     lifetime_hours: i64,
-) -> Response {
-    let mut response = Json(SessionResponse { user_id }).into_response();
+) -> Result<Response, ApiError> {
+    let mut response = Json(SessionResponse {
+        user_id,
+        workspace_id,
+        capabilities: session_capabilities(state, user_id, workspace_id).await?,
+    })
+    .into_response();
     response.headers_mut().append(
         SET_COOKIE,
         cookie(
@@ -160,7 +189,28 @@ fn session_response(
             lifetime_hours,
         ),
     );
-    response
+    Ok(response)
+}
+
+async fn session_capabilities(
+    state: &AppState,
+    user_id: Uuid,
+    workspace_id: Uuid,
+) -> Result<SessionCapabilities, ApiError> {
+    Ok(SessionCapabilities {
+        members_manage: state
+            .repository
+            .is_authorized(user_id, workspace_id, "members.manage", None, None)
+            .await?,
+        roles_manage: state
+            .repository
+            .is_authorized(user_id, workspace_id, "roles.manage", None, None)
+            .await?,
+        tokens_manage: state
+            .repository
+            .is_authorized(user_id, workspace_id, "tokens.manage", None, None)
+            .await?,
+    })
 }
 
 fn clear_session_response(secure: bool) -> Response {
