@@ -52,15 +52,6 @@ const permissionSchema = z.object({
   description: z.string(),
 });
 const grantTargetSchema = z.object({ id: uuid, label: z.string() });
-const tokenSchema = z.object({
-  id: uuid,
-  label: z.string(),
-  permissions: z.array(z.string()),
-  expires_at: z.string().nullable(),
-  revoked_at: z.string().nullable(),
-  last_used_at: z.string().nullable(),
-  created_at: z.string(),
-});
 const apiErrorSchema = z.object({ error: z.object({ message: z.string() }) });
 
 const permissionCodesSchema = z
@@ -69,7 +60,6 @@ const permissionCodesSchema = z
     (permissions) => new Set(permissions).size === permissions.length,
     'Permissions must be unique',
   );
-const tokenPermissionCodesSchema = permissionCodesSchema.min(1);
 const grantInputSchema = z.object({
   role_id: uuid,
   scope_type: scopeTypeSchema,
@@ -78,11 +68,6 @@ const grantInputSchema = z.object({
 const invitationInputSchema = grantInputSchema.extend({
   email: z.string().email(),
   expires_at: z.string().datetime({ offset: true }),
-});
-const tokenInputSchema = z.object({
-  label: z.string().trim().min(1).max(120),
-  permissions: tokenPermissionCodesSchema,
-  expires_at: z.string().datetime({ offset: true }).optional(),
 });
 const roleInputSchema = z.object({
   code: z.string().regex(/^[a-z][a-z0-9_-]*$/),
@@ -232,21 +217,3 @@ export const retireRole = (id: string, replacement_role_id?: string) =>
         : {}),
     }),
   );
-
-export const listTokens = () =>
-  request('/api/personal-access-tokens', z.array(tokenSchema));
-export const createToken = (input: z.input<typeof tokenInputSchema>) => {
-  const parsed = tokenInputSchema.parse(input);
-  if (parsed.expires_at && new Date(parsed.expires_at) <= new Date()) {
-    throw new Error('Token expiry must be in the future.');
-  }
-  return request(
-    '/api/personal-access-tokens',
-    tokenSchema.extend({ secret: z.string().startsWith('cat_pat_') }),
-    json('POST', parsed),
-  );
-};
-export const revokeToken = (id: string) =>
-  noContent(`/api/personal-access-tokens/${uuid.parse(id)}`, {
-    method: 'DELETE',
-  });
