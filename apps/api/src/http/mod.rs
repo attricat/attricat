@@ -14,6 +14,7 @@ mod tokens;
 
 use std::{collections::HashMap, sync::Arc, time::Instant};
 
+use crate::repository::CatalogRepository;
 use axum::{
     Router,
     extract::State,
@@ -26,15 +27,10 @@ use metrics_exporter_prometheus::PrometheusHandle;
 use serde_json::Value;
 use tokio::sync::Mutex;
 use tracing::{Instrument, field::Empty};
-use uuid::Uuid;
-
-use crate::repository::CatalogRepository;
 
 #[derive(Clone)]
 pub struct AppState {
     pub repository: CatalogRepository,
-    /// Deployment-selected workspace used by the RLS connection boundary.
-    pub workspace_id: Uuid,
     pub metrics: PrometheusHandle,
     // Preview expansion is request-controlled, so these limits keep cyclic or
     // high-cardinality relationship graphs from turning one read into an
@@ -100,6 +96,7 @@ pub fn router(state: AppState) -> Router {
     Router::new()
         .route("/metrics", get(metrics))
         .route("/health", get(data_health::health))
+        .route("/auth/discover", post(sessions::discover))
         .route("/auth/login", post(sessions::login))
         .route("/auth/session", get(sessions::current_session))
         .route("/auth/logout", post(sessions::logout))

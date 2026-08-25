@@ -1,4 +1,6 @@
 import { createFileRoute } from '@tanstack/react-router';
-import { LoginPage } from '../features/auth/LoginPage';
+import { WorkspaceLoginPage } from '../features/auth/LoginPage';
 
-export const Route = createFileRoute('/login')({ component: LoginPage });
+export const Route = createFileRoute('/login')({
+  component: WorkspaceLoginPage,
+});

@@ -1,6 +1,6 @@
 # Database Model
 
-The API persists a versioned catalog using PostgreSQL 18 and SQLx migrations. Every catalog aggregate is owned by a workspace; the initial migration backfills existing data into the deterministic `default` workspace. The API selects its workspace from trusted server configuration (`CATALOG_WORKSPACE_ID`), never a request body. Authentication and per-request active-workspace selection build on this boundary in later work.
+The API persists a versioned catalog using PostgreSQL 18 and SQLx migrations. Every catalog aggregate is owned by a workspace; the initial migration backfills existing data into the deterministic `default` workspace. Each workspace also has an immutable, normalized domain-like `login_identifier` used only to route sign-in. Browser-session tenancy comes from that server-issued session binding, never a request body or workspace header.
 
 The canonical write model is normalized EAV data. The API rebuilds the JSONB `preview`
 projection on value writes and uses it for preview and search reads; it remains a
@@ -34,9 +34,9 @@ not assign UUID defaults.
 
 ### `workspaces`
 
-Workspaces are the durable tenant boundary. Their UUID is immutable; `slug` is a stable unique identifier for administration, not a client-controlled authorization input. The bootstrap/default workspace uses UUID `00000000-0000-4000-8000-000000000002`. Bootstrap-owner metadata is retained for the later identity/membership bootstrap step.
+Workspaces are the durable tenant boundary. Their UUID and `login_identifier` are immutable; `slug` is a stable unique identifier for administration, not a client-controlled authorization input. Login identifiers are lowercased, 3–253-character domain-like strings, unique, and intentionally have no DNS or host-routing behavior. The bootstrap/default workspace uses UUID `00000000-0000-4000-8000-000000000002`. Bootstrap-owner metadata is retained for the identity/membership bootstrap step.
 
-Catalog tables carry a required `workspace_id`. Composite foreign keys keep blueprint revisions, attributes, entities, contexts, values, history, relationships, and migration records in the same workspace. Row-level policies run request connections as the non-owner `catalog_api` database role and use the server-configured workspace ID, preventing an accidental unqualified query from crossing the tenant boundary.
+Catalog tables carry a required `workspace_id`. Composite foreign keys keep blueprint revisions, attributes, entities, contexts, values, history, relationships, and migration records in the same workspace. Row-level policies run request connections as the non-owner `catalog_api` database role and enforce the trusted workspace boundary, preventing an accidental unqualified query from crossing the tenant boundary.
 
 ### Identity and seeded RBAC
 

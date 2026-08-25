@@ -70,8 +70,10 @@ async fn start_server_with_auth_mode(
     let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
     let address: SocketAddr = listener.local_addr().unwrap();
     let router = router(AppState {
-        repository: CatalogRepository::new(pool),
-        workspace_id,
+        repository: CatalogRepository::with_workspace_pool_factory(
+            pool.clone(),
+            (*pool.connect_options()).clone(),
+        ),
         metrics: init_metrics().unwrap(),
         max_preview_relationship_depth: 3,
         max_preview_relationship_items: 10,

@@ -7,7 +7,10 @@ use axum::{
 use serde_json::{Map, Value, json};
 use uuid::Uuid;
 
-use super::{AppState, auth::AuthenticatedPrincipal};
+use super::{
+    AppState,
+    auth::{ActiveWorkspace, AuthenticatedPrincipal, ScopedRepository},
+};
 
 const REQUEST_ID_HEADER: &str = "x-request-id";
 const CORRELATION_ID_HEADER: &str = "x-correlation-id";
@@ -17,7 +20,7 @@ const CORRELATION_ID_HEADER: &str = "x-correlation-id";
 /// route information; `redact_metadata` is retained as a guard for future
 /// caller-supplied metadata.
 pub(super) async fn record(
-    State(state): State<AppState>,
+    State(_state): State<AppState>,
     request: Request,
     next: Next,
 ) -> Response {
@@ -42,11 +45,10 @@ pub(super) async fn record(
         .get::<AuthenticatedPrincipal>()
         .map(|principal| principal.0);
     let workspace_id = request
-        .headers()
-        .get("x-catalog-workspace-id")
-        .and_then(|value| value.to_str().ok())
-        .and_then(|value| value.parse().ok())
-        .filter(|workspace_id| *workspace_id == state.workspace_id);
+        .extensions()
+        .get::<ActiveWorkspace>()
+        .map(|workspace| workspace.0);
+    let repository = request.extensions().get::<ScopedRepository>().cloned();
     let route = request
         .extensions()
         .get::<axum::extract::MatchedPath>()
@@ -65,9 +67,8 @@ pub(super) async fn record(
     // A request without a trusted workspace is not allowed to create an event:
     // RLS would reject it anyway and retaining an untrusted tenant identifier
     // would be worse than losing a malformed request's telemetry.
-    if let Some(workspace_id) = workspace_id {
-        if let Err(error) = state
-            .repository
+    if let (Some(workspace_id), Some(ScopedRepository(repository))) = (workspace_id, repository) {
+        if let Err(error) = repository
             .record_audit_event(
                 workspace_id,
                 actor_user_id,

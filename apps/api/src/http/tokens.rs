@@ -56,7 +56,8 @@ impl From<PersonalApiToken> for TokenMetadata {
 }
 
 pub(super) async fn create(
-    State(state): State<AppState>,
+    State(_state): State<AppState>,
+    super::auth::ScopedRepository(repository): super::auth::ScopedRepository,
     AuthenticatedPrincipal(user_id, _): AuthenticatedPrincipal,
     ActiveWorkspace(workspace_id): ActiveWorkspace,
     ApiJson(input): ApiJson<CreateTokenRequest>,
@@ -66,8 +67,7 @@ pub(super) async fn create(
     let secret = format!("cat_pat_{}", URL_SAFE_NO_PAD.encode(bytes));
     let digest = Sha256::digest(secret.as_bytes());
     let token_id = Uuid::new_v4();
-    state
-        .repository
+    repository
         .issue_personal_api_token(
             token_id,
             user_id,
@@ -91,13 +91,13 @@ pub(super) async fn create(
 }
 
 pub(super) async fn list(
-    State(state): State<AppState>,
+    State(_state): State<AppState>,
+    super::auth::ScopedRepository(repository): super::auth::ScopedRepository,
     AuthenticatedPrincipal(user_id, _): AuthenticatedPrincipal,
     ActiveWorkspace(workspace_id): ActiveWorkspace,
 ) -> Result<Json<Vec<TokenMetadata>>, ApiError> {
     Ok(Json(
-        state
-            .repository
+        repository
             .list_personal_api_tokens(user_id, workspace_id)
             .await?
             .into_iter()
@@ -107,13 +107,13 @@ pub(super) async fn list(
 }
 
 pub(super) async fn revoke(
-    State(state): State<AppState>,
+    State(_state): State<AppState>,
+    super::auth::ScopedRepository(repository): super::auth::ScopedRepository,
     AuthenticatedPrincipal(user_id, _): AuthenticatedPrincipal,
     ActiveWorkspace(workspace_id): ActiveWorkspace,
     ApiPath(token_id): ApiPath<Uuid>,
 ) -> Result<StatusCode, ApiError> {
-    if state
-        .repository
+    if repository
         .revoke_personal_api_token(token_id, user_id, workspace_id)
         .await?
     {

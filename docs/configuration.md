@@ -9,7 +9,7 @@ file.
 | --- | --- | --- | --- |
 | `DATABASE_URL` | Required | API and SQLx | PostgreSQL connection string. |
 | `BIND_ADDR` | `127.0.0.1:3000` | API | Listener address. |
-| `CATALOG_WORKSPACE_ID` | Bootstrap `default` workspace UUID | API | Trusted server-selected catalog workspace and RLS boundary. |
+| `CATALOG_WORKSPACE_ID` | Bootstrap `default` workspace UUID | API | Workspace initialized with the configured owner during startup; it is not an HTTP tenancy selector. |
 | `CATALOG_BOOTSTRAP_WORKSPACE_NAME` | `Default workspace` | API | Display name recorded while initializing the configured workspace. |
 | `CATALOG_BOOTSTRAP_OWNER_EMAIL` | `owner@example.test` | API | Initial owner email. Startup trims and lowercases it before idempotently creating the bootstrap user, membership, and owner grant. Set a real deployment email; it is never an API input. |
 | `CATALOG_BOOTSTRAP_OWNER_ID` | Random UUID | API | Optional stable UUID for the bootstrap owner. |
@@ -29,15 +29,14 @@ file.
 
 ## Request authorization
 
-All catalog API routes except `/health` and `POST /auth/login` require an
+All catalog API routes except `/health`, `POST /auth/discover`, and `POST /auth/login` require an
 active browser session cookie. The API verifies its active membership and role
 grant for each request; absent or invalid sessions are `401`, while a valid
 identity without a matching grant is `403`. Unsafe requests must additionally
 provide the `X-Catalog-Csrf` synchronizer token.
 
-Browser sessions are scoped to `CATALOG_WORKSPACE_ID`. Deployments still run one
-API instance per workspace rather than routing a shared pool across
-client-selected workspaces.
+Browser sessions are scoped to the workspace resolved from the submitted login
+identifier. Clients do not provide a workspace UUID or tenancy header.
 
 `CATALOG_SERVER` overrides the CLI's API URL. The CLI otherwise targets
 `http://127.0.0.1:3000`.

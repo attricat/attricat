@@ -1,11 +1,18 @@
-use std::collections::HashSet;
+use std::{
+    collections::{HashMap, HashSet},
+    sync::Arc,
+};
 
 use catalog_validation::is_valid_code;
 use chrono::{DateTime, NaiveDate, NaiveTime};
 use rust_decimal::Decimal;
 use serde_json::{Map, Value};
-use sqlx::{PgPool, Postgres, Transaction};
+use sqlx::{
+    PgPool, Postgres, Transaction,
+    postgres::{PgConnectOptions, PgPoolOptions},
+};
 use thiserror::Error;
+use tokio::sync::Mutex;
 use uuid::Uuid;
 
 use crate::{
@@ -45,7 +52,15 @@ pub(crate) use tokens::PersonalApiToken;
 /// here so HTTP handlers and other callers do not depend on storage internals.
 pub struct CatalogRepository {
     pub(in crate::repository) pool: PgPool,
+    workspace_pools: Option<Arc<WorkspacePoolCache>>,
 }
+
+struct WorkspacePoolCache {
+    connect_options: PgConnectOptions,
+    pools: Mutex<HashMap<Uuid, PgPool>>,
+}
+
+const MAX_WORKSPACE_POOLS: usize = 32;
 
 #[derive(Debug, Error)]
 pub enum RepositoryError {
@@ -129,7 +144,63 @@ impl CatalogRepository {
     const DEFAULT_CONTEXT_ID: Uuid = Uuid::from_u128(0x00000000000040008000000000000001);
 
     pub fn new(pool: PgPool) -> Self {
-        Self { pool }
+        Self {
+            pool,
+            workspace_pools: None,
+        }
+    }
+
+    pub fn with_workspace_pool_factory(pool: PgPool, connect_options: PgConnectOptions) -> Self {
+        Self {
+            pool,
+            workspace_pools: Some(Arc::new(WorkspacePoolCache {
+                connect_options,
+                pools: Mutex::new(HashMap::new()),
+            })),
+        }
+    }
+
+    /// Returns a repository whose pool is permanently restricted to one
+    /// server-derived workspace by the connection's RLS setting.
+    pub async fn for_workspace(&self, workspace_id: Uuid) -> Result<Self, RepositoryError> {
+        let Some(cache) = &self.workspace_pools else {
+            return Ok(self.clone());
+        };
+        let mut pools = cache.pools.lock().await;
+        if let Some(pool) = pools.get(&workspace_id) {
+            return Ok(Self {
+                pool: pool.clone(),
+                workspace_pools: self.workspace_pools.clone(),
+            });
+        }
+        if pools.len() >= MAX_WORKSPACE_POOLS {
+            if let Some(workspace_id) = pools.keys().next().copied() {
+                if let Some(pool) = pools.remove(&workspace_id) {
+                    pool.close().await;
+                }
+            }
+        }
+        let pool = PgPoolOptions::new()
+            .max_connections(5)
+            .after_connect(move |connection, _| {
+                Box::pin(async move {
+                    sqlx::query("SELECT set_config('catalog.workspace_id', $1, false)")
+                        .bind(workspace_id.to_string())
+                        .execute(&mut *connection)
+                        .await?;
+                    sqlx::query("SET ROLE catalog_api")
+                        .execute(connection)
+                        .await?;
+                    Ok(())
+                })
+            })
+            .connect_with(cache.connect_options.clone())
+            .await?;
+        pools.insert(workspace_id, pool.clone());
+        Ok(Self {
+            pool,
+            workspace_pools: self.workspace_pools.clone(),
+        })
     }
 
     pub async fn purge_value_history(&self, retention_days: i64) -> Result<(), RepositoryError> {

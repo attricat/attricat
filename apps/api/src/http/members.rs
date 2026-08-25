@@ -61,27 +61,25 @@ pub(super) struct GrantedRole {
 }
 
 pub(super) async fn list_members(
-    State(state): State<AppState>,
+    State(_state): State<AppState>,
+    super::auth::ScopedRepository(repository): super::auth::ScopedRepository,
     AuthenticatedPrincipal(actor, _): AuthenticatedPrincipal,
     ActiveWorkspace(workspace): ActiveWorkspace,
 ) -> Result<Json<Vec<WorkspaceMember>>, ApiError> {
     Ok(Json(
-        state
-            .repository
-            .list_workspace_members(actor, workspace)
-            .await?,
+        repository.list_workspace_members(actor, workspace).await?,
     ))
 }
 
 pub(super) async fn update_member(
-    State(state): State<AppState>,
+    State(_state): State<AppState>,
+    super::auth::ScopedRepository(repository): super::auth::ScopedRepository,
     AuthenticatedPrincipal(actor, _): AuthenticatedPrincipal,
     ActiveWorkspace(workspace): ActiveWorkspace,
     ApiPath(id): ApiPath<Uuid>,
     ApiJson(input): ApiJson<UpdateMemberRequest>,
 ) -> Result<StatusCode, ApiError> {
-    if state
-        .repository
+    if repository
         .set_workspace_membership_state(id, actor, workspace, &input.state)
         .await?
     {
@@ -92,14 +90,14 @@ pub(super) async fn update_member(
 }
 
 pub(super) async fn grant_role(
-    State(state): State<AppState>,
+    State(_state): State<AppState>,
+    super::auth::ScopedRepository(repository): super::auth::ScopedRepository,
     AuthenticatedPrincipal(actor, _): AuthenticatedPrincipal,
     ActiveWorkspace(workspace): ActiveWorkspace,
     ApiPath(member_id): ApiPath<Uuid>,
     ApiJson(input): ApiJson<GrantRoleRequest>,
 ) -> Result<(StatusCode, Json<GrantedRole>), ApiError> {
-    let id = state
-        .repository
+    let id = repository
         .grant_workspace_member_role(
             actor,
             workspace,
@@ -113,33 +111,34 @@ pub(super) async fn grant_role(
 }
 
 pub(super) async fn revoke_role(
-    State(state): State<AppState>,
+    State(_state): State<AppState>,
+    super::auth::ScopedRepository(repository): super::auth::ScopedRepository,
     AuthenticatedPrincipal(actor, _): AuthenticatedPrincipal,
     ActiveWorkspace(workspace): ActiveWorkspace,
     ApiPath((_, grant_id)): ApiPath<(Uuid, Uuid)>,
 ) -> Result<StatusCode, ApiError> {
-    state
-        .repository
+    repository
         .revoke_workspace_member_role(actor, workspace, grant_id)
         .await?;
     Ok(StatusCode::NO_CONTENT)
 }
 
 pub(super) async fn transfer_ownership(
-    State(state): State<AppState>,
+    State(_state): State<AppState>,
+    super::auth::ScopedRepository(repository): super::auth::ScopedRepository,
     AuthenticatedPrincipal(actor, _): AuthenticatedPrincipal,
     ActiveWorkspace(workspace): ActiveWorkspace,
     ApiPath(id): ApiPath<Uuid>,
 ) -> Result<StatusCode, ApiError> {
-    state
-        .repository
+    repository
         .transfer_workspace_ownership(actor, workspace, id)
         .await?;
     Ok(StatusCode::NO_CONTENT)
 }
 
 pub(super) async fn create_invitation(
-    State(state): State<AppState>,
+    State(_state): State<AppState>,
+    super::auth::ScopedRepository(repository): super::auth::ScopedRepository,
     AuthenticatedPrincipal(actor, _): AuthenticatedPrincipal,
     ActiveWorkspace(workspace): ActiveWorkspace,
     ApiJson(input): ApiJson<CreateInvitationRequest>,
@@ -149,8 +148,7 @@ pub(super) async fn create_invitation(
     rand::rngs::OsRng.fill_bytes(&mut bytes);
     let secret = format!("cat_inv_{}", URL_SAFE_NO_PAD.encode(bytes));
     let id = Uuid::new_v4();
-    state
-        .repository
+    repository
         .create_workspace_invitation(
             id,
             actor,
@@ -164,8 +162,7 @@ pub(super) async fn create_invitation(
         )
         .await?;
     // The digest is the only durable representation of this one-time secret.
-    let invitations = state
-        .repository
+    let invitations = repository
         .list_workspace_invitations(actor, workspace)
         .await?;
     let invitation = invitations
@@ -182,26 +179,26 @@ pub(super) async fn create_invitation(
 }
 
 pub(super) async fn list_invitations(
-    State(state): State<AppState>,
+    State(_state): State<AppState>,
+    super::auth::ScopedRepository(repository): super::auth::ScopedRepository,
     AuthenticatedPrincipal(actor, _): AuthenticatedPrincipal,
     ActiveWorkspace(workspace): ActiveWorkspace,
 ) -> Result<Json<Vec<WorkspaceInvitation>>, ApiError> {
     Ok(Json(
-        state
-            .repository
+        repository
             .list_workspace_invitations(actor, workspace)
             .await?,
     ))
 }
 
 pub(super) async fn revoke_invitation(
-    State(state): State<AppState>,
+    State(_state): State<AppState>,
+    super::auth::ScopedRepository(repository): super::auth::ScopedRepository,
     AuthenticatedPrincipal(actor, _): AuthenticatedPrincipal,
     ActiveWorkspace(workspace): ActiveWorkspace,
     ApiPath(id): ApiPath<Uuid>,
 ) -> Result<StatusCode, ApiError> {
-    if state
-        .repository
+    if repository
         .revoke_workspace_invitation(id, actor, workspace)
         .await?
     {
@@ -212,14 +209,14 @@ pub(super) async fn revoke_invitation(
 }
 
 pub(super) async fn accept_invitation(
-    State(state): State<AppState>,
+    State(_state): State<AppState>,
+    super::auth::ScopedRepository(repository): super::auth::ScopedRepository,
     AuthenticatedPrincipal(user, _): AuthenticatedPrincipal,
     ApiJson(input): ApiJson<AcceptInvitationRequest>,
 ) -> Result<Json<AcceptedInvitation>, ApiError> {
     let digest = Sha256::digest(input.secret.as_bytes());
     Ok(Json(AcceptedInvitation {
-        membership_id: state
-            .repository
+        membership_id: repository
             .accept_workspace_invitation(&digest, user)
             .await?,
     }))

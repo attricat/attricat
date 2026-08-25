@@ -41,11 +41,11 @@ pub(super) struct ListPreviewsQuery {
     cursor: Option<Uuid>,
 }
 pub(super) async fn get_entity(
-    State(state): State<AppState>,
+    State(_state): State<AppState>,
+    super::auth::ScopedRepository(repository): super::auth::ScopedRepository,
     ApiPath(entity_id): ApiPath<Uuid>,
 ) -> Result<Json<Entity>, ApiError> {
-    state
-        .repository
+    repository
         .get_entity(entity_id)
         .await?
         .map(Json)
@@ -53,6 +53,7 @@ pub(super) async fn get_entity(
 }
 pub(super) async fn get_preview(
     State(state): State<AppState>,
+    super::auth::ScopedRepository(repository): super::auth::ScopedRepository,
     ApiPath(entity_id): ApiPath<Uuid>,
     ApiQuery(query): ApiQuery<PreviewQuery>,
 ) -> Result<Json<EntityPreviewResponse>, ApiError> {
@@ -70,13 +71,11 @@ pub(super) async fn get_preview(
             state.max_preview_relationship_items
         )));
     }
-    let context = state
-        .repository
+    let context = repository
         .preview(entity_id, depth, limit.into())
         .await?
         .ok_or_else(|| ApiError::not_found("entity"))?;
-    let entity = state
-        .repository
+    let entity = repository
         .get_entity(entity_id)
         .await?
         .ok_or_else(|| ApiError::not_found("entity"))?;
@@ -91,11 +90,11 @@ pub(super) async fn get_preview(
 }
 pub(super) async fn get_entity_hierarchy(
     State(state): State<AppState>,
+    super::auth::ScopedRepository(repository): super::auth::ScopedRepository,
     ApiPath(entity_id): ApiPath<Uuid>,
     ApiQuery(query): ApiQuery<HierarchyQuery>,
 ) -> Result<Json<crate::model::EntityHierarchyResponse>, ApiError> {
-    state
-        .repository
+    repository
         .hierarchy(
             entity_id,
             query.context_id,
@@ -107,12 +106,12 @@ pub(super) async fn get_entity_hierarchy(
         .ok_or_else(|| ApiError::not_found("entity"))
 }
 pub(super) async fn get_resolved_preview(
-    State(state): State<AppState>,
+    State(_state): State<AppState>,
+    super::auth::ScopedRepository(repository): super::auth::ScopedRepository,
     ApiPath(entity_id): ApiPath<Uuid>,
     ApiQuery(query): ApiQuery<ResolvedPreviewQuery>,
 ) -> Result<Json<ResolvedEntityPreviewResponse>, ApiError> {
-    state
-        .repository
+    repository
         .resolved_preview(entity_id, query.context_id, 1)
         .await?
         .map(Json)
@@ -120,6 +119,7 @@ pub(super) async fn get_resolved_preview(
 }
 pub(super) async fn list_previews(
     State(state): State<AppState>,
+    super::auth::ScopedRepository(repository): super::auth::ScopedRepository,
     ApiQuery(query): ApiQuery<ListPreviewsQuery>,
 ) -> Result<Json<EntityPreviewPage>, ApiError> {
     let limit = query.limit.unwrap_or(20);
@@ -130,8 +130,7 @@ pub(super) async fn list_previews(
         )));
     }
     Ok(Json(
-        state
-            .repository
+        repository
             .list_previews(
                 &query.blueprint,
                 query.related_from,
@@ -144,6 +143,7 @@ pub(super) async fn list_previews(
 }
 pub(super) async fn search_entity_previews(
     State(state): State<AppState>,
+    super::auth::ScopedRepository(repository): super::auth::ScopedRepository,
     ApiJson(input): ApiJson<SearchEntitiesRequest>,
 ) -> Result<Json<EntitySearchResponse>, ApiError> {
     let code = &input.blueprint.code;
@@ -164,15 +164,13 @@ pub(super) async fn search_entity_previews(
             state.max_entity_page_size
         )));
     }
-    let current = state
-        .repository
+    let current = repository
         .get_blueprint_by_code(code)
         .await?
         .ok_or_else(|| ApiError::not_found("blueprint"))?;
     let selected = match input.blueprint.version {
         Some(version) => Some(
-            state
-                .repository
+            repository
                 .get_blueprint_by_code_and_version(code, version)
                 .await?
                 .map(|b| b.blueprint.version)
@@ -216,8 +214,7 @@ pub(super) async fn search_entity_previews(
                         .to_owned(),
                 )
             })?;
-            let target = state
-                .repository
+            let target = repository
                 .get_blueprint_by_code(target_code)
                 .await?
                 .ok_or_else(|| ApiError::not_found("target blueprint"))?;
@@ -238,15 +235,13 @@ pub(super) async fn search_entity_previews(
                         .to_owned(),
                 ));
             }
-            let ids = state
-                .repository
+            let ids = repository
                 .search_matching_entity_ids(current.blueprint.id, selected, query)
                 .await?;
             if facet.selected_target_ids.is_empty() {
                 None
             } else {
-                state
-                    .repository
+                repository
                     .relationship_tree_facet(
                         current.blueprint.id,
                         &facet.source_relationship_field,
@@ -262,8 +257,7 @@ pub(super) async fn search_entity_previews(
         }
         None => None,
     };
-    let (mut items, next_cursor) = state
-        .repository
+    let (mut items, next_cursor) = repository
         .search_entity_previews(
             current.blueprint.id,
             selected,
@@ -284,6 +278,7 @@ pub(super) async fn search_entity_previews(
 }
 pub(super) async fn relationship_tree_facet_children(
     State(state): State<AppState>,
+    super::auth::ScopedRepository(repository): super::auth::ScopedRepository,
     ApiJson(input): ApiJson<RelationshipTreeFacetChildrenRequest>,
 ) -> Result<Json<RelationshipTreeFacetChildrenResponse>, ApiError> {
     if input.blueprint.code.is_empty() {
@@ -291,15 +286,13 @@ pub(super) async fn relationship_tree_facet_children(
             "blueprint.code must not be empty".to_owned(),
         ));
     }
-    let source = state
-        .repository
+    let source = repository
         .get_blueprint_by_code(&input.blueprint.code)
         .await?
         .ok_or_else(|| ApiError::not_found("blueprint"))?;
     let version = match input.blueprint.version {
         Some(v) => Some(
-            state
-                .repository
+            repository
                 .get_blueprint_by_code_and_version(&input.blueprint.code, v)
                 .await?
                 .ok_or_else(|| ApiError::not_found("blueprint"))?
@@ -324,8 +317,7 @@ pub(super) async fn relationship_tree_facet_children(
         .ok_or_else(|| {
             ApiError::invalid_input("source_relationship_field has no target blueprint".to_owned())
         })?;
-    let target = state
-        .repository
+    let target = repository
         .get_blueprint_by_code(target_code)
         .await?
         .ok_or_else(|| ApiError::not_found("target blueprint"))?;
@@ -347,8 +339,7 @@ pub(super) async fn relationship_tree_facet_children(
         .map(str::trim)
         .filter(|v| !v.is_empty());
     Ok(Json(
-        state
-            .repository
+        repository
             .relationship_tree_facet_children(
                 source.blueprint.id,
                 version,

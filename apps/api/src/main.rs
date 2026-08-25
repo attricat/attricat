@@ -1,4 +1,4 @@
-use std::net::SocketAddr;
+use std::{net::SocketAddr, str::FromStr};
 
 use api::{
     MIGRATOR,
@@ -7,7 +7,7 @@ use api::{
     repository::CatalogRepository,
     telemetry::{init_metrics, init_tracing},
 };
-use sqlx::postgres::PgPoolOptions;
+use sqlx::postgres::{PgConnectOptions, PgPoolOptions};
 use uuid::Uuid;
 
 #[tokio::main]
@@ -117,23 +117,21 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         .await?;
     maintenance_pool.close().await;
 
+    // Public authentication uses this unscoped pool. Authorization creates a
+    // separate, cached RLS-configured pool only after deriving a trusted
+    // workspace from the credential or browser session.
+    let connect_options = PgConnectOptions::from_str(&database_url)?;
     let pool = PgPoolOptions::new()
         .max_connections(5)
-        // RLS is configured per deployment pool. HTTP authorization rejects a
-        // different requested workspace before a repository query can run.
-        .after_connect(move |connection, _| {
+        .after_connect(|connection, _| {
             Box::pin(async move {
-                sqlx::query("SELECT set_config('catalog.workspace_id', $1, false)")
-                    .bind(workspace_id.to_string())
-                    .execute(&mut *connection)
-                    .await?;
                 sqlx::query("SET ROLE catalog_api")
                     .execute(connection)
                     .await?;
                 Ok(())
             })
         })
-        .connect(&database_url)
+        .connect_with(connect_options.clone())
         .await?;
 
     let listener = tokio::net::TcpListener::bind(bind_addr).await?;
@@ -141,8 +139,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     axum::serve(
         listener,
         router(AppState {
-            repository: CatalogRepository::new(pool),
-            workspace_id,
+            repository: CatalogRepository::with_workspace_pool_factory(pool, connect_options),
             metrics,
             max_preview_relationship_depth,
             max_preview_relationship_items,

@@ -149,7 +149,7 @@ const ScopeTargetField = ({
         {(field: any) => (
           <TextField
             fullWidth
-            helperText="The configured active workspace"
+            helperText="The workspace bound to this session"
             label="Workspace"
             slotProps={{ input: { readOnly: true } }}
             value={workspaceId ?? ''}
@@ -172,7 +172,7 @@ const ScopeTargetField = ({
         {(field: any) => (
           <TextField
             fullWidth
-            helperText="Only targets owned by the active workspace are available."
+            helperText="Only targets owned by this session's workspace are available."
             label={label}
             onChange={(event) => field.handleChange(event.target.value)}
             select
