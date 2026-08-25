@@ -43,6 +43,8 @@ pub(super) struct SessionResponse {
     user_id: Uuid,
     /// The workspace resolved by the server and bound to this session.
     workspace_id: Uuid,
+    /// The human-facing identifier for the session-bound workspace.
+    login_identifier: String,
     capabilities: SessionCapabilities,
 }
 
@@ -122,6 +124,7 @@ pub(super) async fn login(
         &state,
         credential.user_id,
         workspace.id,
+        workspace.login_identifier,
         &session,
         &csrf,
         state.session_cookie_secure,
@@ -135,11 +138,9 @@ pub(super) async fn current_session(
     AuthenticatedPrincipal(user_id, _): AuthenticatedPrincipal,
     ActiveWorkspace(workspace_id): ActiveWorkspace,
 ) -> Result<Json<SessionResponse>, ApiError> {
-    Ok(Json(SessionResponse {
-        user_id,
-        workspace_id,
-        capabilities: session_capabilities(&state, user_id, workspace_id).await?,
-    }))
+    Ok(Json(
+        session_response_payload(&state, user_id, workspace_id).await?,
+    ))
 }
 
 pub(super) async fn logout(
@@ -176,6 +177,10 @@ pub(super) async fn renew(
         &state,
         user_id,
         workspace_id,
+        state
+            .repository
+            .workspace_login_identifier(workspace_id)
+            .await?,
         &session,
         &csrf,
         state.session_cookie_secure,
@@ -200,16 +205,16 @@ async fn session_response(
     state: &AppState,
     user_id: Uuid,
     workspace_id: Uuid,
+    login_identifier: String,
     session: &SessionSecret,
     csrf: &SessionSecret,
     secure: bool,
     lifetime_hours: i64,
 ) -> Result<Response, ApiError> {
-    let mut response = Json(SessionResponse {
-        user_id,
-        workspace_id,
-        capabilities: session_capabilities(state, user_id, workspace_id).await?,
-    })
+    let mut response = Json(
+        session_response_payload_with_identifier(state, user_id, workspace_id, login_identifier)
+            .await?,
+    )
     .into_response();
     response.headers_mut().append(
         SET_COOKIE,
@@ -232,6 +237,32 @@ async fn session_response(
         ),
     );
     Ok(response)
+}
+
+async fn session_response_payload(
+    state: &AppState,
+    user_id: Uuid,
+    workspace_id: Uuid,
+) -> Result<SessionResponse, ApiError> {
+    let login_identifier = state
+        .repository
+        .workspace_login_identifier(workspace_id)
+        .await?;
+    session_response_payload_with_identifier(state, user_id, workspace_id, login_identifier).await
+}
+
+async fn session_response_payload_with_identifier(
+    state: &AppState,
+    user_id: Uuid,
+    workspace_id: Uuid,
+    login_identifier: String,
+) -> Result<SessionResponse, ApiError> {
+    Ok(SessionResponse {
+        user_id,
+        workspace_id,
+        login_identifier,
+        capabilities: session_capabilities(state, user_id, workspace_id).await?,
+    })
 }
 
 async fn session_capabilities(

@@ -40,6 +40,7 @@ import {
   retireRole,
   revokeInvitation,
   revokeMemberRole,
+  selectedScopeTarget,
   revokeToken,
   setMemberState,
   transferOwnership,
@@ -108,7 +109,7 @@ const ScopeFields = ({
             field.handleChange(scope);
             form.setFieldValue(
               'scope_target_id',
-              scope === 'workspace' ? (workspaceId ?? '') : '',
+              selectedScopeTarget(scope, '', workspaceId),
             );
           }}
           select
@@ -122,41 +123,18 @@ const ScopeFields = ({
       )}
     </form.Field>
     <form.Subscribe selector={(state: any) => state.values.scope_type}>
-      {(scope: ScopeType) => (
-        <ScopeTargetField form={form} scope={scope} workspaceId={workspaceId} />
-      )}
+      {(scope: ScopeType) => <ScopeTargetField form={form} scope={scope} />}
     </form.Subscribe>
   </>
 );
 
-const ScopeTargetField = ({
-  form,
-  scope,
-  workspaceId,
-}: {
-  form: any;
-  scope: ScopeType;
-  workspaceId?: string;
-}) => {
+const ScopeTargetField = ({ form, scope }: { form: any; scope: ScopeType }) => {
   const targets = useQuery({
     enabled: scope !== 'workspace',
     queryKey: workspaceQueryKeys.grantTargets(scope),
     queryFn: () => listGrantTargets(scope),
   });
-  if (scope === 'workspace')
-    return (
-      <form.Field name="scope_target_id">
-        {(field: any) => (
-          <TextField
-            fullWidth
-            helperText="The workspace bound to this session"
-            label="Workspace"
-            slotProps={{ input: { readOnly: true } }}
-            value={workspaceId ?? ''}
-          />
-        )}
-      </form.Field>
-    );
+  if (scope === 'workspace') return null;
   const label =
     scope === 'blueprint_family'
       ? 'Blueprint family'
@@ -199,8 +177,7 @@ export const WorkspaceManagementPage = ({ section }: { section: Section }) => {
     <Box sx={{ maxWidth: 1000, mx: 'auto', p: 3 }}>
       <Typography variant="h4">Workspace management</Typography>
       <Typography color="text.secondary" sx={{ mt: 1 }}>
-        Active workspace: {session.data?.workspace_id ?? 'Loading…'} (configured
-        by this deployment)
+        Active workspace: {session.data?.login_identifier ?? 'Loading…'}
       </Typography>
       <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1, mt: 3 }}>
         {sections
@@ -288,10 +265,11 @@ const Members = ({
           {
             role_id: value.role_id,
             scope_type: value.scope_type,
-            scope_target_id:
-              value.scope_type === 'workspace'
-                ? (workspaceId ?? '')
-                : value.scope_target_id,
+            scope_target_id: selectedScopeTarget(
+              value.scope_type,
+              value.scope_target_id,
+              workspaceId,
+            ),
           },
           workspaceId,
           client.getQueryData(
@@ -630,10 +608,11 @@ const Invitations = ({
           {
             role_id: value.role_id,
             scope_type: value.scope_type,
-            scope_target_id:
-              value.scope_type === 'workspace'
-                ? (workspaceId ?? '')
-                : value.scope_target_id,
+            scope_target_id: selectedScopeTarget(
+              value.scope_type,
+              value.scope_target_id,
+              workspaceId,
+            ),
           },
           workspaceId,
           client.getQueryData(

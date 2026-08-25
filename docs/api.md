@@ -26,7 +26,8 @@ Browser-session request tenancy is selected from the workspace stored in the
 verified session; it is never selected by a client workspace header.
 
 `POST /auth/renew` atomically rotates the browser session, `POST /auth/logout`
-revokes it, and `GET /auth/session` returns the active user identity and session-bound `workspace_id`. The local
+revokes it, and login, renew, and `GET /auth/session` return the active user identity,
+session-bound `workspace_id`, and human-facing workspace `login_identifier`. The local
 password, cookie, CSRF, expiry, and revocation contract is documented in
 [Browser Authentication](authentication.md).
 

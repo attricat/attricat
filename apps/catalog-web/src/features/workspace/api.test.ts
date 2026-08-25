@@ -6,6 +6,7 @@ import {
   grantMemberRole,
   listMembers,
   listRoles,
+  selectedScopeTarget,
 } from './api';
 
 const id = '123e4567-e89b-12d3-a456-426614174000';
@@ -59,6 +60,12 @@ describe('workspace API client', () => {
   it('rejects malformed API data before it reaches the UI', async () => {
     respond([{ id }]);
     await expect(listMembers()).rejects.toThrow();
+  });
+
+  it('uses the session workspace for an entire-workspace scope', () => {
+    const workspaceId = '223e4567-e89b-12d3-a456-426614174000';
+    expect(selectedScopeTarget('workspace', id, workspaceId)).toBe(workspaceId);
+    expect(selectedScopeTarget('entity', id, workspaceId)).toBe(id);
   });
 
   it('rejects stale and cross-scope grant targets before posting a mutation', async () => {

@@ -59,16 +59,21 @@ async fn login_rotates_sessions_and_csrf_protects_mutations(pool: PgPool) {
             .iter()
             .any(|value| value.to_str().unwrap().contains("HttpOnly"))
     );
-    let cookie = format!("{session}; {csrf}");
     assert_eq!(
-        client
-            .get(format!("{base_url}/auth/session"))
-            .header("cookie", &cookie)
-            .send()
-            .await
-            .unwrap()
-            .status(),
-        StatusCode::OK
+        login.json::<Value>().await.unwrap()["login_identifier"],
+        json!("default.local")
+    );
+    let cookie = format!("{session}; {csrf}");
+    let current = client
+        .get(format!("{base_url}/auth/session"))
+        .header("cookie", &cookie)
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(current.status(), StatusCode::OK);
+    assert_eq!(
+        current.json::<Value>().await.unwrap()["login_identifier"],
+        json!("default.local")
     );
     assert_eq!(
         client
@@ -100,6 +105,10 @@ async fn login_rotates_sessions_and_csrf_protects_mutations(pool: PgPool) {
         .await
         .unwrap();
     assert_eq!(renewed.status(), StatusCode::OK);
+    assert_eq!(
+        renewed.json::<Value>().await.unwrap()["login_identifier"],
+        json!("default.local")
+    );
     assert_eq!(
         client
             .get(format!("{base_url}/auth/session"))
