@@ -3,6 +3,7 @@ import CategoryOutlinedIcon from '@mui/icons-material/CategoryOutlined';
 import FolderOutlinedIcon from '@mui/icons-material/FolderOutlined';
 import TravelExploreOutlinedIcon from '@mui/icons-material/TravelExploreOutlined';
 import ManageAccountsOutlinedIcon from '@mui/icons-material/ManageAccountsOutlined';
+import PersonOutlinedIcon from '@mui/icons-material/PersonOutlined';
 import { useQuery } from '@tanstack/react-query';
 import { Link, useRouterState } from '@tanstack/react-router';
 import { currentSession } from '../features/auth/api';
@@ -25,6 +26,7 @@ const navigationItems = [
     label: 'Data health',
     to: '/data-health',
   },
+  { icon: <PersonOutlinedIcon />, label: 'Profile', to: '/profile' },
   {
     icon: <ManageAccountsOutlinedIcon />,
     label: 'Workspace management',

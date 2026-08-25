@@ -25,7 +25,6 @@ import {
   acceptInvitation,
   createInvitation,
   createRole,
-  createToken,
   duplicateRole,
   ensureActiveScopeTarget,
   grantMemberRole,
@@ -35,12 +34,9 @@ import {
   listMembers,
   listPermissions,
   listRoles,
-  listTokenPermissions,
-  listTokens,
   retireRole,
   revokeInvitation,
   revokeMemberRole,
-  revokeToken,
   setMemberState,
   transferOwnership,
   updateRole,
@@ -48,7 +44,7 @@ import {
 } from './api';
 import { workspaceQueryKeys } from './query-keys';
 
-type Section = 'members' | 'roles' | 'invitations' | 'tokens';
+type Section = 'members' | 'roles' | 'invitations';
 const sections: { label: string; section: Section; to: string }[] = [
   { label: 'Members', section: 'members', to: '/workspace/members' },
   { label: 'Roles', section: 'roles', to: '/workspace/roles' },
@@ -57,7 +53,6 @@ const sections: { label: string; section: Section; to: string }[] = [
     section: 'invitations',
     to: '/workspace/invitations',
   },
-  { label: 'Personal tokens', section: 'tokens', to: '/workspace/tokens' },
 ];
 
 const SecretDialog = ({
@@ -208,8 +203,6 @@ export const WorkspaceManagementPage = ({ section }: { section: Section }) => {
             (item) =>
               (item.section === 'roles' &&
                 session.data?.capabilities?.roles_manage) ||
-              (item.section === 'tokens' &&
-                session.data?.capabilities?.tokens_manage) ||
               ((item.section === 'members' || item.section === 'invitations') &&
                 session.data?.capabilities?.members_manage),
           )
@@ -241,11 +234,6 @@ export const WorkspaceManagementPage = ({ section }: { section: Section }) => {
         <Invitations
           canManage={session.data?.capabilities?.members_manage === true}
           workspaceId={session.data?.workspace_id}
-        />
-      )}
-      {section === 'tokens' && (
-        <Tokens
-          canManage={session.data?.capabilities?.tokens_manage === true}
         />
       )}
     </Box>
@@ -751,156 +739,6 @@ const Invitations = ({
           </form.Field>
           <Button type="submit" variant="contained">
             Create invitation
-          </Button>
-        </Stack>
-      </Paper>
-    </Stack>
-  );
-};
-
-const Tokens = ({ canManage }: { canManage: boolean }) => {
-  const client = useQueryClient();
-  const [secret, setSecret] = useState<string>();
-  const [error, setError] = useState<string>();
-  const tokens = useQuery({
-    enabled: canManage,
-    queryKey: workspaceQueryKeys.tokens(),
-    queryFn: listTokens,
-  });
-  const permissions = useQuery({
-    enabled: canManage,
-    queryKey: workspaceQueryKeys.tokenPermissions(),
-    queryFn: listTokenPermissions,
-  });
-  const refresh = () =>
-    client.invalidateQueries({ queryKey: workspaceQueryKeys.tokens() });
-  const form = useForm({
-    defaultValues: { label: '', permissions: [] as string[], expires_at: '' },
-    onSubmit: async ({ value }) => {
-      try {
-        const expiresAt = value.expires_at
-          ? new Date(value.expires_at)
-          : undefined;
-        if (
-          expiresAt &&
-          (Number.isNaN(expiresAt.getTime()) || expiresAt <= new Date())
-        ) {
-          throw new Error('Token expiry must be in the future.');
-        }
-        const token = await createToken({
-          label: value.label,
-          permissions: value.permissions,
-          ...(expiresAt ? { expires_at: expiresAt.toISOString() } : {}),
-        });
-        setSecret(token.secret);
-        refresh();
-      } catch (reason) {
-        setError(
-          reason instanceof Error ? reason.message : 'Could not create token',
-        );
-      }
-    },
-  });
-  if (!canManage) {
-    return (
-      <Alert severity="error">You are not authorized to manage tokens.</Alert>
-    );
-  }
-  return (
-    <Stack spacing={2} sx={{ mt: 3 }}>
-      <SecretDialog onClose={() => setSecret(undefined)} secret={secret} />
-      {error && <Alert severity="error">{error}</Alert>}
-      {tokens.isError && <Alert severity="error">{tokens.error.message}</Alert>}
-      {permissions.isError && (
-        <Alert severity="error">{permissions.error.message}</Alert>
-      )}
-      <Paper>
-        <List>
-          {tokens.data?.map((token) => (
-            <ListItem
-              divider
-              key={token.id}
-              secondaryAction={
-                !token.revoked_at && (
-                  <Button
-                    color="error"
-                    onClick={() =>
-                      revokeToken(token.id)
-                        .then(refresh)
-                        .catch((e) => setError(e.message))
-                    }
-                  >
-                    Revoke
-                  </Button>
-                )
-              }
-            >
-              <ListItemText
-                primary={token.label}
-                secondary={`${token.permissions.join(', ')} · created ${new Date(token.created_at).toLocaleString()}`}
-              />
-            </ListItem>
-          ))}
-        </List>
-      </Paper>
-      <Paper
-        component="form"
-        onSubmit={(event) => {
-          event.preventDefault();
-          form.handleSubmit();
-        }}
-        sx={{ p: 2 }}
-      >
-        <Stack>
-          <Typography variant="h6">Create personal token</Typography>
-          <form.Field name="label">
-            {(field) => (
-              <TextField
-                label="Label"
-                onChange={(event) => field.handleChange(event.target.value)}
-                value={field.state.value}
-              />
-            )}
-          </form.Field>
-          <form.Field name="permissions">
-            {(field) => (
-              <>
-                {permissions.data?.map((permission) => (
-                  <FormControlLabel
-                    control={
-                      <Checkbox
-                        checked={field.state.value.includes(permission.code)}
-                        onChange={(event) =>
-                          field.handleChange(
-                            event.target.checked
-                              ? [...field.state.value, permission.code]
-                              : field.state.value.filter(
-                                  (code) => code !== permission.code,
-                                ),
-                          )
-                        }
-                      />
-                    }
-                    key={permission.code}
-                    label={permission.code}
-                  />
-                ))}
-              </>
-            )}
-          </form.Field>
-          <form.Field name="expires_at">
-            {(field) => (
-              <TextField
-                slotProps={{ inputLabel: { shrink: true } }}
-                label="Expires at (optional)"
-                onChange={(event) => field.handleChange(event.target.value)}
-                type="datetime-local"
-                value={field.state.value}
-              />
-            )}
-          </form.Field>
-          <Button type="submit" variant="contained">
-            Create token
           </Button>
         </Stack>
       </Paper>

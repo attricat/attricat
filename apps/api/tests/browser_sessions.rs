@@ -60,16 +60,20 @@ async fn login_rotates_sessions_and_csrf_protects_mutations(pool: PgPool) {
             .any(|value| value.to_str().unwrap().contains("HttpOnly"))
     );
     let cookie = format!("{session}; {csrf}");
-    assert_eq!(
-        client
-            .get(format!("{base_url}/auth/session"))
-            .header("cookie", &cookie)
-            .send()
-            .await
-            .unwrap()
-            .status(),
-        StatusCode::OK
-    );
+    let session: Value = client
+        .get(format!("{base_url}/auth/session"))
+        .header("cookie", &cookie)
+        .send()
+        .await
+        .unwrap()
+        .error_for_status()
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    assert_eq!(session["user_id"], OWNER_ID);
+    assert_eq!(session["email"], "api-test-owner@example.test");
+    assert!(session.get("display_name").is_some());
     assert_eq!(
         client
             .post(format!("{base_url}/data-health/refresh"))
