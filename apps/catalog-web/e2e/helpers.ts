@@ -9,7 +9,11 @@ const authenticatedHeaders = async () => {
   const login = await fetch(`${e2eApiUrl}/auth/login`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ email: fixtureEmail, password: fixturePassword }),
+    body: JSON.stringify({
+      login_identifier: 'default.local',
+      email: fixtureEmail,
+      password: fixturePassword,
+    }),
   });
   if (!login.ok) throw new Error(`E2E fixture login failed: ${login.status}`);
   const cookies = login.headers

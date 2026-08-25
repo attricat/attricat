@@ -13,11 +13,34 @@ const sessionSchema = z.object({
     .optional(),
 });
 
-export const login = async (email: string, password: string) => {
+const discoverySchema = z.object({
+  login_identifier: z.string(),
+  sign_in_methods: z.array(z.string()),
+});
+
+export const discoverWorkspace = async (loginIdentifier: string) => {
+  const response = await apiFetch('/api/auth/discover', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ login_identifier: loginIdentifier }),
+  });
+  if (!response.ok) throw new Error('Workspace was not found');
+  return discoverySchema.parse(await response.json());
+};
+
+export const login = async (
+  loginIdentifier: string,
+  email: string,
+  password: string,
+) => {
   const response = await apiFetch('/api/auth/login', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ email, password }),
+    body: JSON.stringify({
+      login_identifier: loginIdentifier,
+      email,
+      password,
+    }),
   });
   if (!response.ok) throw new Error('Invalid email or password');
   return sessionSchema.parse(await response.json());

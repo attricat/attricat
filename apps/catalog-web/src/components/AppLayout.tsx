@@ -38,10 +38,12 @@ export const AppLayout = () => {
   const closeMobileNavigation = () => setMobileOpen(false);
   const signOut = async () => {
     await logout();
+    queryClient.clear();
     queryClient.setQueryData(['auth', 'session'], null);
     await navigate({ to: '/login' });
   };
-  if (pathname === '/login') return <Outlet />;
+  if (pathname === '/login' || pathname.startsWith('/login/'))
+    return <Outlet />;
   if (session.isPending) return null;
   if (!session.data) {
     sessionStorage.setItem(

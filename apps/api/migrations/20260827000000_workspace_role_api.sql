@@ -76,9 +76,9 @@ BEGIN
     WHERE EXISTS (
         SELECT 1
         FROM workspace_memberships membership
-        JOIN role_grants grant ON grant.membership_id = membership.id
-          AND grant.workspace_id = membership.workspace_id
-        JOIN role_permissions role_permission ON role_permission.role_id = grant.role_id
+        JOIN role_grants role_grant ON role_grant.membership_id = membership.id
+          AND role_grant.workspace_id = membership.workspace_id
+        JOIN role_permissions role_permission ON role_permission.role_id = role_grant.role_id
         WHERE membership.user_id = p_actor_id
           AND membership.workspace_id = p_workspace_id
           AND membership.state = 'active'

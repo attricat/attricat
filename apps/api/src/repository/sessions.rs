@@ -16,10 +16,46 @@ pub struct LocalLoginCredential {
 
 pub struct ValidBrowserSession {
     pub user_id: Uuid,
+    pub workspace_id: Uuid,
     pub csrf_digest: SessionDigest,
 }
 
+pub struct DiscoveredWorkspace {
+    pub id: Uuid,
+    pub login_identifier: String,
+}
+
 impl CatalogRepository {
+    pub async fn discover_workspace(
+        &self,
+        login_identifier: &str,
+    ) -> Result<Option<DiscoveredWorkspace>, RepositoryError> {
+        let row = sqlx::query("SELECT id, login_identifier FROM discover_workspace_login($1)")
+            .bind(login_identifier)
+            .fetch_optional(&self.pool)
+            .await?;
+        row.map(|row| {
+            Ok::<DiscoveredWorkspace, sqlx::Error>(DiscoveredWorkspace {
+                id: row.try_get("id")?,
+                login_identifier: row.try_get("login_identifier")?,
+            })
+        })
+        .transpose()
+        .map_err(RepositoryError::from)
+    }
+
+    pub async fn reserve_workspace_discovery_attempt(
+        &self,
+        key: &SessionDigest,
+    ) -> Result<bool, RepositoryError> {
+        Ok(
+            sqlx::query_scalar("SELECT reserve_workspace_discovery_attempt($1)")
+                .bind(key.as_ref())
+                .fetch_one(&self.pool)
+                .await?,
+        )
+    }
+
     pub async fn local_login_credential(
         &self,
         email: &str,
@@ -92,16 +128,17 @@ impl CatalogRepository {
     pub async fn validate_browser_session(
         &self,
         session: &SessionDigest,
-        workspace_id: Uuid,
     ) -> Result<Option<ValidBrowserSession>, RepositoryError> {
-        let row = sqlx::query("SELECT user_id, csrf_digest FROM validate_browser_session($1, $2)")
-            .bind(session.as_ref())
-            .bind(workspace_id)
-            .fetch_optional(&self.pool)
-            .await?;
+        let row = sqlx::query(
+            "SELECT user_id, workspace_id, csrf_digest FROM validate_browser_session($1)",
+        )
+        .bind(session.as_ref())
+        .fetch_optional(&self.pool)
+        .await?;
         row.map(|row| {
             Ok::<ValidBrowserSession, sqlx::Error>(ValidBrowserSession {
                 user_id: row.try_get("user_id")?,
+                workspace_id: row.try_get("workspace_id")?,
                 csrf_digest: SessionDigest::from_slice(&row.try_get::<Vec<u8>, _>("csrf_digest")?)
                     .map_err(|_| sqlx::Error::Protocol("stored csrf digest is invalid".into()))?,
             })

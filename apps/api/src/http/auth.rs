@@ -8,7 +8,10 @@ use sha2::Digest;
 use uuid::Uuid;
 
 use super::{AppState, error::ApiError};
-use crate::account::{SessionDigest, SessionSecret};
+use crate::{
+    account::{SessionDigest, SessionSecret},
+    repository::CatalogRepository,
+};
 
 const USER_HEADER: &str = "x-catalog-user-id";
 const WORKSPACE_HEADER: &str = "x-catalog-workspace-id";
@@ -22,7 +25,7 @@ const CSRF_HEADER: &str = "x-catalog-csrf";
 #[derive(Clone, Copy, Debug)]
 pub(super) struct AuthenticatedPrincipal(pub Uuid, pub Option<Uuid>);
 
-/// The deployment-selected workspace for the authenticated credential.
+/// The workspace selected by the verified credential or browser session.
 #[allow(dead_code)]
 #[derive(Clone, Copy, Debug)]
 pub(super) struct ActiveWorkspace(pub Uuid);
@@ -31,6 +34,23 @@ pub(super) struct ActiveWorkspace(pub Uuid);
 /// raw cookie credentials never reach a handler.
 #[derive(Clone)]
 pub(super) struct AuthenticatedSession(pub SessionDigest);
+
+/// Repository whose connections are pinned to the authenticated workspace's
+/// RLS setting. It is inserted only by authorization after workspace selection.
+#[derive(Clone)]
+pub(super) struct ScopedRepository(pub CatalogRepository);
+
+impl FromRequestParts<AppState> for ScopedRepository {
+    type Rejection = ApiError;
+
+    async fn from_request_parts(parts: &mut Parts, _: &AppState) -> Result<Self, Self::Rejection> {
+        parts
+            .extensions
+            .get::<Self>()
+            .cloned()
+            .ok_or_else(ApiError::unauthenticated)
+    }
+}
 
 impl FromRequestParts<AppState> for AuthenticatedSession {
     type Rejection = ApiError;
@@ -91,7 +111,7 @@ pub(super) async fn authorize(
     next: Next,
 ) -> Result<Response, ApiError> {
     let path = request.uri().path();
-    if path == "/health" || path == "/auth/login" {
+    if path == "/health" || path == "/auth/login" || path == "/auth/discover" {
         return Ok(next.run(request).await);
     }
 
@@ -136,7 +156,7 @@ pub(super) async fn authorize(
         let session_digest = session_secret.digest();
         let session = state
             .repository
-            .validate_browser_session(&session_digest, state.workspace_id)
+            .validate_browser_session(&session_digest)
             .await?
             .ok_or_else(ApiError::unauthenticated)?;
         if !matches!(
@@ -155,14 +175,11 @@ pub(super) async fn authorize(
         }
         (
             session.user_id,
-            state.workspace_id,
+            session.workspace_id,
             None,
             Some(session_digest),
         )
     };
-    if workspace != state.workspace_id {
-        return Err(ApiError::forbidden());
-    }
     let matched = request
         .extensions()
         .get::<axum::extract::MatchedPath>()
@@ -210,6 +227,9 @@ pub(super) async fn authorize(
         .extensions_mut()
         .insert(AuthenticatedPrincipal(principal, token_id));
     request.extensions_mut().insert(ActiveWorkspace(workspace));
+    request.extensions_mut().insert(ScopedRepository(
+        state.repository.for_workspace(workspace).await?,
+    ));
     if let Some(session_digest) = session_digest {
         request
             .extensions_mut()

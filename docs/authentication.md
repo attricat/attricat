@@ -61,6 +61,28 @@ digest to those functions.
 There is no email provider. A delivery adapter must send the opaque secret without
 recording it in logs, telemetry, database rows, or API responses.
 
+## Workspace sign-in routing
+
+Each workspace has an immutable, unique `login_identifier`. It is trimmed and
+lowercased at the API boundary and must be a 3–253 character domain-like name;
+it is a sign-in routing key only, so Catalog performs no DNS lookup, ownership
+verification, or host routing. Existing bootstrap workspaces receive
+`<slug>.local` during migration.
+
+Unauthenticated clients first call `POST /auth/discover` with
+`{"login_identifier":"example.local"}`. On success it returns only the
+normalized identifier and `sign_in_methods` (currently `["local_password"]`),
+which is the compatibility seam for OIDC, SAML, and passkeys. Discovery is
+rate-limited and unknown workspaces get a generic not-found response.
+`POST /auth/login` then requires `login_identifier`, `email`, and `password`.
+The server resolves the identifier and issues a session for that workspace;
+clients never select a workspace ID. The web UI uses `/login` then the stable
+workspace-specific `/login/:identifier` credential URL so password managers
+can retain separate native username/current-password credentials.
+
+Custom domains, SSO enforcement/configuration, SCIM/JIT provisioning, MFA,
+passkeys, and switching workspaces after login are explicitly deferred.
+
 ## Browser sessions
 
 `POST /auth/login` verifies a local password and sets an opaque `catalog_session`

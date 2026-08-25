@@ -22,14 +22,26 @@ const SESSION_LIFETIME_HOURS: i64 = 8;
 
 #[derive(Deserialize)]
 pub(super) struct LoginRequest {
+    login_identifier: String,
     email: String,
     password: String,
+}
+
+#[derive(Deserialize)]
+pub(super) struct DiscoveryRequest {
+    login_identifier: String,
+}
+
+#[derive(Serialize)]
+pub(super) struct DiscoveryResponse {
+    login_identifier: String,
+    sign_in_methods: Vec<&'static str>,
 }
 
 #[derive(Serialize)]
 pub(super) struct SessionResponse {
     user_id: Uuid,
-    /// This is the deployment-selected workspace for this API instance.
+    /// The workspace resolved by the server and bound to this session.
     workspace_id: Uuid,
     capabilities: SessionCapabilities,
 }
@@ -41,12 +53,43 @@ pub(super) struct SessionCapabilities {
     tokens_manage: bool,
 }
 
+pub(super) async fn discover(
+    State(state): State<AppState>,
+    Json(request): Json<DiscoveryRequest>,
+) -> Result<Json<DiscoveryResponse>, ApiError> {
+    let identifier = request.login_identifier.trim().to_lowercase();
+    let rate_key = digest_login_key(&identifier);
+    if !state
+        .repository
+        .reserve_workspace_discovery_attempt(&rate_key)
+        .await?
+    {
+        return Err(ApiError::rate_limited());
+    }
+    let workspace = state
+        .repository
+        .discover_workspace(&identifier)
+        .await?
+        .ok_or_else(|| ApiError::not_found("workspace"))?;
+    Ok(Json(DiscoveryResponse {
+        login_identifier: workspace.login_identifier,
+        // This is deliberately extensible for OIDC, SAML, and passkeys.
+        sign_in_methods: vec!["local_password"],
+    }))
+}
+
 pub(super) async fn login(
     State(state): State<AppState>,
     Json(request): Json<LoginRequest>,
 ) -> Result<Response, ApiError> {
+    let identifier = request.login_identifier.trim().to_lowercase();
+    let workspace = state
+        .repository
+        .discover_workspace(&identifier)
+        .await?
+        .ok_or_else(ApiError::invalid_credentials)?;
     let email = request.email.trim().to_lowercase();
-    let rate_key = digest_login_key(&email);
+    let rate_key = digest_login_key(&format!("{}\0{}", workspace.id, email));
     if !state.repository.reserve_login_attempt(&rate_key).await? {
         return Err(ApiError::rate_limited());
     }
@@ -59,20 +102,17 @@ pub(super) async fn login(
                 .unwrap_or(false)
     });
     if !valid {
-        // The reservation is intentionally retained on a failed verification.
         return Err(ApiError::invalid_credentials());
     }
     let credential = credential.expect("valid credential exists");
     state.repository.clear_login_failures(&rate_key).await?;
     let (session, csrf, expires_at) = issue_session();
-    // This locks the user and credential versions observed during verification,
-    // revokes prior workspace sessions, and creates the replacement atomically.
     state
         .repository
         .issue_login_session(
             Uuid::new_v4(),
             &credential,
-            state.workspace_id,
+            workspace.id,
             &session.digest(),
             &csrf.digest(),
             expires_at,
@@ -81,7 +121,7 @@ pub(super) async fn login(
     session_response(
         &state,
         credential.user_id,
-        state.workspace_id,
+        workspace.id,
         &session,
         &csrf,
         state.session_cookie_secure,
@@ -105,10 +145,11 @@ pub(super) async fn current_session(
 pub(super) async fn logout(
     State(state): State<AppState>,
     AuthenticatedSession(session): AuthenticatedSession,
+    ActiveWorkspace(workspace_id): ActiveWorkspace,
 ) -> Result<Response, ApiError> {
     state
         .repository
-        .revoke_browser_session(&session, state.workspace_id)
+        .revoke_browser_session(&session, workspace_id)
         .await?;
     Ok(clear_session_response(state.session_cookie_secure))
 }
@@ -117,6 +158,7 @@ pub(super) async fn renew(
     State(state): State<AppState>,
     AuthenticatedPrincipal(user_id, _): AuthenticatedPrincipal,
     AuthenticatedSession(previous): AuthenticatedSession,
+    ActiveWorkspace(workspace_id): ActiveWorkspace,
 ) -> Result<Response, ApiError> {
     let (session, csrf, expires_at) = issue_session();
     state
@@ -126,14 +168,14 @@ pub(super) async fn renew(
             Uuid::new_v4(),
             &session.digest(),
             &csrf.digest(),
-            state.workspace_id,
+            workspace_id,
             expires_at,
         )
         .await?;
     session_response(
         &state,
         user_id,
-        state.workspace_id,
+        workspace_id,
         &session,
         &csrf,
         state.session_cookie_secure,
@@ -150,8 +192,8 @@ fn issue_session() -> (SessionSecret, SessionSecret, chrono::DateTime<Utc>) {
     )
 }
 
-fn digest_login_key(email: &str) -> SessionDigest {
-    SessionDigest::from_slice(&Sha256::digest(email.as_bytes())).expect("sha256 is 32 bytes")
+fn digest_login_key(value: &str) -> SessionDigest {
+    SessionDigest::from_slice(&Sha256::digest(value.as_bytes())).expect("sha256 is 32 bytes")
 }
 
 async fn session_response(

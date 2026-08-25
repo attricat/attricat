@@ -6,7 +6,7 @@ The API is JSON over HTTP. Successful responses are JSON; failures use an
 
 ## Authorization
 
-`GET /health` and `POST /auth/login` are public. Browser requests authenticate
+`GET /health`, `POST /auth/discover`, and `POST /auth/login` are public. Browser requests authenticate
 with the opaque HttpOnly `catalog_session` cookie created by login; missing,
 expired, rotated, or revoked sessions return `401`. Unsafe cookie-authenticated
 requests must also supply `X-Catalog-Csrf` with the readable `catalog_csrf`
@@ -22,13 +22,11 @@ and `blueprints.publish`; entity operations require `entities.read`,
 `data_health.read`. A context-subtree grant applies to its root and descendants,
 never its ancestors or siblings.
 
-Catalog data remains scoped to the trusted server-selected
-`CATALOG_WORKSPACE_ID` RLS boundary. The workspace header must equal that value;
-a deployment therefore serves one workspace rather than using a request header
-to route a shared database pool. See [Configuration](configuration.md#request-authorization).
+Browser-session request tenancy is selected from the workspace stored in the
+verified session; it is never selected by a client workspace header.
 
 `POST /auth/renew` atomically rotates the browser session, `POST /auth/logout`
-revokes it, and `GET /auth/session` returns the active user identity and the deployment-selected `workspace_id`. The local
+revokes it, and `GET /auth/session` returns the active user identity and session-bound `workspace_id`. The local
 password, cookie, CSRF, expiry, and revocation contract is documented in
 [Browser Authentication](authentication.md).
 
@@ -37,6 +35,8 @@ password, cookie, CSRF, expiry, and revocation contract is documented in
 | Method | Path | Purpose |
 | --- | --- | --- |
 | `GET` | `/health` | Confirm the migrated API is ready. |
+| `POST` | `/auth/discover` | Resolve a normalized workspace identifier and return its sign-in methods; rate-limited and intentionally minimal. |
+| `POST` | `/auth/login` | Sign in with a previously resolved workspace identifier, email, and password. |
 | `GET` | `/metrics` | Scrape Prometheus service metrics. |
 | `GET` | `/workspace/roles` | List fixed and workspace-local roles with permissions (`roles.manage`). |
 | `POST` | `/workspace/roles` | Create a workspace-local role. |

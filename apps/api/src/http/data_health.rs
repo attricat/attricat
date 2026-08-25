@@ -1,4 +1,4 @@
-use super::{AppState, error::ApiError, extractors::ApiQuery};
+use super::{AppState, auth::ActiveWorkspace, error::ApiError, extractors::ApiQuery};
 use crate::repository::RepositoryError;
 use axum::{
     Json,
@@ -77,75 +77,89 @@ pub(super) async fn invalidate_data_health(state: &AppState) {
 }
 pub(super) async fn data_health_summary(
     State(state): State<AppState>,
+    super::auth::ScopedRepository(repository): super::auth::ScopedRepository,
+    ActiveWorkspace(workspace_id): ActiveWorkspace,
     ApiQuery(query): ApiQuery<DataHealthQuery>,
 ) -> Result<Response, ApiError> {
     let days = stale_after_days(query)?;
     cached_data_health(
         &state,
-        format!("summary:{days}"),
-        state.repository.data_health_summary(days.into()),
+        format!("{workspace_id}:summary:{days}"),
+        repository.data_health_summary(days.into()),
     )
     .await
 }
 pub(super) async fn data_health_blueprints(
     State(state): State<AppState>,
+    super::auth::ScopedRepository(repository): super::auth::ScopedRepository,
+    ActiveWorkspace(workspace_id): ActiveWorkspace,
     ApiQuery(query): ApiQuery<DataHealthQuery>,
 ) -> Result<Response, ApiError> {
     let days = stale_after_days(query)?;
     cached_data_health(
         &state,
-        format!("blueprints:{days}"),
-        state.repository.data_health_blueprints(days.into()),
+        format!("{workspace_id}:blueprints:{days}"),
+        repository.data_health_blueprints(days.into()),
     )
     .await
 }
 pub(super) async fn data_health_freshness(
     State(state): State<AppState>,
+    super::auth::ScopedRepository(repository): super::auth::ScopedRepository,
+    ActiveWorkspace(workspace_id): ActiveWorkspace,
 ) -> Result<Response, ApiError> {
     cached_data_health(
         &state,
-        "freshness".to_owned(),
-        state.repository.data_health_freshness(),
+        format!("{workspace_id}:freshness"),
+        repository.data_health_freshness(),
     )
     .await
 }
 pub(super) async fn data_health_completeness(
     State(state): State<AppState>,
+    super::auth::ScopedRepository(repository): super::auth::ScopedRepository,
+    ActiveWorkspace(workspace_id): ActiveWorkspace,
 ) -> Result<Response, ApiError> {
     cached_data_health(
         &state,
-        "completeness".to_owned(),
-        state.repository.data_health_completeness(),
+        format!("{workspace_id}:completeness"),
+        repository.data_health_completeness(),
     )
     .await
 }
 pub(super) async fn data_health_contexts(
     State(state): State<AppState>,
+    super::auth::ScopedRepository(repository): super::auth::ScopedRepository,
+    ActiveWorkspace(workspace_id): ActiveWorkspace,
 ) -> Result<Response, ApiError> {
     cached_data_health(
         &state,
-        "contexts".to_owned(),
-        state.repository.data_health_contexts(),
+        format!("{workspace_id}:contexts"),
+        repository.data_health_contexts(),
     )
     .await
 }
 pub(super) async fn data_health_relationships(
     State(state): State<AppState>,
+    super::auth::ScopedRepository(repository): super::auth::ScopedRepository,
+    ActiveWorkspace(workspace_id): ActiveWorkspace,
 ) -> Result<Response, ApiError> {
     cached_data_health(
         &state,
-        "relationships".to_owned(),
-        state.repository.data_health_relationships(),
+        format!("{workspace_id}:relationships"),
+        repository.data_health_relationships(),
     )
     .await
 }
 pub(super) async fn data_health_storage(
     State(state): State<AppState>,
+    super::auth::ScopedRepository(repository): super::auth::ScopedRepository,
+    ActiveWorkspace(workspace_id): ActiveWorkspace,
 ) -> Result<Response, ApiError> {
     cached_data_health(
         &state,
-        "storage".to_owned(),
-        state.repository.data_health_storage(),
+        format!("{workspace_id}:storage"),
+        repository.data_health_storage(),
     )
     .await
 }
