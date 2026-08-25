@@ -38,6 +38,14 @@ password, cookie, CSRF, expiry, and revocation contract is documented in
 | --- | --- | --- |
 | `GET` | `/health` | Confirm the migrated API is ready. |
 | `GET` | `/metrics` | Scrape Prometheus service metrics. |
+| `GET` | `/workspace/members` | List members and additive grants (`members.manage`). |
+| `PUT` | `/workspace/members/{member_id}` | Set member state to `active` or `inactive`. |
+| `POST` | `/workspace/members/{member_id}/grants` | Add a role grant at one requested scope. |
+| `DELETE` | `/workspace/members/{member_id}/grants/{grant_id}` | Revoke a role grant. |
+| `POST` | `/workspace/members/{member_id}/transfer-ownership` | Transfer ownership to an active member (owner only). |
+| `GET`, `POST` | `/workspace/invitations` | List or create expiring email invitations. |
+| `DELETE` | `/workspace/invitations/{invitation_id}` | Revoke a pending invitation. |
+| `POST` | `/workspace/invitations/accept` | Accept `{ "secret": "cat_inv_..." }` as the verified intended account. |
 | `GET` | `/blueprints` | List published entity blueprints. |
 | `GET` | `/blueprints/catalogue` | List blueprint families and revisions. |
 | `POST` | `/blueprints` | Create the first draft revision from TOML. |

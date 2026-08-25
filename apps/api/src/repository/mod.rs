@@ -29,11 +29,13 @@ mod entity_migration;
 mod entity_projection;
 mod entity_search;
 mod health;
+mod members;
 mod sessions;
 mod tokens;
 mod values;
 
 pub(crate) use entity_search::decode_search_cursor;
+pub(crate) use members::{WorkspaceInvitation, WorkspaceMember};
 pub(crate) use tokens::PersonalApiToken;
 
 #[derive(Clone)]
@@ -47,6 +49,8 @@ pub struct CatalogRepository {
 pub enum RepositoryError {
     #[error("{0} was not found")]
     NotFound(&'static str),
+    #[error("the invitation is invalid, expired, revoked, already accepted, or for another email")]
+    InvitationInvalid,
     #[error("the context code 'default' is reserved")]
     ReservedContextCode,
     #[error("code must contain only ASCII letters, numbers, hyphens, and underscores")]

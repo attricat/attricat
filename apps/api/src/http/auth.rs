@@ -168,6 +168,9 @@ pub(super) async fn authorize(
         .get::<axum::extract::MatchedPath>()
         .map(|matched| matched.as_str())
         .unwrap_or(path);
+    // An invitee can have no membership yet, so acceptance deliberately skips
+    // the active-membership policy while retaining normal credential validation.
+    let accepting_invitation = matched == "/workspace/invitations/accept";
     if let Some(policy) = policy(request.method(), matched) {
         let (target_id, target_code) = target(path, policy.target);
         if !state
@@ -199,7 +202,7 @@ pub(super) async fn authorize(
                 return Err(ApiError::forbidden());
             }
         }
-    } else if !path.starts_with("/auth/") {
+    } else if !path.starts_with("/auth/") && !accepting_invitation {
         return Err(ApiError::forbidden());
     }
 
@@ -238,6 +241,19 @@ fn policy(method: &Method, path: &str) -> Option<Policy> {
     } else {
         "blueprints.write"
     };
+    if path == "/workspace/invitations/accept" {
+        return None;
+    }
+    if path == "/workspace/members"
+        || path.starts_with("/workspace/members/")
+        || path == "/workspace/invitations"
+        || path.starts_with("/workspace/invitations/")
+    {
+        return Some(Policy {
+            permission: "members.manage",
+            target: TargetKind::None,
+        });
+    }
     if path == "/personal-access-tokens" || path.starts_with("/personal-access-tokens/") {
         return Some(Policy {
             permission: "tokens.manage",

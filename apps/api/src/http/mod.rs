@@ -7,6 +7,7 @@ mod entities;
 mod entity_reads;
 mod error;
 mod extractors;
+mod members;
 mod sessions;
 mod tokens;
 
@@ -133,6 +134,35 @@ pub fn router(state: AppState) -> Router {
         .route(
             "/data-health/refresh",
             post(data_health::refresh_data_health),
+        )
+        .route("/workspace/members", get(members::list_members))
+        .route(
+            "/workspace/members/{member_id}",
+            put(members::update_member),
+        )
+        .route(
+            "/workspace/members/{member_id}/grants",
+            post(members::grant_role),
+        )
+        .route(
+            "/workspace/members/{member_id}/grants/{grant_id}",
+            axum::routing::delete(members::revoke_role),
+        )
+        .route(
+            "/workspace/members/{member_id}/transfer-ownership",
+            post(members::transfer_ownership),
+        )
+        .route(
+            "/workspace/invitations",
+            get(members::list_invitations).post(members::create_invitation),
+        )
+        .route(
+            "/workspace/invitations/{invitation_id}",
+            axum::routing::delete(members::revoke_invitation),
+        )
+        .route(
+            "/workspace/invitations/accept",
+            post(members::accept_invitation),
         )
         .route(
             "/personal-access-tokens",
