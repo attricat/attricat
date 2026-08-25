@@ -101,6 +101,11 @@ impl From<RepositoryError> for ApiError {
     fn from(error: RepositoryError) -> Self {
         match error {
             RepositoryError::NotFound(resource) => Self::not_found(resource),
+            RepositoryError::InvitationInvalid => Self {
+                status: StatusCode::UNPROCESSABLE_ENTITY,
+                code: "invitation_invalid",
+                message: error.to_string(),
+            },
             RepositoryError::AttributeNotApplicable => Self {
                 status: StatusCode::UNPROCESSABLE_ENTITY,
                 code: "attribute_not_applicable",
