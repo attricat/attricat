@@ -7,7 +7,7 @@ use axum::{
 use sha2::Digest;
 use uuid::Uuid;
 
-use super::{AppState, error::ApiError};
+use super::{AppState, audit, error::ApiError};
 use crate::{
     account::{SessionDigest, SessionSecret},
     repository::CatalogRepository,
@@ -190,12 +190,15 @@ pub(super) async fn authorize(
     let accepting_invitation = matched == "/workspace/invitations/accept";
     if let Some(policy) = policy(request.method(), matched) {
         let (target_id, target_code) = target(path, policy.target);
+        if !state.repository.is_active_user(principal).await? {
+            return Err(ApiError::unauthenticated());
+        }
         if !state
             .repository
             .is_active_principal(principal, workspace)
             .await?
         {
-            return Err(ApiError::unauthenticated());
+            return Err(ApiError::forbidden());
         }
         if !state
             .repository
@@ -223,12 +226,16 @@ pub(super) async fn authorize(
         return Err(ApiError::forbidden());
     }
 
-    request
-        .extensions_mut()
-        .insert(AuthenticatedPrincipal(principal, token_id));
+    let principal = AuthenticatedPrincipal(principal, token_id);
+    let audit_context = audit::request_context(&request, principal);
+    request.extensions_mut().insert(principal);
     request.extensions_mut().insert(ActiveWorkspace(workspace));
     request.extensions_mut().insert(ScopedRepository(
-        state.repository.for_workspace(workspace).await?,
+        state
+            .repository
+            .for_workspace(workspace)
+            .await?
+            .with_audit_context(audit_context),
     ));
     if let Some(session_digest) = session_digest {
         request

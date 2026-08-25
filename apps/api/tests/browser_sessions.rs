@@ -1,6 +1,9 @@
 mod support;
 
-use api::account::{Password, hash_password};
+use api::{
+    account::{Password, SessionDigest, hash_password},
+    repository::CatalogRepository,
+};
 use reqwest::header::SET_COOKIE;
 use support::*;
 
@@ -235,6 +238,12 @@ async fn stale_password_verification_cannot_issue_a_session(pool: PgPool) {
         .await
         .unwrap();
 
+    let repository = CatalogRepository::new(pool.clone());
+    let credential = repository
+        .local_login_credential("api-test-owner@example.test")
+        .await
+        .unwrap()
+        .unwrap();
     // This models a password reset completing after the password verifier read
     // the old credential but before it attempts to issue the login session.
     sqlx::query("UPDATE users SET security_version = security_version + 1 WHERE id = $1")
@@ -242,15 +251,16 @@ async fn stale_password_verification_cannot_issue_a_session(pool: PgPool) {
         .execute(&pool)
         .await
         .unwrap();
-    let result = sqlx::query(
-        "SELECT issue_browser_login_session($1, $2, '00000000-0000-4000-8000-000000000002', 1, 1, $3, $4, now() + interval '1 hour')",
-    )
-    .bind(Uuid::new_v4())
-    .bind(owner_id)
-    .bind(vec![7_u8; 32])
-    .bind(vec![8_u8; 32])
-    .execute(&pool)
-    .await;
+    let result = repository
+        .issue_login_session(
+            Uuid::new_v4(),
+            &credential,
+            "00000000-0000-4000-8000-000000000002".parse().unwrap(),
+            &SessionDigest::from_slice(&[7_u8; 32]).unwrap(),
+            &SessionDigest::from_slice(&[8_u8; 32]).unwrap(),
+            chrono::Utc::now() + chrono::Duration::hours(1),
+        )
+        .await;
     assert!(
         result.is_err(),
         "stale password verification must not create a session"

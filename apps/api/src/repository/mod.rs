@@ -58,7 +58,24 @@ pub struct UserAccount {
 /// here so HTTP handlers and other callers do not depend on storage internals.
 pub struct CatalogRepository {
     pub(in crate::repository) pool: PgPool,
+    workspace_id: Option<Uuid>,
     workspace_pools: Option<Arc<WorkspacePoolCache>>,
+    audit_context: Option<AuditContext>,
+}
+
+/// Server-derived request metadata written with the same transaction as a
+/// successful mutation. Requests denied before a repository mutation are not
+/// audited.
+#[derive(Clone)]
+pub(crate) struct AuditContext {
+    pub actor_user_id: Option<Uuid>,
+    pub actor_token_id: Option<Uuid>,
+    pub request_id: Uuid,
+    pub correlation_id: Uuid,
+    pub action: String,
+    pub authorization_scope: Value,
+    pub target: Value,
+    pub metadata: Value,
 }
 
 struct WorkspacePoolCache {
@@ -148,17 +165,22 @@ impl RepositoryError {
 
 impl CatalogRepository {
     const DEFAULT_CONTEXT_ID: Uuid = Uuid::from_u128(0x00000000000040008000000000000001);
+    const DEFAULT_WORKSPACE_ID: Uuid = Uuid::from_u128(0x00000000000040008000000000000002);
 
     pub fn new(pool: PgPool) -> Self {
         Self {
             pool,
+            workspace_id: None,
             workspace_pools: None,
+            audit_context: None,
         }
     }
 
     pub fn with_workspace_pool_factory(pool: PgPool, connect_options: PgConnectOptions) -> Self {
         Self {
             pool,
+            workspace_id: None,
+            audit_context: None,
             workspace_pools: Some(Arc::new(WorkspacePoolCache {
                 connect_options,
                 pools: Mutex::new(HashMap::new()),
@@ -170,13 +192,20 @@ impl CatalogRepository {
     /// server-derived workspace by the connection's RLS setting.
     pub async fn for_workspace(&self, workspace_id: Uuid) -> Result<Self, RepositoryError> {
         let Some(cache) = &self.workspace_pools else {
-            return Ok(self.clone());
+            return Ok(Self {
+                pool: self.pool.clone(),
+                workspace_id: Some(workspace_id),
+                workspace_pools: None,
+                audit_context: self.audit_context.clone(),
+            });
         };
         let mut pools = cache.pools.lock().await;
         if let Some(pool) = pools.get(&workspace_id) {
             return Ok(Self {
                 pool: pool.clone(),
+                workspace_id: Some(workspace_id),
                 workspace_pools: self.workspace_pools.clone(),
+                audit_context: self.audit_context.clone(),
             });
         }
         if pools.len() >= MAX_WORKSPACE_POOLS {
@@ -188,63 +217,58 @@ impl CatalogRepository {
         }
         let pool = PgPoolOptions::new()
             .max_connections(5)
-            .after_connect(move |connection, _| {
-                Box::pin(async move {
-                    sqlx::query("SELECT set_config('catalog.workspace_id', $1, false)")
-                        .bind(workspace_id.to_string())
-                        .execute(&mut *connection)
-                        .await?;
-                    sqlx::query("SET ROLE catalog_api")
-                        .execute(connection)
-                        .await?;
-                    Ok(())
-                })
-            })
+            .after_connect(move |_connection, _| Box::pin(async move { Ok(()) }))
             .connect_with(cache.connect_options.clone())
             .await?;
         pools.insert(workspace_id, pool.clone());
         Ok(Self {
             pool,
+            workspace_id: Some(workspace_id),
             workspace_pools: self.workspace_pools.clone(),
+            audit_context: self.audit_context.clone(),
         })
     }
 
     pub async fn purge_value_history(&self, retention_days: i64) -> Result<(), RepositoryError> {
-        sqlx::query("SELECT purge_attribute_value_history($1 * interval '1 day')")
-            .bind(retention_days)
-            .execute(&self.pool)
-            .await?;
+        sqlx::query(
+            "DELETE FROM attribute_value_history WHERE archived_at < now() - ($1 * interval '1 day')",
+        )
+        .bind(retention_days)
+        .execute(&self.pool)
+        .await?;
         Ok(())
     }
 
-    #[allow(clippy::too_many_arguments)]
-    pub async fn record_audit_event(
+    pub(crate) fn with_audit_context(mut self, audit_context: AuditContext) -> Self {
+        self.audit_context = Some(audit_context);
+        self
+    }
+
+    /// Inserts the request audit row before committing a mutation. An audit
+    /// insertion error aborts the surrounding transaction, so success cannot
+    /// be returned without durable audit evidence.
+    pub(in crate::repository) async fn commit_mutation(
         &self,
-        workspace_id: Uuid,
-        actor_user_id: Option<Uuid>,
-        request_id: Uuid,
-        correlation_id: Uuid,
-        action: &str,
-        authorization_scope: Value,
-        target: Value,
-        outcome: &str,
-        metadata: Value,
+        mut transaction: Transaction<'_, Postgres>,
     ) -> Result<(), RepositoryError> {
-        sqlx::query(
-            "INSERT INTO audit_events (id, workspace_id, actor_user_id, request_id, correlation_id, action, authorization_scope, target, outcome, metadata) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)",
-        )
-        .bind(Uuid::new_v4())
-        .bind(workspace_id)
-        .bind(actor_user_id)
-        .bind(request_id)
-        .bind(correlation_id)
-        .bind(action)
-        .bind(authorization_scope)
-        .bind(target)
-        .bind(outcome)
-        .bind(metadata)
-        .execute(&self.pool)
-        .await?;
+        if let Some(audit) = &self.audit_context {
+            sqlx::query(
+                "INSERT INTO audit_events (id, workspace_id, actor_user_id, actor_token_id, request_id, correlation_id, action, authorization_scope, target, outcome, metadata) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, 'success', $10)",
+            )
+            .bind(Uuid::new_v4())
+            .bind(self.workspace_id.unwrap_or(Self::DEFAULT_WORKSPACE_ID))
+            .bind(audit.actor_user_id)
+            .bind(audit.actor_token_id)
+            .bind(audit.request_id)
+            .bind(audit.correlation_id)
+            .bind(&audit.action)
+            .bind(&audit.authorization_scope)
+            .bind(&audit.target)
+            .bind(&audit.metadata)
+            .execute(&mut *transaction)
+            .await?;
+        }
+        transaction.commit().await?;
         Ok(())
     }
 
@@ -258,18 +282,27 @@ impl CatalogRepository {
             .map_err(RepositoryError::from)
     }
 
+    pub async fn is_active_user(&self, user_id: Uuid) -> Result<bool, RepositoryError> {
+        Ok(sqlx::query_scalar(
+            "SELECT EXISTS (SELECT 1 FROM users WHERE id = $1 AND state = 'active')",
+        )
+        .bind(user_id)
+        .fetch_one(&self.pool)
+        .await?)
+    }
+
     pub async fn is_active_principal(
         &self,
         user_id: Uuid,
         workspace_id: Uuid,
     ) -> Result<bool, RepositoryError> {
-        Ok(
-            sqlx::query_scalar("SELECT catalog_request_principal_active($1, $2)")
-                .bind(user_id)
-                .bind(workspace_id)
-                .fetch_one(&self.pool)
-                .await?,
+        Ok(sqlx::query_scalar(
+            "SELECT EXISTS (SELECT 1 FROM workspace_memberships m JOIN users u ON u.id = m.user_id JOIN workspaces w ON w.id = m.workspace_id WHERE m.user_id = $1 AND m.workspace_id = $2 AND m.state = 'active' AND u.state = 'active' AND w.deleted_at IS NULL)",
         )
+        .bind(user_id)
+        .bind(workspace_id)
+        .fetch_one(&self.pool)
+        .await?)
     }
 
     /// Checks the durable membership/grant graph in one database operation so
@@ -282,16 +315,18 @@ impl CatalogRepository {
         target_id: Option<Uuid>,
         target_code: Option<&str>,
     ) -> Result<bool, RepositoryError> {
-        Ok(
-            sqlx::query_scalar("SELECT catalog_authorize_request($1, $2, $3, $4, $5)")
-                .bind(user_id)
-                .bind(workspace_id)
-                .bind(permission)
-                .bind(target_id)
-                .bind(target_code)
-                .fetch_one(&self.pool)
-                .await?,
+        // Resolve grant scope in the application-owned repository query.  A
+        // non-workspace grant can only authorize the requested tenant target.
+        Ok(sqlx::query_scalar(
+            "WITH RECURSIVE grants AS (SELECT g.scope_type, g.scope_target_id FROM workspace_memberships m JOIN users u ON u.id = m.user_id JOIN workspaces w ON w.id = m.workspace_id JOIN role_grants g ON g.membership_id = m.id AND g.workspace_id = m.workspace_id JOIN role_permissions rp ON rp.role_id = g.role_id WHERE m.user_id = $1 AND m.workspace_id = $2 AND m.state = 'active' AND u.state = 'active' AND w.deleted_at IS NULL AND rp.permission_code = $3), target AS (SELECT 'blueprint'::text kind, id FROM blueprints WHERE workspace_id = $2 AND (id = $4 OR code = $5) UNION ALL SELECT 'entity', id FROM entities WHERE workspace_id = $2 AND id = $4 UNION ALL SELECT 'context', id FROM attribute_contexts WHERE workspace_id = $2 AND (id = $4 OR code = $5)), ancestors AS (SELECT c.id, c.parent_id FROM attribute_contexts c JOIN target t ON t.kind = 'context' AND t.id = c.id UNION ALL SELECT p.id, p.parent_id FROM attribute_contexts p JOIN ancestors a ON a.parent_id = p.id WHERE p.workspace_id = $2) SELECT EXISTS (SELECT 1 FROM grants g WHERE (g.scope_type = 'workspace' AND g.scope_target_id = $2) OR (($4 IS NOT NULL OR $5 IS NOT NULL) AND ((g.scope_type = 'blueprint_family' AND EXISTS (SELECT 1 FROM target WHERE kind = 'blueprint' AND id = g.scope_target_id)) OR (g.scope_type = 'entity' AND EXISTS (SELECT 1 FROM target WHERE kind = 'entity' AND id = g.scope_target_id)) OR (g.scope_type = 'blueprint_family' AND EXISTS (SELECT 1 FROM entities e JOIN target t ON t.kind = 'entity' AND t.id = e.id WHERE e.workspace_id = $2 AND e.blueprint_id = g.scope_target_id)) OR (g.scope_type = 'context_subtree' AND EXISTS (SELECT 1 FROM ancestors WHERE id = g.scope_target_id)) OR ($5 = '__context_list__' AND g.scope_type = 'context_subtree'))))",
         )
+        .bind(user_id)
+        .bind(workspace_id)
+        .bind(permission)
+        .bind(target_id)
+        .bind(target_code)
+        .fetch_one(&self.pool)
+        .await?)
     }
 }
 

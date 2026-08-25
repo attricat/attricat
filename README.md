@@ -49,3 +49,12 @@ internal database/configuration identifier; clients do not select it directly.
 - `apps/api`: Axum API and SQLx migrations.
 - `apps/catalog-cli`: JSON-first HTTP command-line client.
 - `apps/catalog-web`: React and Vite web application.
+
+## Database policy
+
+Database migrations are declarative only: schema objects, columns, indexes,
+foreign keys, `NOT NULL`, `UNIQUE`, and `CHECK` constraints, and required types
+or extensions. Do not add SQL functions, procedures, triggers, views, RLS
+policies, or `DO` blocks. Authorization, validation, state transitions,
+rate-limiting, auditing, retention, and all other behavior belong in the Rust
+application and must be performed through repository transactions.

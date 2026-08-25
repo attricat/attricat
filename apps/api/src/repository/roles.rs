@@ -25,17 +25,92 @@ pub struct WorkspaceGrantTarget {
     pub label: String,
 }
 
+const OWNER_ROLE_ID: Uuid = Uuid::from_u128(0x00000000000040008000000000000101);
+
 impl CatalogRepository {
+    async fn require_permission(
+        &self,
+        actor_id: Uuid,
+        workspace_id: Uuid,
+        permission: &str,
+    ) -> Result<(), RepositoryError> {
+        if self
+            .is_authorized(actor_id, workspace_id, permission, None, None)
+            .await?
+        {
+            Ok(())
+        } else {
+            Err(RepositoryError::NotFound("permission"))
+        }
+    }
+
+    async fn validate_role_input(
+        &self,
+        actor_id: Uuid,
+        workspace_id: Uuid,
+        code: &str,
+        permissions: &[String],
+    ) -> Result<(), RepositoryError> {
+        if !code.chars().next().is_some_and(|c| c.is_ascii_lowercase())
+            || !code
+                .chars()
+                .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '-' || c == '_')
+        {
+            return Err(RepositoryError::InvalidCode);
+        }
+        let known: i64 =
+            sqlx::query_scalar("SELECT count(*) FROM permissions WHERE code = ANY($1)")
+                .bind(permissions)
+                .fetch_one(&self.pool)
+                .await?;
+        if known != permissions.len() as i64 {
+            return Err(RepositoryError::NotFound("permission"));
+        }
+        for permission in permissions {
+            self.require_permission(actor_id, workspace_id, permission)
+                .await?;
+        }
+        Ok(())
+    }
+
+    async fn roles_delegable(
+        &self,
+        actor_id: Uuid,
+        workspace_id: Uuid,
+        role_id: Uuid,
+    ) -> Result<bool, RepositoryError> {
+        let permissions: Vec<String> =
+            sqlx::query_scalar("SELECT permission_code FROM role_permissions WHERE role_id = $1")
+                .bind(role_id)
+                .fetch_all(&self.pool)
+                .await?;
+        for permission in permissions {
+            if !self
+                .is_authorized(actor_id, workspace_id, &permission, None, None)
+                .await?
+            {
+                return Ok(false);
+            }
+        }
+        Ok(true)
+    }
+
+    async fn workspace_role(
+        &self,
+        workspace_id: Uuid,
+        role_id: Uuid,
+    ) -> Result<bool, RepositoryError> {
+        Ok(sqlx::query_scalar("SELECT EXISTS (SELECT 1 FROM roles WHERE id = $1 AND (is_system OR workspace_id = $2))").bind(role_id).bind(workspace_id).fetch_one(&self.pool).await?)
+    }
+
     pub async fn list_workspace_roles(
         &self,
         actor_id: Uuid,
         workspace_id: Uuid,
     ) -> Result<Vec<WorkspaceRole>, RepositoryError> {
-        Ok(sqlx::query_as("SELECT * FROM list_workspace_roles($1, $2)")
-            .bind(actor_id)
-            .bind(workspace_id)
-            .fetch_all(&self.pool)
-            .await?)
+        self.require_permission(actor_id, workspace_id, "roles.manage")
+            .await?;
+        Ok(sqlx::query_as("SELECT r.id, r.code, r.is_system, coalesce(array_agg(rp.permission_code ORDER BY rp.permission_code) FILTER (WHERE rp.permission_code IS NOT NULL), ARRAY[]::text[]) AS permissions, r.created_at FROM roles r LEFT JOIN role_permissions rp ON rp.role_id = r.id WHERE r.is_system OR r.workspace_id = $1 GROUP BY r.id ORDER BY r.is_system DESC, r.code").bind(workspace_id).fetch_all(&self.pool).await?)
     }
 
     pub async fn list_workspace_assignable_roles(
@@ -43,13 +118,9 @@ impl CatalogRepository {
         actor_id: Uuid,
         workspace_id: Uuid,
     ) -> Result<Vec<WorkspaceRole>, RepositoryError> {
-        Ok(
-            sqlx::query_as("SELECT * FROM list_workspace_assignable_roles($1, $2)")
-                .bind(actor_id)
-                .bind(workspace_id)
-                .fetch_all(&self.pool)
-                .await?,
-        )
+        self.require_permission(actor_id, workspace_id, "members.manage")
+            .await?;
+        Ok(sqlx::query_as("SELECT r.id, r.code, r.is_system, coalesce(array_agg(rp.permission_code ORDER BY rp.permission_code) FILTER (WHERE rp.permission_code IS NOT NULL), ARRAY[]::text[]) AS permissions, r.created_at FROM roles r LEFT JOIN role_permissions rp ON rp.role_id = r.id WHERE r.is_system OR r.workspace_id = $1 GROUP BY r.id ORDER BY r.is_system DESC, r.code").bind(workspace_id).fetch_all(&self.pool).await?)
     }
 
     pub async fn list_workspace_permissions(
@@ -57,10 +128,10 @@ impl CatalogRepository {
         actor_id: Uuid,
         workspace_id: Uuid,
     ) -> Result<Vec<Permission>, RepositoryError> {
+        self.require_permission(actor_id, workspace_id, "roles.manage")
+            .await?;
         Ok(
-            sqlx::query_as("SELECT * FROM list_workspace_permissions($1, $2)")
-                .bind(actor_id)
-                .bind(workspace_id)
+            sqlx::query_as("SELECT code, description FROM permissions ORDER BY code")
                 .fetch_all(&self.pool)
                 .await?,
         )
@@ -71,13 +142,9 @@ impl CatalogRepository {
         actor_id: Uuid,
         workspace_id: Uuid,
     ) -> Result<Vec<Permission>, RepositoryError> {
-        Ok(
-            sqlx::query_as("SELECT * FROM list_workspace_token_permissions($1, $2)")
-                .bind(actor_id)
-                .bind(workspace_id)
-                .fetch_all(&self.pool)
-                .await?,
-        )
+        self.require_permission(actor_id, workspace_id, "tokens.manage")
+            .await?;
+        Ok(sqlx::query_as("SELECT p.code, p.description FROM permissions p WHERE EXISTS (SELECT 1 FROM workspace_memberships m JOIN role_grants g ON g.membership_id = m.id AND g.workspace_id = m.workspace_id JOIN role_permissions rp ON rp.role_id = g.role_id WHERE m.user_id = $1 AND m.workspace_id = $2 AND m.state = 'active' AND rp.permission_code = p.code) ORDER BY p.code").bind(actor_id).bind(workspace_id).fetch_all(&self.pool).await?)
     }
 
     pub async fn list_workspace_grant_targets(
@@ -86,14 +153,25 @@ impl CatalogRepository {
         workspace_id: Uuid,
         scope_type: &str,
     ) -> Result<Vec<WorkspaceGrantTarget>, RepositoryError> {
-        Ok(
-            sqlx::query_as("SELECT * FROM list_workspace_grant_targets($1, $2, $3)")
-                .bind(actor_id)
-                .bind(workspace_id)
-                .bind(scope_type)
-                .fetch_all(&self.pool)
-                .await?,
-        )
+        self.require_permission(actor_id, workspace_id, "members.manage")
+            .await?;
+        let query = match scope_type {
+            "workspace" => "SELECT id, name AS label FROM workspaces WHERE id = $1",
+            "blueprint_family" => {
+                "SELECT id, code AS label FROM blueprints WHERE workspace_id = $1 ORDER BY code"
+            }
+            "context_subtree" => {
+                "SELECT id, code AS label FROM attribute_contexts WHERE workspace_id = $1 ORDER BY code"
+            }
+            "entity" => {
+                "SELECT id, id::text AS label FROM entities WHERE workspace_id = $1 ORDER BY id"
+            }
+            _ => return Err(RepositoryError::NotFound("grant scope")),
+        };
+        Ok(sqlx::query_as(query)
+            .bind(workspace_id)
+            .fetch_all(&self.pool)
+            .await?)
     }
 
     pub async fn create_workspace_role(
@@ -103,16 +181,29 @@ impl CatalogRepository {
         code: &str,
         permissions: &[String],
     ) -> Result<Uuid, RepositoryError> {
-        Ok(
-            sqlx::query_scalar("SELECT catalog_create_workspace_role($1, $2, $3, $4, $5)")
-                .bind(actor_id)
-                .bind(workspace_id)
-                .bind(Uuid::new_v4())
-                .bind(code)
-                .bind(permissions)
-                .fetch_one(&self.pool)
-                .await?,
+        self.require_permission(actor_id, workspace_id, "roles.manage")
+            .await?;
+        self.validate_role_input(actor_id, workspace_id, code, permissions)
+            .await?;
+        let id = Uuid::new_v4();
+        let mut tx = self.pool.begin().await?;
+        sqlx::query(
+            "INSERT INTO roles (id, code, workspace_id, is_system) VALUES ($1, $2, $3, false)",
         )
+        .bind(id)
+        .bind(code)
+        .bind(workspace_id)
+        .execute(&mut *tx)
+        .await?;
+        for permission in permissions {
+            sqlx::query("INSERT INTO role_permissions (role_id, permission_code) VALUES ($1, $2)")
+                .bind(id)
+                .bind(permission)
+                .execute(&mut *tx)
+                .await?;
+        }
+        self.commit_mutation(tx).await?;
+        Ok(id)
     }
 
     pub async fn update_workspace_role(
@@ -123,14 +214,36 @@ impl CatalogRepository {
         code: &str,
         permissions: &[String],
     ) -> Result<(), RepositoryError> {
-        sqlx::query("SELECT catalog_update_workspace_role($1, $2, $3, $4, $5)")
-            .bind(actor_id)
-            .bind(workspace_id)
-            .bind(role_id)
-            .bind(code)
-            .bind(permissions)
-            .execute(&self.pool)
+        self.require_permission(actor_id, workspace_id, "roles.manage")
             .await?;
+        self.validate_role_input(actor_id, workspace_id, code, permissions)
+            .await?;
+        let mut tx = self.pool.begin().await?;
+        if sqlx::query(
+            "UPDATE roles SET code = $1 WHERE id = $2 AND workspace_id = $3 AND NOT is_system",
+        )
+        .bind(code)
+        .bind(role_id)
+        .bind(workspace_id)
+        .execute(&mut *tx)
+        .await?
+        .rows_affected()
+            != 1
+        {
+            return Err(RepositoryError::NotFound("workspace role"));
+        }
+        sqlx::query("DELETE FROM role_permissions WHERE role_id = $1")
+            .bind(role_id)
+            .execute(&mut *tx)
+            .await?;
+        for permission in permissions {
+            sqlx::query("INSERT INTO role_permissions (role_id, permission_code) VALUES ($1, $2)")
+                .bind(role_id)
+                .bind(permission)
+                .execute(&mut *tx)
+                .await?;
+        }
+        self.commit_mutation(tx).await?;
         Ok(())
     }
 
@@ -141,16 +254,12 @@ impl CatalogRepository {
         source_role_id: Uuid,
         code: &str,
     ) -> Result<Uuid, RepositoryError> {
-        Ok(
-            sqlx::query_scalar("SELECT catalog_duplicate_workspace_role($1, $2, $3, $4, $5)")
-                .bind(actor_id)
-                .bind(workspace_id)
-                .bind(source_role_id)
-                .bind(Uuid::new_v4())
-                .bind(code)
-                .fetch_one(&self.pool)
-                .await?,
-        )
+        if !self.workspace_role(workspace_id, source_role_id).await? {
+            return Err(RepositoryError::NotFound("source role"));
+        }
+        let permissions: Vec<String> = sqlx::query_scalar("SELECT permission_code FROM role_permissions WHERE role_id = $1 ORDER BY permission_code").bind(source_role_id).fetch_all(&self.pool).await?;
+        self.create_workspace_role(actor_id, workspace_id, code, &permissions)
+            .await
     }
 
     pub async fn retire_workspace_role(
@@ -160,13 +269,61 @@ impl CatalogRepository {
         role_id: Uuid,
         replacement_role_id: Option<Uuid>,
     ) -> Result<(), RepositoryError> {
-        sqlx::query("SELECT catalog_retire_workspace_role($1, $2, $3, $4)")
-            .bind(actor_id)
-            .bind(workspace_id)
-            .bind(role_id)
-            .bind(replacement_role_id)
-            .execute(&self.pool)
+        self.require_permission(actor_id, workspace_id, "roles.manage")
             .await?;
+        if role_id == OWNER_ROLE_ID {
+            return Err(RepositoryError::NotFound("workspace-local role"));
+        }
+        let mut tx = self.pool.begin().await?;
+        let exists: bool = sqlx::query_scalar("SELECT EXISTS (SELECT 1 FROM roles WHERE id = $1 AND workspace_id = $2 AND NOT is_system FOR UPDATE)").bind(role_id).bind(workspace_id).fetch_one(&mut *tx).await?;
+        if !exists {
+            return Err(RepositoryError::NotFound("workspace role"));
+        }
+        let grants: i64 = sqlx::query_scalar(
+            "SELECT count(*) FROM role_grants WHERE role_id = $1 AND workspace_id = $2",
+        )
+        .bind(role_id)
+        .bind(workspace_id)
+        .fetch_one(&mut *tx)
+        .await?;
+        let Some(replacement) = replacement_role_id else {
+            if grants > 0 {
+                return Err(RepositoryError::NotFound("replacement role"));
+            };
+            sqlx::query("DELETE FROM role_permissions WHERE role_id = $1")
+                .bind(role_id)
+                .execute(&mut *tx)
+                .await?;
+            sqlx::query("DELETE FROM roles WHERE id = $1")
+                .bind(role_id)
+                .execute(&mut *tx)
+                .await?;
+            self.commit_mutation(tx).await?;
+            return Ok(());
+        };
+        if !self.workspace_role(workspace_id, replacement).await?
+            || !self
+                .roles_delegable(actor_id, workspace_id, replacement)
+                .await?
+        {
+            return Err(RepositoryError::NotFound("replacement role"));
+        }
+        sqlx::query("DELETE FROM role_grants old USING role_grants replacement WHERE old.role_id = $1 AND replacement.role_id = $2 AND replacement.workspace_id = old.workspace_id AND replacement.membership_id = old.membership_id AND replacement.scope_type = old.scope_type AND replacement.scope_target_id = old.scope_target_id").bind(role_id).bind(replacement).execute(&mut *tx).await?;
+        sqlx::query("UPDATE role_grants SET role_id = $1 WHERE role_id = $2 AND workspace_id = $3")
+            .bind(replacement)
+            .bind(role_id)
+            .bind(workspace_id)
+            .execute(&mut *tx)
+            .await?;
+        sqlx::query("DELETE FROM role_permissions WHERE role_id = $1")
+            .bind(role_id)
+            .execute(&mut *tx)
+            .await?;
+        sqlx::query("DELETE FROM roles WHERE id = $1")
+            .bind(role_id)
+            .execute(&mut *tx)
+            .await?;
+        self.commit_mutation(tx).await?;
         Ok(())
     }
 }

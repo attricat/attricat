@@ -486,7 +486,7 @@ impl CatalogRepository {
         let preview = Self::build_preview_projection(&mut transaction, entity.id).await?;
         self.store_preview(&mut transaction, entity.id, preview)
             .await?;
-        transaction.commit().await?;
+        self.commit_mutation(transaction).await?;
         Ok(value)
     }
 }

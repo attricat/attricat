@@ -25,16 +25,34 @@ impl CatalogRepository {
         permissions: &[String],
         expires_at: Option<DateTime<Utc>>,
     ) -> Result<(), RepositoryError> {
-        sqlx::query("SELECT issue_personal_api_token($1, $2, $3, $4, $5, $6, $7)")
-            .bind(token_id)
-            .bind(user_id)
-            .bind(workspace_id)
-            .bind(label)
-            .bind(digest)
-            .bind(permissions)
-            .bind(expires_at)
-            .execute(&self.pool)
+        if label.trim() != label
+            || label.is_empty()
+            || label.len() > 120
+            || digest.len() != 32
+            || permissions.is_empty()
+        {
+            return Err(RepositoryError::NotFound("valid token input"));
+        }
+        let mut tx = self.pool.begin().await?;
+        let permitted = self
+            .is_authorized(user_id, workspace_id, "tokens.manage", None, None)
             .await?;
+        if !permitted {
+            return Err(RepositoryError::NotFound("token authority"));
+        }
+        let known: i64 =
+            sqlx::query_scalar("SELECT count(*) FROM permissions WHERE code = ANY($1)")
+                .bind(permissions)
+                .fetch_one(&mut *tx)
+                .await?;
+        if known != permissions.len() as i64 {
+            return Err(RepositoryError::NotFound("known permissions"));
+        }
+        sqlx::query("INSERT INTO personal_api_tokens (id, user_id, workspace_id, label, token_digest, expires_at) VALUES ($1, $2, $3, $4, $5, $6)").bind(token_id).bind(user_id).bind(workspace_id).bind(label).bind(digest).bind(expires_at).execute(&mut *tx).await?;
+        for permission in permissions {
+            sqlx::query("INSERT INTO personal_api_token_permissions (token_id, permission_code) VALUES ($1, $2)").bind(token_id).bind(permission).execute(&mut *tx).await?;
+        }
+        self.commit_mutation(tx).await?;
         Ok(())
     }
 
@@ -43,7 +61,7 @@ impl CatalogRepository {
         digest: &[u8],
     ) -> Result<Option<(Uuid, Uuid, Uuid)>, RepositoryError> {
         Ok(sqlx::query_as(
-            "SELECT token_id, user_id, workspace_id FROM authenticate_personal_api_token($1)",
+            "UPDATE personal_api_tokens SET last_used_at = clock_timestamp() WHERE token_digest = $1 AND revoked_at IS NULL AND (expires_at IS NULL OR expires_at > clock_timestamp()) RETURNING id AS token_id, user_id, workspace_id",
         )
         .bind(digest)
         .fetch_optional(&self.pool)
@@ -58,13 +76,7 @@ impl CatalogRepository {
         token_id: Uuid,
         permission: &str,
     ) -> Result<bool, RepositoryError> {
-        Ok(
-            sqlx::query_scalar("SELECT personal_api_token_permits($1, $2)")
-                .bind(token_id)
-                .bind(permission)
-                .fetch_one(&self.pool)
-                .await?,
-        )
+        Ok(sqlx::query_scalar("SELECT EXISTS (SELECT 1 FROM personal_api_token_permissions WHERE token_id = $1 AND permission_code = $2)").bind(token_id).bind(permission).fetch_one(&self.pool).await?)
     }
 
     pub async fn list_personal_api_tokens(
@@ -72,13 +84,7 @@ impl CatalogRepository {
         user_id: Uuid,
         workspace_id: Uuid,
     ) -> Result<Vec<PersonalApiToken>, RepositoryError> {
-        Ok(
-            sqlx::query_as("SELECT * FROM list_personal_api_tokens($1, $2)")
-                .bind(user_id)
-                .bind(workspace_id)
-                .fetch_all(&self.pool)
-                .await?,
-        )
+        Ok(sqlx::query_as("SELECT token.id, token.label, coalesce(array_agg(permission.permission_code ORDER BY permission.permission_code) FILTER (WHERE permission.permission_code IS NOT NULL), ARRAY[]::text[]) AS permissions, token.expires_at, token.revoked_at, token.last_used_at, token.created_at FROM personal_api_tokens token LEFT JOIN personal_api_token_permissions permission ON permission.token_id = token.id WHERE token.user_id = $1 AND token.workspace_id = $2 GROUP BY token.id ORDER BY token.created_at DESC").bind(user_id).bind(workspace_id).fetch_all(&self.pool).await?)
     }
 
     pub async fn revoke_personal_api_token(
@@ -87,13 +93,11 @@ impl CatalogRepository {
         user_id: Uuid,
         workspace_id: Uuid,
     ) -> Result<bool, RepositoryError> {
-        Ok(
-            sqlx::query_scalar("SELECT revoke_personal_api_token($1, $2, $3)")
-                .bind(token_id)
-                .bind(user_id)
-                .bind(workspace_id)
-                .fetch_one(&self.pool)
-                .await?,
-        )
+        let mut tx = self.pool.begin().await?;
+        let revoked = sqlx::query("UPDATE personal_api_tokens SET revoked_at = clock_timestamp() WHERE id = $1 AND user_id = $2 AND workspace_id = $3 AND revoked_at IS NULL").bind(token_id).bind(user_id).bind(workspace_id).execute(&mut *tx).await?.rows_affected() == 1;
+        if revoked {
+            self.commit_mutation(tx).await?;
+        }
+        Ok(revoked)
     }
 }

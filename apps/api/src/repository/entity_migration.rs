@@ -133,20 +133,23 @@ impl CatalogRepository {
             "needs_input"
         };
         let migration_id = Uuid::new_v4();
+        let mut transaction = self.pool.begin().await?;
         sqlx::query(
             r#"INSERT INTO entity_blueprint_migrations
-                   (id, entity_id, blueprint_id, source_version, target_version, status, issues)
-               VALUES ($1, $2, $3, $4, $5, $6, $7)"#,
+                   (id, workspace_id, entity_id, blueprint_id, source_version, target_version, status, issues)
+               VALUES ($1, $2, $3, $4, $5, $6, $7, $8)"#,
         )
         .bind(migration_id)
+        .bind(self.workspace_id.unwrap_or(Self::DEFAULT_WORKSPACE_ID))
         .bind(entity.id)
         .bind(entity.blueprint_id)
         .bind(entity.blueprint_version)
         .bind(target.blueprint.version)
         .bind(status)
         .bind(serde_json::to_value(&issues).expect("migration issues serialize"))
-        .execute(&self.pool)
+        .execute(&mut *transaction)
         .await?;
+        self.commit_mutation(transaction).await?;
         Ok(EntityMigrationPreview {
             migration_id,
             source_version: entity.blueprint_version,
@@ -166,9 +169,10 @@ impl CatalogRepository {
         let mut transaction = self.pool.begin().await?;
         let entity = self.lock_entity(&mut transaction, entity_id).await?;
         let migration = sqlx::query_as::<_, (Uuid, i64, i64, String)>(
-            "SELECT entity_id, source_version, target_version, status FROM entity_blueprint_migrations WHERE id = $1 FOR UPDATE",
+            "SELECT entity_id, source_version, target_version, status FROM entity_blueprint_migrations WHERE id = $1 AND workspace_id = $2 FOR UPDATE",
         )
         .bind(input.migration_id)
+        .bind(self.workspace_id.unwrap_or(Self::DEFAULT_WORKSPACE_ID))
         .fetch_optional(&mut *transaction)
         .await?
         .ok_or(RepositoryError::MigrationNotApplicable)?;
@@ -176,17 +180,19 @@ impl CatalogRepository {
             return Err(RepositoryError::MigrationNotApplicable);
         }
         let target_version = sqlx::query_scalar::<_, i64>(
-            "SELECT version FROM blueprints WHERE id = $1 AND status = 'published' AND deleted_at IS NULL ORDER BY version DESC LIMIT 1",
+            "SELECT version FROM blueprints WHERE id = $1 AND workspace_id = $2 AND status = 'published' AND deleted_at IS NULL ORDER BY version DESC LIMIT 1",
         )
         .bind(entity.blueprint_id)
+        .bind(self.workspace_id.unwrap_or(Self::DEFAULT_WORKSPACE_ID))
         .fetch_one(&mut *transaction)
         .await?;
         if target_version != input.expected_target_version || target_version != migration.2 {
-            sqlx::query("UPDATE entity_blueprint_migrations SET status = 'superseded', completed_at = now() WHERE id = $1")
+            sqlx::query("UPDATE entity_blueprint_migrations SET status = 'superseded', completed_at = now() WHERE id = $1 AND workspace_id = $2")
                 .bind(input.migration_id)
+                .bind(self.workspace_id.unwrap_or(Self::DEFAULT_WORKSPACE_ID))
                 .execute(&mut *transaction)
                 .await?;
-            transaction.commit().await?;
+            self.commit_mutation(transaction).await?;
             return Err(RepositoryError::MigrationTargetChanged);
         }
         if migration.3 == "blocked" {
@@ -306,24 +312,26 @@ impl CatalogRepository {
         if !unresolved.is_empty() {
             let unresolved: Vec<_> = unresolved.into_iter().collect();
             sqlx::query(
-                "UPDATE entity_blueprint_migrations SET status = 'needs_input', input = $2 WHERE id = $1",
+                "UPDATE entity_blueprint_migrations SET status = 'needs_input', input = $2 WHERE id = $1 AND workspace_id = $3",
             )
             .bind(input.migration_id)
             .bind(migration_input)
+            .bind(self.workspace_id.unwrap_or(Self::DEFAULT_WORKSPACE_ID))
             .execute(&mut *transaction)
             .await?;
-            transaction.commit().await?;
+            self.commit_mutation(transaction).await?;
             return Err(RepositoryError::MigrationNeedsResolution(unresolved));
         }
         self.archive_all_current_values(&mut transaction, entity.id)
             .await?;
         let target_entity = sqlx::query_as::<_, Entity>(
             r#"UPDATE entities SET blueprint_version = $2, updated_at = now()
-               WHERE id = $1
+               WHERE id = $1 AND workspace_id = $3
                RETURNING id, blueprint_id, blueprint_version, projections, created_at, updated_at, deleted_at"#,
         )
         .bind(entity.id)
         .bind(target_version)
+        .bind(self.workspace_id.unwrap_or(Self::DEFAULT_WORKSPACE_ID))
         .fetch_one(&mut *transaction)
         .await?;
         for value in carried_values.into_iter().chain(input.values) {
@@ -351,13 +359,14 @@ impl CatalogRepository {
             .store_preview(&mut transaction, entity.id, preview)
             .await?;
         sqlx::query(
-            "UPDATE entity_blueprint_migrations SET status = 'migrated', input = $2, started_at = COALESCE(started_at, now()), completed_at = now() WHERE id = $1",
+            "UPDATE entity_blueprint_migrations SET status = 'migrated', input = $2, started_at = COALESCE(started_at, now()), completed_at = now() WHERE id = $1 AND workspace_id = $3",
         )
         .bind(input.migration_id)
         .bind(migration_input)
+        .bind(self.workspace_id.unwrap_or(Self::DEFAULT_WORKSPACE_ID))
         .execute(&mut *transaction)
         .await?;
-        transaction.commit().await?;
+        self.commit_mutation(transaction).await?;
         Ok(target_entity)
     }
 }

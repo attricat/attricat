@@ -17,17 +17,6 @@ VALUES ('00000000-0000-4000-8000-000000000002', 'default', 'Default workspace');
 -- The API sets this trusted server configuration on each pooled connection.
 -- Falling back to the bootstrap workspace keeps existing single-workspace
 -- deployments working until authenticated active-workspace selection lands.
-CREATE FUNCTION catalog_workspace_id() RETURNS UUID
-LANGUAGE sql STABLE AS $$
-    SELECT COALESCE(
-        NULLIF(current_setting('catalog.workspace_id', true), '')::uuid,
-        '00000000-0000-4000-8000-000000000002'::uuid
-    )
-$$;
-
--- Add and backfill ownership before making it mandatory.  This whole migration
--- is one transaction when run by SQLx, so a failed constraint change cannot
--- leave a partially-tenanted catalog behind.
 ALTER TABLE blueprints ADD COLUMN workspace_id UUID;
 ALTER TABLE attributes ADD COLUMN workspace_id UUID;
 ALTER TABLE entities ADD COLUMN workspace_id UUID;
@@ -57,14 +46,14 @@ ALTER TABLE entity_blueprint_migrations ALTER COLUMN workspace_id SET NOT NULL;
 
 -- New rows inherit the server-selected workspace. API payloads intentionally
 -- have no workspace_id field, so callers cannot override this default.
-ALTER TABLE blueprints ALTER COLUMN workspace_id SET DEFAULT catalog_workspace_id();
-ALTER TABLE attributes ALTER COLUMN workspace_id SET DEFAULT catalog_workspace_id();
-ALTER TABLE entities ALTER COLUMN workspace_id SET DEFAULT catalog_workspace_id();
-ALTER TABLE attribute_contexts ALTER COLUMN workspace_id SET DEFAULT catalog_workspace_id();
-ALTER TABLE attribute_values ALTER COLUMN workspace_id SET DEFAULT catalog_workspace_id();
-ALTER TABLE attribute_value_history ALTER COLUMN workspace_id SET DEFAULT catalog_workspace_id();
-ALTER TABLE blueprint_migration_batches ALTER COLUMN workspace_id SET DEFAULT catalog_workspace_id();
-ALTER TABLE entity_blueprint_migrations ALTER COLUMN workspace_id SET DEFAULT catalog_workspace_id();
+ALTER TABLE blueprints ALTER COLUMN workspace_id SET DEFAULT '00000000-0000-4000-8000-000000000002'::uuid;
+ALTER TABLE attributes ALTER COLUMN workspace_id SET DEFAULT '00000000-0000-4000-8000-000000000002'::uuid;
+ALTER TABLE entities ALTER COLUMN workspace_id SET DEFAULT '00000000-0000-4000-8000-000000000002'::uuid;
+ALTER TABLE attribute_contexts ALTER COLUMN workspace_id SET DEFAULT '00000000-0000-4000-8000-000000000002'::uuid;
+ALTER TABLE attribute_values ALTER COLUMN workspace_id SET DEFAULT '00000000-0000-4000-8000-000000000002'::uuid;
+ALTER TABLE attribute_value_history ALTER COLUMN workspace_id SET DEFAULT '00000000-0000-4000-8000-000000000002'::uuid;
+ALTER TABLE blueprint_migration_batches ALTER COLUMN workspace_id SET DEFAULT '00000000-0000-4000-8000-000000000002'::uuid;
+ALTER TABLE entity_blueprint_migrations ALTER COLUMN workspace_id SET DEFAULT '00000000-0000-4000-8000-000000000002'::uuid;
 
 ALTER TABLE blueprints ADD CONSTRAINT blueprints_workspace_fkey FOREIGN KEY (workspace_id) REFERENCES workspaces (id);
 ALTER TABLE attributes ADD CONSTRAINT attributes_workspace_fkey FOREIGN KEY (workspace_id) REFERENCES workspaces (id);
@@ -115,21 +104,3 @@ ALTER TABLE entity_blueprint_migrations ADD CONSTRAINT entity_blueprint_migratio
     FOREIGN KEY (workspace_id, blueprint_id, source_version) REFERENCES blueprints (workspace_id, id, version);
 ALTER TABLE entity_blueprint_migrations ADD CONSTRAINT entity_blueprint_migrations_workspace_blueprint_target_fkey
     FOREIGN KEY (workspace_id, blueprint_id, target_version) REFERENCES blueprints (workspace_id, id, version);
-
-ALTER TABLE blueprints ENABLE ROW LEVEL SECURITY;
-ALTER TABLE attributes ENABLE ROW LEVEL SECURITY;
-ALTER TABLE entities ENABLE ROW LEVEL SECURITY;
-ALTER TABLE attribute_contexts ENABLE ROW LEVEL SECURITY;
-ALTER TABLE attribute_values ENABLE ROW LEVEL SECURITY;
-ALTER TABLE attribute_value_history ENABLE ROW LEVEL SECURITY;
-ALTER TABLE blueprint_migration_batches ENABLE ROW LEVEL SECURITY;
-ALTER TABLE entity_blueprint_migrations ENABLE ROW LEVEL SECURITY;
-
-CREATE POLICY blueprints_workspace_policy ON blueprints USING (workspace_id = catalog_workspace_id()) WITH CHECK (workspace_id = catalog_workspace_id());
-CREATE POLICY attributes_workspace_policy ON attributes USING (workspace_id = catalog_workspace_id()) WITH CHECK (workspace_id = catalog_workspace_id());
-CREATE POLICY entities_workspace_policy ON entities USING (workspace_id = catalog_workspace_id()) WITH CHECK (workspace_id = catalog_workspace_id());
-CREATE POLICY attribute_contexts_workspace_policy ON attribute_contexts USING (workspace_id = catalog_workspace_id()) WITH CHECK (workspace_id = catalog_workspace_id());
-CREATE POLICY attribute_values_workspace_policy ON attribute_values USING (workspace_id = catalog_workspace_id()) WITH CHECK (workspace_id = catalog_workspace_id());
-CREATE POLICY attribute_value_history_workspace_policy ON attribute_value_history USING (workspace_id = catalog_workspace_id()) WITH CHECK (workspace_id = catalog_workspace_id());
-CREATE POLICY blueprint_migration_batches_workspace_policy ON blueprint_migration_batches USING (workspace_id = catalog_workspace_id()) WITH CHECK (workspace_id = catalog_workspace_id());
-CREATE POLICY entity_blueprint_migrations_workspace_policy ON entity_blueprint_migrations USING (workspace_id = catalog_workspace_id()) WITH CHECK (workspace_id = catalog_workspace_id());

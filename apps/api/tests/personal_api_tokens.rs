@@ -4,6 +4,36 @@ use chrono::{Duration, Utc};
 use sha2::{Digest, Sha256};
 use support::*;
 
+async fn insert_personal_api_token(
+    pool: &PgPool,
+    token_id: Uuid,
+    user_id: Uuid,
+    workspace_id: Uuid,
+    label: &str,
+    secret: &str,
+    expires_at: Option<chrono::DateTime<Utc>>,
+) {
+    sqlx::query(
+        "INSERT INTO personal_api_tokens (id, user_id, workspace_id, label, token_digest, expires_at) VALUES ($1, $2, $3, $4, $5, $6)",
+    )
+    .bind(token_id)
+    .bind(user_id)
+    .bind(workspace_id)
+    .bind(label)
+    .bind(Sha256::digest(secret.as_bytes()).as_slice())
+    .bind(expires_at)
+    .execute(pool)
+    .await
+    .unwrap();
+    sqlx::query(
+        "INSERT INTO personal_api_token_permissions (token_id, permission_code) VALUES ($1, 'contexts.read')",
+    )
+    .bind(token_id)
+    .execute(pool)
+    .await
+    .unwrap();
+}
+
 #[sqlx::test]
 async fn personal_api_tokens_are_one_time_secrets_and_enforce_permission_subsets(pool: PgPool) {
     let (base_url, server) = start_server(pool.clone()).await;
@@ -125,17 +155,16 @@ async fn expired_tokens_fail_and_token_auth_still_obeys_scoped_grants(pool: PgPo
         .bind(Uuid::new_v4()).bind(workspace_id).bind(membership_id).bind(child["id"].as_str().unwrap().parse::<Uuid>().unwrap()).execute(&pool).await.unwrap();
 
     let secret = "cat_pat_test_scoped";
-    sqlx::query("SELECT issue_personal_api_token($1, $2, $3, $4, $5, $6, $7)")
-        .bind(Uuid::new_v4())
-        .bind(user_id)
-        .bind(workspace_id)
-        .bind("scoped")
-        .bind(Sha256::digest(secret.as_bytes()).as_slice())
-        .bind(vec!["contexts.read"])
-        .bind(Option::<chrono::DateTime<Utc>>::None)
-        .execute(&pool)
-        .await
-        .unwrap();
+    insert_personal_api_token(
+        &pool,
+        Uuid::new_v4(),
+        user_id,
+        workspace_id,
+        "scoped",
+        secret,
+        None,
+    )
+    .await;
     let token = Client::builder()
         .default_headers({
             let mut h = reqwest::header::HeaderMap::new();
@@ -167,17 +196,16 @@ async fn expired_tokens_fail_and_token_auth_still_obeys_scoped_grants(pool: PgPo
     );
 
     let expired = "cat_pat_expired";
-    sqlx::query("SELECT issue_personal_api_token($1, $2, $3, $4, $5, $6, $7)")
-        .bind(Uuid::new_v4())
-        .bind(user_id)
-        .bind(workspace_id)
-        .bind("expired")
-        .bind(Sha256::digest(expired.as_bytes()).as_slice())
-        .bind(vec!["contexts.read"])
-        .bind(Utc::now() + Duration::seconds(1))
-        .execute(&pool)
-        .await
-        .unwrap();
+    insert_personal_api_token(
+        &pool,
+        Uuid::new_v4(),
+        user_id,
+        workspace_id,
+        "expired",
+        expired,
+        Some(Utc::now() + Duration::seconds(1)),
+    )
+    .await;
     tokio::time::sleep(std::time::Duration::from_secs(2)).await;
     let expired_client = Client::builder()
         .default_headers({
