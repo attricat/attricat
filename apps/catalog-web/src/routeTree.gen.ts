@@ -12,6 +12,7 @@ import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as DataHealthRouteImport } from './routes/data-health'
 import { Route as LoginRouteImport } from './routes/login'
+import { Route as ProfileRouteImport } from './routes/profile'
 import { Route as BlueprintsIndexRouteImport } from './routes/blueprints/index'
 import { Route as BlueprintsBlueprintIdRouteImport } from './routes/blueprints/$blueprintId'
 import { Route as ContextsIndexRouteImport } from './routes/contexts/index'
@@ -25,7 +26,6 @@ import { Route as WorkspaceIndexRouteImport } from './routes/workspace/index'
 import { Route as WorkspaceInvitationsRouteImport } from './routes/workspace/invitations'
 import { Route as WorkspaceMembersRouteImport } from './routes/workspace/members'
 import { Route as WorkspaceRolesRouteImport } from './routes/workspace/roles'
-import { Route as WorkspaceTokensRouteImport } from './routes/workspace/tokens'
 import { Route as EntitiesEntityIdIndexRouteImport } from './routes/entities/$entityId/index'
 import { Route as EntitiesEntityIdEditRouteImport } from './routes/entities/$entityId/edit'
 import { Route as EntitiesEntityIdMigrateRouteImport } from './routes/entities/$entityId/migrate'
@@ -43,6 +43,11 @@ const DataHealthRoute = DataHealthRouteImport.update({
 const LoginRoute = LoginRouteImport.update({
   id: '/login',
   path: '/login',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ProfileRoute = ProfileRouteImport.update({
+  id: '/profile',
+  path: '/profile',
   getParentRoute: () => rootRouteImport,
 } as any)
 const BlueprintsIndexRoute = BlueprintsIndexRouteImport.update({
@@ -110,11 +115,6 @@ const WorkspaceRolesRoute = WorkspaceRolesRouteImport.update({
   path: '/workspace/roles',
   getParentRoute: () => rootRouteImport,
 } as any)
-const WorkspaceTokensRoute = WorkspaceTokensRouteImport.update({
-  id: '/workspace/tokens',
-  path: '/workspace/tokens',
-  getParentRoute: () => rootRouteImport,
-} as any)
 const EntitiesEntityIdIndexRoute = EntitiesEntityIdIndexRouteImport.update({
   id: '/',
   path: '/',
@@ -135,6 +135,7 @@ export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/data-health': typeof DataHealthRoute
   '/login': typeof LoginRouteWithChildren
+  '/profile': typeof ProfileRoute
   '/blueprints/$blueprintId': typeof BlueprintsBlueprintIdRoute
   '/contexts/new': typeof ContextsNewRoute
   '/entities/$entityId': typeof EntitiesEntityIdRouteWithChildren
@@ -144,7 +145,6 @@ export interface FileRoutesByFullPath {
   '/workspace/invitations': typeof WorkspaceInvitationsRoute
   '/workspace/members': typeof WorkspaceMembersRoute
   '/workspace/roles': typeof WorkspaceRolesRoute
-  '/workspace/tokens': typeof WorkspaceTokensRoute
   '/blueprints/': typeof BlueprintsIndexRoute
   '/contexts/': typeof ContextsIndexRoute
   '/login/': typeof LoginIndexRoute
@@ -156,6 +156,7 @@ export interface FileRoutesByFullPath {
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/data-health': typeof DataHealthRoute
+  '/profile': typeof ProfileRoute
   '/blueprints/$blueprintId': typeof BlueprintsBlueprintIdRoute
   '/contexts/new': typeof ContextsNewRoute
   '/entities/new': typeof EntitiesNewRoute
@@ -164,7 +165,6 @@ export interface FileRoutesByTo {
   '/workspace/invitations': typeof WorkspaceInvitationsRoute
   '/workspace/members': typeof WorkspaceMembersRoute
   '/workspace/roles': typeof WorkspaceRolesRoute
-  '/workspace/tokens': typeof WorkspaceTokensRoute
   '/blueprints': typeof BlueprintsIndexRoute
   '/contexts': typeof ContextsIndexRoute
   '/login': typeof LoginIndexRoute
@@ -178,6 +178,7 @@ export interface FileRoutesById {
   '/': typeof IndexRoute
   '/data-health': typeof DataHealthRoute
   '/login': typeof LoginRouteWithChildren
+  '/profile': typeof ProfileRoute
   '/blueprints/$blueprintId': typeof BlueprintsBlueprintIdRoute
   '/contexts/new': typeof ContextsNewRoute
   '/entities/$entityId': typeof EntitiesEntityIdRouteWithChildren
@@ -187,7 +188,6 @@ export interface FileRoutesById {
   '/workspace/invitations': typeof WorkspaceInvitationsRoute
   '/workspace/members': typeof WorkspaceMembersRoute
   '/workspace/roles': typeof WorkspaceRolesRoute
-  '/workspace/tokens': typeof WorkspaceTokensRoute
   '/blueprints/': typeof BlueprintsIndexRoute
   '/contexts/': typeof ContextsIndexRoute
   '/login/': typeof LoginIndexRoute
@@ -202,6 +202,7 @@ export interface FileRouteTypes {
     | '/'
     | '/data-health'
     | '/login'
+    | '/profile'
     | '/blueprints/$blueprintId'
     | '/contexts/new'
     | '/entities/$entityId'
@@ -211,7 +212,6 @@ export interface FileRouteTypes {
     | '/workspace/invitations'
     | '/workspace/members'
     | '/workspace/roles'
-    | '/workspace/tokens'
     | '/blueprints/'
     | '/contexts/'
     | '/login/'
@@ -223,6 +223,7 @@ export interface FileRouteTypes {
   to:
     | '/'
     | '/data-health'
+    | '/profile'
     | '/blueprints/$blueprintId'
     | '/contexts/new'
     | '/entities/new'
@@ -231,7 +232,6 @@ export interface FileRouteTypes {
     | '/workspace/invitations'
     | '/workspace/members'
     | '/workspace/roles'
-    | '/workspace/tokens'
     | '/blueprints'
     | '/contexts'
     | '/login'
@@ -244,6 +244,7 @@ export interface FileRouteTypes {
     | '/'
     | '/data-health'
     | '/login'
+    | '/profile'
     | '/blueprints/$blueprintId'
     | '/contexts/new'
     | '/entities/$entityId'
@@ -253,7 +254,6 @@ export interface FileRouteTypes {
     | '/workspace/invitations'
     | '/workspace/members'
     | '/workspace/roles'
-    | '/workspace/tokens'
     | '/blueprints/'
     | '/contexts/'
     | '/login/'
@@ -267,6 +267,7 @@ export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   DataHealthRoute: typeof DataHealthRoute
   LoginRoute: typeof LoginRouteWithChildren
+  ProfileRoute: typeof ProfileRoute
   BlueprintsBlueprintIdRoute: typeof BlueprintsBlueprintIdRoute
   ContextsNewRoute: typeof ContextsNewRoute
   EntitiesEntityIdRoute: typeof EntitiesEntityIdRouteWithChildren
@@ -275,7 +276,6 @@ export interface RootRouteChildren {
   WorkspaceInvitationsRoute: typeof WorkspaceInvitationsRoute
   WorkspaceMembersRoute: typeof WorkspaceMembersRoute
   WorkspaceRolesRoute: typeof WorkspaceRolesRoute
-  WorkspaceTokensRoute: typeof WorkspaceTokensRoute
   BlueprintsIndexRoute: typeof BlueprintsIndexRoute
   ContextsIndexRoute: typeof ContextsIndexRoute
   WorkspaceIndexRoute: typeof WorkspaceIndexRoute
@@ -302,6 +302,13 @@ declare module '@tanstack/react-router' {
       path: '/login'
       fullPath: '/login'
       preLoaderRoute: typeof LoginRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/profile': {
+      id: '/profile'
+      path: '/profile'
+      fullPath: '/profile'
+      preLoaderRoute: typeof ProfileRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/blueprints/': {
@@ -395,13 +402,6 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof WorkspaceRolesRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/workspace/tokens': {
-      id: '/workspace/tokens'
-      path: '/workspace/tokens'
-      fullPath: '/workspace/tokens'
-      preLoaderRoute: typeof WorkspaceTokensRouteImport
-      parentRoute: typeof rootRouteImport
-    }
     '/entities/$entityId/': {
       id: '/entities/$entityId/'
       path: '/'
@@ -457,6 +457,7 @@ const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   DataHealthRoute: DataHealthRoute,
   LoginRoute: LoginRouteWithChildren,
+  ProfileRoute: ProfileRoute,
   BlueprintsBlueprintIdRoute: BlueprintsBlueprintIdRoute,
   ContextsNewRoute: ContextsNewRoute,
   EntitiesEntityIdRoute: EntitiesEntityIdRouteWithChildren,
@@ -465,7 +466,6 @@ const rootRouteChildren: RootRouteChildren = {
   WorkspaceInvitationsRoute: WorkspaceInvitationsRoute,
   WorkspaceMembersRoute: WorkspaceMembersRoute,
   WorkspaceRolesRoute: WorkspaceRolesRoute,
-  WorkspaceTokensRoute: WorkspaceTokensRoute,
   BlueprintsIndexRoute: BlueprintsIndexRoute,
   ContextsIndexRoute: ContextsIndexRoute,
   WorkspaceIndexRoute: WorkspaceIndexRoute,

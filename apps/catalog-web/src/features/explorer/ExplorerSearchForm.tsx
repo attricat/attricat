@@ -71,7 +71,7 @@ export const ExplorerSearchForm = ({ blueprints, search, onSubmit }: Props) => {
         <form.Field name="version">
           {(field) => (
             <TextField
-              inputProps={{ min: 1, step: 1 }}
+              slotProps={{ htmlInput: { min: 1, step: 1 } }}
               label="Version"
               onChange={(event) => field.handleChange(event.target.value)}
               type="number"

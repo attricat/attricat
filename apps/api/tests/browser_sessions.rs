@@ -59,22 +59,26 @@ async fn login_rotates_sessions_and_csrf_protects_mutations(pool: PgPool) {
             .iter()
             .any(|value| value.to_str().unwrap().contains("HttpOnly"))
     );
-    assert_eq!(
-        login.json::<Value>().await.unwrap()["login_identifier"],
-        json!("default.local")
-    );
+    let login: Value = login.json().await.unwrap();
+    assert_eq!(login["login_identifier"], "default.local");
+    assert_eq!(login["email"], "api-test-owner@example.test");
+    assert!(login.get("display_name").is_some());
     let cookie = format!("{session}; {csrf}");
-    let current = client
+    let current: Value = client
         .get(format!("{base_url}/auth/session"))
         .header("cookie", &cookie)
         .send()
         .await
+        .unwrap()
+        .error_for_status()
+        .unwrap()
+        .json()
+        .await
         .unwrap();
-    assert_eq!(current.status(), StatusCode::OK);
-    assert_eq!(
-        current.json::<Value>().await.unwrap()["login_identifier"],
-        json!("default.local")
-    );
+    assert_eq!(current["user_id"], OWNER_ID);
+    assert_eq!(current["email"], "api-test-owner@example.test");
+    assert!(current.get("display_name").is_some());
+    assert_eq!(current["login_identifier"], "default.local");
     assert_eq!(
         client
             .post(format!("{base_url}/data-health/refresh"))

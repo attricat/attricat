@@ -41,6 +41,8 @@ pub(super) struct DiscoveryResponse {
 #[derive(Serialize)]
 pub(super) struct SessionResponse {
     user_id: Uuid,
+    display_name: Option<String>,
+    email: String,
     /// The workspace resolved by the server and bound to this session.
     workspace_id: Uuid,
     /// The human-facing identifier for the session-bound workspace.
@@ -257,8 +259,11 @@ async fn session_response_payload_with_identifier(
     workspace_id: Uuid,
     login_identifier: String,
 ) -> Result<SessionResponse, ApiError> {
+    let account = state.repository.user_account(user_id).await?;
     Ok(SessionResponse {
         user_id,
+        display_name: account.display_name,
+        email: account.email,
         workspace_id,
         login_identifier,
         capabilities: session_capabilities(state, user_id, workspace_id).await?,

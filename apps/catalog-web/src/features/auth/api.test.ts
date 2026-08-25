@@ -3,6 +3,8 @@ import { currentSession, login } from './api';
 
 const session = {
   user_id: '123e4567-e89b-12d3-a456-426614174000',
+  display_name: null,
+  email: 'user@example.test',
   workspace_id: '223e4567-e89b-12d3-a456-426614174000',
   login_identifier: 'example.local',
 };

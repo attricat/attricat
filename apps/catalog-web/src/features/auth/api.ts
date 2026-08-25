@@ -3,6 +3,8 @@ import { apiFetch } from './request';
 
 const sessionSchema = z.object({
   user_id: z.uuid(),
+  display_name: z.string().nullable(),
+  email: z.string().email(),
   workspace_id: z.uuid(),
   login_identifier: z.string(),
   capabilities: z

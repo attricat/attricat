@@ -47,6 +47,12 @@ pub(crate) use members::{WorkspaceInvitation, WorkspaceMember};
 pub(crate) use roles::{Permission, WorkspaceGrantTarget, WorkspaceRole};
 pub(crate) use tokens::PersonalApiToken;
 
+#[derive(Debug, sqlx::FromRow)]
+pub struct UserAccount {
+    pub display_name: Option<String>,
+    pub email: String,
+}
+
 #[derive(Clone)]
 /// The stable catalog persistence facade. Feature modules add inherent methods
 /// here so HTTP handlers and other callers do not depend on storage internals.
@@ -240,6 +246,16 @@ impl CatalogRepository {
         .execute(&self.pool)
         .await?;
         Ok(())
+    }
+
+    /// Returns only the authenticated principal's account fields. Callers must
+    /// derive `user_id` from authentication rather than accepting it from a request.
+    pub async fn user_account(&self, user_id: Uuid) -> Result<UserAccount, RepositoryError> {
+        sqlx::query_as("SELECT display_name, email FROM users WHERE id = $1")
+            .bind(user_id)
+            .fetch_one(&self.pool)
+            .await
+            .map_err(RepositoryError::from)
     }
 
     pub async fn is_active_principal(
