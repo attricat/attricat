@@ -44,6 +44,18 @@ impl CatalogRepository {
         .map_err(RepositoryError::from)
     }
 
+    pub async fn workspace_login_identifier(
+        &self,
+        workspace_id: Uuid,
+    ) -> Result<String, RepositoryError> {
+        Ok(
+            sqlx::query_scalar("SELECT login_identifier FROM workspaces WHERE id = $1")
+                .bind(workspace_id)
+                .fetch_one(&self.pool)
+                .await?,
+        )
+    }
+
     pub async fn reserve_workspace_discovery_attempt(
         &self,
         key: &SessionDigest,

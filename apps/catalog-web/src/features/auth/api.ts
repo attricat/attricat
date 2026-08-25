@@ -6,6 +6,7 @@ const sessionSchema = z.object({
   display_name: z.string().nullable(),
   email: z.string().email(),
   workspace_id: z.uuid(),
+  login_identifier: z.string(),
   capabilities: z
     .object({
       members_manage: z.boolean(),

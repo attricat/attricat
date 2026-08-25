@@ -81,6 +81,12 @@ export type GrantTarget = z.infer<typeof grantTargetSchema>;
 export type ScopeType = z.infer<typeof scopeTypeSchema>;
 export type GrantInput = z.infer<typeof grantInputSchema>;
 
+export const selectedScopeTarget = (
+  scopeType: ScopeType,
+  scopeTargetId: string,
+  workspaceId: string | undefined,
+) => (scopeType === 'workspace' ? (workspaceId ?? '') : scopeTargetId);
+
 export const ensureActiveScopeTarget = (
   input: GrantInput,
   workspaceId: string | undefined,
