@@ -4,6 +4,7 @@ import {
   createEntityBlueprint,
   createRevision,
   publishRevision,
+  relationship,
   scalar,
   suffix,
 } from './helpers';
@@ -45,6 +46,69 @@ test('shows explorer empty states and configured table fields', async ({
     page.getByRole('cell', { name: 'Table product' }).first(),
   ).toBeVisible();
   await expect(page.getByText('12', { exact: true })).toBeVisible();
+});
+
+test('filters explorer results with a relationship hierarchy facet', async ({
+  page,
+}) => {
+  const categoryCode = `facet_category_${suffix()}`;
+  const productCode = `facet_product_${suffix()}`;
+  const category = await createEntityBlueprint(
+    categoryCode,
+    'Facet categories',
+    `[[attributes]]
+code = "title"
+value_type = "string"
+
+[[attributes]]
+code = "parent"
+value_type = "relationship"
+target_blueprint = "${categoryCode}"`,
+  );
+  const parent = await createEntity(category, [scalar('title', 'Departments')]);
+  const child = await createEntity(category, [
+    scalar('title', 'Shoes'),
+    relationship('parent', parent.id),
+  ]);
+  const other = await createEntity(category, [scalar('title', 'Accessories')]);
+  const product = await createEntityBlueprint(
+    productCode,
+    'Faceted products',
+    `[[attributes]]
+code = "title"
+value_type = "string"
+tags = ["searchable"]
+
+[[attributes]]
+code = "category"
+value_type = "relationship"
+target_blueprint = "${categoryCode}"`,
+  );
+  await createEntity(product, [
+    scalar('title', 'Running shoe'),
+    relationship('category', child.id),
+  ]);
+  await createEntity(product, [
+    scalar('title', 'Canvas bag'),
+    relationship('category', other.id),
+  ]);
+
+  await page.goto(`/?blueprint=${productCode}`);
+  await expect(page.getByText('2 results')).toBeVisible();
+  await page.getByLabel('Relationship').click();
+  await page.getByRole('option', { name: 'category' }).click();
+  await expect(
+    page.getByRole('checkbox', { name: 'Departments (1)' }),
+  ).toBeVisible();
+  await page.getByRole('button', { name: 'Expand Departments' }).click();
+  await page.getByRole('checkbox', { name: 'Shoes (1)' }).check();
+
+  await expect
+    .poll(() => new URL(page.url()).searchParams.get('categories'))
+    .toBe(JSON.stringify([child.id]));
+  await expect(page.getByText('1 result')).toBeVisible();
+  await expect(page.getByRole('cell', { name: 'Running shoe' })).toBeVisible();
+  await expect(page.getByRole('cell', { name: 'Canvas bag' })).toBeHidden();
 });
 
 test('loads additional explorer search pages', async ({ page }) => {

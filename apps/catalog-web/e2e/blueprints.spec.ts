@@ -6,6 +6,45 @@ import {
   suffix,
 } from './helpers';
 
+test('previews blueprint views and inspects revision metadata', async ({
+  page,
+}) => {
+  const code = `preview_${suffix()}`;
+  const blueprint = await createEntityBlueprint(
+    code,
+    'Preview product',
+    '[[attributes]]\ncode = "title"\nvalue_type = "string"',
+    {
+      entitySchema:
+        '{"type":"object","required":["title"],"properties":{"title":{"type":"string"}}}',
+      views:
+        '[views.edit]\ntype = "stack"\nchildren = [{ type = "field", field = "title" }]\n\n[views.detail]\ntype = "stack"\nchildren = [{ type = "heading", text = "Preview detail" }, { type = "field", field = "title" }]\n\n[views.table]\ntype = "table"\nfields = ["title"]',
+    },
+  );
+
+  await page.goto(`/blueprints/${blueprint.blueprint.id}`);
+  await page.getByRole('tab', { name: 'Views' }).click();
+  await expect(
+    page.getByText('Sandbox values stay in this page and are never saved.'),
+  ).toBeVisible();
+  await page.getByRole('tab', { name: 'edit', exact: true }).click();
+  await page.getByLabel('title').fill('Sandbox title');
+  await page.getByRole('tab', { name: 'detail', exact: true }).click();
+  await expect(
+    page.getByRole('heading', { name: 'Preview detail' }),
+  ).toBeVisible();
+  await expect(page.getByText('Sandbox title')).toBeVisible();
+  await page.getByRole('tab', { name: 'table', exact: true }).click();
+  await expect(page.getByRole('cell', { name: 'Sandbox title' })).toBeVisible();
+
+  await page.getByRole('tab', { name: 'View definition' }).click();
+  await expect(page.getByText(/"detail"/)).toBeVisible();
+  await page.getByRole('tab', { name: 'Entity schema' }).click();
+  await expect(page.getByText(/"required"/)).toBeVisible();
+  await page.getByRole('tab', { name: 'Includes' }).click();
+  await expect(page.getByText('[]')).toBeVisible();
+});
+
 test('browses, filters, and compares blueprint revisions', async ({ page }) => {
   const code = `catalogue_${suffix()}`;
   const first = await createEntityBlueprint(
