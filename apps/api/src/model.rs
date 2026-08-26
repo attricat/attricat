@@ -107,12 +107,7 @@ pub struct CreateBlueprint {
 pub struct CreateAttributeContext {
     pub code: String,
     pub data: Value,
-    #[serde(default = "default_context_id")]
-    pub parent_id: Uuid,
-}
-
-fn default_context_id() -> Uuid {
-    Uuid::from_u128(0x00000000000040008000000000000001)
+    pub parent_id: Option<Uuid>,
 }
 
 #[derive(Clone, Debug, Deserialize)]

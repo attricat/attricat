@@ -49,6 +49,26 @@ async fn workspace_scoped_repository_hides_other_workspace_catalog_rows(pool: Pg
             .id,
         other_context
     );
+
+    let bootstrap_default = bootstrap
+        .get_context_by_code("default")
+        .await
+        .unwrap()
+        .unwrap();
+    let other_default = other.get_context_by_code("default").await.unwrap().unwrap();
+    assert_ne!(bootstrap_default.id, other_default.id);
+    assert!(bootstrap_default.parent_id.is_none());
+    assert!(other_default.parent_id.is_none());
+    assert_eq!(
+        other
+            .list_contexts()
+            .await
+            .unwrap()
+            .iter()
+            .filter(|context| context.code == "default")
+            .count(),
+        1
+    );
 }
 
 #[sqlx::test]

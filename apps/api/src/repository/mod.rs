@@ -164,7 +164,6 @@ impl RepositoryError {
 }
 
 impl CatalogRepository {
-    const DEFAULT_CONTEXT_ID: Uuid = Uuid::from_u128(0x00000000000040008000000000000001);
     const DEFAULT_WORKSPACE_ID: Uuid = Uuid::from_u128(0x00000000000040008000000000000002);
 
     pub fn new(pool: PgPool) -> Self {
@@ -192,6 +191,7 @@ impl CatalogRepository {
     /// server-derived workspace by the connection's RLS setting.
     pub async fn for_workspace(&self, workspace_id: Uuid) -> Result<Self, RepositoryError> {
         let Some(cache) = &self.workspace_pools else {
+            self.ensure_default_context(workspace_id).await?;
             return Ok(Self {
                 pool: self.pool.clone(),
                 workspace_id: Some(workspace_id),
@@ -208,6 +208,7 @@ impl CatalogRepository {
                 audit_context: self.audit_context.clone(),
             });
         }
+        self.ensure_default_context(workspace_id).await?;
         if pools.len() >= MAX_WORKSPACE_POOLS {
             if let Some(workspace_id) = pools.keys().next().copied() {
                 if let Some(pool) = pools.remove(&workspace_id) {
@@ -227,6 +228,21 @@ impl CatalogRepository {
             workspace_pools: self.workspace_pools.clone(),
             audit_context: self.audit_context.clone(),
         })
+    }
+
+    async fn ensure_default_context(&self, workspace_id: Uuid) -> Result<(), RepositoryError> {
+        sqlx::query(
+            r#"INSERT INTO attribute_contexts (id, workspace_id, code, data, parent_id)
+               SELECT $1, id, 'default', '{}'::jsonb, NULL
+               FROM workspaces
+               WHERE id = $2 AND deleted_at IS NULL
+               ON CONFLICT (workspace_id, code) DO NOTHING"#,
+        )
+        .bind(Uuid::new_v4())
+        .bind(workspace_id)
+        .execute(&self.pool)
+        .await?;
+        Ok(())
     }
 
     pub async fn purge_value_history(&self, retention_days: i64) -> Result<(), RepositoryError> {
