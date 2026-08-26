@@ -1,0 +1,184 @@
+use axum::http::Method;
+use uuid::Uuid;
+
+#[derive(Clone, Copy)]
+pub(super) struct Policy {
+    pub(super) permission: &'static str,
+    pub(super) target: TargetKind,
+}
+
+#[derive(Clone, Copy)]
+pub(super) enum TargetKind {
+    None,
+    BlueprintId,
+    BlueprintCode,
+    EntityId,
+    ContextId,
+    ContextCode,
+    ContextList,
+}
+
+pub(super) fn policy(method: &Method, path: &str) -> Option<Policy> {
+    let read = |target| Policy {
+        permission: "entities.read",
+        target,
+    };
+    let write = |target| Policy {
+        permission: "entities.write",
+        target,
+    };
+    let blueprint = if method == Method::GET {
+        "blueprints.read"
+    } else if path.ends_with("/publish") {
+        "blueprints.publish"
+    } else {
+        "blueprints.write"
+    };
+    if path == "/workspace/invitations/accept" {
+        return None;
+    }
+    if path == "/workspace/assignable-roles" || path.starts_with("/workspace/grant-targets/") {
+        return Some(Policy {
+            permission: "members.manage",
+            target: TargetKind::None,
+        });
+    }
+    if path == "/workspace/token-permissions" {
+        return Some(Policy {
+            permission: "tokens.manage",
+            target: TargetKind::None,
+        });
+    }
+    if path == "/workspace/roles"
+        || path == "/workspace/permissions"
+        || path.starts_with("/workspace/roles/")
+    {
+        return Some(Policy {
+            permission: "roles.manage",
+            target: TargetKind::None,
+        });
+    }
+    if path == "/workspace/users"
+        || path == "/workspace/members"
+        || path.starts_with("/workspace/members/")
+        || path == "/workspace/invitations"
+        || path.starts_with("/workspace/invitations/")
+    {
+        return Some(Policy {
+            permission: "members.manage",
+            target: TargetKind::None,
+        });
+    }
+    if path == "/personal-access-tokens" || path.starts_with("/personal-access-tokens/") {
+        return Some(Policy {
+            permission: "tokens.manage",
+            target: TargetKind::None,
+        });
+    }
+    if path == "/metrics" || path.starts_with("/data-health/") {
+        return Some(Policy {
+            permission: "data_health.read",
+            target: TargetKind::None,
+        });
+    }
+    if path.starts_with("/blueprints/by-code/{code}") {
+        return Some(Policy {
+            permission: blueprint,
+            target: TargetKind::BlueprintCode,
+        });
+    }
+    if path.starts_with("/blueprints/{blueprint_id}") {
+        return Some(Policy {
+            permission: blueprint,
+            target: TargetKind::BlueprintId,
+        });
+    }
+    if path == "/blueprints" || path == "/blueprints/catalogue" {
+        return Some(Policy {
+            permission: blueprint,
+            target: TargetKind::None,
+        });
+    }
+    if path == "/contexts/{code}" {
+        return Some(Policy {
+            permission: if method == Method::GET {
+                "contexts.read"
+            } else {
+                "contexts.write"
+            },
+            target: TargetKind::ContextCode,
+        });
+    }
+    if path == "/contexts/id/{id}" {
+        return Some(Policy {
+            permission: if method == Method::GET {
+                "contexts.read"
+            } else {
+                "contexts.write"
+            },
+            target: TargetKind::ContextId,
+        });
+    }
+    if path == "/contexts" {
+        return Some(Policy {
+            permission: if method == Method::GET {
+                "contexts.read"
+            } else {
+                "contexts.write"
+            },
+            target: if method == Method::GET {
+                TargetKind::ContextList
+            } else {
+                TargetKind::None
+            },
+        });
+    }
+    if path.starts_with("/v1/entities/{entity_id}") || path.starts_with("/entities/{entity_id}") {
+        return Some(if method == Method::DELETE {
+            Policy {
+                permission: "entities.delete",
+                target: TargetKind::EntityId,
+            }
+        } else if method == Method::GET {
+            read(TargetKind::EntityId)
+        } else {
+            write(TargetKind::EntityId)
+        });
+    }
+    if path == "/v1/entities" {
+        return Some(write(TargetKind::None));
+    }
+    if path == "/v1/entities/search"
+        || path == "/v1/entities/facets/relationship-tree/children"
+        || path == "/entities"
+    {
+        return Some(read(TargetKind::None));
+    }
+    None
+}
+
+pub(super) fn target(path: &str, kind: TargetKind) -> (Option<Uuid>, Option<String>) {
+    let segments: Vec<_> = path
+        .split('/')
+        .filter(|segment| !segment.is_empty())
+        .collect();
+    match kind {
+        TargetKind::None => (None, None),
+        TargetKind::BlueprintId => (segments.get(1).and_then(|value| value.parse().ok()), None),
+        TargetKind::BlueprintCode => (None, segments.get(2).map(|value| (*value).to_owned())),
+        TargetKind::EntityId => {
+            let index = if segments.first() == Some(&"v1") {
+                2
+            } else {
+                1
+            };
+            (
+                segments.get(index).and_then(|value| value.parse().ok()),
+                None,
+            )
+        }
+        TargetKind::ContextId => (segments.get(2).and_then(|value| value.parse().ok()), None),
+        TargetKind::ContextCode => (None, segments.get(1).map(|value| (*value).to_owned())),
+        TargetKind::ContextList => (None, Some("__context_list__".to_owned())),
+    }
+}

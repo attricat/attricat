@@ -3,6 +3,12 @@ use std::{net::SocketAddr, str::FromStr, sync::Arc};
 use api::{
     MIGRATOR,
     account::{Password, hash_password},
+    constants::{
+        DEFAULT_DATA_HEALTH_CACHE_TTL_SECONDS, DEFAULT_ENTITY_PAGE_SIZE,
+        DEFAULT_INCOMING_RELATIONSHIP_PAGE_SIZE, DEFAULT_PREVIEW_RELATIONSHIP_DEPTH,
+        DEFAULT_PREVIEW_RELATIONSHIP_ITEMS, DEFAULT_RELATIONSHIP_FACET_NODES,
+        MAINTENANCE_POOL_CONNECTIONS, REQUEST_POOL_CONNECTIONS,
+    },
     http::{AppState, router},
     mail::SmtpMailDelivery,
     repository::CatalogRepository,
@@ -23,19 +29,19 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         .unwrap_or_else(|_| "127.0.0.1:3000".to_owned())
         .parse()?;
     let max_preview_relationship_depth = std::env::var("PREVIEW_MAX_RELATIONSHIP_DEPTH")
-        .unwrap_or_else(|_| "3".to_owned())
+        .unwrap_or_else(|_| DEFAULT_PREVIEW_RELATIONSHIP_DEPTH.to_string())
         .parse()?;
     let max_preview_relationship_items = std::env::var("PREVIEW_MAX_RELATIONSHIP_ITEMS")
-        .unwrap_or_else(|_| "10".to_owned())
+        .unwrap_or_else(|_| DEFAULT_PREVIEW_RELATIONSHIP_ITEMS.to_string())
         .parse()?;
     let max_entity_page_size = std::env::var("ENTITY_MAX_PAGE_SIZE")
-        .unwrap_or_else(|_| "100".to_owned())
+        .unwrap_or_else(|_| DEFAULT_ENTITY_PAGE_SIZE.to_string())
         .parse()?;
     let max_incoming_relationship_page_size = std::env::var("INCOMING_RELATIONSHIP_MAX_PAGE_SIZE")
-        .unwrap_or_else(|_| "50".to_owned())
+        .unwrap_or_else(|_| DEFAULT_INCOMING_RELATIONSHIP_PAGE_SIZE.to_string())
         .parse()?;
     let max_relationship_facet_nodes = std::env::var("RELATIONSHIP_FACET_MAX_NODES")
-        .unwrap_or_else(|_| "100".to_owned())
+        .unwrap_or_else(|_| DEFAULT_RELATIONSHIP_FACET_NODES.to_string())
         .parse()?;
     let workspace_id = std::env::var("CATALOG_WORKSPACE_ID")
         .unwrap_or_else(|_| "00000000-0000-4000-8000-000000000002".to_owned())
@@ -61,7 +67,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     // connections are deliberately created only after that work is complete
     // and switch to the non-owner role provisioned by the tenancy migration.
     let maintenance_pool = PgPoolOptions::new()
-        .max_connections(1)
+        .max_connections(MAINTENANCE_POOL_CONNECTIONS)
         .connect(&database_url)
         .await?;
     tracing::info!("running database migrations");
@@ -125,7 +131,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     // workspace from the credential or browser session.
     let connect_options = PgConnectOptions::from_str(&database_url)?;
     let pool = PgPoolOptions::new()
-        .max_connections(5)
+        .max_connections(REQUEST_POOL_CONNECTIONS)
         .connect_with(connect_options.clone())
         .await?;
 
@@ -166,7 +172,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
             max_incoming_relationship_page_size,
             max_relationship_facet_nodes,
             data_health_cache_ttl_seconds: std::env::var("DATA_HEALTH_CACHE_TTL_SECONDS")
-                .unwrap_or_else(|_| "300".to_owned())
+                .unwrap_or_else(|_| DEFAULT_DATA_HEALTH_CACHE_TTL_SECONDS.to_string())
                 .parse()?,
             data_health_cache: Default::default(),
             session_cookie_secure: std::env::var("SESSION_COOKIE_SECURE")
