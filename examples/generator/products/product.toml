@@ -17,7 +17,7 @@ separator = " / "
 [views.detail]
 type = "stack"
 children = [
-  { type = "stack", component = { id = "catalog.entity_heading", version = 1 }, children = [{ type = "field", field = "title" }, { type = "text", text = "Generated catalog product" }] },
+  { type = "stack", component = { id = "catalog.entity_heading", version = 1 }, children = [{ type = "field", field = "title" }, { type = "text", text = "Alder & Row collection" }] },
   { type = "section", children = [{ type = "grid", children = [{ type = "field", field = "price", component = { id = "catalog.field_display", version = 1 } }, { type = "field", field = "stock_on_hand" }] }] },
   { type = "tabs", tabs = [{ label = "Availability", children = [{ type = "accordion", sections = [{ label = "Schedule", children = [{ type = "field", field = "available_on" }, { type = "field", field = "released_at" }, { type = "field", field = "order_cutoff" }] }] }] }] },
   { type = "divider" },
@@ -63,7 +63,7 @@ context_fallback = "none"
 [[attributes]]
 code = "price"
 value_type = "number"
-value_schema = '{"type":"number","minimum":100}'
+value_schema = '{"type":"number","minimum":10}'
 
 [[attributes]]
 code = "stock_on_hand"
@@ -93,6 +93,10 @@ value_type = "time"
 [[attributes]]
 code = "meta_title"
 from = "seo.meta_title"
+
+[[attributes]]
+code = "meta_description"
+from = "seo.meta_description"
 
 [[attributes]]
 code = "categories"

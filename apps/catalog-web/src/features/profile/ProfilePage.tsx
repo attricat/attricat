@@ -19,11 +19,41 @@ import {
 } from '@mui/material';
 import { useState } from 'react';
 import { currentSession } from '../auth/api';
-import { createToken, listTokenPermissions, listTokens, revokeToken } from './api';
+import {
+  createToken,
+  listTokenPermissions,
+  listTokens,
+  revokeToken,
+} from './api';
 import { profileQueryKeys } from './query-keys';
 
 const formatTime = (value: string | null) =>
   value ? new Date(value).toLocaleString() : 'Never';
+
+const tokenPermissionPresets = [
+  {
+    name: 'Catalog generator',
+    description: 'Seed blueprints, contexts, products, and relationships.',
+    permissions: [
+      'blueprints.read',
+      'blueprints.write',
+      'blueprints.publish',
+      'contexts.read',
+      'contexts.write',
+      'entities.write',
+    ],
+  },
+  {
+    name: 'Read-only catalog',
+    description: 'Browse blueprints, contexts, and products without changes.',
+    permissions: ['blueprints.read', 'contexts.read', 'entities.read'],
+  },
+  {
+    name: 'Entity importer',
+    description: 'Read catalog structure and create or update products.',
+    permissions: ['blueprints.read', 'contexts.read', 'entities.write'],
+  },
+];
 
 const SecretDialog = ({
   secret,
@@ -169,30 +199,70 @@ const PersonalTokens = ({ canManage }: { canManage: boolean }) => {
             )}
           </form.Field>
           <form.Field name="permissions">
-            {(field) => (
-              <>
-                {permissions.data?.map((permission) => (
-                  <FormControlLabel
-                    control={
-                      <Checkbox
-                        checked={field.state.value.includes(permission.code)}
-                        onChange={(event) =>
-                          field.handleChange(
-                            event.target.checked
-                              ? [...field.state.value, permission.code]
-                              : field.state.value.filter(
-                                  (code) => code !== permission.code,
-                                ),
+            {(field) => {
+              const availablePermissions = new Set(
+                permissions.data?.map((permission) => permission.code),
+              );
+              return (
+                <>
+                  <Typography variant="subtitle2">
+                    Permission presets
+                  </Typography>
+                  <Stack direction={{ sm: 'row', xs: 'column' }} spacing={1}>
+                    {tokenPermissionPresets.map((preset) => {
+                      const unavailable = permissions.data
+                        ? preset.permissions.some(
+                            (code) => !availablePermissions.has(code),
                           )
-                        }
-                      />
-                    }
-                    key={permission.code}
-                    label={permission.code}
-                  />
-                ))}
-              </>
-            )}
+                        : false;
+                      return (
+                        <Box key={preset.name} sx={{ flex: 1 }}>
+                          <Button
+                            disabled={!permissions.data || unavailable}
+                            fullWidth
+                            onClick={() =>
+                              field.handleChange(preset.permissions)
+                            }
+                            type="button"
+                            variant="outlined"
+                          >
+                            {preset.name}
+                          </Button>
+                          <Typography variant="caption">
+                            {unavailable
+                              ? 'Not available with your current grants.'
+                              : preset.description}
+                          </Typography>
+                        </Box>
+                      );
+                    })}
+                  </Stack>
+                  <Typography variant="subtitle2">
+                    Custom permissions
+                  </Typography>
+                  {permissions.data?.map((permission) => (
+                    <FormControlLabel
+                      control={
+                        <Checkbox
+                          checked={field.state.value.includes(permission.code)}
+                          onChange={(event) =>
+                            field.handleChange(
+                              event.target.checked
+                                ? [...field.state.value, permission.code]
+                                : field.state.value.filter(
+                                    (code) => code !== permission.code,
+                                  ),
+                            )
+                          }
+                        />
+                      }
+                      key={permission.code}
+                      label={permission.code}
+                    />
+                  ))}
+                </>
+              );
+            }}
           </form.Field>
           <form.Field name="expires_at">
             {(field) => (
@@ -223,11 +293,15 @@ export const ProfilePage = () => {
   return (
     <Box sx={{ maxWidth: 1000, mx: 'auto', p: 3 }}>
       <Typography variant="h4">Profile</Typography>
-      {session.isError && <Alert severity="error">{session.error.message}</Alert>}
+      {session.isError && (
+        <Alert severity="error">{session.error.message}</Alert>
+      )}
       <Stack spacing={3} sx={{ mt: 3 }}>
         <Paper sx={{ p: 2 }}>
           <Typography variant="h6">Account details</Typography>
-          <Typography>Display name: {account?.display_name ?? 'Not set'}</Typography>
+          <Typography>
+            Display name: {account?.display_name ?? 'Not set'}
+          </Typography>
           <Typography>Email: {account?.email ?? 'Loading…'}</Typography>
           <Typography>User ID: {account?.user_id ?? 'Loading…'}</Typography>
           <Typography>
@@ -238,7 +312,9 @@ export const ProfilePage = () => {
           <Typography gutterBottom variant="h5">
             Personal API tokens
           </Typography>
-          <PersonalTokens canManage={account?.capabilities?.tokens_manage === true} />
+          <PersonalTokens
+            canManage={account?.capabilities?.tokens_manage === true}
+          />
         </Box>
       </Stack>
     </Box>

@@ -9,7 +9,9 @@ export const WorkspaceLoginPage = () => {
   const navigate = useNavigate();
   const [error, setError] = useState<string>();
   const form = useForm({
-    defaultValues: { loginIdentifier: '' },
+    defaultValues: {
+      loginIdentifier: import.meta.env.DEV ? 'default.local' : '',
+    },
     onSubmit: async ({ value }) => {
       try {
         const workspace = await discoverWorkspace(value.loginIdentifier);

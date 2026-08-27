@@ -64,11 +64,14 @@ if (!portNames.every((name) => ports[name])) {
   ports = Object.fromEntries(
     portNames.map((name, index) => [name, values[index]]),
   );
-  writeFileSync(
-    stateFile,
-    `${portNames.map((name) => `${name}=${ports[name]}`).join("\n")}\n`,
-  );
 }
+
+const webUrl = `http://127.0.0.1:${ports.WEB_PORT}`;
+const mailpitUiUrl = `http://127.0.0.1:${ports.MAILPIT_UI_PORT}`;
+writeFileSync(
+  stateFile,
+  `${portNames.map((name) => `${name}=${ports[name]}`).join("\n")}\nWEB_URL=${webUrl}\nMAILPIT_UI_URL=${mailpitUiUrl}\n`,
+);
 
 // Only connection and listener settings are managed here; retain user overrides.
 let env = existsSync(envFile)
@@ -104,4 +107,5 @@ env = setEnvValue(
 );
 writeFileSync(envFile, env);
 
-console.log(`Development web application: http://127.0.0.1:${ports.WEB_PORT}`);
+console.log(`Development web application: ${webUrl}`);
+console.log(`Mailpit: ${mailpitUiUrl}`);
