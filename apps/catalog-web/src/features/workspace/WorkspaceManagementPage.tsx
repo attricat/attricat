@@ -54,44 +54,54 @@ const sections: { label: string; section: Section; to: string }[] = [
   },
 ];
 
-const ScopeFields = ({
-  form,
-  workspaceId,
-}: {
-  form: any;
+type ScopeFieldsProps = {
+  onScopeChange: (scope: ScopeType) => void;
+  onScopeTargetChange: (scopeTargetId: string) => void;
+  scope: ScopeType;
+  scopeTargetId: string;
   workspaceId?: string;
-}) => (
+};
+
+const ScopeFields = ({
+  onScopeChange,
+  onScopeTargetChange,
+  scope,
+  scopeTargetId,
+  workspaceId,
+}: ScopeFieldsProps) => (
   <>
-    <form.Field name="scope_type">
-      {(field: any) => (
-        <TextField
-          fullWidth
-          label="Scope"
-          onChange={(event) => {
-            const scope = event.target.value as ScopeType;
-            field.handleChange(scope);
-            form.setFieldValue(
-              'scope_target_id',
-              selectedScopeTarget(scope, '', workspaceId),
-            );
-          }}
-          select
-          value={field.state.value}
-        >
-          <MenuItem value="workspace">Entire workspace</MenuItem>
-          <MenuItem value="blueprint_family">Blueprint family</MenuItem>
-          <MenuItem value="context_subtree">Context subtree</MenuItem>
-          <MenuItem value="entity">Entity</MenuItem>
-        </TextField>
-      )}
-    </form.Field>
-    <form.Subscribe selector={(state: any) => state.values.scope_type}>
-      {(scope: ScopeType) => <ScopeTargetField form={form} scope={scope} />}
-    </form.Subscribe>
+    <TextField
+      fullWidth
+      label="Scope"
+      onChange={(event) => {
+        const nextScope = event.target.value as ScopeType;
+        onScopeChange(nextScope);
+        onScopeTargetChange(selectedScopeTarget(nextScope, '', workspaceId));
+      }}
+      select
+      value={scope}
+    >
+      <MenuItem value="workspace">Entire workspace</MenuItem>
+      <MenuItem value="blueprint_family">Blueprint family</MenuItem>
+      <MenuItem value="context_subtree">Context subtree</MenuItem>
+      <MenuItem value="entity">Entity</MenuItem>
+    </TextField>
+    <ScopeTargetField
+      onScopeTargetChange={onScopeTargetChange}
+      scope={scope}
+      scopeTargetId={scopeTargetId}
+    />
   </>
 );
 
-const ScopeTargetField = ({ form, scope }: { form: any; scope: ScopeType }) => {
+const ScopeTargetField = ({
+  onScopeTargetChange,
+  scope,
+  scopeTargetId,
+}: Pick<
+  ScopeFieldsProps,
+  'onScopeTargetChange' | 'scope' | 'scopeTargetId'
+>) => {
   const targets = useQuery({
     enabled: scope !== 'workspace',
     queryKey: workspaceQueryKeys.grantTargets(scope),
@@ -109,24 +119,20 @@ const ScopeTargetField = ({ form, scope }: { form: any; scope: ScopeType }) => {
       {targets.isError && (
         <Alert severity="error">{targets.error.message}</Alert>
       )}
-      <form.Field name="scope_target_id">
-        {(field: any) => (
-          <TextField
-            fullWidth
-            helperText="Only targets owned by this session's workspace are available."
-            label={label}
-            onChange={(event) => field.handleChange(event.target.value)}
-            select
-            value={field.state.value}
-          >
-            {targets.data?.map((target) => (
-              <MenuItem key={target.id} value={target.id}>
-                {target.label}
-              </MenuItem>
-            ))}
-          </TextField>
-        )}
-      </form.Field>
+      <TextField
+        fullWidth
+        helperText="Only targets owned by this session's workspace are available."
+        label={label}
+        onChange={(event) => onScopeTargetChange(event.target.value)}
+        select
+        value={scopeTargetId}
+      >
+        {targets.data?.map((target) => (
+          <MenuItem key={target.id} value={target.id}>
+            {target.label}
+          </MenuItem>
+        ))}
+      </TextField>
     </>
   );
 };
@@ -344,7 +350,21 @@ const Members = ({
               </TextField>
             )}
           </form.Field>
-          <ScopeFields form={form} workspaceId={workspaceId} />
+          <form.Subscribe selector={(state) => state.values}>
+            {(values) => (
+              <ScopeFields
+                onScopeChange={(scope) =>
+                  form.setFieldValue('scope_type', scope)
+                }
+                onScopeTargetChange={(scopeTargetId) =>
+                  form.setFieldValue('scope_target_id', scopeTargetId)
+                }
+                scope={values.scope_type}
+                scopeTargetId={values.scope_target_id}
+                workspaceId={workspaceId}
+              />
+            )}
+          </form.Subscribe>
           <Button type="submit" variant="contained">
             Grant role
           </Button>
@@ -707,7 +727,21 @@ const Invitations = ({
               </TextField>
             )}
           </userForm.Field>
-          <ScopeFields form={userForm} workspaceId={workspaceId} />
+          <userForm.Subscribe selector={(state) => state.values}>
+            {(values) => (
+              <ScopeFields
+                onScopeChange={(scope) =>
+                  userForm.setFieldValue('scope_type', scope)
+                }
+                onScopeTargetChange={(scopeTargetId) =>
+                  userForm.setFieldValue('scope_target_id', scopeTargetId)
+                }
+                scope={values.scope_type}
+                scopeTargetId={values.scope_target_id}
+                workspaceId={workspaceId}
+              />
+            )}
+          </userForm.Subscribe>
           <userForm.Field name="expires_at">
             {(field) => (
               <TextField
@@ -760,7 +794,21 @@ const Invitations = ({
               </TextField>
             )}
           </form.Field>
-          <ScopeFields form={form} workspaceId={workspaceId} />
+          <form.Subscribe selector={(state) => state.values}>
+            {(values) => (
+              <ScopeFields
+                onScopeChange={(scope) =>
+                  form.setFieldValue('scope_type', scope)
+                }
+                onScopeTargetChange={(scopeTargetId) =>
+                  form.setFieldValue('scope_target_id', scopeTargetId)
+                }
+                scope={values.scope_type}
+                scopeTargetId={values.scope_target_id}
+                workspaceId={workspaceId}
+              />
+            )}
+          </form.Subscribe>
           <form.Field name="expires_at">
             {(field) => (
               <TextField
