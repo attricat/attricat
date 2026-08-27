@@ -1,4 +1,4 @@
-import Editor, { type Monaco } from '@monaco-editor/react';
+import { DiffEditor, type Monaco } from '@monaco-editor/react';
 import { Box, Typography } from '@mui/material';
 
 const configureToml = (monaco: Monaco) => {
@@ -23,31 +23,39 @@ const configureToml = (monaco: Monaco) => {
   });
 };
 
-export const TomlEditor = ({
-  title,
-  value,
+export const TomlDiffEditor = ({
+  original,
+  modified,
+  originalTitle,
+  modifiedTitle,
 }: {
-  title: string;
-  value: string;
+  original: string;
+  modified: string;
+  originalTitle: string;
+  modifiedTitle: string;
 }) => (
   <Box>
-    <Typography sx={{ fontWeight: 700, mb: 1 }}>{title}</Typography>
+    <Typography sx={{ fontWeight: 700, mb: 1 }}>
+      {originalTitle} → {modifiedTitle}
+    </Typography>
     <Box sx={{ border: 1, borderColor: 'divider', height: 560 }}>
-      <Editor
+      <DiffEditor
         beforeMount={configureToml}
         height="100%"
         language="toml"
+        modified={modified}
         options={{
           automaticLayout: true,
           domReadOnly: true,
-          lineNumbers: 'on',
           minimap: { enabled: false },
+          originalEditable: false,
           readOnly: true,
+          renderSideBySide: true,
           scrollBeyondLastLine: false,
           wordWrap: 'off',
         }}
+        original={original}
         theme="vs"
-        value={value}
       />
     </Box>
   </Box>

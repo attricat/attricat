@@ -29,8 +29,10 @@ import { formatBlueprintDateTime } from './date-time';
 import { blueprintQueryKeys } from './query-keys';
 import { RevisionHistory } from './RevisionHistory';
 
-const TomlEditor = lazy(() =>
-  import('./TomlEditor').then(({ TomlEditor }) => ({ default: TomlEditor })),
+const TomlDiffEditor = lazy(() =>
+  import('./TomlDiffEditor').then(({ TomlDiffEditor }) => ({
+    default: TomlDiffEditor,
+  })),
 );
 
 const JsonMetadata = ({ label, value }: { label: string; value: unknown }) => (
@@ -199,8 +201,8 @@ export const BlueprintDetailPage = ({
             </AccordionSummary>
             <AccordionDetails>
               <Typography color="text.secondary">
-                Choose two revisions to inspect their immutable TOML definitions
-                side by side.
+                Choose two revisions to inspect the changes between their
+                immutable TOML definitions.
               </Typography>
               <Stack
                 direction={{ xs: 'column', sm: 'row' }}
@@ -241,25 +243,14 @@ export const BlueprintDetailPage = ({
                   {left.error?.message ?? right.error?.message}
                 </Alert>
               )}
-              <Box
-                sx={{
-                  display: 'grid',
-                  gap: 2,
-                  gridTemplateColumns: { xs: '1fr', lg: '1fr 1fr' },
-                  mt: 3,
-                }}
-              >
+              <Box sx={{ mt: 3 }}>
                 <Suspense fallback={<Typography>Loading editor...</Typography>}>
-                  {left.data && (
-                    <TomlEditor
-                      title={`Version ${left.data.blueprint.version} · ${left.data.blueprint.status}`}
-                      value={left.data.blueprint.definition}
-                    />
-                  )}
-                  {right.data && (
-                    <TomlEditor
-                      title={`Version ${right.data.blueprint.version} · ${right.data.blueprint.status}`}
-                      value={right.data.blueprint.definition}
+                  {left.data && right.data && (
+                    <TomlDiffEditor
+                      modified={right.data.blueprint.definition}
+                      modifiedTitle={`Version ${right.data.blueprint.version} · ${right.data.blueprint.status}`}
+                      original={left.data.blueprint.definition}
+                      originalTitle={`Version ${left.data.blueprint.version} · ${left.data.blueprint.status}`}
                     />
                   )}
                 </Suspense>
