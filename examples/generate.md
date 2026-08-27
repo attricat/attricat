@@ -5,10 +5,14 @@ HTTP API. It uses Node.js 18 or later and has no package dependencies.
 
 Start the development services, then run it from the repository root:
 
-Set required `CATALOG_TOKEN` for authorization. You can get your token in the profile section of the app.
+The generator authenticates every request with a required personal access token.
+Create one in the profile section of the app with these permissions:
+`blueprints.read`, `blueprints.write`, `blueprints.publish`, `contexts.read`,
+`contexts.write`, and `entities.write`. Then provide it as `CATALOG_TOKEN`.
+`just generate` loads this variable from `.env`.
 
 ```sh
-just generate
+CATALOG_TOKEN=cat_pat_... just generate
 ```
 
 Set `CATALOG_SERVER` to target another API URL. `PRODUCT_COUNT` controls the
@@ -39,9 +43,15 @@ upgraded through the entity migration flow.
 Generated revisions are published automatically after their pinned mixin revisions,
 so generated entities always use published blueprints.
 
-Each run creates six categories, six colors, at least 100 parent products, and
-two variants for every parent. Products and variants receive category and color
-relationships; parents additionally receive their variant relationships. A
-`seed-us -> seed-us-web` context chain and a product with overrides demonstrate
-context fallback. Runs are additive, so use a fresh development database when a
-clean data set is needed.
+Each run creates a fictional but realistic Alder & Row fashion assortment: seven
+clothing, footwear, outerwear, activewear, and accessories categories; six named
+colors; and at least 100 parent products. Product titles, descriptions, prices,
+SKUs, launch codes, stock, SEO metadata, and size variants are assembled from a
+curated deterministic collection, so the same product number is easy to locate
+and reason about during manual tests. Products and variants receive category and
+color relationships; parents additionally receive their variant relationships.
+Accessories have one `One Size` variant, while apparel and footwear receive their
+applicable real-world size range. A `seed-us -> seed-us-web` context chain and a
+Studio Leather Tote with regional overrides demonstrate context fallback. Runs
+are additive, so use a fresh development database when a clean data set is
+needed.

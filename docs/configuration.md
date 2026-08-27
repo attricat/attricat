@@ -2,8 +2,8 @@
 
 The API loads `.env` from the working directory at startup. `just setup` and
 `just dev` create it from `.env.example` with persistent, worktree-specific
-ports. Those port assignments are recorded in the ignored `.catalog-worktree`
-file.
+ports. Those port assignments, plus ready-to-open `WEB_URL` and
+`MAILPIT_UI_URL` values, are recorded in the ignored `.catalog-worktree` file.
 
 | Setting | Default | Used by | Purpose |
 | --- | --- | --- | --- |
@@ -37,7 +37,7 @@ file.
 
 Mailpit is a local-development and E2E adapter only; it is not production mail
 configuration. Source `.catalog-worktree` after `just dev`, open
-`http://127.0.0.1:$MAILPIT_UI_PORT` for manual inspection, and use its REST API
+`$MAILPIT_UI_URL` for manual inspection, and use its REST API
 for E2E mailbox retrieval. Production mail delivery is deliberately deferred.
 
 ## Request authorization

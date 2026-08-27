@@ -226,10 +226,10 @@ attribute_code = "subtitle"
 
 ## Manual Test Data
 
-The Node.js generator creates at least 100 parent products and two variants for
-each parent, alongside categories, colors, relationships, contexts, and
-blueprints that exercise the supported blueprint features. Start the API, then
-run:
+The Node.js generator creates at least 100 realistic fashion parent products and
+their applicable size variants, alongside categories, colors, relationships,
+contexts, and blueprints that exercise the supported blueprint features. Start
+the API, then run:
 
 ```sh
 just generate

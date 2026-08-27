@@ -13,9 +13,9 @@ Install a Docker-compatible container runtime, Rust, Node.js 18 or newer,
 just dev
 ```
 
-`just dev` assigns persistent, worktree-specific ports, writes them to the
-ignored `.catalog-worktree` file, and creates `.env` from `.env.example`. It
-prints the web URL when it starts. Stop `process-compose` with `Ctrl-C`; the
+`just dev` assigns persistent, worktree-specific ports, writes them and ready-to-open
+`WEB_URL` and `MAILPIT_UI_URL` values to the ignored `.catalog-worktree` file,
+and creates `.env` from `.env.example`. It prints both URLs when it starts. Stop `process-compose` with `Ctrl-C`; the
 PostgreSQL container remains available until stopped with:
 
 ```sh
@@ -24,8 +24,7 @@ just down
 
 See [Getting Started](docs/index.md#getting-started) for database, migration,
 and test instructions. Mailpit also starts with the local stack; source
-`.catalog-worktree` and open `http://127.0.0.1:$MAILPIT_UI_PORT` to inspect
-local email.
+`.catalog-worktree` and open `$MAILPIT_UI_URL` to inspect local email.
 
 ## Sign in locally
 
