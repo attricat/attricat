@@ -38,6 +38,8 @@ pub enum BlueprintError {
     UnsupportedValueType { code: String, value_type: String },
     #[error("attribute '{code}' cannot define a value schema for relationship values")]
     RelationshipValueSchema { code: String },
+    #[error("file attribute '{0}' has an invalid file policy")]
+    InvalidFilePolicy(String),
     #[error("{field} is not valid JSON Schema: {message}")]
     InvalidJsonSchema { field: String, message: String },
     #[error("only entity blueprints can define an entity schema")]

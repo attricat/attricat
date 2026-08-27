@@ -42,6 +42,7 @@ pub struct Attribute {
     pub code: String,
     pub value_type: String,
     pub value_schema: Option<Value>,
+    pub file_policy: Option<Value>,
     pub target_blueprint_code: Option<String>,
     pub tags: Value,
     pub context_fallback: String,
