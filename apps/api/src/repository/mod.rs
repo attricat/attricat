@@ -17,6 +17,7 @@ use uuid::Uuid;
 
 use crate::{
     blueprint_resolver::compile_definition,
+    constants::REQUEST_POOL_CONNECTIONS,
     model::{
         AppendAttributeValues, Attribute, AttributeContext, AttributeValue, AttributeValueHistory,
         AttributeValueSelector, Blueprint, BlueprintWithAttributes, CreateBlueprint, Entity,
@@ -216,7 +217,7 @@ impl CatalogRepository {
             }
         }
         let pool = PgPoolOptions::new()
-            .max_connections(5)
+            .max_connections(REQUEST_POOL_CONNECTIONS)
             .after_connect(move |_connection, _| Box::pin(async move { Ok(()) }))
             .connect_with(cache.connect_options.clone())
             .await?;

@@ -1,11 +1,6 @@
-use axum::{
-    Json,
-    extract::State,
-    http::{HeaderValue, header::SET_COOKIE},
-    response::{IntoResponse, Response},
-};
+use axum::{Json, extract::State, response::Response};
 use chrono::{Duration, Utc};
-use serde::{Deserialize, Serialize};
+use serde::Deserialize;
 use sha2::{Digest as _, Sha256};
 use uuid::Uuid;
 
@@ -14,14 +9,20 @@ use super::{
     auth::{ActiveWorkspace, AuthenticatedPrincipal, AuthenticatedSession},
     error::ApiError,
 };
-use crate::account::{
-    ActionTokenSecret, IssuedLifecycleAction, LifecycleActionPurpose, Password, SessionDigest,
-    SessionSecret, hash_password,
+use crate::{
+    account::{
+        ActionTokenSecret, IssuedLifecycleAction, LifecycleActionPurpose, Password, SessionDigest,
+        SessionSecret, hash_password,
+    },
+    constants::SESSION_LIFETIME_HOURS,
 };
 
-const SESSION_COOKIE: &str = "catalog_session";
-const CSRF_COOKIE: &str = "catalog_csrf";
-pub(super) const SESSION_LIFETIME_HOURS: i64 = 8;
+mod responses;
+pub(super) use responses::onboarding_session_response;
+use responses::{
+    SessionResponse, clear_session_response, session_response, session_response_payload,
+};
+
 const PASSWORD_RESET_LIFETIME_MINUTES: i64 = 30;
 
 #[derive(Deserialize)]
@@ -47,36 +48,10 @@ pub(super) struct PasswordResetConfirmation {
     password: String,
 }
 
-#[derive(Serialize)]
+#[derive(serde::Serialize)]
 pub(super) struct DiscoveryResponse {
     login_identifier: String,
     sign_in_methods: Vec<&'static str>,
-}
-
-#[derive(Serialize)]
-pub(super) struct SessionResponse {
-    user_id: Uuid,
-    display_name: Option<String>,
-    email: String,
-    /// The workspace resolved by the server and bound to this session.
-    workspace_id: Uuid,
-    /// The human-facing identifier for the session-bound workspace.
-    login_identifier: String,
-    capabilities: SessionCapabilities,
-}
-
-#[derive(Serialize)]
-pub(super) struct OnboardingSessionResponse {
-    #[serde(flatten)]
-    session: SessionResponse,
-    membership_id: Uuid,
-}
-
-#[derive(Serialize)]
-pub(super) struct SessionCapabilities {
-    members_manage: bool,
-    roles_manage: bool,
-    tokens_manage: bool,
 }
 
 pub(super) async fn discover(
@@ -286,161 +261,4 @@ pub(super) fn issue_session() -> (SessionSecret, SessionSecret, chrono::DateTime
 
 fn digest_login_key(value: &str) -> SessionDigest {
     SessionDigest::from_slice(&Sha256::digest(value.as_bytes())).expect("sha256 is 32 bytes")
-}
-
-pub(super) async fn session_response(
-    state: &AppState,
-    user_id: Uuid,
-    workspace_id: Uuid,
-    login_identifier: String,
-    session: &SessionSecret,
-    csrf: &SessionSecret,
-    secure: bool,
-    lifetime_hours: i64,
-) -> Result<Response, ApiError> {
-    let mut response = Json(
-        session_response_payload_with_identifier(state, user_id, workspace_id, login_identifier)
-            .await?,
-    )
-    .into_response();
-    response.headers_mut().append(
-        SET_COOKIE,
-        cookie(
-            SESSION_COOKIE,
-            session.expose_for_delivery(),
-            true,
-            secure,
-            lifetime_hours,
-        ),
-    );
-    response.headers_mut().append(
-        SET_COOKIE,
-        cookie(
-            CSRF_COOKIE,
-            csrf.expose_for_delivery(),
-            false,
-            secure,
-            lifetime_hours,
-        ),
-    );
-    Ok(response)
-}
-
-pub(super) async fn onboarding_session_response(
-    state: &AppState,
-    user_id: Uuid,
-    workspace_id: Uuid,
-    membership_id: Uuid,
-    session: &SessionSecret,
-    csrf: &SessionSecret,
-    secure: bool,
-    lifetime_hours: i64,
-) -> Result<Response, ApiError> {
-    let mut response = Json(OnboardingSessionResponse {
-        session: session_response_payload(state, user_id, workspace_id).await?,
-        membership_id,
-    })
-    .into_response();
-    response.headers_mut().append(
-        SET_COOKIE,
-        cookie(
-            SESSION_COOKIE,
-            session.expose_for_delivery(),
-            true,
-            secure,
-            lifetime_hours,
-        ),
-    );
-    response.headers_mut().append(
-        SET_COOKIE,
-        cookie(
-            CSRF_COOKIE,
-            csrf.expose_for_delivery(),
-            false,
-            secure,
-            lifetime_hours,
-        ),
-    );
-    Ok(response)
-}
-
-async fn session_response_payload(
-    state: &AppState,
-    user_id: Uuid,
-    workspace_id: Uuid,
-) -> Result<SessionResponse, ApiError> {
-    let login_identifier = state
-        .repository
-        .workspace_login_identifier(workspace_id)
-        .await?;
-    session_response_payload_with_identifier(state, user_id, workspace_id, login_identifier).await
-}
-
-async fn session_response_payload_with_identifier(
-    state: &AppState,
-    user_id: Uuid,
-    workspace_id: Uuid,
-    login_identifier: String,
-) -> Result<SessionResponse, ApiError> {
-    let account = state.repository.user_account(user_id).await?;
-    Ok(SessionResponse {
-        user_id,
-        display_name: account.display_name,
-        email: account.email,
-        workspace_id,
-        login_identifier,
-        capabilities: session_capabilities(state, user_id, workspace_id).await?,
-    })
-}
-
-async fn session_capabilities(
-    state: &AppState,
-    user_id: Uuid,
-    workspace_id: Uuid,
-) -> Result<SessionCapabilities, ApiError> {
-    Ok(SessionCapabilities {
-        members_manage: state
-            .repository
-            .is_authorized(user_id, workspace_id, "members.manage", None, None)
-            .await?,
-        roles_manage: state
-            .repository
-            .is_authorized(user_id, workspace_id, "roles.manage", None, None)
-            .await?,
-        tokens_manage: state
-            .repository
-            .is_authorized(user_id, workspace_id, "tokens.manage", None, None)
-            .await?,
-    })
-}
-
-fn clear_session_response(secure: bool) -> Response {
-    let mut response = axum::http::StatusCode::NO_CONTENT.into_response();
-    response
-        .headers_mut()
-        .append(SET_COOKIE, cookie(SESSION_COOKIE, "", true, secure, 0));
-    response
-        .headers_mut()
-        .append(SET_COOKIE, cookie(CSRF_COOKIE, "", false, secure, 0));
-    response
-}
-
-fn cookie(
-    name: &str,
-    value: &str,
-    http_only: bool,
-    secure: bool,
-    lifetime_hours: i64,
-) -> HeaderValue {
-    let mut value = format!(
-        "{name}={value}; Path=/; SameSite=Lax; Max-Age={}",
-        lifetime_hours * 3600
-    );
-    if http_only {
-        value.push_str("; HttpOnly");
-    }
-    if secure {
-        value.push_str("; Secure");
-    }
-    HeaderValue::from_str(&value).expect("base64url session cookie is a valid header")
 }

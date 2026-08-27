@@ -233,7 +233,7 @@ pub(super) async fn complete_onboarding(
         &session,
         &csrf,
         state.session_cookie_secure,
-        super::sessions::SESSION_LIFETIME_HOURS,
+        crate::constants::SESSION_LIFETIME_HOURS,
     )
     .await
 }
