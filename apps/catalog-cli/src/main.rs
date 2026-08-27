@@ -112,7 +112,7 @@ enum ContextCommand {
         code: Option<String>,
         #[arg(long, requires = "code")]
         data: Option<String>,
-        #[arg(long, requires_all = ["code", "data"])]
+        #[arg(long)]
         parent_id: Option<Uuid>,
     },
     Get {
@@ -286,7 +286,7 @@ enum RoleCommand {
     Duplicate {
         role_id: Uuid,
         #[arg(long)]
-        code: Option<String>,
+        code: String,
     },
     Retire {
         role_id: Uuid,
@@ -454,7 +454,7 @@ impl CliError {
 struct ContextFile {
     code: String,
     data: toml::Value,
-    parent_id: Uuid,
+    parent_id: Option<Uuid>,
 }
 
 #[derive(Deserialize)]
@@ -649,7 +649,7 @@ async fn run(cli: Cli) -> Result<String, CliError> {
             } => {
                 let body = match (file, code, data, parent_id) {
                     (Some(file), None, None, None) => context_body_from_file(&file)?,
-                    (None, Some(code), Some(data), Some(parent_id)) => json!({
+                    (None, Some(code), Some(data), parent_id) => json!({
                         "code": code,
                         "data": serde_json::from_str::<Value>(&data)
                             .map_err(|error| CliError::Input(format!("invalid --data JSON: {error}")))?,
@@ -657,7 +657,7 @@ async fn run(cli: Cli) -> Result<String, CliError> {
                     }),
                     _ => {
                         return Err(CliError::Input(
-                            "provide --file or --code, --data, and --parent-id".to_owned(),
+                            "provide --file or both --code and --data".to_owned(),
                         ));
                     }
                 };
@@ -945,8 +945,8 @@ async fn workspace_command(
             RoleCommand::List => request(client, server, Method::GET, "/workspace/roles", None).await,
             RoleCommand::Permission { command: PermissionCommand::List } => request(client, server, Method::GET, "/workspace/permissions", None).await,
             RoleCommand::AssignableRole { command: AssignableRoleCommand::List } => request(client, server, Method::GET, "/workspace/assignable-roles", None).await,
-            RoleCommand::Create { code, permissions } => request(client, server, Method::POST, "/workspace/roles", Some(json!({ "code": code, "permissions": json_input(&permissions, "--permissions")? }))).await,
-            RoleCommand::Update { role_id, code, permissions } => request(client, server, Method::PUT, &format!("/workspace/roles/{}", segment(role_id)), Some(json!({ "code": code, "permissions": json_input(&permissions, "--permissions")? }))).await,
+            RoleCommand::Create { code, permissions } => request(client, server, Method::POST, "/workspace/roles", Some(json!({ "code": code, "permissions": permissions_input(&permissions)? }))).await,
+            RoleCommand::Update { role_id, code, permissions } => request(client, server, Method::PUT, &format!("/workspace/roles/{}", segment(role_id)), Some(json!({ "code": code, "permissions": permissions_input(&permissions)? }))).await,
             RoleCommand::Duplicate { role_id, code } => request(client, server, Method::POST, &format!("/workspace/roles/{}/duplicate", segment(role_id)), Some(json!({ "code": code }))).await,
             RoleCommand::Retire { role_id, replacement_role_id } => request(client, server, Method::POST, &format!("/workspace/roles/{}/retire", segment(role_id)), Some(json!({ "replacement_role_id": replacement_role_id }))).await,
         },
@@ -977,26 +977,27 @@ async fn token_command(
 ) -> Result<String, CliError> {
     match command {
         TokenCommand::List => request(client, server, Method::GET, "/personal-access-tokens", None).await,
-        TokenCommand::Create { label, permissions, expires_at } => request(client, server, Method::POST, "/personal-access-tokens", Some(json!({ "label": label, "permissions": json_input(&permissions, "--permissions")?, "expires_at": expires_at }))).await,
+        TokenCommand::Create { label, permissions, expires_at } => request(client, server, Method::POST, "/personal-access-tokens", Some(json!({ "label": label, "permissions": permissions_input(&permissions)?, "expires_at": expires_at }))).await,
         TokenCommand::Revoke { token_id } => request(client, server, Method::DELETE, &format!("/personal-access-tokens/{}", segment(token_id)), None).await,
     }
 }
 
-fn json_input(input: &str, option: &str) -> Result<Value, CliError> {
+fn permissions_input(input: &str) -> Result<Value, CliError> {
     let source = match fs::read_to_string(input) {
         Ok(source) => source,
         Err(error) if error.kind() == io::ErrorKind::NotFound => input.to_owned(),
         Err(error) => {
             return Err(CliError::Input(format!(
-                "cannot read {option} file: {error}"
+                "cannot read --permissions file: {error}"
             )));
         }
     };
-    serde_json::from_str(&source).map_err(|error| {
+    let permissions = serde_json::from_str::<Vec<String>>(&source).map_err(|error| {
         CliError::Input(format!(
-            "{option} must be JSON or a readable JSON file: {error}"
+            "--permissions must be a JSON array of strings or a readable JSON file: {error}"
         ))
-    })
+    })?;
+    Ok(json!(permissions))
 }
 
 fn read_three_secrets_stdin() -> Result<(String, String, String), CliError> {
@@ -1628,18 +1629,48 @@ value = "Blue shirt"
     }
 
     #[test]
-    fn accepts_json_or_file_input_for_permissions() {
+    fn accepts_only_a_json_string_array_or_file_for_permissions() {
         assert_eq!(
-            json_input("[\"entities.read\"]", "--permissions").unwrap(),
+            permissions_input("[\"entities.read\"]").unwrap(),
             json!(["entities.read"])
         );
         let file = tempfile::NamedTempFile::new().unwrap();
         fs::write(file.path(), "[\"members.manage\"]").unwrap();
         assert_eq!(
-            json_input(file.path().to_str().unwrap(), "--permissions").unwrap(),
+            permissions_input(file.path().to_str().unwrap()).unwrap(),
             json!(["members.manage"])
         );
-        assert!(json_input("not-json", "--permissions").is_err());
+        assert!(permissions_input("not-json").is_err());
+        assert!(permissions_input("{\"permission\": \"entities.read\"}").is_err());
+        assert!(permissions_input("[\"entities.read\", 1]").is_err());
+    }
+
+    #[test]
+    fn context_creation_defaults_the_parent_and_role_duplication_requires_a_code() {
+        assert!(
+            Cli::try_parse_from([
+                "catalog", "context", "create", "--code", "en-GB", "--data", "{}",
+            ])
+            .is_ok()
+        );
+        assert!(
+            Cli::try_parse_from([
+                "catalog",
+                "workspace",
+                "role",
+                "duplicate",
+                "00000000-0000-0000-0000-000000000001",
+            ])
+            .is_err()
+        );
+    }
+
+    #[test]
+    fn context_file_can_omit_parent_id() {
+        let input: ContextFile =
+            toml::from_str("code = \"en-GB\"\ndata = { language = \"en-GB\" }").unwrap();
+        let body = json!({ "code": input.code, "data": toml_to_json(input.data).unwrap(), "parent_id": input.parent_id });
+        assert_eq!(body["parent_id"], Value::Null);
     }
 
     #[test]

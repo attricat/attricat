@@ -41,7 +41,7 @@ catalog blueprint resolve <code> --version <version>
 
 catalog context list
 catalog context create --file locale.toml
-catalog context create --code en_GB --data '{"language":"en-GB"}' --parent-id <context-id>
+catalog context create --code en_GB --data '{"language":"en-GB"}' [--parent-id <context-id>]
 catalog context get en-GB
 catalog context update <context-id> --parent-id <context-id> --data '{"language":"en-GB"}'
 catalog context delete <context-id>
@@ -73,7 +73,7 @@ catalog workspace role permission list
 catalog workspace role assignable-role list
 catalog workspace role create --code <code> --permissions <json-or-file>
 catalog workspace role update <role-id> --code <code> --permissions <json-or-file>
-catalog workspace role duplicate <role-id> [--code <code>]
+catalog workspace role duplicate <role-id> --code <code>
 catalog workspace role retire <role-id> [--replacement-role-id <role-id>]
 catalog workspace invitation list
 catalog workspace invitation create --email <email> --role-id <role-id> --scope-type <scope> --scope-target-id <id> --expires-at <rfc3339>
@@ -163,6 +163,7 @@ Context file:
 
 ```toml
 code = "en-GB"
+# Omit parent_id to use the default root context.
 parent_id = "00000000-0000-4000-8000-000000000001"
 
 [data]
@@ -202,7 +203,9 @@ are resolved against the source entity's pinned blueprint version.
 Every value and relationship needs a context. Supply `--context-id` to use it
 for all entries in a file, or set `context_id` on an individual TOML entry. Use
 `catalog context list` or `catalog context get default` to obtain IDs. The
-persisted `default` root is `00000000-0000-4000-8000-000000000001`.
+persisted `default` root is `00000000-0000-4000-8000-000000000001`. Context
+creation uses that root when `--parent-id` (or `parent_id` in a context file) is
+omitted.
 
 Relationship replacement and removal files use this shape. `replace` makes the
 listed targets the complete current set for each attribute; `remove` unlinks only
