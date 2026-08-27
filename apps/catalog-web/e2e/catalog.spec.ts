@@ -1,5 +1,11 @@
 import { expect, test } from '@playwright/test';
-import { createEntity, createEntityBlueprint, scalar, suffix } from './helpers';
+import {
+  createEntity,
+  createEntityBlueprint,
+  relationship,
+  scalar,
+  suffix,
+} from './helpers';
 
 test('searches an entity and opens its preview', async ({ page }) => {
   const code = `product_search_${suffix()}`;
@@ -154,6 +160,74 @@ test('creates a context from context management', async ({ page }) => {
   await expect(page).toHaveURL(/\/contexts$/);
   await expect(page.getByText(code)).toBeVisible();
   await expect(page.getByText('{"market":"US"}')).toBeVisible();
+});
+
+test('navigates outgoing, hierarchical, and incoming relationships', async ({
+  page,
+}) => {
+  const categoryCode = `category_views_${suffix()}`;
+  const productCode = `product_views_${suffix()}`;
+  const category = await createEntityBlueprint(
+    categoryCode,
+    'Relationship categories',
+    `[[attributes]]
+code = "title"
+value_type = "string"
+tags = ["searchable"]
+
+[[attributes]]
+code = "parent"
+value_type = "relationship"
+target_blueprint = "${categoryCode}"`,
+    {
+      views: `[views.detail]
+type = "stack"
+children = [{ type = "relationship_list", field = "parent", component = { id = "catalog.relationship_hierarchy", version = 1 } }, { type = "field", field = "title" }, { type = "incoming_relationship_list", label = "Products in category", page_size = 10, relationships = [{ source_blueprint = "${productCode}", field = "category" }], component = { id = "catalog.incoming_relationship_list_display", version = 1 } }]`,
+    },
+  );
+  const parent = await createEntity(category, [scalar('title', 'Departments')]);
+  const child = await createEntity(category, [
+    scalar('title', 'Shoes'),
+    relationship('parent', parent.id),
+  ]);
+  const product = await createEntityBlueprint(
+    productCode,
+    'Relationship products',
+    `[[attributes]]
+code = "title"
+value_type = "string"
+tags = ["searchable"]
+
+[[attributes]]
+code = "category"
+value_type = "relationship"
+target_blueprint = "${categoryCode}"`,
+    {
+      views:
+        '[views.detail]\ntype = "stack"\nchildren = [{ type = "field", field = "title" }, { type = "relationship_list", field = "category", component = { id = "catalog.relationship_hierarchy", version = 1, props = { parent_field = "parent" } } }]',
+    },
+  );
+  const item = await createEntity(product, [
+    scalar('title', 'Running shoe'),
+    relationship('category', child.id),
+  ]);
+
+  await page.goto(`/entities/${item.id}`);
+  const hierarchy = page.getByLabel('Hierarchy');
+  await expect(
+    hierarchy.getByRole('link', { name: 'Departments' }),
+  ).toBeVisible();
+  await expect(hierarchy.getByRole('link', { name: 'Shoes' })).toBeVisible();
+  await hierarchy.getByRole('link', { name: 'Shoes' }).click();
+  await expect(page).toHaveURL(new RegExp(`/entities/${child.id}$`));
+
+  await page.getByRole('button', { name: 'Products in category' }).click();
+  const dialog = page.getByRole('dialog', { name: 'Products in category' });
+  await expect(
+    dialog.getByRole('link', { name: 'Running shoe' }),
+  ).toBeVisible();
+  await dialog.getByRole('link', { name: 'Running shoe' }).click();
+  await expect(page).toHaveURL(new RegExp(`/entities/${item.id}$`));
 });
 
 test('edits scalar values and replaces a typed relationship', async ({

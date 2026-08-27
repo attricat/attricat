@@ -26,6 +26,7 @@ test('upgrades an outdated entity to the current blueprint revision', async ({
 code = "${code}"
 name = "Migrated product"
 kind = "entity"
+entity_schema = '{"type":"object","required":["description"]}'
 
 [views.dropdown_option]
 type = "dropdown_option"
@@ -45,8 +46,11 @@ value_type = "string"`,
   await expect(page.getByText('Schema is outdated')).toBeVisible();
   await page.getByRole('link', { name: 'Upgrade blueprint' }).click();
   await expect(page.getByText('Upgrade from v1 to v2')).toBeVisible();
+  await expect(page.getByLabel('description')).toBeVisible();
+  await page.getByLabel('description').fill('Added during migration');
   await page.getByRole('button', { name: 'Upgrade entity' }).click();
   await expect(page).toHaveURL(new RegExp(`/entities/${entity.id}$`));
   await expect(page.getByText('Matches current schema')).toBeVisible();
   await expect(page.getByText('Existing product')).toBeVisible();
+  await expect(page.getByText('Added during migration')).toBeVisible();
 });

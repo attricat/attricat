@@ -19,11 +19,30 @@ test('signs in and signs out through browser cookies', async ({ page }) => {
   await expect(page).toHaveURL(/\/login$/);
 });
 
+test('returns to an authenticated deep link after sign in', async ({
+  page,
+}) => {
+  await page.context().clearCookies();
+  await page.goto('/data-health?staleAfterDays=45#freshness');
+  await expect(page).toHaveURL(/\/login$/);
+
+  await page.getByLabel('Workspace').fill('default.local');
+  await page.getByRole('button', { name: 'Continue' }).click();
+  await page.getByLabel('Email').fill('fixture@example.test');
+  await page.getByLabel('Password').fill('e2e-only-fixture-password');
+  await page.getByRole('button', { name: 'Sign in' }).click();
+
+  await expect(page).toHaveURL(/\/data-health\?staleAfterDays=45#freshness$/);
+  await expect(
+    page.getByRole('heading', { name: 'Data health' }),
+  ).toBeVisible();
+});
+
 test('resets a password using a Mailpit-delivered one-time link', async ({
   page,
 }) => {
   await page.goto('/password-reset');
-  await page.getByLabel('Email').fill('owner@example.test');
+  await page.getByLabel('Email').fill('reset@example.test');
   await page.getByRole('button', { name: 'Send reset link' }).click();
   await expect(page.getByText(/If an eligible account/)).toBeVisible();
 
@@ -31,9 +50,10 @@ test('resets a password using a Mailpit-delivered one-time link', async ({
     (response) => response.json(),
   );
   const message = messages.messages.find(
-    (candidate: { To: Array<{ Address: string }> }) =>
+    (candidate: { Subject: string; To: Array<{ Address: string }> }) =>
+      candidate.Subject === 'Reset your Catalog password' &&
       candidate.To.some(
-        (recipient) => recipient.Address === 'owner@example.test',
+        (recipient) => recipient.Address === 'reset@example.test',
       ),
   );
   expect(message).toBeTruthy();
@@ -46,7 +66,7 @@ test('resets a password using a Mailpit-delivered one-time link', async ({
   expect(url).toBeTruthy();
 
   await page.goto(url!);
-  await page.getByLabel('New password').fill('new-e2e-owner-password');
+  await page.getByLabel('New password').fill('new-e2e-reset-password');
   await page.getByRole('button', { name: 'Reset password' }).click();
   await expect(page.getByText(/Your password has been reset/)).toBeVisible();
 
@@ -59,8 +79,8 @@ test('resets a password using a Mailpit-delivered one-time link', async ({
   await page.goto('/login');
   await page.getByLabel('Workspace').fill('default.local');
   await page.getByRole('button', { name: 'Continue' }).click();
-  await page.getByLabel('Email').fill('owner@example.test');
-  await page.getByLabel('Password').fill('new-e2e-owner-password');
+  await page.getByLabel('Email').fill('reset@example.test');
+  await page.getByLabel('Password').fill('new-e2e-reset-password');
   await page.getByRole('button', { name: 'Sign in' }).click();
   await expect(page).toHaveURL(/\/$/);
 });

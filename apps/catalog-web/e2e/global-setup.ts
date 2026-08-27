@@ -1,5 +1,5 @@
 import { PostgreSqlContainer } from '@testcontainers/postgresql';
-import { chromium } from '@playwright/test';
+import { chromium, type BrowserContext } from '@playwright/test';
 import { execFileSync, spawn, type ChildProcess } from 'node:child_process';
 import {
   e2eApiPort,
@@ -17,6 +17,8 @@ const bootstrapOwnerEmail = 'owner@example.test';
 const bootstrapOwnerPassword = 'e2e-only-owner-password';
 const fixtureEmail = 'fixture@example.test';
 const fixturePassword = 'e2e-only-fixture-password';
+const resetEmail = 'reset@example.test';
+const resetPassword = 'e2e-only-reset-password';
 const storageStatePath = new URL('.auth.json', import.meta.url).pathname;
 
 const waitFor = async (url: string) => {
@@ -34,6 +36,105 @@ const waitFor = async (url: string) => {
 
 const start = (command: string, args: string[], env: NodeJS.ProcessEnv) =>
   spawn(command, args, { cwd: workspaceRoot, env, stdio: 'inherit' });
+
+const waitForMessage = async (email: string) => {
+  const deadline = Date.now() + 30_000;
+  while (Date.now() < deadline) {
+    const messages = await fetch(`${e2eMailpitUrl}/api/v1/messages`).then(
+      (response) => response.json(),
+    );
+    const message = messages.messages.find(
+      (candidate: { To: Array<{ Address: string }> }) =>
+        candidate.To.some((recipient) => recipient.Address === email),
+    );
+    if (message) {
+      return fetch(`${e2eMailpitUrl}/api/v1/message/${message.ID}`).then(
+        (response) => response.json(),
+      );
+    }
+    await new Promise((resolve) => setTimeout(resolve, 100));
+  }
+  throw new Error(`Timed out waiting for onboarding email to ${email}`);
+};
+
+const ownerRequest = async (
+  context: BrowserContext,
+  path: string,
+  init: RequestInit = {},
+) => {
+  const cookies = await context.cookies(e2eWebUrl);
+  const csrf = cookies.find((cookie) => cookie.name === 'catalog_csrf');
+  const headers = new Headers(init.headers);
+  headers.set(
+    'Cookie',
+    cookies.map((cookie) => `${cookie.name}=${cookie.value}`).join('; '),
+  );
+  if (
+    !['GET', 'HEAD', 'OPTIONS'].includes((init.method ?? 'GET').toUpperCase())
+  ) {
+    if (!csrf) throw new Error('Owner session did not include a CSRF cookie');
+    headers.set('X-Catalog-Csrf', csrf.value);
+  }
+  const response = await fetch(`${e2eApiUrl}${path}`, { ...init, headers });
+  if (!response.ok) {
+    throw new Error(
+      `E2E owner request failed: ${response.status} ${await response.text()}`,
+    );
+  }
+  return response;
+};
+
+const provisionUser = async (
+  context: BrowserContext,
+  email: string,
+  password: string,
+) => {
+  const session = await ownerRequest(context, '/auth/session').then(
+    (response) => response.json(),
+  );
+  const roles = await ownerRequest(context, '/workspace/assignable-roles').then(
+    (response) => response.json(),
+  );
+  const ownerRole = roles.find(
+    (role: { code: string }) => role.code === 'owner',
+  );
+  if (!ownerRole)
+    throw new Error('E2E workspace did not expose the owner role');
+
+  await ownerRequest(context, '/workspace/users', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      email,
+      role_id: ownerRole.id,
+      scope_type: 'workspace',
+      scope_target_id: session.workspace_id,
+      expires_at: new Date(Date.now() + 60 * 60 * 1000).toISOString(),
+    }),
+  });
+  const delivered = await waitForMessage(email);
+  const rawUrl = JSON.stringify(delivered).match(
+    /http:\/\/127\.0\.0\.1:\d+\/onboarding\?[^"\\\s]+/,
+  )?.[0];
+  if (!rawUrl) throw new Error(`Onboarding email for ${email} had no URL`);
+  const url = new URL(
+    rawUrl.replaceAll('\\u0026', '&').replaceAll('&amp;', '&'),
+  );
+  const response = await fetch(`${e2eApiUrl}/onboarding/complete`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      invitation_secret: url.searchParams.get('invitation_secret'),
+      onboarding_secret: url.searchParams.get('onboarding_secret'),
+      password,
+    }),
+  });
+  if (!response.ok) {
+    throw new Error(
+      `E2E onboarding failed: ${response.status} ${await response.text()}`,
+    );
+  }
+};
 
 const stop = (process: ChildProcess) => {
   if (!process.killed) process.kill('SIGTERM');
@@ -74,11 +175,10 @@ export default async () => {
     CATALOG_BOOTSTRAP_OWNER_EMAIL: bootstrapOwnerEmail,
     CATALOG_BOOTSTRAP_OWNER_PASSWORD: bootstrapOwnerPassword,
     SESSION_COOKIE_SECURE: 'false',
-    CATALOG_E2E_FIXTURE_EMAIL: fixtureEmail,
-    CATALOG_E2E_FIXTURE_PASSWORD: fixturePassword,
     SMTP_HOST: '127.0.0.1',
     SMTP_PORT: e2eMailpitSmtpPort,
     PASSWORD_RESET_URL: `${e2eWebUrl}/password-reset/confirm`,
+    WORKSPACE_ONBOARDING_URL: `${e2eWebUrl}/onboarding`,
   });
 
   try {
@@ -114,6 +214,8 @@ export default async () => {
     await page.getByLabel('Password').fill(bootstrapOwnerPassword);
     await page.getByRole('button', { name: 'Sign in' }).click();
     await page.waitForURL(`${e2eWebUrl}/`);
+    await provisionUser(context, fixtureEmail, fixturePassword);
+    await provisionUser(context, resetEmail, resetPassword);
     await context.storageState({ path: storageStatePath });
     await browser.close();
 
