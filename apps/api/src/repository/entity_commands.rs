@@ -160,13 +160,14 @@ impl CatalogRepository {
         let entity = self.lock_entity(&mut transaction, entity_id).await?;
         let mut values = Vec::new();
         for relationship in input.relationships {
-            let context_id = relationship.context_id.or(Some(Self::DEFAULT_CONTEXT_ID));
+            let context_id = self
+                .resolve_context_id(&mut transaction, relationship.context_id)
+                .await?;
             let (attribute_id, target_blueprint_code, context_editable) = self
                 .relationship_attribute(&mut transaction, &entity, &relationship)
                 .await?;
-            self.validate_context_id(&mut transaction, context_id)
+            self.validate_context_editable(&mut transaction, context_id, &context_editable)
                 .await?;
-            self.validate_context_editable(context_id, &context_editable)?;
             // Relationship writes are set operations; collapsing duplicate IDs
             // makes a retried or malformed client payload idempotent.
             let targets: HashSet<_> = relationship.target_entity_ids.into_iter().collect();
@@ -230,12 +231,14 @@ impl CatalogRepository {
         relationships: Vec<RelationshipTargets>,
     ) -> Result<(), RepositoryError> {
         for relationship in relationships {
-            let context_id = relationship.context_id.or(Some(Self::DEFAULT_CONTEXT_ID));
-            self.validate_context_id(transaction, context_id).await?;
+            let context_id = self
+                .resolve_context_id(transaction, relationship.context_id)
+                .await?;
             let (attribute_id, target_blueprint_code, context_editable) = self
                 .relationship_attribute(transaction, entity, &relationship)
                 .await?;
-            self.validate_context_editable(context_id, &context_editable)?;
+            self.validate_context_editable(transaction, context_id, &context_editable)
+                .await?;
             let targets: HashSet<_> = relationship.target_entity_ids.into_iter().collect();
             for target_id in &targets {
                 self.validate_relationship_target(
@@ -302,7 +305,7 @@ impl CatalogRepository {
                     true,
                 ),
             };
-        let context_id = context_id.or(Some(Self::DEFAULT_CONTEXT_ID));
+        let context_id = self.resolve_context_id(transaction, context_id).await?;
 
         let attribute_label = attribute_code.clone();
         let (attribute_id, value_type, value_schema, target_blueprint_code, context_editable) =
@@ -342,8 +345,8 @@ impl CatalogRepository {
             }
             .ok_or(RepositoryError::AttributeNotApplicable)?;
 
-        self.validate_context_id(transaction, context_id).await?;
-        self.validate_context_editable(context_id, &context_editable)?;
+        self.validate_context_editable(transaction, context_id, &context_editable)
+            .await?;
 
         if (value_type == "relationship") != is_relationship {
             return Err(RepositoryError::AttributeKindMismatch);
@@ -430,7 +433,8 @@ impl CatalogRepository {
         selector: AttributeValueSelector,
     ) -> Result<(), RepositoryError> {
         validate_code(&selector.attribute_code)?;
-        self.validate_context_id(transaction, selector.context_id)
+        let context_id = self
+            .resolve_context_id(transaction, selector.context_id)
             .await?;
         let attribute = sqlx::query_as::<_, (Uuid, String, String)>(
             "SELECT id, value_type, context_editable FROM attributes WHERE code = $1 AND blueprint_id = $2 AND blueprint_version = $3 AND deleted_at IS NULL",
@@ -444,44 +448,59 @@ impl CatalogRepository {
         if attribute.1 == "relationship" {
             return Err(RepositoryError::AttributeKindMismatch);
         }
-        self.validate_context_editable(selector.context_id, &attribute.2)?;
-        self.archive_current_value(
-            transaction,
-            entity.id,
-            attribute.0,
-            selector.context_id,
-            None,
-        )
-        .await?;
+        self.validate_context_editable(transaction, context_id, &attribute.2)
+            .await?;
+        self.archive_current_value(transaction, entity.id, attribute.0, context_id, None)
+            .await?;
         Ok(())
     }
 
-    async fn validate_context_id(
+    async fn resolve_context_id(
         &self,
         transaction: &mut Transaction<'_, Postgres>,
         context_id: Option<Uuid>,
-    ) -> Result<(), RepositoryError> {
-        let context_id = context_id.ok_or(RepositoryError::InvalidContext)?;
+    ) -> Result<Option<Uuid>, RepositoryError> {
+        let workspace_id = self.workspace_id.unwrap_or(Self::DEFAULT_WORKSPACE_ID);
+        let context_id = match context_id {
+            Some(context_id) => context_id,
+            None => sqlx::query_scalar::<_, Uuid>(
+                "SELECT id FROM attribute_contexts WHERE workspace_id = $1 AND code = 'default'",
+            )
+            .bind(workspace_id)
+            .fetch_optional(&mut **transaction)
+            .await?
+            .ok_or(RepositoryError::InvalidContext)?,
+        };
         let exists = sqlx::query_scalar::<_, bool>(
             "SELECT EXISTS (SELECT 1 FROM attribute_contexts WHERE id = $1 AND workspace_id = $2)",
         )
         .bind(context_id)
-        .bind(self.workspace_id.unwrap_or(Self::DEFAULT_WORKSPACE_ID))
+        .bind(workspace_id)
         .fetch_one(&mut **transaction)
         .await?;
         if !exists {
             return Err(RepositoryError::InvalidContext);
         }
-        Ok(())
+        Ok(Some(context_id))
     }
 
-    fn validate_context_editable(
+    async fn validate_context_editable(
         &self,
+        transaction: &mut Transaction<'_, Postgres>,
         context_id: Option<Uuid>,
         context_editable: &str,
     ) -> Result<(), RepositoryError> {
-        if context_id != Some(Self::DEFAULT_CONTEXT_ID) && context_editable == "default" {
-            return Err(RepositoryError::DefaultContextOnly);
+        if context_editable == "default" {
+            let is_default = sqlx::query_scalar::<_, bool>(
+                "SELECT EXISTS (SELECT 1 FROM attribute_contexts WHERE id = $1 AND workspace_id = $2 AND code = 'default')",
+            )
+            .bind(context_id.ok_or(RepositoryError::InvalidContext)?)
+            .bind(self.workspace_id.unwrap_or(Self::DEFAULT_WORKSPACE_ID))
+            .fetch_one(&mut **transaction)
+            .await?;
+            if !is_default {
+                return Err(RepositoryError::DefaultContextOnly);
+            }
         }
         Ok(())
     }

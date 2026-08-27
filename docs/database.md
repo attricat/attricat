@@ -108,11 +108,12 @@ Entities are catalog items.
 ### `attribute_contexts`
 
 Contexts define named catalog scopes with one deterministic inheritance path.
-The persisted `default` context is the sole root; other contexts have exactly
-one parent. This supports progressive specialization such as `default -> PL ->
+Each workspace has its own persisted `default` context with a generated UUID.
+It is the workspace's sole root; other contexts have exactly one parent. This
+supports progressive specialization such as `default -> PL ->
 PL-b2c -> PL-b2c-web` without a context-composition table.
 
-- `code` is globally unique.
+- `code` is unique within its workspace.
 - `code` contains only ASCII letters, numbers, hyphens, and underscores.
 - `data` is a JSON object with application-defined dimension metadata.
 - `parent_id` is null only for `default`; every other context references a

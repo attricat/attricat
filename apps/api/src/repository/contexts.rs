@@ -16,11 +16,22 @@ impl CatalogRepository {
         if !input.data.is_object() {
             return Err(RepositoryError::InvalidContextData);
         }
+        let workspace_id = self.workspace_id.unwrap_or(Self::DEFAULT_WORKSPACE_ID);
+        let parent_id = match input.parent_id {
+            Some(parent_id) => parent_id,
+            None => sqlx::query_scalar::<_, Uuid>(
+                "SELECT id FROM attribute_contexts WHERE workspace_id = $1 AND code = 'default'",
+            )
+            .bind(workspace_id)
+            .fetch_optional(&self.pool)
+            .await?
+            .ok_or(RepositoryError::InvalidContext)?,
+        };
         let parent_exists = sqlx::query_scalar::<_, bool>(
             "SELECT EXISTS (SELECT 1 FROM attribute_contexts WHERE id = $1 AND workspace_id = $2)",
         )
-        .bind(input.parent_id)
-        .bind(self.workspace_id.unwrap_or(Self::DEFAULT_WORKSPACE_ID))
+        .bind(parent_id)
+        .bind(workspace_id)
         .fetch_one(&self.pool)
         .await?;
         if !parent_exists {
@@ -32,10 +43,10 @@ impl CatalogRepository {
             VALUES ($1, $2, $3, $4, $5) RETURNING id, code, data, parent_id"#,
         )
         .bind(Uuid::new_v4())
-        .bind(self.workspace_id.unwrap_or(Self::DEFAULT_WORKSPACE_ID))
+        .bind(workspace_id)
         .bind(input.code)
         .bind(input.data)
-        .bind(input.parent_id)
+        .bind(parent_id)
         .fetch_one(&mut *transaction)
         .await?;
         self.commit_mutation(transaction).await?;
@@ -102,9 +113,6 @@ impl CatalogRepository {
         id: Uuid,
         input: UpdateAttributeContext,
     ) -> Result<AttributeContext, RepositoryError> {
-        if id == Self::DEFAULT_CONTEXT_ID {
-            return Err(RepositoryError::DefaultContextProtected);
-        }
         if !input.data.is_object() {
             return Err(RepositoryError::InvalidContextData);
         }
@@ -113,15 +121,16 @@ impl CatalogRepository {
         sqlx::query("LOCK TABLE entities IN SHARE ROW EXCLUSIVE MODE")
             .execute(&mut *transaction)
             .await?;
-        let context_exists = sqlx::query_scalar::<_, bool>(
-            "SELECT EXISTS (SELECT 1 FROM attribute_contexts WHERE id = $1 AND workspace_id = $2)",
+        let context_code = sqlx::query_scalar::<_, String>(
+            "SELECT code FROM attribute_contexts WHERE id = $1 AND workspace_id = $2",
         )
         .bind(id)
         .bind(self.workspace_id.unwrap_or(Self::DEFAULT_WORKSPACE_ID))
-        .fetch_one(&mut *transaction)
-        .await?;
-        if !context_exists {
-            return Err(RepositoryError::NotFound("context"));
+        .fetch_optional(&mut *transaction)
+        .await?
+        .ok_or(RepositoryError::NotFound("context"))?;
+        if context_code == "default" {
+            return Err(RepositoryError::DefaultContextProtected);
         }
         let parent_exists = sqlx::query_scalar::<_, bool>(
             "SELECT EXISTS (SELECT 1 FROM attribute_contexts WHERE id = $1 AND workspace_id = $2)",
@@ -153,18 +162,16 @@ impl CatalogRepository {
     }
 
     pub async fn delete_context(&self, id: Uuid) -> Result<(), RepositoryError> {
-        if id == Self::DEFAULT_CONTEXT_ID {
-            return Err(RepositoryError::DefaultContextProtected);
-        }
-        let context_exists = sqlx::query_scalar::<_, bool>(
-            "SELECT EXISTS (SELECT 1 FROM attribute_contexts WHERE id = $1 AND workspace_id = $2)",
+        let context_code = sqlx::query_scalar::<_, String>(
+            "SELECT code FROM attribute_contexts WHERE id = $1 AND workspace_id = $2",
         )
         .bind(id)
         .bind(self.workspace_id.unwrap_or(Self::DEFAULT_WORKSPACE_ID))
-        .fetch_one(&self.pool)
-        .await?;
-        if !context_exists {
-            return Err(RepositoryError::NotFound("context"));
+        .fetch_optional(&self.pool)
+        .await?
+        .ok_or(RepositoryError::NotFound("context"))?;
+        if context_code == "default" {
+            return Err(RepositoryError::DefaultContextProtected);
         }
         let mut transaction = self.pool.begin().await?;
         let result = sqlx::query("DELETE FROM attribute_contexts c WHERE c.id = $1 AND c.workspace_id = $2 AND NOT EXISTS (SELECT 1 FROM attribute_contexts child WHERE child.parent_id = c.id AND child.workspace_id = c.workspace_id) AND NOT EXISTS (SELECT 1 FROM attribute_values value WHERE value.context_id = c.id AND value.workspace_id = c.workspace_id)")
