@@ -95,6 +95,7 @@ export const validateEntityForm = (
   for (const attribute of attributes) {
     const value = fields[attribute.code] ?? '';
     const required = requiredAttributes.includes(attribute.code);
+    if (attribute.value_type === attributeValueTypes.file) continue;
     if (attribute.value_type === attributeValueTypes.relationship) {
       const targetEntityIds = relationshipIdsForField(value);
       if (required && targetEntityIds.length === 0) {
