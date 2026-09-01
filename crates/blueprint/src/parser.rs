@@ -4,8 +4,8 @@ use catalog_validation::{is_valid_code, validate_json_schema_definition};
 use serde::Deserialize;
 
 use crate::{
-    AttributeDeclaration, BlueprintDefinition, BlueprintError, BlueprintKind, IncludeRef,
-    ViewDefinition,
+    AttributeDeclaration, BlueprintDefinition, BlueprintError, BlueprintKind, FilePolicy,
+    IncludeRef, ViewDefinition,
 };
 
 #[derive(Deserialize)]
@@ -29,6 +29,16 @@ struct RawAttributeDeclaration {
     code: String,
     value_type: Option<String>,
     value_schema: Option<String>,
+    cardinality: Option<String>,
+    ordered: Option<bool>,
+    #[serde(default)]
+    allowed_mime_groups: Vec<String>,
+    #[serde(default)]
+    allowed_extensions: Vec<String>,
+    max_bytes: Option<u64>,
+    #[serde(default)]
+    purposes: Vec<String>,
+    image_only: Option<bool>,
     target_blueprint: Option<String>,
     #[serde(default)]
     tags: Vec<String>,
@@ -82,78 +92,104 @@ pub fn parse(source: &str) -> Result<BlueprintDefinition, BlueprintError> {
             return Err(BlueprintError::DuplicateAttributeCode(attribute.code));
         }
 
-        attributes.push(match (attribute.value_type, attribute.from) {
-            (Some(value_type), None) => {
-                validate_non_empty(&value_type, "attribute value_type")?;
-                if !matches!(
-                    value_type.as_str(),
-                    "string"
-                        | "number"
-                        | "integer"
-                        | "boolean"
-                        | "date"
-                        | "datetime"
-                        | "time"
-                        | "relationship"
-                ) {
-                    return Err(BlueprintError::UnsupportedValueType {
+        attributes.push(
+            match (attribute.value_type.clone(), attribute.from.clone()) {
+                (Some(value_type), None) => {
+                    validate_non_empty(&value_type, "attribute value_type")?;
+                    if !matches!(
+                        value_type.as_str(),
+                        "string"
+                            | "number"
+                            | "integer"
+                            | "boolean"
+                            | "date"
+                            | "datetime"
+                            | "time"
+                            | "relationship"
+                            | "file"
+                    ) {
+                        return Err(BlueprintError::UnsupportedValueType {
+                            code: attribute.code,
+                            value_type,
+                        });
+                    }
+                    if attribute.target_blueprint.is_some() && value_type != "relationship" {
+                        return Err(BlueprintError::InvalidAttributeDeclaration(attribute.code));
+                    }
+                    if value_type == "relationship" && attribute.value_schema.is_some() {
+                        return Err(BlueprintError::RelationshipValueSchema {
+                            code: attribute.code,
+                        });
+                    }
+                    let has_file_policy = attribute.cardinality.is_some()
+                        || attribute.ordered.is_some()
+                        || !attribute.allowed_mime_groups.is_empty()
+                        || !attribute.allowed_extensions.is_empty()
+                        || attribute.max_bytes.is_some()
+                        || !attribute.purposes.is_empty()
+                        || attribute.image_only.is_some();
+                    if value_type != "file" && has_file_policy {
+                        return Err(BlueprintError::InvalidAttributeDeclaration(attribute.code));
+                    }
+                    if value_type == "file"
+                        && (attribute.value_schema.is_some()
+                            || attribute.target_blueprint.is_some())
+                    {
+                        return Err(BlueprintError::InvalidAttributeDeclaration(attribute.code));
+                    }
+                    let file_policy = if value_type == "file" {
+                        Some(parse_file_policy(&attribute, &attribute.code)?)
+                    } else {
+                        None
+                    };
+                    let value_schema = parse_json_schema(
+                        attribute.value_schema,
+                        &format!("attribute '{}'.value_schema", attribute.code),
+                    )?;
+                    if let Some(target_blueprint) = &attribute.target_blueprint {
+                        validate_code(target_blueprint, "attribute target_blueprint")?;
+                    }
+                    if !matches!(attribute.context_fallback.as_str(), "default" | "none") {
+                        return Err(BlueprintError::InvalidContextFallback {
+                            code: attribute.code,
+                            context_fallback: attribute.context_fallback,
+                        });
+                    }
+                    if !matches!(attribute.context_editable.as_str(), "all" | "default") {
+                        return Err(BlueprintError::InvalidContextEditable {
+                            code: attribute.code,
+                            context_editable: attribute.context_editable,
+                        });
+                    }
+                    let mut tags = HashSet::new();
+                    for tag in &attribute.tags {
+                        if tag.trim().is_empty() || !tags.insert(tag.as_str()) {
+                            return Err(BlueprintError::InvalidAttributeTag(attribute.code));
+                        }
+                    }
+                    AttributeDeclaration::Local {
                         code: attribute.code,
                         value_type,
-                    });
-                }
-                if attribute.target_blueprint.is_some() && value_type != "relationship" {
-                    return Err(BlueprintError::InvalidAttributeDeclaration(attribute.code));
-                }
-                if value_type == "relationship" && attribute.value_schema.is_some() {
-                    return Err(BlueprintError::RelationshipValueSchema {
-                        code: attribute.code,
-                    });
-                }
-                let value_schema = parse_json_schema(
-                    attribute.value_schema,
-                    &format!("attribute '{}'.value_schema", attribute.code),
-                )?;
-                if let Some(target_blueprint) = &attribute.target_blueprint {
-                    validate_code(target_blueprint, "attribute target_blueprint")?;
-                }
-                if !matches!(attribute.context_fallback.as_str(), "default" | "none") {
-                    return Err(BlueprintError::InvalidContextFallback {
-                        code: attribute.code,
+                        value_schema,
+                        file_policy,
+                        target_blueprint: attribute.target_blueprint,
+                        tags: attribute.tags,
                         context_fallback: attribute.context_fallback,
-                    });
-                }
-                if !matches!(attribute.context_editable.as_str(), "all" | "default") {
-                    return Err(BlueprintError::InvalidContextEditable {
-                        code: attribute.code,
                         context_editable: attribute.context_editable,
-                    });
-                }
-                let mut tags = HashSet::new();
-                for tag in &attribute.tags {
-                    if tag.trim().is_empty() || !tags.insert(tag.as_str()) {
-                        return Err(BlueprintError::InvalidAttributeTag(attribute.code));
                     }
                 }
-                AttributeDeclaration::Local {
-                    code: attribute.code,
-                    value_type,
-                    value_schema,
-                    target_blueprint: attribute.target_blueprint,
-                    tags: attribute.tags,
-                    context_fallback: attribute.context_fallback,
-                    context_editable: attribute.context_editable,
+                (None, Some(source)) if attribute.target_blueprint.is_none() => {
+                    let (include_alias, attribute_code) =
+                        parse_selection(&attribute.code, &source)?;
+                    AttributeDeclaration::Selection {
+                        code: attribute.code,
+                        include_alias,
+                        attribute_code,
+                    }
                 }
-            }
-            (None, Some(source)) if attribute.target_blueprint.is_none() => {
-                let (include_alias, attribute_code) = parse_selection(&attribute.code, &source)?;
-                AttributeDeclaration::Selection {
-                    code: attribute.code,
-                    include_alias,
-                    attribute_code,
-                }
-            }
-            _ => return Err(BlueprintError::InvalidAttributeDeclaration(attribute.code)),
-        });
+                _ => return Err(BlueprintError::InvalidAttributeDeclaration(attribute.code)),
+            },
+        );
     }
 
     Ok(BlueprintDefinition {
@@ -165,6 +201,55 @@ pub fn parse(source: &str) -> Result<BlueprintDefinition, BlueprintError> {
         views: raw.views,
         entity_schema,
         attributes,
+    })
+}
+
+fn parse_file_policy(
+    attribute: &RawAttributeDeclaration,
+    code: &str,
+) -> Result<FilePolicy, BlueprintError> {
+    let cardinality = attribute
+        .cardinality
+        .clone()
+        .unwrap_or_else(|| "one".to_owned());
+    if !matches!(cardinality.as_str(), "one" | "many") {
+        return Err(BlueprintError::InvalidFilePolicy(code.to_owned()));
+    }
+    let ordered = attribute.ordered.unwrap_or(cardinality == "many");
+    if cardinality == "one" && ordered {
+        return Err(BlueprintError::InvalidFilePolicy(code.to_owned()));
+    }
+    let validate_unique_non_empty = |values: &[String]| {
+        let mut seen = HashSet::new();
+        values
+            .iter()
+            .all(|value| !value.trim().is_empty() && seen.insert(value))
+    };
+    if !validate_unique_non_empty(&attribute.allowed_mime_groups)
+        || !validate_unique_non_empty(&attribute.allowed_extensions)
+        || !validate_unique_non_empty(&attribute.purposes)
+        || attribute.max_bytes == Some(0)
+        || attribute.allowed_extensions.iter().any(|extension| {
+            !extension
+                .trim_start_matches('.')
+                .chars()
+                .all(|character| character.is_ascii_alphanumeric())
+        })
+        || attribute
+            .purposes
+            .iter()
+            .any(|purpose| !is_valid_code(purpose))
+    {
+        return Err(BlueprintError::InvalidFilePolicy(code.to_owned()));
+    }
+    Ok(FilePolicy {
+        cardinality,
+        ordered,
+        allowed_mime_groups: attribute.allowed_mime_groups.clone(),
+        allowed_extensions: attribute.allowed_extensions.clone(),
+        max_bytes: attribute.max_bytes,
+        purposes: attribute.purposes.clone(),
+        image_only: attribute.image_only.unwrap_or(false),
     })
 }
 

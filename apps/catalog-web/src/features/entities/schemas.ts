@@ -209,6 +209,18 @@ export const attributeSchema = z
     context_fallback: z.enum(['default', 'none']).optional(),
     context_editable: z.enum(['all', 'default']).optional(),
     value_schema: jsonSchemaSchema.nullish(),
+    file_policy: z
+      .object({
+        cardinality: z.enum(['one', 'many']),
+        ordered: z.boolean(),
+        allowed_mime_groups: z.array(z.string()),
+        allowed_extensions: z.array(z.string()),
+        max_bytes: z.number().int().positive().nullable().optional(),
+        purposes: z.array(z.string()),
+        image_only: z.boolean(),
+      })
+      .nullable()
+      .optional(),
   })
   .passthrough();
 export const blueprintSchema = z

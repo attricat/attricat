@@ -6,6 +6,7 @@ export const attributeValueTypes = {
   date: 'date',
   datetime: 'datetime',
   time: 'time',
+  file: 'file',
   relationship: 'relationship',
 } as const;
 

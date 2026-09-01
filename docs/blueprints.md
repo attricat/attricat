@@ -20,7 +20,7 @@ blueprint codes contain only ASCII letters, numbers, hyphens, and underscores.
 
 Every attribute declares exactly one of `value_type` or `from`. Supported value
 types are `string`, `number`, `integer`, `boolean`, `date`, `datetime`, `time`,
-and `relationship`.
+`relationship`, and `file`.
 
 ```toml
 [[attributes]]
@@ -52,6 +52,27 @@ code = "categories"
 value_type = "relationship"
 target_blueprint = "category"
 ```
+
+File attributes declare their cardinality and upload policy. `many` values are
+ordered by default; set `ordered = false` when callers must not rely on their
+order. File policy fields are valid only with `value_type = "file"`.
+
+```toml
+[[attributes]]
+code = "product_images"
+value_type = "file"
+cardinality = "many"
+allowed_mime_groups = ["image"]
+allowed_extensions = ["jpg", "png", "webp"]
+max_bytes = 10485760
+purposes = ["product_image"]
+image_only = true
+```
+
+`cardinality` is `one` by default. The compiler rejects a file value schema or
+relationship target, duplicate/empty policy entries, invalid purpose codes,
+zero size limits, and ordered single-file declarations. The persisted policy is
+part of the pinned blueprint revision.
 
 ## Entity Schema
 

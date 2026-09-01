@@ -173,12 +173,24 @@ pub struct IncludeRef {
     pub version: i64,
 }
 
+#[derive(Clone, Debug, PartialEq, Serialize)]
+pub struct FilePolicy {
+    pub cardinality: String,
+    pub ordered: bool,
+    pub allowed_mime_groups: Vec<String>,
+    pub allowed_extensions: Vec<String>,
+    pub max_bytes: Option<u64>,
+    pub purposes: Vec<String>,
+    pub image_only: bool,
+}
+
 #[derive(Clone, Debug, PartialEq)]
 pub enum AttributeDeclaration {
     Local {
         code: String,
         value_type: String,
         value_schema: Option<serde_json::Value>,
+        file_policy: Option<FilePolicy>,
         target_blueprint: Option<String>,
         tags: Vec<String>,
         context_fallback: String,
@@ -204,6 +216,7 @@ pub struct EffectiveAttribute {
     pub code: String,
     pub value_type: String,
     pub value_schema: Option<serde_json::Value>,
+    pub file_policy: Option<FilePolicy>,
     pub target_blueprint: Option<String>,
     pub tags: Vec<String>,
     pub context_fallback: String,

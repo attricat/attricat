@@ -50,7 +50,10 @@ export const scalarValueForField = (
   | undefined => {
   const value = fieldValue.trim();
   if (!value) return undefined;
-  if (attribute.value_type === attributeValueTypes.relationship)
+  if (
+    attribute.value_type === attributeValueTypes.relationship ||
+    attribute.value_type === attributeValueTypes.file
+  )
     return undefined;
   const schema = scalarValueSchemas[attribute.value_type];
   const result = schema.safeParse(value);
