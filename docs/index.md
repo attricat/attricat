@@ -6,7 +6,8 @@
    `process-compose`, and `watchexec`.
 2. Run `just dev`. Its setup step installs the frontend dependencies, creates
    `.env` from `.env.example`, assigns persistent ports for this worktree,
-   starts PostgreSQL, and watches the API and web app.
+   starts PostgreSQL, Mailpit, and RustFS, then watches the API, file worker,
+   and web app.
 3. Open the worktree-specific Vite URL printed by `just dev`; the selected
    ports are also recorded in the ignored `.catalog-worktree` file.
 
@@ -16,8 +17,8 @@ The API applies embedded SQLx migrations when it starts. To run them manually:
 just migrate
 ```
 
-Stop the application processes with `Ctrl-C`. PostgreSQL persists until you
-run `just down`.
+Stop the application processes with `Ctrl-C`. The local containers persist
+until you run `just down`.
 
 See [Configuration](configuration.md) for connection, proxy, and API limit
 settings.

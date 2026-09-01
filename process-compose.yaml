@@ -2,6 +2,8 @@ version: "0.5"
 
 processes:
   api:
-    command: watchexec --restart --watch apps/api --watch crates --exts rs,toml -- cargo run -p api
+    command: watchexec --restart --watch apps/api --watch crates --exts rs,toml -- cargo run -p api --bin api
+  file-worker:
+    command: watchexec --restart --watch apps/api --watch crates --exts rs,toml -- cargo run -p api --bin file-worker
   web:
     command: watchexec --restart --watch apps/catalog-web --exts ts,tsx,css,html,json -- npm run dev --prefix apps/catalog-web -- --host --port $WEB_PORT

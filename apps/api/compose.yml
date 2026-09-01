@@ -20,6 +20,43 @@ services:
     ports:
       - "${MAILPIT_SMTP_PORT:-1025}:1025"
       - "${MAILPIT_UI_PORT:-8025}:8025"
+  # RustFS is an actively maintained local S3-compatible adapter. Production
+  # configuration remains S3-generic and can point to AWS or another provider.
+  rustfs:
+    image: rustfs/rustfs:1.0.0-beta.12
+    command: "/data"
+    environment:
+      RUSTFS_ACCESS_KEY: ${S3_ACCESS_KEY_ID:-catalog-dev}
+      RUSTFS_SECRET_KEY: ${S3_SECRET_ACCESS_KEY:-catalog-dev-secret}
+    ports:
+      - "${RUSTFS_PORT:-9000}:9000"
+      - "${RUSTFS_CONSOLE_PORT:-9001}:9001"
+    volumes:
+      - rustfs-data:/data
+    healthcheck:
+      test: ["CMD-SHELL", "curl --fail --silent http://127.0.0.1:9000/health/live >/dev/null"]
+      interval: 3s
+      timeout: 3s
+      retries: 20
+      start_period: 5s
+  rustfs-init:
+    image: amazon/aws-cli:2.31.0
+    depends_on:
+      rustfs:
+        condition: service_healthy
+    environment:
+      AWS_ACCESS_KEY_ID: ${S3_ACCESS_KEY_ID:-catalog-dev}
+      AWS_SECRET_ACCESS_KEY: ${S3_SECRET_ACCESS_KEY:-catalog-dev-secret}
+      AWS_DEFAULT_REGION: ${S3_REGION:-us-east-1}
+      S3_BUCKET: ${S3_BUCKET:-catalog-files}
+    entrypoint:
+      - /bin/sh
+      - -ec
+      - >-
+        if ! aws --endpoint-url http://rustfs:9000 s3api head-bucket --bucket "$$S3_BUCKET" >/dev/null 2>&1;
+        then aws --endpoint-url http://rustfs:9000 s3api create-bucket --bucket "$$S3_BUCKET"; fi
+    restart: "no"
 
 volumes:
   postgres-data:
+  rustfs-data:

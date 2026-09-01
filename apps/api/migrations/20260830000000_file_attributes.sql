@@ -85,6 +85,16 @@ CREATE INDEX file_processing_jobs_poll_idx
 -- A file attribute has one EAV parent per attribute/context. Its ordered child
 -- rows are the current set. History receives copied children in the same Rust
 -- transaction that archives the parent; SQL triggers are intentionally absent.
+-- Composite references must match their parent workspace. PostgreSQL requires
+-- explicit unique constraints for each referenced key, even when an ID is
+-- globally unique. The partitioned history table's key also includes its
+-- partition key (`archived_at`).
+ALTER TABLE attribute_values
+    ADD CONSTRAINT attribute_values_workspace_id_key UNIQUE (workspace_id, id);
+ALTER TABLE attribute_value_history
+    ADD CONSTRAINT attribute_value_history_workspace_id_archived_at_key
+    UNIQUE (workspace_id, id, archived_at);
+
 CREATE TABLE attribute_file_references (
     attribute_value_id UUID NOT NULL REFERENCES attribute_values (id) ON DELETE CASCADE,
     workspace_id UUID NOT NULL,
@@ -98,11 +108,14 @@ CREATE TABLE attribute_file_references (
 CREATE INDEX attribute_file_references_file_idx ON attribute_file_references (workspace_id, file_id);
 
 CREATE TABLE attribute_file_reference_history (
-    attribute_value_history_id UUID NOT NULL REFERENCES attribute_value_history (id) ON DELETE CASCADE,
+    attribute_value_history_id UUID NOT NULL,
+    attribute_value_history_archived_at TIMESTAMPTZ NOT NULL,
     workspace_id UUID NOT NULL,
     file_id UUID NOT NULL,
     position INTEGER NOT NULL CHECK (position >= 0),
-    PRIMARY KEY (attribute_value_history_id, position),
-    UNIQUE (attribute_value_history_id, file_id),
-    FOREIGN KEY (workspace_id, file_id) REFERENCES files (workspace_id, id)
+    PRIMARY KEY (attribute_value_history_id, attribute_value_history_archived_at, position),
+    UNIQUE (attribute_value_history_id, attribute_value_history_archived_at, file_id),
+    FOREIGN KEY (workspace_id, file_id) REFERENCES files (workspace_id, id),
+    FOREIGN KEY (workspace_id, attribute_value_history_id, attribute_value_history_archived_at)
+        REFERENCES attribute_value_history (workspace_id, id, archived_at) ON DELETE CASCADE
 );

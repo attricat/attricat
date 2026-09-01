@@ -12,6 +12,7 @@ use api::{
     http::{AppState, router},
     mail::SmtpMailDelivery,
     repository::CatalogRepository,
+    storage::{ObjectStore, S3ObjectStore, StorageConfig},
     telemetry::{init_metrics, init_tracing},
 };
 use sqlx::postgres::{PgConnectOptions, PgPoolOptions};
@@ -25,6 +26,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
 
     let database_url =
         std::env::var("DATABASE_URL").map_err(|_| "DATABASE_URL must be set to start the API")?;
+    let storage_config = StorageConfig::from_env()
+        .map_err(|error| format!("invalid object storage configuration: {error}"))?;
+    let object_store = Arc::new(S3ObjectStore::new(storage_config).await);
+    object_store.readiness().await.map_err(|_| {
+        "object storage readiness failed: cannot access the configured S3 bucket; check S3_ENDPOINT, S3_BUCKET, and credentials"
+    })?;
     let bind_addr: SocketAddr = std::env::var("BIND_ADDR")
         .unwrap_or_else(|_| "127.0.0.1:3000".to_owned())
         .parse()?;
@@ -161,6 +168,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         listener,
         router(AppState {
             repository: CatalogRepository::with_workspace_pool_factory(pool, connect_options),
+            object_store,
             mail_delivery,
             password_reset_url,
             workspace_invitation_url,

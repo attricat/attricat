@@ -5,6 +5,7 @@ pub mod http;
 pub mod mail;
 pub mod model;
 pub mod repository;
+pub mod storage;
 pub mod telemetry;
 
 use sqlx::migrate::Migrator;

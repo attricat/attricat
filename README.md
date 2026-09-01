@@ -14,9 +14,11 @@ just dev
 ```
 
 `just dev` assigns persistent, worktree-specific ports, writes them and ready-to-open
-`WEB_URL` and `MAILPIT_UI_URL` values to the ignored `.catalog-worktree` file,
-and creates `.env` from `.env.example`. It prints both URLs when it starts. Stop `process-compose` with `Ctrl-C`; the
-PostgreSQL container remains available until stopped with:
+`WEB_URL`, `MAILPIT_UI_URL`, and `RUSTFS_UI_URL` values to the ignored
+`.catalog-worktree` file, and creates `.env` from `.env.example`. It starts
+PostgreSQL, Mailpit, and RustFS (the local S3-compatible object store) before
+starting the API, file worker, and web app. Stop `process-compose` with `Ctrl-C`;
+the containers remain available until stopped with:
 
 ```sh
 just down
