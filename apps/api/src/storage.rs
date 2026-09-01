@@ -147,6 +147,12 @@ pub trait ObjectStore: Send + Sync {
         content_type: Option<&str>,
     ) -> Result<(), ObjectStoreError>;
     async fn get(&self, key: &str) -> Result<StoredObject, ObjectStoreError>;
+    /// Fetch a requested range through the provider; callers never receive an object URL.
+    async fn get_range(
+        &self,
+        key: &str,
+        range: Option<&str>,
+    ) -> Result<StoredObject, ObjectStoreError>;
     async fn delete(&self, key: &str) -> Result<(), ObjectStoreError>;
     async fn readiness(&self) -> Result<(), ObjectStoreError>;
 }
@@ -283,6 +289,32 @@ impl ObjectStore for S3ObjectStore {
         })
     }
 
+    async fn get_range(
+        &self,
+        key: &str,
+        range: Option<&str>,
+    ) -> Result<StoredObject, ObjectStoreError> {
+        let mut request = self.client.get_object().bucket(&self.bucket).key(key);
+        if let Some(range) = range {
+            request = request.range(range);
+        }
+        let result = timeout(self.download_timeout, request.send())
+            .await
+            .map_err(|_| ObjectStoreError::TimedOut(DOWNLOAD_OPERATION))?
+            .map_err(|_| ObjectStoreError::Operation(DOWNLOAD_OPERATION))?;
+        let content_type = result.content_type().map(str::to_owned);
+        let bytes = timeout(self.download_timeout, result.body.collect())
+            .await
+            .map_err(|_| ObjectStoreError::TimedOut(DOWNLOAD_OPERATION))?
+            .map_err(|_| ObjectStoreError::Operation(DOWNLOAD_OPERATION))?
+            .into_bytes();
+        record_operation(DOWNLOAD_OPERATION, "success");
+        Ok(StoredObject {
+            bytes,
+            content_type,
+        })
+    }
+
     async fn delete(&self, key: &str) -> Result<(), ObjectStoreError> {
         let result = timeout(
             self.upload_timeout,
@@ -410,6 +442,40 @@ impl ObjectStore for FakeObjectStore {
             record_operation(DOWNLOAD_OPERATION, "success");
         }
         result
+    }
+
+    async fn get_range(
+        &self,
+        key: &str,
+        range: Option<&str>,
+    ) -> Result<StoredObject, ObjectStoreError> {
+        let object = self.get(key).await?;
+        let Some(range) = range else {
+            return Ok(object);
+        };
+        let Some(range) = range.strip_prefix("bytes=") else {
+            return Err(ObjectStoreError::Operation(DOWNLOAD_OPERATION));
+        };
+        let Some((start, end)) = range.split_once('-') else {
+            return Err(ObjectStoreError::Operation(DOWNLOAD_OPERATION));
+        };
+        let start = start
+            .parse::<usize>()
+            .map_err(|_| ObjectStoreError::Operation(DOWNLOAD_OPERATION))?;
+        let end = if end.is_empty() {
+            object.bytes.len().saturating_sub(1)
+        } else {
+            end.parse::<usize>()
+                .map_err(|_| ObjectStoreError::Operation(DOWNLOAD_OPERATION))?
+                .min(object.bytes.len().saturating_sub(1))
+        };
+        if start > end {
+            return Err(ObjectStoreError::Operation(DOWNLOAD_OPERATION));
+        }
+        Ok(StoredObject {
+            bytes: object.bytes.slice(start..=end),
+            content_type: object.content_type,
+        })
     }
 
     async fn delete(&self, key: &str) -> Result<(), ObjectStoreError> {

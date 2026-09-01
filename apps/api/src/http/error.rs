@@ -99,6 +99,20 @@ impl ApiError {
             message: message.to_owned(),
         }
     }
+    pub(super) fn invalid_range() -> Self {
+        Self {
+            status: StatusCode::RANGE_NOT_SATISFIABLE,
+            code: "invalid_range",
+            message: "requested byte range is not satisfiable".to_owned(),
+        }
+    }
+    pub(super) fn file_processing() -> Self {
+        Self {
+            status: StatusCode::CONFLICT,
+            code: "file_processing",
+            message: "file is not available for download".to_owned(),
+        }
+    }
     pub(super) fn storage_unavailable() -> Self {
         Self {
             status: StatusCode::SERVICE_UNAVAILABLE,

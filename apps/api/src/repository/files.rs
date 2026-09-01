@@ -38,6 +38,36 @@ pub struct FileUploadResult {
     pub files: Vec<UploadedFile>,
 }
 
+#[derive(Clone, Debug, Serialize, sqlx::FromRow)]
+pub struct FileMetadata {
+    pub id: Uuid,
+    pub filename: String,
+    pub mime_type: String,
+    pub byte_size: i64,
+    pub sha256: String,
+    pub status: String,
+    pub variants: Vec<FileVariantMetadata>,
+}
+
+#[derive(Clone, Debug, Serialize, sqlx::FromRow)]
+pub struct FileVariantMetadata {
+    pub kind: String,
+    pub mime_type: String,
+    pub width: Option<i32>,
+    pub height: Option<i32>,
+    pub byte_size: i64,
+    pub sha256: String,
+}
+
+#[derive(Clone, Debug, sqlx::FromRow)]
+pub struct FileObject {
+    pub mime_type: String,
+    pub byte_size: i64,
+    pub display_filename: String,
+    pub object_key: String,
+    pub status: String,
+}
+
 impl CatalogRepository {
     /// Validates the immutable entity blueprint and returns its file policy before
     /// object bytes are accepted. The entity is locked again while persisting,
@@ -174,6 +204,47 @@ impl CatalogRepository {
             context_id,
             files: result,
         })
+    }
+
+    /// Reads client-safe metadata. Object keys and original filenames remain
+    /// repository internals and are never serialized from this method.
+    pub async fn file_metadata(&self, file_id: Uuid) -> Result<FileMetadata, RepositoryError> {
+        let workspace_id = self.workspace_id.unwrap_or(Self::DEFAULT_WORKSPACE_ID);
+        let row = sqlx::query_as::<_, (Uuid, String, String, i64, String, String)>(
+            "SELECT id, display_filename, mime_type, byte_size, sha256, status FROM files WHERE id = $1 AND workspace_id = $2 AND deleted_at IS NULL",
+        )
+        .bind(file_id).bind(workspace_id).fetch_optional(&self.pool).await?
+        .ok_or(RepositoryError::NotFound("file"))?;
+        let variants = sqlx::query_as::<_, FileVariantMetadata>(
+            "SELECT kind, mime_type, width, height, byte_size, sha256 FROM file_variants WHERE file_id = $1 AND workspace_id = $2 ORDER BY kind",
+        )
+        .bind(file_id).bind(workspace_id).fetch_all(&self.pool).await?;
+        Ok(FileMetadata {
+            id: row.0,
+            filename: row.1,
+            mime_type: row.2,
+            byte_size: row.3,
+            sha256: row.4,
+            status: row.5,
+            variants,
+        })
+    }
+
+    pub async fn file_object(
+        &self,
+        file_id: Uuid,
+        variant_kind: Option<&str>,
+    ) -> Result<FileObject, RepositoryError> {
+        let workspace_id = self.workspace_id.unwrap_or(Self::DEFAULT_WORKSPACE_ID);
+        let row = match variant_kind {
+            Some(kind) => sqlx::query_as::<_, FileObject>(
+                "SELECT v.mime_type, v.byte_size, ''::TEXT AS display_filename, v.object_key, f.status FROM file_variants v JOIN files f ON f.id = v.file_id AND f.workspace_id = v.workspace_id WHERE v.file_id = $1 AND v.workspace_id = $2 AND v.kind = $3 AND f.deleted_at IS NULL",
+            ).bind(file_id).bind(workspace_id).bind(kind).fetch_optional(&self.pool).await?,
+            None => sqlx::query_as::<_, FileObject>(
+                "SELECT mime_type, byte_size, display_filename, original_key AS object_key, status FROM files WHERE id = $1 AND workspace_id = $2 AND deleted_at IS NULL",
+            ).bind(file_id).bind(workspace_id).fetch_optional(&self.pool).await?,
+        };
+        row.ok_or(RepositoryError::NotFound("file"))
     }
 
     async fn file_upload_attribute(

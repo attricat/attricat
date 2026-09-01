@@ -9,6 +9,7 @@ use api::{
         DEFAULT_PREVIEW_RELATIONSHIP_ITEMS, DEFAULT_RELATIONSHIP_FACET_NODES,
         MAINTENANCE_POOL_CONNECTIONS, REQUEST_POOL_CONNECTIONS,
     },
+    file_access::AllowFileAccess,
     http::{AppState, router},
     mail::SmtpMailDelivery,
     repository::CatalogRepository,
@@ -169,6 +170,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         router(AppState {
             repository: CatalogRepository::with_workspace_pool_factory(pool, connect_options),
             object_store,
+            file_access_policy: Arc::new(AllowFileAccess),
             mail_delivery,
             password_reset_url,
             workspace_invitation_url,

@@ -3,6 +3,7 @@
 use std::{net::SocketAddr, sync::Arc};
 
 use api::{
+    file_access::{AllowFileAccess, FileAccessPolicy},
     http::{AppState, router},
     mail::{MailDelivery, MailError},
     repository::CatalogRepository,
@@ -40,7 +41,16 @@ pub async fn start_server_with_object_store(
     pool: PgPool,
     object_store: Arc<FakeObjectStore>,
 ) -> (String, JoinHandle<()>) {
-    start_server_with_auth_mode_and_store(pool, 0, true, object_store).await
+    start_server_with_auth_mode_and_store(pool, 0, true, object_store, Arc::new(AllowFileAccess))
+        .await
+}
+
+pub async fn start_server_with_file_access_policy(
+    pool: PgPool,
+    object_store: Arc<FakeObjectStore>,
+    file_access_policy: Arc<dyn FileAccessPolicy>,
+) -> (String, JoinHandle<()>) {
+    start_server_with_auth_mode_and_store(pool, 0, true, object_store, file_access_policy).await
 }
 
 pub async fn start_session_server(pool: PgPool) -> (String, JoinHandle<()>) {
@@ -67,6 +77,7 @@ async fn start_server_with_auth_mode(
         data_health_cache_ttl_seconds,
         allow_trusted_headers,
         Arc::new(FakeObjectStore::available()),
+        Arc::new(AllowFileAccess),
     )
     .await
 }
@@ -76,6 +87,7 @@ async fn start_server_with_auth_mode_and_store(
     data_health_cache_ttl_seconds: u64,
     allow_trusted_headers: bool,
     object_store: Arc<FakeObjectStore>,
+    file_access_policy: Arc<dyn FileAccessPolicy>,
 ) -> (String, JoinHandle<()>) {
     let workspace_id = BOOTSTRAP_WORKSPACE_ID.parse::<Uuid>().unwrap();
     let owner_id = BOOTSTRAP_OWNER_ID.parse::<Uuid>().unwrap();
@@ -115,6 +127,7 @@ async fn start_server_with_auth_mode_and_store(
             (*pool.connect_options()).clone(),
         ),
         object_store,
+        file_access_policy,
         mail_delivery: Arc::new(TestMailDelivery),
         password_reset_url: "http://127.0.0.1/password-reset/confirm".to_owned(),
         workspace_invitation_url: "http://127.0.0.1/invitations/accept".to_owned(),

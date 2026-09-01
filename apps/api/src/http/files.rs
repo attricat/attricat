@@ -1,12 +1,15 @@
 use super::{AppState, data_health::invalidate_data_health, error::ApiError, extractors::ApiPath};
 use crate::{
-    repository::{FilePolicy, NewUploadedFile},
+    file_access::{FileAccessDecision, FileAccessOperation},
+    repository::{FileObject, FilePolicy, NewUploadedFile},
     storage::ObjectStoreError,
 };
 use axum::{
     Json,
+    body::Body,
     extract::{Multipart, State},
-    http::StatusCode,
+    http::{HeaderMap, HeaderValue, StatusCode, header},
+    response::Response,
 };
 use sha2::{Digest, Sha256};
 use std::path::PathBuf;
@@ -29,6 +32,7 @@ pub(super) async fn upload(
     ApiPath((entity_id, attribute_code)): ApiPath<(Uuid, String)>,
     mut multipart: Multipart,
 ) -> Result<(StatusCode, Json<crate::repository::FileUploadResult>), ApiError> {
+    authorize(&state, FileAccessOperation::Upload { entity_id }).await?;
     let mut context_id = None;
     let mut staged = Vec::new();
     while let Some(field) = multipart
@@ -164,6 +168,160 @@ pub(super) async fn upload(
             Err(error.into())
         }
     }
+}
+
+pub(super) async fn metadata(
+    State(state): State<AppState>,
+    super::auth::ScopedRepository(repository): super::auth::ScopedRepository,
+    ApiPath(file_id): ApiPath<Uuid>,
+) -> Result<Json<crate::repository::FileMetadata>, ApiError> {
+    authorize(&state, FileAccessOperation::ReadMetadata { file_id }).await?;
+    Ok(Json(repository.file_metadata(file_id).await?))
+}
+
+pub(super) async fn download_original(
+    State(state): State<AppState>,
+    super::auth::ScopedRepository(repository): super::auth::ScopedRepository,
+    ApiPath(file_id): ApiPath<Uuid>,
+    headers: HeaderMap,
+) -> Result<Response, ApiError> {
+    authorize(&state, FileAccessOperation::DownloadOriginal { file_id }).await?;
+    download(
+        &state,
+        repository.file_object(file_id, None).await?,
+        &headers,
+    )
+    .await
+}
+
+pub(super) async fn download_variant(
+    State(state): State<AppState>,
+    super::auth::ScopedRepository(repository): super::auth::ScopedRepository,
+    ApiPath((file_id, kind)): ApiPath<(Uuid, String)>,
+    headers: HeaderMap,
+) -> Result<Response, ApiError> {
+    authorize(&state, FileAccessOperation::DownloadVariant { file_id }).await?;
+    download(
+        &state,
+        repository.file_object(file_id, Some(&kind)).await?,
+        &headers,
+    )
+    .await
+}
+
+async fn authorize(state: &AppState, operation: FileAccessOperation) -> Result<(), ApiError> {
+    match state.file_access_policy.authorize(operation).await {
+        FileAccessDecision::Allow => Ok(()),
+        FileAccessDecision::Deny => Err(ApiError::forbidden()),
+    }
+}
+
+async fn download(
+    state: &AppState,
+    file: FileObject,
+    headers: &HeaderMap,
+) -> Result<Response, ApiError> {
+    if file.status != "ready" {
+        return Err(ApiError::file_processing());
+    }
+    // Metadata is database-owned: never trust storage-supplied content types.
+    let total = file.byte_size as usize;
+    let range = parse_range(
+        headers
+            .get(header::RANGE)
+            .and_then(|value| value.to_str().ok()),
+        total,
+    )?;
+    let (status, start, end) = match range {
+        Some((start, end)) => (StatusCode::PARTIAL_CONTENT, start, end),
+        None => (StatusCode::OK, 0, total - 1),
+    };
+    let provider_range =
+        (status == StatusCode::PARTIAL_CONTENT).then(|| format!("bytes={start}-{end}"));
+    let object = state
+        .object_store
+        .get_range(&file.object_key, provider_range.as_deref())
+        .await
+        .map_err(storage_error)?;
+    if object.bytes.len() != end - start + 1 {
+        return Err(ApiError::internal("file download failed"));
+    }
+    let mut response = Response::new(Body::from(object.bytes));
+    *response.status_mut() = status;
+    let response_headers = response.headers_mut();
+    response_headers.insert(
+        header::CONTENT_TYPE,
+        HeaderValue::from_str(&file.mime_type)
+            .unwrap_or(HeaderValue::from_static("application/octet-stream")),
+    );
+    response_headers.insert(
+        header::CONTENT_LENGTH,
+        HeaderValue::from_str(&(end - start + 1).to_string()).expect("length is valid"),
+    );
+    response_headers.insert(header::ACCEPT_RANGES, HeaderValue::from_static("bytes"));
+    response_headers.insert(
+        header::CACHE_CONTROL,
+        HeaderValue::from_static("private, no-store"),
+    );
+    response_headers.insert(
+        header::CONTENT_DISPOSITION,
+        HeaderValue::from_str(&format!(
+            "attachment; filename=\\\"{}\\\"",
+            safe_download_name(&file.display_filename)
+        ))
+        .expect("sanitized filename is valid"),
+    );
+    if status == StatusCode::PARTIAL_CONTENT {
+        response_headers.insert(
+            header::CONTENT_RANGE,
+            HeaderValue::from_str(&format!("bytes {start}-{end}/{total}")).expect("range is valid"),
+        );
+    }
+    Ok(response)
+}
+
+fn parse_range(value: Option<&str>, total: usize) -> Result<Option<(usize, usize)>, ApiError> {
+    let Some(value) = value else {
+        return Ok(None);
+    };
+    let Some(range) = value.strip_prefix("bytes=") else {
+        return Err(ApiError::invalid_range());
+    };
+    if range.contains(',') {
+        return Err(ApiError::invalid_range());
+    }
+    let Some((start, end)) = range.split_once('-') else {
+        return Err(ApiError::invalid_range());
+    };
+    let (start, end) = match (start.parse::<usize>(), end) {
+        (Ok(start), "") if start < total => (start, total - 1),
+        (Ok(start), end) if start < total => match end.parse::<usize>() {
+            Ok(end) if end >= start => (start, end.min(total - 1)),
+            _ => return Err(ApiError::invalid_range()),
+        },
+        (Err(_), end) => match end.parse::<usize>() {
+            Ok(length) if length > 0 => (total.saturating_sub(length), total - 1),
+            _ => return Err(ApiError::invalid_range()),
+        },
+        _ => return Err(ApiError::invalid_range()),
+    };
+    Ok(Some((start, end)))
+}
+
+fn safe_download_name(filename: &str) -> String {
+    let value: String = filename
+        .chars()
+        .map(|character| {
+            if character.is_ascii_alphanumeric() || matches!(character, '.' | '_' | '-') {
+                character
+            } else {
+                '_'
+            }
+        })
+        .collect();
+    (!value.is_empty())
+        .then_some(value)
+        .unwrap_or_else(|| "download".to_owned())
 }
 
 async fn stage_field(

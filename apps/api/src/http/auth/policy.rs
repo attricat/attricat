@@ -133,6 +133,9 @@ pub(super) fn policy(method: &Method, path: &str) -> Option<Policy> {
             },
         });
     }
+    if path.starts_with("/files/{file_id}") {
+        return Some(read(TargetKind::None));
+    }
     if path.starts_with("/v1/entities/{entity_id}") || path.starts_with("/entities/{entity_id}") {
         return Some(if method == Method::DELETE {
             Policy {
