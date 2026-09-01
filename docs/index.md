@@ -20,8 +20,14 @@ just migrate
 Stop the application processes with `Ctrl-C`. The local containers persist
 until you run `just down`.
 
-See [Configuration](configuration.md) for connection, proxy, and API limit
-settings.
+See [Configuration](configuration.md) for connection, proxy, file-storage, and API limit
+settings. The local RustFS-backed production-compatibility check is opt-in and
+uses the same `S3_*` settings as the API:
+
+```sh
+set -a; . ./.env; set +a
+cargo test -p api --test s3_compat -- --ignored
+```
 
 ## Learn The Model
 

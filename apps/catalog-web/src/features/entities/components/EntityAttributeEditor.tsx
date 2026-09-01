@@ -2,11 +2,14 @@ import InfoOutlinedIcon from '@mui/icons-material/InfoOutlined';
 import { MenuItem, TextField, Tooltip } from '@mui/material';
 import type { Attribute } from '../api';
 import { attributeValueTypes } from '../value-types';
+import { FileAttributeEditor } from '../../files/FileAttributeEditor';
 import { RelationshipField } from './RelationshipField';
 
 export const EntityAttributeEditor = ({
   attribute,
+  contextId,
   disabled,
+  entityId,
   error,
   helperText,
   migrationReviewMessage,
@@ -15,7 +18,9 @@ export const EntityAttributeEditor = ({
   value,
 }: {
   attribute: Attribute;
+  contextId: string | null;
   disabled: boolean;
+  entityId?: string;
   error?: string;
   helperText?: string;
   migrationReviewMessage?: string;
@@ -36,6 +41,18 @@ export const EntityAttributeEditor = ({
           error={error}
           onChange={onChange}
           value={value}
+        />
+      </>
+    );
+  if (attribute.value_type === attributeValueTypes.file)
+    return (
+      <>
+        {migrationBadge}
+        <FileAttributeEditor
+          attribute={attribute}
+          contextId={contextId}
+          disabled={disabled}
+          entityId={entityId}
         />
       </>
     );

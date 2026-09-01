@@ -85,8 +85,9 @@ they are never independently authored or edited.
 - `position` is the effective attribute position declared in the consuming
   blueprint TOML.
 - `value_type` is one of `string`, `number`, `integer`, `boolean`, `date`,
-  `datetime`, `time`, or `relationship`. Scalar types map to native PostgreSQL
-  columns; `relationship` has special EAV target semantics.
+  `datetime`, `time`, `relationship`, or `file`. Scalar types map to native
+  PostgreSQL columns; `relationship` and `file` have dedicated reference
+  semantics.
 - `value_schema` is an optional JSON Schema Draft 2020-12 contract for one
   normalized scalar value. It is versioned with the attribute definition.
 - Relationship attributes may declare `target_blueprint` in TOML. Its compiled
@@ -173,6 +174,29 @@ entity_id, attribute_id, context_id, relationship_target_entity_id
 The latter supports one-to-one, one-to-many, many-to-one, and many-to-many
 relationships without a separate relationship table. Relationship rows retain
 the same contextual and historical behavior as all other attribute values.
+
+### Files and processing jobs
+
+`files` stores immutable accepted-upload metadata: its workspace, SHA-256,
+verified MIME type, byte size, sanitized display filename, private original
+object key, status, and optional image dimensions. `file_variants` stores
+worker-produced variant metadata and object keys. File bytes are not stored in
+PostgreSQL, and original object keys are not returned by the API.
+
+`attribute_file_references` binds a file to its file attribute, entity, and
+context in display order. It is the source of truth for whether a file remains
+reachable. `file_processing_jobs` is a durable work queue owned by the file
+worker: it records attempts, availability, locks, worker identity, and a safe
+last error. Jobs are claimed with `SKIP LOCKED`; processing writes stable
+variant keys and is idempotent across retries.
+
+The lifecycle is `queued` → `processing` → `ready` or `failed`. When
+reconciliation finds no file reference, it marks the file `deleted`, sets
+`purge_after`, and queues a purge job only after the configured grace period.
+Deletion is therefore eventual: an object can exist during the grace period,
+but no newly unauthorized caller receives its storage location. A successfully
+completed purge job is retained as operational history; reconciliation and
+purging are safe to run repeatedly.
 
 ## Integrity and Indexes
 

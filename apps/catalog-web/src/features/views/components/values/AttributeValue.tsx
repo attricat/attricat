@@ -1,6 +1,7 @@
 import { Chip, Stack, Typography } from '@mui/material';
 import { Link } from '@tanstack/react-router';
 import type { Attribute } from '../../../entities/api';
+import { fileDownloadUrl } from '../../../files/api';
 import { formatAttributeValue } from './format-attribute-value';
 
 type RelationshipValue = {
@@ -10,6 +11,20 @@ type RelationshipValue = {
 
 const isRelationshipValue = (value: unknown): value is RelationshipValue =>
   typeof value === 'object' && value !== null && 'items' in value;
+
+type FileValue = { id: string; filename: string }[];
+
+const isFileValue = (value: unknown): value is FileValue =>
+  Array.isArray(value) &&
+  value.every(
+    (item) =>
+      typeof item === 'object' &&
+      item !== null &&
+      'id' in item &&
+      'filename' in item &&
+      typeof item.id === 'string' &&
+      typeof item.filename === 'string',
+  );
 
 export const AttributeValue = ({
   attribute,
@@ -45,6 +60,28 @@ export const AttributeValue = ({
         {!items.length && (
           <Typography color="text.secondary">Not set</Typography>
         )}
+      </Stack>
+    );
+  }
+  if (attribute.value_type === 'file' && isFileValue(value)) {
+    if (compact)
+      return (
+        <Typography variant="body2">
+          {value.length} file{value.length === 1 ? '' : 's'}
+        </Typography>
+      );
+    return (
+      <Stack spacing={1}>
+        {value.map((file) => (
+          <Typography
+            component="a"
+            href={fileDownloadUrl(file.id)}
+            key={file.id}
+            variant="body2"
+          >
+            {file.filename}
+          </Typography>
+        ))}
       </Stack>
     );
   }

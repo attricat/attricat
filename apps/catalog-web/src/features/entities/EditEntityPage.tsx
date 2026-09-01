@@ -127,6 +127,7 @@ export const EditEntityPage = ({ entityId }: { entityId: string }) => {
             key={`${entityForm.data.entity.id}:${contextId ?? ''}`}
             blueprint={entityForm.data.blueprint}
             contextId={contextId}
+            entityId={entityId}
             defaultContextId={defaultContextId}
             existingValues={entityForm.data.values}
             resolvedValues={resolvedPreview.data?.values}
