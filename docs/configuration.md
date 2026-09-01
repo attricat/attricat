@@ -45,6 +45,11 @@ or inaccessible configured bucket.
 | `S3_FORCE_PATH_STYLE` | Required | API and file worker | Strict `true`/`false` setting for S3 path-style addressing. Set `true` for local RustFS. |
 | `S3_UPLOAD_TIMEOUT_SECONDS` | Required | API and file worker | Positive timeout for object uploads and deletes. |
 | `S3_DOWNLOAD_TIMEOUT_SECONDS` | Required | API and file worker | Positive timeout for object downloads and bucket readiness. |
+| `FILE_WORKER_ID` | Random process UUID | File worker | Stable identifier written with claimed jobs. |
+| `FILE_WORKER_POLL_MILLISECONDS` | `500` | File worker | Delay between durable-job polls. |
+| `FILE_WORKER_MAX_PIXELS` | `40000000` | File worker | Maximum decoded image pixels accepted for processing. |
+| `FILE_WORKER_MAX_ATTEMPTS` | `5` | File worker | Attempts before a job becomes terminally failed. |
+| `FILE_DELETE_GRACE_SECONDS` | `86400` | File worker | Delay between an unreferenced file being soft-deleted and its object purge. |
 | `RUSTFS_PORT` | `9000` | Docker Compose | Worktree-specific host port for the local RustFS S3 API. |
 | `RUSTFS_CONSOLE_PORT` | `9001` | Docker Compose | Worktree-specific host port for the local RustFS console. |
 
@@ -52,6 +57,10 @@ Mailpit is a local-development and E2E adapter only; it is not production mail
 configuration. Source `.catalog-worktree` after `just dev`, open
 `$MAILPIT_UI_URL` for manual inspection, and use its REST API
 for E2E mailbox retrieval. Production mail delivery is deliberately deferred.
+
+A failed durable job can be returned to the queue by an operator with
+`cargo run -p api --bin file-worker -- --retry <job-uuid>`. The command resets
+its attempt counter only when the job is terminally failed.
 
 RustFS is a local-development S3-compatible adapter, replacing the deprecated
 MinIO local stack. It is not a production provider selection: production uses
