@@ -265,6 +265,7 @@ pub(super) async fn search_entity_previews(
             limit.into(),
             cursor,
             matching.as_deref(),
+            &input.system_tags,
         )
         .await?;
     for item in &mut items {

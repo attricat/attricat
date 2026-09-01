@@ -59,6 +59,8 @@ pub struct Entity {
     pub blueprint_id: Uuid,
     pub blueprint_version: i64,
     pub projections: Value,
+    pub system_tags: Vec<String>,
+    pub system_metadata: Value,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
     pub deleted_at: Option<DateTime<Utc>>,
@@ -258,6 +260,9 @@ pub struct SearchEntitiesRequest {
     pub query: Option<String>,
     #[serde(default)]
     pub filters: Vec<SearchFilter>,
+    /// All requested tags must be present. System tags are outside blueprint data.
+    #[serde(default)]
+    pub system_tags: Vec<String>,
     #[serde(default)]
     pub relationship_tree_facet: Option<RelationshipTreeFacetRequest>,
     #[serde(default)]
@@ -351,6 +356,10 @@ pub struct CreateEntityFormRequest {
     pub blueprint: SearchBlueprint,
     #[serde(default)]
     pub values: Vec<NewAttributeValue>,
+    #[serde(default)]
+    pub system_tags: Vec<String>,
+    #[serde(default = "empty_json_object")]
+    pub system_metadata: Value,
 }
 
 #[derive(Clone, Debug, Deserialize)]
@@ -362,6 +371,13 @@ pub struct UpdateEntityFormRequest {
     pub relationships: Vec<RelationshipTargets>,
     #[serde(default)]
     pub remove_values: Vec<AttributeValueSelector>,
+    /// Omitted fields retain their existing values; use [] or {} to clear.
+    pub system_tags: Option<Vec<String>>,
+    pub system_metadata: Option<Value>,
+}
+
+fn empty_json_object() -> Value {
+    Value::Object(Default::default())
 }
 
 #[derive(Clone, Debug, Serialize)]

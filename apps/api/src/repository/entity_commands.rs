@@ -14,12 +14,21 @@ impl CatalogRepository {
         blueprint_id: Uuid,
         blueprint_version: i64,
         values: Vec<NewAttributeValue>,
+        system_tags: Vec<String>,
+        system_metadata: Value,
     ) -> Result<Entity, RepositoryError> {
+        validate_system_annotations(&system_tags, &system_metadata)?;
         // Do not expose an entity before its initial values and derived preview
         // agree; otherwise a concurrent reader can observe a partial create.
         let mut transaction = self.pool.begin().await?;
         let entity = self
-            .insert_entity(&mut transaction, blueprint_id, blueprint_version)
+            .insert_entity(
+                &mut transaction,
+                blueprint_id,
+                blueprint_version,
+                system_tags,
+                system_metadata,
+            )
             .await?;
         for value in values {
             self.insert_value(&mut transaction, &entity, value).await?;
@@ -40,11 +49,34 @@ impl CatalogRepository {
         values: Vec<NewAttributeValue>,
         relationships: Vec<RelationshipTargets>,
         remove_values: Vec<AttributeValueSelector>,
+        system_tags: Option<Vec<String>>,
+        system_metadata: Option<Value>,
     ) -> Result<Entity, RepositoryError> {
+        if let Some(tags) = &system_tags {
+            validate_system_tags(tags)?;
+        }
+        if let Some(metadata) = &system_metadata {
+            validate_system_metadata(metadata)?;
+        }
         let mut transaction = self.pool.begin().await?;
         // The row lock serializes writers for an entity. It protects both the
         // one-latest-value invariant and the preview rebuilt from that state.
         let entity = self.lock_entity(&mut transaction, entity_id).await?;
+        if system_tags.is_some() || system_metadata.is_some() {
+            sqlx::query(
+                r#"UPDATE entities
+                   SET system_tags = COALESCE($2, system_tags),
+                       system_metadata = COALESCE($3, system_metadata),
+                       updated_at = now()
+                   WHERE id = $1 AND workspace_id = $4"#,
+            )
+            .bind(entity_id)
+            .bind(system_tags)
+            .bind(system_metadata)
+            .bind(self.workspace_id.unwrap_or(Self::DEFAULT_WORKSPACE_ID))
+            .execute(&mut *transaction)
+            .await?;
+        }
         for value in values {
             self.insert_value(&mut transaction, &entity, value).await?;
         }
@@ -66,7 +98,7 @@ impl CatalogRepository {
 
     pub async fn get_entity(&self, entity_id: Uuid) -> Result<Option<Entity>, RepositoryError> {
         Ok(sqlx::query_as::<_, Entity>(
-            r#"SELECT id, blueprint_id, blueprint_version, projections, created_at, updated_at, deleted_at
+            r#"SELECT id, blueprint_id, blueprint_version, projections, system_tags, system_metadata, created_at, updated_at, deleted_at
                FROM entities
                WHERE id = $1 AND workspace_id = $2 AND deleted_at IS NULL"#,
         )
@@ -99,7 +131,7 @@ impl CatalogRepository {
     ) -> Result<Vec<AttributeValue>, RepositoryError> {
         let mut transaction = self.pool.begin().await?;
         let entity = sqlx::query_as::<_, Entity>(
-            r#"SELECT id, blueprint_id, blueprint_version, projections, created_at, updated_at, deleted_at
+            r#"SELECT id, blueprint_id, blueprint_version, projections, system_tags, system_metadata, created_at, updated_at, deleted_at
                FROM entities
                WHERE id = $1 AND workspace_id = $2 AND deleted_at IS NULL
                FOR UPDATE"#,
@@ -511,7 +543,7 @@ impl CatalogRepository {
         entity_id: Uuid,
     ) -> Result<Entity, RepositoryError> {
         sqlx::query_as::<_, Entity>(
-            r#"SELECT id, blueprint_id, blueprint_version, projections, created_at, updated_at, deleted_at
+            r#"SELECT id, blueprint_id, blueprint_version, projections, system_tags, system_metadata, created_at, updated_at, deleted_at
                FROM entities WHERE id = $1 AND workspace_id = $2 AND deleted_at IS NULL FOR UPDATE"#,
         )
         .bind(entity_id)
@@ -526,17 +558,21 @@ impl CatalogRepository {
         transaction: &mut Transaction<'_, Postgres>,
         blueprint_id: Uuid,
         blueprint_version: i64,
+        system_tags: Vec<String>,
+        system_metadata: Value,
     ) -> Result<Entity, RepositoryError> {
         sqlx::query_as::<_, Entity>(
-            r#"INSERT INTO entities (id, workspace_id, blueprint_id, blueprint_version, projections)
-               SELECT $1, $2, b.id, b.version, $3
+            r#"INSERT INTO entities (id, workspace_id, blueprint_id, blueprint_version, projections, system_tags, system_metadata)
+               SELECT $1, $2, b.id, b.version, $3, $4, $5
                FROM blueprints b
-                WHERE b.id = $4 AND b.version = $5 AND b.workspace_id = $2 AND b.kind = 'entity' AND b.status = 'published' AND b.deleted_at IS NULL
-                RETURNING id, blueprint_id, blueprint_version, projections, created_at, updated_at, deleted_at"#,
+                WHERE b.id = $6 AND b.version = $7 AND b.workspace_id = $2 AND b.kind = 'entity' AND b.status = 'published' AND b.deleted_at IS NULL
+                RETURNING id, blueprint_id, blueprint_version, projections, system_tags, system_metadata, created_at, updated_at, deleted_at"#,
         )
         .bind(Uuid::new_v4())
         .bind(self.workspace_id.unwrap_or(Self::DEFAULT_WORKSPACE_ID))
         .bind(empty_projections())
+        .bind(system_tags)
+        .bind(system_metadata)
         .bind(blueprint_id)
         .bind(blueprint_version)
         .fetch_optional(&mut **transaction)
@@ -871,4 +907,30 @@ impl CatalogRepository {
             .await?;
         Ok(())
     }
+}
+
+fn validate_system_annotations(tags: &[String], metadata: &Value) -> Result<(), RepositoryError> {
+    validate_system_tags(tags)?;
+    validate_system_metadata(metadata)
+}
+
+pub(super) fn validate_system_tags(tags: &[String]) -> Result<(), RepositoryError> {
+    if tags.len() > 100
+        || tags
+            .iter()
+            .any(|tag| tag.trim().is_empty() || tag.len() > 128)
+        || tags.iter().collect::<HashSet<_>>().len() != tags.len()
+    {
+        return Err(RepositoryError::InvalidSystemTags);
+    }
+    Ok(())
+}
+
+fn validate_system_metadata(metadata: &Value) -> Result<(), RepositoryError> {
+    if !metadata.is_object()
+        || serde_json::to_vec(metadata).map_or(true, |value| value.len() > 64 * 1024)
+    {
+        return Err(RepositoryError::InvalidSystemMetadata);
+    }
+    Ok(())
 }

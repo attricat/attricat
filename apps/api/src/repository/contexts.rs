@@ -150,7 +150,7 @@ impl CatalogRepository {
               RETURNING id, code, data, parent_id"#)
             .bind(id).bind(input.parent_id).bind(input.data).bind(self.workspace_id.unwrap_or(Self::DEFAULT_WORKSPACE_ID)).fetch_optional(&mut *transaction).await?
             .ok_or(RepositoryError::ContextCycle)?;
-        let entities = query_as::<_, Entity>("SELECT id, blueprint_id, blueprint_version, projections, created_at, updated_at, deleted_at FROM entities WHERE workspace_id = $1 AND deleted_at IS NULL")
+        let entities = query_as::<_, Entity>("SELECT id, blueprint_id, blueprint_version, projections, system_tags, system_metadata, created_at, updated_at, deleted_at FROM entities WHERE workspace_id = $1 AND deleted_at IS NULL")
             .bind(self.workspace_id.unwrap_or(Self::DEFAULT_WORKSPACE_ID))
             .fetch_all(&mut *transaction).await?;
         for entity in &entities {

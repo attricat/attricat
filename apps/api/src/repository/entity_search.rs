@@ -1,5 +1,5 @@
-use super::entity_projection::display_label;
 use super::*;
+use super::{entity_commands::validate_system_tags, entity_projection::display_label};
 use base64::{Engine, engine::general_purpose::URL_SAFE_NO_PAD};
 use chrono::{DateTime, Utc};
 use std::collections::{HashMap, HashSet};
@@ -177,7 +177,9 @@ impl CatalogRepository {
         limit: i64,
         cursor: Option<(DateTime<Utc>, Uuid)>,
         matching_entity_ids: Option<&[Uuid]>,
+        system_tags: &[String],
     ) -> Result<(Vec<EntityPreview>, Option<String>), RepositoryError> {
+        validate_system_tags(system_tags)?;
         let sql = r#"SELECT e.id, e.blueprint_version, e.created_at, e.projections -> 'preview' AS preview,
                       b.views AS blueprint_views,
                       (SELECT COALESCE(jsonb_object_agg(attribute.code, attribute.context_fallback), '{}'::jsonb)
@@ -213,8 +215,9 @@ impl CatalogRepository {
                       OR (e.created_at, e.id) > ($4, $5)
                    )
                   AND ($6::uuid[] IS NULL OR e.id = ANY($6))
+                  AND ($7::text[] IS NULL OR e.system_tags @> $7)
                  ORDER BY e.created_at, e.id
-                 LIMIT $7"#;
+                 LIMIT $8"#;
         let (cursor_created_at, cursor_id) = cursor.unzip();
         let rows = sqlx::query_as::<_, EntityPreviewRow>(sql)
             .bind(blueprint_id)
@@ -223,6 +226,7 @@ impl CatalogRepository {
             .bind(cursor_created_at)
             .bind(cursor_id)
             .bind(matching_entity_ids)
+            .bind((!system_tags.is_empty()).then_some(system_tags))
             .bind(limit + 1)
             .fetch_all(&self.pool)
             .await?;

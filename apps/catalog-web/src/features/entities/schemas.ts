@@ -281,6 +281,8 @@ export const entitySchema = z
     id: uuidSchema,
     blueprint_id: uuidSchema.optional(),
     blueprint_version: z.number().int().positive().optional(),
+    system_tags: z.array(z.string()).optional(),
+    system_metadata: jsonObjectSchema.optional(),
   })
   .passthrough();
 const entityItemSchema = z.object({
@@ -371,6 +373,7 @@ export const searchEntitiesRequestSchema = z.object({
   }),
   query: z.string(),
   filters: z.array(z.never()),
+  system_tags: z.array(z.string()).optional(),
   relationship_tree_facet: z
     .object({
       source_relationship_field: z.string().min(1),
@@ -398,11 +401,15 @@ export const createEntityRequestSchema = z.object({
     version: z.number().int().positive().optional(),
   }),
   values: z.array(newAttributeValueSchema),
+  system_tags: z.array(z.string()).optional(),
+  system_metadata: jsonObjectSchema.optional(),
 });
 export const updateEntityRequestSchema = z.object({
   values: z.array(newAttributeValueSchema),
   relationships: z.array(relationshipTargetsSchema),
   remove_values: z.array(attributeValueSelectorSchema).default([]),
+  system_tags: z.array(z.string()).optional(),
+  system_metadata: jsonObjectSchema.optional(),
 });
 export const migrateEntityRequestSchema = z.object({
   migration_id: uuidSchema,
