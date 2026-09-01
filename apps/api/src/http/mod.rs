@@ -14,7 +14,7 @@ mod tokens;
 
 use std::{collections::HashMap, sync::Arc, time::Instant};
 
-use crate::{mail::MailDelivery, repository::CatalogRepository};
+use crate::{mail::MailDelivery, repository::CatalogRepository, storage::ObjectStore};
 use axum::{
     Router,
     extract::State,
@@ -31,6 +31,9 @@ use tracing::{Instrument, field::Empty};
 #[derive(Clone)]
 pub struct AppState {
     pub repository: CatalogRepository,
+    /// Storage is injected at startup so future file routes never construct a
+    /// provider client from request data.
+    pub object_store: Arc<dyn ObjectStore>,
     pub mail_delivery: Arc<dyn MailDelivery>,
     pub password_reset_url: String,
     pub workspace_invitation_url: String,

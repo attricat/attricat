@@ -6,9 +6,13 @@ edition = "2024"
 [dependencies]
 async-recursion = "1"
 async-trait = "0.1"
+aws-config = "1"
+aws-credential-types = "1"
+aws-sdk-s3 = "1"
 axum = "0.8"
 argon2 = "0.5"
 base64 = "0.22"
+bytes = "1"
 catalog-blueprint = { path = "../../crates/blueprint" }
 catalog-validation = { path = "../../crates/validation" }
 chrono = { version = "0.4", default-features = false, features = ["clock", "serde", "std"] }
@@ -28,7 +32,7 @@ subtle = "2.6"
 thiserror = "2"
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter", "json"] }
-tokio = { version = "1", features = ["macros", "net", "rt-multi-thread", "sync"] }
+tokio = { version = "1", features = ["macros", "net", "rt-multi-thread", "signal", "sync", "time"] }
 url = "2"
 uuid = { version = "1", features = ["serde", "v4"] }
 

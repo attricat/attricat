@@ -6,6 +6,7 @@ use api::{
     http::{AppState, router},
     mail::{MailDelivery, MailError},
     repository::CatalogRepository,
+    storage::FakeObjectStore,
     telemetry::init_metrics,
 };
 use async_trait::async_trait;
@@ -91,6 +92,7 @@ async fn start_server_with_auth_mode(
             pool.clone(),
             (*pool.connect_options()).clone(),
         ),
+        object_store: Arc::new(FakeObjectStore::available()),
         mail_delivery: Arc::new(TestMailDelivery),
         password_reset_url: "http://127.0.0.1/password-reset/confirm".to_owned(),
         workspace_invitation_url: "http://127.0.0.1/invitations/accept".to_owned(),

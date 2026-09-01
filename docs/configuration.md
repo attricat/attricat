@@ -3,7 +3,10 @@
 The API loads `.env` from the working directory at startup. `just setup` and
 `just dev` create it from `.env.example` with persistent, worktree-specific
 ports. Those port assignments, plus ready-to-open `WEB_URL` and
-`MAILPIT_UI_URL` values, are recorded in the ignored `.catalog-worktree` file.
+`MAILPIT_UI_URL`, and `RUSTFS_UI_URL` values, are recorded in the ignored
+`.catalog-worktree` file. The API and file worker validate object-storage
+configuration and bucket access during startup; neither starts with a missing
+or inaccessible configured bucket.
 
 | Setting | Default | Used by | Purpose |
 | --- | --- | --- | --- |
@@ -34,11 +37,28 @@ ports. Those port assignments, plus ready-to-open `WEB_URL` and
 | `WORKSPACE_ONBOARDING_URL` | Local onboarding URL | API local development | Absolute web URL used for delivered new-user onboarding links. |
 | `MAILPIT_SMTP_PORT` | `1025` | Docker Compose | Worktree-specific host port mapped to Mailpit SMTP. |
 | `MAILPIT_UI_PORT` | `8025` | Docker Compose | Worktree-specific host port for Mailpit's UI and REST API. |
+| `S3_ENDPOINT` | Required | API and file worker | Absolute HTTP(S) URL for the S3-compatible endpoint. Local development uses RustFS. |
+| `S3_REGION` | Required | API and file worker | S3 signing region. |
+| `S3_BUCKET` | Required | API and file worker | Existing bucket used for catalog objects. Local startup creates it. |
+| `S3_ACCESS_KEY_ID` | Required | API and file worker | S3 access key. |
+| `S3_SECRET_ACCESS_KEY` | Required | API and file worker | S3 secret access key. Do not log or expose it. |
+| `S3_FORCE_PATH_STYLE` | Required | API and file worker | Strict `true`/`false` setting for S3 path-style addressing. Set `true` for local RustFS. |
+| `S3_UPLOAD_TIMEOUT_SECONDS` | Required | API and file worker | Positive timeout for object uploads and deletes. |
+| `S3_DOWNLOAD_TIMEOUT_SECONDS` | Required | API and file worker | Positive timeout for object downloads and bucket readiness. |
+| `RUSTFS_PORT` | `9000` | Docker Compose | Worktree-specific host port for the local RustFS S3 API. |
+| `RUSTFS_CONSOLE_PORT` | `9001` | Docker Compose | Worktree-specific host port for the local RustFS console. |
 
 Mailpit is a local-development and E2E adapter only; it is not production mail
 configuration. Source `.catalog-worktree` after `just dev`, open
 `$MAILPIT_UI_URL` for manual inspection, and use its REST API
 for E2E mailbox retrieval. Production mail delivery is deliberately deferred.
+
+RustFS is a local-development S3-compatible adapter, replacing the deprecated
+MinIO local stack. It is not a production provider selection: production uses
+the same generic `S3_*` settings for its chosen S3-compatible service. The
+local bucket is initialized as `catalog-files`; open `$RUSTFS_UI_URL` after
+sourcing `.catalog-worktree` to inspect it. Back up PostgreSQL file metadata
+and the configured bucket together once file uploads are enabled.
 
 ## Request authorization
 

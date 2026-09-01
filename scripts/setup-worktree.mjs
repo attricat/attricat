@@ -5,7 +5,7 @@ import net from "node:net";
  * Provision this worktree's development environment.
  *
  * Each worktree receives stable, otherwise-unused PostgreSQL, API, and web
- * ports, Mailpit SMTP, and Mailpit UI ports in `.catalog-worktree`. The assignments are reused on later runs so
+ * ports, Mailpit SMTP, Mailpit UI, RustFS S3, and RustFS Console ports in `.catalog-worktree`. The assignments are reused on later runs so
  * `just dev` can be stopped and restarted without changing its URLs. The
  * script creates `.env` from `.env.example` when necessary, while preserving
  * existing non-port configuration in an existing `.env` file.
@@ -19,6 +19,8 @@ const portNames = [
   "WEB_PORT",
   "MAILPIT_SMTP_PORT",
   "MAILPIT_UI_PORT",
+  "RUSTFS_PORT",
+  "RUSTFS_CONSOLE_PORT",
 ];
 
 /** Parse simple KEY=VALUE entries from .env-style files. */
@@ -68,9 +70,10 @@ if (!portNames.every((name) => ports[name])) {
 
 const webUrl = `http://127.0.0.1:${ports.WEB_PORT}`;
 const mailpitUiUrl = `http://127.0.0.1:${ports.MAILPIT_UI_PORT}`;
+const rustfsUiUrl = `http://127.0.0.1:${ports.RUSTFS_CONSOLE_PORT}`;
 writeFileSync(
   stateFile,
-  `${portNames.map((name) => `${name}=${ports[name]}`).join("\n")}\nWEB_URL=${webUrl}\nMAILPIT_UI_URL=${mailpitUiUrl}\n`,
+  `${portNames.map((name) => `${name}=${ports[name]}`).join("\n")}\nWEB_URL=${webUrl}\nMAILPIT_UI_URL=${mailpitUiUrl}\nRUSTFS_UI_URL=${rustfsUiUrl}\n`,
 );
 
 // Only connection and listener settings are managed here; retain user overrides.
@@ -89,6 +92,9 @@ env = setEnvValue(env, "WEB_PORT", ports.WEB_PORT);
 env = setEnvValue(env, "POSTGRES_PORT", ports.POSTGRES_PORT);
 env = setEnvValue(env, "MAILPIT_SMTP_PORT", ports.MAILPIT_SMTP_PORT);
 env = setEnvValue(env, "MAILPIT_UI_PORT", ports.MAILPIT_UI_PORT);
+env = setEnvValue(env, "RUSTFS_PORT", ports.RUSTFS_PORT);
+env = setEnvValue(env, "RUSTFS_CONSOLE_PORT", ports.RUSTFS_CONSOLE_PORT);
+env = setEnvValue(env, "S3_ENDPOINT", `http://127.0.0.1:${ports.RUSTFS_PORT}`);
 env = setEnvValue(env, "SMTP_PORT", ports.MAILPIT_SMTP_PORT);
 env = setEnvValue(
   env,
@@ -109,3 +115,4 @@ writeFileSync(envFile, env);
 
 console.log(`Development web application: ${webUrl}`);
 console.log(`Mailpit: ${mailpitUiUrl}`);
+console.log(`RustFS: ${rustfsUiUrl}`);
