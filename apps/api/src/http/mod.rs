@@ -7,6 +7,7 @@ mod entities;
 mod entity_reads;
 mod error;
 mod extractors;
+mod files;
 mod members;
 mod roles;
 mod sessions;
@@ -47,6 +48,9 @@ pub struct AppState {
     pub max_entity_page_size: u32,
     pub max_incoming_relationship_page_size: u32,
     pub max_relationship_facet_nodes: u32,
+    /// Independently enforced while multipart fields stream to temporary storage.
+    pub max_upload_file_bytes: u64,
+    pub max_upload_files: usize,
     pub data_health_cache_ttl_seconds: u64,
     pub data_health_cache: DataHealthCache,
     pub session_cookie_secure: bool,
@@ -266,6 +270,10 @@ pub fn router(state: AppState) -> Router {
         .route(
             "/v1/entities/{entity_id}/blueprint-migration",
             post(entities::migrate_entity_to_latest),
+        )
+        .route(
+            "/entities/{entity_id}/file-attributes/{attribute_code}/uploads",
+            post(files::upload).layer(axum::extract::DefaultBodyLimit::disable()),
         )
         .route("/entities", get(entity_reads::list_previews))
         .route(

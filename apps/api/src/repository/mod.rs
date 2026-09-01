@@ -36,6 +36,7 @@ mod entity_commands;
 mod entity_migration;
 mod entity_projection;
 mod entity_search;
+mod files;
 mod health;
 mod members;
 mod roles;
@@ -44,6 +45,7 @@ mod tokens;
 mod values;
 
 pub(crate) use entity_search::decode_search_cursor;
+pub(crate) use files::{FilePolicy, FileUploadResult, NewUploadedFile};
 pub(crate) use members::{WorkspaceInvitation, WorkspaceMember};
 pub(crate) use roles::{Permission, WorkspaceGrantTarget, WorkspaceRole};
 pub(crate) use tokens::PersonalApiToken;
@@ -110,6 +112,10 @@ pub enum RepositoryError {
     DefaultContextOnly,
     #[error("attribute does not belong to the entity blueprint version")]
     AttributeNotApplicable,
+    #[error("file attribute policy is invalid")]
+    InvalidFilePolicy,
+    #[error("file count is incompatible with the attribute cardinality")]
+    FileCardinality,
     #[error("provide exactly one of attribute_id or attribute_code")]
     InvalidAttributeSelector,
     #[error("attribute kind does not match the supplied value")]

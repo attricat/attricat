@@ -6,6 +6,7 @@
 use std::{
     collections::BTreeMap,
     env,
+    path::Path,
     sync::atomic::{AtomicBool, Ordering},
     time::Duration,
 };
@@ -138,6 +139,13 @@ pub enum ObjectStoreError {
 #[async_trait]
 pub trait ObjectStore: Send + Sync {
     async fn put(&self, key: &str, object: StoredObject) -> Result<(), ObjectStoreError>;
+    /// Upload a staged file without collecting it in the HTTP process.
+    async fn put_file(
+        &self,
+        key: &str,
+        path: &Path,
+        content_type: Option<&str>,
+    ) -> Result<(), ObjectStoreError>;
     async fn get(&self, key: &str) -> Result<StoredObject, ObjectStoreError>;
     async fn delete(&self, key: &str) -> Result<(), ObjectStoreError>;
     async fn readiness(&self) -> Result<(), ObjectStoreError>;
@@ -205,6 +213,33 @@ impl ObjectStore for S3ObjectStore {
             .key(key)
             .body(ByteStream::from(object.bytes));
         if let Some(content_type) = object.content_type {
+            request = request.content_type(content_type);
+        }
+        let result = self.send_upload(UPLOAD_OPERATION, request.send()).await;
+        if result.is_err() {
+            record_operation(UPLOAD_OPERATION, "failure");
+        }
+        result?;
+        record_operation(UPLOAD_OPERATION, "success");
+        Ok(())
+    }
+
+    async fn put_file(
+        &self,
+        key: &str,
+        path: &Path,
+        content_type: Option<&str>,
+    ) -> Result<(), ObjectStoreError> {
+        let body = ByteStream::from_path(path)
+            .await
+            .map_err(|_| ObjectStoreError::Operation(UPLOAD_OPERATION))?;
+        let mut request = self
+            .client
+            .put_object()
+            .bucket(&self.bucket)
+            .key(key)
+            .body(body);
+        if let Some(content_type) = content_type {
             request = request.content_type(content_type);
         }
         let result = self.send_upload(UPLOAD_OPERATION, request.send()).await;
@@ -314,6 +349,10 @@ impl FakeObjectStore {
         self.available.store(available, Ordering::Relaxed);
     }
 
+    pub async fn object_count(&self) -> usize {
+        self.objects.lock().await.len()
+    }
+
     fn ensure_available(&self) -> Result<(), ObjectStoreError> {
         self.available
             .load(Ordering::Relaxed)
@@ -332,6 +371,25 @@ impl ObjectStore for FakeObjectStore {
         self.objects.lock().await.insert(key.to_owned(), object);
         record_operation(UPLOAD_OPERATION, "success");
         Ok(())
+    }
+
+    async fn put_file(
+        &self,
+        key: &str,
+        path: &Path,
+        content_type: Option<&str>,
+    ) -> Result<(), ObjectStoreError> {
+        let bytes = tokio::fs::read(path)
+            .await
+            .map_err(|_| ObjectStoreError::Operation(UPLOAD_OPERATION))?;
+        self.put(
+            key,
+            StoredObject {
+                bytes: Bytes::from(bytes),
+                content_type: content_type.map(str::to_owned),
+            },
+        )
+        .await
     }
 
     async fn get(&self, key: &str) -> Result<StoredObject, ObjectStoreError> {
