@@ -230,6 +230,7 @@ impl From<RepositoryError> for ApiError {
             },
             RepositoryError::InvalidPreview
             | RepositoryError::InvalidHierarchyRelationship
+            | RepositoryError::InvalidAgentState(_)
             | RepositoryError::ReservedContextCode
             | RepositoryError::InvalidCode
             | RepositoryError::InvalidContextData
@@ -246,6 +247,11 @@ impl From<RepositoryError> for ApiError {
             RepositoryError::InvalidBlueprintDefinition(_) => Self {
                 status: StatusCode::UNPROCESSABLE_ENTITY,
                 code: "invalid_blueprint_definition",
+                message: error.to_string(),
+            },
+            RepositoryError::ApprovalAlreadyDecided => Self {
+                status: StatusCode::CONFLICT,
+                code: "approval_already_decided",
                 message: error.to_string(),
             },
             RepositoryError::BlueprintCodeTaken => Self {

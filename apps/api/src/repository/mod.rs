@@ -30,6 +30,7 @@ use crate::{
     },
 };
 
+mod agents;
 mod blueprints;
 mod contexts;
 mod entity_commands;
@@ -44,6 +45,9 @@ mod sessions;
 mod tokens;
 mod values;
 
+pub use agents::{
+    AgentRun, AgentRunEvent, AgentToolCall, ApprovalDecision, Conversation, ConversationMessage,
+};
 pub(crate) use entity_search::decode_search_cursor;
 pub(crate) use files::{FileMetadata, FileObject, FilePolicy, FileUploadResult, NewUploadedFile};
 pub(crate) use members::{WorkspaceInvitation, WorkspaceMember};
@@ -166,6 +170,10 @@ pub enum RepositoryError {
     MigrationNotApplicable,
     #[error("migration needs resolutions for: {}", .0.join(", "))]
     MigrationNeedsResolution(Vec<String>),
+    #[error("invalid agent state: {0}")]
+    InvalidAgentState(&'static str),
+    #[error("an approval decision has already been recorded")]
+    ApprovalAlreadyDecided,
     #[error(transparent)]
     Database(#[from] sqlx::Error),
 }

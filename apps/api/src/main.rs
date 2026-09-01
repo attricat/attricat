@@ -3,6 +3,7 @@ use std::{net::SocketAddr, str::FromStr, sync::Arc};
 use api::{
     MIGRATOR,
     account::{Password, hash_password},
+    agents::AgentProviderConfig,
     constants::{
         DEFAULT_DATA_HEALTH_CACHE_TTL_SECONDS, DEFAULT_ENTITY_PAGE_SIZE,
         DEFAULT_INCOMING_RELATIONSHIP_PAGE_SIZE, DEFAULT_PREVIEW_RELATIONSHIP_DEPTH,
@@ -24,6 +25,14 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     dotenvy::dotenv().ok();
     init_tracing()?;
     let metrics = init_metrics()?;
+    let agents_enabled = AgentProviderConfig::from_env()
+        .map_err(|error| format!("invalid agent provider configuration: {error}"))?
+        .is_some();
+    if agents_enabled {
+        tracing::info!("agent provider configuration loaded");
+    } else {
+        tracing::info!("agents are unavailable: LLM_API_KEY is not configured");
+    }
 
     let database_url =
         std::env::var("DATABASE_URL").map_err(|_| "DATABASE_URL must be set to start the API")?;

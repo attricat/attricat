@@ -1,4 +1,6 @@
 pub mod account;
+pub mod agent_service;
+pub mod agents;
 mod blueprint_resolver;
 pub mod constants;
 pub mod file_access;
