@@ -10,6 +10,7 @@ use image::{DynamicImage, GenericImageView, ImageEncoder, ImageReader};
 use metrics::{counter, gauge};
 use sha2::Digest;
 use sqlx::{PgPool, Row};
+use tracing::{Instrument, info_span};
 use uuid::Uuid;
 
 use crate::storage::{ObjectStore, ObjectStoreError, StoredObject};
@@ -116,14 +117,25 @@ impl FileWorker {
             self.record_metrics().await?;
             return Ok(false);
         };
-        let result = match job.kind.as_str() {
-            "purge" => self.purge(&job).await,
-            _ => self.process_file(&job).await,
+        let kind = if job.kind == "purge" {
+            "purge"
+        } else {
+            "metadata"
         };
-        match result {
-            Ok(()) => self.complete(&job).await?,
-            Err(error) => self.fail(&job, &error.to_string()).await?,
+        let span = info_span!("file_worker.job", job_id = %job.id, file_id = %job.file_id, kind);
+        async {
+            let result = match kind {
+                "purge" => self.purge(&job).await,
+                _ => self.process_file(&job).await,
+            };
+            match result {
+                Ok(()) => self.complete(&job).await?,
+                Err(error) => self.fail(&job, &error.to_string()).await?,
+            }
+            Ok::<(), sqlx::Error>(())
         }
+        .instrument(span)
+        .await?;
         self.record_metrics().await?;
         Ok(true)
     }
@@ -220,16 +232,26 @@ impl FileWorker {
     /// purge job. Repeated runs are harmless and never delete before grace.
     pub async fn reconcile(&self) -> Result<(), sqlx::Error> {
         let grace = self.config.delete_grace.as_secs() as i64;
-        sqlx::query(r#"UPDATE files f SET status = 'deleted', deleted_at = now(), purge_after = now() + make_interval(secs => $1), updated_at = now()
+        let marked = sqlx::query(r#"UPDATE files f SET status = 'deleted', deleted_at = now(), purge_after = now() + make_interval(secs => $1), updated_at = now()
             WHERE f.deleted_at IS NULL AND NOT EXISTS (SELECT 1 FROM attribute_file_references r WHERE r.workspace_id = f.workspace_id AND r.file_id = f.id)"#).bind(grace).execute(&self.pool).await?;
+        metrics::counter!("catalog_file_reconciliation_total", "outcome" => "success").increment(1);
+        metrics::counter!("catalog_file_reconciliation_files_marked_total")
+            .increment(marked.rows_affected());
         let due: Vec<(Uuid, Uuid, DateTime<Utc>)> = sqlx::query_as(r#"SELECT f.workspace_id, f.id, f.purge_after FROM files f
             WHERE f.deleted_at IS NOT NULL AND f.purge_after <= now()
               AND NOT EXISTS (SELECT 1 FROM file_processing_jobs j WHERE j.file_id = f.id AND j.kind = 'purge' AND j.status IN ('queued','running','retryable','completed'))"#)
             .fetch_all(&self.pool).await?;
+        let due_count = due.len() as u64;
         for (workspace_id, file_id, available_at) in due {
             sqlx::query("INSERT INTO file_processing_jobs (id, workspace_id, file_id, kind, status, available_at) VALUES ($1,$2,$3,'purge','queued',$4)")
                 .bind(Uuid::new_v4()).bind(workspace_id).bind(file_id).bind(available_at).execute(&self.pool).await?;
         }
+        metrics::counter!("catalog_file_purge_jobs_queued_total").increment(due_count);
+        tracing::info!(
+            files_marked = marked.rows_affected(),
+            purge_jobs_queued = due_count,
+            "file reconciliation completed"
+        );
         Ok(())
     }
 

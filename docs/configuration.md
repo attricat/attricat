@@ -45,6 +45,8 @@ or inaccessible configured bucket.
 | `S3_FORCE_PATH_STYLE` | Required | API and file worker | Strict `true`/`false` setting for S3 path-style addressing. Set `true` for local RustFS. |
 | `S3_UPLOAD_TIMEOUT_SECONDS` | Required | API and file worker | Positive timeout for object uploads and deletes. |
 | `S3_DOWNLOAD_TIMEOUT_SECONDS` | Required | API and file worker | Positive timeout for object downloads and bucket readiness. |
+| `FILE_UPLOAD_MAX_BYTES` | `52428800` | API | Positive request-level byte limit for each streamed upload. A file attribute may set a lower `max_bytes` policy. |
+| `FILE_UPLOAD_MAX_FILES` | `10` | API | Positive request-level number of file parts. A `cardinality = "one"` attribute accepts exactly one. |
 | `FILE_WORKER_ID` | Random process UUID | File worker | Stable identifier written with claimed jobs. |
 | `FILE_WORKER_POLL_MILLISECONDS` | `500` | File worker | Delay between durable-job polls. |
 | `FILE_WORKER_MAX_PIXELS` | `40000000` | File worker | Maximum decoded image pixels accepted for processing. |
@@ -68,6 +70,29 @@ the same generic `S3_*` settings for its chosen S3-compatible service. The
 local bucket is initialized as `catalog-files`; open `$RUSTFS_UI_URL` after
 sourcing `.catalog-worktree` to inspect it. Back up PostgreSQL file metadata
 and the configured bucket together once file uploads are enabled.
+
+## File storage operations
+
+The API process streams multipart parts to private temporary files, verifies the
+file signature and immutable blueprint policy, then streams the staged object to
+S3. It does not return object-store URLs or accept object keys from clients.
+The file worker is the only component that reads originals for processing,
+writes generated variants, or deletes objects. Give API and worker credentials
+only the minimum bucket permissions (`PutObject`, `GetObject`, `DeleteObject`,
+and `HeadBucket`); keep the bucket private and terminate TLS at the S3 endpoint.
+
+Uploaded files are retained while referenced. Reconciliation marks an
+unreferenced file deleted and schedules its purge after
+`FILE_DELETE_GRACE_SECONDS` (one day by default). This is a grace period, not a
+backup policy: restore a file by recreating its reference before the purge is
+claimed. Back up and restore the PostgreSQL database and the S3 bucket as one
+consistent unit. Restoring only one can leave metadata without objects or
+orphaned objects; run the worker afterwards to reconcile the restored state.
+
+RustFS is the supported local and E2E S3-compatible adapter. It is deliberately
+configured through the same AWS SDK and `S3_*` settings used in production, so
+provider compatibility is exercised without making MinIO a development
+requirement.
 
 ## Request authorization
 

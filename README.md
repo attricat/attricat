@@ -43,6 +43,7 @@ internal database/configuration identifier; clients do not select it directly.
 - [API reference](docs/api.md)
 - [Configuration reference](docs/configuration.md)
 - [Database model](docs/database.md)
+- [File storage, worker, and retention configuration](docs/configuration.md#file-storage-operations)
 - [Local account lifecycle](docs/authentication.md)
 - [Manual test-data generator](examples/generate.md)
 - [Relationships walkthrough](examples/relationships/README.md)
