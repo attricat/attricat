@@ -15,7 +15,10 @@ mod tokens;
 
 use std::{collections::HashMap, sync::Arc, time::Instant};
 
-use crate::{mail::MailDelivery, repository::CatalogRepository, storage::ObjectStore};
+use crate::{
+    file_access::FileAccessPolicy, mail::MailDelivery, repository::CatalogRepository,
+    storage::ObjectStore,
+};
 use axum::{
     Router,
     extract::State,
@@ -35,6 +38,7 @@ pub struct AppState {
     /// Storage is injected at startup so future file routes never construct a
     /// provider client from request data.
     pub object_store: Arc<dyn ObjectStore>,
+    pub file_access_policy: Arc<dyn FileAccessPolicy>,
     pub mail_delivery: Arc<dyn MailDelivery>,
     pub password_reset_url: String,
     pub workspace_invitation_url: String,
@@ -274,6 +278,12 @@ pub fn router(state: AppState) -> Router {
         .route(
             "/entities/{entity_id}/file-attributes/{attribute_code}/uploads",
             post(files::upload).layer(axum::extract::DefaultBodyLimit::disable()),
+        )
+        .route("/files/{file_id}", get(files::metadata))
+        .route("/files/{file_id}/download", get(files::download_original))
+        .route(
+            "/files/{file_id}/variants/{kind}/download",
+            get(files::download_variant),
         )
         .route("/entities", get(entity_reads::list_previews))
         .route(

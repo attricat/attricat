@@ -45,7 +45,7 @@ mod tokens;
 mod values;
 
 pub(crate) use entity_search::decode_search_cursor;
-pub(crate) use files::{FilePolicy, FileUploadResult, NewUploadedFile};
+pub(crate) use files::{FileMetadata, FileObject, FilePolicy, FileUploadResult, NewUploadedFile};
 pub(crate) use members::{WorkspaceInvitation, WorkspaceMember};
 pub(crate) use roles::{Permission, WorkspaceGrantTarget, WorkspaceRole};
 pub(crate) use tokens::PersonalApiToken;
