@@ -19,6 +19,12 @@ or inaccessible configured bucket.
 | `CATALOG_BOOTSTRAP_OWNER_PASSWORD` | Unset | API | Optional one-time local password for a newly bootstrapped owner. It is hashed before persistence and never updates an existing credential. |
 | `SESSION_COOKIE_SECURE` | `true` | API | Adds `Secure` to browser session and CSRF cookies. Set `false` only for local HTTP development or test servers. |
 | `RUST_LOG` | `info` | API | Structured tracing filter (for example, `api=debug`). |
+| `LLM_API_KEY` | Unset (agents unavailable) | API only | Secret API key for the OpenAI-compatible provider. Never send, persist, or log it. |
+| `LLM_BASE_URL` | `https://api.openai.com/v1` | API only | Absolute HTTP(S) base URL for OpenAI-compatible Chat Completions. |
+| `LLM_MODEL` | `gpt-4o-mini` | API only | Provider model identifier captured on each run, never a browser-selected setting. |
+| `LLM_REQUEST_TIMEOUT_SECONDS` | `60` | API only | Per-provider-request timeout, 1–3600 seconds. |
+| `LLM_RUN_TIMEOUT_SECONDS` | `300` | API only | Total agent-run timeout, 1–3600 seconds. |
+| `AGENT_SCHEDULER_POLL_SECONDS` | `15` | API only | Durable schedule-worker polling interval, 1–3600 seconds. |
 | `PREVIEW_MAX_RELATIONSHIP_DEPTH` | `3` | API | Maximum recursive relationship preview depth. |
 | `PREVIEW_MAX_RELATIONSHIP_ITEMS` | `10` | API | Maximum inline targets per relationship. |
 | `ENTITY_MAX_PAGE_SIZE` | `100` | API | Maximum page size for relationship browsing. |
@@ -52,6 +58,15 @@ or inaccessible configured bucket.
 | `FILE_DELETE_GRACE_SECONDS` | `86400` | File worker | Delay between an unreferenced file being soft-deleted and its object purge. |
 | `RUSTFS_PORT` | `9000` | Docker Compose | Worktree-specific host port for the local RustFS S3 API. |
 | `RUSTFS_CONSOLE_PORT` | `9001` | Docker Compose | Worktree-specific host port for the local RustFS console. |
+
+## Agent provider
+
+Agents are disabled when `LLM_API_KEY` is absent or blank; ordinary catalog API
+startup continues. Set the key, base URL, and model only in the API process
+environment (or its secret manager). The provider is OpenAI Chat-Completions
+compatible. The API validates the URL and bounded timeouts at startup, logs only
+whether agents are available, and stores provider base URL/model snapshots—not
+credentials—in durable agent records.
 
 Mailpit is a local-development and E2E adapter only; it is not production mail
 configuration. Source `.catalog-worktree` after `just dev`, open
