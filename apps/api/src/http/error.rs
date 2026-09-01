@@ -165,6 +165,16 @@ impl From<RepositoryError> for ApiError {
                 code: "attribute_not_applicable",
                 message: error.to_string(),
             },
+            RepositoryError::InvalidSystemMetadata => Self {
+                status: StatusCode::UNPROCESSABLE_ENTITY,
+                code: "invalid_system_metadata",
+                message: error.to_string(),
+            },
+            RepositoryError::InvalidSystemTags => Self {
+                status: StatusCode::UNPROCESSABLE_ENTITY,
+                code: "invalid_system_tags",
+                message: error.to_string(),
+            },
             RepositoryError::FileCardinality => Self {
                 status: StatusCode::UNPROCESSABLE_ENTITY,
                 code: "file_cardinality_exceeded",

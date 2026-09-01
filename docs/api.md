@@ -78,9 +78,9 @@ password, cookie, CSRF, expiry, and revocation contract is documented in
 | `GET` | `/entities/{id}/values/current` | Read current direct values and edges. |
 | `POST` | `/entities/{id}/relationships/replace` | Replace relationship target sets. |
 | `POST` | `/entities/{id}/relationships/remove` | Remove relationship targets. |
-| `POST` | `/v1/entities/search` | Search entities in one blueprint revision. |
-| `POST` | `/v1/entities` | Create an entity atomically with form values. |
-| `GET`, `PUT` | `/v1/entities/{id}` | Read or update an entity form atomically. |
+| `POST` | `/v1/entities/search` | Search entities in one blueprint revision, optionally by system tags. |
+| `POST` | `/v1/entities` | Create an entity atomically with form values and optional system annotations. |
+| `GET`, `PUT` | `/v1/entities/{id}` | Read or update an entity form atomically, including optional system annotations. |
 | `POST` | `/v1/entities/{id}/blueprint-migration/preview` | Assess migration to the highest published revision. |
 | `POST` | `/v1/entities/{id}/blueprint-migration` | Migrate an entity to that revision. |
 | `POST` | `/entities/{entity_id}/file-attributes/{attribute_code}/uploads` | Stream one or more multipart file parts to a file attribute. |
@@ -102,6 +102,21 @@ can create entities or serve as migration targets. See [Blueprint Publication](d
 `POST /v1/entities/search` optionally accepts a relationship tree facet. See
 [Relationship Tree Facets](search-facets.md) for its request and response
 contract.
+
+## Entity system annotations
+
+Entities include `system_tags` (an array of unique, non-empty strings) and
+`system_metadata` (a JSON object, up to 64 KiB). These fields are intentionally
+outside the versioned blueprint and EAV value model, so automation and operators
+can retain workflow markers and diagnostic data without changing an entity's
+schema. They are returned with entity reads and form responses, but never added
+to projections or views.
+
+`POST /v1/entities` accepts both fields; omitted values default to `[]` and
+`{}`. `PUT /v1/entities/{id}` accepts either field independently; omitted fields
+are retained, while `[]` or `{}` clears the corresponding value. Search accepts
+`system_tags`; returned entities must contain every supplied tag, making it
+suitable for finding a marked batch before applying a bulk workflow.
 
 ## File uploads and downloads
 

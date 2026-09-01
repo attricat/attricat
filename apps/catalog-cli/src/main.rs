@@ -141,6 +141,12 @@ enum EntityCommand {
         values: PathBuf,
         #[arg(long)]
         context_id: Option<Uuid>,
+        /// JSON array of agent/operator-owned tags.
+        #[arg(long)]
+        system_tags: Option<String>,
+        /// JSON object of agent/operator-owned metadata.
+        #[arg(long)]
+        system_metadata: Option<String>,
     },
     Get {
         entity_id: Uuid,
@@ -183,6 +189,9 @@ enum EntityCommand {
         size: u32,
         #[arg(long)]
         cursor: Option<String>,
+        /// JSON array; return entities containing every requested system tag.
+        #[arg(long)]
+        system_tags: Option<String>,
     },
     Form {
         entity_id: Uuid,
@@ -197,6 +206,12 @@ enum EntityCommand {
         remove_values: Option<PathBuf>,
         #[arg(long)]
         context_id: Option<Uuid>,
+        /// JSON array of agent/operator-owned tags. Omit to retain existing tags.
+        #[arg(long)]
+        system_tags: Option<String>,
+        /// JSON object of agent/operator-owned metadata. Omit to retain existing metadata.
+        #[arg(long)]
+        system_metadata: Option<String>,
     },
     Migrate {
         entity_id: Uuid,
@@ -706,18 +721,20 @@ async fn run(cli: Cli) -> Result<String, CliError> {
                 version,
                 values,
                 context_id,
+                system_tags,
+                system_metadata,
             } => {
-                request(
-                    &client,
-                    &server,
-                    Method::POST,
-                    "/v1/entities",
-                    Some(json!({
-                        "blueprint": { "code": blueprint, "version": version },
-                        "values": values_body_from_file(&values, context_id)?["values"].clone(),
-                    })),
-                )
-                .await
+                let mut body = json!({
+                    "blueprint": { "code": blueprint, "version": version },
+                    "values": values_body_from_file(&values, context_id)?["values"].clone(),
+                });
+                if let Some(tags) = system_tags {
+                    body["system_tags"] = json_tags_argument(&tags)?;
+                }
+                if let Some(metadata) = system_metadata {
+                    body["system_metadata"] = json_object_argument(&metadata)?;
+                }
+                request(&client, &server, Method::POST, "/v1/entities", Some(body)).await
             }
             EntityCommand::Get { entity_id } => {
                 request(
@@ -812,18 +829,23 @@ async fn run(cli: Cli) -> Result<String, CliError> {
                 query,
                 size,
                 cursor,
+                system_tags,
             } => {
+                let mut body = json!({
+                    "blueprint": { "code": blueprint, "version": version },
+                    "query": query,
+                    "filters": [],
+                    "page": { "size": size, "cursor": cursor },
+                });
+                if let Some(tags) = system_tags {
+                    body["system_tags"] = json_tags_argument(&tags)?;
+                }
                 request(
                     &client,
                     &server,
                     Method::POST,
                     "/v1/entities/search",
-                    Some(json!({
-                        "blueprint": { "code": blueprint, "version": version },
-                        "query": query,
-                        "filters": [],
-                        "page": { "size": size, "cursor": cursor },
-                    })),
+                    Some(body),
                 )
                 .await
             }
@@ -843,18 +865,27 @@ async fn run(cli: Cli) -> Result<String, CliError> {
                 relationships,
                 remove_values,
                 context_id,
+                system_tags,
+                system_metadata,
             } => {
+                let mut body = form_update_body(
+                    values.as_ref(),
+                    relationships.as_ref(),
+                    remove_values.as_ref(),
+                    context_id,
+                )?;
+                if let Some(tags) = system_tags {
+                    body["system_tags"] = json_tags_argument(&tags)?;
+                }
+                if let Some(metadata) = system_metadata {
+                    body["system_metadata"] = json_object_argument(&metadata)?;
+                }
                 request(
                     &client,
                     &server,
                     Method::PUT,
                     &format!("/v1/entities/{}", segment(entity_id)),
-                    Some(form_update_body(
-                        values.as_ref(),
-                        relationships.as_ref(),
-                        remove_values.as_ref(),
-                        context_id,
-                    )?),
+                    Some(body),
                 )
                 .await
             }
@@ -1293,6 +1324,32 @@ fn relationships_body(
         })
         .collect::<Result<Vec<_>, _>>()?;
     Ok(json!({ "relationships": relationships }))
+}
+
+fn json_tags_argument(input: &str) -> Result<Value, CliError> {
+    let value: Value = serde_json::from_str(input)
+        .map_err(|error| CliError::Input(format!("invalid --system-tags JSON: {error}")))?;
+    if !value.is_array()
+        || !value
+            .as_array()
+            .is_some_and(|tags| tags.iter().all(Value::is_string))
+    {
+        return Err(CliError::Input(
+            "--system-tags must be a JSON array of strings".to_owned(),
+        ));
+    }
+    Ok(value)
+}
+
+fn json_object_argument(input: &str) -> Result<Value, CliError> {
+    let value: Value = serde_json::from_str(input)
+        .map_err(|error| CliError::Input(format!("invalid --system-metadata JSON: {error}")))?;
+    if !value.is_object() {
+        return Err(CliError::Input(
+            "--system-metadata must be a JSON object".to_owned(),
+        ));
+    }
+    Ok(value)
 }
 
 fn form_update_body(

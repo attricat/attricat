@@ -35,6 +35,8 @@ pub(super) async fn create_entity_form(
             blueprint.blueprint.id,
             blueprint.blueprint.version,
             input.values,
+            input.system_tags,
+            input.system_metadata,
         )
         .await?;
     invalidate_data_health(&state).await;
@@ -79,6 +81,8 @@ pub(super) async fn update_entity_form(
             input.values,
             input.relationships,
             input.remove_values,
+            input.system_tags,
+            input.system_metadata,
         )
         .await?;
     invalidate_data_health(&state).await;

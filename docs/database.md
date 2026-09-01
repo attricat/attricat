@@ -105,6 +105,10 @@ Entities are catalog items.
   computation.
 - `projections` is a JSONB field reserved for future denormalized read models;
   EAV values remain the source of truth.
+- `system_tags` and `system_metadata` are operator/automation-owned annotations,
+  rather than blueprint attributes. They are not versioned, schema-validated as
+  entity data, or included in projections. Tags use a GIN index so a workflow
+  can find entities marked with all requested tags.
 
 ### `attribute_contexts`
 

@@ -323,7 +323,7 @@ impl CatalogRepository {
             r#"UPDATE entities
                SET projections = jsonb_set(projections, '{preview}', $2, true), updated_at = now()
                WHERE id = $1
-                RETURNING id, blueprint_id, blueprint_version, projections, created_at, updated_at, deleted_at"#,
+                RETURNING id, blueprint_id, blueprint_version, projections, system_tags, system_metadata, created_at, updated_at, deleted_at"#,
         )
         .bind(entity_id)
         .bind(preview)

@@ -104,6 +104,12 @@ pub enum RepositoryError {
     InvalidCode,
     #[error("context data must be a JSON object")]
     InvalidContextData,
+    #[error("system metadata must be a JSON object no larger than 64 KiB")]
+    InvalidSystemMetadata,
+    #[error(
+        "system tags must contain at most 100 unique, non-blank strings no longer than 128 bytes"
+    )]
+    InvalidSystemTags,
     #[error("context was not found")]
     InvalidContext,
     #[error("the default context cannot be changed or deleted")]
