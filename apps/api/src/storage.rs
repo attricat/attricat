@@ -300,14 +300,21 @@ impl ObjectStore for S3ObjectStore {
         }
         let result = timeout(self.download_timeout, request.send())
             .await
-            .map_err(|_| ObjectStoreError::TimedOut(DOWNLOAD_OPERATION))?
-            .map_err(|_| ObjectStoreError::Operation(DOWNLOAD_OPERATION))?;
+            .map_err(|_| ObjectStoreError::TimedOut(DOWNLOAD_OPERATION))
+            .and_then(|result| result.map_err(|_| ObjectStoreError::Operation(DOWNLOAD_OPERATION)));
+        if result.is_err() {
+            record_operation(DOWNLOAD_OPERATION, "failure");
+        }
+        let result = result?;
         let content_type = result.content_type().map(str::to_owned);
         let bytes = timeout(self.download_timeout, result.body.collect())
             .await
-            .map_err(|_| ObjectStoreError::TimedOut(DOWNLOAD_OPERATION))?
-            .map_err(|_| ObjectStoreError::Operation(DOWNLOAD_OPERATION))?
-            .into_bytes();
+            .map_err(|_| ObjectStoreError::TimedOut(DOWNLOAD_OPERATION))
+            .and_then(|result| result.map_err(|_| ObjectStoreError::Operation(DOWNLOAD_OPERATION)));
+        if bytes.is_err() {
+            record_operation(DOWNLOAD_OPERATION, "failure");
+        }
+        let bytes = bytes?.into_bytes();
         record_operation(DOWNLOAD_OPERATION, "success");
         Ok(StoredObject {
             bytes,

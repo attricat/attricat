@@ -14,6 +14,7 @@ use axum::{
 use sha2::{Digest, Sha256};
 use std::path::PathBuf;
 use tokio::{fs, io::AsyncWriteExt};
+use tracing::{Instrument, info_span};
 use uuid::Uuid;
 
 struct StagedFile {
@@ -32,142 +33,153 @@ pub(super) async fn upload(
     ApiPath((entity_id, attribute_code)): ApiPath<(Uuid, String)>,
     mut multipart: Multipart,
 ) -> Result<(StatusCode, Json<crate::repository::FileUploadResult>), ApiError> {
-    authorize(&state, FileAccessOperation::Upload { entity_id }).await?;
-    let mut context_id = None;
-    let mut staged = Vec::new();
-    while let Some(field) = multipart
-        .next_field()
-        .await
-        .map_err(|_| ApiError::invalid_file("multipart body is malformed"))?
-    {
-        let name = field.name().unwrap_or_default().to_owned();
-        if name == "context_id" {
-            if context_id.is_some() {
-                cleanup(&staged).await;
-                return Err(ApiError::invalid_file("context_id may appear only once"));
-            }
-            let value = field
-                .text()
-                .await
-                .map_err(|_| ApiError::invalid_file("context_id is invalid"))?;
-            context_id = Some(
-                value
-                    .parse()
-                    .map_err(|_| ApiError::invalid_file("context_id is invalid"))?,
-            );
-            continue;
-        }
-        if name != "file" && name != "files" {
-            cleanup(&staged).await;
-            return Err(ApiError::invalid_file(
-                "multipart fields must be file or files",
-            ));
-        }
-        if staged.len() >= state.max_upload_files {
-            cleanup(&staged).await;
-            return Err(ApiError::file_count_exceeded());
-        }
-        let original_filename = field
-            .file_name()
-            .ok_or_else(|| ApiError::invalid_file("file name is required"))?
-            .to_owned();
-        let display_filename = sanitize_filename(&original_filename)
-            .ok_or_else(|| ApiError::invalid_file("file name is invalid"))?;
-        let declared_mime = field.content_type().map(ToString::to_string);
-        match stage_field(
-            field,
-            original_filename,
-            display_filename,
-            declared_mime,
-            state.max_upload_file_bytes,
-        )
-        .await
+    let span = info_span!("file.upload", %entity_id, attribute_code = %attribute_code);
+    let result = async {
+        authorize(&state, FileAccessOperation::Upload { entity_id }).await?;
+        let mut context_id = None;
+        let mut staged = Vec::new();
+        while let Some(field) = multipart
+            .next_field()
+            .await
+            .map_err(|_| ApiError::invalid_file("multipart body is malformed"))?
         {
-            Ok(file) => staged.push(file),
-            Err(error) => {
+            let name = field.name().unwrap_or_default().to_owned();
+            if name == "context_id" {
+                if context_id.is_some() {
+                    cleanup(&staged).await;
+                    return Err(ApiError::invalid_file("context_id may appear only once"));
+                }
+                let value = field
+                    .text()
+                    .await
+                    .map_err(|_| ApiError::invalid_file("context_id is invalid"))?;
+                context_id = Some(
+                    value
+                        .parse()
+                        .map_err(|_| ApiError::invalid_file("context_id is invalid"))?,
+                );
+                continue;
+            }
+            if name != "file" && name != "files" {
                 cleanup(&staged).await;
-                return Err(error);
+                return Err(ApiError::invalid_file(
+                    "multipart fields must be file or files",
+                ));
+            }
+            if staged.len() >= state.max_upload_files {
+                cleanup(&staged).await;
+                return Err(ApiError::file_count_exceeded());
+            }
+            let original_filename = field
+                .file_name()
+                .ok_or_else(|| ApiError::invalid_file("file name is required"))?
+                .to_owned();
+            let display_filename = sanitize_filename(&original_filename)
+                .ok_or_else(|| ApiError::invalid_file("file name is invalid"))?;
+            let declared_mime = field.content_type().map(ToString::to_string);
+            match stage_field(
+                field,
+                original_filename,
+                display_filename,
+                declared_mime,
+                state.max_upload_file_bytes,
+            )
+            .await
+            {
+                Ok(file) => staged.push(file),
+                Err(error) => {
+                    cleanup(&staged).await;
+                    return Err(error);
+                }
             }
         }
-    }
-    if staged.is_empty() {
-        return Err(ApiError::invalid_file("at least one file is required"));
-    }
-    let policy = match repository
-        .file_upload_policy(entity_id, &attribute_code, context_id)
-        .await
-    {
-        Ok(policy) => policy,
-        Err(error) => {
-            cleanup(&staged).await;
-            return Err(error.into());
+        if staged.is_empty() {
+            return Err(ApiError::invalid_file("at least one file is required"));
         }
-    };
-    if policy.cardinality == "one" && staged.len() != 1 {
-        cleanup(&staged).await;
-        return Err(ApiError::invalid_file(
-            "single-file attributes accept exactly one file",
-        ));
-    }
-    let mut uploads = Vec::with_capacity(staged.len());
-    for file in &staged {
-        let Some(mime) = detected_mime(&file.signature, &file.display_filename) else {
-            cleanup(&staged).await;
-            return Err(ApiError::unsupported_media_type());
-        };
-        if policy.max_bytes.is_some_and(|limit| file.byte_size > limit) {
-            cleanup(&staged).await;
-            return Err(ApiError::file_too_large());
-        }
-        if !declared_mime_matches(file.declared_mime.as_deref(), mime)
-            || !allowed_by_policy(&policy, mime, &file.display_filename, file.byte_size)
-        {
-            cleanup(&staged).await;
-            return Err(ApiError::unsupported_media_type());
-        }
-        uploads.push((format!("files/{}", Uuid::new_v4()), mime.to_owned()));
-    }
-    let mut written_keys = Vec::new();
-    for (file, (key, mime)) in staged.iter().zip(&uploads) {
-        // Multipart chunks are streamed to a private temporary file; handlers
-        // never call Field::bytes or collect the multipart request.
-        if let Err(error) = state
-            .object_store
-            .put_file(key, &file.path, Some(mime))
+        let policy = match repository
+            .file_upload_policy(entity_id, &attribute_code, context_id)
             .await
         {
-            delete_objects(&state, &written_keys).await;
+            Ok(policy) => policy,
+            Err(error) => {
+                cleanup(&staged).await;
+                return Err(error.into());
+            }
+        };
+        if policy.cardinality == "one" && staged.len() != 1 {
             cleanup(&staged).await;
-            return Err(storage_error(error));
+            return Err(ApiError::invalid_file(
+                "single-file attributes accept exactly one file",
+            ));
         }
-        written_keys.push(key.clone());
+        let mut uploads = Vec::with_capacity(staged.len());
+        for file in &staged {
+            let Some(mime) = detected_mime(&file.signature, &file.display_filename) else {
+                cleanup(&staged).await;
+                return Err(ApiError::unsupported_media_type());
+            };
+            if policy.max_bytes.is_some_and(|limit| file.byte_size > limit) {
+                cleanup(&staged).await;
+                return Err(ApiError::file_too_large());
+            }
+            if !declared_mime_matches(file.declared_mime.as_deref(), mime)
+                || !allowed_by_policy(&policy, mime, &file.display_filename, file.byte_size)
+            {
+                cleanup(&staged).await;
+                return Err(ApiError::unsupported_media_type());
+            }
+            uploads.push((format!("files/{}", Uuid::new_v4()), mime.to_owned()));
+        }
+        let mut written_keys = Vec::new();
+        for (file, (key, mime)) in staged.iter().zip(&uploads) {
+            // Multipart chunks are streamed to a private temporary file; handlers
+            // never call Field::bytes or collect the multipart request.
+            if let Err(error) = state
+                .object_store
+                .put_file(key, &file.path, Some(mime))
+                .await
+            {
+                delete_objects(&state, &written_keys).await;
+                cleanup(&staged).await;
+                return Err(storage_error(error));
+            }
+            written_keys.push(key.clone());
+        }
+        let records = staged
+            .iter()
+            .zip(&uploads)
+            .map(|(file, (key, mime))| NewUploadedFile {
+                original_filename: file.original_filename.clone(),
+                display_filename: file.display_filename.clone(),
+                mime_type: mime.clone(),
+                byte_size: file.byte_size,
+                sha256: file.sha256.clone(),
+                object_key: key.clone(),
+            })
+            .collect();
+        let result = repository
+            .persist_uploaded_files(entity_id, &attribute_code, context_id, records)
+            .await;
+        cleanup(&staged).await;
+        match result {
+            Ok(result) => {
+                metrics::counter!("catalog_file_uploads_total", "outcome" => "success")
+                    .increment(1);
+                invalidate_data_health(&state).await;
+                Ok((StatusCode::CREATED, Json(result)))
+            }
+            Err(error) => {
+                delete_objects(&state, &written_keys).await;
+                Err(error.into())
+            }
+        }
     }
-    let records = staged
-        .iter()
-        .zip(&uploads)
-        .map(|(file, (key, mime))| NewUploadedFile {
-            original_filename: file.original_filename.clone(),
-            display_filename: file.display_filename.clone(),
-            mime_type: mime.clone(),
-            byte_size: file.byte_size,
-            sha256: file.sha256.clone(),
-            object_key: key.clone(),
-        })
-        .collect();
-    let result = repository
-        .persist_uploaded_files(entity_id, &attribute_code, context_id, records)
-        .await;
-    cleanup(&staged).await;
-    match result {
-        Ok(result) => {
-            invalidate_data_health(&state).await;
-            Ok((StatusCode::CREATED, Json(result)))
-        }
-        Err(error) => {
-            delete_objects(&state, &written_keys).await;
-            Err(error.into())
-        }
+    .instrument(span)
+    .await;
+    if result.is_err() {
+        metrics::counter!("catalog_file_uploads_total", "outcome" => "rejected").increment(1);
     }
+    result
 }
 
 pub(super) async fn metadata(
@@ -221,63 +233,70 @@ async fn download(
     file: FileObject,
     headers: &HeaderMap,
 ) -> Result<Response, ApiError> {
-    if file.status != "ready" {
-        return Err(ApiError::file_processing());
-    }
-    // Metadata is database-owned: never trust storage-supplied content types.
-    let total = file.byte_size as usize;
-    let range = parse_range(
-        headers
-            .get(header::RANGE)
-            .and_then(|value| value.to_str().ok()),
-        total,
-    )?;
-    let (status, start, end) = match range {
-        Some((start, end)) => (StatusCode::PARTIAL_CONTENT, start, end),
-        None => (StatusCode::OK, 0, total - 1),
-    };
-    let provider_range =
-        (status == StatusCode::PARTIAL_CONTENT).then(|| format!("bytes={start}-{end}"));
-    let object = state
-        .object_store
-        .get_range(&file.object_key, provider_range.as_deref())
-        .await
-        .map_err(storage_error)?;
-    if object.bytes.len() != end - start + 1 {
-        return Err(ApiError::internal("file download failed"));
-    }
-    let mut response = Response::new(Body::from(object.bytes));
-    *response.status_mut() = status;
-    let response_headers = response.headers_mut();
-    response_headers.insert(
-        header::CONTENT_TYPE,
-        HeaderValue::from_str(&file.mime_type)
-            .unwrap_or(HeaderValue::from_static("application/octet-stream")),
-    );
-    response_headers.insert(
-        header::CONTENT_LENGTH,
-        HeaderValue::from_str(&(end - start + 1).to_string()).expect("length is valid"),
-    );
-    response_headers.insert(header::ACCEPT_RANGES, HeaderValue::from_static("bytes"));
-    response_headers.insert(
-        header::CACHE_CONTROL,
-        HeaderValue::from_static("private, no-store"),
-    );
-    response_headers.insert(
-        header::CONTENT_DISPOSITION,
-        HeaderValue::from_str(&format!(
-            "attachment; filename=\\\"{}\\\"",
-            safe_download_name(&file.display_filename)
-        ))
-        .expect("sanitized filename is valid"),
-    );
-    if status == StatusCode::PARTIAL_CONTENT {
+    let span = info_span!("file.download");
+    async {
+        if file.status != "ready" {
+            return Err(ApiError::file_processing());
+        }
+        // Metadata is database-owned: never trust storage-supplied content types.
+        let total = file.byte_size as usize;
+        let range = parse_range(
+            headers
+                .get(header::RANGE)
+                .and_then(|value| value.to_str().ok()),
+            total,
+        )?;
+        let (status, start, end) = match range {
+            Some((start, end)) => (StatusCode::PARTIAL_CONTENT, start, end),
+            None => (StatusCode::OK, 0, total - 1),
+        };
+        let provider_range =
+            (status == StatusCode::PARTIAL_CONTENT).then(|| format!("bytes={start}-{end}"));
+        let object = state
+            .object_store
+            .get_range(&file.object_key, provider_range.as_deref())
+            .await
+            .map_err(storage_error)?;
+        if object.bytes.len() != end - start + 1 {
+            return Err(ApiError::internal("file download failed"));
+        }
+        let mut response = Response::new(Body::from(object.bytes));
+        *response.status_mut() = status;
+        let response_headers = response.headers_mut();
         response_headers.insert(
-            header::CONTENT_RANGE,
-            HeaderValue::from_str(&format!("bytes {start}-{end}/{total}")).expect("range is valid"),
+            header::CONTENT_TYPE,
+            HeaderValue::from_str(&file.mime_type)
+                .unwrap_or(HeaderValue::from_static("application/octet-stream")),
         );
+        response_headers.insert(
+            header::CONTENT_LENGTH,
+            HeaderValue::from_str(&(end - start + 1).to_string()).expect("length is valid"),
+        );
+        response_headers.insert(header::ACCEPT_RANGES, HeaderValue::from_static("bytes"));
+        response_headers.insert(
+            header::CACHE_CONTROL,
+            HeaderValue::from_static("private, no-store"),
+        );
+        response_headers.insert(
+            header::CONTENT_DISPOSITION,
+            HeaderValue::from_str(&format!(
+                "attachment; filename=\\\"{}\\\"",
+                safe_download_name(&file.display_filename)
+            ))
+            .expect("sanitized filename is valid"),
+        );
+        if status == StatusCode::PARTIAL_CONTENT {
+            response_headers.insert(
+                header::CONTENT_RANGE,
+                HeaderValue::from_str(&format!("bytes {start}-{end}/{total}"))
+                    .expect("range is valid"),
+            );
+        }
+        metrics::counter!("catalog_file_downloads_total", "outcome" => "success").increment(1);
+        Ok(response)
     }
-    Ok(response)
+    .instrument(span)
+    .await
 }
 
 fn parse_range(value: Option<&str>, total: usize) -> Result<Option<(usize, usize)>, ApiError> {

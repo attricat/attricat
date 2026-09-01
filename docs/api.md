@@ -83,6 +83,10 @@ password, cookie, CSRF, expiry, and revocation contract is documented in
 | `GET`, `PUT` | `/v1/entities/{id}` | Read or update an entity form atomically. |
 | `POST` | `/v1/entities/{id}/blueprint-migration/preview` | Assess migration to the highest published revision. |
 | `POST` | `/v1/entities/{id}/blueprint-migration` | Migrate an entity to that revision. |
+| `POST` | `/entities/{entity_id}/file-attributes/{attribute_code}/uploads` | Stream one or more multipart file parts to a file attribute. |
+| `GET` | `/files/{file_id}` | Read safe file metadata and generated variant metadata. |
+| `GET` | `/files/{file_id}/download` | Download the original through the API, with one safe byte range. |
+| `GET` | `/files/{file_id}/variants/{kind}/download` | Download a ready generated variant through the API. |
 | `GET` | `/data-health/summary` | Read aggregate data-health metrics. |
 | `GET` | `/data-health/blueprints` | Read blueprint health metrics. |
 | `GET` | `/data-health/freshness` | Read value freshness metrics. |
@@ -98,6 +102,24 @@ can create entities or serve as migration targets. See [Blueprint Publication](d
 `POST /v1/entities/search` optionally accepts a relationship tree facet. See
 [Relationship Tree Facets](search-facets.md) for its request and response
 contract.
+
+## File uploads and downloads
+
+Upload with `multipart/form-data`. Use `file` or `files` for every binary part
+and an optional single `context_id` text part. The API streams parts to a
+temporary file rather than buffering the whole request. It validates the
+content signature, declared MIME type, extension, request limits, and the
+pinned file-attribute policy before persisting metadata and queuing processing.
+A successful response is `201` with the attribute, context, and safe file
+metadata; originals and storage keys are never returned.
+
+A newly accepted file has `status: "queued"`. Image files are processed into
+`thumbnail` and `display` WebP variants; non-image files become `ready` without
+variants. Metadata and downloads return `409` until processing is ready. A
+failed job records a safe processing error and is retried with bounded
+exponential backoff; an operator can requeue a terminal failed job as described
+in [Configuration](configuration.md). Downloads are authorized, proxied through
+the API, private/no-store, and support one `Range: bytes=start-end` request.
 
 ## Request performance
 
@@ -118,14 +140,28 @@ access is required.
 
 ## Metrics and traces
 
-`GET /metrics` serves Prometheus text exposition. It provides
-`catalog_http_requests_total` and `catalog_http_request_duration_seconds`, both
-labeled only by method, matched route template, and response status. Data-health
-cache decisions are exposed as `catalog_data_health_cache_total` with a bounded
-`status` label. Scrape this endpoint from the private monitoring network rather
-than exposing it publicly.
+`GET /metrics` serves Prometheus text exposition. All labels are bounded: HTTP
+metrics use method, matched route template, and status; no file ID, object key,
+filename, workspace, or request URL is ever a label. File operation metrics are:
 
-The API emits structured `tracing` events for startup, database migrations, and
-each HTTP request. Request spans include the method, matched route template,
-response status, and duration; 5xx responses are emitted at error level. Set
-`RUST_LOG` (for example, `RUST_LOG=api=debug`) to control output verbosity.
+- `catalog_file_uploads_total` (`outcome`),
+  `catalog_file_downloads_total` (`outcome`), and
+  `catalog_object_store_operations_total` (`operation`, `outcome`);
+- `catalog_file_worker_jobs_claimed_total`,
+  `catalog_file_worker_jobs_completed_total`, and
+  `catalog_file_worker_jobs_failed_total` (`terminal`), plus the queued-job
+gauge `catalog_file_worker_jobs_queued`;
+- `catalog_file_reconciliation_total` (`outcome`),
+  `catalog_file_reconciliation_files_marked_total`, and
+  `catalog_file_purge_jobs_queued_total`.
+
+Data-health cache decisions are exposed as `catalog_data_health_cache_total`
+with a bounded `status` label. Scrape this endpoint from the private monitoring
+network rather than exposing it publicly.
+
+The API emits structured `tracing` events for startup, database migrations, each
+HTTP request, file uploads, downloads, and worker jobs. Request spans include
+the method, matched route template, response status, and duration; file spans
+include only internal IDs and bounded operation values, never object keys or
+filenames. 5xx responses are emitted at error level. Set `RUST_LOG` (for
+example, `RUST_LOG=api=debug`) to control output verbosity.
