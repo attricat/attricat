@@ -71,6 +71,41 @@ impl ApiError {
             message,
         }
     }
+    pub(super) fn file_too_large() -> Self {
+        Self {
+            status: StatusCode::PAYLOAD_TOO_LARGE,
+            code: "file_too_large",
+            message: "file exceeds the configured size limit".to_owned(),
+        }
+    }
+    pub(super) fn file_count_exceeded() -> Self {
+        Self {
+            status: StatusCode::PAYLOAD_TOO_LARGE,
+            code: "file_count_exceeded",
+            message: "request exceeds the configured file count limit".to_owned(),
+        }
+    }
+    pub(super) fn unsupported_media_type() -> Self {
+        Self {
+            status: StatusCode::UNSUPPORTED_MEDIA_TYPE,
+            code: "unsupported_media_type",
+            message: "file type is not allowed".to_owned(),
+        }
+    }
+    pub(super) fn invalid_file(message: &'static str) -> Self {
+        Self {
+            status: StatusCode::UNPROCESSABLE_ENTITY,
+            code: "invalid_file",
+            message: message.to_owned(),
+        }
+    }
+    pub(super) fn storage_unavailable() -> Self {
+        Self {
+            status: StatusCode::SERVICE_UNAVAILABLE,
+            code: "storage_unavailable",
+            message: "object storage is unavailable".to_owned(),
+        }
+    }
     fn bad_request(message: &'static str) -> Self {
         Self {
             status: StatusCode::BAD_REQUEST,
@@ -109,6 +144,16 @@ impl From<RepositoryError> for ApiError {
             RepositoryError::AttributeNotApplicable => Self {
                 status: StatusCode::UNPROCESSABLE_ENTITY,
                 code: "attribute_not_applicable",
+                message: error.to_string(),
+            },
+            RepositoryError::InvalidFilePolicy => Self {
+                status: StatusCode::UNPROCESSABLE_ENTITY,
+                code: "attribute_not_applicable",
+                message: error.to_string(),
+            },
+            RepositoryError::FileCardinality => Self {
+                status: StatusCode::UNPROCESSABLE_ENTITY,
+                code: "file_cardinality_exceeded",
                 message: error.to_string(),
             },
             RepositoryError::AttributeKindMismatch => Self {

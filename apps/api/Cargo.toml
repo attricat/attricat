@@ -9,7 +9,7 @@ async-trait = "0.1"
 aws-config = "1"
 aws-credential-types = "1"
 aws-sdk-s3 = "1"
-axum = "0.8"
+axum = { version = "0.8", features = ["multipart"] }
 argon2 = "0.5"
 base64 = "0.22"
 bytes = "1"
@@ -32,9 +32,9 @@ subtle = "2.6"
 thiserror = "2"
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter", "json"] }
-tokio = { version = "1", features = ["macros", "net", "rt-multi-thread", "signal", "sync", "time"] }
+tokio = { version = "1", features = ["fs", "io-util", "macros", "net", "rt-multi-thread", "signal", "sync", "time"] }
 url = "2"
 uuid = { version = "1", features = ["serde", "v4"] }
 
 [dev-dependencies]
-reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
+reqwest = { version = "0.12", default-features = false, features = ["json", "multipart", "rustls-tls"] }

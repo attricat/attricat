@@ -179,6 +179,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
             max_entity_page_size,
             max_incoming_relationship_page_size,
             max_relationship_facet_nodes,
+            max_upload_file_bytes: std::env::var("FILE_UPLOAD_MAX_BYTES")
+                .unwrap_or_else(|_| (50 * 1024 * 1024).to_string())
+                .parse()?,
+            max_upload_files: std::env::var("FILE_UPLOAD_MAX_FILES")
+                .unwrap_or_else(|_| "10".to_owned())
+                .parse()?,
             data_health_cache_ttl_seconds: std::env::var("DATA_HEALTH_CACHE_TTL_SECONDS")
                 .unwrap_or_else(|_| DEFAULT_DATA_HEALTH_CACHE_TTL_SECONDS.to_string())
                 .parse()?,

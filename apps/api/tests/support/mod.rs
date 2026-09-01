@@ -36,6 +36,13 @@ pub async fn start_server(pool: PgPool) -> (String, JoinHandle<()>) {
     start_server_with_data_health_cache_ttl(pool, 0).await
 }
 
+pub async fn start_server_with_object_store(
+    pool: PgPool,
+    object_store: Arc<FakeObjectStore>,
+) -> (String, JoinHandle<()>) {
+    start_server_with_auth_mode_and_store(pool, 0, true, object_store).await
+}
+
 pub async fn start_session_server(pool: PgPool) -> (String, JoinHandle<()>) {
     start_server_with_auth_mode(pool, 0, false).await
 }
@@ -54,6 +61,21 @@ async fn start_server_with_auth_mode(
     pool: PgPool,
     data_health_cache_ttl_seconds: u64,
     allow_trusted_headers: bool,
+) -> (String, JoinHandle<()>) {
+    start_server_with_auth_mode_and_store(
+        pool,
+        data_health_cache_ttl_seconds,
+        allow_trusted_headers,
+        Arc::new(FakeObjectStore::available()),
+    )
+    .await
+}
+
+async fn start_server_with_auth_mode_and_store(
+    pool: PgPool,
+    data_health_cache_ttl_seconds: u64,
+    allow_trusted_headers: bool,
+    object_store: Arc<FakeObjectStore>,
 ) -> (String, JoinHandle<()>) {
     let workspace_id = BOOTSTRAP_WORKSPACE_ID.parse::<Uuid>().unwrap();
     let owner_id = BOOTSTRAP_OWNER_ID.parse::<Uuid>().unwrap();
@@ -92,7 +114,7 @@ async fn start_server_with_auth_mode(
             pool.clone(),
             (*pool.connect_options()).clone(),
         ),
-        object_store: Arc::new(FakeObjectStore::available()),
+        object_store,
         mail_delivery: Arc::new(TestMailDelivery),
         password_reset_url: "http://127.0.0.1/password-reset/confirm".to_owned(),
         workspace_invitation_url: "http://127.0.0.1/invitations/accept".to_owned(),
@@ -103,6 +125,8 @@ async fn start_server_with_auth_mode(
         max_entity_page_size: 100,
         max_incoming_relationship_page_size: 50,
         max_relationship_facet_nodes: 100,
+        max_upload_file_bytes: 50 * 1024 * 1024,
+        max_upload_files: 10,
         data_health_cache_ttl_seconds,
         data_health_cache: Default::default(),
         session_cookie_secure: false,
