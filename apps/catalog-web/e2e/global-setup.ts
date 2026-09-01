@@ -167,7 +167,7 @@ export default async () => {
     ],
     process.env,
   );
-  const api = start('cargo', ['run', '-p', 'api'], {
+  const api = start('cargo', ['run', '-p', 'api', '--bin', 'api'], {
     ...process.env,
     BIND_ADDR: `127.0.0.1:${e2eApiPort}`,
     DATABASE_URL: database.getConnectionUri(),

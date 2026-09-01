@@ -1,5 +1,5 @@
-const csrfToken = () =>
-  document.cookie
+export const csrfToken = () =>
+  (typeof document === 'undefined' ? '' : document.cookie)
     .split('; ')
     .find((cookie) => cookie.startsWith('catalog_csrf='))
     ?.split('=')[1];

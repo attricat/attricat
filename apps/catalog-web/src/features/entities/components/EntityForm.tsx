@@ -40,6 +40,7 @@ type EntityFormProps = {
   highlightedAttributes?: readonly string[];
   migrationReviewMessages?: Readonly<Record<string, string>>;
   requiredAttributes?: readonly string[];
+  entityId?: string;
   error?: Error | null;
   onLoadBlueprint?: (code: string, version?: number) => void;
   onSubmit: (input: {
@@ -62,6 +63,7 @@ export const EntityForm = ({
   highlightedAttributes = [],
   migrationReviewMessages = {},
   requiredAttributes = [],
+  entityId,
   error,
   onLoadBlueprint,
   onSubmit,
@@ -232,7 +234,9 @@ export const EntityForm = ({
                   return (
                     <EntityAttributeEditor
                       attribute={attribute}
+                      contextId={contextId}
                       disabled={defaultOnly}
+                      entityId={entityId}
                       error={fieldErrors[attribute.code]}
                       helperText={helperText}
                       migrationReviewMessage={migrationReviewMessage}
