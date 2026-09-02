@@ -24,6 +24,16 @@ type PendingFile = {
   error?: string;
 };
 
+let pendingFileSequence = 0;
+
+const pendingFileId = () => {
+  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+    return crypto.randomUUID();
+  }
+  pendingFileSequence += 1;
+  return `pending-file-${Date.now()}-${pendingFileSequence}`;
+};
+
 const acceptsFile = (file: File, attribute: Attribute) => {
   const policy = attribute.file_policy;
   if (!policy) return false;
@@ -72,7 +82,7 @@ export const FileAttributeEditor = ({
       ...current,
       ...accepted.map((file) => ({
         file,
-        id: crypto.randomUUID(),
+        id: pendingFileId(),
         progress: 0,
       })),
     ]);
