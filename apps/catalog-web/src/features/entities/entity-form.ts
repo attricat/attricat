@@ -3,6 +3,7 @@ import type {
   Attribute,
   JsonSchema,
   NewAttributeValue,
+  FormAttributeValue,
   RelationshipTargets,
 } from './api';
 import { scalarValueForField, valueForField } from './attribute-values';
@@ -16,7 +17,7 @@ export type EntityFormValidation = {
 
 export const valuesForForm = (
   attributes: readonly Attribute[],
-  values: NewAttributeValue[],
+  values: FormAttributeValue[],
   contextId: string | null = null,
 ): Record<string, string> => {
   return Object.fromEntries(

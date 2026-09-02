@@ -7,6 +7,7 @@ import {
   getEntityHierarchy,
   getIncomingRelationships,
   getRelationshipTreeFacetChildren,
+  previewEntityMigration,
   getResolvedEntityPreview,
   searchEntities,
   updateEntity,
@@ -60,6 +61,38 @@ describe('entity API client', () => {
       `/api/v1/entities/${entityId}`,
       undefined,
     );
+  });
+
+  it('accepts file values in a migration preview', async () => {
+    respond({
+      migration_id: entityId,
+      source_version: 1,
+      target: blueprintWithAttributes,
+      values: [
+        {
+          kind: 'file',
+          attribute_code: 'image',
+          context_id: null,
+          files: [
+            {
+              id: entityId,
+              filename: 'product.png',
+              mime_type: 'image/png',
+              byte_size: 42,
+              sha256: 'a'.repeat(64),
+              status: 'ready',
+              variants: [],
+            },
+          ],
+        },
+      ],
+      status: 'ready',
+      issues: [],
+    });
+
+    await expect(previewEntityMigration(entityId)).resolves.toMatchObject({
+      values: [{ kind: 'file', attribute_code: 'image' }],
+    });
   });
 
   it('posts and puts the entity payload contract', async () => {

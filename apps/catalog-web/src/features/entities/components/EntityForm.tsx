@@ -239,7 +239,12 @@ export const EntityForm = ({
                       entityId={entityId}
                       files={
                         existingValues.find(
-                          (item) =>
+                          (
+                            item,
+                          ): item is Extract<
+                            FormAttributeValue,
+                            { kind: 'file' }
+                          > =>
                             item.kind === 'file' &&
                             item.attribute_code === attribute.code &&
                             (item.context_id ?? null) === contextId,

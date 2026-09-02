@@ -57,7 +57,9 @@ export const MigrateEntityPage = ({ entityId }: { entityId: string }) => {
         .map((value) =>
           value.kind === 'scalar'
             ? valueForField(value.value)
-            : value.target_entity_id,
+            : value.kind === 'relationship'
+              ? value.target_entity_id
+              : `${value.files.length} file${value.files.length === 1 ? '' : 's'}`,
         )
         .join(', ');
       return [
