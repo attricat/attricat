@@ -11,6 +11,7 @@ use api::{
     storage::FakeObjectStore,
 };
 use axum::{Router, routing::post};
+use reqwest::multipart::{Form, Part};
 use support::*;
 use tokio::time::{sleep, timeout};
 
@@ -378,6 +379,160 @@ async fn agent_read_tools_enforce_initiator_permissions_and_scopes(pool: PgPool)
             .await
             .unwrap(),
         json!([context])
+    );
+    server.abort();
+}
+
+#[sqlx::test]
+async fn standalone_conversation_upload_survives_reconciliation_until_attached(pool: PgPool) {
+    let store = Arc::new(FakeObjectStore::available());
+    let (base_url, server) = start_server_with_object_store(pool.clone(), store.clone()).await;
+    let client = authenticated_client();
+    let conversation: Value = client
+        .post(format!("{base_url}/agent/conversations"))
+        .json(&json!({"title": "Upload retention"}))
+        .send()
+        .await
+        .unwrap()
+        .error_for_status()
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    let conversation_id = conversation["id"]
+        .as_str()
+        .unwrap()
+        .parse::<Uuid>()
+        .unwrap();
+    let upload: Value = client
+        .post(format!(
+            "{base_url}/agent/conversations/{conversation_id}/uploads"
+        ))
+        .multipart(
+            Form::new().part(
+                "file",
+                Part::bytes(b"%PDF-1.4\nattachment".to_vec())
+                    .file_name("attachment.pdf")
+                    .mime_str("application/pdf")
+                    .unwrap(),
+            ),
+        )
+        .send()
+        .await
+        .unwrap()
+        .error_for_status()
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    let file_id = upload["files"][0]["id"]
+        .as_str()
+        .unwrap()
+        .parse::<Uuid>()
+        .unwrap();
+
+    let worker = FileWorker::new(
+        pool.clone(),
+        store,
+        WorkerConfig {
+            worker_id: "test-worker".into(),
+            max_pixels: 1,
+            max_attempts: 1,
+            delete_grace: Duration::from_secs(60),
+        },
+    );
+    worker.reconcile().await.unwrap();
+    let deleted_at: Option<chrono::DateTime<chrono::Utc>> =
+        sqlx::query_scalar("SELECT deleted_at FROM files WHERE id = $1")
+            .bind(file_id)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+    assert!(deleted_at.is_none());
+
+    CatalogRepository::new(pool.clone())
+        .for_workspace(BOOTSTRAP_WORKSPACE_ID.parse().unwrap())
+        .await
+        .unwrap()
+        .append_conversation_message_with_attachments(
+            conversation_id,
+            None,
+            "user",
+            json!("Read the attachment"),
+            &[file_id],
+        )
+        .await
+        .unwrap();
+    assert!(
+        sqlx::query_scalar::<_, Option<chrono::DateTime<chrono::Utc>>>(
+            "SELECT attachment_expires_at FROM files WHERE id = $1",
+        )
+        .bind(file_id)
+        .fetch_one(&pool)
+        .await
+        .unwrap()
+        .is_none()
+    );
+
+    assert!(worker.run_once().await.unwrap());
+    let messages: Value = client
+        .get(format!(
+            "{base_url}/agent/conversations/{conversation_id}/messages"
+        ))
+        .send()
+        .await
+        .unwrap()
+        .error_for_status()
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    assert_eq!(messages[0]["attachments"][0]["id"], file_id.to_string());
+    assert_eq!(messages[0]["attachments"][0]["status"], "ready");
+
+    let never_attached: Value = client
+        .post(format!(
+            "{base_url}/agent/conversations/{conversation_id}/uploads"
+        ))
+        .multipart(
+            Form::new().part(
+                "file",
+                Part::bytes(b"%PDF-1.4\nnever attached".to_vec())
+                    .file_name("never-attached.pdf")
+                    .mime_str("application/pdf")
+                    .unwrap(),
+            ),
+        )
+        .send()
+        .await
+        .unwrap()
+        .error_for_status()
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    let never_attached_id = never_attached["files"][0]["id"]
+        .as_str()
+        .unwrap()
+        .parse::<Uuid>()
+        .unwrap();
+    sqlx::query(
+        "UPDATE files SET attachment_expires_at = now() - interval '1 second' WHERE id = $1",
+    )
+    .bind(never_attached_id)
+    .execute(&pool)
+    .await
+    .unwrap();
+    worker.reconcile().await.unwrap();
+    assert!(
+        sqlx::query_scalar::<_, Option<chrono::DateTime<chrono::Utc>>>(
+            "SELECT deleted_at FROM files WHERE id = $1",
+        )
+        .bind(never_attached_id)
+        .fetch_one(&pool)
+        .await
+        .unwrap()
+        .is_some()
     );
     server.abort();
 }

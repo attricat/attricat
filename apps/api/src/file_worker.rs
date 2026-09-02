@@ -234,6 +234,7 @@ impl FileWorker {
         let grace = self.config.delete_grace.as_secs() as i64;
         let marked = sqlx::query(r#"UPDATE files f SET status = 'deleted', deleted_at = now(), purge_after = now() + make_interval(secs => $1), updated_at = now()
             WHERE f.deleted_at IS NULL
+              AND (f.attachment_expires_at IS NULL OR f.attachment_expires_at <= now())
               AND NOT EXISTS (SELECT 1 FROM attribute_file_references r WHERE r.workspace_id = f.workspace_id AND r.file_id = f.id)
               AND NOT EXISTS (SELECT 1 FROM conversation_message_attachments a WHERE a.workspace_id = f.workspace_id AND a.file_id = f.id)"#).bind(grace).execute(&self.pool).await?;
         metrics::counter!("catalog_file_reconciliation_total", "outcome" => "success").increment(1);

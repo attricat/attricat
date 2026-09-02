@@ -313,8 +313,8 @@ impl CatalogRepository {
     }
 
     /// Persists files uploaded from a conversation without creating an entity
-    /// attribute value. The message attachment transaction later establishes
-    /// the durable relationship to one or more of these files.
+    /// attribute value. A 15-minute attachment window protects them from
+    /// reconciliation until the message attachment transaction claims them.
     pub async fn persist_conversation_uploads(
         &self,
         files: Vec<NewUploadedFile>,
@@ -326,7 +326,7 @@ impl CatalogRepository {
             let id = Uuid::new_v4();
             let status = "queued".to_owned();
             sqlx::query(
-                "INSERT INTO files (id, workspace_id, original_filename, display_filename, mime_type, byte_size, sha256, original_key, status) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)",
+                "INSERT INTO files (id, workspace_id, original_filename, display_filename, mime_type, byte_size, sha256, original_key, status, attachment_expires_at) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,now() + interval '15 minutes')",
             )
             .bind(id)
             .bind(workspace_id)
