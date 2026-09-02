@@ -42,6 +42,13 @@ const FORM_VALUES_SQL: &str = r#"SELECT a.code AS attribute_code, av.context_id,
            ORDER BY a.position, av.relationship_target_entity_id"#;
 
 #[derive(sqlx::FromRow)]
+struct FileFormValueRow {
+    attribute_code: String,
+    context_id: Option<Uuid>,
+    file_id: Uuid,
+}
+
+#[derive(sqlx::FromRow)]
 struct HistoryNativeValueRow {
     id: Uuid,
     entity_id: Uuid,
@@ -338,7 +345,48 @@ impl CatalogRepository {
             .bind(entity_id)
             .fetch_all(&self.pool)
             .await?;
-        form_attribute_values(rows)
+        let mut values = form_attribute_values(rows)?;
+        values.extend(self.file_form_values(entity_id).await?);
+        Ok(values)
+    }
+
+    pub(crate) async fn file_form_values(
+        &self,
+        entity_id: Uuid,
+    ) -> Result<Vec<FormAttributeValue>, RepositoryError> {
+        let rows = sqlx::query_as::<_, FileFormValueRow>(
+            r#"SELECT a.code AS attribute_code, av.context_id, r.file_id
+               FROM attribute_file_references r
+               JOIN attribute_values av ON av.id = r.attribute_value_id
+               JOIN attributes a ON a.id = av.attribute_id
+               WHERE av.entity_id = $1
+                 AND av.workspace_id = $2
+                 AND a.value_type = 'file'
+               ORDER BY a.position, av.context_id, r.position"#,
+        )
+        .bind(entity_id)
+        .bind(self.workspace_id.unwrap_or(Self::DEFAULT_WORKSPACE_ID))
+        .fetch_all(&self.pool)
+        .await?;
+        let mut values: Vec<FormAttributeValue> = Vec::new();
+        for row in rows {
+            let metadata = self.file_metadata(row.file_id).await?;
+            match values.last_mut() {
+                Some(FormAttributeValue::File {
+                    attribute_code,
+                    context_id,
+                    files,
+                }) if *attribute_code == row.attribute_code && *context_id == row.context_id => {
+                    files.push(metadata);
+                }
+                _ => values.push(FormAttributeValue::File {
+                    attribute_code: row.attribute_code,
+                    context_id: row.context_id,
+                    files: vec![metadata],
+                }),
+            }
+        }
+        Ok(values)
     }
 
     pub(super) async fn form_values_in_transaction(

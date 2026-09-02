@@ -62,15 +62,17 @@ export const FileAttributeEditor = ({
   contextId,
   disabled,
   entityId,
+  files,
 }: {
   attribute: Attribute;
   contextId: string | null;
   disabled: boolean;
   entityId?: string;
+  files: FileMetadata[];
 }) => {
   const input = useRef<HTMLInputElement>(null);
   const [pending, setPending] = useState<PendingFile[]>([]);
-  const [uploaded, setUploaded] = useState<FileMetadata[]>([]);
+  const [uploaded, setUploaded] = useState<FileMetadata[]>(files);
   const policy = attribute.file_policy;
   if (!policy) return null;
 

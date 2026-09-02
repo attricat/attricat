@@ -33,7 +33,8 @@ impl CatalogRepository {
         for value in &values {
             let attribute_code = match value {
                 FormAttributeValue::Scalar { attribute_code, .. }
-                | FormAttributeValue::Relationship { attribute_code, .. } => attribute_code,
+                | FormAttributeValue::Relationship { attribute_code, .. }
+                | FormAttributeValue::File { attribute_code, .. } => attribute_code,
             };
             let source = source_attributes
                 .iter()
@@ -107,6 +108,7 @@ impl CatalogRepository {
                             .expect("relationship values are arrays")
                             .push(Value::String(target_entity_id.to_string()));
                     }
+                    FormAttributeValue::File { .. } => {}
                 }
             }
             let target_codes: HashSet<_> = target_attributes.keys().copied().collect();
@@ -307,6 +309,8 @@ impl CatalogRepository {
                             .push(target_entity_id);
                     }
                 }
+                // File references are managed separately from scalar values.
+                FormAttributeValue::File { .. } => {}
             }
         }
         if !unresolved.is_empty() {

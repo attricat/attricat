@@ -112,12 +112,34 @@ async fn uploads_files_to_the_fake_store_and_persists_derived_metadata(pool: PgP
         .json()
         .await
         .unwrap();
-    assert!(
-        entity["values"]
-            .as_array()
-            .unwrap()
-            .iter()
-            .all(|value| value["attribute_code"] != "image")
+    assert!(entity["values"].as_array().unwrap().iter().any(|value| {
+        value["kind"] == "file"
+            && value["attribute_code"] == "image"
+            && value["files"]
+                .as_array()
+                .is_some_and(|files| files.len() == 1)
+    }));
+
+    let context_id: Uuid =
+        sqlx::query_scalar("SELECT id FROM attribute_contexts WHERE code = 'default'")
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+    let preview: Value = client
+        .get(format!(
+            "{base_url}/entities/{entity_id}/resolved-preview?context_id={context_id}"
+        ))
+        .send()
+        .await
+        .unwrap()
+        .error_for_status()
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    assert_eq!(
+        preview["values"]["image"]["value"][0]["filename"],
+        "product.png"
     );
 
     client

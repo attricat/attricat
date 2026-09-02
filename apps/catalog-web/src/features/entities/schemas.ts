@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { fileMetadataSchema } from '../files/schemas';
 import { attributeValueKinds, attributeValueTypes } from './value-types';
 
 export const viewBlockTypes = {
@@ -256,6 +257,15 @@ export const newAttributeValueSchema = z.discriminatedUnion('kind', [
     target_entity_id: uuidSchema,
   }),
 ]);
+export const formAttributeValueSchema = z.discriminatedUnion('kind', [
+  ...newAttributeValueSchema.options,
+  z.object({
+    kind: z.literal('file'),
+    attribute_code: z.string().min(1),
+    context_id: uuidSchema.nullable().optional(),
+    files: z.array(fileMetadataSchema),
+  }),
+]);
 export const relationshipTargetsSchema = z.object({
   attribute_code: z.string().min(1),
   context_id: uuidSchema.nullable().optional(),
@@ -344,7 +354,7 @@ export const entityHierarchySchema = z.object({
 const entityFormResponseSchema = z.object({
   entity: entitySchema,
   blueprint: blueprintWithAttributesSchema,
-  values: z.array(newAttributeValueSchema),
+  values: z.array(formAttributeValueSchema),
   context: entityContextSchema,
 });
 const migrationIssueSchema = z.object({
@@ -426,6 +436,7 @@ export type BlueprintWithAttributes = z.infer<
   typeof blueprintWithAttributesSchema
 >;
 export type NewAttributeValue = z.infer<typeof newAttributeValueSchema>;
+export type FormAttributeValue = z.infer<typeof formAttributeValueSchema>;
 export type RelationshipTargets = z.infer<typeof relationshipTargetsSchema>;
 export type AttributeContext = z.infer<typeof attributeContextSchema>;
 export type Entity = z.infer<typeof entitySchema>;
