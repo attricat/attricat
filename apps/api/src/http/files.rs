@@ -17,6 +17,25 @@ use tokio::{fs, io::AsyncWriteExt};
 use tracing::{Instrument, info_span};
 use uuid::Uuid;
 
+/// Maximum number of leading bytes retained while streaming an upload for
+/// signature-based MIME detection. All supported signatures fit within this
+/// prefix, so the remainder can be written directly to temporary storage.
+const SIGNATURE_SNIFF_BYTES: usize = 512;
+
+/// MIME types accepted by every upload entry point. Attribute policies may
+/// further restrict this set by MIME group, extension, size, or image-only.
+const SUPPORTED_UPLOAD_MIME_TYPES: &[&str] = &[
+    "image/png",
+    "image/jpeg",
+    "image/gif",
+    "image/webp",
+    "application/pdf",
+    "text/plain",
+    "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+];
+
 struct StagedFile {
     original_filename: String,
     display_filename: String,
@@ -246,7 +265,9 @@ pub(super) async fn upload_conversation(
             cleanup(&staged).await;
             return Err(ApiError::unsupported_media_type());
         };
-        if !declared_mime_matches(file.declared_mime.as_deref(), mime) || !supported_mime(mime) {
+        if !declared_mime_matches(file.declared_mime.as_deref(), mime)
+            || !is_supported_upload_mime(mime)
+        {
             cleanup(&staged).await;
             return Err(ApiError::unsupported_media_type());
         }
@@ -547,7 +568,7 @@ async fn stage_field(
         .map_err(|_| ApiError::internal("temporary upload could not be created"))?;
     let mut size = 0u64;
     let mut digest = Sha256::new();
-    let mut signature = Vec::with_capacity(512);
+    let mut signature = Vec::with_capacity(SIGNATURE_SNIFF_BYTES);
     while let Some(chunk) = field
         .chunk()
         .await
@@ -558,8 +579,10 @@ async fn stage_field(
             let _ = fs::remove_file(&path).await;
             return Err(ApiError::file_too_large());
         }
-        if signature.len() < 512 {
-            signature.extend_from_slice(&chunk[..chunk.len().min(512 - signature.len())]);
+        if signature.len() < SIGNATURE_SNIFF_BYTES {
+            signature.extend_from_slice(
+                &chunk[..chunk.len().min(SIGNATURE_SNIFF_BYTES - signature.len())],
+            );
         }
         digest.update(&chunk);
         output
@@ -635,33 +658,11 @@ fn declared_mime_matches(declared: Option<&str>, detected: &str) -> bool {
         .map(str::trim);
     matches!(declared, None | Some("application/octet-stream")) || declared == Some(detected)
 }
-fn supported_mime(mime: &str) -> bool {
-    const ALLOWED: &[&str] = &[
-        "image/png",
-        "image/jpeg",
-        "image/gif",
-        "image/webp",
-        "application/pdf",
-        "text/plain",
-        "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-        "application/vnd.openxmlformats-officedocument.presentationml.presentation",
-    ];
-    ALLOWED.contains(&mime)
+fn is_supported_upload_mime(mime: &str) -> bool {
+    SUPPORTED_UPLOAD_MIME_TYPES.contains(&mime)
 }
 fn allowed_by_policy(policy: &FilePolicy, mime: &str, filename: &str, size: u64) -> bool {
-    const ALLOWED: &[&str] = &[
-        "image/png",
-        "image/jpeg",
-        "image/gif",
-        "image/webp",
-        "application/pdf",
-        "text/plain",
-        "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-        "application/vnd.openxmlformats-officedocument.presentationml.presentation",
-    ];
-    if !ALLOWED.contains(&mime)
+    if !is_supported_upload_mime(mime)
         || policy.max_bytes.is_some_and(|limit| size > limit)
         || (policy.image_only && !mime.starts_with("image/"))
     {
@@ -730,6 +731,35 @@ mod tests {
         assert!(allowed_by_policy(&policy, "image/png", "photo.PNG", 1024));
         assert!(!allowed_by_policy(&policy, "image/jpeg", "photo.jpg", 1));
         assert!(!allowed_by_policy(&policy, "image/png", "photo.png", 1025));
+    }
+    #[test]
+    fn standalone_and_unrestricted_attribute_uploads_share_mime_boundaries() {
+        let unrestricted = FilePolicy {
+            cardinality: "many".to_owned(),
+            allowed_mime_groups: vec![],
+            allowed_extensions: vec![],
+            max_bytes: None,
+            image_only: false,
+        };
+
+        for mime in SUPPORTED_UPLOAD_MIME_TYPES {
+            assert!(is_supported_upload_mime(mime), "{mime} should be accepted");
+            assert!(
+                allowed_by_policy(&unrestricted, mime, "upload.bin", 1),
+                "{mime} should be accepted by an unrestricted attribute"
+            );
+        }
+        for mime in [
+            "application/zip",
+            "image/svg+xml",
+            "application/octet-stream",
+        ] {
+            assert!(!is_supported_upload_mime(mime), "{mime} should be rejected");
+            assert!(
+                !allowed_by_policy(&unrestricted, mime, "upload.bin", 1),
+                "{mime} should be rejected by an unrestricted attribute"
+            );
+        }
     }
     #[test]
     fn sanitizes_path_like_file_names() {

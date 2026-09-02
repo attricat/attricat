@@ -17,6 +17,10 @@ use crate::storage::{ObjectStore, ObjectStoreError, StoredObject};
 
 const DEFAULT_MAX_PIXELS: u64 = 40_000_000;
 const DEFAULT_MAX_ATTEMPTS: i32 = 5;
+/// Longest edge for compact previews used in lists and attachment pickers.
+const THUMBNAIL_MAX_DIMENSION: u32 = 320;
+/// Longest edge for the high-resolution image variant served to clients.
+const DISPLAY_MAX_DIMENSION: u32 = 1600;
 const DEFAULT_GRACE_SECONDS: i64 = 86_400;
 const STALE_LOCK_SECONDS: i64 = 300;
 const MAX_BACKOFF_SECONDS: i64 = 300;
@@ -158,12 +162,20 @@ impl FileWorker {
         let object = self.store.get(&key).await.map_err(WorkerError::Storage)?;
         let image = decode_and_orient(&object.bytes, self.config.max_pixels)?;
         let (width, height) = image.dimensions();
-        self.put_variant(job, "thumbnail", &image.thumbnail(320, 320))
-            .await?;
+        self.put_variant(
+            job,
+            "thumbnail",
+            &image.thumbnail(THUMBNAIL_MAX_DIMENSION, THUMBNAIL_MAX_DIMENSION),
+        )
+        .await?;
         self.put_variant(
             job,
             "display",
-            &image.resize(1600, 1600, image::imageops::FilterType::Lanczos3),
+            &image.resize(
+                DISPLAY_MAX_DIMENSION,
+                DISPLAY_MAX_DIMENSION,
+                image::imageops::FilterType::Lanczos3,
+            ),
         )
         .await?;
         sqlx::query("UPDATE files SET status = 'ready', width = $2, height = $3, processing_error = NULL, updated_at = now() WHERE id = $1")
