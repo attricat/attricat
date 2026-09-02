@@ -73,6 +73,11 @@ pub fn definitions() -> Vec<ToolDefinition> {
             json!({"type":"object","required":["entity_id"],"properties":{"entity_id":{"type":"string","format":"uuid"}},"additionalProperties":false}),
         ),
         definition(
+            "view_image",
+            "View an image file linked to an entity. Use get_entity first to find its file ID. The image is supplied to the model as a bounded display image.",
+            json!({"type":"object","required":["file_id"],"properties":{"file_id":{"type":"string","format":"uuid"}},"additionalProperties":false}),
+        ),
+        definition(
             "search_entities",
             "Search entities of a blueprint by current scalar values and system tags. Omit blueprint.version to include every published revision; set outdated to true to return only entities that are not on the latest published revision. Results are paginated in ascending creation order.",
             json!({"type":"object","required":["blueprint"],"properties":{"blueprint":{"type":"object","required":["code"],"properties":{"code":{"type":"string"},"version":{"type":"integer","minimum":1}},"additionalProperties":false},"query":{"type":"string"},"system_tags":{"type":"array","items":{"type":"string"}},"outdated":{"type":"boolean"},"page":{"type":"object","properties":{"size":{"type":"integer","minimum":1,"maximum":100},"cursor":{"type":"string"}},"additionalProperties":false}},"additionalProperties":false}),
@@ -142,6 +147,7 @@ pub fn kind(name: &str) -> Result<ToolKind, ToolError> {
         | "list_blueprints"
         | "list_contexts"
         | "get_entity"
+        | "view_image"
         | "search_entities" => Ok(ToolKind::Read),
         "create_blueprint"
         | "create_blueprint_revision"
@@ -248,6 +254,21 @@ pub async fn execute_read(
                     serde_json::to_value(values).expect("models serialize"),
                 );
             output
+        }
+        "view_image" => {
+            let file_id = parse_uuid(&arguments, "file_id")?;
+            let metadata = repository.file_metadata(file_id).await?;
+            if !metadata.mime_type.starts_with("image/") {
+                return Err(ToolError::InvalidArguments(
+                    "file_id must identify an image".to_owned(),
+                ));
+            }
+            json!({
+                "file_id": file_id,
+                "filename": metadata.filename,
+                "mime_type": metadata.mime_type,
+                "message": "The image is attached to this tool result for visual inspection.",
+            })
         }
         "search_entities" => {
             #[derive(Deserialize)]
@@ -541,6 +562,24 @@ async fn read_authorized(
             Some(parse_uuid(arguments, "entity_id")?),
             None,
         ),
+        "view_image" => {
+            let file_id = parse_uuid(arguments, "file_id")?;
+            for target in repository.file_read_targets(file_id).await? {
+                if repository
+                    .is_authorized(
+                        actor,
+                        workspace,
+                        "entities.read",
+                        Some(target.entity_id),
+                        None,
+                    )
+                    .await?
+                {
+                    return Ok(true);
+                }
+            }
+            return Ok(false);
+        }
         // Match the HTTP search endpoint: collection searches require a
         // workspace-wide entities.read grant, rather than exposing partial
         // results for a scoped grant.

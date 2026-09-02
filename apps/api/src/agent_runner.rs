@@ -14,7 +14,9 @@ use base64::{Engine, engine::general_purpose::STANDARD};
 use serde_json::{Value, json};
 use uuid::Uuid;
 
-const SYSTEM_PROMPT: &str = "You are a catalogue assistant. Use tools for catalogue facts. Before drafting a blueprint, call blueprint_authoring_guide and use create_blueprint with complete TOML; every entity blueprint must include a views.dropdown_option definition. To modify a blueprint, use create_blueprint_revision with its id and a complete revised TOML definition. New blueprints and revisions are drafts: use publish_blueprint with the returned id and version before creating entities from them. Never put blueprint attributes or a definition in create_entity. Use list_blueprints to find an existing blueprint before creating an entity. Use search_entities to find matching entities; set outdated to true when looking for entities that need a blueprint upgrade. Use migrate_entity to upgrade a compatible entity to its latest published blueprint revision; report its issues if it needs input. When a conversation attachment should be retained on an entity, use link_file with its file_id and an applicable file attribute. Never claim a mutation happened until its tool result says so. All mutations require human approval.";
+const MAX_INLINE_TOOL_IMAGE_BYTES: i64 = 1024 * 1024;
+
+const SYSTEM_PROMPT: &str = "You are a catalogue assistant. Use tools for catalogue facts. Before drafting a blueprint, call blueprint_authoring_guide and use create_blueprint with complete TOML; every entity blueprint must include a views.dropdown_option definition. To modify a blueprint, use create_blueprint_revision with its id and a complete revised TOML definition. New blueprints and revisions are drafts: use publish_blueprint with the returned id and version before creating entities from them. Never put blueprint attributes or a definition in create_entity. Use list_blueprints to find an existing blueprint before creating an entity. Use search_entities to find matching entities; set outdated to true when looking for entities that need a blueprint upgrade. Use migrate_entity to upgrade a compatible entity to its latest published blueprint revision; report its issues if it needs input. Use view_image with an image file ID from get_entity when visual inspection is needed. When a conversation attachment should be retained on an entity, use link_file with its file_id and an applicable file attribute. Never claim a mutation happened until its tool result says so. All mutations require human approval.";
 
 #[derive(Debug, thiserror::Error)]
 pub enum RunError {
@@ -210,6 +212,16 @@ async fn drive(
             )
             .await?;
         let (actor, workspace) = repository.agent_run_initiator(run_id).await?;
+        let image_attachments = if call.function.name == "view_image" {
+            arguments
+                .get("file_id")
+                .and_then(Value::as_str)
+                .and_then(|value| value.parse().ok())
+                .map(|file_id| vec![file_id])
+                .unwrap_or_default()
+        } else {
+            Vec::new()
+        };
         let result =
             agent_tools::execute_read(repository, actor, workspace, &call.function.name, arguments)
                 .await
@@ -226,11 +238,16 @@ async fn drive(
         };
         repository.complete_agent_tool_call(tool.id, result).await?;
         repository
-            .append_conversation_message(
+            .append_conversation_message_with_attachments(
                 conversation_id,
                 Some(run_id),
                 "tool",
                 json!({"tool_call_id":call.id,"name":call.function.name,"result":result_message}),
+                if result_message.get("code").is_some() {
+                    &[]
+                } else {
+                    &image_attachments
+                },
             )
             .await?;
     }
@@ -280,9 +297,35 @@ async fn request_message(
                 .get("result")
                 .cloned()
                 .unwrap_or(Value::Null);
+            let mut parts = vec![json!({"type":"text","text":content.to_string()})];
+            for attachment in message.attachments {
+                if !attachment.mime_type.starts_with("image/") {
+                    continue;
+                }
+                let file = match repository.file_object(attachment.id, Some("display")).await {
+                    Ok(file) => file,
+                    Err(_) => match repository.file_object(attachment.id, None).await {
+                        Ok(file) => file,
+                        Err(_) => continue,
+                    },
+                };
+                if file.byte_size > MAX_INLINE_TOOL_IMAGE_BYTES {
+                    continue;
+                }
+                if let Ok(object) = object_store.get(&file.object_key).await {
+                    if object.bytes.len() as i64 <= MAX_INLINE_TOOL_IMAGE_BYTES {
+                        let data_url = format!(
+                            "data:{};base64,{}",
+                            file.mime_type,
+                            STANDARD.encode(object.bytes),
+                        );
+                        parts.push(json!({"type":"image_url","image_url":{"url":data_url}}));
+                    }
+                }
+            }
             return ChatMessage {
                 role: message.role,
-                content: Value::String(content.to_string()),
+                content: Value::Array(parts),
                 tool_call_id: Some(tool_call_id.to_owned()),
                 tool_calls: None,
             };
