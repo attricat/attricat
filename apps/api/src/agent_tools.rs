@@ -8,9 +8,10 @@ use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 use uuid::Uuid;
 
-use crate::repository::{CatalogRepository, RepositoryError};
-
-pub const MAX_TOOL_RESULT_BYTES: usize = 64 * 1024;
+use crate::{
+    agents::MAX_TOOL_RESULT_BYTES,
+    repository::{CatalogRepository, RepositoryError},
+};
 const BLUEPRINT_AUTHORING_GUIDE: &str = include_str!("../../../docs/blueprints.md");
 const VIEW_CONFIGURATION_GUIDE: &str = include_str!("../../../docs/views.md");
 const JSON_SCHEMA_GUIDE: &str = include_str!("../../../docs/json-schema-validation.md");
@@ -581,6 +582,7 @@ mod tests {
     use serde_json::json;
 
     use super::{ToolError, ToolKind, bounded, change_summary, definitions, kind};
+    use crate::agents::MAX_TOOL_RESULT_BYTES;
 
     #[test]
     fn classifies_every_write_as_an_approval_required_mutation() {
@@ -629,7 +631,7 @@ mod tests {
             Err(ToolError::InvalidArguments(_))
         ));
         assert!(matches!(
-            bounded(json!({"result":"x".repeat(super::MAX_TOOL_RESULT_BYTES)})),
+            bounded(json!({"result":"x".repeat(MAX_TOOL_RESULT_BYTES)})),
             Err(ToolError::ResultTooLarge)
         ));
     }

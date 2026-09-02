@@ -18,7 +18,14 @@ use super::{
     error::ApiError,
     extractors::{ApiJson, ApiPath, ApiQuery},
 };
-use crate::{agent_service::next_utc_schedule_run, repository::ApprovalDecision};
+use crate::{
+    agent_service::next_utc_schedule_run,
+    agents::{
+        MAX_CONVERSATION_ATTACHMENTS, MAX_CONVERSATION_MESSAGE_BYTES, MAX_CONVERSATION_TITLE_BYTES,
+        MAX_SCHEDULE_CRON_BYTES,
+    },
+    repository::ApprovalDecision,
+};
 
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -89,7 +96,7 @@ pub(super) async fn create_conversation(
     ScopedRepository(repository): ScopedRepository,
     ApiJson(input): ApiJson<CreateConversation>,
 ) -> Result<(StatusCode, Json<ConversationResponse>), ApiError> {
-    if input.title.len() > 512 {
+    if input.title.len() > MAX_CONVERSATION_TITLE_BYTES {
         return Err(ApiError::invalid_input(
             "title must be at most 512 characters".into(),
         ));
@@ -124,7 +131,7 @@ pub(super) async fn update_conversation(
     ApiPath(conversation_id): ApiPath<Uuid>,
     ApiJson(input): ApiJson<UpdateConversation>,
 ) -> Result<Json<crate::repository::Conversation>, ApiError> {
-    if input.title.len() > 512 {
+    if input.title.len() > MAX_CONVERSATION_TITLE_BYTES {
         return Err(ApiError::invalid_input(
             "title must be at most 512 characters".into(),
         ));
@@ -175,13 +182,13 @@ pub(super) async fn send_message(
     ApiJson(input): ApiJson<SendMessage>,
 ) -> Result<(StatusCode, Json<RunResponse>), ApiError> {
     if (input.content.trim().is_empty() && input.attachment_ids.is_empty())
-        || input.content.len() > 32 * 1024
+        || input.content.len() > MAX_CONVERSATION_MESSAGE_BYTES
     {
         return Err(ApiError::invalid_input(
             "content must be between 1 and 32768 bytes unless attachments are included".into(),
         ));
     }
-    if input.attachment_ids.len() > 16 {
+    if input.attachment_ids.len() > MAX_CONVERSATION_ATTACHMENTS {
         return Err(ApiError::invalid_input(
             "a message may include at most 16 attachments".into(),
         ));
@@ -301,7 +308,7 @@ pub(super) async fn create_schedule(
     ApiJson(input): ApiJson<CreateSchedule>,
 ) -> Result<(StatusCode, Json<crate::repository::AgentSchedule>), ApiError> {
     let _ = configured(&state)?;
-    if input.cron_expression.len() > 256 {
+    if input.cron_expression.len() > MAX_SCHEDULE_CRON_BYTES {
         return Err(ApiError::invalid_input(
             "cron_expression must be at most 256 characters".into(),
         ));
@@ -340,7 +347,7 @@ pub(super) async fn update_schedule(
     if input
         .cron_expression
         .as_deref()
-        .is_some_and(|value| value.len() > 256)
+        .is_some_and(|value| value.len() > MAX_SCHEDULE_CRON_BYTES)
     {
         return Err(ApiError::invalid_input(
             "cron_expression must be at most 256 characters".into(),

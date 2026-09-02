@@ -32,7 +32,7 @@ pub async fn start(
     config: AgentProviderConfig,
     object_store: Arc<dyn ObjectStore>,
 ) -> AgentDispatcher {
-    let (sender, mut receiver) = mpsc::channel(256);
+    let (sender, mut receiver) = mpsc::channel(config.dispatch_queue_capacity);
     let dispatcher = AgentDispatcher { sender };
     if let Err(error) = repository.recover_interrupted_agent_runs().await {
         tracing::error!(%error, "could not recover interrupted agent runs");

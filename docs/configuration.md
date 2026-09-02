@@ -25,6 +25,7 @@ or inaccessible configured bucket.
 | `LLM_REQUEST_TIMEOUT_SECONDS` | `60` | API only | Per-provider-request timeout, 1–3600 seconds. |
 | `LLM_RUN_TIMEOUT_SECONDS` | `300` | API only | Total agent-run timeout, 1–3600 seconds. |
 | `AGENT_SCHEDULER_POLL_SECONDS` | `15` | API only | Durable schedule-worker polling interval, 1–3600 seconds. |
+| `AGENT_DISPATCH_QUEUE_CAPACITY` | `256` | API only | Positive process-local queue capacity for durable agent runs. Increase for expected bursts; queued runs remain durable in PostgreSQL. |
 | `PREVIEW_MAX_RELATIONSHIP_DEPTH` | `3` | API | Maximum recursive relationship preview depth. |
 | `PREVIEW_MAX_RELATIONSHIP_ITEMS` | `10` | API | Maximum inline targets per relationship. |
 | `ENTITY_MAX_PAGE_SIZE` | `100` | API | Maximum page size for relationship browsing. |
@@ -79,12 +80,17 @@ including scheduled runs. Approval is not a permission bypass: the initiating
 user is re-authorized when an approved write resumes. Restrict this permission
 to trusted operators and review each proposed input and change summary.
 
-The current limits are a 32 KiB user message, 512-character conversation title
-and model name, 64 KiB serialized tool result, eight tool-call rounds per run,
-and a maximum provider request/run timeout of one hour. Provider failures,
-malformed responses, unknown tools, invalid tool arguments, and tool-round
-exhaustion are recorded as failed durable runs; provider response bodies and
-credentials are not retained. Schedules use six-field UTC cron expressions.
+Agent safety limits are fixed in the API's shared agent configuration: a 32 KiB
+user message, 512-byte conversation title and model name, 16 attachments per
+message, 5 MiB inline image attachment, 64 KiB serialized tool result, eight
+tool-call rounds per run, 64 KiB total provider response and undrained SSE
+frame buffers, 32 KiB assistant text, 16 KiB tool arguments, and 32 provider
+tool calls per response. The maximum provider request/run timeout remains one
+hour. `AGENT_DISPATCH_QUEUE_CAPACITY` is the only queue sizing setting because
+it is process-local operational capacity; it does not limit the durable queue.
+Provider failures, malformed responses, unknown tools, invalid tool arguments,
+and tool-round exhaustion are recorded as failed durable runs; provider
+response bodies and credentials are not retained. Schedules use six-field UTC cron expressions.
 An occurrence that overlaps a queued, running, or approval-waiting run is
 recorded as skipped rather than executed concurrently.
 

@@ -200,10 +200,12 @@ run after atomically recording the decision. Decisions are accepted only while
 a call is pending; a repeated or contradictory decision returns the normal
 `approval_already_decided` conflict and never executes the write again.
 
-Conversation titles are limited to 512 characters and messages to 1–32,768
-bytes. Upload standalone conversation files with multipart `POST`
+Conversation titles are limited to 512 bytes and messages to 1–32,768 bytes.
+Upload standalone conversation files with multipart `POST`
 `/agent/conversations/{id}/uploads`, then include up to 16 returned,
-workspace-scoped, unique `attachment_ids` when posting the message. Entity
+workspace-scoped, unique `attachment_ids` when posting the message. Images up
+to 5 MiB are inlined to the provider; larger files are represented by metadata
+and file ID. Entity
 file uploads remain available through their file-attribute endpoint. A message
 or run request returns `503 service_unavailable` when the API
 has no configured provider/worker. Runs retain provider/model snapshots and
