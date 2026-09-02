@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   getBlueprintRevision,
   listBlueprintRevisions,
+  publishBlueprintRevision,
   listBlueprints,
 } from './api';
 
@@ -49,6 +50,13 @@ describe('blueprint API client', () => {
     await getBlueprintRevision(blueprintId, 2);
     expect(fetchMock).toHaveBeenLastCalledWith(
       `/api/blueprints/${blueprintId}/versions/2`,
+    );
+
+    respond({ blueprint, attributes: [] });
+    await publishBlueprintRevision(blueprintId, 2);
+    expect(fetchMock).toHaveBeenLastCalledWith(
+      `/api/blueprints/${blueprintId}/versions/2/publish`,
+      { method: 'POST' },
     );
   });
 });

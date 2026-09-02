@@ -9,8 +9,12 @@ import {
 
 export type { Attribute, Blueprint, BlueprintWithAttributes } from './schemas';
 
-const request = async <T>(path: string, schema: z.ZodType<T>): Promise<T> => {
-  const response = await apiFetch(path);
+const request = async <T>(
+  path: string,
+  schema: z.ZodType<T>,
+  init?: RequestInit,
+): Promise<T> => {
+  const response = init ? await apiFetch(path, init) : await apiFetch(path);
   if (!response.ok) throw new Error(`Request failed (${response.status})`);
   const result = schema.safeParse(await response.json());
   if (!result.success)
@@ -34,4 +38,14 @@ export const getBlueprintRevision = (
   request(
     `/api/blueprints/${encodeURIComponent(z.uuid().parse(id))}/versions/${z.number().int().positive().parse(version)}`,
     blueprintWithAttributesSchema,
+  );
+
+export const publishBlueprintRevision = (
+  id: string,
+  version: number,
+): Promise<BlueprintWithAttributes> =>
+  request(
+    `/api/blueprints/${encodeURIComponent(z.uuid().parse(id))}/versions/${z.number().int().positive().parse(version)}/publish`,
+    blueprintWithAttributesSchema,
+    { method: 'POST' },
   );
