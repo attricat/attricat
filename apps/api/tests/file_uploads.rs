@@ -158,6 +158,112 @@ async fn uploads_files_to_the_fake_store_and_persists_derived_metadata(pool: PgP
 }
 
 #[sqlx::test]
+async fn migration_retains_files_on_compatible_file_attributes(pool: PgPool) {
+    let store = Arc::new(FakeObjectStore::available());
+    let (base_url, server) = start_server_with_object_store(pool, store).await;
+    let client = authenticated_client();
+    let blueprint = upload_blueprint(&client, &base_url).await;
+    let blueprint_id = blueprint["blueprint"]["id"].as_str().unwrap();
+    let entity = create_entity(&client, &base_url, &blueprint).await;
+    let entity_id = entity["id"].as_str().unwrap();
+    let uploaded: Value = client
+        .post(format!(
+            "{base_url}/entities/{entity_id}/file-attributes/image/uploads"
+        ))
+        .multipart(Form::new().part("file", png_part("preserved.png")))
+        .send()
+        .await
+        .unwrap()
+        .error_for_status()
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    let file_id = uploaded["files"][0]["id"].as_str().unwrap();
+
+    let revision: Value = client
+        .post(format!("{base_url}/blueprints/{blueprint_id}/versions"))
+        .json(&serde_json::json!({ "definition": r#"format_version = 1
+code = "file_upload_product"
+name = "Renamed file upload product"
+kind = "entity"
+
+[views.dropdown_option]
+type = "dropdown_option"
+fields = ["image"]
+
+[[attributes]]
+code = "image"
+value_type = "file"
+cardinality = "many"
+allowed_mime_groups = ["image"]
+allowed_extensions = ["png"]
+max_bytes = 1024
+image_only = true"# }))
+        .send()
+        .await
+        .unwrap()
+        .error_for_status()
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    let version = revision["blueprint"]["version"].as_i64().unwrap();
+    client
+        .post(format!(
+            "{base_url}/blueprints/{blueprint_id}/versions/{version}/publish"
+        ))
+        .send()
+        .await
+        .unwrap()
+        .error_for_status()
+        .unwrap();
+
+    let preview: Value = client
+        .post(format!(
+            "{base_url}/v1/entities/{entity_id}/blueprint-migration/preview"
+        ))
+        .send()
+        .await
+        .unwrap()
+        .error_for_status()
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    client
+        .post(format!(
+            "{base_url}/v1/entities/{entity_id}/blueprint-migration"
+        ))
+        .json(&serde_json::json!({
+            "migration_id": preview["migration_id"],
+            "expected_target_version": version,
+        }))
+        .send()
+        .await
+        .unwrap()
+        .error_for_status()
+        .unwrap();
+
+    let migrated: Value = client
+        .get(format!("{base_url}/v1/entities/{entity_id}"))
+        .send()
+        .await
+        .unwrap()
+        .error_for_status()
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    assert!(migrated["values"].as_array().unwrap().iter().any(|value| {
+        value["kind"] == "file"
+            && value["attribute_code"] == "image"
+            && value["files"][0]["id"] == file_id
+    }));
+    server.abort();
+}
+
+#[sqlx::test]
 async fn reads_file_metadata_and_downloads_with_safe_range_headers(pool: PgPool) {
     let store = Arc::new(FakeObjectStore::available());
     let policy = Arc::new(RecordingFilePolicy(Mutex::new(Vec::new())));

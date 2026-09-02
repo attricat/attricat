@@ -875,18 +875,32 @@ impl CatalogRepository {
         entity_id: Uuid,
     ) -> Result<(), RepositoryError> {
         sqlx::query(
-            r#"WITH archived AS (
+            r#"WITH file_references AS MATERIALIZED (
+                    SELECT r.attribute_value_id, r.workspace_id, r.file_id, r.position
+                    FROM attribute_file_references r
+                    JOIN attribute_values av ON av.id = r.attribute_value_id
+                    WHERE av.entity_id = $1 AND av.workspace_id = $2
+                ), archived AS (
                     DELETE FROM attribute_values WHERE entity_id = $1 AND workspace_id = $2 RETURNING *
+                ), stored AS (
+                    INSERT INTO attribute_value_history (
+                        id, workspace_id, entity_id, attribute_id, context_id, relationship_target_entity_id, active,
+                        value_text, value_number, value_integer, value_boolean, value_date, value_datetime,
+                        value_time, value_time_zone, value_json, created_at
+                    )
+                    SELECT id, workspace_id, entity_id, attribute_id, context_id, relationship_target_entity_id, active,
+                           value_text, value_number, value_integer, value_boolean, value_date, value_datetime,
+                           value_time, value_time_zone, value_json, created_at
+                    FROM archived
+                    RETURNING id, workspace_id, archived_at
                 )
-                INSERT INTO attribute_value_history (
-                    id, workspace_id, entity_id, attribute_id, context_id, relationship_target_entity_id, active,
-                    value_text, value_number, value_integer, value_boolean, value_date, value_datetime,
-                    value_time, value_time_zone, value_json, created_at
+                INSERT INTO attribute_file_reference_history (
+                    attribute_value_history_id, attribute_value_history_archived_at, workspace_id, file_id, position
                 )
-                SELECT id, workspace_id, entity_id, attribute_id, context_id, relationship_target_entity_id, active,
-                       value_text, value_number, value_integer, value_boolean, value_date, value_datetime,
-                       value_time, value_time_zone, value_json, created_at
-                FROM archived"#,
+                SELECT stored.id, stored.archived_at, file_references.workspace_id, file_references.file_id, file_references.position
+                FROM file_references JOIN stored
+                  ON stored.id = file_references.attribute_value_id
+                 AND stored.workspace_id = file_references.workspace_id"#,
         )
         .bind(entity_id)
         .bind(self.workspace_id.unwrap_or(Self::DEFAULT_WORKSPACE_ID))

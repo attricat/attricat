@@ -203,6 +203,20 @@ impl CatalogRepository {
         let source_values = self
             .form_values_in_transaction(&mut transaction, entity.id)
             .await?;
+        let source_file_references = sqlx::query_as::<_, (String, Option<Uuid>, Uuid, i32)>(
+            r#"SELECT a.code, av.context_id, r.file_id, r.position
+               FROM attribute_file_references r
+               JOIN attribute_values av ON av.id = r.attribute_value_id
+               JOIN attributes a ON a.id = av.attribute_id
+               WHERE av.entity_id = $1
+                 AND av.workspace_id = $2
+                 AND a.value_type = 'file'
+               ORDER BY a.code, av.context_id, r.position"#,
+        )
+        .bind(entity.id)
+        .bind(self.workspace_id.unwrap_or(Self::DEFAULT_WORKSPACE_ID))
+        .fetch_all(&mut *transaction)
+        .await?;
         let source_attributes = self
             .list_attributes_in_transaction(
                 &mut transaction,
@@ -244,6 +258,8 @@ impl CatalogRepository {
             .collect();
         let mut carried_values = Vec::new();
         let mut carried_relationships: HashMap<(String, Option<Uuid>), Vec<Uuid>> = HashMap::new();
+        let mut carried_file_references: HashMap<(String, Option<Uuid>), Vec<(Uuid, i32)>> =
+            HashMap::new();
         let mut unresolved = HashSet::new();
         for value in source_values {
             match value {
@@ -309,8 +325,28 @@ impl CatalogRepository {
                             .push(target_entity_id);
                     }
                 }
-                // File references are managed separately from scalar values.
+                // File references are carried below so their IDs and ordering are retained.
                 FormAttributeValue::File { .. } => {}
+            }
+        }
+        for (attribute_code, context_id, file_id, position) in source_file_references {
+            let source = source_by_code
+                .get(attribute_code.as_str())
+                .expect("file references belong to the source blueprint");
+            let incompatible = match target_by_code.get(attribute_code.as_str()) {
+                None => true,
+                Some(target) => target.value_type != source.value_type,
+            };
+            if discarded_attributes.contains(attribute_code.as_str()) {
+                continue;
+            }
+            if incompatible {
+                unresolved.insert(attribute_code);
+            } else {
+                carried_file_references
+                    .entry((attribute_code, context_id))
+                    .or_default()
+                    .push((file_id, position));
             }
         }
         if !unresolved.is_empty() {
@@ -341,6 +377,33 @@ impl CatalogRepository {
         for value in carried_values.into_iter().chain(input.values) {
             self.insert_value(&mut transaction, &target_entity, value)
                 .await?;
+        }
+        for ((attribute_code, context_id), files) in carried_file_references {
+            let attribute_id = target_by_code
+                .get(attribute_code.as_str())
+                .expect("compatible file attribute belongs to the target blueprint")
+                .id;
+            let value_id = sqlx::query_scalar::<_, Uuid>(
+                "INSERT INTO attribute_values (id, workspace_id, entity_id, attribute_id, context_id, active) VALUES ($1, $2, $3, $4, $5, true) RETURNING id",
+            )
+            .bind(Uuid::new_v4())
+            .bind(self.workspace_id.unwrap_or(Self::DEFAULT_WORKSPACE_ID))
+            .bind(target_entity.id)
+            .bind(attribute_id)
+            .bind(context_id)
+            .fetch_one(&mut *transaction)
+            .await?;
+            for (file_id, position) in files {
+                sqlx::query(
+                    "INSERT INTO attribute_file_references (attribute_value_id, workspace_id, file_id, position) VALUES ($1, $2, $3, $4)",
+                )
+                .bind(value_id)
+                .bind(self.workspace_id.unwrap_or(Self::DEFAULT_WORKSPACE_ID))
+                .bind(file_id)
+                .bind(position)
+                .execute(&mut *transaction)
+                .await?;
+            }
         }
         let carried_relationships = carried_relationships
             .into_iter()
