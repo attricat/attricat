@@ -389,14 +389,17 @@ No count is returned. A null `next_cursor` means the final page was reached.
 ## V1 Entity Search
 
 `POST /v1/entities/search` resolves the supplied blueprint code to its current
-revision unless `blueprint.version` is provided. Results include only entities
-pinned to that exact revision. Text search is case-insensitive across current
-scalar values; relationship values are not searched.
+revision for response metadata. When `blueprint.version` is provided, results
+include only entities pinned to that revision; otherwise, results span all
+published revisions. Set `outdated` to `true` to include only entities not
+pinned to the latest published revision. Text search is case-insensitive across
+current scalar values; relationship values are not searched.
 
 ```json
 {
   "blueprint": { "code": "product", "version": 1 },
   "query": "blue shirt",
+  "outdated": false,
   "filters": [],
   "page": { "size": 25, "cursor": null }
 }

@@ -266,6 +266,8 @@ pub(super) async fn search_entity_previews(
             cursor,
             matching.as_deref(),
             &input.system_tags,
+            input.outdated,
+            current.blueprint.version,
         )
         .await?;
     for item in &mut items {

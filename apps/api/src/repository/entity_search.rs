@@ -178,6 +178,8 @@ impl CatalogRepository {
         cursor: Option<(DateTime<Utc>, Uuid)>,
         matching_entity_ids: Option<&[Uuid]>,
         system_tags: &[String],
+        outdated: bool,
+        current_blueprint_version: i64,
     ) -> Result<(Vec<EntityPreview>, Option<String>), RepositoryError> {
         validate_system_tags(system_tags)?;
         let sql = r#"SELECT e.id, e.blueprint_version, e.created_at, e.projections -> 'preview' AS preview,
@@ -216,8 +218,9 @@ impl CatalogRepository {
                    )
                   AND ($6::uuid[] IS NULL OR e.id = ANY($6))
                   AND ($7::text[] IS NULL OR e.system_tags @> $7)
+                  AND (NOT $8 OR e.blueprint_version <> $9)
                  ORDER BY e.created_at, e.id
-                 LIMIT $8"#;
+                 LIMIT $10"#;
         let (cursor_created_at, cursor_id) = cursor.unzip();
         let rows = sqlx::query_as::<_, EntityPreviewRow>(sql)
             .bind(blueprint_id)
@@ -227,6 +230,8 @@ impl CatalogRepository {
             .bind(cursor_id)
             .bind(matching_entity_ids)
             .bind((!system_tags.is_empty()).then_some(system_tags))
+            .bind(outdated)
+            .bind(current_blueprint_version)
             .bind(limit + 1)
             .fetch_all(&self.pool)
             .await?;

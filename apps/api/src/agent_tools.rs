@@ -70,6 +70,11 @@ pub fn definitions() -> Vec<ToolDefinition> {
             json!({"type":"object","required":["entity_id"],"properties":{"entity_id":{"type":"string","format":"uuid"}},"additionalProperties":false}),
         ),
         definition(
+            "search_entities",
+            "Search entities of a blueprint by current scalar values and system tags. Omit blueprint.version to include every published revision; set outdated to true to return only entities that are not on the latest published revision. Results are paginated in ascending creation order.",
+            json!({"type":"object","required":["blueprint"],"properties":{"blueprint":{"type":"object","required":["code"],"properties":{"code":{"type":"string"},"version":{"type":"integer","minimum":1}},"additionalProperties":false},"query":{"type":"string"},"system_tags":{"type":"array","items":{"type":"string"}},"outdated":{"type":"boolean"},"page":{"type":"object","properties":{"size":{"type":"integer","minimum":1,"maximum":100},"cursor":{"type":"string"}},"additionalProperties":false}},"additionalProperties":false}),
+        ),
+        definition(
             "create_blueprint",
             "Create a version-1 blueprint from a complete TOML definition. Call blueprint_authoring_guide first. This change requires approval.",
             json!({"type":"object","required":["definition"],"properties":{"definition":{"type":"string","description":"Complete blueprint TOML beginning with format_version, code, name, and kind."}},"additionalProperties":false}),
@@ -130,9 +135,11 @@ fn definition(name: &'static str, description: &'static str, parameters: Value) 
 
 pub fn kind(name: &str) -> Result<ToolKind, ToolError> {
     match name {
-        "blueprint_authoring_guide" | "list_blueprints" | "list_contexts" | "get_entity" => {
-            Ok(ToolKind::Read)
-        }
+        "blueprint_authoring_guide"
+        | "list_blueprints"
+        | "list_contexts"
+        | "get_entity"
+        | "search_entities" => Ok(ToolKind::Read),
         "create_blueprint"
         | "create_blueprint_revision"
         | "publish_blueprint"
@@ -222,6 +229,81 @@ pub async fn execute_read(
                     .await?
                     .ok_or(RepositoryError::NotFound("entity"))?,
             )
+            .expect("models serialize")
+        }
+        "search_entities" => {
+            #[derive(Deserialize)]
+            #[serde(deny_unknown_fields)]
+            struct Input {
+                blueprint: crate::model::SearchBlueprint,
+                #[serde(default)]
+                query: Option<String>,
+                #[serde(default)]
+                system_tags: Vec<String>,
+                #[serde(default)]
+                outdated: bool,
+                #[serde(default)]
+                page: crate::model::SearchPage,
+            }
+
+            let input: Input = decode(arguments)?;
+            if input.blueprint.code.is_empty() {
+                return Err(ToolError::InvalidArguments(
+                    "blueprint.code must not be empty".to_owned(),
+                ));
+            }
+            let limit = input.page.size.unwrap_or(20);
+            if limit == 0 || limit > 100 {
+                return Err(ToolError::InvalidArguments(
+                    "page.size must be between 1 and 100".to_owned(),
+                ));
+            }
+            let current = repository
+                .get_blueprint_by_code(&input.blueprint.code)
+                .await?
+                .ok_or(RepositoryError::NotFound("blueprint"))?;
+            let selected = match input.blueprint.version {
+                Some(version) => Some(
+                    repository
+                        .get_blueprint_by_code_and_version(&input.blueprint.code, version)
+                        .await?
+                        .map(|blueprint| blueprint.blueprint.version)
+                        .ok_or(RepositoryError::NotFound("blueprint"))?,
+                ),
+                None => None,
+            };
+            let cursor = match input.page.cursor.as_deref() {
+                Some(cursor) => Some(super::repository::decode_search_cursor(cursor).ok_or_else(
+                    || ToolError::InvalidArguments("page.cursor is invalid".to_owned()),
+                )?),
+                None => None,
+            };
+            let query = input
+                .query
+                .as_deref()
+                .map(str::trim)
+                .filter(|value| !value.is_empty());
+            let (mut items, next_cursor) = repository
+                .search_entity_previews(
+                    current.blueprint.id,
+                    selected,
+                    query,
+                    limit.into(),
+                    cursor,
+                    None,
+                    &input.system_tags,
+                    input.outdated,
+                    current.blueprint.version,
+                )
+                .await?;
+            for item in &mut items {
+                item.schema_outdated = item.blueprint_version != current.blueprint.version;
+            }
+            serde_json::to_value(crate::model::EntitySearchResponse {
+                blueprint: current,
+                items,
+                next_cursor,
+            })
             .expect("models serialize")
         }
         _ => return Err(ToolError::UnknownTool(name.to_owned())),
@@ -460,11 +542,12 @@ fn bounded(value: Value) -> Result<Value, ToolError> {
 mod tests {
     use serde_json::json;
 
-    use super::{ToolError, ToolKind, bounded, change_summary, kind};
+    use super::{ToolError, ToolKind, bounded, change_summary, definitions, kind};
 
     #[test]
     fn classifies_every_write_as_an_approval_required_mutation() {
         assert_eq!(kind("list_blueprints").unwrap(), ToolKind::Read);
+        assert_eq!(kind("search_entities").unwrap(), ToolKind::Read);
         for name in [
             "create_entity",
             "delete_entity",
@@ -475,6 +558,18 @@ mod tests {
             assert_eq!(kind(name).unwrap(), ToolKind::Mutation);
         }
         assert!(matches!(kind("fetch_url"), Err(ToolError::UnknownTool(_))));
+    }
+
+    #[test]
+    fn search_entities_definition_supports_outdated_filter() {
+        let search = definitions()
+            .into_iter()
+            .find(|definition| definition.function.name == "search_entities")
+            .expect("search_entities definition");
+        assert_eq!(
+            search.function.parameters,
+            json!({"type":"object","required":["blueprint"],"properties":{"blueprint":{"type":"object","required":["code"],"properties":{"code":{"type":"string"},"version":{"type":"integer","minimum":1}},"additionalProperties":false},"query":{"type":"string"},"system_tags":{"type":"array","items":{"type":"string"}},"outdated":{"type":"boolean"},"page":{"type":"object","properties":{"size":{"type":"integer","minimum":1,"maximum":100},"cursor":{"type":"string"}},"additionalProperties":false}},"additionalProperties":false})
+        );
     }
 
     #[test]
