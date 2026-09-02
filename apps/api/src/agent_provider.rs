@@ -36,6 +36,9 @@ pub struct ChatRequest {
     pub model: String,
     pub messages: Vec<ChatMessage>,
     pub tools: Vec<ToolDefinition>,
+    /// Agent approvals are sequential, so a response must contain at most one
+    /// call. This prevents an unresolved call from invalidating the next turn.
+    pub parallel_tool_calls: bool,
     pub stream: bool,
 }
 #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -107,6 +110,7 @@ impl OpenAiCompatibleClient {
                 model: self.model.clone(),
                 messages,
                 tools,
+                parallel_tool_calls: false,
                 stream: false,
             })
             .send()
@@ -132,6 +136,7 @@ impl OpenAiCompatibleClient {
                 model: self.model.clone(),
                 messages,
                 tools,
+                parallel_tool_calls: false,
                 stream: true,
             })
             .send()
@@ -295,7 +300,7 @@ fn finish_calls(calls: Vec<PartialToolCall>) -> Result<Vec<ToolCall>, ProviderEr
 
 #[cfg(test)]
 mod tests {
-    use super::{PartialToolCall, ProviderError, chat_completions_url, finish_calls};
+    use super::{ChatRequest, PartialToolCall, ProviderError, chat_completions_url, finish_calls};
     use url::Url;
 
     #[test]
@@ -303,6 +308,21 @@ mod tests {
         assert_eq!(
             chat_completions_url(&Url::parse("http://provider.test/v1").unwrap()).as_str(),
             "http://provider.test/v1/chat/completions"
+        );
+    }
+
+    #[test]
+    fn disables_parallel_tool_calls_in_provider_requests() {
+        let request = ChatRequest {
+            model: "test".into(),
+            messages: vec![],
+            tools: vec![],
+            parallel_tool_calls: false,
+            stream: true,
+        };
+        assert_eq!(
+            serde_json::to_value(request).unwrap()["parallel_tool_calls"],
+            false
         );
     }
 
