@@ -17,8 +17,8 @@ mod tokens;
 use std::{collections::HashMap, sync::Arc, time::Instant};
 
 use crate::{
-    agents::AgentProviderConfig, file_access::FileAccessPolicy, mail::MailDelivery,
-    repository::CatalogRepository, storage::ObjectStore,
+    agent_worker::AgentDispatcher, agents::AgentProviderConfig, file_access::FileAccessPolicy,
+    mail::MailDelivery, repository::CatalogRepository, storage::ObjectStore,
 };
 use axum::{
     Router,
@@ -37,6 +37,7 @@ use tracing::{Instrument, field::Empty};
 pub struct AppState {
     pub repository: CatalogRepository,
     pub agent_provider: Option<AgentProviderConfig>,
+    pub agent_dispatcher: Option<AgentDispatcher>,
     /// Storage is injected at startup so future file routes never construct a
     /// provider client from request data.
     pub object_store: Arc<dyn ObjectStore>,
@@ -112,11 +113,26 @@ async fn server_timing(request: axum::extract::Request, next: Next) -> Response 
 pub fn router(state: AppState) -> Router {
     Router::new()
         .route("/metrics", get(metrics))
-        .route("/agent/conversations", post(agents::create_conversation))
+        .route(
+            "/agent/conversations",
+            get(agents::list_conversations).post(agents::create_conversation),
+        )
+        .route(
+            "/agent/conversations/{conversation_id}",
+            get(agents::get_conversation)
+                .patch(agents::update_conversation)
+                .delete(agents::delete_conversation),
+        )
         .route(
             "/agent/conversations/{conversation_id}/messages",
-            post(agents::send_message),
+            get(agents::list_messages).post(agents::send_message),
         )
+        .route(
+            "/agent/conversations/{conversation_id}/runs",
+            get(agents::list_runs),
+        )
+        .route("/agent/runs/{run_id}/events", get(agents::stream_events))
+        .route("/agent/approvals", get(agents::list_pending_approvals))
         .route(
             "/agent/tool-calls/{tool_call_id}/approve",
             post(agents::approve),
@@ -124,6 +140,23 @@ pub fn router(state: AppState) -> Router {
         .route(
             "/agent/tool-calls/{tool_call_id}/reject",
             post(agents::reject),
+        )
+        .route(
+            "/agent/schedules",
+            get(agents::list_schedules).post(agents::create_schedule),
+        )
+        .route(
+            "/agent/schedules/{schedule_id}",
+            put(agents::update_schedule).delete(agents::delete_schedule),
+        )
+        .route(
+            "/agent/schedules/{schedule_id}/run-now",
+            post(agents::run_schedule_now),
+        )
+        // Keep the short form for clients built during the backend rollout.
+        .route(
+            "/agent/schedules/{schedule_id}/run",
+            post(agents::run_schedule_now),
         )
         .route("/health", get(data_health::health))
         .route("/auth/discover", post(sessions::discover))

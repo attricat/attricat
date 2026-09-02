@@ -3,6 +3,7 @@ pub mod agent_provider;
 pub mod agent_runner;
 pub mod agent_service;
 pub mod agent_tools;
+pub mod agent_worker;
 pub mod agents;
 mod blueprint_resolver;
 pub mod constants;

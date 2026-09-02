@@ -3,6 +3,7 @@ use std::{net::SocketAddr, str::FromStr, sync::Arc};
 use api::{
     MIGRATOR,
     account::{Password, hash_password},
+    agent_worker,
     agents::AgentProviderConfig,
     constants::{
         DEFAULT_DATA_HEALTH_CACHE_TTL_SECONDS, DEFAULT_ENTITY_PAGE_SIZE,
@@ -174,6 +175,20 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     let workspace_onboarding_url = std::env::var("WORKSPACE_ONBOARDING_URL")
         .unwrap_or_else(|_| "http://127.0.0.1:5173/onboarding".to_owned());
 
+    let agent_dispatcher = match agent_provider.clone() {
+        Some(config) => Some(
+            agent_worker::start(
+                CatalogRepository::with_workspace_pool_factory(
+                    pool.clone(),
+                    connect_options.clone(),
+                ),
+                config,
+            )
+            .await,
+        ),
+        None => None,
+    };
+
     let listener = tokio::net::TcpListener::bind(bind_addr).await?;
     tracing::info!(address = %listener.local_addr()?, "API listening");
     axum::serve(
@@ -181,6 +196,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         router(AppState {
             repository: CatalogRepository::with_workspace_pool_factory(pool, connect_options),
             agent_provider,
+            agent_dispatcher,
             object_store,
             file_access_policy: Arc::new(AllowFileAccess),
             mail_delivery,

@@ -122,3 +122,7 @@ identifier. Clients do not provide a workspace UUID or tenancy header.
 
 `CATALOG_SERVER` overrides the CLI's API URL. The CLI otherwise targets
 `http://127.0.0.1:3000`.
+
+`AGENT_SCHEDULER_POLL_SECONDS` controls the API process UTC schedule poll
+interval (default `15`, range `1`–`3600`). Queued runs are recovered when the
+API process starts; no external scheduler is required.

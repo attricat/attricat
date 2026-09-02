@@ -26,6 +26,17 @@ pub async fn run(
     repository
         .transition_agent_run(run_id, "running", None, None)
         .await?;
+    run_claimed(repository, provider, run_id, conversation_id).await
+}
+
+/// Drives a run whose queued-to-running transition was atomically claimed by
+/// the process-owned dispatcher.
+pub async fn run_claimed(
+    repository: &CatalogRepository,
+    provider: &OpenAiCompatibleClient,
+    run_id: Uuid,
+    conversation_id: Uuid,
+) -> Result<(), RunError> {
     drive(repository, provider, run_id, conversation_id, 0).await
 }
 
@@ -192,15 +203,24 @@ async fn drive(
     repository
         .transition_agent_run(run_id, "completed", None, None)
         .await?;
-    repository
-        .append_run_event(run_id, "terminal", json!({"status":"completed"}))
-        .await?;
     Ok(())
 }
 /// Continues a paused run after its durable decision. Approved mutations are
 /// executed once; rejected calls become structured tool results. The run is
 /// then sent back to the provider with that result in thread history.
 pub async fn resume(
+    repository: &CatalogRepository,
+    provider: &OpenAiCompatibleClient,
+    run_id: Uuid,
+) -> Result<(), RunError> {
+    repository
+        .transition_agent_run(run_id, "running", None, None)
+        .await?;
+    resume_claimed(repository, provider, run_id).await
+}
+
+/// Resumes a decision-bearing run after the dispatcher claimed it.
+pub async fn resume_claimed(
     repository: &CatalogRepository,
     provider: &OpenAiCompatibleClient,
     run_id: Uuid,
@@ -275,9 +295,6 @@ async fn fail(
         .await?;
     repository
         .transition_agent_run(run_id, "failed", Some(code), Some(message))
-        .await?;
-    repository
-        .append_run_event(run_id, "terminal", json!({"status":"failed","code":code}))
         .await?;
     Ok(())
 }

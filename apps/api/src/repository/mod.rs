@@ -46,7 +46,8 @@ mod tokens;
 mod values;
 
 pub use agents::{
-    AgentRun, AgentRunEvent, AgentToolCall, ApprovalDecision, Conversation, ConversationMessage,
+    AgentRun, AgentRunEvent, AgentSchedule, AgentToolCall, ApprovalDecision, Conversation,
+    ConversationMessage,
 };
 pub(crate) use entity_search::decode_search_cursor;
 pub(crate) use files::{FileMetadata, FileObject, FilePolicy, FileUploadResult, NewUploadedFile};

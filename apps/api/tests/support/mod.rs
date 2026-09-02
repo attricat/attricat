@@ -119,6 +119,10 @@ async fn start_server_with_auth_mode_and_store(
         .execute(&pool)
         .await
         .unwrap();
+    CatalogRepository::new(pool.clone())
+        .ensure_agent_permissions()
+        .await
+        .unwrap();
     let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
     let address: SocketAddr = listener.local_addr().unwrap();
     let router = router(AppState {
@@ -127,6 +131,7 @@ async fn start_server_with_auth_mode_and_store(
             (*pool.connect_options()).clone(),
         ),
         agent_provider: None,
+        agent_dispatcher: None,
         object_store,
         file_access_policy,
         mail_delivery: Arc::new(TestMailDelivery),

@@ -180,3 +180,29 @@ the method, matched route template, response status, and duration; file spans
 include only internal IDs and bounded operation values, never object keys or
 filenames. 5xx responses are emitted at error level. Set `RUST_LOG` (for
 example, `RUST_LOG=api=debug`) to control output verbosity.
+
+## Agents
+
+Agent routes require `agents.run`. `GET`/`POST /agent/conversations` lists or
+creates conversations. `GET`/`PATCH`/`DELETE /agent/conversations/{id}` reads,
+renames, or archives a thread; it exposes ordered messages at
+`/agent/conversations/{id}/messages` and run history at
+`/agent/conversations/{id}/runs`. Posting a message creates a durable queued
+run and returns `202`; execution is owned by the API worker rather than the
+HTTP request.
+
+`GET /agent/runs/{run_id}/events` is an SSE stream of durable status, message,
+tool, approval, error, terminal, and schedule events. Each SSE `id` is the
+persisted event UUID. Reconnect with `Last-Event-ID` to replay only later
+ordered events. `GET /agent/approvals` lists pending tool calls (optionally by
+`conversation_id`), and the existing approve/reject routes enqueue the resumed
+run after atomically recording the decision.
+
+Schedules are managed by `GET`/`POST /agent/schedules`,
+`PUT`/`DELETE /agent/schedules/{id}`, and
+`POST /agent/schedules/{id}/run-now` (the temporary `/run` alias is also
+accepted). A schedule request contains `conversation_id` and a six-field UTC
+`cron_expression`. The creating user is persisted as the scheduled execution
+principal; scheduled mutations are re-authorized as that user, while a manual
+run uses the user who requested it. Overlapping scheduled occurrences become durable
+skipped runs with a `schedule_skipped` event instead of executing concurrently.
