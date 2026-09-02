@@ -1,3 +1,4 @@
+mod agents;
 mod audit;
 mod auth;
 mod blueprints;
@@ -16,8 +17,8 @@ mod tokens;
 use std::{collections::HashMap, sync::Arc, time::Instant};
 
 use crate::{
-    file_access::FileAccessPolicy, mail::MailDelivery, repository::CatalogRepository,
-    storage::ObjectStore,
+    agents::AgentProviderConfig, file_access::FileAccessPolicy, mail::MailDelivery,
+    repository::CatalogRepository, storage::ObjectStore,
 };
 use axum::{
     Router,
@@ -35,6 +36,7 @@ use tracing::{Instrument, field::Empty};
 #[derive(Clone)]
 pub struct AppState {
     pub repository: CatalogRepository,
+    pub agent_provider: Option<AgentProviderConfig>,
     /// Storage is injected at startup so future file routes never construct a
     /// provider client from request data.
     pub object_store: Arc<dyn ObjectStore>,
@@ -110,6 +112,19 @@ async fn server_timing(request: axum::extract::Request, next: Next) -> Response 
 pub fn router(state: AppState) -> Router {
     Router::new()
         .route("/metrics", get(metrics))
+        .route("/agent/conversations", post(agents::create_conversation))
+        .route(
+            "/agent/conversations/{conversation_id}/messages",
+            post(agents::send_message),
+        )
+        .route(
+            "/agent/tool-calls/{tool_call_id}/approve",
+            post(agents::approve),
+        )
+        .route(
+            "/agent/tool-calls/{tool_call_id}/reject",
+            post(agents::reject),
+        )
         .route("/health", get(data_health::health))
         .route("/auth/discover", post(sessions::discover))
         .route("/auth/login", post(sessions::login))

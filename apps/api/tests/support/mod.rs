@@ -126,6 +126,7 @@ async fn start_server_with_auth_mode_and_store(
             pool.clone(),
             (*pool.connect_options()).clone(),
         ),
+        agent_provider: None,
         object_store,
         file_access_policy,
         mail_delivery: Arc::new(TestMailDelivery),

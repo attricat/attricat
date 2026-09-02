@@ -57,6 +57,13 @@ impl ApiError {
             message: format!("{resource} was not found"),
         }
     }
+    pub(super) fn service_unavailable(message: &'static str) -> Self {
+        Self {
+            status: StatusCode::SERVICE_UNAVAILABLE,
+            code: "service_unavailable",
+            message: message.to_owned(),
+        }
+    }
     pub(super) fn internal(message: &'static str) -> Self {
         Self {
             status: StatusCode::INTERNAL_SERVER_ERROR,

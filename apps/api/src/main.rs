@@ -25,10 +25,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     dotenvy::dotenv().ok();
     init_tracing()?;
     let metrics = init_metrics()?;
-    let agents_enabled = AgentProviderConfig::from_env()
-        .map_err(|error| format!("invalid agent provider configuration: {error}"))?
-        .is_some();
-    if agents_enabled {
+    let agent_provider = AgentProviderConfig::from_env()
+        .map_err(|error| format!("invalid agent provider configuration: {error}"))?;
+    if agent_provider.is_some() {
         tracing::info!("agent provider configuration loaded");
     } else {
         tracing::info!("agents are unavailable: LLM_API_KEY is not configured");
@@ -89,6 +88,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         .await?;
     tracing::info!("running database migrations");
     MIGRATOR.run(&maintenance_pool).await?;
+    CatalogRepository::new(maintenance_pool.clone())
+        .ensure_agent_permissions()
+        .await?;
     // The identity/membership migration consumes this durable bootstrap owner
     // record to create the initial owner grant. It is set only by deployment
     // configuration, never by a catalog request.
@@ -178,6 +180,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         listener,
         router(AppState {
             repository: CatalogRepository::with_workspace_pool_factory(pool, connect_options),
+            agent_provider,
             object_store,
             file_access_policy: Arc::new(AllowFileAccess),
             mail_delivery,
