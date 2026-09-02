@@ -423,6 +423,22 @@ mod tests {
     }
 
     #[test]
+    fn ignores_large_reasoning_streams_within_provider_byte_limit() {
+        tokio::runtime::Runtime::new().unwrap().block_on(async {
+            let frame = "data: {\"choices\":[{\"delta\":{\"reasoning_content\":\"x\"}}]}\n\n";
+            let body = format!(
+                "{}data: [DONE]\n\n",
+                frame.repeat(128 * 1024 / frame.len() + 1)
+            );
+            assert!(body.len() > 64 * 1024);
+            let (client, server) = mock_client(body).await;
+            let result = client.stream(vec![], vec![], |_| {}).await;
+            server.abort();
+            assert!(result.is_ok());
+        });
+    }
+
+    #[test]
     fn rejects_many_small_frames_after_total_provider_byte_limit() {
         tokio::runtime::Runtime::new().unwrap().block_on(async {
             let frame = "data: {\"choices\":[{\"delta\":{\"content\":\"x\"}}]}\n\n";
