@@ -65,10 +65,28 @@ or inaccessible configured bucket.
 
 Agents are disabled when `LLM_API_KEY` is absent or blank; ordinary catalog API
 startup continues. Set the key, base URL, and model only in the API process
-environment (or its secret manager). The provider is OpenAI Chat-Completions
-compatible. The API validates the URL and bounded timeouts at startup, logs only
-whether agents are available, and stores provider base URL/model snapshots—not
-credentials—in durable agent records.
+environment (or its secret manager), never in browser configuration or source
+control. The provider is OpenAI Chat-Completions compatible. The API validates
+the URL and bounded timeouts at startup, logs only whether agents are
+available, and stores provider base URL/model snapshots—not credentials—in
+durable agent records.
+
+An enabled provider receives the conversation history and bounded catalogue
+results needed to answer it, so choose a provider and retention policy suitable
+for that data. Agent access requires the `agents.run` permission. Read-only
+tools execute automatically; all writes pause for a durable human approval,
+including scheduled runs. Approval is not a permission bypass: the initiating
+user is re-authorized when an approved write resumes. Restrict this permission
+to trusted operators and review each proposed input and change summary.
+
+The current limits are a 32 KiB user message, 512-character conversation title
+and model name, 64 KiB serialized tool result, eight tool-call rounds per run,
+and a maximum provider request/run timeout of one hour. Provider failures,
+malformed responses, unknown tools, invalid tool arguments, and tool-round
+exhaustion are recorded as failed durable runs; provider response bodies and
+credentials are not retained. Schedules use six-field UTC cron expressions.
+An occurrence that overlaps a queued, running, or approval-waiting run is
+recorded as skipped rather than executed concurrently.
 
 Mailpit is a local-development and E2E adapter only; it is not production mail
 configuration. Source `.catalog-worktree` after `just dev`, open

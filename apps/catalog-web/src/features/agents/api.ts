@@ -43,11 +43,15 @@ export const listMessages = (id: string) =>
   request(`/api/agent/conversations/${id}/messages`, z.array(messageSchema));
 export const listRuns = (id: string) =>
   request(`/api/agent/conversations/${id}/runs`, z.array(runSchema));
-export const sendMessage = (id: string, content: string) =>
+export const sendMessage = (
+  id: string,
+  content: string,
+  attachmentIds: string[] = [],
+) =>
   request(
     `/api/agent/conversations/${id}/messages`,
     runResponseSchema,
-    json('POST', { content }),
+    json('POST', { content, attachment_ids: attachmentIds }),
   );
 export const listApprovals = (conversationId?: string) =>
   request(

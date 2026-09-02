@@ -30,6 +30,8 @@ pub(super) struct CreateConversation {
 #[serde(deny_unknown_fields)]
 pub(super) struct SendMessage {
     pub content: String,
+    #[serde(default)]
+    pub attachment_ids: Vec<Uuid>,
 }
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -172,14 +174,38 @@ pub(super) async fn send_message(
     ApiPath(conversation_id): ApiPath<Uuid>,
     ApiJson(input): ApiJson<SendMessage>,
 ) -> Result<(StatusCode, Json<RunResponse>), ApiError> {
-    if input.content.trim().is_empty() || input.content.len() > 32 * 1024 {
+    if (input.content.trim().is_empty() && input.attachment_ids.is_empty())
+        || input.content.len() > 32 * 1024
+    {
         return Err(ApiError::invalid_input(
-            "content must be between 1 and 32768 bytes".into(),
+            "content must be between 1 and 32768 bytes unless attachments are included".into(),
+        ));
+    }
+    if input.attachment_ids.len() > 16 {
+        return Err(ApiError::invalid_input(
+            "a message may include at most 16 attachments".into(),
+        ));
+    }
+    if input
+        .attachment_ids
+        .iter()
+        .collect::<std::collections::HashSet<_>>()
+        .len()
+        != input.attachment_ids.len()
+    {
+        return Err(ApiError::invalid_input(
+            "attachment_ids must not contain duplicates".into(),
         ));
     }
     let (config, dispatcher) = configured(&state)?;
     repository
-        .append_conversation_message(conversation_id, None, "user", Value::String(input.content))
+        .append_conversation_message_with_attachments(
+            conversation_id,
+            None,
+            "user",
+            Value::String(input.content),
+            &input.attachment_ids,
+        )
         .await?;
     let run = repository
         .create_agent_run_for_user(

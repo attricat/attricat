@@ -1,7 +1,11 @@
 import { z } from 'zod';
 import { apiFetch, csrfToken } from '../auth/request';
 import { ApiRequestError } from '../entities/api';
-import { fileMetadataSchema, fileUploadResultSchema } from './schemas';
+import {
+  conversationUploadResultSchema,
+  fileMetadataSchema,
+  fileUploadResultSchema,
+} from './schemas';
 
 const apiErrorSchema = z.object({
   error: z.object({ code: z.string(), message: z.string() }),
@@ -97,4 +101,20 @@ export const uploadFiles = async ({
     };
     request.send(data);
   });
+};
+
+export const uploadConversationFiles = async (
+  conversationId: string,
+  files: File[],
+) => {
+  const data = new FormData();
+  files.forEach((file) =>
+    data.append(files.length === 1 ? 'file' : 'files', file),
+  );
+  const response = await apiFetch(
+    `/api/agent/conversations/${encodeURIComponent(z.uuid().parse(conversationId))}/uploads`,
+    { method: 'POST', body: data },
+  );
+  if (!response.ok) throw await responseError(response);
+  return conversationUploadResultSchema.parse(await response.json());
 };

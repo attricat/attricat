@@ -206,6 +206,152 @@ impl CatalogRepository {
         })
     }
 
+    /// Links an existing workspace file to a file attribute without copying
+    /// storage bytes or creating another file record.
+    pub async fn link_file_to_attribute(
+        &self,
+        entity_id: Uuid,
+        attribute_code: &str,
+        context_id: Option<Uuid>,
+        file_id: Uuid,
+    ) -> Result<FileMetadata, RepositoryError> {
+        let workspace_id = self.workspace_id.unwrap_or(Self::DEFAULT_WORKSPACE_ID);
+        let mut transaction = self.pool.begin().await?;
+        let entity = self.lock_entity(&mut transaction, entity_id).await?;
+        let (attribute_id, policy, context_editable) = self
+            .file_upload_attribute(&mut transaction, &entity, attribute_code)
+            .await?;
+        let context_id = self
+            .file_upload_context(&mut transaction, context_id)
+            .await?;
+        self.validate_context_editable(&mut transaction, Some(context_id), &context_editable)
+            .await?;
+        let exists = sqlx::query_scalar::<_, Uuid>(
+            "SELECT id FROM files WHERE id = $1 AND workspace_id = $2 AND deleted_at IS NULL",
+        )
+        .bind(file_id)
+        .bind(workspace_id)
+        .fetch_optional(&mut *transaction)
+        .await?;
+        if exists.is_none() {
+            return Err(RepositoryError::NotFound("file"));
+        }
+        let current_value = sqlx::query_scalar::<_, Uuid>(
+            "SELECT id FROM attribute_values WHERE entity_id = $1 AND attribute_id = $2 AND context_id = $3 AND relationship_target_entity_id IS NULL FOR UPDATE",
+        )
+        .bind(entity_id)
+        .bind(attribute_id)
+        .bind(context_id)
+        .fetch_optional(&mut *transaction)
+        .await?;
+        let count =
+            match current_value {
+                Some(value_id) => sqlx::query_scalar::<_, i64>(
+                    "SELECT COUNT(*) FROM attribute_file_references WHERE attribute_value_id = $1",
+                )
+                .bind(value_id)
+                .fetch_one(&mut *transaction)
+                .await?,
+                None => 0,
+            };
+        if policy.cardinality == "many" && count == i32::MAX as i64 {
+            return Err(RepositoryError::FileCardinality);
+        }
+        let value_id = if policy.cardinality == "one" {
+            self.archive_current_value(
+                &mut transaction,
+                entity_id,
+                attribute_id,
+                Some(context_id),
+                None,
+            )
+            .await?;
+            sqlx::query_scalar::<_, Uuid>(
+                "INSERT INTO attribute_values (id, workspace_id, entity_id, attribute_id, context_id, active) VALUES ($1, $2, $3, $4, $5, true) RETURNING id",
+            )
+            .bind(Uuid::new_v4())
+            .bind(workspace_id)
+            .bind(entity_id)
+            .bind(attribute_id)
+            .bind(context_id)
+            .fetch_one(&mut *transaction)
+            .await?
+        } else if let Some(value_id) = current_value {
+            value_id
+        } else {
+            sqlx::query_scalar::<_, Uuid>(
+                "INSERT INTO attribute_values (id, workspace_id, entity_id, attribute_id, context_id, active) VALUES ($1, $2, $3, $4, $5, true) RETURNING id",
+            )
+            .bind(Uuid::new_v4())
+            .bind(workspace_id)
+            .bind(entity_id)
+            .bind(attribute_id)
+            .bind(context_id)
+            .fetch_one(&mut *transaction)
+            .await?
+        };
+        let position = if policy.cardinality == "one" {
+            0
+        } else {
+            count as i32
+        };
+        sqlx::query("INSERT INTO attribute_file_references (attribute_value_id, workspace_id, file_id, position) VALUES ($1, $2, $3, $4)")
+            .bind(value_id)
+            .bind(workspace_id)
+            .bind(file_id)
+            .bind(position)
+            .execute(&mut *transaction)
+            .await?;
+        transaction.commit().await?;
+        self.file_metadata(file_id).await
+    }
+
+    /// Persists files uploaded from a conversation without creating an entity
+    /// attribute value. The message attachment transaction later establishes
+    /// the durable relationship to one or more of these files.
+    pub async fn persist_conversation_uploads(
+        &self,
+        files: Vec<NewUploadedFile>,
+    ) -> Result<Vec<UploadedFile>, RepositoryError> {
+        let workspace_id = self.workspace_id.unwrap_or(Self::DEFAULT_WORKSPACE_ID);
+        let mut transaction = self.pool.begin().await?;
+        let mut result = Vec::with_capacity(files.len());
+        for file in files {
+            let id = Uuid::new_v4();
+            let status = "queued".to_owned();
+            sqlx::query(
+                "INSERT INTO files (id, workspace_id, original_filename, display_filename, mime_type, byte_size, sha256, original_key, status) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)",
+            )
+            .bind(id)
+            .bind(workspace_id)
+            .bind(&file.original_filename)
+            .bind(&file.display_filename)
+            .bind(&file.mime_type)
+            .bind(file.byte_size as i64)
+            .bind(&file.sha256)
+            .bind(&file.object_key)
+            .bind(&status)
+            .execute(&mut *transaction)
+            .await?;
+            sqlx::query("INSERT INTO file_processing_jobs (id, workspace_id, file_id, kind, status) VALUES ($1,$2,$3,'metadata','queued')")
+                .bind(Uuid::new_v4())
+                .bind(workspace_id)
+                .bind(id)
+                .execute(&mut *transaction)
+                .await?;
+            result.push(UploadedFile {
+                id,
+                filename: file.display_filename,
+                mime_type: file.mime_type,
+                byte_size: file.byte_size as i64,
+                sha256: file.sha256,
+                status,
+            });
+        }
+        transaction.commit().await?;
+        Ok(result)
+    }
+
     /// Reads client-safe metadata. Object keys and original filenames remain
     /// repository internals and are never serialized from this method.
     pub async fn file_metadata(&self, file_id: Uuid) -> Result<FileMetadata, RepositoryError> {

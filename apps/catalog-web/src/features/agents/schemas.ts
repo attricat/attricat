@@ -12,6 +12,13 @@ export const conversationSchema = z.object({
   updated_at: dateTime,
   archived_at: dateTime.nullable(),
 });
+export const messageAttachmentSchema = z.object({
+  id,
+  filename: z.string(),
+  mime_type: z.string(),
+  byte_size: z.number().int().nonnegative(),
+  status: z.string(),
+});
 export const messageSchema = z.object({
   id,
   conversation_id: id,
@@ -20,6 +27,7 @@ export const messageSchema = z.object({
   role: z.string(),
   content: z.unknown(),
   created_at: dateTime,
+  attachments: z.array(messageAttachmentSchema).default([]),
 });
 export const runSchema = z.object({
   id,
@@ -67,6 +75,9 @@ export const runResponseSchema = z.object({ id, status: z.string() });
 
 export type Conversation = z.infer<typeof conversationSchema>;
 export type ConversationMessage = z.infer<typeof messageSchema>;
+export type ConversationMessageAttachment = z.infer<
+  typeof messageAttachmentSchema
+>;
 export type AgentRun = z.infer<typeof runSchema>;
 export type AgentToolCall = z.infer<typeof toolCallSchema>;
 export type AgentSchedule = z.infer<typeof scheduleSchema>;

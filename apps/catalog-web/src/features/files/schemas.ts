@@ -26,14 +26,19 @@ export const fileMetadataSchema = z.object({
   variants: z.array(fileVariantSchema),
 });
 
+const uploadedFilesSchema = z.array(
+  fileMetadataSchema
+    .omit({ variants: true })
+    .extend({ variants: z.array(fileVariantSchema).default([]) }),
+);
+
 export const fileUploadResultSchema = z.object({
   attribute_code: z.string(),
   context_id: z.uuid(),
-  files: z.array(
-    fileMetadataSchema
-      .omit({ variants: true })
-      .extend({ variants: z.array(fileVariantSchema).default([]) }),
-  ),
+  files: uploadedFilesSchema,
+});
+export const conversationUploadResultSchema = z.object({
+  files: uploadedFilesSchema,
 });
 
 export type FileMetadata = z.infer<typeof fileMetadataSchema>;

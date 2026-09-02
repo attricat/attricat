@@ -1,0 +1,1 @@
+ALTER TABLE agent_tool_calls DROP CONSTRAINT agent_tool_calls_decision_consistency_check;

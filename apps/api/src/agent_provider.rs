@@ -26,6 +26,10 @@ pub struct OpenAiCompatibleClient {
 pub struct ChatMessage {
     pub role: String,
     pub content: Value,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub tool_call_id: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub tool_calls: Option<Vec<ToolCall>>,
 }
 #[derive(Clone, Debug, Serialize)]
 pub struct ChatRequest {
@@ -34,14 +38,14 @@ pub struct ChatRequest {
     pub tools: Vec<ToolDefinition>,
     pub stream: bool,
 }
-#[derive(Clone, Debug, Deserialize)]
+#[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct ToolCall {
     pub id: String,
     #[serde(rename = "type")]
     pub kind: String,
     pub function: ToolFunctionCall,
 }
-#[derive(Clone, Debug, Deserialize)]
+#[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct ToolFunctionCall {
     pub name: String,
     pub arguments: String,
@@ -94,10 +98,7 @@ impl OpenAiCompatibleClient {
         messages: Vec<ChatMessage>,
         tools: Vec<ToolDefinition>,
     ) -> Result<ChatCompletion, ProviderError> {
-        let url = self
-            .base_url
-            .join("chat/completions")
-            .map_err(|_| ProviderError::Malformed)?;
+        let url = chat_completions_url(&self.base_url);
         let response = self
             .client
             .post(url)
@@ -122,10 +123,7 @@ impl OpenAiCompatibleClient {
         tools: Vec<ToolDefinition>,
         mut on_delta: impl FnMut(&str),
     ) -> Result<AssistantMessage, ProviderError> {
-        let url = self
-            .base_url
-            .join("chat/completions")
-            .map_err(|_| ProviderError::Malformed)?;
+        let url = chat_completions_url(&self.base_url);
         let response = self
             .client
             .post(url)
@@ -145,7 +143,10 @@ impl OpenAiCompatibleClient {
         let mut content = String::new();
         let mut calls: Vec<PartialToolCall> = Vec::new();
         while let Some(chunk) = stream.next().await {
-            let chunk = chunk.map_err(|_| ProviderError::Unavailable)?;
+            let chunk = chunk.map_err(|error| {
+                tracing::warn!(error = %error, "agent provider stream failed");
+                ProviderError::Unavailable
+            })?;
             if buffer.len() + chunk.len() > MAX_PROVIDER_BODY_BYTES {
                 return Err(ProviderError::Malformed);
             }
@@ -201,16 +202,28 @@ impl OpenAiCompatibleClient {
         Err(ProviderError::Malformed)
     }
 }
+fn chat_completions_url(base_url: &Url) -> Url {
+    let mut url = base_url.clone();
+    url.set_path(&format!(
+        "{}/chat/completions",
+        url.path().trim_end_matches('/')
+    ));
+    url
+}
+
 fn status(status: StatusCode) -> Result<(), ProviderError> {
     if status.is_success() {
         Ok(())
     } else if status == StatusCode::TOO_MANY_REQUESTS || status.is_server_error() {
+        tracing::warn!(%status, "agent provider returned an unavailable status");
         Err(ProviderError::Unavailable)
     } else {
+        tracing::warn!(%status, "agent provider rejected the request");
         Err(ProviderError::Rejected)
     }
 }
 fn map_request_error(error: reqwest::Error) -> ProviderError {
+    tracing::warn!(error = %format!("{error:#}"), "agent provider HTTP request failed");
     if error.is_timeout() {
         ProviderError::Timeout
     } else {
@@ -278,4 +291,35 @@ fn finish_calls(calls: Vec<PartialToolCall>) -> Result<Vec<ToolCall>, ProviderEr
             }
         })
         .collect()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{PartialToolCall, ProviderError, chat_completions_url, finish_calls};
+    use url::Url;
+
+    #[test]
+    fn preserves_the_provider_version_path_when_building_chat_url() {
+        assert_eq!(
+            chat_completions_url(&Url::parse("http://provider.test/v1").unwrap()).as_str(),
+            "http://provider.test/v1/chat/completions"
+        );
+    }
+
+    #[test]
+    fn completes_fragmented_tool_calls_and_rejects_incomplete_ones() {
+        let calls = finish_calls(vec![PartialToolCall {
+            id: "call_1".into(),
+            kind: String::new(),
+            name: "get_entity".into(),
+            arguments: r#"{"entity_id":"abc"}"#.into(),
+        }])
+        .unwrap();
+        assert_eq!(calls[0].kind, "function");
+        assert_eq!(calls[0].function.name, "get_entity");
+        assert!(matches!(
+            finish_calls(vec![PartialToolCall::default()]),
+            Err(ProviderError::Malformed)
+        ));
+    }
 }
