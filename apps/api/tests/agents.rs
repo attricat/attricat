@@ -1,5 +1,11 @@
 mod support;
 
+use std::{sync::Arc, time::Duration};
+
+use api::{
+    file_worker::{FileWorker, WorkerConfig},
+    storage::FakeObjectStore,
+};
 use support::*;
 
 #[sqlx::test]
@@ -71,6 +77,74 @@ async fn agent_conversation_reads_and_persisted_sse_replay(pool: PgPool) {
     assert!(replay.contains(&format!("id: {event_id}")));
     assert!(replay.contains("event: terminal"));
     server.abort();
+}
+
+#[sqlx::test]
+async fn reconciliation_retains_conversation_attachments(pool: PgPool) {
+    let workspace_id = BOOTSTRAP_WORKSPACE_ID.parse::<Uuid>().unwrap();
+    let conversation_id = Uuid::new_v4();
+    let message_id = Uuid::new_v4();
+    let attached_file_id = Uuid::new_v4();
+    let orphan_file_id = Uuid::new_v4();
+
+    sqlx::query(
+        "INSERT INTO conversations (id, workspace_id, title) VALUES ($1, $2, 'Attachment retention')",
+    )
+    .bind(conversation_id)
+    .bind(workspace_id)
+    .execute(&pool)
+    .await
+    .unwrap();
+    sqlx::query("INSERT INTO conversation_messages (id, conversation_id, sequence, role, content) VALUES ($1, $2, 0, 'user', '\"Keep this file\"')")
+        .bind(message_id)
+        .bind(conversation_id)
+        .execute(&pool)
+        .await
+        .unwrap();
+    for file_id in [attached_file_id, orphan_file_id] {
+        sqlx::query("INSERT INTO files (id, workspace_id, original_filename, display_filename, mime_type, byte_size, sha256, original_key, status) VALUES ($1, $2, 'report.pdf', 'report.pdf', 'application/pdf', 7, $3, 'files/report.pdf', 'ready')")
+            .bind(file_id)
+            .bind(workspace_id)
+            .bind("0".repeat(64))
+            .execute(&pool)
+            .await
+            .unwrap();
+    }
+    sqlx::query("INSERT INTO conversation_message_attachments (id, workspace_id, message_id, file_id, position) VALUES ($1, $2, $3, $4, 0)")
+        .bind(Uuid::new_v4())
+        .bind(workspace_id)
+        .bind(message_id)
+        .bind(attached_file_id)
+        .execute(&pool)
+        .await
+        .unwrap();
+
+    let worker = FileWorker::new(
+        pool.clone(),
+        Arc::new(FakeObjectStore::available()),
+        WorkerConfig {
+            worker_id: "test-worker".into(),
+            max_pixels: 1,
+            max_attempts: 1,
+            delete_grace: Duration::from_secs(60),
+        },
+    );
+    worker.reconcile().await.unwrap();
+
+    let attached_deleted_at: Option<chrono::DateTime<chrono::Utc>> =
+        sqlx::query_scalar("SELECT deleted_at FROM files WHERE id = $1")
+            .bind(attached_file_id)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+    let orphan_deleted_at: Option<chrono::DateTime<chrono::Utc>> =
+        sqlx::query_scalar("SELECT deleted_at FROM files WHERE id = $1")
+            .bind(orphan_file_id)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+    assert!(attached_deleted_at.is_none());
+    assert!(orphan_deleted_at.is_some());
 }
 
 #[sqlx::test]
