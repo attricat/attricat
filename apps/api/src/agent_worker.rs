@@ -65,38 +65,57 @@ pub async fn start(
                     .await;
                 continue;
             };
-            let result = match repository.decided_agent_tool_calls(run_id).await {
-                Ok(calls) if calls.is_empty() => {
-                    agent_runner::run_claimed(
+            let result = tokio::time::timeout(worker_config.run_timeout, async {
+                match repository.decided_agent_tool_calls(run_id).await {
+                    Ok(calls) if calls.is_empty() => {
+                        agent_runner::run_claimed(
+                            &repository,
+                            &provider,
+                            &worker_object_store,
+                            run_id,
+                            run.conversation_id,
+                        )
+                        .await
+                    }
+                    Ok(_) => {
+                        agent_runner::resume_claimed(
+                            &repository,
+                            &provider,
+                            &worker_object_store,
+                            run_id,
+                        )
+                        .await
+                    }
+                    Err(error) => Err(error.into()),
+                }
+            })
+            .await;
+            match result {
+                Ok(Ok(())) => {}
+                Ok(Err(error)) => {
+                    tracing::error!(%run_id, error = %error, "agent run failed");
+                    let _ = repository
+                        .transition_agent_run(
+                            run_id,
+                            "failed",
+                            Some("runner_error"),
+                            Some(&error.to_string()),
+                        )
+                        .await;
+                }
+                Err(_) => {
+                    tracing::warn!(%run_id, "agent run exceeded configured timeout");
+                    if let Err(error) = agent_runner::fail_run(
                         &repository,
-                        &provider,
-                        &worker_object_store,
                         run_id,
-                        run.conversation_id,
+                        "run_timeout",
+                        "agent run exceeded configured timeout",
                     )
                     .await
+                    {
+                        tracing::error!(%run_id, %error, "could not persist agent run timeout");
+                    }
                 }
-                Ok(_) => {
-                    agent_runner::resume_claimed(
-                        &repository,
-                        &provider,
-                        &worker_object_store,
-                        run_id,
-                    )
-                    .await
-                }
-                Err(error) => Err(error.into()),
-            };
-            if let Err(error) = result {
-                tracing::error!(%run_id, error = %error, "agent run failed");
-                let _ = repository
-                    .transition_agent_run(
-                        run_id,
-                        "failed",
-                        Some("runner_error"),
-                        Some(&error.to_string()),
-                    )
-                    .await;
             }
         }
     });
