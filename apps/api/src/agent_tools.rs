@@ -101,8 +101,8 @@ pub fn definitions() -> Vec<ToolDefinition> {
         ),
         definition(
             "migrate_entity",
-            "Upgrade an entity to the latest published revision of its blueprint when all stored values are compatible. The tool reports migration issues instead when input or discarded attributes are required. This change requires approval.",
-            json!({"type":"object","required":["entity_id"],"properties":{"entity_id":{"type":"string","format":"uuid"}},"additionalProperties":false}),
+            "Upgrade an entity to the latest published revision of its blueprint. Call first with entity_id to assess compatibility; when issues require input, call again with replacement scalar values, relationship target sets, or discarded attribute codes. This change requires approval.",
+            json!({"type":"object","required":["entity_id"],"properties":{"entity_id":{"type":"string","format":"uuid"},"values":{"type":"array"},"relationships":{"type":"array"},"discard_attributes":{"type":"array","items":{"type":"string"}}},"additionalProperties":false}),
         ),
         definition(
             "link_file",
@@ -356,10 +356,20 @@ pub async fn execute_mutation(
             #[serde(deny_unknown_fields)]
             struct Input {
                 entity_id: Uuid,
+                #[serde(default)]
+                values: Vec<crate::model::NewAttributeValue>,
+                #[serde(default)]
+                relationships: Vec<crate::model::RelationshipTargets>,
+                #[serde(default)]
+                discard_attributes: Vec<String>,
             }
             let input: Input = decode(arguments)?;
             let preview = repository.preview_entity_migration(input.entity_id).await?;
-            if preview.status != "ready" {
+            if preview.status != "ready"
+                && input.values.is_empty()
+                && input.relationships.is_empty()
+                && input.discard_attributes.is_empty()
+            {
                 json!({
                     "migrated": false,
                     "status": preview.status,
@@ -374,9 +384,9 @@ pub async fn execute_mutation(
                         crate::model::MigrateEntityRequest {
                             migration_id: preview.migration_id,
                             expected_target_version: preview.target.blueprint.version,
-                            values: Vec::new(),
-                            relationships: Vec::new(),
-                            discard_attributes: Vec::new(),
+                            values: input.values,
+                            relationships: input.relationships,
+                            discard_attributes: input.discard_attributes,
                         },
                     )
                     .await?;
