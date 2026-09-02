@@ -14,6 +14,10 @@ import { Route as DataHealthRouteImport } from './routes/data-health'
 import { Route as LoginRouteImport } from './routes/login'
 import { Route as OnboardingRouteImport } from './routes/onboarding'
 import { Route as ProfileRouteImport } from './routes/profile'
+import { Route as AgentsIndexRouteImport } from './routes/agents/index'
+import { Route as AgentsConversationIdRouteImport } from './routes/agents/$conversationId'
+import { Route as AgentsNewRouteImport } from './routes/agents/new'
+import { Route as AgentsSchedulesRouteImport } from './routes/agents/schedules'
 import { Route as BlueprintsIndexRouteImport } from './routes/blueprints/index'
 import { Route as BlueprintsBlueprintIdRouteImport } from './routes/blueprints/$blueprintId'
 import { Route as ContextsIndexRouteImport } from './routes/contexts/index'
@@ -56,6 +60,26 @@ const OnboardingRoute = OnboardingRouteImport.update({
 const ProfileRoute = ProfileRouteImport.update({
   id: '/profile',
   path: '/profile',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AgentsIndexRoute = AgentsIndexRouteImport.update({
+  id: '/agents/',
+  path: '/agents/',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AgentsConversationIdRoute = AgentsConversationIdRouteImport.update({
+  id: '/agents/$conversationId',
+  path: '/agents/$conversationId',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AgentsNewRoute = AgentsNewRouteImport.update({
+  id: '/agents/new',
+  path: '/agents/new',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AgentsSchedulesRoute = AgentsSchedulesRouteImport.update({
+  id: '/agents/schedules',
+  path: '/agents/schedules',
   getParentRoute: () => rootRouteImport,
 } as any)
 const BlueprintsIndexRoute = BlueprintsIndexRouteImport.update({
@@ -155,6 +179,9 @@ export interface FileRoutesByFullPath {
   '/login': typeof LoginRouteWithChildren
   '/onboarding': typeof OnboardingRoute
   '/profile': typeof ProfileRoute
+  '/agents/$conversationId': typeof AgentsConversationIdRoute
+  '/agents/new': typeof AgentsNewRoute
+  '/agents/schedules': typeof AgentsSchedulesRoute
   '/blueprints/$blueprintId': typeof BlueprintsBlueprintIdRoute
   '/contexts/new': typeof ContextsNewRoute
   '/entities/$entityId': typeof EntitiesEntityIdRouteWithChildren
@@ -165,6 +192,7 @@ export interface FileRoutesByFullPath {
   '/workspace/invitations': typeof WorkspaceInvitationsRoute
   '/workspace/members': typeof WorkspaceMembersRoute
   '/workspace/roles': typeof WorkspaceRolesRoute
+  '/agents/': typeof AgentsIndexRoute
   '/blueprints/': typeof BlueprintsIndexRoute
   '/contexts/': typeof ContextsIndexRoute
   '/login/': typeof LoginIndexRoute
@@ -179,6 +207,9 @@ export interface FileRoutesByTo {
   '/data-health': typeof DataHealthRoute
   '/onboarding': typeof OnboardingRoute
   '/profile': typeof ProfileRoute
+  '/agents/$conversationId': typeof AgentsConversationIdRoute
+  '/agents/new': typeof AgentsNewRoute
+  '/agents/schedules': typeof AgentsSchedulesRoute
   '/blueprints/$blueprintId': typeof BlueprintsBlueprintIdRoute
   '/contexts/new': typeof ContextsNewRoute
   '/entities/new': typeof EntitiesNewRoute
@@ -188,6 +219,7 @@ export interface FileRoutesByTo {
   '/workspace/invitations': typeof WorkspaceInvitationsRoute
   '/workspace/members': typeof WorkspaceMembersRoute
   '/workspace/roles': typeof WorkspaceRolesRoute
+  '/agents': typeof AgentsIndexRoute
   '/blueprints': typeof BlueprintsIndexRoute
   '/contexts': typeof ContextsIndexRoute
   '/login': typeof LoginIndexRoute
@@ -204,6 +236,9 @@ export interface FileRoutesById {
   '/login': typeof LoginRouteWithChildren
   '/onboarding': typeof OnboardingRoute
   '/profile': typeof ProfileRoute
+  '/agents/$conversationId': typeof AgentsConversationIdRoute
+  '/agents/new': typeof AgentsNewRoute
+  '/agents/schedules': typeof AgentsSchedulesRoute
   '/blueprints/$blueprintId': typeof BlueprintsBlueprintIdRoute
   '/contexts/new': typeof ContextsNewRoute
   '/entities/$entityId': typeof EntitiesEntityIdRouteWithChildren
@@ -214,6 +249,7 @@ export interface FileRoutesById {
   '/workspace/invitations': typeof WorkspaceInvitationsRoute
   '/workspace/members': typeof WorkspaceMembersRoute
   '/workspace/roles': typeof WorkspaceRolesRoute
+  '/agents/': typeof AgentsIndexRoute
   '/blueprints/': typeof BlueprintsIndexRoute
   '/contexts/': typeof ContextsIndexRoute
   '/login/': typeof LoginIndexRoute
@@ -231,6 +267,9 @@ export interface FileRouteTypes {
     | '/login'
     | '/onboarding'
     | '/profile'
+    | '/agents/$conversationId'
+    | '/agents/new'
+    | '/agents/schedules'
     | '/blueprints/$blueprintId'
     | '/contexts/new'
     | '/entities/$entityId'
@@ -241,6 +280,7 @@ export interface FileRouteTypes {
     | '/workspace/invitations'
     | '/workspace/members'
     | '/workspace/roles'
+    | '/agents/'
     | '/blueprints/'
     | '/contexts/'
     | '/login/'
@@ -255,6 +295,9 @@ export interface FileRouteTypes {
     | '/data-health'
     | '/onboarding'
     | '/profile'
+    | '/agents/$conversationId'
+    | '/agents/new'
+    | '/agents/schedules'
     | '/blueprints/$blueprintId'
     | '/contexts/new'
     | '/entities/new'
@@ -264,6 +307,7 @@ export interface FileRouteTypes {
     | '/workspace/invitations'
     | '/workspace/members'
     | '/workspace/roles'
+    | '/agents'
     | '/blueprints'
     | '/contexts'
     | '/login'
@@ -279,6 +323,9 @@ export interface FileRouteTypes {
     | '/login'
     | '/onboarding'
     | '/profile'
+    | '/agents/$conversationId'
+    | '/agents/new'
+    | '/agents/schedules'
     | '/blueprints/$blueprintId'
     | '/contexts/new'
     | '/entities/$entityId'
@@ -289,6 +336,7 @@ export interface FileRouteTypes {
     | '/workspace/invitations'
     | '/workspace/members'
     | '/workspace/roles'
+    | '/agents/'
     | '/blueprints/'
     | '/contexts/'
     | '/login/'
@@ -305,6 +353,9 @@ export interface RootRouteChildren {
   LoginRoute: typeof LoginRouteWithChildren
   OnboardingRoute: typeof OnboardingRoute
   ProfileRoute: typeof ProfileRoute
+  AgentsConversationIdRoute: typeof AgentsConversationIdRoute
+  AgentsNewRoute: typeof AgentsNewRoute
+  AgentsSchedulesRoute: typeof AgentsSchedulesRoute
   BlueprintsBlueprintIdRoute: typeof BlueprintsBlueprintIdRoute
   ContextsNewRoute: typeof ContextsNewRoute
   EntitiesEntityIdRoute: typeof EntitiesEntityIdRouteWithChildren
@@ -314,6 +365,7 @@ export interface RootRouteChildren {
   WorkspaceInvitationsRoute: typeof WorkspaceInvitationsRoute
   WorkspaceMembersRoute: typeof WorkspaceMembersRoute
   WorkspaceRolesRoute: typeof WorkspaceRolesRoute
+  AgentsIndexRoute: typeof AgentsIndexRoute
   BlueprintsIndexRoute: typeof BlueprintsIndexRoute
   ContextsIndexRoute: typeof ContextsIndexRoute
   PasswordResetIndexRoute: typeof PasswordResetIndexRoute
@@ -355,6 +407,34 @@ declare module '@tanstack/react-router' {
       path: '/profile'
       fullPath: '/profile'
       preLoaderRoute: typeof ProfileRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/agents/': {
+      id: '/agents/'
+      path: '/agents'
+      fullPath: '/agents/'
+      preLoaderRoute: typeof AgentsIndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/agents/$conversationId': {
+      id: '/agents/$conversationId'
+      path: '/agents/$conversationId'
+      fullPath: '/agents/$conversationId'
+      preLoaderRoute: typeof AgentsConversationIdRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/agents/new': {
+      id: '/agents/new'
+      path: '/agents/new'
+      fullPath: '/agents/new'
+      preLoaderRoute: typeof AgentsNewRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/agents/schedules': {
+      id: '/agents/schedules'
+      path: '/agents/schedules'
+      fullPath: '/agents/schedules'
+      preLoaderRoute: typeof AgentsSchedulesRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/blueprints/': {
@@ -519,6 +599,9 @@ const rootRouteChildren: RootRouteChildren = {
   LoginRoute: LoginRouteWithChildren,
   OnboardingRoute: OnboardingRoute,
   ProfileRoute: ProfileRoute,
+  AgentsConversationIdRoute: AgentsConversationIdRoute,
+  AgentsNewRoute: AgentsNewRoute,
+  AgentsSchedulesRoute: AgentsSchedulesRoute,
   BlueprintsBlueprintIdRoute: BlueprintsBlueprintIdRoute,
   ContextsNewRoute: ContextsNewRoute,
   EntitiesEntityIdRoute: EntitiesEntityIdRouteWithChildren,
@@ -528,6 +611,7 @@ const rootRouteChildren: RootRouteChildren = {
   WorkspaceInvitationsRoute: WorkspaceInvitationsRoute,
   WorkspaceMembersRoute: WorkspaceMembersRoute,
   WorkspaceRolesRoute: WorkspaceRolesRoute,
+  AgentsIndexRoute: AgentsIndexRoute,
   BlueprintsIndexRoute: BlueprintsIndexRoute,
   ContextsIndexRoute: ContextsIndexRoute,
   PasswordResetIndexRoute: PasswordResetIndexRoute,
