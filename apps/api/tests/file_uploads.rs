@@ -119,6 +119,19 @@ async fn uploads_files_to_the_fake_store_and_persists_derived_metadata(pool: PgP
             .iter()
             .any(|value| value["attribute_code"] == "image" && value["value"].is_null())
     );
+
+    client
+        .put(format!("{base_url}/v1/entities/{entity_id}"))
+        .json(&serde_json::json!({
+            "values": [],
+            "relationships": [],
+            "remove_values": []
+        }))
+        .send()
+        .await
+        .unwrap()
+        .error_for_status()
+        .unwrap();
     server.abort();
 }
 
