@@ -25,6 +25,7 @@ metrics = "0.23"
 metrics-exporter-prometheus = "0.15"
 lettre = { version = "0.11", default-features = false, features = ["builder", "smtp-transport", "tokio1-rustls-tls"] }
 dotenvy = "0.15"
+futures-util = "0.3"
 image = { version = "0.25", default-features = false, features = ["jpeg", "png", "webp"] }
 kamadak-exif = "0.6"
 serde = { version = "1", features = ["derive"] }

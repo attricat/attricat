@@ -126,6 +126,7 @@ dependencies = [
  "chrono-tz",
  "cron",
  "dotenvy",
+ "futures-util",
  "image",
  "kamadak-exif",
  "lettre",

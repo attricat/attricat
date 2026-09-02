@@ -34,6 +34,12 @@ pub(super) fn policy(method: &Method, path: &str) -> Option<Policy> {
     } else {
         "blueprints.write"
     };
+    if path.starts_with("/agent/") {
+        return Some(Policy {
+            permission: "agents.run",
+            target: TargetKind::None,
+        });
+    }
     if path == "/workspace/invitations/accept" {
         return None;
     }
