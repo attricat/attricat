@@ -538,6 +538,74 @@ async fn standalone_conversation_upload_survives_reconciliation_until_attached(p
 }
 
 #[sqlx::test]
+async fn agent_http_limits_accept_the_boundary_and_reject_the_next_value(pool: PgPool) {
+    let (base_url, server) = start_server(pool).await;
+    let client = authenticated_client();
+    let accepted = client
+        .post(format!("{base_url}/agent/conversations"))
+        .json(&json!({"title": "x".repeat(512)}))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(accepted.status(), StatusCode::CREATED);
+    let conversation: Value = accepted.json().await.unwrap();
+    let oversized_title = client
+        .post(format!("{base_url}/agent/conversations"))
+        .json(&json!({"title": "x".repeat(513)}))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(oversized_title.status(), StatusCode::UNPROCESSABLE_ENTITY);
+
+    let message_url = format!(
+        "{base_url}/agent/conversations/{}/messages",
+        conversation["id"].as_str().unwrap()
+    );
+    let message_at_limit = client
+        .post(&message_url)
+        .json(&json!({"content": "x".repeat(32 * 1024)}))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(message_at_limit.status(), StatusCode::SERVICE_UNAVAILABLE);
+    let oversized_message = client
+        .post(&message_url)
+        .json(&json!({"content": "x".repeat(32 * 1024 + 1)}))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(oversized_message.status(), StatusCode::UNPROCESSABLE_ENTITY);
+
+    let attachments_at_limit = client
+        .post(&message_url)
+        .json(&json!({
+            "content": "",
+            "attachment_ids": (0..16).map(|_| Uuid::new_v4()).collect::<Vec<_>>(),
+        }))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(
+        attachments_at_limit.status(),
+        StatusCode::SERVICE_UNAVAILABLE
+    );
+    let oversized_attachments = client
+        .post(&message_url)
+        .json(&json!({
+            "content": "",
+            "attachment_ids": (0..17).map(|_| Uuid::new_v4()).collect::<Vec<_>>(),
+        }))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(
+        oversized_attachments.status(),
+        StatusCode::UNPROCESSABLE_ENTITY
+    );
+    server.abort();
+}
+
+#[sqlx::test]
 async fn agent_message_requires_a_configured_dispatcher(pool: PgPool) {
     let (base_url, server) = start_server(pool).await;
     let client = authenticated_client();

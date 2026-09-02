@@ -6,14 +6,13 @@ use crate::{
         AssistantMessage, ChatMessage, OpenAiCompatibleClient, ProviderError, ToolCall,
     },
     agent_tools::{self, ToolKind},
+    agents::{MAX_INLINE_ATTACHMENT_BYTES, MAX_TOOL_CALL_ROUNDS},
     repository::{CatalogRepository, RepositoryError},
     storage::ObjectStore,
 };
 use base64::{Engine, engine::general_purpose::STANDARD};
 use serde_json::{Value, json};
 use uuid::Uuid;
-
-const MAX_INLINE_ATTACHMENT_BYTES: i64 = 5 * 1024 * 1024;
 
 const SYSTEM_PROMPT: &str = "You are a catalogue assistant. Use tools for catalogue facts. Before drafting a blueprint, call blueprint_authoring_guide and use create_blueprint with complete TOML; every entity blueprint must include a views.dropdown_option definition. To modify a blueprint, use create_blueprint_revision with its id and a complete revised TOML definition. New blueprints and revisions are drafts: use publish_blueprint with the returned id and version before creating entities from them. Never put blueprint attributes or a definition in create_entity. Use list_blueprints to find an existing blueprint before creating an entity. Use search_entities to find matching entities; set outdated to true when looking for entities that need a blueprint upgrade. Use migrate_entity to upgrade a compatible entity to its latest published blueprint revision; report its issues if it needs input. When a conversation attachment should be retained on an entity, use link_file with its file_id and an applicable file attribute. Never claim a mutation happened until its tool result says so. All mutations require human approval.";
 
@@ -66,7 +65,7 @@ async fn drive(
     conversation_id: Uuid,
     rounds: u8,
 ) -> Result<(), RunError> {
-    if rounds >= 8 {
+    if rounds >= MAX_TOOL_CALL_ROUNDS {
         fail_run(
             repository,
             run_id,

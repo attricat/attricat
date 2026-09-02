@@ -10,18 +10,13 @@ use serde_json::Value;
 use thiserror::Error;
 use url::Url;
 
-use crate::{agent_tools::ToolDefinition, agents::AgentProviderConfig};
-
-/// Maximum total bytes accepted from one streamed provider response.
-pub const MAX_PROVIDER_BODY_BYTES: usize = 64 * 1024;
-/// Maximum undrained SSE frame bytes accepted from the provider.
-pub const MAX_PROVIDER_FRAME_BUFFER_BYTES: usize = 64 * 1024;
-/// Maximum accumulated assistant text from one streamed response.
-pub const MAX_ASSISTANT_CONTENT_BYTES: usize = 32 * 1024;
-/// Maximum accumulated arguments for an individual tool call.
-pub const MAX_TOOL_CALL_ARGUMENT_BYTES: usize = 16 * 1024;
-/// Maximum distinct tool calls accepted from one streamed response.
-pub const MAX_TOOL_CALLS: usize = 32;
+use crate::{
+    agent_tools::ToolDefinition,
+    agents::{
+        AgentProviderConfig, MAX_ASSISTANT_CONTENT_BYTES, MAX_PROVIDER_BODY_BYTES,
+        MAX_PROVIDER_FRAME_BUFFER_BYTES, MAX_TOOL_CALL_ARGUMENT_BYTES, MAX_TOOL_CALLS,
+    },
+};
 
 #[derive(Clone)]
 pub struct OpenAiCompatibleClient {
@@ -337,11 +332,13 @@ fn finish_calls(calls: Vec<PartialToolCall>) -> Result<Vec<ToolCall>, ProviderEr
 #[cfg(test)]
 mod tests {
     use super::{
-        ChatRequest, MAX_ASSISTANT_CONTENT_BYTES, MAX_PROVIDER_BODY_BYTES,
-        MAX_TOOL_CALL_ARGUMENT_BYTES, MAX_TOOL_CALLS, OpenAiCompatibleClient, PartialToolCall,
-        ProviderError, chat_completions_url, finish_calls,
+        ChatRequest, OpenAiCompatibleClient, PartialToolCall, ProviderError, chat_completions_url,
+        finish_calls,
     };
-    use crate::agents::AgentProviderConfig;
+    use crate::agents::{
+        AgentProviderConfig, MAX_ASSISTANT_CONTENT_BYTES, MAX_PROVIDER_BODY_BYTES,
+        MAX_TOOL_CALL_ARGUMENT_BYTES, MAX_TOOL_CALLS,
+    };
     use axum::{
         Router,
         body::Body,
