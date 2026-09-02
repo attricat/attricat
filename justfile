@@ -3,7 +3,8 @@ setup:
     npm install --prefix apps/catalog-web
 
 dev: setup
-    bash scripts/start-dev-services.sh
+    set -a; . ./.env; set +a; docker compose --env-file .env --project-name catalog-$POSTGRES_PORT -f apps/api/compose.yml up -d
+    set -a; . ./.env; set +a; docker compose --env-file .env --project-name catalog-$POSTGRES_PORT -f apps/api/compose.yml wait rustfs-init
     process-compose --no-server --env .env up
 
 down: setup

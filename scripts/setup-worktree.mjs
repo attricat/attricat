@@ -95,6 +95,13 @@ env = setEnvValue(env, "MAILPIT_UI_PORT", ports.MAILPIT_UI_PORT);
 env = setEnvValue(env, "RUSTFS_PORT", ports.RUSTFS_PORT);
 env = setEnvValue(env, "RUSTFS_CONSOLE_PORT", ports.RUSTFS_CONSOLE_PORT);
 env = setEnvValue(env, "S3_ENDPOINT", `http://127.0.0.1:${ports.RUSTFS_PORT}`);
+env = setEnvValue(env, "S3_REGION", "us-east-1");
+env = setEnvValue(env, "S3_BUCKET", "catalog-files");
+env = setEnvValue(env, "S3_ACCESS_KEY_ID", "catalog-dev");
+env = setEnvValue(env, "S3_SECRET_ACCESS_KEY", "catalog-dev-secret");
+env = setEnvValue(env, "S3_FORCE_PATH_STYLE", "true");
+env = setEnvValue(env, "S3_UPLOAD_TIMEOUT_SECONDS", "30");
+env = setEnvValue(env, "S3_DOWNLOAD_TIMEOUT_SECONDS", "30");
 env = setEnvValue(env, "SMTP_PORT", ports.MAILPIT_SMTP_PORT);
 env = setEnvValue(
   env,
