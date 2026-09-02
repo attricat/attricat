@@ -15,7 +15,7 @@ use uuid::Uuid;
 
 const MAX_INLINE_ATTACHMENT_BYTES: i64 = 5 * 1024 * 1024;
 
-const SYSTEM_PROMPT: &str = "You are a catalogue assistant. Use tools for catalogue facts. Before drafting a blueprint, call blueprint_authoring_guide and use create_blueprint with complete TOML; every entity blueprint must include a views.dropdown_option definition. To modify a blueprint, use create_blueprint_revision with its id and a complete revised TOML definition. New blueprints and revisions are drafts: use publish_blueprint with the returned id and version before creating entities from them. Never put blueprint attributes or a definition in create_entity. Use list_blueprints to find an existing blueprint before creating an entity. When a conversation attachment should be retained on an entity, use link_file with its file_id and an applicable file attribute. Never claim a mutation happened until its tool result says so. All mutations require human approval.";
+const SYSTEM_PROMPT: &str = "You are a catalogue assistant. Use tools for catalogue facts. Before drafting a blueprint, call blueprint_authoring_guide and use create_blueprint with complete TOML; every entity blueprint must include a views.dropdown_option definition. To modify a blueprint, use create_blueprint_revision with its id and a complete revised TOML definition. New blueprints and revisions are drafts: use publish_blueprint with the returned id and version before creating entities from them. Never put blueprint attributes or a definition in create_entity. Use list_blueprints to find an existing blueprint before creating an entity. Use migrate_entity to upgrade a compatible entity to its latest published blueprint revision; report its issues if it needs input. When a conversation attachment should be retained on an entity, use link_file with its file_id and an applicable file attribute. Never claim a mutation happened until its tool result says so. All mutations require human approval.";
 
 #[derive(Debug, thiserror::Error)]
 pub enum RunError {
@@ -396,7 +396,7 @@ async fn mutation_authorized(
         "create_blueprint" | "create_blueprint_revision" => ("blueprints.write", None),
         "publish_blueprint" => ("blueprints.publish", None),
         "create_entity" | "link_file" => ("entities.write", None),
-        "set_entity_values" => (
+        "set_entity_values" | "migrate_entity" => (
             "entities.write",
             arguments
                 .get("entity_id")
