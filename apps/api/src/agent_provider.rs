@@ -169,9 +169,9 @@ impl OpenAiCompatibleClient {
                 return Err(ProviderError::Malformed);
             }
             buffer.push_str(std::str::from_utf8(&chunk).map_err(|_| ProviderError::Malformed)?);
-            while let Some(end) = buffer.find("\n\n") {
+            while let Some((end, separator_length)) = sse_frame_end(&buffer) {
                 let frame = buffer[..end].to_owned();
-                buffer.drain(..end + 2);
+                buffer.drain(..end + separator_length);
                 let data = frame
                     .lines()
                     .filter_map(|line| line.strip_prefix("data:"))
@@ -238,6 +238,16 @@ impl OpenAiCompatibleClient {
         Err(ProviderError::Malformed)
     }
 }
+fn sse_frame_end(buffer: &str) -> Option<(usize, usize)> {
+    let lf = buffer.find("\n\n").map(|index| (index, 2));
+    let crlf = buffer.find("\r\n\r\n").map(|index| (index, 4));
+    match (lf, crlf) {
+        (Some(lf), Some(crlf)) => Some(if lf.0 < crlf.0 { lf } else { crlf }),
+        (Some(frame), None) | (None, Some(frame)) => Some(frame),
+        (None, None) => None,
+    }
+}
+
 fn chat_completions_url(base_url: &Url) -> Url {
     let mut url = base_url.clone();
     url.set_path(&format!(
@@ -399,6 +409,17 @@ mod tests {
             serde_json::to_value(request).unwrap()["parallel_tool_calls"],
             false
         );
+    }
+
+    #[test]
+    fn accepts_crlf_delimited_sse_frames() {
+        tokio::runtime::Runtime::new().unwrap().block_on(async {
+            let body = "data: {\"choices\":[{\"delta\":{\"content\":\"hello\"}}]}\r\n\r\ndata: [DONE]\r\n\r\n";
+            let (client, server) = mock_client(body.to_owned()).await;
+            let result = client.stream(vec![], vec![], |_| {}).await;
+            server.abort();
+            assert_eq!(result.unwrap().content.as_deref(), Some("hello"));
+        });
     }
 
     #[test]
