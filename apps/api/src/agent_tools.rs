@@ -78,6 +78,11 @@ pub fn definitions() -> Vec<ToolDefinition> {
             json!({"type":"object","required":["file_id"],"properties":{"file_id":{"type":"string","format":"uuid"}},"additionalProperties":false}),
         ),
         definition(
+            "read_file",
+            "Read a UTF-8 text file linked to an entity. Use get_entity first to find its file ID. The file contents are supplied to the model, up to a fixed safe limit.",
+            json!({"type":"object","required":["file_id"],"properties":{"file_id":{"type":"string","format":"uuid"}},"additionalProperties":false}),
+        ),
+        definition(
             "search_entities",
             "Search entities of a blueprint by current scalar values and system tags. Omit blueprint.version to include every published revision; set outdated to true to return only entities that are not on the latest published revision. Results are paginated in ascending creation order.",
             json!({"type":"object","required":["blueprint"],"properties":{"blueprint":{"type":"object","required":["code"],"properties":{"code":{"type":"string"},"version":{"type":"integer","minimum":1}},"additionalProperties":false},"query":{"type":"string"},"system_tags":{"type":"array","items":{"type":"string"}},"outdated":{"type":"boolean"},"page":{"type":"object","properties":{"size":{"type":"integer","minimum":1,"maximum":100},"cursor":{"type":"string"}},"additionalProperties":false}},"additionalProperties":false}),
@@ -148,6 +153,7 @@ pub fn kind(name: &str) -> Result<ToolKind, ToolError> {
         | "list_contexts"
         | "get_entity"
         | "view_image"
+        | "read_file"
         | "search_entities" => Ok(ToolKind::Read),
         "create_blueprint"
         | "create_blueprint_revision"
@@ -268,6 +274,21 @@ pub async fn execute_read(
                 "filename": metadata.filename,
                 "mime_type": metadata.mime_type,
                 "message": "The image is attached to this tool result for visual inspection.",
+            })
+        }
+        "read_file" => {
+            let file_id = parse_uuid(&arguments, "file_id")?;
+            let metadata = repository.file_metadata(file_id).await?;
+            if !is_readable_text_mime(&metadata.mime_type) {
+                return Err(ToolError::InvalidArguments(
+                    "file_id must identify a UTF-8 text file".to_owned(),
+                ));
+            }
+            json!({
+                "file_id": file_id,
+                "filename": metadata.filename,
+                "mime_type": metadata.mime_type,
+                "message": "The text file is attached to this tool result for reading.",
             })
         }
         "search_entities" => {
@@ -562,7 +583,7 @@ async fn read_authorized(
             Some(parse_uuid(arguments, "entity_id")?),
             None,
         ),
-        "view_image" => {
+        "view_image" | "read_file" => {
             let file_id = parse_uuid(arguments, "file_id")?;
             for target in repository.file_read_targets(file_id).await? {
                 if repository
@@ -589,6 +610,19 @@ async fn read_authorized(
     Ok(repository
         .is_authorized(actor, workspace, permission, target_id, target_code)
         .await?)
+}
+
+fn is_readable_text_mime(mime_type: &str) -> bool {
+    mime_type.starts_with("text/")
+        || matches!(
+            mime_type,
+            "application/json"
+                | "application/ld+json"
+                | "application/xml"
+                | "application/yaml"
+                | "application/x-yaml"
+                | "application/javascript"
+        )
 }
 
 fn empty_object() -> Value {
