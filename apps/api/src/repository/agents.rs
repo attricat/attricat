@@ -428,8 +428,20 @@ impl CatalogRepository {
         &self,
         run_id: Uuid,
     ) -> Result<Vec<AgentToolCall>, RepositoryError> {
-        Ok(sqlx::query_as("SELECT call.id, call.run_id, call.sequence, call.provider_call_id, call.tool_name, call.arguments, call.change_summary, call.result, call.error, call.state, call.decided_by_user_id, call.decided_at, call.created_at, call.completed_at FROM agent_tool_calls call JOIN agent_runs run ON run.id = call.run_id WHERE call.run_id = $1 AND run.workspace_id = $2 AND call.state IN ('approved', 'rejected') ORDER BY call.sequence")
+        Ok(sqlx::query_as("SELECT call.id, call.run_id, call.sequence, call.provider_call_id, call.tool_name, call.arguments, call.change_summary, call.result, call.error, call.state, call.decided_by_user_id, call.decided_at, call.created_at, call.completed_at FROM agent_tool_calls call JOIN agent_runs run ON run.id = call.run_id WHERE call.run_id = $1 AND run.workspace_id = $2 AND call.state IN ('approved', 'rejected') AND call.completed_at IS NULL ORDER BY call.sequence")
             .bind(run_id).bind(self.workspace_id.unwrap_or(Self::DEFAULT_WORKSPACE_ID)).fetch_all(&self.pool).await?)
+    }
+
+    /// Whether this run still has mutations awaiting a human decision.
+    pub async fn has_pending_agent_tool_calls(
+        &self,
+        run_id: Uuid,
+    ) -> Result<bool, RepositoryError> {
+        Ok(sqlx::query_scalar("SELECT EXISTS (SELECT 1 FROM agent_tool_calls call JOIN agent_runs run ON run.id = call.run_id WHERE call.run_id = $1 AND run.workspace_id = $2 AND call.state = 'pending_approval')")
+            .bind(run_id)
+            .bind(self.workspace_id.unwrap_or(Self::DEFAULT_WORKSPACE_ID))
+            .fetch_one(&self.pool)
+            .await?)
     }
 
     pub async fn create_agent_tool_call(
