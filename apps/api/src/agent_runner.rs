@@ -396,6 +396,13 @@ async fn mutation_authorized(
         "create_blueprint" | "create_blueprint_revision" => ("blueprints.write", None),
         "publish_blueprint" => ("blueprints.publish", None),
         "create_entity" | "link_file" => ("entities.write", None),
+        "set_entity_values" => (
+            "entities.write",
+            arguments
+                .get("entity_id")
+                .and_then(Value::as_str)
+                .and_then(|id| id.parse().ok()),
+        ),
         "delete_entity" => (
             "entities.delete",
             arguments

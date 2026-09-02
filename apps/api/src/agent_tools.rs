@@ -95,6 +95,11 @@ pub fn definitions() -> Vec<ToolDefinition> {
             json!({"type":"object","required":["entity_id"],"properties":{"entity_id":{"type":"string","format":"uuid"}},"additionalProperties":false}),
         ),
         definition(
+            "set_entity_values",
+            "Set scalar attribute values on an existing entity, optionally in a named attribute context. Each value replaces the current value for its attribute and context. Call get_entity and list_contexts first when the entity's current values or context IDs are unknown. This change requires approval.",
+            json!({"type":"object","required":["entity_id","values"],"properties":{"entity_id":{"type":"string","format":"uuid"},"values":{"type":"array","minItems":1,"items":{"type":"object","required":["kind","attribute_code","context_id","value"],"properties":{"kind":{"const":"scalar"},"attribute_code":{"type":"string"},"context_id":{"type":["string","null"],"format":"uuid"},"value":{}},"additionalProperties":false}}},"additionalProperties":false}),
+        ),
+        definition(
             "link_file",
             "Attach an existing workspace file to an entity file attribute. Conversation attachments include their file IDs. This change requires approval.",
             json!({"type":"object","required":["entity_id","attribute_code","file_id"],"properties":{"entity_id":{"type":"string","format":"uuid"},"attribute_code":{"type":"string"},"file_id":{"type":"string","format":"uuid"},"context_id":{"type":["string","null"],"format":"uuid"}},"additionalProperties":false}),
@@ -128,6 +133,7 @@ pub fn kind(name: &str) -> Result<ToolKind, ToolError> {
         | "publish_blueprint"
         | "create_entity"
         | "delete_entity"
+        | "set_entity_values"
         | "link_file"
         | "create_context" => Ok(ToolKind::Mutation),
         _ => Err(ToolError::UnknownTool(name.to_owned())),
@@ -161,6 +167,10 @@ pub fn change_summary(name: &str, arguments: &Value) -> Result<String, ToolError
         )),
         "delete_entity" => Ok(format!(
             "Delete entity {}.",
+            required_string(arguments, "entity_id")?
+        )),
+        "set_entity_values" => Ok(format!(
+            "Set attribute values on entity {}.",
             required_string(arguments, "entity_id")?
         )),
         "link_file" => Ok(format!(
@@ -301,6 +311,36 @@ pub async fn execute_mutation(
                 .await?;
             json!({"deleted": true})
         }
+        "set_entity_values" => {
+            #[derive(Deserialize)]
+            #[serde(deny_unknown_fields)]
+            struct Input {
+                entity_id: Uuid,
+                values: Vec<crate::model::NewAttributeValue>,
+            }
+            let input: Input = decode(arguments)?;
+            if input.values.is_empty()
+                || input
+                    .values
+                    .iter()
+                    .any(|value| !matches!(value, crate::model::NewAttributeValue::Scalar { .. }))
+            {
+                return Err(ToolError::InvalidArguments(
+                    "values must contain at least one scalar attribute value".to_owned(),
+                ));
+            }
+            serde_json::to_value(
+                repository
+                    .append_values(
+                        input.entity_id,
+                        crate::model::AppendAttributeValues {
+                            values: input.values,
+                        },
+                    )
+                    .await?,
+            )
+            .expect("attribute values serialize")
+        }
         "link_file" => {
             #[derive(Deserialize)]
             #[serde(deny_unknown_fields)]
@@ -373,7 +413,12 @@ mod tests {
     #[test]
     fn classifies_every_write_as_an_approval_required_mutation() {
         assert_eq!(kind("list_blueprints").unwrap(), ToolKind::Read);
-        for name in ["create_entity", "delete_entity", "create_context"] {
+        for name in [
+            "create_entity",
+            "delete_entity",
+            "set_entity_values",
+            "create_context",
+        ] {
             assert_eq!(kind(name).unwrap(), ToolKind::Mutation);
         }
         assert!(matches!(kind("fetch_url"), Err(ToolError::UnknownTool(_))));
@@ -384,6 +429,10 @@ mod tests {
         assert_eq!(
             change_summary("delete_entity", &json!({"entity_id":"abc"})).unwrap(),
             "Delete entity abc."
+        );
+        assert_eq!(
+            change_summary("set_entity_values", &json!({"entity_id":"abc"})).unwrap(),
+            "Set attribute values on entity abc."
         );
         assert!(matches!(
             change_summary("create_context", &json!({})),
