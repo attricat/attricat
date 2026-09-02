@@ -306,6 +306,7 @@ const entityContextSchema = z.record(z.string(), jsonObjectSchema);
 const resolvedPreviewValueSchema = z.union([
   scalarValueSchema,
   jsonObjectSchema,
+  z.array(fileMetadataSchema),
 ]);
 const resolvedEntityPreviewSchema = z.object({
   entity: entitySchema,
