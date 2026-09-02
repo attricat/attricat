@@ -2,6 +2,9 @@ import { useEffect, useRef, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link } from '@tanstack/react-router';
 import {
+  Accordion,
+  AccordionDetails,
+  AccordionSummary,
   Alert,
   Box,
   Button,
@@ -23,10 +26,8 @@ import {
   listRuns,
   sendMessage,
 } from './api';
+import { ConversationMessageContent } from './ConversationMessageContent';
 import { agentQueryKeys } from './query-keys';
-
-const displayContent = (content: unknown) =>
-  typeof content === 'string' ? content : JSON.stringify(content, null, 2);
 const statusColor = (
   status: string,
 ): 'default' | 'success' | 'error' | 'warning' | 'info' => {
@@ -160,12 +161,10 @@ export const ConversationDetailPage = ({
             <Typography color="text.secondary" variant="caption">
               {message.role}
             </Typography>
-            <Typography
-              component="pre"
-              sx={{ fontFamily: 'inherit', m: 0, whiteSpace: 'pre-wrap' }}
-            >
-              {displayContent(message.content)}
-            </Typography>
+            <ConversationMessageContent
+              content={message.content}
+              role={message.role}
+            />
             {message.attachments.length > 0 && (
               <Stack direction="row" gap={1} sx={{ flexWrap: 'wrap', mt: 1 }}>
                 {message.attachments.map((attachment) => (
@@ -195,15 +194,21 @@ export const ConversationDetailPage = ({
           {call.change_summary && (
             <Typography sx={{ mt: 1 }}>{call.change_summary}</Typography>
           )}
-          <Typography color="text.secondary" sx={{ mt: 1 }} variant="body2">
-            Proposed input
-          </Typography>
-          <Box
-            component="pre"
-            sx={{ bgcolor: 'action.hover', overflow: 'auto', p: 1 }}
+          <Accordion
+            disableGutters
+            elevation={0}
+            sx={{ bgcolor: 'action.hover', mt: 1 }}
           >
-            {JSON.stringify(call.arguments, null, 2)}
-          </Box>
+            <AccordionSummary>Show proposed input JSON</AccordionSummary>
+            <AccordionDetails>
+              <Box
+                component="pre"
+                sx={{ m: 0, overflow: 'auto', whiteSpace: 'pre-wrap' }}
+              >
+                {JSON.stringify(call.arguments, null, 2)}
+              </Box>
+            </AccordionDetails>
+          </Accordion>
           <Stack direction="row" spacing={1}>
             <Button
               color="success"
