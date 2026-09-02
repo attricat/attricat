@@ -6,6 +6,7 @@ edition = "2024"
 [dependencies]
 async-recursion = "1"
 async-trait = "0.1"
+async-stream = "0.3"
 aws-config = "1"
 aws-credential-types = "1"
 aws-sdk-s3 = "1"
@@ -38,6 +39,7 @@ thiserror = "2"
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter", "json"] }
 tokio = { version = "1", features = ["fs", "io-util", "macros", "net", "rt-multi-thread", "signal", "sync", "time"] }
+tokio-stream = "0.1"
 url = "2"
 uuid = { version = "1", features = ["serde", "v4"] }
 
