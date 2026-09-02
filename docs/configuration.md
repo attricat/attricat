@@ -114,13 +114,17 @@ writes generated variants, or deletes objects. Give API and worker credentials
 only the minimum bucket permissions (`PutObject`, `GetObject`, `DeleteObject`,
 and `HeadBucket`); keep the bucket private and terminate TLS at the S3 endpoint.
 
-Uploaded files are retained while referenced. Reconciliation marks an
-unreferenced file deleted and schedules its purge after
-`FILE_DELETE_GRACE_SECONDS` (one day by default). This is a grace period, not a
-backup policy: restore a file by recreating its reference before the purge is
-claimed. Back up and restore the PostgreSQL database and the S3 bucket as one
-consistent unit. Restoring only one can leave metadata without objects or
-orphaned objects; run the worker afterwards to reconcile the restored state.
+Uploaded files are retained while referenced. Conversation uploads have a
+15-minute pending-attachment window, so reconciliation does not delete them
+between the upload response and message creation. Attaching a file clears that
+window in the same transaction as its attachment record. Never-attached uploads
+become ordinary unreferenced files after the window expires. Reconciliation then
+marks them deleted and schedules their purge after `FILE_DELETE_GRACE_SECONDS`
+(one day by default). This is a grace period, not a backup policy: restore a
+file by recreating its reference before the purge is claimed. Back up and
+restore the PostgreSQL database and the S3 bucket as one consistent unit.
+Restoring only one can leave metadata without objects or orphaned objects; run
+the worker afterwards to reconcile the restored state.
 
 RustFS is the supported local and E2E S3-compatible adapter. It is deliberately
 configured through the same AWS SDK and `S3_*` settings used in production, so

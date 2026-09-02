@@ -252,7 +252,7 @@ impl CatalogRepository {
         let message: ConversationMessage = row.into();
         if !attachment_ids.is_empty() {
             let workspace_id = self.workspace_id.unwrap_or(Self::DEFAULT_WORKSPACE_ID);
-            let files: Vec<Uuid> = sqlx::query_scalar("SELECT id FROM files WHERE workspace_id = $1 AND deleted_at IS NULL AND id = ANY($2)")
+            let files: Vec<Uuid> = sqlx::query_scalar("SELECT id FROM files WHERE workspace_id = $1 AND deleted_at IS NULL AND id = ANY($2) FOR UPDATE")
                 .bind(workspace_id).bind(attachment_ids).fetch_all(&mut *tx).await?;
             if files.len() != attachment_ids.len() {
                 return Err(RepositoryError::NotFound("file"));
@@ -262,6 +262,11 @@ impl CatalogRepository {
                     .bind(Uuid::new_v4()).bind(workspace_id).bind(message.id).bind(file_id).bind(position as i32)
                     .execute(&mut *tx).await?;
             }
+            sqlx::query("UPDATE files SET attachment_expires_at = NULL, updated_at = now() WHERE workspace_id = $1 AND id = ANY($2)")
+                .bind(workspace_id)
+                .bind(attachment_ids)
+                .execute(&mut *tx)
+                .await?;
         }
         sqlx::query("UPDATE conversations SET updated_at = now() WHERE id = $1")
             .bind(conversation_id)
