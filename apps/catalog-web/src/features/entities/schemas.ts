@@ -373,7 +373,7 @@ export const entityMigrationPreviewSchema = z.object({
   migration_id: uuidSchema,
   source_version: z.number().int().positive(),
   target: blueprintWithAttributesSchema,
-  values: z.array(newAttributeValueSchema),
+  values: z.array(formAttributeValueSchema),
   status: z.enum(['ready', 'needs_input', 'blocked']),
   issues: z.array(migrationIssueSchema),
 });
