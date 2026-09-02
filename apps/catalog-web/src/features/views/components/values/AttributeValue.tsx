@@ -1,7 +1,8 @@
-import { Box, Chip, Stack, Typography } from '@mui/material';
+import { Chip, Stack, Typography } from '@mui/material';
 import { Link } from '@tanstack/react-router';
 import type { Attribute } from '../../../entities/api';
 import { fileDownloadUrl } from '../../../files/api';
+import { FileThumbnail } from '../../../files/FileThumbnail';
 import { formatAttributeValue } from './format-attribute-value';
 
 type RelationshipValue = {
@@ -79,16 +80,7 @@ export const AttributeValue = ({
         {value.map((file) => (
           <Stack alignItems="center" direction="row" key={file.id} spacing={1}>
             {attribute.file_policy?.image_only && (
-              <Box
-                alt=""
-                component="img"
-                src={fileDownloadUrl(
-                  file.id,
-                  file.variants?.find((variant) => variant.kind === 'thumbnail')
-                    ?.kind,
-                )}
-                sx={{ height: 64, objectFit: 'cover', width: 64 }}
-              />
+              <FileThumbnail file={file} size={64} />
             )}
             <Typography
               component="a"

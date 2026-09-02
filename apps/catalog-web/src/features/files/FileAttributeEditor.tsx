@@ -15,6 +15,7 @@ import {
 import { useRef, useState } from 'react';
 import type { Attribute } from '../entities/api';
 import { fileDownloadUrl, uploadFiles } from './api';
+import { FileThumbnail } from './FileThumbnail';
 import type { FileMetadata } from './schemas';
 
 type PendingFile = {
@@ -188,7 +189,12 @@ export const FileAttributeEditor = ({
           Choose or drop files
         </Button>
         {pending.length > 0 && (
-          <Button disabled={!entityId} onClick={startUploads}>
+          <Button
+            color="primary"
+            disabled={!entityId}
+            onClick={startUploads}
+            variant="contained"
+          >
             Upload {pending.length} file{pending.length === 1 ? '' : 's'}
           </Button>
         )}
@@ -226,18 +232,7 @@ export const FileAttributeEditor = ({
       ))}
       {uploaded.map((file, index) => (
         <Stack alignItems="center" direction="row" key={file.id} spacing={1}>
-          {policy.image_only && (
-            <Box
-              alt=""
-              component="img"
-              src={fileDownloadUrl(
-                file.id,
-                file.variants.find((variant) => variant.kind === 'thumbnail')
-                  ?.kind,
-              )}
-              sx={{ height: 48, objectFit: 'cover', width: 48 }}
-            />
-          )}
+          {policy.image_only && <FileThumbnail file={file} size={48} />}
           <Typography sx={{ flexGrow: 1 }}>{file.filename}</Typography>
           <Chip label={file.status} size="small" />
           <IconButton
