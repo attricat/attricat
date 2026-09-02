@@ -81,6 +81,9 @@ pub(super) enum ValueType {
     Date,
     Datetime,
     Time,
+    /// File metadata is stored in attribute_file_references, not a native
+    /// attribute_values value column.
+    File,
 }
 
 #[derive(sqlx::FromRow)]
@@ -106,6 +109,7 @@ impl ValueType {
             "date" => Ok(Self::Date),
             "datetime" => Ok(Self::Datetime),
             "time" => Ok(Self::Time),
+            "file" => Ok(Self::File),
             _ => Err(RepositoryError::AttributeValueTypeMismatch),
         }
     }
@@ -149,6 +153,7 @@ impl NativeValue {
                     .ok_or_else(invalid)?;
                 Ok(Self::Time(time, time_zone.to_owned()))
             }
+            ValueType::File => Err(invalid()),
         }
     }
 
@@ -246,6 +251,9 @@ impl NativeValue {
 pub(crate) fn native_value_json(row: NativeValueRow) -> Result<Value, RepositoryError> {
     let value_type = ValueType::parse(&row.value_type)
         .map_err(|_| RepositoryError::InvalidStoredAttributeValue)?;
+    if matches!(value_type, ValueType::File) {
+        return Ok(Value::Null);
+    }
     let populated = [
         row.value_text.is_some(),
         row.value_number.is_some(),
@@ -270,6 +278,7 @@ pub(crate) fn native_value_json(row: NativeValueRow) -> Result<Value, Repository
             .zip(row.value_time_zone)
             .filter(|(_, zone)| zone.parse::<Tz>().is_ok())
             .map(|(time, zone)| NativeValue::Time(time, zone)),
+        ValueType::File => unreachable!("file values return before native decoding"),
     }
     .ok_or(RepositoryError::InvalidStoredAttributeValue)?;
     if populated != 1 {

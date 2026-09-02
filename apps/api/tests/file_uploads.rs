@@ -101,6 +101,24 @@ async fn uploads_files_to_the_fake_store_and_persists_derived_metadata(pool: PgP
             .unwrap(),
         1
     );
+
+    let entity: Value = client
+        .get(format!("{base_url}/v1/entities/{entity_id}"))
+        .send()
+        .await
+        .unwrap()
+        .error_for_status()
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    assert!(
+        entity["values"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|value| value["attribute_code"] == "image" && value["value"].is_null())
+    );
     server.abort();
 }
 
