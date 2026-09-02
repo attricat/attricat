@@ -51,14 +51,56 @@ impl CatalogRepository {
                 .and_then(|parent_id| context_by_id.get(&parent_id).cloned());
             path.push(context);
         }
-        let mut values = attributes.iter().filter_map(|attribute| {
-            path.iter().enumerate().find_map(|(index, context)| {
-                if index > 0 && attribute.context_fallback == "none" { return None; }
-                preview.get(&context.code).and_then(Value::as_object).and_then(|values| values.get(&attribute.code)).map(|value| {
-                    (attribute.code.clone(), serde_json::json!({ "value": value, "source_context": { "id": context.id, "code": context.code } }))
+        let mut values = attributes
+            .iter()
+            .filter(|attribute| attribute.value_type != "file")
+            .filter_map(|attribute| {
+                path.iter().enumerate().find_map(|(index, context)| {
+                    if index > 0 && attribute.context_fallback == "none" {
+                        return None;
+                    }
+                    preview
+                        .get(&context.code)
+                        .and_then(Value::as_object)
+                        .and_then(|values| values.get(&attribute.code))
+                        .map(|value| {
+                            (
+                                attribute.code.clone(),
+                                serde_json::json!({ "value": value, "source_context": { "id": context.id, "code": context.code } }),
+                            )
+                        })
                 })
             })
-        }).collect::<Map<_, _>>();
+            .collect::<Map<_, _>>();
+        let file_values = self.file_form_values(entity_id).await?;
+        for attribute in attributes
+            .iter()
+            .filter(|attribute| attribute.value_type == "file")
+        {
+            if let Some((files, context)) = path.iter().enumerate().find_map(|(index, context)| {
+                if index > 0 && attribute.context_fallback == "none" {
+                    return None;
+                }
+                file_values.iter().find_map(|value| match value {
+                    FormAttributeValue::File {
+                        attribute_code,
+                        context_id,
+                        files,
+                    } if attribute_code == &attribute.code && *context_id == Some(context.id) => {
+                        Some((files, context))
+                    }
+                    _ => None,
+                })
+            }) {
+                values.insert(
+                    attribute.code.clone(),
+                    serde_json::json!({
+                        "value": files,
+                        "source_context": { "id": context.id, "code": context.code },
+                    }),
+                );
+            }
+        }
         let enriched_preview = self
             .build_preview(
                 entity.id,

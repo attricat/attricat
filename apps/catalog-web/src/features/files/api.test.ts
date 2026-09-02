@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { ApiRequestError } from '../entities/api';
-import { fileDownloadUrl, uploadFiles } from './api';
+import { fileDownloadUrl, uploadConversationFiles, uploadFiles } from './api';
 
 const id = '123e4567-e89b-12d3-a456-426614174000';
 const fetchMock = vi.fn();
@@ -42,6 +42,32 @@ describe('file API client', () => {
     );
     expect(result.files[0].filename).toBe('shirt.png');
     expect(progress).toHaveBeenCalledWith(100);
+  });
+
+  it('uploads conversation attachments without an entity attribute', async () => {
+    fetchMock.mockResolvedValue({
+      ok: true,
+      json: () =>
+        Promise.resolve({
+          files: [
+            {
+              id,
+              filename: 'notes.txt',
+              mime_type: 'text/plain',
+              byte_size: 5,
+              sha256: 'abc',
+              status: 'queued',
+            },
+          ],
+        }),
+    });
+
+    await expect(
+      uploadConversationFiles(id, [new File(['notes'], 'notes.txt')]),
+    ).resolves.toMatchObject({ files: [{ id, filename: 'notes.txt' }] });
+    expect(fetchMock.mock.calls[0][0]).toBe(
+      `/api/agent/conversations/${id}/uploads`,
+    );
   });
 
   it('preserves structured upload errors and creates safe download paths', async () => {

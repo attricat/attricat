@@ -1,6 +1,7 @@
 import InfoOutlinedIcon from '@mui/icons-material/InfoOutlined';
 import { MenuItem, TextField, Tooltip } from '@mui/material';
 import type { Attribute } from '../api';
+import type { FileMetadata } from '../../files/schemas';
 import { attributeValueTypes } from '../value-types';
 import { FileAttributeEditor } from '../../files/FileAttributeEditor';
 import { RelationshipField } from './RelationshipField';
@@ -10,6 +11,7 @@ export const EntityAttributeEditor = ({
   contextId,
   disabled,
   entityId,
+  files,
   error,
   helperText,
   migrationReviewMessage,
@@ -21,6 +23,7 @@ export const EntityAttributeEditor = ({
   contextId: string | null;
   disabled: boolean;
   entityId?: string;
+  files: FileMetadata[];
   error?: string;
   helperText?: string;
   migrationReviewMessage?: string;
@@ -53,6 +56,7 @@ export const EntityAttributeEditor = ({
           contextId={contextId}
           disabled={disabled}
           entityId={entityId}
+          files={files}
         />
       </>
     );

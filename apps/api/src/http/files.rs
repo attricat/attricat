@@ -182,6 +182,119 @@ pub(super) async fn upload(
     result
 }
 
+/// Stores standalone files for a conversation. It deliberately shares the
+/// streaming, signature validation, object-store, and processing pipeline used
+/// by entity file attributes; only attribute-value persistence is omitted.
+pub(super) async fn upload_conversation(
+    State(state): State<AppState>,
+    super::auth::ScopedRepository(repository): super::auth::ScopedRepository,
+    ApiPath(conversation_id): ApiPath<Uuid>,
+    mut multipart: Multipart,
+) -> Result<(StatusCode, Json<serde_json::Value>), ApiError> {
+    authorize(
+        &state,
+        FileAccessOperation::ConversationUpload { conversation_id },
+    )
+    .await?;
+    repository.get_conversation(conversation_id).await?;
+    let mut staged = Vec::new();
+    while let Some(field) = multipart
+        .next_field()
+        .await
+        .map_err(|_| ApiError::invalid_file("multipart body is malformed"))?
+    {
+        let name = field.name().unwrap_or_default().to_owned();
+        if name != "file" && name != "files" {
+            cleanup(&staged).await;
+            return Err(ApiError::invalid_file(
+                "multipart fields must be file or files",
+            ));
+        }
+        if staged.len() >= state.max_upload_files {
+            cleanup(&staged).await;
+            return Err(ApiError::file_count_exceeded());
+        }
+        let original_filename = field
+            .file_name()
+            .ok_or_else(|| ApiError::invalid_file("file name is required"))?
+            .to_owned();
+        let display_filename = sanitize_filename(&original_filename)
+            .ok_or_else(|| ApiError::invalid_file("file name is invalid"))?;
+        let declared_mime = field.content_type().map(ToString::to_string);
+        match stage_field(
+            field,
+            original_filename,
+            display_filename,
+            declared_mime,
+            state.max_upload_file_bytes,
+        )
+        .await
+        {
+            Ok(file) => staged.push(file),
+            Err(error) => {
+                cleanup(&staged).await;
+                return Err(error);
+            }
+        }
+    }
+    if staged.is_empty() {
+        return Err(ApiError::invalid_file("at least one file is required"));
+    }
+    let mut uploads = Vec::with_capacity(staged.len());
+    for file in &staged {
+        let Some(mime) = detected_mime(&file.signature, &file.display_filename) else {
+            cleanup(&staged).await;
+            return Err(ApiError::unsupported_media_type());
+        };
+        if !declared_mime_matches(file.declared_mime.as_deref(), mime) || !supported_mime(mime) {
+            cleanup(&staged).await;
+            return Err(ApiError::unsupported_media_type());
+        }
+        uploads.push((format!("files/{}", Uuid::new_v4()), mime.to_owned()));
+    }
+    let mut written_keys = Vec::new();
+    for (file, (key, mime)) in staged.iter().zip(&uploads) {
+        if let Err(error) = state
+            .object_store
+            .put_file(key, &file.path, Some(mime))
+            .await
+        {
+            delete_objects(&state, &written_keys).await;
+            cleanup(&staged).await;
+            return Err(storage_error(error));
+        }
+        written_keys.push(key.clone());
+    }
+    let records = staged
+        .iter()
+        .zip(&uploads)
+        .map(|(file, (key, mime))| NewUploadedFile {
+            original_filename: file.original_filename.clone(),
+            display_filename: file.display_filename.clone(),
+            mime_type: mime.clone(),
+            byte_size: file.byte_size,
+            sha256: file.sha256.clone(),
+            object_key: key.clone(),
+        })
+        .collect();
+    let result = repository.persist_conversation_uploads(records).await;
+    cleanup(&staged).await;
+    match result {
+        Ok(files) => {
+            metrics::counter!("catalog_file_uploads_total", "outcome" => "success").increment(1);
+            invalidate_data_health(&state).await;
+            Ok((
+                StatusCode::CREATED,
+                Json(serde_json::json!({ "files": files })),
+            ))
+        }
+        Err(error) => {
+            delete_objects(&state, &written_keys).await;
+            Err(error.into())
+        }
+    }
+}
+
 pub(super) async fn metadata(
     State(state): State<AppState>,
     super::auth::ScopedRepository(repository): super::auth::ScopedRepository,
@@ -443,6 +556,20 @@ fn declared_mime_matches(declared: Option<&str>, detected: &str) -> bool {
         .and_then(|value| value.split(';').next())
         .map(str::trim);
     matches!(declared, None | Some("application/octet-stream")) || declared == Some(detected)
+}
+fn supported_mime(mime: &str) -> bool {
+    const ALLOWED: &[&str] = &[
+        "image/png",
+        "image/jpeg",
+        "image/gif",
+        "image/webp",
+        "application/pdf",
+        "text/plain",
+        "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+    ];
+    ALLOWED.contains(&mime)
 }
 fn allowed_by_policy(policy: &FilePolicy, mime: &str, filename: &str, size: u64) -> bool {
     const ALLOWED: &[&str] = &[

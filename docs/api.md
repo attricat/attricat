@@ -196,7 +196,20 @@ tool, approval, error, terminal, and schedule events. Each SSE `id` is the
 persisted event UUID. Reconnect with `Last-Event-ID` to replay only later
 ordered events. `GET /agent/approvals` lists pending tool calls (optionally by
 `conversation_id`), and the existing approve/reject routes enqueue the resumed
-run after atomically recording the decision.
+run after atomically recording the decision. Decisions are accepted only while
+a call is pending; a repeated or contradictory decision returns the normal
+`approval_already_decided` conflict and never executes the write again.
+
+Conversation titles are limited to 512 characters and messages to 1–32,768
+bytes. Upload standalone conversation files with multipart `POST`
+`/agent/conversations/{id}/uploads`, then include up to 16 returned,
+workspace-scoped, unique `attachment_ids` when posting the message. Entity
+file uploads remain available through their file-attribute endpoint. A message
+or run request returns `503 service_unavailable` when the API
+has no configured provider/worker. Runs retain provider/model snapshots and
+safe error codes, but never provider credentials or raw provider response
+bodies. Read tools run automatically; every mutation is emitted as an approval
+proposal before it reaches a repository write.
 
 Schedules are managed by `GET`/`POST /agent/schedules`,
 `PUT`/`DELETE /agent/schedules/{id}`, and

@@ -1,3 +1,5 @@
+use std::collections::HashMap;
+
 use chrono::{DateTime, Utc};
 use serde_json::Value;
 use uuid::Uuid;
@@ -15,7 +17,7 @@ pub struct Conversation {
     pub archived_at: Option<DateTime<Utc>>,
 }
 
-#[derive(Clone, Debug, serde::Serialize, sqlx::FromRow)]
+#[derive(Clone, Debug, serde::Serialize)]
 pub struct ConversationMessage {
     pub id: Uuid,
     pub conversation_id: Uuid,
@@ -24,6 +26,64 @@ pub struct ConversationMessage {
     pub role: String,
     pub content: Value,
     pub created_at: DateTime<Utc>,
+    pub attachments: Vec<ConversationMessageAttachment>,
+}
+
+#[derive(Clone, Debug, sqlx::FromRow)]
+struct ConversationMessageRow {
+    id: Uuid,
+    conversation_id: Uuid,
+    run_id: Option<Uuid>,
+    sequence: i64,
+    role: String,
+    content: Value,
+    created_at: DateTime<Utc>,
+}
+
+impl From<ConversationMessageRow> for ConversationMessage {
+    fn from(row: ConversationMessageRow) -> Self {
+        Self {
+            id: row.id,
+            conversation_id: row.conversation_id,
+            run_id: row.run_id,
+            sequence: row.sequence,
+            role: row.role,
+            content: row.content,
+            created_at: row.created_at,
+            attachments: Vec::new(),
+        }
+    }
+}
+
+#[derive(Clone, Debug, serde::Serialize)]
+pub struct ConversationMessageAttachment {
+    pub id: Uuid,
+    pub filename: String,
+    pub mime_type: String,
+    pub byte_size: i64,
+    pub status: String,
+}
+
+#[derive(sqlx::FromRow)]
+struct ConversationMessageAttachmentRow {
+    message_id: Uuid,
+    id: Uuid,
+    filename: String,
+    mime_type: String,
+    byte_size: i64,
+    status: String,
+}
+
+impl From<ConversationMessageAttachmentRow> for ConversationMessageAttachment {
+    fn from(row: ConversationMessageAttachmentRow) -> Self {
+        Self {
+            id: row.id,
+            filename: row.filename,
+            mime_type: row.mime_type,
+            byte_size: row.byte_size,
+            status: row.status,
+        }
+    }
 }
 
 #[derive(Clone, Debug, serde::Serialize, sqlx::FromRow)]
@@ -123,8 +183,24 @@ impl CatalogRepository {
         &self,
         conversation_id: Uuid,
     ) -> Result<Vec<ConversationMessage>, RepositoryError> {
-        Ok(sqlx::query_as("SELECT m.id, m.conversation_id, m.run_id, m.sequence, m.role, m.content, m.created_at FROM conversation_messages m JOIN conversations c ON c.id = m.conversation_id WHERE m.conversation_id = $1 AND c.workspace_id = $2 ORDER BY m.sequence")
-            .bind(conversation_id).bind(self.workspace_id.unwrap_or(Self::DEFAULT_WORKSPACE_ID)).fetch_all(&self.pool).await?)
+        let workspace_id = self.workspace_id.unwrap_or(Self::DEFAULT_WORKSPACE_ID);
+        let rows: Vec<ConversationMessageRow> = sqlx::query_as("SELECT m.id, m.conversation_id, m.run_id, m.sequence, m.role, m.content, m.created_at FROM conversation_messages m JOIN conversations c ON c.id = m.conversation_id WHERE m.conversation_id = $1 AND c.workspace_id = $2 ORDER BY m.sequence")
+            .bind(conversation_id).bind(workspace_id).fetch_all(&self.pool).await?;
+        let mut messages: Vec<ConversationMessage> = rows.into_iter().map(Into::into).collect();
+        let message_ids: Vec<Uuid> = messages.iter().map(|message| message.id).collect();
+        let attachments: Vec<ConversationMessageAttachmentRow> = sqlx::query_as("SELECT a.message_id, f.id, f.display_filename AS filename, f.mime_type, f.byte_size, f.status FROM conversation_message_attachments a JOIN files f ON f.id = a.file_id AND f.workspace_id = a.workspace_id WHERE a.workspace_id = $1 AND a.message_id = ANY($2) AND f.deleted_at IS NULL ORDER BY a.message_id, a.position")
+            .bind(workspace_id).bind(&message_ids).fetch_all(&self.pool).await?;
+        let mut by_message: HashMap<Uuid, Vec<ConversationMessageAttachment>> = HashMap::new();
+        for attachment in attachments {
+            by_message
+                .entry(attachment.message_id)
+                .or_default()
+                .push(attachment.into());
+        }
+        for message in &mut messages {
+            message.attachments = by_message.remove(&message.id).unwrap_or_default();
+        }
+        Ok(messages)
     }
 
     /// Appends under a conversation row lock so each thread's durable sequence
@@ -135,6 +211,24 @@ impl CatalogRepository {
         run_id: Option<Uuid>,
         role: &str,
         content: Value,
+    ) -> Result<ConversationMessage, RepositoryError> {
+        self.append_conversation_message_with_attachments(
+            conversation_id,
+            run_id,
+            role,
+            content,
+            &[],
+        )
+        .await
+    }
+
+    pub async fn append_conversation_message_with_attachments(
+        &self,
+        conversation_id: Uuid,
+        run_id: Option<Uuid>,
+        role: &str,
+        content: Value,
+        attachment_ids: &[Uuid],
     ) -> Result<ConversationMessage, RepositoryError> {
         if !matches!(role, "system" | "user" | "assistant" | "tool") {
             return Err(RepositoryError::InvalidAgentState("invalid message role"));
@@ -152,9 +246,23 @@ impl CatalogRepository {
         }
         let sequence: i64 = sqlx::query_scalar("SELECT COALESCE(MAX(sequence) + 1, 0) FROM conversation_messages WHERE conversation_id = $1")
             .bind(conversation_id).fetch_one(&mut *tx).await?;
-        let message = sqlx::query_as("INSERT INTO conversation_messages (id, conversation_id, run_id, sequence, role, content) VALUES ($1, $2, $3, $4, $5, $6) RETURNING id, conversation_id, run_id, sequence, role, content, created_at")
+        let row: ConversationMessageRow = sqlx::query_as("INSERT INTO conversation_messages (id, conversation_id, run_id, sequence, role, content) VALUES ($1, $2, $3, $4, $5, $6) RETURNING id, conversation_id, run_id, sequence, role, content, created_at")
             .bind(Uuid::new_v4()).bind(conversation_id).bind(run_id).bind(sequence).bind(role).bind(content)
             .fetch_one(&mut *tx).await?;
+        let message: ConversationMessage = row.into();
+        if !attachment_ids.is_empty() {
+            let workspace_id = self.workspace_id.unwrap_or(Self::DEFAULT_WORKSPACE_ID);
+            let files: Vec<Uuid> = sqlx::query_scalar("SELECT id FROM files WHERE workspace_id = $1 AND deleted_at IS NULL AND id = ANY($2)")
+                .bind(workspace_id).bind(attachment_ids).fetch_all(&mut *tx).await?;
+            if files.len() != attachment_ids.len() {
+                return Err(RepositoryError::NotFound("file"));
+            }
+            for (position, file_id) in attachment_ids.iter().enumerate() {
+                sqlx::query("INSERT INTO conversation_message_attachments (id, workspace_id, message_id, file_id, position) VALUES ($1, $2, $3, $4, $5)")
+                    .bind(Uuid::new_v4()).bind(workspace_id).bind(message.id).bind(file_id).bind(position as i32)
+                    .execute(&mut *tx).await?;
+            }
+        }
         sqlx::query("UPDATE conversations SET updated_at = now() WHERE id = $1")
             .bind(conversation_id)
             .execute(&mut *tx)
@@ -358,7 +466,9 @@ impl CatalogRepository {
         .bind(run_id)
         .fetch_one(&mut *tx)
         .await?;
-        let call = sqlx::query_as("INSERT INTO agent_tool_calls (id, run_id, sequence, provider_call_id, tool_name, arguments, change_summary, state, decided_at) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, CASE WHEN $8 IN ('approved', 'rejected') THEN now() ELSE NULL END) RETURNING id, run_id, sequence, provider_call_id, tool_name, arguments, change_summary, result, error, state, decided_by_user_id, decided_at, created_at, completed_at")
+        // Every newly proposed or automatically executed call starts undecided.
+        // Only `decide_tool_call` may set an approval decision and timestamp.
+        let call = sqlx::query_as("INSERT INTO agent_tool_calls (id, run_id, sequence, provider_call_id, tool_name, arguments, change_summary, state) VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING id, run_id, sequence, provider_call_id, tool_name, arguments, change_summary, result, error, state, decided_by_user_id, decided_at, created_at, completed_at")
             .bind(Uuid::new_v4()).bind(run_id).bind(sequence).bind(provider_call_id).bind(tool_name).bind(arguments).bind(change_summary).bind(state).fetch_one(&mut *tx).await?;
         tx.commit().await?;
         Ok(call)

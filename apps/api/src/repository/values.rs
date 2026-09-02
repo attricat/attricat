@@ -37,8 +37,16 @@ const FORM_VALUES_SQL: &str = r#"SELECT a.code AS attribute_code, av.context_id,
            WHERE av.entity_id = $1
              AND a.blueprint_id = e.blueprint_id
              AND a.blueprint_version = e.blueprint_version
+             AND a.value_type <> 'file'
              AND (av.relationship_target_entity_id IS NULL OR av.active)
            ORDER BY a.position, av.relationship_target_entity_id"#;
+
+#[derive(sqlx::FromRow)]
+struct FileFormValueRow {
+    attribute_code: String,
+    context_id: Option<Uuid>,
+    file_id: Uuid,
+}
 
 #[derive(sqlx::FromRow)]
 struct HistoryNativeValueRow {
@@ -81,6 +89,9 @@ pub(super) enum ValueType {
     Date,
     Datetime,
     Time,
+    /// File metadata is stored in attribute_file_references, not a native
+    /// attribute_values value column.
+    File,
 }
 
 #[derive(sqlx::FromRow)]
@@ -106,6 +117,7 @@ impl ValueType {
             "date" => Ok(Self::Date),
             "datetime" => Ok(Self::Datetime),
             "time" => Ok(Self::Time),
+            "file" => Ok(Self::File),
             _ => Err(RepositoryError::AttributeValueTypeMismatch),
         }
     }
@@ -149,6 +161,7 @@ impl NativeValue {
                     .ok_or_else(invalid)?;
                 Ok(Self::Time(time, time_zone.to_owned()))
             }
+            ValueType::File => Err(invalid()),
         }
     }
 
@@ -246,6 +259,9 @@ impl NativeValue {
 pub(crate) fn native_value_json(row: NativeValueRow) -> Result<Value, RepositoryError> {
     let value_type = ValueType::parse(&row.value_type)
         .map_err(|_| RepositoryError::InvalidStoredAttributeValue)?;
+    if matches!(value_type, ValueType::File) {
+        return Ok(Value::Null);
+    }
     let populated = [
         row.value_text.is_some(),
         row.value_number.is_some(),
@@ -270,6 +286,7 @@ pub(crate) fn native_value_json(row: NativeValueRow) -> Result<Value, Repository
             .zip(row.value_time_zone)
             .filter(|(_, zone)| zone.parse::<Tz>().is_ok())
             .map(|(time, zone)| NativeValue::Time(time, zone)),
+        ValueType::File => unreachable!("file values return before native decoding"),
     }
     .ok_or(RepositoryError::InvalidStoredAttributeValue)?;
     if populated != 1 {
@@ -328,7 +345,48 @@ impl CatalogRepository {
             .bind(entity_id)
             .fetch_all(&self.pool)
             .await?;
-        form_attribute_values(rows)
+        let mut values = form_attribute_values(rows)?;
+        values.extend(self.file_form_values(entity_id).await?);
+        Ok(values)
+    }
+
+    pub(crate) async fn file_form_values(
+        &self,
+        entity_id: Uuid,
+    ) -> Result<Vec<FormAttributeValue>, RepositoryError> {
+        let rows = sqlx::query_as::<_, FileFormValueRow>(
+            r#"SELECT a.code AS attribute_code, av.context_id, r.file_id
+               FROM attribute_file_references r
+               JOIN attribute_values av ON av.id = r.attribute_value_id
+               JOIN attributes a ON a.id = av.attribute_id
+               WHERE av.entity_id = $1
+                 AND av.workspace_id = $2
+                 AND a.value_type = 'file'
+               ORDER BY a.position, av.context_id, r.position"#,
+        )
+        .bind(entity_id)
+        .bind(self.workspace_id.unwrap_or(Self::DEFAULT_WORKSPACE_ID))
+        .fetch_all(&self.pool)
+        .await?;
+        let mut values: Vec<FormAttributeValue> = Vec::new();
+        for row in rows {
+            let metadata = self.file_metadata(row.file_id).await?;
+            match values.last_mut() {
+                Some(FormAttributeValue::File {
+                    attribute_code,
+                    context_id,
+                    files,
+                }) if *attribute_code == row.attribute_code && *context_id == row.context_id => {
+                    files.push(metadata);
+                }
+                _ => values.push(FormAttributeValue::File {
+                    attribute_code: row.attribute_code,
+                    context_id: row.context_id,
+                    files: vec![metadata],
+                }),
+            }
+        }
+        Ok(values)
     }
 
     pub(super) async fn form_values_in_transaction(

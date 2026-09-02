@@ -12,7 +12,7 @@ import {
 import {
   listEntityBlueprints,
   type BlueprintWithAttributes,
-  type NewAttributeValue,
+  type FormAttributeValue,
 } from '../api';
 import {
   relationshipTargetsForForm,
@@ -30,7 +30,7 @@ type EntityFormProps = {
   initialValues?: ReturnType<typeof valuesForForm>;
   contextId?: string | null;
   defaultContextId?: string | null;
-  existingValues?: NewAttributeValue[];
+  existingValues?: FormAttributeValue[];
   resolvedValues?: Record<
     string,
     { value: unknown; source_context: { id: string; code: string } }
@@ -237,6 +237,14 @@ export const EntityForm = ({
                       contextId={contextId}
                       disabled={defaultOnly}
                       entityId={entityId}
+                      files={
+                        existingValues.find(
+                          (item) =>
+                            item.kind === 'file' &&
+                            item.attribute_code === attribute.code &&
+                            (item.context_id ?? null) === contextId,
+                        )?.files ?? []
+                      }
                       error={fieldErrors[attribute.code]}
                       helperText={helperText}
                       migrationReviewMessage={migrationReviewMessage}

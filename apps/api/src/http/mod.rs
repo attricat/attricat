@@ -128,6 +128,10 @@ pub fn router(state: AppState) -> Router {
             get(agents::list_messages).post(agents::send_message),
         )
         .route(
+            "/agent/conversations/{conversation_id}/uploads",
+            post(files::upload_conversation),
+        )
+        .route(
             "/agent/conversations/{conversation_id}/runs",
             get(agents::list_runs),
         )

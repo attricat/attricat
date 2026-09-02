@@ -183,6 +183,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
                     connect_options.clone(),
                 ),
                 config,
+                object_store.clone(),
             )
             .await,
         ),

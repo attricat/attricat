@@ -32,6 +32,7 @@ export type {
   Entity,
   EntityFormResponse,
   EntityMigrationPreview,
+  FormAttributeValue,
   EntityItem,
   EntitySearchResponse,
   IncomingRelationshipsPage,

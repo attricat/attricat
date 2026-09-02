@@ -42,9 +42,15 @@ impl AgentProviderConfig {
             return Ok(None);
         };
         let base_url = value("LLM_BASE_URL").unwrap_or_else(|| DEFAULT_LLM_BASE_URL.to_owned());
-        let base_url = Url::parse(&base_url).map_err(|_| AgentConfigError::InvalidBaseUrl)?;
+        let mut base_url = Url::parse(&base_url).map_err(|_| AgentConfigError::InvalidBaseUrl)?;
         if !matches!(base_url.scheme(), "http" | "https") || base_url.host_str().is_none() {
             return Err(AgentConfigError::InvalidBaseUrl);
+        }
+        // `Url::join` treats a path without a trailing slash as a file. Provider
+        // base URLs conventionally end in `/v1`, so normalize it before the
+        // client appends `chat/completions`.
+        if !base_url.path().ends_with('/') {
+            base_url.set_path(&format!("{}/", base_url.path()));
         }
         let model = value("LLM_MODEL").unwrap_or_else(|| DEFAULT_LLM_MODEL.to_owned());
         if model.trim().is_empty() || model.len() > 512 {
@@ -101,4 +107,58 @@ pub enum AgentConfigError {
     InvalidModel,
     #[error("{0} must be an integer between 1 and 3600 seconds")]
     InvalidDuration(&'static str),
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{AgentConfigError, AgentProviderConfig, DEFAULT_LLM_MODEL};
+
+    #[test]
+    fn missing_or_blank_key_disables_agents() {
+        assert!(
+            AgentProviderConfig::from_values(|_| None)
+                .unwrap()
+                .is_none()
+        );
+        assert!(
+            AgentProviderConfig::from_values(|name| {
+                (name == "LLM_API_KEY").then(|| "  ".to_owned())
+            })
+            .unwrap()
+            .is_none()
+        );
+    }
+
+    #[test]
+    fn validates_provider_settings_and_uses_safe_defaults() {
+        let configured = AgentProviderConfig::from_values(|name| match name {
+            "LLM_API_KEY" => Some("secret".to_owned()),
+            _ => None,
+        })
+        .unwrap()
+        .unwrap();
+        assert_eq!(configured.base_url.as_str(), "https://api.openai.com/v1/");
+        assert_eq!(configured.model, DEFAULT_LLM_MODEL);
+
+        for (name, value, expected) in [
+            (
+                "LLM_BASE_URL",
+                "ftp://provider.test",
+                AgentConfigError::InvalidBaseUrl,
+            ),
+            ("LLM_MODEL", " ", AgentConfigError::InvalidModel),
+            (
+                "LLM_REQUEST_TIMEOUT_SECONDS",
+                "0",
+                AgentConfigError::InvalidDuration("LLM_REQUEST_TIMEOUT_SECONDS"),
+            ),
+        ] {
+            let result = AgentProviderConfig::from_values(|key| match key {
+                "LLM_API_KEY" => Some("secret".to_owned()),
+                key if key == name => Some(value.to_owned()),
+                _ => None,
+            });
+            assert_eq!(result.err(), Some(expected));
+        }
+    }
 }

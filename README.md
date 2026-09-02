@@ -35,6 +35,24 @@ select **Continue**. Sign in with the bootstrap-owner email configured in `.env`
 (`CATALOG_BOOTSTRAP_OWNER_EMAIL`) and its password. The workspace UUID is an
 internal database/configuration identifier; clients do not select it directly.
 
+## Conversational agents
+
+Agents are optional. Set `LLM_API_KEY` in the API process environment (and, if
+needed, `LLM_BASE_URL` and `LLM_MODEL`), restart the API, then open
+**Conversations** in the web application. The browser never receives the
+provider credential; an absent or blank key disables agent runs without
+preventing normal catalog use.
+
+Treat an enabled provider as a trusted operator integration: conversation
+content and tool results are sent to the configured provider. Read-only tools
+run automatically, but every catalog mutation—interactive or scheduled—stops
+for a durable, explicit approval. An approved scheduled run is re-authorized
+as its initiating user before it writes. Review the proposed arguments and
+change summary, use a least-privileged provider account, and only grant
+`agents.run` to users allowed to request catalog changes. See the
+[agent configuration](docs/configuration.md#agent-provider) and
+[agent API contract](docs/api.md#agents) for limits and operational behavior.
+
 ## Documentation
 
 - [Documentation index](docs/index.md)

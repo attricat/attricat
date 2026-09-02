@@ -1,4 +1,4 @@
-import { Chip, Stack, Typography } from '@mui/material';
+import { Box, Chip, Stack, Typography } from '@mui/material';
 import { Link } from '@tanstack/react-router';
 import type { Attribute } from '../../../entities/api';
 import { fileDownloadUrl } from '../../../files/api';
@@ -12,7 +12,11 @@ type RelationshipValue = {
 const isRelationshipValue = (value: unknown): value is RelationshipValue =>
   typeof value === 'object' && value !== null && 'items' in value;
 
-type FileValue = { id: string; filename: string }[];
+type FileValue = {
+  id: string;
+  filename: string;
+  variants?: { kind: string }[];
+}[];
 
 const isFileValue = (value: unknown): value is FileValue =>
   Array.isArray(value) &&
@@ -73,14 +77,27 @@ export const AttributeValue = ({
     return (
       <Stack spacing={1}>
         {value.map((file) => (
-          <Typography
-            component="a"
-            href={fileDownloadUrl(file.id)}
-            key={file.id}
-            variant="body2"
-          >
-            {file.filename}
-          </Typography>
+          <Stack alignItems="center" direction="row" key={file.id} spacing={1}>
+            {attribute.file_policy?.image_only && (
+              <Box
+                alt=""
+                component="img"
+                src={fileDownloadUrl(
+                  file.id,
+                  file.variants?.find((variant) => variant.kind === 'thumbnail')
+                    ?.kind,
+                )}
+                sx={{ height: 64, objectFit: 'cover', width: 64 }}
+              />
+            )}
+            <Typography
+              component="a"
+              href={fileDownloadUrl(file.id)}
+              variant="body2"
+            >
+              {file.filename}
+            </Typography>
+          </Stack>
         ))}
       </Stack>
     );

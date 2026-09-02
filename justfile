@@ -3,8 +3,7 @@ setup:
     npm install --prefix apps/catalog-web
 
 dev: setup
-    # `--wait` waits for RustFS and its one-shot bucket initialization service.
-    set -a; . ./.env; set +a; docker compose --env-file .env --project-name catalog-$POSTGRES_PORT -f apps/api/compose.yml up -d --wait
+    bash scripts/start-dev-services.sh
     process-compose --no-server --env .env up
 
 down: setup

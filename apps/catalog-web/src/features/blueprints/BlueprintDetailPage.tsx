@@ -1,12 +1,18 @@
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
-import { useQuery } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   Accordion,
   AccordionDetails,
   AccordionSummary,
   Alert,
   Box,
+  Button,
   Chip,
+  Dialog,
+  DialogActions,
+  DialogContent,
+  DialogContentText,
+  DialogTitle,
   MenuItem,
   Paper,
   Stack,
@@ -23,7 +29,11 @@ import {
 import { lazy, Suspense, useState } from 'react';
 import { PageContainer } from '../../components/PageContainer';
 import { PageHeader } from '../../components/PageHeader';
-import { getBlueprintRevision, listBlueprintRevisions } from './api';
+import {
+  getBlueprintRevision,
+  listBlueprintRevisions,
+  publishBlueprintRevision,
+} from './api';
 import { BlueprintViewsPreview } from './BlueprintViewsPreview';
 import { formatBlueprintDateTime } from './date-time';
 import { blueprintQueryKeys } from './query-keys';
@@ -63,6 +73,26 @@ export const BlueprintDetailPage = ({
   const [leftSelection, setLeftSelection] = useState<number | null>(null);
   const [rightSelection, setRightSelection] = useState<number | null>(null);
   const [dataTab, setDataTab] = useState(0);
+  const [publishConfirmationOpen, setPublishConfirmationOpen] = useState(false);
+  const queryClient = useQueryClient();
+  const publish = useMutation({
+    mutationFn: (version: number) =>
+      publishBlueprintRevision(blueprintId, version),
+    onSuccess: async (_, version) => {
+      setPublishConfirmationOpen(false);
+      await Promise.all([
+        queryClient.invalidateQueries({
+          queryKey: blueprintQueryKeys.catalogue(),
+        }),
+        queryClient.invalidateQueries({
+          queryKey: blueprintQueryKeys.revisions(blueprintId),
+        }),
+        queryClient.invalidateQueries({
+          queryKey: blueprintQueryKeys.revision(blueprintId, version),
+        }),
+      ]);
+    },
+  });
   const revisions = useQuery({
     queryKey: blueprintQueryKeys.revisions(blueprintId),
     queryFn: () => listBlueprintRevisions(blueprintId),
@@ -91,7 +121,23 @@ export const BlueprintDetailPage = ({
       )}
       {blueprint && (
         <>
-          <PageHeader eyebrow="Blueprint" title={blueprint.name} />
+          <Stack
+            alignItems={{ sm: 'center' }}
+            direction={{ xs: 'column', sm: 'row' }}
+            justifyContent="space-between"
+            spacing={2}
+          >
+            <PageHeader eyebrow="Blueprint" title={blueprint.name} />
+            {blueprint.status === 'draft' && (
+              <Button
+                color="primary"
+                onClick={() => setPublishConfirmationOpen(true)}
+                variant="contained"
+              >
+                Publish
+              </Button>
+            )}
+          </Stack>
           <Stack direction="row" spacing={1} sx={{ flexWrap: 'wrap', mt: 1 }}>
             <Chip label={blueprint.code} variant="outlined" />
             <Chip label={blueprint.kind} variant="outlined" />
@@ -108,6 +154,11 @@ export const BlueprintDetailPage = ({
             </Box>
             {' · '}Updated: {formatBlueprintDateTime(blueprint.updated_at)}
           </Typography>
+          {publish.isError && (
+            <Alert severity="error" sx={{ mt: 2 }}>
+              {publish.error.message}
+            </Alert>
+          )}
           <RevisionHistory revisions={revisionItems} />
           {left.data && (
             <Paper component="section" sx={{ mt: 3, p: 2.5 }}>
@@ -257,6 +308,36 @@ export const BlueprintDetailPage = ({
               </Box>
             </AccordionDetails>
           </Accordion>
+          <Dialog
+            onClose={() =>
+              !publish.isPending && setPublishConfirmationOpen(false)
+            }
+            open={publishConfirmationOpen}
+          >
+            <DialogTitle>Publish blueprint?</DialogTitle>
+            <DialogContent>
+              <DialogContentText>
+                Publish {blueprint.name} version {blueprint.version}? Published
+                blueprints are available for creating entities.
+              </DialogContentText>
+            </DialogContent>
+            <DialogActions>
+              <Button
+                disabled={publish.isPending}
+                onClick={() => setPublishConfirmationOpen(false)}
+              >
+                Cancel
+              </Button>
+              <Button
+                autoFocus
+                disabled={publish.isPending}
+                onClick={() => publish.mutate(blueprint.version)}
+                variant="contained"
+              >
+                {publish.isPending ? 'Publishing…' : 'Publish'}
+              </Button>
+            </DialogActions>
+          </Dialog>
         </>
       )}
     </PageContainer>

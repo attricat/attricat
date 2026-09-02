@@ -5,12 +5,13 @@ export const csrfToken = () =>
     ?.split('=')[1];
 
 /** Sends same-origin cookies and the synchronizer token for unsafe requests. */
-export const apiFetch = (path: string, init: RequestInit = {}) => {
-  const method = (init.method ?? 'GET').toUpperCase();
-  const headers = new Headers(init.headers);
-  if (!['GET', 'HEAD', 'OPTIONS'].includes(method)) {
-    const csrf = csrfToken();
-    if (csrf) headers.set('X-Catalog-Csrf', csrf);
-  }
-  return fetch(path, { ...init, credentials: 'same-origin', headers });
+export const apiFetch = (path: string, ...args: [RequestInit?]) => {
+  const init = args[0];
+  const method = (init?.method ?? 'GET').toUpperCase();
+  const csrf = !['GET', 'HEAD', 'OPTIONS'].includes(method) ? csrfToken() : '';
+  if (!csrf) return fetch(path, ...args);
+
+  const headers = new Headers(init?.headers);
+  headers.set('X-Catalog-Csrf', csrf);
+  return fetch(path, { ...init, headers });
 };

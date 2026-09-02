@@ -393,6 +393,11 @@ pub enum FormAttributeValue {
         context_id: Option<Uuid>,
         target_entity_id: Uuid,
     },
+    File {
+        attribute_code: String,
+        context_id: Option<Uuid>,
+        files: Vec<crate::repository::FileMetadata>,
+    },
 }
 
 #[derive(Clone, Debug, Serialize)]

@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link } from '@tanstack/react-router';
 import {
@@ -14,6 +14,7 @@ import {
 } from '@mui/material';
 import { PageContainer } from '../../components/PageContainer';
 import { PageHeader } from '../../components/PageHeader';
+import { fileDownloadUrl, uploadConversationFiles } from '../files/api';
 import {
   decideApproval,
   getConversation,
@@ -42,6 +43,8 @@ export const ConversationDetailPage = ({
 }) => {
   const queryClient = useQueryClient();
   const [content, setContent] = useState('');
+  const [attachments, setAttachments] = useState<File[]>([]);
+  const attachmentInput = useRef<HTMLInputElement>(null);
   const [streamError, setStreamError] = useState<string | null>(null);
   const conversation = useQuery({
     queryKey: agentQueryKeys.conversation(conversationId),
@@ -65,9 +68,19 @@ export const ConversationDetailPage = ({
   const invalidate = () =>
     void queryClient.invalidateQueries({ queryKey: agentQueryKeys.all });
   const send = useMutation({
-    mutationFn: () => sendMessage(conversationId, content),
+    mutationFn: async () => {
+      const uploaded = attachments.length
+        ? await uploadConversationFiles(conversationId, attachments)
+        : { files: [] };
+      return sendMessage(
+        conversationId,
+        content,
+        uploaded.files.map((file) => file.id),
+      );
+    },
     onSuccess: () => {
       setContent('');
+      setAttachments([]);
       invalidate();
     },
   });
@@ -76,6 +89,7 @@ export const ConversationDetailPage = ({
       decideApproval(id, approved),
     onSuccess: invalidate,
   });
+  const latestRun = runs.data?.[0];
 
   useEffect(() => {
     const activeRuns =
@@ -152,6 +166,20 @@ export const ConversationDetailPage = ({
             >
               {displayContent(message.content)}
             </Typography>
+            {message.attachments.length > 0 && (
+              <Stack direction="row" gap={1} sx={{ flexWrap: 'wrap', mt: 1 }}>
+                {message.attachments.map((attachment) => (
+                  <Chip
+                    component="a"
+                    clickable
+                    href={fileDownloadUrl(attachment.id)}
+                    key={attachment.id}
+                    label={attachment.filename}
+                    size="small"
+                  />
+                ))}
+              </Stack>
+            )}
           </Paper>
         ))}
         {messages.isPending && <Typography>Loading conversation...</Typography>}
@@ -199,41 +227,73 @@ export const ConversationDetailPage = ({
       <Paper sx={{ mt: 3, p: 2 }}>
         <Typography variant="h6">Run status</Typography>
         <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1, mt: 1 }}>
-          {runs.data?.map((run) => (
+          {latestRun && (
             <Chip
-              color={statusColor(run.status)}
-              key={run.id}
-              label={`${run.origin}: ${run.status}`}
+              color={statusColor(latestRun.status)}
+              label={`${latestRun.origin}: ${latestRun.status}`}
             />
-          ))}
+          )}
         </Box>
-        {runs.data
-          ?.filter((run) => run.error_message)
-          .map((run) => (
-            <Alert key={`${run.id}-error`} severity="error" sx={{ mt: 1 }}>
-              {run.error_message}
-            </Alert>
-          ))}
+        {latestRun?.error_message && (
+          <Alert severity="error" sx={{ mt: 1 }}>
+            <Typography component="pre" sx={{ m: 0, whiteSpace: 'pre-wrap' }}>
+              {latestRun.error_code
+                ? `${latestRun.error_code}: ${latestRun.error_message}`
+                : latestRun.error_message}
+            </Typography>
+          </Alert>
+        )}
       </Paper>
       <Divider sx={{ my: 3 }} />
       <Box
         component="form"
         onSubmit={(event) => {
           event.preventDefault();
-          if (content.trim()) send.mutate();
+          if (content.trim() || attachments.length) send.mutate();
         }}
       >
         <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2}>
-          <TextField
-            fullWidth
-            label="Message"
-            multiline
-            onChange={(event) => setContent(event.target.value)}
-            placeholder="Ask the agent to help with your catalog…"
-            value={content}
-          />
+          <Stack spacing={1} sx={{ flexGrow: 1 }}>
+            <TextField
+              fullWidth
+              label="Message"
+              multiline
+              onChange={(event) => setContent(event.target.value)}
+              placeholder="Ask the agent to help with your catalog…"
+              value={content}
+            />
+            <input
+              hidden
+              multiple
+              onChange={(event) => {
+                setAttachments(Array.from(event.target.files ?? []));
+                event.target.value = '';
+              }}
+              ref={attachmentInput}
+              type="file"
+            />
+            <Stack direction="row" spacing={1} sx={{ alignItems: 'center' }}>
+              <Button onClick={() => attachmentInput.current?.click()}>
+                Add files
+              </Button>
+              {attachments.map((file) => (
+                <Chip
+                  key={`${file.name}:${file.size}:${file.lastModified}`}
+                  label={file.name}
+                  onDelete={() =>
+                    setAttachments((current) =>
+                      current.filter((item) => item !== file),
+                    )
+                  }
+                  size="small"
+                />
+              ))}
+            </Stack>
+          </Stack>
           <Button
-            disabled={!content.trim() || send.isPending}
+            disabled={
+              (!content.trim() && !attachments.length) || send.isPending
+            }
             type="submit"
             variant="contained"
           >

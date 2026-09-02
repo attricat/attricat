@@ -2,7 +2,7 @@
 //!
 //! HTTP only persists a queued run and sends its id here.  Losing a process
 //! message is safe because startup recovery re-enqueues every queued run.
-use std::time::Duration;
+use std::{sync::Arc, time::Duration};
 
 use chrono::Utc;
 use tokio::sync::mpsc;
@@ -10,7 +10,7 @@ use uuid::Uuid;
 
 use crate::{
     agent_provider::OpenAiCompatibleClient, agent_runner, agents::AgentProviderConfig,
-    repository::CatalogRepository,
+    repository::CatalogRepository, storage::ObjectStore,
 };
 
 #[derive(Clone)]
@@ -27,7 +27,11 @@ impl AgentDispatcher {
     }
 }
 
-pub async fn start(repository: CatalogRepository, config: AgentProviderConfig) -> AgentDispatcher {
+pub async fn start(
+    repository: CatalogRepository,
+    config: AgentProviderConfig,
+    object_store: Arc<dyn ObjectStore>,
+) -> AgentDispatcher {
     let (sender, mut receiver) = mpsc::channel(256);
     let dispatcher = AgentDispatcher { sender };
     if let Err(error) = repository.recover_interrupted_agent_runs().await {
@@ -39,6 +43,7 @@ pub async fn start(repository: CatalogRepository, config: AgentProviderConfig) -
 
     let worker_repository = repository.clone();
     let worker_config = config.clone();
+    let worker_object_store = object_store.clone();
     tokio::spawn(async move {
         while let Some((workspace_id, run_id)) = receiver.recv().await {
             let Ok(repository) = worker_repository.for_workspace(workspace_id).await else {
@@ -62,10 +67,24 @@ pub async fn start(repository: CatalogRepository, config: AgentProviderConfig) -
             };
             let result = match repository.decided_agent_tool_calls(run_id).await {
                 Ok(calls) if calls.is_empty() => {
-                    agent_runner::run_claimed(&repository, &provider, run_id, run.conversation_id)
-                        .await
+                    agent_runner::run_claimed(
+                        &repository,
+                        &provider,
+                        &worker_object_store,
+                        run_id,
+                        run.conversation_id,
+                    )
+                    .await
                 }
-                Ok(_) => agent_runner::resume_claimed(&repository, &provider, run_id).await,
+                Ok(_) => {
+                    agent_runner::resume_claimed(
+                        &repository,
+                        &provider,
+                        &worker_object_store,
+                        run_id,
+                    )
+                    .await
+                }
                 Err(error) => Err(error.into()),
             };
             if let Err(error) = result {
@@ -75,7 +94,7 @@ pub async fn start(repository: CatalogRepository, config: AgentProviderConfig) -
                         run_id,
                         "failed",
                         Some("runner_error"),
-                        Some("agent run failed"),
+                        Some(&error.to_string()),
                     )
                     .await;
             }
