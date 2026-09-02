@@ -67,7 +67,7 @@ async fn drive(
     rounds: u8,
 ) -> Result<(), RunError> {
     if rounds >= 8 {
-        fail(
+        fail_run(
             repository,
             run_id,
             "tool_limit",
@@ -96,7 +96,7 @@ async fn drive(
         Ok(answer) => answer,
         Err(error) => {
             tracing::warn!(%run_id, %error, "agent provider request failed");
-            fail(repository, run_id, "provider_error", &error.to_string()).await?;
+            fail_run(repository, run_id, "provider_error", &error.to_string()).await?;
             return Ok(());
         }
     };
@@ -137,7 +137,7 @@ async fn drive(
         let arguments: Value = match serde_json::from_str::<Value>(&call.function.arguments) {
             Ok(value) if value.is_object() => value,
             _ => {
-                fail(
+                fail_run(
                     repository,
                     run_id,
                     "invalid_tool_arguments",
@@ -150,7 +150,7 @@ async fn drive(
         let kind = match agent_tools::kind(&call.function.name) {
             Ok(kind) => kind,
             Err(_) => {
-                fail(
+                fail_run(
                     repository,
                     run_id,
                     "unknown_tool",
@@ -164,7 +164,7 @@ async fn drive(
             let summary = match agent_tools::change_summary(&call.function.name, &arguments) {
                 Ok(value) => value,
                 Err(_) => {
-                    fail(
+                    fail_run(
                         repository,
                         run_id,
                         "invalid_tool_arguments",
@@ -418,7 +418,7 @@ async fn mutation_authorized(
         .await
 }
 
-async fn fail(
+pub(crate) async fn fail_run(
     repository: &CatalogRepository,
     run_id: Uuid,
     code: &str,
