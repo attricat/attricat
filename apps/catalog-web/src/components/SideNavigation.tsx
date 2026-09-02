@@ -1,4 +1,5 @@
 import AssessmentOutlinedIcon from '@mui/icons-material/AssessmentOutlined';
+import SmartToyOutlinedIcon from '@mui/icons-material/SmartToyOutlined';
 import CategoryOutlinedIcon from '@mui/icons-material/CategoryOutlined';
 import FolderOutlinedIcon from '@mui/icons-material/FolderOutlined';
 import TravelExploreOutlinedIcon from '@mui/icons-material/TravelExploreOutlined';
@@ -21,6 +22,7 @@ const navigationItems = [
   { icon: <TravelExploreOutlinedIcon />, label: 'Entity explorer', to: '/' },
   { icon: <CategoryOutlinedIcon />, label: 'Blueprints', to: '/blueprints' },
   { icon: <FolderOutlinedIcon />, label: 'Contexts', to: '/contexts' },
+  { icon: <SmartToyOutlinedIcon />, label: 'Agents', to: '/agents' },
   {
     icon: <AssessmentOutlinedIcon />,
     label: 'Data health',
