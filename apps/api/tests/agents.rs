@@ -3,12 +3,17 @@ mod support;
 use std::{sync::Arc, time::Duration};
 
 use api::{
+    agent_tools::{ToolError, execute_read},
+    agent_worker,
+    agents::AgentProviderConfig,
     file_worker::{FileWorker, WorkerConfig},
     repository::CatalogRepository,
     storage::FakeObjectStore,
 };
+use axum::{Router, routing::post};
 use reqwest::multipart::{Form, Part};
 use support::*;
+use tokio::time::{sleep, timeout};
 
 #[sqlx::test]
 async fn agent_conversation_reads_and_persisted_sse_replay(pool: PgPool) {
@@ -147,6 +152,235 @@ async fn reconciliation_retains_conversation_attachments(pool: PgPool) {
             .unwrap();
     assert!(attached_deleted_at.is_none());
     assert!(orphan_deleted_at.is_some());
+}
+
+async fn slow_provider() -> axum::http::StatusCode {
+    sleep(Duration::from_secs(2)).await;
+    axum::http::StatusCode::OK
+}
+
+#[sqlx::test]
+async fn agent_run_timeout_is_durably_failed_without_provider_details(pool: PgPool) {
+    let (base_url, api_server) = start_server(pool.clone()).await;
+    let client = authenticated_client();
+    let conversation: Value = client
+        .post(format!("{base_url}/agent/conversations"))
+        .json(&json!({"title": "timeout test"}))
+        .send()
+        .await
+        .unwrap()
+        .error_for_status()
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    let provider_listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let provider_address = provider_listener.local_addr().unwrap();
+    let provider_server = tokio::spawn(async move {
+        axum::serve(
+            provider_listener,
+            Router::new().route("/v1/chat/completions", post(slow_provider)),
+        )
+        .await
+        .unwrap();
+    });
+    let config = AgentProviderConfig::from_values(|name| match name {
+        "LLM_API_KEY" => Some("test-key".to_owned()),
+        "LLM_BASE_URL" => Some(format!("http://{provider_address}/v1")),
+        "LLM_RUN_TIMEOUT_SECONDS" => Some("1".to_owned()),
+        _ => None,
+    })
+    .unwrap()
+    .unwrap();
+    let workspace_id = BOOTSTRAP_WORKSPACE_ID.parse::<Uuid>().unwrap();
+    let user_id = BOOTSTRAP_OWNER_ID.parse::<Uuid>().unwrap();
+    let repository = CatalogRepository::new(pool.clone())
+        .for_workspace(workspace_id)
+        .await
+        .unwrap();
+    let dispatcher = agent_worker::start(
+        CatalogRepository::new(pool),
+        config.clone(),
+        Arc::new(FakeObjectStore::available()),
+    )
+    .await;
+    let run = repository
+        .create_agent_run_for_user(
+            conversation["id"].as_str().unwrap().parse().unwrap(),
+            user_id,
+            config.base_url.as_str(),
+            &config.model,
+        )
+        .await
+        .unwrap();
+    dispatcher.enqueue(workspace_id, run.id).await.unwrap();
+
+    let timed_out_run = timeout(Duration::from_secs(5), async {
+        loop {
+            let run = repository.get_agent_run(run.id).await.unwrap();
+            if run.status == "failed" {
+                break run;
+            }
+            sleep(Duration::from_millis(25)).await;
+        }
+    })
+    .await
+    .expect("run should fail before the test deadline");
+    assert_eq!(timed_out_run.error_code.as_deref(), Some("run_timeout"));
+    assert_eq!(
+        timed_out_run.error_message.as_deref(),
+        Some("agent run exceeded configured timeout")
+    );
+    assert!(timed_out_run.finished_at.is_some());
+    let events = repository.agent_run_events_after(run.id, -1).await.unwrap();
+    assert!(events.iter().any(|event| {
+        event.event_type == "error"
+            && event.payload
+                == json!({"code":"run_timeout","message":"agent run exceeded configured timeout"})
+    }));
+    assert!(events.iter().any(|event| {
+        event.event_type == "terminal"
+            && event.payload == json!({"status":"failed","code":"run_timeout"})
+    }));
+    assert!(events.iter().all(|event| {
+        !event
+            .payload
+            .to_string()
+            .contains(&provider_address.to_string())
+    }));
+    api_server.abort();
+    provider_server.abort();
+}
+
+#[sqlx::test]
+async fn agent_read_tools_enforce_initiator_permissions_and_scopes(pool: PgPool) {
+    let (base_url, server) = start_server(pool.clone()).await;
+    let owner = authenticated_client();
+    let blueprint = create_blueprint(
+        &owner,
+        &base_url,
+        "format_version = 1\ncode = 'agent_scoped'\nname = 'Agent scoped'\nkind = 'entity'\n\n[views.dropdown_option]\ntype = 'dropdown_option'\nfields = ['title']\n\n[[attributes]]\ncode = 'title'\nvalue_type = 'string'",
+    )
+    .await;
+    let entity = create_entity(&owner, &base_url, &blueprint).await;
+    let context: Value = owner
+        .post(format!("{base_url}/contexts"))
+        .json(&json!({"code": "agent-scoped", "data": {}}))
+        .send()
+        .await
+        .unwrap()
+        .error_for_status()
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+
+    let workspace = BOOTSTRAP_WORKSPACE_ID.parse::<Uuid>().unwrap();
+    let actor = Uuid::new_v4();
+    let membership = Uuid::new_v4();
+    sqlx::query("INSERT INTO users (id, email) VALUES ($1, $2)")
+        .bind(actor)
+        .bind(format!("{actor}@example.test"))
+        .execute(&pool)
+        .await
+        .unwrap();
+    sqlx::query(
+        "INSERT INTO workspace_memberships (id, workspace_id, user_id) VALUES ($1, $2, $3)",
+    )
+    .bind(membership)
+    .bind(workspace)
+    .bind(actor)
+    .execute(&pool)
+    .await
+    .unwrap();
+
+    let repository = CatalogRepository::new(pool.clone())
+        .for_workspace(workspace)
+        .await
+        .unwrap();
+    let agent_only = repository
+        .create_workspace_role(
+            BOOTSTRAP_OWNER_ID.parse().unwrap(),
+            workspace,
+            "agent-only",
+            &["agents.run".to_owned()],
+        )
+        .await
+        .unwrap();
+    repository
+        .grant_workspace_member_role(
+            BOOTSTRAP_OWNER_ID.parse().unwrap(),
+            workspace,
+            membership,
+            agent_only,
+            "workspace",
+            workspace,
+        )
+        .await
+        .unwrap();
+
+    for (name, arguments) in [
+        ("list_blueprints", json!({})),
+        ("list_contexts", json!({})),
+        ("get_entity", json!({"entity_id": entity["id"]})),
+    ] {
+        assert!(matches!(
+            execute_read(&repository, actor, workspace, name, arguments).await,
+            Err(ToolError::Forbidden)
+        ));
+    }
+
+    let scoped_reader = repository
+        .create_workspace_role(
+            BOOTSTRAP_OWNER_ID.parse().unwrap(),
+            workspace,
+            "agent-scoped-reader",
+            &["entities.read".to_owned(), "contexts.read".to_owned()],
+        )
+        .await
+        .unwrap();
+    repository
+        .grant_workspace_member_role(
+            BOOTSTRAP_OWNER_ID.parse().unwrap(),
+            workspace,
+            membership,
+            scoped_reader,
+            "entity",
+            entity["id"].as_str().unwrap().parse().unwrap(),
+        )
+        .await
+        .unwrap();
+    repository
+        .grant_workspace_member_role(
+            BOOTSTRAP_OWNER_ID.parse().unwrap(),
+            workspace,
+            membership,
+            scoped_reader,
+            "context_subtree",
+            context["id"].as_str().unwrap().parse().unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(
+        execute_read(
+            &repository,
+            actor,
+            workspace,
+            "get_entity",
+            json!({"entity_id": entity["id"]}),
+        )
+        .await
+        .unwrap()["id"],
+        entity["id"]
+    );
+    assert_eq!(
+        execute_read(&repository, actor, workspace, "list_contexts", json!({}))
+            .await
+            .unwrap(),
+        json!([context])
+    );
+    server.abort();
 }
 
 #[sqlx::test]

@@ -43,6 +43,8 @@ pub enum ToolError {
     InvalidArguments(String),
     #[error("tool results exceed the configured bound")]
     ResultTooLarge,
+    #[error("the initiating user is not authorized to read this catalog data")]
+    Forbidden,
     #[error(transparent)]
     Repository(#[from] RepositoryError),
 }
@@ -206,9 +208,14 @@ pub fn change_summary(name: &str, arguments: &Value) -> Result<String, ToolError
 
 pub async fn execute_read(
     repository: &CatalogRepository,
+    actor: Uuid,
+    workspace: Uuid,
     name: &str,
     arguments: Value,
 ) -> Result<Value, ToolError> {
+    if !read_authorized(repository, actor, workspace, name, &arguments).await? {
+        return Err(ToolError::Forbidden);
+    }
     let result = match name {
         "blueprint_authoring_guide" => json!({
             "blueprints_markdown": BLUEPRINT_AUTHORING_GUIDE,
@@ -218,9 +225,12 @@ pub async fn execute_read(
         "list_blueprints" => {
             serde_json::to_value(repository.list_blueprints().await?).expect("models serialize")
         }
-        "list_contexts" => {
-            serde_json::to_value(repository.list_contexts().await?).expect("models serialize")
-        }
+        "list_contexts" => serde_json::to_value(
+            repository
+                .list_authorized_contexts(actor, workspace)
+                .await?,
+        )
+        .expect("models serialize"),
         "get_entity" => {
             let id = parse_uuid(&arguments, "entity_id")?;
             serde_json::to_value(
@@ -504,6 +514,34 @@ pub async fn execute_mutation(
         _ => return Err(ToolError::UnknownTool(name.to_owned())),
     };
     bounded(result)
+}
+
+async fn read_authorized(
+    repository: &CatalogRepository,
+    actor: Uuid,
+    workspace: Uuid,
+    name: &str,
+    arguments: &Value,
+) -> Result<bool, ToolError> {
+    let (permission, target_id, target_code) = match name {
+        // This is static product documentation, not workspace catalog data.
+        "blueprint_authoring_guide" => return Ok(true),
+        "list_blueprints" => ("blueprints.read", None, None),
+        "list_contexts" => ("contexts.read", None, Some("__context_list__")),
+        "get_entity" => (
+            "entities.read",
+            Some(parse_uuid(arguments, "entity_id")?),
+            None,
+        ),
+        // Match the HTTP search endpoint: collection searches require a
+        // workspace-wide entities.read grant, rather than exposing partial
+        // results for a scoped grant.
+        "search_entities" => ("entities.read", None, None),
+        _ => return Err(ToolError::UnknownTool(name.to_owned())),
+    };
+    Ok(repository
+        .is_authorized(actor, workspace, permission, target_id, target_code)
+        .await?)
 }
 
 fn empty_object() -> Value {

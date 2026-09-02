@@ -12,7 +12,16 @@ use url::Url;
 
 use crate::{agent_tools::ToolDefinition, agents::AgentProviderConfig};
 
+/// Maximum total bytes accepted from one streamed provider response.
 pub const MAX_PROVIDER_BODY_BYTES: usize = 64 * 1024;
+/// Maximum undrained SSE frame bytes accepted from the provider.
+pub const MAX_PROVIDER_FRAME_BUFFER_BYTES: usize = 64 * 1024;
+/// Maximum accumulated assistant text from one streamed response.
+pub const MAX_ASSISTANT_CONTENT_BYTES: usize = 32 * 1024;
+/// Maximum accumulated arguments for an individual tool call.
+pub const MAX_TOOL_CALL_ARGUMENT_BYTES: usize = 16 * 1024;
+/// Maximum distinct tool calls accepted from one streamed response.
+pub const MAX_TOOL_CALLS: usize = 32;
 
 #[derive(Clone)]
 pub struct OpenAiCompatibleClient {
@@ -36,6 +45,9 @@ pub struct ChatRequest {
     pub model: String,
     pub messages: Vec<ChatMessage>,
     pub tools: Vec<ToolDefinition>,
+    /// Agent approvals are sequential, so a response must contain at most one
+    /// call. This prevents an unresolved call from invalidating the next turn.
+    pub parallel_tool_calls: bool,
     pub stream: bool,
 }
 #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -107,6 +119,7 @@ impl OpenAiCompatibleClient {
                 model: self.model.clone(),
                 messages,
                 tools,
+                parallel_tool_calls: false,
                 stream: false,
             })
             .send()
@@ -132,6 +145,7 @@ impl OpenAiCompatibleClient {
                 model: self.model.clone(),
                 messages,
                 tools,
+                parallel_tool_calls: false,
                 stream: true,
             })
             .send()
@@ -140,6 +154,7 @@ impl OpenAiCompatibleClient {
         status(response.status())?;
         let mut stream = response.bytes_stream();
         let mut buffer = String::new();
+        let mut received_bytes: usize = 0;
         let mut content = String::new();
         let mut calls: Vec<PartialToolCall> = Vec::new();
         while let Some(chunk) = stream.next().await {
@@ -147,7 +162,15 @@ impl OpenAiCompatibleClient {
                 tracing::warn!(error = %error, "agent provider stream failed");
                 ProviderError::Unavailable
             })?;
-            if buffer.len() + chunk.len() > MAX_PROVIDER_BODY_BYTES {
+            received_bytes = received_bytes
+                .checked_add(chunk.len())
+                .filter(|bytes| *bytes <= MAX_PROVIDER_BODY_BYTES)
+                .ok_or(ProviderError::Malformed)?;
+            if buffer
+                .len()
+                .checked_add(chunk.len())
+                .is_none_or(|bytes| bytes > MAX_PROVIDER_FRAME_BUFFER_BYTES)
+            {
                 return Err(ProviderError::Malformed);
             }
             buffer.push_str(std::str::from_utf8(&chunk).map_err(|_| ProviderError::Malformed)?);
@@ -173,10 +196,20 @@ impl OpenAiCompatibleClient {
                     serde_json::from_str(&data).map_err(|_| ProviderError::Malformed)?;
                 for choice in event.choices {
                     if let Some(text) = choice.delta.content {
+                        if content
+                            .len()
+                            .checked_add(text.len())
+                            .is_none_or(|bytes| bytes > MAX_ASSISTANT_CONTENT_BYTES)
+                        {
+                            return Err(ProviderError::Malformed);
+                        }
                         content.push_str(&text);
                         on_delta(&text);
                     }
                     for call in choice.delta.tool_calls {
+                        if call.index >= MAX_TOOL_CALLS {
+                            return Err(ProviderError::Malformed);
+                        }
                         while calls.len() <= call.index {
                             calls.push(PartialToolCall::default());
                         }
@@ -192,6 +225,14 @@ impl OpenAiCompatibleClient {
                                 slot.name = name;
                             }
                             if let Some(args) = function.arguments {
+                                if slot
+                                    .arguments
+                                    .len()
+                                    .checked_add(args.len())
+                                    .is_none_or(|bytes| bytes > MAX_TOOL_CALL_ARGUMENT_BYTES)
+                                {
+                                    return Err(ProviderError::Malformed);
+                                }
                                 slot.arguments.push_str(&args);
                             }
                         }
@@ -295,8 +336,50 @@ fn finish_calls(calls: Vec<PartialToolCall>) -> Result<Vec<ToolCall>, ProviderEr
 
 #[cfg(test)]
 mod tests {
-    use super::{PartialToolCall, ProviderError, chat_completions_url, finish_calls};
+    use super::{
+        ChatRequest, MAX_ASSISTANT_CONTENT_BYTES, MAX_PROVIDER_BODY_BYTES,
+        MAX_TOOL_CALL_ARGUMENT_BYTES, MAX_TOOL_CALLS, OpenAiCompatibleClient, PartialToolCall,
+        ProviderError, chat_completions_url, finish_calls,
+    };
+    use crate::agents::AgentProviderConfig;
+    use axum::{
+        Router,
+        body::Body,
+        http::{Response, header},
+        routing::post,
+    };
     use url::Url;
+
+    async fn mock_client(body: String) -> (OpenAiCompatibleClient, tokio::task::JoinHandle<()>) {
+        let frames = body
+            .split_inclusive("\n\n")
+            .map(|frame| bytes::Bytes::copy_from_slice(frame.as_bytes()))
+            .collect::<Vec<_>>();
+        let app = Router::new().route(
+            "/v1/chat/completions",
+            post(move || async move {
+                Response::builder()
+                    .header(header::CONTENT_TYPE, "text/event-stream")
+                    .body(Body::from_stream(futures_util::stream::iter(
+                        frames.into_iter().map(Ok::<_, std::convert::Infallible>),
+                    )))
+                    .unwrap()
+            }),
+        );
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let address = listener.local_addr().unwrap();
+        let server = tokio::spawn(async move {
+            axum::serve(listener, app).await.unwrap();
+        });
+        let config = AgentProviderConfig::from_values(|name| match name {
+            "LLM_API_KEY" => Some("test-key".to_owned()),
+            "LLM_BASE_URL" => Some(format!("http://{address}/v1")),
+            _ => None,
+        })
+        .unwrap()
+        .unwrap();
+        (OpenAiCompatibleClient::new(&config).unwrap(), server)
+    }
 
     #[test]
     fn preserves_the_provider_version_path_when_building_chat_url() {
@@ -304,6 +387,78 @@ mod tests {
             chat_completions_url(&Url::parse("http://provider.test/v1").unwrap()).as_str(),
             "http://provider.test/v1/chat/completions"
         );
+    }
+
+    #[test]
+    fn disables_parallel_tool_calls_in_provider_requests() {
+        let request = ChatRequest {
+            model: "test".into(),
+            messages: vec![],
+            tools: vec![],
+            parallel_tool_calls: false,
+            stream: true,
+        };
+        assert_eq!(
+            serde_json::to_value(request).unwrap()["parallel_tool_calls"],
+            false
+        );
+    }
+
+    #[test]
+    fn rejects_many_small_frames_after_total_provider_byte_limit() {
+        tokio::runtime::Runtime::new().unwrap().block_on(async {
+            let frame = "data: {\"choices\":[{\"delta\":{\"content\":\"x\"}}]}\n\n";
+            let body = frame.repeat(MAX_PROVIDER_BODY_BYTES / frame.len() + 1);
+            let (client, server) = mock_client(body).await;
+            let result = client.stream(vec![], vec![], |_| {}).await;
+            server.abort();
+            assert!(matches!(result, Err(ProviderError::Malformed)));
+        });
+    }
+
+    #[test]
+    fn rejects_oversized_fragmented_tool_arguments() {
+        tokio::runtime::Runtime::new().unwrap().block_on(async {
+            let mut body = "data: {\"choices\":[{\"delta\":{\"tool_calls\":[{\"index\":0,\"id\":\"call_1\",\"type\":\"function\",\"function\":{\"name\":\"get_entity\",\"arguments\":\"\"}}]}}]}\n\n".to_owned();
+            let fragment = "x".repeat(1024);
+            let frame = format!(
+                "data: {{\"choices\":[{{\"delta\":{{\"tool_calls\":[{{\"index\":0,\"function\":{{\"arguments\":\"{fragment}\"}}}}]}}}}]}}\n\n"
+            );
+            body.push_str(&frame.repeat(MAX_TOOL_CALL_ARGUMENT_BYTES / fragment.len() + 1));
+            let (client, server) = mock_client(body).await;
+            let result = client.stream(vec![], vec![], |_| {}).await;
+            server.abort();
+            assert!(matches!(result, Err(ProviderError::Malformed)));
+        });
+    }
+
+    #[test]
+    fn rejects_too_many_tool_calls() {
+        tokio::runtime::Runtime::new().unwrap().block_on(async {
+            let body = "data: {\"choices\":[{\"delta\":{\"tool_calls\":[{\"index\":INDEX}]}}]}\n\n"
+                .replace("INDEX", &MAX_TOOL_CALLS.to_string());
+            let (client, server) = mock_client(body).await;
+            let result = client.stream(vec![], vec![], |_| {}).await;
+            server.abort();
+            assert!(matches!(result, Err(ProviderError::Malformed)));
+        });
+    }
+
+    #[test]
+    fn rejects_oversized_accumulated_assistant_text() {
+        tokio::runtime::Runtime::new().unwrap().block_on(async {
+            let fragment = "x".repeat(1024);
+            let frame =
+                format!("data: {{\"choices\":[{{\"delta\":{{\"content\":\"{fragment}\"}}}}]}}\n\n");
+            let body = format!(
+                "{}data: [DONE]\n\n",
+                frame.repeat(MAX_ASSISTANT_CONTENT_BYTES / fragment.len() + 1)
+            );
+            let (client, server) = mock_client(body).await;
+            let result = client.stream(vec![], vec![], |_| {}).await;
+            server.abort();
+            assert!(matches!(result, Err(ProviderError::Malformed)));
+        });
     }
 
     #[test]

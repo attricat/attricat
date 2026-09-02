@@ -60,6 +60,12 @@ pub struct FileVariantMetadata {
 }
 
 #[derive(Clone, Debug, sqlx::FromRow)]
+pub struct FileReadTarget {
+    pub entity_id: Uuid,
+    pub blueprint_id: Uuid,
+}
+
+#[derive(Clone, Debug, sqlx::FromRow)]
 pub struct FileObject {
     pub mime_type: String,
     pub byte_size: i64,
@@ -350,6 +356,22 @@ impl CatalogRepository {
         }
         transaction.commit().await?;
         Ok(result)
+    }
+
+    /// Returns active entities that currently reference a file. Deleted entities
+    /// and archived attribute values cannot authorize a file read.
+    pub async fn file_read_targets(
+        &self,
+        file_id: Uuid,
+    ) -> Result<Vec<FileReadTarget>, RepositoryError> {
+        let workspace_id = self.workspace_id.unwrap_or(Self::DEFAULT_WORKSPACE_ID);
+        Ok(sqlx::query_as::<_, FileReadTarget>(
+            "SELECT DISTINCT e.id AS entity_id, e.blueprint_id FROM attribute_file_references r JOIN attribute_values v ON v.id = r.attribute_value_id AND v.workspace_id = r.workspace_id JOIN entities e ON e.id = v.entity_id AND e.workspace_id = v.workspace_id JOIN blueprints b ON b.id = e.blueprint_id AND b.version = e.blueprint_version AND b.workspace_id = e.workspace_id WHERE r.file_id = $1 AND r.workspace_id = $2 AND v.active AND e.deleted_at IS NULL AND b.deleted_at IS NULL",
+        )
+        .bind(file_id)
+        .bind(workspace_id)
+        .fetch_all(&self.pool)
+        .await?)
     }
 
     /// Reads client-safe metadata. Object keys and original filenames remain

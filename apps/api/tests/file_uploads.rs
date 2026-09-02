@@ -375,14 +375,17 @@ async fn reads_file_metadata_and_downloads_with_safe_range_headers(pool: PgPool)
             .iter()
             .any(|operation| matches!(operation, FileAccessOperation::Upload { .. }))
     );
-    assert!(
-        policy
-            .0
-            .lock()
-            .await
-            .iter()
-            .any(|operation| matches!(operation, FileAccessOperation::ReadMetadata { .. }))
-    );
+    assert!(policy.0.lock().await.iter().any(|operation| {
+        matches!(
+            operation,
+            FileAccessOperation::ReadMetadata {
+                entity_id,
+                blueprint_id,
+                ..
+            } if *entity_id == entity["id"].as_str().unwrap().parse::<Uuid>().unwrap()
+                && *blueprint_id == blueprint["blueprint"]["id"].as_str().unwrap().parse::<Uuid>().unwrap()
+        )
+    }));
     assert!(
         policy
             .0
@@ -391,6 +394,148 @@ async fn reads_file_metadata_and_downloads_with_safe_range_headers(pool: PgPool)
             .iter()
             .any(|operation| matches!(operation, FileAccessOperation::DownloadOriginal { .. }))
     );
+    server.abort();
+}
+
+#[sqlx::test]
+async fn file_reads_use_active_linked_entity_scopes(pool: PgPool) {
+    let store = Arc::new(FakeObjectStore::available());
+    let (base_url, server) = start_server_with_object_store(pool.clone(), store).await;
+    let owner = authenticated_client();
+    let blueprint = upload_blueprint(&owner, &base_url).await;
+    let permitted_entity = create_entity(&owner, &base_url, &blueprint).await;
+    let denied_entity = create_entity(&owner, &base_url, &blueprint).await;
+    let upload = |entity_id: String| {
+        let base_url = base_url.clone();
+        let owner = owner.clone();
+        async move {
+            owner
+                .post(format!(
+                    "{base_url}/entities/{entity_id}/file-attributes/image/uploads"
+                ))
+                .multipart(Form::new().part("file", png_part("product.png")))
+                .send()
+                .await
+                .unwrap()
+                .json::<Value>()
+                .await
+                .unwrap()
+        }
+    };
+    let permitted_file = upload(permitted_entity["id"].as_str().unwrap().to_owned()).await;
+    let denied_file = upload(denied_entity["id"].as_str().unwrap().to_owned()).await;
+    let permitted_file_id = permitted_file["files"][0]["id"].as_str().unwrap();
+    let denied_file_id = denied_file["files"][0]["id"].as_str().unwrap();
+    // A file can be reused by several active values. The reader is scoped to
+    // only the first entity, so this also verifies that one readable target is
+    // sufficient even when another linked entity is out of scope.
+    let denied_value_id = sqlx::query_scalar::<_, Uuid>(
+        "SELECT id FROM attribute_values WHERE entity_id = $1 AND active",
+    )
+    .bind(
+        denied_entity["id"]
+            .as_str()
+            .unwrap()
+            .parse::<Uuid>()
+            .unwrap(),
+    )
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    sqlx::query("INSERT INTO attribute_file_references (attribute_value_id, workspace_id, file_id, position) VALUES ($1, $2, $3, 1)")
+        .bind(denied_value_id)
+        .bind(BOOTSTRAP_WORKSPACE_ID.parse::<Uuid>().unwrap())
+        .bind(permitted_file_id.parse::<Uuid>().unwrap())
+        .execute(&pool)
+        .await
+        .unwrap();
+    for file_id in [permitted_file_id, denied_file_id] {
+        sqlx::query("UPDATE files SET status = 'ready' WHERE id = $1")
+            .bind(file_id.parse::<Uuid>().unwrap())
+            .execute(&pool)
+            .await
+            .unwrap();
+    }
+    let object_key =
+        sqlx::query_scalar::<_, String>("SELECT original_key FROM files WHERE id = $1")
+            .bind(permitted_file_id.parse::<Uuid>().unwrap())
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+    sqlx::query("INSERT INTO file_variants (id, workspace_id, file_id, kind, mime_type, byte_size, object_key, sha256) SELECT $1, workspace_id, id, 'thumbnail', mime_type, byte_size, $2, sha256 FROM files WHERE id = $3")
+        .bind(Uuid::new_v4())
+        .bind(object_key)
+        .bind(permitted_file_id.parse::<Uuid>().unwrap())
+        .execute(&pool)
+        .await
+        .unwrap();
+
+    let reader_id = Uuid::new_v4();
+    let membership_id = Uuid::new_v4();
+    let workspace_id = BOOTSTRAP_WORKSPACE_ID.parse::<Uuid>().unwrap();
+    sqlx::query("INSERT INTO users (id, email) VALUES ($1, 'file-reader@example.test')")
+        .bind(reader_id)
+        .execute(&pool)
+        .await
+        .unwrap();
+    sqlx::query(
+        "INSERT INTO workspace_memberships (id, workspace_id, user_id) VALUES ($1, $2, $3)",
+    )
+    .bind(membership_id)
+    .bind(workspace_id)
+    .bind(reader_id)
+    .execute(&pool)
+    .await
+    .unwrap();
+    sqlx::query("INSERT INTO role_grants (id, workspace_id, membership_id, role_id, scope_type, scope_target_id) VALUES ($1, $2, $3, '00000000-0000-4000-8000-000000000104', 'entity', $4)")
+        .bind(Uuid::new_v4())
+        .bind(workspace_id)
+        .bind(membership_id)
+        .bind(permitted_entity["id"].as_str().unwrap().parse::<Uuid>().unwrap())
+        .execute(&pool)
+        .await
+        .unwrap();
+    let mut headers = reqwest::header::HeaderMap::new();
+    headers.insert(
+        "x-catalog-user-id",
+        reqwest::header::HeaderValue::from_str(&reader_id.to_string()).unwrap(),
+    );
+    headers.insert(
+        "x-catalog-workspace-id",
+        reqwest::header::HeaderValue::from_static(BOOTSTRAP_WORKSPACE_ID),
+    );
+    let reader = Client::builder().default_headers(headers).build().unwrap();
+
+    for path in [
+        format!("/files/{permitted_file_id}"),
+        format!("/files/{permitted_file_id}/download"),
+        format!("/files/{permitted_file_id}/variants/thumbnail/download"),
+    ] {
+        assert_eq!(
+            reader
+                .get(format!("{base_url}{path}"))
+                .send()
+                .await
+                .unwrap()
+                .status(),
+            StatusCode::OK
+        );
+    }
+    for path in [
+        format!("/files/{denied_file_id}"),
+        format!("/files/{denied_file_id}/download"),
+        format!("/files/{denied_file_id}/variants/thumbnail/download"),
+    ] {
+        assert_eq!(
+            reader
+                .get(format!("{base_url}{path}"))
+                .send()
+                .await
+                .unwrap()
+                .status(),
+            StatusCode::FORBIDDEN
+        );
+    }
     server.abort();
 }
 

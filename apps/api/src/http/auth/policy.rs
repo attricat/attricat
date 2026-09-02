@@ -13,6 +13,7 @@ pub(super) enum TargetKind {
     BlueprintId,
     BlueprintCode,
     EntityId,
+    FileRead,
     ContextId,
     ContextCode,
     ContextList,
@@ -140,7 +141,7 @@ pub(super) fn policy(method: &Method, path: &str) -> Option<Policy> {
         });
     }
     if path.starts_with("/files/{file_id}") {
-        return Some(read(TargetKind::None));
+        return Some(read(TargetKind::FileRead));
     }
     if path.starts_with("/v1/entities/{entity_id}") || path.starts_with("/entities/{entity_id}") {
         return Some(if method == Method::DELETE {
@@ -175,6 +176,7 @@ pub(super) fn target(path: &str, kind: TargetKind) -> (Option<Uuid>, Option<Stri
         TargetKind::None => (None, None),
         TargetKind::BlueprintId => (segments.get(1).and_then(|value| value.parse().ok()), None),
         TargetKind::BlueprintCode => (None, segments.get(2).map(|value| (*value).to_owned())),
+        TargetKind::FileRead => (None, None),
         TargetKind::EntityId => {
             let index = if segments.first() == Some(&"v1") {
                 2

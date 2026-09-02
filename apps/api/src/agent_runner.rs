@@ -67,7 +67,7 @@ async fn drive(
     rounds: u8,
 ) -> Result<(), RunError> {
     if rounds >= 8 {
-        fail(
+        fail_run(
             repository,
             run_id,
             "tool_limit",
@@ -96,7 +96,7 @@ async fn drive(
         Ok(answer) => answer,
         Err(error) => {
             tracing::warn!(%run_id, %error, "agent provider request failed");
-            fail(repository, run_id, "provider_error", &error.to_string()).await?;
+            fail_run(repository, run_id, "provider_error", &error.to_string()).await?;
             return Ok(());
         }
     };
@@ -133,11 +133,15 @@ async fn drive(
             .await?;
     }
     let mut executed_read = false;
+    let mut awaiting_approval = false;
+    // Providers are asked not to parallelize calls, but persist every mutation
+    // defensively if one still returns several. This keeps the assistant's
+    // complete tool-call list matched by either an approval or a tool result.
     for call in tool_calls {
         let arguments: Value = match serde_json::from_str::<Value>(&call.function.arguments) {
             Ok(value) if value.is_object() => value,
             _ => {
-                fail(
+                fail_run(
                     repository,
                     run_id,
                     "invalid_tool_arguments",
@@ -150,7 +154,7 @@ async fn drive(
         let kind = match agent_tools::kind(&call.function.name) {
             Ok(kind) => kind,
             Err(_) => {
-                fail(
+                fail_run(
                     repository,
                     run_id,
                     "unknown_tool",
@@ -164,7 +168,7 @@ async fn drive(
             let summary = match agent_tools::change_summary(&call.function.name, &arguments) {
                 Ok(value) => value,
                 Err(_) => {
-                    fail(
+                    fail_run(
                         repository,
                         run_id,
                         "invalid_tool_arguments",
@@ -192,10 +196,8 @@ async fn drive(
                     json!({"tool_call_id":tool.id,"change_summary":summary}),
                 )
                 .await?;
-            repository
-                .transition_agent_run(run_id, "awaiting_approval", None, None)
-                .await?;
-            return Ok(());
+            awaiting_approval = true;
+            continue;
         }
         executed_read = true;
         let tool = repository
@@ -208,9 +210,17 @@ async fn drive(
                 "pending_approval",
             )
             .await?;
-        let result = agent_tools::execute_read(repository, &call.function.name, arguments)
-            .await
-            .map_err(|error| json!({"code":"tool_error","message":error.to_string()}));
+        let (actor, workspace) = repository.agent_run_initiator(run_id).await?;
+        let result =
+            agent_tools::execute_read(repository, actor, workspace, &call.function.name, arguments)
+                .await
+                .map_err(|error| match error {
+                    agent_tools::ToolError::Forbidden => json!({
+                        "code":"forbidden",
+                        "message":"The initiating user is not authorized to read this catalog data."
+                    }),
+                    error => json!({"code":"tool_error","message":error.to_string()}),
+                });
         let result_message = match &result {
             Ok(value) => value.clone(),
             Err(value) => value.clone(),
@@ -224,6 +234,12 @@ async fn drive(
                 json!({"tool_call_id":call.id,"name":call.function.name,"result":result_message}),
             )
             .await?;
+    }
+    if awaiting_approval {
+        repository
+            .transition_agent_run(run_id, "awaiting_approval", None, None)
+            .await?;
+        return Ok(());
     }
     if executed_read {
         return Box::pin(drive(
@@ -375,6 +391,15 @@ pub async fn resume_claimed(
         repository.complete_agent_tool_call(call.id, result).await?;
         repository.append_conversation_message(agent_run.conversation_id, Some(run_id), "tool", json!({"tool_call_id":call.provider_call_id,"name":call.tool_name,"result":payload})).await?;
     }
+    // A decision queues the run, even when sibling calls from this response
+    // still need a human decision. Do not send a partial tool-result set back
+    // to the provider: wait until every call has been resolved.
+    if repository.has_pending_agent_tool_calls(run_id).await? {
+        repository
+            .transition_agent_run(run_id, "awaiting_approval", None, None)
+            .await?;
+        return Ok(());
+    }
     run_claimed(
         repository,
         provider,
@@ -418,7 +443,7 @@ async fn mutation_authorized(
         .await
 }
 
-async fn fail(
+pub(crate) async fn fail_run(
     repository: &CatalogRepository,
     run_id: Uuid,
     code: &str,
