@@ -9,11 +9,27 @@ use uuid::Uuid;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum FileAccessOperation {
-    Upload { entity_id: Uuid },
-    ConversationUpload { conversation_id: Uuid },
-    ReadMetadata { file_id: Uuid },
-    DownloadOriginal { file_id: Uuid },
-    DownloadVariant { file_id: Uuid },
+    Upload {
+        entity_id: Uuid,
+    },
+    ConversationUpload {
+        conversation_id: Uuid,
+    },
+    ReadMetadata {
+        file_id: Uuid,
+        entity_id: Uuid,
+        blueprint_id: Uuid,
+    },
+    DownloadOriginal {
+        file_id: Uuid,
+        entity_id: Uuid,
+        blueprint_id: Uuid,
+    },
+    DownloadVariant {
+        file_id: Uuid,
+        entity_id: Uuid,
+        blueprint_id: Uuid,
+    },
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
