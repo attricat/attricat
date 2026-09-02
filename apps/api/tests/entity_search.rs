@@ -116,6 +116,25 @@ value_type = "string"
             })
     );
 
+    let outdated: Value = client
+        .post(format!("{base_url}/v1/entities/search"))
+        .json(&json!({
+            "blueprint": { "code": "product" },
+            "outdated": true,
+            "page": { "size": 25 }
+        }))
+        .send()
+        .await
+        .unwrap()
+        .error_for_status()
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    assert_eq!(outdated["items"].as_array().unwrap().len(), 1);
+    assert_eq!(outdated["items"][0]["id"], first_entity["id"]);
+    assert_eq!(outdated["items"][0]["schema_outdated"], true);
+
     let first_version = search(Some(1)).await;
     assert_eq!(first_version["items"].as_array().unwrap().len(), 1);
     assert_eq!(first_version["items"][0]["id"], first_entity["id"]);

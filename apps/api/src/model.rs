@@ -263,6 +263,9 @@ pub struct SearchEntitiesRequest {
     /// All requested tags must be present. System tags are outside blueprint data.
     #[serde(default)]
     pub system_tags: Vec<String>,
+    /// Restrict results to entities pinned to an older published blueprint revision.
+    #[serde(default)]
+    pub outdated: bool,
     #[serde(default)]
     pub relationship_tree_facet: Option<RelationshipTreeFacetRequest>,
     #[serde(default)]
