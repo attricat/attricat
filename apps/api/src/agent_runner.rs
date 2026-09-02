@@ -210,9 +210,17 @@ async fn drive(
                 "pending_approval",
             )
             .await?;
-        let result = agent_tools::execute_read(repository, &call.function.name, arguments)
-            .await
-            .map_err(|error| json!({"code":"tool_error","message":error.to_string()}));
+        let (actor, workspace) = repository.agent_run_initiator(run_id).await?;
+        let result =
+            agent_tools::execute_read(repository, actor, workspace, &call.function.name, arguments)
+                .await
+                .map_err(|error| match error {
+                    agent_tools::ToolError::Forbidden => json!({
+                        "code":"forbidden",
+                        "message":"The initiating user is not authorized to read this catalog data."
+                    }),
+                    error => json!({"code":"tool_error","message":error.to_string()}),
+                });
         let result_message = match &result {
             Ok(value) => value.clone(),
             Err(value) => value.clone(),

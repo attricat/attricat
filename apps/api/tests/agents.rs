@@ -3,6 +3,7 @@ mod support;
 use std::{sync::Arc, time::Duration};
 
 use api::{
+    agent_tools::{ToolError, execute_read},
     agent_worker,
     agents::AgentProviderConfig,
     file_worker::{FileWorker, WorkerConfig},
@@ -248,6 +249,137 @@ async fn agent_run_timeout_is_durably_failed_without_provider_details(pool: PgPo
     }));
     api_server.abort();
     provider_server.abort();
+}
+
+#[sqlx::test]
+async fn agent_read_tools_enforce_initiator_permissions_and_scopes(pool: PgPool) {
+    let (base_url, server) = start_server(pool.clone()).await;
+    let owner = authenticated_client();
+    let blueprint = create_blueprint(
+        &owner,
+        &base_url,
+        "format_version = 1\ncode = 'agent_scoped'\nname = 'Agent scoped'\nkind = 'entity'\n\n[views.dropdown_option]\ntype = 'dropdown_option'\nfields = ['title']\n\n[[attributes]]\ncode = 'title'\nvalue_type = 'string'",
+    )
+    .await;
+    let entity = create_entity(&owner, &base_url, &blueprint).await;
+    let context: Value = owner
+        .post(format!("{base_url}/contexts"))
+        .json(&json!({"code": "agent-scoped", "data": {}}))
+        .send()
+        .await
+        .unwrap()
+        .error_for_status()
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+
+    let workspace = BOOTSTRAP_WORKSPACE_ID.parse::<Uuid>().unwrap();
+    let actor = Uuid::new_v4();
+    let membership = Uuid::new_v4();
+    sqlx::query("INSERT INTO users (id, email) VALUES ($1, $2)")
+        .bind(actor)
+        .bind(format!("{actor}@example.test"))
+        .execute(&pool)
+        .await
+        .unwrap();
+    sqlx::query(
+        "INSERT INTO workspace_memberships (id, workspace_id, user_id) VALUES ($1, $2, $3)",
+    )
+    .bind(membership)
+    .bind(workspace)
+    .bind(actor)
+    .execute(&pool)
+    .await
+    .unwrap();
+
+    let repository = CatalogRepository::new(pool.clone())
+        .for_workspace(workspace)
+        .await
+        .unwrap();
+    let agent_only = repository
+        .create_workspace_role(
+            BOOTSTRAP_OWNER_ID.parse().unwrap(),
+            workspace,
+            "agent-only",
+            &["agents.run".to_owned()],
+        )
+        .await
+        .unwrap();
+    repository
+        .grant_workspace_member_role(
+            BOOTSTRAP_OWNER_ID.parse().unwrap(),
+            workspace,
+            membership,
+            agent_only,
+            "workspace",
+            workspace,
+        )
+        .await
+        .unwrap();
+
+    for (name, arguments) in [
+        ("list_blueprints", json!({})),
+        ("list_contexts", json!({})),
+        ("get_entity", json!({"entity_id": entity["id"]})),
+    ] {
+        assert!(matches!(
+            execute_read(&repository, actor, workspace, name, arguments).await,
+            Err(ToolError::Forbidden)
+        ));
+    }
+
+    let scoped_reader = repository
+        .create_workspace_role(
+            BOOTSTRAP_OWNER_ID.parse().unwrap(),
+            workspace,
+            "agent-scoped-reader",
+            &["entities.read".to_owned(), "contexts.read".to_owned()],
+        )
+        .await
+        .unwrap();
+    repository
+        .grant_workspace_member_role(
+            BOOTSTRAP_OWNER_ID.parse().unwrap(),
+            workspace,
+            membership,
+            scoped_reader,
+            "entity",
+            entity["id"].as_str().unwrap().parse().unwrap(),
+        )
+        .await
+        .unwrap();
+    repository
+        .grant_workspace_member_role(
+            BOOTSTRAP_OWNER_ID.parse().unwrap(),
+            workspace,
+            membership,
+            scoped_reader,
+            "context_subtree",
+            context["id"].as_str().unwrap().parse().unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(
+        execute_read(
+            &repository,
+            actor,
+            workspace,
+            "get_entity",
+            json!({"entity_id": entity["id"]}),
+        )
+        .await
+        .unwrap()["id"],
+        entity["id"]
+    );
+    assert_eq!(
+        execute_read(&repository, actor, workspace, "list_contexts", json!({}))
+            .await
+            .unwrap(),
+        json!([context])
+    );
+    server.abort();
 }
 
 #[sqlx::test]
