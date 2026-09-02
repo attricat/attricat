@@ -37,6 +37,7 @@ const FORM_VALUES_SQL: &str = r#"SELECT a.code AS attribute_code, av.context_id,
            WHERE av.entity_id = $1
              AND a.blueprint_id = e.blueprint_id
              AND a.blueprint_version = e.blueprint_version
+             AND a.value_type <> 'file'
              AND (av.relationship_target_entity_id IS NULL OR av.active)
            ORDER BY a.position, av.relationship_target_entity_id"#;
 

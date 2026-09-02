@@ -117,7 +117,7 @@ async fn uploads_files_to_the_fake_store_and_persists_derived_metadata(pool: PgP
             .as_array()
             .unwrap()
             .iter()
-            .any(|value| value["attribute_code"] == "image" && value["value"].is_null())
+            .all(|value| value["attribute_code"] != "image")
     );
 
     client
