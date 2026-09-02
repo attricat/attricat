@@ -362,18 +362,17 @@ async fn agent_read_tools_enforce_initiator_permissions_and_scopes(pool: PgPool)
         .await
         .unwrap();
 
-    assert_eq!(
-        execute_read(
-            &repository,
-            actor,
-            workspace,
-            "get_entity",
-            json!({"entity_id": entity["id"]}),
-        )
-        .await
-        .unwrap()["id"],
-        entity["id"]
-    );
+    let loaded_entity = execute_read(
+        &repository,
+        actor,
+        workspace,
+        "get_entity",
+        json!({"entity_id": entity["id"]}),
+    )
+    .await
+    .unwrap();
+    assert_eq!(loaded_entity["id"], entity["id"]);
+    assert_eq!(loaded_entity["values"], json!([]));
     assert_eq!(
         execute_read(&repository, actor, workspace, "list_contexts", json!({}))
             .await

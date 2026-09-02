@@ -69,7 +69,7 @@ pub fn definitions() -> Vec<ToolDefinition> {
         ),
         definition(
             "get_entity",
-            "Get one entity by UUID.",
+            "Get one entity by UUID, including its current scalar values, relationship targets, and file metadata in `values`.",
             json!({"type":"object","required":["entity_id"],"properties":{"entity_id":{"type":"string","format":"uuid"}},"additionalProperties":false}),
         ),
         definition(
@@ -234,13 +234,20 @@ pub async fn execute_read(
         .expect("models serialize"),
         "get_entity" => {
             let id = parse_uuid(&arguments, "entity_id")?;
-            serde_json::to_value(
-                repository
-                    .get_entity(id)
-                    .await?
-                    .ok_or(RepositoryError::NotFound("entity"))?,
-            )
-            .expect("models serialize")
+            let entity = repository
+                .get_entity(id)
+                .await?
+                .ok_or(RepositoryError::NotFound("entity"))?;
+            let values = repository.form_values(id).await?;
+            let mut output = serde_json::to_value(entity).expect("models serialize");
+            output
+                .as_object_mut()
+                .expect("entity serializes as an object")
+                .insert(
+                    "values".to_owned(),
+                    serde_json::to_value(values).expect("models serialize"),
+                );
+            output
         }
         "search_entities" => {
             #[derive(Deserialize)]
