@@ -1,5 +1,7 @@
+import { Link } from '@tanstack/react-router';
 import {
   Box,
+  Button,
   Chip,
   Paper,
   Table,
@@ -12,7 +14,13 @@ import {
 import type { Blueprint } from './api';
 import { formatBlueprintDateTime } from './date-time';
 
-export const RevisionHistory = ({ revisions }: { revisions: Blueprint[] }) => (
+export const RevisionHistory = ({
+  blueprintId,
+  revisions,
+}: {
+  blueprintId: string;
+  revisions: Blueprint[];
+}) => (
   <Paper component="section" sx={{ mt: 3, p: 2.5 }}>
     <Typography component="h2" variant="h6">
       Revision history
@@ -26,6 +34,7 @@ export const RevisionHistory = ({ revisions }: { revisions: Blueprint[] }) => (
             <TableCell>Created</TableCell>
             <TableCell>Published</TableCell>
             <TableCell>Definition hash</TableCell>
+            <TableCell />
           </TableRow>
         </TableHead>
         <TableBody>
@@ -34,15 +43,29 @@ export const RevisionHistory = ({ revisions }: { revisions: Blueprint[] }) => (
               <TableCell>v{revision.version}</TableCell>
               <TableCell>
                 <Chip
-                  color={revision.status === 'published' ? 'success' : 'warning'}
+                  color={
+                    revision.status === 'published' ? 'success' : 'warning'
+                  }
                   label={revision.status}
                   size="small"
                 />
               </TableCell>
-              <TableCell>{formatBlueprintDateTime(revision.created_at)}</TableCell>
-              <TableCell>{formatBlueprintDateTime(revision.published_at)}</TableCell>
+              <TableCell>
+                {formatBlueprintDateTime(revision.created_at)}
+              </TableCell>
+              <TableCell>
+                {formatBlueprintDateTime(revision.published_at)}
+              </TableCell>
               <TableCell sx={{ fontFamily: 'monospace' }}>
                 {revision.definition_hash}
+              </TableCell>
+              <TableCell align="right">
+                <Link
+                  params={{ blueprintId, version: String(revision.version) }}
+                  to="/manage/blueprints/$blueprintId/revisions/$version/new"
+                >
+                  <Button size="small">Edit</Button>
+                </Link>
               </TableCell>
             </TableRow>
           ))}

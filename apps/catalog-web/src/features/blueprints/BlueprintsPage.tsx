@@ -3,6 +3,7 @@ import { Link } from '@tanstack/react-router';
 import {
   Alert,
   Box,
+  Button,
   Chip,
   Paper,
   Stack,
@@ -40,6 +41,15 @@ export const BlueprintsPage = () => {
   return (
     <PageContainer>
       <PageHeader
+        actions={
+          <Button
+            component={Link}
+            to="/manage/blueprints/new"
+            variant="contained"
+          >
+            New blueprint
+          </Button>
+        }
         description="Inspect every entity and mixin blueprint, including unpublished revisions."
         title="Blueprints"
       />
@@ -76,6 +86,7 @@ export const BlueprintsPage = () => {
                   <TableCell>Status</TableCell>
                   <TableCell>Published</TableCell>
                   <TableCell>Updated</TableCell>
+                  <TableCell />
                 </TableRow>
               </TableHead>
               <TableBody>
@@ -118,6 +129,17 @@ export const BlueprintsPage = () => {
                     </TableCell>
                     <TableCell>
                       {formatBlueprintDateTime(blueprint.updated_at)}
+                    </TableCell>
+                    <TableCell align="right">
+                      <Link
+                        params={{
+                          blueprintId: blueprint.id,
+                          version: String(blueprint.version),
+                        }}
+                        to="/manage/blueprints/$blueprintId/revisions/$version/new"
+                      >
+                        <Button size="small">Edit</Button>
+                      </Link>
                     </TableCell>
                   </TableRow>
                 ))}
