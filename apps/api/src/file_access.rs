@@ -7,6 +7,8 @@
 use async_trait::async_trait;
 use uuid::Uuid;
 
+use crate::repository::{CatalogRepository, RepositoryError};
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum FileAccessOperation {
     Upload {
@@ -30,6 +32,13 @@ pub enum FileAccessOperation {
         entity_id: Uuid,
         blueprint_id: Uuid,
     },
+    /// A provider-visible file read requested by an approved user through an
+    /// agent run.
+    AgentRead {
+        file_id: Uuid,
+        entity_id: Uuid,
+        blueprint_id: Uuid,
+    },
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -47,6 +56,37 @@ pub trait FileAccessPolicy: Send + Sync {
 /// by the normal HTTP middleware and repository; deployments can replace this
 /// policy with resource-level authorization.
 pub struct AllowFileAccess;
+
+/// Applies the same repository grant and deployment-specific file policy used
+/// by HTTP downloads to every caller that exposes file content.
+pub async fn authorize_file_read(
+    repository: &CatalogRepository,
+    policy: &dyn FileAccessPolicy,
+    principal: Uuid,
+    workspace: Uuid,
+    file_id: Uuid,
+    operation: impl Fn(Uuid, Uuid, Uuid) -> FileAccessOperation,
+) -> Result<bool, RepositoryError> {
+    for target in repository.file_read_targets(file_id).await? {
+        if repository
+            .is_authorized(
+                principal,
+                workspace,
+                "entities.read",
+                Some(target.entity_id),
+                None,
+            )
+            .await?
+            && policy
+                .authorize(operation(file_id, target.entity_id, target.blueprint_id))
+                .await
+                == FileAccessDecision::Allow
+        {
+            return Ok(true);
+        }
+    }
+    Ok(false)
+}
 
 #[async_trait]
 impl FileAccessPolicy for AllowFileAccess {

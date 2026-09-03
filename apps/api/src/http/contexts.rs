@@ -5,7 +5,10 @@ use super::{
     error::ApiError,
     extractors::{ApiJson, ApiPath},
 };
-use crate::model::{AttributeContext, CreateAttributeContext, UpdateAttributeContext};
+use crate::{
+    catalog_service::CatalogMutationService,
+    model::{AttributeContext, CreateAttributeContext, UpdateAttributeContext},
+};
 use axum::{Json, extract::State, http::StatusCode};
 use uuid::Uuid;
 pub(super) async fn create_context(
@@ -13,7 +16,9 @@ pub(super) async fn create_context(
     super::auth::ScopedRepository(repository): super::auth::ScopedRepository,
     ApiJson(input): ApiJson<CreateAttributeContext>,
 ) -> Result<(StatusCode, Json<AttributeContext>), ApiError> {
-    let context = repository.create_context(input).await?;
+    let context = CatalogMutationService::new(&repository)
+        .create_context(input)
+        .await?;
     invalidate_data_health(&state).await;
     Ok((StatusCode::CREATED, Json(context)))
 }
@@ -46,7 +51,9 @@ pub(super) async fn update_context(
     ApiPath(id): ApiPath<Uuid>,
     ApiJson(input): ApiJson<UpdateAttributeContext>,
 ) -> Result<Json<AttributeContext>, ApiError> {
-    let context = repository.update_context(id, input).await?;
+    let context = CatalogMutationService::new(&repository)
+        .update_context(id, input)
+        .await?;
     invalidate_data_health(&state).await;
     Ok(Json(context))
 }
@@ -55,7 +62,9 @@ pub(super) async fn delete_context(
     super::auth::ScopedRepository(repository): super::auth::ScopedRepository,
     ApiPath(id): ApiPath<Uuid>,
 ) -> Result<StatusCode, ApiError> {
-    repository.delete_context(id).await?;
+    CatalogMutationService::new(&repository)
+        .delete_context(id)
+        .await?;
     invalidate_data_health(&state).await;
     Ok(StatusCode::NO_CONTENT)
 }

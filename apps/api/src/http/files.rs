@@ -1,6 +1,6 @@
 use super::{AppState, data_health::invalidate_data_health, error::ApiError, extractors::ApiPath};
 use crate::{
-    file_access::{FileAccessDecision, FileAccessOperation},
+    file_access::{FileAccessDecision, FileAccessOperation, authorize_file_read},
     repository::{CatalogRepository, FileObject, FilePolicy, NewUploadedFile},
     storage::ObjectStoreError,
 };
@@ -415,29 +415,17 @@ async fn authorize_read<F>(
 where
     F: Fn(Uuid, Uuid, Uuid) -> FileAccessOperation,
 {
-    for target in repository.file_read_targets(file_id).await? {
-        if repository
-            .is_authorized(
-                principal,
-                workspace,
-                "entities.read",
-                Some(target.entity_id),
-                None,
-            )
-            .await?
-        {
-            if authorize(
-                state,
-                operation(file_id, target.entity_id, target.blueprint_id),
-            )
-            .await
-            .is_ok()
-            {
-                return Ok(());
-            }
-        }
-    }
-    Err(ApiError::forbidden())
+    authorize_file_read(
+        repository,
+        state.file_access_policy.as_ref(),
+        principal,
+        workspace,
+        file_id,
+        operation,
+    )
+    .await?
+    .then_some(())
+    .ok_or_else(ApiError::forbidden)
 }
 
 async fn download(

@@ -5,11 +5,12 @@ use super::{
     extractors::{ApiJson, ApiPath},
 };
 use crate::{
+    catalog_read_service::CatalogReadService,
+    catalog_service::CatalogMutationService,
     model::{
-        AppendAttributeValues, AttributeValue, AttributeValueHistory, BlueprintWithAttributes,
-        CreateEntityFormRequest, Entity, EntityFormResponse, IncomingRelationshipsPage,
-        IncomingRelationshipsRequest, MigrateEntityRequest, RelationshipMutation, SearchBlueprint,
-        UpdateEntityFormRequest,
+        AppendAttributeValues, AttributeValue, AttributeValueHistory, CreateEntityFormRequest,
+        Entity, EntityFormResponse, IncomingRelationshipsPage, IncomingRelationshipsRequest,
+        MigrateEntityRequest, RelationshipMutation, UpdateEntityFormRequest,
     },
     repository::decode_search_cursor,
 };
@@ -20,7 +21,9 @@ pub(super) async fn delete_entity(
     super::auth::ScopedRepository(repository): super::auth::ScopedRepository,
     ApiPath(entity_id): ApiPath<Uuid>,
 ) -> Result<StatusCode, ApiError> {
-    repository.delete_entity(entity_id).await?;
+    CatalogMutationService::new(&repository)
+        .delete_entity(entity_id)
+        .await?;
     invalidate_data_health(&state).await;
     Ok(StatusCode::NO_CONTENT)
 }
@@ -29,15 +32,8 @@ pub(super) async fn create_entity_form(
     super::auth::ScopedRepository(repository): super::auth::ScopedRepository,
     ApiJson(input): ApiJson<CreateEntityFormRequest>,
 ) -> Result<(StatusCode, Json<Entity>), ApiError> {
-    let blueprint = resolve_search_blueprint(&repository, &input.blueprint).await?;
-    let entity = repository
-        .create_entity_with_values(
-            blueprint.blueprint.id,
-            blueprint.blueprint.version,
-            input.values,
-            input.system_tags,
-            input.system_metadata,
-        )
+    let entity = CatalogMutationService::new(&repository)
+        .create_entity(input)
         .await?;
     invalidate_data_health(&state).await;
     Ok((StatusCode::CREATED, Json(entity)))
@@ -47,15 +43,13 @@ pub(super) async fn get_entity_form(
     super::auth::ScopedRepository(repository): super::auth::ScopedRepository,
     ApiPath(entity_id): ApiPath<Uuid>,
 ) -> Result<Json<EntityFormResponse>, ApiError> {
-    let entity = repository
-        .get_entity(entity_id)
-        .await?
-        .ok_or_else(|| ApiError::not_found("entity"))?;
+    let (entity, values) = CatalogReadService::new(&repository)
+        .entity_with_values(entity_id)
+        .await?;
     let blueprint = repository
         .get_blueprint_revision(entity.blueprint_id, entity.blueprint_version)
         .await?
         .ok_or_else(|| ApiError::not_found("blueprint version"))?;
-    let values = repository.form_values(entity_id).await?;
     Ok(Json(EntityFormResponse {
         context: entity
             .projections
@@ -75,15 +69,8 @@ pub(super) async fn update_entity_form(
     ApiPath(entity_id): ApiPath<Uuid>,
     ApiJson(input): ApiJson<UpdateEntityFormRequest>,
 ) -> Result<Json<Entity>, ApiError> {
-    let entity = repository
-        .update_entity_with_values(
-            entity_id,
-            input.values,
-            input.relationships,
-            input.remove_values,
-            input.system_tags,
-            input.system_metadata,
-        )
+    let entity = CatalogMutationService::new(&repository)
+        .update_entity(entity_id, input)
         .await?;
     invalidate_data_health(&state).await;
     Ok(Json(entity))
@@ -132,30 +119,11 @@ pub(super) async fn migrate_entity_to_latest(
     ApiPath(entity_id): ApiPath<Uuid>,
     ApiJson(input): ApiJson<MigrateEntityRequest>,
 ) -> Result<Json<Entity>, ApiError> {
-    let entity = repository
-        .migrate_entity_to_latest(entity_id, input)
+    let entity = CatalogMutationService::new(&repository)
+        .migrate_entity(entity_id, input)
         .await?;
     invalidate_data_health(&state).await;
     Ok(Json(entity))
-}
-async fn resolve_search_blueprint(
-    repository: &crate::repository::CatalogRepository,
-    blueprint: &SearchBlueprint,
-) -> Result<BlueprintWithAttributes, ApiError> {
-    if blueprint.code.is_empty() {
-        return Err(ApiError::invalid_input(
-            "blueprint.code must not be empty".to_owned(),
-        ));
-    }
-    match blueprint.version {
-        Some(version) => {
-            repository
-                .get_published_blueprint_by_code_and_version(&blueprint.code, version)
-                .await?
-        }
-        None => repository.get_blueprint_by_code(&blueprint.code).await?,
-    }
-    .ok_or_else(|| ApiError::not_found("blueprint"))
 }
 pub(super) async fn append_values(
     State(state): State<AppState>,
@@ -163,7 +131,9 @@ pub(super) async fn append_values(
     ApiPath(entity_id): ApiPath<Uuid>,
     ApiJson(input): ApiJson<AppendAttributeValues>,
 ) -> Result<(StatusCode, Json<Vec<AttributeValue>>), ApiError> {
-    let values = repository.append_values(entity_id, input).await?;
+    let values = CatalogMutationService::new(&repository)
+        .append_values(entity_id, input)
+        .await?;
     invalidate_data_health(&state).await;
     Ok((StatusCode::CREATED, Json(values)))
 }
@@ -192,7 +162,9 @@ pub(super) async fn restore_value(
     super::auth::ScopedRepository(repository): super::auth::ScopedRepository,
     ApiPath((entity_id, history_id)): ApiPath<(Uuid, Uuid)>,
 ) -> Result<(StatusCode, Json<AttributeValue>), ApiError> {
-    let value = repository.restore_value(entity_id, history_id).await?;
+    let value = CatalogMutationService::new(&repository)
+        .restore_value(entity_id, history_id)
+        .await?;
     invalidate_data_health(&state).await;
     Ok((StatusCode::CREATED, Json(value)))
 }
@@ -202,7 +174,9 @@ pub(super) async fn replace_relationships(
     ApiPath(entity_id): ApiPath<Uuid>,
     ApiJson(input): ApiJson<RelationshipMutation>,
 ) -> Result<(StatusCode, Json<Vec<AttributeValue>>), ApiError> {
-    let values = repository.replace_relationships(entity_id, input).await?;
+    let values = CatalogMutationService::new(&repository)
+        .replace_relationships(entity_id, input)
+        .await?;
     invalidate_data_health(&state).await;
     Ok((StatusCode::CREATED, Json(values)))
 }
@@ -212,7 +186,9 @@ pub(super) async fn remove_relationships(
     ApiPath(entity_id): ApiPath<Uuid>,
     ApiJson(input): ApiJson<RelationshipMutation>,
 ) -> Result<(StatusCode, Json<Vec<AttributeValue>>), ApiError> {
-    let values = repository.remove_relationships(entity_id, input).await?;
+    let values = CatalogMutationService::new(&repository)
+        .remove_relationships(entity_id, input)
+        .await?;
     invalidate_data_health(&state).await;
     Ok((StatusCode::CREATED, Json(values)))
 }

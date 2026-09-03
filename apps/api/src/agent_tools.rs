@@ -10,6 +10,9 @@ use uuid::Uuid;
 
 use crate::{
     agents::MAX_TOOL_RESULT_BYTES,
+    catalog_read_service::CatalogReadService,
+    catalog_service::CatalogMutationService,
+    file_access::{AllowFileAccess, FileAccessOperation, authorize_file_read},
     repository::{CatalogRepository, RepositoryError},
 };
 const BLUEPRINT_AUTHORING_GUIDE: &str = include_str!("../../../docs/blueprints.md");
@@ -246,11 +249,9 @@ pub async fn execute_read(
         .expect("models serialize"),
         "get_entity" => {
             let id = parse_uuid(&arguments, "entity_id")?;
-            let entity = repository
-                .get_entity(id)
-                .await?
-                .ok_or(RepositoryError::NotFound("entity"))?;
-            let values = repository.form_values(id).await?;
+            let (entity, values) = CatalogReadService::new(repository)
+                .entity_with_values(id)
+                .await?;
             let mut output = serde_json::to_value(entity).expect("models serialize");
             output
                 .as_object_mut()
@@ -387,7 +388,7 @@ pub async fn execute_mutation(
             }
             let input: Input = decode(arguments)?;
             serde_json::to_value(
-                repository
+                CatalogMutationService::new(repository)
                     .create_blueprint_revision(
                         input.blueprint_id,
                         CreateBlueprint {
@@ -407,7 +408,7 @@ pub async fn execute_mutation(
             }
             let input: Input = decode(arguments)?;
             serde_json::to_value(
-                repository
+                CatalogMutationService::new(repository)
                     .publish_blueprint_revision(input.blueprint_id, input.version)
                     .await?,
             )
@@ -415,8 +416,12 @@ pub async fn execute_mutation(
         }
         "create_blueprint" => {
             let input: CreateBlueprint = decode(arguments)?;
-            serde_json::to_value(repository.create_blueprint(input).await?)
-                .expect("models serialize")
+            serde_json::to_value(
+                CatalogMutationService::new(repository)
+                    .create_blueprint(input)
+                    .await?,
+            )
+            .expect("models serialize")
         }
         "create_entity" => {
             #[derive(Deserialize)]
@@ -431,34 +436,20 @@ pub async fn execute_mutation(
                 system_metadata: Value,
             }
             let input: Input = decode(arguments)?;
-            let blueprint = match input.blueprint.version {
-                Some(version) => {
-                    repository
-                        .get_blueprint_by_code_and_version(&input.blueprint.code, version)
-                        .await?
-                }
-                None => {
-                    repository
-                        .get_blueprint_by_code(&input.blueprint.code)
-                        .await?
-                }
-            }
-            .ok_or(RepositoryError::NotFound("blueprint"))?;
             serde_json::to_value(
-                repository
-                    .create_entity_with_values(
-                        blueprint.blueprint.id,
-                        blueprint.blueprint.version,
-                        input.values,
-                        input.system_tags,
-                        input.system_metadata,
-                    )
+                CatalogMutationService::new(repository)
+                    .create_entity(crate::model::CreateEntityFormRequest {
+                        blueprint: input.blueprint,
+                        values: input.values,
+                        system_tags: input.system_tags,
+                        system_metadata: input.system_metadata,
+                    })
                     .await?,
             )
             .expect("models serialize")
         }
         "delete_entity" => {
-            repository
+            CatalogMutationService::new(repository)
                 .delete_entity(parse_uuid(&arguments, "entity_id")?)
                 .await?;
             json!({"deleted": true})
@@ -482,7 +473,7 @@ pub async fn execute_mutation(
                 ));
             }
             serde_json::to_value(
-                repository
+                CatalogMutationService::new(repository)
                     .append_values(
                         input.entity_id,
                         crate::model::AppendAttributeValues {
@@ -520,8 +511,8 @@ pub async fn execute_mutation(
                     "issues": preview.issues,
                 })
             } else {
-                let entity = repository
-                    .migrate_entity_to_latest(
+                let entity = CatalogMutationService::new(repository)
+                    .migrate_entity(
                         input.entity_id,
                         crate::model::MigrateEntityRequest {
                             migration_id: preview.migration_id,
@@ -546,8 +537,8 @@ pub async fn execute_mutation(
             }
             let input: Input = decode(arguments)?;
             serde_json::to_value(
-                repository
-                    .link_file_to_attribute(
+                CatalogMutationService::new(repository)
+                    .link_file(
                         input.entity_id,
                         &input.attribute_code,
                         input.context_id,
@@ -559,7 +550,12 @@ pub async fn execute_mutation(
         }
         "create_context" => {
             let input: CreateAttributeContext = decode(arguments)?;
-            serde_json::to_value(repository.create_context(input).await?).expect("models serialize")
+            serde_json::to_value(
+                CatalogMutationService::new(repository)
+                    .create_context(input)
+                    .await?,
+            )
+            .expect("models serialize")
         }
         _ => return Err(ToolError::UnknownTool(name.to_owned())),
     };
@@ -585,21 +581,19 @@ async fn read_authorized(
         ),
         "view_image" | "read_file" => {
             let file_id = parse_uuid(arguments, "file_id")?;
-            for target in repository.file_read_targets(file_id).await? {
-                if repository
-                    .is_authorized(
-                        actor,
-                        workspace,
-                        "entities.read",
-                        Some(target.entity_id),
-                        None,
-                    )
-                    .await?
-                {
-                    return Ok(true);
-                }
-            }
-            return Ok(false);
+            return Ok(authorize_file_read(
+                repository,
+                &AllowFileAccess,
+                actor,
+                workspace,
+                file_id,
+                |file_id, entity_id, blueprint_id| FileAccessOperation::AgentRead {
+                    file_id,
+                    entity_id,
+                    blueprint_id,
+                },
+            )
+            .await?);
         }
         // Match the HTTP search endpoint: collection searches require a
         // workspace-wide entities.read grant, rather than exposing partial

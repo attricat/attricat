@@ -4,7 +4,10 @@ use super::{
     error::ApiError,
     extractors::{ApiJson, ApiPath, ApiQuery},
 };
-use crate::model::{Blueprint, BlueprintWithAttributes, CreateBlueprint};
+use crate::{
+    catalog_service::CatalogMutationService,
+    model::{Blueprint, BlueprintWithAttributes, CreateBlueprint},
+};
 use axum::{Json, extract::State, http::StatusCode};
 use serde::Deserialize;
 use uuid::Uuid;
@@ -20,7 +23,9 @@ pub(super) async fn create_blueprint(
     super::auth::ScopedRepository(repository): super::auth::ScopedRepository,
     ApiJson(input): ApiJson<CreateBlueprint>,
 ) -> Result<(StatusCode, Json<BlueprintWithAttributes>), ApiError> {
-    let blueprint = repository.create_blueprint(input).await?;
+    let blueprint = CatalogMutationService::new(&repository)
+        .create_blueprint(input)
+        .await?;
     invalidate_data_health(&state).await;
     Ok((StatusCode::CREATED, Json(blueprint)))
 }
@@ -47,7 +52,7 @@ pub(super) async fn create_blueprint_revision(
     ApiPath(blueprint_id): ApiPath<Uuid>,
     ApiJson(input): ApiJson<CreateBlueprint>,
 ) -> Result<(StatusCode, Json<BlueprintWithAttributes>), ApiError> {
-    let blueprint = repository
+    let blueprint = CatalogMutationService::new(&repository)
         .create_blueprint_revision(blueprint_id, input)
         .await?;
     invalidate_data_health(&state).await;
@@ -89,7 +94,7 @@ pub(super) async fn publish_blueprint_revision(
     super::auth::ScopedRepository(repository): super::auth::ScopedRepository,
     ApiPath((blueprint_id, version)): ApiPath<(Uuid, i64)>,
 ) -> Result<Json<BlueprintWithAttributes>, ApiError> {
-    let blueprint = repository
+    let blueprint = CatalogMutationService::new(&repository)
         .publish_blueprint_revision(blueprint_id, version)
         .await?;
     invalidate_data_health(&state).await;
