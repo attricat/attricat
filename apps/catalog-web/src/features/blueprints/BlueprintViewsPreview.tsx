@@ -1,6 +1,7 @@
 import { createElement, useState } from 'react';
 import {
   Box,
+  Button,
   MenuItem,
   Paper,
   Tab,
@@ -170,7 +171,8 @@ export const BlueprintViewsPreview = ({
                     value=""
                   />
                 );
-              if (attribute.value_type === attributeValueTypes.boolean)
+
+              if (attribute.value_type === attributeValueTypes.boolean) {
                 return (
                   <TextField
                     fullWidth
@@ -184,6 +186,12 @@ export const BlueprintViewsPreview = ({
                     <MenuItem value="false">False</MenuItem>
                   </TextField>
                 );
+              }
+
+              if (attribute.value_type === attributeValueTypes.file) {
+                return <Button>Choose or drop files</Button>;
+              }
+
               return (
                 <TextField
                   fullWidth

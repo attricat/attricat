@@ -68,17 +68,23 @@ export const AttributeValue = ({
       </Stack>
     );
   }
-  if (attribute.value_type === 'file' && isFileValue(value)) {
-    if (compact)
+  if (attribute.value_type === 'file') {
+    if (!isFileValue(value)) {
+      return <Typography variant="body2">File value not set</Typography>;
+    }
+
+    if (compact) {
       return (
         <Typography variant="body2">
           {value.length} file{value.length === 1 ? '' : 's'}
         </Typography>
       );
+    }
+
     return (
       <Stack spacing={1}>
         {value.map((file) => (
-          <Stack alignItems="center" direction="row" key={file.id} spacing={1}>
+          <Stack direction="row" key={file.id} spacing={1}>
             {attribute.file_policy?.image_only && (
               <FileThumbnail file={file} size={64} />
             )}
@@ -94,6 +100,7 @@ export const AttributeValue = ({
       </Stack>
     );
   }
+
   if (
     attribute.value_type === 'boolean' &&
     value !== null &&

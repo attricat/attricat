@@ -28,7 +28,10 @@ type PendingFile = {
 let pendingFileSequence = 0;
 
 const pendingFileId = () => {
-  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+  if (
+    typeof crypto !== 'undefined' &&
+    typeof crypto.randomUUID === 'function'
+  ) {
     return crypto.randomUUID();
   }
   pendingFileSequence += 1;
@@ -201,7 +204,7 @@ export const FileAttributeEditor = ({
       </Box>
       {pending.map((item) => (
         <Box key={item.id}>
-          <Stack alignItems="center" direction="row" spacing={1}>
+          <Stack direction="row" spacing={1}>
             <Typography>{item.file.name}</Typography>
             {item.error ? (
               <>
