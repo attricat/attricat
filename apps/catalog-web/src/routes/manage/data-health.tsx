@@ -1,9 +1,9 @@
 import { createFileRoute } from '@tanstack/react-router';
-import { DataHealthPage } from '../features/data-health/DataHealthPage';
+import { DataHealthPage } from '../../features/data-health/DataHealthPage';
 import {
   dataHealthSearchSchema,
   type DataHealthSearch,
-} from '../features/data-health/schemas';
+} from '../../features/data-health/schemas';
 
 const parseDataHealthSearch = (
   input: Record<string, unknown>,
@@ -11,7 +11,7 @@ const parseDataHealthSearch = (
 
 const DataHealthRoute = () => <DataHealthPage search={Route.useSearch()} />;
 
-export const Route = createFileRoute('/data-health')({
+export const Route = createFileRoute('/manage/data-health')({
   validateSearch: parseDataHealthSearch,
   component: DataHealthRoute,
 });

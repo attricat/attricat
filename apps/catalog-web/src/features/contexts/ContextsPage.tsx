@@ -23,7 +23,7 @@ export const ContextsPage = () => {
     <PageContainer>
       <PageHeader
         actions={
-          <Button component={Link} to="/contexts/new" variant="contained">
+          <Button component={Link} to="/manage/contexts/new" variant="contained">
             Create context
           </Button>
         }

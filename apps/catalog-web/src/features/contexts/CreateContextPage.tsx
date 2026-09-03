@@ -16,7 +16,7 @@ import { createContext, listContexts } from '../entities/api';
 import { entityQueryKeys } from '../entities/query-keys';
 
 export const CreateContextPage = () => {
-  const navigate = useNavigate({ from: '/contexts/new' });
+  const navigate = useNavigate({ from: '/manage/contexts/new' });
   const queryClient = useQueryClient();
   const [validationError, setValidationError] = useState<string>();
   const contexts = useQuery({
@@ -37,7 +37,7 @@ export const CreateContextPage = () => {
       void queryClient.invalidateQueries({
         queryKey: entityQueryKeys.contexts(),
       });
-      void navigate({ to: '/contexts' });
+      void navigate({ to: '/manage/contexts' });
     },
   });
   const form = useForm({
@@ -63,7 +63,7 @@ export const CreateContextPage = () => {
   });
   return (
     <PageContainer>
-      <Button component={Link} to="/contexts" sx={{ mb: 4 }}>
+      <Button component={Link} to="/manage/contexts" sx={{ mb: 4 }}>
         Back to contexts
       </Button>
       <PageHeader title="Create context" titleVariant="h3" />

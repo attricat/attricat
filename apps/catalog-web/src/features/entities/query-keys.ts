@@ -27,7 +27,7 @@ export const entityQueryKeys = {
     query: string | undefined,
     relationshipTreeFacet?: {
       source_relationship_field: string;
-      hierarchy_field: string;
+      hierarchy_field?: string;
       context_id: string;
       selected_target_ids: string[];
     },

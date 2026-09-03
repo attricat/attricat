@@ -56,7 +56,7 @@ const SectionError = ({ error }: { error: Error | null }) =>
 
 export const DataHealthPage = ({ search }: { search: DataHealthSearch }) => {
   const staleAfterDays = search.staleAfterDays ?? 90;
-  const navigate = useNavigate({ from: '/data-health' });
+  const navigate = useNavigate({ from: '/manage/data-health' });
   const queryClient = useQueryClient();
   const [showCompleteness, setShowCompleteness] = useState(false);
   const [showContexts, setShowContexts] = useState(false);

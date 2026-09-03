@@ -53,11 +53,13 @@ export const Explorer = ({ search: urlSearch }: { search: ExplorerSearch }) => {
     queryFn: () => getBlueprintByCode(search.blueprint!, search.version),
     enabled: Boolean(search.blueprint),
   });
-  const sourceRelationship = selectedBlueprint.data?.attributes.find(
+  const relationshipFields = (selectedBlueprint.data?.attributes ?? []).filter(
     (attribute) =>
-      attribute.code === search.facetField &&
-      attribute.value_type === 'relationship' &&
-      attribute.target_blueprint_code,
+      attribute.value_type === 'relationship' && attribute.target_blueprint_code,
+  );
+  const facetField = search.facetField ?? relationshipFields[0]?.code;
+  const sourceRelationship = relationshipFields.find(
+    (attribute) => attribute.code === facetField,
   );
   const targetBlueprint = useQuery({
     queryKey: entityQueryKeys.blueprintByCode(
@@ -122,11 +124,6 @@ export const Explorer = ({ search: urlSearch }: { search: ExplorerSearch }) => {
     queryKey: entityQueryKeys.blueprints(),
     queryFn: listEntityBlueprints,
   });
-  const relationshipFields = (selectedBlueprint.data?.attributes ?? []).filter(
-    (attribute) =>
-      attribute.value_type === 'relationship' &&
-      attribute.target_blueprint_code,
-  );
   const updateFacet = (updates: Partial<ExplorerSearch>) => {
     void navigate({
       to: '/',
@@ -200,7 +197,7 @@ export const Explorer = ({ search: urlSearch }: { search: ExplorerSearch }) => {
             onUpdate={updateFacet}
             query={search.query}
             relationshipFields={relationshipFields}
-            searchFacetField={search.facetField}
+            searchFacetField={facetField}
             selectedIds={search.categories ?? []}
             sourceRelationship={sourceRelationship}
             version={search.version}

@@ -45,12 +45,12 @@ import { workspaceQueryKeys } from './query-keys';
 
 type Section = 'members' | 'roles' | 'invitations';
 const sections: { label: string; section: Section; to: string }[] = [
-  { label: 'Members', section: 'members', to: '/workspace/members' },
-  { label: 'Roles', section: 'roles', to: '/workspace/roles' },
+  { label: 'Members', section: 'members', to: '/manage/workspace/members' },
+  { label: 'Roles', section: 'roles', to: '/manage/workspace/roles' },
   {
     label: 'Invitations',
     section: 'invitations',
-    to: '/workspace/invitations',
+    to: '/manage/workspace/invitations',
   },
 ];
 

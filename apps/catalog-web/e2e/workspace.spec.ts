@@ -42,8 +42,8 @@ test('manages custom roles through their full lifecycle', async ({ page }) => {
   const renamedCode = `${roleCode}_renamed`;
   const duplicateCode = `${roleCode}_copy`;
 
-  await page.goto('/workspace');
-  await expect(page).toHaveURL(/\/workspace\/?$/);
+  await page.goto('/manage/workspace');
+  await expect(page).toHaveURL(/\/manage\/workspace\/?$/);
   await expect(
     page.getByRole('heading', { name: 'Workspace management' }),
   ).toBeVisible();
@@ -75,7 +75,7 @@ test('manages custom roles through their full lifecycle', async ({ page }) => {
 test('grants and revokes a workspace member role', async ({ page }) => {
   const roleCode = `fixture_reader_${suffix()}`;
 
-  await page.goto('/workspace/roles');
+  await page.goto('/manage/workspace/roles');
   await page.getByLabel('Role code').fill(roleCode);
   await page.getByLabel(/^entities\.read —/).check();
   await page.getByRole('button', { name: 'Create role' }).click();
@@ -106,7 +106,7 @@ test('creates a workspace user and completes onboarding', async ({
   const email = `new-user-${suffix()}@example.test`;
   const password = 'new-user-e2e-password';
 
-  await page.goto('/workspace/invitations');
+  await page.goto('/manage/workspace/invitations');
   const form = page
     .getByRole('heading', { name: 'Create user and invite' })
     .locator('xpath=ancestor::form');
@@ -142,7 +142,7 @@ test('creates a workspace user and completes onboarding', async ({
 test('revokes a pending workspace invitation', async ({ page }) => {
   const email = `revoked-user-${suffix()}@example.test`;
 
-  await page.goto('/workspace/invitations');
+  await page.goto('/manage/workspace/invitations');
   const form = page
     .getByRole('heading', { name: 'Create user and invite' })
     .locator('xpath=ancestor::form');

@@ -85,7 +85,7 @@ export const BlueprintsPage = () => {
                       <Stack spacing={0.25}>
                         <Link
                           params={{ blueprintId: blueprint.id }}
-                          to="/blueprints/$blueprintId"
+                          to="/manage/blueprints/$blueprintId"
                         >
                           {blueprint.name}
                         </Link>

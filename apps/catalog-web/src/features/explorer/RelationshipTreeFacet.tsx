@@ -109,7 +109,7 @@ const RelationshipTreeFacetContent = ({
           ...(parentId === undefined ? {} : { parent_id: parentId }),
           cursor,
         }),
-      enabled: Boolean(hierarchyField && contextCode),
+      enabled: Boolean(contextCode),
     })),
   });
   const byParent = new Map<string, RelationshipTreeFacetItem[]>();

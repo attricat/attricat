@@ -24,7 +24,7 @@ test('shows health sections, custom stale threshold, and refreshes data', async 
     (await defaultContext()).id,
   );
 
-  await page.goto('/data-health');
+  await page.goto('/manage/data-health');
   await expect(
     page.getByRole('heading', { name: 'Data health' }),
   ).toBeVisible();

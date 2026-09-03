@@ -9,7 +9,6 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   AppBar,
   Box,
-  Button,
   Drawer,
   IconButton,
   Toolbar,
@@ -68,7 +67,7 @@ export const AppLayout = () => {
           slotProps={{ paper: { sx: { width: drawerWidth } } }}
           variant="permanent"
         >
-          <SideNavigation />
+          <SideNavigation onSignOut={signOut} />
         </Drawer>
       ) : (
         <>
@@ -89,9 +88,6 @@ export const AppLayout = () => {
               >
                 Catalog
               </Typography>
-              <Button color="inherit" onClick={signOut}>
-                Sign out
-              </Button>
             </Toolbar>
           </AppBar>
           <Drawer
@@ -100,7 +96,10 @@ export const AppLayout = () => {
             slotProps={{ paper: { sx: { width: drawerWidth } } }}
             variant="temporary"
           >
-            <SideNavigation onNavigate={closeMobileNavigation} />
+            <SideNavigation
+              onNavigate={closeMobileNavigation}
+              onSignOut={signOut}
+            />
           </Drawer>
         </>
       )}
@@ -112,11 +111,6 @@ export const AppLayout = () => {
           pt: { xs: 7, md: 0 },
         }}
       >
-        {isDesktop && (
-          <Box sx={{ display: 'flex', justifyContent: 'flex-end', p: 1 }}>
-            <Button onClick={signOut}>Sign out</Button>
-          </Box>
-        )}
         <Outlet />
       </Box>
     </Box>

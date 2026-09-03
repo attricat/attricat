@@ -95,8 +95,6 @@ target_blueprint = "${categoryCode}"`,
 
   await page.goto(`/?blueprint=${productCode}`);
   await expect(page.getByText('2 results')).toBeVisible();
-  await page.getByLabel('Relationship').click();
-  await page.getByRole('option', { name: 'category' }).click();
   await expect(
     page.getByRole('checkbox', { name: 'Departments (1)' }),
   ).toBeVisible();
@@ -148,8 +146,6 @@ target_blueprint = "${colorCode}"`,
   ]);
 
   await page.goto(`/?blueprint=${productCode}`);
-  await page.getByLabel('Relationship').click();
-  await page.getByRole('option', { name: 'color' }).click();
   await expect(page.getByRole('checkbox', { name: 'Red (1)' })).toBeVisible();
   await expect(page.getByRole('checkbox', { name: 'Blue (1)' })).toBeVisible();
   await expect(page.getByText('Facet options')).toBeVisible();

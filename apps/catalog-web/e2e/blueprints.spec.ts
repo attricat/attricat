@@ -71,7 +71,7 @@ value_type = "string"`,
     `format_version = 1\ncode = "mixin_${suffix()}"\nname = "Catalogue mixin"\nkind = "mixin"\n\n[[attributes]]\ncode = "label"\nvalue_type = "string"`,
   );
 
-  await page.goto('/blueprints');
+  await page.goto('/manage/blueprints');
   await page.getByLabel('Filter blueprints').fill('draft');
   await expect(page.getByText('Catalogue product revision')).toBeVisible();
   await expect(page.getByText(code)).toBeVisible();

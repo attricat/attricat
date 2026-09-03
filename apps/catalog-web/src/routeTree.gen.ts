@@ -10,8 +10,6 @@
 
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
-import { Route as AuditLogRouteImport } from './routes/audit-log'
-import { Route as DataHealthRouteImport } from './routes/data-health'
 import { Route as LoginRouteImport } from './routes/login'
 import { Route as OnboardingRouteImport } from './routes/onboarding'
 import { Route as ProfileRouteImport } from './routes/profile'
@@ -19,39 +17,31 @@ import { Route as AgentsIndexRouteImport } from './routes/agents/index'
 import { Route as AgentsConversationIdRouteImport } from './routes/agents/$conversationId'
 import { Route as AgentsNewRouteImport } from './routes/agents/new'
 import { Route as AgentsSchedulesRouteImport } from './routes/agents/schedules'
-import { Route as BlueprintsIndexRouteImport } from './routes/blueprints/index'
-import { Route as BlueprintsBlueprintIdRouteImport } from './routes/blueprints/$blueprintId'
-import { Route as ContextsIndexRouteImport } from './routes/contexts/index'
-import { Route as ContextsNewRouteImport } from './routes/contexts/new'
 import { Route as EntitiesEntityIdRouteImport } from './routes/entities/$entityId'
 import { Route as EntitiesNewRouteImport } from './routes/entities/new'
 import { Route as InvitationsAcceptRouteImport } from './routes/invitations/accept'
 import { Route as LoginIndexRouteImport } from './routes/login/index'
 import { Route as LoginIdentifierRouteImport } from './routes/login/$identifier'
+import { Route as ManageAuditLogRouteImport } from './routes/manage/audit-log'
+import { Route as ManageDataHealthRouteImport } from './routes/manage/data-health'
 import { Route as PasswordResetIndexRouteImport } from './routes/password-reset/index'
 import { Route as PasswordResetConfirmRouteImport } from './routes/password-reset/confirm'
-import { Route as WorkspaceIndexRouteImport } from './routes/workspace/index'
-import { Route as WorkspaceInvitationsRouteImport } from './routes/workspace/invitations'
-import { Route as WorkspaceMembersRouteImport } from './routes/workspace/members'
-import { Route as WorkspaceRolesRouteImport } from './routes/workspace/roles'
 import { Route as EntitiesEntityIdIndexRouteImport } from './routes/entities/$entityId/index'
 import { Route as EntitiesEntityIdChangesRouteImport } from './routes/entities/$entityId/changes'
 import { Route as EntitiesEntityIdEditRouteImport } from './routes/entities/$entityId/edit'
 import { Route as EntitiesEntityIdMigrateRouteImport } from './routes/entities/$entityId/migrate'
+import { Route as ManageBlueprintsIndexRouteImport } from './routes/manage/blueprints/index'
+import { Route as ManageBlueprintsBlueprintIdRouteImport } from './routes/manage/blueprints/$blueprintId'
+import { Route as ManageContextsIndexRouteImport } from './routes/manage/contexts/index'
+import { Route as ManageContextsNewRouteImport } from './routes/manage/contexts/new'
+import { Route as ManageWorkspaceIndexRouteImport } from './routes/manage/workspace/index'
+import { Route as ManageWorkspaceInvitationsRouteImport } from './routes/manage/workspace/invitations'
+import { Route as ManageWorkspaceMembersRouteImport } from './routes/manage/workspace/members'
+import { Route as ManageWorkspaceRolesRouteImport } from './routes/manage/workspace/roles'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
   path: '/',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const AuditLogRoute = AuditLogRouteImport.update({
-  id: '/audit-log',
-  path: '/audit-log',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const DataHealthRoute = DataHealthRouteImport.update({
-  id: '/data-health',
-  path: '/data-health',
   getParentRoute: () => rootRouteImport,
 } as any)
 const LoginRoute = LoginRouteImport.update({
@@ -89,26 +79,6 @@ const AgentsSchedulesRoute = AgentsSchedulesRouteImport.update({
   path: '/agents/schedules',
   getParentRoute: () => rootRouteImport,
 } as any)
-const BlueprintsIndexRoute = BlueprintsIndexRouteImport.update({
-  id: '/blueprints/',
-  path: '/blueprints/',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const BlueprintsBlueprintIdRoute = BlueprintsBlueprintIdRouteImport.update({
-  id: '/blueprints/$blueprintId',
-  path: '/blueprints/$blueprintId',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const ContextsIndexRoute = ContextsIndexRouteImport.update({
-  id: '/contexts/',
-  path: '/contexts/',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const ContextsNewRoute = ContextsNewRouteImport.update({
-  id: '/contexts/new',
-  path: '/contexts/new',
-  getParentRoute: () => rootRouteImport,
-} as any)
 const EntitiesEntityIdRoute = EntitiesEntityIdRouteImport.update({
   id: '/entities/$entityId',
   path: '/entities/$entityId',
@@ -134,6 +104,16 @@ const LoginIdentifierRoute = LoginIdentifierRouteImport.update({
   path: '/$identifier',
   getParentRoute: () => LoginRoute,
 } as any)
+const ManageAuditLogRoute = ManageAuditLogRouteImport.update({
+  id: '/manage/audit-log',
+  path: '/manage/audit-log',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ManageDataHealthRoute = ManageDataHealthRouteImport.update({
+  id: '/manage/data-health',
+  path: '/manage/data-health',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const PasswordResetIndexRoute = PasswordResetIndexRouteImport.update({
   id: '/password-reset/',
   path: '/password-reset/',
@@ -142,26 +122,6 @@ const PasswordResetIndexRoute = PasswordResetIndexRouteImport.update({
 const PasswordResetConfirmRoute = PasswordResetConfirmRouteImport.update({
   id: '/password-reset/confirm',
   path: '/password-reset/confirm',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const WorkspaceIndexRoute = WorkspaceIndexRouteImport.update({
-  id: '/workspace/',
-  path: '/workspace/',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const WorkspaceInvitationsRoute = WorkspaceInvitationsRouteImport.update({
-  id: '/workspace/invitations',
-  path: '/workspace/invitations',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const WorkspaceMembersRoute = WorkspaceMembersRouteImport.update({
-  id: '/workspace/members',
-  path: '/workspace/members',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const WorkspaceRolesRoute = WorkspaceRolesRouteImport.update({
-  id: '/workspace/roles',
-  path: '/workspace/roles',
   getParentRoute: () => rootRouteImport,
 } as any)
 const EntitiesEntityIdIndexRoute = EntitiesEntityIdIndexRouteImport.update({
@@ -184,217 +144,259 @@ const EntitiesEntityIdMigrateRoute = EntitiesEntityIdMigrateRouteImport.update({
   path: '/migrate',
   getParentRoute: () => EntitiesEntityIdRoute,
 } as any)
+const ManageBlueprintsIndexRoute = ManageBlueprintsIndexRouteImport.update({
+  id: '/manage/blueprints/',
+  path: '/manage/blueprints/',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ManageBlueprintsBlueprintIdRoute =
+  ManageBlueprintsBlueprintIdRouteImport.update({
+    id: '/manage/blueprints/$blueprintId',
+    path: '/manage/blueprints/$blueprintId',
+    getParentRoute: () => rootRouteImport,
+  } as any)
+const ManageContextsIndexRoute = ManageContextsIndexRouteImport.update({
+  id: '/manage/contexts/',
+  path: '/manage/contexts/',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ManageContextsNewRoute = ManageContextsNewRouteImport.update({
+  id: '/manage/contexts/new',
+  path: '/manage/contexts/new',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ManageWorkspaceIndexRoute = ManageWorkspaceIndexRouteImport.update({
+  id: '/manage/workspace/',
+  path: '/manage/workspace/',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ManageWorkspaceInvitationsRoute =
+  ManageWorkspaceInvitationsRouteImport.update({
+    id: '/manage/workspace/invitations',
+    path: '/manage/workspace/invitations',
+    getParentRoute: () => rootRouteImport,
+  } as any)
+const ManageWorkspaceMembersRoute = ManageWorkspaceMembersRouteImport.update({
+  id: '/manage/workspace/members',
+  path: '/manage/workspace/members',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ManageWorkspaceRolesRoute = ManageWorkspaceRolesRouteImport.update({
+  id: '/manage/workspace/roles',
+  path: '/manage/workspace/roles',
+  getParentRoute: () => rootRouteImport,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
-  '/audit-log': typeof AuditLogRoute
-  '/data-health': typeof DataHealthRoute
   '/login': typeof LoginRouteWithChildren
   '/onboarding': typeof OnboardingRoute
   '/profile': typeof ProfileRoute
   '/agents/$conversationId': typeof AgentsConversationIdRoute
   '/agents/new': typeof AgentsNewRoute
   '/agents/schedules': typeof AgentsSchedulesRoute
-  '/blueprints/$blueprintId': typeof BlueprintsBlueprintIdRoute
-  '/contexts/new': typeof ContextsNewRoute
   '/entities/$entityId': typeof EntitiesEntityIdRouteWithChildren
   '/entities/new': typeof EntitiesNewRoute
   '/invitations/accept': typeof InvitationsAcceptRoute
   '/login/$identifier': typeof LoginIdentifierRoute
+  '/manage/audit-log': typeof ManageAuditLogRoute
+  '/manage/data-health': typeof ManageDataHealthRoute
   '/password-reset/confirm': typeof PasswordResetConfirmRoute
-  '/workspace/invitations': typeof WorkspaceInvitationsRoute
-  '/workspace/members': typeof WorkspaceMembersRoute
-  '/workspace/roles': typeof WorkspaceRolesRoute
   '/agents/': typeof AgentsIndexRoute
-  '/blueprints/': typeof BlueprintsIndexRoute
-  '/contexts/': typeof ContextsIndexRoute
   '/login/': typeof LoginIndexRoute
   '/password-reset/': typeof PasswordResetIndexRoute
-  '/workspace/': typeof WorkspaceIndexRoute
   '/entities/$entityId/changes': typeof EntitiesEntityIdChangesRoute
   '/entities/$entityId/edit': typeof EntitiesEntityIdEditRoute
   '/entities/$entityId/migrate': typeof EntitiesEntityIdMigrateRoute
+  '/manage/blueprints/$blueprintId': typeof ManageBlueprintsBlueprintIdRoute
+  '/manage/contexts/new': typeof ManageContextsNewRoute
+  '/manage/workspace/invitations': typeof ManageWorkspaceInvitationsRoute
+  '/manage/workspace/members': typeof ManageWorkspaceMembersRoute
+  '/manage/workspace/roles': typeof ManageWorkspaceRolesRoute
   '/entities/$entityId/': typeof EntitiesEntityIdIndexRoute
+  '/manage/blueprints/': typeof ManageBlueprintsIndexRoute
+  '/manage/contexts/': typeof ManageContextsIndexRoute
+  '/manage/workspace/': typeof ManageWorkspaceIndexRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
-  '/audit-log': typeof AuditLogRoute
-  '/data-health': typeof DataHealthRoute
   '/onboarding': typeof OnboardingRoute
   '/profile': typeof ProfileRoute
   '/agents/$conversationId': typeof AgentsConversationIdRoute
   '/agents/new': typeof AgentsNewRoute
   '/agents/schedules': typeof AgentsSchedulesRoute
-  '/blueprints/$blueprintId': typeof BlueprintsBlueprintIdRoute
-  '/contexts/new': typeof ContextsNewRoute
   '/entities/new': typeof EntitiesNewRoute
   '/invitations/accept': typeof InvitationsAcceptRoute
   '/login/$identifier': typeof LoginIdentifierRoute
+  '/manage/audit-log': typeof ManageAuditLogRoute
+  '/manage/data-health': typeof ManageDataHealthRoute
   '/password-reset/confirm': typeof PasswordResetConfirmRoute
-  '/workspace/invitations': typeof WorkspaceInvitationsRoute
-  '/workspace/members': typeof WorkspaceMembersRoute
-  '/workspace/roles': typeof WorkspaceRolesRoute
   '/agents': typeof AgentsIndexRoute
-  '/blueprints': typeof BlueprintsIndexRoute
-  '/contexts': typeof ContextsIndexRoute
   '/login': typeof LoginIndexRoute
   '/password-reset': typeof PasswordResetIndexRoute
-  '/workspace': typeof WorkspaceIndexRoute
   '/entities/$entityId/changes': typeof EntitiesEntityIdChangesRoute
   '/entities/$entityId/edit': typeof EntitiesEntityIdEditRoute
   '/entities/$entityId/migrate': typeof EntitiesEntityIdMigrateRoute
+  '/manage/blueprints/$blueprintId': typeof ManageBlueprintsBlueprintIdRoute
+  '/manage/contexts/new': typeof ManageContextsNewRoute
+  '/manage/workspace/invitations': typeof ManageWorkspaceInvitationsRoute
+  '/manage/workspace/members': typeof ManageWorkspaceMembersRoute
+  '/manage/workspace/roles': typeof ManageWorkspaceRolesRoute
   '/entities/$entityId': typeof EntitiesEntityIdIndexRoute
+  '/manage/blueprints': typeof ManageBlueprintsIndexRoute
+  '/manage/contexts': typeof ManageContextsIndexRoute
+  '/manage/workspace': typeof ManageWorkspaceIndexRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
-  '/audit-log': typeof AuditLogRoute
-  '/data-health': typeof DataHealthRoute
   '/login': typeof LoginRouteWithChildren
   '/onboarding': typeof OnboardingRoute
   '/profile': typeof ProfileRoute
   '/agents/$conversationId': typeof AgentsConversationIdRoute
   '/agents/new': typeof AgentsNewRoute
   '/agents/schedules': typeof AgentsSchedulesRoute
-  '/blueprints/$blueprintId': typeof BlueprintsBlueprintIdRoute
-  '/contexts/new': typeof ContextsNewRoute
   '/entities/$entityId': typeof EntitiesEntityIdRouteWithChildren
   '/entities/new': typeof EntitiesNewRoute
   '/invitations/accept': typeof InvitationsAcceptRoute
   '/login/$identifier': typeof LoginIdentifierRoute
+  '/manage/audit-log': typeof ManageAuditLogRoute
+  '/manage/data-health': typeof ManageDataHealthRoute
   '/password-reset/confirm': typeof PasswordResetConfirmRoute
-  '/workspace/invitations': typeof WorkspaceInvitationsRoute
-  '/workspace/members': typeof WorkspaceMembersRoute
-  '/workspace/roles': typeof WorkspaceRolesRoute
   '/agents/': typeof AgentsIndexRoute
-  '/blueprints/': typeof BlueprintsIndexRoute
-  '/contexts/': typeof ContextsIndexRoute
   '/login/': typeof LoginIndexRoute
   '/password-reset/': typeof PasswordResetIndexRoute
-  '/workspace/': typeof WorkspaceIndexRoute
   '/entities/$entityId/changes': typeof EntitiesEntityIdChangesRoute
   '/entities/$entityId/edit': typeof EntitiesEntityIdEditRoute
   '/entities/$entityId/migrate': typeof EntitiesEntityIdMigrateRoute
+  '/manage/blueprints/$blueprintId': typeof ManageBlueprintsBlueprintIdRoute
+  '/manage/contexts/new': typeof ManageContextsNewRoute
+  '/manage/workspace/invitations': typeof ManageWorkspaceInvitationsRoute
+  '/manage/workspace/members': typeof ManageWorkspaceMembersRoute
+  '/manage/workspace/roles': typeof ManageWorkspaceRolesRoute
   '/entities/$entityId/': typeof EntitiesEntityIdIndexRoute
+  '/manage/blueprints/': typeof ManageBlueprintsIndexRoute
+  '/manage/contexts/': typeof ManageContextsIndexRoute
+  '/manage/workspace/': typeof ManageWorkspaceIndexRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
   fullPaths:
     | '/'
-    | '/audit-log'
-    | '/data-health'
     | '/login'
     | '/onboarding'
     | '/profile'
     | '/agents/$conversationId'
     | '/agents/new'
     | '/agents/schedules'
-    | '/blueprints/$blueprintId'
-    | '/contexts/new'
     | '/entities/$entityId'
     | '/entities/new'
     | '/invitations/accept'
     | '/login/$identifier'
+    | '/manage/audit-log'
+    | '/manage/data-health'
     | '/password-reset/confirm'
-    | '/workspace/invitations'
-    | '/workspace/members'
-    | '/workspace/roles'
     | '/agents/'
-    | '/blueprints/'
-    | '/contexts/'
     | '/login/'
     | '/password-reset/'
-    | '/workspace/'
     | '/entities/$entityId/changes'
     | '/entities/$entityId/edit'
     | '/entities/$entityId/migrate'
+    | '/manage/blueprints/$blueprintId'
+    | '/manage/contexts/new'
+    | '/manage/workspace/invitations'
+    | '/manage/workspace/members'
+    | '/manage/workspace/roles'
     | '/entities/$entityId/'
+    | '/manage/blueprints/'
+    | '/manage/contexts/'
+    | '/manage/workspace/'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
-    | '/audit-log'
-    | '/data-health'
     | '/onboarding'
     | '/profile'
     | '/agents/$conversationId'
     | '/agents/new'
     | '/agents/schedules'
-    | '/blueprints/$blueprintId'
-    | '/contexts/new'
     | '/entities/new'
     | '/invitations/accept'
     | '/login/$identifier'
+    | '/manage/audit-log'
+    | '/manage/data-health'
     | '/password-reset/confirm'
-    | '/workspace/invitations'
-    | '/workspace/members'
-    | '/workspace/roles'
     | '/agents'
-    | '/blueprints'
-    | '/contexts'
     | '/login'
     | '/password-reset'
-    | '/workspace'
     | '/entities/$entityId/changes'
     | '/entities/$entityId/edit'
     | '/entities/$entityId/migrate'
+    | '/manage/blueprints/$blueprintId'
+    | '/manage/contexts/new'
+    | '/manage/workspace/invitations'
+    | '/manage/workspace/members'
+    | '/manage/workspace/roles'
     | '/entities/$entityId'
+    | '/manage/blueprints'
+    | '/manage/contexts'
+    | '/manage/workspace'
   id:
     | '__root__'
     | '/'
-    | '/audit-log'
-    | '/data-health'
     | '/login'
     | '/onboarding'
     | '/profile'
     | '/agents/$conversationId'
     | '/agents/new'
     | '/agents/schedules'
-    | '/blueprints/$blueprintId'
-    | '/contexts/new'
     | '/entities/$entityId'
     | '/entities/new'
     | '/invitations/accept'
     | '/login/$identifier'
+    | '/manage/audit-log'
+    | '/manage/data-health'
     | '/password-reset/confirm'
-    | '/workspace/invitations'
-    | '/workspace/members'
-    | '/workspace/roles'
     | '/agents/'
-    | '/blueprints/'
-    | '/contexts/'
     | '/login/'
     | '/password-reset/'
-    | '/workspace/'
     | '/entities/$entityId/changes'
     | '/entities/$entityId/edit'
     | '/entities/$entityId/migrate'
+    | '/manage/blueprints/$blueprintId'
+    | '/manage/contexts/new'
+    | '/manage/workspace/invitations'
+    | '/manage/workspace/members'
+    | '/manage/workspace/roles'
     | '/entities/$entityId/'
+    | '/manage/blueprints/'
+    | '/manage/contexts/'
+    | '/manage/workspace/'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
-  AuditLogRoute: typeof AuditLogRoute
-  DataHealthRoute: typeof DataHealthRoute
   LoginRoute: typeof LoginRouteWithChildren
   OnboardingRoute: typeof OnboardingRoute
   ProfileRoute: typeof ProfileRoute
   AgentsConversationIdRoute: typeof AgentsConversationIdRoute
   AgentsNewRoute: typeof AgentsNewRoute
   AgentsSchedulesRoute: typeof AgentsSchedulesRoute
-  BlueprintsBlueprintIdRoute: typeof BlueprintsBlueprintIdRoute
-  ContextsNewRoute: typeof ContextsNewRoute
   EntitiesEntityIdRoute: typeof EntitiesEntityIdRouteWithChildren
   EntitiesNewRoute: typeof EntitiesNewRoute
   InvitationsAcceptRoute: typeof InvitationsAcceptRoute
+  ManageAuditLogRoute: typeof ManageAuditLogRoute
+  ManageDataHealthRoute: typeof ManageDataHealthRoute
   PasswordResetConfirmRoute: typeof PasswordResetConfirmRoute
-  WorkspaceInvitationsRoute: typeof WorkspaceInvitationsRoute
-  WorkspaceMembersRoute: typeof WorkspaceMembersRoute
-  WorkspaceRolesRoute: typeof WorkspaceRolesRoute
   AgentsIndexRoute: typeof AgentsIndexRoute
-  BlueprintsIndexRoute: typeof BlueprintsIndexRoute
-  ContextsIndexRoute: typeof ContextsIndexRoute
   PasswordResetIndexRoute: typeof PasswordResetIndexRoute
-  WorkspaceIndexRoute: typeof WorkspaceIndexRoute
+  ManageBlueprintsBlueprintIdRoute: typeof ManageBlueprintsBlueprintIdRoute
+  ManageContextsNewRoute: typeof ManageContextsNewRoute
+  ManageWorkspaceInvitationsRoute: typeof ManageWorkspaceInvitationsRoute
+  ManageWorkspaceMembersRoute: typeof ManageWorkspaceMembersRoute
+  ManageWorkspaceRolesRoute: typeof ManageWorkspaceRolesRoute
+  ManageBlueprintsIndexRoute: typeof ManageBlueprintsIndexRoute
+  ManageContextsIndexRoute: typeof ManageContextsIndexRoute
+  ManageWorkspaceIndexRoute: typeof ManageWorkspaceIndexRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -404,20 +406,6 @@ declare module '@tanstack/react-router' {
       path: '/'
       fullPath: '/'
       preLoaderRoute: typeof IndexRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/audit-log': {
-      id: '/audit-log'
-      path: '/audit-log'
-      fullPath: '/audit-log'
-      preLoaderRoute: typeof AuditLogRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/data-health': {
-      id: '/data-health'
-      path: '/data-health'
-      fullPath: '/data-health'
-      preLoaderRoute: typeof DataHealthRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/login': {
@@ -469,34 +457,6 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AgentsSchedulesRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/blueprints/': {
-      id: '/blueprints/'
-      path: '/blueprints'
-      fullPath: '/blueprints/'
-      preLoaderRoute: typeof BlueprintsIndexRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/blueprints/$blueprintId': {
-      id: '/blueprints/$blueprintId'
-      path: '/blueprints/$blueprintId'
-      fullPath: '/blueprints/$blueprintId'
-      preLoaderRoute: typeof BlueprintsBlueprintIdRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/contexts/': {
-      id: '/contexts/'
-      path: '/contexts'
-      fullPath: '/contexts/'
-      preLoaderRoute: typeof ContextsIndexRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/contexts/new': {
-      id: '/contexts/new'
-      path: '/contexts/new'
-      fullPath: '/contexts/new'
-      preLoaderRoute: typeof ContextsNewRouteImport
-      parentRoute: typeof rootRouteImport
-    }
     '/entities/$entityId': {
       id: '/entities/$entityId'
       path: '/entities/$entityId'
@@ -532,6 +492,20 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof LoginIdentifierRouteImport
       parentRoute: typeof LoginRoute
     }
+    '/manage/audit-log': {
+      id: '/manage/audit-log'
+      path: '/manage/audit-log'
+      fullPath: '/manage/audit-log'
+      preLoaderRoute: typeof ManageAuditLogRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/manage/data-health': {
+      id: '/manage/data-health'
+      path: '/manage/data-health'
+      fullPath: '/manage/data-health'
+      preLoaderRoute: typeof ManageDataHealthRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/password-reset/': {
       id: '/password-reset/'
       path: '/password-reset'
@@ -544,34 +518,6 @@ declare module '@tanstack/react-router' {
       path: '/password-reset/confirm'
       fullPath: '/password-reset/confirm'
       preLoaderRoute: typeof PasswordResetConfirmRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/workspace/': {
-      id: '/workspace/'
-      path: '/workspace'
-      fullPath: '/workspace/'
-      preLoaderRoute: typeof WorkspaceIndexRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/workspace/invitations': {
-      id: '/workspace/invitations'
-      path: '/workspace/invitations'
-      fullPath: '/workspace/invitations'
-      preLoaderRoute: typeof WorkspaceInvitationsRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/workspace/members': {
-      id: '/workspace/members'
-      path: '/workspace/members'
-      fullPath: '/workspace/members'
-      preLoaderRoute: typeof WorkspaceMembersRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/workspace/roles': {
-      id: '/workspace/roles'
-      path: '/workspace/roles'
-      fullPath: '/workspace/roles'
-      preLoaderRoute: typeof WorkspaceRolesRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/entities/$entityId/': {
@@ -601,6 +547,62 @@ declare module '@tanstack/react-router' {
       fullPath: '/entities/$entityId/migrate'
       preLoaderRoute: typeof EntitiesEntityIdMigrateRouteImport
       parentRoute: typeof EntitiesEntityIdRoute
+    }
+    '/manage/blueprints/': {
+      id: '/manage/blueprints/'
+      path: '/manage/blueprints'
+      fullPath: '/manage/blueprints/'
+      preLoaderRoute: typeof ManageBlueprintsIndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/manage/blueprints/$blueprintId': {
+      id: '/manage/blueprints/$blueprintId'
+      path: '/manage/blueprints/$blueprintId'
+      fullPath: '/manage/blueprints/$blueprintId'
+      preLoaderRoute: typeof ManageBlueprintsBlueprintIdRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/manage/contexts/': {
+      id: '/manage/contexts/'
+      path: '/manage/contexts'
+      fullPath: '/manage/contexts/'
+      preLoaderRoute: typeof ManageContextsIndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/manage/contexts/new': {
+      id: '/manage/contexts/new'
+      path: '/manage/contexts/new'
+      fullPath: '/manage/contexts/new'
+      preLoaderRoute: typeof ManageContextsNewRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/manage/workspace/': {
+      id: '/manage/workspace/'
+      path: '/manage/workspace'
+      fullPath: '/manage/workspace/'
+      preLoaderRoute: typeof ManageWorkspaceIndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/manage/workspace/invitations': {
+      id: '/manage/workspace/invitations'
+      path: '/manage/workspace/invitations'
+      fullPath: '/manage/workspace/invitations'
+      preLoaderRoute: typeof ManageWorkspaceInvitationsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/manage/workspace/members': {
+      id: '/manage/workspace/members'
+      path: '/manage/workspace/members'
+      fullPath: '/manage/workspace/members'
+      preLoaderRoute: typeof ManageWorkspaceMembersRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/manage/workspace/roles': {
+      id: '/manage/workspace/roles'
+      path: '/manage/workspace/roles'
+      fullPath: '/manage/workspace/roles'
+      preLoaderRoute: typeof ManageWorkspaceRolesRouteImport
+      parentRoute: typeof rootRouteImport
     }
   }
 }
@@ -636,28 +638,28 @@ const EntitiesEntityIdRouteWithChildren =
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
-  AuditLogRoute: AuditLogRoute,
-  DataHealthRoute: DataHealthRoute,
   LoginRoute: LoginRouteWithChildren,
   OnboardingRoute: OnboardingRoute,
   ProfileRoute: ProfileRoute,
   AgentsConversationIdRoute: AgentsConversationIdRoute,
   AgentsNewRoute: AgentsNewRoute,
   AgentsSchedulesRoute: AgentsSchedulesRoute,
-  BlueprintsBlueprintIdRoute: BlueprintsBlueprintIdRoute,
-  ContextsNewRoute: ContextsNewRoute,
   EntitiesEntityIdRoute: EntitiesEntityIdRouteWithChildren,
   EntitiesNewRoute: EntitiesNewRoute,
   InvitationsAcceptRoute: InvitationsAcceptRoute,
+  ManageAuditLogRoute: ManageAuditLogRoute,
+  ManageDataHealthRoute: ManageDataHealthRoute,
   PasswordResetConfirmRoute: PasswordResetConfirmRoute,
-  WorkspaceInvitationsRoute: WorkspaceInvitationsRoute,
-  WorkspaceMembersRoute: WorkspaceMembersRoute,
-  WorkspaceRolesRoute: WorkspaceRolesRoute,
   AgentsIndexRoute: AgentsIndexRoute,
-  BlueprintsIndexRoute: BlueprintsIndexRoute,
-  ContextsIndexRoute: ContextsIndexRoute,
   PasswordResetIndexRoute: PasswordResetIndexRoute,
-  WorkspaceIndexRoute: WorkspaceIndexRoute,
+  ManageBlueprintsBlueprintIdRoute: ManageBlueprintsBlueprintIdRoute,
+  ManageContextsNewRoute: ManageContextsNewRoute,
+  ManageWorkspaceInvitationsRoute: ManageWorkspaceInvitationsRoute,
+  ManageWorkspaceMembersRoute: ManageWorkspaceMembersRoute,
+  ManageWorkspaceRolesRoute: ManageWorkspaceRolesRoute,
+  ManageBlueprintsIndexRoute: ManageBlueprintsIndexRoute,
+  ManageContextsIndexRoute: ManageContextsIndexRoute,
+  ManageWorkspaceIndexRoute: ManageWorkspaceIndexRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

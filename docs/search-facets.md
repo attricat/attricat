@@ -8,10 +8,10 @@ relationship such as `category.parent` supplies the tree edges.
 ## Use In The Explorer
 
 1. Search an entity blueprint.
-2. Under **Relationship facet**, select a relationship field, such as
-   `categories`.
-3. The explorer loads that relationship's target blueprint and discovers any
-   self-targeting relationship fields. It uses the first field by default.
+2. The explorer loads the first available relationship field, such as
+   `categories`, and then loads that relationship's target blueprint.
+3. It discovers any self-targeting relationship fields and uses the first one
+   by default.
 4. Select target nodes to restrict results. Selecting a parent includes its
    descendants when the target has a hierarchy; otherwise selections apply only
    to the directly assigned targets.
