@@ -13,6 +13,9 @@ down: setup
 migrate: setup
     set -a; . ./.env; set +a; sqlx migrate run --source apps/api/migrations --database-url "$DATABASE_URL"
 
+test-s3-compat: setup
+    set -a; . ./.env; set +a; cargo test -p api --test s3_compat -- --ignored
+
 reset-db: setup
     set -a; . ./.env; set +a; sqlx database drop -y --database-url "$DATABASE_URL"
     set -a; . ./.env; set +a; sqlx database create --database-url "$DATABASE_URL"
