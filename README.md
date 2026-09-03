@@ -10,19 +10,24 @@ Install a Docker-compatible container runtime, Rust, Node.js 18 or newer,
 `just`, `process-compose`, and `watchexec`. Then, from the repository root:
 
 ```sh
+just setup
 just dev
 ```
 
-`just dev` assigns persistent, worktree-specific ports, writes them and ready-to-open
-`WEB_URL`, `MAILPIT_UI_URL`, and `RUSTFS_UI_URL` values to the ignored
-`.catalog-worktree` file, and creates `.env` from `.env.example`. It starts
-PostgreSQL, Mailpit, and RustFS (the local S3-compatible object store) before
-starting the API, file worker, and web app. Stop `process-compose` with `Ctrl-C`;
-the containers remain available until stopped with:
+Run `just setup` once before any other `just` recipe. It assigns persistent,
+worktree-specific ports, writes them and ready-to-open `WEB_URL`,
+`MAILPIT_UI_URL`, and `RUSTFS_UI_URL` values to the ignored
+`.catalog-worktree` file, and creates `.env` from `.env.example`. `just dev`
+starts PostgreSQL, Mailpit, and RustFS (the local S3-compatible object store)
+before starting the API, file worker, and web app. Stop `process-compose` with
+`Ctrl-C`; the containers remain available until stopped with:
 
 ```sh
 just down
 ```
+
+For database debugging, `just sql` opens an interactive `psql` session inside
+this worktree's PostgreSQL container.
 
 See [Getting Started](docs/index.md#getting-started) for database, migration,
 and test instructions. Mailpit also starts with the local stack; source
