@@ -7,7 +7,7 @@ use crate::{
     },
     agent_tools::{self, ToolKind},
     agents::{MAX_INLINE_ATTACHMENT_BYTES, MAX_TOOL_CALL_ROUNDS},
-    repository::{CatalogRepository, RepositoryError},
+    repository::{AgentAuditAttribution, AuditContext, CatalogRepository, RepositoryError},
     storage::ObjectStore,
 };
 use base64::{Engine, engine::general_purpose::STANDARD};
@@ -437,9 +437,16 @@ pub async fn resume_claimed(
                     json!({"code":"forbidden","message":"The initiating user is no longer authorized to make this change."}),
                 )
             } else {
-                agent_tools::execute_mutation(repository, &call.tool_name, call.arguments.clone())
-                    .await
-                    .map_err(|error| json!({"code":"tool_error","message":error.to_string()}))
+                let audited_repository = repository
+                    .clone()
+                    .with_audit_context(agent_audit_context(actor, &agent_run, &call));
+                agent_tools::execute_mutation(
+                    &audited_repository,
+                    &call.tool_name,
+                    call.arguments.clone(),
+                )
+                .await
+                .map_err(|error| json!({"code":"tool_error","message":error.to_string()}))
             }
         } else {
             Err(
@@ -471,14 +478,8 @@ pub async fn resume_claimed(
     .await
 }
 
-async fn mutation_authorized(
-    repository: &CatalogRepository,
-    actor: Uuid,
-    workspace: Uuid,
-    name: &str,
-    arguments: &Value,
-) -> Result<bool, RepositoryError> {
-    let (permission, target_id) = match name {
+fn mutation_authorization(name: &str, arguments: &Value) -> Option<(&'static str, Option<Uuid>)> {
+    Some(match name {
         "create_blueprint" | "create_blueprint_revision" => ("blueprints.write", None),
         "publish_blueprint" => ("blueprints.publish", None),
         "create_entity" | "link_file" => ("entities.write", None),
@@ -497,11 +498,55 @@ async fn mutation_authorized(
                 .and_then(|id| id.parse().ok()),
         ),
         "create_context" => ("contexts.write", None),
-        _ => return Ok(false),
+        _ => return None,
+    })
+}
+
+async fn mutation_authorized(
+    repository: &CatalogRepository,
+    actor: Uuid,
+    workspace: Uuid,
+    name: &str,
+    arguments: &Value,
+) -> Result<bool, RepositoryError> {
+    let Some((permission, target_id)) = mutation_authorization(name, arguments) else {
+        return Ok(false);
     };
     repository
         .is_authorized(actor, workspace, permission, target_id, None)
         .await
+}
+
+fn agent_audit_context(
+    actor: Uuid,
+    run: &crate::repository::AgentRun,
+    call: &crate::repository::AgentToolCall,
+) -> AuditContext {
+    let (permission, target_id) = mutation_authorization(&call.tool_name, &call.arguments)
+        .expect("only known mutation tools are executed");
+    AuditContext {
+        actor_user_id: Some(actor),
+        actor_token_id: None,
+        // Agent execution has no HTTP request. The durable call and run IDs
+        // provide its request/correlation identity without retaining prompts.
+        request_id: call.id,
+        correlation_id: run.id,
+        action: format!("catalog.agent.{}", call.tool_name),
+        authorization_scope: json!({"permission": permission}),
+        target: match target_id {
+            Some(id) => json!({"id": id}),
+            None => json!({"tool": call.tool_name}),
+        },
+        metadata: json!({}),
+        agent: Some(AgentAuditAttribution {
+            run_id: run.id,
+            conversation_id: run.conversation_id,
+            tool_call_id: call.id,
+            tool_name: call.tool_name.clone(),
+            approval_decision: Some(call.state.clone()),
+            approved_by_user_id: call.decided_by_user_id,
+        }),
+    }
 }
 
 pub(crate) async fn fail_run(

@@ -84,6 +84,19 @@ pub(crate) struct AuditContext {
     pub authorization_scope: Value,
     pub target: Value,
     pub metadata: Value,
+    pub agent: Option<AgentAuditAttribution>,
+}
+
+/// Durable executor and approval provenance for an agent mutation. This is
+/// stored in normalized audit columns, not reconstructed from metadata.
+#[derive(Clone)]
+pub(crate) struct AgentAuditAttribution {
+    pub run_id: Uuid,
+    pub conversation_id: Uuid,
+    pub tool_call_id: Uuid,
+    pub tool_name: String,
+    pub approval_decision: Option<String>,
+    pub approved_by_user_id: Option<Uuid>,
 }
 
 struct WorkspacePoolCache {
@@ -290,8 +303,9 @@ impl CatalogRepository {
         mut transaction: Transaction<'_, Postgres>,
     ) -> Result<(), RepositoryError> {
         if let Some(audit) = &self.audit_context {
+            let agent = audit.agent.as_ref();
             sqlx::query(
-                "INSERT INTO audit_events (id, workspace_id, actor_user_id, actor_token_id, request_id, correlation_id, action, authorization_scope, target, outcome, metadata) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, 'success', $10)",
+                "INSERT INTO audit_events (id, workspace_id, actor_user_id, actor_token_id, request_id, correlation_id, action, authorization_scope, target, outcome, metadata, executor_type, agent_run_id, agent_conversation_id, agent_tool_call_id, agent_tool_name, approval_decision, approved_by_user_id) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, 'success', $10, $11, $12, $13, $14, $15, $16, $17)",
             )
             .bind(Uuid::new_v4())
             .bind(self.workspace_id.unwrap_or(Self::DEFAULT_WORKSPACE_ID))
@@ -303,6 +317,13 @@ impl CatalogRepository {
             .bind(&audit.authorization_scope)
             .bind(&audit.target)
             .bind(&audit.metadata)
+            .bind(if agent.is_some() { "agent" } else { "human" })
+            .bind(agent.map(|agent| agent.run_id))
+            .bind(agent.map(|agent| agent.conversation_id))
+            .bind(agent.map(|agent| agent.tool_call_id))
+            .bind(agent.map(|agent| &agent.tool_name))
+            .bind(agent.and_then(|agent| agent.approval_decision.as_deref()))
+            .bind(agent.and_then(|agent| agent.approved_by_user_id))
             .execute(&mut *transaction)
             .await?;
         }

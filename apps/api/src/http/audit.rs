@@ -48,6 +48,7 @@ pub(super) fn request_context(
         authorization_scope,
         target,
         metadata: redact_metadata(json!({ "method": method.as_str(), "route": route })),
+        agent: None,
     }
 }
 
