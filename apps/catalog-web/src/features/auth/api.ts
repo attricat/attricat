@@ -9,6 +9,7 @@ const sessionSchema = z.object({
   login_identifier: z.string(),
   capabilities: z
     .object({
+      audit_read: z.boolean(),
       members_manage: z.boolean(),
       roles_manage: z.boolean(),
       tokens_manage: z.boolean(),

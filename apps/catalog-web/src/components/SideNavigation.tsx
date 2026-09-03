@@ -1,4 +1,5 @@
 import AssessmentOutlinedIcon from '@mui/icons-material/AssessmentOutlined';
+import FactCheckOutlinedIcon from '@mui/icons-material/FactCheckOutlined';
 import SmartToyOutlinedIcon from '@mui/icons-material/SmartToyOutlined';
 import CategoryOutlinedIcon from '@mui/icons-material/CategoryOutlined';
 import FolderOutlinedIcon from '@mui/icons-material/FolderOutlined';
@@ -27,6 +28,11 @@ const navigationItems = [
     icon: <AssessmentOutlinedIcon />,
     label: 'Data health',
     to: '/data-health',
+  },
+  {
+    icon: <FactCheckOutlinedIcon />,
+    label: 'Activity / Audit log',
+    to: '/audit-log',
   },
   { icon: <PersonOutlinedIcon />, label: 'Profile', to: '/profile' },
   {
@@ -66,7 +72,10 @@ export const SideNavigation = ({ onNavigate }: { onNavigate?: () => void }) => {
       <List sx={{ px: 1, py: 1.5 }}>
         {navigationItems
           .filter(
-            (item) => item.to !== '/workspace/members' || canManageWorkspace,
+            (item) =>
+              (item.to !== '/workspace/members' || canManageWorkspace) &&
+              (item.to !== '/audit-log' ||
+                session.data?.capabilities?.audit_read),
           )
           .map((item) => (
             <ListItemButton

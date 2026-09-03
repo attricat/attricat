@@ -123,6 +123,10 @@ async fn start_server_with_auth_mode_and_store(
         .ensure_agent_permissions()
         .await
         .unwrap();
+    CatalogRepository::new(pool.clone())
+        .ensure_audit_permissions()
+        .await
+        .unwrap();
     let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
     let address: SocketAddr = listener.local_addr().unwrap();
     let router = router(AppState {

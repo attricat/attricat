@@ -44,6 +44,12 @@ pub(super) fn policy(method: &Method, path: &str) -> Option<Policy> {
     if path == "/workspace/invitations/accept" {
         return None;
     }
+    if path == "/audit-events" {
+        return Some(Policy {
+            permission: "audit.read",
+            target: TargetKind::None,
+        });
+    }
     if path == "/workspace/assignable-roles" || path.starts_with("/workspace/grant-targets/") {
         return Some(Policy {
             permission: "members.manage",

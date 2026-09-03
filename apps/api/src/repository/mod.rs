@@ -31,6 +31,7 @@ use crate::{
 };
 
 mod agents;
+mod audit_events;
 mod blueprints;
 mod contexts;
 mod entity_commands;
@@ -49,6 +50,7 @@ pub use agents::{
     AgentRun, AgentRunEvent, AgentSchedule, AgentToolCall, ApprovalDecision, Conversation,
     ConversationMessage,
 };
+pub(crate) use audit_events::{AuditEventFilter, AuditEventPage};
 pub(crate) use entity_search::decode_search_cursor;
 pub(crate) use files::{FileMetadata, FileObject, FilePolicy, FileUploadResult, NewUploadedFile};
 pub(crate) use members::{WorkspaceInvitation, WorkspaceMember};

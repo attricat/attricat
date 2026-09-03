@@ -30,6 +30,7 @@ struct OnboardingSessionResponse {
 
 #[derive(Serialize)]
 pub(super) struct SessionCapabilities {
+    audit_read: bool,
     members_manage: bool,
     roles_manage: bool,
     tokens_manage: bool,
@@ -108,6 +109,10 @@ async fn session_capabilities(
     workspace_id: Uuid,
 ) -> Result<SessionCapabilities, ApiError> {
     Ok(SessionCapabilities {
+        audit_read: state
+            .repository
+            .is_authorized(user_id, workspace_id, "audit.read", None, None)
+            .await?,
         members_manage: state
             .repository
             .is_authorized(user_id, workspace_id, "members.manage", None, None)
