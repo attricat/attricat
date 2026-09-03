@@ -25,13 +25,13 @@ export const entityQueryKeys = {
     blueprint: string | undefined,
     version: number | undefined,
     query: string | undefined,
-    relationshipTreeFacet?: {
+    relationshipTreeFacets?: {
       source_relationship_field: string;
       hierarchy_field?: string;
       context_id: string;
       selected_target_ids: string[];
-    },
-  ) => ['entities', blueprint, version, query, relationshipTreeFacet] as const,
+    }[],
+  ) => ['entities', blueprint, version, query, relationshipTreeFacets] as const,
   relationshipTreeFacetChildren: (
     blueprint: string,
     version: number | undefined,

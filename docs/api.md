@@ -99,7 +99,7 @@ password, cookie, CSRF, expiry, and revocation contract is documented in
 Blueprint creation and revision routes create drafts. Only published revisions
 can create entities or serve as migration targets. See [Blueprint Publication](database.md#blueprint-publication).
 
-`POST /v1/entities/search` optionally accepts a relationship tree facet. See
+`POST /v1/entities/search` optionally accepts multiple relationship tree facets. See
 [Relationship Tree Facets](search-facets.md) for its request and response
 contract.
 

@@ -275,12 +275,12 @@ target_blueprint = "facet_category"
         .post(format!("{base_url}/v1/entities/search"))
         .json(&json!({
             "blueprint": { "code": "facet_product" },
-            "relationship_tree_facet": {
+            "relationship_tree_facets": [{
                 "source_relationship_field": "categories",
                 "hierarchy_field": "parent",
                 "context_id": context["id"],
                 "selected_target_ids": [root["id"]]
-            }
+            }]
         }))
         .send()
         .await
@@ -291,6 +291,33 @@ target_blueprint = "facet_category"
         .await
         .unwrap();
     assert_eq!(search["items"].as_array().unwrap().len(), 2);
+
+    let intersected: Value = client
+        .post(format!("{base_url}/v1/entities/search"))
+        .json(&json!({
+            "blueprint": { "code": "facet_product" },
+            "relationship_tree_facets": [{
+                "source_relationship_field": "categories",
+                "hierarchy_field": "parent",
+                "context_id": context["id"],
+                "selected_target_ids": [root["id"]]
+            }, {
+                "source_relationship_field": "categories",
+                "hierarchy_field": "parent",
+                "context_id": context["id"],
+                "selected_target_ids": [child["id"]]
+            }]
+        }))
+        .send()
+        .await
+        .unwrap()
+        .error_for_status()
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    assert_eq!(intersected["items"].as_array().unwrap().len(), 1);
+    assert_eq!(intersected["items"][0]["id"], first["id"]);
 
     let hierarchy: Value = client
         .get(format!(
@@ -314,12 +341,12 @@ target_blueprint = "facet_category"
         .json(&json!({
             "blueprint": { "code": "facet_product" },
             "query": "First",
-            "relationship_tree_facet": {
+            "relationship_tree_facets": [{
                 "source_relationship_field": "categories",
                 "hierarchy_field": "parent",
                 "context_id": context["id"],
                 "selected_target_ids": []
-            }
+            }]
         }))
         .send()
         .await
@@ -390,11 +417,11 @@ target_blueprint = "facet_category"
         .post(format!("{base_url}/v1/entities/search"))
         .json(&json!({
             "blueprint": { "code": "facet_product" },
-            "relationship_tree_facet": {
+            "relationship_tree_facets": [{
                 "source_relationship_field": "categories",
                 "context_id": context["id"],
                 "selected_target_ids": [root["id"]]
-            }
+            }]
         }))
         .send()
         .await

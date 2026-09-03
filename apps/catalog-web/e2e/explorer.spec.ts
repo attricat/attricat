@@ -102,8 +102,8 @@ target_blueprint = "${categoryCode}"`,
   await page.getByRole('checkbox', { name: 'Shoes (1)' }).check();
 
   await expect
-    .poll(() => new URL(page.url()).searchParams.get('categories'))
-    .toBe(JSON.stringify([child.id]));
+    .poll(() => new URL(page.url()).searchParams.get('relationshipFacets'))
+    .toContain(child.id);
   await expect(page.getByText('1 result')).toBeVisible();
   await expect(page.getByRole('cell', { name: 'Running shoe' })).toBeVisible();
   await expect(page.getByRole('cell', { name: 'Canvas bag' })).toBeHidden();
@@ -152,11 +152,89 @@ target_blueprint = "${colorCode}"`,
   await page.getByRole('checkbox', { name: 'Red (1)' }).check();
 
   await expect
-    .poll(() => new URL(page.url()).searchParams.get('categories'))
-    .toBe(JSON.stringify([red.id]));
+    .poll(() => new URL(page.url()).searchParams.get('relationshipFacets'))
+    .toContain(red.id);
   await expect(page.getByText('1 result')).toBeVisible();
   await expect(page.getByRole('cell', { name: 'Red shirt' })).toBeVisible();
   await expect(page.getByRole('cell', { name: 'Blue shirt' })).toBeHidden();
+});
+
+test('intersects selections from multiple relationship facets', async ({
+  page,
+}) => {
+  const colorCode = `multi_color_${suffix()}`;
+  const sizeCode = `multi_size_${suffix()}`;
+  const productCode = `multi_product_${suffix()}`;
+  const color = await createEntityBlueprint(
+    colorCode,
+    'Colors',
+    '[[attributes]]\ncode = "title"\nvalue_type = "string"',
+  );
+  const size = await createEntityBlueprint(
+    sizeCode,
+    'Sizes',
+    '[[attributes]]\ncode = "title"\nvalue_type = "string"',
+  );
+  const red = await createEntity(color, [scalar('title', 'Red')]);
+  const blue = await createEntity(color, [scalar('title', 'Blue')]);
+  const small = await createEntity(size, [scalar('title', 'Small')]);
+  const large = await createEntity(size, [scalar('title', 'Large')]);
+  const product = await createEntityBlueprint(
+    productCode,
+    'Products with multiple facets',
+    `[[attributes]]
+code = "title"
+value_type = "string"
+tags = ["searchable"]
+
+[[attributes]]
+code = "color"
+value_type = "relationship"
+target_blueprint = "${colorCode}"
+
+[[attributes]]
+code = "size"
+value_type = "relationship"
+target_blueprint = "${sizeCode}"`,
+  );
+  await createEntity(product, [
+    scalar('title', 'Red large shirt'),
+    relationship('color', red.id),
+    relationship('size', large.id),
+  ]);
+  await createEntity(product, [
+    scalar('title', 'Red small shirt'),
+    relationship('color', red.id),
+    relationship('size', small.id),
+  ]);
+  await createEntity(product, [
+    scalar('title', 'Blue large shirt'),
+    relationship('color', blue.id),
+    relationship('size', large.id),
+  ]);
+
+  await page.goto(`/?blueprint=${productCode}`);
+  await expect(page.getByRole('checkbox', { name: 'Red (2)' })).toBeVisible();
+  await expect(page.getByRole('checkbox', { name: 'Large (2)' })).toBeVisible();
+  await page.getByRole('checkbox', { name: 'Red (2)' }).check();
+  await page.getByRole('checkbox', { name: 'Large (2)' }).check();
+
+  await expect(page.getByText('1 result')).toBeVisible();
+  await expect(
+    page.getByRole('cell', { name: 'Red large shirt' }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole('cell', { name: 'Red small shirt' }),
+  ).toBeHidden();
+  await expect(
+    page.getByRole('cell', { name: 'Blue large shirt' }),
+  ).toBeHidden();
+  await expect
+    .poll(() => new URL(page.url()).searchParams.get('relationshipFacets'))
+    .toContain(red.id);
+  await expect
+    .poll(() => new URL(page.url()).searchParams.get('relationshipFacets'))
+    .toContain(large.id);
 });
 
 test('loads additional explorer search pages', async ({ page }) => {

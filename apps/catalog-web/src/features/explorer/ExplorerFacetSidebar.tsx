@@ -1,40 +1,41 @@
-import { MenuItem, Paper, TextField, Typography } from '@mui/material';
-import type { Attribute, AttributeContext } from '../entities/api';
+import { Paper, Typography } from '@mui/material';
+import type {
+  Attribute,
+  AttributeContext,
+  BlueprintWithAttributes,
+} from '../entities/api';
 import { RelationshipTreeFacet } from './RelationshipTreeFacet';
+
+export type ExplorerRelationshipFacet = {
+  contextCode: string;
+  hierarchyField?: string;
+  hierarchyFields: string[];
+  selectedIds: string[];
+  sourceRelationship: Attribute;
+  targetBlueprint?: BlueprintWithAttributes;
+};
 
 type Props = {
   blueprint: string;
-  contextCode: string;
   contexts: AttributeContext[];
-  hierarchyField?: string;
-  hierarchyFields: string[];
-  isTargetBlueprintPending: boolean;
+  facets: ExplorerRelationshipFacet[];
   query?: string;
-  relationshipFields: Attribute[];
-  searchFacetField?: string;
-  selectedIds: string[];
-  sourceRelationship?: Attribute;
   version?: number;
-  onUpdate: (updates: {
-    facetField?: string;
-    facetHierarchy?: string;
-    facetContext?: string;
-    categories?: string[];
-  }) => void;
+  onUpdate: (
+    field: string,
+    updates: {
+      hierarchy?: string;
+      context?: string;
+      selectedIds?: string[];
+    },
+  ) => void;
 };
 
 export const ExplorerFacetSidebar = ({
   blueprint,
-  contextCode,
   contexts,
-  hierarchyField,
-  hierarchyFields,
-  isTargetBlueprintPending,
+  facets,
   query,
-  relationshipFields,
-  searchFacetField,
-  selectedIds,
-  sourceRelationship,
   version,
   onUpdate,
 }: Props) => (
@@ -49,53 +50,45 @@ export const ExplorerFacetSidebar = ({
       top: { md: 88 },
     }}
   >
-    <TextField
-      fullWidth
-      label="Relationship"
-      onChange={(event) =>
-        onUpdate({
-          facetField: event.target.value || undefined,
-          facetHierarchy: undefined,
-          facetContext: undefined,
-          categories: undefined,
-        })
-      }
-      select
-      size="small"
-      sx={{ mt: 1.5 }}
-      value={searchFacetField ?? ''}
-    >
-      <MenuItem value="">None</MenuItem>
-      {relationshipFields.map((attribute) => (
-        <MenuItem key={attribute.code} value={attribute.code}>
-          {attribute.code}
-        </MenuItem>
-      ))}
-    </TextField>
-    {searchFacetField && isTargetBlueprintPending && (
-      <Typography color="text.secondary" sx={{ mt: 2 }} variant="body2">
-        Loading category tree...
-      </Typography>
-    )}
-    {sourceRelationship && !isTargetBlueprintPending && (
-      <RelationshipTreeFacet
-        blueprint={blueprint}
-        contextCode={contextCode}
-        contexts={contexts}
-        hierarchyField={hierarchyField}
-        hierarchyFields={hierarchyFields}
-        onContextChange={(facetContext) =>
-          onUpdate({ facetContext, categories: undefined })
-        }
-        onHierarchyFieldChange={(facetHierarchy) =>
-          onUpdate({ facetHierarchy, categories: undefined })
-        }
-        onSelectedIdsChange={(categories) => onUpdate({ categories })}
-        selectedIds={selectedIds}
-        query={query}
-        sourceField={sourceRelationship.code}
-        version={version}
-      />
-    )}
+    <Typography variant="subtitle2">Relationship filters</Typography>
+    {facets.map((facet) => (
+      <section key={facet.sourceRelationship.code}>
+        <Typography sx={{ mt: 2 }} variant="body2">
+          {facet.sourceRelationship.code}
+        </Typography>
+        {!facet.targetBlueprint ? (
+          <Typography color="text.secondary" sx={{ mt: 1 }} variant="body2">
+            Loading facet...
+          </Typography>
+        ) : (
+          <RelationshipTreeFacet
+            blueprint={blueprint}
+            contextCode={facet.contextCode}
+            contexts={contexts}
+            hierarchyField={facet.hierarchyField}
+            hierarchyFields={facet.hierarchyFields}
+            onContextChange={(context) =>
+              onUpdate(facet.sourceRelationship.code, {
+                context,
+                selectedIds: [],
+              })
+            }
+            onHierarchyFieldChange={(hierarchy) =>
+              onUpdate(facet.sourceRelationship.code, {
+                hierarchy,
+                selectedIds: [],
+              })
+            }
+            onSelectedIdsChange={(selectedIds) =>
+              onUpdate(facet.sourceRelationship.code, { selectedIds })
+            }
+            query={query}
+            selectedIds={facet.selectedIds}
+            sourceField={facet.sourceRelationship.code}
+            version={version}
+          />
+        )}
+      </section>
+    ))}
   </Paper>
 );

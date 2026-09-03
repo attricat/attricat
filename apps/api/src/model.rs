@@ -288,7 +288,7 @@ pub struct SearchEntitiesRequest {
     #[serde(default)]
     pub outdated: bool,
     #[serde(default)]
-    pub relationship_tree_facet: Option<RelationshipTreeFacetRequest>,
+    pub relationship_tree_facets: Vec<RelationshipTreeFacetRequest>,
     #[serde(default)]
     pub page: SearchPage,
 }

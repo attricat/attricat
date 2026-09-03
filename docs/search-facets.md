@@ -8,10 +8,10 @@ relationship such as `category.parent` supplies the tree edges.
 ## Use In The Explorer
 
 1. Search an entity blueprint.
-2. The explorer loads the first available relationship field, such as
-   `categories`, and then loads that relationship's target blueprint.
-3. It discovers any self-targeting relationship fields and uses the first one
-   by default.
+2. The explorer renders a relationship facet for every relationship field, such
+   as `categories` and `color`, and loads each target blueprint independently.
+3. Each facet discovers self-targeting relationship fields and uses the first
+   one by default.
 4. Select target nodes to restrict results. Selecting a parent includes its
    descendants when the target has a hierarchy; otherwise selections apply only
    to the directly assigned targets.
@@ -23,8 +23,8 @@ relationship, the explorer instead renders a one-level picker and exposes only
 **Facet options** for the context. Changing either option clears selected nodes
 because the tree or effective relationship set may have changed.
 
-The source field, hierarchy field, context code, and selected node IDs are in
-the explorer URL. Reloading or sharing that URL restores the facet.
+Each facet's source field, hierarchy field, context code, and selected node IDs
+are in the explorer URL. Reloading or sharing that URL restores every facet.
 
 ## Blueprint Requirements
 
@@ -72,24 +72,29 @@ do not apply the category selection itself. This lets users see useful sibling
 counts after choosing a category. Other search filters, once supported, should
 also be applied before the facet is aggregated.
 
-Selection is an OR over the selected nodes and their descendants. Selecting
-both a parent and child does not duplicate results.
+Selection is an OR over the selected nodes and their descendants within a
+facet. Selections across different facets are combined with AND semantics.
+Selecting both a parent and child does not duplicate results.
 
 ## API Contract
 
-Add `relationship_tree_facet` to `POST /v1/entities/search`:
+Add `relationship_tree_facets` to `POST /v1/entities/search`:
 
 ```json
 {
   "blueprint": { "code": "product" },
   "query": "linen",
   "filters": [],
-  "relationship_tree_facet": {
+  "relationship_tree_facets": [{
     "source_relationship_field": "categories",
     "hierarchy_field": "parent",
     "context_id": "00000000-0000-4000-8000-000000000001",
     "selected_target_ids": ["e8b7a8d3-c954-4c0f-b658-0f686ba466a3"]
-  },
+  }, {
+    "source_relationship_field": "color",
+    "context_id": "00000000-0000-4000-8000-000000000001",
+    "selected_target_ids": ["2a036fb3-5a05-4f34-9a7d-9450bd1bd7d2"]
+  }],
   "page": { "size": 25, "cursor": null }
 }
 ```
