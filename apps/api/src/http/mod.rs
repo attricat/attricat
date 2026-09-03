@@ -1,5 +1,6 @@
 mod agents;
 mod audit;
+mod audit_events;
 mod auth;
 mod blueprints;
 mod contexts;
@@ -208,6 +209,7 @@ pub fn router(state: AppState) -> Router {
             "/data-health/refresh",
             post(data_health::refresh_data_health),
         )
+        .route("/audit-events", get(audit_events::list))
         .route("/workspace/roles", get(roles::list).post(roles::create))
         .route(
             "/workspace/assignable-roles",

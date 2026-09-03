@@ -10,6 +10,7 @@
 
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as AuditLogRouteImport } from './routes/audit-log'
 import { Route as DataHealthRouteImport } from './routes/data-health'
 import { Route as LoginRouteImport } from './routes/login'
 import { Route as OnboardingRouteImport } from './routes/onboarding'
@@ -40,6 +41,11 @@ import { Route as EntitiesEntityIdMigrateRouteImport } from './routes/entities/$
 const IndexRoute = IndexRouteImport.update({
   id: '/',
   path: '/',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AuditLogRoute = AuditLogRouteImport.update({
+  id: '/audit-log',
+  path: '/audit-log',
   getParentRoute: () => rootRouteImport,
 } as any)
 const DataHealthRoute = DataHealthRouteImport.update({
@@ -175,6 +181,7 @@ const EntitiesEntityIdMigrateRoute = EntitiesEntityIdMigrateRouteImport.update({
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
+  '/audit-log': typeof AuditLogRoute
   '/data-health': typeof DataHealthRoute
   '/login': typeof LoginRouteWithChildren
   '/onboarding': typeof OnboardingRoute
@@ -204,6 +211,7 @@ export interface FileRoutesByFullPath {
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
+  '/audit-log': typeof AuditLogRoute
   '/data-health': typeof DataHealthRoute
   '/onboarding': typeof OnboardingRoute
   '/profile': typeof ProfileRoute
@@ -232,6 +240,7 @@ export interface FileRoutesByTo {
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
+  '/audit-log': typeof AuditLogRoute
   '/data-health': typeof DataHealthRoute
   '/login': typeof LoginRouteWithChildren
   '/onboarding': typeof OnboardingRoute
@@ -263,6 +272,7 @@ export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
   fullPaths:
     | '/'
+    | '/audit-log'
     | '/data-health'
     | '/login'
     | '/onboarding'
@@ -292,6 +302,7 @@ export interface FileRouteTypes {
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
+    | '/audit-log'
     | '/data-health'
     | '/onboarding'
     | '/profile'
@@ -319,6 +330,7 @@ export interface FileRouteTypes {
   id:
     | '__root__'
     | '/'
+    | '/audit-log'
     | '/data-health'
     | '/login'
     | '/onboarding'
@@ -349,6 +361,7 @@ export interface FileRouteTypes {
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
+  AuditLogRoute: typeof AuditLogRoute
   DataHealthRoute: typeof DataHealthRoute
   LoginRoute: typeof LoginRouteWithChildren
   OnboardingRoute: typeof OnboardingRoute
@@ -379,6 +392,13 @@ declare module '@tanstack/react-router' {
       path: '/'
       fullPath: '/'
       preLoaderRoute: typeof IndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/audit-log': {
+      id: '/audit-log'
+      path: '/audit-log'
+      fullPath: '/audit-log'
+      preLoaderRoute: typeof AuditLogRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/data-health': {
@@ -595,6 +615,7 @@ const EntitiesEntityIdRouteWithChildren =
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
+  AuditLogRoute: AuditLogRoute,
   DataHealthRoute: DataHealthRoute,
   LoginRoute: LoginRouteWithChildren,
   OnboardingRoute: OnboardingRoute,

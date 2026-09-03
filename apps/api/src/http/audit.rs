@@ -117,11 +117,22 @@ fn audit_context(method: &Method, route: &str, path: &str) -> (Value, Value) {
     let identifier = segments
         .iter()
         .find_map(|segment| segment.parse::<Uuid>().ok());
+    let target_type = if route.contains("/blueprints") {
+        "blueprint"
+    } else if route.contains("/contexts") {
+        "context"
+    } else if route.contains("/entities") {
+        "entity"
+    } else if route.contains("/workspace") {
+        "workspace"
+    } else {
+        "catalog"
+    };
     (
         json!({ "permission": permission }),
         match identifier {
-            Some(id) => json!({ "id": id }),
-            None => json!({ "route": route }),
+            Some(id) => json!({ "type": target_type, "id": id }),
+            None => json!({ "type": target_type, "route": route }),
         },
     )
 }
