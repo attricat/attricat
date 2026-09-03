@@ -386,5 +386,52 @@ target_blueprint = "facet_category"
             .any(|item| item["id"] == child["id"])
     );
 
+    let flat_search: Value = client
+        .post(format!("{base_url}/v1/entities/search"))
+        .json(&json!({
+            "blueprint": { "code": "facet_product" },
+            "relationship_tree_facet": {
+                "source_relationship_field": "categories",
+                "context_id": context["id"],
+                "selected_target_ids": [root["id"]]
+            }
+        }))
+        .send()
+        .await
+        .unwrap()
+        .error_for_status()
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    assert_eq!(flat_search["items"].as_array().unwrap().len(), 1);
+    assert_eq!(flat_search["items"][0]["id"], second["id"]);
+
+    let flat_page: Value = client
+        .post(format!(
+            "{base_url}/v1/entities/facets/relationship-tree/children"
+        ))
+        .json(&json!({
+            "blueprint": { "code": "facet_product" },
+            "source_relationship_field": "categories",
+            "context_id": context["id"],
+        }))
+        .send()
+        .await
+        .unwrap()
+        .error_for_status()
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    let flat_root = flat_page["items"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|item| item["id"] == root["id"])
+        .unwrap();
+    assert_eq!(flat_root["count"], 1);
+    assert_eq!(flat_root["has_children"], false);
+
     server.abort();
 }

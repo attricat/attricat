@@ -10,24 +10,27 @@ relationship such as `category.parent` supplies the tree edges.
 1. Search an entity blueprint.
 2. Under **Relationship facet**, select a relationship field, such as
    `categories`.
-3. The explorer loads that relationship's target blueprint and discovers its
+3. The explorer loads that relationship's target blueprint and discovers any
    self-targeting relationship fields. It uses the first field by default.
-4. Select category nodes to restrict results. Selecting a parent includes its
-   descendants.
+4. Select target nodes to restrict results. Selecting a parent includes its
+   descendants when the target has a hierarchy; otherwise selections apply only
+   to the directly assigned targets.
 
-**Tree options** is collapsed by default. It lets users select a different
-self-targeting field under **Build tree using** and select the relationship
-**Context**. Changing either option clears selected nodes because the tree or
-effective relationship set may have changed.
+**Tree options** is collapsed by default when a hierarchy is available. It lets
+users select a different self-targeting field under **Build tree using** and
+select the relationship **Context**. For a target without a self-referencing
+relationship, the explorer instead renders a one-level picker and exposes only
+**Facet options** for the context. Changing either option clears selected nodes
+because the tree or effective relationship set may have changed.
 
 The source field, hierarchy field, context code, and selected node IDs are in
 the explorer URL. Reloading or sharing that URL restores the facet.
 
 ## Blueprint Requirements
 
-The source attribute must be a relationship with a target blueprint. The
-hierarchy field must be a relationship on that target blueprint that targets
-the same blueprint.
+The source attribute must be a relationship with a target blueprint. A
+hierarchy field, when supplied, must be a relationship on that target blueprint
+that targets the same blueprint. Without one, the facet is a one-level picker.
 
 ```toml
 # Product
@@ -46,7 +49,7 @@ target_blueprint = "category"
 ```
 
 The API validates these conditions for every facet request. A target blueprint
-without a self-targeting relationship cannot be rendered as a tree facet.
+without a self-targeting relationship is rendered as a one-level facet.
 
 ## Context Semantics
 
@@ -101,8 +104,9 @@ separately so searching does not transfer an entire taxonomy.
 ```
 
 `POST /v1/entities/facets/relationship-tree/children` accepts the search
-blueprint/query, facet fields and context, plus an optional `parent_id` and
-cursor. It returns one configured-size page of direct children with `count`,
+blueprint/query, facet fields and context, plus an optional `hierarchy_field`,
+`parent_id`, and cursor. Omit `hierarchy_field` for a one-level picker. It
+returns one configured-size page of direct children with `count`,
 `has_children`, and `next_cursor`. The client requests a page only when a node
 is expanded and uses `next_cursor` for that node's **Load more** action.
 

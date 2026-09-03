@@ -252,7 +252,7 @@ impl CatalogRepository {
         source_blueprint_id: Uuid,
         source_field: &str,
         target_blueprint_id: Uuid,
-        hierarchy_field: &str,
+        hierarchy_field: Option<&str>,
         context_id: Uuid,
         selected_target_ids: &[Uuid],
         source_entity_ids: &HashSet<Uuid>,
@@ -287,14 +287,18 @@ impl CatalogRepository {
                 context_id,
             )
             .await?;
-        let parents = self
-            .resolved_relationship_edges(
-                target_blueprint_id,
-                hierarchy_field,
-                target_blueprint_id,
-                context_id,
-            )
-            .await?;
+        let parents = match hierarchy_field {
+            Some(field) => {
+                self.resolved_relationship_edges(
+                    target_blueprint_id,
+                    field,
+                    target_blueprint_id,
+                    context_id,
+                )
+                .await?
+            }
+            None => Vec::new(),
+        };
         let mut parents_by_child: HashMap<Uuid, Vec<Uuid>> = HashMap::new();
         for (child, parent) in parents {
             if node_ids.contains(&child) && node_ids.contains(&parent) {
@@ -380,7 +384,7 @@ impl CatalogRepository {
         query: Option<&str>,
         source_field: &str,
         target_blueprint_id: Uuid,
-        hierarchy_field: &str,
+        hierarchy_field: Option<&str>,
         context_id: Uuid,
         parent_id: Option<Uuid>,
         cursor: Option<Uuid>,

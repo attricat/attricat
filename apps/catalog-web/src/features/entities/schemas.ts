@@ -414,7 +414,7 @@ export const searchEntitiesRequestSchema = z.object({
   relationship_tree_facet: z
     .object({
       source_relationship_field: z.string().min(1),
-      hierarchy_field: z.string().min(1),
+      hierarchy_field: z.string().min(1).optional(),
       context_id: uuidSchema,
       selected_target_ids: z.array(uuidSchema),
     })

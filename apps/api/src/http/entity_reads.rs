@@ -218,22 +218,25 @@ pub(super) async fn search_entity_previews(
                 .get_blueprint_by_code(target_code)
                 .await?
                 .ok_or_else(|| ApiError::not_found("target blueprint"))?;
-            let hierarchy = target
-                .attributes
-                .iter()
-                .find(|a| a.code == facet.hierarchy_field)
-                .ok_or_else(|| {
-                    ApiError::invalid_input(
-                        "relationship_tree_facet.hierarchy_field is not an attribute".to_owned(),
-                    )
-                })?;
-            if hierarchy.value_type != "relationship"
-                || hierarchy.target_blueprint_code.as_deref() != Some(target_code)
-            {
-                return Err(ApiError::invalid_input(
-                    "relationship_tree_facet.hierarchy_field must be a self-targeting relationship"
-                        .to_owned(),
-                ));
+            if let Some(hierarchy_field) = &facet.hierarchy_field {
+                let hierarchy = target
+                    .attributes
+                    .iter()
+                    .find(|a| a.code == *hierarchy_field)
+                    .ok_or_else(|| {
+                        ApiError::invalid_input(
+                            "relationship_tree_facet.hierarchy_field is not an attribute"
+                                .to_owned(),
+                        )
+                    })?;
+                if hierarchy.value_type != "relationship"
+                    || hierarchy.target_blueprint_code.as_deref() != Some(target_code)
+                {
+                    return Err(ApiError::invalid_input(
+                        "relationship_tree_facet.hierarchy_field must be a self-targeting relationship"
+                            .to_owned(),
+                    ));
+                }
             }
             let ids = repository
                 .search_matching_entity_ids(current.blueprint.id, selected, query)
@@ -246,7 +249,7 @@ pub(super) async fn search_entity_previews(
                         current.blueprint.id,
                         &facet.source_relationship_field,
                         target.blueprint.id,
-                        &facet.hierarchy_field,
+                        facet.hierarchy_field.as_deref(),
                         facet.context_id,
                         &facet.selected_target_ids,
                         &ids,
@@ -324,17 +327,21 @@ pub(super) async fn relationship_tree_facet_children(
         .get_blueprint_by_code(target_code)
         .await?
         .ok_or_else(|| ApiError::not_found("target blueprint"))?;
-    let hierarchy = target
-        .attributes
-        .iter()
-        .find(|a| a.code == input.hierarchy_field)
-        .ok_or_else(|| ApiError::invalid_input("hierarchy_field is not an attribute".to_owned()))?;
-    if hierarchy.value_type != "relationship"
-        || hierarchy.target_blueprint_code.as_deref() != Some(target_code)
-    {
-        return Err(ApiError::invalid_input(
-            "hierarchy_field must be a self-targeting relationship".to_owned(),
-        ));
+    if let Some(hierarchy_field) = &input.hierarchy_field {
+        let hierarchy = target
+            .attributes
+            .iter()
+            .find(|a| a.code == *hierarchy_field)
+            .ok_or_else(|| {
+                ApiError::invalid_input("hierarchy_field is not an attribute".to_owned())
+            })?;
+        if hierarchy.value_type != "relationship"
+            || hierarchy.target_blueprint_code.as_deref() != Some(target_code)
+        {
+            return Err(ApiError::invalid_input(
+                "hierarchy_field must be a self-targeting relationship".to_owned(),
+            ));
+        }
     }
     let query = input
         .query
@@ -349,7 +356,7 @@ pub(super) async fn relationship_tree_facet_children(
                 query,
                 &input.source_relationship_field,
                 target.blueprint.id,
-                &input.hierarchy_field,
+                input.hierarchy_field.as_deref(),
                 input.context_id,
                 input.parent_id,
                 input.cursor,
