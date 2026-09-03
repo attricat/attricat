@@ -9,6 +9,7 @@ import {
   Box,
   Button,
   Chip,
+  CircularProgress,
   Divider,
   Paper,
   Stack,
@@ -91,6 +92,11 @@ export const ConversationDetailPage = ({
     onSuccess: invalidate,
   });
   const latestRun = runs.data?.[0];
+  const submitMessage = () => {
+    if ((content.trim() || attachments.length) && !send.isPending) {
+      send.mutate();
+    }
+  };
 
   useEffect(() => {
     const activeRuns =
@@ -120,7 +126,7 @@ export const ConversationDetailPage = ({
   }, [queryClient, runs.data]); // EventSource reconnects with Last-Event-ID while a run remains active.
 
   return (
-    <PageContainer maxWidth="md">
+    <PageContainer>
       <PageHeader
         actions={
           <Button component={Link} to="/agents/schedules" variant="outlined">
@@ -232,11 +238,15 @@ export const ConversationDetailPage = ({
       <Paper sx={{ mt: 3, p: 2 }}>
         <Typography variant="h6">Run status</Typography>
         <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1, mt: 1 }}>
-          {latestRun && (
-            <Chip
-              color={statusColor(latestRun.status)}
-              label={`${latestRun.origin}: ${latestRun.status}`}
-            />
+          {runs.isPending ? (
+            <CircularProgress aria-label="Loading run status" size={20} />
+          ) : (
+            latestRun && (
+              <Chip
+                color={statusColor(latestRun.status)}
+                label={`${latestRun.origin}: ${latestRun.status}`}
+              />
+            )
           )}
         </Box>
         {latestRun?.error_message && (
@@ -254,7 +264,7 @@ export const ConversationDetailPage = ({
         component="form"
         onSubmit={(event) => {
           event.preventDefault();
-          if (content.trim() || attachments.length) send.mutate();
+          submitMessage();
         }}
       >
         <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2}>
@@ -264,6 +274,16 @@ export const ConversationDetailPage = ({
               label="Message"
               multiline
               onChange={(event) => setContent(event.target.value)}
+              onKeyDown={(event) => {
+                if (
+                  event.key === 'Enter' &&
+                  !event.shiftKey &&
+                  !event.nativeEvent.isComposing
+                ) {
+                  event.preventDefault();
+                  submitMessage();
+                }
+              }}
               placeholder="Ask the agent to help with your catalog…"
               value={content}
             />

@@ -20,7 +20,7 @@ export const ContextsPage = () => {
     queryFn: listContexts,
   });
   return (
-    <PageContainer maxWidth="md">
+    <PageContainer>
       <PageHeader
         actions={
           <Button component={Link} to="/contexts/new" variant="contained">

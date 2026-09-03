@@ -21,7 +21,7 @@ export const ConversationsPage = () => {
     queryFn: listConversations,
   });
   return (
-    <PageContainer maxWidth="md">
+    <PageContainer>
       <PageHeader
         actions={
           <Button component={Link} to="/agents/new" variant="contained">

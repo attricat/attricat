@@ -62,7 +62,7 @@ export const CreateContextPage = () => {
     },
   });
   return (
-    <PageContainer maxWidth="sm">
+    <PageContainer>
       <Button component={Link} to="/contexts" sx={{ mb: 4 }}>
         Back to contexts
       </Button>

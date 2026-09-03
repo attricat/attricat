@@ -24,7 +24,7 @@ export const NewConversationPage = () => {
     },
   });
   return (
-    <PageContainer maxWidth="sm">
+    <PageContainer>
       <PageHeader
         description="Create a focused thread for a task or scheduled agent work."
         title="New agent conversation"
