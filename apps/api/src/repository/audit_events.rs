@@ -61,8 +61,8 @@ impl CatalogRepository {
             .execute(&mut *tx)
             .await?;
         for role_id in [
-            "00000000-0000-4000-8000-000000000101",
-            "00000000-0000-4000-8000-000000000102",
+            Uuid::from_u128(0x00000000000040008000000000000101),
+            Uuid::from_u128(0x00000000000040008000000000000102),
         ] {
             sqlx::query("INSERT INTO role_permissions (role_id, permission_code) VALUES ($1, 'audit.read') ON CONFLICT DO NOTHING")
                 .bind(role_id)
