@@ -1,6 +1,17 @@
 mod support;
 
+use std::sync::Arc;
+
+use api::{
+    agent_provider::OpenAiCompatibleClient,
+    agent_runner,
+    agents::AgentProviderConfig,
+    repository::{ApprovalDecision, CatalogRepository},
+    storage::{FakeObjectStore, ObjectStore},
+};
+use axum::{Router, routing::post};
 use support::{BOOTSTRAP_OWNER_ID, BOOTSTRAP_WORKSPACE_ID, authenticated_client, start_server};
+use tokio::net::TcpListener;
 use uuid::Uuid;
 
 #[sqlx::test(migrations = "./migrations")]
@@ -41,6 +52,167 @@ async fn catalog_mutation_creates_a_redacted_audit_event(pool: sqlx::PgPool) {
     );
 
     server.abort();
+}
+
+async fn completed_provider() -> &'static str {
+    "data: {\"choices\":[{\"delta\":{\"content\":\"Done\"}}]}\n\ndata: [DONE]\n\n"
+}
+
+#[sqlx::test(migrations = "./migrations")]
+async fn approved_agent_mutation_has_explicit_redacted_provenance(pool: sqlx::PgPool) {
+    let (base_url, api_server) = start_server(pool.clone()).await;
+    let conversation: support::Value = authenticated_client()
+        .post(format!("{base_url}/agent/conversations"))
+        .json(&support::json!({"title": "Audited agent"}))
+        .send()
+        .await
+        .unwrap()
+        .error_for_status()
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    let provider_listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let provider_address = provider_listener.local_addr().unwrap();
+    let provider_server = tokio::spawn(async move {
+        axum::serve(
+            provider_listener,
+            Router::new().route("/v1/chat/completions", post(completed_provider)),
+        )
+        .await
+        .unwrap();
+    });
+    let config = AgentProviderConfig::from_values(|name| match name {
+        "LLM_API_KEY" => Some("test-key".to_owned()),
+        "LLM_BASE_URL" => Some(format!("http://{provider_address}/v1")),
+        _ => None,
+    })
+    .unwrap()
+    .unwrap();
+    let workspace = BOOTSTRAP_WORKSPACE_ID.parse::<Uuid>().unwrap();
+    let actor = BOOTSTRAP_OWNER_ID.parse::<Uuid>().unwrap();
+    let repository = CatalogRepository::new(pool.clone())
+        .for_workspace(workspace)
+        .await
+        .unwrap();
+    let run = repository
+        .create_agent_run_for_user(
+            conversation["id"].as_str().unwrap().parse().unwrap(),
+            actor,
+            config.base_url.as_str(),
+            &config.model,
+        )
+        .await
+        .unwrap();
+    let call = repository
+        .create_agent_tool_call(
+            run.id,
+            Some("provider-call"),
+            "create_context",
+            support::json!({"code": "agent-audited", "data": {"token": "not-audit-metadata"}}),
+            Some("Create context agent-audited"),
+            "pending_approval",
+        )
+        .await
+        .unwrap();
+    let _approved = repository
+        .decide_tool_call(call.id, actor, ApprovalDecision::Approve)
+        .await
+        .unwrap();
+    let object_store: Arc<dyn ObjectStore> = Arc::new(FakeObjectStore::available());
+    agent_runner::resume(
+        &repository,
+        &OpenAiCompatibleClient::new(&config).unwrap(),
+        &object_store,
+        run.id,
+    )
+    .await
+    .unwrap();
+
+    let event = sqlx::query_as::<_, (Option<Uuid>, String, Uuid, Uuid, Uuid, String, String, Option<Uuid>, support::Value)>(
+        "SELECT actor_user_id, executor_type, agent_run_id, agent_conversation_id, agent_tool_call_id, agent_tool_name, approval_decision, approved_by_user_id, metadata FROM audit_events WHERE agent_tool_call_id = $1",
+    )
+    .bind(call.id)
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert_eq!(event.0, Some(actor));
+    assert_eq!(event.1, "agent");
+    assert_eq!(event.2, run.id);
+    assert_eq!(
+        event.3,
+        conversation["id"]
+            .as_str()
+            .unwrap()
+            .parse::<Uuid>()
+            .unwrap()
+    );
+    assert_eq!(event.4, call.id);
+    assert_eq!(event.5, "create_context");
+    assert_eq!(event.6, "approved");
+    assert_eq!(event.7, Some(actor));
+    assert_eq!(event.8, support::json!({}));
+    assert_eq!(
+        sqlx::query_scalar::<_, i64>(
+            "SELECT count(*) FROM attribute_contexts WHERE code = 'agent-audited'"
+        )
+        .fetch_one(&pool)
+        .await
+        .unwrap(),
+        1
+    );
+
+    // Agent mutation audits use the same transaction-owned repository path:
+    // rejecting the audit insert must leave the requested catalog change out.
+    sqlx::query(
+        "ALTER TABLE audit_events ADD CONSTRAINT audit_events_agent_test_reject CHECK (false) NOT VALID",
+    )
+    .execute(&pool)
+    .await
+    .unwrap();
+    let rollback_run = repository
+        .create_agent_run_for_user(
+            conversation["id"].as_str().unwrap().parse().unwrap(),
+            actor,
+            config.base_url.as_str(),
+            &config.model,
+        )
+        .await
+        .unwrap();
+    let rollback_call = repository
+        .create_agent_tool_call(
+            rollback_run.id,
+            Some("provider-call-rollback"),
+            "create_context",
+            support::json!({"code": "agent-audit-rollback", "data": {}}),
+            Some("Create context agent-audit-rollback"),
+            "pending_approval",
+        )
+        .await
+        .unwrap();
+    repository
+        .decide_tool_call(rollback_call.id, actor, ApprovalDecision::Approve)
+        .await
+        .unwrap();
+    agent_runner::resume(
+        &repository,
+        &OpenAiCompatibleClient::new(&config).unwrap(),
+        &object_store,
+        rollback_run.id,
+    )
+    .await
+    .unwrap();
+    assert_eq!(
+        sqlx::query_scalar::<_, i64>(
+            "SELECT count(*) FROM attribute_contexts WHERE code = 'agent-audit-rollback'"
+        )
+        .fetch_one(&pool)
+        .await
+        .unwrap(),
+        0
+    );
+    api_server.abort();
+    provider_server.abort();
 }
 
 #[sqlx::test(migrations = "./migrations")]
