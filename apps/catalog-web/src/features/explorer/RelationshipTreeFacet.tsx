@@ -103,7 +103,7 @@ const RelationshipTreeFacetContent = ({
           },
           ...(query ? { query } : {}),
           source_relationship_field: sourceField,
-          hierarchy_field: hierarchyField!,
+          ...(hierarchyField ? { hierarchy_field: hierarchyField } : {}),
           context_id: contexts.find((context) => context.code === contextCode)!
             .id,
           ...(parentId === undefined ? {} : { parent_id: parentId }),
@@ -244,30 +244,34 @@ const RelationshipTreeFacetContent = ({
       </List>
       <Accordion disableGutters elevation={0} sx={{ mt: 1 }}>
         <AccordionSummary expandIcon={<ExpandMoreIcon />}>
-          <Typography variant="body2">Tree options</Typography>
+          <Typography variant="body2">
+            {hierarchyFields.length ? 'Tree options' : 'Facet options'}
+          </Typography>
         </AccordionSummary>
         <AccordionDetails>
-          <TextField
-            fullWidth
-            label="Build tree using"
-            onChange={(event) => onHierarchyFieldChange(event.target.value)}
-            select
-            size="small"
-            value={hierarchyField ?? ''}
-          >
-            {hierarchyFields.map((field) => (
-              <MenuItem key={field} value={field}>
-                {field}
-              </MenuItem>
-            ))}
-          </TextField>
+          {hierarchyFields.length > 0 && (
+            <TextField
+              fullWidth
+              label="Build tree using"
+              onChange={(event) => onHierarchyFieldChange(event.target.value)}
+              select
+              size="small"
+              value={hierarchyField ?? ''}
+            >
+              {hierarchyFields.map((field) => (
+                <MenuItem key={field} value={field}>
+                  {field}
+                </MenuItem>
+              ))}
+            </TextField>
+          )}
           <TextField
             fullWidth
             label="Context"
             onChange={(event) => onContextChange(event.target.value)}
             select
             size="small"
-            sx={{ mt: 2 }}
+            sx={{ mt: hierarchyFields.length ? 2 : 0 }}
             value={contextCode ?? ''}
           >
             {contexts.map((context) => (

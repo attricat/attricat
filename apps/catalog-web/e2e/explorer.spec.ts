@@ -111,6 +111,58 @@ target_blueprint = "${categoryCode}"`,
   await expect(page.getByRole('cell', { name: 'Canvas bag' })).toBeHidden();
 });
 
+test('filters explorer results with a one-level relationship facet', async ({
+  page,
+}) => {
+  const colorCode = `facet_color_${suffix()}`;
+  const productCode = `facet_color_product_${suffix()}`;
+  const color = await createEntityBlueprint(
+    colorCode,
+    'Facet colors',
+    `[[attributes]]
+code = "title"
+value_type = "string"`,
+  );
+  const red = await createEntity(color, [scalar('title', 'Red')]);
+  const blue = await createEntity(color, [scalar('title', 'Blue')]);
+  const product = await createEntityBlueprint(
+    productCode,
+    'Color products',
+    `[[attributes]]
+code = "title"
+value_type = "string"
+tags = ["searchable"]
+
+[[attributes]]
+code = "color"
+value_type = "relationship"
+target_blueprint = "${colorCode}"`,
+  );
+  await createEntity(product, [
+    scalar('title', 'Red shirt'),
+    relationship('color', red.id),
+  ]);
+  await createEntity(product, [
+    scalar('title', 'Blue shirt'),
+    relationship('color', blue.id),
+  ]);
+
+  await page.goto(`/?blueprint=${productCode}`);
+  await page.getByLabel('Relationship').click();
+  await page.getByRole('option', { name: 'color' }).click();
+  await expect(page.getByRole('checkbox', { name: 'Red (1)' })).toBeVisible();
+  await expect(page.getByRole('checkbox', { name: 'Blue (1)' })).toBeVisible();
+  await expect(page.getByText('Facet options')).toBeVisible();
+  await page.getByRole('checkbox', { name: 'Red (1)' }).check();
+
+  await expect
+    .poll(() => new URL(page.url()).searchParams.get('categories'))
+    .toBe(JSON.stringify([red.id]));
+  await expect(page.getByText('1 result')).toBeVisible();
+  await expect(page.getByRole('cell', { name: 'Red shirt' })).toBeVisible();
+  await expect(page.getByRole('cell', { name: 'Blue shirt' })).toBeHidden();
+});
+
 test('loads additional explorer search pages', async ({ page }) => {
   const code = `pagination_${suffix()}`;
   const blueprint = await createEntityBlueprint(

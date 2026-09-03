@@ -61,10 +61,10 @@ export const Explorer = ({ search }: { search: ExplorerSearch }) => {
     (context) => context.code === contextCode,
   )?.id;
   const relationshipTreeFacet =
-    sourceRelationship && hierarchyField && contextId
+    sourceRelationship && contextId
       ? {
           source_relationship_field: sourceRelationship.code,
-          hierarchy_field: hierarchyField,
+          ...(hierarchyField ? { hierarchy_field: hierarchyField } : {}),
           context_id: contextId,
           selected_target_ids: search.categories ?? [],
         }

@@ -77,12 +77,7 @@ export const ExplorerFacetSidebar = ({
         Loading category tree...
       </Typography>
     )}
-    {searchFacetField && !isTargetBlueprintPending && !hierarchyFields.length && (
-      <Typography color="text.secondary" sx={{ mt: 2 }} variant="body2">
-        This relationship target has no self-referencing relationship.
-      </Typography>
-    )}
-    {hierarchyField && sourceRelationship && (
+    {sourceRelationship && !isTargetBlueprintPending && (
       <RelationshipTreeFacet
         blueprint={blueprint}
         contextCode={contextCode}

@@ -276,7 +276,8 @@ pub struct SearchEntitiesRequest {
 #[serde(deny_unknown_fields)]
 pub struct RelationshipTreeFacetRequest {
     pub source_relationship_field: String,
-    pub hierarchy_field: String,
+    #[serde(default)]
+    pub hierarchy_field: Option<String>,
     pub context_id: Uuid,
     #[serde(default)]
     pub selected_target_ids: Vec<Uuid>,
@@ -302,7 +303,8 @@ pub struct RelationshipTreeFacetChildrenRequest {
     #[serde(default)]
     pub query: Option<String>,
     pub source_relationship_field: String,
-    pub hierarchy_field: String,
+    #[serde(default)]
+    pub hierarchy_field: Option<String>,
     pub context_id: Uuid,
     #[serde(default)]
     pub parent_id: Option<Uuid>,

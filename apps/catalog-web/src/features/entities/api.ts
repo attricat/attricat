@@ -91,7 +91,7 @@ export const searchEntities = (
   cursor: string | null = null,
   relationshipTreeFacet?: {
     source_relationship_field: string;
-    hierarchy_field: string;
+    hierarchy_field?: string;
     context_id: string;
     selected_target_ids: string[];
   },
@@ -117,7 +117,7 @@ export const getRelationshipTreeFacetChildren = (input: {
   blueprint: { code: string; version?: number };
   query?: string;
   source_relationship_field: string;
-  hierarchy_field: string;
+  hierarchy_field?: string;
   context_id: string;
   parent_id?: string;
   cursor?: string | null;
