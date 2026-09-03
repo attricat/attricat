@@ -207,15 +207,22 @@ a call is pending; a repeated or contradictory decision returns the normal
 Conversation titles are limited to 512 bytes and messages to 1–32,768 bytes.
 Upload standalone conversation files with multipart `POST`
 `/agent/conversations/{id}/uploads`, then include up to 16 returned,
-workspace-scoped, unique `attachment_ids` when posting the message. Images up
-to 5 MiB are inlined to the provider; larger files are represented by metadata
-and file ID. Entity
+workspace-scoped, unique `attachment_ids` when posting the message. Every
+provider request includes each attachment's display filename, MIME type, and
+file ID; it excludes object-store keys, download URLs, checksums, and byte
+sizes. Only `image/*` attachments whose stored size and retrieved bytes are at
+most 5 MiB (5,242,880 bytes) also send their original bytes as a base64 `data:`
+image URL. Non-images, oversized images, and unreadable images send no file
+content. The same stored conversation history is sent on later runs and
+provider tool-call rounds, so this applies each time the message is included.
+See [Agent provider attachment forwarding](configuration.md#attachment-forwarding)
+for tool-requested file behavior and provider-retention implications. Entity
 file uploads remain available through their file-attribute endpoint. A message
-or run request returns `503 service_unavailable` when the API
-has no configured provider/worker. Runs retain provider/model snapshots and
-safe error codes, but never provider credentials or raw provider response
-bodies. Read tools run automatically; every mutation is emitted as an approval
-proposal before it reaches a repository write.
+or run request returns `503 service_unavailable` when the API has no configured
+provider/worker. Runs retain provider/model snapshots and safe error codes, but
+never provider credentials or raw provider response bodies. Read tools run
+automatically; every mutation is emitted as an approval proposal before it
+reaches a repository write.
 
 Schedules are managed by `GET`/`POST /agent/schedules`,
 `PUT`/`DELETE /agent/schedules/{id}`, and
