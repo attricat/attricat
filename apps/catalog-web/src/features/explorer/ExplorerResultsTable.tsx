@@ -61,8 +61,14 @@ export const ExplorerResultsTable = ({
     columnHelper.display({
       id: 'display',
       header: 'Display',
-      cell: (info) =>
-        displayLabel(info.row.original.display, info.row.original.id),
+      cell: (info) => (
+        <Link
+          params={{ entityId: info.row.original.id }}
+          to="/entities/$entityId"
+        >
+          {displayLabel(info.row.original.display, info.row.original.id)}
+        </Link>
+      ),
     }) as LegacyColumnDef<EntityItem, string>,
     columnHelper.display({
       id: 'schema',
@@ -147,7 +153,16 @@ export const ExplorerResultsTable = ({
             {table.getHeaderGroups().map((group) => (
               <TableRow key={group.id}>
                 {group.headers.map((header) => (
-                  <TableCell key={header.id}>
+                  <TableCell
+                    key={header.id}
+                    sx={
+                      header.column.id === 'display'
+                        ? { minWidth: 280 }
+                        : header.column.id === 'id'
+                          ? { whiteSpace: 'nowrap', width: 290 }
+                          : {}
+                    }
+                  >
                     {header.isPlaceholder
                       ? null
                       : flexRender(
@@ -192,7 +207,16 @@ export const ExplorerResultsTable = ({
                   ref={rowVirtualizer.measureElement}
                 >
                   {row.getVisibleCells().map((cell) => (
-                    <TableCell key={cell.id}>
+                    <TableCell
+                      key={cell.id}
+                      sx={
+                        cell.column.id === 'display'
+                          ? { minWidth: 280 }
+                          : cell.column.id === 'id'
+                            ? { whiteSpace: 'nowrap', width: 290 }
+                            : {}
+                      }
+                    >
                       {flexRender(
                         cell.column.columnDef.cell,
                         cell.getContext(),
