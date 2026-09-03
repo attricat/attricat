@@ -99,6 +99,27 @@ pub struct AttributeValueHistory {
     pub archived_at: DateTime<Utc>,
 }
 
+#[derive(Clone, Debug, FromRow, Serialize)]
+pub struct EntityAuditChange {
+    pub audit_event_id: Uuid,
+    pub occurred_at: DateTime<Utc>,
+    pub actor_user_id: Option<Uuid>,
+    pub actor_display_name: Option<String>,
+    pub actor_email: Option<String>,
+    pub executor_type: String,
+    pub agent_run_id: Option<Uuid>,
+    pub approval_decision: Option<String>,
+    pub approved_by_user_id: Option<Uuid>,
+    pub approved_by_display_name: Option<String>,
+    pub attribute_id: Uuid,
+    pub attribute_code: String,
+    pub context_id: Option<Uuid>,
+    pub context_code: Option<String>,
+    pub change_kind: String,
+    pub before_value: Option<Value>,
+    pub after_value: Option<Value>,
+}
+
 #[derive(Clone, Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct CreateBlueprint {

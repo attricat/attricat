@@ -7,6 +7,7 @@ import {
   createAttributeContextSchema,
   createEntityRequestSchema,
   entityHierarchySchema,
+  entityAuditChangeSchema,
   entityFormResponseSchema,
   entityMigrationPreviewSchema,
   entitySchema,
@@ -30,6 +31,7 @@ export type {
   BlueprintWithAttributes,
   ComponentReference,
   Entity,
+  EntityAuditChange,
   EntityFormResponse,
   EntityMigrationPreview,
   FormAttributeValue,
@@ -205,6 +207,11 @@ export const getCurrentBlueprint = (id: string) =>
   request(
     `/api/blueprints/${encodeURIComponent(uuidSchema.parse(id))}`,
     blueprintWithAttributesSchema,
+  );
+export const getEntityChanges = (id: string) =>
+  request(
+    `/api/entities/${encodeURIComponent(uuidSchema.parse(id))}/changes`,
+    z.array(entityAuditChangeSchema),
   );
 export const getEntityForm = (id: string) => {
   const entityId = uuidSchema.parse(id);

@@ -9,8 +9,9 @@ use crate::{
     catalog_service::CatalogMutationService,
     model::{
         AppendAttributeValues, AttributeValue, AttributeValueHistory, CreateEntityFormRequest,
-        Entity, EntityFormResponse, IncomingRelationshipsPage, IncomingRelationshipsRequest,
-        MigrateEntityRequest, RelationshipMutation, UpdateEntityFormRequest,
+        Entity, EntityAuditChange, EntityFormResponse, IncomingRelationshipsPage,
+        IncomingRelationshipsRequest, MigrateEntityRequest, RelationshipMutation,
+        UpdateEntityFormRequest,
     },
     repository::decode_search_cursor,
 };
@@ -146,6 +147,16 @@ pub(super) async fn get_current_values(
         return Err(ApiError::not_found("entity"));
     }
     Ok(Json(repository.current_values(entity_id).await?))
+}
+pub(super) async fn get_entity_changes(
+    State(_state): State<AppState>,
+    super::auth::ScopedRepository(repository): super::auth::ScopedRepository,
+    ApiPath(entity_id): ApiPath<Uuid>,
+) -> Result<Json<Vec<EntityAuditChange>>, ApiError> {
+    if repository.get_entity(entity_id).await?.is_none() {
+        return Err(ApiError::not_found("entity"));
+    }
+    Ok(Json(repository.entity_audit_changes(entity_id).await?))
 }
 pub(super) async fn get_value_history(
     State(_state): State<AppState>,

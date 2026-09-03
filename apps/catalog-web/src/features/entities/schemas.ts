@@ -352,6 +352,32 @@ export const entityHierarchySchema = z.object({
   multiple_parents: z.boolean(),
   cycle_detected: z.boolean(),
 });
+export const entityAuditChangeSchema = z.object({
+  audit_event_id: uuidSchema,
+  occurred_at: z.string(),
+  actor_user_id: uuidSchema.nullable(),
+  actor_display_name: z.string().nullable(),
+  actor_email: z.string().nullable(),
+  executor_type: z.string(),
+  agent_run_id: uuidSchema.nullable(),
+  approval_decision: z.string().nullable(),
+  approved_by_user_id: uuidSchema.nullable(),
+  approved_by_display_name: z.string().nullable(),
+  attribute_id: uuidSchema,
+  attribute_code: z.string(),
+  context_id: uuidSchema.nullable(),
+  context_code: z.string().nullable(),
+  change_kind: z.enum([
+    'set',
+    'replace',
+    'remove',
+    'relationship_add',
+    'relationship_remove',
+    'restore',
+  ]),
+  before_value: z.unknown().nullable(),
+  after_value: z.unknown().nullable(),
+});
 const entityFormResponseSchema = z.object({
   entity: entitySchema,
   blueprint: blueprintWithAttributesSchema,
@@ -441,6 +467,7 @@ export type FormAttributeValue = z.infer<typeof formAttributeValueSchema>;
 export type RelationshipTargets = z.infer<typeof relationshipTargetsSchema>;
 export type AttributeContext = z.infer<typeof attributeContextSchema>;
 export type Entity = z.infer<typeof entitySchema>;
+export type EntityAuditChange = z.infer<typeof entityAuditChangeSchema>;
 export type EntityItem = z.infer<typeof entityItemSchema>;
 export type EntitySearchResponse = z.infer<typeof entitySearchResponseSchema>;
 export type RelationshipTreeFacetChildrenResponse = z.infer<

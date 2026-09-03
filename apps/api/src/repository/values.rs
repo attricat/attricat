@@ -484,6 +484,9 @@ impl CatalogRepository {
         history_id: Uuid,
     ) -> Result<AttributeValue, RepositoryError> {
         let mut transaction = self.pool.begin().await?;
+        let before = self
+            .entity_audit_snapshot(&mut transaction, entity_id)
+            .await?;
         let entity = self.lock_entity(&mut transaction, entity_id).await?;
         let history = sqlx::query_as::<_, HistoryNativeValueRow>(
             r#"SELECT h.id, h.entity_id, h.attribute_id, h.relationship_target_entity_id,
@@ -544,7 +547,14 @@ impl CatalogRepository {
         let preview = Self::build_preview_projection(&mut transaction, entity.id).await?;
         self.store_preview(&mut transaction, entity.id, preview)
             .await?;
-        self.commit_mutation(transaction).await?;
+        let after = self
+            .entity_audit_snapshot(&mut transaction, entity_id)
+            .await?;
+        self.commit_entity_mutation(
+            transaction,
+            Self::audit_changes(entity_id, before, after, true),
+        )
+        .await?;
         Ok(value)
     }
 }

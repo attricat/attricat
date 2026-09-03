@@ -5,7 +5,17 @@ use catalog_validation::validate_json_schema;
 use chrono::Utc;
 use serde_json::{Map, Value};
 use sqlx::{Postgres, Transaction};
-use std::collections::HashSet;
+use std::collections::{BTreeMap, HashSet};
+
+#[derive(sqlx::FromRow, Clone)]
+pub(super) struct AuditValueSnapshot {
+    attribute_id: Uuid,
+    attribute_code: String,
+    context_id: Option<Uuid>,
+    context_code: Option<String>,
+    relationship_target_entity_id: Option<Uuid>,
+    value: Value,
+}
 use uuid::Uuid;
 
 impl CatalogRepository {
@@ -39,7 +49,14 @@ impl CatalogRepository {
         let entity = self
             .store_preview(&mut transaction, entity.id, preview)
             .await?;
-        self.commit_mutation(transaction).await?;
+        let after = self
+            .entity_audit_snapshot(&mut transaction, entity.id)
+            .await?;
+        self.commit_entity_mutation(
+            transaction,
+            Self::audit_changes(entity.id, Vec::new(), after, false),
+        )
+        .await?;
         Ok(entity)
     }
 
@@ -59,6 +76,9 @@ impl CatalogRepository {
             validate_system_metadata(metadata)?;
         }
         let mut transaction = self.pool.begin().await?;
+        let before = self
+            .entity_audit_snapshot(&mut transaction, entity_id)
+            .await?;
         // The row lock serializes writers for an entity. It protects both the
         // one-latest-value invariant and the preview rebuilt from that state.
         let entity = self.lock_entity(&mut transaction, entity_id).await?;
@@ -92,8 +112,39 @@ impl CatalogRepository {
         let entity = self
             .store_preview(&mut transaction, entity.id, preview)
             .await?;
-        self.commit_mutation(transaction).await?;
+        let after = self
+            .entity_audit_snapshot(&mut transaction, entity_id)
+            .await?;
+        self.commit_entity_mutation(
+            transaction,
+            Self::audit_changes(entity_id, before, after, false),
+        )
+        .await?;
         Ok(entity)
+    }
+
+    pub async fn entity_audit_changes(
+        &self,
+        entity_id: Uuid,
+    ) -> Result<Vec<EntityAuditChange>, RepositoryError> {
+        Ok(sqlx::query_as::<_, EntityAuditChange>(
+            r#"SELECT c.audit_event_id, e.occurred_at, e.actor_user_id,
+                      actor.display_name AS actor_display_name, actor.email AS actor_email,
+                      e.executor_type, e.agent_run_id, e.approval_decision, e.approved_by_user_id,
+                      approver.display_name AS approved_by_display_name,
+                      c.attribute_id, c.attribute_code, c.context_id, c.context_code,
+                      c.change_kind, c.before_value, c.after_value
+               FROM audit_event_changes c
+               JOIN audit_events e ON e.id = c.audit_event_id
+               LEFT JOIN users actor ON actor.id = e.actor_user_id
+               LEFT JOIN users approver ON approver.id = e.approved_by_user_id
+               WHERE c.entity_id = $1 AND c.workspace_id = $2
+               ORDER BY e.occurred_at DESC, c.id DESC"#,
+        )
+        .bind(entity_id)
+        .bind(self.workspace_id.unwrap_or(Self::DEFAULT_WORKSPACE_ID))
+        .fetch_all(&self.pool)
+        .await?)
     }
 
     pub async fn get_entity(&self, entity_id: Uuid) -> Result<Option<Entity>, RepositoryError> {
@@ -110,6 +161,9 @@ impl CatalogRepository {
 
     pub async fn delete_entity(&self, entity_id: Uuid) -> Result<(), RepositoryError> {
         let mut transaction = self.pool.begin().await?;
+        let before = self
+            .entity_audit_snapshot(&mut transaction, entity_id)
+            .await?;
         let result = sqlx::query(
             "UPDATE entities SET deleted_at = now(), updated_at = now() WHERE id = $1 AND workspace_id = $2 AND deleted_at IS NULL",
         )
@@ -120,7 +174,11 @@ impl CatalogRepository {
         if result.rows_affected() == 0 {
             return Err(RepositoryError::NotFound("entity"));
         }
-        self.commit_mutation(transaction).await?;
+        self.commit_entity_mutation(
+            transaction,
+            Self::audit_changes(entity_id, before, Vec::new(), false),
+        )
+        .await?;
         Ok(())
     }
 
@@ -130,6 +188,9 @@ impl CatalogRepository {
         input: AppendAttributeValues,
     ) -> Result<Vec<AttributeValue>, RepositoryError> {
         let mut transaction = self.pool.begin().await?;
+        let before = self
+            .entity_audit_snapshot(&mut transaction, entity_id)
+            .await?;
         let entity = sqlx::query_as::<_, Entity>(
             r#"SELECT id, blueprint_id, blueprint_version, projections, system_tags, system_metadata, created_at, updated_at, deleted_at
                FROM entities
@@ -162,7 +223,14 @@ impl CatalogRepository {
         .execute(&mut *transaction)
         .await?;
 
-        self.commit_mutation(transaction).await?;
+        let after = self
+            .entity_audit_snapshot(&mut transaction, entity_id)
+            .await?;
+        self.commit_entity_mutation(
+            transaction,
+            Self::audit_changes(entity_id, before, after, false),
+        )
+        .await?;
         Ok(values)
     }
 
@@ -189,6 +257,9 @@ impl CatalogRepository {
         replace: bool,
     ) -> Result<Vec<AttributeValue>, RepositoryError> {
         let mut transaction = self.pool.begin().await?;
+        let before = self
+            .entity_audit_snapshot(&mut transaction, entity_id)
+            .await?;
         let entity = self.lock_entity(&mut transaction, entity_id).await?;
         let mut values = Vec::new();
         for relationship in input.relationships {
@@ -252,7 +323,14 @@ impl CatalogRepository {
         self.validate_entity_schema(&mut transaction, &entity)
             .await?;
         self.touch_entity(&mut transaction, entity_id).await?;
-        self.commit_mutation(transaction).await?;
+        let after = self
+            .entity_audit_snapshot(&mut transaction, entity_id)
+            .await?;
+        self.commit_entity_mutation(
+            transaction,
+            Self::audit_changes(entity_id, before, after, false),
+        )
+        .await?;
         Ok(values)
     }
 
@@ -807,6 +885,99 @@ impl CatalogRepository {
         )
         .bind(Uuid::new_v4()).bind(self.workspace_id.unwrap_or(Self::DEFAULT_WORKSPACE_ID)).bind(entity_id).bind(attribute_id).bind(context_id)
         .bind(target_entity_id).bind(active).fetch_one(&mut **transaction).await?)
+    }
+
+    pub(super) async fn entity_audit_snapshot(
+        &self,
+        transaction: &mut Transaction<'_, Postgres>,
+        entity_id: Uuid,
+    ) -> Result<Vec<AuditValueSnapshot>, RepositoryError> {
+        sqlx::query_as::<_, AuditValueSnapshot>(
+            r#"SELECT av.attribute_id, a.code AS attribute_code, av.context_id, c.code AS context_code,
+                      av.relationship_target_entity_id,
+                      CASE a.value_type
+                        WHEN 'string' THEN to_jsonb(av.value_text)
+                        WHEN 'number' THEN to_jsonb(av.value_number)
+                        WHEN 'integer' THEN to_jsonb(av.value_integer)
+                        WHEN 'boolean' THEN to_jsonb(av.value_boolean)
+                        WHEN 'date' THEN to_jsonb(av.value_date)
+                        WHEN 'datetime' THEN to_jsonb(av.value_datetime)
+                        WHEN 'time' THEN jsonb_build_object('time', av.value_time::text, 'time_zone', av.value_time_zone)
+                        WHEN 'relationship' THEN to_jsonb(av.relationship_target_entity_id::text)
+                      END AS value
+               FROM attribute_values av
+               JOIN attributes a ON a.id = av.attribute_id
+               LEFT JOIN attribute_contexts c ON c.id = av.context_id
+               WHERE av.entity_id = $1 AND av.workspace_id = $2 AND (av.relationship_target_entity_id IS NULL OR av.active)
+                 AND a.value_type <> 'file'
+               ORDER BY a.code, c.code, av.relationship_target_entity_id"#,
+        )
+        .bind(entity_id)
+        .bind(self.workspace_id.unwrap_or(Self::DEFAULT_WORKSPACE_ID))
+        .fetch_all(&mut **transaction)
+        .await
+        .map_err(Into::into)
+    }
+
+    pub(super) fn audit_changes(
+        entity_id: Uuid,
+        before: Vec<AuditValueSnapshot>,
+        after: Vec<AuditValueSnapshot>,
+        restored: bool,
+    ) -> Vec<AuditEventChange> {
+        let index = |values: Vec<AuditValueSnapshot>| {
+            values
+                .into_iter()
+                .map(|value| {
+                    (
+                        (
+                            value.attribute_id,
+                            value.context_id,
+                            value.relationship_target_entity_id,
+                        ),
+                        value,
+                    )
+                })
+                .collect::<BTreeMap<_, _>>()
+        };
+        let before = index(before);
+        let after = index(after);
+        let keys: std::collections::BTreeSet<_> =
+            before.keys().chain(after.keys()).copied().collect();
+        keys.into_iter()
+            .filter_map(|key| {
+                let old = before.get(&key);
+                let new = after.get(&key);
+                if old.map(|value| &value.value) == new.map(|value| &value.value) {
+                    return None;
+                }
+                let source = new.or(old)?;
+                let relationship = source.relationship_target_entity_id.is_some();
+                let change_kind = if restored {
+                    "restore"
+                } else if relationship && old.is_none() {
+                    "relationship_add"
+                } else if relationship && new.is_none() {
+                    "relationship_remove"
+                } else if old.is_none() {
+                    "set"
+                } else if new.is_none() {
+                    "remove"
+                } else {
+                    "replace"
+                };
+                Some(AuditEventChange {
+                    entity_id,
+                    attribute_id: source.attribute_id,
+                    attribute_code: source.attribute_code.clone(),
+                    context_id: source.context_id,
+                    context_code: source.context_code.clone(),
+                    change_kind,
+                    before_value: old.map(|value| value.value.clone()),
+                    after_value: new.map(|value| value.value.clone()),
+                })
+            })
+            .collect()
     }
 
     pub(super) async fn archive_current_value(

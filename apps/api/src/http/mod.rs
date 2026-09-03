@@ -359,6 +359,10 @@ pub fn router(state: AppState) -> Router {
             post(entities::append_values),
         )
         .route(
+            "/entities/{entity_id}/changes",
+            get(entities::get_entity_changes),
+        )
+        .route(
             "/entities/{entity_id}/values/history",
             get(entities::get_value_history),
         )
