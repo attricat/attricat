@@ -25,9 +25,12 @@ settings. The local RustFS-backed production-compatibility check is opt-in and
 uses the same `S3_*` settings as the API:
 
 ```sh
-set -a; . ./.env; set +a
-cargo test -p api --test s3_compat -- --ignored
+just dev # leave this running in another terminal to start RustFS
+just test-s3-compat
 ```
+
+`test-s3-compat` creates the worktree environment and loads its generated S3
+settings before running the ignored RustFS compatibility test.
 
 ## Learn The Model
 
