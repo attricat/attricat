@@ -26,7 +26,6 @@ import {
   findEntityHeading,
 } from '../views/components/blocks/EntityHeadingDefinition';
 import { resolveHeadingRenderer } from '../views/components/registry';
-
 export const EntityPreviewPage = ({ entityId }: { entityId: string }) => {
   const [selectedContext, setSelectedContext] = useState('default');
   const contexts = useQuery({
@@ -84,6 +83,10 @@ export const EntityPreviewPage = ({ entityId }: { entityId: string }) => {
       <Box sx={{ mt: 1 }}>
         <Link params={{ entityId }} to="/entities/$entityId/edit">
           Edit entity
+        </Link>
+        {' | '}
+        <Link params={{ entityId }} to="/entities/$entityId/changes">
+          Changes
         </Link>
         {currentBlueprint.data && resolved.data && (
           <>

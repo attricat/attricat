@@ -9,6 +9,7 @@ export const entityQueryKeys = {
   relationshipTargets: (blueprint: string | null | undefined) =>
     ['relationship-targets', blueprint] as const,
   form: (entityId: string) => ['entity-form', entityId] as const,
+  changes: (entityId: string) => ['entity-changes', entityId] as const,
   migrationPreview: (entityId: string) =>
     ['entity-migration-preview', entityId] as const,
   resolvedPreview: (entityId: string, contextId: string) =>

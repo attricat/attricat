@@ -3,6 +3,7 @@ import {
   createEntity,
   createContext,
   getBlueprintByCode,
+  getEntityChanges,
   getEntityForm,
   getEntityHierarchy,
   getIncomingRelationships,
@@ -59,6 +60,35 @@ describe('entity API client', () => {
     await getEntityForm(entityId);
     expect(fetchMock).toHaveBeenCalledWith(
       `/api/v1/entities/${entityId}`,
+      undefined,
+    );
+  });
+
+  it('loads entity changes from the timeline route', async () => {
+    respond([
+      {
+        audit_event_id: entityId,
+        occurred_at: '2026-09-09T12:00:00Z',
+        actor_user_id: null,
+        actor_display_name: null,
+        actor_email: null,
+        executor_type: 'human',
+        agent_run_id: null,
+        approval_decision: null,
+        approved_by_user_id: null,
+        approved_by_display_name: null,
+        attribute_id: entityId,
+        attribute_code: 'title',
+        context_id: null,
+        context_code: null,
+        change_kind: 'replace',
+        before_value: 'Old title',
+        after_value: 'New title',
+      },
+    ]);
+    await expect(getEntityChanges(entityId)).resolves.toHaveLength(1);
+    expect(fetchMock).toHaveBeenCalledWith(
+      `/api/entities/${entityId}/changes`,
       undefined,
     );
   });
