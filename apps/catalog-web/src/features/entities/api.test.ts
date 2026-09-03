@@ -212,12 +212,14 @@ describe('entity API client', () => {
       next_cursor: null,
     });
 
-    await searchEntities('product', undefined, '', null, {
-      source_relationship_field: 'categories',
-      hierarchy_field: 'parent',
-      context_id: entityId,
-      selected_target_ids: [entityId],
-    });
+    await searchEntities('product', undefined, '', null, [
+      {
+        source_relationship_field: 'categories',
+        hierarchy_field: 'parent',
+        context_id: entityId,
+        selected_target_ids: [entityId],
+      },
+    ]);
 
     expect(fetchMock).toHaveBeenLastCalledWith('/api/v1/entities/search', {
       method: 'POST',
@@ -226,12 +228,14 @@ describe('entity API client', () => {
         blueprint: { code: 'product' },
         query: '',
         filters: [],
-        relationship_tree_facet: {
-          source_relationship_field: 'categories',
-          hierarchy_field: 'parent',
-          context_id: entityId,
-          selected_target_ids: [entityId],
-        },
+        relationship_tree_facets: [
+          {
+            source_relationship_field: 'categories',
+            hierarchy_field: 'parent',
+            context_id: entityId,
+            selected_target_ids: [entityId],
+          },
+        ],
         page: { size: 25, cursor: null },
       }),
     });

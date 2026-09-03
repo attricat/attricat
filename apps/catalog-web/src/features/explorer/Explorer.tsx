@@ -1,6 +1,7 @@
 import {
   keepPreviousData,
   useInfiniteQuery,
+  useQueries,
   useQuery,
 } from '@tanstack/react-query';
 import { Link, useNavigate } from '@tanstack/react-router';
@@ -9,13 +10,16 @@ import { useEffect } from 'react';
 import { PageContainer } from '../../components/PageContainer';
 import { PageHeader } from '../../components/PageHeader';
 import {
-  listEntityBlueprints,
   getBlueprintByCode,
   listContexts,
+  listEntityBlueprints,
   searchEntities,
 } from '../entities/api';
 import { entityQueryKeys } from '../entities/query-keys';
-import { ExplorerFacetSidebar } from './ExplorerFacetSidebar';
+import {
+  ExplorerFacetSidebar,
+  type ExplorerRelationshipFacet,
+} from './ExplorerFacetSidebar';
 import { ExplorerResultsTable } from './ExplorerResultsTable';
 import { ExplorerSearchForm } from './ExplorerSearchForm';
 import type { ExplorerSearch } from './search';
@@ -33,17 +37,15 @@ const getLastBlueprint = () => {
 export const Explorer = ({ search: urlSearch }: { search: ExplorerSearch }) => {
   const search = {
     ...urlSearch,
-    // A URL selection is shareable and therefore takes precedence over the
-    // per-tab fallback.
     blueprint: urlSearch.blueprint ?? getLastBlueprint(),
   };
   const navigate = useNavigate({ from: '/' });
 
   useEffect(() => {
-    if (!urlSearch.blueprint) return;
-
-    sessionStorage.setItem(lastBlueprintStorageKey, urlSearch.blueprint);
+    if (urlSearch.blueprint)
+      sessionStorage.setItem(lastBlueprintStorageKey, urlSearch.blueprint);
   }, [urlSearch.blueprint]);
+
   const contexts = useQuery({
     queryKey: entityQueryKeys.contexts(),
     queryFn: listContexts,
@@ -54,52 +56,76 @@ export const Explorer = ({ search: urlSearch }: { search: ExplorerSearch }) => {
     enabled: Boolean(search.blueprint),
   });
   const relationshipFields = (selectedBlueprint.data?.attributes ?? []).filter(
-    (attribute) =>
-      attribute.value_type === 'relationship' && attribute.target_blueprint_code,
+    (
+      attribute,
+    ): attribute is typeof attribute & { target_blueprint_code: string } =>
+      attribute.value_type === 'relationship' &&
+      typeof attribute.target_blueprint_code === 'string',
   );
-  const facetField = search.facetField ?? relationshipFields[0]?.code;
-  const sourceRelationship = relationshipFields.find(
-    (attribute) => attribute.code === facetField,
-  );
-  const targetBlueprint = useQuery({
-    queryKey: entityQueryKeys.blueprintByCode(
-      sourceRelationship?.target_blueprint_code ?? undefined,
-      undefined,
-    ),
-    queryFn: () =>
-      getBlueprintByCode(sourceRelationship!.target_blueprint_code!),
-    enabled: Boolean(sourceRelationship?.target_blueprint_code),
+  const targets = useQueries({
+    queries: relationshipFields.map((field) => ({
+      queryKey: entityQueryKeys.blueprintByCode(
+        field.target_blueprint_code,
+        undefined,
+      ),
+      queryFn: () => getBlueprintByCode(field.target_blueprint_code!),
+    })),
   });
-  const hierarchyFields = (targetBlueprint.data?.attributes ?? [])
-    .filter(
-      (attribute) =>
-        attribute.value_type === 'relationship' &&
-        attribute.target_blueprint_code ===
-          sourceRelationship?.target_blueprint_code,
-    )
-    .map((attribute) => attribute.code);
-  const hierarchyField = hierarchyFields.includes(search.facetHierarchy ?? '')
-    ? search.facetHierarchy
-    : hierarchyFields[0];
-  const contextCode = search.facetContext ?? 'default';
-  const contextId = contexts.data?.find(
-    (context) => context.code === contextCode,
-  )?.id;
-  const relationshipTreeFacet =
-    sourceRelationship && contextId
-      ? {
-          source_relationship_field: sourceRelationship.code,
-          ...(hierarchyField ? { hierarchy_field: hierarchyField } : {}),
-          context_id: contextId,
-          selected_target_ids: search.categories ?? [],
-        }
-      : undefined;
+  const contextCodeByField = new Map(
+    (search.relationshipFacets ?? []).map((facet) => [
+      facet.field,
+      facet.context ?? 'default',
+    ]),
+  );
+  const explorerFacets: ExplorerRelationshipFacet[] = relationshipFields.map(
+    (sourceRelationship, index) => {
+      const saved = search.relationshipFacets?.find(
+        (facet) => facet.field === sourceRelationship.code,
+      );
+      const targetBlueprint = targets[index]?.data;
+      const hierarchyFields = (targetBlueprint?.attributes ?? [])
+        .filter(
+          (attribute) =>
+            attribute.value_type === 'relationship' &&
+            attribute.target_blueprint_code ===
+              sourceRelationship.target_blueprint_code,
+        )
+        .map((attribute) => attribute.code);
+      return {
+        contextCode: saved?.context ?? 'default',
+        sourceRelationship,
+        targetBlueprint,
+        hierarchyFields,
+        hierarchyField: hierarchyFields.includes(saved?.hierarchy ?? '')
+          ? saved?.hierarchy
+          : hierarchyFields[0],
+        selectedIds: saved?.selectedIds ?? [],
+      };
+    },
+  );
+  const relationshipTreeFacets = explorerFacets.flatMap((facet) => {
+    const contextId = contexts.data?.find(
+      (context) =>
+        context.code === contextCodeByField.get(facet.sourceRelationship.code),
+    )?.id;
+    if (!facet.targetBlueprint || !contextId) return [];
+    return [
+      {
+        source_relationship_field: facet.sourceRelationship.code,
+        ...(facet.hierarchyField
+          ? { hierarchy_field: facet.hierarchyField }
+          : {}),
+        context_id: contextId,
+        selected_target_ids: facet.selectedIds,
+      },
+    ];
+  });
   const results = useInfiniteQuery({
     queryKey: entityQueryKeys.search(
       search.blueprint,
       search.version,
       search.query,
-      relationshipTreeFacet,
+      relationshipTreeFacets,
     ),
     queryFn: ({ pageParam }) =>
       searchEntities(
@@ -107,14 +133,11 @@ export const Explorer = ({ search: urlSearch }: { search: ExplorerSearch }) => {
         search.version,
         search.query ?? '',
         pageParam,
-        relationshipTreeFacet,
+        relationshipTreeFacets,
       ),
     initialPageParam: null as string | null,
     getNextPageParam: (page) => page.next_cursor,
     enabled: Boolean(search.blueprint),
-    // Facet selections change this query's key. Preserve the current explorer
-    // while the filtered result page is fetched instead of replacing it with a
-    // full-page loading state.
     placeholderData: keepPreviousData,
   });
   const resultPages = results.data?.pages ?? [];
@@ -124,10 +147,22 @@ export const Explorer = ({ search: urlSearch }: { search: ExplorerSearch }) => {
     queryKey: entityQueryKeys.blueprints(),
     queryFn: listEntityBlueprints,
   });
-  const updateFacet = (updates: Partial<ExplorerSearch>) => {
+  const updateFacet = (
+    field: string,
+    updates: { hierarchy?: string; context?: string; selectedIds?: string[] },
+  ) => {
+    const current = search.relationshipFacets ?? [];
+    const existing = current.find((facet) => facet.field === field);
+    const nextFacet = { field, ...existing, ...updates };
     void navigate({
       to: '/',
-      search: { ...search, ...updates },
+      search: {
+        ...search,
+        relationshipFacets: [
+          ...current.filter((facet) => facet.field !== field),
+          nextFacet,
+        ],
+      },
     });
   };
 
@@ -150,12 +185,7 @@ export const Explorer = ({ search: urlSearch }: { search: ExplorerSearch }) => {
             search: {
               ...(value.blueprint === search.blueprint
                 ? search
-                : {
-                    facetField: undefined,
-                    facetHierarchy: undefined,
-                    facetContext: undefined,
-                    categories: undefined,
-                  }),
+                : { relationshipFacets: undefined }),
               ...value,
             },
           });
@@ -189,17 +219,10 @@ export const Explorer = ({ search: urlSearch }: { search: ExplorerSearch }) => {
         >
           <ExplorerFacetSidebar
             blueprint={search.blueprint ?? ''}
-            contextCode={contextCode}
             contexts={contexts.data ?? []}
-            hierarchyField={hierarchyField}
-            hierarchyFields={hierarchyFields}
-            isTargetBlueprintPending={targetBlueprint.isPending}
+            facets={explorerFacets}
             onUpdate={updateFacet}
             query={search.query}
-            relationshipFields={relationshipFields}
-            searchFacetField={facetField}
-            selectedIds={search.categories ?? []}
-            sourceRelationship={sourceRelationship}
             version={search.version}
           />
           {resultBlueprint && (
@@ -209,7 +232,7 @@ export const Explorer = ({ search: urlSearch }: { search: ExplorerSearch }) => {
                 search.blueprint,
                 search.version,
                 search.query,
-                relationshipTreeFacet,
+                relationshipTreeFacets,
               ])}
               hasNextPage={results.hasNextPage}
               isFetchingNextPage={results.isFetchingNextPage}

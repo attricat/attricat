@@ -411,13 +411,15 @@ export const searchEntitiesRequestSchema = z.object({
   query: z.string(),
   filters: z.array(z.never()),
   system_tags: z.array(z.string()).optional(),
-  relationship_tree_facet: z
-    .object({
-      source_relationship_field: z.string().min(1),
-      hierarchy_field: z.string().min(1).optional(),
-      context_id: uuidSchema,
-      selected_target_ids: z.array(uuidSchema),
-    })
+  relationship_tree_facets: z
+    .array(
+      z.object({
+        source_relationship_field: z.string().min(1),
+        hierarchy_field: z.string().min(1).optional(),
+        context_id: uuidSchema,
+        selected_target_ids: z.array(uuidSchema),
+      }),
+    )
     .optional(),
   page: z.object({
     size: z.number().int().positive(),
