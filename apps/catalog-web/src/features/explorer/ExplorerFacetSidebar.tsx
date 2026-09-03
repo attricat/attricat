@@ -4,7 +4,9 @@ import {
   AccordionDetails,
   AccordionSummary,
   CircularProgress,
+  MenuItem,
   Paper,
+  TextField,
   Typography,
 } from '@mui/material';
 import { useQuery } from '@tanstack/react-query';
@@ -15,7 +17,6 @@ import { entityQueryKeys } from '../entities/query-keys';
 import { RelationshipTreeFacet } from './RelationshipTreeFacet';
 
 export type ExplorerRelationshipFacet = {
-  contextCode: string;
   hierarchyField?: string;
   selectedIds: string[];
   sourceRelationship: Attribute;
@@ -24,9 +25,11 @@ export type ExplorerRelationshipFacet = {
 type Props = {
   blueprint: string;
   contexts: AttributeContext[];
+  contextCode: string;
   facets: ExplorerRelationshipFacet[];
   query?: string;
   version?: number;
+  onContextChange: (contextCode: string) => void;
   onUpdate: (
     field: string,
     updates: {
@@ -44,9 +47,11 @@ type FacetProps = Omit<Props, 'facets'> & {
 export const ExplorerFacetSidebar = ({
   blueprint,
   contexts,
+  contextCode,
   facets,
   query,
   version,
+  onContextChange,
   onUpdate,
 }: Props) => (
   <Paper
@@ -61,9 +66,25 @@ export const ExplorerFacetSidebar = ({
     }}
   >
     <Typography variant="subtitle2">Relationship filters</Typography>
+    <TextField
+      fullWidth
+      label="Context"
+      onChange={(event) => onContextChange(event.target.value)}
+      select
+      size="small"
+      sx={{ mt: 1 }}
+      value={contextCode}
+    >
+      {contexts.map((context) => (
+        <MenuItem key={context.id} value={context.code}>
+          {context.code === 'default' ? 'Default' : context.code}
+        </MenuItem>
+      ))}
+    </TextField>
     {facets.map((facet) => (
       <Facet
         blueprint={blueprint}
+        contextCode={contextCode}
         contexts={contexts}
         facet={facet}
         key={facet.sourceRelationship.code}
@@ -77,6 +98,7 @@ export const ExplorerFacetSidebar = ({
 
 const Facet = ({
   blueprint,
+  contextCode,
   contexts,
   facet,
   onUpdate,
@@ -126,16 +148,10 @@ const Facet = ({
         ) : (
           <RelationshipTreeFacet
             blueprint={blueprint}
-            contextCode={facet.contextCode}
+            contextCode={contextCode}
             contexts={contexts}
             hierarchyField={hierarchyField}
             hierarchyFields={hierarchyFields}
-            onContextChange={(context) =>
-              onUpdate(facet.sourceRelationship.code, {
-                context,
-                selectedIds: [],
-              })
-            }
             onHierarchyFieldChange={(hierarchy) =>
               onUpdate(facet.sourceRelationship.code, {
                 hierarchy,

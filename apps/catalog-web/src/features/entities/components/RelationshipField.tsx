@@ -18,12 +18,14 @@ export const RelationshipField = ({
   attribute,
   disabled = false,
   error,
+  helperText,
   onChange,
   value,
 }: {
   attribute: Attribute;
   disabled?: boolean;
   error?: string;
+  helperText?: string;
   onChange: (value: string) => void;
   value: string;
 }) => {
@@ -108,6 +110,11 @@ export const RelationshipField = ({
         {error && (
           <Typography color="error" variant="caption">
             {error}
+          </Typography>
+        )}
+        {helperText && (
+          <Typography color="text.secondary" variant="caption">
+            {helperText}
           </Typography>
         )}
       </FormControl>

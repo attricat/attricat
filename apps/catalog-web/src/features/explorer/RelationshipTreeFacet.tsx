@@ -40,7 +40,6 @@ type Props = {
   contextCode?: string;
   selectedIds: string[];
   onHierarchyFieldChange: (field: string) => void;
-  onContextChange: (contextCode: string) => void;
   onSelectedIdsChange: (ids: string[]) => void;
 };
 
@@ -69,7 +68,6 @@ const RelationshipTreeFacetContent = ({
   contextCode,
   selectedIds,
   onHierarchyFieldChange,
-  onContextChange,
   onSelectedIdsChange,
 }: Props) => {
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
@@ -242,14 +240,12 @@ const RelationshipTreeFacetContent = ({
           </ListItem>
         )}
       </List>
-      <Accordion disableGutters elevation={0} sx={{ mt: 1 }}>
-        <AccordionSummary expandIcon={<ExpandMoreIcon />}>
-          <Typography variant="body2">
-            {hierarchyFields.length ? 'Tree options' : 'Facet options'}
-          </Typography>
-        </AccordionSummary>
-        <AccordionDetails>
-          {hierarchyFields.length > 0 && (
+      {hierarchyFields.length > 0 && (
+        <Accordion disableGutters elevation={0} sx={{ mt: 1 }}>
+          <AccordionSummary expandIcon={<ExpandMoreIcon />}>
+            <Typography variant="body2">Tree options</Typography>
+          </AccordionSummary>
+          <AccordionDetails>
             <TextField
               fullWidth
               label="Build tree using"
@@ -264,24 +260,9 @@ const RelationshipTreeFacetContent = ({
                 </MenuItem>
               ))}
             </TextField>
-          )}
-          <TextField
-            fullWidth
-            label="Context"
-            onChange={(event) => onContextChange(event.target.value)}
-            select
-            size="small"
-            sx={{ mt: hierarchyFields.length ? 2 : 0 }}
-            value={contextCode ?? ''}
-          >
-            {contexts.map((context) => (
-              <MenuItem key={context.id} value={context.code}>
-                {context.code === 'default' ? 'Default' : context.code}
-              </MenuItem>
-            ))}
-          </TextField>
-        </AccordionDetails>
-      </Accordion>
+          </AccordionDetails>
+        </Accordion>
+      )}
     </>
   );
 };

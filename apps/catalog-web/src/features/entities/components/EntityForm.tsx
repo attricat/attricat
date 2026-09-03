@@ -200,7 +200,6 @@ export const EntityForm = ({
                   const value = field.state.value[attribute.code] ?? '';
                   const localValueExists = existingValues.some(
                     (item) =>
-                      item.kind === 'scalar' &&
                       item.attribute_code === attribute.code &&
                       (item.context_id ?? null) === contextId,
                   );
@@ -219,7 +218,9 @@ export const EntityForm = ({
                   const helperText = defaultOnly
                     ? 'Managed in Default'
                     : inherited
-                      ? `Using ${resolvedValue.source_context.code}: ${typeof resolvedValue.value === 'object' ? JSON.stringify(resolvedValue.value) : String(resolvedValue.value)}`
+                      ? attribute.value_type === 'relationship'
+                        ? `Inherited from ${resolvedValue.source_context.code} context`
+                        : `Inherited from ${resolvedValue.source_context.code} context: ${typeof resolvedValue.value === 'object' ? JSON.stringify(resolvedValue.value) : String(resolvedValue.value)}`
                       : undefined;
                   const handleChange = (nextValue: string) => {
                     const nextFields = {

@@ -61,19 +61,13 @@ export const Explorer = ({ search: urlSearch }: { search: ExplorerSearch }) => {
       attribute.value_type === 'relationship' &&
       typeof attribute.target_blueprint_code === 'string',
   );
-  const contextCodeByField = new Map(
-    (search.relationshipFacets ?? []).map((facet) => [
-      facet.field,
-      facet.context ?? 'default',
-    ]),
-  );
+  const facetContextCode = search.relationshipFacets?.[0]?.context ?? 'default';
   const explorerFacets: ExplorerRelationshipFacet[] = relationshipFields.map(
     (sourceRelationship) => {
       const saved = search.relationshipFacets?.find(
         (facet) => facet.field === sourceRelationship.code,
       );
       return {
-        contextCode: saved?.context ?? 'default',
         hierarchyField: saved?.hierarchy,
         selectedIds: saved?.selectedIds ?? [],
         sourceRelationship,
@@ -82,8 +76,7 @@ export const Explorer = ({ search: urlSearch }: { search: ExplorerSearch }) => {
   );
   const relationshipTreeFacets = explorerFacets.flatMap((facet) => {
     const contextId = contexts.data?.find(
-      (context) =>
-        context.code === contextCodeByField.get(facet.sourceRelationship.code),
+      (context) => context.code === facetContextCode,
     )?.id;
     if (!facet.selectedIds.length || !contextId) return [];
     return [
@@ -124,6 +117,24 @@ export const Explorer = ({ search: urlSearch }: { search: ExplorerSearch }) => {
     queryKey: entityQueryKeys.blueprints(),
     queryFn: listEntityBlueprints,
   });
+  const updateFacetContext = (context: string) => {
+    const current = search.relationshipFacets ?? [];
+    void navigate({
+      to: '/',
+      search: {
+        ...search,
+        relationshipFacets: relationshipFields.map((field) => {
+          const existing = current.find((facet) => facet.field === field.code);
+          return {
+            field: field.code,
+            ...existing,
+            context,
+            selectedIds: [],
+          };
+        }),
+      },
+    });
+  };
   const updateFacet = (
     field: string,
     updates: { hierarchy?: string; context?: string; selectedIds?: string[] },
@@ -196,8 +207,10 @@ export const Explorer = ({ search: urlSearch }: { search: ExplorerSearch }) => {
         >
           <ExplorerFacetSidebar
             blueprint={search.blueprint ?? ''}
+            contextCode={facetContextCode}
             contexts={contexts.data ?? []}
             facets={explorerFacets}
+            onContextChange={updateFacetContext}
             onUpdate={updateFacet}
             query={search.query}
             version={search.version}

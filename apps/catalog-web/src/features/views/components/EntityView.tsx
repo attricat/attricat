@@ -28,7 +28,10 @@ import {
 import { AttributeValue } from './values/AttributeValue';
 import { IncomingRelationshipListDisplay } from './IncomingRelationshipListDisplay';
 
-type ResolvedValue = { value: unknown; source_context?: { code: string } };
+type ResolvedValue = {
+  value: unknown;
+  source_context?: { id: string; code: string };
+};
 type Props = {
   view?: ViewDefinition;
   attributes: readonly Attribute[];
@@ -78,11 +81,13 @@ const ValueField = ({
               />
             );
           })()}
-          {resolved?.source_context && (
-            <Typography color="text.secondary" variant="caption">
-              Using {resolved.source_context.code}
-            </Typography>
-          )}
+          {resolved?.source_context &&
+            contextId &&
+            resolved.source_context.id !== contextId && (
+              <Typography color="text.secondary" variant="caption">
+                Inherited from {resolved.source_context.code} context
+              </Typography>
+            )}
         </>
       )}
     </Stack>

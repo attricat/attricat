@@ -150,7 +150,7 @@ target_blueprint = "${colorCode}"`,
   await page.getByRole('button', { name: 'color' }).click();
   await expect(page.getByRole('checkbox', { name: 'Red (1)' })).toBeVisible();
   await expect(page.getByRole('checkbox', { name: 'Blue (1)' })).toBeVisible();
-  await expect(page.getByText('Facet options')).toBeVisible();
+  await expect(page.getByLabel('Context')).toBeVisible();
   await page.getByRole('checkbox', { name: 'Red (1)' }).check();
 
   await expect

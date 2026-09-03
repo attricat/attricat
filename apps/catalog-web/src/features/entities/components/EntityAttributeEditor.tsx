@@ -42,6 +42,7 @@ export const EntityAttributeEditor = ({
           attribute={attribute}
           disabled={disabled}
           error={error}
+          helperText={helperText}
           onChange={onChange}
           value={value}
         />
