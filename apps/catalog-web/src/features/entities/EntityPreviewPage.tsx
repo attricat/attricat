@@ -7,8 +7,6 @@ import {
   Box,
   MenuItem,
   Paper,
-  Tab,
-  Tabs,
   TextField,
   Typography,
 } from '@mui/material';
@@ -18,7 +16,6 @@ import { PageHeader } from '../../components/PageHeader';
 import {
   getBlueprintRevision,
   getCurrentBlueprint,
-  getEntityChanges,
   getResolvedEntityPreview,
   listContexts,
 } from './api';
@@ -29,17 +26,8 @@ import {
   findEntityHeading,
 } from '../views/components/blocks/EntityHeadingDefinition';
 import { resolveHeadingRenderer } from '../views/components/registry';
-import type { EntityAuditChange } from './api';
-
-const groupChangesByEvent = (changes: EntityAuditChange[]) =>
-  changes.reduce<Record<string, EntityAuditChange[]>>((groups, change) => {
-    (groups[change.audit_event_id] ??= []).push(change);
-    return groups;
-  }, {});
-
 export const EntityPreviewPage = ({ entityId }: { entityId: string }) => {
   const [selectedContext, setSelectedContext] = useState('default');
-  const [tab, setTab] = useState<'preview' | 'changes'>('preview');
   const contexts = useQuery({
     queryKey: entityQueryKeys.contexts(),
     queryFn: listContexts,
@@ -78,11 +66,6 @@ export const EntityPreviewPage = ({ entityId }: { entityId: string }) => {
     queryFn: () => getCurrentBlueprint(resolved.data!.entity.blueprint_id!),
     enabled: Boolean(resolved.data?.entity.blueprint_id),
   });
-  const changes = useQuery({
-    queryKey: entityQueryKeys.changes(entityId),
-    queryFn: () => getEntityChanges(entityId),
-    enabled: tab === 'changes',
-  });
   const detailView = blueprint.data?.blueprint.views.detail;
   const heading = findEntityHeading(detailView);
   const HeadingRenderer = resolveHeadingRenderer(heading?.component);
@@ -100,6 +83,10 @@ export const EntityPreviewPage = ({ entityId }: { entityId: string }) => {
       <Box sx={{ mt: 1 }}>
         <Link params={{ entityId }} to="/entities/$entityId/edit">
           Edit entity
+        </Link>
+        {' | '}
+        <Link params={{ entityId }} to="/entities/$entityId/changes">
+          Changes
         </Link>
         {currentBlueprint.data && resolved.data && (
           <>
@@ -140,61 +127,10 @@ export const EntityPreviewPage = ({ entityId }: { entityId: string }) => {
           </>
         )}
       </Box>
-      <Tabs
-        aria-label="Entity detail tabs"
-        onChange={(_, value: 'preview' | 'changes') => setTab(value)}
-        sx={{ mt: 2 }}
-        value={tab}
-      >
-        <Tab label="Preview" value="preview" />
-        <Tab label="Changes" value="changes" />
-      </Tabs>
-      {tab === 'changes' && changes.isPending && (
-        <Typography sx={{ py: 3 }}>Loading changes...</Typography>
-      )}
-      {tab === 'changes' && changes.isError && (
-        <Alert severity="error" sx={{ mt: 3 }}>{changes.error.message}</Alert>
-      )}
-      {tab === 'changes' && changes.data && (
-        <Box sx={{ mt: 3 }}>
-          {Object.entries(groupChangesByEvent(changes.data)).map(([
-            eventId,
-            eventChanges,
-          ]) => {
-            const event = eventChanges[0];
-            const actor = event.actor_display_name ?? event.actor_email ??
-              (event.executor_type === 'agent' ? 'Agent' : 'Unknown actor');
-            return (
-              <Paper component="section" key={eventId} sx={{ mb: 2, p: 2 }}>
-                <Typography sx={{ fontWeight: 'bold' }}>
-                  {actor} · {new Date(event.occurred_at).toLocaleString()}
-                </Typography>
-                <Typography color="text.secondary" variant="body2">
-                  {event.approval_decision
-                    ? `Approval: ${event.approval_decision}${event.approved_by_display_name ? ` by ${event.approved_by_display_name}` : ''}`
-                    : 'No approval attribution'}
-                </Typography>
-                {eventChanges.map((change) => (
-                  <Box key={`${change.attribute_id}-${change.change_kind}`} sx={{ mt: 1 }}>
-                    <Typography variant="body2">
-                      <strong>{change.attribute_code}</strong>
-                      {change.context_code ? ` (${change.context_code})` : ''}: {change.change_kind.replaceAll('_', ' ')}
-                    </Typography>
-                    <Typography component="pre" sx={{ fontFamily: 'monospace', m: 0, whiteSpace: 'pre-wrap' }} variant="body2">
-                      {JSON.stringify(change.before_value)} → {JSON.stringify(change.after_value)}
-                    </Typography>
-                  </Box>
-                ))}
-              </Paper>
-            );
-          })}
-          {changes.data.length === 0 && <Typography>No recorded changes.</Typography>}
-        </Box>
-      )}
-      {tab === 'preview' && contexts.isPending && (
+      {contexts.isPending && (
         <Typography sx={{ py: 3 }}>Loading contexts...</Typography>
       )}
-      {tab === 'preview' && contexts.data && (
+      {contexts.data && (
         <>
           <TextField
             select

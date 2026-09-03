@@ -34,6 +34,7 @@ import { Route as WorkspaceInvitationsRouteImport } from './routes/workspace/inv
 import { Route as WorkspaceMembersRouteImport } from './routes/workspace/members'
 import { Route as WorkspaceRolesRouteImport } from './routes/workspace/roles'
 import { Route as EntitiesEntityIdIndexRouteImport } from './routes/entities/$entityId/index'
+import { Route as EntitiesEntityIdChangesRouteImport } from './routes/entities/$entityId/changes'
 import { Route as EntitiesEntityIdEditRouteImport } from './routes/entities/$entityId/edit'
 import { Route as EntitiesEntityIdMigrateRouteImport } from './routes/entities/$entityId/migrate'
 
@@ -162,6 +163,11 @@ const EntitiesEntityIdIndexRoute = EntitiesEntityIdIndexRouteImport.update({
   path: '/',
   getParentRoute: () => EntitiesEntityIdRoute,
 } as any)
+const EntitiesEntityIdChangesRoute = EntitiesEntityIdChangesRouteImport.update({
+  id: '/changes',
+  path: '/changes',
+  getParentRoute: () => EntitiesEntityIdRoute,
+} as any)
 const EntitiesEntityIdEditRoute = EntitiesEntityIdEditRouteImport.update({
   id: '/edit',
   path: '/edit',
@@ -198,6 +204,7 @@ export interface FileRoutesByFullPath {
   '/login/': typeof LoginIndexRoute
   '/password-reset/': typeof PasswordResetIndexRoute
   '/workspace/': typeof WorkspaceIndexRoute
+  '/entities/$entityId/changes': typeof EntitiesEntityIdChangesRoute
   '/entities/$entityId/edit': typeof EntitiesEntityIdEditRoute
   '/entities/$entityId/migrate': typeof EntitiesEntityIdMigrateRoute
   '/entities/$entityId/': typeof EntitiesEntityIdIndexRoute
@@ -225,6 +232,7 @@ export interface FileRoutesByTo {
   '/login': typeof LoginIndexRoute
   '/password-reset': typeof PasswordResetIndexRoute
   '/workspace': typeof WorkspaceIndexRoute
+  '/entities/$entityId/changes': typeof EntitiesEntityIdChangesRoute
   '/entities/$entityId/edit': typeof EntitiesEntityIdEditRoute
   '/entities/$entityId/migrate': typeof EntitiesEntityIdMigrateRoute
   '/entities/$entityId': typeof EntitiesEntityIdIndexRoute
@@ -255,6 +263,7 @@ export interface FileRoutesById {
   '/login/': typeof LoginIndexRoute
   '/password-reset/': typeof PasswordResetIndexRoute
   '/workspace/': typeof WorkspaceIndexRoute
+  '/entities/$entityId/changes': typeof EntitiesEntityIdChangesRoute
   '/entities/$entityId/edit': typeof EntitiesEntityIdEditRoute
   '/entities/$entityId/migrate': typeof EntitiesEntityIdMigrateRoute
   '/entities/$entityId/': typeof EntitiesEntityIdIndexRoute
@@ -286,6 +295,7 @@ export interface FileRouteTypes {
     | '/login/'
     | '/password-reset/'
     | '/workspace/'
+    | '/entities/$entityId/changes'
     | '/entities/$entityId/edit'
     | '/entities/$entityId/migrate'
     | '/entities/$entityId/'
@@ -313,6 +323,7 @@ export interface FileRouteTypes {
     | '/login'
     | '/password-reset'
     | '/workspace'
+    | '/entities/$entityId/changes'
     | '/entities/$entityId/edit'
     | '/entities/$entityId/migrate'
     | '/entities/$entityId'
@@ -342,6 +353,7 @@ export interface FileRouteTypes {
     | '/login/'
     | '/password-reset/'
     | '/workspace/'
+    | '/entities/$entityId/changes'
     | '/entities/$entityId/edit'
     | '/entities/$entityId/migrate'
     | '/entities/$entityId/'
@@ -549,6 +561,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof EntitiesEntityIdIndexRouteImport
       parentRoute: typeof EntitiesEntityIdRoute
     }
+    '/entities/$entityId/changes': {
+      id: '/entities/$entityId/changes'
+      path: '/changes'
+      fullPath: '/entities/$entityId/changes'
+      preLoaderRoute: typeof EntitiesEntityIdChangesRouteImport
+      parentRoute: typeof EntitiesEntityIdRoute
+    }
     '/entities/$entityId/edit': {
       id: '/entities/$entityId/edit'
       path: '/edit'
@@ -579,12 +598,14 @@ const LoginRouteChildren: LoginRouteChildren = {
 const LoginRouteWithChildren = LoginRoute._addFileChildren(LoginRouteChildren)
 
 interface EntitiesEntityIdRouteChildren {
+  EntitiesEntityIdChangesRoute: typeof EntitiesEntityIdChangesRoute
   EntitiesEntityIdEditRoute: typeof EntitiesEntityIdEditRoute
   EntitiesEntityIdMigrateRoute: typeof EntitiesEntityIdMigrateRoute
   EntitiesEntityIdIndexRoute: typeof EntitiesEntityIdIndexRoute
 }
 
 const EntitiesEntityIdRouteChildren: EntitiesEntityIdRouteChildren = {
+  EntitiesEntityIdChangesRoute: EntitiesEntityIdChangesRoute,
   EntitiesEntityIdEditRoute: EntitiesEntityIdEditRoute,
   EntitiesEntityIdMigrateRoute: EntitiesEntityIdMigrateRoute,
   EntitiesEntityIdIndexRoute: EntitiesEntityIdIndexRoute,
