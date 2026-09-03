@@ -130,11 +130,15 @@ metadata; originals and storage keys are never returned.
 
 A newly accepted file has `status: "queued"`. Image files are processed into
 `thumbnail` and `display` WebP variants; non-image files become `ready` without
-variants. Metadata and downloads return `409` until processing is ready. A
-failed job records a safe processing error and is retried with bounded
-exponential backoff; an operator can requeue a terminal failed job as described
-in [Configuration](configuration.md). Downloads are authorized, proxied through
-the API, private/no-store, and support one `Range: bytes=start-end` request.
+variants. `GET /files/{file_id}` returns `200` with safe metadata and its
+current status while a file is queued, processing, ready, or failed. The
+original and variant download endpoints return `409 file_processing` until the
+file is `ready`, including after terminal processing failure. A failed job
+records a safe processing error and is retried with bounded exponential backoff;
+an operator can requeue a terminal failed job as described in
+[Configuration](configuration.md). Ready downloads are authorized, proxied
+through the API, private/no-store, and support one `Range: bytes=start-end`
+request.
 
 ## Request performance
 
