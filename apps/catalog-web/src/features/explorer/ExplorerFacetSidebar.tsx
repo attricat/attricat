@@ -1,18 +1,24 @@
-import { Paper, Typography } from '@mui/material';
-import type {
-  Attribute,
-  AttributeContext,
-  BlueprintWithAttributes,
-} from '../entities/api';
+import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
+import {
+  Accordion,
+  AccordionDetails,
+  AccordionSummary,
+  CircularProgress,
+  Paper,
+  Typography,
+} from '@mui/material';
+import { useQuery } from '@tanstack/react-query';
+import { useState } from 'react';
+import type { Attribute, AttributeContext } from '../entities/api';
+import { getBlueprintByCode } from '../entities/api';
+import { entityQueryKeys } from '../entities/query-keys';
 import { RelationshipTreeFacet } from './RelationshipTreeFacet';
 
 export type ExplorerRelationshipFacet = {
   contextCode: string;
   hierarchyField?: string;
-  hierarchyFields: string[];
   selectedIds: string[];
   sourceRelationship: Attribute;
-  targetBlueprint?: BlueprintWithAttributes;
 };
 
 type Props = {
@@ -29,6 +35,10 @@ type Props = {
       selectedIds?: string[];
     },
   ) => void;
+};
+
+type FacetProps = Omit<Props, 'facets'> & {
+  facet: ExplorerRelationshipFacet;
 };
 
 export const ExplorerFacetSidebar = ({
@@ -52,21 +62,74 @@ export const ExplorerFacetSidebar = ({
   >
     <Typography variant="subtitle2">Relationship filters</Typography>
     {facets.map((facet) => (
-      <section key={facet.sourceRelationship.code}>
-        <Typography sx={{ mt: 2 }} variant="body2">
-          {facet.sourceRelationship.code}
-        </Typography>
-        {!facet.targetBlueprint ? (
-          <Typography color="text.secondary" sx={{ mt: 1 }} variant="body2">
-            Loading facet...
+      <Facet
+        blueprint={blueprint}
+        contexts={contexts}
+        facet={facet}
+        key={facet.sourceRelationship.code}
+        onUpdate={onUpdate}
+        query={query}
+        version={version}
+      />
+    ))}
+  </Paper>
+);
+
+const Facet = ({
+  blueprint,
+  contexts,
+  facet,
+  onUpdate,
+  query,
+  version,
+}: FacetProps) => {
+  const [expanded, setExpanded] = useState(facet.selectedIds.length > 0);
+  const targetBlueprint = useQuery({
+    queryKey: entityQueryKeys.blueprintByCode(
+      facet.sourceRelationship.target_blueprint_code,
+      undefined,
+    ),
+    queryFn: () =>
+      getBlueprintByCode(facet.sourceRelationship.target_blueprint_code!),
+    enabled: expanded,
+  });
+  const hierarchyFields = (targetBlueprint.data?.attributes ?? [])
+    .filter(
+      (attribute) =>
+        attribute.value_type === 'relationship' &&
+        attribute.target_blueprint_code ===
+          facet.sourceRelationship.target_blueprint_code,
+    )
+    .map((attribute) => attribute.code);
+  const hierarchyField = hierarchyFields.includes(facet.hierarchyField ?? '')
+    ? facet.hierarchyField
+    : hierarchyFields[0];
+
+  return (
+    <Accordion
+      disableGutters
+      elevation={0}
+      expanded={expanded}
+      onChange={(_, isExpanded) => setExpanded(isExpanded)}
+      sx={{ '&:before': { display: 'none' }, mt: 1 }}
+    >
+      <AccordionSummary expandIcon={<ExpandMoreIcon />}>
+        <Typography variant="body2">{facet.sourceRelationship.code}</Typography>
+      </AccordionSummary>
+      <AccordionDetails>
+        {targetBlueprint.isPending ? (
+          <CircularProgress aria-label="Loading facet options" size={20} />
+        ) : targetBlueprint.isError ? (
+          <Typography color="error" variant="body2">
+            {targetBlueprint.error.message}
           </Typography>
         ) : (
           <RelationshipTreeFacet
             blueprint={blueprint}
             contextCode={facet.contextCode}
             contexts={contexts}
-            hierarchyField={facet.hierarchyField}
-            hierarchyFields={facet.hierarchyFields}
+            hierarchyField={hierarchyField}
+            hierarchyFields={hierarchyFields}
             onContextChange={(context) =>
               onUpdate(facet.sourceRelationship.code, {
                 context,
@@ -80,7 +143,10 @@ export const ExplorerFacetSidebar = ({
               })
             }
             onSelectedIdsChange={(selectedIds) =>
-              onUpdate(facet.sourceRelationship.code, { selectedIds })
+              onUpdate(facet.sourceRelationship.code, {
+                ...(hierarchyField ? { hierarchy: hierarchyField } : {}),
+                selectedIds,
+              })
             }
             query={query}
             selectedIds={facet.selectedIds}
@@ -88,7 +154,7 @@ export const ExplorerFacetSidebar = ({
             version={version}
           />
         )}
-      </section>
-    ))}
-  </Paper>
-);
+      </AccordionDetails>
+    </Accordion>
+  );
+};

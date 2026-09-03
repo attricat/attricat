@@ -1,7 +1,6 @@
 import {
   keepPreviousData,
   useInfiniteQuery,
-  useQueries,
   useQuery,
 } from '@tanstack/react-query';
 import { Link, useNavigate } from '@tanstack/react-router';
@@ -62,15 +61,6 @@ export const Explorer = ({ search: urlSearch }: { search: ExplorerSearch }) => {
       attribute.value_type === 'relationship' &&
       typeof attribute.target_blueprint_code === 'string',
   );
-  const targets = useQueries({
-    queries: relationshipFields.map((field) => ({
-      queryKey: entityQueryKeys.blueprintByCode(
-        field.target_blueprint_code,
-        undefined,
-      ),
-      queryFn: () => getBlueprintByCode(field.target_blueprint_code!),
-    })),
-  });
   const contextCodeByField = new Map(
     (search.relationshipFacets ?? []).map((facet) => [
       facet.field,
@@ -78,28 +68,15 @@ export const Explorer = ({ search: urlSearch }: { search: ExplorerSearch }) => {
     ]),
   );
   const explorerFacets: ExplorerRelationshipFacet[] = relationshipFields.map(
-    (sourceRelationship, index) => {
+    (sourceRelationship) => {
       const saved = search.relationshipFacets?.find(
         (facet) => facet.field === sourceRelationship.code,
       );
-      const targetBlueprint = targets[index]?.data;
-      const hierarchyFields = (targetBlueprint?.attributes ?? [])
-        .filter(
-          (attribute) =>
-            attribute.value_type === 'relationship' &&
-            attribute.target_blueprint_code ===
-              sourceRelationship.target_blueprint_code,
-        )
-        .map((attribute) => attribute.code);
       return {
         contextCode: saved?.context ?? 'default',
-        sourceRelationship,
-        targetBlueprint,
-        hierarchyFields,
-        hierarchyField: hierarchyFields.includes(saved?.hierarchy ?? '')
-          ? saved?.hierarchy
-          : hierarchyFields[0],
+        hierarchyField: saved?.hierarchy,
         selectedIds: saved?.selectedIds ?? [],
+        sourceRelationship,
       };
     },
   );
@@ -108,7 +85,7 @@ export const Explorer = ({ search: urlSearch }: { search: ExplorerSearch }) => {
       (context) =>
         context.code === contextCodeByField.get(facet.sourceRelationship.code),
     )?.id;
-    if (!facet.targetBlueprint || !contextId) return [];
+    if (!facet.selectedIds.length || !contextId) return [];
     return [
       {
         source_relationship_field: facet.sourceRelationship.code,
