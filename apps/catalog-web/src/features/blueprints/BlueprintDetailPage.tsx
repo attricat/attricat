@@ -98,9 +98,10 @@ export const BlueprintDetailPage = ({
     queryFn: () => listBlueprintRevisions(blueprintId),
   });
   const revisionItems = revisions.data ?? [];
-  const leftVersion = leftSelection ?? revisionItems[0]?.version;
+  const leftVersion =
+    leftSelection ?? revisionItems[1]?.version ?? revisionItems[0]?.version;
   const rightVersion =
-    rightSelection ?? revisionItems[1]?.version ?? leftVersion;
+    rightSelection ?? revisionItems[0]?.version ?? leftVersion;
   const left = useQuery({
     queryKey: blueprintQueryKeys.revision(blueprintId, leftVersion ?? 0),
     queryFn: () => getBlueprintRevision(blueprintId, leftVersion!),
