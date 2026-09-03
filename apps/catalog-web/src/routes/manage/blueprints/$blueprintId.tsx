@@ -1,10 +1,5 @@
-import { createFileRoute } from '@tanstack/react-router';
-import { BlueprintDetailPage } from '../../../features/blueprints/BlueprintDetailPage';
-
-const BlueprintDetailRoute = () => (
-  <BlueprintDetailPage blueprintId={Route.useParams().blueprintId} />
-);
+import { Outlet, createFileRoute } from '@tanstack/react-router';
 
 export const Route = createFileRoute('/manage/blueprints/$blueprintId')({
-  component: BlueprintDetailRoute,
+  component: Outlet,
 });

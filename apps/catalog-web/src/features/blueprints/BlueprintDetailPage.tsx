@@ -1,5 +1,6 @@
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { Link } from '@tanstack/react-router';
 import {
   Accordion,
   AccordionDetails,
@@ -129,15 +130,26 @@ export const BlueprintDetailPage = ({
             spacing={2}
           >
             <PageHeader eyebrow="Blueprint" title={blueprint.name} />
-            {blueprint.status === 'draft' && (
-              <Button
-                color="primary"
-                onClick={() => setPublishConfirmationOpen(true)}
-                variant="contained"
+            <Stack direction="row" spacing={1}>
+              <Link
+                params={{
+                  blueprintId,
+                  version: String(blueprint.version),
+                }}
+                to="/manage/blueprints/$blueprintId/revisions/$version/new"
               >
-                Publish
-              </Button>
-            )}
+                <Button variant="outlined">Edit blueprint</Button>
+              </Link>
+              {blueprint.status === 'draft' && (
+                <Button
+                  color="primary"
+                  onClick={() => setPublishConfirmationOpen(true)}
+                  variant="contained"
+                >
+                  Publish
+                </Button>
+              )}
+            </Stack>
           </Stack>
           <Stack direction="row" spacing={1} sx={{ flexWrap: 'wrap', mt: 1 }}>
             <Chip label={blueprint.code} variant="outlined" />
@@ -160,7 +172,10 @@ export const BlueprintDetailPage = ({
               {publish.error.message}
             </Alert>
           )}
-          <RevisionHistory revisions={revisionItems} />
+          <RevisionHistory
+            blueprintId={blueprintId}
+            revisions={revisionItems}
+          />
           {left.data && (
             <Paper component="section" sx={{ mt: 3, p: 2.5 }}>
               <Typography component="h2" variant="h6">

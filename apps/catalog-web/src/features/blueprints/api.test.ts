@@ -1,5 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
+  createBlueprint,
+  createBlueprintRevision,
   getBlueprintRevision,
   listBlueprintRevisions,
   publishBlueprintRevision,
@@ -53,10 +55,47 @@ describe('blueprint API client', () => {
     );
 
     respond({ blueprint, attributes: [] });
+    await createBlueprint('format_version = 1');
+    expect(fetchMock).toHaveBeenLastCalledWith('/api/blueprints', {
+      body: JSON.stringify({ definition: 'format_version = 1' }),
+      headers: { 'Content-Type': 'application/json' },
+      method: 'POST',
+    });
+
+    respond({ blueprint, attributes: [] });
+    await createBlueprintRevision(blueprintId, 'format_version = 1');
+    expect(fetchMock).toHaveBeenLastCalledWith(
+      `/api/blueprints/${blueprintId}/versions`,
+      {
+        body: JSON.stringify({ definition: 'format_version = 1' }),
+        headers: { 'Content-Type': 'application/json' },
+        method: 'POST',
+      },
+    );
+
+    respond({ blueprint, attributes: [] });
     await publishBlueprintRevision(blueprintId, 2);
     expect(fetchMock).toHaveBeenLastCalledWith(
       `/api/blueprints/${blueprintId}/versions/2/publish`,
       { method: 'POST' },
+    );
+  });
+
+  it('preserves the API validation message for editor feedback', async () => {
+    fetchMock.mockResolvedValue({
+      json: () =>
+        Promise.resolve({
+          error: {
+            code: 'invalid_blueprint_definition',
+            message: 'blueprints must define at least one attribute',
+          },
+        }),
+      ok: false,
+      status: 422,
+    });
+
+    await expect(createBlueprint('not valid TOML')).rejects.toThrow(
+      'invalid_blueprint_definition: blueprints must define at least one attribute',
     );
   });
 });

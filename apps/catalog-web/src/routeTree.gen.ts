@@ -32,12 +32,15 @@ import { Route as EntitiesEntityIdEditRouteImport } from './routes/entities/$ent
 import { Route as EntitiesEntityIdMigrateRouteImport } from './routes/entities/$entityId/migrate'
 import { Route as ManageBlueprintsIndexRouteImport } from './routes/manage/blueprints/index'
 import { Route as ManageBlueprintsBlueprintIdRouteImport } from './routes/manage/blueprints/$blueprintId'
+import { Route as ManageBlueprintsNewRouteImport } from './routes/manage/blueprints/new'
 import { Route as ManageContextsIndexRouteImport } from './routes/manage/contexts/index'
 import { Route as ManageContextsNewRouteImport } from './routes/manage/contexts/new'
 import { Route as ManageWorkspaceIndexRouteImport } from './routes/manage/workspace/index'
 import { Route as ManageWorkspaceInvitationsRouteImport } from './routes/manage/workspace/invitations'
 import { Route as ManageWorkspaceMembersRouteImport } from './routes/manage/workspace/members'
 import { Route as ManageWorkspaceRolesRouteImport } from './routes/manage/workspace/roles'
+import { Route as ManageBlueprintsBlueprintIdIndexRouteImport } from './routes/manage/blueprints/$blueprintId/index'
+import { Route as ManageBlueprintsBlueprintIdRevisionsVersionNewRouteImport } from './routes/manage/blueprints/$blueprintId/revisions/$version/new'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
@@ -155,6 +158,11 @@ const ManageBlueprintsBlueprintIdRoute =
     path: '/manage/blueprints/$blueprintId',
     getParentRoute: () => rootRouteImport,
   } as any)
+const ManageBlueprintsNewRoute = ManageBlueprintsNewRouteImport.update({
+  id: '/manage/blueprints/new',
+  path: '/manage/blueprints/new',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ManageContextsIndexRoute = ManageContextsIndexRouteImport.update({
   id: '/manage/contexts/',
   path: '/manage/contexts/',
@@ -186,6 +194,18 @@ const ManageWorkspaceRolesRoute = ManageWorkspaceRolesRouteImport.update({
   path: '/manage/workspace/roles',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ManageBlueprintsBlueprintIdIndexRoute =
+  ManageBlueprintsBlueprintIdIndexRouteImport.update({
+    id: '/',
+    path: '/',
+    getParentRoute: () => ManageBlueprintsBlueprintIdRoute,
+  } as any)
+const ManageBlueprintsBlueprintIdRevisionsVersionNewRoute =
+  ManageBlueprintsBlueprintIdRevisionsVersionNewRouteImport.update({
+    id: '/revisions/$version/new',
+    path: '/revisions/$version/new',
+    getParentRoute: () => ManageBlueprintsBlueprintIdRoute,
+  } as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
@@ -208,7 +228,8 @@ export interface FileRoutesByFullPath {
   '/entities/$entityId/changes': typeof EntitiesEntityIdChangesRoute
   '/entities/$entityId/edit': typeof EntitiesEntityIdEditRoute
   '/entities/$entityId/migrate': typeof EntitiesEntityIdMigrateRoute
-  '/manage/blueprints/$blueprintId': typeof ManageBlueprintsBlueprintIdRoute
+  '/manage/blueprints/$blueprintId': typeof ManageBlueprintsBlueprintIdRouteWithChildren
+  '/manage/blueprints/new': typeof ManageBlueprintsNewRoute
   '/manage/contexts/new': typeof ManageContextsNewRoute
   '/manage/workspace/invitations': typeof ManageWorkspaceInvitationsRoute
   '/manage/workspace/members': typeof ManageWorkspaceMembersRoute
@@ -217,6 +238,8 @@ export interface FileRoutesByFullPath {
   '/manage/blueprints/': typeof ManageBlueprintsIndexRoute
   '/manage/contexts/': typeof ManageContextsIndexRoute
   '/manage/workspace/': typeof ManageWorkspaceIndexRoute
+  '/manage/blueprints/$blueprintId/': typeof ManageBlueprintsBlueprintIdIndexRoute
+  '/manage/blueprints/$blueprintId/revisions/$version/new': typeof ManageBlueprintsBlueprintIdRevisionsVersionNewRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
@@ -237,7 +260,7 @@ export interface FileRoutesByTo {
   '/entities/$entityId/changes': typeof EntitiesEntityIdChangesRoute
   '/entities/$entityId/edit': typeof EntitiesEntityIdEditRoute
   '/entities/$entityId/migrate': typeof EntitiesEntityIdMigrateRoute
-  '/manage/blueprints/$blueprintId': typeof ManageBlueprintsBlueprintIdRoute
+  '/manage/blueprints/new': typeof ManageBlueprintsNewRoute
   '/manage/contexts/new': typeof ManageContextsNewRoute
   '/manage/workspace/invitations': typeof ManageWorkspaceInvitationsRoute
   '/manage/workspace/members': typeof ManageWorkspaceMembersRoute
@@ -246,6 +269,8 @@ export interface FileRoutesByTo {
   '/manage/blueprints': typeof ManageBlueprintsIndexRoute
   '/manage/contexts': typeof ManageContextsIndexRoute
   '/manage/workspace': typeof ManageWorkspaceIndexRoute
+  '/manage/blueprints/$blueprintId': typeof ManageBlueprintsBlueprintIdIndexRoute
+  '/manage/blueprints/$blueprintId/revisions/$version/new': typeof ManageBlueprintsBlueprintIdRevisionsVersionNewRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -269,7 +294,8 @@ export interface FileRoutesById {
   '/entities/$entityId/changes': typeof EntitiesEntityIdChangesRoute
   '/entities/$entityId/edit': typeof EntitiesEntityIdEditRoute
   '/entities/$entityId/migrate': typeof EntitiesEntityIdMigrateRoute
-  '/manage/blueprints/$blueprintId': typeof ManageBlueprintsBlueprintIdRoute
+  '/manage/blueprints/$blueprintId': typeof ManageBlueprintsBlueprintIdRouteWithChildren
+  '/manage/blueprints/new': typeof ManageBlueprintsNewRoute
   '/manage/contexts/new': typeof ManageContextsNewRoute
   '/manage/workspace/invitations': typeof ManageWorkspaceInvitationsRoute
   '/manage/workspace/members': typeof ManageWorkspaceMembersRoute
@@ -278,6 +304,8 @@ export interface FileRoutesById {
   '/manage/blueprints/': typeof ManageBlueprintsIndexRoute
   '/manage/contexts/': typeof ManageContextsIndexRoute
   '/manage/workspace/': typeof ManageWorkspaceIndexRoute
+  '/manage/blueprints/$blueprintId/': typeof ManageBlueprintsBlueprintIdIndexRoute
+  '/manage/blueprints/$blueprintId/revisions/$version/new': typeof ManageBlueprintsBlueprintIdRevisionsVersionNewRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -303,6 +331,7 @@ export interface FileRouteTypes {
     | '/entities/$entityId/edit'
     | '/entities/$entityId/migrate'
     | '/manage/blueprints/$blueprintId'
+    | '/manage/blueprints/new'
     | '/manage/contexts/new'
     | '/manage/workspace/invitations'
     | '/manage/workspace/members'
@@ -311,6 +340,8 @@ export interface FileRouteTypes {
     | '/manage/blueprints/'
     | '/manage/contexts/'
     | '/manage/workspace/'
+    | '/manage/blueprints/$blueprintId/'
+    | '/manage/blueprints/$blueprintId/revisions/$version/new'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
@@ -331,7 +362,7 @@ export interface FileRouteTypes {
     | '/entities/$entityId/changes'
     | '/entities/$entityId/edit'
     | '/entities/$entityId/migrate'
-    | '/manage/blueprints/$blueprintId'
+    | '/manage/blueprints/new'
     | '/manage/contexts/new'
     | '/manage/workspace/invitations'
     | '/manage/workspace/members'
@@ -340,6 +371,8 @@ export interface FileRouteTypes {
     | '/manage/blueprints'
     | '/manage/contexts'
     | '/manage/workspace'
+    | '/manage/blueprints/$blueprintId'
+    | '/manage/blueprints/$blueprintId/revisions/$version/new'
   id:
     | '__root__'
     | '/'
@@ -363,6 +396,7 @@ export interface FileRouteTypes {
     | '/entities/$entityId/edit'
     | '/entities/$entityId/migrate'
     | '/manage/blueprints/$blueprintId'
+    | '/manage/blueprints/new'
     | '/manage/contexts/new'
     | '/manage/workspace/invitations'
     | '/manage/workspace/members'
@@ -371,6 +405,8 @@ export interface FileRouteTypes {
     | '/manage/blueprints/'
     | '/manage/contexts/'
     | '/manage/workspace/'
+    | '/manage/blueprints/$blueprintId/'
+    | '/manage/blueprints/$blueprintId/revisions/$version/new'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -389,7 +425,8 @@ export interface RootRouteChildren {
   PasswordResetConfirmRoute: typeof PasswordResetConfirmRoute
   AgentsIndexRoute: typeof AgentsIndexRoute
   PasswordResetIndexRoute: typeof PasswordResetIndexRoute
-  ManageBlueprintsBlueprintIdRoute: typeof ManageBlueprintsBlueprintIdRoute
+  ManageBlueprintsBlueprintIdRoute: typeof ManageBlueprintsBlueprintIdRouteWithChildren
+  ManageBlueprintsNewRoute: typeof ManageBlueprintsNewRoute
   ManageContextsNewRoute: typeof ManageContextsNewRoute
   ManageWorkspaceInvitationsRoute: typeof ManageWorkspaceInvitationsRoute
   ManageWorkspaceMembersRoute: typeof ManageWorkspaceMembersRoute
@@ -562,6 +599,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ManageBlueprintsBlueprintIdRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/manage/blueprints/new': {
+      id: '/manage/blueprints/new'
+      path: '/manage/blueprints/new'
+      fullPath: '/manage/blueprints/new'
+      preLoaderRoute: typeof ManageBlueprintsNewRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/manage/contexts/': {
       id: '/manage/contexts/'
       path: '/manage/contexts'
@@ -604,6 +648,20 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ManageWorkspaceRolesRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/manage/blueprints/$blueprintId/': {
+      id: '/manage/blueprints/$blueprintId/'
+      path: '/'
+      fullPath: '/manage/blueprints/$blueprintId/'
+      preLoaderRoute: typeof ManageBlueprintsBlueprintIdIndexRouteImport
+      parentRoute: typeof ManageBlueprintsBlueprintIdRoute
+    }
+    '/manage/blueprints/$blueprintId/revisions/$version/new': {
+      id: '/manage/blueprints/$blueprintId/revisions/$version/new'
+      path: '/revisions/$version/new'
+      fullPath: '/manage/blueprints/$blueprintId/revisions/$version/new'
+      preLoaderRoute: typeof ManageBlueprintsBlueprintIdRevisionsVersionNewRouteImport
+      parentRoute: typeof ManageBlueprintsBlueprintIdRoute
+    }
   }
 }
 
@@ -636,6 +694,24 @@ const EntitiesEntityIdRouteChildren: EntitiesEntityIdRouteChildren = {
 const EntitiesEntityIdRouteWithChildren =
   EntitiesEntityIdRoute._addFileChildren(EntitiesEntityIdRouteChildren)
 
+interface ManageBlueprintsBlueprintIdRouteChildren {
+  ManageBlueprintsBlueprintIdIndexRoute: typeof ManageBlueprintsBlueprintIdIndexRoute
+  ManageBlueprintsBlueprintIdRevisionsVersionNewRoute: typeof ManageBlueprintsBlueprintIdRevisionsVersionNewRoute
+}
+
+const ManageBlueprintsBlueprintIdRouteChildren: ManageBlueprintsBlueprintIdRouteChildren =
+  {
+    ManageBlueprintsBlueprintIdIndexRoute:
+      ManageBlueprintsBlueprintIdIndexRoute,
+    ManageBlueprintsBlueprintIdRevisionsVersionNewRoute:
+      ManageBlueprintsBlueprintIdRevisionsVersionNewRoute,
+  }
+
+const ManageBlueprintsBlueprintIdRouteWithChildren =
+  ManageBlueprintsBlueprintIdRoute._addFileChildren(
+    ManageBlueprintsBlueprintIdRouteChildren,
+  )
+
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   LoginRoute: LoginRouteWithChildren,
@@ -652,7 +728,9 @@ const rootRouteChildren: RootRouteChildren = {
   PasswordResetConfirmRoute: PasswordResetConfirmRoute,
   AgentsIndexRoute: AgentsIndexRoute,
   PasswordResetIndexRoute: PasswordResetIndexRoute,
-  ManageBlueprintsBlueprintIdRoute: ManageBlueprintsBlueprintIdRoute,
+  ManageBlueprintsBlueprintIdRoute:
+    ManageBlueprintsBlueprintIdRouteWithChildren,
+  ManageBlueprintsNewRoute: ManageBlueprintsNewRoute,
   ManageContextsNewRoute: ManageContextsNewRoute,
   ManageWorkspaceInvitationsRoute: ManageWorkspaceInvitationsRoute,
   ManageWorkspaceMembersRoute: ManageWorkspaceMembersRoute,
