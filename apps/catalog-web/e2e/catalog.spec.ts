@@ -31,6 +31,30 @@ test('searches an entity and opens its preview', async ({ page }) => {
   await expect(page.getByText(title)).toBeVisible();
 });
 
+test('restores the last selected blueprint and prioritizes the URL', async ({
+  page,
+}) => {
+  const storedCode = `product_stored_${suffix()}`;
+  const urlCode = `product_url_${suffix()}`;
+  const attributes =
+    '[[attributes]]\ncode = "title"\nvalue_type = "string"';
+  await createEntityBlueprint(storedCode, 'Stored products', attributes);
+  await createEntityBlueprint(urlCode, 'URL products', attributes);
+
+  await page.goto('/');
+  await page.evaluate((code) => {
+    sessionStorage.setItem('catalog.explorer.last-blueprint', code);
+  }, storedCode);
+  await page.goto(`/?blueprint=${urlCode}`);
+
+  await expect(page.getByLabel('Select a Blueprint')).toHaveValue(urlCode);
+
+  await page.goto('/');
+  await expect(page.getByLabel('Select a Blueprint')).toHaveValue(urlCode);
+  await page.reload();
+  await expect(page.getByLabel('Select a Blueprint')).toHaveValue(urlCode);
+});
+
 test('creates an entity from a blueprint', async ({ page }) => {
   const code = `product_create_${suffix()}`;
   const title = 'Created in browser';

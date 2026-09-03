@@ -5,6 +5,7 @@ import {
 } from '@tanstack/react-query';
 import { Link, useNavigate } from '@tanstack/react-router';
 import { Alert, Box, Button, Typography } from '@mui/material';
+import { useEffect } from 'react';
 import { PageContainer } from '../../components/PageContainer';
 import { PageHeader } from '../../components/PageHeader';
 import {
@@ -19,8 +20,30 @@ import { ExplorerResultsTable } from './ExplorerResultsTable';
 import { ExplorerSearchForm } from './ExplorerSearchForm';
 import type { ExplorerSearch } from './search';
 
-export const Explorer = ({ search }: { search: ExplorerSearch }) => {
+const lastBlueprintStorageKey = 'catalog.explorer.last-blueprint';
+
+const getLastBlueprint = () => {
+  try {
+    return sessionStorage.getItem(lastBlueprintStorageKey) || undefined;
+  } catch {
+    return undefined;
+  }
+};
+
+export const Explorer = ({ search: urlSearch }: { search: ExplorerSearch }) => {
+  const search = {
+    ...urlSearch,
+    // A URL selection is shareable and therefore takes precedence over the
+    // per-tab fallback.
+    blueprint: urlSearch.blueprint ?? getLastBlueprint(),
+  };
   const navigate = useNavigate({ from: '/' });
+
+  useEffect(() => {
+    if (!urlSearch.blueprint) return;
+
+    sessionStorage.setItem(lastBlueprintStorageKey, urlSearch.blueprint);
+  }, [urlSearch.blueprint]);
   const contexts = useQuery({
     queryKey: entityQueryKeys.contexts(),
     queryFn: listContexts,
