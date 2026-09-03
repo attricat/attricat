@@ -1,6 +1,5 @@
 import { createElement, useState } from 'react';
 import {
-  Alert,
   Box,
   MenuItem,
   Paper,
@@ -126,15 +125,12 @@ export const BlueprintViewsPreview = ({
   const entries = Object.entries(views);
   const editEntry = entries.find(([name]) => name === 'edit');
   const previewEntries = entries.filter(([name]) => name !== 'edit');
-  const tabs = editEntry ? [editEntry, ...previewEntries] : previewEntries;
-  const [selectedView, setSelectedView] = useState(tabs[0]?.[0] ?? '');
+  const tabs: [string, ViewDefinition | undefined][] = editEntry
+    ? [editEntry, ...previewEntries]
+    : [['edit', undefined], ...previewEntries];
+  const [selectedView, setSelectedView] = useState(tabs[0][0]);
   const activeView = tabs.find(([name]) => name === selectedView) ?? tabs[0];
   const values = sandboxValuesForFields(attributes, fields);
-
-  if (!tabs.length)
-    return (
-      <Alert severity="info">This blueprint does not define any views.</Alert>
-    );
 
   return (
     <>
@@ -202,11 +198,13 @@ export const BlueprintViewsPreview = ({
             view={activeView[1]}
           />
         ) : (
-          <RenderedView
-            attributes={attributes}
-            values={values}
-            view={activeView?.[1] ?? tabs[0][1]}
-          />
+          activeView[1] && (
+            <RenderedView
+              attributes={attributes}
+              values={values}
+              view={activeView[1]}
+            />
+          )
         )}
       </Paper>
     </>
