@@ -23,7 +23,7 @@ test('returns to an authenticated deep link after sign in', async ({
   page,
 }) => {
   await page.context().clearCookies();
-  await page.goto('/data-health?staleAfterDays=45#freshness');
+  await page.goto('/manage/data-health?staleAfterDays=45#freshness');
   await expect(page).toHaveURL(/\/login$/);
 
   await page.getByLabel('Workspace').fill('default.local');
@@ -32,7 +32,9 @@ test('returns to an authenticated deep link after sign in', async ({
   await page.getByLabel('Password').fill('e2e-only-fixture-password');
   await page.getByRole('button', { name: 'Sign in' }).click();
 
-  await expect(page).toHaveURL(/\/data-health\?staleAfterDays=45#freshness$/);
+  await expect(page).toHaveURL(
+    /\/manage\/data-health\?staleAfterDays=45#freshness$/,
+  );
   await expect(
     page.getByRole('heading', { name: 'Data health' }),
   ).toBeVisible();

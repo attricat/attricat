@@ -11,7 +11,7 @@ import PersonOutlinedIcon from '@mui/icons-material/PersonOutlined';
 import LogoutOutlinedIcon from '@mui/icons-material/LogoutOutlined';
 import { useQuery } from '@tanstack/react-query';
 import { Link, useRouterState } from '@tanstack/react-router';
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { currentSession } from '../features/auth/api';
 import {
   Box,
@@ -26,7 +26,11 @@ import {
 
 const navigationItems = [
   { icon: <TravelExploreOutlinedIcon />, label: 'Entity explorer', to: '/' },
-  { icon: <CategoryOutlinedIcon />, label: 'Blueprints', to: '/manage/blueprints' },
+  {
+    icon: <CategoryOutlinedIcon />,
+    label: 'Blueprints',
+    to: '/manage/blueprints',
+  },
   { icon: <FolderOutlinedIcon />, label: 'Contexts', to: '/manage/contexts' },
   { icon: <SmartToyOutlinedIcon />, label: 'Agents', to: '/agents' },
   {
@@ -59,13 +63,8 @@ export const SideNavigation = ({
   const pathname = useRouterState({
     select: (state) => state.location.pathname,
   });
-  const [manageOpen, setManageOpen] = useState(() =>
-    pathname.startsWith('/manage/'),
-  );
-
-  useEffect(() => {
-    if (pathname.startsWith('/manage/')) setManageOpen(true);
-  }, [pathname]);
+  const [manageOpen, setManageOpen] = useState(false);
+  const isManageOpen = manageOpen || pathname.startsWith('/manage/');
   const session = useQuery({
     queryKey: ['auth', 'session'],
     queryFn: currentSession,
@@ -78,7 +77,8 @@ export const SideNavigation = ({
   const visibleNavigationItems = navigationItems.filter(
     (item) =>
       (item.to !== '/manage/workspace/members' || canManageWorkspace) &&
-      (item.to !== '/manage/audit-log' || session.data?.capabilities?.audit_read),
+      (item.to !== '/manage/audit-log' ||
+        session.data?.capabilities?.audit_read),
   );
 
   return (
@@ -119,21 +119,26 @@ export const SideNavigation = ({
             </ListItemButton>
           ))}
         <ListItemButton
-          aria-expanded={manageOpen}
+          aria-expanded={isManageOpen}
           onClick={() => setManageOpen((open) => !open)}
           sx={{ mt: 1 }}
         >
           <ListItemText
             primary="Manage"
-            primaryTypographyProps={{ color: 'text.secondary', variant: 'overline' }}
+            primaryTypographyProps={{
+              color: 'text.secondary',
+              variant: 'overline',
+            }}
           />
-          {manageOpen ? <ExpandMoreIcon /> : <ChevronRightIcon />}
+          {isManageOpen ? <ExpandMoreIcon /> : <ChevronRightIcon />}
         </ListItemButton>
-        <Collapse in={manageOpen} timeout="auto" unmountOnExit>
+        <Collapse in={isManageOpen} timeout="auto" unmountOnExit>
           {visibleNavigationItems
             .filter(
               (item) =>
-                item.to !== '/' && item.to !== '/agents' && item.to !== '/profile',
+                item.to !== '/' &&
+                item.to !== '/agents' &&
+                item.to !== '/profile',
             )
             .map((item) => (
               <ListItemButton

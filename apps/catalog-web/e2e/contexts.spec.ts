@@ -29,7 +29,9 @@ test('resolves inherited values and saves a context-specific override', async ({
   await page.goto(`/entities/${entity.id}`);
   await page.getByLabel('Context').click();
   await page.getByRole('option', { name: context.code }).click();
-  await expect(page.getByText('Using default').first()).toBeVisible();
+  await expect(
+    page.getByText('Inherited from default context').first(),
+  ).toBeVisible();
   await expect(page.getByText('Default title')).toBeVisible();
 
   await page.getByRole('link', { name: 'Edit entity' }).click();

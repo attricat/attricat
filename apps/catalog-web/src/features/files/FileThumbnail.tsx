@@ -1,55 +1,38 @@
 import { Box, CircularProgress, Typography } from '@mui/material';
 import { useQuery } from '@tanstack/react-query';
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { fileDownloadUrl, getFileMetadata } from './api';
 import { fileQueryKeys } from './query-keys';
 import type { FileMetadata } from './schemas';
 
 type ThumbnailFile = Pick<FileMetadata, 'id' | 'filename'>;
 
+type ThumbnailPreviewProps = {
+  filename: string;
+  size: number;
+  source?: string;
+  unavailable: boolean;
+};
+
 const pollingStatuses = new Set(['uploading', 'queued', 'processing']);
 
-export const FileThumbnail = ({
-  file,
+const ThumbnailPreview = ({
+  filename,
   size,
-}: {
-  file: ThumbnailFile;
-  size: number;
-}) => {
+  source,
+  unavailable,
+}: ThumbnailPreviewProps) => {
   const [loaded, setLoaded] = useState(false);
   const [attempt, setAttempt] = useState(0);
-  const metadata = useQuery({
-    queryKey: fileQueryKeys.metadata(file.id),
-    queryFn: () => getFileMetadata(file.id),
-    refetchInterval: (query) =>
-      pollingStatuses.has(query.state.data?.status ?? '') ? 1_000 : false,
-    refetchIntervalInBackground: true,
-  });
-  const currentFile = metadata.data;
-  const thumbnail = currentFile?.variants.find(
-    (variant) => variant.kind === 'thumbnail',
-  );
-  const source =
-    currentFile?.status === 'ready'
-      ? fileDownloadUrl(currentFile.id, thumbnail?.kind)
-      : undefined;
-
-  useEffect(() => {
-    setLoaded(false);
-    setAttempt(0);
-  }, [source]);
 
   const retry = () => {
     window.setTimeout(() => setAttempt((value) => value + 1), 1_000);
   };
 
-  const unavailable =
-    currentFile?.status === 'failed' || currentFile?.status === 'deleted';
-
   return (
     <Box
       aria-busy={!loaded && !unavailable}
-      aria-label={`Thumbnail for ${file.filename}`}
+      aria-label={`Thumbnail for ${filename}`}
       role="img"
       sx={{
         bgcolor: 'action.hover',
@@ -98,5 +81,41 @@ export const FileThumbnail = ({
         </Box>
       )}
     </Box>
+  );
+};
+
+export const FileThumbnail = ({
+  file,
+  size,
+}: {
+  file: ThumbnailFile;
+  size: number;
+}) => {
+  const metadata = useQuery({
+    queryKey: fileQueryKeys.metadata(file.id),
+    queryFn: () => getFileMetadata(file.id),
+    refetchInterval: (query) =>
+      pollingStatuses.has(query.state.data?.status ?? '') ? 1_000 : false,
+    refetchIntervalInBackground: true,
+  });
+  const currentFile = metadata.data;
+  const thumbnail = currentFile?.variants.find(
+    (variant) => variant.kind === 'thumbnail',
+  );
+  const source =
+    currentFile?.status === 'ready'
+      ? fileDownloadUrl(currentFile.id, thumbnail?.kind)
+      : undefined;
+  const unavailable =
+    currentFile?.status === 'failed' || currentFile?.status === 'deleted';
+
+  return (
+    <ThumbnailPreview
+      filename={file.filename}
+      key={source ?? currentFile?.status ?? 'loading'}
+      size={size}
+      source={source}
+      unavailable={unavailable}
+    />
   );
 };

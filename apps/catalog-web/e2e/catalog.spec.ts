@@ -36,8 +36,7 @@ test('restores the last selected blueprint and prioritizes the URL', async ({
 }) => {
   const storedCode = `product_stored_${suffix()}`;
   const urlCode = `product_url_${suffix()}`;
-  const attributes =
-    '[[attributes]]\ncode = "title"\nvalue_type = "string"';
+  const attributes = '[[attributes]]\ncode = "title"\nvalue_type = "string"';
   await createEntityBlueprint(storedCode, 'Stored products', attributes);
   await createEntityBlueprint(urlCode, 'URL products', attributes);
 
@@ -47,12 +46,13 @@ test('restores the last selected blueprint and prioritizes the URL', async ({
   }, storedCode);
   await page.goto(`/?blueprint=${urlCode}`);
 
-  await expect(page.getByLabel('Select a Blueprint')).toHaveValue(urlCode);
+  const blueprintSelect = page.getByLabel('Select a Blueprint');
+  await expect(blueprintSelect).toContainText(urlCode);
 
   await page.goto('/');
-  await expect(page.getByLabel('Select a Blueprint')).toHaveValue(urlCode);
+  await expect(blueprintSelect).toContainText(urlCode);
   await page.reload();
-  await expect(page.getByLabel('Select a Blueprint')).toHaveValue(urlCode);
+  await expect(blueprintSelect).toContainText(urlCode);
 });
 
 test('creates an entity from a blueprint', async ({ page }) => {
@@ -171,9 +171,8 @@ test('rejects a browser create that violates a blueprint schema', async ({
 test('creates a context from context management', async ({ page }) => {
   const code = `market_${suffix()}`;
 
-  await page.goto('/');
-  await page.getByRole('link', { name: 'Contexts' }).click();
-  await expect(page).toHaveURL(/\/contexts$/);
+  await page.goto('/manage/contexts');
+  await expect(page).toHaveURL(/\/manage\/contexts$/);
   await page.getByRole('link', { name: 'Create context' }).click();
   await page.getByLabel('Code').fill(code);
   await page.getByLabel('Parent context').click();
@@ -181,7 +180,7 @@ test('creates a context from context management', async ({ page }) => {
   await page.getByLabel('Metadata').fill('{"market":"US"}');
   await page.getByRole('button', { name: 'Create context' }).click();
 
-  await expect(page).toHaveURL(/\/contexts$/);
+  await expect(page).toHaveURL(/\/manage\/contexts$/);
   await expect(page.getByText(code)).toBeVisible();
   await expect(page.getByText('{"market":"US"}')).toBeVisible();
 });

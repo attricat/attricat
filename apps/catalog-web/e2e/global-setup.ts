@@ -7,6 +7,8 @@ import {
   e2eMailpitSmtpPort,
   e2eMailpitUiPort,
   e2eMailpitUrl,
+  e2eS3Port,
+  e2eS3Url,
   e2eWebPort,
   e2eWebUrl,
 } from './ports.ts';
@@ -154,6 +156,25 @@ export default async () => {
   // container lifecycle and always stops PostgreSQL in global teardown.
   process.env.TESTCONTAINERS_RYUK_DISABLED = 'true';
   const database = await new PostgreSqlContainer('postgres:18-alpine').start();
+  const rustfsName = `catalog-e2e-rustfs-${process.pid}`;
+  const rustfs = start(
+    'docker',
+    [
+      'run',
+      '--rm',
+      '--name',
+      rustfsName,
+      '-p',
+      `127.0.0.1:${e2eS3Port}:9000`,
+      '-e',
+      'RUSTFS_ACCESS_KEY=catalog-e2e',
+      '-e',
+      'RUSTFS_SECRET_KEY=catalog-e2e-secret',
+      'rustfs/rustfs:1.0.0-beta.12',
+      '/data',
+    ],
+    process.env,
+  );
   const mailpit = start(
     'docker',
     [
@@ -167,9 +188,41 @@ export default async () => {
     ],
     process.env,
   );
+  await waitFor(`${e2eS3Url}/health/live`);
+  execFileSync(
+    'docker',
+    [
+      'run',
+      '--rm',
+      '--network',
+      `container:${rustfsName}`,
+      '-e',
+      'AWS_ACCESS_KEY_ID=catalog-e2e',
+      '-e',
+      'AWS_SECRET_ACCESS_KEY=catalog-e2e-secret',
+      '-e',
+      'AWS_DEFAULT_REGION=us-east-1',
+      'amazon/aws-cli:2.31.0',
+      '--endpoint-url',
+      'http://127.0.0.1:9000',
+      's3api',
+      'create-bucket',
+      '--bucket',
+      'catalog-files',
+    ],
+    { stdio: 'inherit' },
+  );
   const api = start('cargo', ['run', '-p', 'api', '--bin', 'api'], {
     ...process.env,
     BIND_ADDR: `127.0.0.1:${e2eApiPort}`,
+    S3_ENDPOINT: e2eS3Url,
+    S3_REGION: 'us-east-1',
+    S3_BUCKET: 'catalog-files',
+    S3_ACCESS_KEY_ID: 'catalog-e2e',
+    S3_SECRET_ACCESS_KEY: 'catalog-e2e-secret',
+    S3_FORCE_PATH_STYLE: 'true',
+    S3_UPLOAD_TIMEOUT_SECONDS: '30',
+    S3_DOWNLOAD_TIMEOUT_SECONDS: '30',
     DATABASE_URL: database.getConnectionUri(),
     CATALOG_BOOTSTRAP_OWNER_ID: bootstrapOwnerId,
     CATALOG_BOOTSTRAP_OWNER_EMAIL: bootstrapOwnerEmail,
@@ -223,11 +276,13 @@ export default async () => {
       stop(web);
       stop(api);
       stop(mailpit);
+      stop(rustfs);
       await database.stop();
     };
   } catch (error) {
     stop(api);
     stop(mailpit);
+    stop(rustfs);
     await database.stop();
     throw error;
   }

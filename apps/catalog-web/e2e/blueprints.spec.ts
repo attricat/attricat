@@ -22,7 +22,7 @@ test('previews blueprint views and inspects revision metadata', async ({
     },
   );
 
-  await page.goto(`/blueprints/${blueprint.blueprint.id}`);
+  await page.goto(`/manage/blueprints/${blueprint.blueprint.id}`);
   await page.getByRole('tab', { name: 'Views' }).click();
   await expect(
     page.getByText('Sandbox values stay in this page and are never saved.'),
