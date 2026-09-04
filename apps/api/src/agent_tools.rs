@@ -87,7 +87,7 @@ pub fn definitions() -> Vec<ToolDefinition> {
         ),
         definition(
             "search_entities",
-            "Search entities of a blueprint by current scalar values and system tags. Omit blueprint.version to include every published revision; set outdated to true to return only entities that are not on the latest published revision. Results are paginated in ascending creation order.",
+            "Search entities of a blueprint by scalar values reachable through active relationships and system tags. Query terms are whitespace-separated AND terms. Free text traverses incoming active relationships up to three edges. Use attribute:value for a selected-blueprint attribute, relationship:value or relationship.attribute:value for a direct relationship target, and blueprint:value or blueprint.attribute:value for the selected blueprint (code or name). A trailing * means prefix matching. Results include match_explanations with deterministic match witnesses and relationship paths. Omit blueprint.version to include every published revision; set outdated to true to return only entities that are not on the latest published revision. Results are paginated in ascending creation order.",
             json!({"type":"object","required":["blueprint"],"properties":{"blueprint":{"type":"object","required":["code"],"properties":{"code":{"type":"string"},"version":{"type":"integer","minimum":1}},"additionalProperties":false},"query":{"type":"string"},"system_tags":{"type":"array","items":{"type":"string"}},"outdated":{"type":"boolean"},"page":{"type":"object","properties":{"size":{"type":"integer","minimum":1,"maximum":100},"cursor":{"type":"string"}},"additionalProperties":false}},"additionalProperties":false}),
         ),
         definition(
@@ -344,14 +344,26 @@ pub async fn execute_read(
                 .as_deref()
                 .map(str::trim)
                 .filter(|value| !value.is_empty());
+            let search_blueprint = match selected {
+                Some(version) => repository
+                    .get_blueprint_by_code_and_version(&input.blueprint.code, version)
+                    .await?
+                    .expect("selected version was checked above"),
+                None => current.clone(),
+            };
+            let resolved = repository
+                .resolve_search(&search_blueprint, selected, query)
+                .await
+                .map_err(|error| ToolError::InvalidArguments(error.to_string()))?;
+            let matching: Vec<_> = resolved.ids.iter().copied().collect();
             let (mut items, next_cursor) = repository
                 .search_entity_previews(
                     current.blueprint.id,
                     selected,
-                    query,
+                    None,
                     limit.into(),
                     cursor,
-                    None,
+                    Some(&matching),
                     &input.system_tags,
                     input.outdated,
                     current.blueprint.version,
@@ -359,6 +371,11 @@ pub async fn execute_read(
                 .await?;
             for item in &mut items {
                 item.schema_outdated = item.blueprint_version != current.blueprint.version;
+                item.match_explanations = resolved
+                    .explanations
+                    .get(&item.id)
+                    .cloned()
+                    .unwrap_or_default();
             }
             serde_json::to_value(crate::model::EntitySearchResponse {
                 blueprint: current,
