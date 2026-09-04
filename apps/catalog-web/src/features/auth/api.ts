@@ -13,6 +13,8 @@ const sessionSchema = z.object({
       members_manage: z.boolean(),
       roles_manage: z.boolean(),
       tokens_manage: z.boolean(),
+      extensions_read: z.boolean(),
+      extensions_manage: z.boolean(),
     })
     .optional(),
 });

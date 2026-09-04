@@ -1,17 +1,24 @@
+use std::str::FromStr;
+
 use axum::{
     Json,
     body::Body,
     extract::{Path, State},
-    http::{HeaderValue, header},
+    http::{HeaderValue, StatusCode, header},
     response::Response,
 };
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use uuid::Uuid;
 
-use super::{AppState, auth::ScopedRepository, error::ApiError};
+use super::{AppState, auth::ScopedRepository, error::ApiError, extractors::ApiJson};
 use crate::{
-    extensions::{UiContributionKind, UiOutlet},
+    extension_installer::ExtensionInstaller,
+    extension_registry::{DiscoveredRelease, GitHubRepository},
+    extensions::{ExtensionPackage, UiContributionKind, UiOutlet},
+    repository::{
+        ExtensionGrant, ExtensionInstallation, ExtensionLifecycleRecord, InstalledExtension,
+    },
     storage::ObjectStoreError,
 };
 
@@ -29,8 +36,319 @@ pub(super) struct RuntimeContribution {
     element: String,
 }
 
-/// Returns only contributions from currently enabled installations. The client
-/// loads executable bytes through the separate contribution-bound endpoint.
+#[derive(Serialize)]
+pub(super) struct InstallationResponse {
+    id: Uuid,
+    extension_id: String,
+    installed_release_id: Uuid,
+    state: String,
+    configuration: Value,
+    configuration_version: Option<i32>,
+    created_at: chrono::DateTime<chrono::Utc>,
+    updated_at: chrono::DateTime<chrono::Utc>,
+    version: String,
+    manifest: Value,
+    manifest_sha256: String,
+    source: String,
+}
+impl From<InstalledExtension> for InstallationResponse {
+    fn from(value: InstalledExtension) -> Self {
+        Self {
+            id: value.id,
+            extension_id: value.extension_id,
+            installed_release_id: value.installed_release_id,
+            state: value.state,
+            configuration: value.configuration,
+            configuration_version: value.configuration_version,
+            created_at: value.created_at,
+            updated_at: value.updated_at,
+            version: value.version,
+            manifest: value.manifest,
+            manifest_sha256: value.manifest_sha256,
+            source: value.source,
+        }
+    }
+}
+impl From<ExtensionInstallation> for InstallationResponse {
+    fn from(value: ExtensionInstallation) -> Self {
+        // Mutation responses intentionally omit immutable metadata. The client
+        // invalidates and reloads the management projection after a mutation.
+        Self {
+            id: value.id,
+            extension_id: value.extension_id,
+            installed_release_id: value.installed_release_id,
+            state: value.state,
+            configuration: value.configuration,
+            configuration_version: value.configuration_version,
+            created_at: value.created_at,
+            updated_at: value.updated_at,
+            version: String::new(),
+            manifest: Value::Null,
+            manifest_sha256: String::new(),
+            source: String::new(),
+        }
+    }
+}
+#[derive(Serialize)]
+struct GrantResponse {
+    grant_kind: String,
+    grant_id: String,
+    granted_at: chrono::DateTime<chrono::Utc>,
+}
+impl From<ExtensionGrant> for GrantResponse {
+    fn from(value: ExtensionGrant) -> Self {
+        Self {
+            grant_kind: value.grant_kind,
+            grant_id: value.grant_id,
+            granted_at: value.granted_at,
+        }
+    }
+}
+#[derive(Serialize)]
+struct LifecycleResponse {
+    id: Uuid,
+    operation: String,
+    prior_state: Option<String>,
+    new_state: Option<String>,
+    outcome: String,
+    actor_user_id: Option<Uuid>,
+    actor_token_id: Option<Uuid>,
+    source: Option<String>,
+    diagnostics: Value,
+    created_at: chrono::DateTime<chrono::Utc>,
+}
+impl From<ExtensionLifecycleRecord> for LifecycleResponse {
+    fn from(value: ExtensionLifecycleRecord) -> Self {
+        Self {
+            id: value.id,
+            operation: value.operation,
+            prior_state: value.prior_state,
+            new_state: value.new_state,
+            outcome: value.outcome,
+            actor_user_id: value.actor_user_id,
+            actor_token_id: value.actor_token_id,
+            source: value.source,
+            diagnostics: value.diagnostics,
+            created_at: value.created_at,
+        }
+    }
+}
+#[derive(Serialize)]
+pub(super) struct ExtensionDetailResponse {
+    installation: InstallationResponse,
+    grants: Vec<GrantResponse>,
+    lifecycle: Vec<LifecycleResponse>,
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+pub(super) struct ReleaseRequest {
+    owner: String,
+    repository: String,
+    release_id: u64,
+}
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+pub(super) struct ConfigurationRequest {
+    configuration: Value,
+}
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+pub(super) struct GrantRequest {
+    grant_kind: String,
+    grant_id: String,
+}
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+pub(super) struct QuarantineRequest {
+    diagnostic_code: String,
+}
+
+pub(super) async fn list(
+    ScopedRepository(repository): ScopedRepository,
+) -> Result<Json<Vec<InstallationResponse>>, ApiError> {
+    Ok(Json(
+        repository
+            .installed_extensions()
+            .await?
+            .into_iter()
+            .map(Into::into)
+            .collect(),
+    ))
+}
+pub(super) async fn detail(
+    ScopedRepository(repository): ScopedRepository,
+    Path(extension_id): Path<String>,
+) -> Result<Json<ExtensionDetailResponse>, ApiError> {
+    let installation = repository.installed_extension(&extension_id).await?;
+    let grants = repository.extension_grants(&extension_id).await?;
+    let lifecycle = repository
+        .extension_lifecycle_history(&extension_id)
+        .await?;
+    Ok(Json(ExtensionDetailResponse {
+        installation: installation.into(),
+        grants: grants.into_iter().map(Into::into).collect(),
+        lifecycle: lifecycle.into_iter().map(Into::into).collect(),
+    }))
+}
+
+async fn selected_release(
+    state: &AppState,
+    repository: &crate::repository::CatalogRepository,
+    input: &ReleaseRequest,
+) -> Result<DiscoveredRelease, ApiError> {
+    let target = GitHubRepository::from_str(&format!("{}/{}", input.owner, input.repository))
+        .map_err(|error| ApiError::invalid_input(error.to_string()))?
+        .identity();
+    let mut sources = vec![state.official_registry.clone()];
+    sources.extend(
+        repository
+            .extension_registry_sources()
+            .await?
+            .into_iter()
+            .map(|source| GitHubRepository {
+                owner: source.owner,
+                repository: source.repository,
+            }),
+    );
+    for source in sources {
+        let entries =
+            state.registry.discover(&source).await.map_err(|_| {
+                ApiError::service_unavailable("extension registry discovery failed")
+            })?;
+        if let Some(extension) = entries.into_iter().find(|entry| entry.repository == target) {
+            let details = state
+                .registry
+                .extension_details(extension)
+                .await
+                .map_err(|_| {
+                    ApiError::service_unavailable("extension repository could not be resolved")
+                })?;
+            return details
+                .releases
+                .into_iter()
+                .find(|release| release.release_id == input.release_id)
+                .ok_or_else(|| ApiError::not_found("trusted extension release"));
+        }
+    }
+    Err(ApiError::not_found("trusted extension repository"))
+}
+
+pub(super) async fn install(
+    State(state): State<AppState>,
+    ScopedRepository(repository): ScopedRepository,
+    ApiJson(input): ApiJson<ReleaseRequest>,
+) -> Result<(StatusCode, Json<InstallationResponse>), ApiError> {
+    let release = selected_release(&state, &repository, &input).await?;
+    let archive = state
+        .registry
+        .download_release_asset(&release)
+        .await
+        .map_err(|_| ApiError::service_unavailable("extension archive could not be downloaded"))?;
+    let source = format!("{}@{}", release.source, release.tag_name);
+    let installation = ExtensionInstaller::new(repository, state.object_store.clone())
+        .install(&source, &archive)
+        .await
+        .map_err(|error| ApiError::invalid_input(error.to_string()))?;
+    Ok((StatusCode::CREATED, Json(installation.into())))
+}
+pub(super) async fn upgrade(
+    State(state): State<AppState>,
+    ScopedRepository(repository): ScopedRepository,
+    Path(extension_id): Path<String>,
+    ApiJson(input): ApiJson<ReleaseRequest>,
+) -> Result<Json<InstallationResponse>, ApiError> {
+    let release = selected_release(&state, &repository, &input).await?;
+    let archive = state
+        .registry
+        .download_release_asset(&release)
+        .await
+        .map_err(|_| ApiError::service_unavailable("extension archive could not be downloaded"))?;
+    // Verify the package identity before passing it to the installer. Checking
+    // only its returned installation would allow a selected archive to mutate
+    // a different installed extension before this handler rejects the request.
+    let package = ExtensionPackage::from_tar_zst(&archive)
+        .map_err(|error| ApiError::invalid_input(error.to_string()))?;
+    if package.manifest().catalog.id != extension_id {
+        return Err(ApiError::invalid_input(
+            "selected release has a different extension ID".to_owned(),
+        ));
+    }
+    let source = format!("{}@{}", release.source, release.tag_name);
+    let installation = ExtensionInstaller::new(repository, state.object_store.clone())
+        .upgrade(&source, &archive)
+        .await
+        .map_err(|error| ApiError::invalid_input(error.to_string()))?;
+    Ok(Json(installation.into()))
+}
+pub(super) async fn configure(
+    ScopedRepository(repository): ScopedRepository,
+    Path(extension_id): Path<String>,
+    ApiJson(input): ApiJson<ConfigurationRequest>,
+) -> Result<Json<InstallationResponse>, ApiError> {
+    Ok(Json(
+        repository
+            .configure_extension(&extension_id, input.configuration)
+            .await?
+            .into(),
+    ))
+}
+pub(super) async fn grant(
+    ScopedRepository(repository): ScopedRepository,
+    Path(extension_id): Path<String>,
+    ApiJson(input): ApiJson<GrantRequest>,
+) -> Result<StatusCode, ApiError> {
+    repository
+        .grant_extension(&extension_id, &input.grant_kind, &input.grant_id)
+        .await?;
+    Ok(StatusCode::NO_CONTENT)
+}
+pub(super) async fn revoke(
+    ScopedRepository(repository): ScopedRepository,
+    Path((extension_id, grant_kind, grant_id)): Path<(String, String, String)>,
+) -> Result<StatusCode, ApiError> {
+    repository
+        .revoke_extension_grant(&extension_id, &grant_kind, &grant_id)
+        .await?;
+    Ok(StatusCode::NO_CONTENT)
+}
+pub(super) async fn enable(
+    ScopedRepository(repository): ScopedRepository,
+    Path(extension_id): Path<String>,
+) -> Result<Json<InstallationResponse>, ApiError> {
+    Ok(Json(
+        repository.enable_extension(&extension_id).await?.into(),
+    ))
+}
+pub(super) async fn disable(
+    ScopedRepository(repository): ScopedRepository,
+    Path(extension_id): Path<String>,
+) -> Result<Json<InstallationResponse>, ApiError> {
+    Ok(Json(
+        repository.disable_extension(&extension_id).await?.into(),
+    ))
+}
+pub(super) async fn quarantine(
+    ScopedRepository(repository): ScopedRepository,
+    Path(extension_id): Path<String>,
+    ApiJson(input): ApiJson<QuarantineRequest>,
+) -> Result<Json<InstallationResponse>, ApiError> {
+    Ok(Json(
+        repository
+            .quarantine_extension(&extension_id, &input.diagnostic_code)
+            .await?
+            .into(),
+    ))
+}
+pub(super) async fn remove(
+    ScopedRepository(repository): ScopedRepository,
+    Path(extension_id): Path<String>,
+) -> Result<StatusCode, ApiError> {
+    repository.remove_extension(&extension_id).await?;
+    Ok(StatusCode::NO_CONTENT)
+}
+
+/// Returns only contributions from currently enabled installations.
 pub(super) async fn runtime(
     ScopedRepository(repository): ScopedRepository,
 ) -> Result<Json<Vec<RuntimeContribution>>, ApiError> {
@@ -57,9 +375,6 @@ pub(super) async fn runtime(
     ))
 }
 
-/// Artifact bytes are never addressed by object key or release ID in the URL.
-/// Resolving the enabled contribution before storage access closes the stale
-/// artifact path after disable, quarantine, or upgrade.
 pub(super) async fn artifact(
     State(state): State<AppState>,
     ScopedRepository(repository): ScopedRepository,

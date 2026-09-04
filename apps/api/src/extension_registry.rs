@@ -263,6 +263,51 @@ impl GitHubRegistry {
             releases,
         })
     }
+    /// Downloads only an asset that was returned by this registry's trusted
+    /// release resolution. Callers never provide a URL, preventing this API
+    /// from becoming an outbound fetch proxy.
+    pub async fn download_release_asset(
+        &self,
+        release: &DiscoveredRelease,
+    ) -> Result<Vec<u8>, RegistryError> {
+        let url =
+            Url::parse(&release.asset.download_url).map_err(|_| RegistryError::InvalidResponse)?;
+        let source = release
+            .source
+            .trim_start_matches("github:")
+            .parse::<GitHubRepository>()
+            .map_err(|_| RegistryError::InvalidResponse)?;
+        if url.scheme() != "https"
+            || !release
+                .asset
+                .download_url
+                .starts_with(&source.release_asset_origin())
+        {
+            return Err(RegistryError::InvalidResponse);
+        }
+        let response = self
+            .client
+            .get(url)
+            .send()
+            .await
+            .map_err(|_| RegistryError::Unavailable)?;
+        if !response.status().is_success()
+            || response
+                .content_length()
+                .is_some_and(|size| size > crate::extensions::MAX_EXTENSION_ARCHIVE_BYTES as u64)
+        {
+            return Err(RegistryError::Unavailable);
+        }
+        let bytes = response
+            .bytes()
+            .await
+            .map_err(|_| RegistryError::Unavailable)?;
+        if bytes.len() > crate::extensions::MAX_EXTENSION_ARCHIVE_BYTES {
+            return Err(RegistryError::InvalidResponse);
+        }
+        Ok(bytes.to_vec())
+    }
+
     async fn releases(
         &self,
         source: &GitHubRepository,

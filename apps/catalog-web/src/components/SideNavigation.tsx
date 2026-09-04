@@ -9,6 +9,7 @@ import TravelExploreOutlinedIcon from '@mui/icons-material/TravelExploreOutlined
 import ManageAccountsOutlinedIcon from '@mui/icons-material/ManageAccountsOutlined';
 import PersonOutlinedIcon from '@mui/icons-material/PersonOutlined';
 import LogoutOutlinedIcon from '@mui/icons-material/LogoutOutlined';
+import ExtensionOutlinedIcon from '@mui/icons-material/ExtensionOutlined';
 import { useQuery } from '@tanstack/react-query';
 import { Link, useRouterState } from '@tanstack/react-router';
 import { useState } from 'react';
@@ -43,6 +44,11 @@ const navigationItems = [
     icon: <FactCheckOutlinedIcon />,
     label: 'Activity / Audit log',
     to: '/manage/audit-log',
+  },
+  {
+    icon: <ExtensionOutlinedIcon />,
+    label: 'Extensions',
+    to: '/manage/extensions',
   },
   { icon: <PersonOutlinedIcon />, label: 'Profile', to: '/profile' },
   {
@@ -79,7 +85,9 @@ export const SideNavigation = ({
     (item) =>
       (item.to !== '/manage/workspace/members' || canManageWorkspace) &&
       (item.to !== '/manage/audit-log' ||
-        session.data?.capabilities?.audit_read),
+        session.data?.capabilities?.audit_read) &&
+      (item.to !== '/manage/extensions' ||
+        session.data?.capabilities?.extensions_read),
   );
 
   return (

@@ -60,8 +60,8 @@ pub use domain_events::{EventConsumer, EventDelivery, EventPublisher, FailedEven
 pub(crate) use entity_search::decode_search_cursor;
 pub use extension_registries::ExtensionRegistrySource;
 pub use extensions::{
-    ClientExtensionContribution, ExtensionInstallation, ExtensionLifecycleRecord,
-    ExtensionRuntimeInstallation, ExtensionState,
+    ClientExtensionContribution, ExtensionGrant, ExtensionInstallation, ExtensionLifecycleRecord,
+    ExtensionRuntimeInstallation, ExtensionState, InstalledExtension,
 };
 pub(crate) use files::{FileMetadata, FileObject, FilePolicy, FileUploadResult, NewUploadedFile};
 pub(crate) use members::{WorkspaceInvitation, WorkspaceMember};

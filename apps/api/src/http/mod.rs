@@ -190,7 +190,40 @@ pub fn router(state: AppState) -> Router {
             "/extension-registries/{id}",
             axum::routing::delete(extension_registries::remove),
         )
+        .route(
+            "/extensions",
+            get(extensions::list).post(extensions::install),
+        )
         .route("/extensions/runtime", get(extensions::runtime))
+        .route(
+            "/extensions/{extension_id}",
+            get(extensions::detail).delete(extensions::remove),
+        )
+        .route(
+            "/extensions/{extension_id}/upgrade",
+            post(extensions::upgrade),
+        )
+        .route(
+            "/extensions/{extension_id}/configure",
+            put(extensions::configure),
+        )
+        .route("/extensions/{extension_id}/grants", post(extensions::grant))
+        .route(
+            "/extensions/{extension_id}/grants/{grant_kind}/{grant_id}",
+            axum::routing::delete(extensions::revoke),
+        )
+        .route(
+            "/extensions/{extension_id}/enable",
+            post(extensions::enable),
+        )
+        .route(
+            "/extensions/{extension_id}/disable",
+            post(extensions::disable),
+        )
+        .route(
+            "/extensions/{extension_id}/quarantine",
+            post(extensions::quarantine),
+        )
         .route(
             "/extensions/{extension_id}/{contribution_id}/artifact",
             get(extensions::artifact),

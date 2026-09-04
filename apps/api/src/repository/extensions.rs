@@ -54,7 +54,36 @@ pub struct ExtensionLifecycleRecord {
     pub prior_state: Option<String>,
     pub new_state: Option<String>,
     pub outcome: String,
+    pub actor_user_id: Option<Uuid>,
+    pub actor_token_id: Option<Uuid>,
+    pub source: Option<String>,
+    pub diagnostics: Value,
     pub created_at: DateTime<Utc>,
+}
+
+/// Management-safe view of an installed release. The immutable manifest is
+/// included so callers can show requested permissions before changing grants.
+#[derive(Clone, Debug, FromRow)]
+pub struct InstalledExtension {
+    pub id: Uuid,
+    pub extension_id: String,
+    pub installed_release_id: Uuid,
+    pub state: String,
+    pub configuration: Value,
+    pub configuration_version: Option<i32>,
+    pub created_at: DateTime<Utc>,
+    pub updated_at: DateTime<Utc>,
+    pub version: String,
+    pub manifest: Value,
+    pub manifest_sha256: String,
+    pub source: String,
+}
+
+#[derive(Clone, Debug, FromRow)]
+pub struct ExtensionGrant {
+    pub grant_kind: String,
+    pub grant_id: String,
+    pub granted_at: DateTime<Utc>,
 }
 
 /// Immutable snapshot plus invocation-time state used by the WASM runtime.
@@ -87,6 +116,30 @@ pub struct ClientExtensionContribution {
 }
 
 impl CatalogRepository {
+    /// Lists installations with their immutable release metadata for management UI.
+    pub async fn installed_extensions(&self) -> Result<Vec<InstalledExtension>, RepositoryError> {
+        Ok(sqlx::query_as("SELECT i.id, i.extension_id, i.installed_release_id, i.state, i.configuration, i.configuration_version, i.created_at, i.updated_at, r.version, r.manifest, r.manifest_sha256, r.source FROM extension_installations i JOIN installed_extension_releases r ON r.id = i.installed_release_id WHERE i.workspace_id = $1 ORDER BY i.extension_id")
+            .bind(self.extension_workspace()).fetch_all(&self.pool).await?)
+    }
+
+    pub async fn installed_extension(
+        &self,
+        extension_id: &str,
+    ) -> Result<InstalledExtension, RepositoryError> {
+        sqlx::query_as("SELECT i.id, i.extension_id, i.installed_release_id, i.state, i.configuration, i.configuration_version, i.created_at, i.updated_at, r.version, r.manifest, r.manifest_sha256, r.source FROM extension_installations i JOIN installed_extension_releases r ON r.id = i.installed_release_id WHERE i.workspace_id = $1 AND i.extension_id = $2")
+            .bind(self.extension_workspace()).bind(extension_id).fetch_optional(&self.pool).await?
+            .ok_or(RepositoryError::NotFound("extension installation"))
+    }
+
+    pub async fn extension_grants(
+        &self,
+        extension_id: &str,
+    ) -> Result<Vec<ExtensionGrant>, RepositoryError> {
+        let installation = self.installed_extension(extension_id).await?;
+        Ok(sqlx::query_as("SELECT grant_kind, grant_id, granted_at FROM extension_grants WHERE installation_id = $1 ORDER BY grant_kind, grant_id")
+            .bind(installation.id).fetch_all(&self.pool).await?)
+    }
+
     /// Lists only enabled client contributions for the active workspace.
     /// Deserializing the immutable manifest here keeps runtime selection tied to
     /// the installed release rather than caller-controlled identifiers.
@@ -605,7 +658,7 @@ impl CatalogRepository {
         &self,
         extension_id: &str,
     ) -> Result<Vec<ExtensionLifecycleRecord>, RepositoryError> {
-        Ok(sqlx::query_as("SELECT id, workspace_id, installation_id, extension_id, installed_release_id, operation, prior_state, new_state, outcome, created_at FROM extension_lifecycle_records WHERE workspace_id = $1 AND extension_id = $2 ORDER BY created_at, id")
+        Ok(sqlx::query_as("SELECT id, workspace_id, installation_id, extension_id, installed_release_id, operation, prior_state, new_state, outcome, actor_user_id, actor_token_id, source, diagnostics, created_at FROM extension_lifecycle_records WHERE workspace_id = $1 AND extension_id = $2 ORDER BY created_at, id")
             .bind(self.extension_workspace()).bind(extension_id).fetch_all(&self.pool).await?)
     }
 
