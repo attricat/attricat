@@ -6,8 +6,8 @@ host functions (`catalog.host_api`). Event, capability, configuration, and UI
 contribution versions are independent contracts. A host never coerces or
 downgrades any of these contracts.
 
-Extension repositories and release ZIP discovery are external to Catalog. The
-configured registry list identifies GitHub repositories; a later registry layer
+Extension repositories and `.tar.zst` release-archive discovery are external to
+Catalog. The configured registry list identifies GitHub repositories; a later registry layer
 loads their releases to show what is available. Catalog stores no global copy of
 that catalogue. When a user installs one release, Catalog validates the
 selected release manifest and artifact hashes supplied by the registry flow and
