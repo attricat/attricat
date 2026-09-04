@@ -8,6 +8,12 @@ itself and values on entities connected to it through relationships. It also
 introduces a small, typed query language so that later search features extend a
 query plan rather than ad-hoc SQL text matching.
 
+The query pipeline is application-owned Rust code: it parses and validates the
+query, plans every term, performs breadth-first traversal, and combines
+candidate ID sets. PostgreSQL is used only for parameterized batched set reads;
+no recursive SQL, database functions, triggers, or other database-resident
+query behavior is introduced.
+
 ## Matching Model
 
 Search produces candidate IDs for the selected blueprint, then applies the
