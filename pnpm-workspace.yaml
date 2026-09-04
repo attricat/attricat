@@ -1,3 +1,6 @@
+packages:
+  - apps/catalog-web
+
 allowBuilds:
   cpu-features: true
   esbuild: true

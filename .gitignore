@@ -1,6 +1,7 @@
 /target
 .env
 .catalog-worktree
+/node_modules
 /apps/catalog-web/node_modules
 /apps/catalog-web/dist
 apps/catalog-web/test-results/
