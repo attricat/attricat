@@ -182,6 +182,10 @@ pub fn router(state: AppState) -> Router {
             get(extension_registries::discover),
         )
         .route(
+            "/extension-registries/extensions/{owner}/{repository}",
+            get(extension_registries::extension_details),
+        )
+        .route(
             "/extension-registries/{id}",
             axum::routing::delete(extension_registries::remove),
         )

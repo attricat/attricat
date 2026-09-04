@@ -35,7 +35,9 @@ pub(super) fn policy(method: &Method, path: &str) -> Option<Policy> {
     } else {
         "blueprints.write"
     };
-    if path == "/extension-registries/discover" {
+    if path == "/extension-registries/discover"
+        || path.starts_with("/extension-registries/extensions/")
+    {
         return Some(Policy {
             permission: "extensions.read",
             target: TargetKind::None,

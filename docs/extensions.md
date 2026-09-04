@@ -6,15 +6,22 @@ host functions (`catalog.host_api`). Event, capability, configuration, and UI
 contribution versions are independent contracts. A host never coerces or
 downgrades any of these contracts.
 
-Extension repositories and `.tar.zst` release-archive discovery are external to
-Catalog. Every workspace has the built-in Attricat official GitHub registry plus
-zero or more workspace-managed GitHub `owner/repository` sources. Sources may be
-submitted as `github:owner/repository`, `owner/repository`, or the canonical
-`https://github.com/owner/repository` URL; Catalog canonicalizes them and rejects
-non-GitHub origins, credentials, query/fragment suffixes, and ambiguous paths.
-Discovery queries GitHub Releases directly, ignores drafts and prereleases, and
-returns only `.tar.zst` assets whose download path belongs to that exact source.
-Catalog stores no global copy of that catalogue. When a user installs one release, Catalog validates the
+Extension registries and extension repositories are separate external inputs.
+Every workspace has the built-in Attricat GitHub registry plus zero or more
+workspace-managed GitHub `owner/repository` registries. Each registry exposes a
+raw root `registry.json` with `registry_version: 1` and an `extensions` list;
+each entry supplies a stable `id`, `name`, `description`, optional `icon`, and a
+GitHub extension `repository`. Sources may be submitted as
+`github:owner/repository`, `owner/repository`, or the canonical GitHub URL.
+Catalog canonicalizes them and rejects non-GitHub origins, credentials,
+query/fragment suffixes, and ambiguous paths.
+
+Discovery loads trusted registry indexes only; an index is the sole authority
+for which extension repositories Catalog may resolve. Opening a listed entry
+loads that extension repository's README and non-draft, non-prerelease GitHub
+Releases, returning its `.tar.zst` assets only when their download path belongs
+to that exact extension repository. Catalog stores no global copy of indexes,
+READMEs, releases, or archives. When a user installs one release, Catalog validates the
 selected `.tar.zst` archive with bounded decompression and entry-path checks,
 then reads and validates `manifest.json` before uploading declared extracted
 artifacts to Catalog S3 storage. Artifact integrity verification is deliberately
@@ -100,9 +107,12 @@ credentials, raw packages, and payload bodies may not. SQL migrations remain
 declarative and contain no behavior.
 
 Registry source APIs expose `GET/POST /extension-registries`,
-`DELETE /extension-registries/{id}`, and `GET /extension-registries/discover`.
-`extensions.read` authorizes discovery while `extensions.manage` authorizes
-source changes; the built-in official source cannot be removed. The deployment
+`DELETE /extension-registries/{id}`, `GET /extension-registries/discover`, and
+`GET /extension-registries/extensions/{owner}/{repository}`. The final endpoint
+rejects a repository unless the current trusted index lists it, then returns its
+README and release assets. `extensions.read` authorizes discovery while
+`extensions.manage` authorizes source changes; the built-in official source
+cannot be removed. The deployment
 may set `EXTENSION_OFFICIAL_REGISTRY` to a validated GitHub owner/repository
 instead of the default `attricat/catalog-extensions`.
 
