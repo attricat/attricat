@@ -11,6 +11,8 @@ pub mod catalog_service;
 pub mod constants;
 pub mod domain_events;
 pub mod event_dispatcher;
+pub mod extension_installer;
+pub mod extensions;
 pub mod file_access;
 pub mod file_worker;
 pub mod http;
