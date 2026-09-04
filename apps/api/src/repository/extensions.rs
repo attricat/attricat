@@ -530,10 +530,6 @@ impl CatalogRepository {
         let installed_release_id = Uuid::new_v4();
         sqlx::query("INSERT INTO installed_extension_releases (id, workspace_id, extension_id, version, manifest, manifest_sha256, source) VALUES ($1, $2, $3, $4, $5, $6, $7)")
             .bind(installed_release_id).bind(self.extension_workspace()).bind(&manifest.catalog.id).bind(&manifest.version).bind(serialized).bind(digest).bind(source).execute(&mut **transaction).await?;
-        for artifact in &manifest.artifacts {
-            sqlx::query("INSERT INTO installed_extension_release_artifacts (id, installed_release_id, artifact_id, artifact_kind, artifact_path, sha256) VALUES ($1, $2, $3, $4, $5, $6)")
-            .bind(Uuid::new_v4()).bind(installed_release_id).bind(&artifact.id).bind(match artifact.kind { crate::extensions::ArtifactKind::ServerWasm => "server_wasm", crate::extensions::ArtifactKind::ClientComponent => "client_component" }).bind(&artifact.path).bind(&artifact.sha256).execute(&mut **transaction).await?;
-        }
         Ok(installed_release_id)
     }
     async fn update_extension_state(

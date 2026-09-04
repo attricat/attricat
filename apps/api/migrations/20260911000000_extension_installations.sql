@@ -16,17 +16,6 @@ CREATE TABLE installed_extension_releases (
 CREATE INDEX installed_extension_releases_workspace_extension_version_idx
     ON installed_extension_releases (workspace_id, extension_id, version);
 
-CREATE TABLE installed_extension_release_artifacts (
-    id UUID PRIMARY KEY,
-    installed_release_id UUID NOT NULL REFERENCES installed_extension_releases (id),
-    artifact_id TEXT NOT NULL CHECK (artifact_id ~ '^[A-Za-z0-9._-]{1,128}$'),
-    artifact_kind TEXT NOT NULL CHECK (artifact_kind IN ('server_wasm', 'client_component')),
-    artifact_path TEXT NOT NULL,
-    sha256 TEXT NOT NULL CHECK (sha256 ~ '^[0-9a-f]{64}$'),
-    UNIQUE (installed_release_id, artifact_id),
-    UNIQUE (installed_release_id, artifact_path)
-);
-
 CREATE TABLE extension_installations (
     id UUID PRIMARY KEY,
     workspace_id UUID NOT NULL REFERENCES workspaces (id),
