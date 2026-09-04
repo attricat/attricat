@@ -54,7 +54,7 @@ without rerunning the search; it is explanatory metadata, not ranking input.
 | `color:red` | Match values on entities reached through selected-blueprint relationship `color`. |
 | `color.name:red` | As above, restricted to related attribute `name`. |
 | `sku:123*` | Match selected-blueprint attribute `sku`. |
-| `product.sku:123*` | Explicit selected-blueprint form of the preceding query. |
+| `product.sku:123*` | Explicit selected-blueprint form of the preceding query; `product` may be its code or user-specified name. |
 
 Selectors are validated against the selected blueprint revision before the
 query executes:
@@ -63,11 +63,14 @@ query executes:
 - `relationship.attribute` must name an attribute on that relationship's target
   blueprint.
 - `attribute` is selected-blueprint shorthand.
-- `blueprint.attribute` is valid only when `blueprint` is the selected
-  blueprint and the attribute exists there.
+- `blueprint.attribute` is valid only when `blueprint` identifies the selected
+  blueprint by either its code or its user-specified name, and the attribute
+  exists there. Blueprint-name matching is case-insensitive; if multiple active
+  blueprints share that name, the selector is rejected as ambiguous and the
+  caller must use the blueprint code.
 
-Unknown or incompatible names and malformed terms return a clear `400` input
-validation error. `*` is a query-language wildcard only in a trailing position
+Unknown, ambiguous, or incompatible names and malformed terms return a clear
+`400` input validation error. `*` is a query-language wildcard only in a trailing position
 and means prefix matching. Values are always passed to SQL as parameters;
 query wildcards are never interpolated into SQL.
 
@@ -102,8 +105,9 @@ representative catalogue data is available.
 ## Acceptance Coverage
 
 Integration tests must cover direct and multi-hop matches, depth bounds, cycles,
-deleted entities, inactive relationships, structured selectors, wildcard
-matching, invalid syntax/selectors, AND intersections, pagination, facet
+deleted entities, inactive relationships, structured selectors (including
+selected-blueprint code and user-specified-name aliases), wildcard matching,
+invalid or ambiguous syntax/selectors, AND intersections, pagination, facet
 counts/filtering, and deterministic per-term match explanations. Frontend tests
 must cover URL parsing/submission and request forwarding for structured query
 text, plus rendering or otherwise exposing the returned match rationale.
