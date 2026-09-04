@@ -53,13 +53,18 @@ without rerunning the search; it is explanatory metadata, not ranking input.
 | `red` | Free text across the reachable entity graph. |
 | `color:red` | Match values on entities reached through selected-blueprint relationship `color`. |
 | `color.name:red` | As above, restricted to related attribute `name`. |
+| `Produkt:czerwony` | Free text limited to the selected blueprint, identified by its user-specified name (its code, `product:czerwony`, also works). |
 | `sku:123*` | Match selected-blueprint attribute `sku`. |
 | `product.sku:123*` | Explicit selected-blueprint form of the preceding query; `product` may be its code or user-specified name. |
 
 Selectors are validated against the selected blueprint revision before the
 query executes:
 
-- `relationship` must name a relationship on the selected blueprint.
+- A one-part selector matching the selected blueprint's code or user-specified
+  name (for example `Produkt:czerwony`) scopes free-text matching to that
+  blueprint's own scalar values. This selected-blueprint alias takes precedence
+  over a same-named relationship field.
+- Otherwise, `relationship` must name a relationship on the selected blueprint.
 - `relationship.attribute` must name an attribute on that relationship's target
   blueprint.
 - `attribute` is selected-blueprint shorthand.
@@ -106,8 +111,9 @@ representative catalogue data is available.
 
 Integration tests must cover direct and multi-hop matches, depth bounds, cycles,
 deleted entities, inactive relationships, structured selectors (including
-selected-blueprint code and user-specified-name aliases), wildcard matching,
-invalid or ambiguous syntax/selectors, AND intersections, pagination, facet
+selected-blueprint code and user-specified-name aliases in both `blueprint:term`
+and `blueprint.attribute:term` forms), wildcard matching, invalid or ambiguous
+syntax/selectors, AND intersections, pagination, facet
 counts/filtering, and deterministic per-term match explanations. Frontend tests
 must cover URL parsing/submission and request forwarding for structured query
 text, plus rendering or otherwise exposing the returned match rationale.
