@@ -245,6 +245,8 @@ impl From<RepositoryError> for ApiError {
             RepositoryError::InvalidPreview
             | RepositoryError::InvalidHierarchyRelationship
             | RepositoryError::InvalidAgentState(_)
+            | RepositoryError::InvalidExtension(_)
+            | RepositoryError::InvalidExtensionTransition(_)
             | RepositoryError::InvalidDomainEvent(_)
             | RepositoryError::ReservedContextCode
             | RepositoryError::InvalidCode
@@ -264,7 +266,8 @@ impl From<RepositoryError> for ApiError {
                 code: "invalid_blueprint_definition",
                 message: error.to_string(),
             },
-            RepositoryError::ApprovalAlreadyDecided => Self {
+            RepositoryError::ExtensionAlreadyInstalled
+            | RepositoryError::ApprovalAlreadyDecided => Self {
                 status: StatusCode::CONFLICT,
                 code: "approval_already_decided",
                 message: error.to_string(),

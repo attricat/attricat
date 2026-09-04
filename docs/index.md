@@ -39,6 +39,7 @@ settings before running the ignored RustFS compatibility test.
 - [Database model](database.md): persisted model, value history, projections,
   contexts, and publication behavior.
 - [Domain eventing](eventing.md): transactional outbox contract and delivery semantics.
+- [Extensions](extensions.md): strict manifest, permissions, webhook, and lifecycle contracts.
 - [Authentication and identity adapters](authentication.md): local password
   lifecycle plus the provider-neutral external identity seam.
 - [JSON Schema validation](json-schema-validation.md): attribute and entity

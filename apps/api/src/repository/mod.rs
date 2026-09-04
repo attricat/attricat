@@ -41,6 +41,7 @@ mod entity_commands;
 mod entity_migration;
 mod entity_projection;
 mod entity_search;
+mod extensions;
 mod files;
 mod health;
 mod members;
@@ -56,6 +57,7 @@ pub use agents::{
 pub(crate) use audit_events::{AuditEventFilter, AuditEventPage};
 pub use domain_events::{EventConsumer, EventDelivery, EventPublisher, FailedEventDelivery};
 pub(crate) use entity_search::decode_search_cursor;
+pub use extensions::{ExtensionInstallation, ExtensionLifecycleRecord, ExtensionState};
 pub(crate) use files::{FileMetadata, FileObject, FilePolicy, FileUploadResult, NewUploadedFile};
 pub(crate) use members::{WorkspaceInvitation, WorkspaceMember};
 pub(crate) use roles::{Permission, WorkspaceGrantTarget, WorkspaceRole};
@@ -213,6 +215,12 @@ pub enum RepositoryError {
     MigrationNeedsResolution(Vec<String>),
     #[error("invalid agent state: {0}")]
     InvalidAgentState(&'static str),
+    #[error("invalid extension: {0}")]
+    InvalidExtension(String),
+    #[error("invalid extension lifecycle transition: {0}")]
+    InvalidExtensionTransition(&'static str),
+    #[error("extension is already installed")]
+    ExtensionAlreadyInstalled,
     #[error("invalid domain event: {0}")]
     InvalidDomainEvent(#[from] crate::domain_events::EventContractError),
     #[error("an approval decision has already been recorded")]
