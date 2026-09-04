@@ -170,13 +170,36 @@ pub enum WebhookAuthenticationKind {
     HmacSha256,
 }
 
+/// A client contribution is either a namespaced full page or an element at a
+/// host-owned outlet. The host never accepts arbitrary route paths or DOM
+/// selectors from an extension.
 #[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct UiContribution {
     pub id: String,
     pub version: u32,
-    pub kind: String,
+    pub kind: UiContributionKind,
     pub artifact: String,
+    /// The custom-element name registered inside the isolated extension frame.
+    pub element: String,
+    #[serde(default)]
+    pub outlet: Option<UiOutlet>,
+    #[serde(default)]
+    pub title: Option<String>,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum UiContributionKind {
+    Route,
+    Element,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq, Hash)]
+#[serde(rename_all = "snake_case")]
+pub enum UiOutlet {
+    Navigation,
+    EntityPreviewPanel,
 }
 
 #[derive(Debug, Error, PartialEq, Eq)]
@@ -316,6 +339,11 @@ impl Manifest {
                 ));
             }
         }
+        unique(
+            self.ui.iter().map(|contribution| &contribution.id),
+            "UI contribution",
+        )?;
+        let mut outlets = HashSet::new();
         for contribution in &self.ui {
             valid_id(&contribution.id, "UI contribution id")?;
             if contribution.version == 0
@@ -327,6 +355,37 @@ impl Manifest {
                     "UI contribution '{}' must reference a client_component artifact",
                     contribution.id
                 )));
+            }
+            valid_custom_element_name(&contribution.element)?;
+            match (&contribution.kind, &contribution.outlet) {
+                (UiContributionKind::Route, None) => {}
+                (UiContributionKind::Element, Some(outlet)) => {
+                    if !outlets.insert(outlet) {
+                        return Err(ManifestError::Invalid(
+                            "only one contribution may target each UI outlet".into(),
+                        ));
+                    }
+                }
+                (UiContributionKind::Route, Some(_)) => {
+                    return Err(ManifestError::Invalid(
+                        "route UI contributions cannot declare an outlet".into(),
+                    ));
+                }
+                (UiContributionKind::Element, None) => {
+                    return Err(ManifestError::Invalid(
+                        "element UI contributions require an outlet".into(),
+                    ));
+                }
+            }
+            if matches!(contribution.kind, UiContributionKind::Route)
+                && contribution
+                    .title
+                    .as_deref()
+                    .is_none_or(|title| title.trim().is_empty())
+            {
+                return Err(ManifestError::Invalid(
+                    "route UI contributions require a non-empty title".into(),
+                ));
             }
         }
         Ok(())
@@ -483,6 +542,20 @@ fn unique<'a>(values: impl Iterator<Item = &'a String>, label: &str) -> Result<(
     }
     Ok(())
 }
+fn valid_custom_element_name(value: &str) -> Result<(), ManifestError> {
+    if value.len() > 128
+        || !value.contains('-')
+        || !value
+            .bytes()
+            .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == b'-')
+    {
+        return Err(ManifestError::Invalid(
+            "UI element must be a lowercase custom-element name".into(),
+        ));
+    }
+    Ok(())
+}
+
 fn valid_id(value: &str, label: &str) -> Result<(), ManifestError> {
     if value.is_empty()
         || value.len() > 128
@@ -826,6 +899,27 @@ mod tests {
         assert!(value.validate(SUPPORTED_HOST_API).is_err());
     }
 
+    #[test]
+    fn validates_client_ui_contributions() {
+        let mut value = manifest();
+        value.artifacts.push(Artifact {
+            id: "client".into(),
+            kind: ArtifactKind::ClientComponent,
+            path: "client.js".into(),
+        });
+        value.ui.push(UiContribution {
+            id: "panel".into(),
+            version: 1,
+            kind: UiContributionKind::Element,
+            artifact: "client".into(),
+            element: "acme-panel".into(),
+            outlet: Some(UiOutlet::EntityPreviewPanel),
+            title: None,
+        });
+        assert!(value.validate(SUPPORTED_HOST_API).is_ok());
+        value.ui[0].element = "AcmePanel".into();
+        assert!(value.validate(SUPPORTED_HOST_API).is_err());
+    }
     #[test]
     fn validates_configuration() {
         let value = manifest();

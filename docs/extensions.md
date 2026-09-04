@@ -124,3 +124,63 @@ until their command/secret/storage/network contracts are made durable. In
 particular, `network.request.v1` never grants ambient sockets. The manifest
 host-permission validation remains the egress policy contract for its future
 mediated implementation.
+No management API, web UI, external GitHub registry discovery, client runtime,
+or WASM execution is part of this issue; those are #145–#149 follow-on
+boundaries.
+
+## Client extension runtime (v1)
+
+Enabled `client_component` artifacts can expose a strict `ui` contribution:
+
+```json
+{
+  "id": "inventory-panel",
+  "version": 1,
+  "kind": "element",
+  "artifact": "client",
+  "element": "acme-inventory-panel",
+  "outlet": "entity_preview_panel"
+}
+```
+
+A contribution is either `route` (which requires a non-empty `title`) or
+`element` (which requires one of the host-owned `navigation` or
+`entity_preview_panel` outlets). Routes are always namespaced at
+`/extensions/:extensionId/:contributionId`; manifests cannot provide a path,
+selector, or host component. Element names must be lowercase custom-element
+names. Each extension can use an outlet once and all contribution/artifact IDs
+remain stable across releases.
+
+Catalog loads runtime descriptors and JavaScript only for enabled installations.
+Disabling, quarantining, or upgrading an installation immediately prevents new
+loads; release IDs and object-store keys are never client addresses. The host
+runs every contribution in a distinct `<iframe sandbox="allow-scripts">` with
+an opaque origin and a CSP that denies network access. Components register
+custom elements *inside that frame*, not in Catalog's document, and have no
+access to host DOM, cookies, storage, React state, or other extension frames.
+The host revokes the frame port and removes the frame on unmount or load error.
+
+### Client API
+
+The frame receives a versioned `MessageChannel` API as `globalThis.catalog`.
+It may use only granted operations:
+
+- `catalog.navigate({ entity_id })` requires `client.navigation` and resolves
+  only to Catalog's entity route.
+- `catalog.notify({ message, severity? })` requires `client.notification`;
+  messages are trimmed and limited to 512 characters.
+- `catalog.request(path)` requires `catalog.read` and is limited to `GET`
+  reads of `/api/entities` or `/api/v1/entities/:uuid` with a 1 MiB response
+  limit.
+- `catalog.context` contains only the documented outlet identifiers (the
+  entity preview outlet supplies `entity_id` and optional `context_id`).
+  Configuration is provided only when `configuration.read` is granted.
+
+There is no generic `fetch`, URL navigation, credential/header access, DOM
+bridge, event stream, or inter-extension RPC. Every mediated Catalog request
+uses the signed-in browser session in the parent and the server still applies
+normal authorization. Invalid messages, missing grants, failures, and startup
+timeouts are denied and rendered as a host-owned warning without exposing
+extension source or host internals. Extension UI must provide its own localized
+text and accessible labels; the host owns the surrounding landmarks, focus,
+loading state, and failure announcements.
