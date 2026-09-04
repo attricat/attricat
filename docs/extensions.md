@@ -17,9 +17,23 @@ Catalog canonicalizes them and rejects non-GitHub origins, credentials,
 query/fragment suffixes, and ambiguous paths.
 
 Discovery loads trusted registry indexes only; an index is the sole authority
-for which extension repositories Catalog may resolve. Opening a listed entry
-loads that extension repository's README and non-draft, non-prerelease GitHub
-Releases, returning its `.tar.zst` assets only when their download path belongs
+for which extension repositories Catalog may resolve. The v1 index shape is:
+
+```json
+{
+  "registry_version": 1,
+  "extensions": [{
+    "id": "acme.example",
+    "name": "Acme Example",
+    "description": "Example extension",
+    "icon": "https://example.invalid/icon.svg",
+    "repository": "acme/catalog-extension"
+  }]
+}
+```
+
+Opening a listed entry loads that extension repository's README and non-draft,
+non-prerelease GitHub Releases, returning its `.tar.zst` assets only when their download path belongs
 to that exact extension repository. Catalog stores no global copy of indexes,
 READMEs, releases, or archives. When a user installs one release, Catalog validates the
 selected `.tar.zst` archive with bounded decompression and entry-path checks,
