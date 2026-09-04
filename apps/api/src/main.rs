@@ -11,7 +11,7 @@ use api::{
         DEFAULT_PREVIEW_RELATIONSHIP_ITEMS, DEFAULT_RELATIONSHIP_FACET_NODES,
         MAINTENANCE_POOL_CONNECTIONS, REQUEST_POOL_CONNECTIONS,
     },
-    event_dispatcher::{self, EventHandlerRegistry},
+    event_dispatcher::{self, DispatcherConfig, EventHandlerRegistry},
     file_access::AllowFileAccess,
     http::{AppState, router},
     mail::SmtpMailDelivery,
@@ -194,9 +194,14 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         None => None,
     };
 
-    event_dispatcher::start(
+    let dispatcher_config = DispatcherConfig::from_env()
+        .map_err(|error| format!("invalid event dispatcher configuration: {error}"))?;
+    let (shutdown_sender, shutdown_receiver) = tokio::sync::watch::channel(());
+    let dispatcher_handles = event_dispatcher::start(
         CatalogRepository::with_workspace_pool_factory(pool.clone(), connect_options.clone()),
         EventHandlerRegistry::default_handlers(),
+        dispatcher_config,
+        shutdown_receiver,
     );
 
     let listener = tokio::net::TcpListener::bind(bind_addr).await?;
@@ -235,7 +240,17 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
             allow_trusted_headers: false,
         }),
     )
+    .with_graceful_shutdown(async move {
+        tokio::signal::ctrl_c()
+            .await
+            .expect("install shutdown signal handler");
+        tracing::info!("shutdown signal received");
+        let _ = shutdown_sender.send(());
+    })
     .await?;
+    for handle in dispatcher_handles {
+        handle.await?;
+    }
 
     Ok(())
 }

@@ -244,3 +244,103 @@ async fn delivery_claims_are_exclusive_and_completion_is_durable(pool: sqlx::PgP
         "completed"
     );
 }
+
+#[sqlx::test(migrations = "./migrations")]
+async fn failed_deliveries_wait_until_due_then_dead_letter(pool: sqlx::PgPool) {
+    use std::time::Duration;
+
+    let repository = api::repository::CatalogRepository::new(pool.clone());
+    repository
+        .ensure_event_consumer("test.retry", &[CONTEXT_CREATED_V1])
+        .await
+        .unwrap();
+    sqlx::query("INSERT INTO domain_events (id, workspace_id, event_type, aggregate_kind, aggregate_id, correlation_id, source_kind, source_name, payload) VALUES ($1, '00000000-0000-4000-8000-000000000002', 'context.created.v1', 'context', $2, $3, 'api', 'catalog_api', '{}'::jsonb)")
+        .bind(Uuid::new_v4()).bind(Uuid::new_v4()).bind(Uuid::new_v4()).execute(&pool).await.unwrap();
+    let first = repository
+        .claim_event_delivery(
+            "test.retry",
+            &[CONTEXT_CREATED_V1],
+            "one",
+            Duration::from_secs(30),
+        )
+        .await
+        .unwrap()
+        .unwrap();
+    repository
+        .retry_event_delivery(&first, "first failure", Duration::from_secs(3600), 2)
+        .await
+        .unwrap();
+    assert!(
+        repository
+            .claim_event_delivery(
+                "test.retry",
+                &[CONTEXT_CREATED_V1],
+                "two",
+                Duration::from_secs(30)
+            )
+            .await
+            .unwrap()
+            .is_none()
+    );
+    sqlx::query(
+        "UPDATE event_deliveries SET next_attempt_at = clock_timestamp() - interval '1 second'",
+    )
+    .execute(&pool)
+    .await
+    .unwrap();
+    let second = repository
+        .claim_event_delivery(
+            "test.retry",
+            &[CONTEXT_CREATED_V1],
+            "two",
+            Duration::from_secs(30),
+        )
+        .await
+        .unwrap()
+        .unwrap();
+    repository
+        .retry_event_delivery(&second, "second failure", Duration::from_secs(1), 2)
+        .await
+        .unwrap();
+    let row: (String, i32, String) =
+        sqlx::query_as("SELECT status, attempts, last_error FROM event_deliveries")
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+    assert_eq!(
+        row,
+        ("dead_letter".to_owned(), 2, "second failure".to_owned())
+    );
+}
+
+#[sqlx::test(migrations = "./migrations")]
+async fn dead_letter_can_be_replayed_without_changing_event(pool: sqlx::PgPool) {
+    let repository = api::repository::CatalogRepository::new(pool.clone());
+    let consumer = repository
+        .create_event_consumer("test.replay")
+        .await
+        .unwrap();
+    let event_id = Uuid::new_v4();
+    sqlx::query("INSERT INTO domain_events (id, workspace_id, event_type, aggregate_kind, aggregate_id, correlation_id, source_kind, source_name, payload) VALUES ($1, '00000000-0000-4000-8000-000000000002', 'context.created.v1', 'context', $2, $3, 'api', 'catalog_api', '{}'::jsonb)")
+        .bind(event_id).bind(Uuid::new_v4()).bind(Uuid::new_v4()).execute(&pool).await.unwrap();
+    sqlx::query("INSERT INTO event_deliveries (consumer_id, event_id, status, attempts, last_error, failed_at) VALUES ($1, $2, 'dead_letter', 5, 'boom', clock_timestamp())").bind(consumer.id).bind(event_id).execute(&pool).await.unwrap();
+    assert_eq!(
+        repository
+            .list_failed_event_deliveries()
+            .await
+            .unwrap()
+            .len(),
+        1
+    );
+    assert!(
+        repository
+            .replay_event_delivery(consumer.id, event_id)
+            .await
+            .unwrap()
+    );
+    let row: (String, i32, String) = sqlx::query_as("SELECT d.status, d.attempts, e.event_type FROM event_deliveries d JOIN domain_events e ON e.id = d.event_id WHERE d.consumer_id = $1 AND d.event_id = $2").bind(consumer.id).bind(event_id).fetch_one(&pool).await.unwrap();
+    assert_eq!(
+        row,
+        ("pending".to_owned(), 5, "context.created.v1".to_owned())
+    );
+}
