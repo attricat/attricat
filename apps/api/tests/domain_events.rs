@@ -1,10 +1,61 @@
 mod support;
 
-use api::domain_events::{
-    BLUEPRINT_CREATED_V1, BLUEPRINT_PUBLISHED_V1, BLUEPRINT_REVISION_CREATED_V1,
-    CONTEXT_CREATED_V1, CONTEXT_DELETED_V1, CONTEXT_UPDATED_V1,
+use std::{
+    sync::{
+        Arc,
+        atomic::{AtomicUsize, Ordering},
+    },
+    time::Duration,
 };
+
+use api::{
+    domain_events::{
+        BLUEPRINT_CREATED_V1, BLUEPRINT_PUBLISHED_V1, BLUEPRINT_REVISION_CREATED_V1,
+        CONTEXT_CREATED_V1, CONTEXT_DELETED_V1, CONTEXT_UPDATED_V1,
+    },
+    event_dispatcher::{
+        DispatcherConfig, EventHandler, EventHandlerCommandContext, EventHandlerRegistry,
+    },
+    model::CreateAttributeContext,
+    repository::CatalogRepository,
+};
+use async_trait::async_trait;
 use support::{StatusCode, Uuid, authenticated_client, start_server};
+
+struct FollowOnContextHandler {
+    calls: Arc<AtomicUsize>,
+}
+
+#[async_trait]
+impl EventHandler for FollowOnContextHandler {
+    fn name(&self) -> &'static str {
+        "test-follow-on-context"
+    }
+
+    fn event_types(&self) -> &'static [&'static str] {
+        &[CONTEXT_CREATED_V1]
+    }
+
+    async fn handle(
+        &self,
+        event: api::domain_events::DomainEvent,
+        context: EventHandlerCommandContext,
+    ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+        if event.source_kind == "worker" && event.source_name == self.name() {
+            return Ok(());
+        }
+        self.calls.fetch_add(1, Ordering::SeqCst);
+        context
+            .repository()
+            .create_context(CreateAttributeContext {
+                code: "dispatcher_follow_on".to_owned(),
+                data: support::json!({}),
+                parent_id: None,
+            })
+            .await?;
+        Ok(())
+    }
+}
 
 #[sqlx::test(migrations = "./migrations")]
 async fn context_creation_commits_a_typed_outbox_event(pool: sqlx::PgPool) {
@@ -243,6 +294,194 @@ async fn delivery_claims_are_exclusive_and_completion_is_durable(pool: sqlx::PgP
             .unwrap(),
         "completed"
     );
+}
+
+#[sqlx::test(migrations = "./migrations")]
+async fn expired_leases_redeliver_the_same_event_and_reject_stale_acknowledgements(
+    pool: sqlx::PgPool,
+) {
+    let repository = CatalogRepository::new(pool.clone());
+    repository
+        .ensure_event_consumer("test.lease_expiry", &[CONTEXT_CREATED_V1])
+        .await
+        .unwrap();
+    let event_id = Uuid::new_v4();
+    sqlx::query("INSERT INTO domain_events (id, workspace_id, event_type, aggregate_kind, aggregate_id, correlation_id, source_kind, source_name, payload) VALUES ($1, '00000000-0000-4000-8000-000000000002', 'context.created.v1', 'context', $2, $3, 'api', 'catalog_api', '{}'::jsonb)")
+        .bind(event_id).bind(Uuid::new_v4()).bind(Uuid::new_v4()).execute(&pool).await.unwrap();
+
+    let first = repository
+        .claim_event_delivery(
+            "test.lease_expiry",
+            &[CONTEXT_CREATED_V1],
+            "crashed-replica",
+            Duration::from_secs(30),
+        )
+        .await
+        .unwrap()
+        .unwrap();
+    sqlx::query(
+        "UPDATE event_deliveries SET lease_until = clock_timestamp() - interval '1 second'",
+    )
+    .execute(&pool)
+    .await
+    .unwrap();
+    let retry = repository
+        .claim_event_delivery(
+            "test.lease_expiry",
+            &[CONTEXT_CREATED_V1],
+            "recovery-replica",
+            Duration::from_secs(30),
+        )
+        .await
+        .unwrap()
+        .unwrap();
+
+    assert_eq!(retry.event.id, event_id);
+    assert_eq!(
+        retry.attempts, 2,
+        "an expired lease is at-least-once delivery"
+    );
+    repository.complete_event_delivery(&first).await.unwrap();
+    assert_eq!(
+        sqlx::query_scalar::<_, String>("SELECT status FROM event_deliveries")
+            .fetch_one(&pool)
+            .await
+            .unwrap(),
+        "leased",
+        "a crashed replica cannot acknowledge a later replica's lease"
+    );
+    repository.complete_event_delivery(&retry).await.unwrap();
+}
+
+#[sqlx::test(migrations = "./migrations")]
+async fn deliveries_can_complete_out_of_order_without_losing_the_deferred_event(
+    pool: sqlx::PgPool,
+) {
+    let repository = CatalogRepository::new(pool.clone());
+    repository
+        .ensure_event_consumer("test.reordering", &[CONTEXT_CREATED_V1])
+        .await
+        .unwrap();
+    for _ in 0..2 {
+        sqlx::query("INSERT INTO domain_events (id, workspace_id, event_type, aggregate_kind, aggregate_id, correlation_id, source_kind, source_name, payload) VALUES ($1, '00000000-0000-4000-8000-000000000002', 'context.created.v1', 'context', $2, $3, 'api', 'catalog_api', '{}'::jsonb)")
+            .bind(Uuid::new_v4()).bind(Uuid::new_v4()).bind(Uuid::new_v4()).execute(&pool).await.unwrap();
+    }
+    let deferred = repository
+        .claim_event_delivery(
+            "test.reordering",
+            &[CONTEXT_CREATED_V1],
+            "one",
+            Duration::from_secs(30),
+        )
+        .await
+        .unwrap()
+        .unwrap();
+    repository
+        .retry_event_delivery(
+            &deferred,
+            "temporarily unavailable",
+            Duration::from_secs(3600),
+            3,
+        )
+        .await
+        .unwrap();
+    let later = repository
+        .claim_event_delivery(
+            "test.reordering",
+            &[CONTEXT_CREATED_V1],
+            "two",
+            Duration::from_secs(30),
+        )
+        .await
+        .unwrap()
+        .unwrap();
+    assert_ne!(deferred.event.id, later.event.id);
+    repository.complete_event_delivery(&later).await.unwrap();
+    let mut health = repository.event_delivery_health().await.unwrap();
+    health.sort();
+    assert_eq!(
+        health,
+        vec![("completed".to_owned(), 1), ("pending".to_owned(), 1)]
+    );
+    sqlx::query("UPDATE event_deliveries SET next_attempt_at = clock_timestamp() - interval '1 second' WHERE event_id = $1")
+        .bind(deferred.event.id).execute(&pool).await.unwrap();
+    let recovered = repository
+        .claim_event_delivery(
+            "test.reordering",
+            &[CONTEXT_CREATED_V1],
+            "three",
+            Duration::from_secs(30),
+        )
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(recovered.event.id, deferred.event.id);
+    repository
+        .complete_event_delivery(&recovered)
+        .await
+        .unwrap();
+}
+
+#[sqlx::test(migrations = "./migrations")]
+async fn dispatcher_preserves_causal_lineage_and_suppresses_its_own_follow_on_event(
+    pool: sqlx::PgPool,
+) {
+    let repository = CatalogRepository::new(pool.clone());
+    repository
+        .ensure_event_consumer("test-follow-on-context", &[CONTEXT_CREATED_V1])
+        .await
+        .unwrap();
+    let event_id = Uuid::new_v4();
+    let correlation_id = Uuid::new_v4();
+    sqlx::query("INSERT INTO domain_events (id, workspace_id, event_type, aggregate_kind, aggregate_id, correlation_id, source_kind, source_name, payload) VALUES ($1, '00000000-0000-4000-8000-000000000002', 'context.created.v1', 'context', $2, $3, 'api', 'catalog_api', '{}'::jsonb)")
+        .bind(event_id).bind(Uuid::new_v4()).bind(correlation_id).execute(&pool).await.unwrap();
+    let calls = Arc::new(AtomicUsize::new(0));
+    let registry = EventHandlerRegistry::new(vec![Arc::new(FollowOnContextHandler {
+        calls: calls.clone(),
+    })])
+    .unwrap();
+    let (shutdown, receiver) = tokio::sync::watch::channel(());
+    let handles = api::event_dispatcher::start(
+        repository,
+        registry,
+        DispatcherConfig::new(
+            Duration::from_millis(20),
+            Duration::from_millis(5),
+            Duration::from_millis(20),
+            3,
+            Duration::from_millis(5),
+        )
+        .unwrap(),
+        receiver,
+    );
+    tokio::time::timeout(Duration::from_secs(2), async {
+        loop {
+            if calls.load(Ordering::SeqCst) == 1
+                && sqlx::query_scalar::<_, i64>("SELECT count(*) FROM domain_events WHERE source_kind = 'worker' AND source_name = 'test-follow-on-context'")
+                    .fetch_one(&pool).await.unwrap() == 1
+                && sqlx::query_scalar::<_, String>("SELECT status FROM event_deliveries WHERE consumer_id = (SELECT id FROM event_consumers WHERE name = 'test-follow-on-context') AND event_id = $1")
+                    .bind(event_id).fetch_one(&pool).await.unwrap() == "completed"
+            {
+                break;
+            }
+            tokio::time::sleep(Duration::from_millis(10)).await;
+        }
+    })
+    .await
+    .unwrap();
+    tokio::time::sleep(Duration::from_millis(50)).await;
+    shutdown.send(()).unwrap();
+    for handle in handles {
+        handle.await.unwrap();
+    }
+
+    assert_eq!(calls.load(Ordering::SeqCst), 1);
+    let follow_on: (Uuid, Uuid, String, String) = sqlx::query_as("SELECT correlation_id, causation_id, source_kind, source_name FROM domain_events WHERE source_kind = 'worker'")
+        .fetch_one(&pool).await.unwrap();
+    assert_eq!(follow_on.0, correlation_id);
+    assert_eq!(follow_on.1, event_id);
+    assert_eq!(follow_on.2, "worker");
+    assert_eq!(follow_on.3, "test-follow-on-context");
 }
 
 #[sqlx::test(migrations = "./migrations")]

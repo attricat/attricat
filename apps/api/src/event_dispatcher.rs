@@ -23,6 +23,30 @@ pub struct DispatcherConfig {
 }
 
 impl DispatcherConfig {
+    pub fn new(
+        lease_duration: Duration,
+        retry_initial_delay: Duration,
+        retry_max_delay: Duration,
+        max_attempts: i32,
+        poll_interval: Duration,
+    ) -> Result<Self, String> {
+        if lease_duration.is_zero()
+            || retry_initial_delay.is_zero()
+            || retry_max_delay.is_zero()
+            || poll_interval.is_zero()
+            || max_attempts <= 0
+        {
+            return Err("dispatcher durations and max attempts must be positive".to_owned());
+        }
+        Ok(Self {
+            lease_duration,
+            retry_initial_delay,
+            retry_max_delay,
+            max_attempts,
+            poll_interval,
+        })
+    }
+
     pub fn from_env() -> Result<Self, String> {
         fn positive(name: &str, default: u64) -> Result<u64, String> {
             match env::var(name) {
@@ -34,21 +58,15 @@ impl DispatcherConfig {
                 Err(_) => Ok(default),
             }
         }
-        Ok(Self {
-            lease_duration: Duration::from_secs(positive("EVENT_DISPATCHER_LEASE_SECONDS", 30)?),
-            retry_initial_delay: Duration::from_secs(positive(
-                "EVENT_DISPATCHER_RETRY_INITIAL_SECONDS",
-                1,
-            )?),
-            retry_max_delay: Duration::from_secs(positive(
-                "EVENT_DISPATCHER_RETRY_MAX_SECONDS",
-                60,
-            )?),
-            max_attempts: positive("EVENT_DISPATCHER_MAX_ATTEMPTS", 5)?
+        Self::new(
+            Duration::from_secs(positive("EVENT_DISPATCHER_LEASE_SECONDS", 30)?),
+            Duration::from_secs(positive("EVENT_DISPATCHER_RETRY_INITIAL_SECONDS", 1)?),
+            Duration::from_secs(positive("EVENT_DISPATCHER_RETRY_MAX_SECONDS", 60)?),
+            positive("EVENT_DISPATCHER_MAX_ATTEMPTS", 5)?
                 .try_into()
                 .map_err(|_| "EVENT_DISPATCHER_MAX_ATTEMPTS is too large".to_owned())?,
-            poll_interval: Duration::from_millis(positive("EVENT_DISPATCHER_POLL_MILLIS", 250)?),
-        })
+            Duration::from_millis(positive("EVENT_DISPATCHER_POLL_MILLIS", 250)?),
+        )
     }
 
     fn retry_delay(&self, attempts: i32) -> Duration {
