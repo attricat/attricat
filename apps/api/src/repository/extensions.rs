@@ -7,7 +7,10 @@ use sha2::{Digest, Sha256};
 use sqlx::{FromRow, Postgres, Transaction};
 use uuid::Uuid;
 
-use crate::extensions::{Manifest, SUPPORTED_HOST_API};
+use crate::{
+    extension_installer::installed_artifact_key,
+    extensions::{Manifest, SUPPORTED_HOST_API, UiContributionKind, UiOutlet},
+};
 
 use super::{AuditContext, CatalogRepository, RepositoryError};
 
@@ -66,7 +69,92 @@ pub struct ExtensionRuntimeInstallation {
     pub host_permission_grants: HashSet<String>,
 }
 
+/// Client-safe descriptor for an enabled contribution. It deliberately omits
+/// source identity, grants, server components, and secrets.
+#[derive(Clone, Debug)]
+pub struct ClientExtensionContribution {
+    pub extension_id: String,
+    pub installed_release_id: Uuid,
+    pub configuration: Value,
+    pub capabilities: Vec<String>,
+    pub id: String,
+    pub version: u32,
+    pub kind: UiContributionKind,
+    pub outlet: Option<UiOutlet>,
+    pub title: Option<String>,
+    pub element: String,
+    pub artifact_key: String,
+}
+
 impl CatalogRepository {
+    /// Lists only enabled client contributions for the active workspace.
+    /// Deserializing the immutable manifest here keeps runtime selection tied to
+    /// the installed release rather than caller-controlled identifiers.
+    pub async fn client_extension_contributions(
+        &self,
+    ) -> Result<Vec<ClientExtensionContribution>, RepositoryError> {
+        let rows: Vec<(Uuid, String, Uuid, Value, Value)> = sqlx::query_as(
+            "SELECT i.id, i.extension_id, i.installed_release_id, i.configuration, r.manifest FROM extension_installations i JOIN installed_extension_releases r ON r.id = i.installed_release_id WHERE i.workspace_id = $1 AND i.state = 'enabled' ORDER BY i.extension_id",
+        )
+        .bind(self.extension_workspace())
+        .fetch_all(&self.pool)
+        .await?;
+        let mut contributions = Vec::new();
+        for (installation_id, extension_id, installed_release_id, configuration, stored_manifest) in
+            rows
+        {
+            let capabilities: Vec<String> = sqlx::query_scalar(
+                "SELECT grant_id FROM extension_grants WHERE installation_id = $1 AND grant_kind = 'capability' ORDER BY grant_id",
+            )
+            .bind(installation_id)
+            .fetch_all(&self.pool)
+            .await?;
+            let client_configuration = capabilities
+                .iter()
+                .any(|capability| capability == "configuration.read")
+                .then_some(configuration.clone())
+                .unwrap_or_else(|| json!({}));
+            let manifest: Manifest = serde_json::from_value(stored_manifest).map_err(|_| {
+                RepositoryError::InvalidExtension("stored extension manifest is invalid".into())
+            })?;
+            for contribution in manifest.ui {
+                contributions.push(ClientExtensionContribution {
+                    artifact_key: installed_artifact_key(
+                        installed_release_id,
+                        &contribution.artifact,
+                    ),
+                    extension_id: extension_id.clone(),
+                    installed_release_id,
+                    configuration: client_configuration.clone(),
+                    capabilities: capabilities.clone(),
+                    id: contribution.id,
+                    version: contribution.version,
+                    kind: contribution.kind,
+                    outlet: contribution.outlet,
+                    title: contribution.title,
+                    element: contribution.element,
+                });
+            }
+        }
+        Ok(contributions)
+    }
+
+    /// Resolves an artifact only through an enabled declared client UI
+    /// contribution. Callers never receive the storage key directly.
+    pub async fn client_extension_contribution(
+        &self,
+        extension_id: &str,
+        contribution_id: &str,
+    ) -> Result<ClientExtensionContribution, RepositoryError> {
+        self.client_extension_contributions()
+            .await?
+            .into_iter()
+            .find(|contribution| {
+                contribution.extension_id == extension_id && contribution.id == contribution_id
+            })
+            .ok_or(RepositoryError::NotFound("enabled extension contribution"))
+    }
+
     /// Persists an archive release whose extracted artifacts were already
     /// validated and uploaded by the application installer.
     pub(crate) async fn install_extension(

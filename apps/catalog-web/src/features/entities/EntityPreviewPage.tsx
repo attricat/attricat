@@ -13,6 +13,7 @@ import {
 import { createElement, useState } from 'react';
 import { PageContainer } from '../../components/PageContainer';
 import { PageHeader } from '../../components/PageHeader';
+import { ExtensionOutlet } from '../extensions/ExtensionOutlet';
 import {
   getBlueprintRevision,
   getCurrentBlueprint,
@@ -160,16 +161,27 @@ export const EntityPreviewPage = ({ entityId }: { entityId: string }) => {
             </Alert>
           )}
           {resolved.data && blueprint.data && (
-            <Paper component="section" sx={{ mt: 3, p: { xs: 2, md: 3 } }}>
-              <EntityView
-                attributes={blueprint.data.attributes}
-                contextId={selectedContextId}
-                entityId={entityId}
-                values={resolved.data.values}
-                view={detailView}
-                skipComponentId={entityHeadingComponentId}
-              />
-            </Paper>
+            <>
+              <Paper component="section" sx={{ mt: 3, p: { xs: 2, md: 3 } }}>
+                <EntityView
+                  attributes={blueprint.data.attributes}
+                  contextId={selectedContextId}
+                  entityId={entityId}
+                  values={resolved.data.values}
+                  view={detailView}
+                  skipComponentId={entityHeadingComponentId}
+                />
+              </Paper>
+              <Box sx={{ mt: 3 }}>
+                <ExtensionOutlet
+                  context={{
+                    entity_id: entityId,
+                    context_id: selectedContextId,
+                  }}
+                  outlet="entity_preview_panel"
+                />
+              </Box>
+            </>
           )}
         </>
       )}

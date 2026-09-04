@@ -13,6 +13,7 @@ import { useQuery } from '@tanstack/react-query';
 import { Link, useRouterState } from '@tanstack/react-router';
 import { useState } from 'react';
 import { currentSession } from '../features/auth/api';
+import { ExtensionOutlet } from '../features/extensions/ExtensionOutlet';
 import {
   Box,
   Collapse,
@@ -118,6 +119,7 @@ export const SideNavigation = ({
               <ListItemText primary={item.label} />
             </ListItemButton>
           ))}
+        <ExtensionOutlet outlet="navigation" />
         <ListItemButton
           aria-expanded={isManageOpen}
           onClick={() => setManageOpen((open) => !open)}

@@ -35,6 +35,12 @@ pub(super) fn policy(method: &Method, path: &str) -> Option<Policy> {
     } else {
         "blueprints.write"
     };
+    if path == "/extensions/runtime" || path.starts_with("/extensions/{extension_id}/") {
+        return Some(Policy {
+            permission: "entities.read",
+            target: TargetKind::None,
+        });
+    }
     if path.starts_with("/agent/") {
         return Some(Policy {
             permission: "agents.run",

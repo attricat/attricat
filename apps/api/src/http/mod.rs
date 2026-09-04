@@ -9,6 +9,7 @@ mod entities;
 mod entity_reads;
 mod error;
 mod event_deliveries;
+mod extensions;
 mod extractors;
 mod files;
 mod members;
@@ -165,6 +166,11 @@ pub fn router(state: AppState) -> Router {
             post(agents::run_schedule_now),
         )
         .route("/health", get(data_health::health))
+        .route("/extensions/runtime", get(extensions::runtime))
+        .route(
+            "/extensions/{extension_id}/{contribution_id}/artifact",
+            get(extensions::artifact),
+        )
         .route("/auth/discover", post(sessions::discover))
         .route("/auth/login", post(sessions::login))
         .route(

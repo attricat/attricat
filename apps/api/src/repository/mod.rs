@@ -58,7 +58,8 @@ pub(crate) use audit_events::{AuditEventFilter, AuditEventPage};
 pub use domain_events::{EventConsumer, EventDelivery, EventPublisher, FailedEventDelivery};
 pub(crate) use entity_search::decode_search_cursor;
 pub use extensions::{
-    ExtensionInstallation, ExtensionLifecycleRecord, ExtensionRuntimeInstallation, ExtensionState,
+    ClientExtensionContribution, ExtensionInstallation, ExtensionLifecycleRecord,
+    ExtensionRuntimeInstallation, ExtensionState,
 };
 pub(crate) use files::{FileMetadata, FileObject, FilePolicy, FileUploadResult, NewUploadedFile};
 pub(crate) use members::{WorkspaceInvitation, WorkspaceMember};
