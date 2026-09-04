@@ -1,6 +1,10 @@
 use sqlx::query_as;
 use uuid::Uuid;
 
+use crate::domain_events::{
+    CONTEXT_CREATED_V1, ContextCreatedV1, EventSource, EventSourceKind, NewDomainEvent,
+};
+
 use super::{CatalogRepository, RepositoryError, validate_code};
 use crate::model::{AttributeContext, CreateAttributeContext, Entity, UpdateAttributeContext};
 
@@ -49,7 +53,33 @@ impl CatalogRepository {
         .bind(parent_id)
         .fetch_one(&mut *transaction)
         .await?;
-        self.commit_mutation(transaction).await?;
+        let payload = serde_json::to_value(ContextCreatedV1 {
+            context_id: context.id,
+            code: context.code.clone(),
+            parent_id: context.parent_id,
+        })
+        .expect("context-created payload is serializable");
+        self.commit_mutation_with_event(
+            transaction,
+            NewDomainEvent {
+                event_type: CONTEXT_CREATED_V1.to_owned(),
+                aggregate_kind: "context".to_owned(),
+                aggregate_id: context.id,
+                correlation_id: self
+                    .audit_context
+                    .as_ref()
+                    .map(|audit| audit.correlation_id)
+                    .unwrap_or_else(Uuid::new_v4),
+                causation_id: None,
+                source: EventSource {
+                    kind: EventSourceKind::Api,
+                    name: "catalog_api".to_owned(),
+                },
+                metadata: serde_json::json!({}),
+                payload,
+            },
+        )
+        .await?;
         Ok(context)
     }
 

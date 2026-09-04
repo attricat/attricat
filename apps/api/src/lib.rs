@@ -9,6 +9,7 @@ mod blueprint_resolver;
 pub mod catalog_read_service;
 pub mod catalog_service;
 pub mod constants;
+pub mod domain_events;
 pub mod file_access;
 pub mod file_worker;
 pub mod http;
