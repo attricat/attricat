@@ -10,7 +10,7 @@ _assert-env:
 dev: _assert-env
     docker compose --env-file .env --project-name catalog-$POSTGRES_PORT -f apps/api/compose.yml up -d
     docker compose --env-file .env --project-name catalog-$POSTGRES_PORT -f apps/api/compose.yml wait rustfs-init
-    process-compose --no-server --env .env up
+    trap 'just down' EXIT; process-compose --no-server --env .env up
 
 down: _assert-env
     docker compose --env-file .env --project-name catalog-$POSTGRES_PORT -f apps/api/compose.yml down
