@@ -19,6 +19,14 @@ version suffix. Plugin-produced event types must use the form
 Consumers must ignore event versions they do not support rather than attempt to
 reinterpret a payload.
 
+Entity writes produce one event for each public logical mutation: entity create,
+update, and delete use `entity.*`; scalar append and restore use
+`attribute_value.*`; relationship replacement and removal use
+`relationship.changed.v1`. Entity and value payloads identify the entity and,
+where applicable, its blueprint. Their `facts` arrays contain only normalized
+affected attribute facts (attribute/context IDs and codes, relationship target,
+change hint, and before/after values); they never contain an entity snapshot.
+
 ## Delivery semantics
 
 The eventual dispatcher provides at-least-once delivery. Consumers must tolerate

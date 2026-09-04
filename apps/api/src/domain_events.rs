@@ -125,6 +125,41 @@ pub struct ContextCreatedV1 {
 pub type ContextUpdatedV1 = ContextCreatedV1;
 pub type ContextDeletedV1 = ContextCreatedV1;
 
+/// A normalized catalog fact affected by an entity mutation. This deliberately
+/// excludes entity projections and other snapshots so consumers can update
+/// their own state from the smallest useful before/after representation.
+#[derive(Clone, Debug, Deserialize, Serialize)]
+pub struct AffectedFactV1 {
+    pub attribute_id: Uuid,
+    pub attribute_code: String,
+    pub context_id: Option<Uuid>,
+    pub context_code: Option<String>,
+    pub relationship_target_entity_id: Option<Uuid>,
+    pub change_kind: String,
+    pub before_value: Option<Value>,
+    pub after_value: Option<Value>,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+pub struct EntityMutationV1 {
+    pub entity_id: Uuid,
+    pub blueprint_id: Uuid,
+    pub blueprint_version: i64,
+    pub facts: Vec<AffectedFactV1>,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+pub struct AttributeValueMutationV1 {
+    pub entity_id: Uuid,
+    pub facts: Vec<AffectedFactV1>,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+pub struct RelationshipMutationV1 {
+    pub entity_id: Uuid,
+    pub facts: Vec<AffectedFactV1>,
+}
+
 #[derive(Debug, Error, PartialEq, Eq)]
 pub enum EventContractError {
     #[error(

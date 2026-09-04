@@ -1,4 +1,5 @@
 use super::*;
+use crate::domain_events::{ATTRIBUTE_VALUE_RESTORED_V1, AttributeValueMutationV1};
 use chrono::{DateTime, NaiveDate, NaiveTime, Utc};
 use chrono_tz::Tz;
 use rust_decimal::Decimal;
@@ -550,11 +551,19 @@ impl CatalogRepository {
         let after = self
             .entity_audit_snapshot(&mut transaction, entity_id)
             .await?;
-        self.commit_entity_mutation(
-            transaction,
-            Self::audit_changes(entity_id, before, after, true),
-        )
-        .await?;
+        let changes = Self::audit_changes(entity_id, before, after, true);
+        let event = self.core_event(
+            ATTRIBUTE_VALUE_RESTORED_V1,
+            "entity",
+            entity_id,
+            serde_json::to_value(AttributeValueMutationV1 {
+                entity_id,
+                facts: Self::affected_facts(&changes),
+            })
+            .expect("attribute-value-restored payload is serializable"),
+        );
+        self.commit_entity_mutation(transaction, changes, event)
+            .await?;
         Ok(value)
     }
 }
