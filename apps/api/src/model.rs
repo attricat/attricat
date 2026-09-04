@@ -193,6 +193,22 @@ pub struct BlueprintWithAttributes {
     pub attributes: Vec<Attribute>,
 }
 
+#[derive(Clone, Debug, Serialize)]
+pub struct MatchPathEdge {
+    pub source_entity_id: Uuid,
+    pub attribute_code: String,
+    pub target_entity_id: Uuid,
+}
+
+#[derive(Clone, Debug, Serialize)]
+pub struct MatchExplanation {
+    pub term: String,
+    pub matching_entity_id: Uuid,
+    pub matching_attribute_code: Option<String>,
+    pub traversal_depth: u8,
+    pub relationship_path: Vec<MatchPathEdge>,
+}
+
 #[derive(Clone, Debug, FromRow, Serialize)]
 pub struct EntityPreview {
     pub id: Uuid,
@@ -202,6 +218,8 @@ pub struct EntityPreview {
     pub created_at: DateTime<Utc>,
     pub preview: Value,
     pub display: Value,
+    #[serde(default)]
+    pub match_explanations: Vec<MatchExplanation>,
 }
 
 #[derive(Clone, Debug, Serialize)]

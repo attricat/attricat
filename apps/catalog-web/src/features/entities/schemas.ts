@@ -301,6 +301,23 @@ const entityItemSchema = z.object({
   schema_outdated: z.boolean(),
   display: z.record(z.string(), z.string()),
   preview: z.record(z.string(), jsonObjectSchema),
+  match_explanations: z
+    .array(
+      z.object({
+        term: z.string(),
+        matching_entity_id: uuidSchema,
+        matching_attribute_code: z.string().nullable(),
+        traversal_depth: z.number().int().nonnegative(),
+        relationship_path: z.array(
+          z.object({
+            source_entity_id: uuidSchema,
+            attribute_code: z.string(),
+            target_entity_id: uuidSchema,
+          }),
+        ),
+      }),
+    )
+    .default([]),
 });
 const entityContextSchema = z.record(z.string(), jsonObjectSchema);
 const resolvedPreviewValueSchema = z.union([

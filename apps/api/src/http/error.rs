@@ -71,6 +71,13 @@ impl ApiError {
             message: message.to_owned(),
         }
     }
+    pub(super) fn invalid_search_query(message: String) -> Self {
+        Self {
+            status: StatusCode::BAD_REQUEST,
+            code: "invalid_input",
+            message,
+        }
+    }
     pub(super) fn invalid_input(message: String) -> Self {
         Self {
             status: StatusCode::UNPROCESSABLE_ENTITY,
