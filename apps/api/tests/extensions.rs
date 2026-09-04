@@ -1,15 +1,19 @@
 mod support;
 
-use std::collections::BTreeMap;
+use std::{io::Cursor, sync::Arc};
 
-use api::{extensions::Manifest, repository::CatalogRepository};
-use sha2::{Digest, Sha256};
+use api::{
+    extension_installer::{ExtensionInstaller, installed_artifact_key},
+    repository::CatalogRepository,
+    storage::{FakeObjectStore, ObjectStore},
+};
 use support::{Value, json};
 use uuid::Uuid;
 
-fn manifest(version: &str, dependencies: Value) -> Manifest {
-    let artifact_hash = format!("{:x}", Sha256::digest(b"server bytes"));
-    serde_json::from_value(json!({
+const ARTIFACT_BYTES: &[u8] = b"server bytes";
+
+fn release_archive(version: &str, dependencies: Value, artifact_bytes: &[u8]) -> Vec<u8> {
+    let manifest = serde_json::to_vec(&json!({
         "manifest_version": 1,
         "name": "Acme extension",
         "version": version,
@@ -25,51 +29,85 @@ fn manifest(version: &str, dependencies: Value) -> Manifest {
         "artifacts": [{
             "id": "server",
             "kind": "server_wasm",
-            "path": "server.wasm",
-            "sha256": artifact_hash
+            "path": "server.wasm"
         }],
         "configuration": {
             "version": 1,
             "schema": {"type": "object", "required": ["endpoint"], "properties": {"endpoint": {"type": "string"}}, "additionalProperties": false}
         },
         "dependencies": dependencies
-    })).unwrap()
+    }))
+    .unwrap();
+    let mut tar_bytes = Vec::new();
+    {
+        let mut tar = tar::Builder::new(&mut tar_bytes);
+        append_file(&mut tar, "manifest.json", &manifest);
+        append_file(&mut tar, "server.wasm", artifact_bytes);
+        tar.finish().unwrap();
+    }
+    zstd::stream::encode_all(Cursor::new(tar_bytes), 0).unwrap()
 }
 
-fn package_files() -> BTreeMap<String, Vec<u8>> {
-    BTreeMap::from([("server.wasm".to_owned(), b"server bytes".to_vec())])
+fn append_file(tar: &mut tar::Builder<&mut Vec<u8>>, path: &str, bytes: &[u8]) {
+    let mut header = tar::Header::new_gnu();
+    header.set_size(bytes.len() as u64);
+    header.set_mode(0o644);
+    header.set_cksum();
+    tar.append_data(&mut header, path, bytes).unwrap();
 }
 
 #[sqlx::test(migrations = "./migrations")]
-async fn lifecycle_requires_configuration_and_grants_and_retains_history(pool: sqlx::PgPool) {
+async fn lifecycle_installs_validated_archive_artifacts_and_retains_history(pool: sqlx::PgPool) {
     let workspace = Uuid::from_u128(0x00000000000040008000000000000002);
     let repository = CatalogRepository::new(pool.clone())
         .for_workspace(workspace)
         .await
         .unwrap();
-    let mut corrupted_files = package_files();
-    corrupted_files.insert("server.wasm".to_owned(), b"tampered".to_vec());
+    let store = Arc::new(FakeObjectStore::available());
+    let installer = ExtensionInstaller::new(repository.clone(), store.clone());
+
     assert!(
-        repository
-            .install_extension(&manifest("1.0.0", json!([])), "test", &corrupted_files)
+        installer
+            .install("github:acme/extension@v1.0.0", b"not a zstd archive")
             .await
             .is_err()
     );
-    assert_eq!(
-        sqlx::query_scalar::<_, i64>("SELECT count(*) FROM extension_installations")
-            .fetch_one(&pool)
-            .await
-            .unwrap(),
-        0
-    );
+    assert_eq!(store.object_count().await, 0);
 
-    let installed = repository
-        .install_extension(&manifest("1.0.0", json!([])), "test", &package_files())
+    let installed = installer
+        .install(
+            "github:acme/extension@v1.0.0",
+            &release_archive("1.0.0", json!([]), ARTIFACT_BYTES),
+        )
         .await
         .unwrap();
     assert_eq!(installed.state, "disabled");
-    assert!(repository.enable_extension("acme.extension").await.is_err());
+    assert_eq!(
+        store
+            .get(&installed_artifact_key(
+                installed.installed_release_id,
+                "server"
+            ))
+            .await
+            .unwrap()
+            .bytes
+            .as_ref(),
+        ARTIFACT_BYTES
+    );
 
+    // A repository failure after S3 staging cleans up the newly staged object.
+    assert!(
+        installer
+            .install(
+                "github:acme/extension@v1.0.0",
+                &release_archive("1.0.0", json!([]), ARTIFACT_BYTES),
+            )
+            .await
+            .is_err()
+    );
+    assert_eq!(store.object_count().await, 1);
+
+    assert!(repository.enable_extension("acme.extension").await.is_err());
     repository
         .configure_extension(
             "acme.extension",

@@ -1,4 +1,4 @@
-use std::collections::{BTreeMap, HashSet};
+use std::collections::HashSet;
 
 use chrono::{DateTime, Utc};
 use semver::{Version, VersionReq};
@@ -55,14 +55,15 @@ pub struct ExtensionLifecycleRecord {
 }
 
 impl CatalogRepository {
-    pub async fn install_extension(
+    /// Persists an archive release whose extracted artifacts were already
+    /// validated and uploaded by the application installer.
+    pub(crate) async fn install_extension(
         &self,
         manifest: &Manifest,
         source: &str,
-        package_files: &BTreeMap<String, Vec<u8>>,
+        installed_release_id: Uuid,
     ) -> Result<ExtensionInstallation, RepositoryError> {
         self.validate_extension(manifest)?;
-        self.validate_extension_artifacts(manifest, package_files)?;
         self.validate_extension_source(source)?;
         let workspace_id = self.extension_workspace();
         let mut transaction = self.pool.begin().await?;
@@ -71,9 +72,13 @@ impl CatalogRepository {
         if exists {
             return Err(RepositoryError::ExtensionAlreadyInstalled);
         }
-        let installed_release_id = self
-            .insert_installed_extension_release(&mut transaction, manifest, source)
-            .await?;
+        self.insert_installed_extension_release(
+            &mut transaction,
+            installed_release_id,
+            manifest,
+            source,
+        )
+        .await?;
         let installation_id = Uuid::new_v4();
         let configuration_version = manifest
             .configuration
@@ -310,14 +315,14 @@ impl CatalogRepository {
         Ok(row)
     }
 
-    pub async fn upgrade_extension(
+    /// Persists an already extracted and validated replacement archive release.
+    pub(crate) async fn upgrade_extension(
         &self,
         manifest: &Manifest,
         source: &str,
-        package_files: &BTreeMap<String, Vec<u8>>,
+        installed_release_id: Uuid,
     ) -> Result<ExtensionInstallation, RepositoryError> {
         self.validate_extension(manifest)?;
-        self.validate_extension_artifacts(manifest, package_files)?;
         self.validate_extension_source(source)?;
         let mut transaction = self.pool.begin().await?;
         let current = self
@@ -337,9 +342,13 @@ impl CatalogRepository {
                 "upgrade version must be greater than the installed release".into(),
             ));
         }
-        let installed_release_id = self
-            .insert_installed_extension_release(&mut transaction, manifest, source)
-            .await?;
+        self.insert_installed_extension_release(
+            &mut transaction,
+            installed_release_id,
+            manifest,
+            source,
+        )
+        .await?;
         let state = if current.state == "enabled" {
             "disabled"
         } else {
@@ -470,19 +479,6 @@ impl CatalogRepository {
             .validate(SUPPORTED_HOST_API)
             .map_err(|error| RepositoryError::InvalidExtension(error.to_string()))
     }
-    fn validate_extension_artifacts(
-        &self,
-        manifest: &Manifest,
-        package_files: &BTreeMap<String, Vec<u8>>,
-    ) -> Result<(), RepositoryError> {
-        manifest
-            .validate_artifacts(
-                package_files
-                    .iter()
-                    .map(|(path, bytes)| (path.as_str(), bytes.as_slice())),
-            )
-            .map_err(|error| RepositoryError::InvalidExtension(error.to_string()))
-    }
     fn validate_extension_source(&self, source: &str) -> Result<(), RepositoryError> {
         if source.trim().is_empty() || source.len() > 512 {
             return Err(RepositoryError::InvalidExtension(
@@ -519,18 +515,18 @@ impl CatalogRepository {
     async fn insert_installed_extension_release(
         &self,
         transaction: &mut Transaction<'_, Postgres>,
+        installed_release_id: Uuid,
         manifest: &Manifest,
         source: &str,
-    ) -> Result<Uuid, RepositoryError> {
+    ) -> Result<(), RepositoryError> {
         let serialized = serde_json::to_value(manifest)
             .map_err(|error| RepositoryError::InvalidExtension(error.to_string()))?;
         let bytes = serde_json::to_vec(&serialized)
             .map_err(|error| RepositoryError::InvalidExtension(error.to_string()))?;
         let digest = format!("{:x}", Sha256::digest(bytes));
-        let installed_release_id = Uuid::new_v4();
         sqlx::query("INSERT INTO installed_extension_releases (id, workspace_id, extension_id, version, manifest, manifest_sha256, source) VALUES ($1, $2, $3, $4, $5, $6, $7)")
             .bind(installed_release_id).bind(self.extension_workspace()).bind(&manifest.catalog.id).bind(&manifest.version).bind(serialized).bind(digest).bind(source).execute(&mut **transaction).await?;
-        Ok(installed_release_id)
+        Ok(())
     }
     async fn update_extension_state(
         &self,

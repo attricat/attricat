@@ -1,22 +1,26 @@
 //! Shared extension manifest contracts and host-side policy validation.
 //!
 //! This module intentionally does not load packages or execute components. Those
-//! concerns belong to the registry and runtime follow-on work; callers provide
-//! package bytes only when they want to verify declared artifact digests.
+//! concerns belong to the registry and runtime follow-on work; the installer
+//! accepts trusted release archives and applies only structural safety limits.
 
 use std::{
     collections::{BTreeMap, HashSet},
+    io::{Cursor, Read},
     net::IpAddr,
+    path::{Component, Path},
 };
 
 use semver::{Version, VersionReq};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
-use sha2::{Digest, Sha256};
 use thiserror::Error;
 
 pub const MANIFEST_VERSION: u32 = 1;
 pub const SUPPORTED_HOST_API: &str = "1.0.0";
+pub const MAX_EXTENSION_ARCHIVE_BYTES: usize = 32 * 1024 * 1024;
+pub const MAX_EXTENSION_UNPACKED_BYTES: usize = 128 * 1024 * 1024;
+pub const MAX_EXTENSION_ARCHIVE_ENTRIES: usize = 256;
 pub const CAPABILITIES: &[&str] = &[
     "catalog.read",
     "catalog.write",
@@ -74,7 +78,6 @@ pub struct Artifact {
     pub id: String,
     pub kind: ArtifactKind,
     pub path: String,
-    pub sha256: String,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
@@ -301,26 +304,6 @@ impl Manifest {
         Ok(())
     }
 
-    pub fn validate_artifacts<'a>(
-        &self,
-        files: impl IntoIterator<Item = (&'a str, &'a [u8])>,
-    ) -> Result<(), ManifestError> {
-        let files: BTreeMap<_, _> = files.into_iter().collect();
-        for artifact in &self.artifacts {
-            let bytes = files.get(artifact.path.as_str()).ok_or_else(|| {
-                ManifestError::Invalid(format!("artifact '{}' is missing", artifact.path))
-            })?;
-            let digest = format!("{:x}", Sha256::digest(bytes));
-            if digest != artifact.sha256 {
-                return Err(ManifestError::Invalid(format!(
-                    "artifact '{}' hash does not match",
-                    artifact.id
-                )));
-            }
-        }
-        Ok(())
-    }
-
     /// Validates a configuration value against the intentionally small v1 JSON
     /// Schema subset: object/properties/required/additionalProperties and the
     /// primitive `type` values. More schema vocabulary requires a new contract.
@@ -349,12 +332,6 @@ impl Artifact {
         {
             return Err(ManifestError::Invalid(format!(
                 "artifact '{}' has an unsafe path",
-                self.id
-            )));
-        }
-        if self.sha256.len() != 64 || !self.sha256.bytes().all(|c| c.is_ascii_hexdigit()) {
-            return Err(ManifestError::Invalid(format!(
-                "artifact '{}' must have a SHA-256 digest",
                 self.id
             )));
         }
@@ -517,6 +494,141 @@ fn validate_url_pattern(pattern: &str) -> Result<(), ManifestError> {
     Ok(())
 }
 
+/// A validated selected release archive. Registry discovery supplies the bytes;
+/// installation extracts only declared artifacts to Catalog object storage.
+pub struct ExtensionPackage {
+    manifest: Manifest,
+    artifacts: BTreeMap<String, Vec<u8>>,
+}
+
+impl ExtensionPackage {
+    pub fn from_tar_zst(archive: &[u8]) -> Result<Self, ManifestError> {
+        if archive.len() > MAX_EXTENSION_ARCHIVE_BYTES {
+            return Err(ManifestError::Invalid(
+                "extension archive exceeds the compressed size limit".into(),
+            ));
+        }
+        let decoder = zstd::stream::read::Decoder::new(Cursor::new(archive)).map_err(|_| {
+            ManifestError::Invalid("extension archive is not valid zstd data".into())
+        })?;
+        let mut tar = tar::Archive::new(decoder);
+        let mut manifest_bytes = None;
+        let mut files = BTreeMap::new();
+        let mut total_bytes = 0usize;
+        let mut entries = tar.entries().map_err(|_| {
+            ManifestError::Invalid("extension archive is not valid tar data".into())
+        })?;
+        for (index, entry) in entries.by_ref().enumerate() {
+            if index >= MAX_EXTENSION_ARCHIVE_ENTRIES {
+                return Err(ManifestError::Invalid(
+                    "extension archive has too many entries".into(),
+                ));
+            }
+            let mut entry = entry.map_err(|_| {
+                ManifestError::Invalid("extension archive has an invalid entry".into())
+            })?;
+            let path = entry
+                .path()
+                .map_err(|_| {
+                    ManifestError::Invalid("extension archive entry path is invalid".into())
+                })?
+                .to_str()
+                .ok_or_else(|| {
+                    ManifestError::Invalid("extension archive entry paths must be UTF-8".into())
+                })?
+                .to_owned();
+            if !safe_archive_path(Path::new(&path)) {
+                return Err(ManifestError::Invalid(
+                    "extension archive has an unsafe entry path".into(),
+                ));
+            }
+            if entry.header().entry_type().is_dir() {
+                continue;
+            }
+            if !entry.header().entry_type().is_file() {
+                return Err(ManifestError::Invalid(
+                    "extension archive contains a non-file entry".into(),
+                ));
+            }
+            let declared_size = usize::try_from(entry.size()).map_err(|_| {
+                ManifestError::Invalid("extension archive entry is too large".into())
+            })?;
+            if declared_size > MAX_EXTENSION_UNPACKED_BYTES
+                || total_bytes.saturating_add(declared_size) > MAX_EXTENSION_UNPACKED_BYTES
+            {
+                return Err(ManifestError::Invalid(
+                    "extension archive exceeds the unpacked size limit".into(),
+                ));
+            }
+            let mut bytes = Vec::with_capacity(declared_size);
+            entry
+                .by_ref()
+                .take(declared_size as u64 + 1)
+                .read_to_end(&mut bytes)
+                .map_err(|_| {
+                    ManifestError::Invalid("extension archive entry could not be read".into())
+                })?;
+            if bytes.len() != declared_size {
+                return Err(ManifestError::Invalid(
+                    "extension archive entry size is invalid".into(),
+                ));
+            }
+            total_bytes += bytes.len();
+            if path == "manifest.json" {
+                if manifest_bytes.replace(bytes).is_some() {
+                    return Err(ManifestError::Invalid(
+                        "extension archive contains multiple manifest.json files".into(),
+                    ));
+                }
+            } else if files.insert(path.to_owned(), bytes).is_some() {
+                return Err(ManifestError::Invalid(
+                    "extension archive contains duplicate file paths".into(),
+                ));
+            }
+        }
+        let manifest_bytes = manifest_bytes.ok_or_else(|| {
+            ManifestError::Invalid("extension archive must contain manifest.json".into())
+        })?;
+        let manifest: Manifest = serde_json::from_slice(&manifest_bytes).map_err(|_| {
+            ManifestError::Invalid("manifest.json is not a valid strict manifest".into())
+        })?;
+        manifest.validate(SUPPORTED_HOST_API)?;
+        let artifacts = manifest
+            .artifacts
+            .iter()
+            .map(|artifact| {
+                files
+                    .get(&artifact.path)
+                    .map(|bytes| (artifact.path.clone(), bytes.clone()))
+                    .ok_or_else(|| {
+                        ManifestError::Invalid(format!("artifact '{}' is missing", artifact.path))
+                    })
+            })
+            .collect::<Result<_, _>>()?;
+        Ok(Self {
+            manifest,
+            artifacts,
+        })
+    }
+
+    pub fn manifest(&self) -> &Manifest {
+        &self.manifest
+    }
+
+    pub fn artifacts(&self) -> impl Iterator<Item = (&str, &[u8])> {
+        self.artifacts
+            .iter()
+            .map(|(path, bytes)| (path.as_str(), bytes.as_slice()))
+    }
+}
+
+fn safe_archive_path(path: &Path) -> bool {
+    !path.as_os_str().is_empty()
+        && path
+            .components()
+            .all(|component| matches!(component, Component::Normal(_)))
+}
+
 fn is_public_destination(ip: IpAddr) -> bool {
     match ip {
         IpAddr::V4(ip) => {
@@ -607,7 +719,7 @@ fn validate_schema(schema: &Value, value: &Value) -> Result<(), ManifestError> {
 mod tests {
     use super::*;
     fn manifest() -> Manifest {
-        serde_json::from_value(serde_json::json!({"manifest_version":1,"name":"Acme","version":"1.2.3","description":"test extension","icons":{"48":"icon.png"},"catalog":{"id":"acme.test","host_api":"^1.0"},"permissions":["network.request","webhooks.receive"],"host_permissions":[{"id":"acme","matches":["https://api.acme.example/v1/*"],"methods":["GET"]}],"artifacts":[{"id":"server","kind":"server_wasm","path":"server.wasm","sha256":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"}],"configuration":{"version":1,"schema":{"type":"object","required":["url"],"properties":{"url":{"type":"string"}},"additionalProperties":false}},"server":{"webhooks":[{"id":"events","event_type":"webhook.acme.events.v1","handler":"handle_events_v1","methods":["POST"],"authentication":{"type":"hmac-sha256","signature_header":"X-Signature","timestamp_header":"X-Timestamp","max_age_seconds":300,"secret":"webhook_secret"},"max_body_bytes":1024}]}})).unwrap()
+        serde_json::from_value(serde_json::json!({"manifest_version":1,"name":"Acme","version":"1.2.3","description":"test extension","icons":{"48":"icon.png"},"catalog":{"id":"acme.test","host_api":"^1.0"},"permissions":["network.request","webhooks.receive"],"host_permissions":[{"id":"acme","matches":["https://api.acme.example/v1/*"],"methods":["GET"]}],"artifacts":[{"id":"server","kind":"server_wasm","path":"server.wasm"}],"configuration":{"version":1,"schema":{"type":"object","required":["url"],"properties":{"url":{"type":"string"}},"additionalProperties":false}},"server":{"webhooks":[{"id":"events","event_type":"webhook.acme.events.v1","handler":"handle_events_v1","methods":["POST"],"authentication":{"type":"hmac-sha256","signature_header":"X-Signature","timestamp_header":"X-Timestamp","max_age_seconds":300,"secret":"webhook_secret"},"max_body_bytes":1024}]}})).unwrap()
     }
     #[test]
     fn validates_contract_boundaries() {
@@ -628,7 +740,7 @@ mod tests {
         assert!(invalid.validate(SUPPORTED_HOST_API).is_err());
     }
     #[test]
-    fn validates_config_and_artifact_hashes() {
+    fn validates_configuration() {
         let value = manifest();
         assert!(
             value
@@ -638,11 +750,6 @@ mod tests {
         assert!(
             value
                 .validate_configuration(&serde_json::json!({"url":1}))
-                .is_err()
-        );
-        assert!(
-            value
-                .validate_artifacts([("server.wasm", b"wrong".as_slice())])
                 .is_err()
         );
     }
