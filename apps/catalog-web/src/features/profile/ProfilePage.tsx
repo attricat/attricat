@@ -308,7 +308,7 @@ export const ProfilePage = () => {
             Active workspace: {account?.workspace_id ?? 'Loading…'}
           </Typography>
         </Paper>
-        <Box>
+        <Box id="personal-api-tokens">
           <Typography gutterBottom variant="h5">
             Personal API tokens
           </Typography>

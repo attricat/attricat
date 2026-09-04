@@ -81,6 +81,10 @@ let env = existsSync(envFile)
   ? readFileSync(envFile, "utf8")
   : readFileSync(exampleEnvFile, "utf8");
 
+if (!/^CATALOG_DEVTOOLS=/m.test(env)) {
+  env = setEnvValue(env, "CATALOG_DEVTOOLS", "true");
+}
+
 env = setEnvValue(
   env,
   "DATABASE_URL",

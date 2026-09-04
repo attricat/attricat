@@ -5,12 +5,20 @@ import { Link, useNavigate } from '@tanstack/react-router';
 import { type ReactNode, useState } from 'react';
 import { discoverWorkspace, login } from './api';
 
+const devLoginDefaults = import.meta.env.DEV
+  ? {
+      email: 'owner@example.test',
+      loginIdentifier: 'default.local',
+      password: 'test',
+    }
+  : { email: '', loginIdentifier: '', password: '' };
+
 export const WorkspaceLoginPage = () => {
   const navigate = useNavigate();
   const [error, setError] = useState<string>();
   const form = useForm({
     defaultValues: {
-      loginIdentifier: import.meta.env.DEV ? 'default.local' : '',
+      loginIdentifier: devLoginDefaults.loginIdentifier,
     },
     onSubmit: async ({ value }) => {
       try {
@@ -53,7 +61,10 @@ export const PasswordLoginPage = ({ identifier }: { identifier: string }) => {
   const queryClient = useQueryClient();
   const [error, setError] = useState<string>();
   const form = useForm({
-    defaultValues: { email: '', password: '' },
+    defaultValues: {
+      email: devLoginDefaults.email,
+      password: devLoginDefaults.password,
+    },
     onSubmit: async ({ value }) => {
       try {
         await login(identifier, value.email, value.password);

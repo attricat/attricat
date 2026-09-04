@@ -4,6 +4,7 @@ import { CssBaseline, ThemeProvider } from '@mui/material';
 import { createRoot } from 'react-dom/client';
 import { router } from './app/router';
 import { theme } from './app/theme';
+import { Inspector } from './features/inspector/Inspector';
 
 const queryClient = new QueryClient();
 declare module '@tanstack/react-router' {
@@ -17,6 +18,7 @@ createRoot(document.getElementById('root')!).render(
     <ThemeProvider theme={theme}>
       <CssBaseline />
       <RouterProvider router={router} />
+      {import.meta.env.DEV && __CATALOG_DEVTOOLS__ && <Inspector />}
     </ThemeProvider>
   </QueryClientProvider>,
 );
