@@ -35,6 +35,7 @@ mod agents;
 mod audit_events;
 mod blueprints;
 mod contexts;
+mod domain_events;
 mod entity_commands;
 mod entity_migration;
 mod entity_projection;
@@ -52,6 +53,7 @@ pub use agents::{
     ConversationMessage,
 };
 pub(crate) use audit_events::{AuditEventFilter, AuditEventPage};
+pub use domain_events::{EventConsumer, EventPublisher};
 pub(crate) use entity_search::decode_search_cursor;
 pub(crate) use files::{FileMetadata, FileObject, FilePolicy, FileUploadResult, NewUploadedFile};
 pub(crate) use members::{WorkspaceInvitation, WorkspaceMember};
@@ -201,6 +203,8 @@ pub enum RepositoryError {
     MigrationNeedsResolution(Vec<String>),
     #[error("invalid agent state: {0}")]
     InvalidAgentState(&'static str),
+    #[error("invalid domain event: {0}")]
+    InvalidDomainEvent(#[from] crate::domain_events::EventContractError),
     #[error("an approval decision has already been recorded")]
     ApprovalAlreadyDecided,
     #[error(transparent)]
@@ -352,6 +356,19 @@ impl CatalogRepository {
         mut transaction: Transaction<'_, Postgres>,
     ) -> Result<(), RepositoryError> {
         self.write_audit_event(&mut transaction).await?;
+        transaction.commit().await?;
+        Ok(())
+    }
+
+    /// Commits a catalog mutation, its audit evidence, and an outbox event as
+    /// one database transaction. Callers retain control of event vocabulary.
+    pub(in crate::repository) async fn commit_mutation_with_event(
+        &self,
+        mut transaction: Transaction<'_, Postgres>,
+        event: crate::domain_events::NewDomainEvent,
+    ) -> Result<(), RepositoryError> {
+        self.write_audit_event(&mut transaction).await?;
+        self.enqueue_event(&mut transaction, event).await?;
         transaction.commit().await?;
         Ok(())
     }

@@ -245,6 +245,7 @@ impl From<RepositoryError> for ApiError {
             RepositoryError::InvalidPreview
             | RepositoryError::InvalidHierarchyRelationship
             | RepositoryError::InvalidAgentState(_)
+            | RepositoryError::InvalidDomainEvent(_)
             | RepositoryError::ReservedContextCode
             | RepositoryError::InvalidCode
             | RepositoryError::InvalidContextData
