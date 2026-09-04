@@ -29,13 +29,22 @@ change hint, and before/after values); they never contain an entity snapshot.
 
 ## Delivery semantics
 
-The eventual dispatcher provides at-least-once delivery. Consumers must tolerate
+The startup dispatcher provides at-least-once delivery. Consumers must tolerate
 duplicates and reordering. A consumer created through the repository begins at
 the workspace's current outbox watermark, so newly registered internal handlers
-receive future events only. Delivery attempts, leases, completion, and failure
+receive future events only. PostgreSQL materializes matching deliveries and
+claims them with `FOR UPDATE SKIP LOCKED`; completion and retries are protected
+by the lease owner. Delivery attempts, leases, completion, and failure
 diagnostics are durable `event_deliveries` facts.
+
+Handlers have stable names and exact version filters. They receive the typed
+`DomainEvent` envelope and a command context. Catalog writes made through that
+context emit ordinary worker events retaining the triggering correlation ID and
+using the triggering event ID as causation. Handlers must suppress events they
+produce themselves when that would make a feedback loop; the initial
+computed-field reservation handler demonstrates this rule.
 
 A producer appends its event through the caller-owned SQL transaction. The
 catalog mutation, audit evidence, and outbox row either all commit or all roll
-back. Dispatch, handler registration, retry/dead-letter operations, and any
-client-safe event bridge are intentionally separate follow-up work.
+back. External webhooks, dead-letter administration, and any client-safe event
+bridge remain separate follow-up work.

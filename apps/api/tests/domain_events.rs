@@ -193,3 +193,54 @@ async fn consumer_starts_at_the_current_workspace_watermark(pool: sqlx::PgPool) 
         .unwrap();
     assert_eq!(consumer.watermark, 1);
 }
+
+#[sqlx::test(migrations = "./migrations")]
+async fn delivery_claims_are_exclusive_and_completion_is_durable(pool: sqlx::PgPool) {
+    use std::time::Duration;
+
+    let repository = api::repository::CatalogRepository::new(pool.clone());
+    repository
+        .ensure_event_consumer("test.dispatcher", &[CONTEXT_CREATED_V1])
+        .await
+        .unwrap();
+    let event_id = Uuid::new_v4();
+    sqlx::query(
+        "INSERT INTO domain_events (id, workspace_id, event_type, aggregate_kind, aggregate_id, correlation_id, source_kind, source_name, payload) VALUES ($1, '00000000-0000-4000-8000-000000000002', 'context.created.v1', 'context', $2, $3, 'api', 'catalog_api', '{}'::jsonb)",
+    )
+    .bind(event_id)
+    .bind(Uuid::new_v4())
+    .bind(Uuid::new_v4())
+    .execute(&pool)
+    .await
+    .unwrap();
+
+    let first = repository.clone();
+    let second = repository.clone();
+    let (left, right) = tokio::join!(
+        first.claim_event_delivery(
+            "test.dispatcher",
+            &[CONTEXT_CREATED_V1],
+            "one",
+            Duration::from_secs(30)
+        ),
+        second.claim_event_delivery(
+            "test.dispatcher",
+            &[CONTEXT_CREATED_V1],
+            "two",
+            Duration::from_secs(30)
+        ),
+    );
+    let delivery = match (left.unwrap(), right.unwrap()) {
+        (Some(delivery), None) | (None, Some(delivery)) => delivery,
+        other => panic!("expected exactly one lease, got {other:?}"),
+    };
+    assert_eq!(delivery.event.id, event_id);
+    repository.complete_event_delivery(&delivery).await.unwrap();
+    assert_eq!(
+        sqlx::query_scalar::<_, String>("SELECT status FROM event_deliveries")
+            .fetch_one(&pool)
+            .await
+            .unwrap(),
+        "completed"
+    );
+}

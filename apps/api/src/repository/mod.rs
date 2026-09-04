@@ -54,7 +54,7 @@ pub use agents::{
     ConversationMessage,
 };
 pub(crate) use audit_events::{AuditEventFilter, AuditEventPage};
-pub use domain_events::{EventConsumer, EventPublisher};
+pub use domain_events::{EventConsumer, EventDelivery, EventPublisher};
 pub(crate) use entity_search::decode_search_cursor;
 pub(crate) use files::{FileMetadata, FileObject, FilePolicy, FileUploadResult, NewUploadedFile};
 pub(crate) use members::{WorkspaceInvitation, WorkspaceMember};
@@ -75,6 +75,14 @@ pub struct CatalogRepository {
     workspace_id: Option<Uuid>,
     workspace_pools: Option<Arc<WorkspacePoolCache>>,
     audit_context: Option<AuditContext>,
+    event_context: Option<EventCommandContext>,
+}
+
+#[derive(Clone)]
+pub(crate) struct EventCommandContext {
+    pub correlation_id: Uuid,
+    pub causation_id: Uuid,
+    pub handler_name: String,
 }
 
 /// Server-derived request metadata written with the same transaction as a
@@ -228,6 +236,7 @@ impl CatalogRepository {
             workspace_id: None,
             workspace_pools: None,
             audit_context: None,
+            event_context: None,
         }
     }
 
@@ -236,6 +245,7 @@ impl CatalogRepository {
             pool,
             workspace_id: None,
             audit_context: None,
+            event_context: None,
             workspace_pools: Some(Arc::new(WorkspacePoolCache {
                 connect_options,
                 pools: Mutex::new(HashMap::new()),
@@ -253,6 +263,7 @@ impl CatalogRepository {
                 workspace_id: Some(workspace_id),
                 workspace_pools: None,
                 audit_context: self.audit_context.clone(),
+                event_context: self.event_context.clone(),
             });
         };
         let mut pools = cache.pools.lock().await;
@@ -262,6 +273,7 @@ impl CatalogRepository {
                 workspace_id: Some(workspace_id),
                 workspace_pools: self.workspace_pools.clone(),
                 audit_context: self.audit_context.clone(),
+                event_context: self.event_context.clone(),
             });
         }
         self.ensure_default_context(workspace_id).await?;
@@ -283,7 +295,22 @@ impl CatalogRepository {
             workspace_id: Some(workspace_id),
             workspace_pools: self.workspace_pools.clone(),
             audit_context: self.audit_context.clone(),
+            event_context: self.event_context.clone(),
         })
+    }
+
+    pub(crate) fn for_event_handler(
+        &self,
+        event: &crate::domain_events::DomainEvent,
+        handler_name: &str,
+    ) -> Self {
+        let mut repository = self.clone();
+        repository.event_context = Some(EventCommandContext {
+            correlation_id: event.correlation_id,
+            causation_id: event.id,
+            handler_name: handler_name.to_owned(),
+        });
+        repository
     }
 
     async fn ensure_default_context(&self, workspace_id: Uuid) -> Result<(), RepositoryError> {
@@ -387,14 +414,30 @@ impl CatalogRepository {
             aggregate_kind: aggregate_kind.to_owned(),
             aggregate_id,
             correlation_id: self
-                .audit_context
+                .event_context
                 .as_ref()
-                .map(|audit| audit.correlation_id)
+                .map(|context| context.correlation_id)
+                .or_else(|| {
+                    self.audit_context
+                        .as_ref()
+                        .map(|audit| audit.correlation_id)
+                })
                 .unwrap_or_else(Uuid::new_v4),
-            causation_id: None,
+            causation_id: self
+                .event_context
+                .as_ref()
+                .map(|context| context.causation_id),
             source: EventSource {
-                kind: EventSourceKind::Api,
-                name: "catalog_api".to_owned(),
+                kind: if self.event_context.is_some() {
+                    EventSourceKind::Worker
+                } else {
+                    EventSourceKind::Api
+                },
+                name: self
+                    .event_context
+                    .as_ref()
+                    .map(|context| context.handler_name.clone())
+                    .unwrap_or_else(|| "catalog_api".to_owned()),
             },
             metadata: serde_json::json!({}),
             payload,
@@ -524,4 +567,47 @@ pub(crate) fn missing_required_fields(message: &str, target_codes: &HashSet<&str
         }
     }
     fields.into_iter().collect()
+}
+
+#[cfg(test)]
+mod tests {
+    use sqlx::postgres::PgPoolOptions;
+
+    use super::*;
+
+    #[tokio::test]
+    async fn handler_commands_preserve_event_lineage() {
+        let repository = CatalogRepository::new(
+            PgPoolOptions::new()
+                .connect_lazy("postgres://postgres:postgres@localhost/catalog")
+                .unwrap(),
+        );
+        let trigger = crate::domain_events::DomainEvent {
+            id: Uuid::new_v4(),
+            sequence: 1,
+            workspace_id: Uuid::new_v4(),
+            occurred_at: chrono::Utc::now(),
+            event_type: "context.created.v1".to_owned(),
+            aggregate_kind: "context".to_owned(),
+            aggregate_id: Uuid::new_v4(),
+            correlation_id: Uuid::new_v4(),
+            causation_id: None,
+            source_kind: "api".to_owned(),
+            source_name: "catalog_api".to_owned(),
+            metadata: serde_json::json!({}),
+            payload: serde_json::json!({}),
+        };
+        let event = repository
+            .for_event_handler(&trigger, "catalog.computed_fields")
+            .core_event(
+                "context.updated.v1",
+                "context",
+                trigger.aggregate_id,
+                serde_json::json!({}),
+            );
+        assert_eq!(event.correlation_id, trigger.correlation_id);
+        assert_eq!(event.causation_id, Some(trigger.id));
+        assert_eq!(event.source.kind.as_str(), "worker");
+        assert_eq!(event.source.name, "catalog.computed_fields");
+    }
 }
