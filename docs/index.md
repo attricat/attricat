@@ -63,6 +63,7 @@ settings before running the ignored RustFS compatibility test.
 
 - [View configuration](views.md): declarative blueprint layouts.
 - [Component authoring](component-authoring.md): registered web components.
+- [Web-component event bridge](web-component-events.md): validated host and component DOM events.
 - [Frontend conventions](frontend.md): contributor conventions and tests.
 
 ## Test The Web App
