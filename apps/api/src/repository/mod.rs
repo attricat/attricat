@@ -18,6 +18,7 @@ use uuid::Uuid;
 use crate::{
     blueprint_resolver::compile_definition,
     constants::REQUEST_POOL_CONNECTIONS,
+    domain_events::{AffectedFactV1, EventSource, EventSourceKind, NewDomainEvent},
     model::{
         AppendAttributeValues, Attribute, AttributeContext, AttributeValue, AttributeValueHistory,
         AttributeValueSelector, Blueprint, BlueprintWithAttributes, CreateBlueprint, Entity,
@@ -101,6 +102,7 @@ pub(crate) struct AuditEventChange {
     pub attribute_code: String,
     pub context_id: Option<Uuid>,
     pub context_code: Option<String>,
+    pub relationship_target_entity_id: Option<Uuid>,
     pub change_kind: &'static str,
     pub before_value: Option<Value>,
     pub after_value: Option<Value>,
@@ -373,10 +375,55 @@ impl CatalogRepository {
         Ok(())
     }
 
+    pub(in crate::repository) fn core_event(
+        &self,
+        event_type: &str,
+        aggregate_kind: &str,
+        aggregate_id: Uuid,
+        payload: Value,
+    ) -> NewDomainEvent {
+        NewDomainEvent {
+            event_type: event_type.to_owned(),
+            aggregate_kind: aggregate_kind.to_owned(),
+            aggregate_id,
+            correlation_id: self
+                .audit_context
+                .as_ref()
+                .map(|audit| audit.correlation_id)
+                .unwrap_or_else(Uuid::new_v4),
+            causation_id: None,
+            source: EventSource {
+                kind: EventSourceKind::Api,
+                name: "catalog_api".to_owned(),
+            },
+            metadata: serde_json::json!({}),
+            payload,
+        }
+    }
+
+    pub(in crate::repository) fn affected_facts(
+        changes: &[AuditEventChange],
+    ) -> Vec<AffectedFactV1> {
+        changes
+            .iter()
+            .map(|change| AffectedFactV1 {
+                attribute_id: change.attribute_id,
+                attribute_code: change.attribute_code.clone(),
+                context_id: change.context_id,
+                context_code: change.context_code.clone(),
+                relationship_target_entity_id: change.relationship_target_entity_id,
+                change_kind: change.change_kind.to_owned(),
+                before_value: change.before_value.clone(),
+                after_value: change.after_value.clone(),
+            })
+            .collect()
+    }
+
     pub(in crate::repository) async fn commit_entity_mutation(
         &self,
         mut transaction: Transaction<'_, Postgres>,
         changes: Vec<AuditEventChange>,
+        event: NewDomainEvent,
     ) -> Result<(), RepositoryError> {
         if let Some(audit_event_id) = self.write_audit_event(&mut transaction).await? {
             for change in changes {
@@ -396,6 +443,7 @@ impl CatalogRepository {
                     .await?;
             }
         }
+        self.enqueue_event(&mut transaction, event).await?;
         transaction.commit().await?;
         Ok(())
     }

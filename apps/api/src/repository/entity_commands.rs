@@ -1,6 +1,10 @@
 use super::entity_search::empty_projections;
 use super::values::{NativeValue, ValueType};
 use super::*;
+use crate::domain_events::{
+    ATTRIBUTE_VALUE_CHANGED_V1, AttributeValueMutationV1, ENTITY_CREATED_V1, ENTITY_DELETED_V1,
+    ENTITY_UPDATED_V1, EntityMutationV1, RELATIONSHIP_CHANGED_V1, RelationshipMutationV1,
+};
 use catalog_validation::validate_json_schema;
 use chrono::Utc;
 use serde_json::{Map, Value};
@@ -52,11 +56,21 @@ impl CatalogRepository {
         let after = self
             .entity_audit_snapshot(&mut transaction, entity.id)
             .await?;
-        self.commit_entity_mutation(
-            transaction,
-            Self::audit_changes(entity.id, Vec::new(), after, false),
-        )
-        .await?;
+        let changes = Self::audit_changes(entity.id, Vec::new(), after, false);
+        let event = self.core_event(
+            ENTITY_CREATED_V1,
+            "entity",
+            entity.id,
+            serde_json::to_value(EntityMutationV1 {
+                entity_id: entity.id,
+                blueprint_id: entity.blueprint_id,
+                blueprint_version: entity.blueprint_version,
+                facts: Self::affected_facts(&changes),
+            })
+            .expect("entity-created payload is serializable"),
+        );
+        self.commit_entity_mutation(transaction, changes, event)
+            .await?;
         Ok(entity)
     }
 
@@ -115,11 +129,21 @@ impl CatalogRepository {
         let after = self
             .entity_audit_snapshot(&mut transaction, entity_id)
             .await?;
-        self.commit_entity_mutation(
-            transaction,
-            Self::audit_changes(entity_id, before, after, false),
-        )
-        .await?;
+        let changes = Self::audit_changes(entity_id, before, after, false);
+        let event = self.core_event(
+            ENTITY_UPDATED_V1,
+            "entity",
+            entity.id,
+            serde_json::to_value(EntityMutationV1 {
+                entity_id: entity.id,
+                blueprint_id: entity.blueprint_id,
+                blueprint_version: entity.blueprint_version,
+                facts: Self::affected_facts(&changes),
+            })
+            .expect("entity-updated payload is serializable"),
+        );
+        self.commit_entity_mutation(transaction, changes, event)
+            .await?;
         Ok(entity)
     }
 
@@ -164,6 +188,7 @@ impl CatalogRepository {
         let before = self
             .entity_audit_snapshot(&mut transaction, entity_id)
             .await?;
+        let entity = self.lock_entity(&mut transaction, entity_id).await?;
         let result = sqlx::query(
             "UPDATE entities SET deleted_at = now(), updated_at = now() WHERE id = $1 AND workspace_id = $2 AND deleted_at IS NULL",
         )
@@ -174,11 +199,21 @@ impl CatalogRepository {
         if result.rows_affected() == 0 {
             return Err(RepositoryError::NotFound("entity"));
         }
-        self.commit_entity_mutation(
-            transaction,
-            Self::audit_changes(entity_id, before, Vec::new(), false),
-        )
-        .await?;
+        let changes = Self::audit_changes(entity_id, before, Vec::new(), false);
+        let event = self.core_event(
+            ENTITY_DELETED_V1,
+            "entity",
+            entity_id,
+            serde_json::to_value(EntityMutationV1 {
+                entity_id,
+                blueprint_id: entity.blueprint_id,
+                blueprint_version: entity.blueprint_version,
+                facts: Vec::new(),
+            })
+            .expect("entity-deleted payload is serializable"),
+        );
+        self.commit_entity_mutation(transaction, changes, event)
+            .await?;
         Ok(())
     }
 
@@ -226,11 +261,46 @@ impl CatalogRepository {
         let after = self
             .entity_audit_snapshot(&mut transaction, entity_id)
             .await?;
-        self.commit_entity_mutation(
-            transaction,
-            Self::audit_changes(entity_id, before, after, false),
-        )
-        .await?;
+        let changes = Self::audit_changes(entity_id, before, after, false);
+        let facts = Self::affected_facts(&changes);
+        let contains_relationship = values
+            .iter()
+            .any(|value| value.relationship_target_entity_id.is_some());
+        let contains_scalar = values
+            .iter()
+            .any(|value| value.relationship_target_entity_id.is_none());
+        let event = if contains_relationship && !contains_scalar {
+            self.core_event(
+                RELATIONSHIP_CHANGED_V1,
+                "entity",
+                entity_id,
+                serde_json::to_value(RelationshipMutationV1 { entity_id, facts })
+                    .expect("relationship-changed payload is serializable"),
+            )
+        } else if contains_relationship {
+            self.core_event(
+                ENTITY_UPDATED_V1,
+                "entity",
+                entity_id,
+                serde_json::to_value(EntityMutationV1 {
+                    entity_id,
+                    blueprint_id: entity.blueprint_id,
+                    blueprint_version: entity.blueprint_version,
+                    facts,
+                })
+                .expect("entity-updated payload is serializable"),
+            )
+        } else {
+            self.core_event(
+                ATTRIBUTE_VALUE_CHANGED_V1,
+                "entity",
+                entity_id,
+                serde_json::to_value(AttributeValueMutationV1 { entity_id, facts })
+                    .expect("attribute-value-changed payload is serializable"),
+            )
+        };
+        self.commit_entity_mutation(transaction, changes, event)
+            .await?;
         Ok(values)
     }
 
@@ -326,11 +396,19 @@ impl CatalogRepository {
         let after = self
             .entity_audit_snapshot(&mut transaction, entity_id)
             .await?;
-        self.commit_entity_mutation(
-            transaction,
-            Self::audit_changes(entity_id, before, after, false),
-        )
-        .await?;
+        let changes = Self::audit_changes(entity_id, before, after, false);
+        let event = self.core_event(
+            RELATIONSHIP_CHANGED_V1,
+            "entity",
+            entity_id,
+            serde_json::to_value(RelationshipMutationV1 {
+                entity_id,
+                facts: Self::affected_facts(&changes),
+            })
+            .expect("relationship-changed payload is serializable"),
+        );
+        self.commit_entity_mutation(transaction, changes, event)
+            .await?;
         Ok(values)
     }
 
@@ -972,6 +1050,7 @@ impl CatalogRepository {
                     attribute_code: source.attribute_code.clone(),
                     context_id: source.context_id,
                     context_code: source.context_code.clone(),
+                    relationship_target_entity_id: source.relationship_target_entity_id,
                     change_kind,
                     before_value: old.map(|value| value.value.clone()),
                     after_value: new.map(|value| value.value.clone()),
