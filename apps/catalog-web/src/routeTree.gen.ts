@@ -30,6 +30,7 @@ import { Route as EntitiesEntityIdIndexRouteImport } from './routes/entities/$en
 import { Route as EntitiesEntityIdChangesRouteImport } from './routes/entities/$entityId/changes'
 import { Route as EntitiesEntityIdEditRouteImport } from './routes/entities/$entityId/edit'
 import { Route as EntitiesEntityIdMigrateRouteImport } from './routes/entities/$entityId/migrate'
+import { Route as ExtensionsExtensionIdContributionIdRouteImport } from './routes/extensions/$extensionId/$contributionId'
 import { Route as ManageBlueprintsIndexRouteImport } from './routes/manage/blueprints/index'
 import { Route as ManageBlueprintsBlueprintIdRouteImport } from './routes/manage/blueprints/$blueprintId'
 import { Route as ManageBlueprintsNewRouteImport } from './routes/manage/blueprints/new'
@@ -147,6 +148,12 @@ const EntitiesEntityIdMigrateRoute = EntitiesEntityIdMigrateRouteImport.update({
   path: '/migrate',
   getParentRoute: () => EntitiesEntityIdRoute,
 } as any)
+const ExtensionsExtensionIdContributionIdRoute =
+  ExtensionsExtensionIdContributionIdRouteImport.update({
+    id: '/extensions/$extensionId/$contributionId',
+    path: '/extensions/$extensionId/$contributionId',
+    getParentRoute: () => rootRouteImport,
+  } as any)
 const ManageBlueprintsIndexRoute = ManageBlueprintsIndexRouteImport.update({
   id: '/manage/blueprints/',
   path: '/manage/blueprints/',
@@ -228,6 +235,7 @@ export interface FileRoutesByFullPath {
   '/entities/$entityId/changes': typeof EntitiesEntityIdChangesRoute
   '/entities/$entityId/edit': typeof EntitiesEntityIdEditRoute
   '/entities/$entityId/migrate': typeof EntitiesEntityIdMigrateRoute
+  '/extensions/$extensionId/$contributionId': typeof ExtensionsExtensionIdContributionIdRoute
   '/manage/blueprints/$blueprintId': typeof ManageBlueprintsBlueprintIdRouteWithChildren
   '/manage/blueprints/new': typeof ManageBlueprintsNewRoute
   '/manage/contexts/new': typeof ManageContextsNewRoute
@@ -260,6 +268,7 @@ export interface FileRoutesByTo {
   '/entities/$entityId/changes': typeof EntitiesEntityIdChangesRoute
   '/entities/$entityId/edit': typeof EntitiesEntityIdEditRoute
   '/entities/$entityId/migrate': typeof EntitiesEntityIdMigrateRoute
+  '/extensions/$extensionId/$contributionId': typeof ExtensionsExtensionIdContributionIdRoute
   '/manage/blueprints/new': typeof ManageBlueprintsNewRoute
   '/manage/contexts/new': typeof ManageContextsNewRoute
   '/manage/workspace/invitations': typeof ManageWorkspaceInvitationsRoute
@@ -294,6 +303,7 @@ export interface FileRoutesById {
   '/entities/$entityId/changes': typeof EntitiesEntityIdChangesRoute
   '/entities/$entityId/edit': typeof EntitiesEntityIdEditRoute
   '/entities/$entityId/migrate': typeof EntitiesEntityIdMigrateRoute
+  '/extensions/$extensionId/$contributionId': typeof ExtensionsExtensionIdContributionIdRoute
   '/manage/blueprints/$blueprintId': typeof ManageBlueprintsBlueprintIdRouteWithChildren
   '/manage/blueprints/new': typeof ManageBlueprintsNewRoute
   '/manage/contexts/new': typeof ManageContextsNewRoute
@@ -330,6 +340,7 @@ export interface FileRouteTypes {
     | '/entities/$entityId/changes'
     | '/entities/$entityId/edit'
     | '/entities/$entityId/migrate'
+    | '/extensions/$extensionId/$contributionId'
     | '/manage/blueprints/$blueprintId'
     | '/manage/blueprints/new'
     | '/manage/contexts/new'
@@ -362,6 +373,7 @@ export interface FileRouteTypes {
     | '/entities/$entityId/changes'
     | '/entities/$entityId/edit'
     | '/entities/$entityId/migrate'
+    | '/extensions/$extensionId/$contributionId'
     | '/manage/blueprints/new'
     | '/manage/contexts/new'
     | '/manage/workspace/invitations'
@@ -395,6 +407,7 @@ export interface FileRouteTypes {
     | '/entities/$entityId/changes'
     | '/entities/$entityId/edit'
     | '/entities/$entityId/migrate'
+    | '/extensions/$extensionId/$contributionId'
     | '/manage/blueprints/$blueprintId'
     | '/manage/blueprints/new'
     | '/manage/contexts/new'
@@ -425,6 +438,7 @@ export interface RootRouteChildren {
   PasswordResetConfirmRoute: typeof PasswordResetConfirmRoute
   AgentsIndexRoute: typeof AgentsIndexRoute
   PasswordResetIndexRoute: typeof PasswordResetIndexRoute
+  ExtensionsExtensionIdContributionIdRoute: typeof ExtensionsExtensionIdContributionIdRoute
   ManageBlueprintsBlueprintIdRoute: typeof ManageBlueprintsBlueprintIdRouteWithChildren
   ManageBlueprintsNewRoute: typeof ManageBlueprintsNewRoute
   ManageContextsNewRoute: typeof ManageContextsNewRoute
@@ -585,6 +599,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof EntitiesEntityIdMigrateRouteImport
       parentRoute: typeof EntitiesEntityIdRoute
     }
+    '/extensions/$extensionId/$contributionId': {
+      id: '/extensions/$extensionId/$contributionId'
+      path: '/extensions/$extensionId/$contributionId'
+      fullPath: '/extensions/$extensionId/$contributionId'
+      preLoaderRoute: typeof ExtensionsExtensionIdContributionIdRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/manage/blueprints/': {
       id: '/manage/blueprints/'
       path: '/manage/blueprints'
@@ -728,6 +749,8 @@ const rootRouteChildren: RootRouteChildren = {
   PasswordResetConfirmRoute: PasswordResetConfirmRoute,
   AgentsIndexRoute: AgentsIndexRoute,
   PasswordResetIndexRoute: PasswordResetIndexRoute,
+  ExtensionsExtensionIdContributionIdRoute:
+    ExtensionsExtensionIdContributionIdRoute,
   ManageBlueprintsBlueprintIdRoute:
     ManageBlueprintsBlueprintIdRouteWithChildren,
   ManageBlueprintsNewRoute: ManageBlueprintsNewRoute,

@@ -48,12 +48,105 @@ fn release_archive(version: &str, dependencies: Value, artifact_bytes: &[u8]) ->
     zstd::stream::encode_all(Cursor::new(tar_bytes), 0).unwrap()
 }
 
+fn client_release_archive() -> Vec<u8> {
+    let manifest = serde_json::to_vec(&json!({
+        "manifest_version": 1,
+        "name": "Client extension",
+        "version": "1.0.0",
+        "description": "client runtime integration test",
+        "icons": {"48": "icon.png"},
+        "catalog": {"id": "acme.client", "host_api": "^1.0"},
+        "permissions": ["configuration.read"],
+        "artifacts": [{
+            "id": "client",
+            "kind": "client_component",
+            "path": "client.js"
+        }],
+        "ui": [{
+            "id": "panel",
+            "version": 1,
+            "kind": "element",
+            "artifact": "client",
+            "element": "acme-client-panel",
+            "outlet": "entity_preview_panel"
+        }]
+    }))
+    .unwrap();
+    let mut tar_bytes = Vec::new();
+    {
+        let mut tar = tar::Builder::new(&mut tar_bytes);
+        append_file(&mut tar, "manifest.json", &manifest);
+        append_file(&mut tar, "client.js", b"export {}");
+        tar.finish().unwrap();
+    }
+    zstd::stream::encode_all(Cursor::new(tar_bytes), 0).unwrap()
+}
+
 fn append_file(tar: &mut tar::Builder<&mut Vec<u8>>, path: &str, bytes: &[u8]) {
     let mut header = tar::Header::new_gnu();
     header.set_size(bytes.len() as u64);
     header.set_mode(0o644);
     header.set_cksum();
     tar.append_data(&mut header, path, bytes).unwrap();
+}
+
+#[sqlx::test(migrations = "./migrations")]
+async fn enabled_client_contributions_are_hidden_after_state_changes(pool: sqlx::PgPool) {
+    let workspace = Uuid::from_u128(0x00000000000040008000000000000003);
+    let repository = CatalogRepository::new(pool)
+        .for_workspace(workspace)
+        .await
+        .unwrap();
+    let installer =
+        ExtensionInstaller::new(repository.clone(), Arc::new(FakeObjectStore::available()));
+
+    installer
+        .install("github:acme/client@v1.0.0", &client_release_archive())
+        .await
+        .unwrap();
+    assert!(
+        repository
+            .client_extension_contributions()
+            .await
+            .unwrap()
+            .is_empty()
+    );
+
+    repository
+        .grant_extension("acme.client", "capability", "configuration.read")
+        .await
+        .unwrap();
+    repository.enable_extension("acme.client").await.unwrap();
+    let contributions = repository.client_extension_contributions().await.unwrap();
+    assert_eq!(contributions.len(), 1);
+    assert_eq!(contributions[0].id, "panel");
+    assert_eq!(
+        contributions[0].artifact_key,
+        format!(
+            "extensions/{}/client",
+            contributions[0].installed_release_id
+        )
+    );
+
+    repository.disable_extension("acme.client").await.unwrap();
+    assert!(
+        repository
+            .client_extension_contributions()
+            .await
+            .unwrap()
+            .is_empty()
+    );
+    repository
+        .quarantine_extension("acme.client", "test")
+        .await
+        .unwrap();
+    assert!(
+        repository
+            .client_extension_contributions()
+            .await
+            .unwrap()
+            .is_empty()
+    );
 }
 
 #[sqlx::test(migrations = "./migrations")]
@@ -131,6 +224,60 @@ async fn lifecycle_installs_validated_archive_artifacts_and_retains_history(pool
             .state,
         "enabled"
     );
+
+    // A runtime candidate is not authorization: the invocation-time lookup
+    // must observe configuration and release changes made after selection.
+    let authorized = repository
+        .runtime_extension_installation("acme.extension", installed.installed_release_id)
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(
+        authorized.configuration["endpoint"],
+        "https://api.acme.example"
+    );
+    repository
+        .configure_extension(
+            "acme.extension",
+            json!({"endpoint": "https://changed.acme.example"}),
+        )
+        .await
+        .unwrap();
+    let refreshed = repository
+        .runtime_extension_installation("acme.extension", installed.installed_release_id)
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(
+        refreshed.configuration["endpoint"],
+        "https://changed.acme.example"
+    );
+    let upgraded = installer
+        .upgrade(
+            "github:acme/extension@v2.0.0",
+            &release_archive("2.0.0", json!([]), ARTIFACT_BYTES),
+        )
+        .await
+        .unwrap();
+    assert_ne!(
+        upgraded.installed_release_id,
+        installed.installed_release_id
+    );
+    assert!(
+        repository
+            .runtime_extension_installation("acme.extension", installed.installed_release_id)
+            .await
+            .unwrap()
+            .is_none()
+    );
+    repository
+        .configure_extension(
+            "acme.extension",
+            json!({"endpoint": "https://upgraded.acme.example"}),
+        )
+        .await
+        .unwrap();
+
     assert_eq!(
         repository
             .quarantine_extension("acme.extension", "timeout")

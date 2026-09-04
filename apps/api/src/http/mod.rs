@@ -10,6 +10,7 @@ mod entity_reads;
 mod error;
 mod event_deliveries;
 mod extension_registries;
+mod extensions;
 mod extractors;
 mod files;
 mod members;
@@ -188,6 +189,11 @@ pub fn router(state: AppState) -> Router {
         .route(
             "/extension-registries/{id}",
             axum::routing::delete(extension_registries::remove),
+        )
+        .route("/extensions/runtime", get(extensions::runtime))
+        .route(
+            "/extensions/{extension_id}/{contribution_id}/artifact",
+            get(extensions::artifact),
         )
         .route("/auth/discover", post(sessions::discover))
         .route("/auth/login", post(sessions::login))

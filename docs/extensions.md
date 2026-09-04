@@ -26,16 +26,17 @@ for which extension repositories Catalog may resolve. The v1 index shape is:
     "id": "acme.example",
     "name": "Acme Example",
     "description": "Example extension",
-    "icon": "https://example.invalid/icon.svg",
+    "icon": "icon.svg",
     "repository": "acme/catalog-extension"
   }]
 }
 ```
 
 Opening a listed entry loads that extension repository's README and non-draft,
-non-prerelease GitHub Releases, returning its `.tar.zst` assets only when their download path belongs
-to that exact extension repository. Catalog stores no global copy of indexes,
-READMEs, releases, or archives. When a user installs one release, Catalog validates the
+non-prerelease GitHub Releases, returning its `.tar.zst` assets only when their
+download path belongs to that exact extension repository. Catalog stores no
+global copy of indexes, READMEs, releases, or archives. When a user installs one
+release, Catalog validates the
 selected `.tar.zst` archive with bounded decompression and entry-path checks,
 then reads and validates `manifest.json` before uploading declared extracted
 artifacts to Catalog S3 storage. Artifact integrity verification is deliberately
@@ -120,16 +121,101 @@ request/correlation IDs, and bounded diagnostic codes may be recorded; secrets,
 credentials, raw packages, and payload bodies may not. SQL migrations remain
 declarative and contain no behavior.
 
+The shared lifecycle work intentionally provides no management API, web UI,
+external GitHub registry discovery, or client runtime. WASM execution begins in
+#145; the remaining boundaries are follow-on work.
+
+## Server WASM runtime (#145)
+
+A `server_wasm` artifact is a WebAssembly **component** using the checked-in
+`catalog:host@1.0.0` WIT package at `apps/api/wit/catalog-extension.wit`.
+Components receive no WASI context, filesystem, environment, clock, socket, or
+pre-opened descriptor. The only imports are `api.call` and `api.log`.
+
+A server manifest may declare `server.event_handlers`. Each handler has a
+stable ID, the v1 `handle-event` component export, and one or more exact
+versioned domain event types. It requires the required `events.subscribe` capability and a
+`server_wasm` artifact. The durable event dispatcher treats its initial list
+as a hint and immediately re-reads a locked snapshot of enabled state, exact
+installed release, configuration, and required grants before each invocation.
+Deliveries are at-least-once, may be reordered, and handlers must therefore be
+idempotent. Component traps, fuel or
+memory exhaustion, timeouts, and returned handler failures are traced, metered,
+and quarantine the installation before the delivery is retried/dead-lettered.
+
+The component host ABI uses bounded JSON strings (64 KiB) and bounded log
+messages (16 KiB). Every operation is capability checked at the point of call.
+`configuration.get.v1` is available to components with
+`configuration.read`; all other v1 operation names are deliberately rejected
+until their command/secret/storage/network contracts are made durable. In
+particular, `network.request.v1` never grants ambient sockets. The manifest
+host-permission validation remains the egress policy contract for its future
+mediated implementation.
 Registry source APIs expose `GET/POST /extension-registries`,
 `DELETE /extension-registries/{id}`, `GET /extension-registries/discover`, and
 `GET /extension-registries/extensions/{owner}/{repository}`. The final endpoint
 rejects a repository unless the current trusted index lists it, then returns its
 README and release assets. `extensions.read` authorizes discovery while
 `extensions.manage` authorizes source changes; the built-in official source
-cannot be removed. The deployment
-may set `EXTENSION_OFFICIAL_REGISTRY` to a validated GitHub owner/repository
-instead of the default `attricat/catalog-extensions`.
+cannot be removed. The deployment may set `EXTENSION_OFFICIAL_REGISTRY` to a
+validated GitHub owner/repository instead of the default
+`attricat/catalog-extensions`.
 
-No web UI, client runtime,
-or WASM execution is part of this issue; those are #145–#149 follow-on
-boundaries.
+Marketplace management UI remains #148.
+
+## Client extension runtime (v1)
+
+Enabled `client_component` artifacts can expose a strict `ui` contribution:
+
+```json
+{
+  "id": "inventory-panel",
+  "version": 1,
+  "kind": "element",
+  "artifact": "client",
+  "element": "acme-inventory-panel",
+  "outlet": "entity_preview_panel"
+}
+```
+
+A contribution is either `route` (which requires a non-empty `title`) or
+`element` (which requires one of the host-owned `navigation` or
+`entity_preview_panel` outlets). Routes are always namespaced at
+`/extensions/:extensionId/:contributionId`; manifests cannot provide a path,
+selector, or host component. Element names must be lowercase custom-element
+names. Each extension can use an outlet once and all contribution/artifact IDs
+remain stable across releases.
+
+Catalog loads runtime descriptors and JavaScript only for enabled installations.
+Disabling, quarantining, or upgrading an installation immediately prevents new
+loads; release IDs and object-store keys are never client addresses. The host
+runs every contribution in a distinct `<iframe sandbox="allow-scripts">` with
+an opaque origin and a CSP that denies network access. Components register
+custom elements *inside that frame*, not in Catalog's document, and have no
+access to host DOM, cookies, storage, React state, or other extension frames.
+The host revokes the frame port and removes the frame on unmount or load error.
+
+### Client API
+
+The frame receives a versioned `MessageChannel` API as `globalThis.catalog`.
+It may use only granted operations:
+
+- `catalog.navigate({ entity_id })` requires `client.navigation` and resolves
+  only to Catalog's entity route.
+- `catalog.notify({ message, severity? })` requires `client.notification`;
+  messages are trimmed and limited to 512 characters.
+- `catalog.request(path)` requires `catalog.read` and is limited to `GET`
+  reads of `/api/entities` or `/api/v1/entities/:uuid` with a 1 MiB response
+  limit.
+- `catalog.context` contains only the documented outlet identifiers (the
+  entity preview outlet supplies `entity_id` and optional `context_id`).
+  Configuration is provided only when `configuration.read` is granted.
+
+There is no generic `fetch`, URL navigation, credential/header access, DOM
+bridge, event stream, or inter-extension RPC. Every mediated Catalog request
+uses the signed-in browser session in the parent and the server still applies
+normal authorization. Invalid messages, missing grants, failures, and startup
+timeouts are denied and rendered as a host-owned warning without exposing
+extension source or host internals. Extension UI must provide its own localized
+text and accessible labels; the host owns the surrounding landmarks, focus,
+loading state, and failure announcements.

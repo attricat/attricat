@@ -11,8 +11,9 @@ use api::{
         DEFAULT_PREVIEW_RELATIONSHIP_ITEMS, DEFAULT_RELATIONSHIP_FACET_NODES,
         MAINTENANCE_POOL_CONNECTIONS, REQUEST_POOL_CONNECTIONS,
     },
-    event_dispatcher::{self, DispatcherConfig, EventHandlerRegistry},
+    event_dispatcher::{self, DispatcherConfig},
     extension_registry::{DEFAULT_OFFICIAL_REGISTRY, GitHubRegistry, GitHubRepository},
+    extension_runtime::{self, ExtensionRuntime, ExtensionRuntimeConfig},
     file_access::AllowFileAccess,
     http::{AppState, router},
     mail::SmtpMailDelivery,
@@ -209,9 +210,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     let dispatcher_config = DispatcherConfig::from_env()
         .map_err(|error| format!("invalid event dispatcher configuration: {error}"))?;
     let (shutdown_sender, shutdown_receiver) = tokio::sync::watch::channel(());
+    let extension_runtime =
+        ExtensionRuntime::new(object_store.clone(), ExtensionRuntimeConfig::default())
+            .map_err(|error| format!("invalid extension runtime configuration: {error}"))?;
     let dispatcher_handles = event_dispatcher::start(
         CatalogRepository::with_workspace_pool_factory(pool.clone(), connect_options.clone()),
-        EventHandlerRegistry::default_handlers(),
+        extension_runtime::registry_with_wasm(extension_runtime),
         dispatcher_config,
         shutdown_receiver,
     );

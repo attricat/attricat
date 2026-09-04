@@ -129,6 +129,17 @@ pub struct Dependency {
 pub struct Server {
     #[serde(default)]
     pub webhooks: Vec<Webhook>,
+    /// Durable catalog event subscriptions delivered to named component exports.
+    #[serde(default)]
+    pub event_handlers: Vec<EventHandler>,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct EventHandler {
+    pub id: String,
+    pub event_types: Vec<String>,
+    pub handler: String,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -159,13 +170,36 @@ pub enum WebhookAuthenticationKind {
     HmacSha256,
 }
 
+/// A client contribution is either a namespaced full page or an element at a
+/// host-owned outlet. The host never accepts arbitrary route paths or DOM
+/// selectors from an extension.
 #[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct UiContribution {
     pub id: String,
     pub version: u32,
-    pub kind: String,
+    pub kind: UiContributionKind,
     pub artifact: String,
+    /// The custom-element name registered inside the isolated extension frame.
+    pub element: String,
+    #[serde(default)]
+    pub outlet: Option<UiOutlet>,
+    #[serde(default)]
+    pub title: Option<String>,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum UiContributionKind {
+    Route,
+    Element,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq, Hash)]
+#[serde(rename_all = "snake_case")]
+pub enum UiOutlet {
+    Navigation,
+    EntityPreviewPanel,
 }
 
 #[derive(Debug, Error, PartialEq, Eq)]
@@ -287,7 +321,29 @@ impl Manifest {
             for webhook in &server.webhooks {
                 webhook.validate(&self.permissions)?;
             }
+            unique(
+                server.event_handlers.iter().map(|handler| &handler.id),
+                "event handler",
+            )?;
+            for handler in &server.event_handlers {
+                handler.validate(&self.permissions)?;
+            }
+            if !server.event_handlers.is_empty()
+                && !self
+                    .artifacts
+                    .iter()
+                    .any(|artifact| artifact.kind == ArtifactKind::ServerWasm)
+            {
+                return Err(ManifestError::Invalid(
+                    "event handlers require a server_wasm artifact".into(),
+                ));
+            }
         }
+        unique(
+            self.ui.iter().map(|contribution| &contribution.id),
+            "UI contribution",
+        )?;
+        let mut outlets = HashSet::new();
         for contribution in &self.ui {
             valid_id(&contribution.id, "UI contribution id")?;
             if contribution.version == 0
@@ -299,6 +355,37 @@ impl Manifest {
                     "UI contribution '{}' must reference a client_component artifact",
                     contribution.id
                 )));
+            }
+            valid_custom_element_name(&contribution.element)?;
+            match (&contribution.kind, &contribution.outlet) {
+                (UiContributionKind::Route, None) => {}
+                (UiContributionKind::Element, Some(outlet)) => {
+                    if !outlets.insert(outlet) {
+                        return Err(ManifestError::Invalid(
+                            "only one contribution may target each UI outlet".into(),
+                        ));
+                    }
+                }
+                (UiContributionKind::Route, Some(_)) => {
+                    return Err(ManifestError::Invalid(
+                        "route UI contributions cannot declare an outlet".into(),
+                    ));
+                }
+                (UiContributionKind::Element, None) => {
+                    return Err(ManifestError::Invalid(
+                        "element UI contributions require an outlet".into(),
+                    ));
+                }
+            }
+            if matches!(contribution.kind, UiContributionKind::Route)
+                && contribution
+                    .title
+                    .as_deref()
+                    .is_none_or(|title| title.trim().is_empty())
+            {
+                return Err(ManifestError::Invalid(
+                    "route UI contributions require a non-empty title".into(),
+                ));
             }
         }
         Ok(())
@@ -369,6 +456,45 @@ impl HostPermission {
         Ok(())
     }
 }
+impl EventHandler {
+    fn validate(&self, permissions: &[String]) -> Result<(), ManifestError> {
+        valid_id(&self.id, "event handler id")?;
+        if self.handler != "handle-event" {
+            return Err(ManifestError::Invalid(format!(
+                "event handler '{}' must use the v1 handle-event export",
+                self.id
+            )));
+        }
+        if !permissions
+            .iter()
+            .any(|permission| permission == "events.subscribe")
+        {
+            return Err(ManifestError::Invalid(format!(
+                "event handler '{}' requires events.subscribe",
+                self.id
+            )));
+        }
+        if self.event_types.is_empty()
+            || self.event_types.iter().any(|event_type| {
+                event_type.is_empty()
+                    || event_type.len() > 128
+                    || !event_type.bytes().all(|byte| {
+                        byte.is_ascii_alphanumeric() || matches!(byte, b'.' | b'_' | b'-')
+                    })
+                    || !event_type.rsplit_once(".v").is_some_and(|(_, version)| {
+                        version.parse::<u32>().is_ok_and(|version| version > 0)
+                    })
+            })
+        {
+            return Err(ManifestError::Invalid(format!(
+                "event handler '{}' must declare versioned event types",
+                self.id
+            )));
+        }
+        Ok(())
+    }
+}
+
 impl Webhook {
     fn validate(&self, permissions: &[String]) -> Result<(), ManifestError> {
         valid_id(&self.id, "webhook id")?;
@@ -416,6 +542,20 @@ fn unique<'a>(values: impl Iterator<Item = &'a String>, label: &str) -> Result<(
     }
     Ok(())
 }
+fn valid_custom_element_name(value: &str) -> Result<(), ManifestError> {
+    if value.len() > 128
+        || !value.contains('-')
+        || !value
+            .bytes()
+            .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == b'-')
+    {
+        return Err(ManifestError::Invalid(
+            "UI element must be a lowercase custom-element name".into(),
+        ));
+    }
+    Ok(())
+}
+
 fn valid_id(value: &str, label: &str) -> Result<(), ManifestError> {
     if value.is_empty()
         || value.len() > 128
@@ -738,6 +878,47 @@ mod tests {
         invalid.permissions.clear();
         invalid.optional_permissions = vec!["network.request".into(), "webhooks.receive".into()];
         assert!(invalid.validate(SUPPORTED_HOST_API).is_err());
+    }
+    #[test]
+    fn event_handlers_require_subscription_capability_and_versioned_types() {
+        let mut value = manifest();
+        value.permissions.push("events.subscribe".into());
+        value.server.as_mut().unwrap().event_handlers = vec![EventHandler {
+            id: "on-entity".into(),
+            event_types: vec!["entity.updated.v1".into()],
+            handler: "handle-event".into(),
+        }];
+        assert!(value.validate(SUPPORTED_HOST_API).is_ok());
+        value
+            .permissions
+            .retain(|permission| permission != "events.subscribe");
+        assert!(value.validate(SUPPORTED_HOST_API).is_err());
+        value.permissions.push("events.subscribe".into());
+        value.server.as_mut().unwrap().event_handlers[0].event_types =
+            vec!["entity.updated".into()];
+        assert!(value.validate(SUPPORTED_HOST_API).is_err());
+    }
+
+    #[test]
+    fn validates_client_ui_contributions() {
+        let mut value = manifest();
+        value.artifacts.push(Artifact {
+            id: "client".into(),
+            kind: ArtifactKind::ClientComponent,
+            path: "client.js".into(),
+        });
+        value.ui.push(UiContribution {
+            id: "panel".into(),
+            version: 1,
+            kind: UiContributionKind::Element,
+            artifact: "client".into(),
+            element: "acme-panel".into(),
+            outlet: Some(UiOutlet::EntityPreviewPanel),
+            title: None,
+        });
+        assert!(value.validate(SUPPORTED_HOST_API).is_ok());
+        value.ui[0].element = "AcmePanel".into();
+        assert!(value.validate(SUPPORTED_HOST_API).is_err());
     }
     #[test]
     fn validates_configuration() {
