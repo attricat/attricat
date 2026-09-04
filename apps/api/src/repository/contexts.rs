@@ -2,7 +2,8 @@ use sqlx::query_as;
 use uuid::Uuid;
 
 use crate::domain_events::{
-    CONTEXT_CREATED_V1, ContextCreatedV1, EventSource, EventSourceKind, NewDomainEvent,
+    CONTEXT_CREATED_V1, CONTEXT_DELETED_V1, CONTEXT_UPDATED_V1, ContextCreatedV1, EventSource,
+    EventSourceKind, NewDomainEvent,
 };
 
 use super::{CatalogRepository, RepositoryError, validate_code};
@@ -187,20 +188,24 @@ impl CatalogRepository {
             self.validate_entity_schema(&mut transaction, entity)
                 .await?;
         }
-        self.commit_mutation(transaction).await?;
+        self.commit_mutation_with_event(
+            transaction,
+            context_event(self, CONTEXT_UPDATED_V1, &result),
+        )
+        .await?;
         Ok(result)
     }
 
     pub async fn delete_context(&self, id: Uuid) -> Result<(), RepositoryError> {
-        let context_code = sqlx::query_scalar::<_, String>(
-            "SELECT code FROM attribute_contexts WHERE id = $1 AND workspace_id = $2",
+        let context = query_as::<_, AttributeContext>(
+            "SELECT id, code, data, parent_id FROM attribute_contexts WHERE id = $1 AND workspace_id = $2",
         )
         .bind(id)
         .bind(self.workspace_id.unwrap_or(Self::DEFAULT_WORKSPACE_ID))
         .fetch_optional(&self.pool)
         .await?
         .ok_or(RepositoryError::NotFound("context"))?;
-        if context_code == "default" {
+        if context.code == "default" {
             return Err(RepositoryError::DefaultContextProtected);
         }
         let mut transaction = self.pool.begin().await?;
@@ -209,7 +214,11 @@ impl CatalogRepository {
         if result.rows_affected() == 0 {
             return Err(RepositoryError::ContextInUse);
         }
-        self.commit_mutation(transaction).await?;
+        self.commit_mutation_with_event(
+            transaction,
+            context_event(self, CONTEXT_DELETED_V1, &context),
+        )
+        .await?;
         Ok(())
     }
 
@@ -224,5 +233,34 @@ impl CatalogRepository {
         .bind(self.workspace_id.unwrap_or(Self::DEFAULT_WORKSPACE_ID))
         .fetch_optional(&self.pool)
         .await?)
+    }
+}
+
+fn context_event(
+    repository: &CatalogRepository,
+    event_type: &str,
+    context: &AttributeContext,
+) -> NewDomainEvent {
+    NewDomainEvent {
+        event_type: event_type.to_owned(),
+        aggregate_kind: "context".to_owned(),
+        aggregate_id: context.id,
+        correlation_id: repository
+            .audit_context
+            .as_ref()
+            .map(|audit| audit.correlation_id)
+            .unwrap_or_else(Uuid::new_v4),
+        causation_id: None,
+        source: EventSource {
+            kind: EventSourceKind::Api,
+            name: "catalog_api".to_owned(),
+        },
+        metadata: serde_json::json!({}),
+        payload: serde_json::to_value(ContextCreatedV1 {
+            context_id: context.id,
+            code: context.code.clone(),
+            parent_id: context.parent_id,
+        })
+        .expect("context event payload is serializable"),
     }
 }

@@ -1,4 +1,7 @@
 use super::*;
+use crate::domain_events::{
+    ENTITY_MIGRATED_V1, EntityMigratedV1, EventSource, EventSourceKind, NewDomainEvent,
+};
 use catalog_validation::validate_json_schema;
 use serde_json::{Map, Value};
 use std::collections::{HashMap, HashSet};
@@ -433,7 +436,34 @@ impl CatalogRepository {
         .bind(self.workspace_id.unwrap_or(Self::DEFAULT_WORKSPACE_ID))
         .execute(&mut *transaction)
         .await?;
-        self.commit_mutation(transaction).await?;
+        self.commit_mutation_with_event(
+            transaction,
+            NewDomainEvent {
+                event_type: ENTITY_MIGRATED_V1.to_owned(),
+                aggregate_kind: "entity".to_owned(),
+                aggregate_id: target_entity.id,
+                correlation_id: self
+                    .audit_context
+                    .as_ref()
+                    .map(|audit| audit.correlation_id)
+                    .unwrap_or_else(Uuid::new_v4),
+                causation_id: None,
+                source: EventSource {
+                    kind: EventSourceKind::Api,
+                    name: "catalog_api".to_owned(),
+                },
+                metadata: serde_json::json!({}),
+                payload: serde_json::to_value(EntityMigratedV1 {
+                    entity_id: target_entity.id,
+                    blueprint_id: target_entity.blueprint_id,
+                    source_version: entity.blueprint_version,
+                    target_version: target_entity.blueprint_version,
+                    migration_id: input.migration_id,
+                })
+                .expect("entity-migrated payload is serializable"),
+            },
+        )
+        .await?;
         Ok(target_entity)
     }
 }
