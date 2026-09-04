@@ -38,6 +38,14 @@ separated terms are intersected (implicit `AND`). Relationship-tree facet
 counts, selected-facet filtering, and paginated result pages consume that same
 candidate set, so they cannot disagree about which source entities match.
 
+The resolver must also retain a match witness for every accepted result and
+term. The search response will add `match_explanations` to each item: an array
+with one deterministic witness per matched term containing the original term,
+the matching entity ID, matching attribute code when applicable, traversal
+depth, and the relationship-edge path from the returned entity to that match.
+Depth `0` has an empty path. This data lets clients show why a record matched
+without rerunning the search; it is explanatory metadata, not ranking input.
+
 ## Query Language
 
 | Form | Meaning |
@@ -64,15 +72,16 @@ and means prefix matching. Values are always passed to SQL as parameters;
 query wildcards are never interpolated into SQL.
 
 Explicit multi-hop selectors (such as `category.parent.name:summer`), boolean
-operators other than implicit `AND`, ranking, and match explanations are out of
-scope.
+operators other than implicit `AND`, and ranking are out of scope.
 
 ## API and UI Contract
 
 `POST /v1/entities/search` continues to take the query in its existing `query`
-string field. An empty or absent query preserves current browse behavior. The
-Explore query field and URL query parameter preserve the supplied query text;
-the UI will show examples of supported selector and wildcard forms. API errors
+string field. An empty or absent query preserves current browse behavior. Each
+non-empty-query result additionally returns `match_explanations` as described
+above. The Explore query field and URL query parameter preserve the supplied
+query text; the UI will show examples of supported selector and wildcard forms
+and can use explanation metadata to identify why a result matched. API errors
 are rendered through the existing Explore error alert.
 
 No client-selected traversal depth is introduced initially. The server owns the
@@ -94,6 +103,7 @@ representative catalogue data is available.
 
 Integration tests must cover direct and multi-hop matches, depth bounds, cycles,
 deleted entities, inactive relationships, structured selectors, wildcard
-matching, invalid syntax/selectors, AND intersections, pagination, and facet
-counts/filtering. Frontend tests must cover URL parsing/submission and request
-forwarding for structured query text.
+matching, invalid syntax/selectors, AND intersections, pagination, facet
+counts/filtering, and deterministic per-term match explanations. Frontend tests
+must cover URL parsing/submission and request forwarding for structured query
+text, plus rendering or otherwise exposing the returned match rationale.
