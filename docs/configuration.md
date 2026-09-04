@@ -31,6 +31,11 @@ or inaccessible configured bucket.
 | `PREVIEW_MAX_RELATIONSHIP_ITEMS` | `10` | API | Maximum inline targets per relationship. |
 | `ENTITY_MAX_PAGE_SIZE` | `100` | API | Maximum page size for relationship browsing. |
 | `DATA_HEALTH_CACHE_TTL_SECONDS` | `300` | API | Data-health response cache lifetime. |
+| `EVENT_DISPATCHER_LEASE_SECONDS` | `30` | API | Positive lease duration for one event-handler attempt. A shorter lease raises duplicate-delivery risk. |
+| `EVENT_DISPATCHER_RETRY_INITIAL_SECONDS` | `1` | API | Positive initial failed-delivery retry delay. |
+| `EVENT_DISPATCHER_RETRY_MAX_SECONDS` | `60` | API | Positive cap on exponential failed-delivery retry delay. |
+| `EVENT_DISPATCHER_MAX_ATTEMPTS` | `5` | API | Positive number of claims before a failed delivery becomes `dead_letter`. |
+| `EVENT_DISPATCHER_POLL_MILLIS` | `250` | API | Positive delay between dispatcher polls. |
 | `CATALOG_API_URL` | `http://127.0.0.1:3000` | Vite | API target for the web app's `/api` development proxy. |
 | `POSTGRES_DB` | `catalog` | Docker Compose | Local PostgreSQL database name. |
 | `POSTGRES_USER` | `postgres` | Docker Compose | Local PostgreSQL user. |
@@ -186,6 +191,11 @@ identifier. Clients do not provide a workspace UUID or tenancy header.
 
 `CATALOG_SERVER` overrides the CLI's API URL. The CLI otherwise targets
 `http://127.0.0.1:3000`.
+
+The API validates the five `EVENT_DISPATCHER_*` settings above during startup;
+zero, non-integer, or an unrepresentable `EVENT_DISPATCHER_MAX_ATTEMPTS` stops
+startup. They tune the internal at-least-once event dispatcher only. See
+[Domain eventing](eventing.md) for delivery, retry, and operator behavior.
 
 `AGENT_SCHEDULER_POLL_SECONDS` controls the API process UTC schedule poll
 interval (default `15`, range `1`–`3600`). Queued runs are recovered when the
