@@ -48,3 +48,9 @@ A producer appends its event through the caller-owned SQL transaction. The
 catalog mutation, audit evidence, and outbox row either all commit or all roll
 back. External webhooks, dead-letter administration, and any client-safe event
 bridge remain separate follow-up work.
+
+## Operations
+
+Each API process runs the durable dispatcher and stops its workers cleanly after a shutdown signal. Failed handler attempts use bounded exponential backoff (one second through one minute) and become `dead_letter` after five attempts. Expired leases are eligible for recovery. Inspect failures with `catalog event dead-letters` and reactivate a selected delivery with `catalog event replay <consumer-id> <event-id>`; replay preserves the immutable domain event. Listing requires `data_health.read`; replay requires the operator-level `roles.manage` permission.
+
+Dispatcher defaults can be tuned with positive integer environment variables: `EVENT_DISPATCHER_LEASE_SECONDS` (30), `EVENT_DISPATCHER_RETRY_INITIAL_SECONDS` (1), `EVENT_DISPATCHER_RETRY_MAX_SECONDS` (60), `EVENT_DISPATCHER_MAX_ATTEMPTS` (5), and `EVENT_DISPATCHER_POLL_MILLIS` (250). Prometheus exposes `catalog_event_deliveries_total` by outcome and `catalog_event_delivery_queue_depth` by delivery state.

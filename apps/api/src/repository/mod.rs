@@ -54,7 +54,7 @@ pub use agents::{
     ConversationMessage,
 };
 pub(crate) use audit_events::{AuditEventFilter, AuditEventPage};
-pub use domain_events::{EventConsumer, EventDelivery, EventPublisher};
+pub use domain_events::{EventConsumer, EventDelivery, EventPublisher, FailedEventDelivery};
 pub(crate) use entity_search::decode_search_cursor;
 pub(crate) use files::{FileMetadata, FileObject, FilePolicy, FileUploadResult, NewUploadedFile};
 pub(crate) use members::{WorkspaceInvitation, WorkspaceMember};

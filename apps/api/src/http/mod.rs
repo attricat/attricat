@@ -8,6 +8,7 @@ mod data_health;
 mod entities;
 mod entity_reads;
 mod error;
+mod event_deliveries;
 mod extractors;
 mod files;
 mod members;
@@ -210,6 +211,14 @@ pub fn router(state: AppState) -> Router {
             post(data_health::refresh_data_health),
         )
         .route("/audit-events", get(audit_events::list))
+        .route(
+            "/event-deliveries/dead-letters",
+            get(event_deliveries::list),
+        )
+        .route(
+            "/event-deliveries/{consumer_id}/{event_id}/replay",
+            post(event_deliveries::replay),
+        )
         .route("/workspace/roles", get(roles::list).post(roles::create))
         .route(
             "/workspace/assignable-roles",

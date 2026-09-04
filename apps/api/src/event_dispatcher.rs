@@ -3,7 +3,7 @@
 //! Handlers must be idempotent: a lease can expire after a handler has made a
 //! durable change but before its acknowledgement commits, and delivery order is
 //! intentionally not guaranteed.
-use std::{collections::HashSet, sync::Arc, time::Duration};
+use std::{collections::HashSet, env, sync::Arc, time::Duration};
 
 use async_trait::async_trait;
 use uuid::Uuid;
@@ -13,9 +13,50 @@ use crate::{
     repository::{CatalogRepository, RepositoryError},
 };
 
-const LEASE_DURATION: Duration = Duration::from_secs(30);
-const RETRY_DELAY: Duration = Duration::from_secs(1);
-const POLL_INTERVAL: Duration = Duration::from_millis(250);
+#[derive(Clone, Debug)]
+pub struct DispatcherConfig {
+    lease_duration: Duration,
+    retry_initial_delay: Duration,
+    retry_max_delay: Duration,
+    max_attempts: i32,
+    poll_interval: Duration,
+}
+
+impl DispatcherConfig {
+    pub fn from_env() -> Result<Self, String> {
+        fn positive(name: &str, default: u64) -> Result<u64, String> {
+            match env::var(name) {
+                Ok(value) => value
+                    .parse::<u64>()
+                    .ok()
+                    .filter(|value| *value > 0)
+                    .ok_or_else(|| format!("{name} must be a positive integer")),
+                Err(_) => Ok(default),
+            }
+        }
+        Ok(Self {
+            lease_duration: Duration::from_secs(positive("EVENT_DISPATCHER_LEASE_SECONDS", 30)?),
+            retry_initial_delay: Duration::from_secs(positive(
+                "EVENT_DISPATCHER_RETRY_INITIAL_SECONDS",
+                1,
+            )?),
+            retry_max_delay: Duration::from_secs(positive(
+                "EVENT_DISPATCHER_RETRY_MAX_SECONDS",
+                60,
+            )?),
+            max_attempts: positive("EVENT_DISPATCHER_MAX_ATTEMPTS", 5)?
+                .try_into()
+                .map_err(|_| "EVENT_DISPATCHER_MAX_ATTEMPTS is too large".to_owned())?,
+            poll_interval: Duration::from_millis(positive("EVENT_DISPATCHER_POLL_MILLIS", 250)?),
+        })
+    }
+
+    fn retry_delay(&self, attempts: i32) -> Duration {
+        self.retry_initial_delay
+            .saturating_mul(2_u32.saturating_pow((attempts.saturating_sub(1) as u32).min(16)))
+            .min(self.retry_max_delay)
+    }
+}
 
 /// The repository supplied to a handler emits worker-originated events which
 /// retain the triggering correlation id and use the triggering event as their
@@ -97,54 +138,99 @@ impl EventHandler for ComputedFieldHandler {
     }
 }
 
-pub fn start(repository: CatalogRepository, registry: EventHandlerRegistry) {
-    for handler in registry.handlers {
+pub fn start(
+    repository: CatalogRepository,
+    registry: EventHandlerRegistry,
+    config: DispatcherConfig,
+    shutdown: tokio::sync::watch::Receiver<()>,
+) -> Vec<tokio::task::JoinHandle<()>> {
+    registry.handlers.into_iter().map(|handler| {
         let repository = repository.clone();
+        let config = config.clone();
+        let mut shutdown = shutdown.clone();
         tokio::spawn(async move {
             loop {
-                if let Err(error) = dispatch_handler(&repository, handler.as_ref()).await {
-                    tracing::error!(handler = handler.name(), %error, "event handler poll failed");
-                    tokio::time::sleep(RETRY_DELAY).await;
-                } else {
-                    tokio::time::sleep(POLL_INTERVAL).await;
+                let delay = match dispatch_handler(&repository, handler.as_ref(), &config).await {
+                    Ok(()) => config.poll_interval,
+                    Err(error) => {
+                        tracing::error!(handler = handler.name(), %error, "event handler poll failed");
+                        config.retry_initial_delay
+                    }
+                };
+                tokio::select! {
+                    _ = tokio::time::sleep(delay) => {},
+                    _ = shutdown.changed() => {
+                        tracing::info!(handler = handler.name(), "event handler stopped");
+                        return;
+                    }
                 }
             }
-        });
-    }
+        })
+    }).collect()
 }
 
 async fn dispatch_handler(
     repository: &CatalogRepository,
     handler: &dyn EventHandler,
+    config: &DispatcherConfig,
 ) -> Result<(), RepositoryError> {
     for workspace_id in repository.active_workspace_ids().await? {
         let repository = repository.for_workspace(workspace_id).await?;
         repository
             .ensure_event_consumer(handler.name(), handler.event_types())
             .await?;
+        for (status, count) in repository.event_delivery_health().await? {
+            metrics::gauge!("catalog_event_delivery_queue_depth", "status" => status)
+                .set(count as f64);
+        }
         let Some(delivery) = repository
             .claim_event_delivery(
                 handler.name(),
                 handler.event_types(),
                 &Uuid::new_v4().to_string(),
-                LEASE_DURATION,
+                config.lease_duration,
             )
             .await?
         else {
             continue;
         };
+        metrics::counter!("catalog_event_deliveries_total", "outcome" => "claimed").increment(1);
+        tracing::info!(handler = handler.name(), event_id = %delivery.event.id, attempt = delivery.attempts, "event delivery claimed");
         let context = EventHandlerCommandContext {
             repository: repository.for_event_handler(&delivery.event, handler.name()),
         };
         match handler.handle(delivery.event.clone(), context).await {
-            Ok(()) => repository.complete_event_delivery(&delivery).await?,
+            Ok(()) => {
+                repository.complete_event_delivery(&delivery).await?;
+                metrics::counter!("catalog_event_deliveries_total", "outcome" => "completed")
+                    .increment(1);
+            }
             Err(error) => {
                 tracing::warn!(handler = handler.name(), event_id = %delivery.event.id, %error, "event handler failed");
                 repository
-                    .retry_event_delivery(&delivery, &error.to_string(), RETRY_DELAY)
+                    .retry_event_delivery(
+                        &delivery,
+                        &error.to_string(),
+                        config.retry_delay(delivery.attempts),
+                        config.max_attempts,
+                    )
                     .await?;
+                metrics::counter!("catalog_event_deliveries_total", "outcome" => if delivery.attempts >= config.max_attempts { "dead_letter" } else { "retry" }).increment(1);
             }
         }
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn retry_delay_is_bounded_exponential() {
+        let config = DispatcherConfig::from_env().unwrap();
+        assert_eq!(config.retry_delay(1), Duration::from_secs(1));
+        assert_eq!(config.retry_delay(2), Duration::from_secs(2));
+        assert_eq!(config.retry_delay(20), Duration::from_secs(60));
+    }
 }

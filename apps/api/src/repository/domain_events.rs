@@ -252,15 +252,58 @@ impl CatalogRepository {
         delivery: &EventDelivery,
         error: &str,
         delay: Duration,
+        max_attempts: i32,
     ) -> Result<(), RepositoryError> {
-        sqlx::query("UPDATE event_deliveries SET status = 'pending', next_attempt_at = clock_timestamp() + ($3 * interval '1 millisecond'), failed_at = clock_timestamp(), last_error = $4, lease_owner = NULL, lease_until = NULL WHERE consumer_id = $1 AND event_id = $2 AND status = 'leased' AND lease_owner = $5")
+        sqlx::query("UPDATE event_deliveries SET status = CASE WHEN attempts >= $6 THEN 'dead_letter' ELSE 'pending' END, next_attempt_at = CASE WHEN attempts >= $6 THEN next_attempt_at ELSE clock_timestamp() + ($3 * interval '1 millisecond') END, failed_at = clock_timestamp(), last_error = $4, lease_owner = NULL, lease_until = NULL WHERE consumer_id = $1 AND event_id = $2 AND status = 'leased' AND lease_owner = $5")
             .bind(delivery.consumer_id)
             .bind(delivery.event_id)
             .bind(delay.as_millis() as i64)
             .bind(error)
             .bind(&delivery.lease_owner)
+            .bind(max_attempts)
             .execute(&self.pool)
             .await?;
         Ok(())
+    }
+}
+
+#[derive(Debug, serde::Serialize, sqlx::FromRow)]
+pub struct FailedEventDelivery {
+    pub consumer_id: Uuid,
+    pub event_id: Uuid,
+    pub consumer_name: String,
+    pub event_type: String,
+    pub attempts: i32,
+    pub failed_at: Option<DateTime<Utc>>,
+    pub last_error: Option<String>,
+}
+
+impl CatalogRepository {
+    pub async fn list_failed_event_deliveries(
+        &self,
+    ) -> Result<Vec<FailedEventDelivery>, RepositoryError> {
+        let workspace_id = self.workspace_id.unwrap_or(Self::DEFAULT_WORKSPACE_ID);
+        Ok(sqlx::query_as("SELECT d.consumer_id, d.event_id, c.name AS consumer_name, e.event_type, d.attempts, d.failed_at, d.last_error FROM event_deliveries d JOIN event_consumers c ON c.id = d.consumer_id JOIN domain_events e ON e.id = d.event_id WHERE c.workspace_id = $1 AND d.status = 'dead_letter' ORDER BY d.failed_at DESC NULLS LAST")
+            .bind(workspace_id).fetch_all(&self.pool).await?)
+    }
+
+    /// Counts deliveries by state for dispatcher queue-health metrics.
+    pub async fn event_delivery_health(&self) -> Result<Vec<(String, i64)>, RepositoryError> {
+        let workspace_id = self.workspace_id.unwrap_or(Self::DEFAULT_WORKSPACE_ID);
+        Ok(sqlx::query_as("SELECT d.status, count(*) FROM event_deliveries d JOIN event_consumers c ON c.id = d.consumer_id WHERE c.workspace_id = $1 GROUP BY d.status")
+            .bind(workspace_id)
+            .fetch_all(&self.pool)
+            .await?)
+    }
+
+    /// Reactivates only a terminal delivery; domain event facts are never modified.
+    pub async fn replay_event_delivery(
+        &self,
+        consumer_id: Uuid,
+        event_id: Uuid,
+    ) -> Result<bool, RepositoryError> {
+        let result = sqlx::query("UPDATE event_deliveries d SET status = 'pending', next_attempt_at = clock_timestamp(), lease_owner = NULL, lease_until = NULL, failed_at = NULL, last_error = NULL WHERE d.consumer_id = $1 AND d.event_id = $2 AND d.status = 'dead_letter' AND EXISTS (SELECT 1 FROM event_consumers c WHERE c.id = d.consumer_id AND c.workspace_id = $3)")
+            .bind(consumer_id).bind(event_id).bind(self.workspace_id.unwrap_or(Self::DEFAULT_WORKSPACE_ID)).execute(&self.pool).await?;
+        Ok(result.rows_affected() == 1)
     }
 }

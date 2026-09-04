@@ -34,6 +34,10 @@ struct Cli {
 #[derive(Subcommand)]
 enum Command {
     Health,
+    Event {
+        #[command(subcommand)]
+        command: EventCommand,
+    },
     Blueprint {
         #[command(subcommand)]
         command: BlueprintCommand,
@@ -60,6 +64,12 @@ enum Command {
         #[command(subcommand)]
         command: TokenCommand,
     },
+}
+
+#[derive(Subcommand)]
+enum EventCommand {
+    DeadLetters,
+    Replay { consumer_id: Uuid, event_id: Uuid },
 }
 
 #[derive(Subcommand)]
@@ -553,6 +563,35 @@ async fn run(cli: Cli) -> Result<String, CliError> {
 
     match cli.command {
         Command::Health => request(&client, &server, Method::GET, "/health", None).await,
+        Command::Event { command } => match command {
+            EventCommand::DeadLetters => {
+                request(
+                    &client,
+                    &server,
+                    Method::GET,
+                    "/event-deliveries/dead-letters",
+                    None,
+                )
+                .await
+            }
+            EventCommand::Replay {
+                consumer_id,
+                event_id,
+            } => {
+                request(
+                    &client,
+                    &server,
+                    Method::POST,
+                    &format!(
+                        "/event-deliveries/{}/{}/replay",
+                        segment(consumer_id),
+                        segment(event_id)
+                    ),
+                    None,
+                )
+                .await
+            }
+        },
         Command::Blueprint { command } => match command {
             BlueprintCommand::List { include_drafts } => {
                 request(
