@@ -18,8 +18,9 @@ Permissions are evaluated from active workspace membership role grants:
 blueprint reads/writes/publishing require `blueprints.read`, `blueprints.write`,
 and `blueprints.publish`; entity operations require `entities.read`,
 `entities.write`, or `entities.delete`; context operations require
-`contexts.read` or `contexts.write`; data-health and metrics require
-`data_health.read`. A context-subtree grant applies to its root and descendants,
+`contexts.read` or `contexts.write`; data-health, metrics, and event-delivery
+dead-letter inspection require `data_health.read`; event-delivery replay and
+role management require `roles.manage`. A context-subtree grant applies to its root and descendants,
 never its ancestors or siblings.
 
 Browser-session request tenancy is selected from the workspace stored in the
@@ -38,7 +39,9 @@ password, cookie, CSRF, expiry, and revocation contract is documented in
 | `GET` | `/health` | Confirm the migrated API is ready. |
 | `POST` | `/auth/discover` | Resolve a normalized workspace identifier and return its sign-in methods; rate-limited and intentionally minimal. |
 | `POST` | `/auth/login` | Sign in with a previously resolved workspace identifier, email, and password. |
-| `GET` | `/metrics` | Scrape Prometheus service metrics. |
+| `GET` | `/metrics` | Scrape Prometheus service metrics (`data_health.read`). |
+| `GET` | `/event-deliveries/dead-letters` | List terminal event-handler deliveries for the active workspace (`data_health.read`). |
+| `POST` | `/event-deliveries/{consumer_id}/{event_id}/replay` | Reactivate one terminal delivery as pending; it preserves the event and attempts (`roles.manage`). |
 | `GET` | `/workspace/roles` | List fixed and workspace-local roles with permissions (`roles.manage`). |
 | `POST` | `/workspace/roles` | Create a workspace-local role. |
 | `PUT` | `/workspace/roles/{role_id}` | Update a workspace-local role. Fixed roles are immutable. |

@@ -29,6 +29,9 @@ cargo run -p catalog-cli -- health
 ```sh
 catalog health
 
+catalog event dead-letters
+catalog event replay <consumer-id> <event-id>
+
 catalog blueprint list [--include-drafts]
 catalog blueprint create --file product.toml
 catalog blueprint create --stdin
@@ -86,6 +89,22 @@ catalog token list
 catalog token create --label <label> --permissions <json-or-file> [--expires-at <rfc3339>]
 catalog token revoke <token-id>
 ```
+
+## Event delivery operations
+
+`catalog event dead-letters` lists only terminal event-handler deliveries in
+the bearer token's workspace. It requires `data_health.read` and returns the
+unchanged JSON array from `GET /event-deliveries/dead-letters`. Each item
+includes the consumer and event UUIDs needed for replay, plus the consumer
+name, event type, attempt count, failure timestamp, and last error.
+
+After fixing the cause, use `catalog event replay <consumer-id> <event-id>` to
+reactivate exactly one `dead_letter` delivery. It requires `roles.manage` and
+calls `POST /event-deliveries/{consumer_id}/{event_id}/replay`. It does not
+publish a new event or reset attempts; it returns the existing IDs and
+`"status":"pending"`. A delivery that is not terminal, is outside the token's
+workspace, or does not exist is a `404` API error. See [Domain eventing](eventing.md)
+for the retry lifecycle and safe replay procedure.
 
 ## Workspace administration
 

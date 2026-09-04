@@ -12,8 +12,11 @@ listener is `installCatalogEventBridge` in `catalog-event-bridge.ts`.
 
 ## Host to component
 
-Dispatch these on the intended component element. Their details contain only
-client-safe identifiers, coarse change hints, and an optional correlation ID.
+Dispatch these on the intended component element. They do not bubble or cross a
+shadow boundary (`bubbles: false`, `composed: false`). Their details contain
+only client-safe identifiers, coarse change hints, and an optional correlation
+ID. The helpers validate the strict schemas before dispatching, so invalid
+outbound details throw instead of being emitted.
 
 | Event                        | Detail                                         |
 | ---------------------------- | ---------------------------------------------- |
@@ -26,9 +29,12 @@ It is deliberately not a list of outbox facts or values.
 
 ## Component to host
 
-A component dispatches these bubbling, composed events. The host bridge ignores
-invalid details, including details with extra fields. Once validated, the
-embedding page supplies the behavior:
+A component dispatches these bubbling, composed events so an embedding host can
+listen across a shadow boundary. The host bridge ignores invalid details,
+including details with extra fields, and calls `preventDefault()` after passing
+a valid detail to its configured callback. Dispatchers should not treat that as
+an authorization result: the event is not cancelable by default. Once
+validated, the embedding page supplies the behavior:
 
 | Event                       | Detail                                          | Host behavior                                                               |
 | --------------------------- | ----------------------------------------------- | --------------------------------------------------------------------------- |
@@ -39,3 +45,19 @@ embedding page supplies the behavior:
 `severity` is `success`, `info`, `warning`, or `error`; `message` is trimmed
 and limited to 512 characters. The host owns routing, data fetching, and UI
 presentation.
+
+## Security model and non-goals
+
+This is a local UI convenience protocol, not a trust boundary. Any component
+can dispatch an event, so the host must validate again before acting and every
+resulting API request is still authenticated and authorized by Catalog. A
+component cannot provide a URL, HTTP method, token, permission, workspace, or
+server-side mutation payload through this bridge. Treat IDs and correlation IDs
+as untrusted input; re-fetch current authorized data rather than trusting a
+component's view.
+
+The bridge is intentionally **not** an outbox subscription, webhook, server
+push protocol, audit stream, or generic inter-plugin RPC mechanism. It never
+forwards domain-event envelopes, event metadata/payloads, entity snapshots,
+values, credentials, or authorization decisions. It also does not provide
+ordering, delivery, persistence, retries, or DOM-event cancellation semantics.
