@@ -7,9 +7,14 @@ contribution versions are independent contracts. A host never coerces or
 downgrades any of these contracts.
 
 Extension repositories and `.tar.zst` release-archive discovery are external to
-Catalog. The configured registry list identifies GitHub repositories; a later registry layer
-loads their releases to show what is available. Catalog stores no global copy of
-that catalogue. When a user installs one release, Catalog validates the
+Catalog. Every workspace has the built-in Attricat official GitHub registry plus
+zero or more workspace-managed GitHub `owner/repository` sources. Sources may be
+submitted as `github:owner/repository`, `owner/repository`, or the canonical
+`https://github.com/owner/repository` URL; Catalog canonicalizes them and rejects
+non-GitHub origins, credentials, query/fragment suffixes, and ambiguous paths.
+Discovery queries GitHub Releases directly, ignores drafts and prereleases, and
+returns only `.tar.zst` assets whose download path belongs to that exact source.
+Catalog stores no global copy of that catalogue. When a user installs one release, Catalog validates the
 selected `.tar.zst` archive with bounded decompression and entry-path checks,
 then reads and validates `manifest.json` before uploading declared extracted
 artifacts to Catalog S3 storage. Artifact integrity verification is deliberately
@@ -94,6 +99,13 @@ request/correlation IDs, and bounded diagnostic codes may be recorded; secrets,
 credentials, raw packages, and payload bodies may not. SQL migrations remain
 declarative and contain no behavior.
 
-No management API, web UI, external GitHub registry discovery, client runtime,
+Registry source APIs expose `GET/POST /extension-registries`,
+`DELETE /extension-registries/{id}`, and `GET /extension-registries/discover`.
+`extensions.read` authorizes discovery while `extensions.manage` authorizes
+source changes; the built-in official source cannot be removed. The deployment
+may set `EXTENSION_OFFICIAL_REGISTRY` to a validated GitHub owner/repository
+instead of the default `attricat/catalog-extensions`.
+
+No web UI, client runtime,
 or WASM execution is part of this issue; those are #145–#149 follow-on
 boundaries.

@@ -35,6 +35,18 @@ pub(super) fn policy(method: &Method, path: &str) -> Option<Policy> {
     } else {
         "blueprints.write"
     };
+    if path == "/extension-registries/discover" {
+        return Some(Policy {
+            permission: "extensions.read",
+            target: TargetKind::None,
+        });
+    }
+    if path == "/extension-registries" || path.starts_with("/extension-registries/") {
+        return Some(Policy {
+            permission: "extensions.manage",
+            target: TargetKind::None,
+        });
+    }
     if path.starts_with("/agent/") {
         return Some(Policy {
             permission: "agents.run",
