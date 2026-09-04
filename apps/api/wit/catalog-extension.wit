@@ -1,0 +1,30 @@
+// Capability-mediated server extension ABI. This package is intentionally small:
+// incompatible additions require a new catalog:host/api version.
+package catalog:host@1.0.0;
+
+interface api {
+  record event {
+    id: string,
+    event-type: string,
+    aggregate-kind: string,
+    aggregate-id: string,
+    correlation-id: string,
+    causation-id: option<string>,
+    payload: string,
+  }
+
+  /// Invokes one capability-gated host operation. `operation` is a stable v1
+  /// name and request/response values are bounded JSON strings.
+  call: func(operation: string, request: string) -> result<string, string>;
+  log: func(level: string, message: string) -> result<_, string>;
+}
+
+interface handler {
+  use api.{event};
+  handle-event: func(event: event) -> result<_, string>;
+}
+
+world catalog-extension {
+  import api;
+  export handler;
+}

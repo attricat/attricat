@@ -94,6 +94,33 @@ request/correlation IDs, and bounded diagnostic codes may be recorded; secrets,
 credentials, raw packages, and payload bodies may not. SQL migrations remain
 declarative and contain no behavior.
 
-No management API, web UI, external GitHub registry discovery, client runtime,
-or WASM execution is part of this issue; those are #145–#149 follow-on
-boundaries.
+The shared lifecycle work intentionally provides no management API, web UI,
+external GitHub registry discovery, or client runtime. WASM execution begins in
+#145; the remaining boundaries are follow-on work.
+
+## Server WASM runtime (#145)
+
+A `server_wasm` artifact is a WebAssembly **component** using the checked-in
+`catalog:host@1.0.0` WIT package at `apps/api/wit/catalog-extension.wit`.
+Components receive no WASI context, filesystem, environment, clock, socket, or
+pre-opened descriptor. The only imports are `api.call` and `api.log`.
+
+A server manifest may declare `server.event_handlers`. Each handler has a
+stable ID, the v1 `handle-event` component export, and one or more exact
+versioned domain event types. It requires the required `events.subscribe` capability and a
+`server_wasm` artifact. The durable event dispatcher treats its initial list
+as a hint and immediately re-reads a locked snapshot of enabled state, exact
+installed release, configuration, and required grants before each invocation.
+Deliveries are at-least-once, may be reordered, and handlers must therefore be
+idempotent. Component traps, fuel or
+memory exhaustion, timeouts, and returned handler failures are traced, metered,
+and quarantine the installation before the delivery is retried/dead-lettered.
+
+The component host ABI uses bounded JSON strings (64 KiB) and bounded log
+messages (16 KiB). Every operation is capability checked at the point of call.
+`configuration.get.v1` is available to components with
+`configuration.read`; all other v1 operation names are deliberately rejected
+until their command/secret/storage/network contracts are made durable. In
+particular, `network.request.v1` never grants ambient sockets. The manifest
+host-permission validation remains the egress policy contract for its future
+mediated implementation.

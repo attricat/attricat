@@ -126,6 +126,20 @@ impl EventHandlerRegistry {
     pub fn default_handlers() -> Self {
         Self::new(vec![Arc::new(ComputedFieldHandler)]).expect("built-in handlers are valid")
     }
+
+    pub fn with_handler(mut self, handler: Arc<dyn EventHandler>) -> Result<Self, &'static str> {
+        if handler.name().is_empty()
+            || handler.event_types().is_empty()
+            || self
+                .handlers
+                .iter()
+                .any(|existing| existing.name() == handler.name())
+        {
+            return Err("event handlers need unique names and at least one event type");
+        }
+        self.handlers.push(handler);
+        Ok(self)
+    }
 }
 
 /// Reservation point for computed-field invalidation. It deliberately does no

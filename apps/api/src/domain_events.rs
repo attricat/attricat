@@ -19,7 +19,7 @@ pub const CONTEXT_CREATED_V1: &str = "context.created.v1";
 pub const CONTEXT_UPDATED_V1: &str = "context.updated.v1";
 pub const CONTEXT_DELETED_V1: &str = "context.deleted.v1";
 
-const CORE_EVENT_TYPES: &[&str] = &[
+pub const ALL_EVENT_TYPES_V1: &[&str] = &[
     ENTITY_CREATED_V1,
     ENTITY_UPDATED_V1,
     ENTITY_DELETED_V1,
@@ -190,7 +190,7 @@ impl NewDomainEvent {
 }
 
 fn validate_event_type(event_type: &str) -> Result<(), EventContractError> {
-    if CORE_EVENT_TYPES.contains(&event_type) {
+    if ALL_EVENT_TYPES_V1.contains(&event_type) {
         return Ok(());
     }
     if CORE_EVENT_PREFIXES

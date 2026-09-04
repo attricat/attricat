@@ -129,6 +129,17 @@ pub struct Dependency {
 pub struct Server {
     #[serde(default)]
     pub webhooks: Vec<Webhook>,
+    /// Durable catalog event subscriptions delivered to named component exports.
+    #[serde(default)]
+    pub event_handlers: Vec<EventHandler>,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct EventHandler {
+    pub id: String,
+    pub event_types: Vec<String>,
+    pub handler: String,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -287,6 +298,23 @@ impl Manifest {
             for webhook in &server.webhooks {
                 webhook.validate(&self.permissions)?;
             }
+            unique(
+                server.event_handlers.iter().map(|handler| &handler.id),
+                "event handler",
+            )?;
+            for handler in &server.event_handlers {
+                handler.validate(&self.permissions)?;
+            }
+            if !server.event_handlers.is_empty()
+                && !self
+                    .artifacts
+                    .iter()
+                    .any(|artifact| artifact.kind == ArtifactKind::ServerWasm)
+            {
+                return Err(ManifestError::Invalid(
+                    "event handlers require a server_wasm artifact".into(),
+                ));
+            }
         }
         for contribution in &self.ui {
             valid_id(&contribution.id, "UI contribution id")?;
@@ -369,6 +397,45 @@ impl HostPermission {
         Ok(())
     }
 }
+impl EventHandler {
+    fn validate(&self, permissions: &[String]) -> Result<(), ManifestError> {
+        valid_id(&self.id, "event handler id")?;
+        if self.handler != "handle-event" {
+            return Err(ManifestError::Invalid(format!(
+                "event handler '{}' must use the v1 handle-event export",
+                self.id
+            )));
+        }
+        if !permissions
+            .iter()
+            .any(|permission| permission == "events.subscribe")
+        {
+            return Err(ManifestError::Invalid(format!(
+                "event handler '{}' requires events.subscribe",
+                self.id
+            )));
+        }
+        if self.event_types.is_empty()
+            || self.event_types.iter().any(|event_type| {
+                event_type.is_empty()
+                    || event_type.len() > 128
+                    || !event_type.bytes().all(|byte| {
+                        byte.is_ascii_alphanumeric() || matches!(byte, b'.' | b'_' | b'-')
+                    })
+                    || !event_type.rsplit_once(".v").is_some_and(|(_, version)| {
+                        version.parse::<u32>().is_ok_and(|version| version > 0)
+                    })
+            })
+        {
+            return Err(ManifestError::Invalid(format!(
+                "event handler '{}' must declare versioned event types",
+                self.id
+            )));
+        }
+        Ok(())
+    }
+}
+
 impl Webhook {
     fn validate(&self, permissions: &[String]) -> Result<(), ManifestError> {
         valid_id(&self.id, "webhook id")?;
@@ -739,6 +806,26 @@ mod tests {
         invalid.optional_permissions = vec!["network.request".into(), "webhooks.receive".into()];
         assert!(invalid.validate(SUPPORTED_HOST_API).is_err());
     }
+    #[test]
+    fn event_handlers_require_subscription_capability_and_versioned_types() {
+        let mut value = manifest();
+        value.permissions.push("events.subscribe".into());
+        value.server.as_mut().unwrap().event_handlers = vec![EventHandler {
+            id: "on-entity".into(),
+            event_types: vec!["entity.updated.v1".into()],
+            handler: "handle-event".into(),
+        }];
+        assert!(value.validate(SUPPORTED_HOST_API).is_ok());
+        value
+            .permissions
+            .retain(|permission| permission != "events.subscribe");
+        assert!(value.validate(SUPPORTED_HOST_API).is_err());
+        value.permissions.push("events.subscribe".into());
+        value.server.as_mut().unwrap().event_handlers[0].event_types =
+            vec!["entity.updated".into()];
+        assert!(value.validate(SUPPORTED_HOST_API).is_err());
+    }
+
     #[test]
     fn validates_configuration() {
         let value = manifest();
