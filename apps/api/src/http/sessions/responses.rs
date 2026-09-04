@@ -34,6 +34,8 @@ pub(super) struct SessionCapabilities {
     members_manage: bool,
     roles_manage: bool,
     tokens_manage: bool,
+    extensions_read: bool,
+    extensions_manage: bool,
 }
 
 pub(super) async fn session_response(
@@ -124,6 +126,14 @@ async fn session_capabilities(
         tokens_manage: state
             .repository
             .is_authorized(user_id, workspace_id, "tokens.manage", None, None)
+            .await?,
+        extensions_read: state
+            .repository
+            .is_authorized(user_id, workspace_id, "extensions.read", None, None)
+            .await?,
+        extensions_manage: state
+            .repository
+            .is_authorized(user_id, workspace_id, "extensions.manage", None, None)
             .await?,
     })
 }

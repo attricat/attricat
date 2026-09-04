@@ -49,9 +49,21 @@ pub(super) fn policy(method: &Method, path: &str) -> Option<Policy> {
             target: TargetKind::None,
         });
     }
-    if path == "/extensions/runtime" || path.starts_with("/extensions/{extension_id}/") {
+    if path == "/extensions/runtime"
+        || path == "/extensions/{extension_id}/{contribution_id}/artifact"
+    {
         return Some(Policy {
             permission: "entities.read",
+            target: TargetKind::None,
+        });
+    }
+    if path == "/extensions" || path.starts_with("/extensions/{extension_id}") {
+        return Some(Policy {
+            permission: if method == Method::GET {
+                "extensions.read"
+            } else {
+                "extensions.manage"
+            },
             target: TargetKind::None,
         });
     }
@@ -201,6 +213,38 @@ pub(super) fn policy(method: &Method, path: &str) -> Option<Policy> {
         return Some(read(TargetKind::None));
     }
     None
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn extension_management_routes_require_extension_permissions() {
+        assert_eq!(
+            policy(&Method::GET, "/extensions").unwrap().permission,
+            "extensions.read"
+        );
+        assert_eq!(
+            policy(&Method::POST, "/extensions").unwrap().permission,
+            "extensions.manage"
+        );
+        assert_eq!(
+            policy(&Method::POST, "/extensions/{extension_id}/enable")
+                .unwrap()
+                .permission,
+            "extensions.manage"
+        );
+        assert_eq!(
+            policy(
+                &Method::GET,
+                "/extensions/{extension_id}/{contribution_id}/artifact"
+            )
+            .unwrap()
+            .permission,
+            "entities.read"
+        );
+    }
 }
 
 pub(super) fn target(path: &str, kind: TargetKind) -> (Option<Uuid>, Option<String>) {

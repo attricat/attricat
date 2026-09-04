@@ -86,7 +86,7 @@ fn action(method: &Method, route: &str) -> String {
 }
 
 fn audit_permission(method: &Method, route: &str) -> &'static str {
-    if route.starts_with("/extension-registries") {
+    if route.starts_with("/extension-registries") || route.starts_with("/extensions") {
         "extensions.manage"
     } else if route.starts_with("/blueprints") {
         if route.ends_with("/publish") {
@@ -121,6 +121,8 @@ fn audit_context(method: &Method, route: &str, path: &str) -> (Value, Value) {
         .find_map(|segment| segment.parse::<Uuid>().ok());
     let target_type = if route.contains("/extension-registries") {
         "extension_registry"
+    } else if route.starts_with("/extensions") {
+        "extension"
     } else if route.contains("/blueprints") {
         "blueprint"
     } else if route.contains("/contexts") {
