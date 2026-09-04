@@ -49,6 +49,8 @@ settings before running the ignored RustFS compatibility test.
 - [API reference](api.md): HTTP routes and API behavior.
 - [Relationship tree facets](search-facets.md): filter explorer results through
   a contextual hierarchy with roll-up counts.
+- [Relationship-aware Explore search](relationship-aware-search.md): planned
+  graph traversal and structured query-language semantics.
 - [Relationships walkthrough](../examples/relationships/README.md): create
   blueprints, entities, contextual values, and relationships end to end.
 - [Manual test-data generator](../examples/generate.md): create a larger,
