@@ -6,4 +6,4 @@ processes:
   file-worker:
     command: watchexec --restart --watch apps/api --watch crates --exts rs,toml -- cargo run -p api --bin file-worker
   web:
-    command: watchexec --restart --watch apps/catalog-web --exts ts,tsx,css,html,json -- pnpm --dir apps/catalog-web dev -- --host --port $WEB_PORT
+    command: watchexec --restart --watch apps/catalog-web --exts ts,tsx,css,html,json -- pnpm --dir apps/catalog-web exec vite --host --port $WEB_PORT
