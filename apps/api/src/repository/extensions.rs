@@ -32,7 +32,7 @@ pub struct ExtensionInstallation {
     pub id: Uuid,
     pub workspace_id: Uuid,
     pub extension_id: String,
-    pub release_id: Uuid,
+    pub installed_release_id: Uuid,
     pub state: String,
     pub configuration: Value,
     pub configuration_version: Option<i32>,
@@ -46,7 +46,7 @@ pub struct ExtensionLifecycleRecord {
     pub workspace_id: Uuid,
     pub installation_id: Option<Uuid>,
     pub extension_id: String,
-    pub release_id: Option<Uuid>,
+    pub installed_release_id: Option<Uuid>,
     pub operation: String,
     pub prior_state: Option<String>,
     pub new_state: Option<String>,
@@ -71,16 +71,16 @@ impl CatalogRepository {
         if exists {
             return Err(RepositoryError::ExtensionAlreadyInstalled);
         }
-        let release_id = self
-            .insert_extension_release(&mut transaction, manifest, source)
+        let installed_release_id = self
+            .insert_installed_extension_release(&mut transaction, manifest, source)
             .await?;
         let installation_id = Uuid::new_v4();
         let configuration_version = manifest
             .configuration
             .as_ref()
             .map(|value| value.version as i32);
-        let row = sqlx::query_as::<_, ExtensionInstallation>("INSERT INTO extension_installations (id, workspace_id, extension_id, release_id, state, configuration, configuration_version) VALUES ($1, $2, $3, $4, 'disabled', '{}'::jsonb, $5) RETURNING id, workspace_id, extension_id, release_id, state, configuration, configuration_version, created_at, updated_at")
-            .bind(installation_id).bind(workspace_id).bind(&manifest.catalog.id).bind(release_id).bind(configuration_version).fetch_one(&mut *transaction).await?;
+        let row = sqlx::query_as::<_, ExtensionInstallation>("INSERT INTO extension_installations (id, workspace_id, extension_id, installed_release_id, state, configuration, configuration_version) VALUES ($1, $2, $3, $4, 'disabled', '{}'::jsonb, $5) RETURNING id, workspace_id, extension_id, installed_release_id, state, configuration, configuration_version, created_at, updated_at")
+            .bind(installation_id).bind(workspace_id).bind(&manifest.catalog.id).bind(installed_release_id).bind(configuration_version).fetch_one(&mut *transaction).await?;
         self.write_extension_lifecycle(
             &mut transaction,
             &row,
@@ -104,7 +104,7 @@ impl CatalogRepository {
         let mut transaction = self.pool.begin().await?;
         let current = self.lock_extension(&mut transaction, extension_id).await?;
         let manifest = self
-            .release_manifest(&mut transaction, current.release_id)
+            .installed_release_manifest(&mut transaction, current.installed_release_id)
             .await?;
         manifest
             .validate_configuration(&configuration)
@@ -113,7 +113,7 @@ impl CatalogRepository {
             .configuration
             .as_ref()
             .map(|item| item.version as i32);
-        let row = sqlx::query_as::<_, ExtensionInstallation>("UPDATE extension_installations SET configuration = $2, configuration_version = $3, updated_at = clock_timestamp() WHERE id = $1 RETURNING id, workspace_id, extension_id, release_id, state, configuration, configuration_version, created_at, updated_at")
+        let row = sqlx::query_as::<_, ExtensionInstallation>("UPDATE extension_installations SET configuration = $2, configuration_version = $3, updated_at = clock_timestamp() WHERE id = $1 RETURNING id, workspace_id, extension_id, installed_release_id, state, configuration, configuration_version, created_at, updated_at")
             .bind(current.id).bind(configuration).bind(version).fetch_one(&mut *transaction).await?;
         self.write_extension_lifecycle(
             &mut transaction,
@@ -147,7 +147,7 @@ impl CatalogRepository {
         let mut transaction = self.pool.begin().await?;
         let current = self.lock_extension(&mut transaction, extension_id).await?;
         let manifest = self
-            .release_manifest(&mut transaction, current.release_id)
+            .installed_release_manifest(&mut transaction, current.installed_release_id)
             .await?;
         let declared = match grant_kind {
             "capability" => manifest
@@ -191,7 +191,7 @@ impl CatalogRepository {
         let mut transaction = self.pool.begin().await?;
         let current = self.lock_extension(&mut transaction, extension_id).await?;
         let manifest = self
-            .release_manifest(&mut transaction, current.release_id)
+            .installed_release_manifest(&mut transaction, current.installed_release_id)
             .await?;
         let required = match grant_kind {
             "capability" => manifest.permissions.iter().any(|item| item == grant_id),
@@ -324,7 +324,7 @@ impl CatalogRepository {
             .lock_extension(&mut transaction, &manifest.catalog.id)
             .await?;
         let prior_manifest = self
-            .release_manifest(&mut transaction, current.release_id)
+            .installed_release_manifest(&mut transaction, current.installed_release_id)
             .await?;
         let prior_version = Version::parse(&prior_manifest.version).map_err(|_| {
             RepositoryError::InvalidExtension("stored extension version is invalid".into())
@@ -337,16 +337,16 @@ impl CatalogRepository {
                 "upgrade version must be greater than the installed release".into(),
             ));
         }
-        let release_id = self
-            .insert_extension_release(&mut transaction, manifest, source)
+        let installed_release_id = self
+            .insert_installed_extension_release(&mut transaction, manifest, source)
             .await?;
         let state = if current.state == "enabled" {
             "disabled"
         } else {
             &current.state
         };
-        let row = sqlx::query_as::<_, ExtensionInstallation>("UPDATE extension_installations SET release_id = $2, state = $3, configuration = '{}'::jsonb, configuration_version = $4, updated_at = clock_timestamp() WHERE id = $1 RETURNING id, workspace_id, extension_id, release_id, state, configuration, configuration_version, created_at, updated_at")
-            .bind(current.id).bind(release_id).bind(state).bind(manifest.configuration.as_ref().map(|item| item.version as i32)).fetch_one(&mut *transaction).await?;
+        let row = sqlx::query_as::<_, ExtensionInstallation>("UPDATE extension_installations SET installed_release_id = $2, state = $3, configuration = '{}'::jsonb, configuration_version = $4, updated_at = clock_timestamp() WHERE id = $1 RETURNING id, workspace_id, extension_id, installed_release_id, state, configuration, configuration_version, created_at, updated_at")
+            .bind(current.id).bind(installed_release_id).bind(state).bind(manifest.configuration.as_ref().map(|item| item.version as i32)).fetch_one(&mut *transaction).await?;
         sqlx::query("DELETE FROM extension_grants WHERE installation_id = $1")
             .bind(current.id)
             .execute(&mut *transaction)
@@ -358,7 +358,7 @@ impl CatalogRepository {
             Some(&current.state),
             Some(&row.state),
             source,
-            json!({"prior_release_id": current.release_id}),
+            json!({"prior_installed_release_id": current.installed_release_id}),
         )
         .await?;
         self.commit_extension_mutation(transaction, "upgrade", &row.extension_id)
@@ -391,7 +391,7 @@ impl CatalogRepository {
         &self,
         extension_id: &str,
     ) -> Result<Vec<ExtensionLifecycleRecord>, RepositoryError> {
-        Ok(sqlx::query_as("SELECT id, workspace_id, installation_id, extension_id, release_id, operation, prior_state, new_state, outcome, created_at FROM extension_lifecycle_records WHERE workspace_id = $1 AND extension_id = $2 ORDER BY created_at, id")
+        Ok(sqlx::query_as("SELECT id, workspace_id, installation_id, extension_id, installed_release_id, operation, prior_state, new_state, outcome, created_at FROM extension_lifecycle_records WHERE workspace_id = $1 AND extension_id = $2 ORDER BY created_at, id")
             .bind(self.extension_workspace()).bind(extension_id).fetch_all(&self.pool).await?)
     }
 
@@ -411,7 +411,7 @@ impl CatalogRepository {
         // Leaving quarantine is remediation, not an unchecked state flip.
         if current.state == "quarantined" && state == ExtensionState::Disabled {
             let manifest = self
-                .release_manifest(&mut transaction, current.release_id)
+                .installed_release_manifest(&mut transaction, current.installed_release_id)
                 .await?;
             self.validate_extension(&manifest)?;
             manifest
@@ -500,23 +500,23 @@ impl CatalogRepository {
         transaction: &mut Transaction<'_, Postgres>,
         extension_id: &str,
     ) -> Result<ExtensionInstallation, RepositoryError> {
-        sqlx::query_as("SELECT id, workspace_id, extension_id, release_id, state, configuration, configuration_version, created_at, updated_at FROM extension_installations WHERE workspace_id = $1 AND extension_id = $2 FOR UPDATE")
+        sqlx::query_as("SELECT id, workspace_id, extension_id, installed_release_id, state, configuration, configuration_version, created_at, updated_at FROM extension_installations WHERE workspace_id = $1 AND extension_id = $2 FOR UPDATE")
             .bind(self.extension_workspace()).bind(extension_id).fetch_optional(&mut **transaction).await?.ok_or(RepositoryError::NotFound("extension installation"))
     }
-    async fn release_manifest(
+    async fn installed_release_manifest(
         &self,
         transaction: &mut Transaction<'_, Postgres>,
-        release_id: Uuid,
+        installed_release_id: Uuid,
     ) -> Result<Manifest, RepositoryError> {
         let value: Value =
-            sqlx::query_scalar("SELECT manifest FROM extension_releases WHERE id = $1")
-                .bind(release_id)
+            sqlx::query_scalar("SELECT manifest FROM installed_extension_releases WHERE id = $1")
+                .bind(installed_release_id)
                 .fetch_one(&mut **transaction)
                 .await?;
         serde_json::from_value(value)
             .map_err(|_| RepositoryError::InvalidExtension("stored manifest is invalid".into()))
     }
-    async fn insert_extension_release(
+    async fn insert_installed_extension_release(
         &self,
         transaction: &mut Transaction<'_, Postgres>,
         manifest: &Manifest,
@@ -527,14 +527,14 @@ impl CatalogRepository {
         let bytes = serde_json::to_vec(&serialized)
             .map_err(|error| RepositoryError::InvalidExtension(error.to_string()))?;
         let digest = format!("{:x}", Sha256::digest(bytes));
-        let release_id = Uuid::new_v4();
-        sqlx::query("INSERT INTO extension_releases (id, workspace_id, extension_id, version, manifest, manifest_sha256, source) VALUES ($1, $2, $3, $4, $5, $6, $7)")
-            .bind(release_id).bind(self.extension_workspace()).bind(&manifest.catalog.id).bind(&manifest.version).bind(serialized).bind(digest).bind(source).execute(&mut **transaction).await?;
+        let installed_release_id = Uuid::new_v4();
+        sqlx::query("INSERT INTO installed_extension_releases (id, workspace_id, extension_id, version, manifest, manifest_sha256, source) VALUES ($1, $2, $3, $4, $5, $6, $7)")
+            .bind(installed_release_id).bind(self.extension_workspace()).bind(&manifest.catalog.id).bind(&manifest.version).bind(serialized).bind(digest).bind(source).execute(&mut **transaction).await?;
         for artifact in &manifest.artifacts {
-            sqlx::query("INSERT INTO extension_release_artifacts (id, release_id, artifact_id, artifact_kind, artifact_path, sha256) VALUES ($1, $2, $3, $4, $5, $6)")
-            .bind(Uuid::new_v4()).bind(release_id).bind(&artifact.id).bind(match artifact.kind { crate::extensions::ArtifactKind::ServerWasm => "server_wasm", crate::extensions::ArtifactKind::ClientComponent => "client_component" }).bind(&artifact.path).bind(&artifact.sha256).execute(&mut **transaction).await?;
+            sqlx::query("INSERT INTO installed_extension_release_artifacts (id, installed_release_id, artifact_id, artifact_kind, artifact_path, sha256) VALUES ($1, $2, $3, $4, $5, $6)")
+            .bind(Uuid::new_v4()).bind(installed_release_id).bind(&artifact.id).bind(match artifact.kind { crate::extensions::ArtifactKind::ServerWasm => "server_wasm", crate::extensions::ArtifactKind::ClientComponent => "client_component" }).bind(&artifact.path).bind(&artifact.sha256).execute(&mut **transaction).await?;
         }
-        Ok(release_id)
+        Ok(installed_release_id)
     }
     async fn update_extension_state(
         &self,
@@ -542,7 +542,7 @@ impl CatalogRepository {
         current: &ExtensionInstallation,
         state: ExtensionState,
     ) -> Result<ExtensionInstallation, RepositoryError> {
-        sqlx::query_as("UPDATE extension_installations SET state = $2, updated_at = clock_timestamp() WHERE id = $1 RETURNING id, workspace_id, extension_id, release_id, state, configuration, configuration_version, created_at, updated_at")
+        sqlx::query_as("UPDATE extension_installations SET state = $2, updated_at = clock_timestamp() WHERE id = $1 RETURNING id, workspace_id, extension_id, installed_release_id, state, configuration, configuration_version, created_at, updated_at")
             .bind(current.id).bind(state.as_str()).fetch_one(&mut **transaction).await.map_err(Into::into)
     }
     async fn write_extension_lifecycle(
@@ -556,8 +556,8 @@ impl CatalogRepository {
         diagnostics: Value,
     ) -> Result<(), RepositoryError> {
         let audit = self.audit_context.as_ref();
-        sqlx::query("INSERT INTO extension_lifecycle_records (id, workspace_id, installation_id, extension_id, release_id, operation, prior_state, new_state, outcome, actor_user_id, actor_token_id, request_id, correlation_id, source, diagnostics) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 'success', $9, $10, $11, $12, $13, $14)")
-            .bind(Uuid::new_v4()).bind(installation.workspace_id).bind(installation.id).bind(&installation.extension_id).bind(installation.release_id).bind(operation).bind(prior_state).bind(new_state).bind(audit.and_then(|item| item.actor_user_id)).bind(audit.and_then(|item| item.actor_token_id)).bind(audit.map(|item| item.request_id).unwrap_or_else(Uuid::new_v4)).bind(audit.map(|item| item.correlation_id).unwrap_or_else(Uuid::new_v4)).bind(source).bind(diagnostics).execute(&mut **transaction).await?;
+        sqlx::query("INSERT INTO extension_lifecycle_records (id, workspace_id, installation_id, extension_id, installed_release_id, operation, prior_state, new_state, outcome, actor_user_id, actor_token_id, request_id, correlation_id, source, diagnostics) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 'success', $9, $10, $11, $12, $13, $14)")
+            .bind(Uuid::new_v4()).bind(installation.workspace_id).bind(installation.id).bind(&installation.extension_id).bind(installation.installed_release_id).bind(operation).bind(prior_state).bind(new_state).bind(audit.and_then(|item| item.actor_user_id)).bind(audit.and_then(|item| item.actor_token_id)).bind(audit.map(|item| item.request_id).unwrap_or_else(Uuid::new_v4)).bind(audit.map(|item| item.correlation_id).unwrap_or_else(Uuid::new_v4)).bind(source).bind(diagnostics).execute(&mut **transaction).await?;
         Ok(())
     }
     async fn required_grants_present(
@@ -566,7 +566,7 @@ impl CatalogRepository {
         installation: &ExtensionInstallation,
     ) -> Result<(), RepositoryError> {
         let manifest = self
-            .release_manifest(transaction, installation.release_id)
+            .installed_release_manifest(transaction, installation.installed_release_id)
             .await?;
         let grants: Vec<(String, String)> = sqlx::query_as(
             "SELECT grant_kind, grant_id FROM extension_grants WHERE installation_id = $1",
@@ -609,19 +609,19 @@ impl CatalogRepository {
         if !visiting.insert(extension_id.to_owned()) {
             return Err(RepositoryError::InvalidExtension("dependency cycle".into()));
         }
-        let row: Option<(String, Uuid)> = sqlx::query_as("SELECT state, release_id FROM extension_installations WHERE workspace_id = $1 AND extension_id = $2").bind(workspace_id).bind(extension_id).fetch_optional(&self.pool).await?;
-        let Some((state, release_id)) = row else {
+        let row: Option<(String, Uuid)> = sqlx::query_as("SELECT state, installed_release_id FROM extension_installations WHERE workspace_id = $1 AND extension_id = $2").bind(workspace_id).bind(extension_id).fetch_optional(&self.pool).await?;
+        let Some((state, installed_release_id)) = row else {
             return Err(RepositoryError::NotFound("extension installation"));
         };
         let raw: Value =
-            sqlx::query_scalar("SELECT manifest FROM extension_releases WHERE id = $1")
-                .bind(release_id)
+            sqlx::query_scalar("SELECT manifest FROM installed_extension_releases WHERE id = $1")
+                .bind(installed_release_id)
                 .fetch_one(&self.pool)
                 .await?;
         let manifest: Manifest = serde_json::from_value(raw)
             .map_err(|_| RepositoryError::InvalidExtension("stored manifest is invalid".into()))?;
         for dependency in &manifest.dependencies {
-            let dependency_row: Option<(String, String, Uuid)> = sqlx::query_as("SELECT i.state, r.version, i.release_id FROM extension_installations i JOIN extension_releases r ON r.id = i.release_id WHERE i.workspace_id = $1 AND i.extension_id = $2").bind(workspace_id).bind(&dependency.id).fetch_optional(&self.pool).await?;
+            let dependency_row: Option<(String, String, Uuid)> = sqlx::query_as("SELECT i.state, r.version, i.installed_release_id FROM extension_installations i JOIN installed_extension_releases r ON r.id = i.installed_release_id WHERE i.workspace_id = $1 AND i.extension_id = $2").bind(workspace_id).bind(&dependency.id).fetch_optional(&self.pool).await?;
             let Some((dependency_state, version, _)) = dependency_row else {
                 return Err(RepositoryError::InvalidExtension(format!(
                     "dependency '{}' is not installed",

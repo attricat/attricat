@@ -6,6 +6,14 @@ host functions (`catalog.host_api`). Event, capability, configuration, and UI
 contribution versions are independent contracts. A host never coerces or
 downgrades any of these contracts.
 
+Extension repositories and release ZIP discovery are external to Catalog. The
+configured registry list identifies GitHub repositories; a later registry layer
+loads their releases to show what is available. Catalog stores no global copy of
+that catalogue. When a user installs one release, Catalog validates the
+selected release manifest and artifact hashes supplied by the registry flow and
+retains only that installed release's immutable manifest, source identity, and
+artifact hashes alongside its workspace-owned installation.
+
 ## Manifest
 
 A manifest is strict JSON. Unknown fields at every v1 manifest object are
@@ -64,13 +72,15 @@ observability are deliberately deferred to #145.
 
 Discovery and validation are operations, not states. Installation persists a
 workspace-scoped installation in `disabled`; the only durable states are
-`disabled`, `enabled`, and `quarantined`. Enablement requires valid
-configuration, enabled compatible dependencies without cycles, and every
-required capability and host-permission grant. Quarantine may occur from any
-installed state; a quarantined installation must be moved to `disabled` before
-enabling again. Upgrade snapshots a new immutable release, clears grants and
+`disabled`, `enabled`, and `quarantined`. Catalog retains immutable snapshots
+only for releases that have been installed, not every release discoverable from
+an external GitHub registry. Enablement requires valid configuration, enabled
+compatible dependencies without cycles, and every required capability and
+host-permission grant. Quarantine may occur from any installed state; a
+quarantined installation must be moved to `disabled` before enabling again.
+Upgrade snapshots a newly selected installed release, clears grants and
 configuration, and leaves a formerly enabled installation disabled. Removal
-deletes current state but retains immutable releases and append-only lifecycle
+deletes current state but retains installed-release and append-only lifecycle
 history.
 
 Each lifecycle mutation uses an explicit Rust/SQLx transaction to write the
@@ -80,5 +90,6 @@ request/correlation IDs, and bounded diagnostic codes may be recorded; secrets,
 credentials, raw packages, and payload bodies may not. SQL migrations remain
 declarative and contain no behavior.
 
-No management API, web UI, marketplace, registry retrieval, client runtime, or
-WASM execution is part of this issue; those are #145–#149 follow-on boundaries.
+No management API, web UI, external GitHub registry retrieval, client runtime,
+or WASM execution is part of this issue; those are #145–#149 follow-on
+boundaries.
