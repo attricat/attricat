@@ -54,6 +54,18 @@ pub struct ExtensionLifecycleRecord {
     pub created_at: DateTime<Utc>,
 }
 
+/// Immutable snapshot plus invocation-time state used by the WASM runtime.
+/// It deliberately contains grants, never secret values.
+#[derive(Clone, Debug)]
+pub struct ExtensionRuntimeInstallation {
+    pub extension_id: String,
+    pub installed_release_id: Uuid,
+    pub configuration: Value,
+    pub manifest: Manifest,
+    pub capability_grants: HashSet<String>,
+    pub host_permission_grants: HashSet<String>,
+}
+
 impl CatalogRepository {
     /// Persists an archive release whose extracted artifacts were already
     /// validated and uploaded by the application installer.
@@ -99,6 +111,111 @@ impl CatalogRepository {
         self.commit_extension_mutation(transaction, "install", &row.extension_id)
             .await?;
         Ok(row)
+    }
+
+    /// Lists enabled handler candidates. A candidate is intentionally not an
+    /// authorization decision: callers must use
+    /// `runtime_extension_installation` directly before invocation.
+    pub async fn enabled_extension_handlers(
+        &self,
+        event_type: &str,
+    ) -> Result<Vec<ExtensionRuntimeInstallation>, RepositoryError> {
+        let rows: Vec<(String, Uuid)> = sqlx::query_as(
+            "SELECT extension_id, installed_release_id FROM extension_installations WHERE workspace_id = $1 AND state = 'enabled'",
+        )
+        .bind(self.extension_workspace())
+        .fetch_all(&self.pool)
+        .await?;
+        let mut enabled = Vec::new();
+        for (extension_id, installed_release_id) in rows {
+            if let Some(installation) = self
+                .runtime_extension_installation(&extension_id, installed_release_id)
+                .await?
+            {
+                let subscribed = installation.manifest.server.as_ref().is_some_and(|server| {
+                    server.event_handlers.iter().any(|handler| {
+                        handler
+                            .event_types
+                            .iter()
+                            .any(|registered| registered == event_type)
+                    })
+                });
+                if subscribed {
+                    enabled.push(installation);
+                }
+            }
+        }
+        Ok(enabled)
+    }
+
+    /// Re-fetches authorization data from the current installation immediately
+    /// before a component runs. The expected release ID prevents a queued
+    /// delivery from invoking a replacement release after an upgrade, disable,
+    /// grant revocation, or configuration change.
+    pub async fn runtime_extension_installation(
+        &self,
+        extension_id: &str,
+        expected_release_id: Uuid,
+    ) -> Result<Option<ExtensionRuntimeInstallation>, RepositoryError> {
+        // Lock the installation while loading grants so an upgrade, disable,
+        // configuration change, or revocation cannot produce a mixed snapshot.
+        // The transaction commits before the untrusted invocation; lifecycle
+        // operations therefore never wait on component execution.
+        let mut transaction = self.pool.begin().await?;
+        let row: Option<(Uuid, Value, Value)> = sqlx::query_as(
+            "SELECT i.id, i.configuration, r.manifest FROM extension_installations i JOIN installed_extension_releases r ON r.id = i.installed_release_id WHERE i.workspace_id = $1 AND i.extension_id = $2 AND i.installed_release_id = $3 AND i.state = 'enabled' FOR UPDATE OF i",
+        )
+        .bind(self.extension_workspace())
+        .bind(extension_id)
+        .bind(expected_release_id)
+        .fetch_optional(&mut *transaction)
+        .await?;
+        let Some((installation_id, configuration, manifest_value)) = row else {
+            transaction.commit().await?;
+            return Ok(None);
+        };
+        let manifest: Manifest = serde_json::from_value(manifest_value).map_err(|_| {
+            RepositoryError::InvalidExtension("installed manifest cannot be decoded".into())
+        })?;
+        manifest
+            .validate_configuration(&configuration)
+            .map_err(|error| RepositoryError::InvalidExtension(error.to_string()))?;
+        let grants: Vec<(String, String)> = sqlx::query_as(
+            "SELECT grant_kind, grant_id FROM extension_grants WHERE installation_id = $1",
+        )
+        .bind(installation_id)
+        .fetch_all(&mut *transaction)
+        .await?;
+        let capability_grants: HashSet<String> = grants
+            .iter()
+            .filter(|(kind, _)| kind == "capability")
+            .map(|(_, id)| id.clone())
+            .collect();
+        let host_permission_grants: HashSet<String> = grants
+            .iter()
+            .filter(|(kind, _)| kind == "host_permission")
+            .map(|(_, id)| id.clone())
+            .collect();
+        let authorized = manifest
+            .permissions
+            .iter()
+            .all(|permission| capability_grants.contains(permission))
+            && manifest
+                .host_permissions
+                .iter()
+                .all(|permission| host_permission_grants.contains(&permission.id));
+        transaction.commit().await?;
+        if !authorized {
+            return Ok(None);
+        }
+        Ok(Some(ExtensionRuntimeInstallation {
+            extension_id: extension_id.to_owned(),
+            installed_release_id: expected_release_id,
+            configuration,
+            manifest,
+            capability_grants,
+            host_permission_grants,
+        }))
     }
 
     pub async fn configure_extension(

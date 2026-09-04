@@ -131,6 +131,60 @@ async fn lifecycle_installs_validated_archive_artifacts_and_retains_history(pool
             .state,
         "enabled"
     );
+
+    // A runtime candidate is not authorization: the invocation-time lookup
+    // must observe configuration and release changes made after selection.
+    let authorized = repository
+        .runtime_extension_installation("acme.extension", installed.installed_release_id)
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(
+        authorized.configuration["endpoint"],
+        "https://api.acme.example"
+    );
+    repository
+        .configure_extension(
+            "acme.extension",
+            json!({"endpoint": "https://changed.acme.example"}),
+        )
+        .await
+        .unwrap();
+    let refreshed = repository
+        .runtime_extension_installation("acme.extension", installed.installed_release_id)
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(
+        refreshed.configuration["endpoint"],
+        "https://changed.acme.example"
+    );
+    let upgraded = installer
+        .upgrade(
+            "github:acme/extension@v2.0.0",
+            &release_archive("2.0.0", json!([]), ARTIFACT_BYTES),
+        )
+        .await
+        .unwrap();
+    assert_ne!(
+        upgraded.installed_release_id,
+        installed.installed_release_id
+    );
+    assert!(
+        repository
+            .runtime_extension_installation("acme.extension", installed.installed_release_id)
+            .await
+            .unwrap()
+            .is_none()
+    );
+    repository
+        .configure_extension(
+            "acme.extension",
+            json!({"endpoint": "https://upgraded.acme.example"}),
+        )
+        .await
+        .unwrap();
+
     assert_eq!(
         repository
             .quarantine_extension("acme.extension", "timeout")
