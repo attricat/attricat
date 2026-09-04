@@ -37,6 +37,7 @@ or inaccessible configured bucket.
 | `EVENT_DISPATCHER_MAX_ATTEMPTS` | `5` | API | Positive number of claims before a failed delivery becomes `dead_letter`. |
 | `EVENT_DISPATCHER_POLL_MILLIS` | `250` | API | Positive delay between dispatcher polls. |
 | `CATALOG_API_URL` | `http://127.0.0.1:3000` | Vite | API target for the web app's `/api` development proxy. |
+| `EXTENSION_OFFICIAL_REGISTRY` | `attricat/catalog-extensions` | API | Canonical public GitHub `owner/repository` used as every workspace's immutable official extension source. |
 | `POSTGRES_DB` | `catalog` | Docker Compose | Local PostgreSQL database name. |
 | `POSTGRES_USER` | `postgres` | Docker Compose | Local PostgreSQL user. |
 | `POSTGRES_PASSWORD` | `postgres` | Docker Compose | Local PostgreSQL password. |

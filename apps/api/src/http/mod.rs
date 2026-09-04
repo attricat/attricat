@@ -9,6 +9,7 @@ mod entities;
 mod entity_reads;
 mod error;
 mod event_deliveries;
+mod extension_registries;
 mod extensions;
 mod extractors;
 mod files;
@@ -20,8 +21,13 @@ mod tokens;
 use std::{collections::HashMap, sync::Arc, time::Instant};
 
 use crate::{
-    agent_worker::AgentDispatcher, agents::AgentProviderConfig, file_access::FileAccessPolicy,
-    mail::MailDelivery, repository::CatalogRepository, storage::ObjectStore,
+    agent_worker::AgentDispatcher,
+    agents::AgentProviderConfig,
+    extension_registry::{GitHubRegistry, GitHubRepository},
+    file_access::FileAccessPolicy,
+    mail::MailDelivery,
+    repository::CatalogRepository,
+    storage::ObjectStore,
 };
 use axum::{
     Router,
@@ -41,6 +47,8 @@ pub struct AppState {
     pub repository: CatalogRepository,
     pub agent_provider: Option<AgentProviderConfig>,
     pub agent_dispatcher: Option<AgentDispatcher>,
+    pub registry: Arc<GitHubRegistry>,
+    pub official_registry: GitHubRepository,
     /// Storage is injected at startup so future file routes never construct a
     /// provider client from request data.
     pub object_store: Arc<dyn ObjectStore>,
@@ -166,6 +174,22 @@ pub fn router(state: AppState) -> Router {
             post(agents::run_schedule_now),
         )
         .route("/health", get(data_health::health))
+        .route(
+            "/extension-registries",
+            get(extension_registries::list).post(extension_registries::create),
+        )
+        .route(
+            "/extension-registries/discover",
+            get(extension_registries::discover),
+        )
+        .route(
+            "/extension-registries/extensions/{owner}/{repository}",
+            get(extension_registries::extension_details),
+        )
+        .route(
+            "/extension-registries/{id}",
+            axum::routing::delete(extension_registries::remove),
+        )
         .route("/extensions/runtime", get(extensions::runtime))
         .route(
             "/extensions/{extension_id}/{contribution_id}/artifact",

@@ -20,7 +20,7 @@ and `blueprints.publish`; entity operations require `entities.read`,
 `entities.write`, or `entities.delete`; context operations require
 `contexts.read` or `contexts.write`; data-health, metrics, and event-delivery
 dead-letter inspection require `data_health.read`; event-delivery replay and
-role management require `roles.manage`. A context-subtree grant applies to its root and descendants,
+role management require `roles.manage`; extension release discovery requires `extensions.read` and trusted registry source management requires `extensions.manage`. A context-subtree grant applies to its root and descendants,
 never its ancestors or siblings.
 
 Browser-session request tenancy is selected from the workspace stored in the
@@ -37,6 +37,10 @@ password, cookie, CSRF, expiry, and revocation contract is documented in
 | Method | Path | Purpose |
 | --- | --- | --- |
 | `GET` | `/health` | Confirm the migrated API is ready. |
+| `GET`, `POST` | `/extension-registries` | List the built-in official source and workspace custom sources, or add a trusted GitHub source (`extensions.manage`). |
+| `DELETE` | `/extension-registries/{id}` | Remove one workspace custom source (`extensions.manage`). |
+| `GET` | `/extension-registries/discover` | Load extension metadata from configured trusted registry `registry.json` indexes (`extensions.read`). |
+| `GET` | `/extension-registries/extensions/{owner}/{repository}` | Resolve a repository listed in a current trusted index, returning its README and non-draft, non-prerelease `.tar.zst` GitHub Release assets (`extensions.read`). |
 | `POST` | `/auth/discover` | Resolve a normalized workspace identifier and return its sign-in methods; rate-limited and intentionally minimal. |
 | `POST` | `/auth/login` | Sign in with a previously resolved workspace identifier, email, and password. |
 | `GET` | `/metrics` | Scrape Prometheus service metrics (`data_health.read`). |

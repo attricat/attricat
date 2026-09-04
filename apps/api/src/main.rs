@@ -12,6 +12,7 @@ use api::{
         MAINTENANCE_POOL_CONNECTIONS, REQUEST_POOL_CONNECTIONS,
     },
     event_dispatcher::{self, DispatcherConfig},
+    extension_registry::{DEFAULT_OFFICIAL_REGISTRY, GitHubRegistry, GitHubRepository},
     extension_runtime::{self, ExtensionRuntime, ExtensionRuntimeConfig},
     file_access::AllowFileAccess,
     http::{AppState, router},
@@ -97,6 +98,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     CatalogRepository::new(maintenance_pool.clone())
         .ensure_audit_permissions()
         .await?;
+    CatalogRepository::new(maintenance_pool.clone())
+        .ensure_extension_registry_permissions()
+        .await?;
     // The identity/membership migration consumes this durable bootstrap owner
     // record to create the initial owner grant. It is set only by deployment
     // configuration, never by a catalog request.
@@ -173,6 +177,14 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         std::env::var("SMTP_USERNAME").ok(),
         std::env::var("SMTP_PASSWORD").ok(),
     )?);
+    let official_registry = std::env::var("EXTENSION_OFFICIAL_REGISTRY")
+        .unwrap_or_else(|_| DEFAULT_OFFICIAL_REGISTRY.to_owned())
+        .parse::<GitHubRepository>()
+        .map_err(|error| format!("invalid EXTENSION_OFFICIAL_REGISTRY: {error}"))?;
+    let registry = Arc::new(
+        GitHubRegistry::new()
+            .map_err(|error| format!("cannot initialize extension registry: {error}"))?,
+    );
     let password_reset_url = std::env::var("PASSWORD_RESET_URL")
         .unwrap_or_else(|_| "http://127.0.0.1:5173/password-reset/confirm".to_owned());
     let workspace_invitation_url = std::env::var("WORKSPACE_INVITATION_URL")
@@ -216,6 +228,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
             repository: CatalogRepository::with_workspace_pool_factory(pool, connect_options),
             agent_provider,
             agent_dispatcher,
+            registry,
+            official_registry,
             object_store,
             file_access_policy: Arc::new(AllowFileAccess),
             mail_delivery,

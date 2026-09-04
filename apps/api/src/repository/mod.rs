@@ -41,6 +41,7 @@ mod entity_commands;
 mod entity_migration;
 mod entity_projection;
 mod entity_search;
+mod extension_registries;
 mod extensions;
 mod files;
 mod health;
@@ -57,6 +58,7 @@ pub use agents::{
 pub(crate) use audit_events::{AuditEventFilter, AuditEventPage};
 pub use domain_events::{EventConsumer, EventDelivery, EventPublisher, FailedEventDelivery};
 pub(crate) use entity_search::decode_search_cursor;
+pub use extension_registries::ExtensionRegistrySource;
 pub use extensions::{
     ClientExtensionContribution, ExtensionInstallation, ExtensionLifecycleRecord,
     ExtensionRuntimeInstallation, ExtensionState,

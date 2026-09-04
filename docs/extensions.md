@@ -6,10 +6,37 @@ host functions (`catalog.host_api`). Event, capability, configuration, and UI
 contribution versions are independent contracts. A host never coerces or
 downgrades any of these contracts.
 
-Extension repositories and `.tar.zst` release-archive discovery are external to
-Catalog. The configured registry list identifies GitHub repositories; a later registry layer
-loads their releases to show what is available. Catalog stores no global copy of
-that catalogue. When a user installs one release, Catalog validates the
+Extension registries and extension repositories are separate external inputs.
+Every workspace has the built-in Attricat GitHub registry plus zero or more
+workspace-managed GitHub `owner/repository` registries. Each registry exposes a
+raw root `registry.json` with `registry_version: 1` and an `extensions` list;
+each entry supplies a stable `id`, `name`, `description`, optional `icon`, and a
+GitHub extension `repository`. Sources may be submitted as
+`github:owner/repository`, `owner/repository`, or the canonical GitHub URL.
+Catalog canonicalizes them and rejects non-GitHub origins, credentials,
+query/fragment suffixes, and ambiguous paths.
+
+Discovery loads trusted registry indexes only; an index is the sole authority
+for which extension repositories Catalog may resolve. The v1 index shape is:
+
+```json
+{
+  "registry_version": 1,
+  "extensions": [{
+    "id": "acme.example",
+    "name": "Acme Example",
+    "description": "Example extension",
+    "icon": "icon.svg",
+    "repository": "acme/catalog-extension"
+  }]
+}
+```
+
+Opening a listed entry loads that extension repository's README and non-draft,
+non-prerelease GitHub Releases, returning its `.tar.zst` assets only when their
+download path belongs to that exact extension repository. Catalog stores no
+global copy of indexes, READMEs, releases, or archives. When a user installs one
+release, Catalog validates the
 selected `.tar.zst` archive with bounded decompression and entry-path checks,
 then reads and validates `manifest.json` before uploading declared extracted
 artifacts to Catalog S3 storage. Artifact integrity verification is deliberately
@@ -124,9 +151,17 @@ until their command/secret/storage/network contracts are made durable. In
 particular, `network.request.v1` never grants ambient sockets. The manifest
 host-permission validation remains the egress policy contract for its future
 mediated implementation.
-No management API, web UI, external GitHub registry discovery, client runtime,
-or WASM execution is part of this issue; those are #145–#149 follow-on
-boundaries.
+Registry source APIs expose `GET/POST /extension-registries`,
+`DELETE /extension-registries/{id}`, `GET /extension-registries/discover`, and
+`GET /extension-registries/extensions/{owner}/{repository}`. The final endpoint
+rejects a repository unless the current trusted index lists it, then returns its
+README and release assets. `extensions.read` authorizes discovery while
+`extensions.manage` authorizes source changes; the built-in official source
+cannot be removed. The deployment may set `EXTENSION_OFFICIAL_REGISTRY` to a
+validated GitHub owner/repository instead of the default
+`attricat/catalog-extensions`.
+
+Marketplace management UI remains #148.
 
 ## Client extension runtime (v1)
 

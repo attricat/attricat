@@ -3,6 +3,7 @@
 use std::{net::SocketAddr, sync::Arc};
 
 use api::{
+    extension_registry::{GitHubRegistry, GitHubRepository},
     file_access::{AllowFileAccess, FileAccessPolicy},
     http::{AppState, router},
     mail::{MailDelivery, MailError},
@@ -127,6 +128,10 @@ async fn start_server_with_auth_mode_and_store(
         .ensure_audit_permissions()
         .await
         .unwrap();
+    CatalogRepository::new(pool.clone())
+        .ensure_extension_registry_permissions()
+        .await
+        .unwrap();
     let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
     let address: SocketAddr = listener.local_addr().unwrap();
     let router = router(AppState {
@@ -136,6 +141,10 @@ async fn start_server_with_auth_mode_and_store(
         ),
         agent_provider: None,
         agent_dispatcher: None,
+        registry: Arc::new(GitHubRegistry::new().unwrap()),
+        official_registry: "attricat/catalog-extensions"
+            .parse::<GitHubRepository>()
+            .unwrap(),
         object_store,
         file_access_policy,
         mail_delivery: Arc::new(TestMailDelivery),
