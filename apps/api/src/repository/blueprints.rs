@@ -1,4 +1,9 @@
 use super::*;
+use crate::domain_events::{
+    BLUEPRINT_CREATED_V1, BLUEPRINT_PUBLISHED_V1, BLUEPRINT_REVISION_CREATED_V1,
+    BlueprintRevisionV1, EventSource, EventSourceKind, NewDomainEvent,
+};
+use serde_json::json;
 use uuid::Uuid;
 
 #[derive(sqlx::FromRow)]
@@ -97,7 +102,11 @@ impl CatalogRepository {
                 compiled,
             )
             .await?;
-        self.commit_mutation(transaction).await?;
+        self.commit_mutation_with_event(
+            transaction,
+            blueprint_event(self, BLUEPRINT_CREATED_V1, &result.blueprint),
+        )
+        .await?;
         Ok(result)
     }
 
@@ -137,7 +146,11 @@ impl CatalogRepository {
                 compiled,
             )
             .await?;
-        self.commit_mutation(transaction).await?;
+        self.commit_mutation_with_event(
+            transaction,
+            blueprint_event(self, BLUEPRINT_REVISION_CREATED_V1, &result.blueprint),
+        )
+        .await?;
         Ok(result)
     }
 
@@ -376,8 +389,14 @@ impl CatalogRepository {
             .bind(self.workspace_id.unwrap_or(Self::DEFAULT_WORKSPACE_ID))
             .execute(&mut *transaction)
             .await?;
+            self.commit_mutation_with_event(
+                transaction,
+                blueprint_event(self, BLUEPRINT_PUBLISHED_V1, &blueprint),
+            )
+            .await?;
+        } else {
+            self.commit_mutation(transaction).await?;
         }
-        self.commit_mutation(transaction).await?;
         self.get_blueprint_revision(blueprint_id, version)
             .await?
             .ok_or(RepositoryError::NotFound("blueprint version"))
@@ -417,5 +436,35 @@ impl CatalogRepository {
             }
             None => Ok(None),
         }
+    }
+}
+
+fn blueprint_event(
+    repository: &CatalogRepository,
+    event_type: &str,
+    blueprint: &Blueprint,
+) -> NewDomainEvent {
+    NewDomainEvent {
+        event_type: event_type.to_owned(),
+        aggregate_kind: "blueprint".to_owned(),
+        aggregate_id: blueprint.id,
+        correlation_id: repository
+            .audit_context
+            .as_ref()
+            .map(|audit| audit.correlation_id)
+            .unwrap_or_else(Uuid::new_v4),
+        causation_id: None,
+        source: EventSource {
+            kind: EventSourceKind::Api,
+            name: "catalog_api".to_owned(),
+        },
+        metadata: json!({}),
+        payload: serde_json::to_value(BlueprintRevisionV1 {
+            blueprint_id: blueprint.id,
+            code: blueprint.code.clone(),
+            kind: blueprint.kind.clone(),
+            version: blueprint.version,
+        })
+        .expect("blueprint event payload is serializable"),
     }
 }

@@ -1,6 +1,9 @@
 mod support;
 
-use api::domain_events::CONTEXT_CREATED_V1;
+use api::domain_events::{
+    BLUEPRINT_CREATED_V1, BLUEPRINT_PUBLISHED_V1, BLUEPRINT_REVISION_CREATED_V1,
+    CONTEXT_CREATED_V1, CONTEXT_DELETED_V1, CONTEXT_UPDATED_V1,
+};
 use support::{StatusCode, Uuid, authenticated_client, start_server};
 
 #[sqlx::test(migrations = "./migrations")]
@@ -36,6 +39,96 @@ async fn context_creation_commits_a_typed_outbox_event(pool: sqlx::PgPool) {
             .await
             .unwrap(),
         1
+    );
+    server.abort();
+}
+
+#[sqlx::test(migrations = "./migrations")]
+async fn context_updates_and_deletes_emit_lifecycle_events(pool: sqlx::PgPool) {
+    let (base_url, server) = start_server(pool.clone()).await;
+    let client = authenticated_client();
+    let contexts = client
+        .get(format!("{base_url}/contexts"))
+        .send()
+        .await
+        .unwrap()
+        .json::<Vec<support::Value>>()
+        .await
+        .unwrap();
+    let default_id = contexts
+        .iter()
+        .find(|context| context["code"] == "default")
+        .unwrap()["id"]
+        .clone();
+    let context = client
+        .post(format!("{base_url}/contexts"))
+        .json(&support::json!({"code": "lifecycle", "data": {}}))
+        .send()
+        .await
+        .unwrap()
+        .json::<support::Value>()
+        .await
+        .unwrap();
+    let id = context["id"].as_str().unwrap();
+    client
+        .put(format!("{base_url}/contexts/id/{id}"))
+        .json(&support::json!({"parent_id": default_id, "data": {"changed": true}}))
+        .send()
+        .await
+        .unwrap()
+        .error_for_status()
+        .unwrap();
+    client
+        .delete(format!("{base_url}/contexts/id/{id}"))
+        .send()
+        .await
+        .unwrap()
+        .error_for_status()
+        .unwrap();
+
+    let event_types =
+        sqlx::query_scalar::<_, String>("SELECT event_type FROM domain_events ORDER BY sequence")
+            .fetch_all(&pool)
+            .await
+            .unwrap();
+    assert_eq!(
+        event_types,
+        vec![CONTEXT_CREATED_V1, CONTEXT_UPDATED_V1, CONTEXT_DELETED_V1]
+    );
+    server.abort();
+}
+
+#[sqlx::test(migrations = "./migrations")]
+async fn blueprint_lifecycle_emits_versioned_events(pool: sqlx::PgPool) {
+    let (base_url, server) = start_server(pool.clone()).await;
+    let client = authenticated_client();
+    let first = client.post(format!("{base_url}/blueprints"))
+        .json(&support::json!({"definition": "format_version = 1\ncode = \"evented\"\nname = \"Evented\"\nkind = \"entity\"\n\n[views.dropdown_option]\ntype = \"dropdown_option\"\nfields = [\"title\"]\n\n[[attributes]]\ncode = \"title\"\nvalue_type = \"string\""}))
+        .send().await.unwrap().error_for_status().unwrap().json::<support::Value>().await.unwrap();
+    let id = first["blueprint"]["id"].as_str().unwrap();
+    client.post(format!("{base_url}/blueprints/{id}/versions"))
+        .json(&support::json!({"definition": "format_version = 1\ncode = \"evented\"\nname = \"Evented revision\"\nkind = \"entity\"\n\n[views.dropdown_option]\ntype = \"dropdown_option\"\nfields = [\"title\"]\n\n[[attributes]]\ncode = \"title\"\nvalue_type = \"string\""}))
+        .send().await.unwrap().error_for_status().unwrap();
+    client
+        .post(format!("{base_url}/blueprints/{id}/versions/2/publish"))
+        .send()
+        .await
+        .unwrap()
+        .error_for_status()
+        .unwrap();
+
+    let event_types =
+        sqlx::query_scalar::<_, String>("SELECT event_type FROM domain_events ORDER BY sequence")
+            .fetch_all(&pool)
+            .await
+            .unwrap();
+    assert_eq!(
+        event_types,
+        vec![
+            BLUEPRINT_CREATED_V1,
+            BLUEPRINT_REVISION_CREATED_V1,
+            BLUEPRINT_PUBLISHED_V1
+        ]
     );
     server.abort();
 }

@@ -99,11 +99,31 @@ pub struct DomainEvent {
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
+pub struct BlueprintRevisionV1 {
+    pub blueprint_id: Uuid,
+    pub code: String,
+    pub kind: String,
+    pub version: i64,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+pub struct EntityMigratedV1 {
+    pub entity_id: Uuid,
+    pub blueprint_id: Uuid,
+    pub source_version: i64,
+    pub target_version: i64,
+    pub migration_id: Uuid,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct ContextCreatedV1 {
     pub context_id: Uuid,
     pub code: String,
     pub parent_id: Option<Uuid>,
 }
+
+pub type ContextUpdatedV1 = ContextCreatedV1;
+pub type ContextDeletedV1 = ContextCreatedV1;
 
 #[derive(Debug, Error, PartialEq, Eq)]
 pub enum EventContractError {
