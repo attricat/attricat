@@ -2,8 +2,7 @@ use sqlx::query_as;
 use uuid::Uuid;
 
 use crate::domain_events::{
-    CONTEXT_CREATED_V1, CONTEXT_DELETED_V1, CONTEXT_UPDATED_V1, ContextCreatedV1, EventSource,
-    EventSourceKind, NewDomainEvent,
+    CONTEXT_CREATED_V1, CONTEXT_DELETED_V1, CONTEXT_UPDATED_V1, ContextCreatedV1, NewDomainEvent,
 };
 
 use super::{CatalogRepository, RepositoryError, validate_code};
@@ -62,23 +61,7 @@ impl CatalogRepository {
         .expect("context-created payload is serializable");
         self.commit_mutation_with_event(
             transaction,
-            NewDomainEvent {
-                event_type: CONTEXT_CREATED_V1.to_owned(),
-                aggregate_kind: "context".to_owned(),
-                aggregate_id: context.id,
-                correlation_id: self
-                    .audit_context
-                    .as_ref()
-                    .map(|audit| audit.correlation_id)
-                    .unwrap_or_else(Uuid::new_v4),
-                causation_id: None,
-                source: EventSource {
-                    kind: EventSourceKind::Api,
-                    name: "catalog_api".to_owned(),
-                },
-                metadata: serde_json::json!({}),
-                payload,
-            },
+            self.core_event(CONTEXT_CREATED_V1, "context", context.id, payload),
         )
         .await?;
         Ok(context)
@@ -241,26 +224,15 @@ fn context_event(
     event_type: &str,
     context: &AttributeContext,
 ) -> NewDomainEvent {
-    NewDomainEvent {
-        event_type: event_type.to_owned(),
-        aggregate_kind: "context".to_owned(),
-        aggregate_id: context.id,
-        correlation_id: repository
-            .audit_context
-            .as_ref()
-            .map(|audit| audit.correlation_id)
-            .unwrap_or_else(Uuid::new_v4),
-        causation_id: None,
-        source: EventSource {
-            kind: EventSourceKind::Api,
-            name: "catalog_api".to_owned(),
-        },
-        metadata: serde_json::json!({}),
-        payload: serde_json::to_value(ContextCreatedV1 {
+    repository.core_event(
+        event_type,
+        "context",
+        context.id,
+        serde_json::to_value(ContextCreatedV1 {
             context_id: context.id,
             code: context.code.clone(),
             parent_id: context.parent_id,
         })
         .expect("context event payload is serializable"),
-    }
+    )
 }
