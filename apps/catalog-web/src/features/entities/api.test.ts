@@ -184,6 +184,53 @@ describe('entity API client', () => {
     });
   });
 
+  it('forwards structured query text and parses match explanations', async () => {
+    respond({
+      blueprint: blueprintWithAttributes,
+      items: [
+        {
+          id: entityId,
+          blueprint_version: 1,
+          schema_outdated: false,
+          display: { default: 'Red product' },
+          preview: { default: { title: 'Red product' } },
+          match_explanations: [
+            {
+              term: 'color.name:red',
+              matching_entity_id: entityId,
+              matching_attribute_code: 'name',
+              traversal_depth: 1,
+              relationship_path: [
+                {
+                  source_entity_id: entityId,
+                  attribute_code: 'color',
+                  target_entity_id: entityId,
+                },
+              ],
+            },
+          ],
+        },
+      ],
+      next_cursor: null,
+    });
+    const result = await searchEntities(
+      'product',
+      undefined,
+      'color.name:red',
+    );
+    expect(result.items[0].match_explanations[0]?.term).toBe('color.name:red');
+    expect(fetchMock).toHaveBeenLastCalledWith('/api/v1/entities/search', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        blueprint: { code: 'product' },
+        query: 'color.name:red',
+        filters: [],
+        page: { size: 25, cursor: null },
+      }),
+    });
+  });
+
   it('posts an opaque search cursor for subsequent pages', async () => {
     respond({
       blueprint: blueprintWithAttributes,

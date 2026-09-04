@@ -71,6 +71,27 @@ export const ExplorerResultsTable = ({
       ),
     }) as LegacyColumnDef<EntityItem, string>,
     columnHelper.display({
+      id: 'match-rationale',
+      header: 'Matched by',
+      cell: (info) => {
+        const explanations = info.row.original.match_explanations;
+        if (!explanations.length) return null;
+        return (
+          <Typography variant="body2">
+            {explanations
+              .map((explanation) =>
+                explanation.traversal_depth
+                  ? `${explanation.term} via ${explanation.traversal_depth} relationship${explanation.traversal_depth === 1 ? '' : 's'}`
+                  : explanation.matching_attribute_code
+                    ? `${explanation.term} in ${explanation.matching_attribute_code}`
+                    : explanation.term,
+              )
+              .join('; ')}
+          </Typography>
+        );
+      },
+    }) as LegacyColumnDef<EntityItem, string>,
+    columnHelper.display({
       id: 'schema',
       header: 'Schema',
       cell: (info) => {

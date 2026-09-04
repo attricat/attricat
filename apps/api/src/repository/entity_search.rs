@@ -2,7 +2,7 @@ use super::*;
 use super::{entity_commands::validate_system_tags, entity_projection::display_label};
 use base64::{Engine, engine::general_purpose::URL_SAFE_NO_PAD};
 use chrono::{DateTime, Utc};
-use std::collections::{HashMap, HashSet};
+use std::collections::{HashMap, HashSet, VecDeque};
 use uuid::Uuid;
 
 #[derive(sqlx::FromRow)]
@@ -381,7 +381,7 @@ impl CatalogRepository {
         &self,
         source_blueprint_id: Uuid,
         source_blueprint_version: Option<i64>,
-        query: Option<&str>,
+        matching_entity_ids: Option<&HashSet<Uuid>>,
         source_field: &str,
         target_blueprint_id: Uuid,
         hierarchy_field: Option<&str>,
@@ -423,15 +423,7 @@ impl CatalogRepository {
                       AND source.deleted_at IS NULL AND target.deleted_at IS NULL
                       AND target.blueprint_id = $5 AND a.code = $4 AND av.active
                       AND av.relationship_target_entity_id IS NOT NULL
-                      AND ($3::text IS NULL OR EXISTS (
-                          SELECT 1 FROM attribute_values value
-                          WHERE value.entity_id = source.id
-                            AND value.relationship_target_entity_id IS NULL
-                            AND COALESCE(value.value_text, value.value_number::text,
-                                value.value_integer::text, value.value_boolean::text,
-                                value.value_date::text, value.value_datetime::text,
-                                value.value_time::text) ILIKE '%' || $3 || '%'
-                      ))
+                      AND ($3::uuid[] IS NULL OR source.id = ANY($3))
                 ), parent_edges AS (
                     SELECT DISTINCT child.id AS child_id, av.relationship_target_entity_id AS parent_id
                     FROM entities child
@@ -486,7 +478,7 @@ impl CatalogRepository {
         )
         .bind(source_blueprint_id)
         .bind(source_blueprint_version)
-        .bind(query)
+        .bind(matching_entity_ids.map(|ids| ids.iter().copied().collect::<Vec<_>>()))
         .bind(source_field)
         .bind(target_blueprint_id)
         .bind(hierarchy_field)
@@ -565,44 +557,351 @@ impl CatalogRepository {
         .await?)
     }
 
-    pub async fn search_matching_entity_ids(
+    /// Resolves the application-owned relationship-aware query plan. SQL only reads
+    /// one scalar-match set or one incoming-edge frontier at a time.
+    pub async fn resolve_search(
         &self,
-        blueprint_id: Uuid,
-        blueprint_version: Option<i64>,
+        selected: &BlueprintWithAttributes,
+        selected_version: Option<i64>,
         query: Option<&str>,
-    ) -> Result<HashSet<Uuid>, RepositoryError> {
-        let ids = sqlx::query_scalar::<_, Uuid>(
-            r#"SELECT e.id
-                 FROM entities e
-                WHERE e.blueprint_id = $1
-                  AND ($2::bigint IS NULL OR e.blueprint_version = $2)
-                  AND e.deleted_at IS NULL
-                  AND (
-                      $3::text IS NULL
-                      OR EXISTS (
-                          SELECT 1
-                          FROM attribute_values av
-                          WHERE av.entity_id = e.id
-                            AND av.relationship_target_entity_id IS NULL
-                            AND COALESCE(
-                                av.value_text,
-                                av.value_number::text,
-                                av.value_integer::text,
-                                av.value_boolean::text,
-                                av.value_date::text,
-                                av.value_datetime::text,
-                                av.value_time::text
-                            ) ILIKE '%' || $3 || '%'
-                      )
-                  )"#,
-        )
-        .bind(blueprint_id)
-        .bind(blueprint_version)
-        .bind(query)
-        .fetch_all(&self.pool)
-        .await?;
-        Ok(ids.into_iter().collect())
+    ) -> Result<ResolvedSearch, RepositoryError> {
+        let Some(query) = query else {
+            let ids = sqlx::query_scalar::<_, Uuid>("SELECT id FROM entities WHERE blueprint_id = $1 AND ($2::bigint IS NULL OR blueprint_version = $2) AND deleted_at IS NULL")
+                .bind(selected.blueprint.id).bind(selected_version).fetch_all(&self.pool).await?;
+            return Ok(ResolvedSearch {
+                ids: ids.into_iter().collect(),
+                explanations: HashMap::new(),
+            });
+        };
+        let terms = parse_search_terms(query)?;
+        let mut per_term = Vec::with_capacity(terms.len());
+        for term in terms {
+            let plan = self.compile_search_term(selected, &term).await?;
+            per_term.push(
+                self.resolve_search_term(selected, selected_version, term, plan)
+                    .await?,
+            );
+        }
+        let mut candidates: Option<HashSet<Uuid>> = None;
+        let mut explanations: HashMap<Uuid, Vec<MatchExplanation>> = HashMap::new();
+        for matches in per_term {
+            let ids: HashSet<_> = matches.keys().copied().collect();
+            candidates = Some(match candidates {
+                Some(existing) => existing.intersection(&ids).copied().collect(),
+                None => ids,
+            });
+            for (id, explanation) in matches {
+                explanations.entry(id).or_default().push(explanation);
+            }
+        }
+        let ids = candidates.unwrap_or_default();
+        explanations.retain(|id, _| ids.contains(id));
+        Ok(ResolvedSearch { ids, explanations })
     }
+
+    async fn compile_search_term(
+        &self,
+        selected: &BlueprintWithAttributes,
+        term: &SearchTerm,
+    ) -> Result<TermPlan, RepositoryError> {
+        let alias = |name: &str| {
+            name.eq_ignore_ascii_case(&selected.blueprint.code)
+                || name.eq_ignore_ascii_case(&selected.blueprint.name)
+        };
+        let Some(selector) = &term.selector else {
+            return Ok(TermPlan::Any);
+        };
+        let parts: Vec<_> = selector.split('.').collect();
+        if parts.len() > 2 || parts.iter().any(|part| part.is_empty()) {
+            return Err(RepositoryError::InvalidBlueprintDefinition(
+                "search selector must have one or two parts".into(),
+            ));
+        }
+        if parts.len() == 1 && alias(parts[0]) {
+            self.ensure_unambiguous_name(parts[0], selected).await?;
+            return Ok(TermPlan::SelectedAttribute(None));
+        }
+        if parts.len() == 2 && alias(parts[0]) {
+            self.ensure_unambiguous_name(parts[0], selected).await?;
+            let attribute = selected
+                .attributes
+                .iter()
+                .find(|a| a.code.eq_ignore_ascii_case(parts[1]) && a.value_type != "relationship")
+                .ok_or_else(|| {
+                    RepositoryError::InvalidBlueprintDefinition(format!(
+                        "unknown selected-blueprint attribute '{}'",
+                        parts[1]
+                    ))
+                })?;
+            return Ok(TermPlan::SelectedAttribute(Some(attribute.code.clone())));
+        }
+        if parts.len() == 1 {
+            if let Some(attribute) = selected
+                .attributes
+                .iter()
+                .find(|a| a.code.eq_ignore_ascii_case(parts[0]) && a.value_type != "relationship")
+            {
+                return Ok(TermPlan::SelectedAttribute(Some(attribute.code.clone())));
+            }
+            let relationship = selected
+                .attributes
+                .iter()
+                .find(|a| a.code.eq_ignore_ascii_case(parts[0]) && a.value_type == "relationship")
+                .ok_or_else(|| {
+                    RepositoryError::InvalidBlueprintDefinition(format!(
+                        "unknown search selector '{}'",
+                        parts[0]
+                    ))
+                })?;
+            let target = self
+                .get_blueprint_by_code(relationship.target_blueprint_code.as_deref().ok_or_else(
+                    || {
+                        RepositoryError::InvalidBlueprintDefinition(
+                            "relationship has no target blueprint".into(),
+                        )
+                    },
+                )?)
+                .await?
+                .ok_or(RepositoryError::NotFound("target blueprint"))?;
+            return Ok(TermPlan::Relationship {
+                field: relationship.code.clone(),
+                target,
+                attribute: None,
+            });
+        }
+        let relationship = selected
+            .attributes
+            .iter()
+            .find(|a| a.code.eq_ignore_ascii_case(parts[0]) && a.value_type == "relationship")
+            .ok_or_else(|| {
+                RepositoryError::InvalidBlueprintDefinition(format!(
+                    "unknown relationship '{}'",
+                    parts[0]
+                ))
+            })?;
+        let target = self
+            .get_blueprint_by_code(relationship.target_blueprint_code.as_deref().ok_or_else(
+                || {
+                    RepositoryError::InvalidBlueprintDefinition(
+                        "relationship has no target blueprint".into(),
+                    )
+                },
+            )?)
+            .await?
+            .ok_or(RepositoryError::NotFound("target blueprint"))?;
+        let attribute = target
+            .attributes
+            .iter()
+            .find(|a| a.code.eq_ignore_ascii_case(parts[1]) && a.value_type != "relationship")
+            .map(|attribute| attribute.code.clone())
+            .ok_or_else(|| {
+                RepositoryError::InvalidBlueprintDefinition(format!(
+                    "unknown relationship attribute '{}'",
+                    parts[1]
+                ))
+            })?;
+        Ok(TermPlan::Relationship {
+            field: relationship.code.clone(),
+            target,
+            attribute: Some(attribute),
+        })
+    }
+
+    async fn ensure_unambiguous_name(
+        &self,
+        name: &str,
+        selected: &BlueprintWithAttributes,
+    ) -> Result<(), RepositoryError> {
+        if !name.eq_ignore_ascii_case(&selected.blueprint.name) {
+            return Ok(());
+        }
+        let count: i64 = sqlx::query_scalar("SELECT COUNT(DISTINCT code) FROM blueprints WHERE lower(name) = lower($1) AND status = 'published' AND workspace_id = $2 AND deleted_at IS NULL")
+            .bind(name).bind(self.workspace_id.unwrap_or(Self::DEFAULT_WORKSPACE_ID)).fetch_one(&self.pool).await?;
+        if count > 1 {
+            return Err(RepositoryError::InvalidBlueprintDefinition(format!(
+                "blueprint name '{}' is ambiguous; use its code",
+                name
+            )));
+        }
+        Ok(())
+    }
+
+    async fn resolve_search_term(
+        &self,
+        selected: &BlueprintWithAttributes,
+        selected_version: Option<i64>,
+        term: SearchTerm,
+        plan: TermPlan,
+    ) -> Result<HashMap<Uuid, MatchExplanation>, RepositoryError> {
+        let (match_blueprint, attribute, direct_field) = match &plan {
+            TermPlan::Any => (None, None, None),
+            TermPlan::SelectedAttribute(attribute) => (
+                Some(selected.blueprint.id),
+                attribute.clone(),
+                Some(String::new()),
+            ),
+            TermPlan::Relationship {
+                field,
+                target,
+                attribute,
+            } => (
+                Some(target.blueprint.id),
+                attribute.clone(),
+                Some(field.clone()),
+            ),
+        };
+        let pattern = if term.prefix {
+            format!("{}%", term.value)
+        } else {
+            format!("%{}%", term.value)
+        };
+        let rows = sqlx::query_as::<_, (Uuid, String)>(r#"SELECT DISTINCT e.id, a.code
+            FROM entities e JOIN attribute_values av ON av.entity_id = e.id
+            JOIN attributes a ON a.id = av.attribute_id AND a.deleted_at IS NULL
+            WHERE e.deleted_at IS NULL AND av.relationship_target_entity_id IS NULL
+              AND ($1::uuid IS NULL OR e.blueprint_id = $1)
+              AND ($2::text IS NULL OR a.code = $2)
+              AND COALESCE(av.value_text, av.value_number::text, av.value_integer::text, av.value_boolean::text, av.value_date::text, av.value_datetime::text, av.value_time::text) ILIKE $3
+            ORDER BY e.id, a.code"#)
+            .bind(match_blueprint).bind(attribute).bind(pattern).fetch_all(&self.pool).await?;
+        let mut witnesses: HashMap<Uuid, MatchExplanation> = HashMap::new();
+        let mut frontier = VecDeque::new();
+        for (id, attribute) in rows {
+            if !witnesses.contains_key(&id) {
+                witnesses.insert(
+                    id,
+                    MatchExplanation {
+                        term: term.original.clone(),
+                        matching_entity_id: id,
+                        matching_attribute_code: Some(attribute),
+                        traversal_depth: 0,
+                        relationship_path: vec![],
+                    },
+                );
+                frontier.push_back(id);
+            }
+        }
+        let mut visited: HashSet<_> = witnesses.keys().copied().collect();
+        let max_depth = match &plan {
+            TermPlan::Relationship { .. } => 1,
+            TermPlan::SelectedAttribute(_) => 0,
+            TermPlan::Any => 3,
+        };
+        let restrict_source = matches!(&plan, TermPlan::Relationship { .. });
+        for depth in 1..=max_depth {
+            let level: Vec<_> = frontier.drain(..).collect();
+            if level.is_empty() {
+                break;
+            }
+            let edges = sqlx::query_as::<_, (Uuid, String, Uuid)>(
+                r#"SELECT DISTINCT source.id, a.code, av.relationship_target_entity_id
+                FROM entities source JOIN attribute_values av ON av.entity_id = source.id
+                JOIN attributes a ON a.id = av.attribute_id AND a.deleted_at IS NULL
+                JOIN entities target ON target.id = av.relationship_target_entity_id
+                WHERE source.deleted_at IS NULL AND target.deleted_at IS NULL AND av.active
+                  AND av.relationship_target_entity_id = ANY($1) AND a.value_type = 'relationship'
+                  AND ($2::uuid IS NULL OR source.blueprint_id = $2)
+                  AND ($3::text IS NULL OR a.code = $3)
+                ORDER BY source.id, a.code, av.relationship_target_entity_id"#,
+            )
+            .bind(&level)
+            .bind(restrict_source.then_some(selected.blueprint.id))
+            .bind(direct_field.as_ref().filter(|v| !v.is_empty()))
+            .fetch_all(&self.pool)
+            .await?;
+            for (source, field, target) in edges {
+                if !visited.insert(source) {
+                    continue;
+                }
+                let parent = witnesses.get(&target).expect("frontier has a witness");
+                let mut path = Vec::with_capacity(parent.relationship_path.len() + 1);
+                path.push(MatchPathEdge {
+                    source_entity_id: source,
+                    attribute_code: field,
+                    target_entity_id: target,
+                });
+                path.extend(parent.relationship_path.clone());
+                witnesses.insert(
+                    source,
+                    MatchExplanation {
+                        term: term.original.clone(),
+                        matching_entity_id: parent.matching_entity_id,
+                        matching_attribute_code: parent.matching_attribute_code.clone(),
+                        traversal_depth: depth,
+                        relationship_path: path,
+                    },
+                );
+                frontier.push_back(source);
+            }
+        }
+        let ids = witnesses
+            .into_iter()
+            .filter(|(id, _)| {
+                // Explicit selected-blueprint value queries and all traversals only return selected entities.
+                // The version restriction is applied here because scalar matches may start on old revisions.
+                *id != Uuid::nil()
+            })
+            .collect::<HashMap<_, _>>();
+        let selected_ids = sqlx::query_scalar::<_, Uuid>("SELECT id FROM entities WHERE blueprint_id = $1 AND ($2::bigint IS NULL OR blueprint_version = $2) AND deleted_at IS NULL AND id = ANY($3)")
+            .bind(selected.blueprint.id).bind(selected_version).bind(ids.keys().copied().collect::<Vec<_>>()).fetch_all(&self.pool).await?;
+        Ok(selected_ids
+            .into_iter()
+            .filter_map(|id| ids.get(&id).cloned().map(|w| (id, w)))
+            .collect())
+    }
+}
+
+#[derive(Default)]
+pub struct ResolvedSearch {
+    pub ids: HashSet<Uuid>,
+    pub explanations: HashMap<Uuid, Vec<MatchExplanation>>,
+}
+#[derive(Clone)]
+struct SearchTerm {
+    original: String,
+    selector: Option<String>,
+    value: String,
+    prefix: bool,
+}
+enum TermPlan {
+    Any,
+    SelectedAttribute(Option<String>),
+    Relationship {
+        field: String,
+        target: BlueprintWithAttributes,
+        attribute: Option<String>,
+    },
+}
+fn parse_search_terms(query: &str) -> Result<Vec<SearchTerm>, RepositoryError> {
+    query
+        .split_whitespace()
+        .map(|raw| {
+            let (selector, value) = match raw.split_once(':') {
+                Some((s, v)) if !s.is_empty() && !v.is_empty() && !v.contains(':') => {
+                    (Some(s.to_owned()), v)
+                }
+                Some(_) => {
+                    return Err(RepositoryError::InvalidBlueprintDefinition(format!(
+                        "malformed search term '{raw}'"
+                    )));
+                }
+                None => (None, raw),
+            };
+            let prefix = value.ends_with('*');
+            let value = value.strip_suffix('*').unwrap_or(value);
+            if value.is_empty() || value.contains('*') {
+                return Err(RepositoryError::InvalidBlueprintDefinition(format!(
+                    "wildcard is only allowed at the end of a search term: '{raw}'"
+                )));
+            }
+            Ok(SearchTerm {
+                original: raw.to_owned(),
+                selector,
+                value: value.to_owned(),
+                prefix,
+            })
+        })
+        .collect()
 }
 pub(crate) fn decode_search_cursor(cursor: &str) -> Option<(DateTime<Utc>, Uuid)> {
     let decoded = URL_SAFE_NO_PAD.decode(cursor).ok()?;
@@ -638,6 +937,7 @@ fn entity_preview(row: EntityPreviewRow) -> EntityPreview {
             &row.blueprint_context_fallback,
         ),
         preview: row.preview,
+        match_explanations: Vec::new(),
     }
 }
 

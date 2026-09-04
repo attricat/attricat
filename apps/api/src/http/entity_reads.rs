@@ -190,12 +190,21 @@ pub(super) async fn search_entity_previews(
         .as_deref()
         .map(str::trim)
         .filter(|v| !v.is_empty());
-    let ids = repository
-        .search_matching_entity_ids(current.blueprint.id, selected, query)
-        .await?;
-    let mut matching: Option<Vec<Uuid>> = None;
+    let search_blueprint = match selected {
+        Some(version) => repository
+            .get_blueprint_by_code_and_version(code, version)
+            .await?
+            .expect("selected version was checked above"),
+        None => current.clone(),
+    };
+    let resolved = repository
+        .resolve_search(&search_blueprint, selected, query)
+        .await
+        .map_err(|error| ApiError::invalid_search_query(error.to_string()))?;
+    let ids = &resolved.ids;
+    let mut matching: Option<Vec<Uuid>> = Some(ids.iter().copied().collect());
     for facet in input.relationship_tree_facets {
-        let source = current
+        let source = &search_blueprint
             .attributes
             .iter()
             .find(|a| a.code == facet.source_relationship_field)
@@ -248,7 +257,7 @@ pub(super) async fn search_entity_previews(
                 facet.hierarchy_field.as_deref(),
                 facet.context_id,
                 &facet.selected_target_ids,
-                &ids,
+                ids,
             )
             .await?
             .1;
@@ -266,7 +275,7 @@ pub(super) async fn search_entity_previews(
         .search_entity_previews(
             current.blueprint.id,
             selected,
-            query,
+            None,
             limit.into(),
             cursor,
             matching.as_deref(),
@@ -276,7 +285,12 @@ pub(super) async fn search_entity_previews(
         )
         .await?;
     for item in &mut items {
-        item.schema_outdated = item.blueprint_version != current.blueprint.version
+        item.schema_outdated = item.blueprint_version != current.blueprint.version;
+        item.match_explanations = resolved
+            .explanations
+            .get(&item.id)
+            .cloned()
+            .unwrap_or_default();
     }
     Ok(Json(EntitySearchResponse {
         blueprint: current,
@@ -350,12 +364,23 @@ pub(super) async fn relationship_tree_facet_children(
         .as_deref()
         .map(str::trim)
         .filter(|v| !v.is_empty());
+    let search_blueprint = match version {
+        Some(version) => repository
+            .get_blueprint_by_code_and_version(&input.blueprint.code, version)
+            .await?
+            .expect("selected version was checked above"),
+        None => source.clone(),
+    };
+    let resolved = repository
+        .resolve_search(&search_blueprint, version, query)
+        .await
+        .map_err(|error| ApiError::invalid_search_query(error.to_string()))?;
     Ok(Json(
         repository
             .relationship_tree_facet_children(
                 source.blueprint.id,
                 version,
-                query,
+                query.is_some().then_some(&resolved.ids),
                 &input.source_relationship_field,
                 target.blueprint.id,
                 input.hierarchy_field.as_deref(),

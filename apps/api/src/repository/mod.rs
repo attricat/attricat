@@ -24,9 +24,10 @@ use crate::{
         EntityAuditChange, EntityHierarchyItem, EntityHierarchyResponse, EntityIdentity,
         EntityMigrationPreview, EntityPreview, EntityPreviewPage, FormAttributeValue,
         IncomingRelationshipItem, IncomingRelationshipSelector, IncomingRelationshipsPage,
-        MigrateEntityRequest, MigrationIssue, NewAttributeValue, RelationshipMutation,
-        RelationshipTargets, RelationshipTreeFacetChildItem, RelationshipTreeFacetChildrenResponse,
-        RelationshipTreeFacetItem, RelationshipTreeFacetResponse, ResolvedEntityPreviewResponse,
+        MatchExplanation, MatchPathEdge, MigrateEntityRequest, MigrationIssue, NewAttributeValue,
+        RelationshipMutation, RelationshipTargets, RelationshipTreeFacetChildItem,
+        RelationshipTreeFacetChildrenResponse, RelationshipTreeFacetItem,
+        RelationshipTreeFacetResponse, ResolvedEntityPreviewResponse,
     },
 };
 

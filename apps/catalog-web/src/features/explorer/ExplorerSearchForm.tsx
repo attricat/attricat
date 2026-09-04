@@ -72,6 +72,7 @@ export const ExplorerSearchForm = ({ blueprints, search, onSubmit }: Props) => {
               fullWidth
               label="Query"
               onChange={(event) => field.handleChange(event.target.value)}
+              helperText="Examples: red, sku:123*, color.name:red"
               placeholder="Search terms"
               value={field.state.value}
             />
