@@ -18,7 +18,7 @@ const catalogReadSchema = z
   })
   .strict();
 
-const frameDocument = `<!doctype html><meta charset="utf-8"><meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src blob:; connect-src 'none'; img-src data:; style-src 'unsafe-inline'"><body><div id="root"></div><script>
+export const frameDocument = `<!doctype html><meta charset="utf-8"><meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'nonce-catalog-bootstrap' blob:; connect-src 'none'; img-src data:; style-src 'unsafe-inline'"><body><div id="root"></div><script nonce="catalog-bootstrap">
 (() => { let port; let next = 0; const pending = new Map();
 const call = (method, payload) => new Promise((resolve, reject) => { const id = String(++next); pending.set(id, {resolve,reject}); port.postMessage({type:'catalog:request.v1',id,method,payload}); });
 window.addEventListener('message', async (event) => { if (event.source !== parent || event.data?.type !== 'catalog:init.v1' || !event.ports[0]) return; port = event.ports[0]; port.onmessage = event => { const message = event.data; if (message?.type !== 'catalog:response.v1') return; const item = pending.get(message.id); if (!item) return; pending.delete(message.id); message.ok ? item.resolve(message.data) : item.reject(new Error(message.error || 'Host request failed')); }; globalThis.catalog = { request: path => call('catalog.read', {path}), navigate: detail => call('navigate', detail), notify: detail => call('notify', detail), context: event.data.context }; try { const url = URL.createObjectURL(new Blob([event.data.artifact], {type:'text/javascript'})); await import(url); URL.revokeObjectURL(url); const element = document.createElement(event.data.element); element.configuration = event.data.configuration; element.catalogContext = event.data.context; document.getElementById('root').append(element); if (event.data.capabilities.includes('client.events')) element.dispatchEvent(new CustomEvent('catalog:context-changed.v1', {detail:event.data.context})); port.postMessage({type:'catalog:ready.v1'}); } catch (error) { port.postMessage({type:'catalog:error.v1', error: String(error?.message || error)}); } }); })();
@@ -34,9 +34,14 @@ export const ExtensionFrame = ({ contribution, context = {} }: Props) => {
   const iframe = useRef<HTMLIFrameElement>(null);
   const [error, setError] = useState<string>();
   const [ready, setReady] = useState(false);
+  const [loadedFrame, setLoadedFrame] = useState<string>();
   const navigate = useNavigate();
+  const frameKey = `${contribution.extension_id}:${contribution.id}:${contribution.release_id}`;
+  const contextKey = JSON.stringify(context);
 
   useEffect(() => {
+    if (loadedFrame !== frameKey) return;
+    const frameContext = JSON.parse(contextKey) as Record<string, unknown>;
     let disposed = false;
     let port: MessagePort | undefined;
     const timer = window.setTimeout(
@@ -116,7 +121,7 @@ export const ExtensionFrame = ({ contribution, context = {} }: Props) => {
             element: contribution.element,
             configuration: contribution.configuration,
             capabilities: contribution.capabilities,
-            context,
+            context: frameContext,
           },
           '*',
           [channel.port2],
@@ -125,26 +130,25 @@ export const ExtensionFrame = ({ contribution, context = {} }: Props) => {
         if (!disposed) setError('The extension could not be loaded.');
       }
     };
-    const onLoad = () => {
-      setError(undefined);
-      setReady(false);
-      void start();
-    };
-    const node = iframe.current;
-    node?.addEventListener('load', onLoad, { once: true });
+    void start();
     return () => {
       disposed = true;
       window.clearTimeout(timer);
       port?.close();
-      node?.replaceChildren();
     };
-  }, [contribution, context, navigate]);
+  }, [contribution, contextKey, frameKey, loadedFrame, navigate]);
 
   if (error) return <Alert severity="warning">{error}</Alert>;
   return (
     <Box sx={{ minHeight: ready ? 0 : 48 }}>
       <iframe
         aria-label={contribution.title ?? contribution.id}
+        key={frameKey}
+        onLoad={() => {
+          setError(undefined);
+          setReady(false);
+          setLoadedFrame(frameKey);
+        }}
         ref={iframe}
         sandbox="allow-scripts"
         srcDoc={frameDocument}
