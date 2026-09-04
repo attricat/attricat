@@ -28,7 +28,7 @@ These conventions apply to `apps/catalog-web`.
 
 ## Testing
 
-- Run unit tests with `npm test --prefix apps/catalog-web`.
-- Run the Playwright suite with `npm run test:e2e --prefix apps/catalog-web`.
+- Run unit tests with `pnpm --dir apps/catalog-web test`.
+- Run the Playwright suite with `pnpm --dir apps/catalog-web test:e2e`.
 - See [the documentation index](index.md#test-the-web-app) for E2E setup and
   Docker/Colima behavior. Do not point it at or seed the development database.

@@ -93,9 +93,9 @@ editor renderer, as `FieldEdit.tsx` does.
 `contracts/view-components.json`. Run it after changing either side:
 
 ```sh
-npm test --prefix apps/catalog-web -- src/features/views/components/registry.test.ts
+pnpm --dir apps/catalog-web test -- src/features/views/components/registry.test.ts
 cargo test -p catalog-blueprint
 ```
 
-Run `npm run typecheck --prefix apps/catalog-web` as well when adding or
+Run `pnpm --dir apps/catalog-web typecheck` as well when adding or
 changing renderer types.

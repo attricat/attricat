@@ -2,7 +2,7 @@ set dotenv-load := true
 
 setup:
     node scripts/setup-worktree.mjs
-    npm install --prefix apps/catalog-web
+    pnpm --dir apps/catalog-web install --frozen-lockfile
 
 _assert-env:
     test -f .env || { echo "Missing .env; run 'just setup' first." >&2; exit 1; }
