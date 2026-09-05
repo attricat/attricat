@@ -7,6 +7,7 @@ use axum::{
     http::{HeaderValue, StatusCode, header},
     response::Response,
 };
+use bytes::Bytes;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use uuid::Uuid;
@@ -232,6 +233,21 @@ async fn selected_release(
         }
     }
     Err(ApiError::not_found("trusted extension repository"))
+}
+
+/// Installs a locally supplied archive. The archive goes through the exact
+/// same manifest validation, bounded unpacking, artifact staging, and
+/// lifecycle recording as a registry release.
+pub(super) async fn sideload(
+    State(state): State<AppState>,
+    ScopedRepository(repository): ScopedRepository,
+    archive: Bytes,
+) -> Result<(StatusCode, Json<InstallationResponse>), ApiError> {
+    let installation = ExtensionInstaller::new(repository, state.object_store.clone())
+        .install("sideload", &archive)
+        .await
+        .map_err(|error| ApiError::invalid_input(error.to_string()))?;
+    Ok((StatusCode::CREATED, Json(installation.into())))
 }
 
 pub(super) async fn install(

@@ -7,7 +7,7 @@ use api::{
     repository::CatalogRepository,
     storage::{FakeObjectStore, ObjectStore},
 };
-use support::{Value, json};
+use support::{Value, authenticated_client, json, start_server_with_object_store};
 use uuid::Uuid;
 
 const ARTIFACT_BYTES: &[u8] = b"server bytes";
@@ -88,6 +88,26 @@ fn append_file(tar: &mut tar::Builder<&mut Vec<u8>>, path: &str, bytes: &[u8]) {
     header.set_mode(0o644);
     header.set_cksum();
     tar.append_data(&mut header, path, bytes).unwrap();
+}
+
+#[sqlx::test(migrations = "./migrations")]
+async fn sideload_installs_a_validated_local_archive(pool: sqlx::PgPool) {
+    let store = Arc::new(FakeObjectStore::available());
+    let (base, server) = start_server_with_object_store(pool, store.clone()).await;
+    let response = authenticated_client()
+        .post(format!("{base}/extensions/sideload"))
+        .header("content-type", "application/zstd")
+        .body(release_archive("1.0.0", json!([]), ARTIFACT_BYTES))
+        .send()
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), reqwest::StatusCode::CREATED);
+    let installation: Value = response.json().await.unwrap();
+    assert_eq!(installation["extension_id"], "acme.extension");
+    assert_eq!(installation["state"], "disabled");
+    assert_eq!(store.object_count().await, 1);
+    server.abort();
 }
 
 #[sqlx::test(migrations = "./migrations")]

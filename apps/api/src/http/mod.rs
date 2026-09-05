@@ -24,6 +24,7 @@ use crate::{
     agent_worker::AgentDispatcher,
     agents::AgentProviderConfig,
     extension_registry::{GitHubRegistry, GitHubRepository},
+    extensions::MAX_EXTENSION_ARCHIVE_BYTES,
     file_access::FileAccessPolicy,
     mail::MailDelivery,
     repository::CatalogRepository,
@@ -193,6 +194,12 @@ pub fn router(state: AppState) -> Router {
         .route(
             "/extensions",
             get(extensions::list).post(extensions::install),
+        )
+        .route(
+            "/extensions/sideload",
+            post(extensions::sideload).layer(axum::extract::DefaultBodyLimit::max(
+                MAX_EXTENSION_ARCHIVE_BYTES,
+            )),
         )
         .route("/extensions/runtime", get(extensions::runtime))
         .route(

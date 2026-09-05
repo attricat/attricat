@@ -27,6 +27,7 @@ import {
   removeExtension,
   revokeExtensionGrant,
   configureExtension,
+  sideloadExtension,
   upgradeExtension,
 } from './management-api';
 import { extensionManagementQueryKeys } from './management-query-keys';
@@ -78,6 +79,13 @@ export const ExtensionsPage = () => {
       <PageHeader
         title="Extensions"
         description="Discover trusted extensions and manage installed extension lifecycle."
+        actions={
+          session.data?.capabilities?.extensions_manage ? (
+            <Button component={Link} to="/manage/extensions/sideload">
+              Upload archive
+            </Button>
+          ) : undefined
+        }
       />
       <ErrorNotice error={marketplace.error} />
       <ErrorNotice error={installed.error} />
@@ -157,6 +165,83 @@ export const ExtensionsPage = () => {
           </Paper>
         ))}
       </Stack>
+    </PageContainer>
+  );
+};
+
+export const SideloadExtensionPage = () => {
+  const client = useQueryClient();
+  const session = useQuery({
+    queryKey: ['auth', 'session'],
+    queryFn: currentSession,
+  });
+  const sideload = useMutation({
+    mutationFn: sideloadExtension,
+    onSuccess: () => invalidate(client),
+  });
+  const form = useForm({
+    defaultValues: { archive: null as File | null },
+    onSubmit: ({ value }) => {
+      if (value.archive) sideload.mutate(value.archive);
+    },
+  });
+  const canManage = session.data?.capabilities?.extensions_manage === true;
+  if (session.data && !canManage)
+    return (
+      <PageContainer>
+        <Alert severity="error">
+          You are not authorized to install extensions.
+        </Alert>
+      </PageContainer>
+    );
+  return (
+    <PageContainer>
+      <PageHeader
+        title="Upload extension archive"
+        description="Install a local .tar.zst extension archive. It is validated and installed disabled."
+        actions={<Link to="/manage/extensions">Back to extensions</Link>}
+      />
+      <ErrorNotice error={sideload.error} />
+      {sideload.isSuccess && (
+        <Alert severity="success" sx={{ mb: 2 }}>
+          Extension installed. Configure permissions before enabling it.
+        </Alert>
+      )}
+      <Paper sx={{ p: 2 }}>
+        <form
+          onSubmit={(event) => {
+            event.preventDefault();
+            void form.handleSubmit();
+          }}
+        >
+          <form.Field name="archive">
+            {(field) => (
+              <Button component="label" variant="outlined">
+                {field.state.value?.name ?? 'Choose .tar.zst archive'}
+                <input
+                  accept=".tar.zst,application/zstd"
+                  hidden
+                  onChange={(event) =>
+                    field.handleChange(event.target.files?.[0] ?? null)
+                  }
+                  type="file"
+                />
+              </Button>
+            )}
+          </form.Field>
+          <Typography color="text.secondary" sx={{ mt: 1 }} variant="body2">
+            Archives must be valid extension packages and no larger than 32 MiB.
+          </Typography>
+          <Button
+            disabled={!canManage || !form.state.values.archive || sideload.isPending}
+            sx={{ mt: 2 }}
+            type="submit"
+            variant="contained"
+          >
+            {sideload.isPending ? 'Installing…' : 'Install archive'}
+          </Button>
+        </form>
+      </Paper>
     </PageContainer>
   );
 };

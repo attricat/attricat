@@ -57,7 +57,10 @@ pub(super) fn policy(method: &Method, path: &str) -> Option<Policy> {
             target: TargetKind::None,
         });
     }
-    if path == "/extensions" || path.starts_with("/extensions/{extension_id}") {
+    if path == "/extensions"
+        || path == "/extensions/sideload"
+        || path.starts_with("/extensions/{extension_id}")
+    {
         return Some(Policy {
             permission: if method == Method::GET {
                 "extensions.read"
@@ -227,6 +230,12 @@ mod tests {
         );
         assert_eq!(
             policy(&Method::POST, "/extensions").unwrap().permission,
+            "extensions.manage"
+        );
+        assert_eq!(
+            policy(&Method::POST, "/extensions/sideload")
+                .unwrap()
+                .permission,
             "extensions.manage"
         );
         assert_eq!(

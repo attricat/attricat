@@ -122,6 +122,12 @@ export const installExtension = (input: {
   repository: string;
   release_id: number;
 }) => request('/api/extensions', installationSchema, body(input));
+export const sideloadExtension = (archive: File) =>
+  request('/api/extensions/sideload', installationSchema, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/zstd' },
+    body: archive,
+  });
 export const upgradeExtension = (
   id: string,
   input: { owner: string; repository: string; release_id: number },

@@ -35,14 +35,26 @@ for which extension repositories Catalog may resolve. The v1 index shape is:
 Opening a listed entry loads that extension repository's README and non-draft,
 non-prerelease GitHub Releases, returning its `.tar.zst` assets only when their
 download path belongs to that exact extension repository. Catalog stores no
-global copy of indexes, READMEs, releases, or archives. When a user installs one
-release, Catalog validates the
-selected `.tar.zst` archive with bounded decompression and entry-path checks,
-then reads and validates `manifest.json` before uploading declared extracted
-artifacts to Catalog S3 storage. Artifact integrity verification is deliberately
-deferred: selected release archives are trusted registry inputs in v1. Catalog
-retains only that installed release's immutable manifest and source identity
-alongside its workspace-owned installation; raw archives are not retained.
+global copy of indexes, READMEs, releases, or archives.
+
+A user with `extensions.manage` may alternatively install a local archive from
+**Extensions → Upload archive** (`/manage/extensions/sideload`). The archive is
+sent to `POST /extensions/sideload` as an `application/zstd` request body and
+must be a `.tar.zst` extension package no larger than 32 MiB. Side-loaded
+packages are treated as untrusted input: they receive the same compressed and
+unpacked size limits, safe entry-path checks, strict `manifest.json`
+validation, artifact staging, disabled initial state, lifecycle records, and
+audit events as registry installs. Their recorded source is `sideload`; the raw
+archive is never retained. Users must review configuration and explicitly grant
+required permissions before enabling a side-loaded extension.
+
+Registry installs validate the selected `.tar.zst` archive with bounded
+decompression and entry-path checks, then read and validate `manifest.json`
+before uploading declared extracted artifacts to Catalog S3 storage. Artifact
+integrity verification is deliberately deferred: selected release archives are
+trusted registry inputs in v1. Catalog retains only that installed release's
+immutable manifest and source identity alongside its workspace-owned
+installation; raw archives are not retained.
 
 ## Manifest
 
@@ -156,12 +168,10 @@ Registry source APIs expose `GET/POST /extension-registries`,
 `GET /extension-registries/extensions/{owner}/{repository}`. The final endpoint
 rejects a repository unless the current trusted index lists it, then returns its
 README and release assets. `extensions.read` authorizes discovery while
-`extensions.manage` authorizes source changes; the built-in official source
-cannot be removed. The deployment may set `EXTENSION_OFFICIAL_REGISTRY` to a
-validated GitHub owner/repository instead of the default
-`attricat/attricat-extensions`.
-
-Marketplace management UI remains #148.
+`extensions.manage` authorizes source changes and `POST /extensions/sideload`;
+the built-in official source cannot be removed. The deployment may set
+`EXTENSION_OFFICIAL_REGISTRY` to a validated GitHub owner/repository instead of
+the default `attricat/attricat-extensions`.
 
 ## Client extension runtime (v1)
 

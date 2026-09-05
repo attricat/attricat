@@ -41,6 +41,7 @@ password, cookie, CSRF, expiry, and revocation contract is documented in
 | `DELETE` | `/extension-registries/{id}` | Remove one workspace custom source (`extensions.manage`). |
 | `GET` | `/extension-registries/discover` | Load extension metadata from configured trusted registry `registry.json` indexes (`extensions.read`). |
 | `GET` | `/extension-registries/extensions/{owner}/{repository}` | Resolve a repository listed in a current trusted index, returning its README and non-draft, non-prerelease `.tar.zst` GitHub Release assets (`extensions.read`). |
+| `POST` | `/extensions/sideload` | Install a local `.tar.zst` archive supplied as an `application/zstd` request body. The 32 MiB archive limit and normal package validation apply; installations start disabled (`extensions.manage`). |
 | `POST` | `/auth/discover` | Resolve a normalized workspace identifier and return its sign-in methods; rate-limited and intentionally minimal. |
 | `POST` | `/auth/login` | Sign in with a previously resolved workspace identifier, email, and password. |
 | `GET` | `/metrics` | Scrape Prometheus service metrics (`data_health.read`). |
