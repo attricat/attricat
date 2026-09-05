@@ -687,6 +687,7 @@ mod tests {
         assert_eq!(extension_event.causation_id, Some(trigger.id));
         assert_eq!(extension_event.source.kind.as_str(), "plugin");
         assert_eq!(extension_event.source.name, "extension:acme.computed");
+        assert!(extension_event.validate().is_ok());
         let extension_repository = repository
             .for_event_handler(&trigger, "catalog.extensions.wasm")
             .for_extension("acme.computed");
@@ -704,5 +705,6 @@ mod tests {
         assert_eq!(command_event.causation_id, None);
         assert_eq!(command_event.source.kind.as_str(), "plugin");
         assert_eq!(command_event.source.name, "extension:acme.computed");
+        assert!(command_event.validate().is_ok());
     }
 }

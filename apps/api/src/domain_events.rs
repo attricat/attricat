@@ -179,7 +179,7 @@ pub enum EventContractError {
 impl NewDomainEvent {
     pub fn validate(&self) -> Result<(), EventContractError> {
         validate_event_type(&self.event_type)?;
-        if !valid_identifier(&self.aggregate_kind) || !valid_identifier(&self.source.name) {
+        if !valid_identifier(&self.aggregate_kind) || !valid_source_name(&self.source.name) {
             return Err(EventContractError::InvalidRoutingField);
         }
         if !json_object_within_limit(&self.metadata) || !json_object_within_limit(&self.payload) {
@@ -222,6 +222,18 @@ fn valid_identifier(value: &str) -> bool {
         })
 }
 
+fn valid_source_name(value: &str) -> bool {
+    !value.is_empty()
+        && value.len() <= 128
+        && value.bytes().enumerate().all(|(index, byte)| {
+            if index == 0 {
+                byte.is_ascii_alphabetic()
+            } else {
+                byte.is_ascii_alphanumeric() || matches!(byte, b'.' | b'_' | b'-' | b':')
+            }
+        })
+}
+
 fn json_object_within_limit(value: &Value) -> bool {
     value.is_object() && serde_json::to_vec(value).is_ok_and(|bytes| bytes.len() <= MAX_JSON_BYTES)
 }
@@ -260,6 +272,13 @@ mod tests {
             event("plugin.acme.score_recomputed").validate(),
             Err(EventContractError::InvalidEventType)
         );
+    }
+
+    #[test]
+    fn accepts_extension_source_names() {
+        let mut event = event(CONTEXT_CREATED_V1);
+        event.source.name = "extension:attricat-extension-example".to_owned();
+        assert!(event.validate().is_ok());
     }
 
     #[test]
