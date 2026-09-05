@@ -330,6 +330,56 @@ async fn extension_storage_enforces_cas_bounds_quota_and_workspace_namespace(poo
 }
 
 #[sqlx::test(migrations = "./migrations")]
+async fn extension_storage_list_treats_like_characters_as_literal_prefixes(pool: sqlx::PgPool) {
+    let workspace = Uuid::from_u128(0x00000000000040008000000000000009);
+    let repository = CatalogRepository::new(pool)
+        .for_workspace(workspace)
+        .await
+        .unwrap();
+    let installer =
+        ExtensionInstaller::new(repository.clone(), Arc::new(FakeObjectStore::available()));
+    let installed = installer
+        .install("test", &storage_client_release_archive("1.0.0"))
+        .await
+        .unwrap();
+    repository
+        .grant_extension("acme.storage", "capability", "storage.extension")
+        .await
+        .unwrap();
+    repository.enable_extension("acme.storage").await.unwrap();
+    for key in ["literal%key", "literal_key", "literalXkey"] {
+        repository
+            .extension_storage_set(
+                "acme.storage",
+                installed.installed_release_id,
+                key,
+                json!(true),
+                None,
+            )
+            .await
+            .unwrap();
+    }
+
+    let page = repository
+        .extension_storage_list(
+            "acme.storage",
+            installed.installed_release_id,
+            Some("literal%"),
+            None,
+            10,
+        )
+        .await
+        .unwrap();
+    assert_eq!(
+        page.entries
+            .into_iter()
+            .map(|entry| entry.key)
+            .collect::<Vec<_>>(),
+        vec!["literal%key"]
+    );
+}
+
+#[sqlx::test(migrations = "./migrations")]
 async fn lifecycle_installs_validated_archive_artifacts_and_retains_history(pool: sqlx::PgPool) {
     let workspace = Uuid::from_u128(0x00000000000040008000000000000002);
     let repository = CatalogRepository::new(pool.clone())
