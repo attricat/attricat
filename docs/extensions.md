@@ -159,7 +159,7 @@ README and release assets. `extensions.read` authorizes discovery while
 `extensions.manage` authorizes source changes; the built-in official source
 cannot be removed. The deployment may set `EXTENSION_OFFICIAL_REGISTRY` to a
 validated GitHub owner/repository instead of the default
-`attricat/catalog-extensions`.
+`attricat/attricat-extensions`.
 
 Marketplace management UI remains #148.
 

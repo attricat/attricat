@@ -142,7 +142,7 @@ async fn start_server_with_auth_mode_and_store(
         agent_provider: None,
         agent_dispatcher: None,
         registry: Arc::new(GitHubRegistry::new().unwrap()),
-        official_registry: "attricat/catalog-extensions"
+        official_registry: "attricat/attricat-extensions"
             .parse::<GitHubRepository>()
             .unwrap(),
         object_store,

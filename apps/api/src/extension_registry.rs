@@ -11,7 +11,7 @@ use reqwest::{Client, Url, redirect::Policy};
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
-pub const DEFAULT_OFFICIAL_REGISTRY: &str = "attricat/catalog-extensions";
+pub const DEFAULT_OFFICIAL_REGISTRY: &str = "attricat/attricat-extensions";
 const GITHUB_API_ORIGIN: &str = "https://api.github.com";
 const GITHUB_RAW_ORIGIN: &str = "https://raw.githubusercontent.com";
 const MAX_README_BYTES: usize = 256 * 1024;

@@ -16,7 +16,7 @@ async fn registry_sources_include_official_source_and_manage_custom_sources(pool
         .await
         .unwrap();
     assert_eq!(sources.as_array().unwrap().len(), 1);
-    assert_eq!(sources[0]["source"], "github:attricat/catalog-extensions");
+    assert_eq!(sources[0]["source"], "github:attricat/attricat-extensions");
     assert_eq!(sources[0]["official"], true);
 
     let response = client
