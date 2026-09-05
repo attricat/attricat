@@ -21,7 +21,14 @@ const notificationSchema = z
 const navigationSchema = z.object({ entity_id: z.uuid() }).strict();
 const catalogReadSchema = z
   .object({
-    path: z.string().regex(/^\/api\/(?:entities|v1\/entities\/[0-9a-f-]{36})$/),
+    // Components may read current entity data or the exact blueprint revision
+    // named by the blueprint-configuration outlet. They cannot supply methods,
+    // query strings, arbitrary URLs, or credentials.
+    path: z
+      .string()
+      .regex(
+        /^\/api\/(?:entities|v1\/entities\/[0-9a-f-]{36}|blueprints\/[0-9a-f-]{36}\/versions\/[1-9][0-9]*)$/,
+      ),
   })
   .strict();
 

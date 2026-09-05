@@ -215,8 +215,10 @@ It may use only granted operations:
 - `catalog.notify({ message, severity? })` requires `client.notification`;
   messages are trimmed and limited to 512 characters.
 - `catalog.request(path)` requires `catalog.read` and is limited to `GET`
-  reads of `/api/entities` or `/api/v1/entities/:uuid` with a 1 MiB response
-  limit.
+  reads of `/api/entities`, `/api/v1/entities/:uuid`, or the exact revision
+  route `/api/blueprints/:uuid/versions/:positive-version`, with a 1 MiB
+  response limit. The last form lets a blueprint-configuration contribution
+  inspect only the revision identified by its host-provided outlet context.
 - `catalog.context` contains only the documented outlet identifiers (the
   entity preview outlet supplies `entity_id` and optional `context_id`).
   Configuration is provided only when `configuration.read` is granted.
