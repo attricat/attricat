@@ -10,7 +10,15 @@ const contributionSchema = z
     id: z.string().min(1),
     version: z.number().int().positive(),
     kind: z.enum(['route', 'element']),
-    outlet: z.enum(['navigation', 'entity_preview_panel']).nullable(),
+    outlet: z
+      .enum([
+        'navigation',
+        'entity_preview_panel',
+        'blueprint_attribute_configuration',
+        'entity_attribute_decoration',
+        'entity_action',
+      ])
+      .nullable(),
     title: z.string().nullable(),
     element: z.string().min(1),
   })
@@ -37,6 +45,14 @@ export const getExtensionArtifact = async (
       `/api/extensions/${encodeURIComponent(extensionId)}/${encodeURIComponent(contributionId)}/artifact`,
     )
   ).text();
+
+export const extensionCommandRequestSchema = z
+  .object({
+    release_id: z.uuid(),
+    command_id: z.string().min(1).max(128),
+    payload: z.unknown(),
+  })
+  .strict();
 
 export const extensionStorageRequestSchema = z.discriminatedUnion('operation', [
   z.object({ operation: z.literal('get'), key: z.string() }).strict(),
@@ -67,6 +83,23 @@ export const extensionStorageRequestSchema = z.discriminatedUnion('operation', [
 export type ExtensionStorageRequest = z.infer<
   typeof extensionStorageRequestSchema
 >;
+
+export const extensionCommand = async (
+  extensionId: string,
+  contributionId: string,
+  input: z.infer<typeof extensionCommandRequestSchema>,
+) => {
+  const response = await apiFetch(
+    `/api/extensions/${encodeURIComponent(extensionId)}/${encodeURIComponent(contributionId)}/command`,
+    {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify(input),
+    },
+  );
+  if (!response.ok) throw new Error('Extension command was denied');
+  return response.json() as Promise<unknown>;
+};
 
 export const extensionStorage = async (
   extensionId: string,

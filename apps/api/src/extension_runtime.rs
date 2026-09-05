@@ -8,9 +8,11 @@
 use std::{sync::Arc, time::Duration};
 
 use async_trait::async_trait;
+use semver::{Version, VersionReq};
 use serde::Deserialize;
 use serde_json::{Value, json};
 use thiserror::Error;
+use uuid::Uuid;
 use wasmtime::{
     Config, Engine, Store, StoreLimits, StoreLimitsBuilder,
     component::{Component, HasSelf, Linker},
@@ -21,7 +23,8 @@ use crate::{
     event_dispatcher::{EventHandler, EventHandlerCommandContext},
     extension_installer::installed_artifact_key,
     extensions::{ArtifactKind, EventHandler as ManifestEventHandler},
-    repository::{CatalogRepository, ExtensionRuntimeInstallation},
+    model::{AppendAttributeValues, NewAttributeValue},
+    repository::{CatalogRepository, ExtensionConfigurationScope, ExtensionRuntimeInstallation},
     storage::{ObjectStore, ObjectStoreError},
 };
 
@@ -31,6 +34,14 @@ wasmtime::component::bindgen!({
     imports: { default: async },
     exports: { default: async },
 });
+mod host_v11 {
+    wasmtime::component::bindgen!({
+        path: "wit-next",
+        world: "catalog-extension",
+        imports: { default: async },
+        exports: { default: async },
+    });
+}
 
 const MAX_HOST_MESSAGE_BYTES: usize = 16 * 1024;
 const MAX_HOST_JSON_BYTES: usize = 64 * 1024;
@@ -87,6 +98,154 @@ impl ExtensionRuntime {
         })
     }
 
+    /// Invokes a v1.1 component command after its HTTP broker has resolved a
+    /// locked enabled-release snapshot.
+    pub async fn invoke_command(
+        &self,
+        installation: &ExtensionRuntimeInstallation,
+        repository: CatalogRepository,
+        handler: &str,
+        request: &str,
+        max_response_bytes: u64,
+    ) -> Result<String, ExtensionRuntimeError> {
+        let artifact = installation
+            .manifest
+            .artifacts
+            .iter()
+            .find(|artifact| artifact.kind == ArtifactKind::ServerWasm)
+            .ok_or_else(|| {
+                ExtensionRuntimeError::Runtime("release has no server_wasm artifact".into())
+            })?;
+        let bytes = self
+            .object_store
+            .get(&installed_artifact_key(
+                installation.installed_release_id,
+                &artifact.id,
+            ))
+            .await?
+            .bytes;
+        let component = Component::new(&self.engine, &bytes).map_err(|error| {
+            ExtensionRuntimeError::Runtime(format!("invalid component: {error}"))
+        })?;
+        let state = HostState::new(
+            installation.clone(),
+            repository,
+            self.config.max_memory_bytes,
+        );
+        let mut store = Store::new(&self.engine, state);
+        store.limiter(|state| &mut state.limits);
+        store
+            .set_fuel(self.config.fuel)
+            .map_err(|error| ExtensionRuntimeError::Runtime(error.to_string()))?;
+        store.set_epoch_deadline(1);
+        let engine = self.engine.clone();
+        let timeout = self.config.invocation_timeout;
+        let epoch = tokio::spawn(async move {
+            tokio::time::sleep(timeout).await;
+            engine.increment_epoch();
+        });
+        let mut linker = Linker::new(&self.engine);
+        host_v11::CatalogExtension::add_to_linker::<HostState, HasSelf<HostState>>(
+            &mut linker,
+            |state| state,
+        )
+        .map_err(|error| ExtensionRuntimeError::Runtime(error.to_string()))?;
+        let instance =
+            host_v11::CatalogExtension::instantiate_async(&mut store, &component, &linker)
+                .await
+                .map_err(|error| ExtensionRuntimeError::Runtime(error.to_string()))?;
+        let command = host_v11::exports::catalog::host::handler::CommandRequest {
+            handler: handler.to_owned(),
+            payload: request.to_owned(),
+        };
+        let result = instance
+            .catalog_host_handler()
+            .call_handle_command(&mut store, &command)
+            .await;
+        epoch.abort();
+        match result {
+            Ok(Ok(response))
+                if response.payload.len() <= MAX_HOST_JSON_BYTES
+                    && response.payload.len() <= max_response_bytes as usize =>
+            {
+                Ok(response.payload)
+            }
+            Ok(Ok(_)) => Err(ExtensionRuntimeError::Runtime(
+                "command response exceeds its declared byte limit".into(),
+            )),
+            Ok(Err(error)) => Err(ExtensionRuntimeError::Runtime(error)),
+            Err(error) => Err(ExtensionRuntimeError::Runtime(error.to_string())),
+        }
+    }
+
+    async fn invoke_v11_event(
+        &self,
+        installation: &ExtensionRuntimeInstallation,
+        repository: CatalogRepository,
+        handler: &ManifestEventHandler,
+        event: &DomainEvent,
+    ) -> Result<(), ExtensionRuntimeError> {
+        let artifact = installation
+            .manifest
+            .artifacts
+            .iter()
+            .find(|artifact| artifact.kind == ArtifactKind::ServerWasm)
+            .ok_or_else(|| {
+                ExtensionRuntimeError::Runtime("release has no server_wasm artifact".into())
+            })?;
+        let bytes = self
+            .object_store
+            .get(&installed_artifact_key(
+                installation.installed_release_id,
+                &artifact.id,
+            ))
+            .await?
+            .bytes;
+        let component = Component::new(&self.engine, &bytes).map_err(|error| {
+            ExtensionRuntimeError::Runtime(format!("invalid component: {error}"))
+        })?;
+        let state = HostState::new(
+            installation.clone(),
+            repository,
+            self.config.max_memory_bytes,
+        );
+        let mut store = Store::new(&self.engine, state);
+        store.limiter(|state| &mut state.limits);
+        store
+            .set_fuel(self.config.fuel)
+            .map_err(|error| ExtensionRuntimeError::Runtime(error.to_string()))?;
+        store.set_epoch_deadline(1);
+        let engine = self.engine.clone();
+        let timeout = self.config.invocation_timeout;
+        let epoch = tokio::spawn(async move {
+            tokio::time::sleep(timeout).await;
+            engine.increment_epoch();
+        });
+        let mut linker = Linker::new(&self.engine);
+        host_v11::CatalogExtension::add_to_linker::<HostState, HasSelf<HostState>>(
+            &mut linker,
+            |state| state,
+        )
+        .map_err(|error| ExtensionRuntimeError::Runtime(error.to_string()))?;
+        let instance =
+            host_v11::CatalogExtension::instantiate_async(&mut store, &component, &linker)
+                .await
+                .map_err(|error| ExtensionRuntimeError::Runtime(error.to_string()))?;
+        let result = instance
+            .catalog_host_handler()
+            .call_handle_event(&mut store, &to_wit_v11_event(event))
+            .await;
+        epoch.abort();
+        match result {
+            Ok(Ok(())) => Ok(()),
+            Ok(Err(message)) => Err(ExtensionRuntimeError::Runtime(format!(
+                "handler '{}' failed: {message}",
+                handler.id
+            ))),
+            Err(error) => Err(ExtensionRuntimeError::Runtime(error.to_string())),
+        }
+    }
+
     async fn invoke(
         &self,
         installation: &ExtensionRuntimeInstallation,
@@ -94,6 +253,11 @@ impl ExtensionRuntime {
         handler: &ManifestEventHandler,
         event: &DomainEvent,
     ) -> Result<(), ExtensionRuntimeError> {
+        if uses_v11(&installation.manifest.catalog.host_api) {
+            return self
+                .invoke_v11_event(installation, repository, handler, event)
+                .await;
+        }
         let artifact = installation
             .manifest
             .artifacts
@@ -151,6 +315,25 @@ impl ExtensionRuntime {
             ))),
             Err(error) => Err(ExtensionRuntimeError::Runtime(error.to_string())),
         }
+    }
+}
+
+fn uses_v11(range: &str) -> bool {
+    let Ok(range) = VersionReq::parse(range) else {
+        return false;
+    };
+    range.matches(&Version::new(1, 1, 0)) && !range.matches(&Version::new(1, 0, 0))
+}
+
+fn to_wit_v11_event(event: &DomainEvent) -> host_v11::catalog::host::api::Event {
+    host_v11::catalog::host::api::Event {
+        id: event.id.to_string(),
+        event_type: event.event_type.clone(),
+        aggregate_kind: event.aggregate_kind.clone(),
+        aggregate_id: event.aggregate_id.to_string(),
+        correlation_id: event.correlation_id.to_string(),
+        causation_id: event.causation_id.map(|id| id.to_string()),
+        payload: event.payload.to_string(),
     }
 }
 
@@ -224,6 +407,18 @@ impl catalog::host::api::Host for HostState {
             metrics::counter!("catalog_extension_host_calls_total", "outcome" => "denied", "operation" => operation).increment(1);
             return Err(error.to_string());
         }
+        if self
+            .repository
+            .runtime_extension_installation(
+                &self.installation.extension_id,
+                self.installation.installed_release_id,
+            )
+            .await
+            .map_err(|_| "extension authorization could not be checked")?
+            .is_none()
+        {
+            return Err("extension invocation is no longer authorized".into());
+        }
         if operation == "configuration.get.v1" {
             return Ok(self.installation.configuration.to_string());
         }
@@ -247,7 +442,154 @@ impl catalog::host::api::Host for HostState {
     }
 }
 
+impl host_v11::catalog::host::api::Host for HostState {
+    async fn read(
+        &mut self,
+        request: host_v11::catalog::host::api::ReadRequest,
+    ) -> Result<host_v11::catalog::host::api::ReadResponse, String> {
+        self.require_active("catalog.read").await?;
+        let (entity_id, context_id) = match request {
+            host_v11::catalog::host::api::ReadRequest::Entity(input)
+            | host_v11::catalog::host::api::ReadRequest::Values(input) => {
+                (parse_uuid(&input.entity_id, "entity ID")?, None)
+            }
+            host_v11::catalog::host::api::ReadRequest::Resolved(input) => (
+                parse_uuid(&input.entity_id, "entity ID")?,
+                Some(parse_uuid(&input.context_id, "context ID")?),
+            ),
+        };
+        let entity = self
+            .repository
+            .get_entity(entity_id)
+            .await
+            .map_err(|error| error.to_string())?
+            .ok_or_else(|| "entity not found".to_owned())?;
+        let blueprint = self
+            .repository
+            .get_blueprint_revision(entity.blueprint_id, entity.blueprint_version)
+            .await
+            .map_err(|error| error.to_string())?
+            .ok_or_else(|| "blueprint revision not found".to_owned())?;
+        let direct_values = self
+            .repository
+            .current_values(entity_id)
+            .await
+            .map_err(|error| error.to_string())?;
+        let resolved_values = match context_id {
+            Some(context_id) => Some(
+                self.repository
+                    .resolved_preview(entity_id, context_id, 0)
+                    .await
+                    .map_err(|error| error.to_string())?
+                    .ok_or_else(|| "entity not found".to_owned())?,
+            ),
+            None => None,
+        };
+        Ok(host_v11::catalog::host::api::ReadResponse {
+            entity: bounded_serialize(&entity)?,
+            blueprint: bounded_serialize(&blueprint)?,
+            direct_values: bounded_serialize(&direct_values)?,
+            resolved_values: resolved_values
+                .as_ref()
+                .map(bounded_serialize)
+                .transpose()?,
+        })
+    }
+
+    async fn write(
+        &mut self,
+        request: host_v11::catalog::host::api::WriteRequest,
+    ) -> Result<host_v11::catalog::host::api::WriteResponse, String> {
+        self.require_active("catalog.write").await?;
+        if request.values.is_empty() || request.values.len() > 100 {
+            return Err("writes require 1-100 scalar values".into());
+        }
+        let entity_id = parse_uuid(&request.entity_id, "entity ID")?;
+        let values = request
+            .values
+            .into_iter()
+            .map(|value| {
+                let attribute_id = value
+                    .attribute_id
+                    .as_deref()
+                    .map(|id| parse_uuid(id, "attribute ID"))
+                    .transpose()?;
+                if (attribute_id.is_some()) == (value.attribute_code.is_some()) {
+                    return Err("each write requires exactly one attribute selector".into());
+                }
+                Ok(NewAttributeValue::Scalar {
+                    attribute_id,
+                    attribute_code: value.attribute_code,
+                    context_id: Some(parse_uuid(&value.context_id, "context ID")?),
+                    value: parse_bounded_json(&value.value, "attribute value")?,
+                })
+            })
+            .collect::<Result<Vec<_>, String>>()?;
+        let values = self
+            .repository
+            .for_extension(&self.installation.extension_id)
+            .append_values(entity_id, AppendAttributeValues { values })
+            .await
+            .map_err(|error| error.to_string())?;
+        Ok(host_v11::catalog::host::api::WriteResponse {
+            values: bounded_serialize(&values)?,
+        })
+    }
+
+    async fn scoped_configuration_get(
+        &mut self,
+        scope: host_v11::catalog::host::api::ConfigurationScope,
+    ) -> Result<Option<String>, String> {
+        self.require_active("configuration.write").await?;
+        let value = self
+            .repository
+            .extension_scoped_configuration_get(
+                &self.installation.extension_id,
+                self.installation.installed_release_id,
+                &to_configuration_scope(scope)?,
+            )
+            .await
+            .map_err(|error| error.to_string())?;
+        value.as_ref().map(bounded_serialize).transpose()
+    }
+
+    async fn scoped_configuration_set(
+        &mut self,
+        request: host_v11::catalog::host::api::ScopedConfigurationUpdate,
+    ) -> Result<(), String> {
+        self.require_active("configuration.write").await?;
+        let value = parse_bounded_json(&request.value, "scoped configuration value")?;
+        self.repository
+            .extension_scoped_configuration_set(
+                &self.installation.extension_id,
+                self.installation.installed_release_id,
+                &to_configuration_scope(request.scope)?,
+                value,
+            )
+            .await
+            .map_err(|error| error.to_string())
+    }
+
+    async fn log(&mut self, level: String, message: String) -> Result<(), String> {
+        <Self as catalog::host::api::Host>::log(self, level, message).await
+    }
+}
+
 impl HostState {
+    async fn require_active(&self, capability: &str) -> Result<(), String> {
+        self.require(capability)
+            .map_err(|error| error.to_string())?;
+        self.repository
+            .runtime_extension_installation(
+                &self.installation.extension_id,
+                self.installation.installed_release_id,
+            )
+            .await
+            .map_err(|_| "extension authorization could not be checked")?
+            .ok_or_else(|| "extension invocation is no longer authorized".to_owned())?;
+        Ok(())
+    }
+
     async fn storage_call(&self, operation: &str, request: &str) -> Result<String, String> {
         let release_id = self.installation.installed_release_id;
         let extension_id = &self.installation.extension_id;
@@ -310,6 +652,53 @@ impl HostState {
             _ => Err("host operation is not enabled by this deployment".into()),
         }
     }
+}
+
+fn bounded_serialize(value: &impl serde::Serialize) -> Result<String, String> {
+    let serialized =
+        serde_json::to_string(value).map_err(|_| "response serialization failed".to_owned())?;
+    if serialized.len() > MAX_HOST_JSON_BYTES {
+        Err("response exceeds host JSON limit".into())
+    } else {
+        Ok(serialized)
+    }
+}
+
+fn parse_bounded_json(value: &str, label: &str) -> Result<Value, String> {
+    if value.len() > MAX_HOST_JSON_BYTES {
+        return Err(format!("{label} exceeds host JSON limit"));
+    }
+    serde_json::from_str(value).map_err(|_| format!("invalid {label}"))
+}
+
+fn parse_uuid(value: &str, label: &str) -> Result<Uuid, String> {
+    if value.len() > 128 {
+        return Err(format!("invalid {label}"));
+    }
+    value.parse().map_err(|_| format!("invalid {label}"))
+}
+
+fn to_configuration_scope(
+    scope: host_v11::catalog::host::api::ConfigurationScope,
+) -> Result<ExtensionConfigurationScope, String> {
+    let kind = match scope.kind {
+        host_v11::catalog::host::api::ConfigurationScopeKind::Blueprint => {
+            crate::extensions::ConfigurationScope::Blueprint
+        }
+        host_v11::catalog::host::api::ConfigurationScopeKind::Attribute => {
+            crate::extensions::ConfigurationScope::Attribute
+        }
+    };
+    Ok(ExtensionConfigurationScope {
+        kind,
+        blueprint_id: parse_uuid(&scope.blueprint_id, "blueprint ID")?,
+        blueprint_version: scope.blueprint_version,
+        attribute_id: scope
+            .attribute_id
+            .as_deref()
+            .map(|id| parse_uuid(id, "attribute ID"))
+            .transpose()?,
+    })
 }
 
 #[derive(Deserialize)]
@@ -415,7 +804,14 @@ impl EventHandler for WasmExtensionHandler {
                 };
                 if let Err(error) = self
                     .runtime
-                    .invoke(&installation, context.repository().clone(), handler, &event)
+                    .invoke(
+                        &installation,
+                        context
+                            .repository()
+                            .for_extension(&installation.extension_id),
+                        handler,
+                        &event,
+                    )
                     .await
                 {
                     metrics::counter!("catalog_extension_invocations_total", "outcome" => "failed")
@@ -430,6 +826,33 @@ impl EventHandler for WasmExtensionHandler {
             }
         }
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{host_v11, parse_bounded_json, to_configuration_scope, uses_v11};
+
+    #[test]
+    fn selects_an_explicit_abi_without_upgrading_v1_ranges() {
+        assert!(!uses_v11("^1.0"));
+        assert!(uses_v11(">=1.1.0, <2.0.0"));
+        assert!(!uses_v11(">=1.0.0, <2.0.0"));
+    }
+
+    #[test]
+    fn typed_v11_inputs_reject_oversized_json_and_invalid_scopes() {
+        assert!(parse_bounded_json(&"x".repeat(65_537), "value").is_err());
+        assert!(parse_bounded_json("{", "value").is_err());
+        assert!(
+            to_configuration_scope(host_v11::catalog::host::api::ConfigurationScope {
+                kind: host_v11::catalog::host::api::ConfigurationScopeKind::Attribute,
+                blueprint_id: "not-a-uuid".into(),
+                blueprint_version: 1,
+                attribute_id: Some("also-not-a-uuid".into()),
+            })
+            .is_err()
+        );
     }
 }
 

@@ -434,9 +434,11 @@ impl CatalogRepository {
                 FROM attribute_values av
                 JOIN attributes a ON a.id = av.attribute_id
                 WHERE av.entity_id = $1
+                  AND av.workspace_id = $2
                   AND (av.relationship_target_entity_id IS NULL OR av.active)"#,
         )
         .bind(entity_id)
+        .bind(self.workspace_id.unwrap_or(Self::DEFAULT_WORKSPACE_ID))
         .fetch_all(&self.pool)
         .await?;
         rows.into_iter()

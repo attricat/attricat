@@ -49,6 +49,12 @@ pub(super) fn policy(method: &Method, path: &str) -> Option<Policy> {
             target: TargetKind::None,
         });
     }
+    if path == "/extensions/{extension_id}/{contribution_id}/command" {
+        return Some(Policy {
+            permission: "entities.write",
+            target: TargetKind::None,
+        });
+    }
     if path == "/extensions/runtime"
         || path == "/extensions/{extension_id}/{contribution_id}/artifact"
         || path == "/extensions/{extension_id}/{contribution_id}/storage/{release_id}"
@@ -262,6 +268,15 @@ mod tests {
             .unwrap()
             .permission,
             "entities.read"
+        );
+        assert_eq!(
+            policy(
+                &Method::POST,
+                "/extensions/{extension_id}/{contribution_id}/command"
+            )
+            .unwrap()
+            .permission,
+            "entities.write"
         );
     }
 }

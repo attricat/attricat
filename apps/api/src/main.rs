@@ -215,7 +215,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
             .map_err(|error| format!("invalid extension runtime configuration: {error}"))?;
     let dispatcher_handles = event_dispatcher::start(
         CatalogRepository::with_workspace_pool_factory(pool.clone(), connect_options.clone()),
-        extension_runtime::registry_with_wasm(extension_runtime),
+        extension_runtime::registry_with_wasm(extension_runtime.clone()),
         dispatcher_config,
         shutdown_receiver,
     );
@@ -231,6 +231,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
             registry,
             official_registry,
             object_store,
+            extension_runtime,
             file_access_policy: Arc::new(AllowFileAccess),
             mail_delivery,
             password_reset_url,

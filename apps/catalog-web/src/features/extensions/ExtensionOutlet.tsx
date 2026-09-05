@@ -5,7 +5,12 @@ import { getExtensionRuntime } from './api';
 import { extensionQueryKeys } from './query-keys';
 
 type Props = {
-  outlet: 'navigation' | 'entity_preview_panel';
+  outlet:
+    | 'navigation'
+    | 'entity_preview_panel'
+    | 'blueprint_attribute_configuration'
+    | 'entity_attribute_decoration'
+    | 'entity_action';
   context?: Record<string, unknown>;
 };
 

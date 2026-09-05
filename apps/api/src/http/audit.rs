@@ -86,7 +86,9 @@ fn action(method: &Method, route: &str) -> String {
 }
 
 fn audit_permission(method: &Method, route: &str) -> &'static str {
-    if route.starts_with("/extension-registries") || route.starts_with("/extensions") {
+    if route == "/extensions/{extension_id}/{contribution_id}/command" {
+        "entities.write"
+    } else if route.starts_with("/extension-registries") || route.starts_with("/extensions") {
         "extensions.manage"
     } else if route.starts_with("/blueprints") {
         if route.ends_with("/publish") {
@@ -198,6 +200,13 @@ mod tests {
         assert_eq!(
             audit_permission(&Method::DELETE, "/workspace/roles/{id}"),
             "roles.manage"
+        );
+        assert_eq!(
+            audit_permission(
+                &Method::POST,
+                "/extensions/{extension_id}/{contribution_id}/command"
+            ),
+            "entities.write"
         );
     }
 

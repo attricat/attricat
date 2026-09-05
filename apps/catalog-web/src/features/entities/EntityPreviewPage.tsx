@@ -172,6 +172,21 @@ export const EntityPreviewPage = ({ entityId }: { entityId: string }) => {
                   skipComponentId={entityHeadingComponentId}
                 />
               </Paper>
+              {blueprint.data.attributes.map((attribute) => (
+                <ExtensionOutlet
+                  context={{
+                    attribute_id: attribute.id,
+                    context_id: selectedContextId,
+                    entity_id: entityId,
+                  }}
+                  key={attribute.id}
+                  outlet="entity_attribute_decoration"
+                />
+              ))}
+              <ExtensionOutlet
+                context={{ entity_id: entityId, context_id: selectedContextId }}
+                outlet="entity_action"
+              />
               <Box sx={{ mt: 3 }}>
                 <ExtensionOutlet
                   context={{
