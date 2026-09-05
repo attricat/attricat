@@ -745,7 +745,7 @@ impl CatalogRepository {
         }
         Ok(())
     }
-    fn extension_workspace(&self) -> Uuid {
+    pub(in crate::repository) fn extension_workspace(&self) -> Uuid {
         self.workspace_id.unwrap_or(Self::DEFAULT_WORKSPACE_ID)
     }
 

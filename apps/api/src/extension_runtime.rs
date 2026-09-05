@@ -8,6 +8,8 @@
 use std::{sync::Arc, time::Duration};
 
 use async_trait::async_trait;
+use serde::Deserialize;
+use serde_json::{Value, json};
 use thiserror::Error;
 use wasmtime::{
     Config, Engine, Store, StoreLimits, StoreLimitsBuilder,
@@ -19,7 +21,7 @@ use crate::{
     event_dispatcher::{EventHandler, EventHandlerCommandContext},
     extension_installer::installed_artifact_key,
     extensions::{ArtifactKind, EventHandler as ManifestEventHandler},
-    repository::ExtensionRuntimeInstallation,
+    repository::{CatalogRepository, ExtensionRuntimeInstallation},
     storage::{ObjectStore, ObjectStoreError},
 };
 
@@ -88,6 +90,7 @@ impl ExtensionRuntime {
     async fn invoke(
         &self,
         installation: &ExtensionRuntimeInstallation,
+        repository: CatalogRepository,
         handler: &ManifestEventHandler,
         event: &DomainEvent,
     ) -> Result<(), ExtensionRuntimeError> {
@@ -105,7 +108,11 @@ impl ExtensionRuntime {
             ExtensionRuntimeError::Runtime(format!("invalid component: {error}"))
         })?;
 
-        let state = HostState::new(installation.clone(), self.config.max_memory_bytes);
+        let state = HostState::new(
+            installation.clone(),
+            repository,
+            self.config.max_memory_bytes,
+        );
         let mut store = Store::new(&self.engine, state);
         store.limiter(|state| &mut state.limits);
         store
@@ -162,13 +169,19 @@ fn to_wit_event(event: &DomainEvent) -> catalog::host::api::Event {
 #[derive(Clone)]
 struct HostState {
     installation: ExtensionRuntimeInstallation,
+    repository: CatalogRepository,
     limits: StoreLimits,
 }
 
 impl HostState {
-    fn new(installation: ExtensionRuntimeInstallation, max_memory_bytes: usize) -> Self {
+    fn new(
+        installation: ExtensionRuntimeInstallation,
+        repository: CatalogRepository,
+        max_memory_bytes: usize,
+    ) -> Self {
         Self {
             installation,
+            repository,
             limits: StoreLimitsBuilder::new()
                 .memory_size(max_memory_bytes)
                 .build(),
@@ -199,7 +212,8 @@ impl catalog::host::api::Host for HostState {
         let required = match operation.as_str() {
             "configuration.get.v1" => "configuration.read",
             "secrets.get.v1" => "secrets.read",
-            "storage.get.v1" | "storage.put.v1" | "storage.delete.v1" => "storage.extension",
+            "storage.get.v1" | "storage.set.v1" | "storage.put.v1" | "storage.delete.v1"
+            | "storage.list.v1" => "storage.extension",
             "catalog.read.v1" => "catalog.read",
             "catalog.command.v1" => "catalog.write",
             "events.emit.v1" => "events.emit",
@@ -210,13 +224,10 @@ impl catalog::host::api::Host for HostState {
             metrics::counter!("catalog_extension_host_calls_total", "outcome" => "denied", "operation" => operation).increment(1);
             return Err(error.to_string());
         }
-        // Configuration is the only data-bearing v1 operation implemented in
-        // this runtime. Other operation names are intentionally capability
-        // checked but rejected until their command contracts are introduced.
         if operation == "configuration.get.v1" {
             return Ok(self.installation.configuration.to_string());
         }
-        Err("host operation is not enabled by this deployment".into())
+        self.storage_call(&operation, &request).await
     }
 
     async fn log(&mut self, level: String, message: String) -> Result<(), String> {
@@ -234,6 +245,100 @@ impl catalog::host::api::Host for HostState {
         tracing::info!(extension = %self.installation.extension_id, %level, message = %message, "extension host log");
         Ok(())
     }
+}
+
+impl HostState {
+    async fn storage_call(&self, operation: &str, request: &str) -> Result<String, String> {
+        let release_id = self.installation.installed_release_id;
+        let extension_id = &self.installation.extension_id;
+        match operation {
+            "storage.get.v1" => {
+                let input: StorageGet = parse_storage_request(request)?;
+                let result = self
+                    .repository
+                    .extension_storage_get(extension_id, release_id, &input.key)
+                    .await
+                    .map_err(|error| error.to_string())?;
+                Ok(serde_json::to_string(
+                    &result.map(|entry| json!({"value": entry.value, "revision": entry.revision})),
+                )
+                .expect("storage result serializes"))
+            }
+            "storage.set.v1" | "storage.put.v1" => {
+                let input: StorageSet = parse_storage_request(request)?;
+                let revision = self
+                    .repository
+                    .extension_storage_set(
+                        extension_id,
+                        release_id,
+                        &input.key,
+                        input.value,
+                        input.expected_revision,
+                    )
+                    .await
+                    .map_err(|error| error.to_string())?;
+                Ok(json!({"revision": revision}).to_string())
+            }
+            "storage.delete.v1" => {
+                let input: StorageDelete = parse_storage_request(request)?;
+                self.repository
+                    .extension_storage_delete(
+                        extension_id,
+                        release_id,
+                        &input.key,
+                        input.expected_revision,
+                    )
+                    .await
+                    .map_err(|error| error.to_string())?;
+                Ok("null".to_owned())
+            }
+            "storage.list.v1" => {
+                let input: StorageList = parse_storage_request(request)?;
+                let page = self
+                    .repository
+                    .extension_storage_list(
+                        extension_id,
+                        release_id,
+                        input.prefix.as_deref(),
+                        input.cursor.as_deref(),
+                        input.limit.unwrap_or(50),
+                    )
+                    .await
+                    .map_err(|error| error.to_string())?;
+                Ok(json!({"entries": page.entries.into_iter().map(|entry| json!({"key": entry.key, "value": entry.value, "revision": entry.revision})).collect::<Vec<_>>(), "cursor": page.cursor}).to_string())
+            }
+            _ => Err("host operation is not enabled by this deployment".into()),
+        }
+    }
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct StorageGet {
+    key: String,
+}
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct StorageSet {
+    key: String,
+    value: Value,
+    expected_revision: Option<i64>,
+}
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct StorageDelete {
+    key: String,
+    expected_revision: Option<i64>,
+}
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct StorageList {
+    prefix: Option<String>,
+    cursor: Option<String>,
+    limit: Option<u32>,
+}
+fn parse_storage_request<T: for<'de> Deserialize<'de>>(request: &str) -> Result<T, String> {
+    serde_json::from_str(request).map_err(|_| "invalid storage request".to_owned())
 }
 
 /// One durable dispatcher consumer runs enabled extension handlers. Individual
@@ -308,7 +413,11 @@ impl EventHandler for WasmExtensionHandler {
                 }) else {
                     continue;
                 };
-                if let Err(error) = self.runtime.invoke(&installation, handler, &event).await {
+                if let Err(error) = self
+                    .runtime
+                    .invoke(&installation, context.repository().clone(), handler, &event)
+                    .await
+                {
                     metrics::counter!("catalog_extension_invocations_total", "outcome" => "failed")
                         .increment(1);
                     tracing::warn!(extension = %installation.extension_id, handler = %handler.id, event_id = %event.id, %error, "extension handler failed");

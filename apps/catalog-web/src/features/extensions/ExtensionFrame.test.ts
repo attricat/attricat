@@ -16,4 +16,13 @@ describe('extension frame bootstrap', () => {
     expect(frameDocument).toContain("message?.type !== 'catalog:response.v1'");
     expect(frameDocument).toContain("connect-src 'none'");
   });
+
+  it('exposes storage only through the MessageChannel broker', () => {
+    expect(frameDocument).toContain(
+      "storage: { get: detail => call('storage.get'",
+    );
+    expect(frameDocument).toContain("call('storage.set'");
+    expect(frameDocument).toContain("call('storage.delete'");
+    expect(frameDocument).toContain("call('storage.list'");
+  });
 });

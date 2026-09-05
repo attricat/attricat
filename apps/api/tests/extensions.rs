@@ -48,6 +48,30 @@ fn release_archive(version: &str, dependencies: Value, artifact_bytes: &[u8]) ->
     zstd::stream::encode_all(Cursor::new(tar_bytes), 0).unwrap()
 }
 
+fn storage_client_release_archive(version: &str) -> Vec<u8> {
+    let manifest = serde_json::to_vec(&json!({
+        "manifest_version": 1,
+        "name": "Storage client extension",
+        "version": version,
+        "description": "extension storage integration test",
+        "icons": {"48": "icon.png"},
+        "catalog": {"id": "acme.storage", "host_api": "^1.0"},
+        "permissions": ["storage.extension"],
+        "configuration": {"version": 1, "schema": {"type": "object", "additionalProperties": false}},
+        "artifacts": [{"id": "client", "kind": "client_component", "path": "client.js"}],
+        "ui": [{"id": "panel", "version": 1, "kind": "element", "artifact": "client", "element": "acme-storage-panel", "outlet": "entity_preview_panel"}]
+    }))
+    .unwrap();
+    let mut tar_bytes = Vec::new();
+    {
+        let mut tar = tar::Builder::new(&mut tar_bytes);
+        append_file(&mut tar, "manifest.json", &manifest);
+        append_file(&mut tar, "client.js", b"export {}");
+        tar.finish().unwrap();
+    }
+    zstd::stream::encode_all(Cursor::new(tar_bytes), 0).unwrap()
+}
+
 fn client_release_archive() -> Vec<u8> {
     let manifest = serde_json::to_vec(&json!({
         "manifest_version": 1,
@@ -57,6 +81,7 @@ fn client_release_archive() -> Vec<u8> {
         "icons": {"48": "icon.png"},
         "catalog": {"id": "acme.client", "host_api": "^1.0"},
         "permissions": ["configuration.read"],
+        "configuration": {"version": 1, "schema": {"type": "object", "additionalProperties": false}},
         "artifacts": [{
             "id": "client",
             "kind": "client_component",
@@ -112,7 +137,7 @@ async fn sideload_installs_a_validated_local_archive(pool: sqlx::PgPool) {
 
 #[sqlx::test(migrations = "./migrations")]
 async fn enabled_client_contributions_are_hidden_after_state_changes(pool: sqlx::PgPool) {
-    let workspace = Uuid::from_u128(0x00000000000040008000000000000003);
+    let workspace = Uuid::from_u128(0x00000000000040008000000000000002);
     let repository = CatalogRepository::new(pool)
         .for_workspace(workspace)
         .await
@@ -167,6 +192,141 @@ async fn enabled_client_contributions_are_hidden_after_state_changes(pool: sqlx:
             .unwrap()
             .is_empty()
     );
+}
+
+#[sqlx::test(migrations = "./migrations")]
+async fn extension_storage_enforces_cas_bounds_quota_and_workspace_namespace(pool: sqlx::PgPool) {
+    let workspace = Uuid::from_u128(0x00000000000040008000000000000002);
+    let repository = CatalogRepository::new(pool)
+        .for_workspace(workspace)
+        .await
+        .unwrap();
+    let installer =
+        ExtensionInstaller::new(repository.clone(), Arc::new(FakeObjectStore::available()));
+    let installed = installer
+        .install("test", &storage_client_release_archive("1.0.0"))
+        .await
+        .unwrap();
+    repository
+        .grant_extension("acme.storage", "capability", "storage.extension")
+        .await
+        .unwrap();
+    repository.enable_extension("acme.storage").await.unwrap();
+
+    let first = repository
+        .extension_storage_set(
+            "acme.storage",
+            installed.installed_release_id,
+            "state",
+            json!({"enabled": true}),
+            None,
+        )
+        .await
+        .unwrap();
+    assert_eq!(first, 1);
+    assert_eq!(
+        repository
+            .extension_storage_get("acme.storage", installed.installed_release_id, "state")
+            .await
+            .unwrap()
+            .unwrap()
+            .value,
+        json!({"enabled": true})
+    );
+    assert_eq!(
+        repository
+            .extension_storage_set(
+                "acme.storage",
+                installed.installed_release_id,
+                "state",
+                json!(2),
+                Some(first)
+            )
+            .await
+            .unwrap(),
+        2
+    );
+    assert!(matches!(
+        repository
+            .extension_storage_set(
+                "acme.storage",
+                installed.installed_release_id,
+                "state",
+                json!(3),
+                Some(first)
+            )
+            .await,
+        Err(api::repository::ExtensionStorageError::Conflict)
+    ));
+    assert!(
+        repository
+            .extension_storage_set(
+                "acme.storage",
+                installed.installed_release_id,
+                &"x".repeat(257),
+                json!(null),
+                None
+            )
+            .await
+            .is_err()
+    );
+    assert!(
+        repository
+            .extension_storage_set(
+                "acme.storage",
+                installed.installed_release_id,
+                "large",
+                json!("x".repeat(65_535)),
+                None
+            )
+            .await
+            .is_err()
+    );
+
+    let quota_value = json!("x".repeat(65_534));
+    for index in 0..79 {
+        repository
+            .extension_storage_set(
+                "acme.storage",
+                installed.installed_release_id,
+                &format!("quota-{index}"),
+                quota_value.clone(),
+                None,
+            )
+            .await
+            .unwrap();
+    }
+    assert!(matches!(
+        repository
+            .extension_storage_set(
+                "acme.storage",
+                installed.installed_release_id,
+                "quota-overflow",
+                quota_value,
+                None
+            )
+            .await,
+        Err(api::repository::ExtensionStorageError::QuotaExceeded)
+    ));
+    let page = repository
+        .extension_storage_list(
+            "acme.storage",
+            installed.installed_release_id,
+            Some("quota-"),
+            None,
+            1,
+        )
+        .await
+        .unwrap();
+    assert_eq!(page.entries.len(), 1);
+    assert!(page.cursor.is_some());
+    repository.disable_extension("acme.storage").await.unwrap();
+    assert!(matches!(
+        repository
+            .extension_storage_get("acme.storage", installed.installed_release_id, "state")
+            .await,
+        Err(api::repository::ExtensionStorageError::Denied)
+    ));
 }
 
 #[sqlx::test(migrations = "./migrations")]

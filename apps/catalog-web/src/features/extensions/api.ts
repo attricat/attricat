@@ -37,3 +37,54 @@ export const getExtensionArtifact = async (
       `/api/extensions/${encodeURIComponent(extensionId)}/${encodeURIComponent(contributionId)}/artifact`,
     )
   ).text();
+
+export const extensionStorageRequestSchema = z.discriminatedUnion('operation', [
+  z.object({ operation: z.literal('get'), key: z.string() }).strict(),
+  z
+    .object({
+      operation: z.literal('set'),
+      key: z.string(),
+      value: z.unknown(),
+      expected_revision: z.number().int().positive().optional(),
+    })
+    .strict(),
+  z
+    .object({
+      operation: z.literal('delete'),
+      key: z.string(),
+      expected_revision: z.number().int().positive().optional(),
+    })
+    .strict(),
+  z
+    .object({
+      operation: z.literal('list'),
+      prefix: z.string().optional(),
+      cursor: z.string().optional(),
+      limit: z.number().int().min(1).max(100).optional(),
+    })
+    .strict(),
+]);
+export type ExtensionStorageRequest = z.infer<
+  typeof extensionStorageRequestSchema
+>;
+
+export const extensionStorage = async (
+  extensionId: string,
+  contributionId: string,
+  releaseId: string,
+  input: ExtensionStorageRequest,
+) => {
+  const response = await apiFetch(
+    `/api/extensions/${encodeURIComponent(extensionId)}/${encodeURIComponent(contributionId)}/storage/${encodeURIComponent(releaseId)}`,
+    {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify(input),
+    },
+  );
+  if (!response.ok) throw new Error('Extension storage request was denied');
+  const text = await response.text();
+  if (text.length > 1_048_576)
+    throw new Error('Extension storage response is too large');
+  return JSON.parse(text) as unknown;
+};
