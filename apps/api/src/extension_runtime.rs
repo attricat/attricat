@@ -75,7 +75,6 @@ pub enum ExtensionRuntimeError {
 
 #[derive(Clone)]
 pub struct ExtensionRuntime {
-    engine: Engine,
     object_store: Arc<dyn ObjectStore>,
     config: ExtensionRuntimeConfig,
 }
@@ -89,13 +88,20 @@ impl ExtensionRuntime {
         wasmtime.wasm_component_model(true);
         wasmtime.consume_fuel(true);
         wasmtime.epoch_interruption(true);
-        let engine = Engine::new(&wasmtime)
+        Engine::new(&wasmtime)
             .map_err(|error| ExtensionRuntimeError::Runtime(error.to_string()))?;
         Ok(Self {
-            engine,
             object_store,
             config,
         })
+    }
+
+    fn invocation_engine() -> Result<Engine, ExtensionRuntimeError> {
+        let mut wasmtime = Config::new();
+        wasmtime.wasm_component_model(true);
+        wasmtime.consume_fuel(true);
+        wasmtime.epoch_interruption(true);
+        Engine::new(&wasmtime).map_err(|error| ExtensionRuntimeError::Runtime(error.to_string()))
     }
 
     /// Invokes a v1.1 component command after its HTTP broker has resolved a
@@ -108,6 +114,7 @@ impl ExtensionRuntime {
         request: &str,
         max_response_bytes: u64,
     ) -> Result<String, ExtensionRuntimeError> {
+        let engine = Self::invocation_engine()?;
         let artifact = installation
             .manifest
             .artifacts
@@ -124,7 +131,7 @@ impl ExtensionRuntime {
             ))
             .await?
             .bytes;
-        let component = Component::new(&self.engine, &bytes).map_err(|error| {
+        let component = Component::new(&engine, &bytes).map_err(|error| {
             ExtensionRuntimeError::Runtime(format!("invalid component: {error}"))
         })?;
         let state = HostState::new(
@@ -132,19 +139,19 @@ impl ExtensionRuntime {
             repository,
             self.config.max_memory_bytes,
         );
-        let mut store = Store::new(&self.engine, state);
+        let mut store = Store::new(&engine, state);
         store.limiter(|state| &mut state.limits);
         store
             .set_fuel(self.config.fuel)
             .map_err(|error| ExtensionRuntimeError::Runtime(error.to_string()))?;
         store.set_epoch_deadline(1);
-        let engine = self.engine.clone();
+        let timeout_engine = engine.clone();
         let timeout = self.config.invocation_timeout;
         let epoch = tokio::spawn(async move {
             tokio::time::sleep(timeout).await;
-            engine.increment_epoch();
+            timeout_engine.increment_epoch();
         });
-        let mut linker = Linker::new(&self.engine);
+        let mut linker = Linker::new(&engine);
         host_v11::CatalogExtension::add_to_linker::<HostState, HasSelf<HostState>>(
             &mut linker,
             |state| state,
@@ -185,6 +192,7 @@ impl ExtensionRuntime {
         handler: &ManifestEventHandler,
         event: &DomainEvent,
     ) -> Result<(), ExtensionRuntimeError> {
+        let engine = Self::invocation_engine()?;
         let artifact = installation
             .manifest
             .artifacts
@@ -201,7 +209,7 @@ impl ExtensionRuntime {
             ))
             .await?
             .bytes;
-        let component = Component::new(&self.engine, &bytes).map_err(|error| {
+        let component = Component::new(&engine, &bytes).map_err(|error| {
             ExtensionRuntimeError::Runtime(format!("invalid component: {error}"))
         })?;
         let state = HostState::new(
@@ -209,19 +217,19 @@ impl ExtensionRuntime {
             repository,
             self.config.max_memory_bytes,
         );
-        let mut store = Store::new(&self.engine, state);
+        let mut store = Store::new(&engine, state);
         store.limiter(|state| &mut state.limits);
         store
             .set_fuel(self.config.fuel)
             .map_err(|error| ExtensionRuntimeError::Runtime(error.to_string()))?;
         store.set_epoch_deadline(1);
-        let engine = self.engine.clone();
+        let timeout_engine = engine.clone();
         let timeout = self.config.invocation_timeout;
         let epoch = tokio::spawn(async move {
             tokio::time::sleep(timeout).await;
-            engine.increment_epoch();
+            timeout_engine.increment_epoch();
         });
-        let mut linker = Linker::new(&self.engine);
+        let mut linker = Linker::new(&engine);
         host_v11::CatalogExtension::add_to_linker::<HostState, HasSelf<HostState>>(
             &mut linker,
             |state| state,
@@ -258,6 +266,7 @@ impl ExtensionRuntime {
                 .invoke_v11_event(installation, repository, handler, event)
                 .await;
         }
+        let engine = Self::invocation_engine()?;
         let artifact = installation
             .manifest
             .artifacts
@@ -268,7 +277,7 @@ impl ExtensionRuntime {
             })?;
         let key = installed_artifact_key(installation.installed_release_id, &artifact.id);
         let bytes = self.object_store.get(&key).await?.bytes;
-        let component = Component::new(&self.engine, &bytes).map_err(|error| {
+        let component = Component::new(&engine, &bytes).map_err(|error| {
             ExtensionRuntimeError::Runtime(format!("invalid component: {error}"))
         })?;
 
@@ -277,20 +286,20 @@ impl ExtensionRuntime {
             repository,
             self.config.max_memory_bytes,
         );
-        let mut store = Store::new(&self.engine, state);
+        let mut store = Store::new(&engine, state);
         store.limiter(|state| &mut state.limits);
         store
             .set_fuel(self.config.fuel)
             .map_err(|error| ExtensionRuntimeError::Runtime(error.to_string()))?;
         store.set_epoch_deadline(1);
-        let engine = self.engine.clone();
+        let timeout_engine = engine.clone();
         let timeout = self.config.invocation_timeout;
         let epoch = tokio::spawn(async move {
             tokio::time::sleep(timeout).await;
-            engine.increment_epoch();
+            timeout_engine.increment_epoch();
         });
 
-        let mut linker = Linker::new(&self.engine);
+        let mut linker = Linker::new(&engine);
         CatalogExtension::add_to_linker::<HostState, HasSelf<HostState>>(&mut linker, |state| {
             state
         })

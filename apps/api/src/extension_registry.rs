@@ -15,6 +15,11 @@ pub const DEFAULT_OFFICIAL_REGISTRY: &str = "attricat/attricat-extensions";
 const GITHUB_API_ORIGIN: &str = "https://api.github.com";
 const GITHUB_RAW_ORIGIN: &str = "https://raw.githubusercontent.com";
 const MAX_README_BYTES: usize = 256 * 1024;
+const MAX_REGISTRY_INDEX_BYTES: usize = 1024 * 1024;
+const MAX_REGISTRY_ENTRIES: usize = 1_000;
+const MAX_REGISTRY_NAME_BYTES: usize = 256;
+const MAX_REGISTRY_DESCRIPTION_BYTES: usize = 4 * 1024;
+const MAX_REGISTRY_ICON_BYTES: usize = 512;
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize)]
 pub struct GitHubRepository {
@@ -186,11 +191,22 @@ impl GitHubRegistry {
         if !response.status().is_success() {
             return Err(RegistryError::Unavailable);
         }
-        let index: RegistryIndex = response
-            .json()
+        if response
+            .content_length()
+            .is_some_and(|size| size > MAX_REGISTRY_INDEX_BYTES as u64)
+        {
+            return Err(RegistryError::InvalidResponse);
+        }
+        let bytes = response
+            .bytes()
             .await
-            .map_err(|_| RegistryError::InvalidResponse)?;
-        if index.registry_version != 1 {
+            .map_err(|_| RegistryError::Unavailable)?;
+        if bytes.len() > MAX_REGISTRY_INDEX_BYTES {
+            return Err(RegistryError::InvalidResponse);
+        }
+        let index: RegistryIndex =
+            serde_json::from_slice(&bytes).map_err(|_| RegistryError::InvalidResponse)?;
+        if index.registry_version != 1 || index.extensions.len() > MAX_REGISTRY_ENTRIES {
             return Err(RegistryError::InvalidResponse);
         }
         let mut ids = std::collections::HashSet::new();
@@ -204,7 +220,13 @@ impl GitHubRegistry {
                         byte.is_ascii_alphanumeric() || matches!(byte, b'.' | b'_' | b'-')
                     })
                     || entry.name.trim().is_empty()
+                    || entry.name.len() > MAX_REGISTRY_NAME_BYTES
                     || entry.description.trim().is_empty()
+                    || entry.description.len() > MAX_REGISTRY_DESCRIPTION_BYTES
+                    || entry
+                        .icon
+                        .as_ref()
+                        .is_some_and(|icon| icon.len() > MAX_REGISTRY_ICON_BYTES)
                     || !ids.insert(entry.id.clone())
                 {
                     return Err(RegistryError::InvalidResponse);

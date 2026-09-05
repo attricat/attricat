@@ -41,8 +41,8 @@ A user with `extensions.manage` may alternatively install a local archive from
 **Extensions → Upload archive** (`/manage/extensions/sideload`). The archive is
 sent by Catalog's web client to `POST /extensions/sideload` as an
 `application/zstd` request body and must be a `.tar.zst` extension package no
-larger than 32 MiB. The server validates the archive contents but does not
-currently enforce the request media type. Side-loaded
+larger than 32 MiB. The server enforces the request media type and validates
+the archive contents. Side-loaded
 packages are treated as untrusted input: they receive the same compressed and
 unpacked size limits, safe entry-path checks, strict `manifest.json`
 validation, artifact staging, disabled initial state, lifecycle records, and
@@ -225,15 +225,13 @@ It may use only granted operations:
 - `catalog.navigate({ entity_id })` requires `client.navigation` and resolves
   only to Catalog's entity route.
 - `catalog.notify({ message, severity? })` requires `client.notification`;
-  messages are trimmed and limited to 512 characters. The broker accepts the
-  call, but the host currently has no notification listener, so it does not
-  produce a user-visible notification.
+  messages are trimmed and limited to 512 characters and are displayed through
+  a host-owned accessible notification surface.
 - `catalog.request(path)` requires `catalog.read` and is limited to `GET`
   reads of `/api/entities`, `/api/v1/entities/:uuid`, or the exact revision
   route `/api/blueprints/:uuid/versions/:positive-version`. Responses are
-  limited to 1 MiB. The revision route is not currently bound to the
-  contribution's outlet context, so a component can request any revision the
-  signed-in user may read.
+  limited to 1 MiB measured as UTF-8 bytes. Revision reads are bound to the
+  `blueprint_attribute_configuration` outlet's blueprint ID and revision.
 - `catalog.command({ command_id, payload })` requires `client.commands` and
   invokes a declared, bounded server command. The host validates the caller,
   contribution, release, installation state, configuration, and grants.
@@ -286,9 +284,8 @@ A manifest may declare `scoped_configuration` with an object schema, positive
 version, and `blueprint` and/or `attribute` scopes. It requires
 `configuration.write`. Catalog persists these values separately from blueprint
 schemas and verifies the workspace-owned blueprint revision and attribute on
-every get/set. Attribute-scoped values are operational; blueprint-scoped writes
-are currently blocked by the nullable-primary-key schema defect described in
-this document's implementation limitations. Values are release-bound and
+every get/set. Both attribute-scoped and blueprint-scoped values are
+operational. Values are release-bound and
 inaccessible after disable,
 quarantine, grant changes, or upgrade.
 
@@ -309,13 +306,5 @@ host routes, React state, or inter-extension RPC.
 
 ## Current implementation limitations
 
-- Removing an extension retains its installed-release history, but reinstalling
-  the same extension version in the same workspace currently fails.
-- Concurrent server component invocations share the Wasmtime timeout epoch;
-  one timeout can interrupt an unrelated invocation.
-- Registry index downloads have no response-size, entry-count, or field-size
-  bounds before deserialization.
-- Disabling/removing/upgrading a dependency does not currently disable enabled
-  dependents.
-- An entity context change can reinitialize a mounted client frame and append a
-  duplicate custom element. Refresh or remount the frame after changing context.
+Mediated network, secrets, event-emission, and webhook-delivery functionality
+remain deferred as described above.

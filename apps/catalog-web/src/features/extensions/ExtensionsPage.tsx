@@ -1,5 +1,6 @@
 import { useForm } from '@tanstack/react-form';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useEffect, useRef, useState } from 'react';
 import { Link } from '@tanstack/react-router';
 import {
   Alert,
@@ -31,6 +32,7 @@ import {
   upgradeExtension,
 } from './management-api';
 import { extensionManagementQueryKeys } from './management-query-keys';
+import { extensionQueryKeys } from './query-keys';
 
 const repositoryParts = (repository: string) =>
   repository.replace(/^github:/, '').split('/', 2);
@@ -45,6 +47,7 @@ const invalidate = (
   extensionId?: string,
 ) => {
   void client.invalidateQueries({ queryKey: extensionManagementQueryKeys.all });
+  void client.invalidateQueries({ queryKey: extensionQueryKeys.runtime });
   if (extensionId)
     void client.invalidateQueries({
       queryKey: extensionManagementQueryKeys.detail(extensionId),
@@ -233,7 +236,9 @@ export const SideloadExtensionPage = () => {
             Archives must be valid extension packages and no larger than 32 MiB.
           </Typography>
           <Button
-            disabled={!canManage || !form.state.values.archive || sideload.isPending}
+            disabled={
+              !canManage || !form.state.values.archive || sideload.isPending
+            }
             sx={{ mt: 2 }}
             type="submit"
             variant="contained"
@@ -364,17 +369,37 @@ export const InstalledExtensionPage = ({
     mutationFn: (value: unknown) => configureExtension(extensionId, value),
     onSuccess: () => invalidate(client, extensionId),
   });
+  const revoke = useMutation({
+    mutationFn: ({ kind, grant }: { kind: string; grant: string }) =>
+      revokeExtensionGrant(extensionId, kind, grant),
+    onSuccess: () => invalidate(client, extensionId),
+  });
+  const [configurationError, setConfigurationError] = useState<string>();
+  const hydratedRelease = useRef<string>();
   const form = useForm({
     defaultValues: { configuration: '{}' },
     onSubmit: ({ value }) => {
       try {
+        setConfigurationError(undefined);
         config.mutate(JSON.parse(value.configuration));
       } catch {
-        /* parse feedback is rendered below */
+        setConfigurationError('Configuration must be valid JSON.');
       }
     },
   });
   const installation = detail.data?.installation;
+  useEffect(() => {
+    if (
+      installation &&
+      hydratedRelease.current !== installation.installed_release_id
+    ) {
+      form.setFieldValue(
+        'configuration',
+        JSON.stringify(installation.configuration, null, 2),
+      );
+      hydratedRelease.current = installation.installed_release_id;
+    }
+  }, [form, installation]);
   const [upgradeOwner = '', upgradeRepository = ''] = installation
     ? repositoryParts(installation.source.replace(/@.*$/, ''))
     : [];
@@ -400,6 +425,10 @@ export const InstalledExtensionPage = ({
       <ErrorNotice error={detail.error} />
       <ErrorNotice error={action.error} />
       <ErrorNotice error={config.error} />
+      <ErrorNotice error={revoke.error} />
+      {configurationError && (
+        <Alert severity="error">{configurationError}</Alert>
+      )}
       {detail.data && (
         <Stack spacing={3}>
           <Paper sx={{ p: 2 }}>
@@ -538,14 +567,13 @@ export const InstalledExtensionPage = ({
               >
                 <Chip label={`${grant.grant_kind}: ${grant.grant_id}`} />
                 <Button
-                  disabled={!manage}
-                  onClick={() => {
-                    void revokeExtensionGrant(
-                      extensionId,
-                      grant.grant_kind,
-                      grant.grant_id,
-                    ).then(() => invalidate(client, extensionId));
-                  }}
+                  disabled={!manage || revoke.isPending}
+                  onClick={() =>
+                    revoke.mutate({
+                      kind: grant.grant_kind,
+                      grant: grant.grant_id,
+                    })
+                  }
                 >
                   Revoke
                 </Button>
@@ -602,6 +630,16 @@ const DeclaredPermissions = ({
   enabled: boolean;
   onGrant: () => void;
 }) => {
+  const grant = useMutation({
+    mutationFn: ({
+      kind,
+      id,
+    }: {
+      kind: 'capability' | 'host_permission';
+      id: string;
+    }) => grantExtension(extensionId, kind, id),
+    onSuccess: onGrant,
+  });
   const value = manifest as {
     permissions?: string[];
     optional_permissions?: string[];
@@ -620,6 +658,7 @@ const DeclaredPermissions = ({
   );
   return (
     <Stack spacing={1} sx={{ mt: 1 }}>
+      <ErrorNotice error={grant.error} />
       {requested
         .filter(
           ([kind, id]) =>
@@ -631,10 +670,8 @@ const DeclaredPermissions = ({
           <Stack direction="row" key={`${kind}:${id}`} spacing={1}>
             <Chip label={`Requested ${kind}: ${id}`} />
             <Button
-              disabled={!enabled}
-              onClick={() => {
-                void grantExtension(extensionId, kind, id).then(onGrant);
-              }}
+              disabled={!enabled || grant.isPending}
+              onClick={() => grant.mutate({ kind, id })}
             >
               Grant
             </Button>

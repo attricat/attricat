@@ -586,6 +586,8 @@ impl CatalogRepository {
         let current = self
             .lock_extension(&mut transaction, &manifest.catalog.id)
             .await?;
+        self.ensure_no_enabled_dependents(&mut transaction, &current.extension_id)
+            .await?;
         let prior_manifest = self
             .installed_release_manifest(&mut transaction, current.installed_release_id)
             .await?;
@@ -636,6 +638,8 @@ impl CatalogRepository {
     pub async fn remove_extension(&self, extension_id: &str) -> Result<(), RepositoryError> {
         let mut transaction = self.pool.begin().await?;
         let current = self.lock_extension(&mut transaction, extension_id).await?;
+        self.ensure_no_enabled_dependents(&mut transaction, &current.extension_id)
+            .await?;
         self.write_extension_lifecycle(
             &mut transaction,
             &current,
@@ -670,6 +674,10 @@ impl CatalogRepository {
     ) -> Result<ExtensionInstallation, RepositoryError> {
         let mut transaction = self.pool.begin().await?;
         let current = self.lock_extension(&mut transaction, extension_id).await?;
+        if state == ExtensionState::Disabled {
+            self.ensure_no_enabled_dependents(&mut transaction, &current.extension_id)
+                .await?;
+        }
         if current.state == state.as_str() {
             return Err(RepositoryError::InvalidExtensionTransition(
                 "extension is already in the requested state",
@@ -747,6 +755,37 @@ impl CatalogRepository {
     }
     pub(in crate::repository) fn extension_workspace(&self) -> Uuid {
         self.workspace_id.unwrap_or(Self::DEFAULT_WORKSPACE_ID)
+    }
+
+    /// Prevent lifecycle changes that would leave another enabled installation
+    /// with an unsatisfied declared dependency. Lock the candidate rows as part
+    /// of the same transaction so concurrent lifecycle changes serialize.
+    async fn ensure_no_enabled_dependents(
+        &self,
+        transaction: &mut Transaction<'_, Postgres>,
+        dependency_id: &str,
+    ) -> Result<(), RepositoryError> {
+        let rows: Vec<(String, Value)> = sqlx::query_as(
+            "SELECT i.extension_id, r.manifest FROM extension_installations i JOIN installed_extension_releases r ON r.id = i.installed_release_id WHERE i.workspace_id = $1 AND i.state = 'enabled' FOR UPDATE OF i",
+        )
+        .bind(self.extension_workspace())
+        .fetch_all(&mut **transaction)
+        .await?;
+        for (_extension_id, raw_manifest) in rows {
+            let manifest: Manifest = serde_json::from_value(raw_manifest).map_err(|_| {
+                RepositoryError::InvalidExtension("stored manifest is invalid".into())
+            })?;
+            if manifest
+                .dependencies
+                .iter()
+                .any(|item| item.id == dependency_id)
+            {
+                return Err(RepositoryError::InvalidExtensionTransition(
+                    "disable dependent extensions before changing this dependency",
+                ));
+            }
+        }
+        Ok(())
     }
 
     async fn lock_extension(
