@@ -20,6 +20,10 @@ struct RawBlueprintDefinition {
     #[serde(default)]
     views: HashMap<String, ViewDefinition>,
     entity_schema: Option<String>,
+    /// Namespaced extension metadata is preserved in the immutable source
+    /// definition and intentionally ignored by the core blueprint compiler.
+    #[serde(default)]
+    extensions: HashMap<String, toml::Value>,
     attributes: Vec<RawAttributeDeclaration>,
 }
 
@@ -60,6 +64,11 @@ fn default_context_editable() -> String {
 
 pub fn parse(source: &str) -> Result<BlueprintDefinition, BlueprintError> {
     let raw: RawBlueprintDefinition = toml::from_str(source)?;
+    // Parsing this field here makes `[extensions.<extension-id>]` a supported,
+    // namespaced escape hatch while retaining strict validation for every core
+    // blueprint field. Extension runtimes read their own data from the saved
+    // immutable `definition` text.
+    let _extension_metadata = &raw.extensions;
     if raw.format_version != 1 {
         return Err(BlueprintError::UnsupportedFormatVersion(raw.format_version));
     }
