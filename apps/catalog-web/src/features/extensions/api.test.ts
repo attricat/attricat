@@ -1,5 +1,9 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { getExtensionArtifact, getExtensionRuntime } from './api';
+import {
+  extensionCommand,
+  getExtensionArtifact,
+  getExtensionRuntime,
+} from './api';
 
 const fetchMock = vi.fn();
 vi.stubGlobal('fetch', fetchMock);
@@ -31,6 +35,22 @@ describe('extension runtime API', () => {
       json: () => Promise.resolve([{ ...contribution, element: undefined }]),
     });
     await expect(getExtensionRuntime()).rejects.toThrow();
+  });
+
+  it('brokers bounded commands through a declared contribution', async () => {
+    fetchMock.mockResolvedValue({
+      ok: true,
+      json: () => Promise.resolve({}),
+    });
+    await extensionCommand('acme.test', 'panel', {
+      release_id: contribution.release_id,
+      command_id: 'refresh',
+      payload: {},
+    });
+    expect(fetchMock).toHaveBeenCalledWith(
+      '/api/extensions/acme.test/panel/command',
+      expect.objectContaining({ method: 'POST' }),
+    );
   });
 
   it('addresses artifacts by declared contribution instead of storage key', async () => {

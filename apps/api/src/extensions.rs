@@ -17,7 +17,9 @@ use serde_json::Value;
 use thiserror::Error;
 
 pub const MANIFEST_VERSION: u32 = 1;
-pub const SUPPORTED_HOST_API: &str = "1.0.0";
+/// The newest host contract accepted by manifests. Components importing
+/// `catalog:host@1.0.0` remain supported by the unchanged v1 WIT package.
+pub const SUPPORTED_HOST_API: &str = "1.1.0";
 pub const MAX_EXTENSION_ARCHIVE_BYTES: usize = 32 * 1024 * 1024;
 pub const MAX_EXTENSION_UNPACKED_BYTES: usize = 128 * 1024 * 1024;
 pub const MAX_EXTENSION_ARCHIVE_ENTRIES: usize = 256;
@@ -28,6 +30,11 @@ pub const CAPABILITIES: &[&str] = &[
     "events.emit",
     "storage.extension",
     "configuration.read",
+    "configuration.write",
+    "client.commands",
+    "client.blueprint_configuration",
+    "client.entity_decoration",
+    "client.entity_action",
     "secrets.read",
     "logging.write",
     "client.navigation",
@@ -57,6 +64,10 @@ pub struct Manifest {
     pub artifacts: Vec<Artifact>,
     #[serde(default)]
     pub configuration: Option<Configuration>,
+    /// Extension-owned values associated with Catalog objects rather than the
+    /// installation. These values never modify the blueprint definition.
+    #[serde(default)]
+    pub scoped_configuration: Option<ScopedConfiguration>,
     #[serde(default)]
     pub dependencies: Vec<Dependency>,
     #[serde(default)]
@@ -119,6 +130,21 @@ pub struct Configuration {
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
+pub struct ScopedConfiguration {
+    pub version: u32,
+    pub schema: Value,
+    pub scopes: Vec<ConfigurationScope>,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq, Hash)]
+#[serde(rename_all = "snake_case")]
+pub enum ConfigurationScope {
+    Blueprint,
+    Attribute,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
 pub struct Dependency {
     pub id: String,
     pub version: String,
@@ -132,6 +158,26 @@ pub struct Server {
     /// Durable catalog event subscriptions delivered to named component exports.
     #[serde(default)]
     pub event_handlers: Vec<EventHandler>,
+    /// Client-mediated component calls. Commands have no route or ambient
+    /// browser access; the host resolves and authorizes each invocation.
+    #[serde(default)]
+    pub commands: Vec<ServerCommand>,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct ServerCommand {
+    pub id: String,
+    pub handler: String,
+    pub request_schema: Value,
+    pub response_schema: Value,
+    #[serde(default = "default_command_bytes")]
+    pub max_request_bytes: u64,
+    #[serde(default = "default_command_bytes")]
+    pub max_response_bytes: u64,
+}
+fn default_command_bytes() -> u64 {
+    65_536
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -200,6 +246,9 @@ pub enum UiContributionKind {
 pub enum UiOutlet {
     Navigation,
     EntityPreviewPanel,
+    BlueprintAttributeConfiguration,
+    EntityAttributeDecoration,
+    EntityAction,
 }
 
 #[derive(Debug, Error, PartialEq, Eq)]
@@ -307,6 +356,33 @@ impl Manifest {
                 ));
             }
         }
+        if let Some(configuration) = &self.scoped_configuration {
+            require_next_host_api(&range)?;
+            if configuration.version == 0
+                || !configuration.schema.is_object()
+                || configuration.scopes.is_empty()
+            {
+                return Err(ManifestError::Invalid(
+                    "scoped_configuration requires a positive version, object JSON Schema, and scopes".into(),
+                ));
+            }
+            let scopes = configuration.scopes.iter().collect::<HashSet<_>>();
+            if scopes.len() != configuration.scopes.len() {
+                return Err(ManifestError::Invalid(
+                    "scoped_configuration scopes must be unique".into(),
+                ));
+            }
+            if !self
+                .permissions
+                .iter()
+                .chain(&self.optional_permissions)
+                .any(|item| item == "configuration.write")
+            {
+                return Err(ManifestError::Invalid(
+                    "scoped_configuration requires configuration.write".into(),
+                ));
+            }
+        }
         if let Some(server) = &self.server {
             if !server.webhooks.is_empty()
                 && !self
@@ -328,7 +404,17 @@ impl Manifest {
             for handler in &server.event_handlers {
                 handler.validate(&self.permissions)?;
             }
-            if !server.event_handlers.is_empty()
+            if !server.commands.is_empty() {
+                require_next_host_api(&range)?;
+            }
+            unique(
+                server.commands.iter().map(|command| &command.id),
+                "server command",
+            )?;
+            for command in &server.commands {
+                command.validate(&self.permissions)?;
+            }
+            if (!server.event_handlers.is_empty() || !server.commands.is_empty())
                 && !self
                     .artifacts
                     .iter()
@@ -357,6 +443,31 @@ impl Manifest {
                 )));
             }
             valid_custom_element_name(&contribution.element)?;
+            if let Some(outlet) = &contribution.outlet {
+                if !matches!(outlet, UiOutlet::Navigation | UiOutlet::EntityPreviewPanel) {
+                    require_next_host_api(&range)?;
+                }
+                let required = match outlet {
+                    UiOutlet::Navigation | UiOutlet::EntityPreviewPanel => None,
+                    UiOutlet::BlueprintAttributeConfiguration => {
+                        Some("client.blueprint_configuration")
+                    }
+                    UiOutlet::EntityAttributeDecoration => Some("client.entity_decoration"),
+                    UiOutlet::EntityAction => Some("client.entity_action"),
+                };
+                if required.is_some_and(|capability| {
+                    !self
+                        .permissions
+                        .iter()
+                        .chain(&self.optional_permissions)
+                        .any(|item| item == capability)
+                }) {
+                    return Err(ManifestError::Invalid(format!(
+                        "UI outlet requires capability '{}'",
+                        required.unwrap()
+                    )));
+                }
+            }
             match (&contribution.kind, &contribution.outlet) {
                 (UiContributionKind::Route, None) => {}
                 (UiContributionKind::Element, Some(outlet)) => {
@@ -495,6 +606,35 @@ impl EventHandler {
     }
 }
 
+impl ServerCommand {
+    fn validate(&self, permissions: &[String]) -> Result<(), ManifestError> {
+        valid_id(&self.id, "server command id")?;
+        valid_id(&self.handler, "server command handler")?;
+        if !permissions
+            .iter()
+            .any(|permission| permission == "client.commands")
+        {
+            return Err(ManifestError::Invalid(format!(
+                "server command '{}' requires client.commands",
+                self.id
+            )));
+        }
+        if !self.request_schema.is_object()
+            || !self.response_schema.is_object()
+            || self.max_request_bytes == 0
+            || self.max_request_bytes > 65_536
+            || self.max_response_bytes == 0
+            || self.max_response_bytes > 65_536
+        {
+            return Err(ManifestError::Invalid(format!(
+                "server command '{}' requires bounded object request and response schemas",
+                self.id
+            )));
+        }
+        Ok(())
+    }
+}
+
 impl Webhook {
     fn validate(&self, permissions: &[String]) -> Result<(), ManifestError> {
         valid_id(&self.id, "webhook id")?;
@@ -528,6 +668,16 @@ impl Webhook {
             )));
         }
         Ok(())
+    }
+}
+
+fn require_next_host_api(range: &VersionReq) -> Result<(), ManifestError> {
+    if range.matches(&Version::new(1, 1, 0)) && !range.matches(&Version::new(1, 0, 0)) {
+        Ok(())
+    } else {
+        Err(ManifestError::Invalid(
+            "this declaration requires catalog.host_api compatible with 1.1 but not 1.0".into(),
+        ))
     }
 }
 
@@ -798,7 +948,7 @@ fn is_public_destination(ip: IpAddr) -> bool {
     }
 }
 
-fn validate_schema(schema: &Value, value: &Value) -> Result<(), ManifestError> {
+pub(crate) fn validate_schema(schema: &Value, value: &Value) -> Result<(), ManifestError> {
     let object = schema
         .as_object()
         .ok_or_else(|| ManifestError::Invalid("configuration schema must be an object".into()))?;
@@ -920,6 +1070,56 @@ mod tests {
         value.ui[0].element = "AcmePanel".into();
         assert!(value.validate(SUPPORTED_HOST_API).is_err());
     }
+    #[test]
+    fn validates_generic_scoped_configuration_and_commands() {
+        let mut value = manifest();
+        value.catalog.host_api = ">=1.1.0, <2.0.0".into();
+        value.permissions.extend([
+            "configuration.write".into(),
+            "client.commands".into(),
+            "client.entity_action".into(),
+        ]);
+        value.scoped_configuration = Some(ScopedConfiguration {
+            version: 1,
+            schema: serde_json::json!({"type":"object","additionalProperties":false}),
+            scopes: vec![ConfigurationScope::Attribute],
+        });
+        value.artifacts.push(Artifact {
+            id: "client".into(),
+            kind: ArtifactKind::ClientComponent,
+            path: "client.js".into(),
+        });
+        value.server.as_mut().unwrap().commands.push(ServerCommand {
+            id: "refresh".into(),
+            handler: "refresh".into(),
+            request_schema: serde_json::json!({"type":"object"}),
+            response_schema: serde_json::json!({"type":"object"}),
+            max_request_bytes: 64,
+            max_response_bytes: 64,
+        });
+        value.ui.push(UiContribution {
+            id: "action".into(),
+            version: 1,
+            kind: UiContributionKind::Element,
+            artifact: "client".into(),
+            element: "acme-action".into(),
+            outlet: Some(UiOutlet::EntityAction),
+            title: None,
+        });
+        assert!(value.validate(SUPPORTED_HOST_API).is_ok());
+        value
+            .permissions
+            .retain(|permission| permission != "client.entity_action");
+        assert!(value.validate(SUPPORTED_HOST_API).is_err());
+
+        value.permissions.push("client.entity_action".into());
+        value.server.as_mut().unwrap().commands[0].handler = "".into();
+        assert!(value.validate(SUPPORTED_HOST_API).is_err());
+        value.server.as_mut().unwrap().commands[0].handler = "refresh-handler".into();
+        value.server.as_mut().unwrap().commands[0].max_response_bytes = 65_537;
+        assert!(value.validate(SUPPORTED_HOST_API).is_err());
+    }
+
     #[test]
     fn validates_configuration() {
         let value = manifest();

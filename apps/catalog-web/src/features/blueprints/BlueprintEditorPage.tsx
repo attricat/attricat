@@ -19,6 +19,7 @@ import {
 import { useEffect, useState } from 'react';
 import { PageContainer } from '../../components/PageContainer';
 import { PageHeader } from '../../components/PageHeader';
+import { ExtensionOutlet } from '../extensions/ExtensionOutlet';
 import {
   createBlueprint,
   createBlueprintRevision,
@@ -246,6 +247,17 @@ export const BlueprintEditorPage = ({
           </Button>
         </Stack>
       </Stack>
+      {source.data?.attributes.map((attribute) => (
+        <ExtensionOutlet
+          context={{
+            attribute_id: attribute.id,
+            blueprint_id: source.data!.blueprint.id,
+            blueprint_version: source.data!.blueprint.version,
+          }}
+          key={attribute.id}
+          outlet="blueprint_attribute_configuration"
+        />
+      ))}
       {source.isError && (
         <Alert severity="error" sx={{ mt: 3 }}>
           Could not load the revision source: {source.error.message}

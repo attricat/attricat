@@ -16,13 +16,21 @@ use super::{AppState, auth::ScopedRepository, error::ApiError, extractors::ApiJs
 use crate::{
     extension_installer::ExtensionInstaller,
     extension_registry::{DiscoveredRelease, GitHubRepository},
-    extensions::{ExtensionPackage, UiContributionKind, UiOutlet},
+    extensions::{ExtensionPackage, UiContributionKind, UiOutlet, validate_schema},
     repository::{
         ExtensionGrant, ExtensionInstallation, ExtensionLifecycleRecord, ExtensionStorageError,
         InstalledExtension,
     },
     storage::ObjectStoreError,
 };
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+pub(super) struct CommandRequest {
+    release_id: Uuid,
+    command_id: String,
+    payload: Value,
+}
 
 #[derive(Serialize)]
 pub(super) struct RuntimeContribution {
@@ -443,6 +451,73 @@ pub(super) async fn runtime(
 /// The frame broker is the only client storage path. Resolving the contribution
 /// on every request ties storage to an enabled current release, not IDs supplied
 /// by the opaque-origin frame.
+/// Resolves a manifest-declared command through the same enabled-release gate
+/// as artifacts and storage. The command request is intentionally mediated;
+/// components never receive browser credentials or a direct endpoint.
+pub(super) async fn command(
+    State(state): State<AppState>,
+    ScopedRepository(repository): ScopedRepository,
+    Path((extension_id, contribution_id)): Path<(String, String)>,
+    ApiJson(input): ApiJson<CommandRequest>,
+) -> Result<Json<Value>, ApiError> {
+    if input.command_id.len() > 128 {
+        return Err(ApiError::invalid_input(
+            "invalid extension command request".into(),
+        ));
+    }
+    let contribution = repository
+        .client_extension_contribution(&extension_id, &contribution_id)
+        .await?;
+    if contribution.installed_release_id != input.release_id
+        || !contribution
+            .capabilities
+            .iter()
+            .any(|capability| capability == "client.commands")
+    {
+        return Err(ApiError::forbidden());
+    }
+    let installation = repository
+        .runtime_extension_installation(&extension_id, input.release_id)
+        .await?
+        .ok_or_else(ApiError::forbidden)?;
+    let command = installation
+        .manifest
+        .server
+        .as_ref()
+        .and_then(|server| {
+            server
+                .commands
+                .iter()
+                .find(|command| command.id == input.command_id)
+        })
+        .ok_or_else(|| ApiError::not_found("extension command"))?;
+    validate_schema(&command.request_schema, &input.payload)
+        .map_err(|error| ApiError::invalid_input(error.to_string()))?;
+    let request = serde_json::to_string(&input.payload)
+        .map_err(|_| ApiError::invalid_input("invalid extension command payload".into()))?;
+    if request.len() > command.max_request_bytes as usize {
+        return Err(ApiError::invalid_input(
+            "extension command request exceeds its declared byte limit".into(),
+        ));
+    }
+    let response = state
+        .extension_runtime
+        .invoke_command(
+            &installation,
+            repository.for_extension(&extension_id),
+            &command.handler,
+            &request,
+            command.max_response_bytes,
+        )
+        .await
+        .map_err(|_| ApiError::service_unavailable("extension command failed"))?;
+    let response: Value = serde_json::from_str(&response)
+        .map_err(|_| ApiError::service_unavailable("extension command returned invalid JSON"))?;
+    validate_schema(&command.response_schema, &response)
+        .map_err(|_| ApiError::service_unavailable("extension command returned invalid data"))?;
+    Ok(Json(response))
+}
+
 pub(super) async fn storage(
     ScopedRepository(repository): ScopedRepository,
     Path((extension_id, contribution_id, release_id)): Path<(String, String, Uuid)>,

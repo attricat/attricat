@@ -42,6 +42,7 @@ mod entity_migration;
 mod entity_projection;
 mod entity_search;
 mod extension_registries;
+mod extension_scoped_configuration;
 mod extension_storage;
 mod extensions;
 mod files;
@@ -60,6 +61,7 @@ pub(crate) use audit_events::{AuditEventFilter, AuditEventPage};
 pub use domain_events::{EventConsumer, EventDelivery, EventPublisher, FailedEventDelivery};
 pub(crate) use entity_search::decode_search_cursor;
 pub use extension_registries::ExtensionRegistrySource;
+pub use extension_scoped_configuration::ExtensionConfigurationScope;
 pub use extension_storage::{
     ExtensionStorageEntry, ExtensionStorageError, ExtensionStoragePage,
     MAX_EXTENSION_STORAGE_LIST_LIMIT,
@@ -88,6 +90,7 @@ pub struct CatalogRepository {
     workspace_pools: Option<Arc<WorkspacePoolCache>>,
     audit_context: Option<AuditContext>,
     event_context: Option<EventCommandContext>,
+    extension_id: Option<String>,
 }
 
 #[derive(Clone)]
@@ -255,6 +258,7 @@ impl CatalogRepository {
             workspace_pools: None,
             audit_context: None,
             event_context: None,
+            extension_id: None,
         }
     }
 
@@ -264,6 +268,7 @@ impl CatalogRepository {
             workspace_id: None,
             audit_context: None,
             event_context: None,
+            extension_id: None,
             workspace_pools: Some(Arc::new(WorkspacePoolCache {
                 connect_options,
                 pools: Mutex::new(HashMap::new()),
@@ -282,6 +287,7 @@ impl CatalogRepository {
                 workspace_pools: None,
                 audit_context: self.audit_context.clone(),
                 event_context: self.event_context.clone(),
+                extension_id: self.extension_id.clone(),
             });
         };
         let mut pools = cache.pools.lock().await;
@@ -292,6 +298,7 @@ impl CatalogRepository {
                 workspace_pools: self.workspace_pools.clone(),
                 audit_context: self.audit_context.clone(),
                 event_context: self.event_context.clone(),
+                extension_id: self.extension_id.clone(),
             });
         }
         self.ensure_default_context(workspace_id).await?;
@@ -314,6 +321,7 @@ impl CatalogRepository {
             workspace_pools: self.workspace_pools.clone(),
             audit_context: self.audit_context.clone(),
             event_context: self.event_context.clone(),
+            extension_id: self.extension_id.clone(),
         })
     }
 
@@ -328,6 +336,38 @@ impl CatalogRepository {
             causation_id: event.id,
             handler_name: handler_name.to_owned(),
         });
+        repository
+    }
+
+    /// Marks a mutation as extension-originated. Event-handler invocations
+    /// retain their triggering correlation and causation; browser commands keep
+    /// the authenticated request correlation and have no causation ID.
+    pub(crate) fn for_extension(&self, extension_id: &str) -> Self {
+        let mut repository = self.clone();
+        repository.extension_id = Some(extension_id.to_owned());
+        // Browser commands retain their authenticated request audit context.
+        // Event deliveries have no browser request, so synthesize durable plugin
+        // audit provenance before an extension can mutate catalog state.
+        if repository.audit_context.is_none() {
+            repository.audit_context = Some(AuditContext {
+                actor_user_id: None,
+                actor_token_id: None,
+                request_id: Uuid::new_v4(),
+                correlation_id: repository
+                    .event_context
+                    .as_ref()
+                    .map(|context| context.correlation_id)
+                    .unwrap_or_else(Uuid::new_v4),
+                action: "catalog.extensions.attribute_values.write".to_owned(),
+                authorization_scope: serde_json::json!({
+                    "capability": "catalog.write",
+                    "extension_id": extension_id,
+                }),
+                target: serde_json::json!({ "type": "extension", "id": extension_id }),
+                metadata: serde_json::json!({ "extension_id": extension_id }),
+                agent: None,
+            });
+        }
         repository
     }
 
@@ -446,15 +486,22 @@ impl CatalogRepository {
                 .as_ref()
                 .map(|context| context.causation_id),
             source: EventSource {
-                kind: if self.event_context.is_some() {
+                kind: if self.extension_id.is_some() {
+                    EventSourceKind::Plugin
+                } else if self.event_context.is_some() {
                     EventSourceKind::Worker
                 } else {
                     EventSourceKind::Api
                 },
                 name: self
-                    .event_context
+                    .extension_id
                     .as_ref()
-                    .map(|context| context.handler_name.clone())
+                    .map(|extension_id| format!("extension:{extension_id}"))
+                    .or_else(|| {
+                        self.event_context
+                            .as_ref()
+                            .map(|context| context.handler_name.clone())
+                    })
                     .unwrap_or_else(|| "catalog_api".to_owned()),
             },
             metadata: serde_json::json!({}),
@@ -627,5 +674,35 @@ mod tests {
         assert_eq!(event.causation_id, Some(trigger.id));
         assert_eq!(event.source.kind.as_str(), "worker");
         assert_eq!(event.source.name, "catalog.computed_fields");
+        let extension_event = repository
+            .for_event_handler(&trigger, "catalog.extensions.wasm")
+            .for_extension("acme.computed")
+            .core_event(
+                "context.updated.v1",
+                "context",
+                trigger.aggregate_id,
+                serde_json::json!({}),
+            );
+        assert_eq!(extension_event.correlation_id, trigger.correlation_id);
+        assert_eq!(extension_event.causation_id, Some(trigger.id));
+        assert_eq!(extension_event.source.kind.as_str(), "plugin");
+        assert_eq!(extension_event.source.name, "extension:acme.computed");
+        let extension_repository = repository
+            .for_event_handler(&trigger, "catalog.extensions.wasm")
+            .for_extension("acme.computed");
+        let audit = extension_repository.audit_context.as_ref().unwrap();
+        assert_eq!(audit.correlation_id, trigger.correlation_id);
+        assert_eq!(audit.action, "catalog.extensions.attribute_values.write");
+        assert_eq!(audit.metadata["extension_id"], "acme.computed");
+
+        let command_event = repository.for_extension("acme.computed").core_event(
+            "context.updated.v1",
+            "context",
+            trigger.aggregate_id,
+            serde_json::json!({}),
+        );
+        assert_eq!(command_event.causation_id, None);
+        assert_eq!(command_event.source.kind.as_str(), "plugin");
+        assert_eq!(command_event.source.name, "extension:acme.computed");
     }
 }

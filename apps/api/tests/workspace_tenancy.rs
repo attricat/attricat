@@ -180,3 +180,53 @@ async fn workspace_scoped_entity_commands_reject_foreign_entity_ids(pool: PgPool
     assert_eq!(other.get_entity(entity).await.unwrap().unwrap().id, entity);
     other.delete_entity(entity).await.unwrap();
 }
+
+#[sqlx::test]
+async fn current_values_hides_foreign_entity_values(pool: PgPool) {
+    use api::model::{CreateBlueprint, NewAttributeValue};
+
+    let bootstrap_workspace: Uuid = BOOTSTRAP_WORKSPACE_ID.parse().unwrap();
+    let other_workspace = Uuid::new_v4();
+    sqlx::query("INSERT INTO workspaces (id, slug, name, login_identifier) VALUES ($1, 'tenant-values', 'Tenant values', 'tenant-values.local')")
+        .bind(other_workspace)
+        .execute(&pool)
+        .await
+        .unwrap();
+    let repository = CatalogRepository::new(pool);
+    let bootstrap = repository.for_workspace(bootstrap_workspace).await.unwrap();
+    let other = repository.for_workspace(other_workspace).await.unwrap();
+    let blueprint = other
+        .create_blueprint(CreateBlueprint {
+            definition: "format_version = 1\ncode = 'private_values'\nname = 'Private values'\nkind = 'entity'\n\n[views.dropdown_option]\ntype = 'dropdown_option'\nfields = ['title']\n\n[[attributes]]\ncode = 'title'\nvalue_type = 'string'".to_owned(),
+        })
+        .await
+        .unwrap();
+    other
+        .publish_blueprint_revision(blueprint.blueprint.id, 1)
+        .await
+        .unwrap();
+    let entity = other
+        .create_entity_with_values(
+            blueprint.blueprint.id,
+            1,
+            vec![NewAttributeValue::Scalar {
+                attribute_id: None,
+                attribute_code: Some("title".to_owned()),
+                context_id: None,
+                value: serde_json::json!("private"),
+            }],
+            Vec::new(),
+            serde_json::json!({}),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(other.current_values(entity.id).await.unwrap().len(), 1);
+    assert!(
+        bootstrap
+            .current_values(entity.id)
+            .await
+            .unwrap()
+            .is_empty()
+    );
+}

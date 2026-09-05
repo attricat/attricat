@@ -4,6 +4,8 @@ import { useEffect, useRef, useState } from 'react';
 import { z } from 'zod';
 import { apiFetch } from '../auth/request';
 import {
+  extensionCommand,
+  extensionCommandRequestSchema,
   extensionStorage,
   extensionStorageRequestSchema,
   getExtensionArtifact,
@@ -50,7 +52,7 @@ const validateStorageRequest = (payload: unknown) => {
 export const frameDocument = `<!doctype html><meta charset="utf-8"><meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'nonce-catalog-bootstrap' blob:; connect-src 'none'; img-src data:; style-src 'unsafe-inline'"><body><div id="root"></div><script nonce="catalog-bootstrap">
 (() => { let port; let next = 0; const pending = new Map();
 const call = (method, payload) => new Promise((resolve, reject) => { const id = String(++next); pending.set(id, {resolve,reject}); port.postMessage({type:'catalog:request.v1',id,method,payload}); });
-window.addEventListener('message', async (event) => { if (event.source !== parent || event.data?.type !== 'catalog:init.v1' || !event.ports[0]) return; port = event.ports[0]; port.onmessage = event => { const message = event.data; if (message?.type !== 'catalog:response.v1') return; const item = pending.get(message.id); if (!item) return; pending.delete(message.id); message.ok ? item.resolve(message.data) : item.reject(new Error(message.error || 'Host request failed')); }; globalThis.catalog = { request: path => call('catalog.read', {path}), navigate: detail => call('navigate', detail), notify: detail => call('notify', detail), storage: { get: detail => call('storage.get', detail), set: detail => call('storage.set', detail), delete: detail => call('storage.delete', detail), list: detail => call('storage.list', detail) }, context: event.data.context }; try { const url = URL.createObjectURL(new Blob([event.data.artifact], {type:'text/javascript'})); await import(url); URL.revokeObjectURL(url); const element = document.createElement(event.data.element); element.configuration = event.data.configuration; element.catalogContext = event.data.context; document.getElementById('root').append(element); if (event.data.capabilities.includes('client.events')) element.dispatchEvent(new CustomEvent('catalog:context-changed.v1', {detail:event.data.context})); port.postMessage({type:'catalog:ready.v1'}); } catch (error) { port.postMessage({type:'catalog:error.v1', error: String(error?.message || error)}); } }); })();
+window.addEventListener('message', async (event) => { if (event.source !== parent || event.data?.type !== 'catalog:init.v1' || !event.ports[0]) return; port = event.ports[0]; port.onmessage = event => { const message = event.data; if (message?.type !== 'catalog:response.v1') return; const item = pending.get(message.id); if (!item) return; pending.delete(message.id); message.ok ? item.resolve(message.data) : item.reject(new Error(message.error || 'Host request failed')); }; globalThis.catalog = { request: path => call('catalog.read', {path}), command: detail => call('command', detail), navigate: detail => call('navigate', detail), notify: detail => call('notify', detail), storage: { get: detail => call('storage.get', detail), set: detail => call('storage.set', detail), delete: detail => call('storage.delete', detail), list: detail => call('storage.list', detail) }, context: event.data.context }; try { const url = URL.createObjectURL(new Blob([event.data.artifact], {type:'text/javascript'})); await import(url); URL.revokeObjectURL(url); const element = document.createElement(event.data.element); element.configuration = event.data.configuration; element.catalogContext = event.data.context; document.getElementById('root').append(element); if (event.data.capabilities.includes('client.events')) element.dispatchEvent(new CustomEvent('catalog:context-changed.v1', {detail:event.data.context})); port.postMessage({type:'catalog:ready.v1'}); } catch (error) { port.postMessage({type:'catalog:error.v1', error: String(error?.message || error)}); } }); })();
 </script>`;
 
 type Props = {
@@ -149,6 +151,27 @@ export const ExtensionFrame = ({ contribution, context = {} }: Props) => {
                   contribution.id,
                   contribution.release_id,
                   request,
+                ),
+              );
+            } else if (
+              data.method === 'command' &&
+              contribution.capabilities.includes('client.commands')
+            ) {
+              const command = extensionCommandRequestSchema.parse({
+                ...(data.payload as Record<string, unknown>),
+                release_id: contribution.release_id,
+              });
+              if (
+                new TextEncoder().encode(JSON.stringify(command.payload)).length >
+                65_536
+              )
+                throw new Error('Command payload is too large');
+              respond(
+                true,
+                await extensionCommand(
+                  contribution.extension_id,
+                  contribution.id,
+                  command,
                 ),
               );
             } else if (

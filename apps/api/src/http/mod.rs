@@ -24,6 +24,7 @@ use crate::{
     agent_worker::AgentDispatcher,
     agents::AgentProviderConfig,
     extension_registry::{GitHubRegistry, GitHubRepository},
+    extension_runtime::ExtensionRuntime,
     extensions::MAX_EXTENSION_ARCHIVE_BYTES,
     file_access::FileAccessPolicy,
     mail::MailDelivery,
@@ -53,6 +54,7 @@ pub struct AppState {
     /// Storage is injected at startup so future file routes never construct a
     /// provider client from request data.
     pub object_store: Arc<dyn ObjectStore>,
+    pub extension_runtime: ExtensionRuntime,
     pub file_access_policy: Arc<dyn FileAccessPolicy>,
     pub mail_delivery: Arc<dyn MailDelivery>,
     pub password_reset_url: String,
@@ -230,6 +232,10 @@ pub fn router(state: AppState) -> Router {
         .route(
             "/extensions/{extension_id}/quarantine",
             post(extensions::quarantine),
+        )
+        .route(
+            "/extensions/{extension_id}/{contribution_id}/command",
+            post(extensions::command),
         )
         .route(
             "/extensions/{extension_id}/{contribution_id}/storage/{release_id}",

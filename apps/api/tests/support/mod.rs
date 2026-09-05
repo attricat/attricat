@@ -4,6 +4,7 @@ use std::{net::SocketAddr, sync::Arc};
 
 use api::{
     extension_registry::{GitHubRegistry, GitHubRepository},
+    extension_runtime::{ExtensionRuntime, ExtensionRuntimeConfig},
     file_access::{AllowFileAccess, FileAccessPolicy},
     http::{AppState, router},
     mail::{MailDelivery, MailError},
@@ -145,6 +146,11 @@ async fn start_server_with_auth_mode_and_store(
         official_registry: "attricat/attricat-extensions"
             .parse::<GitHubRepository>()
             .unwrap(),
+        extension_runtime: ExtensionRuntime::new(
+            object_store.clone(),
+            ExtensionRuntimeConfig::default(),
+        )
+        .unwrap(),
         object_store,
         file_access_policy,
         mail_delivery: Arc::new(TestMailDelivery),

@@ -229,3 +229,49 @@ timeouts are denied and rendered as a host-owned warning without exposing
 extension source or host internals. Extension UI must provide its own localized
 text and accessible labels; the host owns the surrounding landmarks, focus,
 loading state, and failure announcements.
+
+## Context-aware catalog APIs (host API 1.1)
+
+`catalog:host@1.0.0` remains a supported immutable ABI. New components may use
+`apps/api/wit-next/catalog-extension.wit` (`catalog:host@1.1.0`); manifests use
+`catalog.host_api` SemVer ranges and are never silently downgraded. The v1.1
+WIT interface has typed `read`, `write`, `scoped-configuration-get`, and
+`scoped-configuration-set` functions. Dynamic attribute and configuration
+values are JSON strings bounded to 64 KiB; identifiers, scope kinds, response
+shapes, and write selectors are typed WIT records and variants. Components have
+no WASI, network, filesystem, database, browser credential, or ambient host
+access.
+
+Server components granted `catalog.read` can request an entity, direct current
+values, or resolved values for a supplied entity/context pair. Every typed read
+response includes the workspace-owned entity, its pinned `BlueprintWithAttributes`
+metadata, direct values, and resolved values when requested. Resolved reads use
+Catalog's existing context/fallback path rather than a copy in the extension.
+`catalog.write` permits only validated scalar writes with an explicit context
+ID; ordinary attribute/type/schema validation, audit records, and the domain-event
+outbox remain in force. A write made while handling an event keeps
+that event's correlation ID, uses its ID as causation, and is published with
+`source_kind: plugin` and `source_name: extension:<extension-id>`. Handlers should ignore their own
+extension source name to prevent feedback loops.
+
+A manifest may declare `scoped_configuration` with an object schema, positive
+version, and `blueprint` and/or `attribute` scopes. It requires
+`configuration.write`. Catalog persists these values separately from blueprint
+schemas and verifies the workspace-owned blueprint revision and attribute on
+every get/set. Values are release-bound and inaccessible after disable,
+quarantine, grant changes, or upgrade.
+
+A server manifest may declare bounded `server.commands` (stable ID, handler,
+object request/response schemas, and byte limits). They require
+`client.commands`. The only browser path is the opaque-frame MessageChannel
+`catalog.command`; Catalog validates the command and caller session, then
+rechecks contribution, enabled state, exact release, configuration, and grants.
+No extension receives browser cookies, routes, or arbitrary fetch access.
+
+The fixed element outlets are `blueprint_attribute_configuration` (requires
+`client.blueprint_configuration`), `entity_attribute_decoration` (requires
+`client.entity_decoration`), and `entity_action` (requires
+`client.entity_action`). Their contexts contain only the relevant catalog IDs:
+blueprint/revision/attribute, or entity/attribute/context. Extensions cannot
+provide DOM selectors, arbitrary host routes, React state, or inter-extension
+RPC.
