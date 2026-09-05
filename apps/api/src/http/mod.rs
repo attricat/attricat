@@ -205,6 +205,10 @@ pub fn router(state: AppState) -> Router {
         )
         .route("/extensions/runtime", get(extensions::runtime))
         .route(
+            "/workspace/extensions-mode",
+            put(extensions::set_workspace_mode),
+        )
+        .route(
             "/extensions/{extension_id}",
             get(extensions::detail).delete(extensions::remove),
         )

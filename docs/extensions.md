@@ -206,10 +206,17 @@ selector, or host component. Element names must be lowercase custom-element
 names. Each extension can use an outlet once and all contribution/artifact IDs
 remain stable across releases.
 
-Catalog loads runtime descriptors and JavaScript only for enabled installations.
-Disabling, quarantining, or upgrading an installation excludes it from new
-runtime-descriptor loads; already-mounted frames remain active until they
-unmount or the client refreshes its runtime descriptor query. Release IDs and
+Catalog loads runtime descriptors and JavaScript only for installations whose
+effective runtime state is enabled. The deployment gate (`EXTENSIONS_MODE`),
+targeted `EXTENSION_DENYLIST`, workspace emergency gate, installation state,
+and grants are all checked before descriptors, artifacts, broker requests,
+server commands, host calls, storage, and event delivery. `PUT
+/workspace/extensions-mode` with `{"enabled": false}` lets an
+`extensions.manage` operator contain one workspace without changing any
+installation or grant; the change is audited and setting it back to `true`
+restores only still-enabled, authorized installations. Mounted frames poll the
+runtime descriptor and unmount within 15 seconds; broker calls are rejected
+immediately after containment. Release IDs and
 object-store keys are never client addresses. The host
 runs every contribution in a distinct `<iframe sandbox="allow-scripts">` with
 an opaque origin and a CSP that denies network access. Components register

@@ -175,6 +175,17 @@ pub(super) struct QuarantineRequest {
 }
 
 #[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+pub(super) struct WorkspaceExtensionsModeRequest {
+    enabled: bool,
+}
+
+#[derive(Serialize)]
+pub(super) struct WorkspaceExtensionsModeResponse {
+    enabled: bool,
+}
+
+#[derive(Deserialize)]
 #[serde(tag = "operation", rename_all = "snake_case", deny_unknown_fields)]
 pub(super) enum StorageRequest {
     Get {
@@ -220,6 +231,20 @@ fn storage_error(error: ExtensionStorageError) -> ApiError {
             ApiError::internal("extension storage operation failed")
         }
     }
+}
+
+/// Changes the workspace emergency gate without changing installation state or
+/// grants. The audit middleware records the operator and request context.
+pub(super) async fn set_workspace_mode(
+    ScopedRepository(repository): ScopedRepository,
+    ApiJson(input): ApiJson<WorkspaceExtensionsModeRequest>,
+) -> Result<Json<WorkspaceExtensionsModeResponse>, ApiError> {
+    repository
+        .set_workspace_extensions_enabled(input.enabled)
+        .await?;
+    Ok(Json(WorkspaceExtensionsModeResponse {
+        enabled: input.enabled,
+    }))
 }
 
 pub(super) async fn list(

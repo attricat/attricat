@@ -435,9 +435,7 @@ impl catalog::host::api::Host for HostState {
     }
 
     async fn log(&mut self, level: String, message: String) -> Result<(), String> {
-        if let Err(error) = self.require("logging.write") {
-            return Err(error.to_string());
-        }
+        self.require_active("logging.write").await?;
         if message.len() > MAX_HOST_MESSAGE_BYTES
             || !matches!(
                 level.as_str(),

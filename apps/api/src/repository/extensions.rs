@@ -9,6 +9,7 @@ use uuid::Uuid;
 
 use crate::{
     extension_installer::installed_artifact_key,
+    extension_policy,
     extensions::{Manifest, SUPPORTED_HOST_API, UiContributionKind, UiOutlet},
 };
 
@@ -116,6 +117,44 @@ pub struct ClientExtensionContribution {
 }
 
 impl CatalogRepository {
+    /// Changes only the workspace emergency gate; installations and grants are
+    /// deliberately untouched so recovery is explicit and reversible.
+    pub async fn set_workspace_extensions_enabled(
+        &self,
+        enabled: bool,
+    ) -> Result<(), RepositoryError> {
+        let mut transaction = self.pool.begin().await?;
+        sqlx::query("UPDATE workspaces SET extensions_enabled = $2, updated_at = clock_timestamp() WHERE id = $1")
+            .bind(self.extension_workspace())
+            .bind(enabled)
+            .execute(&mut *transaction)
+            .await?;
+        if let Some(mut audit_context) = self.audit_context.clone() {
+            audit_context.metadata["extensions_enabled"] = json!(enabled);
+            let mut audit_repository = self.clone();
+            audit_repository.audit_context = Some(audit_context);
+            audit_repository.write_audit_event(&mut transaction).await?;
+        } else {
+            let mut system_repository = self.clone();
+            system_repository.audit_context = Some(AuditContext {
+                actor_user_id: None,
+                actor_token_id: None,
+                request_id: Uuid::new_v4(),
+                correlation_id: Uuid::new_v4(),
+                action: "workspace.extensions_mode.set".into(),
+                authorization_scope: json!({"type": "workspace"}),
+                target: json!({"type": "workspace", "id": self.extension_workspace()}),
+                metadata: json!({"extensions_enabled": enabled}),
+                agent: None,
+            });
+            system_repository
+                .write_audit_event(&mut transaction)
+                .await?;
+        }
+        transaction.commit().await?;
+        Ok(())
+    }
+
     /// Lists installations with their immutable release metadata for management UI.
     pub async fn installed_extensions(&self) -> Result<Vec<InstalledExtension>, RepositoryError> {
         Ok(sqlx::query_as("SELECT i.id, i.extension_id, i.installed_release_id, i.state, i.configuration, i.configuration_version, i.created_at, i.updated_at, r.version, r.manifest, r.manifest_sha256, r.source FROM extension_installations i JOIN installed_extension_releases r ON r.id = i.installed_release_id WHERE i.workspace_id = $1 ORDER BY i.extension_id")
@@ -147,7 +186,7 @@ impl CatalogRepository {
         &self,
     ) -> Result<Vec<ClientExtensionContribution>, RepositoryError> {
         let rows: Vec<(Uuid, String, Uuid, Value, Value)> = sqlx::query_as(
-            "SELECT i.id, i.extension_id, i.installed_release_id, i.configuration, r.manifest FROM extension_installations i JOIN installed_extension_releases r ON r.id = i.installed_release_id WHERE i.workspace_id = $1 AND i.state = 'enabled' ORDER BY i.extension_id",
+            "SELECT i.id, i.extension_id, i.installed_release_id, i.configuration, r.manifest FROM extension_installations i JOIN installed_extension_releases r ON r.id = i.installed_release_id JOIN workspaces w ON w.id = i.workspace_id WHERE i.workspace_id = $1 AND i.state = 'enabled' AND w.extensions_enabled ORDER BY i.extension_id",
         )
         .bind(self.extension_workspace())
         .fetch_all(&self.pool)
@@ -156,6 +195,9 @@ impl CatalogRepository {
         for (installation_id, extension_id, installed_release_id, configuration, stored_manifest) in
             rows
         {
+            if !extension_policy::allows(&extension_id, installed_release_id) {
+                continue;
+            }
             let capabilities: Vec<String> = sqlx::query_scalar(
                 "SELECT grant_id FROM extension_grants WHERE installation_id = $1 AND grant_kind = 'capability' ORDER BY grant_id",
             )
@@ -262,7 +304,7 @@ impl CatalogRepository {
         event_type: &str,
     ) -> Result<Vec<ExtensionRuntimeInstallation>, RepositoryError> {
         let rows: Vec<(String, Uuid)> = sqlx::query_as(
-            "SELECT extension_id, installed_release_id FROM extension_installations WHERE workspace_id = $1 AND state = 'enabled'",
+            "SELECT i.extension_id, i.installed_release_id FROM extension_installations i JOIN workspaces w ON w.id = i.workspace_id WHERE i.workspace_id = $1 AND i.state = 'enabled' AND w.extensions_enabled",
         )
         .bind(self.extension_workspace())
         .fetch_all(&self.pool)
@@ -298,13 +340,16 @@ impl CatalogRepository {
         extension_id: &str,
         expected_release_id: Uuid,
     ) -> Result<Option<ExtensionRuntimeInstallation>, RepositoryError> {
+        if !extension_policy::allows(extension_id, expected_release_id) {
+            return Ok(None);
+        }
         // Lock the installation while loading grants so an upgrade, disable,
         // configuration change, or revocation cannot produce a mixed snapshot.
         // The transaction commits before the untrusted invocation; lifecycle
         // operations therefore never wait on component execution.
         let mut transaction = self.pool.begin().await?;
         let row: Option<(Uuid, Value, Value)> = sqlx::query_as(
-            "SELECT i.id, i.configuration, r.manifest FROM extension_installations i JOIN installed_extension_releases r ON r.id = i.installed_release_id WHERE i.workspace_id = $1 AND i.extension_id = $2 AND i.installed_release_id = $3 AND i.state = 'enabled' FOR UPDATE OF i",
+            "SELECT i.id, i.configuration, r.manifest FROM extension_installations i JOIN installed_extension_releases r ON r.id = i.installed_release_id JOIN workspaces w ON w.id = i.workspace_id WHERE i.workspace_id = $1 AND i.extension_id = $2 AND i.installed_release_id = $3 AND i.state = 'enabled' AND w.extensions_enabled FOR UPDATE OF i",
         )
         .bind(self.extension_workspace())
         .bind(extension_id)

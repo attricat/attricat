@@ -47,6 +47,10 @@ export const ExtensionOutlet = ({ outlet, context }: Props) => {
   const runtime = useQuery({
     queryKey: extensionQueryKeys.runtime,
     queryFn: getExtensionRuntime,
+    // Runtime state can change outside this browser (safe mode, quarantine, or
+    // grant revocation). Polling makes mounted frames unmount promptly; every
+    // broker call remains server-gated between refreshes.
+    refetchInterval: 15_000,
     retry: false,
   });
   if (runtime.isError)
@@ -96,6 +100,7 @@ export const ExtensionRoutePage = ({
   const runtime = useQuery({
     queryKey: extensionQueryKeys.runtime,
     queryFn: getExtensionRuntime,
+    refetchInterval: 15_000,
     retry: false,
   });
   if (runtime.isPending) return null;

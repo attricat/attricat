@@ -4,6 +4,7 @@ use thiserror::Error;
 use uuid::Uuid;
 
 use super::{AuditContext, CatalogRepository};
+use crate::extension_policy;
 
 pub const MAX_EXTENSION_STORAGE_KEY_BYTES: usize = 256;
 pub const MAX_EXTENSION_STORAGE_VALUE_BYTES: usize = 64 * 1024;
@@ -180,7 +181,10 @@ impl CatalogRepository {
         extension_id: &str,
         expected_release_id: Uuid,
     ) -> Result<(), ExtensionStorageError> {
-        let allowed: bool = sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM extension_installations i JOIN extension_grants g ON g.installation_id = i.id WHERE i.workspace_id = $1 AND i.extension_id = $2 AND i.installed_release_id = $3 AND i.state = 'enabled' AND g.grant_kind = 'capability' AND g.grant_id = 'storage.extension')")
+        if !extension_policy::allows(extension_id, expected_release_id) {
+            return Err(ExtensionStorageError::Denied);
+        }
+        let allowed: bool = sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM extension_installations i JOIN extension_grants g ON g.installation_id = i.id JOIN workspaces w ON w.id = i.workspace_id WHERE i.workspace_id = $1 AND i.extension_id = $2 AND i.installed_release_id = $3 AND i.state = 'enabled' AND w.extensions_enabled AND g.grant_kind = 'capability' AND g.grant_id = 'storage.extension')")
             .bind(self.extension_workspace()).bind(extension_id).bind(expected_release_id).fetch_one(&self.pool).await?;
         allowed.then_some(()).ok_or(ExtensionStorageError::Denied)
     }
@@ -191,7 +195,10 @@ impl CatalogRepository {
         extension_id: &str,
         expected_release_id: Uuid,
     ) -> Result<(), ExtensionStorageError> {
-        let installation_id: Option<Uuid> = sqlx::query_scalar("SELECT id FROM extension_installations WHERE workspace_id = $1 AND extension_id = $2 AND installed_release_id = $3 AND state = 'enabled' FOR UPDATE")
+        if !extension_policy::allows(extension_id, expected_release_id) {
+            return Err(ExtensionStorageError::Denied);
+        }
+        let installation_id: Option<Uuid> = sqlx::query_scalar("SELECT i.id FROM extension_installations i JOIN workspaces w ON w.id = i.workspace_id WHERE i.workspace_id = $1 AND i.extension_id = $2 AND i.installed_release_id = $3 AND i.state = 'enabled' AND w.extensions_enabled FOR UPDATE OF i")
             .bind(self.extension_workspace()).bind(extension_id).bind(expected_release_id).fetch_optional(&mut **transaction).await?;
         let Some(installation_id) = installation_id else {
             return Err(ExtensionStorageError::Denied);

@@ -195,6 +195,74 @@ async fn enabled_client_contributions_are_hidden_after_state_changes(pool: sqlx:
 }
 
 #[sqlx::test(migrations = "./migrations")]
+async fn workspace_safe_mode_blocks_runtime_descriptors_and_storage_without_mutating_installations(
+    pool: sqlx::PgPool,
+) {
+    let workspace = Uuid::from_u128(0x00000000000040008000000000000002);
+    let repository = CatalogRepository::new(pool)
+        .for_workspace(workspace)
+        .await
+        .unwrap();
+    let installer =
+        ExtensionInstaller::new(repository.clone(), Arc::new(FakeObjectStore::available()));
+    let installed = installer
+        .install("test", &storage_client_release_archive("1.0.0"))
+        .await
+        .unwrap();
+    repository
+        .grant_extension("acme.storage", "capability", "storage.extension")
+        .await
+        .unwrap();
+    repository.enable_extension("acme.storage").await.unwrap();
+
+    repository
+        .set_workspace_extensions_enabled(false)
+        .await
+        .unwrap();
+    assert!(
+        repository
+            .client_extension_contributions()
+            .await
+            .unwrap()
+            .is_empty()
+    );
+    assert!(
+        repository
+            .runtime_extension_installation("acme.storage", installed.installed_release_id)
+            .await
+            .unwrap()
+            .is_none()
+    );
+    assert!(
+        repository
+            .extension_storage_get("acme.storage", installed.installed_release_id, "state")
+            .await
+            .is_err()
+    );
+    assert_eq!(
+        repository
+            .installed_extension("acme.storage")
+            .await
+            .unwrap()
+            .state,
+        "enabled"
+    );
+
+    repository
+        .set_workspace_extensions_enabled(true)
+        .await
+        .unwrap();
+    assert_eq!(
+        repository
+            .client_extension_contributions()
+            .await
+            .unwrap()
+            .len(),
+        1
+    );
+}
+
+#[sqlx::test(migrations = "./migrations")]
 async fn extension_storage_enforces_cas_bounds_quota_and_workspace_namespace(pool: sqlx::PgPool) {
     let workspace = Uuid::from_u128(0x00000000000040008000000000000002);
     let repository = CatalogRepository::new(pool)
