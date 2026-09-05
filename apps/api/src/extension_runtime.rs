@@ -5,7 +5,11 @@
 //! `wit/catalog-extension.wit`; every call is checked against the immutable
 //! release manifest and invocation-time grants.
 
-use std::{sync::Arc, time::Duration};
+use std::{
+    collections::{HashMap, VecDeque},
+    sync::{Arc, Mutex},
+    time::Duration,
+};
 
 use async_trait::async_trait;
 use semver::{Version, VersionReq};
@@ -45,6 +49,7 @@ mod host_v11 {
 
 const MAX_HOST_MESSAGE_BYTES: usize = 16 * 1024;
 const MAX_HOST_JSON_BYTES: usize = 64 * 1024;
+const MAX_CACHED_COMPONENTS: usize = 64;
 
 #[derive(Clone, Debug)]
 pub struct ExtensionRuntimeConfig {
@@ -73,10 +78,47 @@ pub enum ExtensionRuntimeError {
     Denied(String),
 }
 
+#[derive(Clone, Debug, Eq, Hash, PartialEq)]
+struct ComponentCacheKey {
+    installed_release_id: Uuid,
+    artifact_id: String,
+}
+
+#[derive(Default)]
+struct ComponentCache {
+    components: HashMap<ComponentCacheKey, Arc<Component>>,
+    lru: VecDeque<ComponentCacheKey>,
+}
+
+impl ComponentCache {
+    fn get(&mut self, key: &ComponentCacheKey) -> Option<Arc<Component>> {
+        let component = self.components.get(key)?.clone();
+        self.lru.retain(|cached| cached != key);
+        self.lru.push_back(key.clone());
+        Some(component)
+    }
+
+    fn insert(&mut self, key: ComponentCacheKey, component: Arc<Component>) -> Arc<Component> {
+        if let Some(component) = self.get(&key) {
+            return component;
+        }
+        self.components.insert(key.clone(), component.clone());
+        self.lru.push_back(key);
+        if self.components.len() > MAX_CACHED_COMPONENTS {
+            if let Some(evicted) = self.lru.pop_front() {
+                self.components.remove(&evicted);
+            }
+        }
+        component
+    }
+}
+
 #[derive(Clone)]
 pub struct ExtensionRuntime {
     object_store: Arc<dyn ObjectStore>,
     config: ExtensionRuntimeConfig,
+    engine: Arc<Engine>,
+    components: Arc<Mutex<ComponentCache>>,
 }
 
 impl ExtensionRuntime {
@@ -88,20 +130,61 @@ impl ExtensionRuntime {
         wasmtime.wasm_component_model(true);
         wasmtime.consume_fuel(true);
         wasmtime.epoch_interruption(true);
-        Engine::new(&wasmtime)
+        let engine = Engine::new(&wasmtime)
             .map_err(|error| ExtensionRuntimeError::Runtime(error.to_string()))?;
         Ok(Self {
             object_store,
             config,
+            engine: Arc::new(engine),
+            components: Arc::new(Mutex::new(ComponentCache::default())),
         })
     }
 
-    fn invocation_engine() -> Result<Engine, ExtensionRuntimeError> {
-        let mut wasmtime = Config::new();
-        wasmtime.wasm_component_model(true);
-        wasmtime.consume_fuel(true);
-        wasmtime.epoch_interruption(true);
-        Engine::new(&wasmtime).map_err(|error| ExtensionRuntimeError::Runtime(error.to_string()))
+    async fn component(
+        &self,
+        installation: &ExtensionRuntimeInstallation,
+    ) -> Result<Arc<Component>, ExtensionRuntimeError> {
+        let artifact = installation
+            .manifest
+            .artifacts
+            .iter()
+            .find(|artifact| artifact.kind == ArtifactKind::ServerWasm)
+            .ok_or_else(|| {
+                ExtensionRuntimeError::Runtime("release has no server_wasm artifact".into())
+            })?;
+        let key = ComponentCacheKey {
+            installed_release_id: installation.installed_release_id,
+            artifact_id: artifact.id.clone(),
+        };
+        if let Some(component) = self
+            .components
+            .lock()
+            .expect("component cache is not poisoned")
+            .get(&key)
+        {
+            metrics::counter!("catalog_extension_component_cache_total", "outcome" => "hit")
+                .increment(1);
+            return Ok(component);
+        }
+        let bytes = self
+            .object_store
+            .get(&installed_artifact_key(
+                key.installed_release_id,
+                &key.artifact_id,
+            ))
+            .await?
+            .bytes;
+        let component = Arc::new(Component::new(&self.engine, &bytes).map_err(|error| {
+            ExtensionRuntimeError::Runtime(format!("invalid component: {error}"))
+        })?);
+        let component = self
+            .components
+            .lock()
+            .expect("component cache is not poisoned")
+            .insert(key, component);
+        metrics::counter!("catalog_extension_component_cache_total", "outcome" => "miss")
+            .increment(1);
+        Ok(component)
     }
 
     /// Invokes a v1.1 component command after its HTTP broker has resolved a
@@ -114,44 +197,25 @@ impl ExtensionRuntime {
         request: &str,
         max_response_bytes: u64,
     ) -> Result<String, ExtensionRuntimeError> {
-        let engine = Self::invocation_engine()?;
-        let artifact = installation
-            .manifest
-            .artifacts
-            .iter()
-            .find(|artifact| artifact.kind == ArtifactKind::ServerWasm)
-            .ok_or_else(|| {
-                ExtensionRuntimeError::Runtime("release has no server_wasm artifact".into())
-            })?;
-        let bytes = self
-            .object_store
-            .get(&installed_artifact_key(
-                installation.installed_release_id,
-                &artifact.id,
-            ))
-            .await?
-            .bytes;
-        let component = Component::new(&engine, &bytes).map_err(|error| {
-            ExtensionRuntimeError::Runtime(format!("invalid component: {error}"))
-        })?;
+        let component = self.component(installation).await?;
         let state = HostState::new(
             installation.clone(),
             repository,
             self.config.max_memory_bytes,
         );
-        let mut store = Store::new(&engine, state);
+        let mut store = Store::new(&self.engine, state);
         store.limiter(|state| &mut state.limits);
         store
             .set_fuel(self.config.fuel)
             .map_err(|error| ExtensionRuntimeError::Runtime(error.to_string()))?;
         store.set_epoch_deadline(1);
-        let timeout_engine = engine.clone();
+        let timeout_engine = self.engine.clone();
         let timeout = self.config.invocation_timeout;
         let epoch = tokio::spawn(async move {
             tokio::time::sleep(timeout).await;
             timeout_engine.increment_epoch();
         });
-        let mut linker = Linker::new(&engine);
+        let mut linker = Linker::new(&self.engine);
         host_v11::CatalogExtension::add_to_linker::<HostState, HasSelf<HostState>>(
             &mut linker,
             |state| state,
@@ -192,44 +256,25 @@ impl ExtensionRuntime {
         handler: &ManifestEventHandler,
         event: &DomainEvent,
     ) -> Result<(), ExtensionRuntimeError> {
-        let engine = Self::invocation_engine()?;
-        let artifact = installation
-            .manifest
-            .artifacts
-            .iter()
-            .find(|artifact| artifact.kind == ArtifactKind::ServerWasm)
-            .ok_or_else(|| {
-                ExtensionRuntimeError::Runtime("release has no server_wasm artifact".into())
-            })?;
-        let bytes = self
-            .object_store
-            .get(&installed_artifact_key(
-                installation.installed_release_id,
-                &artifact.id,
-            ))
-            .await?
-            .bytes;
-        let component = Component::new(&engine, &bytes).map_err(|error| {
-            ExtensionRuntimeError::Runtime(format!("invalid component: {error}"))
-        })?;
+        let component = self.component(installation).await?;
         let state = HostState::new(
             installation.clone(),
             repository,
             self.config.max_memory_bytes,
         );
-        let mut store = Store::new(&engine, state);
+        let mut store = Store::new(&self.engine, state);
         store.limiter(|state| &mut state.limits);
         store
             .set_fuel(self.config.fuel)
             .map_err(|error| ExtensionRuntimeError::Runtime(error.to_string()))?;
         store.set_epoch_deadline(1);
-        let timeout_engine = engine.clone();
+        let timeout_engine = self.engine.clone();
         let timeout = self.config.invocation_timeout;
         let epoch = tokio::spawn(async move {
             tokio::time::sleep(timeout).await;
             timeout_engine.increment_epoch();
         });
-        let mut linker = Linker::new(&engine);
+        let mut linker = Linker::new(&self.engine);
         host_v11::CatalogExtension::add_to_linker::<HostState, HasSelf<HostState>>(
             &mut linker,
             |state| state,
@@ -266,40 +311,27 @@ impl ExtensionRuntime {
                 .invoke_v11_event(installation, repository, handler, event)
                 .await;
         }
-        let engine = Self::invocation_engine()?;
-        let artifact = installation
-            .manifest
-            .artifacts
-            .iter()
-            .find(|artifact| artifact.kind == ArtifactKind::ServerWasm)
-            .ok_or_else(|| {
-                ExtensionRuntimeError::Runtime("release has no server_wasm artifact".into())
-            })?;
-        let key = installed_artifact_key(installation.installed_release_id, &artifact.id);
-        let bytes = self.object_store.get(&key).await?.bytes;
-        let component = Component::new(&engine, &bytes).map_err(|error| {
-            ExtensionRuntimeError::Runtime(format!("invalid component: {error}"))
-        })?;
+        let component = self.component(installation).await?;
 
         let state = HostState::new(
             installation.clone(),
             repository,
             self.config.max_memory_bytes,
         );
-        let mut store = Store::new(&engine, state);
+        let mut store = Store::new(&self.engine, state);
         store.limiter(|state| &mut state.limits);
         store
             .set_fuel(self.config.fuel)
             .map_err(|error| ExtensionRuntimeError::Runtime(error.to_string()))?;
         store.set_epoch_deadline(1);
-        let timeout_engine = engine.clone();
+        let timeout_engine = self.engine.clone();
         let timeout = self.config.invocation_timeout;
         let epoch = tokio::spawn(async move {
             tokio::time::sleep(timeout).await;
             timeout_engine.increment_epoch();
         });
 
-        let mut linker = Linker::new(&engine);
+        let mut linker = Linker::new(&self.engine);
         CatalogExtension::add_to_linker::<HostState, HasSelf<HostState>>(&mut linker, |state| {
             state
         })
