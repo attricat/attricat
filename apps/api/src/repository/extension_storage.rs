@@ -149,12 +149,15 @@ impl CatalogRepository {
         if limit == 0 || limit > MAX_EXTENSION_STORAGE_LIST_LIMIT {
             return Err(ExtensionStorageError::InvalidLimit);
         }
-        let prefix = prefix.map(normalized_key).transpose()?;
+        let prefix = prefix
+            .map(normalized_key)
+            .transpose()?
+            .map(escape_like_prefix);
         let cursor = cursor.map(normalized_key).transpose()?;
         self.require_storage_access(extension_id, expected_release_id)
             .await?;
         let rows: Vec<(String, Value, i64)> = sqlx::query_as(
-            "SELECT key, value, revision FROM extension_storage_entries WHERE workspace_id = $1 AND extension_id = $2 AND ($3::text IS NULL OR key LIKE $3 || '%') AND ($4::text IS NULL OR key > $4) ORDER BY key LIMIT $5",
+            "SELECT key, value, revision FROM extension_storage_entries WHERE workspace_id = $1 AND extension_id = $2 AND ($3::text IS NULL OR key LIKE $3 || '%' ESCAPE '\\') AND ($4::text IS NULL OR key > $4) ORDER BY key LIMIT $5",
         )
         .bind(self.extension_workspace()).bind(extension_id).bind(prefix).bind(cursor).bind(i64::from(limit) + 1)
         .fetch_all(&self.pool).await?;
@@ -243,6 +246,13 @@ fn normalized_key(key: &str) -> Result<&str, ExtensionStorageError> {
         Ok(key)
     }
 }
+fn escape_like_prefix(prefix: &str) -> String {
+    prefix
+        .replace('\\', "\\\\")
+        .replace('%', "\\%")
+        .replace('_', "\\_")
+}
+
 fn value_size(value: &Value) -> Result<usize, ExtensionStorageError> {
     let size = serde_json::to_vec(value)
         .map_err(|_| ExtensionStorageError::InvalidValue)?

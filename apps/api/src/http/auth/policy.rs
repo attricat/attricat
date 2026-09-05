@@ -51,6 +51,7 @@ pub(super) fn policy(method: &Method, path: &str) -> Option<Policy> {
     }
     if path == "/extensions/runtime"
         || path == "/extensions/{extension_id}/{contribution_id}/artifact"
+        || path == "/extensions/{extension_id}/{contribution_id}/storage/{release_id}"
     {
         return Some(Policy {
             permission: "entities.read",
@@ -248,6 +249,15 @@ mod tests {
             policy(
                 &Method::GET,
                 "/extensions/{extension_id}/{contribution_id}/artifact"
+            )
+            .unwrap()
+            .permission,
+            "entities.read"
+        );
+        assert_eq!(
+            policy(
+                &Method::POST,
+                "/extensions/{extension_id}/{contribution_id}/storage/{release_id}"
             )
             .unwrap()
             .permission,
