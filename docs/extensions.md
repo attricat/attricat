@@ -39,8 +39,10 @@ global copy of indexes, READMEs, releases, or archives.
 
 A user with `extensions.manage` may alternatively install a local archive from
 **Extensions → Upload archive** (`/manage/extensions/sideload`). The archive is
-sent to `POST /extensions/sideload` as an `application/zstd` request body and
-must be a `.tar.zst` extension package no larger than 32 MiB. Side-loaded
+sent by Catalog's web client to `POST /extensions/sideload` as an
+`application/zstd` request body and must be a `.tar.zst` extension package no
+larger than 32 MiB. The server validates the archive contents but does not
+currently enforce the request media type. Side-loaded
 packages are treated as untrusted input: they receive the same compressed and
 unpacked size limits, safe entry-path checks, strict `manifest.json`
 validation, artifact staging, disabled initial state, lifecycle records, and
@@ -77,8 +79,10 @@ verification is deferred from the trusted-source MVP.
 
 The v1 capability catalogue is: `catalog.read`, `catalog.write`,
 `events.subscribe`, `events.emit`, `storage.extension`, `configuration.read`,
-`secrets.read`, `logging.write`, `client.navigation`, `client.notification`,
-`client.events`, `network.request`, and `webhooks.receive`.
+`configuration.write`, `secrets.read`, `logging.write`, `client.commands`,
+`client.navigation`, `client.notification`, `client.events`,
+`client.blueprint_configuration`, `client.entity_decoration`,
+`client.entity_action`, `network.request`, and `webhooks.receive`.
 
 Required `permissions` and `host_permissions` must be granted before an
 extension can be enabled. Optional variants are independently grantable and
@@ -133,9 +137,11 @@ request/correlation IDs, and bounded diagnostic codes may be recorded; secrets,
 credentials, raw packages, and payload bodies may not. SQL migrations remain
 declarative and contain no behavior.
 
-The shared lifecycle work intentionally provides no management API, web UI,
-external GitHub registry discovery, or client runtime. WASM execution begins in
-#145; the remaining boundaries are follow-on work.
+Catalog provides management APIs and web UI for registry sources, discovery,
+installation, configuration, grants, lifecycle actions, and client runtime
+descriptors. Server WASM execution, client components, storage, commands, and
+host API 1.1 are implemented; mediated network/secrets/event-emission APIs and
+webhook delivery remain follow-on work.
 
 ## Server WASM runtime (#145)
 
@@ -158,8 +164,11 @@ and quarantine the installation before the delivery is retried/dead-lettered.
 The component host ABI uses bounded JSON strings (64 KiB) and bounded log
 messages (16 KiB). Every operation is capability checked at the point of call.
 `configuration.get.v1` is available to components with
-`configuration.read`; all other v1 operation names are deliberately rejected
-until their command/secret/storage/network contracts are made durable. In
+`configuration.read`. `storage.get.v1`, `storage.set.v1` (also accepted as
+`storage.put.v1`), `storage.delete.v1`, and `storage.list.v1` are available to
+components with `storage.extension`. `secrets.get.v1`, `catalog.read.v1`,
+`catalog.command.v1`, `events.emit.v1`, and `network.request.v1` are recognized
+and capability-checked but are not implemented by this deployment. In
 particular, `network.request.v1` never grants ambient sockets. The manifest
 host-permission validation remains the egress policy contract for its future
 mediated implementation.
@@ -189,16 +198,19 @@ Enabled `client_component` artifacts can expose a strict `ui` contribution:
 ```
 
 A contribution is either `route` (which requires a non-empty `title`) or
-`element` (which requires one of the host-owned `navigation` or
-`entity_preview_panel` outlets). Routes are always namespaced at
+`element` (which requires one of the host-owned `navigation`,
+`entity_preview_panel`, `blueprint_attribute_configuration`,
+`entity_attribute_decoration`, or `entity_action` outlets). Routes are always namespaced at
 `/extensions/:extensionId/:contributionId`; manifests cannot provide a path,
 selector, or host component. Element names must be lowercase custom-element
 names. Each extension can use an outlet once and all contribution/artifact IDs
 remain stable across releases.
 
 Catalog loads runtime descriptors and JavaScript only for enabled installations.
-Disabling, quarantining, or upgrading an installation immediately prevents new
-loads; release IDs and object-store keys are never client addresses. The host
+Disabling, quarantining, or upgrading an installation excludes it from new
+runtime-descriptor loads; already-mounted frames remain active until they
+unmount or the client refreshes its runtime descriptor query. Release IDs and
+object-store keys are never client addresses. The host
 runs every contribution in a distinct `<iframe sandbox="allow-scripts">` with
 an opaque origin and a CSP that denies network access. Components register
 custom elements *inside that frame*, not in Catalog's document, and have no
@@ -213,22 +225,36 @@ It may use only granted operations:
 - `catalog.navigate({ entity_id })` requires `client.navigation` and resolves
   only to Catalog's entity route.
 - `catalog.notify({ message, severity? })` requires `client.notification`;
-  messages are trimmed and limited to 512 characters.
+  messages are trimmed and limited to 512 characters. The broker accepts the
+  call, but the host currently has no notification listener, so it does not
+  produce a user-visible notification.
 - `catalog.request(path)` requires `catalog.read` and is limited to `GET`
   reads of `/api/entities`, `/api/v1/entities/:uuid`, or the exact revision
-  route `/api/blueprints/:uuid/versions/:positive-version`, with a 1 MiB
-  response limit. The last form lets a blueprint-configuration contribution
-  inspect only the revision identified by its host-provided outlet context.
+  route `/api/blueprints/:uuid/versions/:positive-version`. Responses are
+  limited to 1 MiB. The revision route is not currently bound to the
+  contribution's outlet context, so a component can request any revision the
+  signed-in user may read.
+- `catalog.command({ command_id, payload })` requires `client.commands` and
+  invokes a declared, bounded server command. The host validates the caller,
+  contribution, release, installation state, configuration, and grants.
+- `catalog.storage.get/set/delete/list(...)` requires `storage.extension` and
+  provides release-scoped extension storage. Storage requests and values are
+  bounded; `set` and `delete` support an optional optimistic
+  `expected_revision`.
 - `catalog.context` contains only the documented outlet identifiers (the
   entity preview outlet supplies `entity_id` and optional `context_id`).
-  Configuration is provided only when `configuration.read` is granted.
+  Configuration is supplied to the component as `element.configuration` only
+  when `configuration.read` is granted. `client.events` currently dispatches
+  a startup `catalog:context-changed.v1` event only; it is not a durable
+  context-update protocol.
 
 There is no generic `fetch`, URL navigation, credential/header access, DOM
 bridge, event stream, or inter-extension RPC. Every mediated Catalog request
 uses the signed-in browser session in the parent and the server still applies
 normal authorization. Invalid messages, missing grants, failures, and startup
-timeouts are denied and rendered as a host-owned warning without exposing
-extension source or host internals. Extension UI must provide its own localized
+timeouts are denied; frame startup failures render as host-owned warnings
+without exposing extension source or host internals. Runtime-descriptor
+fetch failures are currently suppressed by outlets rather than rendered. Extension UI must provide its own localized
 text and accessible labels; the host owns the surrounding landmarks, focus,
 loading state, and failure announcements.
 
@@ -260,7 +286,10 @@ A manifest may declare `scoped_configuration` with an object schema, positive
 version, and `blueprint` and/or `attribute` scopes. It requires
 `configuration.write`. Catalog persists these values separately from blueprint
 schemas and verifies the workspace-owned blueprint revision and attribute on
-every get/set. Values are release-bound and inaccessible after disable,
+every get/set. Attribute-scoped values are operational; blueprint-scoped writes
+are currently blocked by the nullable-primary-key schema defect described in
+this document's implementation limitations. Values are release-bound and
+inaccessible after disable,
 quarantine, grant changes, or upgrade.
 
 A server manifest may declare bounded `server.commands` (stable ID, handler,
@@ -270,10 +299,23 @@ object request/response schemas, and byte limits). They require
 rechecks contribution, enabled state, exact release, configuration, and grants.
 No extension receives browser cookies, routes, or arbitrary fetch access.
 
-The fixed element outlets are `blueprint_attribute_configuration` (requires
-`client.blueprint_configuration`), `entity_attribute_decoration` (requires
-`client.entity_decoration`), and `entity_action` (requires
-`client.entity_action`). Their contexts contain only the relevant catalog IDs:
-blueprint/revision/attribute, or entity/attribute/context. Extensions cannot
-provide DOM selectors, arbitrary host routes, React state, or inter-extension
-RPC.
+The additional fixed element outlets are
+`blueprint_attribute_configuration` (requires `client.blueprint_configuration`),
+`entity_attribute_decoration` (requires `client.entity_decoration`), and
+`entity_action` (requires `client.entity_action`). Their contexts contain only
+the relevant catalog IDs: blueprint/revision/attribute, or
+entity/attribute/context. Extensions cannot provide DOM selectors, arbitrary
+host routes, React state, or inter-extension RPC.
+
+## Current implementation limitations
+
+- Removing an extension retains its installed-release history, but reinstalling
+  the same extension version in the same workspace currently fails.
+- Concurrent server component invocations share the Wasmtime timeout epoch;
+  one timeout can interrupt an unrelated invocation.
+- Registry index downloads have no response-size, entry-count, or field-size
+  bounds before deserialization.
+- Disabling/removing/upgrading a dependency does not currently disable enabled
+  dependents.
+- An entity context change can reinitialize a mounted client frame and append a
+  duplicate custom element. Refresh or remount the frame after changing context.
