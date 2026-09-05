@@ -26,6 +26,17 @@ and `just down` to stop the worktree database.
 
 Use SQLx for all migration operations.
 
+## Extension integration verification
+
+When changing extension installation, runtime, artifact storage, event dispatch,
+permissions, or client contributions, validate the host integration against the
+sibling example extension when it is available at
+`../../attricat-extension-example` (two levels above this worktree). Build and
+package it, side-load the generated archive into this worktree's running server,
+grant its requested permissions, enable it, and exercise a real extension
+event/action. Unit tests alone are not sufficient for these changes. See
+[Extension integration testing](docs/extensions.md#local-extension-integration-testing).
+
 ## Database policy
 
 SQL migrations are declarative only. They may define tables, columns, indexes,

@@ -50,6 +50,27 @@ audit events as registry installs. Their recorded source is `sideload`; the raw
 archive is never retained. Users must review configuration and explicitly grant
 required permissions before enabling a side-loaded extension.
 
+### Local extension integration testing
+
+The sibling [`attricat-extension-example`](../../attricat-extension-example)
+checkout is the host's end-to-end test extension. From an Attricat worktree,
+it is available two levels above the repository root:
+
+```sh
+example_extension="$(cd ../../attricat-extension-example && pwd)"
+(cd "$example_extension" && just check && just pack)
+```
+
+With this worktree's local stack running, upload the resulting
+`$example_extension/dist/*.tar.zst` archive through **Manage → Extensions →
+Upload archive**. Grant every requested permission and enable the extension.
+Each side-loaded replacement is a new release and must be granted and enabled
+again. Exercise an extension UI contribution and a server event (for example,
+update a formula dependency in the example's blueprint TOML) to verify both the
+browser and WASM runtime paths. Use this workflow when changing extension
+installation, permissions, artifact storage, runtime, or event dispatch; unit
+tests alone do not prove host integration.
+
 Registry installs validate the selected `.tar.zst` archive with bounded
 decompression and entry-path checks, then read and validate `manifest.json`
 before uploading declared extracted artifacts to Catalog S3 storage. Artifact

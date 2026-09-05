@@ -62,6 +62,7 @@ change summary, use a least-privileged provider account, and only grant
 
 - [Documentation index](docs/index.md)
 - [Blueprint authoring](docs/blueprints.md)
+- [Extension development and local side-loading](docs/extensions.md#local-extension-integration-testing)
 - [Catalog CLI](docs/cli.md)
 - [API reference](docs/api.md)
 - [Configuration reference](docs/configuration.md)
