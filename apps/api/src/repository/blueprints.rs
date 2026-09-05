@@ -1,8 +1,10 @@
+use super::values::{NativeValue, ValueType};
 use super::*;
 use crate::domain_events::{
     BLUEPRINT_CREATED_V1, BLUEPRINT_PUBLISHED_V1, BLUEPRINT_REVISION_CREATED_V1,
     BlueprintRevisionV1, EventSource, EventSourceKind, NewDomainEvent,
 };
+use catalog_validation::validate_json_schema;
 use serde_json::json;
 use uuid::Uuid;
 
@@ -193,11 +195,12 @@ impl CatalogRepository {
 
         let mut attributes = Vec::with_capacity(compiled.attributes.len());
         for attribute in compiled.attributes {
+            validate_attribute_default_value(&attribute)?;
             attributes.push(
                 sqlx::query_as::<_, Attribute>(
-                    r#"INSERT INTO attributes (id, workspace_id, blueprint_id, blueprint_version, code, value_type, value_schema, file_policy, target_blueprint_code, tags, context_fallback, context_editable, position)
-                       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
-                       RETURNING id, blueprint_id, blueprint_version, code, value_type, value_schema, file_policy, target_blueprint_code, tags, context_fallback, context_editable, position, created_at, updated_at, deleted_at"#,
+                    r#"INSERT INTO attributes (id, workspace_id, blueprint_id, blueprint_version, code, value_type, value_schema, default_value, file_policy, target_blueprint_code, tags, context_fallback, context_editable, position)
+                       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
+                       RETURNING id, blueprint_id, blueprint_version, code, value_type, value_schema, default_value, file_policy, target_blueprint_code, tags, context_fallback, context_editable, position, created_at, updated_at, deleted_at"#,
                 )
                 .bind(Uuid::new_v4())
                 .bind(self.workspace_id.unwrap_or(Self::DEFAULT_WORKSPACE_ID))
@@ -206,6 +209,7 @@ impl CatalogRepository {
                 .bind(attribute.code)
                 .bind(attribute.value_type)
                 .bind(attribute.value_schema)
+                .bind(attribute.default_value)
                 .bind(attribute.file_policy.map(|policy| serde_json::to_value(policy).expect("file policy serializes")))
                 .bind(attribute.target_blueprint)
                 .bind(serde_json::to_value(attribute.tags).expect("attribute tags serialize"))
@@ -408,7 +412,7 @@ impl CatalogRepository {
         blueprint_version: i64,
     ) -> Result<Vec<Attribute>, RepositoryError> {
         Ok(sqlx::query_as::<_, Attribute>(
-            r#"SELECT id, blueprint_id, blueprint_version, code, value_type, value_schema, file_policy, target_blueprint_code, tags, context_fallback, context_editable, position, created_at, updated_at, deleted_at
+            r#"SELECT id, blueprint_id, blueprint_version, code, value_type, value_schema, default_value, file_policy, target_blueprint_code, tags, context_fallback, context_editable, position, created_at, updated_at, deleted_at
                FROM attributes
                WHERE blueprint_id = $1 AND blueprint_version = $2 AND workspace_id = $3 AND deleted_at IS NULL
                ORDER BY position"#,
@@ -437,6 +441,37 @@ impl CatalogRepository {
             None => Ok(None),
         }
     }
+}
+
+fn validate_attribute_default_value(
+    attribute: &catalog_blueprint::EffectiveAttribute,
+) -> Result<(), RepositoryError> {
+    let Some(default_value) = &attribute.default_value else {
+        return Ok(());
+    };
+    let native = NativeValue::parse(
+        ValueType::parse(&attribute.value_type)?,
+        default_value.clone(),
+    )
+    .map_err(|_| {
+        RepositoryError::InvalidBlueprintDefinition(format!(
+            "default value for attribute '{}' does not match its value type",
+            attribute.code
+        ))
+    })?;
+    if let Some(schema) = &attribute.value_schema {
+        if let Some(error) = validate_json_schema(schema, &native.json())
+            .map_err(RepositoryError::invalid_blueprint_definition)?
+            .into_iter()
+            .next()
+        {
+            return Err(RepositoryError::InvalidBlueprintDefinition(format!(
+                "default value for attribute '{}' does not match its schema at '{}': {}",
+                attribute.code, error.instance_path, error.message
+            )));
+        }
+    }
+    Ok(())
 }
 
 fn blueprint_event(

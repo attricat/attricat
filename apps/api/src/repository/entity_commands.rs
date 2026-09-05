@@ -44,6 +44,45 @@ impl CatalogRepository {
                 system_metadata,
             )
             .await?;
+        let default_context_id = self
+            .resolve_context_id(&mut transaction, None)
+            .await?
+            .expect("the default context is required");
+        let attributes = self
+            .list_attributes_in_transaction(
+                &mut transaction,
+                entity.blueprint_id,
+                entity.blueprint_version,
+            )
+            .await?;
+        for attribute in attributes.iter().filter(|attribute| {
+            attribute.default_value.is_some()
+                && !values.iter().any(|value| {
+                    matches!(
+                        value,
+                        NewAttributeValue::Scalar {
+                            attribute_id,
+                            attribute_code,
+                            context_id,
+                            ..
+                        } if (attribute_id == &Some(attribute.id)
+                            || attribute_code.as_deref() == Some(attribute.code.as_str()))
+                            && context_id.is_none_or(|id| id == default_context_id)
+                    )
+                })
+        }) {
+            self.insert_value(
+                &mut transaction,
+                &entity,
+                NewAttributeValue::Scalar {
+                    attribute_id: Some(attribute.id),
+                    attribute_code: None,
+                    context_id: Some(default_context_id),
+                    value: attribute.default_value.clone().expect("filtered above"),
+                },
+            )
+            .await?;
+        }
         for value in values {
             self.insert_value(&mut transaction, &entity, value).await?;
         }

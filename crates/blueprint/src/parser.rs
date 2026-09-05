@@ -29,6 +29,7 @@ struct RawAttributeDeclaration {
     code: String,
     value_type: Option<String>,
     value_schema: Option<String>,
+    default_value: Option<serde_json::Value>,
     cardinality: Option<String>,
     ordered: Option<bool>,
     #[serde(default)]
@@ -121,6 +122,13 @@ pub fn parse(source: &str) -> Result<BlueprintDefinition, BlueprintError> {
                             code: attribute.code,
                         });
                     }
+                    if attribute.default_value.is_some()
+                        && matches!(value_type.as_str(), "relationship" | "file")
+                    {
+                        return Err(BlueprintError::DefaultValueOnNonScalarAttribute {
+                            code: attribute.code,
+                        });
+                    }
                     let has_file_policy = attribute.cardinality.is_some()
                         || attribute.ordered.is_some()
                         || !attribute.allowed_mime_groups.is_empty()
@@ -171,6 +179,7 @@ pub fn parse(source: &str) -> Result<BlueprintDefinition, BlueprintError> {
                         code: attribute.code,
                         value_type,
                         value_schema,
+                        default_value: attribute.default_value,
                         file_policy,
                         target_blueprint: attribute.target_blueprint,
                         tags: attribute.tags,

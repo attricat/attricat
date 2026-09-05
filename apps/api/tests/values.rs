@@ -3,6 +3,130 @@ mod support;
 use support::*;
 
 #[sqlx::test]
+async fn creates_default_scalar_attribute_values(pool: PgPool) {
+    let (base_url, server) = start_server(pool).await;
+    let client = authenticated_client();
+    let blueprint = create_blueprint(
+        &client,
+        &base_url,
+        r#"
+format_version = 1
+code = "defaulted_product"
+name = "Defaulted product"
+kind = "entity"
+
+[views.dropdown_option]
+type = "dropdown_option"
+fields = ["title"]
+
+[[attributes]]
+code = "title"
+value_type = "string"
+default_value = "Untitled"
+
+[[attributes]]
+code = "stock"
+value_type = "integer"
+default_value = 0
+"#,
+    )
+    .await;
+
+    let entity = create_entity(&client, &base_url, &blueprint).await;
+    let values: Vec<Value> = client
+        .get(format!(
+            "{base_url}/entities/{}/values/current",
+            entity["id"].as_str().unwrap()
+        ))
+        .send()
+        .await
+        .unwrap()
+        .error_for_status()
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    assert_eq!(values.len(), 2);
+    assert!(values.iter().any(|value| value["value"] == "Untitled"));
+    assert!(values.iter().any(|value| value["value"] == 0));
+
+    server.abort();
+}
+
+#[sqlx::test]
+async fn create_values_override_default_attribute_values(pool: PgPool) {
+    let (base_url, server) = start_server(pool).await;
+    let client = authenticated_client();
+    let blueprint = create_blueprint(
+        &client,
+        &base_url,
+        r#"
+format_version = 1
+code = "overridden_default_product"
+name = "Overridden default product"
+kind = "entity"
+
+[views.dropdown_option]
+type = "dropdown_option"
+fields = ["title"]
+
+[[attributes]]
+code = "title"
+value_type = "string"
+default_value = "Untitled"
+"#,
+    )
+    .await;
+    let entity: Value = client
+        .post(format!("{base_url}/v1/entities"))
+        .json(&json!({
+            "blueprint": {
+                "code": blueprint["blueprint"]["code"],
+                "version": blueprint["blueprint"]["version"],
+            },
+            "values": [{
+                "kind": "scalar",
+                "attribute_code": "title",
+                "value": "Specified title",
+            }],
+        }))
+        .send()
+        .await
+        .unwrap()
+        .error_for_status()
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    let entity_id = entity["id"].as_str().unwrap();
+    let values: Vec<Value> = client
+        .get(format!("{base_url}/entities/{entity_id}/values/current"))
+        .send()
+        .await
+        .unwrap()
+        .error_for_status()
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    assert_eq!(values.len(), 1);
+    assert_eq!(values[0]["value"], "Specified title");
+    let history: Vec<Value> = client
+        .get(format!("{base_url}/entities/{entity_id}/values/history"))
+        .send()
+        .await
+        .unwrap()
+        .error_for_status()
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    assert!(history.is_empty());
+
+    server.abort();
+}
+
+#[sqlx::test]
 async fn restores_a_scalar_value_from_synchronous_history(pool: PgPool) {
     let (base_url, server) = start_server(pool.clone()).await;
     let client = authenticated_client();

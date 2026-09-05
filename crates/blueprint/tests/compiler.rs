@@ -41,6 +41,7 @@ from = "seo.meta_title"
                     code: "meta_title".to_owned(),
                     value_type: "string".to_owned(),
                     value_schema: None,
+                    default_value: None,
                     file_policy: None,
                     target_blueprint: None,
                     tags: vec![],
@@ -52,6 +53,7 @@ from = "seo.meta_title"
                     code: "meta_description".to_owned(),
                     value_type: "string".to_owned(),
                     value_schema: None,
+                    default_value: None,
                     file_policy: None,
                     target_blueprint: None,
                     tags: vec![],
@@ -73,6 +75,49 @@ from = "seo.meta_title"
     assert_eq!(compiled.attributes[1].code, "meta_title");
     assert_eq!(compiled.attributes[1].position, 1);
     assert_eq!(compiled.raw_definition_hash, raw_hash(source));
+}
+
+#[test]
+fn compiles_scalar_attribute_default_values() {
+    let source = r#"
+format_version = 1
+code = "product"
+name = "Product"
+kind = "entity"
+
+[views.dropdown_option]
+type = "dropdown_option"
+fields = ["title"]
+
+[[attributes]]
+code = "title"
+value_type = "string"
+default_value = "Untitled"
+"#;
+    let compiled = compile(parse(source).unwrap(), &[], source).unwrap();
+    assert_eq!(
+        compiled.attributes[0].default_value,
+        Some(serde_json::json!("Untitled"))
+    );
+}
+
+#[test]
+fn rejects_default_values_on_non_scalar_attributes() {
+    let source = r#"
+format_version = 1
+code = "product"
+name = "Product"
+kind = "entity"
+
+[[attributes]]
+code = "related"
+value_type = "relationship"
+default_value = "00000000-0000-0000-0000-000000000000"
+"#;
+    assert!(matches!(
+        parse(source),
+        Err(BlueprintError::DefaultValueOnNonScalarAttribute { .. })
+    ));
 }
 
 #[test]

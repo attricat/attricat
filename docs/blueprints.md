@@ -44,6 +44,19 @@ context_editable = "default"
 Blank contextual string fields remove their override instead of storing an empty
 string. Missing contextual values resolve according to `context_fallback`.
 
+Scalar attributes may set `default_value`. The value is stored in the default
+context when an entity is created, unless the create request supplies a value
+for that attribute in the default context. Defaults support `string`, `number`,
+`integer`, `boolean`, `date`, `datetime`, and `time`; relationships and files do
+not support defaults.
+
+```toml
+[[attributes]]
+code = "status"
+value_type = "string"
+default_value = "draft"
+```
+
 A relationship may restrict its target type:
 
 ```toml
