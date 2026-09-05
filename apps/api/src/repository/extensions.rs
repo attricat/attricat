@@ -499,9 +499,13 @@ impl CatalogRepository {
         let mut transaction = self.pool.begin().await?;
         let current = self.lock_extension(&mut transaction, extension_id).await?;
         if current.state == "quarantined" {
-            return Err(RepositoryError::InvalidExtensionTransition(
-                "a quarantined extension must be remediated to disabled before enabling",
-            ));
+            let manifest = self
+                .installed_release_manifest(&mut transaction, current.installed_release_id)
+                .await?;
+            self.validate_extension(&manifest)?;
+            manifest
+                .validate_configuration(&current.configuration)
+                .map_err(|error| RepositoryError::InvalidExtension(error.to_string()))?;
         }
         if current.state == "enabled" {
             return Err(RepositoryError::InvalidExtensionTransition(
@@ -683,7 +687,8 @@ impl CatalogRepository {
                 "extension is already in the requested state",
             ));
         }
-        // Leaving quarantine is remediation, not an unchecked state flip.
+        // Re-enablement validates the installed release and configuration; disabling
+        // remains available as a separate remediation step.
         if current.state == "quarantined" && state == ExtensionState::Disabled {
             let manifest = self
                 .installed_release_manifest(&mut transaction, current.installed_release_id)
@@ -898,8 +903,8 @@ impl CatalogRepository {
         if !visiting.insert(extension_id.to_owned()) {
             return Err(RepositoryError::InvalidExtension("dependency cycle".into()));
         }
-        let row: Option<(String, Uuid)> = sqlx::query_as("SELECT state, installed_release_id FROM extension_installations WHERE workspace_id = $1 AND extension_id = $2").bind(workspace_id).bind(extension_id).fetch_optional(&self.pool).await?;
-        let Some((state, installed_release_id)) = row else {
+        let row: Option<Uuid> = sqlx::query_scalar("SELECT installed_release_id FROM extension_installations WHERE workspace_id = $1 AND extension_id = $2").bind(workspace_id).bind(extension_id).fetch_optional(&self.pool).await?;
+        let Some(installed_release_id) = row else {
             return Err(RepositoryError::NotFound("extension installation"));
         };
         let raw: Value =
@@ -933,11 +938,6 @@ impl CatalogRepository {
                 .await?;
         }
         visiting.remove(extension_id);
-        if state == "quarantined" {
-            return Err(RepositoryError::InvalidExtension(format!(
-                "dependency '{extension_id}' is quarantined"
-            )));
-        }
         Ok(())
     }
 }

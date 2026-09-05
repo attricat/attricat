@@ -521,7 +521,22 @@ async fn lifecycle_installs_validated_archive_artifacts_and_retains_history(pool
             .state,
         "quarantined"
     );
-    assert!(repository.enable_extension("acme.extension").await.is_err());
+    repository
+        .grant_extension("acme.extension", "capability", "network.request")
+        .await
+        .unwrap();
+    repository
+        .grant_extension("acme.extension", "host_permission", "api-read")
+        .await
+        .unwrap();
+    assert_eq!(
+        repository
+            .enable_extension("acme.extension")
+            .await
+            .unwrap()
+            .state,
+        "enabled"
+    );
     repository
         .disable_extension("acme.extension")
         .await

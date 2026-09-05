@@ -123,9 +123,9 @@ workspace-scoped installation in `disabled`; the only durable states are
 only for releases that have been installed, not every release discoverable from
 an external GitHub registry. Enablement requires valid configuration, enabled
 compatible dependencies without cycles, and every required capability and
-host-permission grant. Quarantine may occur from any installed state; a
-quarantined installation must be moved to `disabled` before enabling again.
-Upgrade snapshots a newly selected installed release, clears grants and
+host-permission grant. Quarantine may occur from any installed state; direct
+re-enablement revalidates the installed release and its configuration before
+handlers resume. Upgrade snapshots a newly selected installed release, clears grants and
 configuration, and leaves a formerly enabled installation disabled. Removal
 deletes current state but retains installed-release and append-only lifecycle
 history.
