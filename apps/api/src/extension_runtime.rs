@@ -825,7 +825,20 @@ impl EventHandler for WasmExtensionHandler {
                 {
                     metrics::counter!("catalog_extension_invocations_total", "outcome" => "failed")
                         .increment(1);
-                    tracing::warn!(extension = %installation.extension_id, handler = %handler.id, event_id = %event.id, %error, "extension handler failed");
+                    tracing::warn!(
+                        extension = %installation.extension_id,
+                        installed_release_id = %installation.installed_release_id,
+                        handler = %handler.id,
+                        event_id = %event.id,
+                        event_sequence = event.sequence,
+                        event_type = %event.event_type,
+                        aggregate_kind = %event.aggregate_kind,
+                        aggregate_id = %event.aggregate_id,
+                        correlation_id = %event.correlation_id,
+                        error = %error,
+                        error_debug = ?error,
+                        "extension handler failed; quarantining extension"
+                    );
                     context
                         .repository()
                         .quarantine_extension(&installation.extension_id, "runtime_failure")
