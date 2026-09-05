@@ -9,4 +9,6 @@ ALTER TABLE extension_scoped_configuration
     UNIQUE NULLS NOT DISTINCT (workspace_id, extension_id, scope_kind, blueprint_id, blueprint_version, attribute_id);
 
 ALTER TABLE installed_extension_releases
-    DROP CONSTRAINT installed_extension_releases_workspace_id_extension_id_version_key;
+    -- PostgreSQL truncates implicit constraint names to 63 bytes while preserving
+-- the `_key` suffix.
+    DROP CONSTRAINT installed_extension_releases_workspace_id_extension_id_vers_key;
