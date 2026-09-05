@@ -9,7 +9,7 @@ use axum::{
 };
 use bytes::Bytes;
 use serde::{Deserialize, Serialize};
-use serde_json::Value;
+use serde_json::{Value, json};
 use uuid::Uuid;
 
 use super::{AppState, auth::ScopedRepository, error::ApiError, extractors::ApiJson};
@@ -18,7 +18,8 @@ use crate::{
     extension_registry::{DiscoveredRelease, GitHubRepository},
     extensions::{ExtensionPackage, UiContributionKind, UiOutlet},
     repository::{
-        ExtensionGrant, ExtensionInstallation, ExtensionLifecycleRecord, InstalledExtension,
+        ExtensionGrant, ExtensionInstallation, ExtensionLifecycleRecord, ExtensionStorageError,
+        InstalledExtension,
     },
     storage::ObjectStoreError,
 };
@@ -163,6 +164,54 @@ pub(super) struct GrantRequest {
 #[serde(deny_unknown_fields)]
 pub(super) struct QuarantineRequest {
     diagnostic_code: String,
+}
+
+#[derive(Deserialize)]
+#[serde(tag = "operation", rename_all = "snake_case", deny_unknown_fields)]
+pub(super) enum StorageRequest {
+    Get {
+        key: String,
+    },
+    Set {
+        key: String,
+        value: Value,
+        expected_revision: Option<i64>,
+    },
+    Delete {
+        key: String,
+        expected_revision: Option<i64>,
+    },
+    List {
+        prefix: Option<String>,
+        cursor: Option<String>,
+        limit: Option<u32>,
+    },
+}
+
+#[derive(Serialize)]
+struct StorageEntryResponse {
+    key: String,
+    value: Value,
+    revision: i64,
+}
+#[derive(Serialize)]
+struct StoragePageResponse {
+    entries: Vec<StorageEntryResponse>,
+    cursor: Option<String>,
+}
+
+fn storage_error(error: ExtensionStorageError) -> ApiError {
+    match error {
+        ExtensionStorageError::Denied => ApiError::forbidden(),
+        ExtensionStorageError::Conflict => ApiError::storage_conflict(),
+        ExtensionStorageError::QuotaExceeded => ApiError::storage_quota_exceeded(),
+        ExtensionStorageError::InvalidKey
+        | ExtensionStorageError::InvalidValue
+        | ExtensionStorageError::InvalidLimit => ApiError::invalid_input(error.to_string()),
+        ExtensionStorageError::Database(_) | ExtensionStorageError::Audit(_) => {
+            ApiError::internal("extension storage operation failed")
+        }
+    }
 }
 
 pub(super) async fn list(
@@ -389,6 +438,37 @@ pub(super) async fn runtime(
             })
             .collect(),
     ))
+}
+
+/// The frame broker is the only client storage path. Resolving the contribution
+/// on every request ties storage to an enabled current release, not IDs supplied
+/// by the opaque-origin frame.
+pub(super) async fn storage(
+    ScopedRepository(repository): ScopedRepository,
+    Path((extension_id, contribution_id, release_id)): Path<(String, String, Uuid)>,
+    ApiJson(input): ApiJson<StorageRequest>,
+) -> Result<Json<Value>, ApiError> {
+    let contribution = repository
+        .client_extension_contribution(&extension_id, &contribution_id)
+        .await?;
+    if contribution.installed_release_id != release_id
+        || !contribution
+            .capabilities
+            .iter()
+            .any(|capability| capability == "storage.extension")
+    {
+        return Err(ApiError::forbidden());
+    }
+    let response = match input {
+        StorageRequest::Get { key } => serde_json::to_value(repository.extension_storage_get(&extension_id, release_id, &key).await.map_err(storage_error)?.map(|entry| StorageEntryResponse { key: entry.key, value: entry.value, revision: entry.revision })).expect("storage response serializes"),
+        StorageRequest::Set { key, value, expected_revision } => serde_json::to_value(json!({"revision": repository.extension_storage_set(&extension_id, release_id, &key, value, expected_revision).await.map_err(storage_error)?})).expect("storage response serializes"),
+        StorageRequest::Delete { key, expected_revision } => { repository.extension_storage_delete(&extension_id, release_id, &key, expected_revision).await.map_err(storage_error)?; json!(null) },
+        StorageRequest::List { prefix, cursor, limit } => {
+            let page = repository.extension_storage_list(&extension_id, release_id, prefix.as_deref(), cursor.as_deref(), limit.unwrap_or(50)).await.map_err(storage_error)?;
+            serde_json::to_value(StoragePageResponse { entries: page.entries.into_iter().map(|entry| StorageEntryResponse { key: entry.key, value: entry.value, revision: entry.revision }).collect(), cursor: page.cursor }).expect("storage response serializes")
+        }
+    };
+    Ok(Json(response))
 }
 
 pub(super) async fn artifact(

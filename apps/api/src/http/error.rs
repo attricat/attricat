@@ -85,6 +85,20 @@ impl ApiError {
             message,
         }
     }
+    pub(super) fn storage_conflict() -> Self {
+        Self {
+            status: StatusCode::CONFLICT,
+            code: "storage_conflict",
+            message: "storage revision conflict".to_owned(),
+        }
+    }
+    pub(super) fn storage_quota_exceeded() -> Self {
+        Self {
+            status: StatusCode::PAYLOAD_TOO_LARGE,
+            code: "storage_quota_exceeded",
+            message: "extension storage quota exceeded".to_owned(),
+        }
+    }
     pub(super) fn file_too_large() -> Self {
         Self {
             status: StatusCode::PAYLOAD_TOO_LARGE,

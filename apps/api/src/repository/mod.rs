@@ -42,6 +42,7 @@ mod entity_migration;
 mod entity_projection;
 mod entity_search;
 mod extension_registries;
+mod extension_storage;
 mod extensions;
 mod files;
 mod health;
@@ -59,6 +60,10 @@ pub(crate) use audit_events::{AuditEventFilter, AuditEventPage};
 pub use domain_events::{EventConsumer, EventDelivery, EventPublisher, FailedEventDelivery};
 pub(crate) use entity_search::decode_search_cursor;
 pub use extension_registries::ExtensionRegistrySource;
+pub use extension_storage::{
+    ExtensionStorageEntry, ExtensionStorageError, ExtensionStoragePage,
+    MAX_EXTENSION_STORAGE_LIST_LIMIT,
+};
 pub use extensions::{
     ClientExtensionContribution, ExtensionGrant, ExtensionInstallation, ExtensionLifecycleRecord,
     ExtensionRuntimeInstallation, ExtensionState, InstalledExtension,

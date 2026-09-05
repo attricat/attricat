@@ -3,7 +3,12 @@ import { useNavigate } from '@tanstack/react-router';
 import { useEffect, useRef, useState } from 'react';
 import { z } from 'zod';
 import { apiFetch } from '../auth/request';
-import { getExtensionArtifact, type ExtensionContribution } from './api';
+import {
+  extensionStorage,
+  extensionStorageRequestSchema,
+  getExtensionArtifact,
+  type ExtensionContribution,
+} from './api';
 
 const notificationSchema = z
   .object({
@@ -18,10 +23,34 @@ const catalogReadSchema = z
   })
   .strict();
 
+const validStorageKey = (key: string) =>
+  key.length > 0 &&
+  key === key.trim() &&
+  new TextEncoder().encode(key).length <= 256 &&
+  !/[\u0000-\u001f\u007f-\u009f]/.test(key);
+const validateStorageRequest = (payload: unknown) => {
+  const request = extensionStorageRequestSchema.parse(payload);
+  const keys = [
+    'key' in request ? request.key : undefined,
+    'prefix' in request ? request.prefix : undefined,
+    'cursor' in request ? request.cursor : undefined,
+  ];
+  if (keys.some((key) => key !== undefined && !validStorageKey(key)))
+    throw new Error('Invalid storage key');
+  if (
+    request.operation === 'set' &&
+    new TextEncoder().encode(JSON.stringify(request.value)).length > 65_536
+  )
+    throw new Error('Storage value is too large');
+  if (new TextEncoder().encode(JSON.stringify(request)).length > 65_536)
+    throw new Error('Storage request is too large');
+  return request;
+};
+
 export const frameDocument = `<!doctype html><meta charset="utf-8"><meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'nonce-catalog-bootstrap' blob:; connect-src 'none'; img-src data:; style-src 'unsafe-inline'"><body><div id="root"></div><script nonce="catalog-bootstrap">
 (() => { let port; let next = 0; const pending = new Map();
 const call = (method, payload) => new Promise((resolve, reject) => { const id = String(++next); pending.set(id, {resolve,reject}); port.postMessage({type:'catalog:request.v1',id,method,payload}); });
-window.addEventListener('message', async (event) => { if (event.source !== parent || event.data?.type !== 'catalog:init.v1' || !event.ports[0]) return; port = event.ports[0]; port.onmessage = event => { const message = event.data; if (message?.type !== 'catalog:response.v1') return; const item = pending.get(message.id); if (!item) return; pending.delete(message.id); message.ok ? item.resolve(message.data) : item.reject(new Error(message.error || 'Host request failed')); }; globalThis.catalog = { request: path => call('catalog.read', {path}), navigate: detail => call('navigate', detail), notify: detail => call('notify', detail), context: event.data.context }; try { const url = URL.createObjectURL(new Blob([event.data.artifact], {type:'text/javascript'})); await import(url); URL.revokeObjectURL(url); const element = document.createElement(event.data.element); element.configuration = event.data.configuration; element.catalogContext = event.data.context; document.getElementById('root').append(element); if (event.data.capabilities.includes('client.events')) element.dispatchEvent(new CustomEvent('catalog:context-changed.v1', {detail:event.data.context})); port.postMessage({type:'catalog:ready.v1'}); } catch (error) { port.postMessage({type:'catalog:error.v1', error: String(error?.message || error)}); } }); })();
+window.addEventListener('message', async (event) => { if (event.source !== parent || event.data?.type !== 'catalog:init.v1' || !event.ports[0]) return; port = event.ports[0]; port.onmessage = event => { const message = event.data; if (message?.type !== 'catalog:response.v1') return; const item = pending.get(message.id); if (!item) return; pending.delete(message.id); message.ok ? item.resolve(message.data) : item.reject(new Error(message.error || 'Host request failed')); }; globalThis.catalog = { request: path => call('catalog.read', {path}), navigate: detail => call('navigate', detail), notify: detail => call('notify', detail), storage: { get: detail => call('storage.get', detail), set: detail => call('storage.set', detail), delete: detail => call('storage.delete', detail), list: detail => call('storage.list', detail) }, context: event.data.context }; try { const url = URL.createObjectURL(new Blob([event.data.artifact], {type:'text/javascript'})); await import(url); URL.revokeObjectURL(url); const element = document.createElement(event.data.element); element.configuration = event.data.configuration; element.catalogContext = event.data.context; document.getElementById('root').append(element); if (event.data.capabilities.includes('client.events')) element.dispatchEvent(new CustomEvent('catalog:context-changed.v1', {detail:event.data.context})); port.postMessage({type:'catalog:ready.v1'}); } catch (error) { port.postMessage({type:'catalog:error.v1', error: String(error?.message || error)}); } }); })();
 </script>`;
 
 type Props = {
@@ -67,13 +96,19 @@ export const ExtensionFrame = ({ contribution, context = {} }: Props) => {
             return setError('The extension could not be started.');
           if (data.type !== 'catalog:request.v1' || typeof data.id !== 'string')
             return;
-          const respond = (ok: boolean, value?: unknown) =>
+          const respond = (ok: boolean, value?: unknown) => {
+            if (
+              ok &&
+              new TextEncoder().encode(JSON.stringify(value)).length > 1_048_576
+            )
+              return respond(false);
             port?.postMessage({
               type: 'catalog:response.v1',
               id: data.id,
               ok,
               ...(ok ? { data: value } : { error: 'Request denied' }),
             });
+          };
           try {
             if (
               data.method === 'navigate' &&
@@ -96,6 +131,26 @@ export const ExtensionFrame = ({ contribution, context = {} }: Props) => {
                 }),
               );
               respond(true, null);
+            } else if (
+              data.method.startsWith('storage.') &&
+              contribution.capabilities.includes('storage.extension')
+            ) {
+              const operation = data.method.slice('storage.'.length);
+              if (!['get', 'set', 'delete', 'list'].includes(operation))
+                throw new Error('Storage request denied');
+              const request = validateStorageRequest({
+                ...(data.payload as Record<string, unknown>),
+                operation,
+              });
+              respond(
+                true,
+                await extensionStorage(
+                  contribution.extension_id,
+                  contribution.id,
+                  contribution.release_id,
+                  request,
+                ),
+              );
             } else if (
               data.method === 'catalog.read' &&
               contribution.capabilities.includes('catalog.read')

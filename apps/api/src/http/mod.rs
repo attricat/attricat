@@ -232,6 +232,10 @@ pub fn router(state: AppState) -> Router {
             post(extensions::quarantine),
         )
         .route(
+            "/extensions/{extension_id}/{contribution_id}/storage/{release_id}",
+            post(extensions::storage),
+        )
+        .route(
             "/extensions/{extension_id}/{contribution_id}/artifact",
             get(extensions::artifact),
         )
