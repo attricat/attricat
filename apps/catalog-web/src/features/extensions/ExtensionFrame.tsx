@@ -36,7 +36,10 @@ const validStorageKey = (key: string) =>
   key.length > 0 &&
   key === key.trim() &&
   new TextEncoder().encode(key).length <= 256 &&
-  !/[\u0000-\u001f\u007f-\u009f]/.test(key);
+  ![...key].some((character) => {
+    const code = character.charCodeAt(0);
+    return code <= 0x1f || (code >= 0x7f && code <= 0x9f);
+  });
 const validateStorageRequest = (payload: unknown) => {
   const request = extensionStorageRequestSchema.parse(payload);
   const keys = [
@@ -74,8 +77,10 @@ export const ExtensionFrame = ({ contribution, context = {} }: Props) => {
   const [ready, setReady] = useState(false);
   const [loadedFrame, setLoadedFrame] = useState<string>();
   const navigate = useNavigate();
-  const frameKey = `${contribution.extension_id}:${contribution.id}:${contribution.release_id}`;
   const contextKey = JSON.stringify(context);
+  // A frame owns the custom element it registers; recreating it on a context
+  // change prevents a second element from being appended to the same document.
+  const frameKey = `${contribution.extension_id}:${contribution.id}:${contribution.release_id}:${contextKey}`;
 
   useEffect(() => {
     if (loadedFrame !== frameKey) return;
@@ -169,8 +174,8 @@ export const ExtensionFrame = ({ contribution, context = {} }: Props) => {
                 release_id: contribution.release_id,
               });
               if (
-                new TextEncoder().encode(JSON.stringify(command.payload)).length >
-                65_536
+                new TextEncoder().encode(JSON.stringify(command.payload))
+                  .length > 65_536
               )
                 throw new Error('Command payload is too large');
               respond(
@@ -186,10 +191,21 @@ export const ExtensionFrame = ({ contribution, context = {} }: Props) => {
               contribution.capabilities.includes('catalog.read')
             ) {
               const { path } = catalogReadSchema.parse(data.payload);
+              const revision = path.match(
+                /^\/api\/blueprints\/([0-9a-f-]{36})\/versions\/([1-9][0-9]*)$/,
+              );
+              if (
+                revision &&
+                (frameContext.blueprint_id !== revision[1] ||
+                  String(frameContext.blueprint_version) !== revision[2])
+              )
+                throw new Error(
+                  'Blueprint revision is outside this outlet context',
+                );
               const response = await apiFetch(path);
               if (!response.ok) throw new Error('Catalog request failed');
               const text = await response.text();
-              if (text.length > 1_048_576)
+              if (new TextEncoder().encode(text).length > 1_048_576)
                 throw new Error('Catalog response is too large');
               respond(true, JSON.parse(text));
             } else {

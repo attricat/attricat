@@ -4,7 +4,7 @@ use axum::{
     Json,
     body::Body,
     extract::{Path, State},
-    http::{HeaderValue, StatusCode, header},
+    http::{HeaderMap, HeaderValue, StatusCode, header},
     response::Response,
 };
 use bytes::Bytes;
@@ -298,8 +298,19 @@ async fn selected_release(
 pub(super) async fn sideload(
     State(state): State<AppState>,
     ScopedRepository(repository): ScopedRepository,
+    headers: HeaderMap,
     archive: Bytes,
 ) -> Result<(StatusCode, Json<InstallationResponse>), ApiError> {
+    let media_type = headers
+        .get(header::CONTENT_TYPE)
+        .and_then(|value| value.to_str().ok())
+        .and_then(|value| value.split(';').next())
+        .map(str::trim);
+    if media_type != Some("application/zstd") {
+        return Err(ApiError::invalid_input(
+            "extension archives must use application/zstd".into(),
+        ));
+    }
     let installation = ExtensionInstaller::new(repository, state.object_store.clone())
         .install("sideload", &archive)
         .await
