@@ -37,6 +37,7 @@ type Props = {
   attributes: readonly Attribute[];
   values: Record<string, ResolvedValue>;
   renderEditor?: (attribute: Attribute) => ReactNode;
+  renderAttributeDecoration?: (attribute: Attribute) => ReactNode;
   skipComponentId?: string;
   contextId?: string;
   entityId?: string;
@@ -48,6 +49,7 @@ const ValueField = ({
   attribute,
   resolved,
   renderEditor,
+  renderAttributeDecoration,
   component,
   contextId,
   entityId,
@@ -55,6 +57,7 @@ const ValueField = ({
   attribute: Attribute;
   resolved?: ResolvedValue;
   renderEditor?: (attribute: Attribute) => ReactNode;
+  renderAttributeDecoration?: (attribute: Attribute) => ReactNode;
   component?: ComponentReference | null;
   contextId?: string;
   entityId?: string;
@@ -90,6 +93,7 @@ const ValueField = ({
             )}
         </>
       )}
+      {renderAttributeDecoration?.(attribute)}
     </Stack>
   </FieldErrorBoundary>
 );
@@ -123,6 +127,7 @@ export const EntityView = ({
   attributes,
   values,
   renderEditor,
+  renderAttributeDecoration,
   skipComponentId,
   contextId,
   entityId,
@@ -235,6 +240,7 @@ export const EntityView = ({
           contextId={contextId}
           entityId={entityId}
           key={key}
+          renderAttributeDecoration={renderAttributeDecoration}
           renderEditor={renderEditor}
           resolved={values[attribute.code]}
         />
