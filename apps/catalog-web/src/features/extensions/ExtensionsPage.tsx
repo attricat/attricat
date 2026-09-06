@@ -182,6 +182,7 @@ export const SideloadExtensionPage = () => {
     mutationFn: sideloadExtension,
     onSuccess: () => invalidate(client),
   });
+  const [archive, setArchive] = useState<File | null>(null);
   const form = useForm({
     defaultValues: { archive: null as File | null },
     onSubmit: ({ value }) => {
@@ -224,9 +225,11 @@ export const SideloadExtensionPage = () => {
                 <input
                   accept=".tar.zst,application/zstd"
                   hidden
-                  onChange={(event) =>
-                    field.handleChange(event.target.files?.[0] ?? null)
-                  }
+                  onChange={(event) => {
+                    const archive = event.target.files?.[0] ?? null;
+                    field.handleChange(archive);
+                    setArchive(archive);
+                  }}
                   type="file"
                 />
               </Button>
@@ -236,9 +239,7 @@ export const SideloadExtensionPage = () => {
             Archives must be valid extension packages and no larger than 32 MiB.
           </Typography>
           <Button
-            disabled={
-              !canManage || !form.state.values.archive || sideload.isPending
-            }
+            disabled={!canManage || !archive || sideload.isPending}
             sx={{ mt: 2 }}
             type="submit"
             variant="contained"

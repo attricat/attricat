@@ -1,6 +1,8 @@
 import { PostgreSqlContainer } from '@testcontainers/postgresql';
 import { chromium, type BrowserContext } from '@playwright/test';
 import { execFileSync, spawn, type ChildProcess } from 'node:child_process';
+import { readdirSync, statSync } from 'node:fs';
+import { resolve } from 'node:path';
 import {
   e2eApiPort,
   e2eApiUrl,
@@ -22,6 +24,24 @@ const fixturePassword = 'e2e-only-fixture-password';
 const resetEmail = 'reset@example.test';
 const resetPassword = 'e2e-only-reset-password';
 const storageStatePath = new URL('.auth.json', import.meta.url).pathname;
+
+const packageExampleExtension = () => {
+  const exampleRoot = resolve(
+    process.env.ATTRICAT_EXTENSION_EXAMPLE_DIR ??
+      `${workspaceRoot}/../../attricat-extension-example`,
+  );
+  execFileSync('just', ['pack'], { cwd: exampleRoot, stdio: 'inherit' });
+  const archive = readdirSync(resolve(exampleRoot, 'dist'))
+    .filter((name) => name.endsWith('.tar.zst'))
+    .map((name) => ({
+      path: resolve(exampleRoot, 'dist', name),
+      modified: statSync(resolve(exampleRoot, 'dist', name)).mtimeMs,
+    }))
+    .sort((left, right) => right.modified - left.modified)[0]?.path;
+  if (!archive)
+    throw new Error('Example extension packaging produced no archive');
+  process.env.CATALOG_E2E_EXAMPLE_EXTENSION_ARCHIVE = archive;
+};
 
 const waitFor = async (url: string) => {
   const deadline = Date.now() + 120_000;
@@ -143,6 +163,7 @@ const stop = (process: ChildProcess) => {
 };
 
 export default async () => {
+  packageExampleExtension();
   // Testcontainers reads DOCKER_HOST rather than Docker CLI contexts. Resolve
   // the active context so Colima and other non-default socket locations work.
   if (!process.env.DOCKER_HOST) {
