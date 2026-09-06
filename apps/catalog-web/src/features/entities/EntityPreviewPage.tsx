@@ -161,33 +161,48 @@ export const EntityPreviewPage = ({ entityId }: { entityId: string }) => {
             </Alert>
           )}
           {resolved.data && blueprint.data && (
-            <>
-              <Paper component="section" sx={{ mt: 3, p: { xs: 2, md: 3 } }}>
-                <EntityView
-                  attributes={blueprint.data.attributes}
-                  contextId={selectedContextId}
-                  entityId={entityId}
-                  renderAttributeDecoration={(attribute) => (
-                    <ExtensionOutlet
-                      context={{
-                        attribute_id: attribute.id,
-                        context_id: selectedContextId,
-                        entity_id: entityId,
-                      }}
-                      key={attribute.id}
-                      outlet="entity_attribute_decoration"
-                    />
-                  )}
-                  values={resolved.data.values}
-                  view={detailView}
-                  skipComponentId={entityHeadingComponentId}
+            <Box
+              sx={{
+                display: 'grid',
+                gap: 3,
+                gridTemplateColumns: {
+                  xs: 'minmax(0, 1fr)',
+                  md: 'minmax(0, 2fr) minmax(280px, 1fr)',
+                },
+                mt: 3,
+              }}
+            >
+              <Box>
+                <Paper component="section" sx={{ p: { xs: 2, md: 3 } }}>
+                  <EntityView
+                    attributes={blueprint.data.attributes}
+                    contextId={selectedContextId}
+                    entityId={entityId}
+                    renderAttributeDecoration={(attribute) => (
+                      <ExtensionOutlet
+                        context={{
+                          attribute_id: attribute.id,
+                          context_id: selectedContextId,
+                          entity_id: entityId,
+                        }}
+                        key={attribute.id}
+                        outlet="entity_attribute_decoration"
+                      />
+                    )}
+                    values={resolved.data.values}
+                    view={detailView}
+                    skipComponentId={entityHeadingComponentId}
+                  />
+                </Paper>
+                <ExtensionOutlet
+                  context={{
+                    entity_id: entityId,
+                    context_id: selectedContextId,
+                  }}
+                  outlet="entity_action"
                 />
-              </Paper>
-              <ExtensionOutlet
-                context={{ entity_id: entityId, context_id: selectedContextId }}
-                outlet="entity_action"
-              />
-              <Box sx={{ mt: 3 }}>
+              </Box>
+              <Box>
                 <ExtensionOutlet
                   context={{
                     entity_id: entityId,
@@ -196,7 +211,7 @@ export const EntityPreviewPage = ({ entityId }: { entityId: string }) => {
                   outlet="entity_preview_panel"
                 />
               </Box>
-            </>
+            </Box>
           )}
         </>
       )}
