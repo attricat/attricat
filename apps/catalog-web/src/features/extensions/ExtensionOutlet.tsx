@@ -118,7 +118,6 @@ export const ExtensionPopoverOutlet = ({
     {},
   );
   const contextKey = JSON.stringify(context);
-  useEffect(() => setContentHeights({}), [contextKey]);
   const runtime = useQuery({
     queryKey: extensionQueryKeys.runtime,
     queryFn: getExtensionRuntime,
@@ -129,8 +128,10 @@ export const ExtensionPopoverOutlet = ({
     runtime.data?.filter(
       (item) => item.kind === 'element' && item.outlet === outlet,
     ) ?? [];
+  const contentKey = (contribution: ExtensionContribution) =>
+    `${contextKey}:${contributionKey(contribution)}`;
   const hasContent = contributions.some(
-    (contribution) => contentHeights[contributionKey(contribution)] > 0,
+    (contribution) => contentHeights[contentKey(contribution)] > 0,
   );
   if (!contributions.length) return null;
   return (
@@ -153,7 +154,7 @@ export const ExtensionPopoverOutlet = ({
               onContentHeight={(height) =>
                 setContentHeights((current) => ({
                   ...current,
-                  [contributionKey(contribution)]: height,
+                  [contentKey(contribution)]: height,
                 }))
               }
             />
