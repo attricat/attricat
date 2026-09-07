@@ -1,5 +1,5 @@
 import { useForm } from '@tanstack/react-form';
-import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link, useNavigate } from '@tanstack/react-router';
 import {
   Alert,
@@ -19,6 +19,8 @@ import {
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { currentSession } from '../auth/api';
+import { listEntityBlueprints } from '../entities/api';
+import { entityQueryKeys } from '../entities/query-keys';
 import {
   acceptInvitation,
   createInvitation,
@@ -40,11 +42,14 @@ import {
   selectedScopeTarget,
   transferOwnership,
   updateRole,
+  listExploreNavigation,
+  updateExploreNavigation,
+  type ExploreNavigationEntry,
   type ScopeType,
 } from './api';
 import { workspaceQueryKeys } from './query-keys';
 
-type Section = 'members' | 'roles' | 'invitations';
+type Section = 'members' | 'roles' | 'invitations' | 'navigation';
 const sections: { labelKey: string; section: Section; to: string }[] = [
   {
     labelKey: 'workspace.members',
@@ -60,6 +65,11 @@ const sections: { labelKey: string; section: Section; to: string }[] = [
     labelKey: 'workspace.invitations',
     section: 'invitations',
     to: '/manage/workspace/invitations',
+  },
+  {
+    labelKey: 'workspace.navigation',
+    section: 'navigation',
+    to: '/manage/workspace/navigation',
   },
 ];
 
@@ -118,6 +128,7 @@ const ScopeTargetField = ({
   ScopeFieldsProps,
   'onScopeTargetChange' | 'scope' | 'scopeTargetId'
 >) => {
+  const { t } = useTranslation();
   const targets = useQuery({
     enabled: scope !== 'workspace',
     queryKey: workspaceQueryKeys.grantTargets(scope),
@@ -174,7 +185,9 @@ export const WorkspaceManagementPage = ({ section }: { section: Section }) => {
               (item.section === 'roles' &&
                 session.data?.capabilities?.roles_manage) ||
               ((item.section === 'members' || item.section === 'invitations') &&
-                session.data?.capabilities?.members_manage),
+                session.data?.capabilities?.members_manage) ||
+              (item.section === 'navigation' &&
+                session.data?.capabilities?.workspace_navigation_manage),
           )
           .map((item) => (
             <Button
@@ -200,6 +213,13 @@ export const WorkspaceManagementPage = ({ section }: { section: Section }) => {
       {section === 'roles' && (
         <Roles canManage={session.data?.capabilities?.roles_manage === true} />
       )}
+      {section === 'navigation' && (
+        <Navigation
+          canManage={
+            session.data?.capabilities?.workspace_navigation_manage === true
+          }
+        />
+      )}
       {section === 'invitations' && (
         <Invitations
           canManage={session.data?.capabilities?.members_manage === true}
@@ -207,6 +227,165 @@ export const WorkspaceManagementPage = ({ section }: { section: Section }) => {
         />
       )}
     </Box>
+  );
+};
+
+const Navigation = ({ canManage }: { canManage: boolean }) => {
+  const { t } = useTranslation();
+  const queryClient = useQueryClient();
+  const navigation = useQuery({
+    queryKey: workspaceQueryKeys.exploreNavigation(),
+    queryFn: listExploreNavigation,
+    enabled: canManage,
+  });
+  const roles = useQuery({
+    queryKey: workspaceQueryKeys.roles(),
+    queryFn: listRoles,
+    enabled: canManage,
+  });
+  const blueprints = useQuery({
+    queryKey: entityQueryKeys.blueprints(),
+    queryFn: listEntityBlueprints,
+    enabled: canManage,
+  });
+  const [entries, setEntries] = useState<
+    ExploreNavigationEntry[] | undefined
+  >();
+  const displayed = entries ?? navigation.data ?? [];
+  const save = useMutation({
+    mutationFn: updateExploreNavigation,
+    onSuccess: () => {
+      void queryClient.invalidateQueries({
+        queryKey: workspaceQueryKeys.exploreNavigation(),
+      });
+      void queryClient.invalidateQueries({
+        queryKey: workspaceQueryKeys.sidebarExploreNavigation(),
+      });
+      setEntries(undefined);
+    },
+  });
+  if (!canManage)
+    return <Alert severity="error">{t('workspace.unavailable')}</Alert>;
+  return (
+    <Stack spacing={2} sx={{ mt: 3 }}>
+      <Typography variant="h6">Navigation</Typography>
+      <Typography color="text.secondary">
+        Pin published entity blueprints and optionally limit them to workspace
+        roles.
+      </Typography>
+      {(navigation.isError || roles.isError || blueprints.isError) && (
+        <Alert severity="error">
+          {navigation.error?.message ??
+            roles.error?.message ??
+            blueprints.error?.message}
+        </Alert>
+      )}
+      {displayed.map((entry, index) => (
+        <Paper key={entry.blueprint_code} sx={{ p: 2 }}>
+          <Stack direction={{ xs: 'column', md: 'row' }} spacing={1.5}>
+            <TextField
+              label="Blueprint"
+              onChange={(event) =>
+                setEntries(
+                  displayed.map((item, position) =>
+                    position === index
+                      ? { ...item, blueprint_code: event.target.value }
+                      : item,
+                  ),
+                )
+              }
+              select
+              value={entry.blueprint_code}
+              sx={{ minWidth: 250 }}
+            >
+              {(blueprints.data ?? []).map((blueprint) => (
+                <MenuItem key={blueprint.code} value={blueprint.code}>
+                  {blueprint.name} ({blueprint.code})
+                </MenuItem>
+              ))}
+            </TextField>
+            <TextField
+              helperText={`Available: ${(roles.data ?? []).map((role) => role.code).join(', ')}`}
+              label="Visible roles (comma separated)"
+              onChange={(event) =>
+                setEntries(
+                  displayed.map((item, position) =>
+                    position === index
+                      ? {
+                          ...item,
+                          visible_to_role_codes: event.target.value
+                            .split(',')
+                            .map((code) => code.trim())
+                            .filter(Boolean),
+                        }
+                      : item,
+                  ),
+                )
+              }
+              value={entry.visible_to_role_codes.join(', ')}
+              sx={{ minWidth: 250 }}
+            />
+            <Button
+              onClick={() =>
+                setEntries(
+                  displayed.filter((_, position) => position !== index),
+                )
+              }
+            >
+              Remove
+            </Button>
+            <Button
+              disabled={index === 0}
+              onClick={() => {
+                const next = [...displayed];
+                [next[index - 1], next[index]] = [next[index], next[index - 1]];
+                setEntries(next);
+              }}
+            >
+              Up
+            </Button>
+            <Button
+              disabled={index === displayed.length - 1}
+              onClick={() => {
+                const next = [...displayed];
+                [next[index + 1], next[index]] = [next[index], next[index + 1]];
+                setEntries(next);
+              }}
+            >
+              Down
+            </Button>
+          </Stack>
+        </Paper>
+      ))}
+      <Stack direction="row" spacing={1}>
+        <Button
+          disabled={!blueprints.data?.length}
+          onClick={() => {
+            const first = blueprints.data?.find(
+              (blueprint) =>
+                !displayed.some(
+                  (entry) => entry.blueprint_code === blueprint.code,
+                ),
+            );
+            if (first)
+              setEntries([
+                ...displayed,
+                { blueprint_code: first.code, visible_to_role_codes: [] },
+              ]);
+          }}
+        >
+          Add shortcut
+        </Button>
+        <Button
+          disabled={save.isPending}
+          onClick={() => save.mutate(displayed)}
+          variant="contained"
+        >
+          Save navigation
+        </Button>
+      </Stack>
+      {save.isError && <Alert severity="error">{save.error.message}</Alert>}
+    </Stack>
   );
 };
 

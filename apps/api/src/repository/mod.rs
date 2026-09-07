@@ -52,6 +52,7 @@ mod roles;
 mod sessions;
 mod tokens;
 mod values;
+mod workspace_navigation;
 
 pub use agents::{
     AgentRun, AgentRunEvent, AgentSchedule, AgentToolCall, ApprovalDecision, Conversation,
@@ -74,6 +75,7 @@ pub(crate) use files::{FileMetadata, FileObject, FilePolicy, FileUploadResult, N
 pub(crate) use members::{WorkspaceInvitation, WorkspaceMember};
 pub(crate) use roles::{Permission, WorkspaceGrantTarget, WorkspaceRole};
 pub(crate) use tokens::PersonalApiToken;
+pub(crate) use workspace_navigation::{ExploreNavigationEntry, ExploreNavigationItem};
 
 #[derive(Debug, sqlx::FromRow)]
 pub struct UserAccount {

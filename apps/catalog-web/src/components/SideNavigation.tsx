@@ -15,6 +15,8 @@ import { Link, useRouterState } from '@tanstack/react-router';
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { currentSession } from '../features/auth/api';
+import { listSidebarExploreNavigation } from '../features/workspace/api';
+import { workspaceQueryKeys } from '../features/workspace/query-keys';
 import { ExtensionOutlet } from '../features/extensions/ExtensionOutlet';
 import { LanguageSwitcher } from './LanguageSwitcher';
 import {
@@ -95,6 +97,10 @@ export const SideNavigation = ({
     queryKey: ['auth', 'session'],
     queryFn: currentSession,
   });
+  const pinnedExplore = useQuery({
+    queryKey: workspaceQueryKeys.sidebarExploreNavigation(),
+    queryFn: listSidebarExploreNavigation,
+  });
   const canManageWorkspace = Boolean(
     session.data?.capabilities?.members_manage ||
     session.data?.capabilities?.roles_manage ||
@@ -146,6 +152,24 @@ export const SideNavigation = ({
               <ListItemText primary={t(item.labelKey)} />
             </ListItemButton>
           ))}
+        {pinnedExplore.data?.map((item) => (
+          <ListItemButton
+            component="a"
+            href={`/?blueprint=${encodeURIComponent(item.blueprint_code)}&locked=true`}
+            key={item.blueprint_code}
+            onClick={onNavigate}
+            selected={
+              pathname === '/' &&
+              new URLSearchParams(window.location.search).get('blueprint') ===
+                item.blueprint_code
+            }
+          >
+            <ListItemIcon>
+              <TravelExploreOutlinedIcon />
+            </ListItemIcon>
+            <ListItemText primary={item.blueprint_name} />
+          </ListItemButton>
+        ))}
         <ExtensionOutlet outlet="navigation" />
         <ListItemButton
           aria-expanded={isManageOpen}

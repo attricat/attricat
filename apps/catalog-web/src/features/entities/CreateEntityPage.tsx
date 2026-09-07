@@ -1,4 +1,5 @@
 import { useMutation, useQuery } from '@tanstack/react-query';
+import { useEffect } from 'react';
 import { useNavigate } from '@tanstack/react-router';
 import { useTranslation } from 'react-i18next';
 import { createEntity, getBlueprintByCode, listContexts } from './api';
@@ -7,13 +8,27 @@ import { EntityPage } from './components/EntityPage';
 import { attributeValueKinds } from './value-types';
 import { entityQueryKeys } from './query-keys';
 
-export const CreateEntityPage = () => {
+export const CreateEntityPage = ({
+  search,
+}: {
+  search: { blueprint?: string; locked?: boolean };
+}) => {
   const { t } = useTranslation();
   const navigate = useNavigate({ from: '/entities/new' });
   const blueprint = useMutation({
     mutationFn: ({ code, version }: { code: string; version?: number }) =>
       getBlueprintByCode(code, version),
   });
+  useEffect(() => {
+    if (
+      search.locked &&
+      search.blueprint &&
+      !blueprint.data &&
+      !blueprint.isPending
+    ) {
+      blueprint.mutate({ code: search.blueprint });
+    }
+  }, [blueprint, search.blueprint, search.locked]);
   const contexts = useQuery({
     queryKey: entityQueryKeys.contexts(),
     queryFn: listContexts,
@@ -69,6 +84,7 @@ export const CreateEntityPage = () => {
         defaultContextId={defaultContextId}
         error={blueprint.error ?? create.error}
         isLoadingBlueprint={blueprint.isPending || create.isPending}
+        lockedBlueprint={search.locked}
         onLoadBlueprint={(code, version) => blueprint.mutate({ code, version })}
         onSubmit={({ values, relationships }) =>
           create.mutate({ values, relationships })

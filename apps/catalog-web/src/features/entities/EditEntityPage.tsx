@@ -5,7 +5,6 @@ import CheckCircleOutlinedIcon from '@mui/icons-material/CheckCircleOutlined';
 import WarningAmberOutlinedIcon from '@mui/icons-material/WarningAmberOutlined';
 import {
   Alert,
-  Box,
   Button,
   MenuItem,
   Paper,
@@ -89,7 +88,8 @@ export const EditEntityPage = ({ entityId }: { entityId: string }) => {
                     fontSize="inherit"
                     sx={{ mr: 0.25, verticalAlign: 'text-bottom' }}
                   />
-                  {t('entities.blueprint')}: {entityForm.data.blueprint.blueprint.name}
+                  {t('entities.blueprint')}:{' '}
+                  {entityForm.data.blueprint.blueprint.name}
                 </Link>
               </Tooltip>{' '}
               ·{' '}
@@ -147,7 +147,8 @@ export const EditEntityPage = ({ entityId }: { entityId: string }) => {
               to="/manage/blueprints/$blueprintId"
               variant="text"
             >
-              {t('entities.blueprint')}: {entityForm.data.blueprint.blueprint.name}
+              {t('entities.blueprint')}:{' '}
+              {entityForm.data.blueprint.blueprint.name}
             </Button>
           </Tooltip>
         )}

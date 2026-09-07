@@ -17,6 +17,7 @@ mod members;
 mod roles;
 mod sessions;
 mod tokens;
+mod workspace_navigation;
 
 use std::{collections::HashMap, sync::Arc, time::Instant};
 
@@ -304,6 +305,14 @@ pub fn router(state: AppState) -> Router {
             post(event_deliveries::replay),
         )
         .route("/workspace/roles", get(roles::list).post(roles::create))
+        .route(
+            "/workspace/navigation",
+            get(workspace_navigation::configured).put(workspace_navigation::update),
+        )
+        .route(
+            "/workspace/navigation/sidebar",
+            get(workspace_navigation::sidebar),
+        )
         .route(
             "/workspace/assignable-roles",
             get(roles::list_assignable_roles),

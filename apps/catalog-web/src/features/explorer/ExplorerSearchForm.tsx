@@ -9,9 +9,15 @@ type Props = {
   blueprints: Blueprint[];
   search: ExplorerSearch;
   onSubmit: (value: ExplorerSearch) => void;
+  lockedBlueprint?: boolean;
 };
 
-export const ExplorerSearchForm = ({ blueprints, search, onSubmit }: Props) => {
+export const ExplorerSearchForm = ({
+  blueprints,
+  search,
+  onSubmit,
+  lockedBlueprint = false,
+}: Props) => {
   const { t } = useTranslation();
   const form = useForm({
     defaultValues: {
@@ -50,24 +56,26 @@ export const ExplorerSearchForm = ({ blueprints, search, onSubmit }: Props) => {
       }}
     >
       <Stack direction={{ xs: 'column', md: 'row' }} spacing={1.5}>
-        <form.Field name="blueprint">
-          {(field) => (
-            <TextField
-              required
-              label={t('explorer.selectBlueprint')}
-              onChange={(event) => field.handleChange(event.target.value)}
-              select
-              sx={{ width: 280 }}
-              value={field.state.value}
-            >
-              {blueprints.map((blueprint) => (
-                <MenuItem key={blueprint.code} value={blueprint.code}>
-                  {blueprint.name} ({blueprint.code})
-                </MenuItem>
-              ))}
-            </TextField>
-          )}
-        </form.Field>
+        {!lockedBlueprint && (
+          <form.Field name="blueprint">
+            {(field) => (
+              <TextField
+                required
+                label={t('explorer.selectBlueprint')}
+                onChange={(event) => field.handleChange(event.target.value)}
+                select
+                sx={{ width: 280 }}
+                value={field.state.value}
+              >
+                {blueprints.map((blueprint) => (
+                  <MenuItem key={blueprint.code} value={blueprint.code}>
+                    {blueprint.name} ({blueprint.code})
+                  </MenuItem>
+                ))}
+              </TextField>
+            )}
+          </form.Field>
+        )}
         <form.Field name="query">
           {(field) => (
             <TextField

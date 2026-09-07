@@ -193,17 +193,19 @@ pub(super) async fn authorize(
         }
         // File reads are authorized in their handlers after resolving active
         // file-to-entity references. Other routes can authorize from the path.
-        if !matches!(policy.target, policy::TargetKind::FileRead)
-            && !state
-                .repository
-                .is_authorized(
-                    principal,
-                    workspace,
-                    policy.permission,
-                    target_id,
-                    target_code.as_deref(),
-                )
-                .await?
+        if !matches!(
+            policy.target,
+            policy::TargetKind::FileRead | policy::TargetKind::WorkspaceNavigation
+        ) && !state
+            .repository
+            .is_authorized(
+                principal,
+                workspace,
+                policy.permission,
+                target_id,
+                target_code.as_deref(),
+            )
+            .await?
         {
             return Err(ApiError::forbidden());
         }

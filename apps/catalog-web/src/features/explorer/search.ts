@@ -11,6 +11,7 @@ export const explorerSearchSchema = z.object({
   blueprint: z.string().trim().min(1).optional().catch(undefined),
   version: z.coerce.number().int().positive().optional().catch(undefined),
   query: z.string().trim().min(1).optional().catch(undefined),
+  locked: z.boolean().optional().catch(undefined),
   relationshipFacets: z
     .array(relationshipFacetSearchSchema)
     .optional()

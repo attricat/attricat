@@ -14,6 +14,7 @@ pub(super) enum TargetKind {
     BlueprintCode,
     EntityId,
     FileRead,
+    WorkspaceNavigation,
     ContextId,
     ContextCode,
     ContextList,
@@ -111,6 +112,18 @@ pub(super) fn policy(method: &Method, path: &str) -> Option<Policy> {
     if path == "/workspace/assignable-roles" || path.starts_with("/workspace/grant-targets/") {
         return Some(Policy {
             permission: "members.manage",
+            target: TargetKind::None,
+        });
+    }
+    if path == "/workspace/navigation/sidebar" {
+        return Some(Policy {
+            permission: "entities.read",
+            target: TargetKind::WorkspaceNavigation,
+        });
+    }
+    if path == "/workspace/navigation" {
+        return Some(Policy {
+            permission: "workspace_navigation.manage",
             target: TargetKind::None,
         });
     }
@@ -296,7 +309,7 @@ pub(super) fn target(path: &str, kind: TargetKind) -> (Option<Uuid>, Option<Stri
         TargetKind::None => (None, None),
         TargetKind::BlueprintId => (segments.get(1).and_then(|value| value.parse().ok()), None),
         TargetKind::BlueprintCode => (None, segments.get(2).map(|value| (*value).to_owned())),
-        TargetKind::FileRead => (None, None),
+        TargetKind::FileRead | TargetKind::WorkspaceNavigation => (None, None),
         TargetKind::EntityId => {
             let index = if segments.first() == Some(&"v1") {
                 2

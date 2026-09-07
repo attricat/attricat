@@ -53,6 +53,15 @@ const permissionSchema = z.object({
 });
 const grantTargetSchema = z.object({ id: uuid, label: z.string() });
 const apiErrorSchema = z.object({ error: z.object({ message: z.string() }) });
+const exploreNavigationEntrySchema = z.object({
+  blueprint_code: z.string().min(1),
+  visible_to_role_codes: z.array(z.string()).default([]),
+});
+const exploreNavigationItemSchema = exploreNavigationEntrySchema
+  .pick({
+    blueprint_code: true,
+  })
+  .extend({ blueprint_name: z.string() });
 
 const permissionCodesSchema = z
   .array(z.string())
@@ -80,6 +89,10 @@ export type Permission = z.infer<typeof permissionSchema>;
 export type GrantTarget = z.infer<typeof grantTargetSchema>;
 export type ScopeType = z.infer<typeof scopeTypeSchema>;
 export type GrantInput = z.infer<typeof grantInputSchema>;
+export type ExploreNavigationEntry = z.infer<
+  typeof exploreNavigationEntrySchema
+>;
+export type ExploreNavigationItem = z.infer<typeof exploreNavigationItemSchema>;
 
 export const selectedScopeTarget = (
   scopeType: ScopeType,
@@ -205,6 +218,24 @@ export const acceptInvitation = (secret: string) =>
 
 export const listRoles = () =>
   request('/api/workspace/roles', z.array(roleSchema));
+export const listExploreNavigation = () =>
+  request('/api/workspace/navigation', z.array(exploreNavigationEntrySchema));
+export const listSidebarExploreNavigation = () =>
+  request(
+    '/api/workspace/navigation/sidebar',
+    z.array(exploreNavigationItemSchema),
+  );
+export const updateExploreNavigation = (
+  explore_navigation: z.input<typeof exploreNavigationEntrySchema>[],
+) =>
+  noContent(
+    '/api/workspace/navigation',
+    json('PUT', {
+      explore_navigation: z
+        .array(exploreNavigationEntrySchema)
+        .parse(explore_navigation),
+    }),
+  );
 export const listAssignableRoles = () =>
   request('/api/workspace/assignable-roles', z.array(roleSchema));
 export const listPermissions = () =>

@@ -105,6 +105,8 @@ fn audit_permission(method: &Method, route: &str) -> &'static str {
         "members.manage"
     } else if route.starts_with("/workspace/roles") {
         "roles.manage"
+    } else if route.starts_with("/workspace/navigation") {
+        "workspace_navigation.manage"
     } else if method == Method::DELETE {
         "entities.delete"
     } else {

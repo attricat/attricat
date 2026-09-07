@@ -17,6 +17,15 @@ describe('parseExplorerSearch', () => {
     });
   });
 
+  it('preserves locked mode for pinned navigation shortcuts', () => {
+    expect(parseExplorerSearch({ blueprint: 'product', locked: true })).toEqual(
+      {
+        blueprint: 'product',
+        locked: true,
+      },
+    );
+  });
+
   it('trims valid string values', () => {
     expect(
       parseExplorerSearch({ blueprint: ' product ', query: ' shirt ' }),

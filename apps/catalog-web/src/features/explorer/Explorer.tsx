@@ -3,7 +3,7 @@ import {
   useInfiniteQuery,
   useQuery,
 } from '@tanstack/react-query';
-import { Link, useNavigate } from '@tanstack/react-router';
+import { useNavigate } from '@tanstack/react-router';
 import { Alert, Box, Button, Typography } from '@mui/material';
 import { useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
@@ -160,7 +160,15 @@ export const Explorer = ({ search: urlSearch }: { search: ExplorerSearch }) => {
     <PageContainer>
       <PageHeader
         actions={
-          <Button component={Link} to="/entities/new" variant="contained">
+          <Button
+            component="a"
+            href={
+              search.locked && search.blueprint
+                ? `/entities/new?blueprint=${encodeURIComponent(search.blueprint)}&locked=true`
+                : '/entities/new'
+            }
+            variant="contained"
+          >
             {t('explorer.create')}
           </Button>
         }
@@ -169,6 +177,7 @@ export const Explorer = ({ search: urlSearch }: { search: ExplorerSearch }) => {
       />
       <ExplorerSearchForm
         blueprints={blueprints.data ?? []}
+        lockedBlueprint={search.locked}
         onSubmit={(value) => {
           void navigate({
             to: '/',

@@ -44,6 +44,7 @@ type EntityFormProps = {
   entityId?: string;
   error?: Error | null;
   onLoadBlueprint?: (code: string, version?: number) => void;
+  lockedBlueprint?: boolean;
   onSubmit: (input: {
     values: ReturnType<typeof serializeAttributeValues>;
     relationships: ReturnType<typeof relationshipTargetsForForm>;
@@ -67,6 +68,7 @@ export const EntityForm = ({
   entityId,
   error,
   onLoadBlueprint,
+  lockedBlueprint = false,
   onSubmit,
   submitLabel,
 }: EntityFormProps) => {
@@ -160,7 +162,7 @@ export const EntityForm = ({
       sx={{ mt: 4, p: 3 }}
     >
       <Stack spacing={2}>
-        {!blueprint && (
+        {!blueprint && !lockedBlueprint && (
           <>
             <Typography variant="h6">
               {t('entities.chooseBlueprint')}

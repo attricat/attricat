@@ -42,6 +42,7 @@ import { Route as ManageExtensionsSideloadRouteImport } from './routes/manage/ex
 import { Route as ManageWorkspaceIndexRouteImport } from './routes/manage/workspace/index'
 import { Route as ManageWorkspaceInvitationsRouteImport } from './routes/manage/workspace/invitations'
 import { Route as ManageWorkspaceMembersRouteImport } from './routes/manage/workspace/members'
+import { Route as ManageWorkspaceNavigationRouteImport } from './routes/manage/workspace/navigation'
 import { Route as ManageWorkspaceRolesRouteImport } from './routes/manage/workspace/roles'
 import { Route as ManageBlueprintsBlueprintIdIndexRouteImport } from './routes/manage/blueprints/$blueprintId/index'
 import { Route as ManageExtensionsOwnerRepositoryRouteImport } from './routes/manage/extensions/$owner/$repository'
@@ -217,6 +218,12 @@ const ManageWorkspaceMembersRoute = ManageWorkspaceMembersRouteImport.update({
   path: '/manage/workspace/members',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ManageWorkspaceNavigationRoute =
+  ManageWorkspaceNavigationRouteImport.update({
+    id: '/manage/workspace/navigation',
+    path: '/manage/workspace/navigation',
+    getParentRoute: () => rootRouteImport,
+  } as any)
 const ManageWorkspaceRolesRoute = ManageWorkspaceRolesRouteImport.update({
   id: '/manage/workspace/roles',
   path: '/manage/workspace/roles',
@@ -270,6 +277,7 @@ export interface FileRoutesByFullPath {
   '/manage/extensions/sideload': typeof ManageExtensionsSideloadRoute
   '/manage/workspace/invitations': typeof ManageWorkspaceInvitationsRoute
   '/manage/workspace/members': typeof ManageWorkspaceMembersRoute
+  '/manage/workspace/navigation': typeof ManageWorkspaceNavigationRoute
   '/manage/workspace/roles': typeof ManageWorkspaceRolesRoute
   '/entities/$entityId/': typeof EntitiesEntityIdIndexRoute
   '/manage/blueprints/': typeof ManageBlueprintsIndexRoute
@@ -306,6 +314,7 @@ export interface FileRoutesByTo {
   '/manage/extensions/sideload': typeof ManageExtensionsSideloadRoute
   '/manage/workspace/invitations': typeof ManageWorkspaceInvitationsRoute
   '/manage/workspace/members': typeof ManageWorkspaceMembersRoute
+  '/manage/workspace/navigation': typeof ManageWorkspaceNavigationRoute
   '/manage/workspace/roles': typeof ManageWorkspaceRolesRoute
   '/entities/$entityId': typeof EntitiesEntityIdIndexRoute
   '/manage/blueprints': typeof ManageBlueprintsIndexRoute
@@ -346,6 +355,7 @@ export interface FileRoutesById {
   '/manage/extensions/sideload': typeof ManageExtensionsSideloadRoute
   '/manage/workspace/invitations': typeof ManageWorkspaceInvitationsRoute
   '/manage/workspace/members': typeof ManageWorkspaceMembersRoute
+  '/manage/workspace/navigation': typeof ManageWorkspaceNavigationRoute
   '/manage/workspace/roles': typeof ManageWorkspaceRolesRoute
   '/entities/$entityId/': typeof EntitiesEntityIdIndexRoute
   '/manage/blueprints/': typeof ManageBlueprintsIndexRoute
@@ -387,6 +397,7 @@ export interface FileRouteTypes {
     | '/manage/extensions/sideload'
     | '/manage/workspace/invitations'
     | '/manage/workspace/members'
+    | '/manage/workspace/navigation'
     | '/manage/workspace/roles'
     | '/entities/$entityId/'
     | '/manage/blueprints/'
@@ -423,6 +434,7 @@ export interface FileRouteTypes {
     | '/manage/extensions/sideload'
     | '/manage/workspace/invitations'
     | '/manage/workspace/members'
+    | '/manage/workspace/navigation'
     | '/manage/workspace/roles'
     | '/entities/$entityId'
     | '/manage/blueprints'
@@ -462,6 +474,7 @@ export interface FileRouteTypes {
     | '/manage/extensions/sideload'
     | '/manage/workspace/invitations'
     | '/manage/workspace/members'
+    | '/manage/workspace/navigation'
     | '/manage/workspace/roles'
     | '/entities/$entityId/'
     | '/manage/blueprints/'
@@ -497,6 +510,7 @@ export interface RootRouteChildren {
   ManageExtensionsSideloadRoute: typeof ManageExtensionsSideloadRoute
   ManageWorkspaceInvitationsRoute: typeof ManageWorkspaceInvitationsRoute
   ManageWorkspaceMembersRoute: typeof ManageWorkspaceMembersRoute
+  ManageWorkspaceNavigationRoute: typeof ManageWorkspaceNavigationRoute
   ManageWorkspaceRolesRoute: typeof ManageWorkspaceRolesRoute
   ManageBlueprintsIndexRoute: typeof ManageBlueprintsIndexRoute
   ManageContextsIndexRoute: typeof ManageContextsIndexRoute
@@ -738,6 +752,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ManageWorkspaceMembersRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/manage/workspace/navigation': {
+      id: '/manage/workspace/navigation'
+      path: '/manage/workspace/navigation'
+      fullPath: '/manage/workspace/navigation'
+      preLoaderRoute: typeof ManageWorkspaceNavigationRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/manage/workspace/roles': {
       id: '/manage/workspace/roles'
       path: '/manage/workspace/roles'
@@ -842,6 +863,7 @@ const rootRouteChildren: RootRouteChildren = {
   ManageExtensionsSideloadRoute: ManageExtensionsSideloadRoute,
   ManageWorkspaceInvitationsRoute: ManageWorkspaceInvitationsRoute,
   ManageWorkspaceMembersRoute: ManageWorkspaceMembersRoute,
+  ManageWorkspaceNavigationRoute: ManageWorkspaceNavigationRoute,
   ManageWorkspaceRolesRoute: ManageWorkspaceRolesRoute,
   ManageBlueprintsIndexRoute: ManageBlueprintsIndexRoute,
   ManageContextsIndexRoute: ManageContextsIndexRoute,
