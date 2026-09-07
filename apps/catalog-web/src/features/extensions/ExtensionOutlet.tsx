@@ -1,4 +1,12 @@
-import { Alert, Snackbar, Stack } from '@mui/material';
+import ExtensionOutlinedIcon from '@mui/icons-material/ExtensionOutlined';
+import {
+  Alert,
+  IconButton,
+  Popover,
+  Snackbar,
+  Stack,
+  Tooltip,
+} from '@mui/material';
 import { useQuery } from '@tanstack/react-query';
 import { useEffect, useState } from 'react';
 import { z } from 'zod';
@@ -6,13 +14,15 @@ import { ExtensionFrame } from './ExtensionFrame';
 import { getExtensionRuntime } from './api';
 import { extensionQueryKeys } from './query-keys';
 
+type Outlet =
+  | 'navigation'
+  | 'entity_preview_panel'
+  | 'blueprint_attribute_configuration'
+  | 'entity_attribute_decoration'
+  | 'entity_action';
+
 type Props = {
-  outlet:
-    | 'navigation'
-    | 'entity_preview_panel'
-    | 'blueprint_attribute_configuration'
-    | 'entity_attribute_decoration'
-    | 'entity_action';
+  outlet: Outlet;
   context?: Record<string, unknown>;
 };
 
@@ -86,6 +96,51 @@ export const ExtensionOutlet = ({ outlet, context }: Props) => {
           {notification?.message}
         </Alert>
       </Snackbar>
+    </>
+  );
+};
+
+export const ExtensionPopoverOutlet = ({
+  context,
+  label,
+  outlet,
+}: {
+  context?: Record<string, unknown>;
+  label: string;
+  outlet: Outlet;
+}) => {
+  const [anchor, setAnchor] = useState<HTMLElement | null>(null);
+  const runtime = useQuery({
+    queryKey: extensionQueryKeys.runtime,
+    queryFn: getExtensionRuntime,
+    refetchInterval: 15_000,
+    retry: false,
+  });
+  const hasContributions = runtime.data?.some(
+    (item) => item.kind === 'element' && item.outlet === outlet,
+  );
+  if (!hasContributions) return null;
+  return (
+    <>
+      <Tooltip title="Extension details">
+        <IconButton
+          aria-label={label}
+          onClick={(event) => setAnchor(event.currentTarget)}
+          size="small"
+        >
+          <ExtensionOutlinedIcon fontSize="inherit" />
+        </IconButton>
+      </Tooltip>
+      <Popover
+        anchorEl={anchor}
+        anchorOrigin={{ horizontal: 'left', vertical: 'bottom' }}
+        onClose={() => setAnchor(null)}
+        open={Boolean(anchor)}
+      >
+        <Stack sx={{ maxWidth: 480, p: 2 }}>
+          <ExtensionOutlet context={context} outlet={outlet} />
+        </Stack>
+      </Popover>
     </>
   );
 };

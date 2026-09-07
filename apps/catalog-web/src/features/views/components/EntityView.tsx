@@ -68,9 +68,12 @@ const ValueField = ({
         renderEditor(attribute)
       ) : (
         <>
-          <Typography sx={{ fontWeight: 700 }} variant="subtitle2">
-            {labelFor(attribute.code)}
-          </Typography>
+          <Box sx={{ alignItems: 'center', display: 'flex', gap: 0.5 }}>
+            <Typography sx={{ fontWeight: 700 }} variant="subtitle2">
+              {labelFor(attribute.code)}
+            </Typography>
+            {renderAttributeDecoration?.(attribute)}
+          </Box>
           {(() => {
             const ValueRenderer =
               resolveValueRenderer(component) ?? AttributeValue;
@@ -93,7 +96,7 @@ const ValueField = ({
             )}
         </>
       )}
-      {renderAttributeDecoration?.(attribute)}
+      {renderEditor && renderAttributeDecoration?.(attribute)}
     </Stack>
   </FieldErrorBoundary>
 );

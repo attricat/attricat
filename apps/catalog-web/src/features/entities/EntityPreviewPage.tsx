@@ -13,7 +13,10 @@ import {
 import { createElement, useState } from 'react';
 import { PageContainer } from '../../components/PageContainer';
 import { PageHeader } from '../../components/PageHeader';
-import { ExtensionOutlet } from '../extensions/ExtensionOutlet';
+import {
+  ExtensionOutlet,
+  ExtensionPopoverOutlet,
+} from '../extensions/ExtensionOutlet';
 import {
   getBlueprintRevision,
   getCurrentBlueprint,
@@ -179,13 +182,14 @@ export const EntityPreviewPage = ({ entityId }: { entityId: string }) => {
                     contextId={selectedContextId}
                     entityId={entityId}
                     renderAttributeDecoration={(attribute) => (
-                      <ExtensionOutlet
+                      <ExtensionPopoverOutlet
                         context={{
                           attribute_id: attribute.id,
                           context_id: selectedContextId,
                           entity_id: entityId,
                         }}
                         key={attribute.id}
+                        label={`Open extensions for ${attribute.code}`}
                         outlet="entity_attribute_decoration"
                       />
                     )}
