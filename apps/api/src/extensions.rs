@@ -72,6 +72,10 @@ pub struct Manifest {
     pub scoped_configuration: Option<ScopedConfiguration>,
     #[serde(default)]
     pub dependencies: Vec<Dependency>,
+    /// Versioned extension-owned event contracts. They are the only supported
+    /// inter-extension communication primitive in host API 1.1.
+    #[serde(default)]
+    pub event_contracts: EventContracts,
     #[serde(default)]
     pub server: Option<Server>,
     #[serde(default)]
@@ -149,6 +153,35 @@ pub enum ConfigurationScope {
 #[serde(deny_unknown_fields)]
 pub struct Dependency {
     pub id: String,
+    pub version: String,
+}
+
+/// Exports are owned by this extension; imports name both a provider and its
+/// stable contract ID. Contract versions are independent of package versions.
+#[derive(Clone, Debug, Default, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct EventContracts {
+    #[serde(default)]
+    pub exports: Vec<EventContractExport>,
+    #[serde(default)]
+    pub consumes: Vec<EventContractConsume>,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct EventContractExport {
+    pub id: String,
+    pub version: String,
+    pub event_type: String,
+    pub schema: Value,
+    pub max_payload_bytes: u64,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct EventContractConsume {
+    pub provider: String,
+    pub contract: String,
     pub version: String,
 }
 
@@ -359,6 +392,44 @@ impl Manifest {
                     dependency.id
                 ))
             })?;
+        }
+        unique(
+            self.event_contracts.exports.iter().map(|item| &item.id),
+            "event export",
+        )?;
+        for contract in &self.event_contracts.exports {
+            contract.validate(&self.catalog.id)?;
+        }
+        let consumed_contracts = self
+            .event_contracts
+            .consumes
+            .iter()
+            .map(|item| (&item.provider, &item.contract))
+            .collect::<HashSet<_>>();
+        if consumed_contracts.len() != self.event_contracts.consumes.len() {
+            return Err(ManifestError::Invalid(
+                "duplicate event contract consumption".into(),
+            ));
+        }
+        for contract in &self.event_contracts.consumes {
+            contract.validate(&self.catalog.id)?;
+        }
+        if !self.event_contracts.exports.is_empty()
+            && !self.permissions.iter().any(|item| item == "events.emit")
+        {
+            return Err(ManifestError::Invalid(
+                "event exports require events.emit".into(),
+            ));
+        }
+        if !self.event_contracts.consumes.is_empty()
+            && !self
+                .permissions
+                .iter()
+                .any(|item| item == "events.subscribe")
+        {
+            return Err(ManifestError::Invalid(
+                "event contract consumption requires events.subscribe".into(),
+            ));
         }
         if let Some(configuration) = &self.configuration {
             if configuration.version == 0 || !configuration.schema.is_object() {
@@ -607,6 +678,54 @@ impl HostPermission {
         Ok(())
     }
 }
+impl EventContractExport {
+    fn validate(&self, extension_id: &str) -> Result<(), ManifestError> {
+        valid_id(&self.id, "event contract id")?;
+        Version::parse(&self.version).map_err(|_| {
+            ManifestError::Invalid(format!(
+                "event contract '{}' version must be SemVer",
+                self.id
+            ))
+        })?;
+        if !self
+            .event_type
+            .starts_with(&format!("plugin.{extension_id}."))
+            || !self
+                .event_type
+                .rsplit_once(".v")
+                .is_some_and(|(_, version)| version.parse::<u32>().is_ok_and(|version| version > 0))
+            || !self.schema.is_object()
+            || self.max_payload_bytes == 0
+            || self.max_payload_bytes > 65_536
+        {
+            return Err(ManifestError::Invalid(format!(
+                "event contract '{}' requires an owned versioned type, object schema, and 1-65536 byte payload limit",
+                self.id
+            )));
+        }
+        Ok(())
+    }
+}
+
+impl EventContractConsume {
+    fn validate(&self, extension_id: &str) -> Result<(), ManifestError> {
+        valid_id(&self.provider, "event contract provider")?;
+        valid_id(&self.contract, "event contract id")?;
+        if self.provider == extension_id {
+            return Err(ManifestError::Invalid(
+                "an extension cannot consume its own event contract".into(),
+            ));
+        }
+        VersionReq::parse(&self.version).map_err(|_| {
+            ManifestError::Invalid(format!(
+                "event contract '{}:{}' has an invalid SemVer range",
+                self.provider, self.contract
+            ))
+        })?;
+        Ok(())
+    }
+}
+
 impl EventHandler {
     fn validate(&self, permissions: &[String]) -> Result<(), ManifestError> {
         valid_id(&self.id, "event handler id")?;
@@ -1086,6 +1205,28 @@ mod tests {
         value.permissions.push("events.subscribe".into());
         value.server.as_mut().unwrap().event_handlers[0].event_types =
             vec!["entity.updated".into()];
+        assert!(value.validate(SUPPORTED_HOST_API).is_err());
+    }
+
+    #[test]
+    fn validates_event_contracts_and_requires_scoped_capabilities() {
+        let mut value = manifest();
+        value.permissions.push("events.emit".into());
+        value.event_contracts.exports.push(EventContractExport {
+            id: "inventory.changed".into(),
+            version: "1.0.0".into(),
+            event_type: "plugin.acme.test.inventory_changed.v1".into(),
+            schema: serde_json::json!({"type":"object","required":["sku"]}),
+            max_payload_bytes: 1024,
+        });
+        assert!(value.validate(SUPPORTED_HOST_API).is_ok());
+        value.event_contracts.exports[0].event_type = "plugin.other.changed.v1".into();
+        assert!(value.validate(SUPPORTED_HOST_API).is_err());
+        value.event_contracts.exports[0].event_type =
+            "plugin.acme.test.inventory_changed.v1".into();
+        value
+            .permissions
+            .retain(|permission| permission != "events.emit");
         assert!(value.validate(SUPPORTED_HOST_API).is_err());
     }
 

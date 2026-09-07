@@ -162,8 +162,8 @@ declarative and contain no behavior.
 Catalog provides management APIs and web UI for registry sources, discovery,
 installation, configuration, grants, lifecycle actions, and client runtime
 descriptors. Server WASM execution, client components, storage, commands, and
-host API 1.1 are implemented; mediated network/secrets/event-emission APIs and
-webhook delivery remain follow-on work.
+host API 1.1 are implemented. Mediated extension-owned event publication is
+implemented; mediated network/secrets APIs and webhook delivery remain follow-on work.
 
 ## Server WASM runtime (#145)
 
@@ -189,9 +189,11 @@ messages (16 KiB). Every operation is capability checked at the point of call.
 `configuration.read`. `storage.get.v1`, `storage.set.v1` (also accepted as
 `storage.put.v1`), `storage.delete.v1`, and `storage.list.v1` are available to
 components with `storage.extension`. `secrets.get.v1`, `catalog.read.v1`,
-`catalog.command.v1`, `events.emit.v1`, and `network.request.v1` are recognized
-and capability-checked but are not implemented by this deployment. In
-particular, `network.request.v1` never grants ambient sockets. The manifest
+`catalog.command.v1`, and `network.request.v1` are recognized and
+capability-checked but are not implemented by this deployment. `events.emit.v1`
+is implemented only for a manifest-declared, per-contract event export as
+described in [Inter-extension events](#inter-extension-events). In particular,
+`network.request.v1` never grants ambient sockets. The manifest
 host-permission validation remains the egress policy contract for its future
 mediated implementation.
 Registry source APIs expose `GET/POST /extension-registries`,
@@ -203,6 +205,62 @@ README and release assets. `extensions.read` authorizes discovery while
 the built-in official source cannot be removed. The deployment may set
 `EXTENSION_OFFICIAL_REGISTRY` to a validated GitHub owner/repository instead of
 the default `attricat/attricat-extensions`.
+
+## Inter-extension events
+
+The generic Host API v1 call surface provides asynchronous, durable,
+extension-owned events as the first inter-extension primitive. It does **not** provide service calls, shared
+extension storage, direct networking, browser frame messaging, DOM access,
+credentials, or ambient state.
+
+A manifest declares stable exports and compatible consumption ranges:
+
+```json
+{
+  "permissions": ["events.emit"],
+  "event_contracts": {
+    "exports": [{
+      "id": "inventory.changed",
+      "version": "1.0.0",
+      "event_type": "plugin.acme.inventory.inventory_changed.v1",
+      "schema": {"type": "object", "required": ["sku"]},
+      "max_payload_bytes": 4096
+    }],
+    "consumes": []
+  }
+}
+```
+
+Each export has an independent SemVer version, provider-owned
+`plugin.<extension-id>.*.vN` type, object JSON schema, and 1--64 KiB payload
+bound. A consumer declares `events.subscribe` and a consumption item with
+`provider`, `contract`, and a SemVer `version` range. Enabling a consumer
+requires its provider to be installed, enabled, and contract-compatible.
+Disabling, removing, or upgrading a provider is rejected when it would break
+an enabled consumer.
+
+Capabilities are not global permission. Operators must grant `events.emit` and
+an `event_publish` grant for every export; consumers require `events.subscribe`
+and an `event_subscribe` grant named `<provider-id>:<contract-id>`. The host
+rechecks installation state, exact release, grants, schema, and byte limits on
+each publish and delivery. Upgrades clear these grants.
+
+A server component calls `api.call("events.emit.v1", json)` with:
+
+```json
+{"contract_id":"inventory.changed","aggregate_kind":"inventory_item","aggregate_id":"<uuid>","payload":{"sku":"ABC-1"}}
+```
+
+The host derives type, source, correlation ID, and causation ID; extensions
+cannot forge them. Events use the existing transactional outbox and
+at-least-once dispatcher. They can be reordered or retried, so handlers must
+be idempotent. Failed components are quarantined and deliveries retry or dead
+letter under dispatcher policy. Consumers only receive declared provider
+contracts; core Catalog event subscriptions are unchanged. Handlers should
+ignore events whose source is their own extension ID to prevent feedback loops.
+
+Request/response calls, cancellation, and shared state are deliberately out of
+scope for this contract and require a separately versioned design.
 
 ## Client extension runtime (v1)
 
@@ -349,5 +407,5 @@ authorized command broker.
 
 ## Current implementation limitations
 
-Mediated network, secrets, event-emission, and webhook-delivery functionality
-remain deferred as described above.
+Mediated network, secrets, request/response calls, and webhook-delivery
+functionality remain deferred as described above.
