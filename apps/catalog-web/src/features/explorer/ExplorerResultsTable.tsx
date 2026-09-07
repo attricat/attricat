@@ -7,11 +7,17 @@ import {
   type LegacyColumnDef,
   useLegacyTable,
 } from '@tanstack/react-table/legacy';
+import MoreVertIcon from '@mui/icons-material/MoreVert';
 import TagOutlinedIcon from '@mui/icons-material/TagOutlined';
 import {
   Box,
   Chip,
+  Dialog,
+  DialogContent,
+  DialogTitle,
   IconButton,
+  Menu,
+  MenuItem,
   Popover,
   Paper,
   Table,
@@ -28,6 +34,56 @@ import { useRef, useState } from 'react';
 import type { BlueprintWithAttributes, EntityItem } from '../entities/api';
 import { displayLabel } from '../entities/entity-display';
 import { AttributeValue } from '../views/components/values/AttributeValue';
+
+const matchSummary = (entity: EntityItem) =>
+  entity.match_explanations
+    .map((explanation) =>
+      explanation.traversal_depth
+        ? `${explanation.term} via ${explanation.traversal_depth} relationship${explanation.traversal_depth === 1 ? '' : 's'}`
+        : explanation.matching_attribute_code
+          ? `${explanation.term} in ${explanation.matching_attribute_code}`
+          : explanation.term,
+    )
+    .join('; ');
+
+const EntityActionsMenu = ({ entity }: { entity: EntityItem }) => {
+  const [anchor, setAnchor] = useState<HTMLElement | null>(null);
+  const [searchInfoOpen, setSearchInfoOpen] = useState(false);
+  const label = `Entity actions for ${entity.id}`;
+  return (
+    <>
+      <IconButton
+        aria-label={label}
+        onClick={(event) => setAnchor(event.currentTarget)}
+        size="small"
+      >
+        <MoreVertIcon fontSize="inherit" />
+      </IconButton>
+      <Menu
+        anchorEl={anchor}
+        onClose={() => setAnchor(null)}
+        open={Boolean(anchor)}
+      >
+        <MenuItem
+          onClick={() => {
+            setAnchor(null);
+            setSearchInfoOpen(true);
+          }}
+        >
+          Search info
+        </MenuItem>
+      </Menu>
+      <Dialog onClose={() => setSearchInfoOpen(false)} open={searchInfoOpen}>
+        <DialogTitle>Search info</DialogTitle>
+        <DialogContent>
+          <Typography>
+            {matchSummary(entity) || 'No search details.'}
+          </Typography>
+        </DialogContent>
+      </Dialog>
+    </>
+  );
+};
 
 const EntityIdPopover = ({ entityId }: { entityId: string }) => {
   const [anchor, setAnchor] = useState<HTMLElement | null>(null);
@@ -99,27 +155,6 @@ export const ExplorerResultsTable = ({
       ),
     }) as LegacyColumnDef<EntityItem, string>,
     columnHelper.display({
-      id: 'match-rationale',
-      header: 'Matched by',
-      cell: (info) => {
-        const explanations = info.row.original.match_explanations;
-        if (!explanations.length) return null;
-        return (
-          <Typography variant="body2">
-            {explanations
-              .map((explanation) =>
-                explanation.traversal_depth
-                  ? `${explanation.term} via ${explanation.traversal_depth} relationship${explanation.traversal_depth === 1 ? '' : 's'}`
-                  : explanation.matching_attribute_code
-                    ? `${explanation.term} in ${explanation.matching_attribute_code}`
-                    : explanation.term,
-              )
-              .join('; ')}
-          </Typography>
-        );
-      },
-    }) as LegacyColumnDef<EntityItem, string>,
-    columnHelper.display({
       id: 'schema',
       header: 'Schema',
       cell: (info) => {
@@ -152,6 +187,11 @@ export const ExplorerResultsTable = ({
         }) as LegacyColumnDef<EntityItem, string>,
       ];
     }),
+    columnHelper.display({
+      id: 'actions',
+      header: '',
+      cell: (info) => <EntityActionsMenu entity={info.row.original} />,
+    }) as LegacyColumnDef<EntityItem, string>,
   ];
   const table = useLegacyTable({
     data: items,
@@ -208,7 +248,7 @@ export const ExplorerResultsTable = ({
                       header.column.id === 'display'
                         ? { minWidth: 280 }
                         : header.column.id === 'id'
-                          ? { width: 56 }
+                          ? { px: 0.5, width: 40 }
                           : {}
                     }
                   >
@@ -262,7 +302,7 @@ export const ExplorerResultsTable = ({
                         cell.column.id === 'display'
                           ? { minWidth: 280 }
                           : cell.column.id === 'id'
-                            ? { width: 56 }
+                            ? { px: 0.5, width: 40 }
                             : {}
                       }
                     >

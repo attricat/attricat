@@ -28,6 +28,14 @@ test('searches an entity and opens its preview', async ({ page }) => {
   await expect(
     page.getByRole('button', { name: `View entity ID ${entity.id}` }),
   ).toBeVisible();
+  await page
+    .getByRole('button', { name: `Entity actions for ${entity.id}` })
+    .click();
+  await page.getByRole('menuitem', { name: 'Search info' }).click();
+  await expect(page.getByRole('dialog', { name: 'Search info' })).toContainText(
+    'red in title',
+  );
+  await page.keyboard.press('Escape');
   await page.getByRole('link', { name: title }).click();
   await expect(page).toHaveURL(new RegExp(`/entities/${entity.id}$`));
   await expect(page.getByText(title)).toBeVisible();
