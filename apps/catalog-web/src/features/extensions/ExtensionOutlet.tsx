@@ -1,4 +1,4 @@
-import ExtensionOutlinedIcon from '@mui/icons-material/ExtensionOutlined';
+import BoltOutlinedIcon from '@mui/icons-material/BoltOutlined';
 import {
   Alert,
   Box,
@@ -168,7 +168,7 @@ export const ExtensionPopoverOutlet = ({
             onClick={(event) => setAnchor(event.currentTarget)}
             size="small"
           >
-            <ExtensionOutlinedIcon fontSize="inherit" />
+            <BoltOutlinedIcon fontSize="inherit" />
           </IconButton>
         </Tooltip>
       )}
