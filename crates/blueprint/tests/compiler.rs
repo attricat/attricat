@@ -47,6 +47,7 @@ from = "seo.meta_title"
                     tags: vec![],
                     context_fallback: "default".to_owned(),
                     context_editable: "all".to_owned(),
+                    readonly: false,
                     position: 0,
                 },
                 EffectiveAttribute {
@@ -59,6 +60,7 @@ from = "seo.meta_title"
                     tags: vec![],
                     context_fallback: "default".to_owned(),
                     context_editable: "all".to_owned(),
+                    readonly: false,
                     position: 1,
                 },
             ],
@@ -149,6 +151,32 @@ context_fallback = "none"
             .iter()
             .all(|attribute| attribute.context_fallback == "none")
     );
+}
+
+#[test]
+fn supports_readonly_attributes() {
+    let source = r#"
+format_version = 1
+code = "product"
+name = "Product"
+kind = "entity"
+
+[views.dropdown_option]
+type = "dropdown_option"
+fields = ["title"]
+
+[[attributes]]
+code = "title"
+value_type = "string"
+
+[[attributes]]
+code = "stock"
+value_type = "integer"
+readonly = true
+"#;
+    let compiled = compile(parse(source).unwrap(), &[], source).unwrap();
+    assert!(!compiled.attributes[0].readonly);
+    assert!(compiled.attributes[1].readonly);
 }
 
 #[test]

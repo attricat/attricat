@@ -84,6 +84,41 @@ async fn blueprint_catalogue_lists_all_kinds_and_revision_history(pool: PgPool) 
 }
 
 #[sqlx::test]
+async fn persists_readonly_attribute_metadata(pool: PgPool) {
+    let (base_url, server) = start_server(pool).await;
+    let client = authenticated_client();
+    let blueprint = create_blueprint(
+        &client,
+        &base_url,
+        r#"
+format_version = 1
+code = "system_managed_product"
+name = "System managed product"
+kind = "entity"
+
+[views.dropdown_option]
+type = "dropdown_option"
+fields = ["title"]
+
+[[attributes]]
+code = "title"
+value_type = "string"
+
+[[attributes]]
+code = "external_id"
+value_type = "string"
+readonly = true
+"#,
+    )
+    .await;
+
+    assert_eq!(blueprint["attributes"][0]["readonly"], false);
+    assert_eq!(blueprint["attributes"][1]["readonly"], true);
+
+    server.abort();
+}
+
+#[sqlx::test]
 async fn rejects_invalid_toml_and_mixin_entity_creation(pool: PgPool) {
     let (base_url, server) = start_server(pool).await;
     let client = authenticated_client();

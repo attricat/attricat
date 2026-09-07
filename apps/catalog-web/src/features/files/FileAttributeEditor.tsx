@@ -178,7 +178,7 @@ export const FileAttributeEditor = ({
           hidden
           multiple={policy.cardinality === 'many'}
           onChange={(event) => {
-            if (event.target.files) add(event.target.files);
+            if (!disabled && event.target.files) add(event.target.files);
             event.target.value = '';
           }}
           ref={input}
@@ -194,7 +194,7 @@ export const FileAttributeEditor = ({
         {pending.length > 0 && (
           <Button
             color="primary"
-            disabled={!entityId}
+            disabled={disabled || !entityId}
             onClick={startUploads}
             variant="contained"
           >
@@ -211,6 +211,7 @@ export const FileAttributeEditor = ({
                 <Chip color="error" label="Failed" size="small" />
                 <IconButton
                   aria-label={`Retry ${item.file.name}`}
+                  disabled={disabled}
                   onClick={() => void send(item)}
                 >
                   <ReplayOutlinedIcon />
@@ -247,11 +248,14 @@ export const FileAttributeEditor = ({
           </IconButton>
           {policy.ordered && (
             <>
-              <Button disabled={index === 0} onClick={() => reorder(index, -1)}>
+              <Button
+                disabled={disabled || index === 0}
+                onClick={() => reorder(index, -1)}
+              >
                 Up
               </Button>
               <Button
-                disabled={index === uploaded.length - 1}
+                disabled={disabled || index === uploaded.length - 1}
                 onClick={() => reorder(index, 1)}
               >
                 Down
@@ -260,6 +264,7 @@ export const FileAttributeEditor = ({
           )}
           <IconButton
             aria-label={`Remove ${file.filename}`}
+            disabled={disabled}
             onClick={() =>
               setUploaded((items) =>
                 items.filter((value) => value.id !== file.id),

@@ -209,6 +209,7 @@ export const attributeSchema = z
     target_blueprint_code: z.string().nullable().optional(),
     context_fallback: z.enum(['default', 'none']).optional(),
     context_editable: z.enum(['all', 'default']).optional(),
+    readonly: z.boolean().optional(),
     value_schema: jsonSchemaSchema.nullish(),
     file_policy: z
       .object({

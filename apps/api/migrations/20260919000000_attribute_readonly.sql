@@ -1,0 +1,2 @@
+ALTER TABLE attributes
+    ADD COLUMN readonly BOOLEAN NOT NULL DEFAULT false;

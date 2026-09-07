@@ -410,7 +410,7 @@ impl CatalogRepository {
     ) -> Result<Vec<Attribute>, RepositoryError> {
         Ok(sqlx::query_as::<_, Attribute>(
             r#"SELECT id, blueprint_id, blueprint_version, code, value_type, value_schema, default_value, file_policy,
-                      target_blueprint_code, tags, context_fallback, context_editable,
+                      target_blueprint_code, tags, context_fallback, context_editable, readonly,
                       position, created_at, updated_at, deleted_at
                FROM attributes
                WHERE blueprint_id = $1 AND blueprint_version = $2 AND deleted_at IS NULL
