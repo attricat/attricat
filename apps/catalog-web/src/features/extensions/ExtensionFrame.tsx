@@ -61,8 +61,8 @@ const validateStorageRequest = (payload: unknown) => {
 
 export const frameDocument = `<!doctype html><meta charset="utf-8"><style>html,body{margin:0}</style><meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'nonce-catalog-bootstrap' blob:; connect-src 'none'; img-src data:; style-src 'unsafe-inline'"><body><div id="root"></div><script nonce="catalog-bootstrap">
 (() => { let port; let next = 0; const pending = new Map();
-const call = (method, payload) => new Promise((resolve, reject) => { const id = String(++next); pending.set(id, {resolve,reject}); port.postMessage({type:'catalog:request.v1',id,method,payload}); });
-window.addEventListener('message', async (event) => { if (event.source !== parent || event.data?.type !== 'catalog:init.v1' || !event.ports[0]) return; port = event.ports[0]; port.onmessage = event => { const message = event.data; if (message?.type !== 'catalog:response.v1') return; const item = pending.get(message.id); if (!item) return; pending.delete(message.id); message.ok ? item.resolve(message.data) : item.reject(new Error(message.error || 'Host request failed')); }; globalThis.catalog = { request: path => call('catalog.read', {path}), command: detail => call('command', detail), navigate: detail => call('navigate', detail), notify: detail => call('notify', detail), storage: { get: detail => call('storage.get', detail), set: detail => call('storage.set', detail), delete: detail => call('storage.delete', detail), list: detail => call('storage.list', detail) }, context: event.data.context }; try { const url = URL.createObjectURL(new Blob([event.data.artifact], {type:'text/javascript'})); await import(url); URL.revokeObjectURL(url); const element = document.createElement(event.data.element); element.configuration = event.data.configuration; element.catalogContext = event.data.context; const root = document.getElementById('root'); root.append(element); const resize = () => port.postMessage({type:'catalog:resize.v1', height: root.getBoundingClientRect().height}); new ResizeObserver(resize).observe(root); new MutationObserver(resize).observe(root, {childList:true, characterData:true, subtree:true}); if (event.data.capabilities.includes('client.events')) element.dispatchEvent(new CustomEvent('catalog:context-changed.v1', {detail:event.data.context})); port.postMessage({type:'catalog:ready.v1'}); resize(); } catch (error) { port.postMessage({type:'catalog:error.v1', error: String(error?.message || error)}); } }); })();
+const call = (method, payload) => new Promise((resolve, reject) => { const id = String(++next); pending.set(id, {resolve,reject}); port.postMessage({type:'catalog:request.v1',id,method,payload}); }); const rejectPending = () => { for (const item of pending.values()) item.reject(new Error('Host request cancelled')); pending.clear(); };
+window.addEventListener('message', async (event) => { if (event.source !== parent || event.data?.type !== 'catalog:init.v1' || !event.ports[0]) return; port = event.ports[0]; const capabilities = event.data.capabilities; port.onmessage = event => { const message = event.data; if (message?.type === 'catalog:shutdown.v1') { rejectPending(); port.close(); return; } if (message?.type === 'catalog:context-update.v1') { if (!message.context || typeof message.context !== 'object' || Array.isArray(message.context)) return; globalThis.catalog.context = message.context; element && (element.catalogContext = message.context); capabilities.includes('client.events') && element?.dispatchEvent(new CustomEvent('catalog:context-changed.v1', {detail: message.context})); return; } if (message?.type !== 'catalog:response.v1') return; const item = pending.get(message.id); if (!item) return; pending.delete(message.id); message.ok ? item.resolve(message.data) : item.reject(new Error(message.error || 'Host request failed')); }; let element; globalThis.catalog = { request: path => call('catalog.read', {path}), command: detail => call('command', detail), navigate: detail => call('navigate', detail), notify: detail => call('notify', detail), storage: { get: detail => call('storage.get', detail), set: detail => call('storage.set', detail), delete: detail => call('storage.delete', detail), list: detail => call('storage.list', detail) }, context: event.data.context }; try { const url = URL.createObjectURL(new Blob([event.data.artifact], {type:'text/javascript'})); await import(url); URL.revokeObjectURL(url); element = document.createElement(event.data.element); element.configuration = event.data.configuration; element.catalogContext = event.data.context; const root = document.getElementById('root'); root.append(element); const resize = () => port.postMessage({type:'catalog:resize.v1', height: root.getBoundingClientRect().height}); new ResizeObserver(resize).observe(root); new MutationObserver(resize).observe(root, {childList:true, characterData:true, subtree:true}); if (event.data.capabilities.includes('client.events')) element.dispatchEvent(new CustomEvent('catalog:context-changed.v1', {detail:event.data.context})); port.postMessage({type:'catalog:ready.v1'}); resize(); } catch (error) { port.postMessage({type:'catalog:error.v1', error: String(error?.message || error)}); } }); })();
 </script>`;
 
 type Props = {
@@ -79,20 +79,30 @@ export const ExtensionFrame = ({
 }: Props) => {
   const iframe = useRef<HTMLIFrameElement>(null);
   const onContentHeightRef = useRef(onContentHeight);
-  onContentHeightRef.current = onContentHeight;
+  const portRef = useRef<MessagePort>();
+  const contextRef = useRef(JSON.stringify(context));
+  useEffect(() => {
+    onContentHeightRef.current = onContentHeight;
+  }, [onContentHeight]);
   const [error, setError] = useState<string>();
   const [ready, setReady] = useState(false);
   const [height, setHeight] = useState(48);
   const [loadedFrame, setLoadedFrame] = useState<string>();
   const navigate = useNavigate();
   const contextKey = JSON.stringify(context);
-  // A frame owns the custom element it registers; recreating it on a context
-  // change prevents a second element from being appended to the same document.
-  const frameKey = `${contribution.extension_id}:${contribution.id}:${contribution.release_id}:${contextKey}`;
+  useEffect(() => {
+    contextRef.current = contextKey;
+  }, [contextKey]);
+  // Context changes are delivered through the broker. A contribution keeps its
+  // frame and subscriptions until its release changes or it is unmounted.
+  const frameKey = `${contribution.extension_id}:${contribution.id}:${contribution.release_id}`;
 
   useEffect(() => {
     if (loadedFrame !== frameKey) return;
-    const frameContext = JSON.parse(contextKey) as Record<string, unknown>;
+    const frameContext = JSON.parse(contextRef.current) as Record<
+      string,
+      unknown
+    >;
     let disposed = false;
     let port: MessagePort | undefined;
     const timer = window.setTimeout(
@@ -108,6 +118,7 @@ export const ExtensionFrame = ({
         if (disposed || !iframe.current?.contentWindow) return;
         const channel = new MessageChannel();
         port = channel.port1;
+        portRef.current = port;
         port.onmessage = async ({ data }) => {
           if (!data || typeof data !== 'object') return;
           if (data.type === 'catalog:ready.v1') {
@@ -254,9 +265,21 @@ export const ExtensionFrame = ({
     return () => {
       disposed = true;
       window.clearTimeout(timer);
+      port?.postMessage({ type: 'catalog:shutdown.v1' });
       port?.close();
+      if (portRef.current === port) portRef.current = undefined;
     };
-  }, [contribution, contextKey, frameKey, loadedFrame, navigate]);
+  }, [contribution, frameKey, loadedFrame, navigate]);
+
+  useEffect(() => {
+    if (!ready) return;
+    // Only the parent-owned port can update context; the opaque frame cannot
+    // forge this versioned message or choose another contribution context.
+    portRef.current?.postMessage({
+      type: 'catalog:context-update.v1',
+      context: JSON.parse(contextKey) as Record<string, unknown>,
+    });
+  }, [contextKey, ready]);
 
   if (error) return <Alert severity="warning">{error}</Alert>;
   return (
