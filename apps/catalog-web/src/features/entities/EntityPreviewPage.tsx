@@ -185,6 +185,8 @@ export const EntityPreviewPage = ({ entityId }: { entityId: string }) => {
                       <ExtensionPopoverOutlet
                         context={{
                           attribute_id: attribute.id,
+                          blueprint_id: blueprint.data.blueprint.id,
+                          blueprint_version: blueprint.data.blueprint.version,
                           context_id: selectedContextId,
                           entity_id: entityId,
                         }}
