@@ -196,6 +196,7 @@ export const ExtensionFrame = ({
               );
             } else if (
               data.method === 'command' &&
+              contribution.kind !== 'panel' &&
               contribution.capabilities.includes('client.commands')
             ) {
               const command = extensionCommandRequestSchema.parse({

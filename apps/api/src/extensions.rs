@@ -35,6 +35,8 @@ pub const CAPABILITIES: &[&str] = &[
     "client.blueprint_configuration",
     "client.entity_decoration",
     "client.entity_action",
+    "client.explorer_row_action",
+    "client.blueprint_detail_panel",
     "secrets.read",
     "logging.write",
     "client.navigation",
@@ -90,6 +92,10 @@ pub struct Manifest {
     pub scoped_configuration: Option<ScopedConfiguration>,
     #[serde(default)]
     pub dependencies: Vec<Dependency>,
+    /// Versioned extension-owned event contracts. They are the only supported
+    /// inter-extension communication primitive in host API 1.1.
+    #[serde(default)]
+    pub event_contracts: EventContracts,
     #[serde(default)]
     pub server: Option<Server>,
     #[serde(default)]
@@ -167,6 +173,35 @@ pub enum ConfigurationScope {
 #[serde(deny_unknown_fields)]
 pub struct Dependency {
     pub id: String,
+    pub version: String,
+}
+
+/// Exports are owned by this extension; imports name both a provider and its
+/// stable contract ID. Contract versions are independent of package versions.
+#[derive(Clone, Debug, Default, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct EventContracts {
+    #[serde(default)]
+    pub exports: Vec<EventContractExport>,
+    #[serde(default)]
+    pub consumes: Vec<EventContractConsume>,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct EventContractExport {
+    pub id: String,
+    pub version: String,
+    pub event_type: String,
+    pub schema: Value,
+    pub max_payload_bytes: u64,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct EventContractConsume {
+    pub provider: String,
+    pub contract: String,
     pub version: String,
 }
 
@@ -258,7 +293,11 @@ pub struct UiContribution {
 #[serde(rename_all = "snake_case")]
 pub enum UiContributionKind {
     Route,
+    /// Legacy generic embedded contribution. New surfaces must use `Action` or
+    /// `Panel`, so the host can own their compact/action or read-only layout.
     Element,
+    Action,
+    Panel,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq, Hash)]
@@ -269,6 +308,11 @@ pub enum UiOutlet {
     BlueprintAttributeConfiguration,
     EntityAttributeDecoration,
     EntityAction,
+    /// A compact, per-entity explorer menu action. The host provides only the
+    /// entity and immutable blueprint revision identifiers.
+    ExplorerRowAction,
+    /// A read-only panel on a blueprint revision detail page.
+    BlueprintDetailPanel,
     ExplorerAction,
     ExplorerBulkAction,
     EntityHeaderAction,
@@ -378,6 +422,44 @@ impl Manifest {
                 ))
             })?;
         }
+        unique(
+            self.event_contracts.exports.iter().map(|item| &item.id),
+            "event export",
+        )?;
+        for contract in &self.event_contracts.exports {
+            contract.validate(&self.catalog.id)?;
+        }
+        let consumed_contracts = self
+            .event_contracts
+            .consumes
+            .iter()
+            .map(|item| (&item.provider, &item.contract))
+            .collect::<HashSet<_>>();
+        if consumed_contracts.len() != self.event_contracts.consumes.len() {
+            return Err(ManifestError::Invalid(
+                "duplicate event contract consumption".into(),
+            ));
+        }
+        for contract in &self.event_contracts.consumes {
+            contract.validate(&self.catalog.id)?;
+        }
+        if !self.event_contracts.exports.is_empty()
+            && !self.permissions.iter().any(|item| item == "events.emit")
+        {
+            return Err(ManifestError::Invalid(
+                "event exports require events.emit".into(),
+            ));
+        }
+        if !self.event_contracts.consumes.is_empty()
+            && !self
+                .permissions
+                .iter()
+                .any(|item| item == "events.subscribe")
+        {
+            return Err(ManifestError::Invalid(
+                "event contract consumption requires events.subscribe".into(),
+            ));
+        }
         if let Some(configuration) = &self.configuration {
             if configuration.version == 0 || !configuration.schema.is_object() {
                 return Err(ManifestError::Invalid(
@@ -483,6 +565,8 @@ impl Manifest {
                     }
                     UiOutlet::EntityAttributeDecoration => Some("client.entity_decoration"),
                     UiOutlet::EntityAction => Some("client.entity_action"),
+                    UiOutlet::ExplorerRowAction => Some("client.explorer_row_action"),
+                    UiOutlet::BlueprintDetailPanel => Some("client.blueprint_detail_panel"),
                     UiOutlet::ExplorerAction => Some("client.explorer_action"),
                     UiOutlet::ExplorerBulkAction => Some("client.explorer_bulk_action"),
                     UiOutlet::EntityHeaderAction => Some("client.entity_header_action"),
@@ -508,10 +592,44 @@ impl Manifest {
             }
             match (&contribution.kind, &contribution.outlet) {
                 (UiContributionKind::Route, None) => {}
-                (UiContributionKind::Element, Some(outlet)) => {
+                (UiContributionKind::Element, Some(outlet))
+                | (UiContributionKind::Action, Some(outlet))
+                | (UiContributionKind::Panel, Some(outlet)) => {
+                    // Extensions may each contribute once to an outlet. A
+                    // single extension cannot rely on duplicate ordering.
                     if !outlets.insert(outlet) {
                         return Err(ManifestError::Invalid(
                             "only one contribution may target each UI outlet".into(),
+                        ));
+                    }
+                    let valid_kind = matches!(
+                        (&contribution.kind, outlet),
+                        (UiContributionKind::Action, UiOutlet::ExplorerRowAction)
+                            | (UiContributionKind::Action, UiOutlet::ExplorerAction)
+                            | (UiContributionKind::Action, UiOutlet::ExplorerBulkAction)
+                            | (UiContributionKind::Action, UiOutlet::EntityHeaderAction)
+                            | (UiContributionKind::Panel, UiOutlet::BlueprintDetailPanel)
+                            | (UiContributionKind::Panel, UiOutlet::EntityAttributePanel)
+                            | (UiContributionKind::Panel, UiOutlet::BlueprintPanel)
+                            | (UiContributionKind::Panel, UiOutlet::BlueprintPublishCheck)
+                            | (UiContributionKind::Panel, UiOutlet::FilePanel)
+                            | (UiContributionKind::Panel, UiOutlet::AuditEventPanel)
+                            | (UiContributionKind::Panel, UiOutlet::DataHealthCard)
+                            | (UiContributionKind::Element, UiOutlet::Navigation)
+                            | (UiContributionKind::Element, UiOutlet::EntityPreviewPanel)
+                            | (
+                                UiContributionKind::Element,
+                                UiOutlet::BlueprintAttributeConfiguration
+                            )
+                            | (
+                                UiContributionKind::Element,
+                                UiOutlet::EntityAttributeDecoration
+                            )
+                            | (UiContributionKind::Element, UiOutlet::EntityAction)
+                    );
+                    if !valid_kind {
+                        return Err(ManifestError::Invalid(
+                            "this UI outlet requires its explicit contribution kind".into(),
                         ));
                     }
                 }
@@ -520,9 +638,11 @@ impl Manifest {
                         "route UI contributions cannot declare an outlet".into(),
                     ));
                 }
-                (UiContributionKind::Element, None) => {
+                (UiContributionKind::Element, None)
+                | (UiContributionKind::Action, None)
+                | (UiContributionKind::Panel, None) => {
                     return Err(ManifestError::Invalid(
-                        "element UI contributions require an outlet".into(),
+                        "embedded UI contributions require an outlet".into(),
                     ));
                 }
             }
@@ -605,6 +725,54 @@ impl HostPermission {
         Ok(())
     }
 }
+impl EventContractExport {
+    fn validate(&self, extension_id: &str) -> Result<(), ManifestError> {
+        valid_id(&self.id, "event contract id")?;
+        Version::parse(&self.version).map_err(|_| {
+            ManifestError::Invalid(format!(
+                "event contract '{}' version must be SemVer",
+                self.id
+            ))
+        })?;
+        if !self
+            .event_type
+            .starts_with(&format!("plugin.{extension_id}."))
+            || !self
+                .event_type
+                .rsplit_once(".v")
+                .is_some_and(|(_, version)| version.parse::<u32>().is_ok_and(|version| version > 0))
+            || !self.schema.is_object()
+            || self.max_payload_bytes == 0
+            || self.max_payload_bytes > 65_536
+        {
+            return Err(ManifestError::Invalid(format!(
+                "event contract '{}' requires an owned versioned type, object schema, and 1-65536 byte payload limit",
+                self.id
+            )));
+        }
+        Ok(())
+    }
+}
+
+impl EventContractConsume {
+    fn validate(&self, extension_id: &str) -> Result<(), ManifestError> {
+        valid_id(&self.provider, "event contract provider")?;
+        valid_id(&self.contract, "event contract id")?;
+        if self.provider == extension_id {
+            return Err(ManifestError::Invalid(
+                "an extension cannot consume its own event contract".into(),
+            ));
+        }
+        VersionReq::parse(&self.version).map_err(|_| {
+            ManifestError::Invalid(format!(
+                "event contract '{}:{}' has an invalid SemVer range",
+                self.provider, self.contract
+            ))
+        })?;
+        Ok(())
+    }
+}
+
 impl EventHandler {
     fn validate(&self, permissions: &[String]) -> Result<(), ManifestError> {
         valid_id(&self.id, "event handler id")?;
@@ -1088,6 +1256,28 @@ mod tests {
     }
 
     #[test]
+    fn validates_event_contracts_and_requires_scoped_capabilities() {
+        let mut value = manifest();
+        value.permissions.push("events.emit".into());
+        value.event_contracts.exports.push(EventContractExport {
+            id: "inventory.changed".into(),
+            version: "1.0.0".into(),
+            event_type: "plugin.acme.test.inventory_changed.v1".into(),
+            schema: serde_json::json!({"type":"object","required":["sku"]}),
+            max_payload_bytes: 1024,
+        });
+        assert!(value.validate(SUPPORTED_HOST_API).is_ok());
+        value.event_contracts.exports[0].event_type = "plugin.other.changed.v1".into();
+        assert!(value.validate(SUPPORTED_HOST_API).is_err());
+        value.event_contracts.exports[0].event_type =
+            "plugin.acme.test.inventory_changed.v1".into();
+        value
+            .permissions
+            .retain(|permission| permission != "events.emit");
+        assert!(value.validate(SUPPORTED_HOST_API).is_err());
+    }
+
+    #[test]
     fn validates_client_ui_contributions() {
         let mut value = manifest();
         value.artifacts.push(Artifact {
@@ -1122,7 +1312,7 @@ mod tests {
         value.ui.push(UiContribution {
             id: "explorer-action".into(),
             version: 1,
-            kind: UiContributionKind::Element,
+            kind: UiContributionKind::Action,
             artifact: "client".into(),
             element: "acme-explorer-action".into(),
             outlet: Some(UiOutlet::ExplorerAction),
@@ -1180,6 +1370,35 @@ mod tests {
         assert!(value.validate(SUPPORTED_HOST_API).is_err());
         value.server.as_mut().unwrap().commands[0].handler = "refresh-handler".into();
         value.server.as_mut().unwrap().commands[0].max_response_bytes = 65_537;
+        assert!(value.validate(SUPPORTED_HOST_API).is_err());
+    }
+
+    #[test]
+    fn validates_explicit_context_outlet_kinds_and_capabilities() {
+        let mut value = manifest();
+        value.catalog.host_api = ">=1.1.0, <2.0.0".into();
+        value.permissions.push("client.explorer_row_action".into());
+        value.artifacts.push(Artifact {
+            id: "client".into(),
+            kind: ArtifactKind::ClientComponent,
+            path: "client.js".into(),
+        });
+        value.ui.push(UiContribution {
+            id: "explorer-action".into(),
+            version: 1,
+            kind: UiContributionKind::Action,
+            artifact: "client".into(),
+            element: "acme-explorer-action".into(),
+            outlet: Some(UiOutlet::ExplorerRowAction),
+            title: None,
+        });
+        assert!(value.validate(SUPPORTED_HOST_API).is_ok());
+        value.ui[0].kind = UiContributionKind::Panel;
+        assert!(value.validate(SUPPORTED_HOST_API).is_err());
+        value.ui[0].kind = UiContributionKind::Action;
+        value
+            .permissions
+            .retain(|permission| permission != "client.explorer_row_action");
         assert!(value.validate(SUPPORTED_HOST_API).is_err());
     }
 

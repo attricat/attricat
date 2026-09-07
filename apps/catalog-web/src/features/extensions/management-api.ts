@@ -13,7 +13,12 @@ const jsonValue: z.ZodType<unknown> = z.lazy(() =>
 );
 const errorSchema = z.object({ error: z.object({ message: z.string() }) });
 const grantSchema = z.object({
-  grant_kind: z.enum(['capability', 'host_permission']),
+  grant_kind: z.enum([
+    'capability',
+    'host_permission',
+    'event_publish',
+    'event_subscribe',
+  ]),
   grant_id: z.string(),
   granted_at: z.string(),
 });
@@ -145,7 +150,8 @@ export const configureExtension = (id: string, configuration: unknown) =>
   );
 export const grantExtension = (
   id: string,
-  grant_kind: 'capability' | 'host_permission',
+  grant_kind:
+    'capability' | 'host_permission' | 'event_publish' | 'event_subscribe',
   grant_id: string,
 ) =>
   noContent(

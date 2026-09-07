@@ -20,10 +20,47 @@ type Outlet =
   | 'entity_preview_panel'
   | 'blueprint_attribute_configuration'
   | 'entity_attribute_decoration'
-  | 'entity_action';
+  | 'entity_action'
+  | 'explorer_row_action'
+  | 'blueprint_detail_panel';
 
 const contributionKey = (contribution: ExtensionContribution) =>
   `${contribution.extension_id}:${contribution.id}:${contribution.release_id}`;
+
+const supportsOutlet = (contribution: ExtensionContribution, outlet: Outlet) =>
+  contribution.outlet === outlet &&
+  (contribution.kind === 'element' ||
+    (outlet === 'explorer_row_action' && contribution.kind === 'action') ||
+    (outlet === 'blueprint_detail_panel' && contribution.kind === 'panel'));
+
+// New outlet contexts are deliberately small, strict, and versioned. They are
+// the only page data an extension frame receives for these surfaces.
+const outletContextSchemas = {
+  explorer_row_action: z
+    .object({
+      blueprint_id: z.uuid(),
+      blueprint_version: z.number().int().positive(),
+      context_version: z.literal(1),
+      entity_id: z.uuid(),
+    })
+    .strict(),
+  blueprint_detail_panel: z
+    .object({
+      blueprint_id: z.uuid(),
+      blueprint_version: z.number().int().positive(),
+      context_version: z.literal(1),
+    })
+    .strict(),
+};
+
+const hasValidContext = (
+  outlet: Outlet,
+  context: Record<string, unknown> | undefined,
+) => {
+  const schema =
+    outletContextSchemas[outlet as keyof typeof outletContextSchemas];
+  return !schema || schema.safeParse(context).success;
+};
 
 type Props = {
   outlet: Outlet;
@@ -37,7 +74,11 @@ const notificationSchema = z
   })
   .strict();
 
-/** A fixed host-owned insertion point; extensions never choose a DOM selector. */
+/**
+ * A fixed host-owned insertion point; extensions never choose a DOM selector.
+ * Contributions from enabled extensions are independent; their relative order is
+ * intentionally not a contract.
+ */
 export const ExtensionOutlet = ({ outlet, context }: Props) => {
   const [notification, setNotification] = useState<{
     message: string;
@@ -77,7 +118,10 @@ export const ExtensionOutlet = ({ outlet, context }: Props) => {
     <>
       <Stack spacing={1}>
         {runtime.data
-          ?.filter((item) => item.kind === 'element' && item.outlet === outlet)
+          ?.filter(
+            (item) =>
+              supportsOutlet(item, outlet) && hasValidContext(outlet, context),
+          )
           .map((item) => (
             <ExtensionFrame
               contribution={item}
@@ -126,7 +170,8 @@ export const ExtensionPopoverOutlet = ({
   });
   const contributions =
     runtime.data?.filter(
-      (item) => item.kind === 'element' && item.outlet === outlet,
+      (item) =>
+        supportsOutlet(item, outlet) && hasValidContext(outlet, context),
     ) ?? [];
   const contentKey = (contribution: ExtensionContribution) =>
     `${contextKey}:${contributionKey(contribution)}`;

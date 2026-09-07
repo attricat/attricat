@@ -460,6 +460,57 @@ impl CatalogRepository {
         Ok(())
     }
 
+    /// Appends a declared extension event through the durable outbox. The
+    /// caller supplies an invocation-time authorized release snapshot.
+    pub(crate) async fn emit_extension_event(
+        &self,
+        extension_id: &str,
+        installed_release_id: Uuid,
+        contract_id: &str,
+        aggregate_kind: &str,
+        aggregate_id: Uuid,
+        payload: Value,
+    ) -> Result<(), RepositoryError> {
+        let Some(installation) = self
+            .runtime_extension_installation(extension_id, installed_release_id)
+            .await?
+        else {
+            return Err(RepositoryError::InvalidExtension(
+                "extension invocation is no longer authorized".into(),
+            ));
+        };
+        let contract = installation
+            .manifest
+            .event_contracts
+            .exports
+            .iter()
+            .find(|item| item.id == contract_id)
+            .ok_or_else(|| {
+                RepositoryError::InvalidExtension(
+                    "event contract is not declared by this release".into(),
+                )
+            })?;
+        let bytes = serde_json::to_vec(&payload).map_err(|_| {
+            RepositoryError::InvalidExtension("event payload cannot be serialized".into())
+        })?;
+        if bytes.len() > contract.max_payload_bytes as usize {
+            return Err(RepositoryError::InvalidExtension(
+                "event payload exceeds contract limit".into(),
+            ));
+        }
+        crate::extensions::validate_schema(&contract.schema, &payload)
+            .map_err(|error| RepositoryError::InvalidExtension(error.to_string()))?;
+        let repository = self.for_extension(extension_id);
+        let mut transaction = repository.pool.begin().await?;
+        let mut event =
+            repository.core_event(&contract.event_type, aggregate_kind, aggregate_id, payload);
+        event.metadata = serde_json::json!({"event_contract": contract_id, "event_contract_version": contract.version});
+        repository.write_audit_event(&mut transaction).await?;
+        repository.enqueue_event(&mut transaction, event).await?;
+        transaction.commit().await?;
+        Ok(())
+    }
+
     pub(in crate::repository) fn core_event(
         &self,
         event_type: &str,

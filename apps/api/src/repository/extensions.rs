@@ -15,6 +15,33 @@ use crate::{
 
 use super::{AuditContext, CatalogRepository, RepositoryError};
 
+fn event_contract_grant_id(provider: &str, contract: &str) -> String {
+    format!("{provider}:{contract}")
+}
+
+/// Core Catalog events retain existing subscription semantics. Extension-owned
+/// events additionally require a matching declared provider contract.
+fn event_contract_subscription_allowed(
+    manifest: &Manifest,
+    event: &crate::domain_events::DomainEvent,
+) -> bool {
+    let Some(provider) = event.source_name.strip_prefix("extension:") else {
+        return true;
+    };
+    let Some(contract) = event
+        .metadata
+        .get("event_contract")
+        .and_then(|value| value.as_str())
+    else {
+        return false;
+    };
+    manifest
+        .event_contracts
+        .consumes
+        .iter()
+        .any(|item| item.provider == provider && item.contract == contract)
+}
+
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum ExtensionState {
     Disabled,
@@ -301,8 +328,9 @@ impl CatalogRepository {
     /// `runtime_extension_installation` directly before invocation.
     pub async fn enabled_extension_handlers(
         &self,
-        event_type: &str,
+        event: &crate::domain_events::DomainEvent,
     ) -> Result<Vec<ExtensionRuntimeInstallation>, RepositoryError> {
+        let event_type = &event.event_type;
         let rows: Vec<(String, Uuid)> = sqlx::query_as(
             "SELECT i.extension_id, i.installed_release_id FROM extension_installations i JOIN workspaces w ON w.id = i.workspace_id WHERE i.workspace_id = $1 AND i.state = 'enabled' AND w.extensions_enabled",
         )
@@ -315,14 +343,15 @@ impl CatalogRepository {
                 .runtime_extension_installation(&extension_id, installed_release_id)
                 .await?
             {
-                let subscribed = installation.manifest.server.as_ref().is_some_and(|server| {
-                    server.event_handlers.iter().any(|handler| {
-                        handler
-                            .event_types
-                            .iter()
-                            .any(|registered| registered == event_type)
-                    })
-                });
+                let subscribed =
+                    installation.manifest.server.as_ref().is_some_and(|server| {
+                        server.event_handlers.iter().any(|handler| {
+                            handler
+                                .event_types
+                                .iter()
+                                .any(|registered| registered == event_type)
+                        })
+                    }) && event_contract_subscription_allowed(&installation.manifest, event);
                 if subscribed {
                     enabled.push(installation);
                 }
@@ -389,7 +418,18 @@ impl CatalogRepository {
             && manifest
                 .host_permissions
                 .iter()
-                .all(|permission| host_permission_grants.contains(&permission.id));
+                .all(|permission| host_permission_grants.contains(&permission.id))
+            && manifest.event_contracts.exports.iter().all(|contract| {
+                grants
+                    .iter()
+                    .any(|(kind, id)| kind == "event_publish" && id == &contract.id)
+            })
+            && manifest.event_contracts.consumes.iter().all(|contract| {
+                grants.iter().any(|(kind, id)| {
+                    kind == "event_subscribe"
+                        && id == &event_contract_grant_id(&contract.provider, &contract.contract)
+                })
+            });
         transaction.commit().await?;
         if !authorized {
             return Ok(None);
@@ -447,9 +487,13 @@ impl CatalogRepository {
         grant_kind: &str,
         grant_id: &str,
     ) -> Result<(), RepositoryError> {
-        if !matches!(grant_kind, "capability" | "host_permission") {
+        if !matches!(
+            grant_kind,
+            "capability" | "host_permission" | "event_publish" | "event_subscribe"
+        ) {
             return Err(RepositoryError::InvalidExtension(
-                "grant kind must be capability or host_permission".into(),
+                "grant kind must be capability, host_permission, event_publish, or event_subscribe"
+                    .into(),
             ));
         }
         let mut transaction = self.pool.begin().await?;
@@ -457,18 +501,28 @@ impl CatalogRepository {
         let manifest = self
             .installed_release_manifest(&mut transaction, current.installed_release_id)
             .await?;
-        let declared = match grant_kind {
-            "capability" => manifest
-                .permissions
-                .iter()
-                .chain(&manifest.optional_permissions)
-                .any(|item| item == grant_id),
-            _ => manifest
-                .host_permissions
-                .iter()
-                .chain(&manifest.optional_host_permissions)
-                .any(|item| item.id == grant_id),
-        };
+        let declared =
+            match grant_kind {
+                "capability" => manifest
+                    .permissions
+                    .iter()
+                    .chain(&manifest.optional_permissions)
+                    .any(|item| item == grant_id),
+                "host_permission" => manifest
+                    .host_permissions
+                    .iter()
+                    .chain(&manifest.optional_host_permissions)
+                    .any(|item| item.id == grant_id),
+                "event_publish" => manifest
+                    .event_contracts
+                    .exports
+                    .iter()
+                    .any(|item| item.id == grant_id),
+                "event_subscribe" => manifest.event_contracts.consumes.iter().any(|item| {
+                    event_contract_grant_id(&item.provider, &item.contract) == grant_id
+                }),
+                _ => false,
+            };
         if !declared {
             return Err(RepositoryError::InvalidExtension(format!(
                 "'{grant_id}' is not declared by this release"
@@ -501,18 +555,27 @@ impl CatalogRepository {
         let manifest = self
             .installed_release_manifest(&mut transaction, current.installed_release_id)
             .await?;
-        let required = match grant_kind {
-            "capability" => manifest.permissions.iter().any(|item| item == grant_id),
-            "host_permission" => manifest
-                .host_permissions
-                .iter()
-                .any(|item| item.id == grant_id),
-            _ => {
-                return Err(RepositoryError::InvalidExtension(
-                    "grant kind must be capability or host_permission".into(),
-                ));
-            }
-        };
+        let required =
+            match grant_kind {
+                "capability" => manifest.permissions.iter().any(|item| item == grant_id),
+                "host_permission" => manifest
+                    .host_permissions
+                    .iter()
+                    .any(|item| item.id == grant_id),
+                "event_publish" => manifest
+                    .event_contracts
+                    .exports
+                    .iter()
+                    .any(|item| item.id == grant_id),
+                "event_subscribe" => manifest.event_contracts.consumes.iter().any(|item| {
+                    event_contract_grant_id(&item.provider, &item.contract) == grant_id
+                }),
+                _ => {
+                    return Err(RepositoryError::InvalidExtension(
+                        "invalid grant kind".into(),
+                    ));
+                }
+            };
         if current.state == "enabled" && required {
             return Err(RepositoryError::InvalidExtensionTransition(
                 "disable an extension before revoking a required grant",
@@ -829,6 +892,11 @@ impl CatalogRepository {
                 .dependencies
                 .iter()
                 .any(|item| item.id == dependency_id)
+                || manifest
+                    .event_contracts
+                    .consumes
+                    .iter()
+                    .any(|item| item.provider == dependency_id)
             {
                 return Err(RepositoryError::InvalidExtensionTransition(
                     "disable dependent extensions before changing this dependency",
@@ -934,6 +1002,29 @@ impl CatalogRepository {
                 )));
             }
         }
+        for contract in &manifest.event_contracts.exports {
+            if !grants
+                .iter()
+                .any(|(kind, granted)| kind == "event_publish" && granted == &contract.id)
+            {
+                return Err(RepositoryError::InvalidExtension(format!(
+                    "event publish grant '{}' has not been granted",
+                    contract.id
+                )));
+            }
+        }
+        for contract in &manifest.event_contracts.consumes {
+            let grant_id = event_contract_grant_id(&contract.provider, &contract.contract);
+            if !grants
+                .iter()
+                .any(|(kind, granted)| kind == "event_subscribe" && granted == &grant_id)
+            {
+                return Err(RepositoryError::InvalidExtension(format!(
+                    "event subscribe grant '{}' has not been granted",
+                    grant_id
+                )));
+            }
+        }
         manifest
             .validate_configuration(&installation.configuration)
             .map_err(|error| RepositoryError::InvalidExtension(error.to_string()))
@@ -980,6 +1071,51 @@ impl CatalogRepository {
                 )));
             }
             self.dependencies_enabled(workspace_id, &dependency.id, visiting)
+                .await?;
+        }
+        for consumed in &manifest.event_contracts.consumes {
+            let provider: Option<(String, Value)> = sqlx::query_as("SELECT i.state, r.manifest FROM extension_installations i JOIN installed_extension_releases r ON r.id = i.installed_release_id WHERE i.workspace_id = $1 AND i.extension_id = $2")
+                .bind(workspace_id).bind(&consumed.provider).fetch_optional(&self.pool).await?;
+            let Some((state, raw_provider_manifest)) = provider else {
+                return Err(RepositoryError::InvalidExtension(format!(
+                    "event provider '{}' is not installed",
+                    consumed.provider
+                )));
+            };
+            let provider_manifest: Manifest = serde_json::from_value(raw_provider_manifest)
+                .map_err(|_| {
+                    RepositoryError::InvalidExtension("stored provider manifest is invalid".into())
+                })?;
+            let range = VersionReq::parse(&consumed.version).map_err(|_| {
+                RepositoryError::InvalidExtension("stored event contract range is invalid".into())
+            })?;
+            let compatible_contract =
+                provider_manifest
+                    .event_contracts
+                    .exports
+                    .iter()
+                    .find(|provided| {
+                        provided.id == consumed.contract
+                            && Version::parse(&provided.version)
+                                .is_ok_and(|version| range.matches(&version))
+                    });
+            let compatible = compatible_contract.is_some_and(|provided| {
+                manifest.server.as_ref().is_some_and(|server| {
+                    server.event_handlers.iter().any(|handler| {
+                        handler
+                            .event_types
+                            .iter()
+                            .any(|event_type| event_type == &provided.event_type)
+                    })
+                })
+            });
+            if state != "enabled" || !compatible {
+                return Err(RepositoryError::InvalidExtension(format!(
+                    "event contract '{}:{}' is not enabled at a compatible version",
+                    consumed.provider, consumed.contract
+                )));
+            }
+            self.dependencies_enabled(workspace_id, &consumed.provider, visiting)
                 .await?;
         }
         visiting.remove(extension_id);

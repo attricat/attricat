@@ -34,6 +34,7 @@ import { useRef, useState } from 'react';
 import type { BlueprintWithAttributes, EntityItem } from '../entities/api';
 import { displayLabel } from '../entities/entity-display';
 import { AttributeValue } from '../views/components/values/AttributeValue';
+import { ExtensionPopoverOutlet } from '../extensions/ExtensionOutlet';
 
 const matchSummary = (entity: EntityItem) =>
   entity.match_explanations
@@ -46,7 +47,13 @@ const matchSummary = (entity: EntityItem) =>
     )
     .join('; ');
 
-const EntityActionsMenu = ({ entity }: { entity: EntityItem }) => {
+const EntityActionsMenu = ({
+  blueprintId,
+  entity,
+}: {
+  blueprintId: string;
+  entity: EntityItem;
+}) => {
   const [anchor, setAnchor] = useState<HTMLElement | null>(null);
   const [searchInfoOpen, setSearchInfoOpen] = useState(false);
   const label = `Entity actions for ${entity.id}`;
@@ -72,6 +79,16 @@ const EntityActionsMenu = ({ entity }: { entity: EntityItem }) => {
         >
           Search info
         </MenuItem>
+        <ExtensionPopoverOutlet
+          context={{
+            context_version: 1,
+            blueprint_id: blueprintId,
+            blueprint_version: entity.blueprint_version,
+            entity_id: entity.id,
+          }}
+          label="Extension actions"
+          outlet="explorer_row_action"
+        />
       </Menu>
       <Dialog onClose={() => setSearchInfoOpen(false)} open={searchInfoOpen}>
         <DialogTitle>Search info</DialogTitle>
@@ -190,7 +207,12 @@ export const ExplorerResultsTable = ({
     columnHelper.display({
       id: 'actions',
       header: '',
-      cell: (info) => <EntityActionsMenu entity={info.row.original} />,
+      cell: (info) => (
+        <EntityActionsMenu
+          blueprintId={blueprint.blueprint.id}
+          entity={info.row.original}
+        />
+      ),
     }) as LegacyColumnDef<EntityItem, string>,
   ];
   const table = useLegacyTable({

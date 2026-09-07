@@ -106,7 +106,8 @@ The v1 capability catalogue is: `catalog.read`, `catalog.write`,
 `client.files.read`, `client.files.upload`, `client.search`,
 `client.live_updates`, `client.clipboard`, `client.theme.read`,
 `client.locale.read`, `client.blueprint_configuration`,
-`client.entity_decoration`, `client.entity_action`, `client.explorer_action`,
+`client.entity_decoration`, `client.entity_action`, `client.explorer_row_action`,
+`client.blueprint_detail_panel`, `client.explorer_action`,
 `client.explorer_bulk_action`, `client.entity_header_action`,
 `client.entity_attribute_panel`, `client.blueprint_panel`,
 `client.blueprint_publish_check`, `client.file_panel`,
@@ -169,8 +170,8 @@ declarative and contain no behavior.
 Catalog provides management APIs and web UI for registry sources, discovery,
 installation, configuration, grants, lifecycle actions, and client runtime
 descriptors. Server WASM execution, client components, storage, commands, and
-host API 1.1 are implemented; mediated network/secrets/event-emission APIs and
-webhook delivery remain follow-on work.
+host API 1.1 are implemented. Mediated extension-owned event publication is
+implemented; mediated network/secrets APIs and webhook delivery remain follow-on work.
 
 ## Server WASM runtime (#145)
 
@@ -196,9 +197,11 @@ messages (16 KiB). Every operation is capability checked at the point of call.
 `configuration.read`. `storage.get.v1`, `storage.set.v1` (also accepted as
 `storage.put.v1`), `storage.delete.v1`, and `storage.list.v1` are available to
 components with `storage.extension`. `secrets.get.v1`, `catalog.read.v1`,
-`catalog.command.v1`, `events.emit.v1`, and `network.request.v1` are recognized
-and capability-checked but are not implemented by this deployment. In
-particular, `network.request.v1` never grants ambient sockets. The manifest
+`catalog.command.v1`, and `network.request.v1` are recognized and
+capability-checked but are not implemented by this deployment. `events.emit.v1`
+is implemented only for a manifest-declared, per-contract event export as
+described in [Inter-extension events](#inter-extension-events). In particular,
+`network.request.v1` never grants ambient sockets. The manifest
 host-permission validation remains the egress policy contract for its future
 mediated implementation.
 Registry source APIs expose `GET/POST /extension-registries`,
@@ -210,6 +213,62 @@ README and release assets. `extensions.read` authorizes discovery while
 the built-in official source cannot be removed. The deployment may set
 `EXTENSION_OFFICIAL_REGISTRY` to a validated GitHub owner/repository instead of
 the default `attricat/attricat-extensions`.
+
+## Inter-extension events
+
+The generic Host API v1 call surface provides asynchronous, durable,
+extension-owned events as the first inter-extension primitive. It does **not** provide service calls, shared
+extension storage, direct networking, browser frame messaging, DOM access,
+credentials, or ambient state.
+
+A manifest declares stable exports and compatible consumption ranges:
+
+```json
+{
+  "permissions": ["events.emit"],
+  "event_contracts": {
+    "exports": [{
+      "id": "inventory.changed",
+      "version": "1.0.0",
+      "event_type": "plugin.acme.inventory.inventory_changed.v1",
+      "schema": {"type": "object", "required": ["sku"]},
+      "max_payload_bytes": 4096
+    }],
+    "consumes": []
+  }
+}
+```
+
+Each export has an independent SemVer version, provider-owned
+`plugin.<extension-id>.*.vN` type, object JSON schema, and 1--64 KiB payload
+bound. A consumer declares `events.subscribe` and a consumption item with
+`provider`, `contract`, and a SemVer `version` range. Enabling a consumer
+requires its provider to be installed, enabled, and contract-compatible.
+Disabling, removing, or upgrading a provider is rejected when it would break
+an enabled consumer.
+
+Capabilities are not global permission. Operators must grant `events.emit` and
+an `event_publish` grant for every export; consumers require `events.subscribe`
+and an `event_subscribe` grant named `<provider-id>:<contract-id>`. The host
+rechecks installation state, exact release, grants, schema, and byte limits on
+each publish and delivery. Upgrades clear these grants.
+
+A server component calls `api.call("events.emit.v1", json)` with:
+
+```json
+{"contract_id":"inventory.changed","aggregate_kind":"inventory_item","aggregate_id":"<uuid>","payload":{"sku":"ABC-1"}}
+```
+
+The host derives type, source, correlation ID, and causation ID; extensions
+cannot forge them. Events use the existing transactional outbox and
+at-least-once dispatcher. They can be reordered or retried, so handlers must
+be idempotent. Failed components are quarantined and deliveries retry or dead
+letter under dispatcher policy. Consumers only receive declared provider
+contracts; core Catalog event subscriptions are unchanged. Handlers should
+ignore events whose source is their own extension ID to prevent feedback loops.
+
+Request/response calls, cancellation, and shared state are deliberately out of
+scope for this contract and require a separately versioned design.
 
 ## Client extension runtime (v1)
 
@@ -226,17 +285,20 @@ Enabled `client_component` artifacts can expose a strict `ui` contribution:
 }
 ```
 
-A contribution is either `route` (which requires a non-empty `title`) or
-`element` (which requires one of the host-owned `navigation`, `entity_preview_panel`,
-`blueprint_attribute_configuration`, `entity_attribute_decoration`,
-`entity_action`, `explorer_action`, `explorer_bulk_action`,
-`entity_header_action`, `entity_attribute_panel`, `blueprint_panel`,
-`blueprint_publish_check`, `file_panel`, `audit_event_panel`, or
-`data_health_card` outlets). Routes are always namespaced at
+A contribution is either `route` (which requires a non-empty `title`), legacy
+`element`, explicit `action`, or explicit read-only `panel`. `action` is
+required for `explorer_row_action` (and requires `client.explorer_row_action`);
+`panel` is required for `blueprint_detail_panel` (and requires
+`client.blueprint_detail_panel`). Existing `element` contributions use
+`navigation`, `entity_preview_panel`, `blueprint_attribute_configuration`,
+`entity_attribute_decoration`, or `entity_action`; the additional mediated
+placement capabilities reserve their matching fixed outlets for their explicit
+host-owned action or panel layouts. Routes are always namespaced at
 `/extensions/:extensionId/:contributionId`; manifests cannot provide a path,
 selector, or host component. Element names must be lowercase custom-element
 names. Each extension can use an outlet once and all contribution/artifact IDs
-remain stable across releases.
+remain stable across releases. Multiple enabled extensions may contribute to a
+surface, but their display order is intentionally unspecified.
 
 Catalog loads runtime descriptors and JavaScript only for installations whose
 effective runtime state is enabled. The deployment gate (`EXTENSIONS_MODE`),
@@ -373,7 +435,16 @@ the relevant catalog IDs: blueprint/revision/attribute, or
 entity/attribute/context. Extensions cannot provide DOM selectors, arbitrary
 host routes, React state, or inter-extension RPC.
 
+The `explorer_row_action` outlet is host-controlled overflow UI for one entity;
+its strict v1 context is `{ "context_version": 1, "entity_id", "blueprint_id",
+"blueprint_version" }`. The `blueprint_detail_panel` outlet is a host-owned,
+read-only detail-page region with strict v1 context `{ "context_version": 1,
+"blueprint_id", "blueprint_version" }`. These contexts deliberately exclude
+search state, arbitrary entity values, and browser page state. Commands from an
+action still require `client.commands` and use the existing validated,
+authorized command broker.
+
 ## Current implementation limitations
 
-Mediated network, secrets, event-emission, and webhook-delivery functionality
-remain deferred as described above.
+Mediated network, secrets, request/response calls, and webhook-delivery
+functionality remain deferred as described above.

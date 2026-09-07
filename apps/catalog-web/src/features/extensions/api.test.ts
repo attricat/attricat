@@ -30,6 +30,17 @@ describe('extension runtime API', () => {
       json: () => Promise.resolve([contribution]),
     });
     await expect(getExtensionRuntime()).resolves.toEqual([contribution]);
+    const action = {
+      ...contribution,
+      capabilities: ['client.explorer_row_action'],
+      kind: 'action',
+      outlet: 'explorer_row_action',
+    };
+    fetchMock.mockResolvedValue({
+      ok: true,
+      json: () => Promise.resolve([action]),
+    });
+    await expect(getExtensionRuntime()).resolves.toEqual([action]);
     fetchMock.mockResolvedValue({
       ok: true,
       json: () => Promise.resolve([{ ...contribution, element: undefined }]),

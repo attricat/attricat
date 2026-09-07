@@ -9,7 +9,7 @@ const contributionSchema = z
     capabilities: z.array(z.string()),
     id: z.string().min(1),
     version: z.number().int().positive(),
-    kind: z.enum(['route', 'element']),
+    kind: z.enum(['route', 'element', 'action', 'panel']),
     outlet: z
       .enum([
         'navigation',
@@ -17,6 +17,8 @@ const contributionSchema = z
         'blueprint_attribute_configuration',
         'entity_attribute_decoration',
         'entity_action',
+        'explorer_row_action',
+        'blueprint_detail_panel',
         'explorer_action',
         'explorer_bulk_action',
         'entity_header_action',
