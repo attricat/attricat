@@ -463,6 +463,21 @@ impl catalog::host::api::Host for HostState {
         if operation == "configuration.get.v1" {
             return Ok(self.installation.configuration.to_string());
         }
+        if operation == "events.emit.v1" {
+            let input: EventEmit = parse_event_emit_request(&request)?;
+            self.repository
+                .emit_extension_event(
+                    &self.installation.extension_id,
+                    self.installation.installed_release_id,
+                    &input.contract_id,
+                    &input.aggregate_kind,
+                    parse_uuid(&input.aggregate_id, "event aggregate ID")?,
+                    input.payload,
+                )
+                .await
+                .map_err(|error| error.to_string())?;
+            return Ok("null".to_owned());
+        }
         self.storage_call(&operation, &request).await
     }
 
@@ -742,6 +757,15 @@ fn to_configuration_scope(
 
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
+struct EventEmit {
+    contract_id: String,
+    aggregate_kind: String,
+    aggregate_id: String,
+    payload: Value,
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
 struct StorageGet {
     key: String,
 }
@@ -765,6 +789,20 @@ struct StorageList {
     cursor: Option<String>,
     limit: Option<u32>,
 }
+fn parse_event_emit_request(request: &str) -> Result<EventEmit, String> {
+    let input: EventEmit =
+        serde_json::from_str(request).map_err(|_| "invalid event emission request".to_owned())?;
+    if input.contract_id.is_empty()
+        || input.contract_id.len() > 128
+        || input.aggregate_kind.is_empty()
+        || input.aggregate_kind.len() > 128
+        || !input.payload.is_object()
+    {
+        return Err("invalid event emission request".into());
+    }
+    Ok(input)
+}
+
 fn parse_storage_request<T: for<'de> Deserialize<'de>>(request: &str) -> Result<T, String> {
     serde_json::from_str(request).map_err(|_| "invalid storage request".to_owned())
 }
@@ -799,7 +837,7 @@ impl EventHandler for WasmExtensionHandler {
     ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         let installations = context
             .repository()
-            .enabled_extension_handlers(&event.event_type)
+            .enabled_extension_handlers(&event)
             .await?;
         for candidate in installations {
             let handler_ids: Vec<String> = candidate

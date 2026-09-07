@@ -627,7 +627,11 @@ const DeclaredPermissions = ({
 }: {
   extensionId: string;
   manifest: unknown;
-  grants: { grant_kind: 'capability' | 'host_permission'; grant_id: string }[];
+  grants: {
+    grant_kind:
+      'capability' | 'host_permission' | 'event_publish' | 'event_subscribe';
+    grant_id: string;
+  }[];
   enabled: boolean;
   onGrant: () => void;
 }) => {
@@ -636,7 +640,8 @@ const DeclaredPermissions = ({
       kind,
       id,
     }: {
-      kind: 'capability' | 'host_permission';
+      kind:
+        'capability' | 'host_permission' | 'event_publish' | 'event_subscribe';
       id: string;
     }) => grantExtension(extensionId, kind, id),
     onSuccess: onGrant,
@@ -646,16 +651,31 @@ const DeclaredPermissions = ({
     optional_permissions?: string[];
     host_permissions?: { id: string }[];
     optional_host_permissions?: { id: string }[];
+    event_contracts?: {
+      exports?: { id: string }[];
+      consumes?: { provider: string; contract: string }[];
+    };
   };
-  const requested: Array<readonly ['capability' | 'host_permission', string]> =
-    [...(value.permissions ?? []), ...(value.optional_permissions ?? [])].map(
-      (id) => ['capability', id] as const,
-    );
+  const requested: Array<
+    readonly [
+      'capability' | 'host_permission' | 'event_publish' | 'event_subscribe',
+      string,
+    ]
+  > = [...(value.permissions ?? []), ...(value.optional_permissions ?? [])].map(
+    (id) => ['capability', id] as const,
+  );
   requested.push(
     ...[
       ...(value.host_permissions ?? []),
       ...(value.optional_host_permissions ?? []),
     ].map((item) => ['host_permission', item.id] as const),
+    ...(value.event_contracts?.exports ?? []).map(
+      (item) => ['event_publish', item.id] as const,
+    ),
+    ...(value.event_contracts?.consumes ?? []).map(
+      (item) =>
+        ['event_subscribe', `${item.provider}:${item.contract}`] as const,
+    ),
   );
   return (
     <Stack spacing={1} sx={{ mt: 1 }}>
