@@ -98,6 +98,8 @@ pub(crate) struct EventCommandContext {
     pub correlation_id: Uuid,
     pub causation_id: Uuid,
     pub handler_name: String,
+    pub initiating_actor_user_id: Option<Uuid>,
+    pub initiating_actor_token_id: Option<Uuid>,
 }
 
 /// Server-derived request metadata written with the same transaction as a
@@ -335,6 +337,8 @@ impl CatalogRepository {
             correlation_id: event.correlation_id,
             causation_id: event.id,
             handler_name: handler_name.to_owned(),
+            initiating_actor_user_id: event_metadata_uuid(event, "initiating_actor_user_id"),
+            initiating_actor_token_id: event_metadata_uuid(event, "initiating_actor_token_id"),
         });
         repository
     }
@@ -350,8 +354,14 @@ impl CatalogRepository {
         // audit provenance before an extension can mutate catalog state.
         if repository.audit_context.is_none() {
             repository.audit_context = Some(AuditContext {
-                actor_user_id: None,
-                actor_token_id: None,
+                actor_user_id: repository
+                    .event_context
+                    .as_ref()
+                    .and_then(|context| context.initiating_actor_user_id),
+                actor_token_id: repository
+                    .event_context
+                    .as_ref()
+                    .and_then(|context| context.initiating_actor_token_id),
                 request_id: Uuid::new_v4(),
                 correlation_id: repository
                     .event_context
@@ -370,7 +380,37 @@ impl CatalogRepository {
         }
         repository
     }
+}
 
+fn event_metadata_uuid(event: &crate::domain_events::DomainEvent, key: &str) -> Option<Uuid> {
+    event.metadata.get(key)?.as_str()?.parse().ok()
+}
+
+fn initiating_actor_metadata(audit: Option<&AuditContext>) -> Value {
+    let mut metadata = Value::Object(serde_json::Map::new());
+    add_initiating_actor_metadata(&mut metadata, audit);
+    metadata
+}
+
+fn add_initiating_actor_metadata(metadata: &mut Value, audit: Option<&AuditContext>) {
+    let Some(metadata) = metadata.as_object_mut() else {
+        return;
+    };
+    if let Some(actor_user_id) = audit.and_then(|context| context.actor_user_id) {
+        metadata.insert(
+            "initiating_actor_user_id".to_owned(),
+            Value::String(actor_user_id.to_string()),
+        );
+    }
+    if let Some(actor_token_id) = audit.and_then(|context| context.actor_token_id) {
+        metadata.insert(
+            "initiating_actor_token_id".to_owned(),
+            Value::String(actor_token_id.to_string()),
+        );
+    }
+}
+
+impl CatalogRepository {
     async fn ensure_default_context(&self, workspace_id: Uuid) -> Result<(), RepositoryError> {
         sqlx::query(
             r#"INSERT INTO attribute_contexts (id, workspace_id, code, data, parent_id)
@@ -504,7 +544,7 @@ impl CatalogRepository {
                     })
                     .unwrap_or_else(|| "catalog_api".to_owned()),
             },
-            metadata: serde_json::json!({}),
+            metadata: initiating_actor_metadata(self.audit_context.as_ref()),
             payload,
         }
     }
@@ -647,6 +687,8 @@ mod tests {
                 .connect_lazy("postgres://postgres:postgres@localhost/catalog")
                 .unwrap(),
         );
+        let initiating_actor_user_id = Uuid::new_v4();
+        let initiating_actor_token_id = Uuid::new_v4();
         let trigger = crate::domain_events::DomainEvent {
             id: Uuid::new_v4(),
             sequence: 1,
@@ -659,7 +701,10 @@ mod tests {
             causation_id: None,
             source_kind: "api".to_owned(),
             source_name: "catalog_api".to_owned(),
-            metadata: serde_json::json!({}),
+            metadata: serde_json::json!({
+                "initiating_actor_user_id": initiating_actor_user_id.to_string(),
+                "initiating_actor_token_id": initiating_actor_token_id.to_string(),
+            }),
             payload: serde_json::json!({}),
         };
         let event = repository
@@ -687,12 +732,18 @@ mod tests {
         assert_eq!(extension_event.causation_id, Some(trigger.id));
         assert_eq!(extension_event.source.kind.as_str(), "plugin");
         assert_eq!(extension_event.source.name, "extension:acme.computed");
+        assert_eq!(
+            extension_event.metadata["initiating_actor_user_id"],
+            initiating_actor_user_id.to_string()
+        );
         assert!(extension_event.validate().is_ok());
         let extension_repository = repository
             .for_event_handler(&trigger, "catalog.extensions.wasm")
             .for_extension("acme.computed");
         let audit = extension_repository.audit_context.as_ref().unwrap();
         assert_eq!(audit.correlation_id, trigger.correlation_id);
+        assert_eq!(audit.actor_user_id, Some(initiating_actor_user_id));
+        assert_eq!(audit.actor_token_id, Some(initiating_actor_token_id));
         assert_eq!(audit.action, "catalog.extensions.attribute_values.write");
         assert_eq!(audit.metadata["extension_id"], "acme.computed");
 
