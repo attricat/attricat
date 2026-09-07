@@ -319,7 +319,9 @@ value_type = "string"`,
   await page.goto(`/?blueprint=${code}`);
   await expect(page.getByText('v2')).toBeVisible();
   await expect(page.getByText('Outdated')).toBeVisible();
-  await expect(page.getByRole('link', { name: oldEntity.id })).toBeVisible();
+  await expect(
+    page.getByRole('button', { name: `View entity ID ${oldEntity.id}` }),
+  ).toBeVisible();
 
   await page.goto(`/?blueprint=${code}&version=1`);
   await expect(page).toHaveURL(new RegExp(`blueprint=${code}.*version=1`));

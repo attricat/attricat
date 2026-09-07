@@ -25,8 +25,10 @@ test('searches an entity and opens its preview', async ({ page }) => {
 
   await expect(page).toHaveURL(new RegExp(`blueprint=${code}.*query=red`));
   await expect(page.getByText('1 result')).toBeVisible();
-  await expect(page.getByRole('link', { name: entity.id })).toBeVisible();
-  await page.getByRole('link', { name: entity.id }).click();
+  await expect(
+    page.getByRole('button', { name: `View entity ID ${entity.id}` }),
+  ).toBeVisible();
+  await page.getByRole('link', { name: title }).click();
   await expect(page).toHaveURL(new RegExp(`/entities/${entity.id}$`));
   await expect(page.getByText(title)).toBeVisible();
 });

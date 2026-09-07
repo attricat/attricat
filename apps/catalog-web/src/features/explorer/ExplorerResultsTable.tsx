@@ -7,9 +7,12 @@ import {
   type LegacyColumnDef,
   useLegacyTable,
 } from '@tanstack/react-table/legacy';
+import TagOutlinedIcon from '@mui/icons-material/TagOutlined';
 import {
   Box,
   Chip,
+  IconButton,
+  Popover,
   Paper,
   Table,
   TableBody,
@@ -17,13 +20,45 @@ import {
   TableContainer,
   TableHead,
   TableRow,
+  Tooltip,
   Typography,
 } from '@mui/material';
 import { LoadMoreButton } from '../../components/LoadMoreButton';
-import { useRef } from 'react';
+import { useRef, useState } from 'react';
 import type { BlueprintWithAttributes, EntityItem } from '../entities/api';
 import { displayLabel } from '../entities/entity-display';
 import { AttributeValue } from '../views/components/values/AttributeValue';
+
+const EntityIdPopover = ({ entityId }: { entityId: string }) => {
+  const [anchor, setAnchor] = useState<HTMLElement | null>(null);
+  const label = `View entity ID ${entityId}`;
+  return (
+    <>
+      <Tooltip title="View entity ID">
+        <IconButton
+          aria-label={label}
+          onClick={(event) => setAnchor(event.currentTarget)}
+          size="small"
+        >
+          <TagOutlinedIcon fontSize="inherit" />
+        </IconButton>
+      </Tooltip>
+      <Popover
+        anchorEl={anchor}
+        anchorOrigin={{ horizontal: 'left', vertical: 'bottom' }}
+        onClose={() => setAnchor(null)}
+        open={Boolean(anchor)}
+      >
+        <Typography
+          component="code"
+          sx={{ display: 'block', fontFamily: 'monospace', p: 2 }}
+        >
+          {entityId}
+        </Typography>
+      </Popover>
+    </>
+  );
+};
 
 export const ExplorerResultsTable = ({
   blueprint,
@@ -49,14 +84,7 @@ export const ExplorerResultsTable = ({
   const columns: LegacyColumnDef<EntityItem, string>[] = [
     columnHelper.accessor('id', {
       header: 'ID',
-      cell: (info) => (
-        <Link
-          to="/entities/$entityId"
-          params={{ entityId: info.row.original.id }}
-        >
-          {info.getValue()}
-        </Link>
-      ),
+      cell: (info) => <EntityIdPopover entityId={info.getValue()} />,
     }),
     columnHelper.display({
       id: 'display',
@@ -180,7 +208,7 @@ export const ExplorerResultsTable = ({
                       header.column.id === 'display'
                         ? { minWidth: 280 }
                         : header.column.id === 'id'
-                          ? { whiteSpace: 'nowrap', width: 290 }
+                          ? { width: 56 }
                           : {}
                     }
                   >
@@ -234,7 +262,7 @@ export const ExplorerResultsTable = ({
                         cell.column.id === 'display'
                           ? { minWidth: 280 }
                           : cell.column.id === 'id'
-                            ? { whiteSpace: 'nowrap', width: 290 }
+                            ? { width: 56 }
                             : {}
                       }
                     >
