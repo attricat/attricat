@@ -1,6 +1,7 @@
 import { useQueries } from '@tanstack/react-query';
 import { Link } from '@tanstack/react-router';
 import { Breadcrumbs, Stack, Typography } from '@mui/material';
+import { useTranslation } from 'react-i18next';
 import { getEntityHierarchy } from '../../entities/api';
 import { entityQueryKeys } from '../../entities/query-keys';
 import type { ViewComponentDefinition } from './component-types';
@@ -18,6 +19,7 @@ export const RelationshipHierarchy = ({
   entityId?: string;
   value: unknown;
 }) => {
+  const { t } = useTranslation();
   const parentField = component?.props.parent_field;
   const targetIds =
     typeof parentField === 'string'
@@ -45,7 +47,7 @@ export const RelationshipHierarchy = ({
     })),
   });
   if (hierarchies.some((hierarchy) => hierarchy.isPending))
-    return <Typography>Loading hierarchy...</Typography>;
+    return <Typography>{t('views.loadingHierarchy')}</Typography>;
   const failedHierarchy = hierarchies.find((hierarchy) => hierarchy.isError);
   if (failedHierarchy)
     return (
@@ -56,14 +58,14 @@ export const RelationshipHierarchy = ({
   );
   if (!paths.length)
     return (
-      <Typography color="text.secondary">No hierarchy available.</Typography>
+      <Typography color="text.secondary">{t('views.noHierarchy')}</Typography>
     );
 
   return (
     <Stack spacing={0.5}>
       {paths.map((items) => (
         <Breadcrumbs
-          aria-label="Hierarchy"
+          aria-label={t('views.hierarchy')}
           key={items.map((item) => item.id).join(':')}
           sx={{ fontSize: '0.875rem' }}
         >

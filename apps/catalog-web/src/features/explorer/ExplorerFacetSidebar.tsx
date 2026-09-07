@@ -11,6 +11,7 @@ import {
 } from '@mui/material';
 import { useQuery } from '@tanstack/react-query';
 import { useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import type { Attribute, AttributeContext } from '../entities/api';
 import { getBlueprintByCode } from '../entities/api';
 import { entityQueryKeys } from '../entities/query-keys';
@@ -53,48 +54,53 @@ export const ExplorerFacetSidebar = ({
   version,
   onContextChange,
   onUpdate,
-}: Props) => (
-  <Paper
-    component="aside"
-    sx={{
-      alignSelf: 'start',
-      maxHeight: { md: 'calc(100dvh - 104px)' },
-      overflowY: { md: 'auto' },
-      p: 2,
-      position: { md: 'sticky' },
-      top: { md: 88 },
-    }}
-  >
-    <Typography variant="subtitle2">Relationship filters</Typography>
-    <TextField
-      fullWidth
-      label="Context"
-      onChange={(event) => onContextChange(event.target.value)}
-      select
-      size="small"
-      sx={{ mt: 1 }}
-      value={contextCode}
+}: Props) => {
+  const { t } = useTranslation();
+  return (
+    <Paper
+      component="aside"
+      sx={{
+        alignSelf: 'start',
+        maxHeight: { md: 'calc(100dvh - 104px)' },
+        overflowY: { md: 'auto' },
+        p: 2,
+        position: { md: 'sticky' },
+        top: { md: 88 },
+      }}
     >
-      {contexts.map((context) => (
-        <MenuItem key={context.id} value={context.code}>
-          {context.code === 'default' ? 'Default' : context.code}
-        </MenuItem>
+      <Typography variant="subtitle2">
+        {t('explorer.relationshipFilters')}
+      </Typography>
+      <TextField
+        fullWidth
+        label={t('explorer.context')}
+        onChange={(event) => onContextChange(event.target.value)}
+        select
+        size="small"
+        sx={{ mt: 1 }}
+        value={contextCode}
+      >
+        {contexts.map((context) => (
+          <MenuItem key={context.id} value={context.code}>
+            {context.code === 'default' ? t('explorer.default') : context.code}
+          </MenuItem>
+        ))}
+      </TextField>
+      {facets.map((facet) => (
+        <Facet
+          blueprint={blueprint}
+          contextCode={contextCode}
+          contexts={contexts}
+          facet={facet}
+          key={facet.sourceRelationship.code}
+          onUpdate={onUpdate}
+          query={query}
+          version={version}
+        />
       ))}
-    </TextField>
-    {facets.map((facet) => (
-      <Facet
-        blueprint={blueprint}
-        contextCode={contextCode}
-        contexts={contexts}
-        facet={facet}
-        key={facet.sourceRelationship.code}
-        onUpdate={onUpdate}
-        query={query}
-        version={version}
-      />
-    ))}
-  </Paper>
-);
+    </Paper>
+  );
+};
 
 const Facet = ({
   blueprint,
@@ -105,6 +111,7 @@ const Facet = ({
   query,
   version,
 }: FacetProps) => {
+  const { t } = useTranslation();
   const [expanded, setExpanded] = useState(facet.selectedIds.length > 0);
   const targetBlueprint = useQuery({
     queryKey: entityQueryKeys.blueprintByCode(
@@ -140,7 +147,10 @@ const Facet = ({
       </AccordionSummary>
       <AccordionDetails>
         {targetBlueprint.isPending ? (
-          <CircularProgress aria-label="Loading facet options" size={20} />
+          <CircularProgress
+            aria-label={t('explorer.loadingFacetOptions')}
+            size={20}
+          />
         ) : targetBlueprint.isError ? (
           <Typography color="error" variant="body2">
             {targetBlueprint.error.message}

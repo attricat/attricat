@@ -17,6 +17,7 @@ import {
   Typography,
 } from '@mui/material';
 import { useEffect, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { PageContainer } from '../../components/PageContainer';
 import { PageHeader } from '../../components/PageHeader';
 import { ExtensionOutlet } from '../extensions/ExtensionOutlet';
@@ -42,8 +43,8 @@ fields = ["name"]
 code = "name"
 value_type = "string"
 `,
-    description: 'A minimal entity with a name.',
-    label: 'Basic entity',
+    descriptionKey: 'blueprints.basicEntityDescription',
+    labelKey: 'blueprints.basicEntity',
   },
   {
     definition: `format_version = 1
@@ -82,9 +83,8 @@ max_bytes = 10485760
 purposes = ["product_image"]
 image_only = true
 `,
-    description:
-      'A product with identifiers, price, description, and image uploads.',
-    label: 'Product',
+    descriptionKey: 'blueprints.productDescription',
+    labelKey: 'blueprints.product',
   },
   {
     definition: `format_version = 1
@@ -100,8 +100,8 @@ value_type = "string"
 code = "meta_description"
 value_type = "string"
 `,
-    description: 'Reusable SEO fields for inclusion in entities.',
-    label: 'SEO mixin',
+    descriptionKey: 'blueprints.seoMixinDescription',
+    labelKey: 'blueprints.seoMixin',
   },
 ] as const;
 
@@ -134,6 +134,7 @@ export const BlueprintEditorPage = ({
   blueprintId?: string;
   sourceVersion?: number;
 }) => {
+  const { t } = useTranslation();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const source = useQuery({
@@ -184,7 +185,7 @@ export const BlueprintEditorPage = ({
   });
 
   const selectTemplate = (index: number) => {
-    if (isDirty && !window.confirm('Replace your unsaved blueprint changes?'))
+    if (isDirty && !window.confirm(t('blueprints.replaceUnsavedChanges')))
       return;
     setTemplateIndex(index);
     setEditedDefinition(null);
@@ -192,7 +193,7 @@ export const BlueprintEditorPage = ({
   };
 
   const cancel = () => {
-    if (isDirty && !window.confirm('Discard unsaved blueprint changes?'))
+    if (isDirty && !window.confirm(t('blueprints.discardUnsavedChanges')))
       return;
     navigate(
       blueprintId
@@ -204,7 +205,7 @@ export const BlueprintEditorPage = ({
   if (blueprintId && source.isPending) {
     return (
       <PageContainer>
-        <Typography>Loading blueprint source...</Typography>
+        <Typography>{t('blueprints.loadingBlueprintSource')}</Typography>
       </PageContainer>
     );
   }
@@ -219,20 +220,28 @@ export const BlueprintEditorPage = ({
         <PageHeader
           description={
             blueprintId
-              ? `Creating a draft from version ${sourceVersion}. Publishing remains a separate step.`
-              : 'Start a draft blueprint from the included valid TOML template.'
+              ? t('blueprints.newRevisionDescription', {
+                  version: sourceVersion,
+                })
+              : t('blueprints.newBlueprintDescription')
           }
-          title={blueprintId ? 'New blueprint revision' : 'New blueprint'}
+          title={
+            blueprintId
+              ? t('blueprints.newBlueprintRevision')
+              : t('blueprints.newBlueprint')
+          }
         />
         <Stack direction="row" spacing={1}>
           {!blueprintId && (
             <Button onClick={() => setTemplateDialogOpen(true)}>
-              Examples
+              {t('blueprints.examples')}
             </Button>
           )}
-          {isDirty && <Chip color="warning" label="Unsaved changes" />}
+          {isDirty && (
+            <Chip color="warning" label={t('blueprints.unsavedChanges')} />
+          )}
           <Button disabled={save.isPending} onClick={cancel}>
-            Cancel
+            {t('blueprints.cancel')}
           </Button>
           <Button
             disabled={
@@ -243,7 +252,9 @@ export const BlueprintEditorPage = ({
             onClick={() => save.mutate()}
             variant="contained"
           >
-            {save.isPending ? 'Saving…' : 'Save draft'}
+            {save.isPending
+              ? t('blueprints.saving')
+              : t('blueprints.saveDraft')}
           </Button>
         </Stack>
       </Stack>
@@ -260,12 +271,14 @@ export const BlueprintEditorPage = ({
       ))}
       {source.isError && (
         <Alert severity="error" sx={{ mt: 3 }}>
-          Could not load the revision source: {source.error.message}
+          {t('blueprints.couldNotLoadSource', {
+            message: source.error.message,
+          })}
         </Alert>
       )}
       {save.isError && (
         <Alert severity="error" sx={{ mt: 3 }}>
-          The draft was not saved. {save.error.message}
+          {t('blueprints.draftNotSaved', { message: save.error.message })}
         </Alert>
       )}
       {!blueprintId && (
@@ -275,10 +288,10 @@ export const BlueprintEditorPage = ({
           onClose={() => setTemplateDialogOpen(false)}
           open={templateDialogOpen}
         >
-          <DialogTitle>Start from an example</DialogTitle>
+          <DialogTitle>{t('blueprints.startFromExample')}</DialogTitle>
           <DialogContent>
             <Typography color="text.secondary">
-              Choose a valid template, then tailor its TOML in the editor.
+              {t('blueprints.templateDescription')}
             </Typography>
             <Box
               sx={{
@@ -293,7 +306,7 @@ export const BlueprintEditorPage = ({
             >
               {blueprintTemplates.map((template, index) => (
                 <Card
-                  key={template.label}
+                  key={template.labelKey}
                   sx={{
                     border: templateIndex === index ? 2 : 1,
                     borderColor:
@@ -304,10 +317,10 @@ export const BlueprintEditorPage = ({
                   <CardActionArea onClick={() => selectTemplate(index)}>
                     <CardContent>
                       <Typography component="h3" variant="h6">
-                        {template.label}
+                        {t(template.labelKey)}
                       </Typography>
                       <Typography color="text.secondary" sx={{ mt: 1 }}>
-                        {template.description}
+                        {t(template.descriptionKey)}
                       </Typography>
                     </CardContent>
                   </CardActionArea>
@@ -317,7 +330,7 @@ export const BlueprintEditorPage = ({
           </DialogContent>
           <DialogActions>
             <Button onClick={() => setTemplateDialogOpen(false)}>
-              Dismiss
+              {t('blueprints.dismiss')}
             </Button>
           </DialogActions>
         </Dialog>
@@ -357,8 +370,8 @@ export const BlueprintEditorPage = ({
       </Box>
       <Typography color="text.secondary" sx={{ mt: 1 }} variant="body2">
         {blueprintId && !isDirty
-          ? 'Make a change before saving a new draft revision.'
-          : 'Press Ctrl+S (or Command+S) to save this draft.'}
+          ? t('blueprints.makeChangeBeforeSaving')
+          : t('blueprints.saveShortcut')}
       </Typography>
     </PageContainer>
   );

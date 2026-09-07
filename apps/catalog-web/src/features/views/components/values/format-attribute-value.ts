@@ -1,8 +1,10 @@
+import i18n from '../../../../i18n';
 import type { Attribute } from '../../../entities/api';
 
 export const formatAttributeValue = (attribute: Attribute, value: unknown) => {
-  if (value === null || value === undefined) return 'Not set';
-  if (attribute.value_type === 'boolean') return value ? 'Yes' : 'No';
+  if (value === null || value === undefined) return i18n.t('views.notSet');
+  if (attribute.value_type === 'boolean')
+    return value ? i18n.t('views.yes') : i18n.t('views.no');
   if (attribute.value_type === 'date' && typeof value === 'string') {
     return new Intl.DateTimeFormat(undefined, {
       dateStyle: 'medium',
@@ -24,7 +26,7 @@ export const formatAttributeValue = (attribute: Attribute, value: unknown) => {
     const zone = (value as { time_zone?: unknown }).time_zone;
     return typeof time === 'string' && typeof zone === 'string'
       ? `${time} ${zone}`
-      : 'Invalid time';
+      : i18n.t('views.invalidTime');
   }
   return String(value);
 };

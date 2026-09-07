@@ -1,5 +1,6 @@
 import { useMutation, useQuery } from '@tanstack/react-query';
 import { useNavigate } from '@tanstack/react-router';
+import { useTranslation } from 'react-i18next';
 import { createEntity, getBlueprintByCode, listContexts } from './api';
 import { EntityForm } from './components/EntityForm';
 import { EntityPage } from './components/EntityPage';
@@ -7,6 +8,7 @@ import { attributeValueKinds } from './value-types';
 import { entityQueryKeys } from './query-keys';
 
 export const CreateEntityPage = () => {
+  const { t } = useTranslation();
   const navigate = useNavigate({ from: '/entities/new' });
   const blueprint = useMutation({
     mutationFn: ({ code, version }: { code: string; version?: number }) =>
@@ -28,10 +30,9 @@ export const CreateEntityPage = () => {
       relationships: { attribute_code: string; target_entity_ids: string[] }[];
     }) => {
       const resolved = blueprint.data;
-      if (!resolved)
-        throw new Error('Choose a blueprint before creating an entity');
+      if (!resolved) throw new Error(t('entities.chooseBeforeCreate'));
       if (!defaultContextId)
-        throw new Error('The default context is not available');
+        throw new Error(t('entities.defaultContextUnavailable'));
       return createEntity({
         blueprint: {
           code: resolved.blueprint.code,
@@ -61,7 +62,7 @@ export const CreateEntityPage = () => {
     },
   });
   return (
-    <EntityPage title="Create entity">
+    <EntityPage title={t('entities.createEntity')}>
       <EntityForm
         blueprint={blueprint.data}
         contextId={defaultContextId}
@@ -72,7 +73,11 @@ export const CreateEntityPage = () => {
         onSubmit={({ values, relationships }) =>
           create.mutate({ values, relationships })
         }
-        submitLabel={blueprint.data ? 'Create entity' : 'Load blueprint'}
+        submitLabel={
+          blueprint.data
+            ? t('entities.createEntity')
+            : t('entities.loadBlueprint')
+        }
       />
     </EntityPage>
   );

@@ -18,6 +18,8 @@ import {
   Typography,
 } from '@mui/material';
 import { useState } from 'react';
+import { useTranslation } from 'react-i18next';
+import i18n from '../../i18n';
 import { currentSession } from '../auth/api';
 import {
   createToken,
@@ -28,12 +30,17 @@ import {
 import { profileQueryKeys } from './query-keys';
 
 const formatTime = (value: string | null) =>
-  value ? new Date(value).toLocaleString() : 'Never';
+  value
+    ? new Intl.DateTimeFormat(i18n.language, {
+        dateStyle: 'medium',
+        timeStyle: 'medium',
+      }).format(new Date(value))
+    : i18n.t('profile.never');
 
 const tokenPermissionPresets = [
   {
-    name: 'Catalog generator',
-    description: 'Seed blueprints, contexts, products, and relationships.',
+    nameKey: 'profile.catalogGenerator',
+    descriptionKey: 'profile.catalogGeneratorDescription',
     permissions: [
       'blueprints.read',
       'blueprints.write',
@@ -44,13 +51,13 @@ const tokenPermissionPresets = [
     ],
   },
   {
-    name: 'Read-only catalog',
-    description: 'Browse blueprints, contexts, and products without changes.',
+    nameKey: 'profile.readOnlyCatalog',
+    descriptionKey: 'profile.readOnlyCatalogDescription',
     permissions: ['blueprints.read', 'contexts.read', 'entities.read'],
   },
   {
-    name: 'Entity importer',
-    description: 'Read catalog structure and create or update products.',
+    nameKey: 'profile.entityImporter',
+    descriptionKey: 'profile.entityImporterDescription',
     permissions: ['blueprints.read', 'contexts.read', 'entities.write'],
   },
 ];
@@ -61,31 +68,32 @@ const SecretDialog = ({
 }: {
   secret?: string;
   onClose: () => void;
-}) => (
-  <Dialog onClose={onClose} open={Boolean(secret)}>
-    <DialogTitle>Copy this secret now</DialogTitle>
-    <DialogContent>
-      <Stack spacing={2} sx={{ minWidth: 360 }}>
-        <Alert severity="warning">
-          This secret is shown only once. Store it securely before closing this
-          dialog.
-        </Alert>
-        <TextField
-          slotProps={{ input: { readOnly: true } }}
-          value={secret ?? ''}
-        />
-        <Button
-          onClick={() => navigator.clipboard?.writeText(secret ?? '')}
-          variant="contained"
-        >
-          Copy secret
-        </Button>
-      </Stack>
-    </DialogContent>
-  </Dialog>
-);
+}) => {
+  const { t } = useTranslation();
+  return (
+    <Dialog onClose={onClose} open={Boolean(secret)}>
+      <DialogTitle>{t('profile.copySecretTitle')}</DialogTitle>
+      <DialogContent>
+        <Stack spacing={2} sx={{ minWidth: 360 }}>
+          <Alert severity="warning">{t('profile.copySecretWarning')}</Alert>
+          <TextField
+            slotProps={{ input: { readOnly: true } }}
+            value={secret ?? ''}
+          />
+          <Button
+            onClick={() => navigator.clipboard?.writeText(secret ?? '')}
+            variant="contained"
+          >
+            {t('profile.copySecret')}
+          </Button>
+        </Stack>
+      </DialogContent>
+    </Dialog>
+  );
+};
 
 const PersonalTokens = ({ canManage }: { canManage: boolean }) => {
+  const { t } = useTranslation();
   const client = useQueryClient();
   const [secret, setSecret] = useState<string>();
   const [error, setError] = useState<string>();
@@ -112,7 +120,7 @@ const PersonalTokens = ({ canManage }: { canManage: boolean }) => {
           expiresAt &&
           (Number.isNaN(expiresAt.getTime()) || expiresAt <= new Date())
         ) {
-          throw new Error('Token expiry must be in the future.');
+          throw new Error(t('profile.tokenExpiry'));
         }
         const token = await createToken({
           label: value.label,
@@ -123,19 +131,14 @@ const PersonalTokens = ({ canManage }: { canManage: boolean }) => {
         refresh();
       } catch (reason) {
         setError(
-          reason instanceof Error ? reason.message : 'Could not create token',
+          reason instanceof Error ? reason.message : t('profile.createFailed'),
         );
       }
     },
   });
 
   if (!canManage) {
-    return (
-      <Alert severity="info">
-        Personal token management is unavailable because you do not have the
-        required permission.
-      </Alert>
-    );
+    return <Alert severity="info">{t('profile.tokenUnavailable')}</Alert>;
   }
   return (
     <Stack spacing={2}>
@@ -146,7 +149,7 @@ const PersonalTokens = ({ canManage }: { canManage: boolean }) => {
         <Alert severity="error">{permissions.error.message}</Alert>
       )}
       <Paper>
-        <List aria-label="Personal API tokens">
+        <List aria-label={t('profile.tokenList')}>
           {tokens.data?.map((token) => (
             <ListItem
               divider
@@ -161,20 +164,28 @@ const PersonalTokens = ({ canManage }: { canManage: boolean }) => {
                         .catch((reason) => setError(reason.message))
                     }
                   >
-                    Revoke
+                    {t('profile.revoke')}
                   </Button>
                 )
               }
             >
               <ListItemText
                 primary={token.label}
-                secondary={`Permissions: ${token.permissions.join(', ')} · Created: ${formatTime(token.created_at)} · Last used: ${formatTime(token.last_used_at)} · Expires: ${formatTime(token.expires_at)} · Revoked: ${token.revoked_at ? formatTime(token.revoked_at) : 'No'}`}
+                secondary={t('profile.tokenDetails', {
+                  permissions: token.permissions.join(', '),
+                  created: formatTime(token.created_at),
+                  lastUsed: formatTime(token.last_used_at),
+                  expires: formatTime(token.expires_at),
+                  revoked: token.revoked_at
+                    ? formatTime(token.revoked_at)
+                    : t('profile.no'),
+                })}
               />
             </ListItem>
           ))}
           {tokens.data?.length === 0 && (
             <ListItem>
-              <ListItemText primary="No personal API tokens yet." />
+              <ListItemText primary={t('profile.noTokens')} />
             </ListItem>
           )}
         </List>
@@ -188,11 +199,11 @@ const PersonalTokens = ({ canManage }: { canManage: boolean }) => {
         sx={{ p: 2 }}
       >
         <Stack spacing={1}>
-          <Typography variant="h6">Create personal token</Typography>
+          <Typography variant="h6">{t('profile.createToken')}</Typography>
           <form.Field name="label">
             {(field) => (
               <TextField
-                label="Label"
+                label={t('profile.label')}
                 onChange={(event) => field.handleChange(event.target.value)}
                 value={field.state.value}
               />
@@ -206,7 +217,7 @@ const PersonalTokens = ({ canManage }: { canManage: boolean }) => {
               return (
                 <>
                   <Typography variant="subtitle2">
-                    Permission presets
+                    {t('profile.permissionPresets')}
                   </Typography>
                   <Stack direction={{ sm: 'row', xs: 'column' }} spacing={1}>
                     {tokenPermissionPresets.map((preset) => {
@@ -216,7 +227,7 @@ const PersonalTokens = ({ canManage }: { canManage: boolean }) => {
                           )
                         : false;
                       return (
-                        <Box key={preset.name} sx={{ flex: 1 }}>
+                        <Box key={preset.nameKey} sx={{ flex: 1 }}>
                           <Button
                             disabled={!permissions.data || unavailable}
                             fullWidth
@@ -226,19 +237,19 @@ const PersonalTokens = ({ canManage }: { canManage: boolean }) => {
                             type="button"
                             variant="outlined"
                           >
-                            {preset.name}
+                            {t(preset.nameKey)}
                           </Button>
                           <Typography variant="caption">
                             {unavailable
-                              ? 'Not available with your current grants.'
-                              : preset.description}
+                              ? t('profile.unavailable')
+                              : t(preset.descriptionKey)}
                           </Typography>
                         </Box>
                       );
                     })}
                   </Stack>
                   <Typography variant="subtitle2">
-                    Custom permissions
+                    {t('profile.customPermissions')}
                   </Typography>
                   {permissions.data?.map((permission) => (
                     <FormControlLabel
@@ -268,7 +279,7 @@ const PersonalTokens = ({ canManage }: { canManage: boolean }) => {
             {(field) => (
               <TextField
                 slotProps={{ inputLabel: { shrink: true } }}
-                label="Expires at (optional)"
+                label={t('profile.expiresAt')}
                 onChange={(event) => field.handleChange(event.target.value)}
                 type="datetime-local"
                 value={field.state.value}
@@ -276,7 +287,7 @@ const PersonalTokens = ({ canManage }: { canManage: boolean }) => {
             )}
           </form.Field>
           <Button type="submit" variant="contained">
-            Create token
+            {t('profile.create')}
           </Button>
         </Stack>
       </Paper>
@@ -285,6 +296,7 @@ const PersonalTokens = ({ canManage }: { canManage: boolean }) => {
 };
 
 export const ProfilePage = () => {
+  const { t } = useTranslation();
   const session = useQuery({
     queryKey: ['auth', 'session'],
     queryFn: currentSession,
@@ -292,25 +304,37 @@ export const ProfilePage = () => {
   const account = session.data;
   return (
     <Box sx={{ maxWidth: 1000, mx: 'auto', p: 3 }}>
-      <Typography variant="h4">Profile</Typography>
+      <Typography variant="h4">{t('profile.title')}</Typography>
       {session.isError && (
         <Alert severity="error">{session.error.message}</Alert>
       )}
       <Stack spacing={3} sx={{ mt: 3 }}>
         <Paper sx={{ p: 2 }}>
-          <Typography variant="h6">Account details</Typography>
+          <Typography variant="h6">{t('profile.accountDetails')}</Typography>
           <Typography>
-            Display name: {account?.display_name ?? 'Not set'}
+            {t('profile.displayName', {
+              value: account?.display_name ?? t('profile.notSet'),
+            })}
           </Typography>
-          <Typography>Email: {account?.email ?? 'Loading…'}</Typography>
-          <Typography>User ID: {account?.user_id ?? 'Loading…'}</Typography>
           <Typography>
-            Active workspace: {account?.workspace_id ?? 'Loading…'}
+            {t('profile.email', {
+              value: account?.email ?? t('profile.loading'),
+            })}
+          </Typography>
+          <Typography>
+            {t('profile.userId', {
+              value: account?.user_id ?? t('profile.loading'),
+            })}
+          </Typography>
+          <Typography>
+            {t('profile.activeWorkspace', {
+              value: account?.workspace_id ?? t('profile.loading'),
+            })}
           </Typography>
         </Paper>
         <Box id="personal-api-tokens">
           <Typography gutterBottom variant="h5">
-            Personal API tokens
+            {t('profile.tokenList')}
           </Typography>
           <PersonalTokens
             canManage={account?.capabilities?.tokens_manage === true}

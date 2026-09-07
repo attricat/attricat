@@ -16,6 +16,7 @@ import {
   Typography,
 } from '@mui/material';
 import { useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { PageContainer } from '../../components/PageContainer';
 import { PageHeader } from '../../components/PageHeader';
 import { listBlueprints } from './api';
@@ -23,6 +24,7 @@ import { formatBlueprintDateTime } from './date-time';
 import { blueprintQueryKeys } from './query-keys';
 
 export const BlueprintsPage = () => {
+  const { t } = useTranslation();
   const [query, setQuery] = useState('');
   const blueprints = useQuery({
     queryKey: blueprintQueryKeys.catalogue(),
@@ -47,21 +49,23 @@ export const BlueprintsPage = () => {
             to="/manage/blueprints/new"
             variant="contained"
           >
-            New blueprint
+            {t('blueprints.newBlueprintAction')}
           </Button>
         }
-        description="Inspect every entity and mixin blueprint, including unpublished revisions."
-        title="Blueprints"
+        description={t('blueprints.blueprintsDescription')}
+        title={t('blueprints.blueprints')}
       />
       <TextField
-        label="Filter blueprints"
+        label={t('blueprints.filterBlueprints')}
         onChange={(event) => setQuery(event.target.value)}
-        placeholder="Name, code, kind, or status"
+        placeholder={t('blueprints.filterBlueprintsPlaceholder')}
         sx={{ mt: 3, width: { xs: '100%', sm: 420 } }}
         value={query}
       />
       {blueprints.isPending && (
-        <Typography sx={{ mt: 3 }}>Loading blueprints...</Typography>
+        <Typography sx={{ mt: 3 }}>
+          {t('blueprints.loadingBlueprints')}
+        </Typography>
       )}
       {blueprints.isError && (
         <Alert severity="error" sx={{ mt: 3 }}>
@@ -72,20 +76,21 @@ export const BlueprintsPage = () => {
         <Paper component="section" sx={{ mt: 3 }}>
           <Box sx={{ borderBottom: 1, borderColor: 'divider', p: 2 }}>
             <Typography>
-              {matchingBlueprints.length} blueprint
-              {matchingBlueprints.length === 1 ? '' : 's'}
+              {t('blueprints.blueprintCount', {
+                count: matchingBlueprints.length,
+              })}
             </Typography>
           </Box>
           <Box sx={{ overflowX: 'auto' }}>
             <Table size="small">
               <TableHead>
                 <TableRow>
-                  <TableCell>Blueprint</TableCell>
-                  <TableCell>Kind</TableCell>
-                  <TableCell>Latest version</TableCell>
-                  <TableCell>Status</TableCell>
-                  <TableCell>Published</TableCell>
-                  <TableCell>Updated</TableCell>
+                  <TableCell>{t('blueprints.blueprint')}</TableCell>
+                  <TableCell>{t('blueprints.kind')}</TableCell>
+                  <TableCell>{t('blueprints.latestVersionColumn')}</TableCell>
+                  <TableCell>{t('blueprints.status')}</TableCell>
+                  <TableCell>{t('blueprints.published')}</TableCell>
+                  <TableCell>{t('blueprints.updated')}</TableCell>
                   <TableCell />
                 </TableRow>
               </TableHead>
@@ -138,7 +143,7 @@ export const BlueprintsPage = () => {
                         }}
                         to="/manage/blueprints/$blueprintId/revisions/$version/new"
                       >
-                        <Button size="small">Edit</Button>
+                        <Button size="small">{t('blueprints.edit')}</Button>
                       </Link>
                     </TableCell>
                   </TableRow>
@@ -148,7 +153,7 @@ export const BlueprintsPage = () => {
           </Box>
           {matchingBlueprints.length === 0 && (
             <Typography sx={{ p: 2 }}>
-              No blueprints matched this filter.
+              {t('blueprints.noMatchingBlueprints')}
             </Typography>
           )}
         </Paper>

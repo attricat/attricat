@@ -1,4 +1,5 @@
 import { Button } from '@mui/material';
+import i18n from '../i18n';
 
 export const LoadMoreButton = ({
   disabled = false,
@@ -17,6 +18,6 @@ export const LoadMoreButton = ({
     size="medium"
     variant="contained"
   >
-    {isLoading ? 'Loading...' : 'Load more'}
+    {isLoading ? i18n.t('common.loading') : i18n.t('common.loadMore')}
   </Button>
 );

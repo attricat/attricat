@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from '@tanstack/react-router';
 import {
@@ -55,6 +56,7 @@ const SectionError = ({ error }: { error: Error | null }) =>
   error ? <Alert severity="error">{error.message}</Alert> : null;
 
 export const DataHealthPage = ({ search }: { search: DataHealthSearch }) => {
+  const { t } = useTranslation();
   const staleAfterDays = search.staleAfterDays ?? 90;
   const navigate = useNavigate({ from: '/manage/data-health' });
   const queryClient = useQueryClient();
@@ -101,7 +103,8 @@ export const DataHealthPage = ({ search }: { search: DataHealthSearch }) => {
   });
   const refresh = useMutation({
     mutationFn: refreshDataHealth,
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['data-health'] }),
+    onSuccess: () =>
+      queryClient.invalidateQueries({ queryKey: ['data-health'] }),
   });
 
   return (
@@ -118,8 +121,8 @@ export const DataHealthPage = ({ search }: { search: DataHealthSearch }) => {
             staleAfterDays={staleAfterDays}
           />
         }
-        description="Monitor catalog currency, freshness, correctness, and storage growth."
-        title="Data health"
+        description={t('dataHealth.description')}
+        title={t('dataHealth.title')}
       />
       <SectionError error={summary.error} />
       {summary.data && (
@@ -129,11 +132,14 @@ export const DataHealthPage = ({ search }: { search: DataHealthSearch }) => {
           sx={{ flexWrap: 'wrap', mt: 4 }}
         >
           {[
-            ['Outdated entities', summary.data.outdated_entities],
-            ['Active entities', summary.data.active_entities],
-            [`Stale after ${staleAfterDays} days`, summary.data.stale_entities],
+            [t('dataHealth.outdatedEntities'), summary.data.outdated_entities],
+            [t('dataHealth.activeEntities'), summary.data.active_entities],
             [
-              'Deleted relationship targets',
+              t('dataHealth.staleAfterDays', { count: staleAfterDays }),
+              summary.data.stale_entities,
+            ],
+            [
+              t('dataHealth.deletedRelationshipTargets'),
               summary.data.deleted_relationship_targets,
             ],
           ].map(([label, value]) => (
@@ -147,13 +153,13 @@ export const DataHealthPage = ({ search }: { search: DataHealthSearch }) => {
         </Stack>
       )}
       <Paper sx={{ mt: 4, p: 2 }}>
-        <Typography variant="h5">Storage</Typography>
+        <Typography variant="h5">{t('dataHealth.storage')}</Typography>
         <SectionError error={storage.error} />
         <Table size="small">
           <TableHead>
             <TableRow>
-              <TableCell>Table</TableCell>
-              <TableCell align="right">Total size</TableCell>
+              <TableCell>{t('dataHealth.table')}</TableCell>
+              <TableCell align="right">{t('dataHealth.totalSize')}</TableCell>
             </TableRow>
           </TableHead>
           <TableBody>
@@ -168,17 +174,19 @@ export const DataHealthPage = ({ search }: { search: DataHealthSearch }) => {
       </Paper>
       <Paper sx={{ mt: 4, overflowX: 'auto' }}>
         <Box sx={{ p: 2 }}>
-          <Typography variant="h5">Blueprint health</Typography>
+          <Typography variant="h5">
+            {t('dataHealth.blueprintHealth')}
+          </Typography>
         </Box>
         <SectionError error={blueprints.error} />
         <Table size="small">
           <TableHead>
             <TableRow>
-              <TableCell>Blueprint</TableCell>
-              <TableCell>Entities</TableCell>
-              <TableCell>Outdated</TableCell>
-              <TableCell>Stale</TableCell>
-              <TableCell>Oldest update</TableCell>
+              <TableCell>{t('dataHealth.blueprint')}</TableCell>
+              <TableCell>{t('dataHealth.entities')}</TableCell>
+              <TableCell>{t('dataHealth.outdated')}</TableCell>
+              <TableCell>{t('dataHealth.stale')}</TableCell>
+              <TableCell>{t('dataHealth.oldestUpdate')}</TableCell>
             </TableRow>
           </TableHead>
           <TableBody>
@@ -197,7 +205,9 @@ export const DataHealthPage = ({ search }: { search: DataHealthSearch }) => {
                     {blueprint.outdated_entities > 0 && (
                       <Chip
                         color="warning"
-                        label={`${blueprint.outdated_entities} outdated`}
+                        label={t('dataHealth.outdatedCount', {
+                          count: blueprint.outdated_entities,
+                        })}
                         size="small"
                       />
                     )}
@@ -213,7 +223,9 @@ export const DataHealthPage = ({ search }: { search: DataHealthSearch }) => {
         </Table>
       </Paper>
       <Paper sx={{ mt: 4, p: 2 }}>
-        <Typography variant="h5">Freshness distribution</Typography>
+        <Typography variant="h5">
+          {t('dataHealth.freshnessDistribution')}
+        </Typography>
         <SectionError error={freshness.error} />
         <Stack direction="row" spacing={3} sx={{ mt: 2 }}>
           {(freshness.data ?? []).map((band) => (
@@ -231,20 +243,21 @@ export const DataHealthPage = ({ search }: { search: DataHealthSearch }) => {
         sx={{ mt: 4 }}
       >
         <AccordionSummary expandIcon={<ExpandMoreIcon />}>
-          <Typography variant="h5">Default completeness</Typography>
+          <Typography variant="h5">
+            {t('dataHealth.defaultCompleteness')}
+          </Typography>
         </AccordionSummary>
         <AccordionDetails>
           <Typography color="text.secondary" sx={{ mb: 2 }}>
-            Complete entities provide every schema-required field in the default
-            context.
+            {t('dataHealth.completenessDescription')}
           </Typography>
           <SectionError error={completeness.error} />
           <Table size="small">
             <TableHead>
               <TableRow>
-                <TableCell>Blueprint</TableCell>
-                <TableCell>Active entities</TableCell>
-                <TableCell>Default complete</TableCell>
+                <TableCell>{t('dataHealth.blueprint')}</TableCell>
+                <TableCell>{t('dataHealth.activeEntities')}</TableCell>
+                <TableCell>{t('dataHealth.defaultComplete')}</TableCell>
               </TableRow>
             </TableHead>
             <TableBody>
@@ -262,7 +275,9 @@ export const DataHealthPage = ({ search }: { search: DataHealthSearch }) => {
                       {item.outdated_entities > 0 && (
                         <Chip
                           color="warning"
-                          label={`${item.outdated_entities} outdated`}
+                          label={t('dataHealth.outdatedCount', {
+                            count: item.outdated_entities,
+                          })}
                           size="small"
                         />
                       )}
@@ -278,16 +293,20 @@ export const DataHealthPage = ({ search }: { search: DataHealthSearch }) => {
       </Accordion>
       <Accordion onChange={(_, expanded) => setShowContexts(expanded)}>
         <AccordionSummary expandIcon={<ExpandMoreIcon />}>
-          <Typography variant="h5">Context coverage</Typography>
+          <Typography variant="h5">
+            {t('dataHealth.contextCoverage')}
+          </Typography>
         </AccordionSummary>
         <AccordionDetails>
           <SectionError error={contexts.error} />
           <Table size="small">
             <TableHead>
               <TableRow>
-                <TableCell>Context</TableCell>
-                <TableCell>Entities with direct values</TableCell>
-                <TableCell>Current direct values</TableCell>
+                <TableCell>{t('dataHealth.context')}</TableCell>
+                <TableCell>
+                  {t('dataHealth.entitiesWithDirectValues')}
+                </TableCell>
+                <TableCell>{t('dataHealth.currentDirectValues')}</TableCell>
               </TableRow>
             </TableHead>
             <TableBody>
@@ -304,17 +323,21 @@ export const DataHealthPage = ({ search }: { search: DataHealthSearch }) => {
       </Accordion>
       <Accordion onChange={(_, expanded) => setShowRelationships(expanded)}>
         <AccordionSummary expandIcon={<ExpandMoreIcon />}>
-          <Typography variant="h5">Relationship integrity</Typography>
+          <Typography variant="h5">
+            {t('dataHealth.relationshipIntegrity')}
+          </Typography>
         </AccordionSummary>
         <AccordionDetails>
           <SectionError error={relationships.error} />
           <Table size="small">
             <TableHead>
               <TableRow>
-                <TableCell>Source</TableCell>
-                <TableCell>Attribute</TableCell>
-                <TableCell>Active edges</TableCell>
-                <TableCell>Deleted targets</TableCell>
+                <TableCell>{t('dataHealth.source')}</TableCell>
+                <TableCell>{t('dataHealth.attribute')}</TableCell>
+                <TableCell>{t('dataHealth.activeEdges')}</TableCell>
+                <TableCell>
+                  {t('dataHealth.deletedRelationshipTargets')}
+                </TableCell>
               </TableRow>
             </TableHead>
             <TableBody>

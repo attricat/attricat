@@ -1,5 +1,6 @@
 import InfoOutlinedIcon from '@mui/icons-material/InfoOutlined';
 import { MenuItem, TextField, Tooltip } from '@mui/material';
+import { useTranslation } from 'react-i18next';
 import type { Attribute } from '../api';
 import type { FileMetadata } from '../../files/schemas';
 import { attributeValueTypes } from '../value-types';
@@ -31,6 +32,7 @@ export const EntityAttributeEditor = ({
   showMigrationBadge: boolean;
   value: string;
 }) => {
+  const { t } = useTranslation();
   const migrationBadge = showMigrationBadge ? (
     <MigrationBadge message={migrationReviewMessage} />
   ) : null;
@@ -75,9 +77,9 @@ export const EntityAttributeEditor = ({
           onChange={(event) => onChange(event.target.value)}
           value={value}
         >
-          <MenuItem value="">Not set</MenuItem>
-          <MenuItem value="true">True</MenuItem>
-          <MenuItem value="false">False</MenuItem>
+          <MenuItem value="">{t('entities.notSet')}</MenuItem>
+          <MenuItem value="true">{t('entities.true')}</MenuItem>
+          <MenuItem value="false">{t('entities.false')}</MenuItem>
         </TextField>
       </>
     );
@@ -119,13 +121,11 @@ export const EntityAttributeEditor = ({
   );
 };
 
-const MigrationBadge = ({ message }: { message?: string }) => (
-  <Tooltip
-    title={
-      message ??
-      'Review is necessary for this field to migrate to the current schema version.'
-    }
-  >
-    <InfoOutlinedIcon color="info" fontSize="small" />
-  </Tooltip>
-);
+const MigrationBadge = ({ message }: { message?: string }) => {
+  const { t } = useTranslation();
+  return (
+    <Tooltip title={message ?? t('entities.migrationReview')}>
+      <InfoOutlinedIcon color="info" fontSize="small" />
+    </Tooltip>
+  );
+};

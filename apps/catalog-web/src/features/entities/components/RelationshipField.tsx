@@ -1,4 +1,5 @@
 import { useQuery } from '@tanstack/react-query';
+import { useTranslation } from 'react-i18next';
 import {
   Checkbox,
   FormControl,
@@ -29,6 +30,7 @@ export const RelationshipField = ({
   onChange: (value: string) => void;
   value: string;
 }) => {
+  const { t } = useTranslation();
   const targetBlueprint = attribute.target_blueprint_code;
   const targets = useQuery({
     queryKey: entityQueryKeys.relationshipTargets(targetBlueprint),
@@ -42,7 +44,7 @@ export const RelationshipField = ({
         disabled={disabled}
         error={Boolean(error)}
         label={attribute.code}
-        helperText={error ?? 'Comma-separated entity UUIDs'}
+        helperText={error ?? t('entities.commaSeparatedUuids')}
         onChange={(event) => onChange(event.target.value)}
         value={value}
       />
@@ -100,11 +102,13 @@ export const RelationshipField = ({
           ))}
         </Select>
         {targets.isPending && (
-          <Typography variant="caption">Loading options...</Typography>
+          <Typography variant="caption">
+            {t('entities.loadingOptions')}
+          </Typography>
         )}
         {targets.isError && (
           <Typography color="error" variant="caption">
-            Could not load {targetBlueprint} entities.
+            {t('entities.couldNotLoadEntities', { blueprint: targetBlueprint })}
           </Typography>
         )}
         {error && (

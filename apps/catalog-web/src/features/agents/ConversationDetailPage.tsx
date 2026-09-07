@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link } from '@tanstack/react-router';
 import {
@@ -43,6 +44,7 @@ export const ConversationDetailPage = ({
 }: {
   conversationId: string;
 }) => {
+  const { t } = useTranslation();
   const queryClient = useQueryClient();
   const [content, setContent] = useState('');
   const [attachments, setAttachments] = useState<File[]>([]);
@@ -119,22 +121,22 @@ export const ConversationDetailPage = ({
         'schedule_skipped',
       ].forEach((type) => source.addEventListener(type, update));
       source.onerror = () =>
-        setStreamError('Live updates disconnected; reconnecting…');
+        setStreamError(t('agents.liveUpdatesDisconnected'));
       return source;
     });
     return () => sources.forEach((source) => source.close());
-  }, [queryClient, runs.data]); // EventSource reconnects with Last-Event-ID while a run remains active.
+  }, [queryClient, runs.data, t]); // EventSource reconnects with Last-Event-ID while a run remains active.
 
   return (
     <PageContainer>
       <PageHeader
         actions={
           <Button component={Link} to="/agents/schedules" variant="outlined">
-            Schedules
+            {t('agents.schedules')}
           </Button>
         }
-        eyebrow="Agent conversation"
-        title={conversation.data?.title ?? 'Conversation'}
+        eyebrow={t('agents.agentConversation')}
+        title={conversation.data?.title ?? t('agents.conversation')}
       />
       {(conversation.isError ||
         messages.isError ||
@@ -187,7 +189,9 @@ export const ConversationDetailPage = ({
             )}
           </Paper>
         ))}
-        {messages.isPending && <Typography>Loading conversation...</Typography>}
+        {messages.isPending && (
+          <Typography>{t('agents.loadingConversation')}</Typography>
+        )}
       </Stack>
       {approvals.data?.map((call) => (
         <Paper
@@ -195,7 +199,7 @@ export const ConversationDetailPage = ({
           sx={{ border: 1, borderColor: 'warning.main', mt: 3, p: 2 }}
         >
           <Typography variant="h6">
-            Approval needed: {call.tool_name}
+            {t('agents.approvalNeeded', { tool: call.tool_name })}
           </Typography>
           {call.change_summary && (
             <Typography sx={{ mt: 1 }}>{call.change_summary}</Typography>
@@ -205,7 +209,7 @@ export const ConversationDetailPage = ({
             elevation={0}
             sx={{ bgcolor: 'action.hover', mt: 1 }}
           >
-            <AccordionSummary>Show proposed input JSON</AccordionSummary>
+            <AccordionSummary>{t('agents.showProposedInput')}</AccordionSummary>
             <AccordionDetails>
               <Box
                 component="pre"
@@ -222,7 +226,7 @@ export const ConversationDetailPage = ({
               onClick={() => decide.mutate({ id: call.id, approved: true })}
               variant="contained"
             >
-              Approve
+              {t('agents.approve')}
             </Button>
             <Button
               color="error"
@@ -230,16 +234,19 @@ export const ConversationDetailPage = ({
               onClick={() => decide.mutate({ id: call.id, approved: false })}
               variant="outlined"
             >
-              Reject
+              {t('agents.reject')}
             </Button>
           </Stack>
         </Paper>
       ))}
       <Paper sx={{ mt: 3, p: 2 }}>
-        <Typography variant="h6">Run status</Typography>
+        <Typography variant="h6">{t('agents.runStatus')}</Typography>
         <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1, mt: 1 }}>
           {runs.isPending ? (
-            <CircularProgress aria-label="Loading run status" size={20} />
+            <CircularProgress
+              aria-label={t('agents.loadingRunStatus')}
+              size={20}
+            />
           ) : (
             latestRun && (
               <Chip
@@ -271,7 +278,7 @@ export const ConversationDetailPage = ({
           <Stack spacing={1} sx={{ flexGrow: 1 }}>
             <TextField
               fullWidth
-              label="Message"
+              label={t('agents.message')}
               multiline
               onChange={(event) => setContent(event.target.value)}
               onKeyDown={(event) => {
@@ -284,7 +291,7 @@ export const ConversationDetailPage = ({
                   submitMessage();
                 }
               }}
-              placeholder="Ask the agent to help with your catalog…"
+              placeholder={t('agents.messagePlaceholder')}
               value={content}
             />
             <input
@@ -299,7 +306,7 @@ export const ConversationDetailPage = ({
             />
             <Stack direction="row" spacing={1} sx={{ alignItems: 'center' }}>
               <Button onClick={() => attachmentInput.current?.click()}>
-                Add files
+                {t('agents.addFiles')}
               </Button>
               {attachments.map((file) => (
                 <Chip
@@ -322,7 +329,7 @@ export const ConversationDetailPage = ({
             type="submit"
             variant="contained"
           >
-            Send
+            {t('agents.send')}
           </Button>
         </Stack>
         {send.isError && (

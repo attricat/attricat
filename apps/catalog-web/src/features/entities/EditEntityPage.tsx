@@ -4,6 +4,7 @@ import CheckCircleOutlinedIcon from '@mui/icons-material/CheckCircleOutlined';
 import WarningAmberOutlinedIcon from '@mui/icons-material/WarningAmberOutlined';
 import { Alert, Box, MenuItem, TextField, Typography } from '@mui/material';
 import { useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import {
   getEntityForm,
   getCurrentBlueprint,
@@ -17,6 +18,7 @@ import { valuesForForm } from './entity-form';
 import { entityQueryKeys } from './query-keys';
 
 export const EditEntityPage = ({ entityId }: { entityId: string }) => {
+  const { t } = useTranslation();
   const navigate = useNavigate({ from: '/entities/$entityId/edit' });
   const [selectedContext, setSelectedContext] = useState('');
   const entityForm = useQuery({
@@ -56,10 +58,10 @@ export const EditEntityPage = ({ entityId }: { entityId: string }) => {
     enabled: contextId !== null,
   });
   return (
-    <EntityPage title="Edit entity">
+    <EntityPage title={t('entities.editEntity')}>
       <Box sx={{ mt: 1 }}>
         <Link params={{ entityId }} to="/entities/$entityId">
-          View preview
+          {t('entities.viewPreview')}
         </Link>
         {' | '}
         {currentBlueprint.data &&
@@ -77,11 +79,11 @@ export const EditEntityPage = ({ entityId }: { entityId: string }) => {
                 }}
               >
                 <WarningAmberOutlinedIcon fontSize="small" />
-                Schema is outdated
+                {t('entities.schemaOutdated')}
               </Typography>
               {' | '}
               <Link params={{ entityId }} to="/entities/$entityId/migrate">
-                Upgrade blueprint
+                {t('entities.upgradeBlueprint')}
               </Link>
             </>
           ) : (
@@ -90,12 +92,12 @@ export const EditEntityPage = ({ entityId }: { entityId: string }) => {
               sx={{ display: 'inline-flex', gap: 0.5, verticalAlign: 'middle' }}
             >
               <CheckCircleOutlinedIcon color="success" fontSize="small" />
-              Matches current schema
+              {t('entities.matchesCurrentSchema')}
             </Typography>
           ))}
       </Box>
       {entityForm.isPending && (
-        <Typography sx={{ mt: 4 }}>Loading entity...</Typography>
+        <Typography sx={{ mt: 4 }}>{t('entities.loadingEntity')}</Typography>
       )}
       {(entityForm.error || update.error) && (
         <Alert severity="error" sx={{ mt: 4 }}>
@@ -112,7 +114,7 @@ export const EditEntityPage = ({ entityId }: { entityId: string }) => {
           <TextField
             select
             fullWidth
-            label="Context"
+            label={t('entities.context')}
             onChange={(event) => setSelectedContext(event.target.value)}
             sx={{ mt: 4 }}
             value={contextId ?? ''}
@@ -138,7 +140,7 @@ export const EditEntityPage = ({ entityId }: { entityId: string }) => {
             )}
             isLoadingBlueprint={update.isPending}
             onSubmit={(input) => update.mutate(input)}
-            submitLabel="Save changes"
+            submitLabel={t('entities.saveChanges')}
           />
         </>
       )}

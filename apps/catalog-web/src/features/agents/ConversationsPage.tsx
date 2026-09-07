@@ -13,9 +13,11 @@ import {
 import { PageContainer } from '../../components/PageContainer';
 import { PageHeader } from '../../components/PageHeader';
 import { listConversations } from './api';
+import { useTranslation } from 'react-i18next';
 import { agentQueryKeys } from './query-keys';
 
 export const ConversationsPage = () => {
+  const { i18n, t } = useTranslation();
   const conversations = useQuery({
     queryKey: agentQueryKeys.conversations(),
     queryFn: listConversations,
@@ -25,11 +27,11 @@ export const ConversationsPage = () => {
       <PageHeader
         actions={
           <Button component={Link} to="/agents/new" variant="contained">
-            New conversation
+            {t('agents.newConversation')}
           </Button>
         }
-        description="Ask the Catalog agent to inspect and change your workspace."
-        title="Agent conversations"
+        description={t('agents.conversationDescription')}
+        title={t('agents.agentConversations')}
       />
       {conversations.isError && (
         <Alert severity="error" sx={{ mt: 3 }}>
@@ -46,8 +48,15 @@ export const ConversationsPage = () => {
               >
                 <ListItemButton>
                   <ListItemText
-                    primary={conversation.title || 'Untitled conversation'}
-                    secondary={`Updated ${new Intl.DateTimeFormat(undefined, { dateStyle: 'medium', timeStyle: 'short' }).format(new Date(conversation.updated_at))}`}
+                    primary={
+                      conversation.title || t('agents.untitledConversation')
+                    }
+                    secondary={t('agents.updatedAt', {
+                      date: new Intl.DateTimeFormat(i18n.language, {
+                        dateStyle: 'medium',
+                        timeStyle: 'short',
+                      }).format(new Date(conversation.updated_at)),
+                    })}
                   />
                 </ListItemButton>
               </Link>
@@ -55,14 +64,14 @@ export const ConversationsPage = () => {
           ))}
           {conversations.isPending && (
             <ListItem>
-              <Typography>Loading conversations...</Typography>
+              <Typography>{t('agents.loadingConversations')}</Typography>
             </ListItem>
           )}
           {conversations.data?.length === 0 && (
             <ListItem>
               <ListItemText
-                primary="No conversations yet."
-                secondary="Start a thread to work with the agent."
+                primary={t('agents.noConversations')}
+                secondary={t('agents.noConversationsDescription')}
               />
             </ListItem>
           )}

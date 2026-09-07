@@ -9,6 +9,7 @@ import {
   TextField,
 } from '@mui/material';
 import { useState } from 'react';
+import { useTranslation } from 'react-i18next';
 
 type Props = {
   staleAfterDays: number;
@@ -29,6 +30,7 @@ const DataHealthControlsForm = ({
   onStaleAfterDaysChange,
   onRefresh,
 }: Props) => {
+  const { t } = useTranslation();
   const [customThreshold, setCustomThreshold] = useState(
     ![30, 90, 180, 365].includes(staleAfterDays),
   );
@@ -41,9 +43,11 @@ const DataHealthControlsForm = ({
         sx={{ alignItems: { sm: 'center' } }}
       >
         <FormControl size="small" sx={{ minWidth: 160 }}>
-          <InputLabel id="stale-after-label">Stale after</InputLabel>
+          <InputLabel id="stale-after-label">
+            {t('dataHealth.staleAfter')}
+          </InputLabel>
           <Select
-            label="Stale after"
+            label={t('dataHealth.staleAfter')}
             labelId="stale-after-label"
             value={customThreshold ? 'custom' : staleAfterDays}
             onChange={(event) => {
@@ -57,16 +61,16 @@ const DataHealthControlsForm = ({
           >
             {[30, 90, 180, 365].map((days) => (
               <MenuItem key={days} value={days}>
-                {days} days
+                {t('dataHealth.daysCount', { count: days })}
               </MenuItem>
             ))}
-            <MenuItem value="custom">Custom</MenuItem>
+            <MenuItem value="custom">{t('dataHealth.custom')}</MenuItem>
           </Select>
         </FormControl>
         {customThreshold && (
           <TextField
             defaultValue={staleAfterDays}
-            label="Days"
+            label={t('dataHealth.days')}
             onBlur={(event) => {
               const days = Number(event.target.value);
               if (Number.isInteger(days) && days >= 1 && days <= 3650)
@@ -79,7 +83,7 @@ const DataHealthControlsForm = ({
           />
         )}
         <Button disabled={isRefreshing} onClick={onRefresh} variant="outlined">
-          {isRefreshing ? 'Refreshing...' : 'Refresh'}
+          {isRefreshing ? t('dataHealth.refreshing') : t('dataHealth.refresh')}
         </Button>
       </Stack>
       {refreshError && (

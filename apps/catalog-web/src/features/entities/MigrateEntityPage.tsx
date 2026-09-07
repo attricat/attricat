@@ -9,6 +9,7 @@ import {
   Typography,
 } from '@mui/material';
 import { useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { listContexts, migrateEntity, previewEntityMigration } from './api';
 import { valueForField } from './attribute-values';
 import { EntityForm } from './components/EntityForm';
@@ -17,6 +18,7 @@ import { valuesForForm } from './entity-form';
 import { entityQueryKeys } from './query-keys';
 
 export const MigrateEntityPage = ({ entityId }: { entityId: string }) => {
+  const { t } = useTranslation();
   const navigate = useNavigate({ from: '/entities/$entityId/migrate' });
   const [discardAttributes, setDiscardAttributes] = useState<string[]>([]);
   const preview = useQuery({
@@ -59,12 +61,12 @@ export const MigrateEntityPage = ({ entityId }: { entityId: string }) => {
             ? valueForField(value.value)
             : value.kind === 'relationship'
               ? value.target_entity_id
-              : `${value.files.length} file${value.files.length === 1 ? '' : 's'}`,
+              : t('entities.fileCount', { count: value.files.length }),
         )
         .join(', ');
       return [
         issue.attribute_code!,
-        `${issue.message}${currentValue ? ` Current value: ${currentValue}.` : ''}`,
+        `${issue.message}${currentValue ? ` ${t('entities.currentValue', { value: currentValue })}` : ''}`,
       ];
     }),
   );
@@ -76,7 +78,7 @@ export const MigrateEntityPage = ({ entityId }: { entityId: string }) => {
       values: Parameters<typeof migrateEntity>[1]['values'];
       relationships: Parameters<typeof migrateEntity>[1]['relationships'];
     }) => {
-      if (!preview.data) throw new Error('Load the migration preview first');
+      if (!preview.data) throw new Error(t('entities.loadMigrationFirst'));
       return migrateEntity(entityId, {
         migration_id: preview.data.migration_id,
         expected_target_version: preview.data.target.blueprint.version,
@@ -93,14 +95,16 @@ export const MigrateEntityPage = ({ entityId }: { entityId: string }) => {
     },
   });
   return (
-    <EntityPage title="Upgrade entity">
+    <EntityPage title={t('entities.upgradeEntity')}>
       <Box sx={{ mt: 1 }}>
         <Link params={{ entityId }} to="/entities/$entityId/edit">
-          Back to edit
+          {t('entities.backToEdit')}
         </Link>
       </Box>
       {preview.isPending && (
-        <Typography sx={{ mt: 4 }}>Preparing migration...</Typography>
+        <Typography sx={{ mt: 4 }}>
+          {t('entities.preparingMigration')}
+        </Typography>
       )}
       {(preview.error || migrate.error) && (
         <Alert severity="error" sx={{ mt: 4 }}>
@@ -110,8 +114,10 @@ export const MigrateEntityPage = ({ entityId }: { entityId: string }) => {
       {preview.data && (
         <>
           <Typography sx={{ mt: 4 }}>
-            Upgrade from v{preview.data.source_version} to v
-            {preview.data.target.blueprint.version}
+            {t('entities.upgradeFrom', {
+              source: preview.data.source_version,
+              target: preview.data.target.blueprint.version,
+            })}
           </Typography>
           {standaloneIssues.map((issue) => (
             <Alert
@@ -147,7 +153,9 @@ export const MigrateEntityPage = ({ entityId }: { entityId: string }) => {
                     />
                   }
                   key={issue.attribute_code}
-                  label={`Confirm removal of ${issue.attribute_code} from this revision`}
+                  label={t('entities.confirmRemoval', {
+                    attribute: issue.attribute_code,
+                  })}
                 />
               ))}
           </FormGroup>
@@ -175,7 +183,7 @@ export const MigrateEntityPage = ({ entityId }: { entityId: string }) => {
               migrate.mutate({ values, relationships })
             }
             showAllAttributes
-            submitLabel="Upgrade entity"
+            submitLabel={t('entities.upgradeEntity')}
           />
         </>
       )}

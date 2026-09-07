@@ -1,4 +1,5 @@
 import { Link } from '@tanstack/react-router';
+import { useTranslation } from 'react-i18next';
 import {
   Box,
   Button,
@@ -20,57 +21,60 @@ export const RevisionHistory = ({
 }: {
   blueprintId: string;
   revisions: Blueprint[];
-}) => (
-  <Paper component="section" sx={{ mt: 3, p: 2.5 }}>
-    <Typography component="h2" variant="h6">
-      Revision history
-    </Typography>
-    <Box sx={{ overflowX: 'auto', mt: 1 }}>
-      <Table size="small">
-        <TableHead>
-          <TableRow>
-            <TableCell>Version</TableCell>
-            <TableCell>Status</TableCell>
-            <TableCell>Created</TableCell>
-            <TableCell>Published</TableCell>
-            <TableCell>Definition hash</TableCell>
-            <TableCell />
-          </TableRow>
-        </TableHead>
-        <TableBody>
-          {revisions.map((revision) => (
-            <TableRow key={revision.version}>
-              <TableCell>v{revision.version}</TableCell>
-              <TableCell>
-                <Chip
-                  color={
-                    revision.status === 'published' ? 'success' : 'warning'
-                  }
-                  label={revision.status}
-                  size="small"
-                />
-              </TableCell>
-              <TableCell>
-                {formatBlueprintDateTime(revision.created_at)}
-              </TableCell>
-              <TableCell>
-                {formatBlueprintDateTime(revision.published_at)}
-              </TableCell>
-              <TableCell sx={{ fontFamily: 'monospace' }}>
-                {revision.definition_hash}
-              </TableCell>
-              <TableCell align="right">
-                <Link
-                  params={{ blueprintId, version: String(revision.version) }}
-                  to="/manage/blueprints/$blueprintId/revisions/$version/new"
-                >
-                  <Button size="small">Edit</Button>
-                </Link>
-              </TableCell>
+}) => {
+  const { t } = useTranslation();
+  return (
+    <Paper component="section" sx={{ mt: 3, p: 2.5 }}>
+      <Typography component="h2" variant="h6">
+        {t('blueprints.revisionHistory')}
+      </Typography>
+      <Box sx={{ overflowX: 'auto', mt: 1 }}>
+        <Table size="small">
+          <TableHead>
+            <TableRow>
+              <TableCell>{t('blueprints.version')}</TableCell>
+              <TableCell>{t('blueprints.status')}</TableCell>
+              <TableCell>{t('blueprints.created')}</TableCell>
+              <TableCell>{t('blueprints.published')}</TableCell>
+              <TableCell>{t('blueprints.definitionHash')}</TableCell>
+              <TableCell />
             </TableRow>
-          ))}
-        </TableBody>
-      </Table>
-    </Box>
-  </Paper>
-);
+          </TableHead>
+          <TableBody>
+            {revisions.map((revision) => (
+              <TableRow key={revision.version}>
+                <TableCell>v{revision.version}</TableCell>
+                <TableCell>
+                  <Chip
+                    color={
+                      revision.status === 'published' ? 'success' : 'warning'
+                    }
+                    label={revision.status}
+                    size="small"
+                  />
+                </TableCell>
+                <TableCell>
+                  {formatBlueprintDateTime(revision.created_at)}
+                </TableCell>
+                <TableCell>
+                  {formatBlueprintDateTime(revision.published_at)}
+                </TableCell>
+                <TableCell sx={{ fontFamily: 'monospace' }}>
+                  {revision.definition_hash}
+                </TableCell>
+                <TableCell align="right">
+                  <Link
+                    params={{ blueprintId, version: String(revision.version) }}
+                    to="/manage/blueprints/$blueprintId/revisions/$version/new"
+                  >
+                    <Button size="small">{t('blueprints.edit')}</Button>
+                  </Link>
+                </TableCell>
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
+      </Box>
+    </Paper>
+  );
+};

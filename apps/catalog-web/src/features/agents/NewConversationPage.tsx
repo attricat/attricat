@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
+import { useTranslation } from 'react-i18next';
 import { useNavigate } from '@tanstack/react-router';
 import { Alert, Button, Paper, Stack, TextField } from '@mui/material';
 import { PageContainer } from '../../components/PageContainer';
@@ -8,6 +9,7 @@ import { createConversation } from './api';
 import { agentQueryKeys } from './query-keys';
 
 export const NewConversationPage = () => {
+  const { t } = useTranslation();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const [title, setTitle] = useState('');
@@ -26,8 +28,8 @@ export const NewConversationPage = () => {
   return (
     <PageContainer>
       <PageHeader
-        description="Create a focused thread for a task or scheduled agent work."
-        title="New agent conversation"
+        description={t('agents.newConversationDescription')}
+        title={t('agents.newAgentConversation')}
       />
       <Paper
         component="form"
@@ -41,9 +43,9 @@ export const NewConversationPage = () => {
           <TextField
             autoFocus
             fullWidth
-            label="Conversation title"
+            label={t('agents.conversationTitle')}
             onChange={(event) => setTitle(event.target.value)}
-            placeholder="e.g. Clean up inactive suppliers"
+            placeholder={t('agents.conversationTitlePlaceholder')}
             value={title}
           />
           <Button
@@ -51,7 +53,7 @@ export const NewConversationPage = () => {
             type="submit"
             variant="contained"
           >
-            Create conversation
+            {t('agents.createConversation')}
           </Button>
           {create.isError && (
             <Alert severity="error">{create.error.message}</Alert>

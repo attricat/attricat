@@ -17,6 +17,7 @@ import {
   Typography,
 } from '@mui/material';
 import { useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { currentSession } from '../auth/api';
 import {
   acceptInvitation,
@@ -44,11 +45,19 @@ import {
 import { workspaceQueryKeys } from './query-keys';
 
 type Section = 'members' | 'roles' | 'invitations';
-const sections: { label: string; section: Section; to: string }[] = [
-  { label: 'Members', section: 'members', to: '/manage/workspace/members' },
-  { label: 'Roles', section: 'roles', to: '/manage/workspace/roles' },
+const sections: { labelKey: string; section: Section; to: string }[] = [
   {
-    label: 'Invitations',
+    labelKey: 'workspace.members',
+    section: 'members',
+    to: '/manage/workspace/members',
+  },
+  {
+    labelKey: 'workspace.roles',
+    section: 'roles',
+    to: '/manage/workspace/roles',
+  },
+  {
+    labelKey: 'workspace.invitations',
     section: 'invitations',
     to: '/manage/workspace/invitations',
   },
@@ -68,31 +77,38 @@ const ScopeFields = ({
   scope,
   scopeTargetId,
   workspaceId,
-}: ScopeFieldsProps) => (
-  <>
-    <TextField
-      fullWidth
-      label="Scope"
-      onChange={(event) => {
-        const nextScope = event.target.value as ScopeType;
-        onScopeChange(nextScope);
-        onScopeTargetChange(selectedScopeTarget(nextScope, '', workspaceId));
-      }}
-      select
-      value={scope}
-    >
-      <MenuItem value="workspace">Entire workspace</MenuItem>
-      <MenuItem value="blueprint_family">Blueprint family</MenuItem>
-      <MenuItem value="context_subtree">Context subtree</MenuItem>
-      <MenuItem value="entity">Entity</MenuItem>
-    </TextField>
-    <ScopeTargetField
-      onScopeTargetChange={onScopeTargetChange}
-      scope={scope}
-      scopeTargetId={scopeTargetId}
-    />
-  </>
-);
+}: ScopeFieldsProps) => {
+  const { t } = useTranslation();
+  return (
+    <>
+      <TextField
+        fullWidth
+        label={t('workspace.scope')}
+        onChange={(event) => {
+          const nextScope = event.target.value as ScopeType;
+          onScopeChange(nextScope);
+          onScopeTargetChange(selectedScopeTarget(nextScope, '', workspaceId));
+        }}
+        select
+        value={scope}
+      >
+        <MenuItem value="workspace">{t('workspace.entireWorkspace')}</MenuItem>
+        <MenuItem value="blueprint_family">
+          {t('workspace.blueprintFamily')}
+        </MenuItem>
+        <MenuItem value="context_subtree">
+          {t('workspace.contextSubtree')}
+        </MenuItem>
+        <MenuItem value="entity">{t('workspace.entity')}</MenuItem>
+      </TextField>
+      <ScopeTargetField
+        onScopeTargetChange={onScopeTargetChange}
+        scope={scope}
+        scopeTargetId={scopeTargetId}
+      />
+    </>
+  );
+};
 
 const ScopeTargetField = ({
   onScopeTargetChange,
@@ -110,10 +126,10 @@ const ScopeTargetField = ({
   if (scope === 'workspace') return null;
   const label =
     scope === 'blueprint_family'
-      ? 'Blueprint family'
+      ? t('workspace.blueprintFamily')
       : scope === 'context_subtree'
-        ? 'Context subtree'
-        : 'Entity';
+        ? t('workspace.contextSubtree')
+        : t('workspace.entity');
   return (
     <>
       {targets.isError && (
@@ -121,7 +137,7 @@ const ScopeTargetField = ({
       )}
       <TextField
         fullWidth
-        helperText="Only targets owned by this session's workspace are available."
+        helperText={t('workspace.ownedTargets')}
         label={label}
         onChange={(event) => onScopeTargetChange(event.target.value)}
         select
@@ -138,15 +154,18 @@ const ScopeTargetField = ({
 };
 
 export const WorkspaceManagementPage = ({ section }: { section: Section }) => {
+  const { t } = useTranslation();
   const session = useQuery({
     queryKey: ['auth', 'session'],
     queryFn: currentSession,
   });
   return (
     <Box sx={{ maxWidth: 1000, mx: 'auto', p: 3 }}>
-      <Typography variant="h4">Workspace management</Typography>
+      <Typography variant="h4">{t('workspace.title')}</Typography>
       <Typography color="text.secondary" sx={{ mt: 1 }}>
-        Active workspace: {session.data?.login_identifier ?? 'Loading…'}
+        {t('workspace.active', {
+          workspace: session.data?.login_identifier ?? t('workspace.loading'),
+        })}
       </Typography>
       <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1, mt: 3 }}>
         {sections
@@ -164,7 +183,7 @@ export const WorkspaceManagementPage = ({ section }: { section: Section }) => {
               to={item.to}
               variant={item.section === section ? 'contained' : 'outlined'}
             >
-              {item.label}
+              {t(item.labelKey)}
             </Button>
           ))}
       </Box>
@@ -200,6 +219,7 @@ const Members = ({
   currentUserId?: string;
   workspaceId?: string;
 }) => {
+  const { t } = useTranslation();
   const client = useQueryClient();
   const [error, setError] = useState<string>();
   const members = useQuery({
@@ -242,7 +262,9 @@ const Members = ({
         refresh();
       } catch (reason) {
         setError(
-          reason instanceof Error ? reason.message : 'Could not grant role',
+          reason instanceof Error
+            ? reason.message
+            : t('workspace.grantRoleFailed'),
         );
       }
     },
@@ -259,7 +281,7 @@ const Members = ({
   );
   if (!canManage) {
     return (
-      <Alert severity="error">You are not authorized to manage members.</Alert>
+      <Alert severity="error">{t('workspace.notAuthorizedMembers')}</Alert>
     );
   }
   return (
@@ -286,7 +308,7 @@ const Members = ({
                       .catch((e) => setError(e.message))
                   }
                 >
-                  Revoke {grant.role_code}
+                  {t('workspace.revoke', { role: grant.role_code })}
                 </Button>
               ))}
               <Stack direction="row" sx={{ gap: 1 }}>
@@ -315,11 +337,11 @@ const Members = ({
         sx={{ p: 2 }}
       >
         <Stack spacing={2}>
-          <Typography variant="h6">Add role grant</Typography>
+          <Typography variant="h6">{t('workspace.addRoleGrant')}</Typography>
           <form.Field name="member_id">
             {(field) => (
               <TextField
-                label="Member"
+                label={t('workspace.member')}
                 onChange={(event) => field.handleChange(event.target.value)}
                 select
                 value={field.state.value}
@@ -337,7 +359,7 @@ const Members = ({
           <form.Field name="role_id">
             {(field) => (
               <TextField
-                label="Role"
+                label={t('workspace.role')}
                 onChange={(event) => field.handleChange(event.target.value)}
                 select
                 value={field.state.value}
@@ -375,6 +397,7 @@ const Members = ({
 };
 
 const Roles = ({ canManage }: { canManage: boolean }) => {
+  const { t } = useTranslation();
   const client = useQueryClient();
   const [error, setError] = useState<string>();
   const roles = useQuery({
@@ -397,15 +420,15 @@ const Roles = ({ canManage }: { canManage: boolean }) => {
         refresh();
       } catch (reason) {
         setError(
-          reason instanceof Error ? reason.message : 'Could not create role',
+          reason instanceof Error
+            ? reason.message
+            : t('workspace.createRoleFailed'),
         );
       }
     },
   });
   if (!canManage) {
-    return (
-      <Alert severity="error">You are not authorized to manage roles.</Alert>
-    );
+    return <Alert severity="error">{t('workspace.notAuthorizedRoles')}</Alert>;
   }
   return (
     <Stack spacing={2} sx={{ mt: 3 }}>
@@ -425,7 +448,10 @@ const Roles = ({ canManage }: { canManage: boolean }) => {
                   <Stack direction="row">
                     <Button
                       onClick={() => {
-                        const code = window.prompt('Role code', role.code);
+                        const code = window.prompt(
+                          t('workspace.roleCode'),
+                          role.code,
+                        );
                         if (code)
                           updateRole(role.id, {
                             code,
@@ -439,7 +465,7 @@ const Roles = ({ canManage }: { canManage: boolean }) => {
                     </Button>
                     <Button
                       onClick={() => {
-                        const code = window.prompt('New role code');
+                        const code = window.prompt(t('workspace.newRoleCode'));
                         if (code)
                           duplicateRole(role.id, code)
                             .then(refresh)
@@ -452,7 +478,7 @@ const Roles = ({ canManage }: { canManage: boolean }) => {
                       color="error"
                       onClick={() => {
                         const replacement = window.prompt(
-                          'Replacement role ID (required when this role has grants; leave empty otherwise)',
+                          t('workspace.replacementRole'),
                         );
                         retireRole(role.id, replacement || undefined)
                           .then(refresh)
@@ -466,7 +492,7 @@ const Roles = ({ canManage }: { canManage: boolean }) => {
               }
             >
               <ListItemText
-                primary={`${role.code}${role.is_system ? ' (fixed)' : ''}`}
+                primary={`${role.code}${role.is_system ? t('workspace.fixed') : ''}`}
                 secondary={role.permissions.join(', ')}
               />
             </ListItem>
@@ -482,11 +508,13 @@ const Roles = ({ canManage }: { canManage: boolean }) => {
         sx={{ p: 2 }}
       >
         <Stack>
-          <Typography variant="h6">Create custom role</Typography>
+          <Typography variant="h6">
+            {t('workspace.createCustomRole')}
+          </Typography>
           <form.Field name="code">
             {(field) => (
               <TextField
-                label="Role code"
+                label={t('workspace.roleCode')}
                 onChange={(event) => field.handleChange(event.target.value)}
                 value={field.state.value}
               />
@@ -534,6 +562,7 @@ const Invitations = ({
   canManage: boolean;
   workspaceId?: string;
 }) => {
+  const { t } = useTranslation();
   const client = useQueryClient();
   const [error, setError] = useState<string>();
   const invitations = useQuery({
@@ -560,7 +589,7 @@ const Invitations = ({
       try {
         const expiresAt = new Date(value.expires_at);
         if (Number.isNaN(expiresAt.getTime()) || expiresAt <= new Date()) {
-          throw new Error('Invitation expiry must be in the future.');
+          throw new Error(t('workspace.invitationExpiry'));
         }
         const input = ensureActiveScopeTarget(
           {
@@ -587,7 +616,7 @@ const Invitations = ({
         setError(
           reason instanceof Error
             ? reason.message
-            : 'Could not create invitation',
+            : t('workspace.createInvitationFailed'),
         );
       }
     },
@@ -605,7 +634,7 @@ const Invitations = ({
       try {
         const expiresAt = new Date(value.expires_at);
         if (Number.isNaN(expiresAt.getTime()) || expiresAt <= new Date())
-          throw new Error('Invitation expiry must be in the future.');
+          throw new Error(t('workspace.invitationExpiry'));
         const input = ensureActiveScopeTarget(
           {
             role_id: value.role_id,
@@ -629,16 +658,16 @@ const Invitations = ({
         refresh();
       } catch (reason) {
         setError(
-          reason instanceof Error ? reason.message : 'Could not create user',
+          reason instanceof Error
+            ? reason.message
+            : t('workspace.createUserFailed'),
         );
       }
     },
   });
   if (!canManage) {
     return (
-      <Alert severity="error">
-        You are not authorized to manage invitations.
-      </Alert>
+      <Alert severity="error">{t('workspace.notAuthorizedInvitations')}</Alert>
     );
   }
   return (
@@ -672,7 +701,7 @@ const Invitations = ({
             >
               <ListItemText
                 primary={item.invitee_email}
-                secondary={`${item.role_code} · expires ${new Date(item.expires_at).toLocaleString()}`}
+                secondary={`${item.role_code} · ${t('workspace.expires', { date: new Date(item.expires_at).toLocaleString() })}`}
               />
             </ListItem>
           ))}
@@ -687,15 +716,14 @@ const Invitations = ({
         sx={{ p: 2 }}
       >
         <Stack spacing={2}>
-          <Typography variant="h6">Create user and invite</Typography>
-          <Alert severity="info">
-            Catalog sends a one-time onboarding link to this email address. The
-            link is not displayed here or returned by the API.
-          </Alert>
+          <Typography variant="h6">
+            {t('workspace.createUserInvite')}
+          </Typography>
+          <Alert severity="info">{t('workspace.inviteEmailInfo')}</Alert>
           <userForm.Field name="email">
             {(field) => (
               <TextField
-                label="Email"
+                label={t('workspace.email')}
                 type="email"
                 value={field.state.value}
                 onChange={(event) => field.handleChange(event.target.value)}
@@ -705,7 +733,7 @@ const Invitations = ({
           <userForm.Field name="display_name">
             {(field) => (
               <TextField
-                label="Display name (optional)"
+                label={t('workspace.displayNameOptional')}
                 value={field.state.value}
                 onChange={(event) => field.handleChange(event.target.value)}
               />
@@ -714,7 +742,7 @@ const Invitations = ({
           <userForm.Field name="role_id">
             {(field) => (
               <TextField
-                label="Role"
+                label={t('workspace.role')}
                 select
                 value={field.state.value}
                 onChange={(event) => field.handleChange(event.target.value)}
@@ -745,7 +773,7 @@ const Invitations = ({
           <userForm.Field name="expires_at">
             {(field) => (
               <TextField
-                label="Expires at"
+                label={t('workspace.expiresAt')}
                 type="datetime-local"
                 slotProps={{ inputLabel: { shrink: true } }}
                 value={field.state.value}
@@ -767,11 +795,11 @@ const Invitations = ({
         sx={{ p: 2 }}
       >
         <Stack spacing={2}>
-          <Typography variant="h6">Invite existing user</Typography>
+          <Typography variant="h6">{t('workspace.inviteExisting')}</Typography>
           <form.Field name="email">
             {(field) => (
               <TextField
-                label="Email"
+                label={t('workspace.email')}
                 onChange={(event) => field.handleChange(event.target.value)}
                 type="email"
                 value={field.state.value}
@@ -781,7 +809,7 @@ const Invitations = ({
           <form.Field name="role_id">
             {(field) => (
               <TextField
-                label="Role"
+                label={t('workspace.role')}
                 onChange={(event) => field.handleChange(event.target.value)}
                 select
                 value={field.state.value}
@@ -813,7 +841,7 @@ const Invitations = ({
             {(field) => (
               <TextField
                 slotProps={{ inputLabel: { shrink: true } }}
-                label="Expires at"
+                label={t('workspace.expiresAt')}
                 onChange={(event) => field.handleChange(event.target.value)}
                 type="datetime-local"
                 value={field.state.value}
@@ -830,6 +858,7 @@ const Invitations = ({
 };
 
 export const PasswordSetupPage = () => {
+  const { t } = useTranslation();
   const navigate = useNavigate();
   const [invitationSecret, setInvitationSecret] = useState(
     () =>
@@ -847,9 +876,9 @@ export const PasswordSetupPage = () => {
   const submit = async () => {
     try {
       if (password.length < 12)
-        throw new Error('Password must be at least 12 characters.');
+        throw new Error(t('workspace.passwordTooShort'));
       if (password !== confirmPassword)
-        throw new Error('Passwords do not match.');
+        throw new Error(t('workspace.passwordMismatch'));
       await completeOnboarding({
         invitation_secret: invitationSecret,
         onboarding_secret: onboardingSecret,
@@ -860,38 +889,38 @@ export const PasswordSetupPage = () => {
       setMessage(
         reason instanceof Error
           ? reason.message
-          : 'Could not complete onboarding',
+          : t('workspace.onboardingFailed'),
       );
     }
   };
   return (
     <Box sx={{ maxWidth: 500, mx: 'auto', p: 3 }}>
-      <Typography variant="h4">Set up your workspace account</Typography>
+      <Typography variant="h4">{t('workspace.setupTitle')}</Typography>
       <Stack spacing={2} sx={{ mt: 3 }}>
         <TextField
           autoComplete="off"
-          label="Invitation secret"
+          label={t('workspace.invitationSecret')}
           onChange={(event) => setInvitationSecret(event.target.value)}
           type="password"
           value={invitationSecret}
         />
         <TextField
           autoComplete="off"
-          label="Password setup secret"
+          label={t('workspace.passwordSetupSecret')}
           onChange={(event) => setOnboardingSecret(event.target.value)}
           type="password"
           value={onboardingSecret}
         />
         <TextField
           autoComplete="new-password"
-          label="Password"
+          label={t('workspace.password')}
           onChange={(event) => setPassword(event.target.value)}
           type="password"
           value={password}
         />
         <TextField
           autoComplete="new-password"
-          label="Confirm password"
+          label={t('workspace.confirmPassword')}
           onChange={(event) => setConfirmPassword(event.target.value)}
           type="password"
           value={confirmPassword}
@@ -912,6 +941,7 @@ export const PasswordSetupPage = () => {
 };
 
 export const AcceptInvitationPage = () => {
+  const { t } = useTranslation();
   const [secret, setSecret] = useState(
     () => new URLSearchParams(window.location.search).get('secret') ?? '',
   );
@@ -920,22 +950,22 @@ export const AcceptInvitationPage = () => {
     try {
       await acceptInvitation(secret);
       setSecret('');
-      setMessage('Invitation accepted. You can now use the workspace.');
+      setMessage(t('workspace.invitationAccepted'));
     } catch (reason) {
       setMessage(
         reason instanceof Error
           ? reason.message
-          : 'Could not accept invitation',
+          : t('workspace.acceptInvitationFailed'),
       );
     }
   };
   return (
     <Box sx={{ maxWidth: 500, mx: 'auto', p: 3 }}>
-      <Typography variant="h4">Accept workspace invitation</Typography>
+      <Typography variant="h4">{t('workspace.acceptTitle')}</Typography>
       <Stack spacing={2} sx={{ mt: 3 }}>
         <TextField
           autoComplete="off"
-          label="Invitation secret"
+          label={t('workspace.invitationSecret')}
           onChange={(event) => setSecret(event.target.value)}
           type="password"
           value={secret}

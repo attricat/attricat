@@ -31,6 +31,7 @@ import {
 } from '@mui/material';
 import { LoadMoreButton } from '../../components/LoadMoreButton';
 import { useRef, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import type { BlueprintWithAttributes, EntityItem } from '../entities/api';
 import { displayLabel } from '../entities/entity-display';
 import { AttributeValue } from '../views/components/values/AttributeValue';
@@ -54,9 +55,10 @@ const EntityActionsMenu = ({
   blueprintId: string;
   entity: EntityItem;
 }) => {
+  const { t } = useTranslation();
   const [anchor, setAnchor] = useState<HTMLElement | null>(null);
   const [searchInfoOpen, setSearchInfoOpen] = useState(false);
-  const label = `Entity actions for ${entity.id}`;
+  const label = t('explorer.entityActionsFor', { entityId: entity.id });
   return (
     <>
       <IconButton
@@ -86,15 +88,15 @@ const EntityActionsMenu = ({
             blueprint_version: entity.blueprint_version,
             entity_id: entity.id,
           }}
-          label="Extension actions"
+          label={t('explorer.extensionActions')}
           outlet="explorer_row_action"
         />
       </Menu>
       <Dialog onClose={() => setSearchInfoOpen(false)} open={searchInfoOpen}>
-        <DialogTitle>Search info</DialogTitle>
+        <DialogTitle>{t('explorer.searchInfo')}</DialogTitle>
         <DialogContent>
           <Typography>
-            {matchSummary(entity) || 'No search details.'}
+            {matchSummary(entity) || t('explorer.noSearchDetails')}
           </Typography>
         </DialogContent>
       </Dialog>
@@ -103,11 +105,12 @@ const EntityActionsMenu = ({
 };
 
 const EntityIdPopover = ({ entityId }: { entityId: string }) => {
+  const { t } = useTranslation();
   const [anchor, setAnchor] = useState<HTMLElement | null>(null);
-  const label = `View entity ID ${entityId}`;
+  const label = t('explorer.viewEntityIdWithId', { entityId });
   return (
     <>
-      <Tooltip title="View entity ID">
+      <Tooltip title={t('explorer.viewEntityId')}>
         <IconButton
           aria-label={label}
           onClick={(event) => setAnchor(event.currentTarget)}
@@ -146,6 +149,7 @@ export const ExplorerResultsTable = ({
   items: EntityItem[];
   onLoadMore: () => void;
 }) => {
+  const { t } = useTranslation();
   const columnHelper = legacyCreateColumnHelper<EntityItem>();
   const tableFields =
     blueprint.blueprint.views.table?.type === 'table'
@@ -156,12 +160,12 @@ export const ExplorerResultsTable = ({
   );
   const columns: LegacyColumnDef<EntityItem, string>[] = [
     columnHelper.accessor('id', {
-      header: 'ID',
+      header: t('explorer.id'),
       cell: (info) => <EntityIdPopover entityId={info.getValue()} />,
     }),
     columnHelper.display({
       id: 'display',
-      header: 'Display',
+      header: t('explorer.display'),
       cell: (info) => (
         <Link
           params={{ entityId: info.row.original.id }}
@@ -173,14 +177,16 @@ export const ExplorerResultsTable = ({
     }) as LegacyColumnDef<EntityItem, string>,
     columnHelper.display({
       id: 'schema',
-      header: 'Schema',
+      header: t('explorer.schema'),
       cell: (info) => {
         const entity = info.row.original;
         return (
           <Chip
             color={entity.schema_outdated ? 'warning' : 'success'}
             label={`v${entity.blueprint_version} · ${
-              entity.schema_outdated ? 'Outdated' : 'Current'
+              entity.schema_outdated
+                ? t('explorer.outdated')
+                : t('explorer.current')
             }`}
             size="small"
           />
@@ -247,7 +253,7 @@ export const ExplorerResultsTable = ({
         </Typography>
       </Box>
       <TableContainer
-        aria-label="Explorer results"
+        aria-label={t('explorer.results')}
         ref={tableContainerRef}
         sx={{
           // On desktop this leaves room for the sticky search form and result

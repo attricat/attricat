@@ -14,6 +14,7 @@ import {
   Typography,
 } from '@mui/material';
 import ReactMarkdown from 'react-markdown';
+import { useTranslation } from 'react-i18next';
 import { PageContainer } from '../../components/PageContainer';
 import { PageHeader } from '../../components/PageHeader';
 import { currentSession } from '../auth/api';
@@ -55,6 +56,7 @@ const invalidate = (
 };
 
 export const ExtensionsPage = () => {
+  const { t } = useTranslation();
   const session = useQuery({
     queryKey: ['auth', 'session'],
     queryFn: currentSession,
@@ -72,20 +74,18 @@ export const ExtensionsPage = () => {
   if (session.data && !session.data.capabilities?.extensions_read)
     return (
       <PageContainer>
-        <Alert severity="error">
-          You are not authorized to view extensions.
-        </Alert>
+        <Alert severity="error">{t('extensions.notAuthorizedView')}</Alert>
       </PageContainer>
     );
   return (
     <PageContainer>
       <PageHeader
-        title="Extensions"
-        description="Discover trusted extensions and manage installed extension lifecycle."
+        title={t('extensions.title')}
+        description={t('extensions.description')}
         actions={
           session.data?.capabilities?.extensions_manage ? (
             <Button component={Link} to="/manage/extensions/sideload">
-              Upload archive
+              {t('extensions.uploadArchive')}
             </Button>
           ) : undefined
         }
@@ -93,7 +93,7 @@ export const ExtensionsPage = () => {
       <ErrorNotice error={marketplace.error} />
       <ErrorNotice error={installed.error} />
       <Typography sx={{ mb: 1 }} variant="h5">
-        Marketplace
+        {t('extensions.marketplace')}
       </Typography>
       <Stack spacing={2}>
         {(marketplace.data ?? []).map((extension) => {
@@ -123,7 +123,7 @@ export const ExtensionsPage = () => {
                   to="/manage/extensions/$owner/$repository"
                   params={{ owner, repository }}
                 >
-                  Inspect
+                  {t('extensions.inspect')}
                 </Link>
               </Box>
             </Paper>
@@ -131,7 +131,7 @@ export const ExtensionsPage = () => {
         })}
       </Stack>
       <Typography sx={{ mb: 1, mt: 4 }} variant="h5">
-        Installed
+        {t('extensions.installed')}
       </Typography>
       <Stack spacing={2}>
         {(installed.data ?? []).map((extension) => (
@@ -162,7 +162,7 @@ export const ExtensionsPage = () => {
                 to="/manage/extensions/$extensionId"
                 params={{ extensionId: extension.extension_id }}
               >
-                Manage
+                {t('extensions.manage')}
               </Link>
             </Box>
           </Paper>
@@ -173,6 +173,7 @@ export const ExtensionsPage = () => {
 };
 
 export const SideloadExtensionPage = () => {
+  const { t } = useTranslation();
   const client = useQueryClient();
   const session = useQuery({
     queryKey: ['auth', 'session'],
@@ -193,22 +194,20 @@ export const SideloadExtensionPage = () => {
   if (session.data && !canManage)
     return (
       <PageContainer>
-        <Alert severity="error">
-          You are not authorized to install extensions.
-        </Alert>
+        <Alert severity="error">{t('extensions.notAuthorizedInstall')}</Alert>
       </PageContainer>
     );
   return (
     <PageContainer>
       <PageHeader
-        title="Upload extension archive"
-        description="Install a local .tar.zst extension archive. It is validated and installed disabled."
+        title={t('extensions.uploadTitle')}
+        description={t('extensions.uploadDescription')}
         actions={<Link to="/manage/extensions">Back to extensions</Link>}
       />
       <ErrorNotice error={sideload.error} />
       {sideload.isSuccess && (
         <Alert severity="success" sx={{ mb: 2 }}>
-          Extension installed. Configure permissions before enabling it.
+          {t('extensions.installedSuccess')}
         </Alert>
       )}
       <Paper sx={{ p: 2 }}>
@@ -221,7 +220,7 @@ export const SideloadExtensionPage = () => {
           <form.Field name="archive">
             {(field) => (
               <Button component="label" variant="outlined">
-                {field.state.value?.name ?? 'Choose .tar.zst archive'}
+                {field.state.value?.name ?? t('extensions.chooseArchive')}
                 <input
                   accept=".tar.zst,application/zstd"
                   hidden
@@ -236,7 +235,7 @@ export const SideloadExtensionPage = () => {
             )}
           </form.Field>
           <Typography color="text.secondary" sx={{ mt: 1 }} variant="body2">
-            Archives must be valid extension packages and no larger than 32 MiB.
+            {t('extensions.archiveHelp')}
           </Typography>
           <Button
             disabled={!canManage || !archive || sideload.isPending}
@@ -244,7 +243,9 @@ export const SideloadExtensionPage = () => {
             type="submit"
             variant="contained"
           >
-            {sideload.isPending ? 'Installing…' : 'Install archive'}
+            {sideload.isPending
+              ? t('extensions.installing')
+              : t('extensions.installArchive')}
           </Button>
         </form>
       </Paper>
@@ -259,6 +260,7 @@ export const MarketplaceExtensionPage = ({
   owner: string;
   repository: string;
 }) => {
+  const { t } = useTranslation();
   const client = useQueryClient();
   const details = useQuery({
     queryKey: extensionManagementQueryKeys.registry(owner, repository),
@@ -274,10 +276,11 @@ export const MarketplaceExtensionPage = ({
   return (
     <PageContainer>
       <PageHeader
-        title={details.data?.extension.name ?? 'Extension'}
+        title={
+          details.data?.extension.name ?? t('extensions.extensionFallback')
+        }
         description={
-          details.data?.extension.description ??
-          'Loading trusted extension details.'
+          details.data?.extension.description ?? t('extensions.loadingDetails')
         }
         actions={<Link to="/manage/extensions">Back to extensions</Link>}
       />
@@ -328,7 +331,7 @@ export const MarketplaceExtensionPage = ({
             )}
           </Paper>
           <Paper sx={{ mt: 3, p: 2 }}>
-            <Typography variant="h6">README</Typography>
+            <Typography variant="h6">{t('extensions.readme')}</Typography>
             <ReactMarkdown>{details.data.readme}</ReactMarkdown>
           </Paper>
         </>
@@ -342,6 +345,7 @@ export const InstalledExtensionPage = ({
 }: {
   extensionId: string;
 }) => {
+  const { t } = useTranslation();
   const client = useQueryClient();
   const detail = useQuery({
     queryKey: extensionManagementQueryKeys.detail(extensionId),
@@ -384,7 +388,7 @@ export const InstalledExtensionPage = ({
         setConfigurationError(undefined);
         config.mutate(JSON.parse(value.configuration));
       } catch {
-        setConfigurationError('Configuration must be valid JSON.');
+        setConfigurationError(t('extensions.configurationJsonError'));
       }
     },
   });
@@ -415,11 +419,11 @@ export const InstalledExtensionPage = ({
   return (
     <PageContainer>
       <PageHeader
-        title={installation?.extension_id ?? 'Extension'}
+        title={installation?.extension_id ?? t('extensions.extensionFallback')}
         description={
           installation
             ? `v${installation.version} from ${installation.source}`
-            : 'Loading installation.'
+            : t('extensions.loadingInstallation')
         }
         actions={<Link to="/manage/extensions">Back to extensions</Link>}
       />
@@ -445,7 +449,9 @@ export const InstalledExtensionPage = ({
                 }
               />
               <Typography>
-                Manifest SHA-256: {installation!.manifest_sha256}
+                {t('extensions.manifestHash', {
+                  hash: installation!.manifest_sha256,
+                })}
               </Typography>
             </Stack>
             <Stack direction="row" spacing={1} sx={{ mt: 2 }}>
@@ -526,7 +532,7 @@ export const InstalledExtensionPage = ({
           <Paper sx={{ p: 2 }}>
             <Typography variant="h6">Configuration</Typography>
             <Typography color="text.secondary" variant="body2">
-              Server validation uses the extension's declared JSON Schema.
+              {t('extensions.serverValidation')}
             </Typography>
             <form
               onSubmit={(event) => {
@@ -538,7 +544,7 @@ export const InstalledExtensionPage = ({
                 {(field) => (
                   <TextField
                     fullWidth
-                    label="JSON configuration"
+                    label={t('extensions.jsonConfiguration')}
                     multiline
                     onChange={(event) => field.handleChange(event.target.value)}
                     sx={{ mt: 2 }}
@@ -689,7 +695,7 @@ const DeclaredPermissions = ({
         )
         .map(([kind, id]) => (
           <Stack direction="row" key={`${kind}:${id}`} spacing={1}>
-            <Chip label={`Requested ${kind}: ${id}`} />
+            <Chip label={t('extensions.requestedGrant', { kind, id })} />
             <Button
               disabled={!enabled || grant.isPending}
               onClick={() => grant.mutate({ kind, id })}

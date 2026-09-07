@@ -13,6 +13,7 @@ import {
   Typography,
 } from '@mui/material';
 import { useRef, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import type { Attribute } from '../entities/api';
 import { fileDownloadUrl, uploadFiles } from './api';
 import { FileThumbnail } from './FileThumbnail';
@@ -74,6 +75,7 @@ export const FileAttributeEditor = ({
   entityId?: string;
   files: FileMetadata[];
 }) => {
+  const { t } = useTranslation();
   const input = useRef<HTMLInputElement>(null);
   const [pending, setPending] = useState<PendingFile[]>([]);
   const [uploaded, setUploaded] = useState<FileMetadata[]>(files);
@@ -208,7 +210,7 @@ export const FileAttributeEditor = ({
             <Typography>{item.file.name}</Typography>
             {item.error ? (
               <>
-                <Chip color="error" label="Failed" size="small" />
+                <Chip color="error" label={t('files.failed')} size="small" />
                 <IconButton
                   aria-label={`Retry ${item.file.name}`}
                   disabled={disabled}

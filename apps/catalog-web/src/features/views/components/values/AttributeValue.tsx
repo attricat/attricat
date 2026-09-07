@@ -1,5 +1,6 @@
 import { Chip, Stack, Typography } from '@mui/material';
 import { Link } from '@tanstack/react-router';
+import { useTranslation } from 'react-i18next';
 import type { Attribute } from '../../../entities/api';
 import { fileDownloadUrl } from '../../../files/api';
 import { FileThumbnail } from '../../../files/FileThumbnail';
@@ -40,12 +41,13 @@ export const AttributeValue = ({
   value: unknown;
   compact?: boolean;
 }) => {
+  const { t } = useTranslation();
   if (attribute.value_type === 'relationship' && isRelationshipValue(value)) {
     const items = value.items ?? [];
     if (compact)
       return (
         <Typography variant="body2">
-          {items.length ? `${items.length} linked` : 'Not set'}
+          {items.length ? t('views.linked', { count: items.length }) : t('views.notSet')}
         </Typography>
       );
     return (
@@ -60,23 +62,23 @@ export const AttributeValue = ({
           </Link>
         ))}
         {value.truncated && (
-          <Chip label="More linked entities" variant="outlined" />
+          <Chip label={t('views.moreLinkedEntities')} variant="outlined" />
         )}
         {!items.length && (
-          <Typography color="text.secondary">Not set</Typography>
+          <Typography color="text.secondary">{t('views.notSet')}</Typography>
         )}
       </Stack>
     );
   }
   if (attribute.value_type === 'file') {
     if (!isFileValue(value)) {
-      return <Typography variant="body2">File value not set</Typography>;
+      return <Typography variant="body2">{t('views.fileValueNotSet')}</Typography>;
     }
 
     if (compact) {
       return (
         <Typography variant="body2">
-          {value.length} file{value.length === 1 ? '' : 's'}
+          {t('views.fileCount', { count: value.length })}
         </Typography>
       );
     }

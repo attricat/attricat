@@ -11,6 +11,7 @@ import {
   Typography,
 } from '@mui/material';
 import { createElement, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { PageContainer } from '../../components/PageContainer';
 import { PageHeader } from '../../components/PageHeader';
 import {
@@ -31,6 +32,7 @@ import {
 } from '../views/components/blocks/EntityHeadingDefinition';
 import { resolveHeadingRenderer } from '../views/components/registry';
 export const EntityPreviewPage = ({ entityId }: { entityId: string }) => {
+  const { t } = useTranslation();
   const [selectedContext, setSelectedContext] = useState('default');
   const contexts = useQuery({
     queryKey: entityQueryKeys.contexts(),
@@ -75,7 +77,7 @@ export const EntityPreviewPage = ({ entityId }: { entityId: string }) => {
   const HeadingRenderer = resolveHeadingRenderer(heading?.component);
   return (
     <PageContainer maxWidth="lg">
-      <PageHeader eyebrow="Entity preview" />
+      <PageHeader eyebrow={t('entities.entityPreview')} />
       {resolved.data && blueprint.data && HeadingRenderer
         ? createElement(HeadingRenderer, {
             attributes: blueprint.data.attributes,
@@ -86,11 +88,11 @@ export const EntityPreviewPage = ({ entityId }: { entityId: string }) => {
         : null}
       <Box sx={{ mt: 1 }}>
         <Link params={{ entityId }} to="/entities/$entityId/edit">
-          Edit entity
+          {t('entities.editEntity')}
         </Link>
         {' | '}
         <Link params={{ entityId }} to="/entities/$entityId/changes">
-          Changes
+          {t('entities.changes')}
         </Link>
         {currentBlueprint.data && resolved.data && (
           <>
@@ -108,11 +110,11 @@ export const EntityPreviewPage = ({ entityId }: { entityId: string }) => {
                   }}
                 >
                   <WarningAmberOutlinedIcon fontSize="small" />
-                  Schema is outdated
+                  {t('entities.schemaOutdated')}
                 </Typography>
                 {' | '}
                 <Link params={{ entityId }} to="/entities/$entityId/migrate">
-                  Upgrade blueprint
+                  {t('entities.upgradeBlueprint')}
                 </Link>
               </>
             ) : (
@@ -125,33 +127,37 @@ export const EntityPreviewPage = ({ entityId }: { entityId: string }) => {
                 }}
               >
                 <CheckCircleOutlinedIcon color="success" fontSize="small" />
-                Matches current schema
+                {t('entities.matchesCurrentSchema')}
               </Typography>
             )}
           </>
         )}
       </Box>
       {contexts.isPending && (
-        <Typography sx={{ py: 3 }}>Loading contexts...</Typography>
+        <Typography sx={{ py: 3 }}>{t('entities.loadingContexts')}</Typography>
       )}
       {contexts.data && (
         <>
           <TextField
             select
             fullWidth
-            label="Context"
+            label={t('entities.context')}
             onChange={(event) => setSelectedContext(event.target.value)}
             sx={{ mt: 3 }}
             value={selectedContext}
           >
             {(contexts.data ?? []).map((context) => (
               <MenuItem key={context.id} value={context.code}>
-                {context.code === 'default' ? 'Default' : context.code}
+                {context.code === 'default'
+                  ? t('entities.default')
+                  : context.code}
               </MenuItem>
             ))}
           </TextField>
           {resolved.isPending && (
-            <Typography sx={{ mt: 3 }}>Resolving values...</Typography>
+            <Typography sx={{ mt: 3 }}>
+              {t('entities.resolvingValues')}
+            </Typography>
           )}
           {resolved.isError && (
             <Alert severity="error" sx={{ mt: 3 }}>
@@ -191,7 +197,9 @@ export const EntityPreviewPage = ({ entityId }: { entityId: string }) => {
                           entity_id: entityId,
                         }}
                         key={attribute.id}
-                        label={`View extension content for ${attribute.code.replaceAll('_', ' ')}`}
+                        label={t('entities.viewExtensionContent', {
+                          attribute: attribute.code.replaceAll('_', ' '),
+                        })}
                         outlet="entity_attribute_decoration"
                       />
                     )}

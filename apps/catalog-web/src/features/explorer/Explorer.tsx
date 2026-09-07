@@ -6,6 +6,7 @@ import {
 import { Link, useNavigate } from '@tanstack/react-router';
 import { Alert, Box, Button, Typography } from '@mui/material';
 import { useEffect } from 'react';
+import { useTranslation } from 'react-i18next';
 import { PageContainer } from '../../components/PageContainer';
 import { PageHeader } from '../../components/PageHeader';
 import {
@@ -34,6 +35,7 @@ const getLastBlueprint = () => {
 };
 
 export const Explorer = ({ search: urlSearch }: { search: ExplorerSearch }) => {
+  const { t } = useTranslation();
   const search = {
     ...urlSearch,
     blueprint: urlSearch.blueprint ?? getLastBlueprint(),
@@ -159,11 +161,11 @@ export const Explorer = ({ search: urlSearch }: { search: ExplorerSearch }) => {
       <PageHeader
         actions={
           <Button component={Link} to="/entities/new" variant="contained">
-            Create entity
+            {t('explorer.create')}
           </Button>
         }
-        description="Search and browse your catalog."
-        title="Entity explorer"
+        description={t('explorer.description')}
+        title={t('explorer.title')}
       />
       <ExplorerSearchForm
         blueprints={blueprints.data ?? []}
@@ -181,12 +183,10 @@ export const Explorer = ({ search: urlSearch }: { search: ExplorerSearch }) => {
         search={search}
       />
       {!search.blueprint && (
-        <Typography sx={{ py: 3 }}>
-          Enter a blueprint code to start exploring.
-        </Typography>
+        <Typography sx={{ py: 3 }}>{t('explorer.start')}</Typography>
       )}
       {search.blueprint && results.isPending && (
-        <Typography sx={{ py: 3 }}>Loading entities...</Typography>
+        <Typography sx={{ py: 3 }}>{t('explorer.loading')}</Typography>
       )}
       {results.isError && (
         <Alert severity="error" sx={{ mt: 3 }}>

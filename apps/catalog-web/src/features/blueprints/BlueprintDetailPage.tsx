@@ -28,6 +28,7 @@ import {
   Typography,
 } from '@mui/material';
 import { lazy, Suspense, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { PageContainer } from '../../components/PageContainer';
 import { PageHeader } from '../../components/PageHeader';
 import {
@@ -72,6 +73,7 @@ export const BlueprintDetailPage = ({
 }: {
   blueprintId: string;
 }) => {
+  const { t } = useTranslation();
   const [leftSelection, setLeftSelection] = useState<number | null>(null);
   const [rightSelection, setRightSelection] = useState<number | null>(null);
   const [dataTab, setDataTab] = useState(0);
@@ -118,7 +120,9 @@ export const BlueprintDetailPage = ({
 
   return (
     <PageContainer>
-      {revisions.isPending && <Typography>Loading blueprint...</Typography>}
+      {revisions.isPending && (
+        <Typography>{t('blueprints.loadingBlueprint')}</Typography>
+      )}
       {revisions.isError && (
         <Alert severity="error">{revisions.error.message}</Alert>
       )}
@@ -130,7 +134,10 @@ export const BlueprintDetailPage = ({
             justifyContent="space-between"
             spacing={2}
           >
-            <PageHeader eyebrow="Blueprint" title={blueprint.name} />
+            <PageHeader
+              eyebrow={t('blueprints.blueprint')}
+              title={blueprint.name}
+            />
             <Stack direction="row" spacing={1}>
               <Link
                 params={{
@@ -139,7 +146,9 @@ export const BlueprintDetailPage = ({
                 }}
                 to="/manage/blueprints/$blueprintId/revisions/$version/new"
               >
-                <Button variant="outlined">Edit blueprint</Button>
+                <Button variant="outlined">
+                  {t('blueprints.editBlueprint')}
+                </Button>
               </Link>
               {blueprint.status === 'draft' && (
                 <Button
@@ -147,7 +156,7 @@ export const BlueprintDetailPage = ({
                   onClick={() => setPublishConfirmationOpen(true)}
                   variant="contained"
                 >
-                  Publish
+                  {t('blueprints.publish')}
                 </Button>
               )}
             </Stack>
@@ -159,14 +168,20 @@ export const BlueprintDetailPage = ({
               color={blueprint.status === 'published' ? 'success' : 'warning'}
               label={blueprint.status}
             />
-            <Chip label={`Latest: v${blueprint.version}`} />
+            <Chip
+              label={t('blueprints.latestVersion', {
+                version: blueprint.version,
+              })}
+            />
           </Stack>
           <Typography color="text.secondary" sx={{ mt: 1.5 }}>
-            ID:{' '}
+            {t('blueprints.id')}:{' '}
             <Box component="span" sx={{ fontFamily: 'monospace' }}>
               {blueprint.id}
             </Box>
-            {' · '}Updated: {formatBlueprintDateTime(blueprint.updated_at)}
+            {' · '}
+            {t('blueprints.updated')}:{' '}
+            {formatBlueprintDateTime(blueprint.updated_at)}
           </Typography>
           {publish.isError && (
             <Alert severity="error" sx={{ mt: 2 }}>
@@ -180,7 +195,9 @@ export const BlueprintDetailPage = ({
           {left.data && (
             <Paper component="section" sx={{ mt: 3, p: 2.5 }}>
               <Typography component="h2" variant="h6">
-                Version {left.data.blueprint.version} metadata
+                {t('blueprints.versionMetadata', {
+                  version: left.data.blueprint.version,
+                })}
               </Typography>
               <Tabs
                 allowScrollButtonsMobile
@@ -190,16 +207,20 @@ export const BlueprintDetailPage = ({
                 value={dataTab}
                 variant="scrollable"
               >
-                <Tab label={`Attributes (${left.data.attributes.length})`} />
-                <Tab label="Views" />
-                <Tab label="View definition" />
-                <Tab label="Entity schema" />
-                <Tab label="Includes" />
+                <Tab
+                  label={t('blueprints.attributes', {
+                    count: left.data.attributes.length,
+                  })}
+                />
+                <Tab label={t('blueprints.views')} />
+                <Tab label={t('blueprints.viewDefinition')} />
+                <Tab label={t('blueprints.entitySchema')} />
+                <Tab label={t('blueprints.includes')} />
               </Tabs>
               <Box sx={{ mt: 2 }}>
                 {dataTab === 4 && (
                   <JsonMetadata
-                    label="Includes"
+                    label={t('blueprints.includes')}
                     value={left.data.blueprint.includes}
                   />
                 )}
@@ -211,13 +232,13 @@ export const BlueprintDetailPage = ({
                 )}
                 {dataTab === 2 && (
                   <JsonMetadata
-                    label="Views"
+                    label={t('blueprints.views')}
                     value={left.data.blueprint.views}
                   />
                 )}
                 {dataTab === 3 && (
                   <JsonMetadata
-                    label="Entity schema"
+                    label={t('blueprints.entitySchema')}
                     value={left.data.blueprint.entity_schema}
                   />
                 )}
@@ -226,12 +247,12 @@ export const BlueprintDetailPage = ({
                     <Table size="small">
                       <TableHead>
                         <TableRow>
-                          <TableCell>Code</TableCell>
-                          <TableCell>Type</TableCell>
-                          <TableCell>Target</TableCell>
-                          <TableCell>Tags</TableCell>
-                          <TableCell>Value schema</TableCell>
-                          <TableCell>Context</TableCell>
+                          <TableCell>{t('blueprints.code')}</TableCell>
+                          <TableCell>{t('blueprints.type')}</TableCell>
+                          <TableCell>{t('blueprints.target')}</TableCell>
+                          <TableCell>{t('blueprints.tags')}</TableCell>
+                          <TableCell>{t('blueprints.valueSchema')}</TableCell>
+                          <TableCell>{t('blueprints.context')}</TableCell>
                         </TableRow>
                       </TableHead>
                       <TableBody>
@@ -276,13 +297,12 @@ export const BlueprintDetailPage = ({
           <Accordion component="section" sx={{ mt: 3 }}>
             <AccordionSummary expandIcon={<ExpandMoreIcon />}>
               <Typography component="h2" variant="h6">
-                Compare definitions
+                {t('blueprints.compareDefinitions')}
               </Typography>
             </AccordionSummary>
             <AccordionDetails>
               <Typography color="text.secondary">
-                Choose two revisions to inspect the changes between their
-                immutable TOML definitions.
+                {t('blueprints.compareDefinitionsDescription')}
               </Typography>
               <Stack
                 direction={{ xs: 'column', sm: 'row' }}
@@ -290,7 +310,7 @@ export const BlueprintDetailPage = ({
                 sx={{ mt: 2 }}
               >
                 <TextField
-                  label="Left version"
+                  label={t('blueprints.leftVersion')}
                   onChange={(event) =>
                     setLeftSelection(Number(event.target.value))
                   }
@@ -304,7 +324,7 @@ export const BlueprintDetailPage = ({
                   ))}
                 </TextField>
                 <TextField
-                  label="Right version"
+                  label={t('blueprints.rightVersion')}
                   onChange={(event) =>
                     setRightSelection(Number(event.target.value))
                   }
@@ -324,7 +344,11 @@ export const BlueprintDetailPage = ({
                 </Alert>
               )}
               <Box sx={{ mt: 3 }}>
-                <Suspense fallback={<Typography>Loading editor...</Typography>}>
+                <Suspense
+                  fallback={
+                    <Typography>{t('blueprints.loadingEditor')}</Typography>
+                  }
+                >
                   {left.data && right.data && (
                     <TomlDiffEditor
                       modified={right.data.blueprint.definition}
@@ -343,11 +367,13 @@ export const BlueprintDetailPage = ({
             }
             open={publishConfirmationOpen}
           >
-            <DialogTitle>Publish blueprint?</DialogTitle>
+            <DialogTitle>{t('blueprints.publishBlueprintTitle')}</DialogTitle>
             <DialogContent>
               <DialogContentText>
-                Publish {blueprint.name} version {blueprint.version}? Published
-                blueprints are available for creating entities.
+                {t('blueprints.publishBlueprintDescription', {
+                  name: blueprint.name,
+                  version: blueprint.version,
+                })}
               </DialogContentText>
             </DialogContent>
             <DialogActions>
@@ -355,7 +381,7 @@ export const BlueprintDetailPage = ({
                 disabled={publish.isPending}
                 onClick={() => setPublishConfirmationOpen(false)}
               >
-                Cancel
+                {t('blueprints.cancel')}
               </Button>
               <Button
                 autoFocus
@@ -363,7 +389,9 @@ export const BlueprintDetailPage = ({
                 onClick={() => publish.mutate(blueprint.version)}
                 variant="contained"
               >
-                {publish.isPending ? 'Publishing…' : 'Publish'}
+                {publish.isPending
+                  ? t('blueprints.publishing')
+                  : t('blueprints.publish')}
               </Button>
             </DialogActions>
           </Dialog>

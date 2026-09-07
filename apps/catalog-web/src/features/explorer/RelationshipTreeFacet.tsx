@@ -15,6 +15,7 @@ import {
   Typography,
 } from '@mui/material';
 import { useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { LoadMoreButton } from '../../components/LoadMoreButton';
 import {
   getRelationshipTreeFacetChildren,
@@ -70,6 +71,7 @@ const RelationshipTreeFacetContent = ({
   onHierarchyFieldChange,
   onSelectedIdsChange,
 }: Props) => {
+  const { t } = useTranslation();
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
   const [cursors, setCursors] = useState<Map<string, (string | null)[]>>(
     new Map([['root', [null]]]),
@@ -158,7 +160,9 @@ const RelationshipTreeFacetContent = ({
             {canExpand && (
               <Box
                 aria-label={
-                  open ? `Collapse ${item.display}` : `Expand ${item.display}`
+                  open
+                    ? t('explorer.collapse', { item: item.display })
+                    : t('explorer.expand', { item: item.display })
                 }
                 component="button"
                 onClick={() => {
@@ -243,12 +247,12 @@ const RelationshipTreeFacetContent = ({
       {hierarchyFields.length > 0 && (
         <Accordion disableGutters elevation={0} sx={{ mt: 1 }}>
           <AccordionSummary expandIcon={<ExpandMoreIcon />}>
-            <Typography variant="body2">Tree options</Typography>
+            <Typography variant="body2">{t('explorer.treeOptions')}</Typography>
           </AccordionSummary>
           <AccordionDetails>
             <TextField
               fullWidth
-              label="Build tree using"
+              label={t('explorer.buildTreeUsing')}
               onChange={(event) => onHierarchyFieldChange(event.target.value)}
               select
               size="small"

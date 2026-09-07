@@ -8,6 +8,8 @@ import {
   Typography,
 } from '@mui/material';
 import ReactMarkdown from 'react-markdown';
+import { useTranslation } from 'react-i18next';
+import '../../i18n';
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === 'object' && value !== null && !Array.isArray(value);
@@ -36,33 +38,38 @@ const JsonDetails = ({
 );
 
 const ToolCall = ({ call }: { call: unknown }) => {
+  const { t } = useTranslation();
   const functionCall =
     isRecord(call) && isRecord(call.function) ? call.function : null;
   const name =
-    typeof functionCall?.name === 'string' ? functionCall.name : 'unknown tool';
+    typeof functionCall?.name === 'string'
+      ? functionCall.name
+      : t('agents.unknownTool');
 
   return (
     <Stack spacing={1}>
       <Stack direction="row" spacing={1} sx={{ alignItems: 'center' }}>
-        <Chip label="Tool call" size="small" />
+        <Chip label={t('agents.toolCall')} size="small" />
         <Typography variant="body2">{name}</Typography>
       </Stack>
-      <JsonDetails label="Show call JSON">{call}</JsonDetails>
+      <JsonDetails label={t('agents.showCallJson')}>{call}</JsonDetails>
     </Stack>
   );
 };
 
 const ToolResult = ({ content }: { content: Record<string, unknown> }) => {
-  const name = typeof content.name === 'string' ? content.name : 'unknown tool';
+  const { t } = useTranslation();
+  const name =
+    typeof content.name === 'string' ? content.name : t('agents.unknownTool');
   const result = content.result;
 
   return (
     <Stack spacing={1}>
       <Stack direction="row" spacing={1} sx={{ alignItems: 'center' }}>
-        <Chip color="success" label="Tool result" size="small" />
+        <Chip color="success" label={t('agents.toolResult')} size="small" />
         <Typography variant="body2">{name}</Typography>
       </Stack>
-      <JsonDetails label="Show result JSON">{result}</JsonDetails>
+      <JsonDetails label={t('agents.showResultJson')}>{result}</JsonDetails>
     </Stack>
   );
 };

@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useTranslation } from 'react-i18next';
 import { Link } from '@tanstack/react-router';
 import {
   Alert,
@@ -31,16 +32,16 @@ import {
 } from './api';
 import { agentQueryKeys } from './query-keys';
 
-const formatDate = (value: string | null) =>
-  value
-    ? new Intl.DateTimeFormat(undefined, {
-        dateStyle: 'medium',
-        timeStyle: 'short',
-        timeZone: 'UTC',
-      }).format(new Date(value)) + ' UTC'
-    : 'Never';
-
 export const SchedulesPage = () => {
+  const { i18n, t } = useTranslation();
+  const formatDate = (value: string | null) =>
+    value
+      ? `${new Intl.DateTimeFormat(i18n.language, {
+          dateStyle: 'medium',
+          timeStyle: 'short',
+          timeZone: 'UTC',
+        }).format(new Date(value))} UTC`
+      : t('agents.never');
   const queryClient = useQueryClient();
   const [conversationId, setConversationId] = useState('');
   const [cron, setCron] = useState('0 0 * * * *');
@@ -77,11 +78,11 @@ export const SchedulesPage = () => {
       <PageHeader
         actions={
           <Button component={Link} to="/agents" variant="outlined">
-            Conversations
+            {t('agents.conversations')}
           </Button>
         }
-        description="Schedules run in UTC using six-field cron expressions (second minute hour day month weekday)."
-        title="Agent schedules"
+        description={t('agents.schedulesDescription')}
+        title={t('agents.agentSchedules')}
       />
       <Paper
         component="form"
@@ -93,24 +94,26 @@ export const SchedulesPage = () => {
       >
         <Stack direction={{ xs: 'column', md: 'row' }} spacing={2}>
           <FormControl fullWidth>
-            <InputLabel id="conversation-label">Conversation</InputLabel>
+            <InputLabel id="conversation-label">
+              {t('agents.conversationLabel')}
+            </InputLabel>
             <Select
-              label="Conversation"
+              label={t('agents.conversationLabel')}
               labelId="conversation-label"
               onChange={(event) => setConversationId(event.target.value)}
               value={conversationId}
             >
               {conversations.data?.map((conversation) => (
                 <MenuItem key={conversation.id} value={conversation.id}>
-                  {conversation.title || 'Untitled conversation'}
+                  {conversation.title || t('agents.untitledConversation')}
                 </MenuItem>
               ))}
             </Select>
           </FormControl>
           <TextField
             fullWidth
-            helperText="UTC, six fields"
-            label="Cron expression"
+            helperText={t('agents.cronHelp')}
+            label={t('agents.cronExpression')}
             onChange={(event) => setCron(event.target.value)}
             value={cron}
           />
@@ -119,7 +122,7 @@ export const SchedulesPage = () => {
             type="submit"
             variant="contained"
           >
-            Schedule
+            {t('agents.schedule')}
           </Button>
         </Stack>
         {create.isError && (
@@ -137,12 +140,12 @@ export const SchedulesPage = () => {
         <Table>
           <TableHead>
             <TableRow>
-              <TableCell>Conversation</TableCell>
-              <TableCell>UTC cron</TableCell>
-              <TableCell>Next run</TableCell>
-              <TableCell>Last run</TableCell>
-              <TableCell>Enabled</TableCell>
-              <TableCell>Actions</TableCell>
+              <TableCell>{t('agents.conversationLabel')}</TableCell>
+              <TableCell>{t('agents.utcCron')}</TableCell>
+              <TableCell>{t('agents.nextRun')}</TableCell>
+              <TableCell>{t('agents.lastRun')}</TableCell>
+              <TableCell>{t('agents.enabled')}</TableCell>
+              <TableCell>{t('agents.actions')}</TableCell>
             </TableRow>
           </TableHead>
           <TableBody>
@@ -162,7 +165,9 @@ export const SchedulesPage = () => {
                     disabled={update.isPending}
                     slotProps={{
                       input: {
-                        'aria-label': `Enable schedule ${schedule.cron_expression}`,
+                        'aria-label': t('agents.enableSchedule', {
+                          cron: schedule.cron_expression,
+                        }),
                       },
                     }}
                     onChange={(event) =>
@@ -180,7 +185,7 @@ export const SchedulesPage = () => {
                       onClick={() => runNow.mutate(schedule.id)}
                       size="small"
                     >
-                      Run now
+                      {t('agents.runNow')}
                     </Button>
                     <Button
                       color="error"
@@ -188,7 +193,7 @@ export const SchedulesPage = () => {
                       onClick={() => remove.mutate(schedule.id)}
                       size="small"
                     >
-                      Delete
+                      {t('agents.delete')}
                     </Button>
                   </Stack>
                 </TableCell>
@@ -197,7 +202,7 @@ export const SchedulesPage = () => {
             {schedules.data?.length === 0 && (
               <TableRow>
                 <TableCell colSpan={6}>
-                  <Typography>No schedules yet.</Typography>
+                  <Typography>{t('agents.noSchedules')}</Typography>
                 </TableCell>
               </TableRow>
             )}

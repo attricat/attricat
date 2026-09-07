@@ -10,12 +10,14 @@ import {
   TextField,
 } from '@mui/material';
 import { useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { PageContainer } from '../../components/PageContainer';
 import { PageHeader } from '../../components/PageHeader';
 import { createContext, listContexts } from '../entities/api';
 import { entityQueryKeys } from '../entities/query-keys';
 
 export const CreateContextPage = () => {
+  const { t } = useTranslation();
   const navigate = useNavigate({ from: '/manage/contexts/new' });
   const queryClient = useQueryClient();
   const [validationError, setValidationError] = useState<string>();
@@ -64,9 +66,9 @@ export const CreateContextPage = () => {
   return (
     <PageContainer>
       <Button component={Link} to="/manage/contexts" sx={{ mb: 4 }}>
-        Back to contexts
+        {t('contexts.backToContexts')}
       </Button>
-      <PageHeader title="Create context" titleVariant="h3" />
+      <PageHeader title={t('contexts.createContext')} titleVariant="h3" />
       <Paper
         component="form"
         onSubmit={(event) => {
@@ -79,7 +81,7 @@ export const CreateContextPage = () => {
           <form.Field name="code">
             {(field) => (
               <TextField
-                label="Code"
+                label={t('contexts.code')}
                 onChange={(event) => field.handleChange(event.target.value)}
                 required
                 value={field.state.value}
@@ -90,12 +92,12 @@ export const CreateContextPage = () => {
             {(field) => (
               <TextField
                 select
-                label="Parent context"
+                label={t('contexts.parentContext')}
                 required
                 value={field.state.value}
                 onChange={(event) => field.handleChange(event.target.value)}
               >
-                <MenuItem value="">Select a parent</MenuItem>
+                <MenuItem value="">{t('contexts.selectParent')}</MenuItem>
                 {(contexts.data ?? []).map((context) => (
                   <MenuItem key={context.id} value={context.id}>
                     {context.code}
@@ -107,7 +109,7 @@ export const CreateContextPage = () => {
           <form.Field name="data">
             {(field) => (
               <TextField
-                label="Metadata"
+                label={t('contexts.metadata')}
                 multiline
                 minRows={5}
                 onChange={(event) => field.handleChange(event.target.value)}
@@ -122,7 +124,7 @@ export const CreateContextPage = () => {
             </Alert>
           )}
           <Button disabled={create.isPending} type="submit" variant="contained">
-            Create context
+            {t('contexts.createContext')}
           </Button>
         </Stack>
       </Paper>

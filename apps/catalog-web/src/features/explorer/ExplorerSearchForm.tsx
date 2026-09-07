@@ -1,6 +1,7 @@
 import { useForm } from '@tanstack/react-form';
 import { Button, MenuItem, Paper, Stack, TextField } from '@mui/material';
 import { useEffect } from 'react';
+import { useTranslation } from 'react-i18next';
 import type { Blueprint } from '../entities/api';
 import type { ExplorerSearch } from './search';
 
@@ -11,6 +12,7 @@ type Props = {
 };
 
 export const ExplorerSearchForm = ({ blueprints, search, onSubmit }: Props) => {
+  const { t } = useTranslation();
   const form = useForm({
     defaultValues: {
       blueprint: search.blueprint ?? '',
@@ -52,7 +54,7 @@ export const ExplorerSearchForm = ({ blueprints, search, onSubmit }: Props) => {
           {(field) => (
             <TextField
               required
-              label="Select a Blueprint"
+              label={t('explorer.selectBlueprint')}
               onChange={(event) => field.handleChange(event.target.value)}
               select
               sx={{ width: 280 }}
@@ -70,16 +72,16 @@ export const ExplorerSearchForm = ({ blueprints, search, onSubmit }: Props) => {
           {(field) => (
             <TextField
               fullWidth
-              label="Query"
+              label={t('explorer.query')}
               onChange={(event) => field.handleChange(event.target.value)}
-              helperText="Examples: red, sku:123*, color.name:red"
-              placeholder="Search terms"
+              helperText={t('explorer.queryExamples')}
+              placeholder={t('explorer.searchTerms')}
               value={field.state.value}
             />
           )}
         </form.Field>
         <Button type="submit" variant="contained">
-          Search
+          {t('explorer.search')}
         </Button>
       </Stack>
     </Paper>

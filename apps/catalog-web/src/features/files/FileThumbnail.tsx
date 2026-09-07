@@ -1,6 +1,7 @@
 import { Box, CircularProgress, Typography } from '@mui/material';
 import { useQuery } from '@tanstack/react-query';
 import { useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { fileDownloadUrl, getFileMetadata } from './api';
 import { fileQueryKeys } from './query-keys';
 import type { FileMetadata } from './schemas';
@@ -22,6 +23,7 @@ const ThumbnailPreview = ({
   source,
   unavailable,
 }: ThumbnailPreviewProps) => {
+  const { t } = useTranslation();
   const [loaded, setLoaded] = useState(false);
   const [attempt, setAttempt] = useState(0);
 
@@ -73,10 +75,13 @@ const ThumbnailPreview = ({
         >
           {unavailable ? (
             <Typography color="text.secondary" variant="caption">
-              Unavailable
+              {t('files.unavailable')}
             </Typography>
           ) : (
-            <CircularProgress aria-label="Thumbnail is processing" size={20} />
+            <CircularProgress
+              aria-label={t('files.thumbnailProcessing')}
+              size={20}
+            />
           )}
         </Box>
       )}

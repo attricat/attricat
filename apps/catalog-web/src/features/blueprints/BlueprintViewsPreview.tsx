@@ -1,4 +1,5 @@
 import { createElement, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import {
   Box,
   Button,
@@ -122,6 +123,7 @@ export const BlueprintViewsPreview = ({
   attributes: readonly Attribute[];
   views: Blueprint['views'];
 }) => {
+  const { t } = useTranslation();
   const [fields, setFields] = useState<Record<string, string>>({});
   const entries = Object.entries(views);
   const editEntry = entries.find(([name]) => name === 'edit');
@@ -136,7 +138,7 @@ export const BlueprintViewsPreview = ({
   return (
     <>
       <Typography color="text.secondary" sx={{ mt: 1 }}>
-        Sandbox values stay in this page and are never saved.
+        {t('blueprints.sandboxDescription')}
       </Typography>
       <Tabs
         allowScrollButtonsMobile
@@ -166,7 +168,7 @@ export const BlueprintViewsPreview = ({
                   <TextField
                     disabled
                     fullWidth
-                    helperText="Relationship values are not available in the sandbox."
+                    helperText={t('blueprints.relationshipSandboxUnavailable')}
                     label={attribute.code}
                     value=""
                   />
@@ -181,15 +183,15 @@ export const BlueprintViewsPreview = ({
                     select
                     value={value}
                   >
-                    <MenuItem value="">Not set</MenuItem>
-                    <MenuItem value="true">True</MenuItem>
-                    <MenuItem value="false">False</MenuItem>
+                    <MenuItem value="">{t('blueprints.notSet')}</MenuItem>
+                    <MenuItem value="true">{t('blueprints.true')}</MenuItem>
+                    <MenuItem value="false">{t('blueprints.false')}</MenuItem>
                   </TextField>
                 );
               }
 
               if (attribute.value_type === attributeValueTypes.file) {
-                return <Button>Choose or drop files</Button>;
+                return <Button>{t('blueprints.chooseOrDropFiles')}</Button>;
               }
 
               return (

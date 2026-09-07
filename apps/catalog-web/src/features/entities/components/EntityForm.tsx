@@ -23,6 +23,7 @@ import {
 import { entityQueryKeys } from '../query-keys';
 import { EntityView } from '../../views/components/EntityView';
 import { useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { EntityAttributeEditor } from './EntityAttributeEditor';
 
 type EntityFormProps = {
@@ -69,6 +70,7 @@ export const EntityForm = ({
   onSubmit,
   submitLabel,
 }: EntityFormProps) => {
+  const { t } = useTranslation();
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
   const [formError, setFormError] = useState<string>();
   const blueprints = useQuery({
@@ -160,17 +162,19 @@ export const EntityForm = ({
       <Stack spacing={2}>
         {!blueprint && (
           <>
-            <Typography variant="h6">Choose blueprint</Typography>
+            <Typography variant="h6">
+              {t('entities.chooseBlueprint')}
+            </Typography>
             <form.Field name="blueprintCode">
               {(field) => (
                 <TextField
                   select
                   required
-                  label="Blueprint"
+                  label={t('entities.blueprint')}
                   onChange={(event) => field.handleChange(event.target.value)}
                   value={field.state.value}
                 >
-                  <MenuItem value="">Select a blueprint</MenuItem>
+                  <MenuItem value="">{t('entities.selectBlueprint')}</MenuItem>
                   {(blueprints.data ?? []).map((option) => (
                     <MenuItem key={option.code} value={option.code}>
                       {option.name} ({option.code})
@@ -180,7 +184,9 @@ export const EntityForm = ({
               )}
             </form.Field>
             {blueprints.isError && (
-              <Alert severity="error">Could not load blueprints.</Alert>
+              <Alert severity="error">
+                {t('entities.couldNotLoadBlueprints')}
+              </Alert>
             )}
           </>
         )}
@@ -219,13 +225,21 @@ export const EntityForm = ({
                   const migrationReviewMessage =
                     migrationReviewMessages[attribute.code];
                   const helperText = readonly
-                    ? 'Managed by system actions'
+                    ? t('entities.managedBySystem')
                     : defaultOnly
-                      ? 'Managed in Default'
+                      ? t('entities.managedInDefault')
                       : inherited
                         ? attribute.value_type === 'relationship'
-                          ? `Inherited from ${resolvedValue.source_context.code} context`
-                          : `Inherited from ${resolvedValue.source_context.code} context: ${typeof resolvedValue.value === 'object' ? JSON.stringify(resolvedValue.value) : String(resolvedValue.value)}`
+                          ? t('entities.inheritedFromContext', {
+                              context: resolvedValue.source_context.code,
+                            })
+                          : t('entities.inheritedValue', {
+                              context: resolvedValue.source_context.code,
+                              value:
+                                typeof resolvedValue.value === 'object'
+                                  ? JSON.stringify(resolvedValue.value)
+                                  : String(resolvedValue.value),
+                            })
                         : undefined;
                   const handleChange = (nextValue: string) => {
                     const nextFields = {
@@ -273,7 +287,7 @@ export const EntityForm = ({
           <Alert severity="error">{error?.message ?? formError}</Alert>
         )}
         <Button disabled={isLoadingBlueprint} type="submit" variant="contained">
-          {isLoadingBlueprint ? 'Loading blueprint...' : submitLabel}
+          {isLoadingBlueprint ? t('entities.loadingBlueprint') : submitLabel}
         </Button>
       </Stack>
     </Paper>
