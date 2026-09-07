@@ -143,7 +143,7 @@ export const SideNavigation = ({
               onClick={onNavigate}
               selected={
                 item.to === '/'
-                  ? pathname === item.to
+                  ? pathname === item.to && !search.locked
                   : pathname.startsWith(item.to)
               }
               to={item.to}
