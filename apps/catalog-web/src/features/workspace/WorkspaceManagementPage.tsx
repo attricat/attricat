@@ -265,13 +265,14 @@ const Navigation = ({ canManage }: { canManage: boolean }) => {
     },
   });
   if (!canManage)
-    return <Alert severity="error">{t('workspace.unavailable')}</Alert>;
+    return (
+      <Alert severity="error">{t('workspace.notAuthorizedNavigation')}</Alert>
+    );
   return (
     <Stack spacing={2} sx={{ mt: 3 }}>
-      <Typography variant="h6">Navigation</Typography>
+      <Typography variant="h6">{t('workspace.navigationTitle')}</Typography>
       <Typography color="text.secondary">
-        Pin published entity blueprints and optionally limit them to workspace
-        roles.
+        {t('workspace.navigationDescription')}
       </Typography>
       {(navigation.isError || roles.isError || blueprints.isError) && (
         <Alert severity="error">
@@ -284,7 +285,7 @@ const Navigation = ({ canManage }: { canManage: boolean }) => {
         <Paper key={entry.blueprint_code} sx={{ p: 2 }}>
           <Stack direction={{ xs: 'column', md: 'row' }} spacing={1.5}>
             <TextField
-              label="Blueprint"
+              label={t('workspace.navigationBlueprint')}
               onChange={(event) =>
                 setEntries(
                   displayed.map((item, position) =>
@@ -305,8 +306,10 @@ const Navigation = ({ canManage }: { canManage: boolean }) => {
               ))}
             </TextField>
             <TextField
-              helperText={`Available: ${(roles.data ?? []).map((role) => role.code).join(', ')}`}
-              label="Visible roles (comma separated)"
+              helperText={t('workspace.navigationAvailableRoles', {
+                roles: (roles.data ?? []).map((role) => role.code).join(', '),
+              })}
+              label={t('workspace.navigationVisibleRoles')}
               onChange={(event) =>
                 setEntries(
                   displayed.map((item, position) =>
@@ -332,7 +335,7 @@ const Navigation = ({ canManage }: { canManage: boolean }) => {
                 )
               }
             >
-              Remove
+              {t('workspace.remove')}
             </Button>
             <Button
               disabled={index === 0}
@@ -342,7 +345,7 @@ const Navigation = ({ canManage }: { canManage: boolean }) => {
                 setEntries(next);
               }}
             >
-              Up
+              {t('workspace.moveUp')}
             </Button>
             <Button
               disabled={index === displayed.length - 1}
@@ -352,7 +355,7 @@ const Navigation = ({ canManage }: { canManage: boolean }) => {
                 setEntries(next);
               }}
             >
-              Down
+              {t('workspace.moveDown')}
             </Button>
           </Stack>
         </Paper>
@@ -374,14 +377,14 @@ const Navigation = ({ canManage }: { canManage: boolean }) => {
               ]);
           }}
         >
-          Add shortcut
+          {t('workspace.addShortcut')}
         </Button>
         <Button
           disabled={save.isPending}
           onClick={() => save.mutate(displayed)}
           variant="contained"
         >
-          Save navigation
+          {t('workspace.saveNavigation')}
         </Button>
       </Stack>
       {save.isError && <Alert severity="error">{save.error.message}</Alert>}

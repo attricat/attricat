@@ -88,8 +88,8 @@ export const SideNavigation = ({
   onSignOut?: () => void;
 }) => {
   const { t } = useTranslation();
-  const pathname = useRouterState({
-    select: (state) => state.location.pathname,
+  const { pathname, search } = useRouterState({
+    select: (state) => state.location,
   });
   const [manageOpen, setManageOpen] = useState(false);
   const isManageOpen = manageOpen || pathname.startsWith('/manage/');
@@ -153,22 +153,24 @@ export const SideNavigation = ({
             </ListItemButton>
           ))}
         {pinnedExplore.data?.map((item) => (
-          <ListItemButton
-            component="a"
-            href={`/?blueprint=${encodeURIComponent(item.blueprint_code)}&locked=true`}
+          <Link
             key={item.blueprint_code}
             onClick={onNavigate}
-            selected={
-              pathname === '/' &&
-              new URLSearchParams(window.location.search).get('blueprint') ===
-                item.blueprint_code
-            }
+            search={{ blueprint: item.blueprint_code, locked: true }}
+            style={{ color: 'inherit', textDecoration: 'none' }}
+            to="/"
           >
-            <ListItemIcon>
-              <TravelExploreOutlinedIcon />
-            </ListItemIcon>
-            <ListItemText primary={item.blueprint_name} />
-          </ListItemButton>
+            <ListItemButton
+              selected={
+                pathname === '/' && search.blueprint === item.blueprint_code
+              }
+            >
+              <ListItemIcon>
+                <TravelExploreOutlinedIcon />
+              </ListItemIcon>
+              <ListItemText primary={item.blueprint_name} />
+            </ListItemButton>
+          </Link>
         ))}
         <ExtensionOutlet outlet="navigation" />
         <ListItemButton
