@@ -156,6 +156,9 @@ export const Explorer = ({ search: urlSearch }: { search: ExplorerSearch }) => {
     });
   };
 
+  const lockedBlueprintName =
+    selectedBlueprint.data?.blueprint.name ?? search.blueprint;
+
   return (
     <PageContainer>
       <PageHeader
@@ -169,11 +172,25 @@ export const Explorer = ({ search: urlSearch }: { search: ExplorerSearch }) => {
             }
             variant="contained"
           >
-            {t('explorer.create')}
+            {search.locked && lockedBlueprintName
+              ? t('explorer.createBlueprint', {
+                  blueprint: lockedBlueprintName,
+                })
+              : t('explorer.create')}
           </Button>
         }
-        description={t('explorer.description')}
-        title={t('explorer.title')}
+        description={
+          search.locked && lockedBlueprintName
+            ? t('explorer.blueprintDescription', {
+                blueprint: lockedBlueprintName,
+              })
+            : t('explorer.description')
+        }
+        title={
+          search.locked && lockedBlueprintName
+            ? t('explorer.blueprintTitle', { blueprint: lockedBlueprintName })
+            : t('explorer.title')
+        }
       />
       <ExplorerSearchForm
         blueprints={blueprints.data ?? []}
