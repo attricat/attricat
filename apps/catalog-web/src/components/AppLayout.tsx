@@ -13,12 +13,15 @@ import {
   IconButton,
   Toolbar,
   Typography,
+  CircularProgress,
   useMediaQuery,
   useTheme,
 } from '@mui/material';
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { currentSession, logout } from '../features/auth/api';
+import { listSidebarExploreNavigation } from '../features/workspace/api';
+import { workspaceQueryKeys } from '../features/workspace/query-keys';
 import { LanguageSwitcher } from './LanguageSwitcher';
 import { drawerWidth, SideNavigation } from './SideNavigation';
 
@@ -33,6 +36,11 @@ export const AppLayout = () => {
     queryKey: ['auth', 'session'],
     queryFn: currentSession,
     retry: false,
+  });
+  const workspaceNavigation = useQuery({
+    queryKey: workspaceQueryKeys.sidebarExploreNavigation(),
+    queryFn: listSidebarExploreNavigation,
+    enabled: Boolean(session.data),
   });
   const theme = useTheme();
   const isDesktop = useMediaQuery(theme.breakpoints.up('md'));
@@ -52,7 +60,23 @@ export const AppLayout = () => {
     pathname === '/onboarding'
   )
     return <Outlet />;
-  if (session.isPending) return null;
+  if (
+    session.isPending ||
+    (Boolean(session.data) && workspaceNavigation.isPending)
+  )
+    return (
+      <Box
+        aria-label={t('app.loading')}
+        sx={{
+          alignItems: 'center',
+          display: 'flex',
+          height: '100dvh',
+          justifyContent: 'center',
+        }}
+      >
+        <CircularProgress />
+      </Box>
+    );
   if (!session.data) {
     sessionStorage.setItem(
       'catalog.return-to',

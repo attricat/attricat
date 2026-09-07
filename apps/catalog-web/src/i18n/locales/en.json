@@ -6,7 +6,8 @@
   },
   "app": {
     "catalog": "Catalog",
-    "dataManagement": "Data management"
+    "dataManagement": "Data management",
+    "loading": "Loading"
   },
   "navigation": {
     "open": "Open navigation",
