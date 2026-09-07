@@ -103,7 +103,8 @@ The v1 capability catalogue is: `catalog.read`, `catalog.write`,
 `configuration.write`, `secrets.read`, `logging.write`, `client.commands`,
 `client.navigation`, `client.notification`, `client.events`,
 `client.blueprint_configuration`, `client.entity_decoration`,
-`client.entity_action`, `network.request`, and `webhooks.receive`.
+`client.entity_action`, `client.explorer_row_action`,
+`client.blueprint_detail_panel`, `network.request`, and `webhooks.receive`.
 
 Required `permissions` and `host_permissions` must be granted before an
 extension can be enabled. Optional variants are independently grantable and
@@ -218,14 +219,19 @@ Enabled `client_component` artifacts can expose a strict `ui` contribution:
 }
 ```
 
-A contribution is either `route` (which requires a non-empty `title`) or
-`element` (which requires one of the host-owned `navigation`,
-`entity_preview_panel`, `blueprint_attribute_configuration`,
-`entity_attribute_decoration`, or `entity_action` outlets). Routes are always namespaced at
+A contribution is either `route` (which requires a non-empty `title`), legacy
+`element`, explicit `action`, or explicit read-only `panel`. `action` is
+required for `explorer_row_action` (and requires
+`client.explorer_row_action`); `panel` is required for
+`blueprint_detail_panel` (and requires `client.blueprint_detail_panel`).
+Existing `element` contributions use `navigation`, `entity_preview_panel`,
+`blueprint_attribute_configuration`, `entity_attribute_decoration`, or
+`entity_action`. Routes are always namespaced at
 `/extensions/:extensionId/:contributionId`; manifests cannot provide a path,
 selector, or host component. Element names must be lowercase custom-element
 names. Each extension can use an outlet once and all contribution/artifact IDs
-remain stable across releases.
+remain stable across releases. Multiple enabled extensions may contribute to a
+surface, but their display order is intentionally unspecified.
 
 Catalog loads runtime descriptors and JavaScript only for installations whose
 effective runtime state is enabled. The deployment gate (`EXTENSIONS_MODE`),
@@ -331,6 +337,15 @@ The additional fixed element outlets are
 the relevant catalog IDs: blueprint/revision/attribute, or
 entity/attribute/context. Extensions cannot provide DOM selectors, arbitrary
 host routes, React state, or inter-extension RPC.
+
+The `explorer_row_action` outlet is host-controlled overflow UI for one entity;
+its strict v1 context is `{ "context_version": 1, "entity_id", "blueprint_id",
+"blueprint_version" }`. The `blueprint_detail_panel` outlet is a host-owned,
+read-only detail-page region with strict v1 context `{ "context_version": 1,
+"blueprint_id", "blueprint_version" }`. These contexts deliberately exclude
+search state, arbitrary entity values, and browser page state. Commands from an
+action still require `client.commands` and use the existing validated,
+authorized command broker.
 
 ## Current implementation limitations
 
