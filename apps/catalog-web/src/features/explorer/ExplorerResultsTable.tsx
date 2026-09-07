@@ -248,7 +248,7 @@ export const ExplorerResultsTable = ({
                       header.column.id === 'display'
                         ? { minWidth: 280 }
                         : header.column.id === 'id'
-                          ? { width: 48 }
+                          ? { textAlign: 'center', width: 48 }
                           : {}
                     }
                   >
@@ -302,7 +302,7 @@ export const ExplorerResultsTable = ({
                         cell.column.id === 'display'
                           ? { minWidth: 280 }
                           : cell.column.id === 'id'
-                            ? { width: 48 }
+                            ? { textAlign: 'center', width: 48 }
                             : {}
                       }
                     >
