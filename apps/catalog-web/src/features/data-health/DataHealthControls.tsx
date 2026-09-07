@@ -10,6 +10,11 @@ import {
 } from '@mui/material';
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
+import {
+  maximumStaleAfterDays,
+  minimumStaleAfterDays,
+  staleAfterDayOptions,
+} from './constants';
 
 type Props = {
   staleAfterDays: number;
@@ -32,7 +37,9 @@ const DataHealthControlsForm = ({
 }: Props) => {
   const { t } = useTranslation();
   const [customThreshold, setCustomThreshold] = useState(
-    ![30, 90, 180, 365].includes(staleAfterDays),
+    !staleAfterDayOptions.includes(
+      staleAfterDays as (typeof staleAfterDayOptions)[number],
+    ),
   );
 
   return (
@@ -59,7 +66,7 @@ const DataHealthControlsForm = ({
               onStaleAfterDaysChange(Number(event.target.value));
             }}
           >
-            {[30, 90, 180, 365].map((days) => (
+            {staleAfterDayOptions.map((days) => (
               <MenuItem key={days} value={days}>
                 {t('dataHealth.daysCount', { count: days })}
               </MenuItem>
@@ -73,11 +80,20 @@ const DataHealthControlsForm = ({
             label={t('dataHealth.days')}
             onBlur={(event) => {
               const days = Number(event.target.value);
-              if (Number.isInteger(days) && days >= 1 && days <= 3650)
+              if (
+                Number.isInteger(days) &&
+                days >= minimumStaleAfterDays &&
+                days <= maximumStaleAfterDays
+              )
                 onStaleAfterDaysChange(days);
             }}
             size="small"
-            slotProps={{ htmlInput: { min: 1, max: 3650 } }}
+            slotProps={{
+              htmlInput: {
+                min: minimumStaleAfterDays,
+                max: maximumStaleAfterDays,
+              },
+            }}
             type="number"
             sx={{ width: 110 }}
           />

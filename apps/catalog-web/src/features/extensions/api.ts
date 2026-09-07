@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { apiFetch } from '../auth/request';
+import { maximumExtensionResponseBytes } from './constants';
 
 const contributionSchema = z
   .object({
@@ -128,7 +129,7 @@ export const extensionStorage = async (
   );
   if (!response.ok) throw new Error('Extension storage request was denied');
   const text = await response.text();
-  if (text.length > 1_048_576)
+  if (new TextEncoder().encode(text).length > maximumExtensionResponseBytes)
     throw new Error('Extension storage response is too large');
   return JSON.parse(text) as unknown;
 };

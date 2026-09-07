@@ -7,6 +7,7 @@ use api::{
     agents::AgentProviderConfig,
     constants::{
         DEFAULT_DATA_HEALTH_CACHE_TTL_SECONDS, DEFAULT_ENTITY_PAGE_SIZE,
+        DEFAULT_FILE_UPLOAD_MAX_BYTES, DEFAULT_FILE_UPLOAD_MAX_FILES,
         DEFAULT_INCOMING_RELATIONSHIP_PAGE_SIZE, DEFAULT_PREVIEW_RELATIONSHIP_DEPTH,
         DEFAULT_PREVIEW_RELATIONSHIP_ITEMS, DEFAULT_RELATIONSHIP_FACET_NODES,
         MAINTENANCE_POOL_CONNECTIONS, REQUEST_POOL_CONNECTIONS,
@@ -244,10 +245,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
             max_incoming_relationship_page_size,
             max_relationship_facet_nodes,
             max_upload_file_bytes: std::env::var("FILE_UPLOAD_MAX_BYTES")
-                .unwrap_or_else(|_| (50 * 1024 * 1024).to_string())
+                .unwrap_or_else(|_| DEFAULT_FILE_UPLOAD_MAX_BYTES.to_string())
                 .parse()?,
             max_upload_files: std::env::var("FILE_UPLOAD_MAX_FILES")
-                .unwrap_or_else(|_| "10".to_owned())
+                .unwrap_or_else(|_| DEFAULT_FILE_UPLOAD_MAX_FILES.to_string())
                 .parse()?,
             data_health_cache_ttl_seconds: std::env::var("DATA_HEALTH_CACHE_TTL_SECONDS")
                 .unwrap_or_else(|_| DEFAULT_DATA_HEALTH_CACHE_TTL_SECONDS.to_string())

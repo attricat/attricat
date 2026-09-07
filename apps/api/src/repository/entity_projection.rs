@@ -1,5 +1,6 @@
 use super::values::{ProjectionNativeValueRow, native_value_json};
 use super::*;
+use crate::constants::DEFAULT_PREVIEW_RELATIONSHIP_ITEMS;
 use async_recursion::async_recursion;
 use std::collections::HashSet;
 use uuid::Uuid;
@@ -106,7 +107,7 @@ impl CatalogRepository {
                 entity.id,
                 &entity.projections,
                 relationship_depth,
-                10,
+                DEFAULT_PREVIEW_RELATIONSHIP_ITEMS.into(),
                 &mut HashSet::new(),
             )
             .await?;

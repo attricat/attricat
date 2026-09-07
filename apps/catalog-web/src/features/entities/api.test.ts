@@ -213,11 +213,7 @@ describe('entity API client', () => {
       ],
       next_cursor: null,
     });
-    const result = await searchEntities(
-      'product',
-      undefined,
-      'color.name:red',
-    );
+    const result = await searchEntities('product', undefined, 'color.name:red');
     expect(result.items[0].match_explanations[0]?.term).toBe('color.name:red');
     expect(fetchMock).toHaveBeenLastCalledWith('/api/v1/entities/search', {
       method: 'POST',

@@ -32,7 +32,9 @@ describe('agent API client', () => {
 
     const [conversationPath, conversationInit] = fetchMock.mock.calls[0];
     expect(conversationPath).toBe('/api/agent/conversations');
-    expect(JSON.parse(conversationInit.body)).toEqual({ title: 'Review products' });
+    expect(JSON.parse(conversationInit.body)).toEqual({
+      title: 'Review products',
+    });
     expect(fetchMock.mock.calls[1][0]).toBe(
       `/api/agent/conversations/${id}/messages`,
     );
@@ -53,6 +55,8 @@ describe('agent API client', () => {
       status: 202,
       json: () => Promise.resolve({ id: 'not-a-uuid', status: 'queued' }),
     });
-    await expect(sendMessage(id, 'Hello')).rejects.toThrow('Invalid API response');
+    await expect(sendMessage(id, 'Hello')).rejects.toThrow(
+      'Invalid API response',
+    );
   });
 });

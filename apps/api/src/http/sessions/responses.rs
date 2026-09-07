@@ -7,7 +7,7 @@ use serde::Serialize;
 use uuid::Uuid;
 
 use super::{ApiError, AppState, SessionSecret};
-use crate::constants::{CSRF_COOKIE, SESSION_COOKIE};
+use crate::constants::{CSRF_COOKIE, SECONDS_PER_HOUR, SESSION_COOKIE};
 
 #[derive(Serialize)]
 pub(in crate::http) struct SessionResponse {
@@ -187,7 +187,7 @@ fn cookie(
 ) -> HeaderValue {
     let mut value = format!(
         "{name}={value}; Path=/; SameSite=Lax; Max-Age={}",
-        lifetime_hours * 3600
+        lifetime_hours * SECONDS_PER_HOUR
     );
     if http_only {
         value.push_str("; HttpOnly");

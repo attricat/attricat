@@ -33,6 +33,12 @@ import {
 } from './api';
 import { dataHealthQueryKeys } from './query-keys';
 import { DataHealthControls } from './DataHealthControls';
+import {
+  byteDisplayPrecision,
+  bytesPerKilobyte,
+  dataHealthStaleTime,
+  defaultStaleAfterDays,
+} from './constants';
 import type { DataHealthSearch } from './schemas';
 
 const formatDate = (value: string | null) =>
@@ -43,13 +49,13 @@ const formatDate = (value: string | null) =>
     : 'Never';
 
 const formatBytes = (bytes: number) => {
-  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < bytesPerKilobyte) return `${bytes} B`;
   const units = ['KB', 'MB', 'GB', 'TB'];
   const unit = Math.min(
-    Math.floor(Math.log(bytes) / Math.log(1024)),
+    Math.floor(Math.log(bytes) / Math.log(bytesPerKilobyte)),
     units.length,
   );
-  return `${(bytes / 1024 ** unit).toFixed(1)} ${units[unit - 1]}`;
+  return `${(bytes / bytesPerKilobyte ** unit).toFixed(byteDisplayPrecision)} ${units[unit - 1]}`;
 };
 
 const SectionError = ({ error }: { error: Error | null }) =>
@@ -57,7 +63,7 @@ const SectionError = ({ error }: { error: Error | null }) =>
 
 export const DataHealthPage = ({ search }: { search: DataHealthSearch }) => {
   const { t } = useTranslation();
-  const staleAfterDays = search.staleAfterDays ?? 90;
+  const staleAfterDays = search.staleAfterDays ?? defaultStaleAfterDays;
   const navigate = useNavigate({ from: '/manage/data-health' });
   const queryClient = useQueryClient();
   const [showCompleteness, setShowCompleteness] = useState(false);
@@ -66,40 +72,40 @@ export const DataHealthPage = ({ search }: { search: DataHealthSearch }) => {
   const summary = useQuery({
     queryKey: dataHealthQueryKeys.summary(staleAfterDays),
     queryFn: () => getDataHealthSummary(staleAfterDays),
-    staleTime: 30_000,
+    staleTime: dataHealthStaleTime,
   });
   const blueprints = useQuery({
     queryKey: dataHealthQueryKeys.blueprints(staleAfterDays),
     queryFn: () => getDataHealthBlueprints(staleAfterDays),
-    staleTime: 30_000,
+    staleTime: dataHealthStaleTime,
   });
   const freshness = useQuery({
     queryKey: dataHealthQueryKeys.freshness(),
     queryFn: getDataHealthFreshness,
-    staleTime: 30_000,
+    staleTime: dataHealthStaleTime,
   });
   const storage = useQuery({
     queryKey: dataHealthQueryKeys.storage(),
     queryFn: getDataHealthStorage,
-    staleTime: 30_000,
+    staleTime: dataHealthStaleTime,
   });
   const completeness = useQuery({
     queryKey: dataHealthQueryKeys.completeness(),
     queryFn: getDataHealthCompleteness,
     enabled: showCompleteness,
-    staleTime: 30_000,
+    staleTime: dataHealthStaleTime,
   });
   const contexts = useQuery({
     queryKey: dataHealthQueryKeys.contexts(),
     queryFn: getDataHealthContexts,
     enabled: showContexts,
-    staleTime: 30_000,
+    staleTime: dataHealthStaleTime,
   });
   const relationships = useQuery({
     queryKey: dataHealthQueryKeys.relationships(),
     queryFn: getDataHealthRelationships,
     enabled: showRelationships,
-    staleTime: 30_000,
+    staleTime: dataHealthStaleTime,
   });
   const refresh = useMutation({
     mutationFn: refreshDataHealth,

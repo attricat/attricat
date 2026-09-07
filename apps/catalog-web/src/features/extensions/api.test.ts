@@ -1,9 +1,11 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   extensionCommand,
+  extensionStorage,
   getExtensionArtifact,
   getExtensionRuntime,
 } from './api';
+import { maximumExtensionResponseBytes } from './constants';
 
 const fetchMock = vi.fn();
 vi.stubGlobal('fetch', fetchMock);
@@ -62,6 +64,19 @@ describe('extension runtime API', () => {
       '/api/extensions/acme.test/panel/command',
       expect.objectContaining({ method: 'POST' }),
     );
+  });
+
+  it('rejects storage responses larger than the byte limit', async () => {
+    fetchMock.mockResolvedValue({
+      ok: true,
+      text: () => Promise.resolve('😀'.repeat(maximumExtensionResponseBytes)),
+    });
+    await expect(
+      extensionStorage('acme.test', 'panel', contribution.release_id, {
+        operation: 'get',
+        key: 'theme',
+      }),
+    ).rejects.toThrow('Extension storage response is too large');
   });
 
   it('addresses artifacts by declared contribution instead of storage key', async () => {

@@ -70,8 +70,11 @@ export const createToken = (input: z.input<typeof tokenInputSchema>) => {
   );
 };
 export const revokeToken = async (id: string) => {
-  const response = await apiFetch(`/api/personal-access-tokens/${uuid.parse(id)}`, {
-    method: 'DELETE',
-  });
+  const response = await apiFetch(
+    `/api/personal-access-tokens/${uuid.parse(id)}`,
+    {
+      method: 'DELETE',
+    },
+  );
   if (!response.ok) throw new Error(`Request failed (${response.status})`);
 };

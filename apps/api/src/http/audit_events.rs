@@ -1,5 +1,8 @@
 use super::{auth::ScopedRepository, error::ApiError, extractors::ApiQuery};
-use crate::repository::{AuditEventFilter, AuditEventPage};
+use crate::{
+    constants::DEFAULT_LIST_PAGE_SIZE,
+    repository::{AuditEventFilter, AuditEventPage},
+};
 use axum::Json;
 use chrono::{DateTime, Utc};
 use serde::Deserialize;
@@ -24,7 +27,7 @@ pub(super) async fn list(
     ScopedRepository(repository): ScopedRepository,
     ApiQuery(query): ApiQuery<AuditEventsQuery>,
 ) -> Result<Json<AuditEventPage>, ApiError> {
-    let limit = query.limit.unwrap_or(50);
+    let limit = query.limit.unwrap_or(i64::from(DEFAULT_LIST_PAGE_SIZE));
     let offset = query.offset.unwrap_or(0);
     if !(1..=100).contains(&limit) || offset < 0 {
         return Err(ApiError::invalid_input(

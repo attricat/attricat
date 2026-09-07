@@ -1,4 +1,5 @@
 use super::*;
+use crate::constants::CONVERSATION_ATTACHMENT_LIFETIME_SECONDS;
 use serde::{Deserialize, Serialize};
 use sqlx::Transaction;
 
@@ -326,7 +327,7 @@ impl CatalogRepository {
             let id = Uuid::new_v4();
             let status = "queued".to_owned();
             sqlx::query(
-                "INSERT INTO files (id, workspace_id, original_filename, display_filename, mime_type, byte_size, sha256, original_key, status, attachment_expires_at) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,now() + interval '15 minutes')",
+                "INSERT INTO files (id, workspace_id, original_filename, display_filename, mime_type, byte_size, sha256, original_key, status, attachment_expires_at) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,now() + make_interval(secs => $10))",
             )
             .bind(id)
             .bind(workspace_id)
@@ -337,6 +338,7 @@ impl CatalogRepository {
             .bind(&file.sha256)
             .bind(&file.object_key)
             .bind(&status)
+            .bind(CONVERSATION_ATTACHMENT_LIFETIME_SECONDS)
             .execute(&mut *transaction)
             .await?;
             sqlx::query("INSERT INTO file_processing_jobs (id, workspace_id, file_id, kind, status) VALUES ($1,$2,$3,'metadata','queued')")

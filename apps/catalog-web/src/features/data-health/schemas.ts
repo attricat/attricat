@@ -1,11 +1,12 @@
 import { z } from 'zod';
+import { maximumStaleAfterDays, minimumStaleAfterDays } from './constants';
 
 export const dataHealthSearchSchema = z.object({
   staleAfterDays: z.coerce
     .number()
     .int()
-    .min(1)
-    .max(3650)
+    .min(minimumStaleAfterDays)
+    .max(maximumStaleAfterDays)
     .optional()
     .catch(undefined),
 });

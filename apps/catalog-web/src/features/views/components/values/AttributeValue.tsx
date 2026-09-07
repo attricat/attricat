@@ -47,7 +47,9 @@ export const AttributeValue = ({
     if (compact)
       return (
         <Typography variant="body2">
-          {items.length ? t('views.linked', { count: items.length }) : t('views.notSet')}
+          {items.length
+            ? t('views.linked', { count: items.length })
+            : t('views.notSet')}
         </Typography>
       );
     return (
@@ -72,7 +74,9 @@ export const AttributeValue = ({
   }
   if (attribute.value_type === 'file') {
     if (!isFileValue(value)) {
-      return <Typography variant="body2">{t('views.fileValueNotSet')}</Typography>;
+      return (
+        <Typography variant="body2">{t('views.fileValueNotSet')}</Typography>
+      );
     }
 
     if (compact) {

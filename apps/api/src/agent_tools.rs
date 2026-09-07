@@ -12,6 +12,7 @@ use crate::{
     agents::MAX_TOOL_RESULT_BYTES,
     catalog_read_service::CatalogReadService,
     catalog_service::CatalogMutationService,
+    constants::{DEFAULT_ENTITY_PAGE_SIZE, DEFAULT_PAGE_SIZE},
     file_access::{AllowFileAccess, FileAccessOperation, authorize_file_read},
     repository::{CatalogRepository, RepositoryError},
 };
@@ -313,11 +314,11 @@ pub async fn execute_read(
                     "blueprint.code must not be empty".to_owned(),
                 ));
             }
-            let limit = input.page.size.unwrap_or(20);
-            if limit == 0 || limit > 100 {
-                return Err(ToolError::InvalidArguments(
-                    "page.size must be between 1 and 100".to_owned(),
-                ));
+            let limit = input.page.size.unwrap_or(DEFAULT_PAGE_SIZE);
+            if limit == 0 || limit > DEFAULT_ENTITY_PAGE_SIZE {
+                return Err(ToolError::InvalidArguments(format!(
+                    "page.size must be between 1 and {DEFAULT_ENTITY_PAGE_SIZE}"
+                )));
             }
             let current = repository
                 .get_blueprint_by_code(&input.blueprint.code)

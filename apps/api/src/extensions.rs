@@ -23,6 +23,12 @@ pub const SUPPORTED_HOST_API: &str = "1.1.0";
 pub const MAX_EXTENSION_ARCHIVE_BYTES: usize = 32 * 1024 * 1024;
 pub const MAX_EXTENSION_UNPACKED_BYTES: usize = 128 * 1024 * 1024;
 pub const MAX_EXTENSION_ARCHIVE_ENTRIES: usize = 256;
+pub const DEFAULT_HOST_REQUEST_BYTES: u64 = 64 * 1024;
+pub const DEFAULT_HOST_RESPONSE_BYTES: u64 = 1024 * 1024;
+pub const DEFAULT_HOST_TIMEOUT_MILLIS: u64 = 10_000;
+pub const MAX_HOST_REQUEST_BYTES: u64 = DEFAULT_HOST_REQUEST_BYTES;
+pub const MAX_HOST_RESPONSE_BYTES: u64 = DEFAULT_HOST_REQUEST_BYTES;
+pub const MAX_EXTENSION_IDENTIFIER_BYTES: usize = 128;
 pub const CAPABILITIES: &[&str] = &[
     "catalog.read",
     "catalog.write",
@@ -138,13 +144,13 @@ pub struct HostPermission {
     pub timeout_ms: u64,
 }
 fn default_request_limit() -> u64 {
-    65_536
+    DEFAULT_HOST_REQUEST_BYTES
 }
 fn default_response_limit() -> u64 {
-    1_048_576
+    DEFAULT_HOST_RESPONSE_BYTES
 }
 fn default_timeout() -> u64 {
-    10_000
+    DEFAULT_HOST_TIMEOUT_MILLIS
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -232,7 +238,7 @@ pub struct ServerCommand {
     pub max_response_bytes: u64,
 }
 fn default_command_bytes() -> u64 {
-    65_536
+    DEFAULT_HOST_REQUEST_BYTES
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -743,7 +749,7 @@ impl EventContractExport {
                 .is_some_and(|(_, version)| version.parse::<u32>().is_ok_and(|version| version > 0))
             || !self.schema.is_object()
             || self.max_payload_bytes == 0
-            || self.max_payload_bytes > 65_536
+            || self.max_payload_bytes > MAX_HOST_REQUEST_BYTES
         {
             return Err(ManifestError::Invalid(format!(
                 "event contract '{}' requires an owned versioned type, object schema, and 1-65536 byte payload limit",
@@ -794,7 +800,7 @@ impl EventHandler {
         if self.event_types.is_empty()
             || self.event_types.iter().any(|event_type| {
                 event_type.is_empty()
-                    || event_type.len() > 128
+                    || event_type.len() > MAX_EXTENSION_IDENTIFIER_BYTES
                     || !event_type.bytes().all(|byte| {
                         byte.is_ascii_alphanumeric() || matches!(byte, b'.' | b'_' | b'-')
                     })
@@ -828,9 +834,9 @@ impl ServerCommand {
         if !self.request_schema.is_object()
             || !self.response_schema.is_object()
             || self.max_request_bytes == 0
-            || self.max_request_bytes > 65_536
+            || self.max_request_bytes > MAX_HOST_REQUEST_BYTES
             || self.max_response_bytes == 0
-            || self.max_response_bytes > 65_536
+            || self.max_response_bytes > MAX_HOST_RESPONSE_BYTES
         {
             return Err(ManifestError::Invalid(format!(
                 "server command '{}' requires bounded object request and response schemas",
@@ -899,7 +905,7 @@ fn unique<'a>(values: impl Iterator<Item = &'a String>, label: &str) -> Result<(
     Ok(())
 }
 fn valid_custom_element_name(value: &str) -> Result<(), ManifestError> {
-    if value.len() > 128
+    if value.len() > MAX_EXTENSION_IDENTIFIER_BYTES
         || !value.contains('-')
         || !value
             .bytes()
@@ -914,7 +920,7 @@ fn valid_custom_element_name(value: &str) -> Result<(), ManifestError> {
 
 fn valid_id(value: &str, label: &str) -> Result<(), ManifestError> {
     if value.is_empty()
-        || value.len() > 128
+        || value.len() > MAX_EXTENSION_IDENTIFIER_BYTES
         || !value
             .bytes()
             .all(|c| c.is_ascii_alphanumeric() || matches!(c, b'.' | b'_' | b'-'))
@@ -1319,7 +1325,9 @@ mod tests {
             title: None,
         });
         assert!(value.validate(SUPPORTED_HOST_API).is_ok());
-        value.permissions.retain(|permission| permission != "client.explorer_action");
+        value
+            .permissions
+            .retain(|permission| permission != "client.explorer_action");
         assert!(value.validate(SUPPORTED_HOST_API).is_err());
     }
 

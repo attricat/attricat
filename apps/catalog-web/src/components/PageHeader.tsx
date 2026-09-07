@@ -10,7 +10,7 @@ export const PageHeader = ({
 }: {
   actions?: ReactNode;
   description?: ReactNode;
-  eyebrow?: string;
+  eyebrow?: ReactNode;
   title?: ReactNode;
   titleVariant?: 'h2' | 'h3';
 }) => (

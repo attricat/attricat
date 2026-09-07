@@ -165,12 +165,22 @@ const createUserInputSchema = invitationInputSchema.extend({
 
 export const createWorkspaceUser = (
   input: z.input<typeof createUserInputSchema>,
-) => request('/api/workspace/users', createdUserSchema, json('POST', createUserInputSchema.parse(input)));
+) =>
+  request(
+    '/api/workspace/users',
+    createdUserSchema,
+    json('POST', createUserInputSchema.parse(input)),
+  );
 export const completeOnboarding = (input: {
   invitation_secret: string;
   onboarding_secret: string;
   password: string;
-}) => request('/api/onboarding/complete', z.object({ membership_id: uuid }), json('POST', input));
+}) =>
+  request(
+    '/api/onboarding/complete',
+    z.object({ membership_id: uuid }),
+    json('POST', input),
+  );
 
 export const listInvitations = () =>
   request('/api/workspace/invitations', z.array(invitationSchema));

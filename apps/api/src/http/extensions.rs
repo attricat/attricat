@@ -14,9 +14,13 @@ use uuid::Uuid;
 
 use super::{AppState, auth::ScopedRepository, error::ApiError, extractors::ApiJson};
 use crate::{
+    constants::DEFAULT_LIST_PAGE_SIZE,
     extension_installer::ExtensionInstaller,
     extension_registry::{DiscoveredRelease, GitHubRepository},
-    extensions::{ExtensionPackage, UiContributionKind, UiOutlet, validate_schema},
+    extensions::{
+        ExtensionPackage, MAX_EXTENSION_IDENTIFIER_BYTES, UiContributionKind, UiOutlet,
+        validate_schema,
+    },
     repository::{
         ExtensionGrant, ExtensionInstallation, ExtensionLifecycleRecord, ExtensionStorageError,
         InstalledExtension,
@@ -496,7 +500,7 @@ pub(super) async fn command(
     Path((extension_id, contribution_id)): Path<(String, String)>,
     ApiJson(input): ApiJson<CommandRequest>,
 ) -> Result<Json<Value>, ApiError> {
-    if input.command_id.len() > 128 {
+    if input.command_id.len() > MAX_EXTENSION_IDENTIFIER_BYTES {
         return Err(ApiError::invalid_input(
             "invalid extension command request".into(),
         ));
@@ -576,7 +580,7 @@ pub(super) async fn storage(
         StorageRequest::Set { key, value, expected_revision } => serde_json::to_value(json!({"revision": repository.extension_storage_set(&extension_id, release_id, &key, value, expected_revision).await.map_err(storage_error)?})).expect("storage response serializes"),
         StorageRequest::Delete { key, expected_revision } => { repository.extension_storage_delete(&extension_id, release_id, &key, expected_revision).await.map_err(storage_error)?; json!(null) },
         StorageRequest::List { prefix, cursor, limit } => {
-            let page = repository.extension_storage_list(&extension_id, release_id, prefix.as_deref(), cursor.as_deref(), limit.unwrap_or(50)).await.map_err(storage_error)?;
+            let page = repository.extension_storage_list(&extension_id, release_id, prefix.as_deref(), cursor.as_deref(), limit.unwrap_or(DEFAULT_LIST_PAGE_SIZE)).await.map_err(storage_error)?;
             serde_json::to_value(StoragePageResponse { entries: page.entries.into_iter().map(|entry| StorageEntryResponse { key: entry.key, value: entry.value, revision: entry.revision }).collect(), cursor: page.cursor }).expect("storage response serializes")
         }
     };

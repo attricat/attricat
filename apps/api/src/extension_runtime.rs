@@ -24,10 +24,13 @@ use wasmtime::{
 
 use crate::{
     catalog_service::CatalogMutationService,
+    constants::DEFAULT_LIST_PAGE_SIZE,
     domain_events::DomainEvent,
     event_dispatcher::{EventHandler, EventHandlerCommandContext},
     extension_installer::installed_artifact_key,
-    extensions::{ArtifactKind, EventHandler as ManifestEventHandler},
+    extensions::{
+        ArtifactKind, EventHandler as ManifestEventHandler, MAX_EXTENSION_IDENTIFIER_BYTES,
+    },
     model::{AppendAttributeValues, NewAttributeValue},
     repository::{CatalogRepository, ExtensionConfigurationScope, ExtensionRuntimeInstallation},
     storage::{ObjectStore, ObjectStoreError},
@@ -51,6 +54,7 @@ mod host_v11 {
 const MAX_HOST_MESSAGE_BYTES: usize = 16 * 1024;
 const MAX_HOST_JSON_BYTES: usize = 64 * 1024;
 const MAX_CACHED_COMPONENTS: usize = 64;
+const MAX_WRITE_VALUES: usize = 100;
 
 #[derive(Clone, Debug)]
 pub struct ExtensionRuntimeConfig {
@@ -556,7 +560,7 @@ impl host_v11::catalog::host::api::Host for HostState {
         request: host_v11::catalog::host::api::WriteRequest,
     ) -> Result<host_v11::catalog::host::api::WriteResponse, String> {
         self.require_active("catalog.write").await?;
-        if request.values.is_empty() || request.values.len() > 100 {
+        if request.values.is_empty() || request.values.len() > MAX_WRITE_VALUES {
             return Err("writes require 1-100 scalar values".into());
         }
         let entity_id = parse_uuid(&request.entity_id, "entity ID")?;
@@ -699,7 +703,7 @@ impl HostState {
                         release_id,
                         input.prefix.as_deref(),
                         input.cursor.as_deref(),
-                        input.limit.unwrap_or(50),
+                        input.limit.unwrap_or(DEFAULT_LIST_PAGE_SIZE),
                     )
                     .await
                     .map_err(|error| error.to_string())?;
@@ -728,7 +732,7 @@ fn parse_bounded_json(value: &str, label: &str) -> Result<Value, String> {
 }
 
 fn parse_uuid(value: &str, label: &str) -> Result<Uuid, String> {
-    if value.len() > 128 {
+    if value.len() > MAX_EXTENSION_IDENTIFIER_BYTES {
         return Err(format!("invalid {label}"));
     }
     value.parse().map_err(|_| format!("invalid {label}"))
@@ -795,9 +799,9 @@ fn parse_event_emit_request(request: &str) -> Result<EventEmit, String> {
     let input: EventEmit =
         serde_json::from_str(request).map_err(|_| "invalid event emission request".to_owned())?;
     if input.contract_id.is_empty()
-        || input.contract_id.len() > 128
+        || input.contract_id.len() > MAX_EXTENSION_IDENTIFIER_BYTES
         || input.aggregate_kind.is_empty()
-        || input.aggregate_kind.len() > 128
+        || input.aggregate_kind.len() > MAX_EXTENSION_IDENTIFIER_BYTES
         || !input.payload.is_object()
     {
         return Err("invalid event emission request".into());

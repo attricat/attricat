@@ -4,6 +4,7 @@ use super::{
     extractors::{ApiJson, ApiPath, ApiQuery},
 };
 use crate::{
+    constants::{DEFAULT_PAGE_SIZE, DEFAULT_PREVIEW_RELATIONSHIP_ITEMS},
     model::{
         Entity, EntityIdentity, EntityPreviewPage, EntityPreviewResponse, EntitySearchResponse,
         RelationshipTreeFacetChildrenRequest, RelationshipTreeFacetChildrenResponse,
@@ -58,7 +59,9 @@ pub(super) async fn get_preview(
     ApiQuery(query): ApiQuery<PreviewQuery>,
 ) -> Result<Json<EntityPreviewResponse>, ApiError> {
     let depth = query.relationship_depth.unwrap_or(1);
-    let limit = query.relationship_limit.unwrap_or(10);
+    let limit = query
+        .relationship_limit
+        .unwrap_or(DEFAULT_PREVIEW_RELATIONSHIP_ITEMS);
     if depth > state.max_preview_relationship_depth {
         return Err(ApiError::invalid_input(format!(
             "relationship_depth must not exceed {}",
@@ -122,7 +125,7 @@ pub(super) async fn list_previews(
     super::auth::ScopedRepository(repository): super::auth::ScopedRepository,
     ApiQuery(query): ApiQuery<ListPreviewsQuery>,
 ) -> Result<Json<EntityPreviewPage>, ApiError> {
-    let limit = query.limit.unwrap_or(20);
+    let limit = query.limit.unwrap_or(DEFAULT_PAGE_SIZE);
     if limit == 0 || limit > state.max_entity_page_size {
         return Err(ApiError::invalid_input(format!(
             "limit must be between 1 and {}",
@@ -157,7 +160,7 @@ pub(super) async fn search_entity_previews(
             "field filters are not supported by v1 search yet".to_owned(),
         ));
     }
-    let limit = input.page.size.unwrap_or(20);
+    let limit = input.page.size.unwrap_or(DEFAULT_PAGE_SIZE);
     if limit == 0 || limit > state.max_entity_page_size {
         return Err(ApiError::invalid_input(format!(
             "page.size must be between 1 and {}",

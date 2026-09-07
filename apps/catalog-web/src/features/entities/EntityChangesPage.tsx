@@ -1,7 +1,7 @@
 import { useQuery } from '@tanstack/react-query';
 import { Link } from '@tanstack/react-router';
 import { useTranslation } from 'react-i18next';
-import { Alert, Box, Paper, Typography } from '@mui/material';
+import { Alert, Box, Button, Paper, Typography } from '@mui/material';
 import { PageContainer } from '../../components/PageContainer';
 import { PageHeader } from '../../components/PageHeader';
 import { getEntityChanges } from './api';
@@ -23,9 +23,37 @@ export const EntityChangesPage = ({ entityId }: { entityId: string }) => {
   return (
     <PageContainer maxWidth="lg">
       <PageHeader eyebrow={t('entities.entityChanges')} />
-      <Link params={{ entityId }} to="/entities/$entityId">
-        {t('entities.backToEntity')}
-      </Link>
+      <Paper
+        aria-label={t('entities.entityChanges')}
+        component="nav"
+        sx={{
+          alignItems: 'center',
+          display: 'flex',
+          flexWrap: 'wrap',
+          gap: 1,
+          mt: 3,
+          p: 1.5,
+        }}
+      >
+        <Button
+          component={Link}
+          params={{ entityId }}
+          size="small"
+          to="/entities/$entityId"
+          variant="text"
+        >
+          {t('entities.backToEntity')}
+        </Button>
+        <Button
+          component={Link}
+          params={{ entityId }}
+          size="small"
+          to="/entities/$entityId/edit"
+          variant="text"
+        >
+          {t('entities.editEntity')}
+        </Button>
+      </Paper>
       {changes.isPending && (
         <Typography sx={{ py: 3 }}>{t('entities.loadingChanges')}</Typography>
       )}

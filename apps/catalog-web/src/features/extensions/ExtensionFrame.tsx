@@ -4,6 +4,14 @@ import { useEffect, useRef, useState } from 'react';
 import { z } from 'zod';
 import { apiFetch } from '../auth/request';
 import {
+  defaultExtensionFrameHeight,
+  extensionStartTimeout,
+  maximumExtensionFrameHeight,
+  maximumExtensionRequestBytes,
+  maximumExtensionResponseBytes,
+  maximumExtensionStorageKeyBytes,
+} from './constants';
+import {
   extensionCommand,
   extensionCommandRequestSchema,
   extensionStorage,
@@ -35,7 +43,7 @@ const catalogReadSchema = z
 const validStorageKey = (key: string) =>
   key.length > 0 &&
   key === key.trim() &&
-  new TextEncoder().encode(key).length <= 256 &&
+  new TextEncoder().encode(key).length <= maximumExtensionStorageKeyBytes &&
   ![...key].some((character) => {
     const code = character.charCodeAt(0);
     return code <= 0x1f || (code >= 0x7f && code <= 0x9f);
@@ -51,10 +59,14 @@ const validateStorageRequest = (payload: unknown) => {
     throw new Error('Invalid storage key');
   if (
     request.operation === 'set' &&
-    new TextEncoder().encode(JSON.stringify(request.value)).length > 65_536
+    new TextEncoder().encode(JSON.stringify(request.value)).length >
+      maximumExtensionRequestBytes
   )
     throw new Error('Storage value is too large');
-  if (new TextEncoder().encode(JSON.stringify(request)).length > 65_536)
+  if (
+    new TextEncoder().encode(JSON.stringify(request)).length >
+    maximumExtensionRequestBytes
+  )
     throw new Error('Storage request is too large');
   return request;
 };
@@ -86,7 +98,7 @@ export const ExtensionFrame = ({
   }, [onContentHeight]);
   const [error, setError] = useState<string>();
   const [ready, setReady] = useState(false);
-  const [height, setHeight] = useState(48);
+  const [height, setHeight] = useState(defaultExtensionFrameHeight);
   const [loadedFrame, setLoadedFrame] = useState<string>();
   const navigate = useNavigate();
   const contextKey = JSON.stringify(context);
@@ -107,7 +119,7 @@ export const ExtensionFrame = ({
     let port: MessagePort | undefined;
     const timer = window.setTimeout(
       () => !disposed && setError('The extension timed out while starting.'),
-      10_000,
+      extensionStartTimeout,
     );
     const start = async () => {
       try {
@@ -132,7 +144,10 @@ export const ExtensionFrame = ({
             typeof data.height === 'number' &&
             Number.isFinite(data.height)
           ) {
-            const height = Math.min(Math.max(0, data.height), 2048);
+            const height = Math.min(
+              Math.max(0, data.height),
+              maximumExtensionFrameHeight,
+            );
             setHeight(height);
             onContentHeightRef.current?.(height);
             return;
@@ -142,7 +157,8 @@ export const ExtensionFrame = ({
           const respond = (ok: boolean, value?: unknown) => {
             if (
               ok &&
-              new TextEncoder().encode(JSON.stringify(value)).length > 1_048_576
+              new TextEncoder().encode(JSON.stringify(value)).length >
+                maximumExtensionResponseBytes
             )
               return respond(false);
             port?.postMessage({
@@ -205,7 +221,7 @@ export const ExtensionFrame = ({
               });
               if (
                 new TextEncoder().encode(JSON.stringify(command.payload))
-                  .length > 65_536
+                  .length > maximumExtensionRequestBytes
               )
                 throw new Error('Command payload is too large');
               respond(
@@ -235,7 +251,10 @@ export const ExtensionFrame = ({
               const response = await apiFetch(path);
               if (!response.ok) throw new Error('Catalog request failed');
               const text = await response.text();
-              if (new TextEncoder().encode(text).length > 1_048_576)
+              if (
+                new TextEncoder().encode(text).length >
+                maximumExtensionResponseBytes
+              )
                 throw new Error('Catalog response is too large');
               respond(true, JSON.parse(text));
             } else {
@@ -283,13 +302,13 @@ export const ExtensionFrame = ({
 
   if (error) return <Alert severity="warning">{error}</Alert>;
   return (
-    <Box sx={{ minHeight: ready ? 0 : 48 }}>
+    <Box sx={{ minHeight: ready ? 0 : defaultExtensionFrameHeight }}>
       <iframe
         aria-label={contribution.title ?? contribution.id}
         key={frameKey}
         onLoad={() => {
           setError(undefined);
-          setHeight(48);
+          setHeight(defaultExtensionFrameHeight);
           setReady(false);
           setLoadedFrame(frameKey);
         }}

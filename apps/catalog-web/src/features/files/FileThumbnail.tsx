@@ -16,6 +16,7 @@ type ThumbnailPreviewProps = {
 };
 
 const pollingStatuses = new Set(['uploading', 'queued', 'processing']);
+const thumbnailPollInterval = 1_000;
 
 const ThumbnailPreview = ({
   filename,
@@ -28,7 +29,10 @@ const ThumbnailPreview = ({
   const [attempt, setAttempt] = useState(0);
 
   const retry = () => {
-    window.setTimeout(() => setAttempt((value) => value + 1), 1_000);
+    window.setTimeout(
+      () => setAttempt((value) => value + 1),
+      thumbnailPollInterval,
+    );
   };
 
   return (
@@ -100,7 +104,9 @@ export const FileThumbnail = ({
     queryKey: fileQueryKeys.metadata(file.id),
     queryFn: () => getFileMetadata(file.id),
     refetchInterval: (query) =>
-      pollingStatuses.has(query.state.data?.status ?? '') ? 1_000 : false,
+      pollingStatuses.has(query.state.data?.status ?? '')
+        ? thumbnailPollInterval
+        : false,
     refetchIntervalInBackground: true,
   });
   const currentFile = metadata.data;

@@ -7,6 +7,7 @@ use super::{
 use crate::{
     catalog_read_service::CatalogReadService,
     catalog_service::CatalogMutationService,
+    constants::DEFAULT_PAGE_SIZE,
     model::{
         AppendAttributeValues, AttributeValue, AttributeValueHistory, CreateEntityFormRequest,
         Entity, EntityAuditChange, EntityFormResponse, IncomingRelationshipsPage,
@@ -87,7 +88,7 @@ pub(super) async fn list_incoming_relationships(
             "relationships must not be empty".to_owned(),
         ));
     }
-    let requested = input.page.size.unwrap_or(20);
+    let requested = input.page.size.unwrap_or(DEFAULT_PAGE_SIZE);
     if requested == 0 {
         return Err(ApiError::invalid_input(
             "page.size must be greater than zero".to_owned(),

@@ -1,5 +1,8 @@
 use super::{AppState, auth::ActiveWorkspace, error::ApiError, extractors::ApiQuery};
-use crate::repository::RepositoryError;
+use crate::{
+    constants::{DEFAULT_STALE_AFTER_DAYS, MAX_STALE_AFTER_DAYS},
+    repository::RepositoryError,
+};
 use axum::{
     Json,
     extract::State,
@@ -19,11 +22,11 @@ pub(super) struct DataHealthQuery {
     stale_after_days: Option<u16>,
 }
 fn stale_after_days(query: DataHealthQuery) -> Result<u16, ApiError> {
-    let days = query.stale_after_days.unwrap_or(90);
-    if !(1..=3650).contains(&days) {
-        return Err(ApiError::invalid_input(
-            "stale_after_days must be between 1 and 3650".to_owned(),
-        ));
+    let days = query.stale_after_days.unwrap_or(DEFAULT_STALE_AFTER_DAYS);
+    if !(1..=MAX_STALE_AFTER_DAYS).contains(&days) {
+        return Err(ApiError::invalid_input(format!(
+            "stale_after_days must be between 1 and {MAX_STALE_AFTER_DAYS}"
+        )));
     }
     Ok(days)
 }

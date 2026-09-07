@@ -5,6 +5,8 @@ import WarningAmberOutlinedIcon from '@mui/icons-material/WarningAmberOutlined';
 import {
   Alert,
   Box,
+  Button,
+  Drawer,
   MenuItem,
   Paper,
   TextField,
@@ -75,8 +77,9 @@ export const EntityPreviewPage = ({ entityId }: { entityId: string }) => {
   const detailView = blueprint.data?.blueprint.views.detail;
   const heading = findEntityHeading(detailView);
   const HeadingRenderer = resolveHeadingRenderer(heading?.component);
+  const [extensionPanelOpen, setExtensionPanelOpen] = useState(false);
   return (
-    <PageContainer maxWidth="lg">
+    <PageContainer>
       <PageHeader eyebrow={t('entities.entityPreview')} />
       {resolved.data && blueprint.data && HeadingRenderer
         ? createElement(HeadingRenderer, {
@@ -86,17 +89,38 @@ export const EntityPreviewPage = ({ entityId }: { entityId: string }) => {
             view: detailView,
           })
         : null}
-      <Box sx={{ mt: 1 }}>
-        <Link params={{ entityId }} to="/entities/$entityId/edit">
+      <Paper
+        aria-label={t('entities.entityPreview')}
+        component="nav"
+        sx={{
+          alignItems: 'center',
+          display: 'flex',
+          flexWrap: 'wrap',
+          gap: 1,
+          mt: 3,
+          p: 1.5,
+        }}
+      >
+        <Button
+          component={Link}
+          params={{ entityId }}
+          size="small"
+          to="/entities/$entityId/edit"
+          variant="text"
+        >
           {t('entities.editEntity')}
-        </Link>
-        {' | '}
-        <Link params={{ entityId }} to="/entities/$entityId/changes">
+        </Button>
+        <Button
+          component={Link}
+          params={{ entityId }}
+          size="small"
+          to="/entities/$entityId/changes"
+          variant="text"
+        >
           {t('entities.changes')}
-        </Link>
+        </Button>
         {currentBlueprint.data && resolved.data && (
           <>
-            {' | '}
             {currentBlueprint.data.blueprint.version >
             (resolved.data.entity.blueprint_version ?? Infinity) ? (
               <>
@@ -112,10 +136,15 @@ export const EntityPreviewPage = ({ entityId }: { entityId: string }) => {
                   <WarningAmberOutlinedIcon fontSize="small" />
                   {t('entities.schemaOutdated')}
                 </Typography>
-                {' | '}
-                <Link params={{ entityId }} to="/entities/$entityId/migrate">
+                <Button
+                  component={Link}
+                  params={{ entityId }}
+                  size="small"
+                  to="/entities/$entityId/migrate"
+                  variant="text"
+                >
                   {t('entities.upgradeBlueprint')}
-                </Link>
+                </Button>
               </>
             ) : (
               <Typography
@@ -132,28 +161,43 @@ export const EntityPreviewPage = ({ entityId }: { entityId: string }) => {
             )}
           </>
         )}
-      </Box>
+        <TextField
+          select
+          disabled={contexts.isPending}
+          label={t('entities.context')}
+          onChange={(event) => setSelectedContext(event.target.value)}
+          size="small"
+          sx={{ maxWidth: '100%', width: 280 }}
+          value={selectedContext}
+        >
+          {(contexts.data ?? []).map((context) => (
+            <MenuItem key={context.id} value={context.code}>
+              {context.code === 'default'
+                ? t('entities.default')
+                : context.code}
+            </MenuItem>
+          ))}
+        </TextField>
+        <Box sx={{ flexGrow: 1 }} />
+        {resolved.data && blueprint.data && (
+          <Button
+            aria-controls={
+              extensionPanelOpen ? 'entity-extension-contributions' : undefined
+            }
+            aria-expanded={extensionPanelOpen}
+            onClick={() => setExtensionPanelOpen(true)}
+            size="small"
+            variant="text"
+          >
+            {t('entities.extensionContributions')}
+          </Button>
+        )}
+      </Paper>
       {contexts.isPending && (
         <Typography sx={{ py: 3 }}>{t('entities.loadingContexts')}</Typography>
       )}
       {contexts.data && (
         <>
-          <TextField
-            select
-            fullWidth
-            label={t('entities.context')}
-            onChange={(event) => setSelectedContext(event.target.value)}
-            sx={{ mt: 3 }}
-            value={selectedContext}
-          >
-            {(contexts.data ?? []).map((context) => (
-              <MenuItem key={context.id} value={context.code}>
-                {context.code === 'default'
-                  ? t('entities.default')
-                  : context.code}
-              </MenuItem>
-            ))}
-          </TextField>
           {resolved.isPending && (
             <Typography sx={{ mt: 3 }}>
               {t('entities.resolvingValues')}
@@ -174,10 +218,7 @@ export const EntityPreviewPage = ({ entityId }: { entityId: string }) => {
               sx={{
                 display: 'grid',
                 gap: 3,
-                gridTemplateColumns: {
-                  xs: 'minmax(0, 1fr)',
-                  md: 'minmax(0, 2fr) minmax(280px, 1fr)',
-                },
+                gridTemplateColumns: 'minmax(0, 1fr)',
                 mt: 3,
               }}
             >
@@ -216,19 +257,35 @@ export const EntityPreviewPage = ({ entityId }: { entityId: string }) => {
                   outlet="entity_action"
                 />
               </Box>
-              <Box>
-                <ExtensionOutlet
-                  context={{
-                    entity_id: entityId,
-                    context_id: selectedContextId,
-                  }}
-                  outlet="entity_preview_panel"
-                />
-              </Box>
             </Box>
           )}
         </>
       )}
+      <Drawer
+        anchor="right"
+        onClose={() => setExtensionPanelOpen(false)}
+        open={extensionPanelOpen}
+      >
+        <Box
+          id="entity-extension-contributions"
+          sx={{ p: 3, width: { xs: '100vw', sm: 480 } }}
+        >
+          <Typography variant="h6">
+            {t('entities.extensionContributions')}
+          </Typography>
+          {resolved.data && blueprint.data && (
+            <Box sx={{ mt: 2 }}>
+              <ExtensionOutlet
+                context={{
+                  entity_id: entityId,
+                  context_id: selectedContextId,
+                }}
+                outlet="entity_preview_panel"
+              />
+            </Box>
+          )}
+        </Box>
+      </Drawer>
     </PageContainer>
   );
 };
