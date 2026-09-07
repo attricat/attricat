@@ -155,6 +155,7 @@ pub enum RegistryError {
 #[derive(Clone)]
 pub struct GitHubRegistry {
     client: Client,
+    asset_client: Client,
     api_origin: Url,
     raw_origin: Url,
 }
@@ -165,8 +166,17 @@ impl GitHubRegistry {
             .user_agent("catalog-extension-registry")
             .build()
             .map_err(|_| RegistryError::Unavailable)?;
+        // GitHub release download URLs redirect to a short-lived asset URL.
+        // The initial URL is authenticated against the GitHub release response
+        // and exact repository before this client follows that redirect.
+        let asset_client = Client::builder()
+            .redirect(Policy::limited(5))
+            .user_agent("catalog-extension-registry")
+            .build()
+            .map_err(|_| RegistryError::Unavailable)?;
         Ok(Self {
             client,
+            asset_client,
             api_origin: Url::parse(GITHUB_API_ORIGIN).expect("constant URL"),
             raw_origin: Url::parse(GITHUB_RAW_ORIGIN).expect("constant URL"),
         })
@@ -308,7 +318,7 @@ impl GitHubRegistry {
             return Err(RegistryError::InvalidResponse);
         }
         let response = self
-            .client
+            .asset_client
             .get(url)
             .send()
             .await
