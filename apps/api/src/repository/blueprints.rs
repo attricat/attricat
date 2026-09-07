@@ -198,9 +198,9 @@ impl CatalogRepository {
             validate_attribute_default_value(&attribute)?;
             attributes.push(
                 sqlx::query_as::<_, Attribute>(
-                    r#"INSERT INTO attributes (id, workspace_id, blueprint_id, blueprint_version, code, value_type, value_schema, default_value, file_policy, target_blueprint_code, tags, context_fallback, context_editable, position)
-                       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
-                       RETURNING id, blueprint_id, blueprint_version, code, value_type, value_schema, default_value, file_policy, target_blueprint_code, tags, context_fallback, context_editable, position, created_at, updated_at, deleted_at"#,
+                    r#"INSERT INTO attributes (id, workspace_id, blueprint_id, blueprint_version, code, value_type, value_schema, default_value, file_policy, target_blueprint_code, tags, context_fallback, context_editable, readonly, position)
+                       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
+                       RETURNING id, blueprint_id, blueprint_version, code, value_type, value_schema, default_value, file_policy, target_blueprint_code, tags, context_fallback, context_editable, readonly, position, created_at, updated_at, deleted_at"#,
                 )
                 .bind(Uuid::new_v4())
                 .bind(self.workspace_id.unwrap_or(Self::DEFAULT_WORKSPACE_ID))
@@ -215,6 +215,7 @@ impl CatalogRepository {
                 .bind(serde_json::to_value(attribute.tags).expect("attribute tags serialize"))
                 .bind(attribute.context_fallback)
                 .bind(attribute.context_editable)
+                .bind(attribute.readonly)
                 .bind(attribute.position)
                 .fetch_one(&mut **transaction)
                 .await?,
@@ -412,7 +413,7 @@ impl CatalogRepository {
         blueprint_version: i64,
     ) -> Result<Vec<Attribute>, RepositoryError> {
         Ok(sqlx::query_as::<_, Attribute>(
-            r#"SELECT id, blueprint_id, blueprint_version, code, value_type, value_schema, default_value, file_policy, target_blueprint_code, tags, context_fallback, context_editable, position, created_at, updated_at, deleted_at
+            r#"SELECT id, blueprint_id, blueprint_version, code, value_type, value_schema, default_value, file_policy, target_blueprint_code, tags, context_fallback, context_editable, readonly, position, created_at, updated_at, deleted_at
                FROM attributes
                WHERE blueprint_id = $1 AND blueprint_version = $2 AND workspace_id = $3 AND deleted_at IS NULL
                ORDER BY position"#,

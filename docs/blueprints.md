@@ -41,6 +41,19 @@ context_editable = "default"
 - `default` permits writes only in the default context. Other contexts render it
   read-only, and the API rejects writes.
 
+Set `readonly = true` to make an attribute preview-only in the Catalog web app.
+It is intended for values managed by system actions such as agents, extensions,
+rules, the API, or the CLI; those integrations can still write the attribute.
+The default is `false`. Read-only attributes remain visible in entity forms but
+cannot be changed, cleared, linked, or uploaded through the web UI.
+
+```toml
+[[attributes]]
+code = "external_id"
+value_type = "string"
+readonly = true
+```
+
 Blank contextual string fields remove their override instead of storing an empty
 string. Missing contextual values resolve according to `context_fallback`.
 

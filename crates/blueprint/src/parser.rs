@@ -51,6 +51,8 @@ struct RawAttributeDeclaration {
     context_fallback: String,
     #[serde(default = "default_context_editable")]
     context_editable: String,
+    #[serde(default)]
+    readonly: bool,
     from: Option<String>,
 }
 
@@ -194,6 +196,7 @@ pub fn parse(source: &str) -> Result<BlueprintDefinition, BlueprintError> {
                         tags: attribute.tags,
                         context_fallback: attribute.context_fallback,
                         context_editable: attribute.context_editable,
+                        readonly: attribute.readonly,
                     }
                 }
                 (None, Some(source)) if attribute.target_blueprint.is_none() => {

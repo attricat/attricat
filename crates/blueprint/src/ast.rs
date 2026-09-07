@@ -196,6 +196,7 @@ pub enum AttributeDeclaration {
         tags: Vec<String>,
         context_fallback: String,
         context_editable: String,
+        readonly: bool,
     },
     Selection {
         code: String,
@@ -223,6 +224,7 @@ pub struct EffectiveAttribute {
     pub tags: Vec<String>,
     pub context_fallback: String,
     pub context_editable: String,
+    pub readonly: bool,
     pub position: i64,
 }
 

@@ -80,8 +80,9 @@ export const EntityForm = ({
     if (!blueprint) return { fieldErrors: {} };
     const editableAttributes = blueprint.attributes.filter(
       (attribute) =>
-        contextId === defaultContextId ||
-        attribute.context_editable !== 'default',
+        !attribute.readonly &&
+        (contextId === defaultContextId ||
+          attribute.context_editable !== 'default'),
     );
     return validateEntityForm(
       editableAttributes,
@@ -105,8 +106,9 @@ export const EntityForm = ({
       if (blueprint) {
         const editableAttributes = blueprint.attributes.filter(
           (attribute) =>
-            contextId === defaultContextId ||
-            attribute.context_editable !== 'default',
+            !attribute.readonly &&
+            (contextId === defaultContextId ||
+              attribute.context_editable !== 'default'),
         );
         const validation = validateFields(value.fields);
         setFieldErrors(validation.fieldErrors);
@@ -211,17 +213,20 @@ export const EntityForm = ({
                   const defaultOnly =
                     contextId !== defaultContextId &&
                     attribute.context_editable === 'default';
+                  const readonly = attribute.readonly === true;
                   const requiresMigrationReview =
                     highlightedAttributes.includes(attribute.code);
                   const migrationReviewMessage =
                     migrationReviewMessages[attribute.code];
-                  const helperText = defaultOnly
-                    ? 'Managed in Default'
-                    : inherited
-                      ? attribute.value_type === 'relationship'
-                        ? `Inherited from ${resolvedValue.source_context.code} context`
-                        : `Inherited from ${resolvedValue.source_context.code} context: ${typeof resolvedValue.value === 'object' ? JSON.stringify(resolvedValue.value) : String(resolvedValue.value)}`
-                      : undefined;
+                  const helperText = readonly
+                    ? 'Managed by system actions'
+                    : defaultOnly
+                      ? 'Managed in Default'
+                      : inherited
+                        ? attribute.value_type === 'relationship'
+                          ? `Inherited from ${resolvedValue.source_context.code} context`
+                          : `Inherited from ${resolvedValue.source_context.code} context: ${typeof resolvedValue.value === 'object' ? JSON.stringify(resolvedValue.value) : String(resolvedValue.value)}`
+                        : undefined;
                   const handleChange = (nextValue: string) => {
                     const nextFields = {
                       ...field.state.value,
@@ -236,7 +241,7 @@ export const EntityForm = ({
                     <EntityAttributeEditor
                       attribute={attribute}
                       contextId={contextId}
-                      disabled={defaultOnly}
+                      disabled={readonly || defaultOnly}
                       entityId={entityId}
                       files={
                         existingValues.find(
