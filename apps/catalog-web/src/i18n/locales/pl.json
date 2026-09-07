@@ -1,0 +1,38 @@
+{
+  "language": {
+    "label": "Język",
+    "english": "Angielski",
+    "polish": "Polski"
+  },
+  "app": {
+    "catalog": "Katalog",
+    "dataManagement": "Zarządzanie danymi"
+  },
+  "navigation": {
+    "open": "Otwórz nawigację",
+    "entityExplorer": "Przeglądarka encji",
+    "blueprints": "Schematy",
+    "contexts": "Konteksty",
+    "agents": "Agenci",
+    "dataHealth": "Stan danych",
+    "auditLog": "Aktywność / dziennik audytu",
+    "extensions": "Rozszerzenia",
+    "profile": "Profil",
+    "workspaceManagement": "Zarządzanie obszarem roboczym",
+    "manage": "Zarządzanie",
+    "signOut": "Wyloguj się"
+  },
+  "auth": {
+    "signIn": "Zaloguj się",
+    "signInTo": "Zaloguj się do {{identifier}}",
+    "workspacePrompt": "Wpisz identyfikator obszaru roboczego.",
+    "workspace": "Obszar roboczy",
+    "continue": "Kontynuuj",
+    "changeWorkspace": "Zmień obszar roboczy",
+    "email": "E-mail",
+    "password": "Hasło",
+    "forgotPassword": "Nie pamiętasz hasła?",
+    "workspaceNotFound": "Nie udało się znaleźć obszaru roboczego",
+    "loginFailed": "Nie udało się zalogować"
+  }
+}

@@ -1,0 +1,38 @@
+{
+  "language": {
+    "label": "Language",
+    "english": "English",
+    "polish": "Polish"
+  },
+  "app": {
+    "catalog": "Catalog",
+    "dataManagement": "Data management"
+  },
+  "navigation": {
+    "open": "Open navigation",
+    "entityExplorer": "Entity explorer",
+    "blueprints": "Blueprints",
+    "contexts": "Contexts",
+    "agents": "Agents",
+    "dataHealth": "Data health",
+    "auditLog": "Activity / Audit log",
+    "extensions": "Extensions",
+    "profile": "Profile",
+    "workspaceManagement": "Workspace management",
+    "manage": "Manage",
+    "signOut": "Sign out"
+  },
+  "auth": {
+    "signIn": "Sign in",
+    "signInTo": "Sign in to {{identifier}}",
+    "workspacePrompt": "Enter your workspace identifier.",
+    "workspace": "Workspace",
+    "continue": "Continue",
+    "changeWorkspace": "Change workspace",
+    "email": "Email",
+    "password": "Password",
+    "forgotPassword": "Forgot password?",
+    "workspaceNotFound": "Unable to find workspace",
+    "loginFailed": "Unable to sign in"
+  }
+}

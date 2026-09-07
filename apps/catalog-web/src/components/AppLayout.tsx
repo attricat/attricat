@@ -17,10 +17,13 @@ import {
   useTheme,
 } from '@mui/material';
 import { useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { currentSession, logout } from '../features/auth/api';
+import { LanguageSwitcher } from './LanguageSwitcher';
 import { drawerWidth, SideNavigation } from './SideNavigation';
 
 export const AppLayout = () => {
+  const { t } = useTranslation();
   const pathname = useRouterState({
     select: (state) => state.location.pathname,
   });
@@ -74,7 +77,7 @@ export const AppLayout = () => {
           <AppBar position="fixed">
             <Toolbar>
               <IconButton
-                aria-label="Open navigation"
+                aria-label={t('navigation.open')}
                 color="inherit"
                 edge="start"
                 onClick={() => setMobileOpen(true)}
@@ -86,8 +89,9 @@ export const AppLayout = () => {
                 sx={{ flexGrow: 1, ml: 1 }}
                 variant="h6"
               >
-                Catalog
+                {t('app.catalog')}
               </Typography>
+              <LanguageSwitcher />
             </Toolbar>
           </AppBar>
           <Drawer

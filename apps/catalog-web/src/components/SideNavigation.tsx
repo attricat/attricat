@@ -13,8 +13,10 @@ import BoltOutlinedIcon from '@mui/icons-material/BoltOutlined';
 import { useQuery } from '@tanstack/react-query';
 import { Link, useRouterState } from '@tanstack/react-router';
 import { useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { currentSession } from '../features/auth/api';
 import { ExtensionOutlet } from '../features/extensions/ExtensionOutlet';
+import { LanguageSwitcher } from './LanguageSwitcher';
 import {
   Box,
   Collapse,
@@ -27,33 +29,49 @@ import {
 } from '@mui/material';
 
 const navigationItems = [
-  { icon: <TravelExploreOutlinedIcon />, label: 'Entity explorer', to: '/' },
+  {
+    icon: <TravelExploreOutlinedIcon />,
+    labelKey: 'navigation.entityExplorer',
+    to: '/',
+  },
   {
     icon: <CategoryOutlinedIcon />,
-    label: 'Blueprints',
+    labelKey: 'navigation.blueprints',
     to: '/manage/blueprints',
   },
-  { icon: <FolderOutlinedIcon />, label: 'Contexts', to: '/manage/contexts' },
-  { icon: <SmartToyOutlinedIcon />, label: 'Agents', to: '/agents' },
+  {
+    icon: <FolderOutlinedIcon />,
+    labelKey: 'navigation.contexts',
+    to: '/manage/contexts',
+  },
+  {
+    icon: <SmartToyOutlinedIcon />,
+    labelKey: 'navigation.agents',
+    to: '/agents',
+  },
   {
     icon: <AssessmentOutlinedIcon />,
-    label: 'Data health',
+    labelKey: 'navigation.dataHealth',
     to: '/manage/data-health',
   },
   {
     icon: <FactCheckOutlinedIcon />,
-    label: 'Activity / Audit log',
+    labelKey: 'navigation.auditLog',
     to: '/manage/audit-log',
   },
   {
     icon: <BoltOutlinedIcon />,
-    label: 'Extensions',
+    labelKey: 'navigation.extensions',
     to: '/manage/extensions',
   },
-  { icon: <PersonOutlinedIcon />, label: 'Profile', to: '/profile' },
+  {
+    icon: <PersonOutlinedIcon />,
+    labelKey: 'navigation.profile',
+    to: '/profile',
+  },
   {
     icon: <ManageAccountsOutlinedIcon />,
-    label: 'Workspace management',
+    labelKey: 'navigation.workspaceManagement',
     to: '/manage/workspace/members',
   },
 ] as const;
@@ -67,6 +85,7 @@ export const SideNavigation = ({
   onNavigate?: () => void;
   onSignOut?: () => void;
 }) => {
+  const { t } = useTranslation();
   const pathname = useRouterState({
     select: (state) => state.location.pathname,
   });
@@ -104,7 +123,7 @@ export const SideNavigation = ({
           Attricat
         </Typography>
         <Typography color="text.secondary" variant="body2">
-          Data management
+          {t('app.dataManagement')}
         </Typography>
       </Box>
       <Divider />
@@ -124,7 +143,7 @@ export const SideNavigation = ({
               to={item.to}
             >
               <ListItemIcon>{item.icon}</ListItemIcon>
-              <ListItemText primary={item.label} />
+              <ListItemText primary={t(item.labelKey)} />
             </ListItemButton>
           ))}
         <ExtensionOutlet outlet="navigation" />
@@ -134,11 +153,11 @@ export const SideNavigation = ({
           sx={{ mt: 1 }}
         >
           <ListItemText
-            primary="Manage"
-            primaryTypographyProps={{
-              color: 'text.secondary',
-              variant: 'overline',
-            }}
+            primary={
+              <Typography color="text.secondary" variant="overline">
+                {t('navigation.manage')}
+              </Typography>
+            }
           />
           {isManageOpen ? <ExpandMoreIcon /> : <ChevronRightIcon />}
         </ListItemButton>
@@ -159,12 +178,15 @@ export const SideNavigation = ({
                 to={item.to}
               >
                 <ListItemIcon>{item.icon}</ListItemIcon>
-                <ListItemText primary={item.label} />
+                <ListItemText primary={t(item.labelKey)} />
               </ListItemButton>
             ))}
         </Collapse>
       </List>
       <Divider />
+      <Box sx={{ px: 2, py: 1.5 }}>
+        <LanguageSwitcher />
+      </Box>
       <List sx={{ px: 1, py: 1.5 }}>
         {visibleNavigationItems
           .filter((item) => item.to === '/profile')
@@ -177,14 +199,14 @@ export const SideNavigation = ({
               to={item.to}
             >
               <ListItemIcon>{item.icon}</ListItemIcon>
-              <ListItemText primary={item.label} />
+              <ListItemText primary={t(item.labelKey)} />
             </ListItemButton>
           ))}
         <ListItemButton onClick={onSignOut}>
           <ListItemIcon>
             <LogoutOutlinedIcon />
           </ListItemIcon>
-          <ListItemText primary="Sign out" />
+          <ListItemText primary={t('navigation.signOut')} />
         </ListItemButton>
       </List>
     </Box>
