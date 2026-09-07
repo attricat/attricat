@@ -17,6 +17,13 @@ describe('extension frame bootstrap', () => {
     expect(frameDocument).toContain("connect-src 'none'");
   });
 
+  it('delivers later context changes through the versioned port protocol', () => {
+    expect(frameDocument).toContain('catalog:context-update.v1');
+    expect(frameDocument).toContain('catalog:context-changed.v1');
+    expect(frameDocument).toContain('catalog:shutdown.v1');
+    expect(frameDocument).not.toContain("window.addEventListener('popstate'");
+  });
+
   it('exposes storage only through the MessageChannel broker', () => {
     expect(frameDocument).toContain(
       "storage: { get: detail => call('storage.get'",

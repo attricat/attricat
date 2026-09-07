@@ -101,9 +101,17 @@ verification is deferred from the trusted-source MVP.
 The v1 capability catalogue is: `catalog.read`, `catalog.write`,
 `events.subscribe`, `events.emit`, `storage.extension`, `configuration.read`,
 `configuration.write`, `secrets.read`, `logging.write`, `client.commands`,
-`client.navigation`, `client.notification`, `client.events`,
-`client.blueprint_configuration`, `client.entity_decoration`,
-`client.entity_action`, `network.request`, and `webhooks.receive`.
+`client.navigation`, `client.notification`, `client.events`, `client.refresh`,
+`client.confirmation`, `client.download`, `client.external_navigation`,
+`client.files.read`, `client.files.upload`, `client.search`,
+`client.live_updates`, `client.clipboard`, `client.theme.read`,
+`client.locale.read`, `client.blueprint_configuration`,
+`client.entity_decoration`, `client.entity_action`, `client.explorer_action`,
+`client.explorer_bulk_action`, `client.entity_header_action`,
+`client.entity_attribute_panel`, `client.blueprint_panel`,
+`client.blueprint_publish_check`, `client.file_panel`,
+`client.audit_event_panel`, `client.data_health_card`, `network.request`, and
+`webhooks.receive`.
 
 Required `permissions` and `host_permissions` must be granted before an
 extension can be enabled. Optional variants are independently grantable and
@@ -219,9 +227,12 @@ Enabled `client_component` artifacts can expose a strict `ui` contribution:
 ```
 
 A contribution is either `route` (which requires a non-empty `title`) or
-`element` (which requires one of the host-owned `navigation`,
-`entity_preview_panel`, `blueprint_attribute_configuration`,
-`entity_attribute_decoration`, or `entity_action` outlets). Routes are always namespaced at
+`element` (which requires one of the host-owned `navigation`, `entity_preview_panel`,
+`blueprint_attribute_configuration`, `entity_attribute_decoration`,
+`entity_action`, `explorer_action`, `explorer_bulk_action`,
+`entity_header_action`, `entity_attribute_panel`, `blueprint_panel`,
+`blueprint_publish_check`, `file_panel`, `audit_event_panel`, or
+`data_health_card` outlets). Routes are always namespaced at
 `/extensions/:extensionId/:contributionId`; manifests cannot provide a path,
 selector, or host component. Element names must be lowercase custom-element
 names. Each extension can use an outlet once and all contribution/artifact IDs
@@ -270,9 +281,39 @@ It may use only granted operations:
 - `catalog.context` contains only the documented outlet identifiers (the
   entity preview outlet supplies `entity_id` and optional `context_id`).
   Configuration is supplied to the component as `element.configuration` only
-  when `configuration.read` is granted. `client.events` currently dispatches
-  a startup `catalog:context-changed.v1` event only; it is not a durable
-  context-update protocol.
+  when `configuration.read` is granted. `client.events` dispatches a
+  `catalog:context-changed.v1` event at startup and after every host context
+  update. The event detail and `catalog.context` are replaced together through
+  the versioned private `MessageChannel`; no browser event, route state, or
+  host object is exposed. A frame remains mounted across context updates, so
+  extensions must discard work scoped to the prior context.
+
+### Mediated interaction contracts
+
+The interaction and placement capabilities above are independent, narrow
+permissions; none grants browser privileges. Every request is versioned,
+schema-validated, byte-bounded, bound to the contribution's documented outlet
+context, and re-authorized by the host at execution time. The host owns focus,
+confirmation, notification, download, navigation, upload, error, and
+accessibility UI.
+
+`client.refresh` may target only the current entity, Explorer result set, or a
+documented dashboard resource. `client.confirmation` has bounded title,
+message, and severity. `client.download` accepts bounded data or a host artifact
+reference with a validated filename and media type. `client.external_navigation`
+opens only allowlisted HTTPS URLs in a new tab. `client.files.read` and
+`client.files.upload` are restricted to file-detail context; upload selection
+and progress are host UI. `client.search` is a bounded authorized Catalog
+search, `client.live_updates` is limited to typed current-context events, and
+`client.clipboard` writes bounded user-initiated text. Theme and locale reads
+return only safe tokens, color mode, and locale.
+
+Placement capabilities authorize only their matching fixed outlet; they do not
+imply `client.commands`. Disabling, quarantining, removing, upgrading, or
+revoking a grant removes a contribution from runtime descriptors. Mounted
+outlets refresh at least every 15 seconds, unmount removed frames, close their
+ports, reject pending calls, and discard subscriptions; broker calls are
+re-authorized immediately.
 
 There is no generic `fetch`, URL navigation, credential/header access, DOM
 bridge, event stream, or inter-extension RPC. Every mediated Catalog request

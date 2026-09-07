@@ -40,6 +40,26 @@ pub const CAPABILITIES: &[&str] = &[
     "client.navigation",
     "client.notification",
     "client.events",
+    "client.refresh",
+    "client.confirmation",
+    "client.download",
+    "client.external_navigation",
+    "client.files.read",
+    "client.files.upload",
+    "client.search",
+    "client.live_updates",
+    "client.clipboard",
+    "client.theme.read",
+    "client.locale.read",
+    "client.explorer_action",
+    "client.explorer_bulk_action",
+    "client.entity_header_action",
+    "client.entity_attribute_panel",
+    "client.blueprint_panel",
+    "client.blueprint_publish_check",
+    "client.file_panel",
+    "client.audit_event_panel",
+    "client.data_health_card",
     "network.request",
     "webhooks.receive",
 ];
@@ -249,6 +269,15 @@ pub enum UiOutlet {
     BlueprintAttributeConfiguration,
     EntityAttributeDecoration,
     EntityAction,
+    ExplorerAction,
+    ExplorerBulkAction,
+    EntityHeaderAction,
+    EntityAttributePanel,
+    BlueprintPanel,
+    BlueprintPublishCheck,
+    FilePanel,
+    AuditEventPanel,
+    DataHealthCard,
 }
 
 #[derive(Debug, Error, PartialEq, Eq)]
@@ -454,6 +483,15 @@ impl Manifest {
                     }
                     UiOutlet::EntityAttributeDecoration => Some("client.entity_decoration"),
                     UiOutlet::EntityAction => Some("client.entity_action"),
+                    UiOutlet::ExplorerAction => Some("client.explorer_action"),
+                    UiOutlet::ExplorerBulkAction => Some("client.explorer_bulk_action"),
+                    UiOutlet::EntityHeaderAction => Some("client.entity_header_action"),
+                    UiOutlet::EntityAttributePanel => Some("client.entity_attribute_panel"),
+                    UiOutlet::BlueprintPanel => Some("client.blueprint_panel"),
+                    UiOutlet::BlueprintPublishCheck => Some("client.blueprint_publish_check"),
+                    UiOutlet::FilePanel => Some("client.file_panel"),
+                    UiOutlet::AuditEventPanel => Some("client.audit_event_panel"),
+                    UiOutlet::DataHealthCard => Some("client.data_health_card"),
                 };
                 if required.is_some_and(|capability| {
                     !self
@@ -1070,6 +1108,31 @@ mod tests {
         value.ui[0].element = "AcmePanel".into();
         assert!(value.validate(SUPPORTED_HOST_API).is_err());
     }
+    #[test]
+    fn validates_mediated_capabilities_and_matching_placement() {
+        let mut value = manifest();
+        value.catalog.host_api = ">=1.1.0, <2.0.0".into();
+        value.permissions.push("client.confirmation".into());
+        value.permissions.push("client.explorer_action".into());
+        value.artifacts.push(Artifact {
+            id: "client".into(),
+            kind: ArtifactKind::ClientComponent,
+            path: "client.js".into(),
+        });
+        value.ui.push(UiContribution {
+            id: "explorer-action".into(),
+            version: 1,
+            kind: UiContributionKind::Element,
+            artifact: "client".into(),
+            element: "acme-explorer-action".into(),
+            outlet: Some(UiOutlet::ExplorerAction),
+            title: None,
+        });
+        assert!(value.validate(SUPPORTED_HOST_API).is_ok());
+        value.permissions.retain(|permission| permission != "client.explorer_action");
+        assert!(value.validate(SUPPORTED_HOST_API).is_err());
+    }
+
     #[test]
     fn validates_generic_scoped_configuration_and_commands() {
         let mut value = manifest();
