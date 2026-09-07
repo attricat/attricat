@@ -101,7 +101,7 @@ export const SideNavigation = ({
     >
       <Box sx={{ px: 3, py: 2 }}>
         <Typography color="primary" sx={{ fontWeight: 700 }} variant="h6">
-          Catalog
+          Attricat
         </Typography>
         <Typography color="text.secondary" variant="body2">
           Data management
