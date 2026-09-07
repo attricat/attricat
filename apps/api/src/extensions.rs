@@ -277,8 +277,8 @@ pub enum WebhookAuthenticationKind {
     HmacSha256,
 }
 
-/// A client contribution is either a namespaced full page or an element at a
-/// host-owned outlet. The host never accepts arbitrary route paths or DOM
+/// A client contribution is either a namespaced full page or an embedded view
+/// at a host-owned outlet. The host never accepts arbitrary route paths or DOM
 /// selectors from an extension.
 #[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
@@ -287,8 +287,6 @@ pub struct UiContribution {
     pub version: u32,
     pub kind: UiContributionKind,
     pub artifact: String,
-    /// The custom-element name registered inside the isolated extension frame.
-    pub element: String,
     #[serde(default)]
     pub outlet: Option<UiOutlet>,
     #[serde(default)]
@@ -299,9 +297,9 @@ pub struct UiContribution {
 #[serde(rename_all = "snake_case")]
 pub enum UiContributionKind {
     Route,
-    /// Legacy generic embedded contribution. New surfaces must use `Action` or
+    /// Generic embedded contribution. New surfaces must use `Action` or
     /// `Panel`, so the host can own their compact/action or read-only layout.
-    Element,
+    Embedded,
     Action,
     Panel,
 }
@@ -559,7 +557,6 @@ impl Manifest {
                     contribution.id
                 )));
             }
-            valid_custom_element_name(&contribution.element)?;
             if let Some(outlet) = &contribution.outlet {
                 if !matches!(outlet, UiOutlet::Navigation | UiOutlet::EntityPreviewPanel) {
                     require_next_host_api(&range)?;
@@ -598,7 +595,7 @@ impl Manifest {
             }
             match (&contribution.kind, &contribution.outlet) {
                 (UiContributionKind::Route, None) => {}
-                (UiContributionKind::Element, Some(outlet))
+                (UiContributionKind::Embedded, Some(outlet))
                 | (UiContributionKind::Action, Some(outlet))
                 | (UiContributionKind::Panel, Some(outlet)) => {
                     // Extensions may each contribute once to an outlet. A
@@ -621,17 +618,17 @@ impl Manifest {
                             | (UiContributionKind::Panel, UiOutlet::FilePanel)
                             | (UiContributionKind::Panel, UiOutlet::AuditEventPanel)
                             | (UiContributionKind::Panel, UiOutlet::DataHealthCard)
-                            | (UiContributionKind::Element, UiOutlet::Navigation)
-                            | (UiContributionKind::Element, UiOutlet::EntityPreviewPanel)
+                            | (UiContributionKind::Embedded, UiOutlet::Navigation)
+                            | (UiContributionKind::Embedded, UiOutlet::EntityPreviewPanel)
                             | (
-                                UiContributionKind::Element,
+                                UiContributionKind::Embedded,
                                 UiOutlet::BlueprintAttributeConfiguration
                             )
                             | (
-                                UiContributionKind::Element,
+                                UiContributionKind::Embedded,
                                 UiOutlet::EntityAttributeDecoration
                             )
-                            | (UiContributionKind::Element, UiOutlet::EntityAction)
+                            | (UiContributionKind::Embedded, UiOutlet::EntityAction)
                     );
                     if !valid_kind {
                         return Err(ManifestError::Invalid(
@@ -644,7 +641,7 @@ impl Manifest {
                         "route UI contributions cannot declare an outlet".into(),
                     ));
                 }
-                (UiContributionKind::Element, None)
+                (UiContributionKind::Embedded, None)
                 | (UiContributionKind::Action, None)
                 | (UiContributionKind::Panel, None) => {
                     return Err(ManifestError::Invalid(
@@ -904,20 +901,6 @@ fn unique<'a>(values: impl Iterator<Item = &'a String>, label: &str) -> Result<(
     }
     Ok(())
 }
-fn valid_custom_element_name(value: &str) -> Result<(), ManifestError> {
-    if value.len() > MAX_EXTENSION_IDENTIFIER_BYTES
-        || !value.contains('-')
-        || !value
-            .bytes()
-            .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == b'-')
-    {
-        return Err(ManifestError::Invalid(
-            "UI element must be a lowercase custom-element name".into(),
-        ));
-    }
-    Ok(())
-}
-
 fn valid_id(value: &str, label: &str) -> Result<(), ManifestError> {
     if value.is_empty()
         || value.len() > MAX_EXTENSION_IDENTIFIER_BYTES
@@ -1294,15 +1277,12 @@ mod tests {
         value.ui.push(UiContribution {
             id: "panel".into(),
             version: 1,
-            kind: UiContributionKind::Element,
+            kind: UiContributionKind::Embedded,
             artifact: "client".into(),
-            element: "acme-panel".into(),
             outlet: Some(UiOutlet::EntityPreviewPanel),
             title: None,
         });
         assert!(value.validate(SUPPORTED_HOST_API).is_ok());
-        value.ui[0].element = "AcmePanel".into();
-        assert!(value.validate(SUPPORTED_HOST_API).is_err());
     }
     #[test]
     fn validates_mediated_capabilities_and_matching_placement() {
@@ -1320,7 +1300,6 @@ mod tests {
             version: 1,
             kind: UiContributionKind::Action,
             artifact: "client".into(),
-            element: "acme-explorer-action".into(),
             outlet: Some(UiOutlet::ExplorerAction),
             title: None,
         });
@@ -1361,9 +1340,8 @@ mod tests {
         value.ui.push(UiContribution {
             id: "action".into(),
             version: 1,
-            kind: UiContributionKind::Element,
+            kind: UiContributionKind::Embedded,
             artifact: "client".into(),
-            element: "acme-action".into(),
             outlet: Some(UiOutlet::EntityAction),
             title: None,
         });
@@ -1396,7 +1374,6 @@ mod tests {
             version: 1,
             kind: UiContributionKind::Action,
             artifact: "client".into(),
-            element: "acme-explorer-action".into(),
             outlet: Some(UiOutlet::ExplorerRowAction),
             title: None,
         });

@@ -47,7 +47,6 @@ pub(super) struct RuntimeContribution {
     kind: UiContributionKind,
     outlet: Option<UiOutlet>,
     title: Option<String>,
-    element: String,
 }
 
 #[derive(Serialize)]
@@ -482,7 +481,6 @@ pub(super) async fn runtime(
                 kind: item.kind,
                 outlet: item.outlet,
                 title: item.title,
-                element: item.element,
             })
             .collect(),
     ))

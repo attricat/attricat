@@ -278,27 +278,26 @@ Enabled `client_component` artifacts can expose a strict `ui` contribution:
 {
   "id": "inventory-panel",
   "version": 1,
-  "kind": "element",
+  "kind": "embedded",
   "artifact": "client",
-  "element": "acme-inventory-panel",
   "outlet": "entity_preview_panel"
 }
 ```
 
-A contribution is either `route` (which requires a non-empty `title`), legacy
-`element`, explicit `action`, or explicit read-only `panel`. `action` is
+A contribution is either `route` (which requires a non-empty `title`),
+`embedded`, explicit `action`, or explicit read-only `panel`. `action` is
 required for `explorer_row_action` (and requires `client.explorer_row_action`);
 `panel` is required for `blueprint_detail_panel` (and requires
-`client.blueprint_detail_panel`). Existing `element` contributions use
-`navigation`, `entity_preview_panel`, `blueprint_attribute_configuration`,
+`client.blueprint_detail_panel`). `embedded` contributions use `navigation`,
+`entity_preview_panel`, `blueprint_attribute_configuration`,
 `entity_attribute_decoration`, or `entity_action`; the additional mediated
 placement capabilities reserve their matching fixed outlets for their explicit
 host-owned action or panel layouts. Routes are always namespaced at
 `/extensions/:extensionId/:contributionId`; manifests cannot provide a path,
-selector, or host component. Element names must be lowercase custom-element
-names. Each extension can use an outlet once and all contribution/artifact IDs
-remain stable across releases. Multiple enabled extensions may contribute to a
-surface, but their display order is intentionally unspecified.
+selector, or host component. Each extension can use an outlet once and all
+contribution/artifact IDs remain stable across releases. Multiple enabled
+extensions may contribute to a surface, but their display order is intentionally
+unspecified.
 
 Catalog loads runtime descriptors and JavaScript only for installations whose
 effective runtime state is enabled. The deployment gate (`EXTENSIONS_MODE`),
@@ -313,15 +312,28 @@ runtime descriptor and unmount within 15 seconds; broker calls are rejected
 immediately after containment. Release IDs and
 object-store keys are never client addresses. The host
 runs every contribution in a distinct `<iframe sandbox="allow-scripts">` with
-an opaque origin and a CSP that denies network access. Components register
-custom elements *inside that frame*, not in Catalog's document, and have no
-access to host DOM, cookies, storage, React state, or other extension frames.
-The host revokes the frame port and removes the frame on unmount or load error.
+an opaque origin and a CSP that denies network access. The host imports the
+artifact and calls its required `mount(root, catalog)` export *inside that
+frame*, not in Catalog's document. The artifact has no access to host DOM,
+cookies, storage, React state, or other extension frames. `mount` may return a
+cleanup function, which the frame calls during shutdown. The host revokes the
+frame port and removes the frame on unmount or load error.
 
 ### Client API
 
-The frame receives a versioned `MessageChannel` API as `globalThis.catalog`.
-It may use only granted operations:
+A client artifact must export `mount(root, catalog)`. It runs only after the
+artifact has been imported in its opaque frame; it may return a synchronous or
+asynchronous cleanup function. For example:
+
+```js
+export const mount = (root, catalog) => {
+  root.textContent = `Current entity: ${catalog.context.entity_id}`;
+  return () => root.replaceChildren();
+};
+```
+
+The frame provides a versioned `MessageChannel` API as `globalThis.catalog` and
+passes that same object to `mount`. It may use only granted operations:
 
 - `catalog.navigate({ entity_id })` requires `client.navigation` and resolves
   only to Catalog's entity route.
@@ -342,12 +354,12 @@ It may use only granted operations:
   `expected_revision`.
 - `catalog.context` contains only the documented outlet identifiers (the
   entity preview outlet supplies `entity_id` and optional `context_id`).
-  Configuration is supplied to the component as `element.configuration` only
-  when `configuration.read` is granted. `client.events` dispatches a
-  `catalog:context-changed.v1` event at startup and after every host context
-  update. The event detail and `catalog.context` are replaced together through
-  the versioned private `MessageChannel`; no browser event, route state, or
-  host object is exposed. A frame remains mounted across context updates, so
+  `catalog.configuration` is supplied only when `configuration.read` is
+  granted. `client.events` dispatches a `catalog:context-changed.v1` event on
+  the `root` passed to `mount` at startup and after every host context update.
+  The event detail and `catalog.context` are replaced together through the
+  versioned private `MessageChannel`; no browser event, route state, or host
+  object is exposed. A frame remains mounted across context updates, so
   extensions must discard work scoped to the prior context.
 
 ### Mediated interaction contracts
@@ -434,7 +446,7 @@ object request/response schemas, and byte limits). They require
 rechecks contribution, enabled state, exact release, configuration, and grants.
 No extension receives browser cookies, routes, or arbitrary fetch access.
 
-The additional fixed element outlets are
+The additional fixed embedded outlets are
 `blueprint_attribute_configuration` (requires `client.blueprint_configuration`),
 `entity_attribute_decoration` (requires `client.entity_decoration`), and
 `entity_action` (requires `client.entity_action`). Their contexts contain only

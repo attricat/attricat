@@ -29,7 +29,7 @@ const contributionKey = (contribution: ExtensionContribution) =>
 
 const supportsOutlet = (contribution: ExtensionContribution, outlet: Outlet) =>
   contribution.outlet === outlet &&
-  (contribution.kind === 'element' ||
+  (contribution.kind === 'embedded' ||
     (outlet === 'explorer_row_action' && contribution.kind === 'action') ||
     (outlet === 'blueprint_detail_panel' && contribution.kind === 'panel'));
 

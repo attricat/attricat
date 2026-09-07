@@ -19,10 +19,9 @@ const contribution = {
   capabilities: ['client.navigation'],
   id: 'panel',
   version: 1,
-  kind: 'element',
+  kind: 'embedded',
   outlet: 'entity_preview_panel',
   title: null,
-  element: 'acme-panel',
 };
 
 describe('extension runtime API', () => {
@@ -45,7 +44,7 @@ describe('extension runtime API', () => {
     await expect(getExtensionRuntime()).resolves.toEqual([action]);
     fetchMock.mockResolvedValue({
       ok: true,
-      json: () => Promise.resolve([{ ...contribution, element: undefined }]),
+      json: () => Promise.resolve([{ ...contribution, id: undefined }]),
     });
     await expect(getExtensionRuntime()).rejects.toThrow();
   });

@@ -10,7 +10,7 @@ const contributionSchema = z
     capabilities: z.array(z.string()),
     id: z.string().min(1),
     version: z.number().int().positive(),
-    kind: z.enum(['route', 'element', 'action', 'panel']),
+    kind: z.enum(['route', 'embedded', 'action', 'panel']),
     outlet: z
       .enum([
         'navigation',
@@ -32,7 +32,6 @@ const contributionSchema = z
       ])
       .nullable(),
     title: z.string().nullable(),
-    element: z.string().min(1),
   })
   .strict();
 

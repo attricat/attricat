@@ -139,7 +139,6 @@ pub struct ClientExtensionContribution {
     pub kind: UiContributionKind,
     pub outlet: Option<UiOutlet>,
     pub title: Option<String>,
-    pub element: String,
     pub artifact_key: String,
 }
 
@@ -254,7 +253,6 @@ impl CatalogRepository {
                     kind: contribution.kind,
                     outlet: contribution.outlet,
                     title: contribution.title,
-                    element: contribution.element,
                 });
             }
         }

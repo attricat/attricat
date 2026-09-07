@@ -59,7 +59,7 @@ fn storage_client_release_archive(version: &str) -> Vec<u8> {
         "permissions": ["storage.extension"],
         "configuration": {"version": 1, "schema": {"type": "object", "additionalProperties": false}},
         "artifacts": [{"id": "client", "kind": "client_component", "path": "client.js"}],
-        "ui": [{"id": "panel", "version": 1, "kind": "element", "artifact": "client", "element": "acme-storage-panel", "outlet": "entity_preview_panel"}]
+        "ui": [{"id": "panel", "version": 1, "kind": "embedded", "artifact": "client", "outlet": "entity_preview_panel"}]
     }))
     .unwrap();
     let mut tar_bytes = Vec::new();
@@ -90,9 +90,8 @@ fn client_release_archive() -> Vec<u8> {
         "ui": [{
             "id": "panel",
             "version": 1,
-            "kind": "element",
+            "kind": "embedded",
             "artifact": "client",
-            "element": "acme-client-panel",
             "outlet": "entity_preview_panel"
         }]
     }))
