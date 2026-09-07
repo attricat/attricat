@@ -39,6 +39,7 @@ import { BlueprintViewsPreview } from './BlueprintViewsPreview';
 import { formatBlueprintDateTime } from './date-time';
 import { blueprintQueryKeys } from './query-keys';
 import { RevisionHistory } from './RevisionHistory';
+import { ExtensionOutlet } from '../extensions/ExtensionOutlet';
 
 const TomlDiffEditor = lazy(() =>
   import('./TomlDiffEditor').then(({ TomlDiffEditor }) => ({
@@ -259,6 +260,18 @@ export const BlueprintDetailPage = ({
                 )}
               </Box>
             </Paper>
+          )}
+          {left.data && (
+            <Box component="aside" sx={{ mt: 3 }}>
+              <ExtensionOutlet
+                context={{
+                  context_version: 1,
+                  blueprint_id: left.data.blueprint.id,
+                  blueprint_version: left.data.blueprint.version,
+                }}
+                outlet="blueprint_detail_panel"
+              />
+            </Box>
           )}
           <Accordion component="section" sx={{ mt: 3 }}>
             <AccordionSummary expandIcon={<ExpandMoreIcon />}>

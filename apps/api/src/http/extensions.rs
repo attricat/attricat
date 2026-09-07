@@ -505,6 +505,7 @@ pub(super) async fn command(
         .client_extension_contribution(&extension_id, &contribution_id)
         .await?;
     if contribution.installed_release_id != input.release_id
+        || contribution.kind == UiContributionKind::Panel
         || !contribution
             .capabilities
             .iter()

@@ -35,6 +35,8 @@ pub const CAPABILITIES: &[&str] = &[
     "client.blueprint_configuration",
     "client.entity_decoration",
     "client.entity_action",
+    "client.explorer_row_action",
+    "client.blueprint_detail_panel",
     "secrets.read",
     "logging.write",
     "client.navigation",
@@ -238,7 +240,11 @@ pub struct UiContribution {
 #[serde(rename_all = "snake_case")]
 pub enum UiContributionKind {
     Route,
+    /// Legacy generic embedded contribution. New surfaces must use `Action` or
+    /// `Panel`, so the host can own their compact/action or read-only layout.
     Element,
+    Action,
+    Panel,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq, Hash)]
@@ -249,6 +255,11 @@ pub enum UiOutlet {
     BlueprintAttributeConfiguration,
     EntityAttributeDecoration,
     EntityAction,
+    /// A compact, per-entity explorer menu action. The host provides only the
+    /// entity and immutable blueprint revision identifiers.
+    ExplorerRowAction,
+    /// A read-only panel on a blueprint revision detail page.
+    BlueprintDetailPanel,
 }
 
 #[derive(Debug, Error, PartialEq, Eq)]
@@ -454,6 +465,8 @@ impl Manifest {
                     }
                     UiOutlet::EntityAttributeDecoration => Some("client.entity_decoration"),
                     UiOutlet::EntityAction => Some("client.entity_action"),
+                    UiOutlet::ExplorerRowAction => Some("client.explorer_row_action"),
+                    UiOutlet::BlueprintDetailPanel => Some("client.blueprint_detail_panel"),
                 };
                 if required.is_some_and(|capability| {
                     !self
@@ -470,10 +483,35 @@ impl Manifest {
             }
             match (&contribution.kind, &contribution.outlet) {
                 (UiContributionKind::Route, None) => {}
-                (UiContributionKind::Element, Some(outlet)) => {
+                (UiContributionKind::Element, Some(outlet))
+                | (UiContributionKind::Action, Some(outlet))
+                | (UiContributionKind::Panel, Some(outlet)) => {
+                    // Extensions may each contribute once to an outlet. A
+                    // single extension cannot rely on duplicate ordering.
                     if !outlets.insert(outlet) {
                         return Err(ManifestError::Invalid(
                             "only one contribution may target each UI outlet".into(),
+                        ));
+                    }
+                    let valid_kind = matches!(
+                        (&contribution.kind, outlet),
+                        (UiContributionKind::Action, UiOutlet::ExplorerRowAction)
+                            | (UiContributionKind::Panel, UiOutlet::BlueprintDetailPanel)
+                            | (UiContributionKind::Element, UiOutlet::Navigation)
+                            | (UiContributionKind::Element, UiOutlet::EntityPreviewPanel)
+                            | (
+                                UiContributionKind::Element,
+                                UiOutlet::BlueprintAttributeConfiguration
+                            )
+                            | (
+                                UiContributionKind::Element,
+                                UiOutlet::EntityAttributeDecoration
+                            )
+                            | (UiContributionKind::Element, UiOutlet::EntityAction)
+                    );
+                    if !valid_kind {
+                        return Err(ManifestError::Invalid(
+                            "this UI outlet requires its explicit contribution kind".into(),
                         ));
                     }
                 }
@@ -482,9 +520,11 @@ impl Manifest {
                         "route UI contributions cannot declare an outlet".into(),
                     ));
                 }
-                (UiContributionKind::Element, None) => {
+                (UiContributionKind::Element, None)
+                | (UiContributionKind::Action, None)
+                | (UiContributionKind::Panel, None) => {
                     return Err(ManifestError::Invalid(
-                        "element UI contributions require an outlet".into(),
+                        "embedded UI contributions require an outlet".into(),
                     ));
                 }
             }
@@ -1117,6 +1157,35 @@ mod tests {
         assert!(value.validate(SUPPORTED_HOST_API).is_err());
         value.server.as_mut().unwrap().commands[0].handler = "refresh-handler".into();
         value.server.as_mut().unwrap().commands[0].max_response_bytes = 65_537;
+        assert!(value.validate(SUPPORTED_HOST_API).is_err());
+    }
+
+    #[test]
+    fn validates_explicit_context_outlet_kinds_and_capabilities() {
+        let mut value = manifest();
+        value.catalog.host_api = ">=1.1.0, <2.0.0".into();
+        value.permissions.push("client.explorer_row_action".into());
+        value.artifacts.push(Artifact {
+            id: "client".into(),
+            kind: ArtifactKind::ClientComponent,
+            path: "client.js".into(),
+        });
+        value.ui.push(UiContribution {
+            id: "explorer-action".into(),
+            version: 1,
+            kind: UiContributionKind::Action,
+            artifact: "client".into(),
+            element: "acme-explorer-action".into(),
+            outlet: Some(UiOutlet::ExplorerRowAction),
+            title: None,
+        });
+        assert!(value.validate(SUPPORTED_HOST_API).is_ok());
+        value.ui[0].kind = UiContributionKind::Panel;
+        assert!(value.validate(SUPPORTED_HOST_API).is_err());
+        value.ui[0].kind = UiContributionKind::Action;
+        value
+            .permissions
+            .retain(|permission| permission != "client.explorer_row_action");
         assert!(value.validate(SUPPORTED_HOST_API).is_err());
     }
 
