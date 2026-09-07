@@ -90,6 +90,31 @@ permission bypass: the initiating user is re-authorized when an approved write
 resumes. Restrict this permission to trusted operators and review each proposed
 input and change summary.
 
+### macOS LiteLLM loopback proxy
+
+On macOS, local-network privacy or firewall policy can allow `curl` to reach a
+LAN-hosted LiteLLM instance while denying the Rust API binary with `No route to
+host`. This is a host networking issue, not an invalid `LLM_BASE_URL`. For
+local development, route the API through the included Node-based loopback proxy
+instead:
+
+```sh
+# .env
+LLM_UPSTREAM_BASE_URL=http://192.168.1.100:4000/v1
+LLM_LOOPBACK_PROXY_PORT=4010
+LLM_BASE_URL=http://127.0.0.1:4010/v1
+
+# In another terminal, alongside the development stack
+set -a; source .env; set +a
+node scripts/litellm-loopback-proxy.mjs
+```
+
+The proxy listens only on `127.0.0.1`, forwards streaming Chat Completions
+requests unchanged to `LLM_UPSTREAM_BASE_URL`, and does not log provider
+credentials or request bodies. Keep it running while the API is running. Fix
+the host networking policy instead of using this development workaround in a
+deployed environment.
+
 ### Attachment forwarding
 
 Every provider request contains the complete stored conversation history, so an
