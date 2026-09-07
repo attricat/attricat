@@ -68,11 +68,18 @@ window.addEventListener('message', async (event) => { if (event.source !== paren
 type Props = {
   contribution: ExtensionContribution;
   context?: Record<string, unknown>;
+  onContentHeight?: (height: number) => void;
 };
 
 /** Executes one contribution in an opaque-origin document, never in Catalog's DOM. */
-export const ExtensionFrame = ({ contribution, context = {} }: Props) => {
+export const ExtensionFrame = ({
+  contribution,
+  context = {},
+  onContentHeight,
+}: Props) => {
   const iframe = useRef<HTMLIFrameElement>(null);
+  const onContentHeightRef = useRef(onContentHeight);
+  onContentHeightRef.current = onContentHeight;
   const [error, setError] = useState<string>();
   const [ready, setReady] = useState(false);
   const [height, setHeight] = useState(48);
@@ -113,8 +120,12 @@ export const ExtensionFrame = ({ contribution, context = {} }: Props) => {
             data.type === 'catalog:resize.v1' &&
             typeof data.height === 'number' &&
             Number.isFinite(data.height)
-          )
-            return setHeight(Math.min(Math.max(0, data.height), 2048));
+          ) {
+            const height = Math.min(Math.max(0, data.height), 2048);
+            setHeight(height);
+            onContentHeightRef.current?.(height);
+            return;
+          }
           if (data.type !== 'catalog:request.v1' || typeof data.id !== 'string')
             return;
           const respond = (ok: boolean, value?: unknown) => {

@@ -1,6 +1,7 @@
 import ExtensionOutlinedIcon from '@mui/icons-material/ExtensionOutlined';
 import {
   Alert,
+  Box,
   IconButton,
   Popover,
   Snackbar,
@@ -11,7 +12,7 @@ import { useQuery } from '@tanstack/react-query';
 import { useEffect, useState } from 'react';
 import { z } from 'zod';
 import { ExtensionFrame } from './ExtensionFrame';
-import { getExtensionRuntime } from './api';
+import { getExtensionRuntime, type ExtensionContribution } from './api';
 import { extensionQueryKeys } from './query-keys';
 
 type Outlet =
@@ -20,6 +21,9 @@ type Outlet =
   | 'blueprint_attribute_configuration'
   | 'entity_attribute_decoration'
   | 'entity_action';
+
+const contributionKey = (contribution: ExtensionContribution) =>
+  `${contribution.extension_id}:${contribution.id}:${contribution.release_id}`;
 
 type Props = {
   outlet: Outlet;
@@ -110,27 +114,63 @@ export const ExtensionPopoverOutlet = ({
   outlet: Outlet;
 }) => {
   const [anchor, setAnchor] = useState<HTMLElement | null>(null);
+  const [contentHeights, setContentHeights] = useState<Record<string, number>>(
+    {},
+  );
+  const contextKey = JSON.stringify(context);
+  useEffect(() => setContentHeights({}), [contextKey]);
   const runtime = useQuery({
     queryKey: extensionQueryKeys.runtime,
     queryFn: getExtensionRuntime,
     refetchInterval: 15_000,
     retry: false,
   });
-  const hasContributions = runtime.data?.some(
-    (item) => item.kind === 'element' && item.outlet === outlet,
+  const contributions =
+    runtime.data?.filter(
+      (item) => item.kind === 'element' && item.outlet === outlet,
+    ) ?? [];
+  const hasContent = contributions.some(
+    (contribution) => contentHeights[contributionKey(contribution)] > 0,
   );
-  if (!hasContributions) return null;
+  if (!contributions.length) return null;
   return (
     <>
-      <Tooltip title="Extension details">
-        <IconButton
-          aria-label={label}
-          onClick={(event) => setAnchor(event.currentTarget)}
-          size="small"
+      {!hasContent && (
+        <Box
+          sx={{
+            left: -10_000,
+            position: 'fixed',
+            top: 0,
+            visibility: 'hidden',
+            width: 480,
+          }}
         >
-          <ExtensionOutlinedIcon fontSize="inherit" />
-        </IconButton>
-      </Tooltip>
+          {contributions.map((contribution) => (
+            <ExtensionFrame
+              context={context}
+              contribution={contribution}
+              key={contributionKey(contribution)}
+              onContentHeight={(height) =>
+                setContentHeights((current) => ({
+                  ...current,
+                  [contributionKey(contribution)]: height,
+                }))
+              }
+            />
+          ))}
+        </Box>
+      )}
+      {hasContent && (
+        <Tooltip title="Extension details">
+          <IconButton
+            aria-label={label}
+            onClick={(event) => setAnchor(event.currentTarget)}
+            size="small"
+          >
+            <ExtensionOutlinedIcon fontSize="inherit" />
+          </IconButton>
+        </Tooltip>
+      )}
       <Popover
         anchorEl={anchor}
         anchorOrigin={{ horizontal: 'left', vertical: 'bottom' }}

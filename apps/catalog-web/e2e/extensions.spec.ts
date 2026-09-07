@@ -69,6 +69,10 @@ price_gross = "price_net * (1 + 0.23)"`,
   const entity = await createEntity(blueprint, [scalar('price_net', 100)]);
 
   await page.goto(`/entities/${entity.id}`);
+  await expect(
+    page.getByLabel('Open extensions for price_gross'),
+  ).toBeVisible();
+  await expect(page.getByLabel('Open extensions for price_net')).toHaveCount(0);
   const action = page
     .frameLocator('iframe[title="recalculate-formulas-action"]')
     .getByRole('button', { name: 'Recalculate formulas' });
