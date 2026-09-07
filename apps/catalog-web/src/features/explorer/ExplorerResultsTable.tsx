@@ -10,7 +10,6 @@ import {
 import MoreVertIcon from '@mui/icons-material/MoreVert';
 import TagOutlinedIcon from '@mui/icons-material/TagOutlined';
 import {
-  Box,
   Chip,
   Dialog,
   DialogContent,
@@ -245,13 +244,10 @@ export const ExplorerResultsTable = ({
 
   return (
     <Paper component="section">
-      <Box sx={{ borderBottom: 1, borderColor: 'divider', p: 2 }}>
-        <Typography>
-          <strong>{blueprint.blueprint.code}</strong> v
-          {blueprint.blueprint.version} · {items.length} result
-          {items.length === 1 ? '' : 's'}
-        </Typography>
-      </Box>
+      <Typography sx={{ borderBottom: 1, borderColor: 'divider', p: 2 }}>
+        {items.length} result
+        {items.length === 1 ? '' : 's'}
+      </Typography>
       <TableContainer
         aria-label={t('explorer.results')}
         ref={tableContainerRef}
