@@ -191,7 +191,7 @@ export const EntityPreviewPage = ({ entityId }: { entityId: string }) => {
                           entity_id: entityId,
                         }}
                         key={attribute.id}
-                        label={`Open extensions for ${attribute.code}`}
+                        label={`View extension content for ${attribute.code.replaceAll('_', ' ')}`}
                         outlet="entity_attribute_decoration"
                       />
                     )}

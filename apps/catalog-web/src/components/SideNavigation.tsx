@@ -9,7 +9,7 @@ import TravelExploreOutlinedIcon from '@mui/icons-material/TravelExploreOutlined
 import ManageAccountsOutlinedIcon from '@mui/icons-material/ManageAccountsOutlined';
 import PersonOutlinedIcon from '@mui/icons-material/PersonOutlined';
 import LogoutOutlinedIcon from '@mui/icons-material/LogoutOutlined';
-import ExtensionOutlinedIcon from '@mui/icons-material/ExtensionOutlined';
+import BoltOutlinedIcon from '@mui/icons-material/BoltOutlined';
 import { useQuery } from '@tanstack/react-query';
 import { Link, useRouterState } from '@tanstack/react-router';
 import { useState } from 'react';
@@ -46,7 +46,7 @@ const navigationItems = [
     to: '/manage/audit-log',
   },
   {
-    icon: <ExtensionOutlinedIcon />,
+    icon: <BoltOutlinedIcon />,
     label: 'Extensions',
     to: '/manage/extensions',
   },

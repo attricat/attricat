@@ -70,9 +70,11 @@ price_gross = "price_net * (1 + 0.23)"`,
 
   await page.goto(`/entities/${entity.id}`);
   await expect(
-    page.getByLabel('Open extensions for price_gross'),
+    page.getByLabel('View extension content for price gross'),
   ).toBeVisible();
-  await expect(page.getByLabel('Open extensions for price_net')).toHaveCount(0);
+  await expect(
+    page.getByLabel('View extension content for price net'),
+  ).toHaveCount(0);
   const action = page
     .frameLocator('iframe[title="recalculate-formulas-action"]')
     .getByRole('button', { name: 'Recalculate formulas' });

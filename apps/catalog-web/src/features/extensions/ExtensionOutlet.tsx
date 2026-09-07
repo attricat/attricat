@@ -162,7 +162,7 @@ export const ExtensionPopoverOutlet = ({
         </Box>
       )}
       {hasContent && (
-        <Tooltip title="Extension details">
+        <Tooltip title={label}>
           <IconButton
             aria-label={label}
             onClick={(event) => setAnchor(event.currentTarget)}
