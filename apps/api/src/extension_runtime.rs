@@ -23,6 +23,7 @@ use wasmtime::{
 };
 
 use crate::{
+    catalog_service::CatalogMutationService,
     domain_events::DomainEvent,
     event_dispatcher::{EventHandler, EventHandlerCommandContext},
     extension_installer::installed_artifact_key,
@@ -579,9 +580,10 @@ impl host_v11::catalog::host::api::Host for HostState {
                 })
             })
             .collect::<Result<Vec<_>, String>>()?;
-        let values = self
+        let repository = self
             .repository
-            .for_extension(&self.installation.extension_id)
+            .for_extension(&self.installation.extension_id);
+        let values = CatalogMutationService::new(&repository)
             .append_values(entity_id, AppendAttributeValues { values })
             .await
             .map_err(|error| error.to_string())?;

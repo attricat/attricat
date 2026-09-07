@@ -89,8 +89,9 @@ impl EventPublisher for CatalogRepository {
     async fn enqueue_event(
         &self,
         transaction: &mut Transaction<'_, Postgres>,
-        event: NewDomainEvent,
+        mut event: NewDomainEvent,
     ) -> Result<DomainEvent, RepositoryError> {
+        super::add_initiating_actor_metadata(&mut event.metadata, self.audit_context.as_ref());
         event
             .validate()
             .map_err(RepositoryError::InvalidDomainEvent)?;

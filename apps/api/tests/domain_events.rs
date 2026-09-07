@@ -71,8 +71,8 @@ async fn context_creation_commits_a_typed_outbox_event(pool: sqlx::PgPool) {
     assert_eq!(response.status(), StatusCode::CREATED);
     let context = response.json::<support::Value>().await.unwrap();
 
-    let event = sqlx::query_as::<_, (String, String, Uuid, Uuid, String, String, support::Value)>(
-        "SELECT event_type, aggregate_kind, aggregate_id, correlation_id, source_kind, source_name, payload FROM domain_events",
+    let event = sqlx::query_as::<_, (String, String, Uuid, Uuid, String, String, support::Value, support::Value)>(
+        "SELECT event_type, aggregate_kind, aggregate_id, correlation_id, source_kind, source_name, payload, metadata FROM domain_events",
     )
     .fetch_one(&pool)
     .await
@@ -84,6 +84,16 @@ async fn context_creation_commits_a_typed_outbox_event(pool: sqlx::PgPool) {
     assert_eq!(event.4, "api");
     assert_eq!(event.5, "catalog_api");
     assert_eq!(event.6["code"], "evented");
+    let audit_actor_id = sqlx::query_scalar::<_, Uuid>(
+        "SELECT actor_user_id FROM audit_events WHERE actor_user_id IS NOT NULL",
+    )
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert_eq!(
+        event.7["initiating_actor_user_id"],
+        audit_actor_id.to_string()
+    );
     assert_eq!(
         sqlx::query_scalar::<_, i64>("SELECT count(*) FROM audit_events")
             .fetch_one(&pool)

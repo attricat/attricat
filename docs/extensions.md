@@ -367,10 +367,17 @@ metadata, direct values, and resolved values when requested. Resolved reads use
 Catalog's existing context/fallback path rather than a copy in the extension.
 `catalog.write` permits only validated scalar writes with an explicit context
 ID; ordinary attribute/type/schema validation, audit records, and the domain-event
-outbox remain in force. A write made while handling an event keeps
-that event's correlation ID, uses its ID as causation, and is published with
-`source_kind: plugin` and `source_name: extension:<extension-id>`. Handlers should ignore their own
+outbox remain in force. A write made while handling an event inherits the
+triggering write's user and token audit attribution, keeps that event's
+correlation ID, uses its ID as causation, and is published with `source_kind:
+plugin` and `source_name: extension:<extension-id>`. Handlers should ignore their own
 extension source name to prevent feedback loops.
+
+This mediation is required: an extension host API must never issue catalog-table
+SQL or implement its own validation, projection, audit, or event logic. Every
+extension-initiated catalog mutation must use `CatalogMutationService` and its
+repository-backed transaction so validation, audit evidence, initiating-actor propagation, and
+the transactional outbox cannot be bypassed.
 
 A manifest may declare `scoped_configuration` with an object schema, positive
 version, and `blueprint` and/or `attribute` scopes. It requires
