@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { apiFetch } from '../auth/request';
+import { request } from '../../api/request';
 import {
   blueprintSchema,
   blueprintWithAttributesSchema,
@@ -44,44 +44,7 @@ export type {
   ViewNode,
 } from './schemas';
 
-const apiErrorSchema = z.object({
-  error: z.object({ code: z.string(), message: z.string() }),
-});
-
-export class ApiRequestError extends Error {
-  status: number;
-  code?: string;
-
-  constructor(status: number, message: string, code?: string) {
-    super(message);
-    this.name = 'ApiRequestError';
-    this.status = status;
-    this.code = code;
-  }
-}
-
-const request = async <T>(
-  path: string,
-  schema: z.ZodType<T>,
-  init?: RequestInit,
-): Promise<T> => {
-  const response = await apiFetch(path, init);
-  if (!response.ok) {
-    const body = await response.json().catch(() => undefined);
-    const error = apiErrorSchema.safeParse(body);
-    throw new ApiRequestError(
-      response.status,
-      error.success
-        ? error.data.error.message
-        : `Request failed (${response.status})`,
-      error.success ? error.data.error.code : undefined,
-    );
-  }
-  const result = schema.safeParse(await response.json());
-  if (!result.success)
-    throw new Error(`Invalid API response: ${z.prettifyError(result.error)}`);
-  return result.data;
-};
+export { ApiRequestError } from '../../api/request';
 
 export const searchEntities = (
   blueprint: string,

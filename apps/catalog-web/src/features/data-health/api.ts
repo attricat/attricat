@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { apiFetch } from '../auth/request';
+import { request, requestNoContent } from '../../api/request';
 import {
   blueprintHealthSchema,
   completenessHealthSchema,
@@ -9,15 +9,6 @@ import {
   relationshipHealthSchema,
   storageHealthSchema,
 } from './schemas';
-
-const request = async <T>(path: string, schema: z.ZodType<T>): Promise<T> => {
-  const response = await apiFetch(path);
-  if (!response.ok) throw new Error(`Request failed (${response.status})`);
-  const result = schema.safeParse(await response.json());
-  if (!result.success)
-    throw new Error(`Invalid API response: ${z.prettifyError(result.error)}`);
-  return result.data;
-};
 
 export const getDataHealthSummary = (staleAfterDays: number) =>
   request(
@@ -40,9 +31,5 @@ export const getDataHealthRelationships = () =>
 export const getDataHealthStorage = () =>
   request('/api/data-health/storage', z.array(storageHealthSchema));
 
-export const refreshDataHealth = async () => {
-  const response = await apiFetch('/api/data-health/refresh', {
-    method: 'POST',
-  });
-  if (!response.ok) throw new Error(`Request failed (${response.status})`);
-};
+export const refreshDataHealth = () =>
+  requestNoContent('/api/data-health/refresh', { method: 'POST' });

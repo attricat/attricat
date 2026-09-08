@@ -22,7 +22,7 @@ describe('context API client', () => {
     await expect(listContexts()).resolves.toEqual([
       { id: contextId, code: 'default', data: {}, parent_id: null },
     ]);
-    expect(fetchMock).toHaveBeenCalledWith('/api/contexts', undefined);
+    expect(fetchMock).toHaveBeenCalledWith('/api/contexts');
   });
 
   it('validates and posts context payloads', async () => {

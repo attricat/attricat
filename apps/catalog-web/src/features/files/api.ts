@@ -1,36 +1,17 @@
 import { z } from 'zod';
-import { apiFetch, csrfToken } from '../auth/request';
-import { ApiRequestError } from '../entities/api';
+import { apiRequestError, request } from '../../api/request';
+import { csrfToken } from '../auth/request';
 import {
   conversationUploadResultSchema,
   fileMetadataSchema,
   fileUploadResultSchema,
 } from './schemas';
 
-const apiErrorSchema = z.object({
-  error: z.object({ code: z.string(), message: z.string() }),
-});
-
-const responseError = async (response: Response) => {
-  const result = apiErrorSchema.safeParse(
-    await response.json().catch(() => null),
-  );
-  return new ApiRequestError(
-    response.status,
-    result.success
-      ? result.data.error.message
-      : `Request failed (${response.status})`,
-    result.success ? result.data.error.code : undefined,
-  );
-};
-
-export const getFileMetadata = async (fileId: string) => {
-  const response = await apiFetch(
+export const getFileMetadata = (fileId: string) =>
+  request(
     `/api/files/${encodeURIComponent(z.uuid().parse(fileId))}`,
+    fileMetadataSchema,
   );
-  if (!response.ok) throw await responseError(response);
-  return fileMetadataSchema.parse(await response.json());
-};
 
 export const fileDownloadUrl = (fileId: string, variant?: string) =>
   `/api/files/${encodeURIComponent(z.uuid().parse(fileId))}${variant ? `/variants/${encodeURIComponent(variant)}/download` : '/download'}`;
@@ -55,10 +36,12 @@ export const uploadFiles = async ({
   );
   const path = `/api/entities/${encodeURIComponent(z.uuid().parse(entityId))}/file-attributes/${encodeURIComponent(attributeCode)}/uploads`;
   if (typeof XMLHttpRequest === 'undefined') {
-    const response = await apiFetch(path, { method: 'POST', body: data });
-    if (!response.ok) throw await responseError(response);
+    const result = await request(path, fileUploadResultSchema, {
+      method: 'POST',
+      body: data,
+    });
     onProgress?.(100);
-    return fileUploadResultSchema.parse(await response.json());
+    return result;
   }
   return new Promise<z.infer<typeof fileUploadResultSchema>>(
     (resolve, reject) => {
@@ -71,7 +54,8 @@ export const uploadFiles = async ({
         if (event.lengthComputable)
           onProgress?.(Math.round((event.loaded / event.total) * 100));
       };
-      request.onerror = () => reject(new ApiRequestError(0, 'Upload failed'));
+      request.onerror = () =>
+        reject(apiRequestError(0, undefined, 'Upload failed'));
       request.onload = () => {
         const body: unknown = (() => {
           try {
@@ -81,16 +65,7 @@ export const uploadFiles = async ({
           }
         })();
         if (request.status < 200 || request.status >= 300) {
-          const error = apiErrorSchema.safeParse(body);
-          reject(
-            new ApiRequestError(
-              request.status,
-              error.success
-                ? error.data.error.message
-                : `Request failed (${request.status})`,
-              error.success ? error.data.error.code : undefined,
-            ),
-          );
+          reject(apiRequestError(request.status, body));
           return;
         }
         try {
@@ -113,10 +88,9 @@ export const uploadConversationFiles = async (
   files.forEach((file) =>
     data.append(files.length === 1 ? 'file' : 'files', file),
   );
-  const response = await apiFetch(
+  return request(
     `/api/agent/conversations/${encodeURIComponent(z.uuid().parse(conversationId))}/uploads`,
+    conversationUploadResultSchema,
     { method: 'POST', body: data },
   );
-  if (!response.ok) throw await responseError(response);
-  return conversationUploadResultSchema.parse(await response.json());
 };
