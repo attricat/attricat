@@ -50,11 +50,12 @@ export const Explorer = ({ search: urlSearch }: { search: ExplorerSearch }) => {
 
   const contexts = useQuery({
     queryKey: contextQueryKeys.all(),
-    queryFn: listContexts,
+    queryFn: ({ signal }) => listContexts(signal),
   });
   const selectedBlueprint = useQuery({
     queryKey: entityQueryKeys.blueprintByCode(search.blueprint, search.version),
-    queryFn: () => getBlueprintByCode(search.blueprint!, search.version),
+    queryFn: ({ signal }) =>
+      getBlueprintByCode(search.blueprint!, search.version, signal),
     enabled: Boolean(search.blueprint),
   });
   const relationshipFields = (selectedBlueprint.data?.attributes ?? []).filter(
@@ -100,13 +101,14 @@ export const Explorer = ({ search: urlSearch }: { search: ExplorerSearch }) => {
       search.query,
       relationshipTreeFacets,
     ),
-    queryFn: ({ pageParam }) =>
+    queryFn: ({ pageParam, signal }) =>
       searchEntities(
         search.blueprint!,
         search.version,
         search.query ?? '',
         pageParam,
         relationshipTreeFacets,
+        signal,
       ),
     initialPageParam: null as string | null,
     getNextPageParam: (page) => page.next_cursor,
@@ -118,7 +120,7 @@ export const Explorer = ({ search: urlSearch }: { search: ExplorerSearch }) => {
   const resultBlueprint = resultPages[0]?.blueprint;
   const blueprints = useQuery({
     queryKey: entityQueryKeys.blueprints(),
-    queryFn: listEntityBlueprints,
+    queryFn: ({ signal }) => listEntityBlueprints(signal),
   });
   const updateFacetContext = (context: string) => {
     const current = search.relationshipFacets ?? [];

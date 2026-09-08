@@ -119,8 +119,12 @@ const Facet = ({
       facet.sourceRelationship.target_blueprint_code ?? undefined,
       undefined,
     ),
-    queryFn: () =>
-      getBlueprintByCode(facet.sourceRelationship.target_blueprint_code!),
+    queryFn: ({ signal }) =>
+      getBlueprintByCode(
+        facet.sourceRelationship.target_blueprint_code!,
+        undefined,
+        signal,
+      ),
     enabled: expanded,
   });
   const hierarchyFields = (targetBlueprint.data?.attributes ?? [])

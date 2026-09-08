@@ -35,8 +35,15 @@ export const RelationshipField = ({
   const targetBlueprint = attribute.target_blueprint_code;
   const targets = useInfiniteQuery({
     queryKey: entityQueryKeys.relationshipTargets(targetBlueprint, query),
-    queryFn: ({ pageParam }) =>
-      searchEntities(targetBlueprint!, undefined, query, pageParam),
+    queryFn: ({ pageParam, signal }) =>
+      searchEntities(
+        targetBlueprint!,
+        undefined,
+        query,
+        pageParam,
+        undefined,
+        signal,
+      ),
     initialPageParam: null as string | null,
     getNextPageParam: (page) => page.next_cursor,
     enabled: Boolean(targetBlueprint),

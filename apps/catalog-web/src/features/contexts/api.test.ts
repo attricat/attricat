@@ -25,6 +25,23 @@ describe('context API client', () => {
     expect(fetchMock).toHaveBeenCalledWith('/api/contexts');
   });
 
+  it('forwards navigation cancellation signals', async () => {
+    const controller = new AbortController();
+    fetchMock.mockResolvedValue({
+      ok: true,
+      json: () =>
+        Promise.resolve([
+          { id: contextId, code: 'default', data: {}, parent_id: null },
+        ]),
+    });
+
+    await listContexts(controller.signal);
+
+    expect(fetchMock).toHaveBeenCalledWith('/api/contexts', {
+      signal: controller.signal,
+    });
+  });
+
   it('validates and posts context payloads', async () => {
     expect(() => createContext('en GB', {}, contextId)).toThrow('hyphens');
     expect(fetchMock).not.toHaveBeenCalled();
