@@ -40,24 +40,18 @@ export const EntityChangesPage = ({ entityId }: { entityId: string }) => {
       <PageHeader eyebrow={t('entities.entityChanges')} />
       <EntityToolbar label={t('entities.entityChanges')}>
         <Tooltip title={t('entities.backToEntity')}>
-          <IconButton
-            aria-label={t('entities.backToEntity')}
-            component={Link}
-            params={{ entityId }}
-            to="/entities/$entityId"
-          >
-            <VisibilityOutlinedIcon />
-          </IconButton>
+          <Link params={{ entityId }} to="/entities/$entityId">
+            <IconButton aria-label={t('entities.backToEntity')}>
+              <VisibilityOutlinedIcon />
+            </IconButton>
+          </Link>
         </Tooltip>
         <Tooltip title={t('entities.editEntity')}>
-          <IconButton
-            aria-label={t('entities.editEntity')}
-            component={Link}
-            params={{ entityId }}
-            to="/entities/$entityId/edit"
-          >
-            <EditOutlinedIcon />
-          </IconButton>
+          <Link params={{ entityId }} to="/entities/$entityId/edit">
+            <IconButton aria-label={t('entities.editEntity')}>
+              <EditOutlinedIcon />
+            </IconButton>
+          </Link>
         </Tooltip>
       </EntityToolbar>
       <EntitySchemaSubheader

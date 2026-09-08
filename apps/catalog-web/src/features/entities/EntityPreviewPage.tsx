@@ -93,16 +93,18 @@ export const EntityPreviewPage = ({ entityId }: { entityId: string }) => {
         actions={
           blueprint.data && (
             <Tooltip title={blueprint.data.blueprint.name}>
-              <Button
-                component={Link}
-                params={{ blueprintId: blueprint.data.blueprint.id }}
-                size="small"
-                startIcon={<CategoryOutlinedIcon />}
+              <Link
+                params={{ blueprintId: String(blueprint.data.blueprint.id) }}
                 to="/manage/blueprints/$blueprintId"
-                variant="text"
               >
-                {t('entities.blueprint')}: {blueprint.data.blueprint.name}
-              </Button>
+                <Button
+                  size="small"
+                  startIcon={<CategoryOutlinedIcon />}
+                  variant="text"
+                >
+                  {t('entities.blueprint')}: {blueprint.data.blueprint.name}
+                </Button>
+              </Link>
             </Tooltip>
           )
         }
@@ -135,24 +137,18 @@ export const EntityPreviewPage = ({ entityId }: { entityId: string }) => {
         : null}
       <EntityToolbar label={t('entities.entityPreview')}>
         <Tooltip title={t('entities.editEntity')}>
-          <IconButton
-            aria-label={t('entities.editEntity')}
-            component={Link}
-            params={{ entityId }}
-            to="/entities/$entityId/edit"
-          >
-            <EditOutlinedIcon />
-          </IconButton>
+          <Link params={{ entityId }} to="/entities/$entityId/edit">
+            <IconButton aria-label={t('entities.editEntity')}>
+              <EditOutlinedIcon />
+            </IconButton>
+          </Link>
         </Tooltip>
         <Tooltip title={t('entities.changes')}>
-          <IconButton
-            aria-label={t('entities.changes')}
-            component={Link}
-            params={{ entityId }}
-            to="/entities/$entityId/changes"
-          >
-            <HistoryOutlinedIcon />
-          </IconButton>
+          <Link params={{ entityId }} to="/entities/$entityId/changes">
+            <IconButton aria-label={t('entities.changes')}>
+              <HistoryOutlinedIcon />
+            </IconButton>
+          </Link>
         </Tooltip>
         {currentBlueprint.data && resolved.data && (
           <>
@@ -163,14 +159,11 @@ export const EntityPreviewPage = ({ entityId }: { entityId: string }) => {
                   <WarningAmberOutlinedIcon color="warning" fontSize="small" />
                 </Tooltip>
                 <Tooltip title={t('entities.upgradeBlueprint')}>
-                  <IconButton
-                    aria-label={t('entities.upgradeBlueprint')}
-                    component={Link}
-                    params={{ entityId }}
-                    to="/entities/$entityId/migrate"
-                  >
-                    <UpgradeOutlinedIcon />
-                  </IconButton>
+                  <Link params={{ entityId }} to="/entities/$entityId/migrate">
+                    <IconButton aria-label={t('entities.upgradeBlueprint')}>
+                      <UpgradeOutlinedIcon />
+                    </IconButton>
+                  </Link>
                 </Tooltip>
               </>
             ) : (
@@ -252,7 +245,7 @@ export const EntityPreviewPage = ({ entityId }: { entityId: string }) => {
                           context_id: selectedContextId,
                           entity_id: entityId,
                         }}
-                        key={attribute.id}
+                        key={String(attribute.id)}
                         label={t('entities.viewExtensionContent', {
                           attribute: attribute.code.replaceAll('_', ' '),
                         })}

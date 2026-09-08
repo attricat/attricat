@@ -380,7 +380,7 @@ export const InstalledExtensionPage = ({
     onSuccess: () => invalidate(client, extensionId),
   });
   const [configurationError, setConfigurationError] = useState<string>();
-  const hydratedRelease = useRef<string>();
+  const hydratedRelease = useRef<string | undefined>(undefined);
   const form = useForm({
     defaultValues: { configuration: '{}' },
     onSubmit: ({ value }) => {
@@ -641,6 +641,7 @@ const DeclaredPermissions = ({
   enabled: boolean;
   onGrant: () => void;
 }) => {
+  const { t } = useTranslation();
   const grant = useMutation({
     mutationFn: ({
       kind,

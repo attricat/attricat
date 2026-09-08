@@ -237,7 +237,12 @@ export const FileAttributeEditor = ({
         </Box>
       ))}
       {uploaded.map((file, index) => (
-        <Stack alignItems="center" direction="row" key={file.id} spacing={1}>
+        <Stack
+          direction="row"
+          key={file.id}
+          spacing={1}
+          sx={{ alignItems: 'center' }}
+        >
           {policy.image_only && <FileThumbnail file={file} size={48} />}
           <Typography sx={{ flexGrow: 1 }}>{file.filename}</Typography>
           <Chip label={file.status} size="small" />

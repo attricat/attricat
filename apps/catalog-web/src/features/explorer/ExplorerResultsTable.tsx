@@ -116,9 +116,9 @@ export const ExplorerResultsTable = ({
 }) => {
   const { t } = useTranslation();
   const columnHelper = legacyCreateColumnHelper<EntityItem>();
-  const tableFields =
+  const tableFields: string[] =
     blueprint.blueprint.views.table?.type === 'table'
-      ? blueprint.blueprint.views.table.fields
+      ? (blueprint.blueprint.views.table.fields as string[])
       : [];
   const attributes = new Map(
     blueprint.attributes.map((attribute) => [attribute.code, attribute]),
@@ -180,7 +180,7 @@ export const ExplorerResultsTable = ({
       header: '',
       cell: (info) => (
         <EntityActionsMenu
-          blueprintId={blueprint.blueprint.id}
+          blueprintId={String(blueprint.blueprint.id)}
           entity={info.row.original}
         />
       ),

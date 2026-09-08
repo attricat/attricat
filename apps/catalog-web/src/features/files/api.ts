@@ -60,47 +60,49 @@ export const uploadFiles = async ({
     onProgress?.(100);
     return fileUploadResultSchema.parse(await response.json());
   }
-  return new Promise((resolve, reject) => {
-    const request = new XMLHttpRequest();
-    request.open('POST', path);
-    request.withCredentials = true;
-    const csrf = csrfToken();
-    if (csrf) request.setRequestHeader('X-Catalog-Csrf', csrf);
-    request.upload.onprogress = (event) => {
-      if (event.lengthComputable)
-        onProgress?.(Math.round((event.loaded / event.total) * 100));
-    };
-    request.onerror = () => reject(new ApiRequestError(0, 'Upload failed'));
-    request.onload = () => {
-      const body: unknown = (() => {
-        try {
-          return JSON.parse(request.responseText);
-        } catch {
-          return undefined;
+  return new Promise<z.infer<typeof fileUploadResultSchema>>(
+    (resolve, reject) => {
+      const request = new XMLHttpRequest();
+      request.open('POST', path);
+      request.withCredentials = true;
+      const csrf = csrfToken();
+      if (csrf) request.setRequestHeader('X-Catalog-Csrf', csrf);
+      request.upload.onprogress = (event) => {
+        if (event.lengthComputable)
+          onProgress?.(Math.round((event.loaded / event.total) * 100));
+      };
+      request.onerror = () => reject(new ApiRequestError(0, 'Upload failed'));
+      request.onload = () => {
+        const body: unknown = (() => {
+          try {
+            return JSON.parse(request.responseText);
+          } catch {
+            return undefined;
+          }
+        })();
+        if (request.status < 200 || request.status >= 300) {
+          const error = apiErrorSchema.safeParse(body);
+          reject(
+            new ApiRequestError(
+              request.status,
+              error.success
+                ? error.data.error.message
+                : `Request failed (${request.status})`,
+              error.success ? error.data.error.code : undefined,
+            ),
+          );
+          return;
         }
-      })();
-      if (request.status < 200 || request.status >= 300) {
-        const error = apiErrorSchema.safeParse(body);
-        reject(
-          new ApiRequestError(
-            request.status,
-            error.success
-              ? error.data.error.message
-              : `Request failed (${request.status})`,
-            error.success ? error.data.error.code : undefined,
-          ),
-        );
-        return;
-      }
-      try {
-        onProgress?.(100);
-        resolve(fileUploadResultSchema.parse(body));
-      } catch (error) {
-        reject(error);
-      }
-    };
-    request.send(data);
-  });
+        try {
+          onProgress?.(100);
+          resolve(fileUploadResultSchema.parse(body));
+        } catch (error) {
+          reject(error);
+        }
+      };
+      request.send(data);
+    },
+  );
 };
 
 export const uploadConversationFiles = async (

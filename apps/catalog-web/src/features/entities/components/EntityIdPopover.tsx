@@ -43,7 +43,7 @@ export const EntityIdPopover = ({
         onClose={() => setAnchor(null)}
         open={Boolean(anchor)}
       >
-        <Stack alignItems="center" direction="row" spacing={1} sx={{ p: 1 }}>
+        <Stack direction="row" spacing={1} sx={{ alignItems: 'center', p: 1 }}>
           <Typography component="code" sx={{ fontFamily: 'monospace' }}>
             {entityId}
           </Typography>

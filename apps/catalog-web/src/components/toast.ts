@@ -18,7 +18,9 @@ export const subscribeToToasts = (
 ) => {
   subscribers.add(subscriber);
   pendingToasts.splice(0).forEach(subscriber);
-  return () => subscribers.delete(subscriber);
+  return () => {
+    subscribers.delete(subscriber);
+  };
 };
 
 /**

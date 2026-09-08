@@ -63,6 +63,7 @@ export const RelationshipField = ({
         blueprint_version: 0,
         schema_outdated: false,
         display: { default: targetId },
+        match_explanations: [],
         preview: {},
       });
     }

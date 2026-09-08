@@ -8,7 +8,7 @@ type Props = {
 
 /** Identifies the schema used by the entity page beneath its action toolbar. */
 export const EntitySchemaSubheader = ({ entityId, name }: Props) => (
-  <Stack alignItems="baseline" direction="row" spacing={0.5} sx={{ mt: 3 }}>
+  <Stack direction="row" spacing={0.5} sx={{ alignItems: 'baseline', mt: 3 }}>
     {name && (
       <Typography component="h2" variant="h6">
         {name}

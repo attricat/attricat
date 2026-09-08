@@ -41,7 +41,7 @@ type Props = {
   ) => void;
 };
 
-type FacetProps = Omit<Props, 'facets'> & {
+type FacetProps = Omit<Props, 'facets' | 'onContextChange'> & {
   facet: ExplorerRelationshipFacet;
 };
 
@@ -115,7 +115,7 @@ const Facet = ({
   const [expanded, setExpanded] = useState(facet.selectedIds.length > 0);
   const targetBlueprint = useQuery({
     queryKey: entityQueryKeys.blueprintByCode(
-      facet.sourceRelationship.target_blueprint_code,
+      facet.sourceRelationship.target_blueprint_code ?? undefined,
       undefined,
     ),
     queryFn: () =>

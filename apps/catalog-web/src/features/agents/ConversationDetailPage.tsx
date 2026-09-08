@@ -175,7 +175,11 @@ export const ConversationDetailPage = ({
               role={message.role}
             />
             {message.attachments.length > 0 && (
-              <Stack direction="row" gap={1} sx={{ flexWrap: 'wrap', mt: 1 }}>
+              <Stack
+                direction="row"
+                spacing={1}
+                sx={{ flexWrap: 'wrap', mt: 1 }}
+              >
                 {message.attachments.map((attachment) => (
                   <Chip
                     component="a"
