@@ -1,3 +1,4 @@
 export const inspectorQueryKeys = {
-  apiHealth: () => ['inspector', 'api-health'] as const,
+  all: () => ['inspector'] as const,
+  apiHealth: () => [...inspectorQueryKeys.all(), 'api-health'] as const,
 };

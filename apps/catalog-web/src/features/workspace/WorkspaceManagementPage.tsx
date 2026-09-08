@@ -19,6 +19,7 @@ import {
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { currentSession } from '../auth/api';
+import { authQueryKeys } from '../auth/query-keys';
 import { listEntityBlueprints } from '../entities/api';
 import { entityQueryKeys } from '../entities/query-keys';
 import {
@@ -167,7 +168,7 @@ const ScopeTargetField = ({
 export const WorkspaceManagementPage = ({ section }: { section: Section }) => {
   const { t } = useTranslation();
   const session = useQuery({
-    queryKey: ['auth', 'session'],
+    queryKey: authQueryKeys.session(),
     queryFn: currentSession,
   });
   return (

@@ -7,4 +7,15 @@ describe('entity query keys', () => {
       entityQueryKeys.relationshipTargets('category'),
     );
   });
+
+  it('keeps disabled preview keys feature-local and entity-specific', () => {
+    expect(entityQueryKeys.resolvedPreview('first', undefined)).toEqual([
+      'entity-resolved-preview',
+      'first',
+      undefined,
+    ]);
+    expect(entityQueryKeys.resolvedPreview('first', undefined)).not.toEqual(
+      entityQueryKeys.resolvedPreview('second', undefined),
+    );
+  });
 });

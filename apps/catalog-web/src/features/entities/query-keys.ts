@@ -1,7 +1,7 @@
 export const entityQueryKeys = {
   blueprints: () => ['entity-blueprints'] as const,
   contexts: () => ['attribute-contexts'] as const,
-  blueprintRevision: (id: string, version: number) =>
+  blueprintRevision: (id: string | undefined, version: number | undefined) =>
     ['blueprint-revision', id, version] as const,
   blueprintByCode: (code: string | undefined, version: number | undefined) =>
     ['blueprint-by-code', code, version] as const,
@@ -12,7 +12,7 @@ export const entityQueryKeys = {
   changes: (entityId: string) => ['entity-changes', entityId] as const,
   migrationPreview: (entityId: string) =>
     ['entity-migration-preview', entityId] as const,
-  resolvedPreview: (entityId: string, contextId: string) =>
+  resolvedPreview: (entityId: string, contextId: string | undefined) =>
     ['entity-resolved-preview', entityId, contextId] as const,
   hierarchy: (entityId: string, contextId: string, field: string) =>
     ['entity-hierarchy', entityId, contextId, field] as const,

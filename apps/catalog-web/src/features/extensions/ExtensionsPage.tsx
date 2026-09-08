@@ -18,6 +18,7 @@ import { useTranslation } from 'react-i18next';
 import { PageContainer } from '../../components/PageContainer';
 import { PageHeader } from '../../components/PageHeader';
 import { currentSession } from '../auth/api';
+import { authQueryKeys } from '../auth/query-keys';
 import {
   discoverExtensions,
   extensionDetail,
@@ -58,7 +59,7 @@ const invalidate = (
 export const ExtensionsPage = () => {
   const { t } = useTranslation();
   const session = useQuery({
-    queryKey: ['auth', 'session'],
+    queryKey: authQueryKeys.session(),
     queryFn: currentSession,
   });
   const marketplace = useQuery({
@@ -176,7 +177,7 @@ export const SideloadExtensionPage = () => {
   const { t } = useTranslation();
   const client = useQueryClient();
   const session = useQuery({
-    queryKey: ['auth', 'session'],
+    queryKey: authQueryKeys.session(),
     queryFn: currentSession,
   });
   const sideload = useMutation({
@@ -271,8 +272,8 @@ export const MarketplaceExtensionPage = ({
     onSuccess: () => invalidate(client),
   });
   const canManage =
-    useQuery({ queryKey: ['auth', 'session'], queryFn: currentSession }).data
-      ?.capabilities?.extensions_manage === true;
+    useQuery({ queryKey: authQueryKeys.session(), queryFn: currentSession })
+      .data?.capabilities?.extensions_manage === true;
   return (
     <PageContainer>
       <PageHeader
@@ -352,8 +353,8 @@ export const InstalledExtensionPage = ({
     queryFn: () => extensionDetail(extensionId),
   });
   const manage =
-    useQuery({ queryKey: ['auth', 'session'], queryFn: currentSession }).data
-      ?.capabilities?.extensions_manage === true;
+    useQuery({ queryKey: authQueryKeys.session(), queryFn: currentSession })
+      .data?.capabilities?.extensions_manage === true;
   const action = useMutation({
     mutationFn: ({
       action,

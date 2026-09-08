@@ -15,6 +15,7 @@ import { Link, useRouterState } from '@tanstack/react-router';
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { currentSession } from '../features/auth/api';
+import { authQueryKeys } from '../features/auth/query-keys';
 import { listSidebarExploreNavigation } from '../features/workspace/api';
 import { workspaceQueryKeys } from '../features/workspace/query-keys';
 import { ExtensionOutlet } from '../features/extensions/ExtensionOutlet';
@@ -94,7 +95,7 @@ export const SideNavigation = ({
   const [manageOpen, setManageOpen] = useState(false);
   const isManageOpen = manageOpen || pathname.startsWith('/manage/');
   const session = useQuery({
-    queryKey: ['auth', 'session'],
+    queryKey: authQueryKeys.session(),
     queryFn: currentSession,
   });
   const pinnedExplore = useQuery({

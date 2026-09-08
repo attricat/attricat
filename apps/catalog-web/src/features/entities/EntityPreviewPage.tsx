@@ -53,19 +53,15 @@ export const EntityPreviewPage = ({ entityId }: { entityId: string }) => {
     selectedContext ||
     contexts.data?.find((context) => context.code === 'default')?.id;
   const resolved = useQuery({
-    queryKey: selectedContextId
-      ? entityQueryKeys.resolvedPreview(entityId, selectedContextId)
-      : ['entity-resolved-preview'],
+    queryKey: entityQueryKeys.resolvedPreview(entityId, selectedContextId),
     queryFn: () => getResolvedEntityPreview(entityId, selectedContextId!),
     enabled: Boolean(selectedContextId),
   });
   const blueprint = useQuery({
-    queryKey: resolved.data
-      ? entityQueryKeys.blueprintRevision(
-          resolved.data.entity.blueprint_id!,
-          resolved.data.entity.blueprint_version!,
-        )
-      : ['blueprint-revision'],
+    queryKey: entityQueryKeys.blueprintRevision(
+      resolved.data?.entity.blueprint_id,
+      resolved.data?.entity.blueprint_version,
+    ),
     queryFn: () =>
       getBlueprintRevision(
         resolved.data!.entity.blueprint_id!,

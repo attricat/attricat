@@ -23,6 +23,7 @@ import { copyToClipboard } from '../../components/clipboard';
 import { useToast } from '../../components/useToast';
 import i18n from '../../i18n';
 import { currentSession } from '../auth/api';
+import { authQueryKeys } from '../auth/query-keys';
 import {
   createToken,
   listTokenPermissions,
@@ -306,7 +307,7 @@ const PersonalTokens = ({ canManage }: { canManage: boolean }) => {
 export const ProfilePage = () => {
   const { t } = useTranslation();
   const session = useQuery({
-    queryKey: ['auth', 'session'],
+    queryKey: authQueryKeys.session(),
     queryFn: currentSession,
   });
   const account = session.data;

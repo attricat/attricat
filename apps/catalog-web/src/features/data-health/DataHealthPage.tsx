@@ -110,7 +110,7 @@ export const DataHealthPage = ({ search }: { search: DataHealthSearch }) => {
   const refresh = useMutation({
     mutationFn: refreshDataHealth,
     onSuccess: () =>
-      queryClient.invalidateQueries({ queryKey: ['data-health'] }),
+      queryClient.invalidateQueries({ queryKey: dataHealthQueryKeys.all() }),
   });
 
   return (

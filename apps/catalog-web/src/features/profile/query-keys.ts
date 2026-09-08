@@ -1,4 +1,6 @@
 export const profileQueryKeys = {
-  tokens: () => ['profile', 'tokens'] as const,
-  tokenPermissions: () => ['profile', 'token-permissions'] as const,
+  all: () => ['profile'] as const,
+  tokens: () => [...profileQueryKeys.all(), 'tokens'] as const,
+  tokenPermissions: () =>
+    [...profileQueryKeys.all(), 'token-permissions'] as const,
 } as const;

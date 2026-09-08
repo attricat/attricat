@@ -20,6 +20,7 @@ import {
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { currentSession, logout } from '../features/auth/api';
+import { authQueryKeys } from '../features/auth/query-keys';
 import { listSidebarExploreNavigation } from '../features/workspace/api';
 import { workspaceQueryKeys } from '../features/workspace/query-keys';
 import { drawerWidth, SideNavigation } from './SideNavigation';
@@ -32,7 +33,7 @@ export const AppLayout = () => {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const session = useQuery({
-    queryKey: ['auth', 'session'],
+    queryKey: authQueryKeys.session(),
     queryFn: currentSession,
     retry: false,
   });
@@ -48,7 +49,7 @@ export const AppLayout = () => {
   const signOut = async () => {
     await logout();
     queryClient.clear();
-    queryClient.setQueryData(['auth', 'session'], null);
+    queryClient.setQueryData(authQueryKeys.session(), null);
     await navigate({ to: '/login' });
   };
   if (

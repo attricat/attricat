@@ -1,12 +1,15 @@
 export const workspaceQueryKeys = {
-  members: () => ['workspace', 'members'] as const,
-  invitations: () => ['workspace', 'invitations'] as const,
-  roles: () => ['workspace', 'roles'] as const,
-  permissions: () => ['workspace', 'permissions'] as const,
-  exploreNavigation: () => ['workspace', 'explore-navigation'] as const,
+  all: () => ['workspace'] as const,
+  members: () => [...workspaceQueryKeys.all(), 'members'] as const,
+  invitations: () => [...workspaceQueryKeys.all(), 'invitations'] as const,
+  roles: () => [...workspaceQueryKeys.all(), 'roles'] as const,
+  permissions: () => [...workspaceQueryKeys.all(), 'permissions'] as const,
+  exploreNavigation: () =>
+    [...workspaceQueryKeys.all(), 'explore-navigation'] as const,
   sidebarExploreNavigation: () =>
-    ['workspace', 'sidebar-explore-navigation'] as const,
-  assignableRoles: () => ['workspace', 'assignable-roles'] as const,
+    [...workspaceQueryKeys.all(), 'sidebar-explore-navigation'] as const,
+  assignableRoles: () =>
+    [...workspaceQueryKeys.all(), 'assignable-roles'] as const,
   grantTargets: (scope: string) =>
-    ['workspace', 'grant-targets', scope] as const,
+    [...workspaceQueryKeys.all(), 'grant-targets', scope] as const,
 } as const;
