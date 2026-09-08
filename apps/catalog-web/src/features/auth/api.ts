@@ -74,7 +74,13 @@ export const confirmPasswordReset = async (token: string, password: string) => {
 
 export const currentSession = async () => {
   const response = await apiFetch('/api/auth/session');
-  if (!response.ok) return null;
+  if (response.status === 401) return null;
+  if (!response.ok) {
+    const statusText = response.statusText ? ` ${response.statusText}` : '';
+    throw new Error(
+      `Unable to check the current session (HTTP ${response.status}${statusText})`,
+    );
+  }
   return sessionSchema.parse(await response.json());
 };
 

@@ -7,8 +7,10 @@ import {
 } from '@tanstack/react-router';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import {
+  Alert,
   AppBar,
   Box,
+  Button,
   Drawer,
   IconButton,
   Toolbar,
@@ -23,6 +25,34 @@ import { currentSession, logout } from '../features/auth/api';
 import { listSidebarExploreNavigation } from '../features/workspace/api';
 import { workspaceQueryKeys } from '../features/workspace/query-keys';
 import { drawerWidth, SideNavigation } from './SideNavigation';
+
+export const SessionErrorState = ({ onRetry }: { onRetry: () => void }) => {
+  const { t } = useTranslation();
+
+  return (
+    <Box
+      sx={{
+        alignItems: 'center',
+        display: 'flex',
+        height: '100dvh',
+        justifyContent: 'center',
+        p: 3,
+      }}
+    >
+      <Alert
+        action={
+          <Button color="inherit" onClick={onRetry} size="small">
+            {t('auth.retrySession')}
+          </Button>
+        }
+        role="alert"
+        severity="error"
+      >
+        {t('auth.sessionCheckFailed')}
+      </Alert>
+    </Box>
+  );
+};
 
 export const AppLayout = () => {
   const { t } = useTranslation();
@@ -76,6 +106,9 @@ export const AppLayout = () => {
         <CircularProgress />
       </Box>
     );
+  if (session.isError)
+    return <SessionErrorState onRetry={() => void session.refetch()} />;
+
   if (!session.data) {
     sessionStorage.setItem(
       'catalog.return-to',
