@@ -20,6 +20,7 @@ import { listSidebarExploreNavigation } from '../features/workspace/api';
 import { workspaceQueryKeys } from '../features/workspace/query-keys';
 import { ExtensionOutlet } from '../features/extensions/ExtensionOutlet';
 import { LanguageSwitcher } from './LanguageSwitcher';
+import { QueryErrorNotice } from './QueryErrorNotice';
 import {
   Box,
   Collapse,
@@ -153,6 +154,15 @@ export const SideNavigation = ({
               <ListItemText primary={t(item.labelKey)} />
             </ListItemButton>
           ))}
+        <Box sx={{ px: 1 }}>
+          <QueryErrorNotice
+            error={pinnedExplore.error}
+            isRetrying={pinnedExplore.isFetching}
+            onRetry={() => {
+              void pinnedExplore.refetch();
+            }}
+          />
+        </Box>
         {pinnedExplore.data?.map((item) => (
           <Link
             key={item.blueprint_code}

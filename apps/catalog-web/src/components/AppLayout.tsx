@@ -23,8 +23,6 @@ import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { currentSession, logout } from '../features/auth/api';
 import { authQueryKeys } from '../features/auth/query-keys';
-import { listSidebarExploreNavigation } from '../features/workspace/api';
-import { workspaceQueryKeys } from '../features/workspace/query-keys';
 import { drawerWidth, SideNavigation } from './SideNavigation';
 
 export const SessionErrorState = ({ onRetry }: { onRetry: () => void }) => {
@@ -67,11 +65,6 @@ export const AppLayout = () => {
     queryFn: currentSession,
     retry: false,
   });
-  const workspaceNavigation = useQuery({
-    queryKey: workspaceQueryKeys.sidebarExploreNavigation(),
-    queryFn: listSidebarExploreNavigation,
-    enabled: Boolean(session.data),
-  });
   const theme = useTheme();
   const isDesktop = useMediaQuery(theme.breakpoints.up('md'));
   const [mobileOpen, setMobileOpen] = useState(false);
@@ -90,10 +83,7 @@ export const AppLayout = () => {
     pathname === '/onboarding'
   )
     return <Outlet />;
-  if (
-    session.isPending ||
-    (Boolean(session.data) && workspaceNavigation.isPending)
-  )
+  if (session.isPending)
     return (
       <Box
         aria-label={t('app.loading')}
@@ -109,7 +99,6 @@ export const AppLayout = () => {
     );
   if (session.isError)
     return <SessionErrorState onRetry={() => void session.refetch()} />;
-
   if (!session.data) {
     sessionStorage.setItem(
       'catalog.return-to',
