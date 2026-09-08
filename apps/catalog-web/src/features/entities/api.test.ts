@@ -47,7 +47,6 @@ describe('entity API client', () => {
     await getBlueprintByCode('summer sale', 2);
     expect(fetchMock).toHaveBeenCalledWith(
       '/api/blueprints/by-code/summer%20sale/versions/2',
-      undefined,
     );
 
     respond({
@@ -57,10 +56,7 @@ describe('entity API client', () => {
       context: { default: {} },
     });
     await getEntityForm(entityId);
-    expect(fetchMock).toHaveBeenCalledWith(
-      `/api/v1/entities/${entityId}`,
-      undefined,
-    );
+    expect(fetchMock).toHaveBeenCalledWith(`/api/v1/entities/${entityId}`);
   });
 
   it('loads entity changes from the timeline route', async () => {
@@ -86,10 +82,7 @@ describe('entity API client', () => {
       },
     ]);
     await expect(getEntityChanges(entityId)).resolves.toHaveLength(1);
-    expect(fetchMock).toHaveBeenCalledWith(
-      `/api/entities/${entityId}/changes`,
-      undefined,
-    );
+    expect(fetchMock).toHaveBeenCalledWith(`/api/entities/${entityId}/changes`);
   });
 
   it('accepts file values in a migration preview', async () => {
@@ -370,7 +363,6 @@ describe('entity API client', () => {
 
     expect(fetchMock).toHaveBeenLastCalledWith(
       `/api/entities/${entityId}/resolved-preview?context_id=${entityId}`,
-      undefined,
     );
   });
 
@@ -387,7 +379,6 @@ describe('entity API client', () => {
 
     expect(fetchMock).toHaveBeenLastCalledWith(
       `/api/entities/${entityId}/hierarchy?context_id=${entityId}&field=parent%20category`,
-      undefined,
     );
   });
 

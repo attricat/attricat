@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { apiFetch } from '../auth/request';
+import { request, requestNoContent } from '../../api/request';
 
 const contextCodeSchema = z
   .string()
@@ -20,20 +20,6 @@ const createAttributeContextSchema = z.object({
 });
 
 export type AttributeContext = z.infer<typeof attributeContextSchema>;
-
-const request = async <T>(
-  path: string,
-  schema: z.ZodType<T>,
-  init?: RequestInit,
-): Promise<T> => {
-  const response = await apiFetch(path, init);
-  if (!response.ok) throw new Error(`Request failed (${response.status})`);
-
-  const result = schema.safeParse(await response.json());
-  if (!result.success)
-    throw new Error(`Invalid API response: ${z.prettifyError(result.error)}`);
-  return result.data;
-};
 
 export const listContexts = (): Promise<AttributeContext[]> =>
   request('/api/contexts', z.array(attributeContextSchema));
@@ -70,10 +56,8 @@ export const updateContext = (
     },
   );
 
-export const deleteContext = async (id: string): Promise<void> => {
-  const response = await apiFetch(
+export const deleteContext = async (id: string): Promise<void> =>
+  requestNoContent(
     `/api/contexts/id/${encodeURIComponent(z.uuid().parse(id))}`,
     { method: 'DELETE' },
   );
-  if (!response.ok) throw new Error(`Request failed (${response.status})`);
-};

@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { apiFetch } from '../auth/request';
+import { request, requestNoContent } from '../../api/request';
 import {
   conversationSchema,
   messageSchema,
@@ -9,20 +9,6 @@ import {
   toolCallSchema,
 } from './schemas';
 
-const request = async <T>(
-  path: string,
-  schema: z.ZodType<T>,
-  init?: RequestInit,
-): Promise<T> => {
-  const response = await apiFetch(path, init);
-  if (!response.ok) throw new Error(`Request failed (${response.status})`);
-  const parsed = schema.safeParse(
-    response.status === 204 ? undefined : await response.json(),
-  );
-  if (!parsed.success)
-    throw new Error(`Invalid API response: ${z.prettifyError(parsed.error)}`);
-  return parsed.data;
-};
 const json = (method: string, body?: unknown): RequestInit => ({
   method,
   headers: { 'Content-Type': 'application/json' },
@@ -98,12 +84,10 @@ export const updateSchedule = (
     scheduleSchema,
     json('PUT', update),
   );
-export const deleteSchedule = async (id: string) => {
-  const response = await apiFetch(`/api/agent/schedules/${uuidPathParam(id)}`, {
+export const deleteSchedule = async (id: string) =>
+  requestNoContent(`/api/agent/schedules/${uuidPathParam(id)}`, {
     method: 'DELETE',
   });
-  if (!response.ok) throw new Error(`Request failed (${response.status})`);
-};
 export const runScheduleNow = (id: string) =>
   request(
     `/api/agent/schedules/${uuidPathParam(id)}/run-now`,
