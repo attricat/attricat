@@ -369,6 +369,7 @@
     "noMatches": "No activity matches these filters.",
     "showing": "Showing {{from}}-{{to}} of {{total}}",
     "event": "Audit event",
+    "viewEvent": "View details for {{action}} by {{actor}}",
     "eventBy": "{{action}} by {{actor}} at {{date}}",
     "openConversation": "Open agent conversation",
     "authorizationScope": "Authorization scope",

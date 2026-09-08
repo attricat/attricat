@@ -373,6 +373,7 @@
     "noMatches": "Brak aktywności pasującej do tych filtrów.",
     "showing": "Wyświetlono {{from}}-{{to}} z {{total}}",
     "event": "Zdarzenie audytu",
+    "viewEvent": "Wyświetl szczegóły {{action}} przez {{actor}}",
     "eventBy": "{{action}} przez {{actor}} o {{date}}",
     "openConversation": "Otwórz rozmowę z agentem",
     "authorizationScope": "Zakres uprawnień",

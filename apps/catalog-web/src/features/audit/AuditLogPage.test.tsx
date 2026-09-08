@@ -1,0 +1,81 @@
+// @vitest-environment jsdom
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { render, screen, waitFor } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
+import { describe, expect, it, vi } from 'vitest';
+import '../../i18n';
+import type { AuditEvent } from './api';
+import { listAuditEvents } from './api';
+import { AuditLogPage } from './AuditLogPage';
+
+vi.mock('./api', () => ({
+  listAuditEvents: vi.fn(),
+}));
+
+const event: AuditEvent = {
+  action: 'entity.updated',
+  actor_display_name: 'Ada Lovelace',
+  actor_email: null,
+  actor_user_id: '00000000-0000-4000-8000-000000000001',
+  agent_conversation_id: null,
+  agent_run_id: null,
+  agent_tool_call_id: null,
+  agent_tool_name: null,
+  approval_decision: null,
+  approved_by_display_name: null,
+  approved_by_email: null,
+  approved_by_user_id: null,
+  authorization_scope: {},
+  correlation_id: '00000000-0000-4000-8000-000000000002',
+  executor_type: 'human',
+  id: '00000000-0000-4000-8000-000000000003',
+  metadata: {},
+  occurred_at: '2026-03-06T12:00:00.000Z',
+  outcome: 'success',
+  request_id: '00000000-0000-4000-8000-000000000004',
+  target: { type: 'entity' },
+};
+
+const renderPage = () => {
+  const queryClient = new QueryClient({
+    defaultOptions: { queries: { retry: false } },
+  });
+  return render(
+    <QueryClientProvider client={queryClient}>
+      <AuditLogPage />
+    </QueryClientProvider>,
+  );
+};
+
+describe('AuditLogPage', () => {
+  it('opens event details with a labelled button by mouse and keyboard', async () => {
+    vi.mocked(listAuditEvents).mockResolvedValue({
+      events: [event],
+      limit: 50,
+      offset: 0,
+      total: 1,
+    });
+    const user = userEvent.setup();
+
+    renderPage();
+
+    const detailsButton = await screen.findByRole('button', {
+      name: 'View details for entity.updated by Ada Lovelace',
+    });
+    await user.click(detailsButton);
+    expect(
+      await screen.findByRole('heading', { name: 'Audit event' }),
+    ).toBeTruthy();
+
+    await user.keyboard('{Escape}');
+    await waitFor(() =>
+      expect(screen.queryByRole('heading', { name: 'Audit event' })).toBeNull(),
+    );
+
+    detailsButton.focus();
+    await user.keyboard('{Enter}');
+    expect(
+      await screen.findByRole('heading', { name: 'Audit event' }),
+    ).toBeTruthy();
+  });
+});
