@@ -4,8 +4,8 @@ import net from "node:net";
 /**
  * Provision this worktree's development environment.
  *
- * Each worktree receives stable, otherwise-unused PostgreSQL, API, and web
- * ports, Mailpit SMTP, Mailpit UI, RustFS S3, and RustFS Console ports in `.catalog-worktree`. The assignments are reused on later runs so
+ * Each worktree receives stable, otherwise-unused PostgreSQL, API, web, and
+ * documentation ports, Mailpit SMTP, Mailpit UI, RustFS S3, and RustFS Console ports in `.catalog-worktree`. The assignments are reused on later runs so
  * `just dev` can be stopped and restarted without changing its URLs. The
  * script creates `.env` from `.env.example` when necessary, while preserving
  * existing non-port configuration in an existing `.env` file.
@@ -17,6 +17,7 @@ const portNames = [
   "POSTGRES_PORT",
   "API_PORT",
   "WEB_PORT",
+  "DOCS_PORT",
   "MAILPIT_SMTP_PORT",
   "MAILPIT_UI_PORT",
   "RUSTFS_PORT",
@@ -61,19 +62,21 @@ let ports = existsSync(stateFile)
   ? parseEnv(readFileSync(stateFile, "utf8"))
   : {};
 
-if (!portNames.every((name) => ports[name])) {
-  const values = await Promise.all(portNames.map(() => availablePort()));
-  ports = Object.fromEntries(
-    portNames.map((name, index) => [name, values[index]]),
-  );
+const missingPortNames = portNames.filter((name) => !ports[name]);
+if (missingPortNames.length > 0) {
+  const values = await Promise.all(missingPortNames.map(() => availablePort()));
+  for (const [index, name] of missingPortNames.entries()) {
+    ports[name] = values[index];
+  }
 }
 
 const webUrl = `http://127.0.0.1:${ports.WEB_PORT}`;
+const docsUrl = `http://127.0.0.1:${ports.DOCS_PORT}`;
 const mailpitUiUrl = `http://127.0.0.1:${ports.MAILPIT_UI_PORT}`;
 const rustfsUiUrl = `http://127.0.0.1:${ports.RUSTFS_CONSOLE_PORT}`;
 writeFileSync(
   stateFile,
-  `${portNames.map((name) => `${name}=${ports[name]}`).join("\n")}\nWEB_URL=${webUrl}\nMAILPIT_UI_URL=${mailpitUiUrl}\nRUSTFS_UI_URL=${rustfsUiUrl}\n`,
+  `${portNames.map((name) => `${name}=${ports[name]}`).join("\n")}\nWEB_URL=${webUrl}\nDOCS_URL=${docsUrl}\nMAILPIT_UI_URL=${mailpitUiUrl}\nRUSTFS_UI_URL=${rustfsUiUrl}\n`,
 );
 
 // Only connection and listener settings are managed here; retain user overrides.
@@ -93,6 +96,7 @@ env = setEnvValue(
 env = setEnvValue(env, "BIND_ADDR", `127.0.0.1:${ports.API_PORT}`);
 env = setEnvValue(env, "CATALOG_API_URL", `http://127.0.0.1:${ports.API_PORT}`);
 env = setEnvValue(env, "WEB_PORT", ports.WEB_PORT);
+env = setEnvValue(env, "DOCS_PORT", ports.DOCS_PORT);
 env = setEnvValue(env, "POSTGRES_PORT", ports.POSTGRES_PORT);
 env = setEnvValue(env, "MAILPIT_SMTP_PORT", ports.MAILPIT_SMTP_PORT);
 env = setEnvValue(env, "MAILPIT_UI_PORT", ports.MAILPIT_UI_PORT);
@@ -125,5 +129,6 @@ env = setEnvValue(
 writeFileSync(envFile, env);
 
 console.log(`Development web application: ${webUrl}`);
+console.log(`Documentation site: ${docsUrl}`);
 console.log(`Mailpit: ${mailpitUiUrl}`);
 console.log(`RustFS: ${rustfsUiUrl}`);

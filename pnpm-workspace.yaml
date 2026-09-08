@@ -1,5 +1,6 @@
 packages:
   - apps/catalog-web
+  - apps/docs
 
 allowBuilds:
   cpu-features: true

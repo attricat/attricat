@@ -15,11 +15,12 @@ just dev
 ```
 
 Run `just setup` once before any other `just` recipe. It assigns persistent,
-worktree-specific ports, writes them and ready-to-open `WEB_URL`,
+worktree-specific ports, writes them and ready-to-open `WEB_URL`, `DOCS_URL`,
 `MAILPIT_UI_URL`, and `RUSTFS_UI_URL` values to the ignored
 `.catalog-worktree` file, and creates `.env` from `.env.example`. `just dev`
 starts PostgreSQL, Mailpit, and RustFS (the local S3-compatible object store)
-before starting the API, file worker, and web app. Stop `process-compose` with
+before starting the API, file worker, web app, and public documentation site.
+Stop `process-compose` with
 `Ctrl-C`; the containers remain available until stopped with:
 
 ```sh
@@ -30,8 +31,9 @@ For database debugging, `just sql` opens an interactive `psql` session inside
 this worktree's PostgreSQL container.
 
 See [Getting Started](docs/index.md#getting-started) for database, migration,
-and test instructions. Mailpit also starts with the local stack; source
-`.catalog-worktree` and open `$MAILPIT_UI_URL` to inspect local email.
+and test instructions. The public docs site is available at `$DOCS_URL`; source
+`.catalog-worktree` and open it after starting `just dev`. Mailpit also starts
+with the local stack; open `$MAILPIT_UI_URL` to inspect local email.
 
 ## Sign in locally
 
@@ -60,6 +62,7 @@ change summary, use a least-privileged provider account, and only grant
 
 ## Documentation
 
+- Public documentation site: `apps/docs` (run with `pnpm --dir apps/docs dev`)
 - [Documentation index](docs/index.md)
 - [Blueprint authoring](docs/blueprints.md)
 - [Extension development and local side-loading](docs/extensions.md#local-extension-integration-testing)

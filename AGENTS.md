@@ -9,8 +9,8 @@ The development server is already running via Process Compose when developing th
 ## Worktree development server
 
 Run `just setup` from the repository root before any other `just` recipe. It
-creates `.env` and writes the assigned `POSTGRES_PORT`, `API_PORT`, and
-`WEB_PORT` to the ignored `.catalog-worktree` file. Then run `just dev` to
+creates `.env` and writes the assigned `POSTGRES_PORT`, `API_PORT`, `WEB_PORT`,
+and `DOCS_PORT` values to the ignored `.catalog-worktree` file. Then run `just dev` to
 start the worktree-local stack. Source that file whenever a later verification
 step needs the running services:
 
@@ -18,6 +18,7 @@ step needs the running services:
 source .catalog-worktree
 curl http://127.0.0.1:$API_PORT/health
 open http://127.0.0.1:$WEB_PORT
+open http://127.0.0.1:$DOCS_PORT
 ```
 
 Do not assume the default Vite or API ports; parallel worktrees receive unique

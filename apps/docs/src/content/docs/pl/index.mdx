@@ -1,0 +1,33 @@
+---
+title: Attricat
+head:
+  - tag: meta
+    attrs:
+      name: description
+      content: Twórz wersjonowany katalog z Attricat.
+template: splash
+hero:
+  title: Twórz katalog, który zachowuje historię
+  tagline: Attricat to wersjonowany katalog dla zespołów potrzebujących elastycznych modeli danych, wartości zależnych od kontekstu i wiarygodnej historii zmian.
+  actions:
+    - text: Zacznij
+      link: /pl/introduction/
+      icon: right-arrow
+    - text: Twórz blueprinty
+      link: /pl/builders/blueprints/
+      variant: minimal
+---
+
+import { Card, CardGrid } from '@astrojs/starlight/components';
+
+<CardGrid>
+  <Card title="Korzystaj z Attricat" icon="open-book">
+    Wyszukuj encje, pracuj z wartościami kontekstowymi i używaj agentów z wyraźnymi zatwierdzeniami.
+  </Card>
+  <Card title="Buduj katalog" icon="setting">
+    Definiuj wersjonowane blueprinty i rozbudowuj produkt o zaufane integracje.
+  </Card>
+  <Card title="Administruj bezpiecznie" icon="approve-check">
+    Zarządzaj dostępem do przestrzeni roboczej i zachowuj jasną historię udanych zmian.
+  </Card>
+</CardGrid>

@@ -1,0 +1,33 @@
+---
+title: Attricat
+head:
+  - tag: meta
+    attrs:
+      name: description
+      content: Build a versioned, contextual catalog with Attricat.
+template: splash
+hero:
+  title: Build a catalog that keeps its history
+  tagline: Attricat is a versioned catalog for teams that need flexible data models, contextual values, and trustworthy change history.
+  actions:
+    - text: Get started
+      link: /introduction/
+      icon: right-arrow
+    - text: Build blueprints
+      link: /builders/blueprints/
+      variant: minimal
+---
+
+import { Card, CardGrid } from '@astrojs/starlight/components';
+
+<CardGrid>
+  <Card title="Use Attricat" icon="open-book">
+    Search entities, work with contextual values, and use agents with explicit approvals.
+  </Card>
+  <Card title="Build your catalog" icon="setting">
+    Define versioned blueprints and extend the product with trusted integrations.
+  </Card>
+  <Card title="Operate safely" icon="approve-check">
+    Manage workspace access and retain a clear record of successful changes.
+  </Card>
+</CardGrid>

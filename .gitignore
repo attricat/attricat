@@ -4,6 +4,9 @@
 /node_modules
 /apps/catalog-web/node_modules
 /apps/catalog-web/dist
+/apps/docs/node_modules
+/apps/docs/.astro
+/apps/docs/dist
 apps/catalog-web/test-results/
 apps/catalog-web/playwright-report/
 
