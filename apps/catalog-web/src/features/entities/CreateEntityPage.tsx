@@ -2,11 +2,12 @@ import { useMutation, useQuery } from '@tanstack/react-query';
 import { useEffect } from 'react';
 import { useNavigate } from '@tanstack/react-router';
 import { useTranslation } from 'react-i18next';
-import { createEntity, getBlueprintByCode, listContexts } from './api';
+import { listContexts } from '../contexts/api';
+import { contextQueryKeys } from '../contexts/query-keys';
+import { createEntity, getBlueprintByCode } from './api';
 import { EntityForm } from './components/EntityForm';
 import { EntityPage } from './components/EntityPage';
 import { attributeValueKinds } from './value-types';
-import { entityQueryKeys } from './query-keys';
 
 export const CreateEntityPage = ({
   search,
@@ -31,7 +32,7 @@ export const CreateEntityPage = ({
     }
   }, [blueprint, search.blueprint, search.locked]);
   const contexts = useQuery({
-    queryKey: entityQueryKeys.contexts(),
+    queryKey: contextQueryKeys.all(),
     queryFn: listContexts,
   });
   const defaultContextId = contexts.data?.find(

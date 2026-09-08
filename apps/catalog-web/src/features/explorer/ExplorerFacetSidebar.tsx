@@ -12,7 +12,8 @@ import {
 import { useQuery } from '@tanstack/react-query';
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import type { Attribute, AttributeContext } from '../entities/api';
+import type { Attribute } from '../entities/api';
+import type { AttributeContext } from '../contexts/api';
 import { getBlueprintByCode } from '../entities/api';
 import { entityQueryKeys } from '../entities/query-keys';
 import { RelationshipTreeFacet } from './RelationshipTreeFacet';

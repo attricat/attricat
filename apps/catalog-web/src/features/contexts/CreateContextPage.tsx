@@ -13,8 +13,8 @@ import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { PageContainer } from '../../components/PageContainer';
 import { PageHeader } from '../../components/PageHeader';
-import { createContext, listContexts } from '../entities/api';
-import { entityQueryKeys } from '../entities/query-keys';
+import { createContext, listContexts } from './api';
+import { contextQueryKeys } from './query-keys';
 
 export const CreateContextPage = () => {
   const { t } = useTranslation();
@@ -22,7 +22,7 @@ export const CreateContextPage = () => {
   const queryClient = useQueryClient();
   const [validationError, setValidationError] = useState<string>();
   const contexts = useQuery({
-    queryKey: entityQueryKeys.contexts(),
+    queryKey: contextQueryKeys.all(),
     queryFn: listContexts,
   });
   const create = useMutation({
@@ -37,7 +37,7 @@ export const CreateContextPage = () => {
     }) => createContext(code, data, parentId),
     onSuccess: () => {
       void queryClient.invalidateQueries({
-        queryKey: entityQueryKeys.contexts(),
+        queryKey: contextQueryKeys.all(),
       });
       void navigate({ to: '/manage/contexts' });
     },

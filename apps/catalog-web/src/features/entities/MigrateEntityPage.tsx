@@ -10,7 +10,9 @@ import {
 } from '@mui/material';
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { listContexts, migrateEntity, previewEntityMigration } from './api';
+import { listContexts } from '../contexts/api';
+import { contextQueryKeys } from '../contexts/query-keys';
+import { migrateEntity, previewEntityMigration } from './api';
 import { valueForField } from './attribute-values';
 import { EntityForm } from './components/EntityForm';
 import { EntityPage } from './components/EntityPage';
@@ -26,7 +28,7 @@ export const MigrateEntityPage = ({ entityId }: { entityId: string }) => {
     queryFn: () => previewEntityMigration(entityId),
   });
   const contexts = useQuery({
-    queryKey: entityQueryKeys.contexts(),
+    queryKey: contextQueryKeys.all(),
     queryFn: listContexts,
   });
   const defaultContextId =

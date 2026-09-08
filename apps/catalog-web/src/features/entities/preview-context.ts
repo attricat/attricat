@@ -1,4 +1,5 @@
-import type { Attribute, AttributeContext } from './api';
+import type { Attribute } from './api';
+import type { AttributeContext } from '../contexts/api';
 
 export const resolvePreviewContext = (
   context: Record<string, Record<string, unknown>>,

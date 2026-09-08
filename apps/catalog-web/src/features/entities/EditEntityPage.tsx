@@ -9,11 +9,12 @@ import WarningAmberOutlinedIcon from '@mui/icons-material/WarningAmberOutlined';
 import { Alert, Button, IconButton, Tooltip, Typography } from '@mui/material';
 import { createElement, useState } from 'react';
 import { useTranslation } from 'react-i18next';
+import { listContexts } from '../contexts/api';
+import { contextQueryKeys } from '../contexts/query-keys';
 import {
   getEntityForm,
   getCurrentBlueprint,
   getResolvedEntityPreview,
-  listContexts,
   updateEntity,
 } from './api';
 import { EntityContextPicker } from './components/EntityContextPicker';
@@ -52,7 +53,7 @@ export const EditEntityPage = ({ entityId }: { entityId: string }) => {
     enabled: Boolean(blueprintId),
   });
   const contexts = useQuery({
-    queryKey: entityQueryKeys.contexts(),
+    queryKey: contextQueryKeys.all(),
     queryFn: listContexts,
   });
   const contextId =

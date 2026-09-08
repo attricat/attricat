@@ -1,7 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   createEntity,
-  createContext,
   getBlueprintByCode,
   getEntityChanges,
   getEntityForm,
@@ -428,7 +427,6 @@ describe('entity API client', () => {
 
   it('rejects invalid request inputs before fetching', async () => {
     expect(() => getEntityForm('not-a-uuid')).toThrow('Invalid UUID');
-    expect(() => createContext('en GB', {}, entityId)).toThrow('hyphens');
     expect(fetchMock).not.toHaveBeenCalled();
   });
 });
