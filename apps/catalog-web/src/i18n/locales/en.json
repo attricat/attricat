@@ -48,6 +48,8 @@
     "loginFailed": "Unable to sign in",
     "sessionCheckFailed": "We couldn't restore your session. Check your connection and try again.",
     "retrySession": "Retry",
+    "signOutFailed": "We couldn't sign you out. Check your connection and try again.",
+    "retrySignOut": "Retry sign out",
     "resetPassword": "Reset your password",
     "resetPasswordPrompt": "Enter your email address to receive a password reset link.",
     "resetPasswordSent": "If an eligible account uses that email address, a reset link has been sent.",

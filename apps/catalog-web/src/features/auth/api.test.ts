@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { currentSession, login } from './api';
+import { currentSession, login, logout } from './api';
 
 const session = {
   user_id: '123e4567-e89b-12d3-a456-426614174000',
@@ -56,6 +56,21 @@ describe('session API client', () => {
     await expect(currentSession()).rejects.toThrow(
       'Unable to check the current session (HTTP 403 Forbidden)',
     );
+  });
+
+  it('rejects HTTP failures from the logout endpoint', async () => {
+    fetchMock.mockResolvedValue({
+      ok: false,
+      status: 503,
+      statusText: 'Service Unavailable',
+    });
+
+    await expect(logout()).rejects.toThrow(
+      'Unable to sign out (HTTP 503 Service Unavailable)',
+    );
+    expect(fetchMock).toHaveBeenCalledWith('/api/auth/logout', {
+      method: 'POST',
+    });
   });
 
   it('propagates network failures rather than treating them as unauthenticated', async () => {

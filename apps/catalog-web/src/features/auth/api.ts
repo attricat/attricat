@@ -84,4 +84,12 @@ export const currentSession = async () => {
   return sessionSchema.parse(await response.json());
 };
 
-export const logout = () => apiFetch('/api/auth/logout', { method: 'POST' });
+export const logout = async () => {
+  const response = await apiFetch('/api/auth/logout', { method: 'POST' });
+  if (!response.ok) {
+    const statusText = response.statusText ? ` ${response.statusText}` : '';
+    throw new Error(
+      `Unable to sign out (HTTP ${response.status}${statusText})`,
+    );
+  }
+};
