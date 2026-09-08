@@ -52,7 +52,9 @@ describe('API request helper', () => {
       text: () => Promise.resolve('artifact contents'),
     });
 
-    await expect(requestText('/api/example')).resolves.toBe('artifact contents');
+    await expect(requestText('/api/example')).resolves.toBe(
+      'artifact contents',
+    );
   });
 
   it('supports successful no-content requests without reading a response body', async () => {

@@ -1,9 +1,5 @@
 import { z } from 'zod';
-import {
-  ApiRequestError,
-  request,
-  requestNoContent,
-} from '../../api/request';
+import { ApiRequestError, request, requestNoContent } from '../../api/request';
 
 const sessionSchema = z.object({
   user_id: z.uuid(),

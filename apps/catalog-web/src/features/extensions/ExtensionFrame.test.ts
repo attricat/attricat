@@ -22,7 +22,9 @@ describe('extension frame bootstrap', () => {
     expect(frameDocument).toContain('catalog:context-changed.v1');
     expect(frameDocument).toContain('catalog:shutdown.v1');
     expect(frameDocument).toContain('module.mount(root, globalThis.catalog)');
-    expect(frameDocument).not.toContain('document.createElement(event.data.element)');
+    expect(frameDocument).not.toContain(
+      'document.createElement(event.data.element)',
+    );
     expect(frameDocument).not.toContain("window.addEventListener('popstate'");
   });
 

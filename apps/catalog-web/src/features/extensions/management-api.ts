@@ -152,4 +152,6 @@ export const lifecycleExtension = (
       : { method: 'POST' },
   );
 export const removeExtension = (id: string) =>
-  requestNoContent(`/api/extensions/${encodeURIComponent(id)}`, { method: 'DELETE' });
+  requestNoContent(`/api/extensions/${encodeURIComponent(id)}`, {
+    method: 'DELETE',
+  });

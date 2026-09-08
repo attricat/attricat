@@ -39,6 +39,7 @@ const allJavaScriptAssets = await Promise.all(
     .filter((chunk) => chunk.file.endsWith('.js'))
     .map((chunk) => getSize(chunk.file)),
 );
+const initialGzipBudget = 275 * 1024;
 const total = (assets, property) =>
   assets.reduce((size, asset) => size + asset[property], 0);
 
@@ -54,3 +55,10 @@ console.log(
 console.log(
   `All JavaScript chunks: ${allJavaScriptAssets.length}, ${formatBytes(total(allJavaScriptAssets, 'raw'))} (${formatBytes(total(allJavaScriptAssets, 'gzip'))} gzip)`,
 );
+
+const initialGzipSize = total(initialAssets, 'gzip');
+if (initialGzipSize > initialGzipBudget) {
+  throw new Error(
+    `Initial JavaScript exceeds the ${formatBytes(initialGzipBudget)} gzip budget: ${formatBytes(initialGzipSize)}.`,
+  );
+}

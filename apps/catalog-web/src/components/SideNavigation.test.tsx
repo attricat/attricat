@@ -12,35 +12,32 @@ vi.mock('@tanstack/react-router', async () => {
   const { createElement, forwardRef } = await import('react');
 
   const Link = forwardRef<
-      HTMLAnchorElement,
-      ComponentPropsWithoutRef<'a'> & {
-        children: ReactNode;
-        search?: Record<string, string | boolean>;
-        to: string;
-      }
-    >(({ children, onClick, search, to, ...props }, ref) => {
-      const query = new URLSearchParams(
-        Object.entries(search ?? {}).map(([key, value]) => [
-          key,
-          String(value),
-        ]),
-      );
-      const href = query.size ? `${to}?${query}` : to;
+    HTMLAnchorElement,
+    ComponentPropsWithoutRef<'a'> & {
+      children: ReactNode;
+      search?: Record<string, string | boolean>;
+      to: string;
+    }
+  >(({ children, onClick, search, to, ...props }, ref) => {
+    const query = new URLSearchParams(
+      Object.entries(search ?? {}).map(([key, value]) => [key, String(value)]),
+    );
+    const href = query.size ? `${to}?${query}` : to;
 
-      return (
-        <a
-          {...props}
-          href={href}
-          onClick={(event) => {
-            event.preventDefault();
-            onClick?.(event);
-          }}
-          ref={ref}
-        >
-          {children}
-        </a>
-      );
-    });
+    return (
+      <a
+        {...props}
+        href={href}
+        onClick={(event) => {
+          event.preventDefault();
+          onClick?.(event);
+        }}
+        ref={ref}
+      >
+        {children}
+      </a>
+    );
+  });
 
   return {
     createLink: <T,>(Component: T) =>
@@ -53,7 +50,6 @@ vi.mock('@tanstack/react-router', async () => {
       ),
     Link,
     useRouterState: ({
-
       select,
     }: {
       select: (state: {

@@ -1,5 +1,5 @@
 import { createFileRoute } from '@tanstack/react-router';
-import { MarketplaceExtensionPage } from '../../../../features/extensions/ExtensionsPage';
+import { MarketplaceExtensionPage } from '../../../../features/extensions/MarketplaceExtensionPage';
 
 const Page = () => {
   const { owner, repository } = Route.useParams();

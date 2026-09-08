@@ -1,5 +1,5 @@
 import { createFileRoute } from '@tanstack/react-router';
-import { InstalledExtensionPage } from '../../../features/extensions/ExtensionsPage';
+import { InstalledExtensionPage } from '../../../features/extensions/InstalledExtensionPage';
 
 const Page = () => (
   <InstalledExtensionPage extensionId={Route.useParams().extensionId} />

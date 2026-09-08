@@ -22,11 +22,21 @@ These conventions apply to `apps/catalog-web`.
 
 - Keep route files thin and compose feature page components from
   `src/features`.
+- Keep one route-level page component per feature module. Extract independent
+  pages and substantial page sections into descriptive sibling modules rather
+  than growing a multi-route page file.
 - Use TanStack Form for form state and Material UI for interface components.
 - Validate API payloads with Zod before using them in the UI.
 - Blueprint responses can include JSON Schema contracts. Use the feature-local
   Ajv helper for immediate form feedback, but treat server-side `422` schema
   validation as authoritative.
+
+## Bundle size
+
+- Run `pnpm --dir apps/catalog-web inspect:bundle` when changing dependencies
+  or imports that affect the client bundle. It enforces a 275 KiB gzip budget
+  for JavaScript synchronously loaded by `index.html`; keep new code behind
+  route or component boundaries when it is not needed at application startup.
 
 ## Testing
 
