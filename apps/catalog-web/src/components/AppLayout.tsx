@@ -53,6 +53,24 @@ export const SessionErrorState = ({ onRetry }: { onRetry: () => void }) => {
   );
 };
 
+export const SignOutErrorState = ({ onRetry }: { onRetry: () => void }) => {
+  const { t } = useTranslation();
+
+  return (
+    <Alert
+      action={
+        <Button color="inherit" onClick={onRetry} size="small">
+          {t('auth.retrySignOut')}
+        </Button>
+      }
+      role="alert"
+      severity="error"
+    >
+      {t('auth.signOutFailed')}
+    </Alert>
+  );
+};
+
 export const AppLayout = () => {
   const { t } = useTranslation();
   const pathname = useRouterState({
@@ -68,9 +86,15 @@ export const AppLayout = () => {
   const theme = useTheme();
   const isDesktop = useMediaQuery(theme.breakpoints.up('md'));
   const [mobileOpen, setMobileOpen] = useState(false);
+  const [signOutError, setSignOutError] = useState(false);
   const closeMobileNavigation = () => setMobileOpen(false);
   const signOut = async () => {
-    await logout();
+    try {
+      await logout();
+    } catch {
+      setSignOutError(true);
+      return;
+    }
     queryClient.clear();
     queryClient.setQueryData(authQueryKeys.session(), null);
     await navigate({ to: '/login' });
@@ -109,6 +133,19 @@ export const AppLayout = () => {
 
   return (
     <Box sx={{ display: 'flex', minHeight: '100dvh' }}>
+      {signOutError && (
+        <Box
+          sx={{
+            left: 24,
+            maxWidth: 480,
+            position: 'fixed',
+            top: 24,
+            zIndex: (theme) => theme.zIndex.snackbar,
+          }}
+        >
+          <SignOutErrorState onRetry={() => void signOut()} />
+        </Box>
+      )}
       {isDesktop ? (
         <Drawer
           open
