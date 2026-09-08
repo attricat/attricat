@@ -50,19 +50,56 @@ describe('extension runtime API', () => {
   });
 
   it('brokers bounded commands through a declared contribution', async () => {
+    const result = { arbitrary: [null, 'value', { nested: true }] };
     fetchMock.mockResolvedValue({
       ok: true,
-      json: () => Promise.resolve({}),
+      text: () => Promise.resolve(JSON.stringify(result)),
     });
-    await extensionCommand('acme.test', 'panel', {
-      release_id: contribution.release_id,
-      command_id: 'refresh',
-      payload: {},
-    });
+    await expect(
+      extensionCommand('acme.test', 'panel', {
+        release_id: contribution.release_id,
+        command_id: 'refresh',
+        payload: {},
+      }),
+    ).resolves.toEqual(result);
     expect(fetchMock).toHaveBeenCalledWith(
       '/api/extensions/acme.test/panel/command',
       expect.objectContaining({ method: 'POST' }),
     );
+  });
+
+  it('returns valid arbitrary JSON from storage responses', async () => {
+    const result = [null, false, { extensible: ['value'] }];
+    fetchMock.mockResolvedValue({
+      ok: true,
+      text: () => Promise.resolve(JSON.stringify(result)),
+    });
+    await expect(
+      extensionStorage('acme.test', 'panel', contribution.release_id, {
+        operation: 'get',
+        key: 'theme',
+      }),
+    ).resolves.toEqual(result);
+  });
+
+  it('identifies malformed JSON returned by commands and storage', async () => {
+    fetchMock.mockResolvedValue({
+      ok: true,
+      text: () => Promise.resolve('{invalid'),
+    });
+    await expect(
+      extensionCommand('acme.test', 'panel', {
+        release_id: contribution.release_id,
+        command_id: 'refresh',
+        payload: {},
+      }),
+    ).rejects.toThrow('Extension command response contains malformed JSON');
+    await expect(
+      extensionStorage('acme.test', 'panel', contribution.release_id, {
+        operation: 'get',
+        key: 'theme',
+      }),
+    ).rejects.toThrow('Extension storage response contains malformed JSON');
   });
 
   it('rejects storage responses larger than the byte limit', async () => {
