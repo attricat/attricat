@@ -367,6 +367,7 @@
     "agent": "Agent",
     "agentRunId": "Agent run ID",
     "toolCallId": "Tool-call ID",
+    "applyFilters": "Apply filters",
     "timestamp": "Timestamp",
     "actor": "Actor",
     "source": "Source",
