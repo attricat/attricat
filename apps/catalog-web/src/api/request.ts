@@ -43,11 +43,7 @@ export const request = async <T>(
   schema: z.ZodType<T>,
   init?: RequestInit,
 ): Promise<T> => {
-  const response = await (init === undefined
-    ? apiFetch(path)
-    : apiFetch(path, init));
-  if (!response.ok) throw await responseError(response);
-
+  const response = await responseFor(path, init);
   const result = schema.safeParse(
     response.status === 204 ? undefined : await response.json(),
   );
@@ -56,9 +52,17 @@ export const request = async <T>(
   return result.data;
 };
 
-export const requestNoContent = async (path: string, init?: RequestInit) => {
+const responseFor = async (path: string, init?: RequestInit) => {
   const response = await (init === undefined
     ? apiFetch(path)
     : apiFetch(path, init));
   if (!response.ok) throw await responseError(response);
+  return response;
+};
+
+export const requestText = async (path: string, init?: RequestInit) =>
+  (await responseFor(path, init)).text();
+
+export const requestNoContent = async (path: string, init?: RequestInit) => {
+  await responseFor(path, init);
 };

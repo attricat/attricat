@@ -12,6 +12,8 @@ These conventions apply to `apps/catalog-web`.
 ## Data Fetching
 
 - Keep API request functions in each feature's `api.ts` and their Zod request/response schemas in that feature's `schemas.ts`.
+- Route browser API calls through `src/api/request.ts`: use `request` for Zod-validated JSON, `requestNoContent` for successful empty responses, and `requestText` only for deliberately non-JSON or bounded extension responses. Do not call `fetch` or `apiFetch` from feature API clients.
+- Preserve endpoint-specific semantics by handling `ApiRequestError` at the feature boundary (for example, an unauthenticated session may map HTTP 401 to `null`); all other API failures must retain the shared structured error.
 - Define TanStack Query key factories in a feature-local `query-keys.ts` file.
 - Use those factories for every `queryKey` so equivalent requests share the same
   cache entry and invalidation can reuse the same key definitions.

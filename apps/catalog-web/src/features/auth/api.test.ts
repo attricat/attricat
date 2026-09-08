@@ -43,9 +43,7 @@ describe('session API client', () => {
       statusText: 'Service Unavailable',
     });
 
-    await expect(currentSession()).rejects.toThrow(
-      'Unable to check the current session (HTTP 503 Service Unavailable)',
-    );
+    await expect(currentSession()).rejects.toMatchObject({ status: 503 });
 
     fetchMock.mockResolvedValue({
       ok: false,
@@ -53,9 +51,7 @@ describe('session API client', () => {
       statusText: 'Forbidden',
     });
 
-    await expect(currentSession()).rejects.toThrow(
-      'Unable to check the current session (HTTP 403 Forbidden)',
-    );
+    await expect(currentSession()).rejects.toMatchObject({ status: 403 });
   });
 
   it('rejects HTTP failures from the logout endpoint', async () => {
@@ -65,9 +61,7 @@ describe('session API client', () => {
       statusText: 'Service Unavailable',
     });
 
-    await expect(logout()).rejects.toThrow(
-      'Unable to sign out (HTTP 503 Service Unavailable)',
-    );
+    await expect(logout()).rejects.toMatchObject({ status: 503 });
     expect(fetchMock).toHaveBeenCalledWith('/api/auth/logout', {
       method: 'POST',
     });

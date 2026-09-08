@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { apiFetch } from '../../api/fetch';
+import { request, requestText } from '../../api/request';
 import { maximumExtensionResponseBytes } from './constants';
 
 const contributionSchema = z
@@ -38,24 +38,16 @@ const contributionSchema = z
 export const runtimeSchema = z.array(contributionSchema);
 export type ExtensionContribution = z.infer<typeof contributionSchema>;
 
-const request = async (path: string) => {
-  const response = await apiFetch(path);
-  if (!response.ok) throw new Error('Extension runtime is unavailable');
-  return response;
-};
-
-export const getExtensionRuntime = async () =>
-  runtimeSchema.parse(await (await request('/api/extensions/runtime')).json());
+export const getExtensionRuntime = () =>
+  request('/api/extensions/runtime', runtimeSchema);
 
 export const getExtensionArtifact = async (
   extensionId: string,
   contributionId: string,
 ) =>
-  (
-    await request(
-      `/api/extensions/${encodeURIComponent(extensionId)}/${encodeURIComponent(contributionId)}/artifact`,
-    )
-  ).text();
+  requestText(
+    `/api/extensions/${encodeURIComponent(extensionId)}/${encodeURIComponent(contributionId)}/artifact`,
+  );
 
 export const extensionCommandRequestSchema = z
   .object({
@@ -95,11 +87,10 @@ export type ExtensionStorageRequest = z.infer<
   typeof extensionStorageRequestSchema
 >;
 
-const parseExtensionResponse = async (
-  response: Response,
+const parseExtensionResponse = (
+  text: string,
   operation: 'command' | 'storage',
-): Promise<unknown> => {
-  const text = await response.text();
+): unknown => {
   if (new TextEncoder().encode(text).length > maximumExtensionResponseBytes)
     throw new Error(`Extension ${operation} response is too large`);
   try {
@@ -116,7 +107,7 @@ export const extensionCommand = async (
   contributionId: string,
   input: z.infer<typeof extensionCommandRequestSchema>,
 ) => {
-  const response = await apiFetch(
+  const response = await requestText(
     `/api/extensions/${encodeURIComponent(extensionId)}/${encodeURIComponent(contributionId)}/command`,
     {
       method: 'POST',
@@ -124,7 +115,6 @@ export const extensionCommand = async (
       body: JSON.stringify(input),
     },
   );
-  if (!response.ok) throw new Error('Extension command was denied');
   return parseExtensionResponse(response, 'command');
 };
 
@@ -134,7 +124,7 @@ export const extensionStorage = async (
   releaseId: string,
   input: ExtensionStorageRequest,
 ) => {
-  const response = await apiFetch(
+  const response = await requestText(
     `/api/extensions/${encodeURIComponent(extensionId)}/${encodeURIComponent(contributionId)}/storage/${encodeURIComponent(releaseId)}`,
     {
       method: 'POST',
@@ -142,6 +132,5 @@ export const extensionStorage = async (
       body: JSON.stringify(input),
     },
   );
-  if (!response.ok) throw new Error('Extension storage request was denied');
   return parseExtensionResponse(response, 'storage');
 };

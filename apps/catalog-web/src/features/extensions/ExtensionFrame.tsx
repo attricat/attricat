@@ -3,7 +3,7 @@ import { useNavigate } from '@tanstack/react-router';
 import { useEffect, useRef, useState } from 'react';
 import { z } from 'zod';
 import { toast } from '../../components/toast';
-import { apiFetch } from '../../api/fetch';
+import { requestText } from '../../api/request';
 import {
   defaultExtensionFrameHeight,
   extensionStartTimeout,
@@ -245,9 +245,7 @@ export const ExtensionFrame = ({
                 throw new Error(
                   'Blueprint revision is outside this outlet context',
                 );
-              const response = await apiFetch(path);
-              if (!response.ok) throw new Error('Catalog request failed');
-              const text = await response.text();
+              const text = await requestText(path);
               if (
                 new TextEncoder().encode(text).length >
                 maximumExtensionResponseBytes

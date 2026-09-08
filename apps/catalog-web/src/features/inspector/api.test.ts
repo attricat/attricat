@@ -16,8 +16,8 @@ describe('Inspector API client', () => {
   });
 
   it('fails when the API is unavailable', async () => {
-    fetchMock.mockResolvedValueOnce({ ok: false });
+    fetchMock.mockResolvedValueOnce({ ok: false, status: 503 });
 
-    await expect(getApiHealth()).rejects.toThrow('API health check failed');
+    await expect(getApiHealth()).rejects.toMatchObject({ status: 503 });
   });
 });

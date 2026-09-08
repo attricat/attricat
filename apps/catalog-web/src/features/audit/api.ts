@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { apiFetch } from '../../api/fetch';
+import { request } from '../../api/request';
 
 const auditEventSchema = z.object({
   id: z.uuid(),
@@ -51,8 +51,5 @@ export const listAuditEvents = async (filters: AuditEventFilters) => {
   Object.entries(filters).forEach(([key, value]) => {
     if (value !== undefined && value !== '') search.set(key, String(value));
   });
-  const response = await apiFetch(`/api/audit-events?${search}`);
-  if (!response.ok)
-    throw new Error(`Unable to load activity (${response.status})`);
-  return auditEventPageSchema.parse(await response.json());
+  return request(`/api/audit-events?${search}`, auditEventPageSchema);
 };

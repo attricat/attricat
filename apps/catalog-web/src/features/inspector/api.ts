@@ -1,5 +1,6 @@
+import { requestNoContent } from '../../api/request';
+
 export const getApiHealth = async () => {
-  const response = await fetch('/api/health');
-  if (!response.ok) throw new Error('API health check failed');
+  await requestNoContent('/api/health');
   return true;
 };

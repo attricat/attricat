@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { apiFetch } from '../../api/fetch';
+import { request, requestNoContent } from '../../api/request';
 
 const jsonValue: z.ZodType<unknown> = z.lazy(() =>
   z.union([
@@ -11,7 +11,6 @@ const jsonValue: z.ZodType<unknown> = z.lazy(() =>
     z.record(z.string(), jsonValue),
   ]),
 );
-const errorSchema = z.object({ error: z.object({ message: z.string() }) });
 const grantSchema = z.object({
   grant_kind: z.enum([
     'capability',
@@ -83,28 +82,6 @@ export type ExtensionDetail = z.infer<typeof detailSchema>;
 export type DiscoveredExtension = z.infer<typeof discoveredSchema>;
 export type RegistryDetails = z.infer<typeof registryDetailsSchema>;
 
-const request = async <T>(
-  path: string,
-  schema: z.ZodType<T>,
-  init?: RequestInit,
-) => {
-  const response = await apiFetch(path, init);
-  if (!response.ok) {
-    const parsed = errorSchema.safeParse(
-      await response.json().catch(() => null),
-    );
-    throw new Error(
-      parsed.success
-        ? parsed.data.error.message
-        : `Request failed (${response.status})`,
-    );
-  }
-  return schema.parse(await response.json());
-};
-const noContent = async (path: string, init: RequestInit) => {
-  const response = await apiFetch(path, init);
-  if (!response.ok) throw new Error(`Request failed (${response.status})`);
-};
 const body = (value: unknown, method = 'POST'): RequestInit => ({
   method,
   headers: { 'Content-Type': 'application/json' },
@@ -154,12 +131,12 @@ export const grantExtension = (
     'capability' | 'host_permission' | 'event_publish' | 'event_subscribe',
   grant_id: string,
 ) =>
-  noContent(
+  requestNoContent(
     `/api/extensions/${encodeURIComponent(id)}/grants`,
     body({ grant_kind, grant_id }),
   );
 export const revokeExtensionGrant = (id: string, kind: string, grant: string) =>
-  noContent(
+  requestNoContent(
     `/api/extensions/${encodeURIComponent(id)}/grants/${encodeURIComponent(kind)}/${encodeURIComponent(grant)}`,
     { method: 'DELETE' },
   );
@@ -175,4 +152,4 @@ export const lifecycleExtension = (
       : { method: 'POST' },
   );
 export const removeExtension = (id: string) =>
-  noContent(`/api/extensions/${encodeURIComponent(id)}`, { method: 'DELETE' });
+  requestNoContent(`/api/extensions/${encodeURIComponent(id)}`, { method: 'DELETE' });

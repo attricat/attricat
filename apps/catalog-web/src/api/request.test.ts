@@ -1,6 +1,11 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
-import { ApiRequestError, request, requestNoContent } from './request';
+import {
+  ApiRequestError,
+  request,
+  requestNoContent,
+  requestText,
+} from './request';
 
 const fetchMock = vi.fn();
 vi.stubGlobal('fetch', fetchMock);
@@ -38,6 +43,16 @@ describe('API request helper', () => {
     await expect(
       request('/api/example', z.object({ id: z.string() })),
     ).rejects.toThrow('Invalid API response');
+  });
+
+  it('returns successful text responses through the shared error handling', async () => {
+    fetchMock.mockResolvedValue({
+      ok: true,
+      status: 200,
+      text: () => Promise.resolve('artifact contents'),
+    });
+
+    await expect(requestText('/api/example')).resolves.toBe('artifact contents');
   });
 
   it('supports successful no-content requests without reading a response body', async () => {
