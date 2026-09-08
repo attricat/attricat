@@ -1,5 +1,4 @@
 import CloudUploadOutlinedIcon from '@mui/icons-material/CloudUploadOutlined';
-import DeleteOutlineIcon from '@mui/icons-material/DeleteOutlineOutlined';
 import DownloadOutlinedIcon from '@mui/icons-material/DownloadOutlined';
 import ReplayOutlinedIcon from '@mui/icons-material/ReplayOutlined';
 import {
@@ -143,15 +142,6 @@ export const FileAttributeEditor = ({
   const startUploads = () => {
     void uploadPending();
   };
-  const reorder = (index: number, direction: -1 | 1) =>
-    setUploaded((items) => {
-      const next = [...items];
-      const target = index + direction;
-      if (target < 0 || target >= next.length) return items;
-      [next[index], next[target]] = [next[target], next[index]];
-      return next;
-    });
-
   return (
     <Stack spacing={1}>
       <Typography>{attribute.code}</Typography>
@@ -236,7 +226,7 @@ export const FileAttributeEditor = ({
           )}
         </Box>
       ))}
-      {uploaded.map((file, index) => (
+      {uploaded.map((file) => (
         <Stack
           direction="row"
           key={file.id}
@@ -252,33 +242,6 @@ export const FileAttributeEditor = ({
             href={fileDownloadUrl(file.id)}
           >
             <DownloadOutlinedIcon />
-          </IconButton>
-          {policy.ordered && (
-            <>
-              <Button
-                disabled={disabled || index === 0}
-                onClick={() => reorder(index, -1)}
-              >
-                Up
-              </Button>
-              <Button
-                disabled={disabled || index === uploaded.length - 1}
-                onClick={() => reorder(index, 1)}
-              >
-                Down
-              </Button>
-            </>
-          )}
-          <IconButton
-            aria-label={`Remove ${file.filename}`}
-            disabled={disabled}
-            onClick={() =>
-              setUploaded((items) =>
-                items.filter((value) => value.id !== file.id),
-              )
-            }
-          >
-            <DeleteOutlineIcon />
           </IconButton>
         </Stack>
       ))}
