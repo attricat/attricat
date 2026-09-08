@@ -375,6 +375,7 @@
     "agent": "Agent",
     "agentRunId": "Identyfikator uruchomienia agenta",
     "toolCallId": "Identyfikator wywołania narzędzia",
+    "applyFilters": "Zastosuj filtry",
     "timestamp": "Czas",
     "actor": "Wykonawca",
     "source": "Źródło",

@@ -2,7 +2,7 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import '../../i18n';
 import type { AuditEvent } from './api';
 import { listAuditEvents } from './api';
@@ -48,6 +48,10 @@ const renderPage = () => {
 };
 
 describe('AuditLogPage', () => {
+  beforeEach(() => {
+    vi.mocked(listAuditEvents).mockReset();
+  });
+
   it('opens event details with a labelled button by mouse and keyboard', async () => {
     vi.mocked(listAuditEvents).mockResolvedValue({
       events: [event],
@@ -77,5 +81,33 @@ describe('AuditLogPage', () => {
     expect(
       await screen.findByRole('heading', { name: 'Audit event' }),
     ).toBeTruthy();
+  });
+
+  it('waits to request text filters until they are applied', async () => {
+    vi.mocked(listAuditEvents).mockResolvedValue({
+      events: [],
+      limit: 50,
+      offset: 0,
+      total: 0,
+    });
+    const user = userEvent.setup();
+
+    renderPage();
+
+    await waitFor(() => expect(listAuditEvents).toHaveBeenCalledTimes(1));
+    await user.type(
+      screen.getByRole('textbox', { name: 'Action category' }),
+      'catalog',
+    );
+    expect(listAuditEvents).toHaveBeenCalledTimes(1);
+
+    await user.click(screen.getByRole('button', { name: 'Apply filters' }));
+    await waitFor(() =>
+      expect(listAuditEvents).toHaveBeenLastCalledWith({
+        action_category: 'catalog',
+        limit: 50,
+        offset: 0,
+      }),
+    );
   });
 });

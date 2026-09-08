@@ -50,17 +50,22 @@ export const AuditLogPage = () => {
     limit: pageSize,
     offset: 0,
   });
+  const [draftFilters, setDraftFilters] = useState<AuditEventFilters>(filters);
   const [selected, setSelected] = useState<AuditEvent>();
   const events = useQuery({
     queryKey: auditQueryKeys.events(filters),
     queryFn: () => listAuditEvents(filters),
   });
-  const update = (key: keyof AuditEventFilters, value: string) =>
-    setFilters((current) => ({
+  const updateDraft = (key: keyof AuditEventFilters, value: string) =>
+    setDraftFilters((current) => ({
       ...current,
       [key]: value || undefined,
-      offset: 0,
     }));
+  const applyFilters = () =>
+    setFilters({
+      ...draftFilters,
+      offset: 0,
+    });
   return (
     <PageContainer>
       <PageHeader
@@ -71,7 +76,7 @@ export const AuditLogPage = () => {
         <TextField
           label={t('audit.from')}
           onChange={(event) =>
-            update(
+            updateDraft(
               'occurred_after',
               event.target.value
                 ? new Date(event.target.value).toISOString()
@@ -84,7 +89,7 @@ export const AuditLogPage = () => {
         <TextField
           label={t('audit.to')}
           onChange={(event) =>
-            update(
+            updateDraft(
               'occurred_before',
               event.target.value
                 ? new Date(event.target.value).toISOString()
@@ -96,26 +101,28 @@ export const AuditLogPage = () => {
         />
         <TextField
           label={t('audit.actionCategory')}
-          onChange={(event) => update('action_category', event.target.value)}
+          onChange={(event) =>
+            updateDraft('action_category', event.target.value)
+          }
           placeholder="catalog"
           size="small"
         />
         <TextField
           label={t('audit.actorId')}
-          onChange={(event) => update('actor_user_id', event.target.value)}
+          onChange={(event) => updateDraft('actor_user_id', event.target.value)}
           size="small"
         />
         <TextField
           label={t('audit.targetType')}
-          onChange={(event) => update('target_type', event.target.value)}
+          onChange={(event) => updateDraft('target_type', event.target.value)}
           size="small"
         />
         <TextField
           label={t('audit.executor')}
-          onChange={(event) => update('executor_type', event.target.value)}
+          onChange={(event) => updateDraft('executor_type', event.target.value)}
           select
           size="small"
-          value={filters.executor_type ?? ''}
+          value={draftFilters.executor_type ?? ''}
         >
           <MenuItem value="">{t('audit.all')}</MenuItem>
           <MenuItem value="human">{t('audit.human')}</MenuItem>
@@ -123,14 +130,19 @@ export const AuditLogPage = () => {
         </TextField>
         <TextField
           label={t('audit.agentRunId')}
-          onChange={(event) => update('agent_run_id', event.target.value)}
+          onChange={(event) => updateDraft('agent_run_id', event.target.value)}
           size="small"
         />
         <TextField
           label={t('audit.toolCallId')}
-          onChange={(event) => update('agent_tool_call_id', event.target.value)}
+          onChange={(event) =>
+            updateDraft('agent_tool_call_id', event.target.value)
+          }
           size="small"
         />
+        <Button onClick={applyFilters} variant="contained">
+          {t('audit.applyFilters')}
+        </Button>
       </Box>
       {events.isError && <Alert severity="error">{events.error.message}</Alert>}
       <Paper variant="outlined">
