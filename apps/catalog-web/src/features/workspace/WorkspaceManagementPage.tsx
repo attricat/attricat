@@ -3,6 +3,7 @@ import { Link } from '@tanstack/react-router';
 import { Alert, Box, Button, Typography } from '@mui/material';
 import { useTranslation } from 'react-i18next';
 import { currentSession } from '../auth/api';
+import { authQueryKeys } from '../auth/query-keys';
 import { WorkspaceInvitationsSection } from './WorkspaceInvitationsSection';
 import { WorkspaceMembersSection } from './WorkspaceMembersSection';
 import { WorkspaceNavigationSection } from './WorkspaceNavigationSection';
@@ -45,7 +46,7 @@ export const WorkspaceManagementPage = ({
 }) => {
   const { t } = useTranslation();
   const session = useQuery({
-    queryKey: ['auth', 'session'],
+    queryKey: authQueryKeys.session(),
     queryFn: currentSession,
   });
   const capabilities = session.data?.capabilities;

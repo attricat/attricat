@@ -13,6 +13,7 @@ import {
 import { useQuery } from '@tanstack/react-query';
 import { useState, type ReactNode } from 'react';
 import { currentSession } from '../auth/api';
+import { authQueryKeys } from '../auth/query-keys';
 import { getApiHealth } from './api';
 import { inspectorQueryKeys } from './query-keys';
 
@@ -82,7 +83,7 @@ export const Inspector = () => {
         : API_HEALTH_POLL_INTERVAL_MS,
   });
   const session = useQuery({
-    queryKey: ['auth', 'session'],
+    queryKey: authQueryKeys.session(),
     queryFn: currentSession,
     retry: false,
   });

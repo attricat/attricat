@@ -6,6 +6,7 @@ import { type ReactNode, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { LanguageSwitcher } from '../../components/LanguageSwitcher';
 import { discoverWorkspace, login } from './api';
+import { authQueryKeys } from './query-keys';
 
 const devLoginDefaults = import.meta.env.DEV
   ? {
@@ -74,7 +75,9 @@ export const PasswordLoginPage = ({ identifier }: { identifier: string }) => {
     onSubmit: async ({ value }) => {
       try {
         await login(identifier, value.email, value.password);
-        await queryClient.invalidateQueries({ queryKey: ['auth', 'session'] });
+        await queryClient.invalidateQueries({
+          queryKey: authQueryKeys.session(),
+        });
         const returnTo = sessionStorage.getItem('catalog.return-to');
         sessionStorage.removeItem('catalog.return-to');
         await navigate({
