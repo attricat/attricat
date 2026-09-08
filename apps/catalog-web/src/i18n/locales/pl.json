@@ -10,6 +10,16 @@
     "dataManagement": "Zarządzanie danymi",
     "loading": "Ładowanie"
   },
+  "errors": {
+    "unexpectedTitle": "Coś poszło nie tak",
+    "unexpectedDescription": "Nie udało się wyświetlić tej strony. Spróbuj ponownie albo wróć do strony głównej katalogu.",
+    "notFoundTitle": "Nie znaleziono strony",
+    "notFoundDescription": "Żądana strona nie istnieje lub nie jest już dostępna.",
+    "queryTitle": "Nie udało się wczytać tych informacji",
+    "queryDescription": "Sprawdź połączenie i spróbuj ponownie.",
+    "retry": "Spróbuj ponownie",
+    "goHome": "Przejdź do strony głównej katalogu"
+  },
   "navigation": {
     "open": "Otwórz nawigację",
     "entityExplorer": "Przeglądarka encji",

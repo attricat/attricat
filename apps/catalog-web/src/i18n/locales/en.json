@@ -10,6 +10,16 @@
     "dataManagement": "Data management",
     "loading": "Loading"
   },
+  "errors": {
+    "unexpectedTitle": "Something went wrong",
+    "unexpectedDescription": "We couldn't display this page. Try again or return to the catalog home page.",
+    "notFoundTitle": "Page not found",
+    "notFoundDescription": "The page you requested doesn't exist or is no longer available.",
+    "queryTitle": "Unable to load this information",
+    "queryDescription": "Check your connection and try again.",
+    "retry": "Try again",
+    "goHome": "Go to catalog home"
+  },
   "navigation": {
     "open": "Open navigation",
     "entityExplorer": "Entity explorer",
