@@ -75,6 +75,9 @@ const RelationshipTreeFacetContent = ({
     new Map([['root', [null]]]),
   );
   const selected = new Set(selectedIds);
+  const contextId = contexts.find(
+    (context) => context.code === contextCode,
+  )?.id;
   const pages = [...cursors.entries()].flatMap(([parentKey, pageCursors]) =>
     pageCursors.map((cursor) => ({
       parentId: parentKey === 'root' ? undefined : parentKey,
@@ -103,15 +106,13 @@ const RelationshipTreeFacetContent = ({
             ...(query ? { query } : {}),
             source_relationship_field: sourceField,
             ...(hierarchyField ? { hierarchy_field: hierarchyField } : {}),
-            context_id: contexts.find(
-              (context) => context.code === contextCode,
-            )!.id,
+            context_id: contextId!,
             ...(parentId === undefined ? {} : { parent_id: parentId }),
             cursor,
           },
           signal,
         ),
-      enabled: Boolean(contextCode),
+      enabled: Boolean(contextId),
     })),
   });
   const byParent = new Map<string, RelationshipTreeFacetItem[]>();
