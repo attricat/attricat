@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { apiFetch } from '../auth/request';
+import { request } from '../../api/request';
 import {
   blueprintSchema,
   blueprintWithAttributesSchema,
@@ -8,29 +8,6 @@ import {
 } from './schemas';
 
 export type { Attribute, Blueprint, BlueprintWithAttributes } from './schemas';
-
-const request = async <T>(
-  path: string,
-  schema: z.ZodType<T>,
-  init?: RequestInit,
-): Promise<T> => {
-  const response = init ? await apiFetch(path, init) : await apiFetch(path);
-  if (!response.ok) {
-    const body = await response.json().catch(() => undefined);
-    const error = z
-      .object({ error: z.object({ code: z.string(), message: z.string() }) })
-      .safeParse(body);
-    throw new Error(
-      error.success
-        ? `${error.data.error.code}: ${error.data.error.message}`
-        : `Request failed (${response.status})`,
-    );
-  }
-  const result = schema.safeParse(await response.json());
-  if (!result.success)
-    throw new Error(`Invalid API response: ${z.prettifyError(result.error)}`);
-  return result.data;
-};
 
 export const listBlueprints = (): Promise<Blueprint[]> =>
   request('/api/blueprints/catalogue', z.array(blueprintSchema));

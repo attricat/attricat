@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { apiFetch } from '../auth/request';
+import { request, requestNoContent } from '../../api/request';
 
 const uuid = z.uuid();
 const scopeTypeSchema = z.enum([
@@ -52,7 +52,6 @@ const permissionSchema = z.object({
   description: z.string(),
 });
 const grantTargetSchema = z.object({ id: uuid, label: z.string() });
-const apiErrorSchema = z.object({ error: z.object({ message: z.string() }) });
 const exploreNavigationEntrySchema = z.object({
   blueprint_code: z.string().min(1),
   visible_to_role_codes: z.array(z.string()).default([]),
@@ -120,28 +119,6 @@ export const ensureActiveScopeTarget = (
   return parsed;
 };
 
-const request = async <T>(
-  path: string,
-  schema: z.ZodType<T>,
-  init?: RequestInit,
-) => {
-  const response = await apiFetch(path, init);
-  if (!response.ok) {
-    const parsed = apiErrorSchema.safeParse(
-      await response.json().catch(() => null),
-    );
-    throw new Error(
-      parsed.success
-        ? parsed.data.error.message
-        : `Request failed (${response.status})`,
-    );
-  }
-  return schema.parse(await response.json());
-};
-const noContent = async (path: string, init: RequestInit) => {
-  const response = await apiFetch(path, init);
-  if (!response.ok) throw new Error(`Request failed (${response.status})`);
-};
 const json = (method: string, value: unknown): RequestInit => ({
   method,
   headers: { 'Content-Type': 'application/json' },
@@ -151,7 +128,10 @@ const json = (method: string, value: unknown): RequestInit => ({
 export const listMembers = () =>
   request('/api/workspace/members', z.array(memberSchema));
 export const setMemberState = (id: string, state: 'active' | 'inactive') =>
-  noContent(`/api/workspace/members/${uuid.parse(id)}`, json('PUT', { state }));
+  requestNoContent(
+    `/api/workspace/members/${uuid.parse(id)}`,
+    json('PUT', { state }),
+  );
 export const grantMemberRole = (memberId: string, input: GrantInput) =>
   request(
     `/api/workspace/members/${uuid.parse(memberId)}/grants`,
@@ -159,14 +139,17 @@ export const grantMemberRole = (memberId: string, input: GrantInput) =>
     json('POST', grantInputSchema.parse(input)),
   );
 export const revokeMemberRole = (memberId: string, grantId: string) =>
-  noContent(
+  requestNoContent(
     `/api/workspace/members/${uuid.parse(memberId)}/grants/${uuid.parse(grantId)}`,
     { method: 'DELETE' },
   );
 export const transferOwnership = (id: string) =>
-  noContent(`/api/workspace/members/${uuid.parse(id)}/transfer-ownership`, {
-    method: 'POST',
-  });
+  requestNoContent(
+    `/api/workspace/members/${uuid.parse(id)}/transfer-ownership`,
+    {
+      method: 'POST',
+    },
+  );
 
 const createdUserSchema = z.object({
   user_id: uuid,
@@ -206,7 +189,7 @@ export const createInvitation = (
     json('POST', invitationInputSchema.parse(input)),
   );
 export const revokeInvitation = (id: string) =>
-  noContent(`/api/workspace/invitations/${uuid.parse(id)}`, {
+  requestNoContent(`/api/workspace/invitations/${uuid.parse(id)}`, {
     method: 'DELETE',
   });
 export const acceptInvitation = (secret: string) =>
@@ -228,7 +211,7 @@ export const listSidebarExploreNavigation = () =>
 export const updateExploreNavigation = (
   explore_navigation: z.input<typeof exploreNavigationEntrySchema>[],
 ) =>
-  noContent(
+  requestNoContent(
     '/api/workspace/navigation',
     json('PUT', {
       explore_navigation: z
@@ -257,7 +240,7 @@ export const updateRole = (
   id: string,
   input: z.input<typeof roleInputSchema>,
 ) =>
-  noContent(
+  requestNoContent(
     `/api/workspace/roles/${uuid.parse(id)}`,
     json('PUT', roleInputSchema.parse(input)),
   );
@@ -273,7 +256,7 @@ export const duplicateRole = (id: string, code: string) =>
     }),
   );
 export const retireRole = (id: string, replacement_role_id?: string) =>
-  noContent(
+  requestNoContent(
     `/api/workspace/roles/${uuid.parse(id)}/retire`,
     json('POST', {
       ...(replacement_role_id
