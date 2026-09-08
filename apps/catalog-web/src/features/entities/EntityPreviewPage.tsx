@@ -22,6 +22,7 @@ import { createElement, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { PageContainer } from '../../components/PageContainer';
 import { PageHeader } from '../../components/PageHeader';
+import { QueryErrorNotice } from '../../components/QueryErrorNotice';
 import { EntityContextPicker } from './components/EntityContextPicker';
 import { EntitySchemaSubheader } from './components/EntitySchemaSubheader';
 import { EntityToolbar } from './components/EntityToolbar';
@@ -202,6 +203,11 @@ export const EntityPreviewPage = ({ entityId }: { entityId: string }) => {
       {contexts.isPending && (
         <Typography sx={{ py: 3 }}>{t('entities.loadingContexts')}</Typography>
       )}
+      <QueryErrorNotice
+        error={contexts.error}
+        isRetrying={contexts.isFetching}
+        onRetry={() => void contexts.refetch()}
+      />
       {contexts.data && (
         <>
           {resolved.isPending && (
