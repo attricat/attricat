@@ -36,6 +36,8 @@
     "forgotPassword": "Nie pamiętasz hasła?",
     "workspaceNotFound": "Nie udało się znaleźć obszaru roboczego",
     "loginFailed": "Nie udało się zalogować",
+    "sessionCheckFailed": "Nie udało się przywrócić sesji. Sprawdź połączenie i spróbuj ponownie.",
+    "retrySession": "Spróbuj ponownie",
     "resetPassword": "Zresetuj hasło",
     "resetPasswordPrompt": "Wpisz adres e-mail, aby otrzymać link do zresetowania hasła.",
     "resetPasswordSent": "Jeśli konto z tym adresem e-mail istnieje, wysłano link do zresetowania hasła.",

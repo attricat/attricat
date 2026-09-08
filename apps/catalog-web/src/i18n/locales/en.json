@@ -36,6 +36,8 @@
     "forgotPassword": "Forgot password?",
     "workspaceNotFound": "Unable to find workspace",
     "loginFailed": "Unable to sign in",
+    "sessionCheckFailed": "We couldn't restore your session. Check your connection and try again.",
+    "retrySession": "Retry",
     "resetPassword": "Reset your password",
     "resetPasswordPrompt": "Enter your email address to receive a password reset link.",
     "resetPasswordSent": "If an eligible account uses that email address, a reset link has been sent.",
