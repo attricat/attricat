@@ -417,6 +417,7 @@
   },
   "files": {
     "thumbnailProcessing": "Thumbnail is processing",
+    "thumbnailUnavailable": "Thumbnail unavailable",
     "failed": "Failed",
     "unavailable": "Unavailable"
   },

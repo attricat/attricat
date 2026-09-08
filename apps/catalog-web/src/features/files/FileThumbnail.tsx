@@ -1,6 +1,6 @@
 import { Box, CircularProgress, Typography } from '@mui/material';
 import { useQuery } from '@tanstack/react-query';
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { fileDownloadUrl, getFileMetadata } from './api';
 import { fileQueryKeys } from './query-keys';
@@ -17,8 +17,9 @@ type ThumbnailPreviewProps = {
 
 const pollingStatuses = new Set(['uploading', 'queued', 'processing']);
 const thumbnailPollInterval = 1_000;
+const maxThumbnailRetries = 3;
 
-const ThumbnailPreview = ({
+const ThumbnailPreviewContent = ({
   filename,
   size,
   source,
@@ -27,17 +28,37 @@ const ThumbnailPreview = ({
   const { t } = useTranslation();
   const [loaded, setLoaded] = useState(false);
   const [attempt, setAttempt] = useState(0);
+  const [retryExhausted, setRetryExhausted] = useState(false);
+  const retryTimer = useRef<number | undefined>(undefined);
+  const isUnavailable = unavailable || retryExhausted;
+
+  useEffect(
+    () => () => {
+      if (retryTimer.current !== undefined) {
+        window.clearTimeout(retryTimer.current);
+        retryTimer.current = undefined;
+      }
+    },
+    [],
+  );
 
   const retry = () => {
-    window.setTimeout(
-      () => setAttempt((value) => value + 1),
-      thumbnailPollInterval,
-    );
+    if (retryTimer.current !== undefined || retryExhausted) return;
+
+    if (attempt >= maxThumbnailRetries) {
+      setRetryExhausted(true);
+      return;
+    }
+
+    retryTimer.current = window.setTimeout(() => {
+      retryTimer.current = undefined;
+      setAttempt((value) => value + 1);
+    }, thumbnailPollInterval);
   };
 
   return (
     <Box
-      aria-busy={!loaded && !unavailable}
+      aria-busy={!loaded && !isUnavailable}
       aria-label={`Thumbnail for ${filename}`}
       role="img"
       sx={{
@@ -77,9 +98,9 @@ const ThumbnailPreview = ({
             width: '100%',
           }}
         >
-          {unavailable ? (
+          {isUnavailable ? (
             <Typography color="text.secondary" variant="caption">
-              {t('files.unavailable')}
+              {t('files.thumbnailUnavailable')}
             </Typography>
           ) : (
             <CircularProgress
@@ -92,6 +113,10 @@ const ThumbnailPreview = ({
     </Box>
   );
 };
+
+export const ThumbnailPreview = (props: ThumbnailPreviewProps) => (
+  <ThumbnailPreviewContent key={props.source ?? 'none'} {...props} />
+);
 
 export const FileThumbnail = ({
   file,
@@ -123,7 +148,6 @@ export const FileThumbnail = ({
   return (
     <ThumbnailPreview
       filename={file.filename}
-      key={source ?? currentFile?.status ?? 'loading'}
       size={size}
       source={source}
       unavailable={unavailable}
