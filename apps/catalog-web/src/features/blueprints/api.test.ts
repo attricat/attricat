@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { ApiRequestError } from '../../api/request';
 import {
   createBlueprint,
   createBlueprintRevision,
@@ -81,7 +82,7 @@ describe('blueprint API client', () => {
     );
   });
 
-  it('preserves the API validation message for editor feedback', async () => {
+  it('preserves structured validation errors for editor feedback', async () => {
     fetchMock.mockResolvedValue({
       json: () =>
         Promise.resolve({
@@ -94,8 +95,11 @@ describe('blueprint API client', () => {
       status: 422,
     });
 
-    await expect(createBlueprint('not valid TOML')).rejects.toThrow(
-      'invalid_blueprint_definition: blueprints must define at least one attribute',
-    );
+    await expect(createBlueprint('not valid TOML')).rejects.toMatchObject({
+      name: 'ApiRequestError',
+      status: 422,
+      code: 'invalid_blueprint_definition',
+      message: 'blueprints must define at least one attribute',
+    } satisfies Partial<ApiRequestError>);
   });
 });

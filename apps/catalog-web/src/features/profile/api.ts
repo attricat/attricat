@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { apiFetch } from '../auth/request';
+import { request, requestNoContent } from '../../api/request';
 
 const uuid = z.uuid();
 const tokenSchema = z.object({
@@ -15,7 +15,6 @@ const permissionSchema = z.object({
   code: z.string(),
   description: z.string(),
 });
-const apiErrorSchema = z.object({ error: z.object({ message: z.string() }) });
 const permissionCodesSchema = z
   .array(z.string())
   .refine(
@@ -28,25 +27,6 @@ const tokenInputSchema = z.object({
   permissions: permissionCodesSchema,
   expires_at: z.string().datetime({ offset: true }).optional(),
 });
-
-const request = async <T>(
-  path: string,
-  schema: z.ZodType<T>,
-  init?: RequestInit,
-) => {
-  const response = await apiFetch(path, init);
-  if (!response.ok) {
-    const parsed = apiErrorSchema.safeParse(
-      await response.json().catch(() => null),
-    );
-    throw new Error(
-      parsed.success
-        ? parsed.data.error.message
-        : `Request failed (${response.status})`,
-    );
-  }
-  return schema.parse(await response.json());
-};
 
 const json = (method: string, value: unknown): RequestInit => ({
   method,
@@ -69,12 +49,7 @@ export const createToken = (input: z.input<typeof tokenInputSchema>) => {
     json('POST', parsed),
   );
 };
-export const revokeToken = async (id: string) => {
-  const response = await apiFetch(
-    `/api/personal-access-tokens/${uuid.parse(id)}`,
-    {
-      method: 'DELETE',
-    },
-  );
-  if (!response.ok) throw new Error(`Request failed (${response.status})`);
-};
+export const revokeToken = (id: string) =>
+  requestNoContent(`/api/personal-access-tokens/${uuid.parse(id)}`, {
+    method: 'DELETE',
+  });

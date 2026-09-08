@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { ApiRequestError } from '../../api/request';
 import { createToken, listTokens, revokeToken } from './api';
 
 const id = '123e4567-e89b-12d3-a456-426614174000';
@@ -42,6 +43,29 @@ describe('profile API client', () => {
     expect(fetchMock.mock.calls[2]?.[0]).toBe(
       `/api/personal-access-tokens/${id}`,
     );
+  });
+
+  it('uses typed errors and accepts empty token revocation responses', async () => {
+    const json = vi.fn();
+    fetchMock.mockResolvedValueOnce({ ok: true, status: 204, json });
+
+    await expect(revokeToken(id)).resolves.toBeUndefined();
+    expect(json).not.toHaveBeenCalled();
+
+    fetchMock.mockResolvedValueOnce({
+      ok: false,
+      status: 409,
+      json: () =>
+        Promise.resolve({
+          error: { code: 'token_already_revoked', message: 'Token is revoked' },
+        }),
+    });
+    await expect(revokeToken(id)).rejects.toMatchObject({
+      name: 'ApiRequestError',
+      status: 409,
+      code: 'token_already_revoked',
+      message: 'Token is revoked',
+    } satisfies Partial<ApiRequestError>);
   });
 
   it('validates token input before submitting it', () => {
