@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useQuery } from '@tanstack/react-query';
+import { Link } from '@tanstack/react-router';
 import {
   Alert,
   Box,
@@ -230,7 +231,11 @@ const EventDrawer = ({
               })}
             </Typography>
             {event.agent_conversation_id && (
-              <Button href={`/agents/${event.agent_conversation_id}`}>
+              <Button
+                component={Link}
+                params={{ conversationId: event.agent_conversation_id }}
+                to="/agents/$conversationId"
+              >
                 {t('audit.openConversation')}
               </Button>
             )}
