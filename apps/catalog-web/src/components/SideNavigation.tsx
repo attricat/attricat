@@ -164,24 +164,22 @@ export const SideNavigation = ({
           />
         </Box>
         {pinnedExplore.data?.map((item) => (
-          <Link
+          <ListItemButton
+            component={Link}
             key={item.blueprint_code}
             onClick={onNavigate}
             search={{ blueprint: item.blueprint_code, locked: true }}
+            selected={
+              pathname === '/' && search.blueprint === item.blueprint_code
+            }
             style={{ color: 'inherit', textDecoration: 'none' }}
             to="/"
           >
-            <ListItemButton
-              selected={
-                pathname === '/' && search.blueprint === item.blueprint_code
-              }
-            >
-              <ListItemIcon>
-                <TravelExploreOutlinedIcon />
-              </ListItemIcon>
-              <ListItemText primary={item.blueprint_name} />
-            </ListItemButton>
-          </Link>
+            <ListItemIcon>
+              <TravelExploreOutlinedIcon />
+            </ListItemIcon>
+            <ListItemText primary={item.blueprint_name} />
+          </ListItemButton>
         ))}
         <ExtensionOutlet outlet="navigation" />
         <ListItemButton
