@@ -1,5 +1,7 @@
 import type { AuditEventFilters } from './api';
 
 export const auditQueryKeys = {
-  events: (filters: AuditEventFilters) => ['audit-events', filters] as const,
+  all: () => ['audit-events'] as const,
+  events: (filters: AuditEventFilters) =>
+    [...auditQueryKeys.all(), filters] as const,
 } as const;

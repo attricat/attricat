@@ -61,9 +61,7 @@ export const EditEntityPage = ({ entityId }: { entityId: string }) => {
   const defaultContextId =
     contexts.data?.find((context) => context.code === 'default')?.id ?? null;
   const resolvedPreview = useQuery({
-    queryKey: contextId
-      ? entityQueryKeys.resolvedPreview(entityId, contextId)
-      : ['entity-resolved-preview'],
+    queryKey: entityQueryKeys.resolvedPreview(entityId, contextId ?? undefined),
     queryFn: () => getResolvedEntityPreview(entityId, contextId!),
     enabled: contextId !== null,
   });
