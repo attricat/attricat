@@ -376,6 +376,7 @@
     "noMatches": "No activity matches these filters.",
     "showing": "Showing {{from}}-{{to}} of {{total}}",
     "event": "Audit event",
+    "viewEvent": "View details for {{action}} by {{actor}}",
     "eventBy": "{{action}} by {{actor}} at {{date}}",
     "openConversation": "Open agent conversation",
     "authorizationScope": "Authorization scope",
@@ -424,6 +425,7 @@
   },
   "files": {
     "thumbnailProcessing": "Thumbnail is processing",
+    "thumbnailUnavailable": "Thumbnail unavailable",
     "failed": "Failed",
     "unavailable": "Unavailable",
     "uploadFailed": "Upload failed",
@@ -433,10 +435,7 @@
     "uploadCount_other": "Upload {{count}} files",
     "retryFile": "Retry {{filename}}",
     "ready": "Ready",
-    "downloadFile": "Download {{filename}}",
-    "moveUp": "Up",
-    "moveDown": "Down",
-    "removeFile": "Remove {{filename}}"
+    "downloadFile": "Download {{filename}}"
   },
   "extensions": {
     "title": "Extensions",

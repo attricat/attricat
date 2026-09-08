@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useQuery } from '@tanstack/react-query';
+import { Link } from '@tanstack/react-router';
 import {
   Alert,
   Box,
@@ -146,13 +147,20 @@ export const AuditLogPage = () => {
           </TableHead>
           <TableBody>
             {events.data?.events.map((event) => (
-              <TableRow
-                hover
-                key={event.id}
-                onClick={() => setSelected(event)}
-                sx={{ cursor: 'pointer' }}
-              >
-                <TableCell>{formatDate(event.occurred_at)}</TableCell>
+              <TableRow hover key={event.id}>
+                <TableCell>
+                  <Button
+                    aria-label={t('audit.viewEvent', {
+                      action: event.action,
+                      actor: actor(event),
+                    })}
+                    onClick={() => setSelected(event)}
+                    size="small"
+                    variant="text"
+                  >
+                    {formatDate(event.occurred_at)}
+                  </Button>
+                </TableCell>
                 <TableCell>{actor(event)}</TableCell>
                 <TableCell>
                   <Chip
@@ -217,9 +225,20 @@ const EventDrawer = ({
 }) => {
   const { t } = useTranslation();
   return (
-    <Drawer anchor="right" onClose={onClose} open={Boolean(event)}>
+    <Drawer
+      anchor="right"
+      aria-labelledby={event ? `audit-event-${event.id}` : undefined}
+      onClose={onClose}
+      open={Boolean(event)}
+    >
       <Box sx={{ p: 3, width: { xs: '100vw', sm: 480 } }}>
-        <Typography variant="h6">{t('audit.event')}</Typography>
+        <Typography
+          component="h2"
+          id={event ? `audit-event-${event.id}` : undefined}
+          variant="h6"
+        >
+          {t('audit.event')}
+        </Typography>
         {event && (
           <Box sx={{ display: 'grid', gap: 2, mt: 2 }}>
             <Typography>
@@ -230,7 +249,11 @@ const EventDrawer = ({
               })}
             </Typography>
             {event.agent_conversation_id && (
-              <Button href={`/agents/${event.agent_conversation_id}`}>
+              <Button
+                component={Link}
+                params={{ conversationId: event.agent_conversation_id }}
+                to="/agents/$conversationId"
+              >
                 {t('audit.openConversation')}
               </Button>
             )}

@@ -19,7 +19,7 @@ import {
   TextField,
   Typography,
 } from '@mui/material';
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
   createRole,
@@ -202,6 +202,7 @@ const RoleActionDialog = ({
   onSuccess: () => void;
 }) => {
   const { t } = useTranslation();
+  const initialFocusRef = useRef<HTMLInputElement>(null);
   const isRetiring = action.type === 'retire';
   const mutation = useMutation({
     mutationFn: async (value: { code: string; replacementRoleId: string }) => {
@@ -249,6 +250,11 @@ const RoleActionDialog = ({
         if (!mutation.isPending && reason !== 'backdropClick') onClose();
       }}
       open
+      slotProps={{
+        transition: {
+          onEntered: () => initialFocusRef.current?.focus(),
+        },
+      }}
     >
       <Box
         component="form"
@@ -276,12 +282,12 @@ const RoleActionDialog = ({
             >
               {(field) => (
                 <TextField
-                  autoFocus
                   error={field.state.meta.errors.length > 0}
                   fullWidth
                   helperText={
                     field.state.meta.errors[0] ?? t('workspace.replacementRole')
                   }
+                  inputRef={initialFocusRef}
                   label={t('workspace.replacementRoleLabel')}
                   margin="dense"
                   onBlur={field.handleBlur}
@@ -300,10 +306,10 @@ const RoleActionDialog = ({
             >
               {(field) => (
                 <TextField
-                  autoFocus
                   error={field.state.meta.errors.length > 0}
                   fullWidth
                   helperText={field.state.meta.errors[0]}
+                  inputRef={initialFocusRef}
                   label={t(
                     action.type === 'rename'
                       ? 'workspace.roleCode'
