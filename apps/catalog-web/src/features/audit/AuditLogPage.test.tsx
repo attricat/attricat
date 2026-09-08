@@ -3,7 +3,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import '../../i18n';
+import i18n from '../../i18n';
 import type { AuditEvent } from './api';
 import { listAuditEvents } from './api';
 import { AuditLogPage } from './AuditLogPage';
@@ -53,6 +53,7 @@ describe('AuditLogPage', () => {
   });
 
   it('opens event details with a labelled button by mouse and keyboard', async () => {
+    await i18n.changeLanguage('en');
     vi.mocked(listAuditEvents).mockResolvedValue({
       events: [event],
       limit: 50,
@@ -109,5 +110,58 @@ describe('AuditLogPage', () => {
         offset: 0,
       }),
     );
+  });
+
+  it('uses the resolved locale for dates and translates Polish fallback labels', async () => {
+    await i18n.changeLanguage('pl');
+    vi.mocked(listAuditEvents).mockResolvedValue({
+      events: [
+        {
+          ...event,
+          actor_display_name: null,
+          actor_email: null,
+          actor_user_id: null,
+          target: {},
+        },
+      ],
+      limit: 50,
+      offset: 0,
+      total: 1,
+    });
+
+    renderPage();
+
+    const expectedDate = new Intl.DateTimeFormat('pl', {
+      dateStyle: 'medium',
+      timeStyle: 'medium',
+    }).format(new Date(event.occurred_at));
+    expect(await screen.findByText(expectedDate)).toBeTruthy();
+    expect(screen.getByText('Obszar roboczy')).toBeTruthy();
+    expect(screen.getByText('System')).toBeTruthy();
+
+    await i18n.changeLanguage('en');
+  });
+
+  it('translates fallback labels in English', async () => {
+    await i18n.changeLanguage('en');
+    vi.mocked(listAuditEvents).mockResolvedValue({
+      events: [
+        {
+          ...event,
+          actor_display_name: null,
+          actor_email: null,
+          actor_user_id: null,
+          target: {},
+        },
+      ],
+      limit: 50,
+      offset: 0,
+      total: 1,
+    });
+
+    renderPage();
+
+    expect(await screen.findByText('System')).toBeTruthy();
+    expect(screen.getByText('Workspace')).toBeTruthy();
   });
 });
