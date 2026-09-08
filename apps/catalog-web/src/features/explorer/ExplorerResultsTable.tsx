@@ -34,17 +34,6 @@ import { displayLabel } from '../entities/entity-display';
 import { AttributeValue } from '../views/components/values/AttributeValue';
 import { ExtensionPopoverOutlet } from '../extensions/ExtensionOutlet';
 
-const matchSummary = (entity: EntityItem) =>
-  entity.match_explanations
-    .map((explanation) =>
-      explanation.traversal_depth
-        ? `${explanation.term} via ${explanation.traversal_depth} relationship${explanation.traversal_depth === 1 ? '' : 's'}`
-        : explanation.matching_attribute_code
-          ? `${explanation.term} in ${explanation.matching_attribute_code}`
-          : explanation.term,
-    )
-    .join('; ');
-
 const EntityActionsMenu = ({
   blueprintId,
   entity,
@@ -56,6 +45,21 @@ const EntityActionsMenu = ({
   const [anchor, setAnchor] = useState<HTMLElement | null>(null);
   const [searchInfoOpen, setSearchInfoOpen] = useState(false);
   const label = t('explorer.entityActionsFor', { entityId: entity.id });
+  const matchSummary = entity.match_explanations
+    .map((explanation) =>
+      explanation.traversal_depth
+        ? t('explorer.matchViaRelationship', {
+            count: explanation.traversal_depth,
+            term: explanation.term,
+          })
+        : explanation.matching_attribute_code
+          ? t('explorer.matchInAttribute', {
+              attribute: explanation.matching_attribute_code,
+              term: explanation.term,
+            })
+          : explanation.term,
+    )
+    .join('; ');
   return (
     <>
       <IconButton
@@ -76,7 +80,7 @@ const EntityActionsMenu = ({
             setSearchInfoOpen(true);
           }}
         >
-          Search info
+          {t('explorer.searchInfo')}
         </MenuItem>
         <ExtensionPopoverOutlet
           context={{
@@ -93,7 +97,7 @@ const EntityActionsMenu = ({
         <DialogTitle>{t('explorer.searchInfo')}</DialogTitle>
         <DialogContent>
           <Typography>
-            {matchSummary(entity) || t('explorer.noSearchDetails')}
+            {matchSummary || t('explorer.noSearchDetails')}
           </Typography>
         </DialogContent>
       </Dialog>
@@ -211,8 +215,7 @@ export const ExplorerResultsTable = ({
   return (
     <Paper component="section">
       <Typography sx={{ borderBottom: 1, borderColor: 'divider', p: 2 }}>
-        {items.length} result
-        {items.length === 1 ? '' : 's'}
+        {t('explorer.resultCount', { count: items.length })}
       </Typography>
       <TableContainer
         aria-label={t('explorer.results')}
@@ -317,7 +320,9 @@ export const ExplorerResultsTable = ({
         </Table>
       </TableContainer>
       {items.length === 0 && (
-        <Typography sx={{ p: 2 }}>No entities matched this search.</Typography>
+        <Typography sx={{ p: 2 }}>
+          {t('explorer.noMatchingEntities')}
+        </Typography>
       )}
     </Paper>
   );

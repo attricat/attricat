@@ -166,7 +166,8 @@
     "relationshipIntegrity": "Relationship integrity",
     "source": "Source",
     "attribute": "Attribute",
-    "activeEdges": "Active edges"
+    "activeEdges": "Active edges",
+    "never": "Never"
   },
   "entities": {
     "createEntity": "Create entity",
@@ -344,7 +345,13 @@
     "display": "Display",
     "schema": "Schema",
     "outdated": "Outdated",
-    "current": "Current"
+    "current": "Current",
+    "resultCount_one": "{{count}} result",
+    "resultCount_other": "{{count}} results",
+    "noMatchingEntities": "No entities matched this search.",
+    "matchViaRelationship_one": "{{term}} via {{count}} relationship",
+    "matchViaRelationship_other": "{{term}} via {{count}} relationships",
+    "matchInAttribute": "{{term}} in {{attribute}}"
   },
   "audit": {
     "title": "Activity / Audit log",
@@ -420,7 +427,15 @@
     "thumbnailProcessing": "Thumbnail is processing",
     "thumbnailUnavailable": "Thumbnail unavailable",
     "failed": "Failed",
-    "unavailable": "Unavailable"
+    "unavailable": "Unavailable",
+    "uploadFailed": "Upload failed",
+    "saveEntityBeforeUploading": "Save the entity before uploading files.",
+    "chooseOrDropFiles": "Choose or drop files",
+    "uploadCount_one": "Upload {{count}} file",
+    "uploadCount_other": "Upload {{count}} files",
+    "retryFile": "Retry {{filename}}",
+    "ready": "Ready",
+    "downloadFile": "Download {{filename}}"
   },
   "extensions": {
     "title": "Extensions",

@@ -40,13 +40,7 @@ import {
   defaultStaleAfterDays,
 } from './constants';
 import type { DataHealthSearch } from './schemas';
-
-const formatDate = (value: string | null) =>
-  value
-    ? new Intl.DateTimeFormat(undefined, { dateStyle: 'medium' }).format(
-        new Date(value),
-      )
-    : 'Never';
+import { formatDataHealthDate } from './date-format';
 
 const formatBytes = (bytes: number) => {
   if (bytes < bytesPerKilobyte) return `${bytes} B`;
@@ -62,7 +56,7 @@ const SectionError = ({ error }: { error: Error | null }) =>
   error ? <Alert severity="error">{error.message}</Alert> : null;
 
 export const DataHealthPage = ({ search }: { search: DataHealthSearch }) => {
-  const { t } = useTranslation();
+  const { i18n, t } = useTranslation();
   const staleAfterDays = search.staleAfterDays ?? defaultStaleAfterDays;
   const navigate = useNavigate({ from: '/manage/data-health' });
   const queryClient = useQueryClient();
@@ -222,7 +216,13 @@ export const DataHealthPage = ({ search }: { search: DataHealthSearch }) => {
                 <TableCell>{blueprint.active_entities}</TableCell>
                 <TableCell>{blueprint.outdated_entities}</TableCell>
                 <TableCell>{blueprint.stale_entities}</TableCell>
-                <TableCell>{formatDate(blueprint.oldest_updated_at)}</TableCell>
+                <TableCell>
+                  {formatDataHealthDate(
+                    blueprint.oldest_updated_at,
+                    i18n.resolvedLanguage ?? i18n.language,
+                    t('dataHealth.never'),
+                  )}
+                </TableCell>
               </TableRow>
             ))}
           </TableBody>
