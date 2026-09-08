@@ -1,6 +1,6 @@
 import AttachFileOutlinedIcon from '@mui/icons-material/AttachFileOutlined';
 import ArrowUpwardIcon from '@mui/icons-material/ArrowUpward';
-import { useEffect, useRef, useState } from 'react';
+import { useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useMutation } from '@tanstack/react-query';
 import {
@@ -50,16 +50,15 @@ export const ConversationComposer = ({
       }
       return sendMessage(conversationId, content, attachmentIds);
     },
+    onMutate: () => onSendingChange(true),
     onSuccess: () => {
       setContent('');
       setAttachments([]);
       setUploadedAttachmentIds([]);
       onSent();
     },
+    onSettled: () => onSendingChange(false),
   });
-  useEffect(() => {
-    onSendingChange(send.isPending);
-  }, [onSendingChange, send.isPending]);
 
   const submitMessage = () => {
     if ((content.trim() || attachments.length) && !send.isPending) {
