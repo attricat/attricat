@@ -74,7 +74,7 @@ type Props = {
  */
 export const ExtensionOutlet = ({ outlet, context }: Props) => {
   const runtime = useQuery({
-    queryKey: extensionQueryKeys.runtime,
+    queryKey: extensionQueryKeys.runtime(),
     queryFn: getExtensionRuntime,
     // Runtime state can change outside this browser (safe mode, quarantine, or
     // grant revocation). Polling makes mounted frames unmount promptly; every
@@ -133,7 +133,7 @@ export const ExtensionPopoverOutlet = ({
   );
   const contextKey = JSON.stringify(context);
   const runtime = useQuery({
-    queryKey: extensionQueryKeys.runtime,
+    queryKey: extensionQueryKeys.runtime(),
     queryFn: getExtensionRuntime,
     refetchInterval: 15_000,
     retry: false,
@@ -199,7 +199,7 @@ export const ExtensionRoutePage = ({
   contributionId: string;
 }) => {
   const runtime = useQuery({
-    queryKey: extensionQueryKeys.runtime,
+    queryKey: extensionQueryKeys.runtime(),
     queryFn: getExtensionRuntime,
     refetchInterval: 15_000,
     retry: false,

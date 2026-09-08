@@ -3,7 +3,7 @@ import { useNavigate } from '@tanstack/react-router';
 import { useEffect, useRef, useState } from 'react';
 import { z } from 'zod';
 import { toast } from '../../components/toast';
-import { apiFetch } from '../auth/request';
+import { apiFetch } from '../../api/fetch';
 import {
   defaultExtensionFrameHeight,
   extensionStartTimeout,

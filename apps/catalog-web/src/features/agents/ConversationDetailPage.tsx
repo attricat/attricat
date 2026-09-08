@@ -56,7 +56,7 @@ export const ConversationDetailPage = ({
     refetchInterval: 10_000,
   });
   const invalidate = () =>
-    void queryClient.invalidateQueries({ queryKey: agentQueryKeys.all });
+    void queryClient.invalidateQueries({ queryKey: agentQueryKeys.all() });
   const decide = useMutation({
     mutationFn: ({ id, approved }: { id: string; approved: boolean }) =>
       decideApproval(id, approved),

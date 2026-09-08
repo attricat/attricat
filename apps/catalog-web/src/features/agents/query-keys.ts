@@ -1,5 +1,5 @@
 export const agentQueryKeys = {
-  all: ['agents'] as const,
+  all: () => ['agents'] as const,
   conversations: () => ['agents', 'conversations'] as const,
   conversation: (id: string) => ['agents', 'conversations', id] as const,
   messages: (id: string) =>

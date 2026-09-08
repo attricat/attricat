@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import { apiRequestError, request } from '../../api/request';
-import { csrfToken } from '../auth/request';
+import { csrfToken } from '../../api/fetch';
 import {
   conversationUploadResultSchema,
   fileMetadataSchema,

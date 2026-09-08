@@ -30,7 +30,7 @@ export const useConversationLiveUpdates = (runs: AgentRun[] | undefined) => {
           const update = () => {
             setStreamError(null);
             void queryClient.invalidateQueries({
-              queryKey: agentQueryKeys.all,
+              queryKey: agentQueryKeys.all(),
             });
           };
 

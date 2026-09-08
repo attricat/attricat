@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { apiFetch } from '../features/auth/request';
+import { apiFetch } from './fetch';
 
 export const apiErrorSchema = z.object({
   error: z.object({ code: z.string(), message: z.string() }),

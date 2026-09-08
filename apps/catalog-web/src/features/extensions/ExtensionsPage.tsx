@@ -49,7 +49,7 @@ const invalidate = (
   extensionId?: string,
 ) => {
   void client.invalidateQueries({ queryKey: extensionManagementQueryKeys.all });
-  void client.invalidateQueries({ queryKey: extensionQueryKeys.runtime });
+  void client.invalidateQueries({ queryKey: extensionQueryKeys.runtime() });
   if (extensionId)
     void client.invalidateQueries({
       queryKey: extensionManagementQueryKeys.detail(extensionId),

@@ -55,7 +55,7 @@ export const NewConversationPage = () => {
       return id;
     },
     onSuccess: async (id) => {
-      await queryClient.invalidateQueries({ queryKey: agentQueryKeys.all });
+      await queryClient.invalidateQueries({ queryKey: agentQueryKeys.all() });
       await navigate({
         to: '/agents/$conversationId',
         params: { conversationId: id },

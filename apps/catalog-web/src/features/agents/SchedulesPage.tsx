@@ -55,7 +55,7 @@ export const SchedulesPage = () => {
     refetchInterval: 15_000,
   });
   const invalidate = () =>
-    void queryClient.invalidateQueries({ queryKey: agentQueryKeys.all });
+    void queryClient.invalidateQueries({ queryKey: agentQueryKeys.all() });
   const create = useMutation({
     mutationFn: () => createSchedule(conversationId, cron),
     onSuccess: invalidate,

@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { apiFetch } from './request';
+import { apiFetch } from '../../api/fetch';
 
 const sessionSchema = z.object({
   user_id: z.uuid(),

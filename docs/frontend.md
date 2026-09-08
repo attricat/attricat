@@ -11,7 +11,7 @@ These conventions apply to `apps/catalog-web`.
 
 ## Data Fetching
 
-- Keep API request functions and response schemas in each feature's `api.ts`.
+- Keep API request functions in each feature's `api.ts` and their Zod request/response schemas in that feature's `schemas.ts`.
 - Define TanStack Query key factories in a feature-local `query-keys.ts` file.
 - Use those factories for every `queryKey` so equivalent requests share the same
   cache entry and invalidation can reuse the same key definitions.

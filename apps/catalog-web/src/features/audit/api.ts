@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { apiFetch } from '../auth/request';
+import { apiFetch } from '../../api/fetch';
 
 const auditEventSchema = z.object({
   id: z.uuid(),
