@@ -6,8 +6,8 @@ export const entityQueryKeys = {
   blueprintByCode: (code: string | undefined, version: number | undefined) =>
     ['blueprint-by-code', code, version] as const,
   currentBlueprint: (id: string) => ['current-blueprint', id] as const,
-  relationshipTargets: (blueprint: string | null | undefined) =>
-    ['relationship-targets', blueprint] as const,
+  relationshipTargets: (blueprint: string | null | undefined, query: string) =>
+    ['relationship-targets', blueprint, query] as const,
   form: (entityId: string) => ['entity-form', entityId] as const,
   changes: (entityId: string) => ['entity-changes', entityId] as const,
   migrationPreview: (entityId: string) =>
