@@ -55,20 +55,27 @@ test('manages custom roles through their full lifecycle', async ({ page }) => {
 
   let role = page.getByRole('listitem').filter({ hasText: roleCode });
   await expect(role).toContainText('blueprints.read');
-  page.once('dialog', (dialog) => dialog.accept(renamedCode));
-  await role.getByRole('button', { name: 'Rename' }).click();
+  await role.getByRole('button', { name: 'Rename role' }).click();
+  const renameDialog = page.getByRole('dialog', { name: 'Rename role' });
+  await expect(renameDialog.getByLabel('Role code')).toBeFocused();
+  await renameDialog.getByLabel('Role code').fill(renamedCode);
+  await renameDialog.getByRole('button', { name: 'Rename role' }).click();
 
   role = page.getByRole('listitem').filter({ hasText: renamedCode });
   await expect(role).toBeVisible();
-  page.once('dialog', (dialog) => dialog.accept(duplicateCode));
-  await role.getByRole('button', { name: 'Duplicate' }).click();
+  await role.getByRole('button', { name: 'Duplicate role' }).click();
+  const duplicateDialog = page.getByRole('dialog', { name: 'Duplicate role' });
+  await duplicateDialog.getByLabel('New role code').fill(duplicateCode);
+  await duplicateDialog.getByRole('button', { name: 'Duplicate role' }).click();
 
   const duplicate = page
     .getByRole('listitem')
     .filter({ hasText: duplicateCode });
   await expect(duplicate).toContainText('blueprints.read');
-  page.once('dialog', (dialog) => dialog.accept(''));
-  await duplicate.getByRole('button', { name: 'Retire' }).click();
+  await duplicate.getByRole('button', { name: 'Retire role' }).click();
+  const retireDialog = page.getByRole('dialog', { name: 'Retire role' });
+  await expect(retireDialog.getByLabel('Replacement role ID')).toBeFocused();
+  await retireDialog.getByRole('button', { name: 'Retire role' }).click();
   await expect(duplicate).toBeHidden();
 });
 
