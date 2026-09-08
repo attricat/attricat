@@ -22,7 +22,6 @@ import { useTranslation } from 'react-i18next';
 import { currentSession, logout } from '../features/auth/api';
 import { listSidebarExploreNavigation } from '../features/workspace/api';
 import { workspaceQueryKeys } from '../features/workspace/query-keys';
-import { LanguageSwitcher } from './LanguageSwitcher';
 import { drawerWidth, SideNavigation } from './SideNavigation';
 
 export const AppLayout = () => {
@@ -113,9 +112,8 @@ export const AppLayout = () => {
                 sx={{ flexGrow: 1, ml: 1 }}
                 variant="h6"
               >
-                {t('app.catalog')}
+                {t('app.attricat')}
               </Typography>
-              <LanguageSwitcher />
             </Toolbar>
           </AppBar>
           <Drawer
