@@ -1,9 +1,15 @@
 import { useForm } from '@tanstack/react-form';
-import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   Alert,
+  Box,
   Button,
   Checkbox,
+  Dialog,
+  DialogActions,
+  DialogContent,
+  DialogContentText,
+  DialogTitle,
   FormControlLabel,
   List,
   ListItem,
@@ -22,8 +28,18 @@ import {
   listRoles,
   retireRole,
   updateRole,
+  type WorkspaceRole,
 } from './api';
 import { workspaceQueryKeys } from './query-keys';
+
+type RoleDialogAction =
+  | { role: WorkspaceRole; type: 'rename' }
+  | { role: WorkspaceRole; type: 'duplicate' }
+  | { role: WorkspaceRole; type: 'retire' };
+
+const roleCodePattern = /^[a-z][a-z0-9_-]*$/;
+const uuidPattern =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 export const WorkspaceRolesSection = ({
   canManage,
@@ -33,6 +49,7 @@ export const WorkspaceRolesSection = ({
   const { t } = useTranslation();
   const client = useQueryClient();
   const [error, setError] = useState<string>();
+  const [dialogAction, setDialogAction] = useState<RoleDialogAction>();
   const roles = useQuery({
     enabled: canManage,
     queryKey: workspaceQueryKeys.roles(),
@@ -80,45 +97,22 @@ export const WorkspaceRolesSection = ({
                 !role.is_system && (
                   <Stack direction="row">
                     <Button
-                      onClick={() => {
-                        const code = window.prompt(
-                          t('workspace.roleCode'),
-                          role.code,
-                        );
-                        if (code)
-                          updateRole(role.id, {
-                            code,
-                            permissions: role.permissions,
-                          })
-                            .then(refresh)
-                            .catch((e) => setError(e.message));
-                      }}
+                      onClick={() => setDialogAction({ role, type: 'rename' })}
                     >
-                      Rename
+                      {t('workspace.renameRole')}
                     </Button>
                     <Button
-                      onClick={() => {
-                        const code = window.prompt(t('workspace.newRoleCode'));
-                        if (code)
-                          duplicateRole(role.id, code)
-                            .then(refresh)
-                            .catch((e) => setError(e.message));
-                      }}
+                      onClick={() =>
+                        setDialogAction({ role, type: 'duplicate' })
+                      }
                     >
-                      Duplicate
+                      {t('workspace.duplicateRole')}
                     </Button>
                     <Button
                       color="error"
-                      onClick={() => {
-                        const replacement = window.prompt(
-                          t('workspace.replacementRole'),
-                        );
-                        retireRole(role.id, replacement || undefined)
-                          .then(refresh)
-                          .catch((e) => setError(e.message));
-                      }}
+                      onClick={() => setDialogAction({ role, type: 'retire' })}
                     >
-                      Retire
+                      {t('workspace.retireRole')}
                     </Button>
                   </Stack>
                 )
@@ -132,6 +126,16 @@ export const WorkspaceRolesSection = ({
           ))}
         </List>
       </Paper>
+      {dialogAction && (
+        <RoleActionDialog
+          action={dialogAction}
+          onClose={() => setDialogAction(undefined)}
+          onSuccess={() => {
+            void refresh();
+            setDialogAction(undefined);
+          }}
+        />
+      )}
       <Paper
         component="form"
         onSubmit={(event) => {
@@ -185,5 +189,154 @@ export const WorkspaceRolesSection = ({
         </Stack>
       </Paper>
     </Stack>
+  );
+};
+
+const RoleActionDialog = ({
+  action,
+  onClose,
+  onSuccess,
+}: {
+  action: RoleDialogAction;
+  onClose: () => void;
+  onSuccess: () => void;
+}) => {
+  const { t } = useTranslation();
+  const isRetiring = action.type === 'retire';
+  const mutation = useMutation({
+    mutationFn: async (value: { code: string; replacementRoleId: string }) => {
+      if (action.type === 'rename') {
+        await updateRole(action.role.id, {
+          code: value.code,
+          permissions: action.role.permissions,
+        });
+        return;
+      }
+      if (action.type === 'duplicate') {
+        await duplicateRole(action.role.id, value.code);
+        return;
+      }
+      await retireRole(action.role.id, value.replacementRoleId || undefined);
+    },
+    onSuccess,
+  });
+  const form = useForm({
+    defaultValues: {
+      code: action.type === 'rename' ? action.role.code : '',
+      replacementRoleId: '',
+    },
+    onSubmit: ({ value }) => mutation.mutate(value),
+  });
+  const codeError = (value: string) =>
+    roleCodePattern.test(value) ? undefined : t('workspace.roleCodeInvalid');
+  const replacementRoleError = (value: string) =>
+    !value || uuidPattern.test(value)
+      ? undefined
+      : t('workspace.replacementRoleInvalid');
+  const title =
+    action.type === 'rename'
+      ? t('workspace.renameRole')
+      : action.type === 'duplicate'
+        ? t('workspace.duplicateRole')
+        : t('workspace.retireRole');
+
+  return (
+    <Dialog
+      aria-describedby="role-action-dialog-description"
+      fullWidth
+      maxWidth="sm"
+      onClose={(_, reason) => {
+        if (!mutation.isPending && reason !== 'backdropClick') onClose();
+      }}
+      open
+    >
+      <Box
+        component="form"
+        onSubmit={(event) => {
+          event.preventDefault();
+          form.handleSubmit();
+        }}
+      >
+        <DialogTitle>{title}</DialogTitle>
+        <DialogContent>
+          <DialogContentText id="role-action-dialog-description">
+            {isRetiring
+              ? t('workspace.retireRoleDescription', { role: action.role.code })
+              : t('workspace.roleActionDescription', {
+                  role: action.role.code,
+                })}
+          </DialogContentText>
+          {isRetiring ? (
+            <form.Field
+              name="replacementRoleId"
+              validators={{
+                onChange: ({ value }) => replacementRoleError(value),
+                onSubmit: ({ value }) => replacementRoleError(value),
+              }}
+            >
+              {(field) => (
+                <TextField
+                  autoFocus
+                  error={field.state.meta.errors.length > 0}
+                  fullWidth
+                  helperText={
+                    field.state.meta.errors[0] ?? t('workspace.replacementRole')
+                  }
+                  label={t('workspace.replacementRoleLabel')}
+                  margin="dense"
+                  onBlur={field.handleBlur}
+                  onChange={(event) => field.handleChange(event.target.value)}
+                  value={field.state.value}
+                />
+              )}
+            </form.Field>
+          ) : (
+            <form.Field
+              name="code"
+              validators={{
+                onChange: ({ value }) => codeError(value),
+                onSubmit: ({ value }) => codeError(value),
+              }}
+            >
+              {(field) => (
+                <TextField
+                  autoFocus
+                  error={field.state.meta.errors.length > 0}
+                  fullWidth
+                  helperText={field.state.meta.errors[0]}
+                  label={t(
+                    action.type === 'rename'
+                      ? 'workspace.roleCode'
+                      : 'workspace.newRoleCode',
+                  )}
+                  margin="dense"
+                  onBlur={field.handleBlur}
+                  onChange={(event) => field.handleChange(event.target.value)}
+                  value={field.state.value}
+                />
+              )}
+            </form.Field>
+          )}
+          {mutation.isError && (
+            <Alert severity="error" sx={{ mt: 2 }}>
+              {mutation.error.message}
+            </Alert>
+          )}
+        </DialogContent>
+        <DialogActions>
+          <Button disabled={mutation.isPending} onClick={onClose}>
+            {t('workspace.cancel')}
+          </Button>
+          <Button
+            color={isRetiring ? 'error' : 'primary'}
+            disabled={mutation.isPending}
+            type="submit"
+            variant="contained"
+          >
+            {mutation.isPending ? t('workspace.saving') : title}
+          </Button>
+        </DialogActions>
+      </Box>
+    </Dialog>
   );
 };
