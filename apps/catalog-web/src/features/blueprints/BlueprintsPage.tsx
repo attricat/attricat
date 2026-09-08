@@ -136,15 +136,17 @@ export const BlueprintsPage = () => {
                       {formatBlueprintDateTime(blueprint.updated_at)}
                     </TableCell>
                     <TableCell align="right">
-                      <Link
+                      <Button
+                        component={Link}
                         params={{
                           blueprintId: blueprint.id,
                           version: String(blueprint.version),
                         }}
+                        size="small"
                         to="/manage/blueprints/$blueprintId/revisions/$version/new"
                       >
-                        <Button size="small">{t('blueprints.edit')}</Button>
-                      </Link>
+                        {t('blueprints.edit')}
+                      </Button>
                     </TableCell>
                   </TableRow>
                 ))}
