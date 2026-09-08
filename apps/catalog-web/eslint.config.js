@@ -1,4 +1,5 @@
 import js from '@eslint/js';
+import jsxA11y from 'eslint-plugin-jsx-a11y';
 import prettier from 'eslint-config-prettier';
 import reactHooks from 'eslint-plugin-react-hooks';
 import reactRefresh from 'eslint-plugin-react-refresh';
@@ -12,6 +13,7 @@ export default tseslint.config(
     extends: [
       js.configs.recommended,
       ...tseslint.configs.recommended,
+      jsxA11y.flatConfigs.recommended,
       prettier,
     ],
     languageOptions: { globals: globals.browser },

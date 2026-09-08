@@ -1,24 +1,30 @@
-import { renderToStaticMarkup } from 'react-dom/server';
+// @vitest-environment jsdom
+import { render, screen } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
 import { LoadMoreButton } from './LoadMoreButton';
 
 describe('LoadMoreButton', () => {
-  it('renders an enabled accessible default control', () => {
-    const markup = renderToStaticMarkup(
-      <LoadMoreButton onLoadMore={vi.fn()} />,
-    );
+  it('is an accessible button that invokes its action', async () => {
+    const onLoadMore = vi.fn();
+    const user = userEvent.setup();
 
-    expect(markup).toContain('Load more');
-    expect(markup).not.toMatch(/<button[^>]*\sdisabled(?:=|\s|>)/);
+    render(<LoadMoreButton onLoadMore={onLoadMore} />);
+
+    await user.click(screen.getByRole('button', { name: 'Load more' }));
+
+    expect(onLoadMore).toHaveBeenCalledOnce();
   });
 
-  it('renders a disabled loading state', () => {
-    const markup = renderToStaticMarkup(
-      <LoadMoreButton isLoading onLoadMore={vi.fn()} />,
-    );
+  it('exposes loading state and prevents duplicate actions', () => {
+    const onLoadMore = vi.fn();
 
-    expect(markup).toContain('Loading...');
-    expect(markup).toMatch(/<button[^>]*\sdisabled(?:=|\s|>)/);
-    expect(markup).toContain('aria-busy="true"');
+    render(<LoadMoreButton isLoading onLoadMore={onLoadMore} />);
+
+    const button = screen.getByRole('button', { name: 'Loading...' });
+    expect(button.getAttribute('aria-busy')).toBe('true');
+    expect(button).toHaveProperty('disabled', true);
+
+    expect(onLoadMore).not.toHaveBeenCalled();
   });
 });

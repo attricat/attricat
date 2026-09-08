@@ -92,7 +92,6 @@ export const NewConversationPage = () => {
           }}
         >
           <TextField
-            autoFocus
             fullWidth
             hiddenLabel
             maxRows={8}

@@ -392,7 +392,6 @@ export const BlueprintDetailPage = ({
                 {t('blueprints.cancel')}
               </Button>
               <Button
-                autoFocus
                 disabled={publish.isPending}
                 onClick={() => publish.mutate(blueprint.version)}
                 variant="contained"

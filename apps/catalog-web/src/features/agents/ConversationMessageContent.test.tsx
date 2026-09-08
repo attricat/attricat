@@ -7,7 +7,7 @@ describe('ConversationMessageContent', () => {
     const markup = renderToStaticMarkup(
       <ConversationMessageContent
         content="Hello **catalog**"
-        role="assistant"
+        messageRole="assistant"
       />,
     );
 
@@ -28,7 +28,7 @@ describe('ConversationMessageContent', () => {
             },
           ],
         }}
-        role="assistant"
+        messageRole="assistant"
       />,
     );
 
