@@ -16,6 +16,7 @@ export const CreateEntityPage = ({
   const { t } = useTranslation();
   const navigate = useNavigate({ from: '/entities/new' });
   const blueprint = useMutation({
+    meta: { toast: false },
     mutationFn: ({ code, version }: { code: string; version?: number }) =>
       getBlueprintByCode(code, version),
   });

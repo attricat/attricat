@@ -1,21 +1,30 @@
 import { useQuery } from '@tanstack/react-query';
 import { Link } from '@tanstack/react-router';
+import CategoryOutlinedIcon from '@mui/icons-material/CategoryOutlined';
 import CheckCircleOutlinedIcon from '@mui/icons-material/CheckCircleOutlined';
+import CloseIcon from '@mui/icons-material/Close';
+import EditOutlinedIcon from '@mui/icons-material/EditOutlined';
+import HistoryOutlinedIcon from '@mui/icons-material/HistoryOutlined';
+import UpgradeOutlinedIcon from '@mui/icons-material/UpgradeOutlined';
+import ViewSidebarOutlinedIcon from '@mui/icons-material/ViewSidebarOutlined';
 import WarningAmberOutlinedIcon from '@mui/icons-material/WarningAmberOutlined';
 import {
   Alert,
   Box,
   Button,
   Drawer,
-  MenuItem,
+  IconButton,
   Paper,
-  TextField,
+  Tooltip,
   Typography,
 } from '@mui/material';
 import { createElement, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { PageContainer } from '../../components/PageContainer';
 import { PageHeader } from '../../components/PageHeader';
+import { EntityContextPicker } from './components/EntityContextPicker';
+import { EntitySchemaSubheader } from './components/EntitySchemaSubheader';
+import { EntityToolbar } from './components/EntityToolbar';
 import {
   ExtensionOutlet,
   ExtensionPopoverOutlet,
@@ -35,14 +44,14 @@ import {
 import { resolveHeadingRenderer } from '../views/components/registry';
 export const EntityPreviewPage = ({ entityId }: { entityId: string }) => {
   const { t } = useTranslation();
-  const [selectedContext, setSelectedContext] = useState('default');
+  const [selectedContext, setSelectedContext] = useState('');
   const contexts = useQuery({
     queryKey: entityQueryKeys.contexts(),
     queryFn: listContexts,
   });
-  const selectedContextId = contexts.data?.find(
-    (context) => context.code === selectedContext,
-  )?.id;
+  const selectedContextId =
+    selectedContext ||
+    contexts.data?.find((context) => context.code === 'default')?.id;
   const resolved = useQuery({
     queryKey: selectedContextId
       ? entityQueryKeys.resolvedPreview(entityId, selectedContextId)
@@ -80,7 +89,42 @@ export const EntityPreviewPage = ({ entityId }: { entityId: string }) => {
   const [extensionPanelOpen, setExtensionPanelOpen] = useState(false);
   return (
     <PageContainer>
-      <PageHeader eyebrow={t('entities.entityPreview')} />
+      <PageHeader
+        actions={
+          blueprint.data && (
+            <Tooltip title={blueprint.data.blueprint.name}>
+              <Button
+                component={Link}
+                params={{ blueprintId: blueprint.data.blueprint.id }}
+                size="small"
+                startIcon={<CategoryOutlinedIcon />}
+                to="/manage/blueprints/$blueprintId"
+                variant="text"
+              >
+                {t('entities.blueprint')}: {blueprint.data.blueprint.name}
+              </Button>
+            </Tooltip>
+          )
+        }
+        eyebrow={
+          blueprint.data ? (
+            <>
+              {t('entities.entityPreview')} ·{' '}
+              <Link
+                search={{
+                  blueprint: blueprint.data.blueprint.code,
+                  version: blueprint.data.blueprint.version,
+                }}
+                to="/"
+              >
+                {t('entities.viewAll')}
+              </Link>
+            </>
+          ) : (
+            t('entities.entityPreview')
+          )
+        }
+      />
       {resolved.data && blueprint.data && HeadingRenderer
         ? createElement(HeadingRenderer, {
             attributes: blueprint.data.attributes,
@@ -89,110 +133,75 @@ export const EntityPreviewPage = ({ entityId }: { entityId: string }) => {
             view: detailView,
           })
         : null}
-      <Paper
-        aria-label={t('entities.entityPreview')}
-        component="nav"
-        sx={{
-          alignItems: 'center',
-          display: 'flex',
-          flexWrap: 'wrap',
-          gap: 1,
-          mt: 3,
-          p: 1.5,
-        }}
-      >
-        <Button
-          component={Link}
-          params={{ entityId }}
-          size="small"
-          to="/entities/$entityId/edit"
-          variant="text"
-        >
-          {t('entities.editEntity')}
-        </Button>
-        <Button
-          component={Link}
-          params={{ entityId }}
-          size="small"
-          to="/entities/$entityId/changes"
-          variant="text"
-        >
-          {t('entities.changes')}
-        </Button>
+      <EntityToolbar label={t('entities.entityPreview')}>
+        <Tooltip title={t('entities.editEntity')}>
+          <IconButton
+            aria-label={t('entities.editEntity')}
+            component={Link}
+            params={{ entityId }}
+            to="/entities/$entityId/edit"
+          >
+            <EditOutlinedIcon />
+          </IconButton>
+        </Tooltip>
+        <Tooltip title={t('entities.changes')}>
+          <IconButton
+            aria-label={t('entities.changes')}
+            component={Link}
+            params={{ entityId }}
+            to="/entities/$entityId/changes"
+          >
+            <HistoryOutlinedIcon />
+          </IconButton>
+        </Tooltip>
         {currentBlueprint.data && resolved.data && (
           <>
             {currentBlueprint.data.blueprint.version >
             (resolved.data.entity.blueprint_version ?? Infinity) ? (
               <>
-                <Typography
-                  color="warning.main"
-                  component="span"
-                  sx={{
-                    display: 'inline-flex',
-                    gap: 0.5,
-                    verticalAlign: 'middle',
-                  }}
-                >
-                  <WarningAmberOutlinedIcon fontSize="small" />
-                  {t('entities.schemaOutdated')}
-                </Typography>
-                <Button
-                  component={Link}
-                  params={{ entityId }}
-                  size="small"
-                  to="/entities/$entityId/migrate"
-                  variant="text"
-                >
-                  {t('entities.upgradeBlueprint')}
-                </Button>
+                <Tooltip title={t('entities.schemaOutdated')}>
+                  <WarningAmberOutlinedIcon color="warning" fontSize="small" />
+                </Tooltip>
+                <Tooltip title={t('entities.upgradeBlueprint')}>
+                  <IconButton
+                    aria-label={t('entities.upgradeBlueprint')}
+                    component={Link}
+                    params={{ entityId }}
+                    to="/entities/$entityId/migrate"
+                  >
+                    <UpgradeOutlinedIcon />
+                  </IconButton>
+                </Tooltip>
               </>
             ) : (
-              <Typography
-                component="span"
-                sx={{
-                  display: 'inline-flex',
-                  gap: 0.5,
-                  verticalAlign: 'middle',
-                }}
-              >
+              <Tooltip title={t('entities.matchesCurrentSchema')}>
                 <CheckCircleOutlinedIcon color="success" fontSize="small" />
-                {t('entities.matchesCurrentSchema')}
-              </Typography>
+              </Tooltip>
             )}
           </>
         )}
-        <TextField
-          select
-          disabled={contexts.isPending}
-          label={t('entities.context')}
-          onChange={(event) => setSelectedContext(event.target.value)}
-          size="small"
-          sx={{ maxWidth: '100%', width: 280 }}
-          value={selectedContext}
-        >
-          {(contexts.data ?? []).map((context) => (
-            <MenuItem key={context.id} value={context.code}>
-              {context.code === 'default'
-                ? t('entities.default')
-                : context.code}
-            </MenuItem>
-          ))}
-        </TextField>
         <Box sx={{ flexGrow: 1 }} />
         {resolved.data && blueprint.data && (
-          <Button
-            aria-controls={
-              extensionPanelOpen ? 'entity-extension-contributions' : undefined
-            }
-            aria-expanded={extensionPanelOpen}
-            onClick={() => setExtensionPanelOpen(true)}
-            size="small"
-            variant="text"
-          >
-            {t('entities.extensionContributions')}
-          </Button>
+          <Tooltip title={t('entities.extensionContributions')}>
+            <IconButton
+              aria-controls={
+                extensionPanelOpen
+                  ? 'entity-extension-contributions'
+                  : undefined
+              }
+              aria-expanded={extensionPanelOpen}
+              aria-label={t('entities.extensionContributions')}
+              onClick={() => setExtensionPanelOpen(true)}
+            >
+              <ViewSidebarOutlinedIcon />
+            </IconButton>
+          </Tooltip>
         )}
-      </Paper>
+      </EntityToolbar>
+      <EntitySchemaSubheader
+        entityId={entityId}
+        name={blueprint.data?.blueprint.name}
+      />
       {contexts.isPending && (
         <Typography sx={{ py: 3 }}>{t('entities.loadingContexts')}</Typography>
       )}
@@ -224,6 +233,12 @@ export const EntityPreviewPage = ({ entityId }: { entityId: string }) => {
             >
               <Box>
                 <Paper component="section" sx={{ p: { xs: 2, md: 3 } }}>
+                  <EntityContextPicker
+                    contexts={contexts.data}
+                    disabled={contexts.isPending}
+                    onChange={setSelectedContext}
+                    value={selectedContextId ?? ''}
+                  />
                   <EntityView
                     attributes={blueprint.data.attributes}
                     contextId={selectedContextId}
@@ -265,14 +280,23 @@ export const EntityPreviewPage = ({ entityId }: { entityId: string }) => {
         anchor="right"
         onClose={() => setExtensionPanelOpen(false)}
         open={extensionPanelOpen}
+        variant="persistent"
       >
         <Box
           id="entity-extension-contributions"
           sx={{ p: 3, width: { xs: '100vw', sm: 480 } }}
         >
-          <Typography variant="h6">
-            {t('entities.extensionContributions')}
-          </Typography>
+          <Box sx={{ alignItems: 'center', display: 'flex' }}>
+            <Typography sx={{ flexGrow: 1 }} variant="h6">
+              {t('entities.extensionContributions')}
+            </Typography>
+            <IconButton
+              aria-label={t('entities.closeExtensionContributions')}
+              onClick={() => setExtensionPanelOpen(false)}
+            >
+              <CloseIcon />
+            </IconButton>
+          </Box>
           {resolved.data && blueprint.data && (
             <Box sx={{ mt: 2 }}>
               <ExtensionOutlet

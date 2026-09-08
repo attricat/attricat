@@ -16,6 +16,13 @@ export const theme = createTheme({
     subtitle2: { fontSize: '0.8125rem', lineHeight: 1.35 },
   },
   components: {
+    MuiCssBaseline: {
+      styleOverrides: {
+        'a:not(.MuiButtonBase-root), a:not(.MuiButtonBase-root):visited': {
+          color: '#1565c0',
+        },
+      },
+    },
     MuiButton: { defaultProps: { size: 'small' } },
     MuiTextField: { defaultProps: { size: 'small' } },
     MuiFormControl: { defaultProps: { size: 'small' } },

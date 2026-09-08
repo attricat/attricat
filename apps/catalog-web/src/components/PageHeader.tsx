@@ -44,6 +44,18 @@ export const PageHeader = ({
         <Typography color="text.secondary">{description}</Typography>
       )}
     </Box>
-    {actions && <Box sx={{ alignSelf: { sm: 'center' } }}>{actions}</Box>}
+    {actions && (
+      <Box
+        sx={{
+          '& a, & a:visited': { color: 'primary.main' },
+          '& .MuiButton-contained, & .MuiButton-contained:visited': {
+            color: '#fff !important',
+          },
+          alignSelf: { sm: 'center' },
+        }}
+      >
+        {actions}
+      </Box>
+    )}
   </Stack>
 );

@@ -8,7 +8,6 @@ import {
   useLegacyTable,
 } from '@tanstack/react-table/legacy';
 import MoreVertIcon from '@mui/icons-material/MoreVert';
-import TagOutlinedIcon from '@mui/icons-material/TagOutlined';
 import {
   Chip,
   Dialog,
@@ -17,7 +16,6 @@ import {
   IconButton,
   Menu,
   MenuItem,
-  Popover,
   Paper,
   Table,
   TableBody,
@@ -25,13 +23,13 @@ import {
   TableContainer,
   TableHead,
   TableRow,
-  Tooltip,
   Typography,
 } from '@mui/material';
 import { LoadMoreButton } from '../../components/LoadMoreButton';
 import { useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { BlueprintWithAttributes, EntityItem } from '../entities/api';
+import { EntityIdPopover } from '../entities/components/EntityIdPopover';
 import { displayLabel } from '../entities/entity-display';
 import { AttributeValue } from '../views/components/values/AttributeValue';
 import { ExtensionPopoverOutlet } from '../extensions/ExtensionOutlet';
@@ -99,38 +97,6 @@ const EntityActionsMenu = ({
           </Typography>
         </DialogContent>
       </Dialog>
-    </>
-  );
-};
-
-const EntityIdPopover = ({ entityId }: { entityId: string }) => {
-  const { t } = useTranslation();
-  const [anchor, setAnchor] = useState<HTMLElement | null>(null);
-  const label = t('explorer.viewEntityIdWithId', { entityId });
-  return (
-    <>
-      <Tooltip title={t('explorer.viewEntityId')}>
-        <IconButton
-          aria-label={label}
-          onClick={(event) => setAnchor(event.currentTarget)}
-          size="small"
-        >
-          <TagOutlinedIcon fontSize="inherit" />
-        </IconButton>
-      </Tooltip>
-      <Popover
-        anchorEl={anchor}
-        anchorOrigin={{ horizontal: 'left', vertical: 'bottom' }}
-        onClose={() => setAnchor(null)}
-        open={Boolean(anchor)}
-      >
-        <Typography
-          component="code"
-          sx={{ display: 'block', fontFamily: 'monospace', p: 2 }}
-        >
-          {entityId}
-        </Typography>
-      </Popover>
     </>
   );
 };

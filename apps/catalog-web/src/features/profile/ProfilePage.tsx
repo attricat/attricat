@@ -19,6 +19,8 @@ import {
 } from '@mui/material';
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
+import { copyToClipboard } from '../../components/clipboard';
+import { useToast } from '../../components/useToast';
 import i18n from '../../i18n';
 import { currentSession } from '../auth/api';
 import {
@@ -70,6 +72,15 @@ const SecretDialog = ({
   onClose: () => void;
 }) => {
   const { t } = useTranslation();
+  const { show } = useToast();
+  const copySecret = async () => {
+    try {
+      await copyToClipboard(secret ?? '');
+      show({ message: t('common.copied'), severity: 'success' });
+    } catch {
+      show({ message: t('common.copyFailed'), severity: 'error' });
+    }
+  };
   return (
     <Dialog onClose={onClose} open={Boolean(secret)}>
       <DialogTitle>{t('profile.copySecretTitle')}</DialogTitle>
@@ -80,10 +91,7 @@ const SecretDialog = ({
             slotProps={{ input: { readOnly: true } }}
             value={secret ?? ''}
           />
-          <Button
-            onClick={() => navigator.clipboard?.writeText(secret ?? '')}
-            variant="contained"
-          >
+          <Button onClick={() => void copySecret()} variant="contained">
             {t('profile.copySecret')}
           </Button>
         </Stack>

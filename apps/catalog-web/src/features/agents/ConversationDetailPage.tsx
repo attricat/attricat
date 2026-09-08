@@ -72,6 +72,7 @@ export const ConversationDetailPage = ({
   const invalidate = () =>
     void queryClient.invalidateQueries({ queryKey: agentQueryKeys.all });
   const send = useMutation({
+    meta: { toast: false },
     mutationFn: async () => {
       const uploaded = attachments.length
         ? await uploadConversationFiles(conversationId, attachments)

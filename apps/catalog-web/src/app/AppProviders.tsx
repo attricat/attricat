@@ -3,6 +3,7 @@ import { plPL } from '@mui/material/locale';
 import { RouterProvider } from '@tanstack/react-router';
 import { useEffect, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
+import { ToastProvider } from '../components/ToastProvider';
 import { Inspector } from '../features/inspector/Inspector';
 import { router } from './router';
 import { theme } from './theme';
@@ -22,8 +23,10 @@ export const AppProviders = () => {
   return (
     <ThemeProvider theme={localizedTheme}>
       <CssBaseline />
-      <RouterProvider router={router} />
-      {import.meta.env.DEV && __CATALOG_DEVTOOLS__ && <Inspector />}
+      <ToastProvider>
+        <RouterProvider router={router} />
+        {import.meta.env.DEV && __CATALOG_DEVTOOLS__ && <Inspector />}
+      </ToastProvider>
     </ThemeProvider>
   );
 };

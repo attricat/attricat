@@ -22,7 +22,7 @@ import {
 } from '../entity-form';
 import { entityQueryKeys } from '../query-keys';
 import { EntityView } from '../../views/components/EntityView';
-import { useState } from 'react';
+import { useState, type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
 import { EntityAttributeEditor } from './EntityAttributeEditor';
 
@@ -30,6 +30,7 @@ type EntityFormProps = {
   blueprint?: BlueprintWithAttributes;
   initialValues?: ReturnType<typeof valuesForForm>;
   contextId?: string | null;
+  contextPicker?: ReactNode;
   defaultContextId?: string | null;
   existingValues?: FormAttributeValue[];
   resolvedValues?: Record<
@@ -37,6 +38,7 @@ type EntityFormProps = {
     { value: unknown; source_context: { id: string; code: string } }
   >;
   isLoadingBlueprint?: boolean;
+  showBlueprintMetadata?: boolean;
   showAllAttributes?: boolean;
   highlightedAttributes?: readonly string[];
   migrationReviewMessages?: Readonly<Record<string, string>>;
@@ -57,10 +59,12 @@ export const EntityForm = ({
   blueprint,
   initialValues = {},
   contextId = null,
+  contextPicker,
   defaultContextId = null,
   existingValues = [],
   resolvedValues = {},
   isLoadingBlueprint = false,
+  showBlueprintMetadata = true,
   showAllAttributes = false,
   highlightedAttributes = [],
   migrationReviewMessages = {},
@@ -162,6 +166,7 @@ export const EntityForm = ({
       sx={{ mt: 4, p: 3 }}
     >
       <Stack spacing={2}>
+        {contextPicker}
         {!blueprint && !lockedBlueprint && (
           <>
             <Typography variant="h6">
@@ -192,7 +197,7 @@ export const EntityForm = ({
             )}
           </>
         )}
-        {blueprint && (
+        {blueprint && showBlueprintMetadata && (
           <Typography color="text.secondary">
             {blueprint.blueprint.code} v{blueprint.blueprint.version}
           </Typography>

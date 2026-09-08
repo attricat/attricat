@@ -1,7 +1,8 @@
-import { Alert, Box, CircularProgress } from '@mui/material';
+import { Alert, Box, Skeleton, Typography } from '@mui/material';
 import { useNavigate } from '@tanstack/react-router';
 import { useEffect, useRef, useState } from 'react';
 import { z } from 'zod';
+import { toast } from '../../components/toast';
 import { apiFetch } from '../auth/request';
 import {
   defaultExtensionFrameHeight,
@@ -183,12 +184,8 @@ export const ExtensionFrame = ({
               data.method === 'notify' &&
               contribution.capabilities.includes('client.notification')
             ) {
-              // The frame cannot render host UI. A bounded event lets the host page opt in.
-              window.dispatchEvent(
-                new CustomEvent('catalog:extension-notify.v1', {
-                  detail: notificationSchema.parse(data.payload),
-                }),
-              );
+              const notification = notificationSchema.parse(data.payload);
+              toast.show(notification);
               respond(true, null);
             } else if (
               data.method.startsWith('storage.') &&
@@ -301,7 +298,12 @@ export const ExtensionFrame = ({
 
   if (error) return <Alert severity="warning">{error}</Alert>;
   return (
-    <Box sx={{ minHeight: ready ? 0 : defaultExtensionFrameHeight }}>
+    <Box
+      sx={{
+        minHeight: ready ? 0 : defaultExtensionFrameHeight,
+        position: 'relative',
+      }}
+    >
       <iframe
         aria-label={contribution.title ?? contribution.id}
         key={frameKey}
@@ -314,10 +316,22 @@ export const ExtensionFrame = ({
         ref={iframe}
         sandbox="allow-scripts"
         srcDoc={frameDocument}
-        style={{ border: 0, height, width: '100%' }}
+        style={{ border: 0, height, opacity: ready ? 1 : 0, width: '100%' }}
         title={contribution.title ?? contribution.id}
       />
-      {!ready && <CircularProgress size={20} />}
+      {!ready && (
+        <Box
+          aria-live="polite"
+          role="status"
+          sx={{ inset: 0, p: 1, position: 'absolute' }}
+        >
+          <Skeleton animation="wave" height={20} variant="text" width="45%" />
+          <Skeleton animation="wave" height={16} variant="text" width="75%" />
+          <Typography sx={{ clip: 'rect(0 0 0 0)', position: 'absolute' }}>
+            Loading extension content…
+          </Typography>
+        </Box>
+      )}
     </Box>
   );
 };

@@ -179,9 +179,14 @@
     "upgradeBlueprint": "Zaktualizuj schemat",
     "loadingEntity": "Wczytywanie encji...",
     "context": "Kontekst",
+    "moreContexts": "Więcej kontekstów",
     "saveChanges": "Zapisz zmiany",
     "entityPreview": "Podgląd encji",
     "extensionContributions": "Kontrybucje z rozszerzeń",
+    "closeExtensionContributions": "Zamknij kontrybucje z rozszerzeń",
+    "viewEntityId": "Wyświetl identyfikator encji",
+    "viewEntityIdWithId": "Wyświetl identyfikator encji {{entityId}}",
+    "copyEntityId": "Kopiuj identyfikator encji",
     "default": "Domyślny",
     "loadingContexts": "Wczytywanie kontekstów...",
     "resolvingValues": "Rozwiązywanie wartości...",
@@ -528,6 +533,9 @@
     "hierarchy": "Hierarchia"
   },
   "common": {
+    "actionCompleted": "Akcja zakończona.",
+    "copyFailed": "Nie udało się skopiować do schowka.",
+    "copied": "Skopiowano do schowka.",
     "loadMore": "Załaduj więcej",
     "loading": "Wczytywanie..."
   }

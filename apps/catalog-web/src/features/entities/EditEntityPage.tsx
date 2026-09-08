@@ -2,16 +2,11 @@ import { useMutation, useQuery } from '@tanstack/react-query';
 import { Link, useNavigate } from '@tanstack/react-router';
 import CategoryOutlinedIcon from '@mui/icons-material/CategoryOutlined';
 import CheckCircleOutlinedIcon from '@mui/icons-material/CheckCircleOutlined';
+import UpgradeOutlinedIcon from '@mui/icons-material/UpgradeOutlined';
+import ViewListOutlinedIcon from '@mui/icons-material/ViewListOutlined';
+import VisibilityOutlinedIcon from '@mui/icons-material/VisibilityOutlined';
 import WarningAmberOutlinedIcon from '@mui/icons-material/WarningAmberOutlined';
-import {
-  Alert,
-  Button,
-  MenuItem,
-  Paper,
-  TextField,
-  Tooltip,
-  Typography,
-} from '@mui/material';
+import { Alert, Button, IconButton, Tooltip, Typography } from '@mui/material';
 import { createElement, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
@@ -21,7 +16,10 @@ import {
   listContexts,
   updateEntity,
 } from './api';
+import { EntityContextPicker } from './components/EntityContextPicker';
 import { EntityForm } from './components/EntityForm';
+import { EntitySchemaSubheader } from './components/EntitySchemaSubheader';
+import { EntityToolbar } from './components/EntityToolbar';
 import { PageContainer } from '../../components/PageContainer';
 import { PageHeader } from '../../components/PageHeader';
 import { valuesForForm } from './entity-form';
@@ -75,24 +73,27 @@ export const EditEntityPage = ({ entityId }: { entityId: string }) => {
   return (
     <PageContainer>
       <PageHeader
+        actions={
+          entityForm.data && (
+            <Tooltip title={entityForm.data.blueprint.blueprint.name}>
+              <Button
+                component={Link}
+                params={{ blueprintId: entityForm.data.entity.blueprint_id! }}
+                size="small"
+                startIcon={<CategoryOutlinedIcon />}
+                to="/manage/blueprints/$blueprintId"
+                variant="text"
+              >
+                {t('entities.blueprint')}:{' '}
+                {entityForm.data.blueprint.blueprint.name}
+              </Button>
+            </Tooltip>
+          )
+        }
         eyebrow={
           entityForm.data ? (
             <>
               {t('entities.editEntity')} ·{' '}
-              <Tooltip title={entityForm.data.blueprint.blueprint.name}>
-                <Link
-                  params={{ blueprintId: entityForm.data.entity.blueprint_id! }}
-                  to="/manage/blueprints/$blueprintId"
-                >
-                  <CategoryOutlinedIcon
-                    fontSize="inherit"
-                    sx={{ mr: 0.25, verticalAlign: 'text-bottom' }}
-                  />
-                  {t('entities.blueprint')}:{' '}
-                  {entityForm.data.blueprint.blueprint.name}
-                </Link>
-              </Tooltip>{' '}
-              ·{' '}
               <Link
                 search={{
                   blueprint: entityForm.data.blueprint.blueprint.code,
@@ -116,110 +117,61 @@ export const EditEntityPage = ({ entityId }: { entityId: string }) => {
             view: detailView,
           })
         : null}
-      <Paper
-        aria-label={t('entities.editEntity')}
-        component="nav"
-        sx={{
-          alignItems: 'center',
-          display: 'flex',
-          flexWrap: 'wrap',
-          gap: 1,
-          mt: 3,
-          p: 1.5,
-        }}
-      >
-        <Button
-          component={Link}
-          params={{ entityId }}
-          size="small"
-          to="/entities/$entityId"
-          variant="text"
-        >
-          {t('entities.viewPreview')}
-        </Button>
-        {entityForm.data && (
-          <Tooltip title={entityForm.data.blueprint.blueprint.name}>
-            <Button
-              component={Link}
-              params={{ blueprintId: entityForm.data.entity.blueprint_id! }}
-              size="small"
-              startIcon={<CategoryOutlinedIcon />}
-              to="/manage/blueprints/$blueprintId"
-              variant="text"
-            >
-              {t('entities.blueprint')}:{' '}
-              {entityForm.data.blueprint.blueprint.name}
-            </Button>
-          </Tooltip>
-        )}
-        {entityForm.data && (
-          <Button
+      <EntityToolbar label={t('entities.editEntity')}>
+        <Tooltip title={t('entities.viewPreview')}>
+          <IconButton
+            aria-label={t('entities.viewPreview')}
             component={Link}
-            search={{
-              blueprint: entityForm.data.blueprint.blueprint.code,
-              version: entityForm.data.blueprint.blueprint.version,
-            }}
-            size="small"
-            to="/"
-            variant="text"
+            params={{ entityId }}
+            to="/entities/$entityId"
           >
-            {t('entities.viewAll')}
-          </Button>
+            <VisibilityOutlinedIcon />
+          </IconButton>
+        </Tooltip>
+        {entityForm.data && (
+          <Tooltip title={t('entities.viewAll')}>
+            <IconButton
+              aria-label={t('entities.viewAll')}
+              component={Link}
+              search={{
+                blueprint: entityForm.data.blueprint.blueprint.code,
+                version: entityForm.data.blueprint.blueprint.version,
+              }}
+              to="/"
+            >
+              <ViewListOutlinedIcon />
+            </IconButton>
+          </Tooltip>
         )}
         {currentBlueprint.data &&
           entityForm.data &&
           (currentBlueprint.data.blueprint.version >
           (entityForm.data.entity.blueprint_version ?? Infinity) ? (
             <>
-              <Typography
-                color="warning.main"
-                component="span"
-                sx={{
-                  display: 'inline-flex',
-                  gap: 0.5,
-                  verticalAlign: 'middle',
-                }}
-              >
-                <WarningAmberOutlinedIcon fontSize="small" />
-                {t('entities.schemaOutdated')}
-              </Typography>
-              <Button
-                component={Link}
-                params={{ entityId }}
-                size="small"
-                to="/entities/$entityId/migrate"
-                variant="text"
-              >
-                {t('entities.upgradeBlueprint')}
-              </Button>
+              <Tooltip title={t('entities.schemaOutdated')}>
+                <WarningAmberOutlinedIcon color="warning" fontSize="small" />
+              </Tooltip>
+              <Tooltip title={t('entities.upgradeBlueprint')}>
+                <IconButton
+                  aria-label={t('entities.upgradeBlueprint')}
+                  component={Link}
+                  params={{ entityId }}
+                  to="/entities/$entityId/migrate"
+                >
+                  <UpgradeOutlinedIcon />
+                </IconButton>
+              </Tooltip>
             </>
           ) : (
-            <Typography
-              component="span"
-              sx={{ display: 'inline-flex', gap: 0.5, verticalAlign: 'middle' }}
-            >
+            <Tooltip title={t('entities.matchesCurrentSchema')}>
               <CheckCircleOutlinedIcon color="success" fontSize="small" />
-              {t('entities.matchesCurrentSchema')}
-            </Typography>
+            </Tooltip>
           ))}
-        {entityForm.data && (
-          <TextField
-            select
-            disabled={contexts.isPending}
-            label={t('entities.context')}
-            onChange={(event) => setSelectedContext(event.target.value)}
-            size="small"
-            sx={{ maxWidth: '100%', width: 280 }}
-            value={contextId ?? ''}
-          >
-            {(contexts.data ?? []).map((context) => (
-              <MenuItem key={context.id} value={context.id}>
-                {context.code}
-              </MenuItem>
-            ))}
-          </TextField>
-        )}
-      </Paper>
+      </EntityToolbar>
+      <EntitySchemaSubheader
+        entityId={entityId}
+        name={entityForm.data?.blueprint.blueprint.name}
+      />
       {entityForm.isPending && (
         <Typography sx={{ mt: 4 }}>{t('entities.loadingEntity')}</Typography>
       )}
@@ -238,10 +190,19 @@ export const EditEntityPage = ({ entityId }: { entityId: string }) => {
           key={`${entityForm.data.entity.id}:${contextId ?? ''}`}
           blueprint={entityForm.data.blueprint}
           contextId={contextId}
+          contextPicker={
+            <EntityContextPicker
+              contexts={contexts.data ?? []}
+              disabled={contexts.isPending}
+              onChange={setSelectedContext}
+              value={contextId ?? ''}
+            />
+          }
           entityId={entityId}
           defaultContextId={defaultContextId}
           existingValues={entityForm.data.values}
           resolvedValues={resolvedPreview.data?.values}
+          showBlueprintMetadata={false}
           initialValues={valuesForForm(
             entityForm.data.blueprint.attributes,
             entityForm.data.values,

@@ -1,10 +1,21 @@
 import { useQuery } from '@tanstack/react-query';
 import { Link } from '@tanstack/react-router';
+import EditOutlinedIcon from '@mui/icons-material/EditOutlined';
+import VisibilityOutlinedIcon from '@mui/icons-material/VisibilityOutlined';
 import { useTranslation } from 'react-i18next';
-import { Alert, Box, Button, Paper, Typography } from '@mui/material';
+import {
+  Alert,
+  Box,
+  IconButton,
+  Paper,
+  Tooltip,
+  Typography,
+} from '@mui/material';
 import { PageContainer } from '../../components/PageContainer';
 import { PageHeader } from '../../components/PageHeader';
-import { getEntityChanges } from './api';
+import { EntitySchemaSubheader } from './components/EntitySchemaSubheader';
+import { EntityToolbar } from './components/EntityToolbar';
+import { getEntityChanges, getEntityForm } from './api';
 import type { EntityAuditChange } from './api';
 import { entityQueryKeys } from './query-keys';
 
@@ -20,40 +31,39 @@ export const EntityChangesPage = ({ entityId }: { entityId: string }) => {
     queryKey: entityQueryKeys.changes(entityId),
     queryFn: () => getEntityChanges(entityId),
   });
+  const entityForm = useQuery({
+    queryKey: entityQueryKeys.form(entityId),
+    queryFn: () => getEntityForm(entityId),
+  });
   return (
     <PageContainer maxWidth="lg">
       <PageHeader eyebrow={t('entities.entityChanges')} />
-      <Paper
-        aria-label={t('entities.entityChanges')}
-        component="nav"
-        sx={{
-          alignItems: 'center',
-          display: 'flex',
-          flexWrap: 'wrap',
-          gap: 1,
-          mt: 3,
-          p: 1.5,
-        }}
-      >
-        <Button
-          component={Link}
-          params={{ entityId }}
-          size="small"
-          to="/entities/$entityId"
-          variant="text"
-        >
-          {t('entities.backToEntity')}
-        </Button>
-        <Button
-          component={Link}
-          params={{ entityId }}
-          size="small"
-          to="/entities/$entityId/edit"
-          variant="text"
-        >
-          {t('entities.editEntity')}
-        </Button>
-      </Paper>
+      <EntityToolbar label={t('entities.entityChanges')}>
+        <Tooltip title={t('entities.backToEntity')}>
+          <IconButton
+            aria-label={t('entities.backToEntity')}
+            component={Link}
+            params={{ entityId }}
+            to="/entities/$entityId"
+          >
+            <VisibilityOutlinedIcon />
+          </IconButton>
+        </Tooltip>
+        <Tooltip title={t('entities.editEntity')}>
+          <IconButton
+            aria-label={t('entities.editEntity')}
+            component={Link}
+            params={{ entityId }}
+            to="/entities/$entityId/edit"
+          >
+            <EditOutlinedIcon />
+          </IconButton>
+        </Tooltip>
+      </EntityToolbar>
+      <EntitySchemaSubheader
+        entityId={entityId}
+        name={entityForm.data?.blueprint.blueprint.name}
+      />
       {changes.isPending && (
         <Typography sx={{ py: 3 }}>{t('entities.loadingChanges')}</Typography>
       )}

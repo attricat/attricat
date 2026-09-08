@@ -179,9 +179,14 @@
     "upgradeBlueprint": "Upgrade blueprint",
     "loadingEntity": "Loading entity...",
     "context": "Context",
+    "moreContexts": "More contexts",
     "saveChanges": "Save changes",
     "entityPreview": "Entity preview",
     "extensionContributions": "Extension contributions",
+    "closeExtensionContributions": "Close extension contributions",
+    "viewEntityId": "View entity ID",
+    "viewEntityIdWithId": "View entity ID {{entityId}}",
+    "copyEntityId": "Copy entity ID",
     "default": "Default",
     "loadingContexts": "Loading contexts...",
     "resolvingValues": "Resolving values...",
@@ -522,6 +527,9 @@
     "hierarchy": "Hierarchy"
   },
   "common": {
+    "actionCompleted": "Action completed.",
+    "copyFailed": "Couldn't copy to clipboard.",
+    "copied": "Copied to clipboard.",
     "loadMore": "Load more",
     "loading": "Loading..."
   }
