@@ -1,10 +1,6 @@
-import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link } from '@tanstack/react-router';
 import {
-  Accordion,
-  AccordionDetails,
-  AccordionSummary,
   Alert,
   Box,
   Button,
@@ -76,6 +72,7 @@ export const BlueprintDetailPage = ({
   const { t } = useTranslation();
   const [leftSelection, setLeftSelection] = useState<number | null>(null);
   const [rightSelection, setRightSelection] = useState<number | null>(null);
+  const [pageTab, setPageTab] = useState(0);
   const [dataTab, setDataTab] = useState(0);
   const [publishConfirmationOpen, setPublishConfirmationOpen] = useState(false);
   const queryClient = useQueryClient();
@@ -128,39 +125,34 @@ export const BlueprintDetailPage = ({
       )}
       {blueprint && (
         <>
-          <Stack
-            alignItems={{ sm: 'center' }}
-            direction={{ xs: 'column', sm: 'row' }}
-            justifyContent="space-between"
-            spacing={2}
-          >
-            <PageHeader
-              eyebrow={t('blueprints.blueprint')}
-              title={blueprint.name}
-            />
-            <Stack direction="row" spacing={1}>
-              <Link
-                params={{
-                  blueprintId,
-                  version: String(blueprint.version),
-                }}
-                to="/manage/blueprints/$blueprintId/revisions/$version/new"
-              >
-                <Button variant="outlined">
-                  {t('blueprints.editBlueprint')}
-                </Button>
-              </Link>
-              {blueprint.status === 'draft' && (
-                <Button
-                  color="primary"
-                  onClick={() => setPublishConfirmationOpen(true)}
-                  variant="contained"
+          <PageHeader
+            actions={
+              <Stack direction="row" spacing={1}>
+                <Link
+                  params={{
+                    blueprintId,
+                    version: String(blueprint.version),
+                  }}
+                  to="/manage/blueprints/$blueprintId/revisions/$version/new"
                 >
-                  {t('blueprints.publish')}
-                </Button>
-              )}
-            </Stack>
-          </Stack>
+                  <Button variant="outlined">
+                    {t('blueprints.editBlueprint')}
+                  </Button>
+                </Link>
+                {blueprint.status === 'draft' && (
+                  <Button
+                    color="primary"
+                    onClick={() => setPublishConfirmationOpen(true)}
+                    variant="contained"
+                  >
+                    {t('blueprints.publish')}
+                  </Button>
+                )}
+              </Stack>
+            }
+            eyebrow={t('blueprints.blueprint')}
+            title={blueprint.name}
+          />
           <Stack direction="row" spacing={1} sx={{ flexWrap: 'wrap', mt: 1 }}>
             <Chip label={blueprint.code} variant="outlined" />
             <Chip label={blueprint.kind} variant="outlined" />
@@ -188,11 +180,29 @@ export const BlueprintDetailPage = ({
               {publish.error.message}
             </Alert>
           )}
-          <RevisionHistory
-            blueprintId={blueprintId}
-            revisions={revisionItems}
-          />
-          {left.data && (
+          <Tabs
+            allowScrollButtonsMobile
+            onChange={(_, value: number) => setPageTab(value)}
+            scrollButtons="auto"
+            sx={{ mt: 3 }}
+            value={pageTab}
+            variant="scrollable"
+          >
+            <Tab
+              label={t('blueprints.versionMetadata', {
+                version: leftVersion,
+              })}
+            />
+            <Tab label={t('blueprints.revisionHistory')} />
+            <Tab label={t('blueprints.compareDefinitions')} />
+          </Tabs>
+          {pageTab === 1 && (
+            <RevisionHistory
+              blueprintId={blueprintId}
+              revisions={revisionItems}
+            />
+          )}
+          {pageTab === 0 && left.data && (
             <Paper component="section" sx={{ mt: 3, p: 2.5 }}>
               <Typography component="h2" variant="h6">
                 {t('blueprints.versionMetadata', {
@@ -282,7 +292,7 @@ export const BlueprintDetailPage = ({
               </Box>
             </Paper>
           )}
-          {left.data && (
+          {pageTab === 0 && left.data && (
             <Box component="aside" sx={{ mt: 3 }}>
               <ExtensionOutlet
                 context={{
@@ -294,14 +304,12 @@ export const BlueprintDetailPage = ({
               />
             </Box>
           )}
-          <Accordion component="section" sx={{ mt: 3 }}>
-            <AccordionSummary expandIcon={<ExpandMoreIcon />}>
+          {pageTab === 2 && (
+            <Paper component="section" sx={{ mt: 3, p: 2.5 }}>
               <Typography component="h2" variant="h6">
                 {t('blueprints.compareDefinitions')}
               </Typography>
-            </AccordionSummary>
-            <AccordionDetails>
-              <Typography color="text.secondary">
+              <Typography color="text.secondary" sx={{ mt: 1 }}>
                 {t('blueprints.compareDefinitionsDescription')}
               </Typography>
               <Stack
@@ -359,8 +367,8 @@ export const BlueprintDetailPage = ({
                   )}
                 </Suspense>
               </Box>
-            </AccordionDetails>
-          </Accordion>
+            </Paper>
+          )}
           <Dialog
             onClose={() =>
               !publish.isPending && setPublishConfirmationOpen(false)

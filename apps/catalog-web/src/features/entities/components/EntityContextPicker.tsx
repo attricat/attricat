@@ -34,7 +34,16 @@ export const EntityContextPicker = ({
     <Box
       aria-label={t('entities.context')}
       component="nav"
-      sx={{ alignItems: 'center', display: 'flex', gap: 1, mb: 2, mt: -1 }}
+      sx={{
+        alignItems: 'center',
+        borderBottom: 1,
+        borderColor: 'divider',
+        display: 'flex',
+        gap: 1,
+        mb: 2,
+        mt: -1,
+        width: '100%',
+      }}
     >
       <Tabs
         aria-label={t('entities.context')}
