@@ -1,16 +1,16 @@
-import { useQuery } from '@tanstack/react-query';
+import { useState } from 'react';
+import { useInfiniteQuery } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
 import {
+  Autocomplete,
   Checkbox,
   FormControl,
-  InputLabel,
   ListItemText,
-  MenuItem,
-  Select,
   Stack,
   TextField,
   Typography,
 } from '@mui/material';
+import { LoadMoreButton } from '../../../components/LoadMoreButton';
 import { searchEntities, type Attribute } from '../api';
 import { displayLabel, dropdownOptionLabel } from '../entity-display';
 import { entityQueryKeys } from '../query-keys';
@@ -31,10 +31,14 @@ export const RelationshipField = ({
   value: string;
 }) => {
   const { t } = useTranslation();
+  const [query, setQuery] = useState('');
   const targetBlueprint = attribute.target_blueprint_code;
-  const targets = useQuery({
-    queryKey: entityQueryKeys.relationshipTargets(targetBlueprint),
-    queryFn: () => searchEntities(targetBlueprint!, undefined, '', null),
+  const targets = useInfiniteQuery({
+    queryKey: entityQueryKeys.relationshipTargets(targetBlueprint, query),
+    queryFn: ({ pageParam }) =>
+      searchEntities(targetBlueprint!, undefined, query, pageParam),
+    initialPageParam: null as string | null,
+    getNextPageParam: (page) => page.next_cursor,
     enabled: Boolean(targetBlueprint),
   });
   if (!targetBlueprint) {
@@ -55,7 +59,7 @@ export const RelationshipField = ({
     .split(',')
     .map((targetId) => targetId.trim())
     .filter(Boolean);
-  const options = [...(targets.data?.items ?? [])];
+  const options = targets.data?.pages.flatMap((page) => page.items) ?? [];
   for (const targetId of selectedIds) {
     if (!options.some((target) => target.id === targetId)) {
       options.push({
@@ -68,40 +72,55 @@ export const RelationshipField = ({
       });
     }
   }
-  const targetViews = targets.data?.blueprint.blueprint.views ?? {};
+  const targetViews = targets.data?.pages[0]?.blueprint.blueprint.views ?? {};
   const targetLabel = (target: (typeof options)[number]) =>
     dropdownOptionLabel(target.preview, targetViews) ??
     displayLabel(target.display, target.id);
-  const labels = new Map(
-    options.map((target) => [target.id, targetLabel(target)]),
-  );
+  const selectedTargets = selectedIds.flatMap((targetId) => {
+    const target = options.find((option) => option.id === targetId);
+    return target ? [target] : [];
+  });
 
   return (
     <Stack spacing={0.5}>
       <FormControl error={Boolean(error)} fullWidth>
-        <InputLabel id={`${attribute.code}-label`}>{attribute.code}</InputLabel>
-        <Select
+        <Autocomplete
+          disableCloseOnSelect
           disabled={disabled}
+          filterOptions={(items) => items}
+          getOptionLabel={targetLabel}
+          inputValue={query}
+          isOptionEqualToValue={(option, selected) => option.id === selected.id}
           multiple
-          label={attribute.code}
-          labelId={`${attribute.code}-label`}
-          onChange={(event) =>
-            onChange((event.target.value as string[]).join(', '))
+          onChange={(_, selected) =>
+            onChange(selected.map((target) => target.id).join(', '))
           }
-          renderValue={(selected) =>
-            (selected as string[])
-              .map((targetId) => labels.get(targetId) ?? targetId)
-              .join(', ')
-          }
-          value={selectedIds}
-        >
-          {options.map((target) => (
-            <MenuItem key={target.id} value={target.id}>
-              <Checkbox checked={selectedIds.includes(target.id)} />
+          onInputChange={(_, input, reason) => {
+            if (reason === 'input' || reason === 'clear') setQuery(input);
+          }}
+          options={options}
+          renderInput={(params) => (
+            <TextField
+              {...params}
+              error={Boolean(error)}
+              label={attribute.code}
+            />
+          )}
+          renderOption={(props, target, { selected }) => (
+            <li {...props} key={target.id}>
+              <Checkbox checked={selected} />
               <ListItemText primary={targetLabel(target)} />
-            </MenuItem>
-          ))}
-        </Select>
+            </li>
+          )}
+          value={selectedTargets}
+        />
+        {targets.hasNextPage && (
+          <LoadMoreButton
+            disabled={disabled}
+            isLoading={targets.isFetchingNextPage}
+            onLoadMore={() => void targets.fetchNextPage()}
+          />
+        )}
         {targets.isPending && (
           <Typography variant="caption">
             {t('entities.loadingOptions')}
