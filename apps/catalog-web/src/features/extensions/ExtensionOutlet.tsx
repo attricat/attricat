@@ -151,16 +151,27 @@ export const ExtensionPopoverOutlet = ({
   if (!contributions.length) return null;
   return (
     <>
-      {!hasContent && (
-        <Box
-          sx={{
-            left: -10_000,
-            position: 'fixed',
-            top: 0,
-            visibility: 'hidden',
-            width: 480,
-          }}
-        >
+      {hasContent && (
+        <Tooltip title={label}>
+          <IconButton
+            aria-label={label}
+            onClick={(event) => setAnchor(event.currentTarget)}
+            size="small"
+          >
+            <BoltOutlinedIcon fontSize="inherit" />
+          </IconButton>
+        </Tooltip>
+      )}
+      {/* Keep the measuring frame in this popover so opening it never remounts
+          the extension artifact. */}
+      <Popover
+        anchorEl={anchor}
+        anchorOrigin={{ horizontal: 'left', vertical: 'bottom' }}
+        keepMounted
+        onClose={() => setAnchor(null)}
+        open={Boolean(anchor)}
+      >
+        <Stack sx={{ maxWidth: 480, p: 2, width: 480 }}>
           {contributions.map((contribution) => (
             <ExtensionFrame
               context={context}
@@ -174,27 +185,6 @@ export const ExtensionPopoverOutlet = ({
               }
             />
           ))}
-        </Box>
-      )}
-      {hasContent && (
-        <Tooltip title={label}>
-          <IconButton
-            aria-label={label}
-            onClick={(event) => setAnchor(event.currentTarget)}
-            size="small"
-          >
-            <BoltOutlinedIcon fontSize="inherit" />
-          </IconButton>
-        </Tooltip>
-      )}
-      <Popover
-        anchorEl={anchor}
-        anchorOrigin={{ horizontal: 'left', vertical: 'bottom' }}
-        onClose={() => setAnchor(null)}
-        open={Boolean(anchor)}
-      >
-        <Stack sx={{ maxWidth: 480, p: 2 }}>
-          <ExtensionOutlet context={context} outlet={outlet} />
         </Stack>
       </Popover>
     </>
