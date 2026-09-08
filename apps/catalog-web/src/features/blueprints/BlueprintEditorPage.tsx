@@ -12,6 +12,7 @@ import {
   Dialog,
   DialogActions,
   DialogContent,
+  DialogContentText,
   DialogTitle,
   Stack,
   Typography,
@@ -105,6 +106,9 @@ value_type = "string"
   },
 ] as const;
 
+type PendingUnsavedAction =
+  { templateIndex: number; type: 'replace' } | { type: 'discard' };
+
 const configureToml = (monaco: Monaco) => {
   if (
     monaco.languages
@@ -147,6 +151,8 @@ export const BlueprintEditorPage = ({
   });
   const [templateIndex, setTemplateIndex] = useState(0);
   const [templateDialogOpen, setTemplateDialogOpen] = useState(!blueprintId);
+  const [pendingUnsavedAction, setPendingUnsavedAction] =
+    useState<PendingUnsavedAction>();
   const initialDefinition =
     source.data?.blueprint.definition ??
     blueprintTemplates[templateIndex].definition;
@@ -184,22 +190,43 @@ export const BlueprintEditorPage = ({
     },
   });
 
-  const selectTemplate = (index: number) => {
-    if (isDirty && !window.confirm(t('blueprints.replaceUnsavedChanges')))
-      return;
+  const applyTemplate = (index: number) => {
     setTemplateIndex(index);
     setEditedDefinition(null);
     setTemplateDialogOpen(false);
   };
 
-  const cancel = () => {
-    if (isDirty && !window.confirm(t('blueprints.discardUnsavedChanges')))
+  const selectTemplate = (index: number) => {
+    if (isDirty) {
+      setPendingUnsavedAction({ templateIndex: index, type: 'replace' });
       return;
+    }
+    applyTemplate(index);
+  };
+
+  const leaveEditor = () => {
     navigate(
       blueprintId
         ? { params: { blueprintId }, to: '/manage/blueprints/$blueprintId' }
         : { to: '/manage/blueprints' },
     );
+  };
+
+  const cancel = () => {
+    if (isDirty) {
+      setPendingUnsavedAction({ type: 'discard' });
+      return;
+    }
+    leaveEditor();
+  };
+
+  const confirmUnsavedAction = () => {
+    if (pendingUnsavedAction?.type === 'replace') {
+      applyTemplate(pendingUnsavedAction.templateIndex);
+    } else if (pendingUnsavedAction?.type === 'discard') {
+      leaveEditor();
+    }
+    setPendingUnsavedAction(undefined);
   };
 
   if (blueprintId && source.isPending) {
@@ -335,6 +362,34 @@ export const BlueprintEditorPage = ({
           </DialogActions>
         </Dialog>
       )}
+      <Dialog
+        aria-describedby="unsaved-changes-dialog-description"
+        onClose={() => setPendingUnsavedAction(undefined)}
+        open={Boolean(pendingUnsavedAction)}
+      >
+        <DialogTitle>{t('blueprints.unsavedChangesTitle')}</DialogTitle>
+        <DialogContent>
+          <DialogContentText id="unsaved-changes-dialog-description">
+            {pendingUnsavedAction?.type === 'replace'
+              ? t('blueprints.replaceUnsavedChanges')
+              : t('blueprints.discardUnsavedChanges')}
+          </DialogContentText>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setPendingUnsavedAction(undefined)}>
+            {t('blueprints.keepEditing')}
+          </Button>
+          <Button
+            color="error"
+            onClick={confirmUnsavedAction}
+            variant="contained"
+          >
+            {pendingUnsavedAction?.type === 'replace'
+              ? t('blueprints.replace')
+              : t('blueprints.discard')}
+          </Button>
+        </DialogActions>
+      </Dialog>
       <Box
         sx={{
           border: 1,
