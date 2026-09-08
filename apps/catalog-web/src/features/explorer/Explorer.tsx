@@ -9,9 +9,10 @@ import { useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 import { PageContainer } from '../../components/PageContainer';
 import { PageHeader } from '../../components/PageHeader';
+import { listContexts } from '../contexts/api';
+import { contextQueryKeys } from '../contexts/query-keys';
 import {
   getBlueprintByCode,
-  listContexts,
   listEntityBlueprints,
   searchEntities,
 } from '../entities/api';
@@ -48,7 +49,7 @@ export const Explorer = ({ search: urlSearch }: { search: ExplorerSearch }) => {
   }, [urlSearch.blueprint]);
 
   const contexts = useQuery({
-    queryKey: entityQueryKeys.contexts(),
+    queryKey: contextQueryKeys.all(),
     queryFn: listContexts,
   });
   const selectedBlueprint = useQuery({

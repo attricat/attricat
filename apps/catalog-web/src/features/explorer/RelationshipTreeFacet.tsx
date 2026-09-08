@@ -17,10 +17,8 @@ import {
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { LoadMoreButton } from '../../components/LoadMoreButton';
-import {
-  getRelationshipTreeFacetChildren,
-  type AttributeContext,
-} from '../entities/api';
+import type { AttributeContext } from '../contexts/api';
+import { getRelationshipTreeFacetChildren } from '../entities/api';
 import { entityQueryKeys } from '../entities/query-keys';
 
 export type RelationshipTreeFacetItem = {

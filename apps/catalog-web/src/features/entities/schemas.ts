@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { attributeContextSchema } from '../contexts/api';
 import { fileMetadataSchema } from '../files/schemas';
 import { attributeValueKinds, attributeValueTypes } from './value-types';
 
@@ -196,12 +197,6 @@ const viewDefinitionSchema: z.ZodType<ViewDefinition> = z.lazy(() =>
 );
 const viewsSchema = z.record(z.string(), viewDefinitionSchema);
 const valueTypeSchema = z.enum(attributeValueTypes);
-export const contextCodeSchema = z
-  .string()
-  .regex(
-    /^[A-Za-z0-9_-]+$/,
-    'Use only letters, numbers, hyphens, and underscores',
-  );
 export const attributeSchema = z
   .object({
     code: z.string(),
@@ -275,17 +270,6 @@ export const relationshipTargetsSchema = z.object({
 const attributeValueSelectorSchema = z.object({
   attribute_code: z.string().min(1),
   context_id: uuidSchema.nullable(),
-});
-export const attributeContextSchema = z.object({
-  id: uuidSchema,
-  code: contextCodeSchema,
-  data: jsonObjectSchema,
-  parent_id: uuidSchema.nullable(),
-});
-export const createAttributeContextSchema = z.object({
-  code: contextCodeSchema,
-  data: jsonObjectSchema,
-  parent_id: uuidSchema,
 });
 export const entitySchema = z
   .object({
@@ -485,7 +469,6 @@ export type BlueprintWithAttributes = z.infer<
 export type NewAttributeValue = z.infer<typeof newAttributeValueSchema>;
 export type FormAttributeValue = z.infer<typeof formAttributeValueSchema>;
 export type RelationshipTargets = z.infer<typeof relationshipTargetsSchema>;
-export type AttributeContext = z.infer<typeof attributeContextSchema>;
 export type Entity = z.infer<typeof entitySchema>;
 export type EntityAuditChange = z.infer<typeof entityAuditChangeSchema>;
 export type EntityItem = z.infer<typeof entityItemSchema>;

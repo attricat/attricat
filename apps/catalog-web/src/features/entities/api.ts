@@ -1,10 +1,8 @@
 import { z } from 'zod';
 import { apiFetch } from '../auth/request';
 import {
-  attributeContextSchema,
   blueprintSchema,
   blueprintWithAttributesSchema,
-  createAttributeContextSchema,
   createEntityRequestSchema,
   entityHierarchySchema,
   entityAuditChangeSchema,
@@ -26,7 +24,6 @@ import {
 export { viewBlockTypes } from './schemas';
 export type {
   Attribute,
-  AttributeContext,
   Blueprint,
   BlueprintWithAttributes,
   ComponentReference,
@@ -136,47 +133,6 @@ export const getRelationshipTreeFacetChildren = (input: {
 
 export const listEntityBlueprints = () =>
   request('/api/blueprints', z.array(blueprintSchema));
-export const listContexts = () =>
-  request('/api/contexts', z.array(attributeContextSchema));
-export const createContext = (
-  code: string,
-  data: Record<string, unknown>,
-  parentId: string,
-) => {
-  const payload = createAttributeContextSchema.parse({
-    code,
-    data,
-    parent_id: parentId,
-  });
-  return request('/api/contexts', attributeContextSchema, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(payload),
-  });
-};
-export const updateContext = (
-  id: string,
-  data: Record<string, unknown>,
-  parentId: string,
-) =>
-  request(
-    `/api/contexts/id/${encodeURIComponent(id)}`,
-    attributeContextSchema,
-    {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ data, parent_id: parentId }),
-    },
-  );
-export const deleteContext = async (id: string) => {
-  const response = await apiFetch(
-    `/api/contexts/id/${encodeURIComponent(id)}`,
-    {
-      method: 'DELETE',
-    },
-  );
-  if (!response.ok) throw new Error(`Request failed (${response.status})`);
-};
 export const getResolvedEntityPreview = (id: string, contextId: string) =>
   request(
     `/api/entities/${encodeURIComponent(uuidSchema.parse(id))}/resolved-preview?context_id=${encodeURIComponent(uuidSchema.parse(contextId))}`,

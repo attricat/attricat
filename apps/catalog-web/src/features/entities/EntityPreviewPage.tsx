@@ -29,11 +29,12 @@ import {
   ExtensionOutlet,
   ExtensionPopoverOutlet,
 } from '../extensions/ExtensionOutlet';
+import { listContexts } from '../contexts/api';
+import { contextQueryKeys } from '../contexts/query-keys';
 import {
   getBlueprintRevision,
   getCurrentBlueprint,
   getResolvedEntityPreview,
-  listContexts,
 } from './api';
 import { entityQueryKeys } from './query-keys';
 import { EntityView } from '../views/components/EntityView';
@@ -46,7 +47,7 @@ export const EntityPreviewPage = ({ entityId }: { entityId: string }) => {
   const { t } = useTranslation();
   const [selectedContext, setSelectedContext] = useState('');
   const contexts = useQuery({
-    queryKey: entityQueryKeys.contexts(),
+    queryKey: contextQueryKeys.all(),
     queryFn: listContexts,
   });
   const selectedContextId =

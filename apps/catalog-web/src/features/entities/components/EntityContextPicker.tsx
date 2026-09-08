@@ -1,6 +1,6 @@
 import { Box, MenuItem, Tab, Tabs, TextField } from '@mui/material';
 import { useTranslation } from 'react-i18next';
-import type { AttributeContext } from '../api';
+import type { AttributeContext } from '../../contexts/api';
 
 type EntityContextPickerProps = {
   contexts: readonly AttributeContext[];

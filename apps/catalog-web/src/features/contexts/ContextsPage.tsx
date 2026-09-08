@@ -12,13 +12,13 @@ import {
 } from '@mui/material';
 import { PageContainer } from '../../components/PageContainer';
 import { PageHeader } from '../../components/PageHeader';
-import { listContexts } from '../entities/api';
-import { entityQueryKeys } from '../entities/query-keys';
+import { listContexts } from './api';
+import { contextQueryKeys } from './query-keys';
 
 export const ContextsPage = () => {
   const { t } = useTranslation();
   const contexts = useQuery({
-    queryKey: entityQueryKeys.contexts(),
+    queryKey: contextQueryKeys.all(),
     queryFn: listContexts,
   });
   return (
