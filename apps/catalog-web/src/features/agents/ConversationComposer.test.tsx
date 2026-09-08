@@ -18,7 +18,7 @@ vi.mock('./api', () => ({
 
 const conversationId = '123e4567-e89b-12d3-a456-426614174000';
 
-const renderComposer = (onSent = vi.fn()) => {
+const renderComposer = (onSent = vi.fn(), onSendingChange = vi.fn()) => {
   const queryClient = new QueryClient({
     defaultOptions: { mutations: { retry: false } },
   });
@@ -27,13 +27,13 @@ const renderComposer = (onSent = vi.fn()) => {
     <QueryClientProvider client={queryClient}>
       <ConversationComposer
         conversationId={conversationId}
-        onSendingChange={vi.fn()}
+        onSendingChange={onSendingChange}
         onSent={onSent}
       />
     </QueryClientProvider>,
   );
 
-  return onSent;
+  return { onSendingChange, onSent };
 };
 
 describe('ConversationComposer', () => {
@@ -44,7 +44,7 @@ describe('ConversationComposer', () => {
 
   it('uploads attachments before sending and resets after a successful send', async () => {
     const user = userEvent.setup();
-    const onSent = renderComposer();
+    const { onSendingChange, onSent } = renderComposer();
     const file = new File(['catalog'], 'catalog.csv', { type: 'text/csv' });
 
     vi.mocked(uploadConversationFiles).mockResolvedValue({
@@ -68,6 +68,8 @@ describe('ConversationComposer', () => {
       '123e4567-e89b-12d3-a456-426614174001',
     ]);
     await waitFor(() => expect(onSent).toHaveBeenCalledOnce());
+    expect(onSendingChange).toHaveBeenNthCalledWith(1, true);
+    expect(onSendingChange).toHaveBeenLastCalledWith(false);
     expect(screen.queryByText('catalog.csv')).toBeNull();
     expect(screen.getByRole('textbox', { name: 'Message' })).toHaveProperty(
       'value',
