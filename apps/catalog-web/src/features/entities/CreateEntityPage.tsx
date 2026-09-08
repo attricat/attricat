@@ -1,5 +1,5 @@
 import { useMutation, useQuery } from '@tanstack/react-query';
-import { useEffect } from 'react';
+import { useState } from 'react';
 import { useNavigate } from '@tanstack/react-router';
 import { useTranslation } from 'react-i18next';
 import { listContexts } from '../contexts/api';
@@ -7,6 +7,7 @@ import { contextQueryKeys } from '../contexts/query-keys';
 import { createEntity, getBlueprintByCode } from './api';
 import { EntityForm } from './components/EntityForm';
 import { EntityPage } from './components/EntityPage';
+import { entityQueryKeys } from './query-keys';
 import { attributeValueKinds } from './value-types';
 
 export const CreateEntityPage = ({
@@ -16,21 +17,27 @@ export const CreateEntityPage = ({
 }) => {
   const { t } = useTranslation();
   const navigate = useNavigate({ from: '/entities/new' });
-  const blueprint = useMutation({
-    meta: { toast: false },
-    mutationFn: ({ code, version }: { code: string; version?: number }) =>
-      getBlueprintByCode(code, version),
+  const [selectedBlueprint, setSelectedBlueprint] = useState<{
+    code: string;
+    version?: number;
+  }>();
+  const blueprintSelection =
+    search.locked && search.blueprint
+      ? { code: search.blueprint }
+      : selectedBlueprint;
+  const blueprint = useQuery({
+    queryKey: entityQueryKeys.blueprintByCode(
+      blueprintSelection?.code,
+      blueprintSelection?.version,
+    ),
+    queryFn: ({ signal }) =>
+      getBlueprintByCode(
+        blueprintSelection!.code,
+        blueprintSelection!.version,
+        signal,
+      ),
+    enabled: Boolean(blueprintSelection),
   });
-  useEffect(() => {
-    if (
-      search.locked &&
-      search.blueprint &&
-      !blueprint.data &&
-      !blueprint.isPending
-    ) {
-      blueprint.mutate({ code: search.blueprint });
-    }
-  }, [blueprint, search.blueprint, search.locked]);
   const contexts = useQuery({
     queryKey: contextQueryKeys.all(),
     queryFn: listContexts,
@@ -87,7 +94,9 @@ export const CreateEntityPage = ({
         error={blueprint.error ?? create.error}
         isLoadingBlueprint={blueprint.isPending || create.isPending}
         lockedBlueprint={search.locked}
-        onLoadBlueprint={(code, version) => blueprint.mutate({ code, version })}
+        onLoadBlueprint={(code, version) =>
+          setSelectedBlueprint({ code, version })
+        }
         onSubmit={({ values, relationships }) =>
           create.mutate({ values, relationships })
         }
