@@ -1,0 +1,94 @@
+// @vitest-environment jsdom
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { render, screen, waitFor } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+import '../../i18n';
+import { uploadConversationFiles } from '../files/api';
+import { sendMessage } from './api';
+import { ConversationComposer } from './ConversationComposer';
+
+vi.mock('../files/api', () => ({
+  uploadConversationFiles: vi.fn(),
+}));
+
+vi.mock('./api', () => ({
+  sendMessage: vi.fn(),
+}));
+
+const conversationId = '123e4567-e89b-12d3-a456-426614174000';
+
+const renderComposer = (onSent = vi.fn()) => {
+  const queryClient = new QueryClient({
+    defaultOptions: { mutations: { retry: false } },
+  });
+
+  render(
+    <QueryClientProvider client={queryClient}>
+      <ConversationComposer
+        conversationId={conversationId}
+        onSendingChange={vi.fn()}
+        onSent={onSent}
+      />
+    </QueryClientProvider>,
+  );
+
+  return onSent;
+};
+
+describe('ConversationComposer', () => {
+  beforeEach(() => {
+    vi.mocked(sendMessage).mockReset();
+    vi.mocked(uploadConversationFiles).mockReset();
+  });
+
+  it('uploads attachments before sending and resets after a successful send', async () => {
+    const user = userEvent.setup();
+    const onSent = renderComposer();
+    const file = new File(['catalog'], 'catalog.csv', { type: 'text/csv' });
+
+    vi.mocked(uploadConversationFiles).mockResolvedValue({
+      files: [{ id: '123e4567-e89b-12d3-a456-426614174001' }],
+    } as Awaited<ReturnType<typeof uploadConversationFiles>>);
+    vi.mocked(sendMessage).mockResolvedValue({
+      id: '123e4567-e89b-12d3-a456-426614174002',
+      status: 'queued',
+    });
+
+    await user.type(screen.getByRole('textbox', { name: 'Message' }), 'Review');
+    await user.upload(document.querySelector('input[type="file"]')!, file);
+    await user.click(screen.getByRole('button', { name: 'Send' }));
+
+    await waitFor(() =>
+      expect(uploadConversationFiles).toHaveBeenCalledWith(conversationId, [
+        file,
+      ]),
+    );
+    expect(sendMessage).toHaveBeenCalledWith(conversationId, 'Review', [
+      '123e4567-e89b-12d3-a456-426614174001',
+    ]);
+    await waitFor(() => expect(onSent).toHaveBeenCalledOnce());
+    expect(screen.queryByText('catalog.csv')).toBeNull();
+    expect(screen.getByRole('textbox', { name: 'Message' })).toHaveProperty(
+      'value',
+      '',
+    );
+  });
+
+  it('submits a message from Enter', async () => {
+    const user = userEvent.setup();
+    renderComposer();
+    vi.mocked(sendMessage).mockResolvedValue({
+      id: '123e4567-e89b-12d3-a456-426614174002',
+      status: 'queued',
+    });
+    const message = screen.getByRole('textbox', { name: 'Message' });
+
+    await user.type(message, 'Review');
+    await user.keyboard('{Enter}');
+
+    await waitFor(() =>
+      expect(sendMessage).toHaveBeenCalledWith(conversationId, 'Review', []),
+    );
+  });
+});
