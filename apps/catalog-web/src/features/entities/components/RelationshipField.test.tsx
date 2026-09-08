@@ -84,6 +84,8 @@ describe('RelationshipField', () => {
       undefined,
       'later',
       'second-page',
+      undefined,
+      expect.any(AbortSignal),
     );
   });
 });

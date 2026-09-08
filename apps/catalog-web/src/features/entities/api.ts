@@ -57,6 +57,7 @@ export const searchEntities = (
     context_id: string;
     selected_target_ids: string[];
   }[],
+  signal?: AbortSignal,
 ) => {
   const payload = searchEntitiesRequestSchema.parse({
     blueprint: {
@@ -72,18 +73,22 @@ export const searchEntities = (
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(payload),
+    ...(signal === undefined ? {} : { signal }),
   });
 };
 
-export const getRelationshipTreeFacetChildren = (input: {
-  blueprint: { code: string; version?: number };
-  query?: string;
-  source_relationship_field: string;
-  hierarchy_field?: string;
-  context_id: string;
-  parent_id?: string;
-  cursor?: string | null;
-}) =>
+export const getRelationshipTreeFacetChildren = (
+  input: {
+    blueprint: { code: string; version?: number };
+    query?: string;
+    source_relationship_field: string;
+    hierarchy_field?: string;
+    context_id: string;
+    parent_id?: string;
+    cursor?: string | null;
+  },
+  signal?: AbortSignal,
+) =>
   request(
     '/api/v1/entities/facets/relationship-tree/children',
     relationshipTreeFacetChildrenResponseSchema,
@@ -91,11 +96,16 @@ export const getRelationshipTreeFacetChildren = (input: {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(input),
+      ...(signal === undefined ? {} : { signal }),
     },
   );
 
-export const listEntityBlueprints = () =>
-  request('/api/blueprints', z.array(blueprintSchema));
+export const listEntityBlueprints = (signal?: AbortSignal) =>
+  request(
+    '/api/blueprints',
+    z.array(blueprintSchema),
+    signal === undefined ? undefined : { signal },
+  );
 export const getResolvedEntityPreview = (id: string, contextId: string) =>
   request(
     `/api/entities/${encodeURIComponent(uuidSchema.parse(id))}/resolved-preview?context_id=${encodeURIComponent(uuidSchema.parse(contextId))}`,
@@ -110,10 +120,18 @@ export const getEntityHierarchy = (
     `/api/entities/${encodeURIComponent(uuidSchema.parse(id))}/hierarchy?context_id=${encodeURIComponent(uuidSchema.parse(contextId))}&field=${encodeURIComponent(field)}`,
     entityHierarchySchema,
   );
-export const getBlueprintByCode = (code: string, version?: number) => {
+export const getBlueprintByCode = (
+  code: string,
+  version?: number,
+  signal?: AbortSignal,
+) => {
   const input = getBlueprintRequestSchema.parse({ code, version });
   const path = `/api/blueprints/by-code/${encodeURIComponent(input.code)}${input.version === undefined ? '' : `/versions/${input.version}`}`;
-  return request(path, blueprintWithAttributesSchema);
+  return request(
+    path,
+    blueprintWithAttributesSchema,
+    signal === undefined ? undefined : { signal },
+  );
 };
 export const getBlueprintRevision = (id: string, version: number) => {
   const input = getBlueprintRevisionRequestSchema.parse({ id, version });

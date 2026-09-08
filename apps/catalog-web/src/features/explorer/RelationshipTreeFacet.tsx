@@ -93,20 +93,24 @@ const RelationshipTreeFacetContent = ({
         parentId,
         cursor,
       ),
-      queryFn: () =>
-        getRelationshipTreeFacetChildren({
-          blueprint: {
-            code: blueprint,
-            ...(version === undefined ? {} : { version }),
+      queryFn: ({ signal }) =>
+        getRelationshipTreeFacetChildren(
+          {
+            blueprint: {
+              code: blueprint,
+              ...(version === undefined ? {} : { version }),
+            },
+            ...(query ? { query } : {}),
+            source_relationship_field: sourceField,
+            ...(hierarchyField ? { hierarchy_field: hierarchyField } : {}),
+            context_id: contexts.find(
+              (context) => context.code === contextCode,
+            )!.id,
+            ...(parentId === undefined ? {} : { parent_id: parentId }),
+            cursor,
           },
-          ...(query ? { query } : {}),
-          source_relationship_field: sourceField,
-          ...(hierarchyField ? { hierarchy_field: hierarchyField } : {}),
-          context_id: contexts.find((context) => context.code === contextCode)!
-            .id,
-          ...(parentId === undefined ? {} : { parent_id: parentId }),
-          cursor,
-        }),
+          signal,
+        ),
       enabled: Boolean(contextCode),
     })),
   });

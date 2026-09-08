@@ -7,6 +7,7 @@ import {
   getEntityHierarchy,
   getIncomingRelationships,
   getRelationshipTreeFacetChildren,
+  listEntityBlueprints,
   previewEntityMigration,
   getResolvedEntityPreview,
   searchEntities,
@@ -143,6 +144,71 @@ describe('entity API client', () => {
         remove_values: [],
       }),
     });
+  });
+
+  it('forwards cancellation signals for explorer searches and facets', async () => {
+    const controller = new AbortController();
+
+    respond(blueprintWithAttributes);
+    await getBlueprintByCode('product', undefined, controller.signal);
+    expect(fetchMock).toHaveBeenLastCalledWith(
+      '/api/blueprints/by-code/product',
+      { signal: controller.signal },
+    );
+
+    respond([blueprint]);
+    await listEntityBlueprints(controller.signal);
+    expect(fetchMock).toHaveBeenLastCalledWith('/api/blueprints', {
+      signal: controller.signal,
+    });
+
+    respond({
+      blueprint: blueprintWithAttributes,
+      items: [],
+      next_cursor: null,
+    });
+    await searchEntities(
+      'product',
+      undefined,
+      '',
+      null,
+      undefined,
+      controller.signal,
+    );
+    expect(fetchMock).toHaveBeenLastCalledWith('/api/v1/entities/search', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        blueprint: { code: 'product' },
+        query: '',
+        filters: [],
+        page: { size: 25, cursor: null },
+      }),
+      signal: controller.signal,
+    });
+
+    respond({ items: [], next_cursor: null });
+    await getRelationshipTreeFacetChildren(
+      {
+        blueprint: { code: 'product' },
+        source_relationship_field: 'categories',
+        context_id: entityId,
+      },
+      controller.signal,
+    );
+    expect(fetchMock).toHaveBeenLastCalledWith(
+      '/api/v1/entities/facets/relationship-tree/children',
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          blueprint: { code: 'product' },
+          source_relationship_field: 'categories',
+          context_id: entityId,
+        }),
+        signal: controller.signal,
+      },
+    );
   });
 
   it('uses the backend default ordering', async () => {
