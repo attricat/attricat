@@ -125,7 +125,10 @@ export const FileAttributeEditor = ({
           value.id === item.id
             ? {
                 ...value,
-                error: error instanceof Error ? error.message : 'Upload failed',
+                error:
+                  error instanceof Error
+                    ? error.message
+                    : t('files.uploadFailed'),
                 progress: 0,
               }
             : value,
@@ -156,7 +159,7 @@ export const FileAttributeEditor = ({
     <Stack spacing={1}>
       <Typography>{attribute.code}</Typography>
       {!entityId && (
-        <Alert severity="info">Save the entity before uploading files.</Alert>
+        <Alert severity="info">{t('files.saveEntityBeforeUploading')}</Alert>
       )}
       <Box
         onDragOver={(event) => event.preventDefault()}
@@ -191,7 +194,7 @@ export const FileAttributeEditor = ({
           onClick={() => input.current?.click()}
           startIcon={<CloudUploadOutlinedIcon />}
         >
-          Choose or drop files
+          {t('files.chooseOrDropFiles')}
         </Button>
         {pending.length > 0 && (
           <Button
@@ -200,7 +203,7 @@ export const FileAttributeEditor = ({
             onClick={startUploads}
             variant="contained"
           >
-            Upload {pending.length} file{pending.length === 1 ? '' : 's'}
+            {t('files.uploadCount', { count: pending.length })}
           </Button>
         )}
       </Box>
@@ -212,7 +215,9 @@ export const FileAttributeEditor = ({
               <>
                 <Chip color="error" label={t('files.failed')} size="small" />
                 <IconButton
-                  aria-label={`Retry ${item.file.name}`}
+                  aria-label={t('files.retryFile', {
+                    filename: item.file.name,
+                  })}
                   disabled={disabled}
                   onClick={() => void send(item)}
                 >
@@ -221,7 +226,7 @@ export const FileAttributeEditor = ({
               </>
             ) : (
               <Chip
-                label={item.progress ? `${item.progress}%` : 'Ready'}
+                label={item.progress ? `${item.progress}%` : t('files.ready')}
                 size="small"
               />
             )}
@@ -247,7 +252,7 @@ export const FileAttributeEditor = ({
           <Typography sx={{ flexGrow: 1 }}>{file.filename}</Typography>
           <Chip label={file.status} size="small" />
           <IconButton
-            aria-label={`Download ${file.filename}`}
+            aria-label={t('files.downloadFile', { filename: file.filename })}
             component="a"
             href={fileDownloadUrl(file.id)}
           >
@@ -259,18 +264,18 @@ export const FileAttributeEditor = ({
                 disabled={disabled || index === 0}
                 onClick={() => reorder(index, -1)}
               >
-                Up
+                {t('files.moveUp')}
               </Button>
               <Button
                 disabled={disabled || index === uploaded.length - 1}
                 onClick={() => reorder(index, 1)}
               >
-                Down
+                {t('files.moveDown')}
               </Button>
             </>
           )}
           <IconButton
-            aria-label={`Remove ${file.filename}`}
+            aria-label={t('files.removeFile', { filename: file.filename })}
             disabled={disabled}
             onClick={() =>
               setUploaded((items) =>

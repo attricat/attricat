@@ -166,7 +166,8 @@
     "relationshipIntegrity": "Integralność relacji",
     "source": "Źródło",
     "attribute": "Atrybut",
-    "activeEdges": "Aktywne krawędzie"
+    "activeEdges": "Aktywne krawędzie",
+    "never": "Nigdy"
   },
   "entities": {
     "createEntity": "Utwórz encję",
@@ -348,7 +349,17 @@
     "display": "Wyświetlanie",
     "schema": "Schemat",
     "outdated": "Nieaktualny",
-    "current": "Aktualny"
+    "current": "Aktualny",
+    "resultCount_one": "{{count}} wynik",
+    "resultCount_few": "{{count}} wyniki",
+    "resultCount_many": "{{count}} wyników",
+    "resultCount_other": "{{count}} wyniku",
+    "noMatchingEntities": "Żadna encja nie pasuje do tego wyszukiwania.",
+    "matchViaRelationship_one": "{{term}} przez {{count}} relację",
+    "matchViaRelationship_few": "{{term}} przez {{count}} relacje",
+    "matchViaRelationship_many": "{{term}} przez {{count}} relacji",
+    "matchViaRelationship_other": "{{term}} przez {{count}} relacji",
+    "matchInAttribute": "{{term}} w {{attribute}}"
   },
   "audit": {
     "title": "Aktywność / dziennik audytu",
@@ -422,7 +433,20 @@
   "files": {
     "thumbnailProcessing": "Miniatura jest przetwarzana",
     "failed": "Niepowodzenie",
-    "unavailable": "Niedostępne"
+    "unavailable": "Niedostępne",
+    "uploadFailed": "Przesyłanie nie powiodło się",
+    "saveEntityBeforeUploading": "Zapisz encję przed przesłaniem plików.",
+    "chooseOrDropFiles": "Wybierz lub upuść pliki",
+    "uploadCount_one": "Prześlij {{count}} plik",
+    "uploadCount_few": "Prześlij {{count}} pliki",
+    "uploadCount_many": "Prześlij {{count}} plików",
+    "uploadCount_other": "Prześlij {{count}} pliku",
+    "retryFile": "Spróbuj ponownie: {{filename}}",
+    "ready": "Gotowe",
+    "downloadFile": "Pobierz {{filename}}",
+    "moveUp": "W górę",
+    "moveDown": "W dół",
+    "removeFile": "Usuń {{filename}}"
   },
   "extensions": {
     "title": "Rozszerzenia",
