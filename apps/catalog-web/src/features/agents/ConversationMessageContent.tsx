@@ -84,10 +84,10 @@ const markdownStyles = {
 
 export const ConversationMessageContent = ({
   content,
-  role,
+  messageRole,
 }: {
   content: unknown;
-  role: string;
+  messageRole: string;
 }) => {
   if (isRecord(content) && Array.isArray(content.tool_calls)) {
     return (
@@ -104,11 +104,15 @@ export const ConversationMessageContent = ({
     );
   }
 
-  if (role === 'tool' && isRecord(content) && 'tool_call_id' in content) {
+  if (
+    messageRole === 'tool' &&
+    isRecord(content) &&
+    'tool_call_id' in content
+  ) {
     return <ToolResult content={content} />;
   }
 
-  if (typeof content === 'string' && role === 'assistant') {
+  if (typeof content === 'string' && messageRole === 'assistant') {
     return (
       <Box sx={markdownStyles}>
         <ReactMarkdown>{content}</ReactMarkdown>

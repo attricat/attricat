@@ -24,8 +24,11 @@ export default defineConfig(({ mode }) => {
       },
     },
     test: {
+      clearMocks: true,
       environment: 'node',
       exclude: ['e2e/**', 'node_modules/**'],
+      restoreMocks: true,
+      setupFiles: ['./src/test/setup.ts'],
     },
   };
 });

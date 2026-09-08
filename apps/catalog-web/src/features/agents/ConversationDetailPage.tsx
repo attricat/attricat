@@ -249,7 +249,7 @@ export const ConversationDetailPage = ({
                   </Typography>
                   <ConversationMessageContent
                     content={message.content}
-                    role={message.role}
+                    messageRole={message.role}
                   />
                   {message.attachments.length > 0 && (
                     <Stack
