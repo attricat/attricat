@@ -95,6 +95,22 @@ export type ExtensionStorageRequest = z.infer<
   typeof extensionStorageRequestSchema
 >;
 
+const parseExtensionResponse = async (
+  response: Response,
+  operation: 'command' | 'storage',
+): Promise<unknown> => {
+  const text = await response.text();
+  if (new TextEncoder().encode(text).length > maximumExtensionResponseBytes)
+    throw new Error(`Extension ${operation} response is too large`);
+  try {
+    return JSON.parse(text) as unknown;
+  } catch (error) {
+    throw new Error(`Extension ${operation} response contains malformed JSON`, {
+      cause: error,
+    });
+  }
+};
+
 export const extensionCommand = async (
   extensionId: string,
   contributionId: string,
@@ -109,7 +125,7 @@ export const extensionCommand = async (
     },
   );
   if (!response.ok) throw new Error('Extension command was denied');
-  return response.json() as Promise<unknown>;
+  return parseExtensionResponse(response, 'command');
 };
 
 export const extensionStorage = async (
@@ -127,8 +143,5 @@ export const extensionStorage = async (
     },
   );
   if (!response.ok) throw new Error('Extension storage request was denied');
-  const text = await response.text();
-  if (new TextEncoder().encode(text).length > maximumExtensionResponseBytes)
-    throw new Error('Extension storage response is too large');
-  return JSON.parse(text) as unknown;
+  return parseExtensionResponse(response, 'storage');
 };
