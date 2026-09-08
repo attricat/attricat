@@ -26,6 +26,7 @@ import { PageContainer } from '../../components/PageContainer';
 import { PageHeader } from '../../components/PageHeader';
 import { fileDownloadUrl, uploadConversationFiles } from '../files/api';
 import {
+  agentRunEventsUrl,
   decideApproval,
   getConversation,
   listApprovals,
@@ -130,7 +131,7 @@ export const ConversationDetailPage = ({
         ['queued', 'running', 'awaiting_approval'].includes(run.status),
       ) ?? [];
     const sources = activeRuns.map((run) => {
-      const source = new EventSource(`/api/agent/runs/${run.id}/events`);
+      const source = new EventSource(agentRunEventsUrl(run.id));
       const update = () => {
         setStreamError(null);
         void queryClient.invalidateQueries({ queryKey: agentQueryKeys.all });
