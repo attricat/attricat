@@ -13,6 +13,7 @@ import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { PageContainer } from '../../components/PageContainer';
 import { PageHeader } from '../../components/PageHeader';
+import { QueryErrorNotice } from '../../components/QueryErrorNotice';
 import { createContext, listContexts } from './api';
 import { contextQueryKeys } from './query-keys';
 
@@ -88,9 +89,18 @@ export const CreateContextPage = () => {
               />
             )}
           </form.Field>
+          <QueryErrorNotice
+            error={contexts.error}
+            isRetrying={contexts.isFetching}
+            onRetry={() => void contexts.refetch()}
+          />
           <form.Field name="parentId">
             {(field) => (
               <TextField
+                disabled={contexts.isPending || contexts.isError}
+                helperText={
+                  contexts.isPending ? t('contexts.loadingContexts') : undefined
+                }
                 select
                 label={t('contexts.parentContext')}
                 required
@@ -123,7 +133,13 @@ export const CreateContextPage = () => {
               {create.error?.message ?? validationError}
             </Alert>
           )}
-          <Button disabled={create.isPending} type="submit" variant="contained">
+          <Button
+            disabled={
+              create.isPending || contexts.isPending || contexts.isError
+            }
+            type="submit"
+            variant="contained"
+          >
             {t('contexts.createContext')}
           </Button>
         </Stack>
