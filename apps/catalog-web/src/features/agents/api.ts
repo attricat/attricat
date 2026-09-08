@@ -33,7 +33,7 @@ export const listConversations = () =>
   request('/api/agent/conversations', z.array(conversationSchema));
 export const getConversation = (id: string) =>
   request(`/api/agent/conversations/${id}`, conversationSchema);
-export const createConversation = (title: string) =>
+export const createConversation = (title = '') =>
   request(
     '/api/agent/conversations',
     z.object({ id: z.string().uuid(), title: z.string() }),
