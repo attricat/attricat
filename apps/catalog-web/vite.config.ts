@@ -13,7 +13,7 @@ export default defineConfig(({ mode }) => {
     define: {
       __CATALOG_DEVTOOLS__: JSON.stringify(devtoolsEnabled),
     },
-    plugins: [tanstackRouter(), react()],
+    plugins: [tanstackRouter({ autoCodeSplitting: true }), react()],
     server: {
       proxy: {
         '/api': {
