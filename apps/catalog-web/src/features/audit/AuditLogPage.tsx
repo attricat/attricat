@@ -29,23 +29,26 @@ import {
 import { auditQueryKeys } from './query-keys';
 
 const pageSize = 50;
-const formatDate = (value: string) =>
-  new Intl.DateTimeFormat(undefined, {
+const formatDate = (value: string, locale: string) =>
+  new Intl.DateTimeFormat(locale, {
     dateStyle: 'medium',
     timeStyle: 'medium',
   }).format(new Date(value));
-const actor = (event: AuditEvent) =>
+const actor = (event: AuditEvent, systemLabel: string) =>
   event.actor_display_name ??
   event.actor_email ??
   event.actor_user_id ??
-  'System';
-const target = (event: AuditEvent) =>
+  systemLabel;
+const target = (event: AuditEvent, workspaceLabel: string) =>
   Object.entries(event.target)
     .map(([key, value]) => `${key}: ${String(value)}`)
-    .join(', ') || 'Workspace';
+    .join(', ') || workspaceLabel;
 
 export const AuditLogPage = () => {
-  const { t } = useTranslation();
+  const { i18n, t } = useTranslation();
+  const locale = i18n.resolvedLanguage ?? i18n.language;
+  const systemLabel = t('audit.system');
+  const workspaceLabel = t('audit.workspace');
   const [filters, setFilters] = useState<AuditEventFilters>({
     limit: pageSize,
     offset: 0,
@@ -164,16 +167,16 @@ export const AuditLogPage = () => {
                   <Button
                     aria-label={t('audit.viewEvent', {
                       action: event.action,
-                      actor: actor(event),
+                      actor: actor(event, systemLabel),
                     })}
                     onClick={() => setSelected(event)}
                     size="small"
                     variant="text"
                   >
-                    {formatDate(event.occurred_at)}
+                    {formatDate(event.occurred_at, locale)}
                   </Button>
                 </TableCell>
-                <TableCell>{actor(event)}</TableCell>
+                <TableCell>{actor(event, systemLabel)}</TableCell>
                 <TableCell>
                   <Chip
                     color={
@@ -184,7 +187,7 @@ export const AuditLogPage = () => {
                   />
                 </TableCell>
                 <TableCell>{event.action}</TableCell>
-                <TableCell>{target(event)}</TableCell>
+                <TableCell>{target(event, workspaceLabel)}</TableCell>
                 <TableCell>
                   <Chip
                     color={event.outcome === 'success' ? 'success' : 'default'}
@@ -223,17 +226,26 @@ export const AuditLogPage = () => {
           />
         </Box>
       )}
-      <EventDrawer event={selected} onClose={() => setSelected(undefined)} />
+      <EventDrawer
+        event={selected}
+        locale={locale}
+        onClose={() => setSelected(undefined)}
+        systemLabel={systemLabel}
+      />
     </PageContainer>
   );
 };
 
 const EventDrawer = ({
   event,
+  locale,
   onClose,
+  systemLabel,
 }: {
   event?: AuditEvent;
+  locale: string;
   onClose: () => void;
+  systemLabel: string;
 }) => {
   const { t } = useTranslation();
   return (
@@ -256,8 +268,8 @@ const EventDrawer = ({
             <Typography>
               {t('audit.eventBy', {
                 action: event.action,
-                actor: actor(event),
-                date: formatDate(event.occurred_at),
+                actor: actor(event, systemLabel),
+                date: formatDate(event.occurred_at, locale),
               })}
             </Typography>
             {event.agent_conversation_id && (
