@@ -1,5 +1,18 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { createConversation, sendMessage } from './api';
+import {
+  agentRunEventsUrl,
+  createConversation,
+  decideApproval,
+  deleteSchedule,
+  getConversation,
+  listApprovals,
+  listMessages,
+  listRuns,
+  listSchedules,
+  runScheduleNow,
+  sendMessage,
+  updateSchedule,
+} from './api';
 
 const id = '123e4567-e89b-12d3-a456-426614174000';
 const fetchMock = vi.fn();
@@ -42,6 +55,39 @@ describe('agent API client', () => {
       content: 'List products',
       attachment_ids: [id],
     });
+  });
+
+  it('rejects malformed UUID path IDs before issuing requests', async () => {
+    const malformedId = 'not-a-uuid';
+
+    expect(() => getConversation(malformedId)).toThrow('Invalid UUID');
+    expect(() => listMessages(malformedId)).toThrow('Invalid UUID');
+    expect(() => listRuns(malformedId)).toThrow('Invalid UUID');
+    expect(() => sendMessage(malformedId, 'Hello')).toThrow('Invalid UUID');
+    expect(() => decideApproval(malformedId, true)).toThrow('Invalid UUID');
+    expect(() => updateSchedule(malformedId, { enabled: true })).toThrow(
+      'Invalid UUID',
+    );
+    await expect(deleteSchedule(malformedId)).rejects.toThrow('Invalid UUID');
+    expect(() => runScheduleNow(malformedId)).toThrow('Invalid UUID');
+    expect(() => agentRunEventsUrl(malformedId)).toThrow('Invalid UUID');
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it('encodes dynamic query values', async () => {
+    fetchMock.mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: () => Promise.resolve([]),
+    });
+
+    await listApprovals('space & slash/');
+    await listSchedules('space & slash/');
+
+    expect(fetchMock.mock.calls.map(([path]) => path)).toEqual([
+      '/api/agent/approvals?conversation_id=space%20%26%20slash%2F',
+      '/api/agent/schedules?conversation_id=space%20%26%20slash%2F',
+    ]);
   });
 
   it('rejects unsuccessful or invalid responses', async () => {
