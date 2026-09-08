@@ -8,6 +8,7 @@ import { listContexts } from '../contexts/api';
 import { EntityPreviewPage } from './EntityPreviewPage';
 
 vi.mock('@tanstack/react-router', () => ({
+  createLink: <T,>(component: T) => component,
   Link: ({ children }: { children: React.ReactNode }) => (
     <span>{children}</span>
   ),

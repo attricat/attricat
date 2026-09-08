@@ -11,7 +11,6 @@ import WarningAmberOutlinedIcon from '@mui/icons-material/WarningAmberOutlined';
 import {
   Alert,
   Box,
-  Button,
   Drawer,
   IconButton,
   Paper,
@@ -23,6 +22,7 @@ import { useTranslation } from 'react-i18next';
 import { PageContainer } from '../../components/PageContainer';
 import { PageHeader } from '../../components/PageHeader';
 import { QueryErrorNotice } from '../../components/QueryErrorNotice';
+import { RouterButton, RouterIconButton } from '../../components/RouterLink';
 import { EntityContextPicker } from './components/EntityContextPicker';
 import { EntitySchemaSubheader } from './components/EntitySchemaSubheader';
 import { EntityToolbar } from './components/EntityToolbar';
@@ -49,7 +49,7 @@ export const EntityPreviewPage = ({ entityId }: { entityId: string }) => {
   const [selectedContext, setSelectedContext] = useState('');
   const contexts = useQuery({
     queryKey: contextQueryKeys.all(),
-    queryFn: listContexts,
+    queryFn: ({ signal }) => listContexts(signal),
   });
   const selectedContextId =
     selectedContext ||
@@ -91,8 +91,7 @@ export const EntityPreviewPage = ({ entityId }: { entityId: string }) => {
         actions={
           blueprint.data && (
             <Tooltip title={blueprint.data.blueprint.name}>
-              <Button
-                component={Link}
+              <RouterButton
                 params={{ blueprintId: String(blueprint.data.blueprint.id) }}
                 size="small"
                 startIcon={<CategoryOutlinedIcon />}
@@ -100,7 +99,7 @@ export const EntityPreviewPage = ({ entityId }: { entityId: string }) => {
                 variant="text"
               >
                 {t('entities.blueprint')}: {blueprint.data.blueprint.name}
-              </Button>
+              </RouterButton>
             </Tooltip>
           )
         }
@@ -133,24 +132,22 @@ export const EntityPreviewPage = ({ entityId }: { entityId: string }) => {
         : null}
       <EntityToolbar label={t('entities.entityPreview')}>
         <Tooltip title={t('entities.editEntity')}>
-          <IconButton
+          <RouterIconButton
             aria-label={t('entities.editEntity')}
-            component={Link}
             params={{ entityId }}
             to="/entities/$entityId/edit"
           >
             <EditOutlinedIcon />
-          </IconButton>
+          </RouterIconButton>
         </Tooltip>
         <Tooltip title={t('entities.changes')}>
-          <IconButton
+          <RouterIconButton
             aria-label={t('entities.changes')}
-            component={Link}
             params={{ entityId }}
             to="/entities/$entityId/changes"
           >
             <HistoryOutlinedIcon />
-          </IconButton>
+          </RouterIconButton>
         </Tooltip>
         {currentBlueprint.data && resolved.data && (
           <>
@@ -161,14 +158,13 @@ export const EntityPreviewPage = ({ entityId }: { entityId: string }) => {
                   <WarningAmberOutlinedIcon color="warning" fontSize="small" />
                 </Tooltip>
                 <Tooltip title={t('entities.upgradeBlueprint')}>
-                  <IconButton
+                  <RouterIconButton
                     aria-label={t('entities.upgradeBlueprint')}
-                    component={Link}
                     params={{ entityId }}
                     to="/entities/$entityId/migrate"
                   >
                     <UpgradeOutlinedIcon />
-                  </IconButton>
+                  </RouterIconButton>
                 </Tooltip>
               </>
             ) : (

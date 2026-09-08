@@ -18,6 +18,7 @@ import {
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { PageContainer } from '../../components/PageContainer';
+import { RouterButton } from '../../components/RouterLink';
 import { PageHeader } from '../../components/PageHeader';
 import { listBlueprints } from './api';
 import { formatBlueprintDateTime } from './date-time';
@@ -136,8 +137,7 @@ export const BlueprintsPage = () => {
                       {formatBlueprintDateTime(blueprint.updated_at)}
                     </TableCell>
                     <TableCell align="right">
-                      <Button
-                        component={Link}
+                      <RouterButton
                         params={{
                           blueprintId: blueprint.id,
                           version: String(blueprint.version),
@@ -146,7 +146,7 @@ export const BlueprintsPage = () => {
                         to="/manage/blueprints/$blueprintId/revisions/$version/new"
                       >
                         {t('blueprints.edit')}
-                      </Button>
+                      </RouterButton>
                     </TableCell>
                   </TableRow>
                 ))}

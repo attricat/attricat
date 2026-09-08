@@ -3,12 +3,13 @@ import {
   useInfiniteQuery,
   useQuery,
 } from '@tanstack/react-query';
-import { Link, useNavigate } from '@tanstack/react-router';
-import { Alert, Box, Button, Typography } from '@mui/material';
+import { useNavigate } from '@tanstack/react-router';
+import { Alert, Box, Typography } from '@mui/material';
 import { useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 import { PageContainer } from '../../components/PageContainer';
 import { PageHeader } from '../../components/PageHeader';
+import { RouterButton } from '../../components/RouterLink';
 import { listContexts } from '../contexts/api';
 import { contextQueryKeys } from '../contexts/query-keys';
 import {
@@ -166,8 +167,7 @@ export const Explorer = ({ search: urlSearch }: { search: ExplorerSearch }) => {
     <PageContainer>
       <PageHeader
         actions={
-          <Button
-            component={Link}
+          <RouterButton
             search={
               search.locked && search.blueprint
                 ? { blueprint: search.blueprint, locked: true }
@@ -181,7 +181,7 @@ export const Explorer = ({ search: urlSearch }: { search: ExplorerSearch }) => {
                   blueprint: lockedBlueprintName,
                 })
               : t('explorer.create')}
-          </Button>
+          </RouterButton>
         }
         description={
           search.locked && lockedBlueprintName

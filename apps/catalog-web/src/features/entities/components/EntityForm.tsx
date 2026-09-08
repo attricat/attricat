@@ -81,7 +81,7 @@ export const EntityForm = ({
   const [formError, setFormError] = useState<string>();
   const blueprints = useQuery({
     queryKey: entityQueryKeys.blueprints(),
-    queryFn: listEntityBlueprints,
+    queryFn: ({ signal }) => listEntityBlueprints(signal),
     enabled: !blueprint,
   });
   const validateFields = (fields: Record<string, string>) => {

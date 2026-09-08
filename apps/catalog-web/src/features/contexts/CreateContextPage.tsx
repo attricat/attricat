@@ -24,7 +24,7 @@ export const CreateContextPage = () => {
   const [validationError, setValidationError] = useState<string>();
   const contexts = useQuery({
     queryKey: contextQueryKeys.all(),
-    queryFn: listContexts,
+    queryFn: ({ signal }) => listContexts(signal),
   });
   const create = useMutation({
     mutationFn: ({

@@ -39,7 +39,7 @@ export const WorkspaceNavigationSection = ({
   });
   const blueprints = useQuery({
     queryKey: entityQueryKeys.blueprints(),
-    queryFn: listEntityBlueprints,
+    queryFn: ({ signal }) => listEntityBlueprints(signal),
     enabled: canManage,
   });
   const [entries, setEntries] = useState<

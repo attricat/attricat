@@ -19,7 +19,7 @@ export const ContextsPage = () => {
   const { t } = useTranslation();
   const contexts = useQuery({
     queryKey: contextQueryKeys.all(),
-    queryFn: listContexts,
+    queryFn: ({ signal }) => listContexts(signal),
   });
   return (
     <PageContainer>

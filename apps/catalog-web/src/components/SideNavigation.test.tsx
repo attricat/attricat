@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { fireEvent, render, screen, within } from '@testing-library/react';
-import type { ComponentPropsWithoutRef, ReactNode } from 'react';
+import type { ComponentPropsWithoutRef, ElementType, ReactNode } from 'react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import '../i18n';
 import { currentSession } from '../features/auth/api';
@@ -9,10 +9,9 @@ import { listSidebarExploreNavigation } from '../features/workspace/api';
 import { SideNavigation } from './SideNavigation';
 
 vi.mock('@tanstack/react-router', async () => {
-  const { forwardRef } = await import('react');
+  const { createElement, forwardRef } = await import('react');
 
-  return {
-    Link: forwardRef<
+  const Link = forwardRef<
       HTMLAnchorElement,
       ComponentPropsWithoutRef<'a'> & {
         children: ReactNode;
@@ -41,8 +40,20 @@ vi.mock('@tanstack/react-router', async () => {
           {children}
         </a>
       );
-    }),
+    });
+
+  return {
+    createLink: <T,>(Component: T) =>
+      forwardRef((props, ref) =>
+        createElement(Component as ElementType, {
+          ...props,
+          component: Link,
+          ref,
+        }),
+      ),
+    Link,
     useRouterState: ({
+
       select,
     }: {
       select: (state: {

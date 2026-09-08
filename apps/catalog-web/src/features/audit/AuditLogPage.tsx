@@ -1,7 +1,6 @@
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useQuery } from '@tanstack/react-query';
-import { Link } from '@tanstack/react-router';
 import {
   Alert,
   Box,
@@ -19,6 +18,7 @@ import {
   Typography,
 } from '@mui/material';
 import { PageContainer } from '../../components/PageContainer';
+import { RouterButton } from '../../components/RouterLink';
 import { PageHeader } from '../../components/PageHeader';
 import { LoadMoreButton } from '../../components/LoadMoreButton';
 import {
@@ -273,13 +273,12 @@ const EventDrawer = ({
               })}
             </Typography>
             {event.agent_conversation_id && (
-              <Button
-                component={Link}
+              <RouterButton
                 params={{ conversationId: event.agent_conversation_id }}
                 to="/agents/$conversationId"
               >
                 {t('audit.openConversation')}
-              </Button>
+              </RouterButton>
             )}
             <Detail
               label={t('audit.authorizationScope')}

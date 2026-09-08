@@ -29,7 +29,7 @@ export const MigrateEntityPage = ({ entityId }: { entityId: string }) => {
   });
   const contexts = useQuery({
     queryKey: contextQueryKeys.all(),
-    queryFn: listContexts,
+    queryFn: ({ signal }) => listContexts(signal),
   });
   const defaultContextId =
     contexts.data?.find((context) => context.code === 'default')?.id ?? null;

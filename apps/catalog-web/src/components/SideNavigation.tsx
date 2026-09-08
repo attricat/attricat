@@ -21,6 +21,7 @@ import { workspaceQueryKeys } from '../features/workspace/query-keys';
 import { ExtensionOutlet } from '../features/extensions/ExtensionOutlet';
 import { LanguageSwitcher } from './LanguageSwitcher';
 import { QueryErrorNotice } from './QueryErrorNotice';
+import { RouterListItemButton } from './RouterLink';
 import {
   Box,
   Collapse,
@@ -164,8 +165,7 @@ export const SideNavigation = ({
           />
         </Box>
         {pinnedExplore.data?.map((item) => (
-          <ListItemButton
-            component={Link}
+          <RouterListItemButton
             key={item.blueprint_code}
             onClick={onNavigate}
             search={{ blueprint: item.blueprint_code, locked: true }}
@@ -179,7 +179,7 @@ export const SideNavigation = ({
               <TravelExploreOutlinedIcon />
             </ListItemIcon>
             <ListItemText primary={item.blueprint_name} />
-          </ListItemButton>
+          </RouterListItemButton>
         ))}
         <ExtensionOutlet outlet="navigation" />
         <ListItemButton
