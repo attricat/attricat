@@ -299,6 +299,76 @@ contribution/artifact IDs remain stable across releases. Multiple enabled
 extensions may contribute to a surface, but their display order is intentionally
 unspecified.
 
+### Route contributions as extension applications
+
+A `route` contribution is a dedicated host page and may mount an application-
+sized extension UI. Once mounted in its iframe, the artifact may render multiple
+screens and manage transitions between them with its own client-side router
+(for example, an in-memory router). This supports workflows such as a
+multi-step import wizard, a domain-specific workbench with a list and detail
+screens, or an extension settings/dashboard experience.
+
+This is an internal routing tree, not a host routing tree: the browser's
+host-owned URL remains
+`/extensions/:extensionId/:contributionId`, and an extension cannot claim
+subpaths, add host route definitions, replace Catalog page chrome, or access
+Catalog's router. A route contribution must provide its own UI, localized text,
+and accessible labels inside the frame; Catalog owns the surrounding page,
+loading/error treatment, and navigation outside it.
+
+Today, such an application can use the granted mediated client APIs described
+below: read the limited Catalog resources through `catalog.request`, invoke its
+declared server commands through `catalog.command`, persist its own
+release-scoped state through `catalog.storage`, show host notifications, and
+navigate the user to a Catalog entity. It still has no generic browser fetch,
+host DOM access, browser credentials, arbitrary URL navigation, or
+inter-extension RPC. Required capabilities and the corresponding server command
+or artifact declarations remain necessary for each operation.
+
+### Fixed contribution outlets
+
+The remaining contribution outlets are small, host-owned insertion points rather
+than independently routed pages. An enabled contribution gets its own sandboxed
+frame at the documented placement; it cannot select a DOM node, change the
+surrounding layout, or assume a particular ordering relative to other enabled
+extensions. Use them for focused controls, summaries, configuration, and
+contextual actions—not an application-wide navigation tree.
+
+- **`navigation`** (`embedded`) appears in Catalog's side navigation. It is
+  appropriate for a compact entry point, such as a link or button that takes
+  the user to the extension's route contribution.
+- **`entity_preview_panel`** (`embedded`) appears in the entity extension
+  drawer. It is appropriate for an entity-specific summary, diagnostics, or a
+  focused mini-workflow. Its context supplies `entity_id` and optional
+  `context_id`.
+- **`blueprint_attribute_configuration`** (`embedded`, requiring
+  `client.blueprint_configuration`) is rendered for an attribute in the
+  blueprint editor. Use it to configure extension-owned behavior for that
+  blueprint/attribute; scoped configuration is separately declared and requires
+  `configuration.write`.
+- **`entity_attribute_decoration`** (`embedded`, requiring
+  `client.entity_decoration`) is an attribute-level popover on an entity page.
+  Use it for a concise indicator, explanation, or contextual detail. Its
+  context identifies the entity, attribute, blueprint/version, and optional
+  context.
+- **`entity_action`** (`embedded`, requiring `client.entity_action`) is a
+  host-owned entity-page action area. Use it for a focused entity action or
+  status; mutations still go through declared `catalog.command` commands.
+- **`explorer_row_action`** (`action`, requiring
+  `client.explorer_row_action`) is the Explorer row overflow UI for one entity.
+  Its strict context is `entity_id`, `blueprint_id`, `blueprint_version`, and
+  `context_version: 1`; it deliberately does not include search state or entity
+  values.
+- **`blueprint_detail_panel`** (`panel`, requiring
+  `client.blueprint_detail_panel`) is a read-only region on a blueprint detail
+  page. Its strict context is `blueprint_id`, `blueprint_version`, and
+  `context_version: 1`, making it suitable for blueprint-level status,
+  validation results, or documentation.
+
+All of these frames use the same mediated `catalog` API and capability checks
+as route contributions. The host re-authorizes every broker call and unmounts
+contributions when their runtime access is removed.
+
 Catalog loads runtime descriptors and JavaScript only for installations whose
 effective runtime state is enabled. The deployment gate (`EXTENSIONS_MODE`),
 targeted `EXTENSION_DENYLIST`, workspace emergency gate, installation state,
