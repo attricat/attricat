@@ -1,4 +1,4 @@
-import { Editor, type Monaco } from '@monaco-editor/react';
+import { Editor } from '@monaco-editor/react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from '@tanstack/react-router';
 import {
@@ -28,108 +28,10 @@ import {
   getBlueprintRevision,
 } from './api';
 import { blueprintQueryKeys } from './query-keys';
-
-const blueprintTemplates = [
-  {
-    definition: `format_version = 1
-code = "new_blueprint"
-name = "New blueprint"
-kind = "entity"
-
-[views.dropdown_option]
-type = "dropdown_option"
-fields = ["name"]
-
-[[attributes]]
-code = "name"
-value_type = "string"
-`,
-    descriptionKey: 'blueprints.basicEntityDescription',
-    labelKey: 'blueprints.basicEntity',
-  },
-  {
-    definition: `format_version = 1
-code = "product"
-name = "Product"
-kind = "entity"
-
-[views.dropdown_option]
-type = "dropdown_option"
-fields = ["name", "sku"]
-separator = " / "
-
-[[attributes]]
-code = "name"
-value_type = "string"
-
-[[attributes]]
-code = "sku"
-value_type = "string"
-
-[[attributes]]
-code = "price"
-value_type = "number"
-
-[[attributes]]
-code = "description"
-value_type = "string"
-
-[[attributes]]
-code = "product_images"
-value_type = "file"
-cardinality = "many"
-allowed_mime_groups = ["image"]
-allowed_extensions = ["jpg", "jpeg", "png", "webp"]
-max_bytes = 10485760
-purposes = ["product_image"]
-image_only = true
-`,
-    descriptionKey: 'blueprints.productDescription',
-    labelKey: 'blueprints.product',
-  },
-  {
-    definition: `format_version = 1
-code = "seo"
-name = "SEO"
-kind = "mixin"
-
-[[attributes]]
-code = "meta_title"
-value_type = "string"
-
-[[attributes]]
-code = "meta_description"
-value_type = "string"
-`,
-    descriptionKey: 'blueprints.seoMixinDescription',
-    labelKey: 'blueprints.seoMixin',
-  },
-] as const;
+import { blueprintTemplates, configureToml } from './blueprint-editor-utils';
 
 type PendingUnsavedAction =
   { templateIndex: number; type: 'replace' } | { type: 'discard' };
-
-const configureToml = (monaco: Monaco) => {
-  if (
-    monaco.languages
-      .getLanguages()
-      .some((language: { id: string }) => language.id === 'toml')
-  )
-    return;
-  monaco.languages.register({ id: 'toml' });
-  monaco.languages.setMonarchTokensProvider('toml', {
-    tokenizer: {
-      root: [
-        [/^\s*#.*$/, 'comment'],
-        [/\[[^\]]+\]/, 'keyword'],
-        [/[A-Za-z0-9_-]+(?=\s*=)/, 'type.identifier'],
-        [/"([^"\\]|\\.)*"|'([^'\\]|\\.)*'/, 'string'],
-        [/\b(true|false)\b/, 'keyword'],
-        [/-?\d+(\.\d+)?/, 'number'],
-      ],
-    },
-  });
-};
 
 export const BlueprintEditorPage = ({
   blueprintId,
