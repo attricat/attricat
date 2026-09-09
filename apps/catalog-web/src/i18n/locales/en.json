@@ -389,7 +389,8 @@
     "agentApproval": "Agent approval",
     "agentToolCall": "Agent tool call",
     "system": "System",
-    "workspace": "Workspace"
+    "workspace": "Workspace",
+    "actionCategoryPlaceholder": "catalog"
   },
   "profile": {
     "never": "Never",
@@ -482,7 +483,11 @@
     "readme": "README",
     "manifestHash": "Manifest SHA-256: {{hash}}",
     "serverValidation": "Server validation uses the extension's declared JSON Schema.",
-    "requestedGrant": "Requested {{kind}}: {{id}}"
+    "requestedGrant": "Requested {{kind}}: {{id}}",
+    "loadingContent": "Loading extension content",
+    "contentLoadFailed": "Extension content could not be loaded.",
+    "loadingPage": "Loading extension page",
+    "pageUnavailable": "This extension page is unavailable."
   },
   "workspace": {
     "members": "Members",
@@ -576,7 +581,10 @@
     "fileCount_other": "{{count}} files",
     "loadingHierarchy": "Loading hierarchy...",
     "noHierarchy": "No hierarchy available.",
-    "hierarchy": "Hierarchy"
+    "hierarchy": "Hierarchy",
+    "loadingLinkedEntities": "Loading linked entities...",
+    "noLinkedEntities": "No linked entities.",
+    "close": "Close"
   },
   "common": {
     "actionCompleted": "Action completed.",
@@ -584,5 +592,28 @@
     "copied": "Copied to clipboard.",
     "loadMore": "Load more",
     "loading": "Loading..."
+  },
+  "inspector": {
+    "apiRestarting": "API restarting…",
+    "checkingApi": "Checking API…",
+    "apiReady": "API ready",
+    "server": "Server",
+    "apiStatus": "API status: {{status}}",
+    "restarting": "Restarting",
+    "checking": "Checking",
+    "ready": "Ready",
+    "waitingForHealthCheck": "Waiting for the API health check to succeed.",
+    "healthCheckInterval": "Health checks run every 5 seconds.",
+    "session": "Session",
+    "checkingSession": "Checking session…",
+    "signedInAs": "Signed in as {{email}}",
+    "workspace": "Workspace: {{workspace}}",
+    "tokenHelp": "Use a personal access token for curl. Browser session cookies are HttpOnly and deliberately unavailable to the Inspector.",
+    "manageTokens": "Manage personal API tokens",
+    "notSignedIn": "Not signed in.",
+    "open": "Open Inspector",
+    "collapse": "Collapse Inspector",
+    "tools": "Inspector tools",
+    "status": "Inspector · {{status}}"
   }
 }

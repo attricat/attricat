@@ -30,10 +30,7 @@ import {
 } from './management-api';
 import { extensionManagementQueryKeys } from './management-query-keys';
 import { ErrorNotice } from './ExtensionErrorNotice';
-import {
-  invalidateExtensions,
-  repositoryParts,
-} from './extension-page-utils';
+import { invalidateExtensions, repositoryParts } from './extension-page-utils';
 
 export const InstalledExtensionPage = ({
   extensionId,
@@ -120,7 +117,7 @@ export const InstalledExtensionPage = ({
             ? `v${installation.version} from ${installation.source}`
             : t('extensions.loadingInstallation')
         }
-        actions={<Link to="/manage/extensions">Back to extensions</Link>}
+        actions={<Link to="/manage/extensions">{t('extensions.back')}</Link>}
       />
       <ErrorNotice error={detail.error} />
       <ErrorNotice error={action.error} />
@@ -191,7 +188,7 @@ export const InstalledExtensionPage = ({
             </Stack>
           </Paper>
           <Paper sx={{ p: 2 }}>
-            <Typography variant="h6">Upgrade</Typography>
+            <Typography variant="h6">{t('extensions.upgrade')}</Typography>
             <ErrorNotice error={upgrades.error} />
             {(upgrades.data?.releases ?? [])
               .filter(
@@ -225,7 +222,9 @@ export const InstalledExtensionPage = ({
               ))}
           </Paper>
           <Paper sx={{ p: 2 }}>
-            <Typography variant="h6">Configuration</Typography>
+            <Typography variant="h6">
+              {t('extensions.configuration')}
+            </Typography>
             <Typography color="text.secondary" variant="body2">
               {t('extensions.serverValidation')}
             </Typography>
@@ -259,7 +258,7 @@ export const InstalledExtensionPage = ({
             </form>
           </Paper>
           <Paper sx={{ p: 2 }}>
-            <Typography variant="h6">Permissions</Typography>
+            <Typography variant="h6">{t('extensions.permissions')}</Typography>
             {detail.data.grants.map((grant) => (
               <Stack
                 direction="row"
@@ -290,7 +289,7 @@ export const InstalledExtensionPage = ({
             />
           </Paper>
           <Paper sx={{ p: 2 }}>
-            <Typography variant="h6">Lifecycle and health</Typography>
+            <Typography variant="h6">{t('extensions.lifecycle')}</Typography>
             {detail.data.lifecycle.length === 0 ? (
               <Typography color="text.secondary">
                 No lifecycle history.

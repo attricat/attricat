@@ -42,7 +42,7 @@ export const SideloadExtensionPage = () => {
       <PageHeader
         title={t('extensions.uploadTitle')}
         description={t('extensions.uploadDescription')}
-        actions={<Link to="/manage/extensions">Back to extensions</Link>}
+        actions={<Link to="/manage/extensions">{t('extensions.back')}</Link>}
       />
       <ErrorNotice error={sideload.error} />
       {sideload.isSuccess && (

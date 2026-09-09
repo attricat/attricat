@@ -107,7 +107,7 @@ export const AuditLogPage = () => {
           onChange={(event) =>
             updateDraft('action_category', event.target.value)
           }
-          placeholder="catalog"
+          placeholder={t('audit.actionCategoryPlaceholder')}
           size="small"
         />
         <TextField

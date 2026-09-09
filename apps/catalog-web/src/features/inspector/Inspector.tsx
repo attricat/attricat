@@ -12,6 +12,7 @@ import {
 } from '@mui/material';
 import { useQuery } from '@tanstack/react-query';
 import { useState, type ReactNode } from 'react';
+import { useTranslation } from 'react-i18next';
 import { currentSession } from '../auth/api';
 import { authQueryKeys } from '../auth/query-keys';
 import { getApiHealth } from './api';
@@ -59,6 +60,7 @@ const readInspectorState = (): InspectorState => {
 };
 
 export const Inspector = () => {
+  const { t } = useTranslation();
   const [inspectorState, setInspectorState] = useState(readInspectorState);
   const { activePane, expanded } = inspectorState;
   const updateInspectorState = (updates: Partial<InspectorState>) => {
@@ -90,53 +92,63 @@ export const Inspector = () => {
   const apiRestarting = apiHealth.isError;
   const apiChecking = apiHealth.isPending;
   const apiStatus = apiRestarting
-    ? 'API restarting…'
+    ? t('inspector.apiRestarting')
     : apiChecking
-      ? 'Checking API…'
-      : 'API ready';
+      ? t('inspector.checkingApi')
+      : t('inspector.apiReady');
   const panes: InspectorPane[] = [
     {
       id: 'server',
-      label: 'Server',
+      label: t('inspector.server'),
       content: (
         <Box sx={{ display: 'grid', gap: 0.5 }}>
           <Typography variant="body2">
-            API status:{' '}
-            {apiRestarting ? 'Restarting' : apiChecking ? 'Checking' : 'Ready'}
+            {t('inspector.apiStatus', {
+              status: apiRestarting
+                ? t('inspector.restarting')
+                : apiChecking
+                  ? t('inspector.checking')
+                  : t('inspector.ready'),
+            })}
           </Typography>
           <Typography color="text.secondary" variant="caption">
             {apiRestarting
-              ? 'Waiting for the API health check to succeed.'
-              : 'Health checks run every 5 seconds.'}
+              ? t('inspector.waitingForHealthCheck')
+              : t('inspector.healthCheckInterval')}
           </Typography>
         </Box>
       ),
     },
     {
       id: 'session',
-      label: 'Session',
+      label: t('inspector.session'),
       content: (
         <Box sx={{ display: 'grid', gap: 0.5 }}>
           {session.isPending ? (
-            <Typography variant="body2">Checking session…</Typography>
+            <Typography variant="body2">
+              {t('inspector.checkingSession')}
+            </Typography>
           ) : session.data ? (
             <>
               <Typography variant="body2">
-                Signed in as {session.data.email}
+                {t('inspector.signedInAs', { email: session.data.email })}
               </Typography>
               <Typography color="text.secondary" variant="caption">
-                Workspace: {session.data.login_identifier}
+                {t('inspector.workspace', {
+                  workspace: session.data.login_identifier,
+                })}
               </Typography>
               <Typography color="text.secondary" variant="caption">
-                Use a personal access token for curl. Browser session cookies
-                are HttpOnly and deliberately unavailable to the Inspector.
+                {t('inspector.tokenHelp')}
               </Typography>
               <Link href="/profile#personal-api-tokens">
-                Manage personal API tokens
+                {t('inspector.manageTokens')}
               </Link>
             </>
           ) : (
-            <Typography variant="body2">Not signed in.</Typography>
+            <Typography variant="body2">
+              {t('inspector.notSignedIn')}
+            </Typography>
           )}
         </Box>
       ),
@@ -150,7 +162,7 @@ export const Inspector = () => {
     <>
       {!expanded && (
         <Fab
-          aria-label="Open Inspector"
+          aria-label={t('inspector.open')}
           color="default"
           onClick={() => updateInspectorState({ expanded: true })}
           size="small"
@@ -222,11 +234,11 @@ export const Inspector = () => {
               sx={{ flexGrow: 1 }}
               variant="caption"
             >
-              Inspector · {apiStatus}
+              {t('inspector.status', { status: apiStatus })}
             </Typography>
             <IconButton
               aria-expanded
-              aria-label="Collapse Inspector"
+              aria-label={t('inspector.collapse')}
               onClick={() => updateInspectorState({ expanded: false })}
               size="small"
             >
@@ -245,7 +257,7 @@ export const Inspector = () => {
             }}
           >
             <Tabs
-              aria-label="Inspector tools"
+              aria-label={t('inspector.tools')}
               onChange={(_, value: string) =>
                 updateInspectorState({ activePane: value })
               }

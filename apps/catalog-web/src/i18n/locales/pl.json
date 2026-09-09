@@ -397,7 +397,8 @@
     "agentApproval": "Zatwierdzenie agenta",
     "agentToolCall": "Wywołanie narzędzia agenta",
     "system": "System",
-    "workspace": "Obszar roboczy"
+    "workspace": "Obszar roboczy",
+    "actionCategoryPlaceholder": "katalog"
   },
   "profile": {
     "never": "Nigdy",
@@ -491,7 +492,11 @@
     "readme": "README",
     "manifestHash": "Manifest SHA-256: {{hash}}",
     "serverValidation": "Walidacja serwera używa zadeklarowanego przez rozszerzenie schematu JSON.",
-    "requestedGrant": "Zażądano {{kind}}: {{id}}"
+    "requestedGrant": "Zażądano {{kind}}: {{id}}",
+    "loadingContent": "Ładowanie zawartości rozszerzenia",
+    "contentLoadFailed": "Nie udało się wczytać zawartości rozszerzenia.",
+    "loadingPage": "Ładowanie strony rozszerzenia",
+    "pageUnavailable": "Ta strona rozszerzenia jest niedostępna."
   },
   "workspace": {
     "members": "Członkowie",
@@ -587,7 +592,10 @@
     "fileCount_other": "{{count}} pliku",
     "loadingHierarchy": "Wczytywanie hierarchii...",
     "noHierarchy": "Brak dostępnej hierarchii.",
-    "hierarchy": "Hierarchia"
+    "hierarchy": "Hierarchia",
+    "loadingLinkedEntities": "Ładowanie powiązanych encji...",
+    "noLinkedEntities": "Brak powiązanych encji.",
+    "close": "Zamknij"
   },
   "common": {
     "actionCompleted": "Akcja zakończona.",
@@ -595,5 +603,28 @@
     "copied": "Skopiowano do schowka.",
     "loadMore": "Załaduj więcej",
     "loading": "Wczytywanie..."
+  },
+  "inspector": {
+    "apiRestarting": "Ponowne uruchamianie API…",
+    "checkingApi": "Sprawdzanie API…",
+    "apiReady": "API gotowe",
+    "server": "Serwer",
+    "apiStatus": "Stan API: {{status}}",
+    "restarting": "Ponowne uruchamianie",
+    "checking": "Sprawdzanie",
+    "ready": "Gotowe",
+    "waitingForHealthCheck": "Oczekiwanie na pomyślne sprawdzenie stanu API.",
+    "healthCheckInterval": "Sprawdzanie stanu odbywa się co 5 sekund.",
+    "session": "Sesja",
+    "checkingSession": "Sprawdzanie sesji…",
+    "signedInAs": "Zalogowano jako {{email}}",
+    "workspace": "Obszar roboczy: {{workspace}}",
+    "tokenHelp": "Użyj osobistego tokenu dostępu dla curl. Pliki cookie sesji przeglądarki są HttpOnly i celowo niedostępne w Inspektorze.",
+    "manageTokens": "Zarządzaj osobistymi tokenami API",
+    "notSignedIn": "Nie zalogowano.",
+    "open": "Otwórz Inspektor",
+    "collapse": "Zwiń Inspektor",
+    "tools": "Narzędzia Inspektora",
+    "status": "Inspektor · {{status}}"
   }
 }

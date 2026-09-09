@@ -10,6 +10,7 @@ import {
 } from '@mui/material';
 import { useQuery } from '@tanstack/react-query';
 import { useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { z } from 'zod';
 import { ExtensionFrame } from './ExtensionFrame';
 import { getExtensionRuntime, type ExtensionContribution } from './api';
@@ -73,6 +74,7 @@ type Props = {
  * intentionally not a contract.
  */
 export const ExtensionOutlet = ({ outlet, context }: Props) => {
+  const { t } = useTranslation();
   const runtime = useQuery({
     queryKey: extensionQueryKeys.runtime(),
     queryFn: getExtensionRuntime,
@@ -89,13 +91,16 @@ export const ExtensionOutlet = ({ outlet, context }: Props) => {
         role="status"
         sx={{ display: 'flex', justifyContent: 'center', py: 1 }}
       >
-        <CircularProgress aria-label="Loading extension content" size={20} />
+        <CircularProgress
+          aria-label={t('extensions.loadingContent')}
+          size={20}
+        />
       </Box>
     );
   if (runtime.isError)
     return (
       <Alert role="status" severity="warning">
-        Extension content could not be loaded.
+        {t('extensions.contentLoadFailed')}
       </Alert>
     );
   return (
@@ -198,6 +203,7 @@ export const ExtensionRoutePage = ({
   extensionId: string;
   contributionId: string;
 }) => {
+  const { t } = useTranslation();
   const runtime = useQuery({
     queryKey: extensionQueryKeys.runtime(),
     queryFn: getExtensionRuntime,
@@ -211,12 +217,12 @@ export const ExtensionRoutePage = ({
         role="status"
         sx={{ display: 'flex', justifyContent: 'center', py: 2 }}
       >
-        <CircularProgress aria-label="Loading extension page" />
+        <CircularProgress aria-label={t('extensions.loadingPage')} />
       </Box>
     );
   if (runtime.isError)
     return (
-      <Alert severity="warning">Extension content could not be loaded.</Alert>
+      <Alert severity="warning">{t('extensions.contentLoadFailed')}</Alert>
     );
   const contribution = runtime.data?.find(
     (item) =>
@@ -225,8 +231,6 @@ export const ExtensionRoutePage = ({
       item.id === contributionId,
   );
   if (!contribution)
-    return (
-      <Alert severity="warning">This extension page is unavailable.</Alert>
-    );
+    return <Alert severity="warning">{t('extensions.pageUnavailable')}</Alert>;
   return <ExtensionFrame contribution={contribution} />;
 };

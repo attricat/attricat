@@ -41,7 +41,7 @@ export const MarketplaceExtensionPage = ({
         description={
           details.data?.extension.description ?? t('extensions.loadingDetails')
         }
-        actions={<Link to="/manage/extensions">Back to extensions</Link>}
+        actions={<Link to="/manage/extensions">{t('extensions.back')}</Link>}
       />
       <ErrorNotice error={details.error} />
       <ErrorNotice error={install.error} />

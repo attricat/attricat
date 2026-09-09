@@ -14,6 +14,7 @@ import {
   Typography,
 } from '@mui/material';
 import { useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { LoadMoreButton } from '../../../components/LoadMoreButton';
 import { getIncomingRelationships } from '../../entities/api';
 import { displayLabel } from '../../entities/entity-display';
@@ -32,6 +33,7 @@ export const IncomingRelationshipListDisplay = ({
     page_size: number;
   };
 }) => {
+  const { t } = useTranslation();
   const [open, setOpen] = useState(false);
   const results = useInfiniteQuery({
     queryKey: entityQueryKeys.incomingRelationships(
@@ -66,13 +68,15 @@ export const IncomingRelationshipListDisplay = ({
         <DialogTitle>{node.label}</DialogTitle>
         <DialogContent dividers>
           {results.isPending && (
-            <Typography>Loading linked entities...</Typography>
+            <Typography>{t('views.loadingLinkedEntities')}</Typography>
           )}
           {results.isError && (
             <Typography color="error">{results.error.message}</Typography>
           )}
           {!results.isPending && !results.isError && !items.length && (
-            <Typography color="text.secondary">No linked entities.</Typography>
+            <Typography color="text.secondary">
+              {t('views.noLinkedEntities')}
+            </Typography>
           )}
           {items.length > 0 && (
             <List disablePadding>
@@ -112,7 +116,7 @@ export const IncomingRelationshipListDisplay = ({
               onLoadMore={() => void results.fetchNextPage()}
             />
           )}
-          <Button onClick={() => setOpen(false)}>Close</Button>
+          <Button onClick={() => setOpen(false)}>{t('views.close')}</Button>
         </DialogActions>
       </Dialog>
     </>
