@@ -16,6 +16,7 @@ const GITHUB_API_ORIGIN: &str = "https://api.github.com";
 const GITHUB_RAW_ORIGIN: &str = "https://raw.githubusercontent.com";
 const MAX_README_BYTES: usize = 256 * 1024;
 const MAX_REGISTRY_INDEX_BYTES: usize = 1024 * 1024;
+const MAX_RELEASE_CATALOGUE_BYTES: usize = 1024 * 1024;
 const MAX_REGISTRY_ENTRIES: usize = 1_000;
 const MAX_REGISTRY_NAME_BYTES: usize = 256;
 const MAX_REGISTRY_DESCRIPTION_BYTES: usize = 4 * 1024;
@@ -360,10 +361,21 @@ impl GitHubRegistry {
         if !response.status().is_success() {
             return Err(RegistryError::Unavailable);
         }
-        let releases: Vec<GitHubRelease> = response
-            .json()
+        if response
+            .content_length()
+            .is_some_and(|size| size > MAX_RELEASE_CATALOGUE_BYTES as u64)
+        {
+            return Err(RegistryError::InvalidResponse);
+        }
+        let bytes = response
+            .bytes()
             .await
-            .map_err(|_| RegistryError::InvalidResponse)?;
+            .map_err(|_| RegistryError::Unavailable)?;
+        if bytes.len() > MAX_RELEASE_CATALOGUE_BYTES {
+            return Err(RegistryError::InvalidResponse);
+        }
+        let releases: Vec<GitHubRelease> =
+            serde_json::from_slice(&bytes).map_err(|_| RegistryError::InvalidResponse)?;
         Ok(releases
             .into_iter()
             .filter(|release| !release.draft && !release.prerelease)

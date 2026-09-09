@@ -121,7 +121,17 @@ impl OpenAiCompatibleClient {
             .await
             .map_err(map_request_error)?;
         status(response.status())?;
-        response.json().await.map_err(|_| ProviderError::Malformed)
+        if response
+            .content_length()
+            .is_some_and(|length| length > MAX_PROVIDER_BODY_BYTES as u64)
+        {
+            return Err(ProviderError::Malformed);
+        }
+        let body = response.bytes().await.map_err(map_request_error)?;
+        if body.len() > MAX_PROVIDER_BODY_BYTES {
+            return Err(ProviderError::Malformed);
+        }
+        serde_json::from_slice(&body).map_err(|_| ProviderError::Malformed)
     }
     /// Reads OpenAI SSE frames and invokes `on_delta` for each non-empty text
     /// delta. Tool calls are returned after the terminal frame.

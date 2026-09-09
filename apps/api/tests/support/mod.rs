@@ -225,6 +225,9 @@ async fn start_server_with_auth_mode_and_store(
         data_health_cache: Default::default(),
         session_cookie_secure: false,
         allow_trusted_headers,
+        request_permits: Arc::new(tokio::sync::Semaphore::new(256)),
+        request_timeout: std::time::Duration::from_secs(30),
+        default_body_limit: 2 * 1024 * 1024,
     });
     let server = tokio::spawn(async move { axum::serve(listener, router).await.unwrap() });
 

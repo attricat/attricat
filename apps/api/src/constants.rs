@@ -11,6 +11,9 @@ pub const DEFAULT_STALE_AFTER_DAYS: u16 = 90;
 pub const MAX_STALE_AFTER_DAYS: u16 = 3650;
 pub const DEFAULT_FILE_UPLOAD_MAX_BYTES: usize = 50 * 1024 * 1024;
 pub const DEFAULT_FILE_UPLOAD_MAX_FILES: usize = 10;
+pub const DEFAULT_HTTP_REQUEST_TIMEOUT_SECONDS: usize = 30;
+pub const DEFAULT_HTTP_MAX_CONCURRENT_REQUESTS: usize = 256;
+pub const DEFAULT_HTTP_DEFAULT_BODY_BYTES: usize = 2 * 1024 * 1024;
 pub const SECONDS_PER_HOUR: i64 = 60 * 60;
 
 /// Connection pools are deliberately small: request pools are workspace-scoped.

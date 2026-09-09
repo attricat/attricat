@@ -16,6 +16,7 @@ use semver::{Version, VersionReq};
 use serde::Deserialize;
 use serde_json::{Value, json};
 use thiserror::Error;
+use tokio::sync::watch;
 use uuid::Uuid;
 use wasmtime::{
     Config, Engine, Store, StoreLimits, StoreLimitsBuilder,
@@ -55,6 +56,7 @@ const MAX_HOST_MESSAGE_BYTES: usize = 16 * 1024;
 const MAX_HOST_JSON_BYTES: usize = 64 * 1024;
 const MAX_CACHED_COMPONENTS: usize = 64;
 const MAX_WRITE_VALUES: usize = 100;
+const EPOCH_TICK_INTERVAL: Duration = Duration::from_millis(10);
 
 #[derive(Clone, Debug)]
 pub struct ExtensionRuntimeConfig {
@@ -118,11 +120,22 @@ impl ComponentCache {
     }
 }
 
+struct ExtensionEpochTicker {
+    shutdown: watch::Sender<()>,
+}
+
+impl Drop for ExtensionEpochTicker {
+    fn drop(&mut self) {
+        let _ = self.shutdown.send(());
+    }
+}
+
 #[derive(Clone)]
 pub struct ExtensionRuntime {
     object_store: Arc<dyn ObjectStore>,
     config: ExtensionRuntimeConfig,
     engine: Arc<Engine>,
+    _epoch_ticker: Arc<ExtensionEpochTicker>,
     components: Arc<Mutex<ComponentCache>>,
 }
 
@@ -137,10 +150,22 @@ impl ExtensionRuntime {
         wasmtime.epoch_interruption(true);
         let engine = Engine::new(&wasmtime)
             .map_err(|error| ExtensionRuntimeError::Runtime(error.to_string()))?;
+        let engine = Arc::new(engine);
+        let (shutdown, mut shutdown_receiver) = watch::channel(());
+        let tick_engine = engine.clone();
+        tokio::spawn(async move {
+            loop {
+                tokio::select! {
+                    _ = tokio::time::sleep(EPOCH_TICK_INTERVAL) => tick_engine.increment_epoch(),
+                    _ = shutdown_receiver.changed() => return,
+                }
+            }
+        });
         Ok(Self {
             object_store,
             config,
-            engine: Arc::new(engine),
+            engine,
+            _epoch_ticker: Arc::new(ExtensionEpochTicker { shutdown }),
             components: Arc::new(Mutex::new(ComponentCache::default())),
         })
     }
@@ -213,13 +238,7 @@ impl ExtensionRuntime {
         store
             .set_fuel(self.config.fuel)
             .map_err(|error| ExtensionRuntimeError::Runtime(error.to_string()))?;
-        store.set_epoch_deadline(1);
-        let timeout_engine = self.engine.clone();
-        let timeout = self.config.invocation_timeout;
-        let epoch = tokio::spawn(async move {
-            tokio::time::sleep(timeout).await;
-            timeout_engine.increment_epoch();
-        });
+        store.set_epoch_deadline(epoch_deadline(self.config.invocation_timeout));
         let mut linker = Linker::new(&self.engine);
         host_v11::CatalogExtension::add_to_linker::<HostState, HasSelf<HostState>>(
             &mut linker,
@@ -238,7 +257,6 @@ impl ExtensionRuntime {
             .catalog_host_handler()
             .call_handle_command(&mut store, &command)
             .await;
-        epoch.abort();
         match result {
             Ok(Ok(response))
                 if response.payload.len() <= MAX_HOST_JSON_BYTES
@@ -272,13 +290,7 @@ impl ExtensionRuntime {
         store
             .set_fuel(self.config.fuel)
             .map_err(|error| ExtensionRuntimeError::Runtime(error.to_string()))?;
-        store.set_epoch_deadline(1);
-        let timeout_engine = self.engine.clone();
-        let timeout = self.config.invocation_timeout;
-        let epoch = tokio::spawn(async move {
-            tokio::time::sleep(timeout).await;
-            timeout_engine.increment_epoch();
-        });
+        store.set_epoch_deadline(epoch_deadline(self.config.invocation_timeout));
         let mut linker = Linker::new(&self.engine);
         host_v11::CatalogExtension::add_to_linker::<HostState, HasSelf<HostState>>(
             &mut linker,
@@ -293,7 +305,6 @@ impl ExtensionRuntime {
             .catalog_host_handler()
             .call_handle_event(&mut store, &to_wit_v11_event(event))
             .await;
-        epoch.abort();
         match result {
             Ok(Ok(())) => Ok(()),
             Ok(Err(message)) => Err(ExtensionRuntimeError::Runtime(format!(
@@ -328,13 +339,7 @@ impl ExtensionRuntime {
         store
             .set_fuel(self.config.fuel)
             .map_err(|error| ExtensionRuntimeError::Runtime(error.to_string()))?;
-        store.set_epoch_deadline(1);
-        let timeout_engine = self.engine.clone();
-        let timeout = self.config.invocation_timeout;
-        let epoch = tokio::spawn(async move {
-            tokio::time::sleep(timeout).await;
-            timeout_engine.increment_epoch();
-        });
+        store.set_epoch_deadline(epoch_deadline(self.config.invocation_timeout));
 
         let mut linker = Linker::new(&self.engine);
         CatalogExtension::add_to_linker::<HostState, HasSelf<HostState>>(&mut linker, |state| {
@@ -348,7 +353,6 @@ impl ExtensionRuntime {
             .catalog_host_handler()
             .call_handle_event(&mut store, &to_wit_event(event))
             .await;
-        epoch.abort();
         match result {
             Ok(Ok(())) => {
                 metrics::counter!("catalog_extension_invocations_total", "outcome" => "completed")
@@ -362,6 +366,13 @@ impl ExtensionRuntime {
             Err(error) => Err(ExtensionRuntimeError::Runtime(error.to_string())),
         }
     }
+}
+
+fn epoch_deadline(timeout: Duration) -> u64 {
+    timeout
+        .as_millis()
+        .div_ceil(EPOCH_TICK_INTERVAL.as_millis())
+        .max(1) as u64
 }
 
 fn uses_v11(range: &str) -> bool {

@@ -19,7 +19,12 @@ mod sessions;
 mod tokens;
 mod workspace_navigation;
 
-use std::{collections::HashMap, sync::Arc, time::Instant};
+use self::error::ApiError;
+use std::{
+    collections::HashMap,
+    sync::Arc,
+    time::{Duration, Instant},
+};
 
 use crate::{
     agent_worker::AgentDispatcher,
@@ -42,7 +47,7 @@ use axum::{
 };
 use metrics_exporter_prometheus::PrometheusHandle;
 use serde_json::Value;
-use tokio::sync::Mutex;
+use tokio::sync::{Mutex, Semaphore};
 use tracing::{Instrument, field::Empty};
 
 #[derive(Clone)]
@@ -77,9 +82,27 @@ pub struct AppState {
     pub data_health_cache: DataHealthCache,
     pub session_cookie_secure: bool,
     pub allow_trusted_headers: bool,
+    /// Bounds in-flight requests before expensive extractors or handlers run.
+    pub request_permits: Arc<Semaphore>,
+    pub request_timeout: Duration,
+    pub default_body_limit: usize,
 }
 
 pub type DataHealthCache = Arc<Mutex<HashMap<String, (Instant, Value)>>>;
+
+async fn request_limits(
+    State(state): State<AppState>,
+    request: axum::extract::Request,
+    next: Next,
+) -> Response {
+    let Ok(_permit) = state.request_permits.clone().try_acquire_owned() else {
+        return ApiError::service_unavailable("server is at request capacity").into_response();
+    };
+    match tokio::time::timeout(state.request_timeout, next.run(request)).await {
+        Ok(response) => response,
+        Err(_) => (axum::http::StatusCode::REQUEST_TIMEOUT, "request timed out").into_response(),
+    }
+}
 
 async fn server_timing(request: axum::extract::Request, next: Next) -> Response {
     let method = request.method().to_string();
@@ -491,7 +514,14 @@ pub fn router(state: AppState) -> Router {
             state.clone(),
             auth::authorize,
         ))
-        .with_state(state)
+        .with_state(state.clone())
+        .layer(axum::extract::DefaultBodyLimit::max(
+            state.default_body_limit,
+        ))
+        .layer(middleware::from_fn_with_state(
+            state.clone(),
+            request_limits,
+        ))
         .layer(middleware::from_fn(server_timing))
 }
 

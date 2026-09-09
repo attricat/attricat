@@ -8,9 +8,10 @@ use api::{
     constants::{
         DEFAULT_DATA_HEALTH_CACHE_TTL_SECONDS, DEFAULT_ENTITY_PAGE_SIZE,
         DEFAULT_FILE_UPLOAD_MAX_BYTES, DEFAULT_FILE_UPLOAD_MAX_FILES,
-        DEFAULT_INCOMING_RELATIONSHIP_PAGE_SIZE, DEFAULT_PREVIEW_RELATIONSHIP_DEPTH,
-        DEFAULT_PREVIEW_RELATIONSHIP_ITEMS, DEFAULT_RELATIONSHIP_FACET_NODES,
-        MAINTENANCE_POOL_CONNECTIONS, REQUEST_POOL_CONNECTIONS,
+        DEFAULT_HTTP_DEFAULT_BODY_BYTES, DEFAULT_HTTP_MAX_CONCURRENT_REQUESTS,
+        DEFAULT_HTTP_REQUEST_TIMEOUT_SECONDS, DEFAULT_INCOMING_RELATIONSHIP_PAGE_SIZE,
+        DEFAULT_PREVIEW_RELATIONSHIP_DEPTH, DEFAULT_PREVIEW_RELATIONSHIP_ITEMS,
+        DEFAULT_RELATIONSHIP_FACET_NODES, MAINTENANCE_POOL_CONNECTIONS, REQUEST_POOL_CONNECTIONS,
     },
     event_dispatcher::{self, DispatcherConfig},
     extension_registry::{DEFAULT_OFFICIAL_REGISTRY, GitHubRegistry, GitHubRepository},
@@ -23,6 +24,7 @@ use api::{
     telemetry::{init_metrics, init_tracing},
 };
 use sqlx::postgres::{PgConnectOptions, PgPoolOptions};
+use tokio::sync::Semaphore;
 use uuid::Uuid;
 
 #[tokio::main]
@@ -258,6 +260,18 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
                 .map(|value| value != "false")
                 .unwrap_or(true),
             allow_trusted_headers: false,
+            request_permits: Arc::new(Semaphore::new(positive_env(
+                "HTTP_MAX_CONCURRENT_REQUESTS",
+                DEFAULT_HTTP_MAX_CONCURRENT_REQUESTS,
+            )?)),
+            request_timeout: std::time::Duration::from_secs(positive_env(
+                "HTTP_REQUEST_TIMEOUT_SECONDS",
+                DEFAULT_HTTP_REQUEST_TIMEOUT_SECONDS,
+            )? as u64),
+            default_body_limit: positive_env(
+                "HTTP_DEFAULT_BODY_BYTES",
+                DEFAULT_HTTP_DEFAULT_BODY_BYTES,
+            )?,
         }),
     )
     .with_graceful_shutdown(async move {
@@ -273,6 +287,20 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     }
 
     Ok(())
+}
+
+fn positive_env(
+    name: &str,
+    default: usize,
+) -> Result<usize, Box<dyn std::error::Error + Send + Sync>> {
+    match std::env::var(name) {
+        Ok(value) => value
+            .parse::<usize>()
+            .ok()
+            .filter(|value| *value > 0)
+            .ok_or_else(|| format!("{name} must be a positive integer").into()),
+        Err(_) => Ok(default),
+    }
 }
 
 async fn bootstrap_workspace_owner(
