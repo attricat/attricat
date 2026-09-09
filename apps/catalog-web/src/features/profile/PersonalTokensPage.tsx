@@ -88,6 +88,7 @@ const SecretDialog = ({
 
 export const PersonalTokensPage = () => {
   const { t } = useTranslation();
+  const { show } = useToast();
   const navigate = useNavigate();
   const client = useQueryClient();
   const session = useQuery({
@@ -121,6 +122,7 @@ export const PersonalTokensPage = () => {
           ...(expiresAt ? { expires_at: expiresAt.toISOString() } : {}),
         });
         setSecret(token.secret);
+        show({ message: t('profile.tokenCreated'), severity: 'success' });
         void client.invalidateQueries({ queryKey: profileQueryKeys.tokens() });
       } catch (reason) {
         setError(

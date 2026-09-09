@@ -416,6 +416,7 @@
     "unavailable": "Niedostępne przy obecnych uprawnieniach.",
     "expiresAt": "Wygasa (opcjonalnie)",
     "create": "Utwórz token",
+    "tokenCreated": "Utworzono osobisty token.",
     "title": "Profil",
     "accountDetails": "Dane konta",
     "displayName": "Nazwa wyświetlana: {{value}}",
