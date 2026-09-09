@@ -33,6 +33,7 @@ import {
 } from './api';
 import { dataHealthQueryKeys } from './query-keys';
 import { DataHealthControls } from './DataHealthControls';
+import { DataHealthSummaryCards } from './DataHealthSummaryCards';
 import {
   byteDisplayPrecision,
   bytesPerKilobyte,
@@ -126,31 +127,10 @@ export const DataHealthPage = ({ search }: { search: DataHealthSearch }) => {
       />
       <SectionError error={summary.error} />
       {summary.data && (
-        <Stack
-          direction={{ xs: 'column', sm: 'row' }}
-          spacing={2}
-          sx={{ flexWrap: 'wrap', mt: 4 }}
-        >
-          {[
-            [t('dataHealth.outdatedEntities'), summary.data.outdated_entities],
-            [t('dataHealth.activeEntities'), summary.data.active_entities],
-            [
-              t('dataHealth.staleAfterDays', { count: staleAfterDays }),
-              summary.data.stale_entities,
-            ],
-            [
-              t('dataHealth.deletedRelationshipTargets'),
-              summary.data.deleted_relationship_targets,
-            ],
-          ].map(([label, value]) => (
-            <Paper key={String(label)} sx={{ minWidth: 190, p: 2 }}>
-              <Typography color="text.secondary" variant="body2">
-                {label}
-              </Typography>
-              <Typography variant="h4">{value}</Typography>
-            </Paper>
-          ))}
-        </Stack>
+        <DataHealthSummaryCards
+          staleAfterDays={staleAfterDays}
+          summary={summary.data}
+        />
       )}
       <Paper sx={{ mt: 4, p: 2 }}>
         <Typography variant="h5">{t('dataHealth.storage')}</Typography>
