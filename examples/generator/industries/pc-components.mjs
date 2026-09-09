@@ -146,16 +146,19 @@ value_type = "number"
 code = "family"
 value_type = "relationship"
 target_blueprint = "${prefix}_family"
+cardinality = "one_to_one"
 
 [[attributes]]
 code = "category"
 value_type = "relationship"
 target_blueprint = "${prefix}_category"
+cardinality = "one_to_one"
 
 [[attributes]]
 code = "manufacturer"
 value_type = "relationship"
 target_blueprint = "${prefix}_manufacturer"
+cardinality = "one_to_one"
 
 [[attributes]]
 code = "compatible_skus"
@@ -174,6 +177,9 @@ max_bytes = 1048576`,
   { field = "name", label = "Product" },
   { field = "sku", label = "SKU" },
   { field = "product_type", label = "Type" },
+  { field = "family.name", label = "Product family" },
+  { field = "category.name", label = "Category" },
+  { field = "manufacturer.name", label = "Manufacturer" },
   { field = "price", label = "Price" },
   { field = "stock_on_hand", label = "Stock" },
   { field = "availability", label = "Availability" },
