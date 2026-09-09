@@ -16,9 +16,9 @@ pub const DEFAULT_HTTP_MAX_CONCURRENT_REQUESTS: usize = 256;
 pub const DEFAULT_HTTP_DEFAULT_BODY_BYTES: usize = 2 * 1024 * 1024;
 pub const SECONDS_PER_HOUR: i64 = 60 * 60;
 
-/// Connection pools are deliberately small: request pools are workspace-scoped.
+/// Request pools are workspace-scoped, so keep this bounded for the database.
 pub const MAINTENANCE_POOL_CONNECTIONS: u32 = 1;
-pub const REQUEST_POOL_CONNECTIONS: u32 = 5;
+pub const REQUEST_POOL_CONNECTIONS: u32 = 10;
 
 pub const SESSION_COOKIE: &str = "catalog_session";
 pub const CSRF_COOKIE: &str = "catalog_csrf";

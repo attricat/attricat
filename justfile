@@ -30,7 +30,7 @@ reset-db: _assert-env
     sqlx migrate run --source apps/api/migrations --database-url "$DATABASE_URL"
 
 generate size="small" industry="pc-components": _assert-env
-    CATALOG_SERVER="$CATALOG_API_URL" node examples/generate.mjs --industry "{{industry}}" --size "{{size}}"
+    CATALOG_SERVER="$CATALOG_API_URL" node examples/generate.mjs --industry "{{industry}}" --size "{{size}}" --concurrency 8
 
 generate-resume size="small" industry="pc-components": _assert-env
     CATALOG_SERVER="$CATALOG_API_URL" node examples/generate.mjs --industry "{{industry}}" --size "{{size}}" --resume
