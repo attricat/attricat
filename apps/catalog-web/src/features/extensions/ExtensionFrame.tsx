@@ -82,6 +82,8 @@ type Props = {
   contribution: ExtensionContribution;
   context?: Record<string, unknown>;
   onContentHeight?: (height: number) => void;
+  onFailure?: () => void;
+  onReady?: () => void;
 };
 
 /** Executes one contribution in an opaque-origin document, never in Catalog's DOM. */
@@ -89,6 +91,8 @@ export const ExtensionFrame = ({
   contribution,
   context = {},
   onContentHeight,
+  onFailure,
+  onReady,
 }: Props) => {
   const iframe = useRef<HTMLIFrameElement>(null);
   const onContentHeightRef = useRef(onContentHeight);
@@ -118,10 +122,11 @@ export const ExtensionFrame = ({
     >;
     let disposed = false;
     let port: MessagePort | undefined;
-    const timer = window.setTimeout(
-      () => !disposed && setError('The extension timed out while starting.'),
-      extensionStartTimeout,
-    );
+    const timer = window.setTimeout(() => {
+      if (disposed) return;
+      onFailure?.();
+      setError('The extension timed out while starting.');
+    }, extensionStartTimeout);
     const start = async () => {
       try {
         const artifact = await getExtensionArtifact(
@@ -136,10 +141,13 @@ export const ExtensionFrame = ({
           if (!data || typeof data !== 'object') return;
           if (data.type === 'catalog:ready.v1') {
             window.clearTimeout(timer);
+            onReady?.();
             return setReady(true);
           }
-          if (data.type === 'catalog:error.v1')
+          if (data.type === 'catalog:error.v1') {
+            onFailure?.();
             return setError('The extension could not be started.');
+          }
           if (
             data.type === 'catalog:resize.v1' &&
             typeof data.height === 'number' &&
@@ -271,7 +279,10 @@ export const ExtensionFrame = ({
           [channel.port2],
         );
       } catch {
-        if (!disposed) setError('The extension could not be loaded.');
+        if (!disposed) {
+          onFailure?.();
+          setError('The extension could not be loaded.');
+        }
       }
     };
     void start();
@@ -282,7 +293,7 @@ export const ExtensionFrame = ({
       port?.close();
       if (portRef.current === port) portRef.current = undefined;
     };
-  }, [contribution, frameKey, loadedFrame, navigate]);
+  }, [contribution, frameKey, loadedFrame, navigate, onFailure, onReady]);
 
   useEffect(() => {
     if (!ready) return;

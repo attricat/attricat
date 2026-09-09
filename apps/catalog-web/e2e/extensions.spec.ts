@@ -63,6 +63,10 @@ value_type = "number"
 code = "price_gross"
 value_type = "number"
 
+[views.table]
+type = "table"
+columns = [{ field = "price_net", renderer = { id = "attricat-extension-example.table-cell", version = 1 } }]
+
 [extensions.attricat-extension-example.formulas]
 price_gross = "price_net * (1 + 0.23)"`,
   );
@@ -93,4 +97,23 @@ price_gross = "price_net * (1 + 0.23)"`,
       { timeout: 10_000 },
     )
     .toBe(true);
+
+  await page.goto('/');
+  await page.getByLabel('Select a Blueprint').click();
+  await page.getByRole('option', { name: `Formula product (${code})` }).click();
+  await page.getByRole('button', { name: 'Search' }).click();
+  const cellFrame = page.frameLocator(
+    'iframe[title="attricat-extension-example.table-cell"]',
+  );
+  await expect(cellFrame.getByText('Example cell: 100')).toBeVisible();
+
+  await page.getByLabel(`Entity actions for ${entity.id}`).click();
+  await expect(page.getByLabel('Extension actions')).toBeVisible();
+  await page.getByLabel('Extension actions').click();
+  const rowAction = page
+    .frameLocator('iframe[title="example-row-action"]')
+    .getByRole('button', { name: 'Example row action' });
+  await expect(rowAction).toBeVisible();
+  await rowAction.click();
+  await expect(page.getByText(`Row action for ${entity.id}`)).toBeVisible();
 });

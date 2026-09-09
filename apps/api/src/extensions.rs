@@ -42,6 +42,7 @@ pub const CAPABILITIES: &[&str] = &[
     "client.entity_decoration",
     "client.entity_action",
     "client.explorer_row_action",
+    "client.explorer_table_cell",
     "client.blueprint_detail_panel",
     "secrets.read",
     "logging.write",
@@ -106,8 +107,8 @@ pub struct Manifest {
     pub server: Option<Server>,
     #[serde(default)]
     pub ui: Vec<UiContribution>,
-    /// Declarative cell renderers available to blueprint table columns. Runtime
-    /// loading is deliberately outside this contract.
+    /// Declarative cell renderers available to Explorer table columns. Each
+    /// renderer is paired with a sandboxed `explorer_table_cell` contribution.
     #[serde(default)]
     pub cell_renderers: Vec<CellRenderer>,
 }
@@ -329,6 +330,8 @@ pub enum UiOutlet {
     /// A compact, per-entity explorer menu action. The host provides only the
     /// entity and immutable blueprint revision identifiers.
     ExplorerRowAction,
+    /// A sandboxed renderer for a visible Explorer table cell.
+    ExplorerTableCell,
     /// A read-only panel on a blueprint revision detail page.
     BlueprintDetailPanel,
     ExplorerAction,
@@ -563,6 +566,17 @@ impl Manifest {
             self.cell_renderers.iter().map(|renderer| &renderer.id),
             "cell renderer",
         )?;
+        if !self.cell_renderers.is_empty()
+            && !self
+                .permissions
+                .iter()
+                .chain(&self.optional_permissions)
+                .any(|item| item == "client.explorer_table_cell")
+        {
+            return Err(ManifestError::Invalid(
+                "cell renderers require client.explorer_table_cell".into(),
+            ));
+        }
         for renderer in &self.cell_renderers {
             valid_id(&renderer.id, "cell renderer")?;
             if renderer.version == 0 || renderer.value_types.is_empty() {
@@ -608,6 +622,7 @@ impl Manifest {
                     UiOutlet::EntityAttributeDecoration => Some("client.entity_decoration"),
                     UiOutlet::EntityAction => Some("client.entity_action"),
                     UiOutlet::ExplorerRowAction => Some("client.explorer_row_action"),
+                    UiOutlet::ExplorerTableCell => Some("client.explorer_table_cell"),
                     UiOutlet::BlueprintDetailPanel => Some("client.blueprint_detail_panel"),
                     UiOutlet::ExplorerAction => Some("client.explorer_action"),
                     UiOutlet::ExplorerBulkAction => Some("client.explorer_bulk_action"),
@@ -647,6 +662,7 @@ impl Manifest {
                     let valid_kind = matches!(
                         (&contribution.kind, outlet),
                         (UiContributionKind::Action, UiOutlet::ExplorerRowAction)
+                            | (UiContributionKind::Embedded, UiOutlet::ExplorerTableCell)
                             | (UiContributionKind::Action, UiOutlet::ExplorerAction)
                             | (UiContributionKind::Action, UiOutlet::ExplorerBulkAction)
                             | (UiContributionKind::Action, UiOutlet::EntityHeaderAction)
@@ -697,6 +713,18 @@ impl Manifest {
                 return Err(ManifestError::Invalid(
                     "route UI contributions require a non-empty title".into(),
                 ));
+            }
+        }
+        for renderer in &self.cell_renderers {
+            if !self.ui.iter().any(|contribution| {
+                contribution.outlet == Some(UiOutlet::ExplorerTableCell)
+                    && contribution.id == renderer.id
+                    && contribution.version == renderer.version
+            }) {
+                return Err(ManifestError::Invalid(format!(
+                    "cell renderer '{}@{}' requires a matching explorer_table_cell contribution",
+                    renderer.id, renderer.version
+                )));
             }
         }
         Ok(())
@@ -1344,6 +1372,38 @@ mod tests {
         value
             .permissions
             .retain(|permission| permission != "client.explorer_action");
+        assert!(value.validate(SUPPORTED_HOST_API).is_err());
+    }
+
+    #[test]
+    fn validates_explorer_table_cell_renderer_contract() {
+        let mut value = manifest();
+        value.catalog.host_api = ">=1.1.0, <2.0.0".into();
+        value.permissions.push("client.explorer_table_cell".into());
+        value.artifacts.push(Artifact {
+            id: "client".into(),
+            kind: ArtifactKind::ClientComponent,
+            path: "client.js".into(),
+        });
+        value.cell_renderers.push(CellRenderer {
+            id: "example.currency".into(),
+            version: 1,
+            value_types: vec!["number".into()],
+            allowed_props: vec!["currency".into()],
+        });
+        value.ui.push(UiContribution {
+            id: "example.currency".into(),
+            version: 1,
+            kind: UiContributionKind::Embedded,
+            artifact: "client".into(),
+            outlet: Some(UiOutlet::ExplorerTableCell),
+            title: None,
+        });
+        assert!(value.validate(SUPPORTED_HOST_API).is_ok());
+        value.permissions.clear();
+        assert!(value.validate(SUPPORTED_HOST_API).is_err());
+        value.permissions.push("client.explorer_table_cell".into());
+        value.ui[0].version = 2;
         assert!(value.validate(SUPPORTED_HOST_API).is_err());
     }
 

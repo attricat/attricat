@@ -1,6 +1,7 @@
 import { Link } from '@tanstack/react-router';
 import { flexRender } from '@tanstack/react-table';
 import { useVirtualizer } from '@tanstack/react-virtual';
+import { useQuery } from '@tanstack/react-query';
 import {
   getCoreRowModel,
   legacyCreateColumnHelper,
@@ -33,6 +34,14 @@ import { EntityIdPopover } from '../entities/components/EntityIdPopover';
 import { displayLabel } from '../entities/entity-display';
 import { AttributeValue } from '../views/components/values/AttributeValue';
 import { ExtensionPopoverOutlet } from '../extensions/ExtensionOutlet';
+import { getExtensionRuntime } from '../extensions/api';
+import { extensionQueryKeys } from '../extensions/query-keys';
+import {
+  ExtensionTableCell,
+  explorerTableCellContextSchema,
+} from './ExtensionTableCell';
+
+const maximumExplorerCellFrames = 32;
 
 const EntityActionsMenu = ({
   blueprintId,
@@ -120,13 +129,35 @@ export const ExplorerResultsTable = ({
 }) => {
   const { t } = useTranslation();
   const columnHelper = legacyCreateColumnHelper<EntityItem>();
-  const tableFields: string[] =
+  const tableView =
     blueprint.blueprint.views.table?.type === 'table'
-      ? (blueprint.blueprint.views.table.fields as string[])
-      : [];
+      ? blueprint.blueprint.views.table
+      : undefined;
+  const tableColumns: {
+    field: string;
+    label?: string | null;
+    renderer?: {
+      id: string;
+      version: number;
+      props: Record<string, unknown>;
+    } | null;
+  }[] = tableView?.columns?.length
+    ? tableView.columns
+    : (tableView?.fields ?? []).map((field) => ({ field }));
+  const runtime = useQuery({
+    queryKey: extensionQueryKeys.runtime(),
+    queryFn: getExtensionRuntime,
+    refetchInterval: 15_000,
+    retry: false,
+  });
   const attributes = new Map(
     blueprint.attributes.map((attribute) => [attribute.code, attribute]),
   );
+  // `flexRender` is only called for virtual rows. This bounded allocator keeps
+  // a pathological blueprint from turning one Explorer viewport into hundreds
+  // of opaque-origin frames.
+  let cellFrames = 0;
+  const takeCellFrame = () => cellFrames++ < maximumExplorerCellFrames;
   const columns: LegacyColumnDef<EntityItem, string>[] = [
     columnHelper.accessor('id', {
       header: t('explorer.id'),
@@ -162,20 +193,81 @@ export const ExplorerResultsTable = ({
         );
       },
     }) as LegacyColumnDef<EntityItem, string>,
-    ...tableFields.flatMap((field) => {
-      const attribute = attributes.get(field);
+    ...tableColumns.flatMap((column) => {
+      const [relationship, targetField] = column.field.split('.', 2);
+      const attribute = attributes.get(relationship);
       if (!attribute) return [];
+      const renderer = column.renderer;
+      const extension = renderer?.id.startsWith('catalog.')
+        ? undefined
+        : runtime.data?.find(
+            (item) =>
+              item.outlet === 'explorer_table_cell' &&
+              item.kind === 'embedded' &&
+              item.id === renderer?.id &&
+              item.version === renderer.version &&
+              item.capabilities.includes('client.explorer_table_cell'),
+          );
       return [
         columnHelper.display({
-          id: field,
-          header: field.replaceAll('_', ' '),
-          cell: (info) => (
-            <AttributeValue
-              attribute={attribute}
-              compact
-              value={info.row.original.preview.default?.[field]}
-            />
-          ),
+          id: column.field,
+          header: column.label ?? column.field.replaceAll('_', ' '),
+          cell: (info) => {
+            const entity = info.row.original;
+            const related = targetField
+              ? entity.related?.[relationship]?.[0]
+              : undefined;
+            const primaryValue = targetField
+              ? related?.preview.default?.[targetField]
+              : entity.preview.default?.[relationship];
+            const fallback = targetField ? (
+              <Typography variant="body2">
+                {String(primaryValue ?? '')}
+              </Typography>
+            ) : (
+              <AttributeValue
+                attribute={attribute}
+                compact
+                value={primaryValue}
+              />
+            );
+            if (!renderer || renderer.id.startsWith('catalog.'))
+              return fallback;
+            const context = explorerTableCellContextSchema.parse({
+              context_version: 1,
+              column: {
+                field: column.field,
+                label: column.label ?? null,
+                renderer,
+              },
+              primary_value: primaryValue ?? null,
+              related_entity: related
+                ? {
+                    id: related.id,
+                    blueprint_id: related.blueprint_id,
+                    blueprint_version: related.blueprint_version,
+                    relationship_context_id: related.relationship_context_id,
+                    relationship_context_code:
+                      related.relationship_context_code,
+                  }
+                : null,
+              related_preview: related?.preview ?? null,
+              source_row: {
+                entity_id: entity.id,
+                blueprint_version: entity.blueprint_version,
+                preview: entity.preview,
+              },
+            });
+            return (
+              <ExtensionTableCell
+                context={context}
+                contribution={extension}
+                key={extension?.release_id}
+                fallback={fallback}
+                frameAllowed={takeCellFrame()}
+              />
+            );
+          },
         }) as LegacyColumnDef<EntityItem, string>,
       ];
     }),

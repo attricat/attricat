@@ -107,7 +107,7 @@ The v1 capability catalogue is: `catalog.read`, `catalog.write`,
 `client.live_updates`, `client.clipboard`, `client.theme.read`,
 `client.locale.read`, `client.blueprint_configuration`,
 `client.entity_decoration`, `client.entity_action`, `client.explorer_row_action`,
-`client.blueprint_detail_panel`, `client.explorer_action`,
+`client.explorer_table_cell`, `client.blueprint_detail_panel`, `client.explorer_action`,
 `client.explorer_bulk_action`, `client.entity_header_action`,
 `client.entity_attribute_panel`, `client.blueprint_panel`,
 `client.blueprint_publish_check`, `client.file_panel`,
@@ -359,6 +359,16 @@ contextual actions—not an application-wide navigation tree.
   Its strict context is `entity_id`, `blueprint_id`, `blueprint_version`, and
   `context_version: 1`; it deliberately does not include search state or entity
   values.
+- **`explorer_table_cell`** (`embedded`, requiring
+  `client.explorer_table_cell`) is a sandboxed renderer for a visible Explorer
+  cell. A root `cell_renderers` declaration and its contribution share the
+  stable renderer `id` and positive `version`; it declares supported scalar
+  `value_types` and allowed renderer props. The strict v1 context contains the
+  column configuration, `primary_value`, source row identity and preview, and
+  nullable related-entity metadata and related preview. Catalog mounts only
+  virtualized visible cells, bounds simultaneous frames, sends a versioned
+  context update when a frame is reused, and falls back to scalar rendering for
+  unavailable, disabled, incompatible, slow, or failed renderers.
 - **`blueprint_detail_panel`** (`panel`, requiring
   `client.blueprint_detail_panel`) is a read-only region on a blueprint detail
   page. Its strict context is `blueprint_id`, `blueprint_version`, and

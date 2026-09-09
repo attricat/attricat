@@ -42,6 +42,17 @@ describe('extension runtime API', () => {
       json: () => Promise.resolve([action]),
     });
     await expect(getExtensionRuntime()).resolves.toEqual([action]);
+    const tableCell = {
+      ...contribution,
+      capabilities: ['client.explorer_table_cell'],
+      id: 'example.currency',
+      outlet: 'explorer_table_cell',
+    };
+    fetchMock.mockResolvedValue({
+      ok: true,
+      json: () => Promise.resolve([tableCell]),
+    });
+    await expect(getExtensionRuntime()).resolves.toEqual([tableCell]);
     fetchMock.mockResolvedValue({
       ok: true,
       json: () => Promise.resolve([{ ...contribution, id: undefined }]),

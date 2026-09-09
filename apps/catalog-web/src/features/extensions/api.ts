@@ -19,6 +19,7 @@ const contributionSchema = z
         'entity_attribute_decoration',
         'entity_action',
         'explorer_row_action',
+        'explorer_table_cell',
         'blueprint_detail_panel',
         'explorer_action',
         'explorer_bulk_action',
