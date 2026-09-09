@@ -19,6 +19,7 @@ use axum::{
 };
 use serde::Deserialize;
 use std::{collections::HashMap, time::Instant};
+use tracing::Instrument;
 use uuid::Uuid;
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -175,19 +176,32 @@ pub(super) async fn search_entity_previews(
     }
     let current = repository
         .get_blueprint_by_code(code)
+        .instrument(tracing::info_span!(
+            "sql.operation",
+            label = "blueprint-load"
+        ))
         .await?
         .ok_or_else(|| ApiError::not_found("blueprint"))?;
     let selected = match input.blueprint.version {
         Some(version) => Some(
             repository
                 .get_blueprint_by_code_and_version(code, version)
+                .instrument(tracing::info_span!(
+                    "sql.operation",
+                    label = "blueprint-load"
+                ))
                 .await?
                 .map(|b| b.blueprint.version)
                 .ok_or_else(|| ApiError::not_found("blueprint"))?,
         ),
         None => None,
     };
-    let sort = resolve_table_sort(&repository, &current, input.sort.as_ref()).await?;
+    let sort = resolve_table_sort(&repository, &current, input.sort.as_ref())
+        .instrument(tracing::info_span!(
+            "sql.operation",
+            label = "table-sort-resolve"
+        ))
+        .await?;
     let cursor = match (sort.is_some(), input.page.cursor.as_deref()) {
         (true, _) => None,
         (false, Some(cursor)) => Some(
@@ -204,17 +218,40 @@ pub(super) async fn search_entity_previews(
     let search_blueprint = match selected {
         Some(version) => repository
             .get_blueprint_by_code_and_version(code, version)
+            .instrument(tracing::info_span!(
+                "sql.operation",
+                label = "blueprint-load"
+            ))
             .await?
             .expect("selected version was checked above"),
         None => current.clone(),
     };
     let candidate_started = Instant::now();
-    let resolved = repository
-        .resolve_search(&search_blueprint, selected, query)
-        .await
-        .map_err(|error| ApiError::invalid_search_query(error.to_string()))?;
-    let ids = &resolved.ids;
-    let mut matching: Option<Vec<Uuid>> = Some(ids.iter().copied().collect());
+    // An unfiltered current-version search is already constrained by the page query.
+    // Avoid materializing every entity ID only to pass it back as `id = ANY(...)`.
+    let must_resolve =
+        query.is_some() || (selected.is_some() && !input.relationship_tree_facets.is_empty());
+    let resolved = if must_resolve {
+        Some(
+            repository
+                .resolve_search(&search_blueprint, selected, query)
+                .instrument(tracing::info_span!(
+                    "sql.operation",
+                    label = "search-resolve"
+                ))
+                .await
+                .map_err(|error| ApiError::invalid_search_query(error.to_string()))?,
+        )
+    } else {
+        None
+    };
+    let ids = resolved.as_ref().map(|resolved| &resolved.ids);
+    let mut matching: Option<Vec<Uuid>> = query.is_some().then(|| {
+        ids.expect("search queries are resolved")
+            .iter()
+            .copied()
+            .collect()
+    });
     for facet in input.relationship_tree_facets {
         let source = &search_blueprint
             .attributes
@@ -240,6 +277,10 @@ pub(super) async fn search_entity_previews(
         })?;
         let target = repository
             .get_blueprint_by_code(target_code)
+            .instrument(tracing::info_span!(
+                "sql.operation",
+                label = "blueprint-load"
+            ))
             .await?
             .ok_or_else(|| ApiError::not_found("target blueprint"))?;
         if let Some(hierarchy_field) = &facet.hierarchy_field {
@@ -271,6 +312,10 @@ pub(super) async fn search_entity_previews(
                 &facet.selected_target_ids,
                 ids,
             )
+            .instrument(tracing::info_span!(
+                "sql.operation",
+                label = "relationship-facet"
+            ))
             .await?
             .1;
         if let Some(facet_matching) = facet_matching {
@@ -299,6 +344,10 @@ pub(super) async fn search_entity_previews(
                     current.blueprint.version,
                     sort,
                 )
+                .instrument(tracing::info_span!(
+                    "sql.operation",
+                    label = "entities-page"
+                ))
                 .await?
         }
         None => {
@@ -314,6 +363,10 @@ pub(super) async fn search_entity_previews(
                     input.outdated,
                     current.blueprint.version,
                 )
+                .instrument(tracing::info_span!(
+                    "sql.operation",
+                    label = "entities-page"
+                ))
                 .await?
         }
     };
@@ -321,14 +374,18 @@ pub(super) async fn search_entity_previews(
     for item in &mut items {
         item.schema_outdated = item.blueprint_version != current.blueprint.version;
         item.match_explanations = resolved
-            .explanations
-            .get(&item.id)
+            .as_ref()
+            .and_then(|resolved| resolved.explanations.get(&item.id))
             .cloned()
             .unwrap_or_default();
     }
     let related_started = Instant::now();
     repository
         .hydrate_related_table_previews(&mut items, &table_relationships(&current))
+        .instrument(tracing::info_span!(
+            "sql.operation",
+            label = "related-hydrate"
+        ))
         .await?;
     timing.record("related", related_started);
     let serialization_started = Instant::now();
@@ -534,16 +591,23 @@ pub(super) async fn relationship_tree_facet_children(
             .expect("selected version was checked above"),
         None => source.clone(),
     };
-    let resolved = repository
-        .resolve_search(&search_blueprint, version, query)
-        .await
-        .map_err(|error| ApiError::invalid_search_query(error.to_string()))?;
+    // Without a search term, the facet query already scopes its source blueprint
+    // and does not need a materialized set of every source entity ID.
+    let resolved = match query {
+        Some(query) => Some(
+            repository
+                .resolve_search(&search_blueprint, version, Some(query))
+                .await
+                .map_err(|error| ApiError::invalid_search_query(error.to_string()))?,
+        ),
+        None => None,
+    };
     Ok(Json(
         repository
             .relationship_tree_facet_children(
                 source.blueprint.id,
                 version,
-                query.is_some().then_some(&resolved.ids),
+                resolved.as_ref().map(|resolved| &resolved.ids),
                 &input.source_relationship_field,
                 target.blueprint.id,
                 input.hierarchy_field.as_deref(),
@@ -552,6 +616,10 @@ pub(super) async fn relationship_tree_facet_children(
                 input.cursor,
                 state.max_relationship_facet_nodes.into(),
             )
+            .instrument(tracing::info_span!(
+                "sql.operation",
+                label = "relationship-facet"
+            ))
             .await?,
     ))
 }

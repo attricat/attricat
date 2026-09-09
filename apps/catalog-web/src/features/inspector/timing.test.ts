@@ -11,7 +11,7 @@ afterEach(clearTimingsForTest);
 describe('development timing buffer', () => {
   it('keeps only fixed aggregate Server-Timing phases', () => {
     recordServerTiming(
-      'candidate;dur=1.25, page;dur=2, sql;dur=8;desc=SELECT secret, related;dur=3, request-123;dur=4',
+      'candidate;dur=1.25, page;dur=2, sql;dur=8;desc=queries-3, related;dur=3, sql;dur=4;desc=SELECT secret, request-123;dur=4',
     );
 
     expect(recentTimings()).toEqual([
@@ -19,6 +19,7 @@ describe('development timing buffer', () => {
         phases: [
           { name: 'candidate', duration: 1.25 },
           { name: 'page', duration: 2 },
+          { name: 'sql', duration: 8, queryCount: 3 },
           { name: 'related', duration: 3 },
         ],
         recordedAt: expect.any(Number),

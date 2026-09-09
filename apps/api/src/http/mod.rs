@@ -36,6 +36,7 @@ use crate::{
     mail::MailDelivery,
     repository::CatalogRepository,
     storage::ObjectStore,
+    telemetry::{register_request_timing, unregister_request_timing},
 };
 use axum::{
     Router,
@@ -93,13 +94,29 @@ pub struct AppState {
 pub type DataHealthCache = Arc<Mutex<HashMap<String, (Instant, Value)>>>;
 
 const TIMING_PHASES: [&str; 4] = ["candidate", "page", "related", "serialize"];
+/// Only Explorer requests publish development SQL and phase breakdowns.
+/// Other API responses retain the standard aggregate `app` timing.
+const EXPLORER_TIMING_ROUTES: [&str; 2] = [
+    "/v1/entities/search",
+    "/v1/entities/facets/relationship-tree/children",
+];
+/// SQL breakdowns are limited to Explorer result and facet retrieval.
+const SQL_TIMING_LABELS: [&str; 3] = ["relationship-facet", "entities-page", "related-hydrate"];
 
-/// Request-local, aggregate timings. Its API only permits a fixed set of names,
+/// Request-local, aggregate timings. Its API only permits fixed metric names,
 /// so headers cannot accidentally contain SQL, identifiers, parameters, or bodies.
 #[derive(Clone)]
-pub(super) struct RequestTiming {
+pub(crate) struct RequestTiming {
     enabled: bool,
     phases: Arc<std::sync::Mutex<Vec<(&'static str, f64)>>>,
+    sql: Arc<std::sync::Mutex<SqlTiming>>,
+}
+
+#[derive(Default)]
+struct SqlTiming {
+    duration_ms: f64,
+    queries: u32,
+    labels: HashMap<&'static str, (f64, u32)>,
 }
 
 impl RequestTiming {
@@ -107,6 +124,7 @@ impl RequestTiming {
         Self {
             enabled,
             phases: Arc::new(std::sync::Mutex::new(Vec::new())),
+            sql: Arc::new(std::sync::Mutex::new(SqlTiming::default())),
         }
     }
 
@@ -120,14 +138,48 @@ impl RequestTiming {
             .push((phase, started.elapsed().as_secs_f64() * 1_000.0));
     }
 
+    pub(crate) fn record_sql(&self, label: Option<&str>, duration_ms: f64) {
+        if !self.enabled {
+            return;
+        }
+        let Some(label) = label.and_then(|request_label| {
+            SQL_TIMING_LABELS
+                .iter()
+                .find(|allowed| **allowed == request_label)
+        }) else {
+            return;
+        };
+        let mut sql = self.sql.lock().expect("timing lock is not poisoned");
+        sql.duration_ms += duration_ms;
+        sql.queries += 1;
+        let entry = sql.labels.entry(*label).or_default();
+        entry.0 += duration_ms;
+        entry.1 += 1;
+    }
+
     fn server_timing(&self) -> String {
-        self.phases
+        let mut timings = self
+            .phases
             .lock()
             .expect("timing lock is not poisoned")
             .iter()
             .map(|(phase, duration)| format!("{phase};dur={duration:.2}"))
-            .collect::<Vec<_>>()
-            .join(", ")
+            .collect::<Vec<_>>();
+        let sql = self.sql.lock().expect("timing lock is not poisoned");
+        if sql.queries > 0 {
+            timings.push(format!(
+                "sql;dur={:.2};desc=queries-{}",
+                sql.duration_ms, sql.queries
+            ));
+            for label in SQL_TIMING_LABELS {
+                if let Some((duration, queries)) = sql.labels.get(label) {
+                    timings.push(format!(
+                        "sql-{label};dur={duration:.2};desc=queries-{queries}"
+                    ));
+                }
+            }
+        }
+        timings.join(", ")
     }
 }
 
@@ -150,14 +202,16 @@ async fn server_timing(
     mut request: axum::extract::Request,
     next: Next,
 ) -> Response {
-    let timing = RequestTiming::new(state.devtools_enabled);
-    request.extensions_mut().insert(timing.clone());
     let method = request.method().to_string();
     let route = request
         .extensions()
         .get::<axum::extract::MatchedPath>()
         .map(|path| path.as_str().to_owned())
         .unwrap_or_else(|| "unmatched".to_owned());
+    let timing = RequestTiming::new(
+        state.devtools_enabled && EXPLORER_TIMING_ROUTES.contains(&route.as_str()),
+    );
+    request.extensions_mut().insert(timing.clone());
     let span = tracing::info_span!(
         "http.request",
         method = %method,
@@ -165,6 +219,12 @@ async fn server_timing(
         status = Empty,
         duration_ms = Empty
     );
+    // Spans have no ID when tracing is disabled (including some integration-test
+    // subscribers). Timing remains optional in that case.
+    let timing_span = span.id();
+    if let Some(id) = &timing_span {
+        register_request_timing(id.clone(), timing.clone());
+    }
     let started_at = Instant::now();
     let mut response = next.run(request).instrument(span.clone()).await;
     let status = response.status().as_u16();
@@ -195,6 +255,9 @@ async fn server_timing(
         server_timing,
         HeaderValue::from_str(&value).expect("server timing values are valid header values"),
     );
+    if let Some(id) = timing_span {
+        unregister_request_timing(id);
+    }
     response
 }
 
@@ -595,10 +658,12 @@ mod timing_tests {
 
         let enabled = RequestTiming::new(true);
         enabled.record("candidate", Instant::now());
-        enabled.record("sql", Instant::now());
+        enabled.record("unknown", Instant::now());
+        enabled.record_sql(Some("entities-page"), 12.345);
         let header = enabled.server_timing();
         assert!(header.starts_with("candidate;dur="));
-        assert!(!header.contains("sql"));
+        assert!(header.contains("sql;dur=12.35;desc=queries-1"));
+        assert!(header.contains("sql-entities-page;dur=12.35;desc=queries-1"));
         assert!(!header.contains("SELECT"));
     }
 }

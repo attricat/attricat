@@ -138,8 +138,10 @@ export const Inspector = () => {
                 variant="body2"
               >
                 {entry.phases
-                  .map(
-                    (phase) => `${phase.name}: ${phase.duration.toFixed(2)} ms`,
+                  .map((phase) =>
+                    phase.name.startsWith('sql')
+                      ? `${phase.name === 'sql' ? 'SQL' : `SQL ${phase.name.slice(4).replaceAll('-', ' ')}`} (${phase.queryCount ?? '?'} queries): ${phase.duration.toFixed(2)} ms`
+                      : `${phase.name}: ${phase.duration.toFixed(2)} ms`,
                   )
                   .join(' · ')}
               </Typography>

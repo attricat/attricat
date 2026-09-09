@@ -515,7 +515,7 @@ impl CatalogRepository {
         hierarchy_field: Option<&str>,
         context_id: Uuid,
         selected_target_ids: &[Uuid],
-        source_entity_ids: &HashSet<Uuid>,
+        source_entity_ids: Option<&HashSet<Uuid>>,
     ) -> Result<(RelationshipTreeFacetResponse, Option<Vec<Uuid>>), RepositoryError> {
         let context_exists = self.get_context_by_id(context_id).await?.is_some();
         if !context_exists {
@@ -585,7 +585,8 @@ impl CatalogRepository {
             edges
                 .iter()
                 .filter(|(source, target)| {
-                    source_entity_ids.contains(source) && allowed.contains(target)
+                    source_entity_ids.is_none_or(|ids| ids.contains(source))
+                        && allowed.contains(target)
                 })
                 .map(|(source, _)| *source)
                 .collect::<HashSet<_>>()
@@ -594,7 +595,7 @@ impl CatalogRepository {
         });
         let mut counts: HashMap<Uuid, HashSet<Uuid>> = HashMap::new();
         for (source, target) in edges {
-            if !source_entity_ids.contains(&source) {
+            if source_entity_ids.is_some_and(|ids| !ids.contains(&source)) {
                 continue;
             }
             let mut pending = vec![target];
@@ -1023,15 +1024,41 @@ impl CatalogRepository {
         } else {
             format!("%{}%", term.value)
         };
-        let rows = sqlx::query_as::<_, (Uuid, String)>(r#"SELECT DISTINCT e.id, a.code
-            FROM entities e JOIN attribute_values av ON av.entity_id = e.id
-            JOIN attributes a ON a.id = av.attribute_id AND a.deleted_at IS NULL
-            WHERE e.deleted_at IS NULL AND av.relationship_target_entity_id IS NULL
-              AND ($1::uuid IS NULL OR e.blueprint_id = $1)
-              AND ($2::text IS NULL OR a.code = $2)
-              AND COALESCE(av.value_text, av.value_number::text, av.value_integer::text, av.value_boolean::text, av.value_date::text, av.value_datetime::text, av.value_time::text) ILIKE $3
-            ORDER BY e.id, a.code"#)
-            .bind(match_blueprint).bind(attribute).bind(pattern).fetch_all(&self.pool).await?;
+        // Alphabetic terms other than booleans cannot match the canonical native
+        // renderings of non-text values. Start these searches from the trigram-indexed
+        // text values and materialize them so PostgreSQL does not repeat that scan for
+        // every attribute.
+        let sql = if text_only_search(&term.value) {
+            r#"WITH matching_values AS MATERIALIZED (
+                    SELECT entity_id, attribute_id
+                    FROM attribute_values
+                    WHERE active AND relationship_target_entity_id IS NULL
+                      AND value_text ILIKE $3
+                )
+                SELECT DISTINCT e.id, a.code
+                FROM matching_values av
+                JOIN attributes a ON a.id = av.attribute_id AND a.deleted_at IS NULL
+                JOIN entities e ON e.id = av.entity_id
+                WHERE e.deleted_at IS NULL
+                  AND ($1::uuid IS NULL OR e.blueprint_id = $1)
+                  AND ($2::text IS NULL OR a.code = $2)
+                ORDER BY e.id, a.code"#
+        } else {
+            r#"SELECT DISTINCT e.id, a.code
+                FROM entities e JOIN attribute_values av ON av.entity_id = e.id
+                JOIN attributes a ON a.id = av.attribute_id AND a.deleted_at IS NULL
+                WHERE e.deleted_at IS NULL AND av.relationship_target_entity_id IS NULL
+                  AND ($1::uuid IS NULL OR e.blueprint_id = $1)
+                  AND ($2::text IS NULL OR a.code = $2)
+                  AND COALESCE(av.value_text, av.value_number::text, av.value_integer::text, av.value_boolean::text, av.value_date::text, av.value_datetime::text, av.value_time::text) ILIKE $3
+                ORDER BY e.id, a.code"#
+        };
+        let rows = sqlx::query_as::<_, (Uuid, String)>(sql)
+            .bind(match_blueprint)
+            .bind(attribute)
+            .bind(pattern)
+            .fetch_all(&self.pool)
+            .await?;
         let mut witnesses: HashMap<Uuid, MatchExplanation> = HashMap::new();
         let mut frontier = VecDeque::new();
         for (id, attribute) in rows {
@@ -1169,6 +1196,13 @@ fn parse_search_terms(query: &str) -> Result<Vec<SearchTerm>, RepositoryError> {
         })
         .collect()
 }
+fn text_only_search(value: &str) -> bool {
+    let normalized = value.to_ascii_lowercase();
+    normalized != "true"
+        && normalized != "false"
+        && value.chars().any(|character| character.is_alphabetic())
+}
+
 fn native_sort_column(value_type: &str) -> Result<&'static str, RepositoryError> {
     match value_type {
         "string" => Ok("value_text"),

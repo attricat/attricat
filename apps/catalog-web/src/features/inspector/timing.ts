@@ -1,12 +1,7 @@
 export type TimingPhase = {
-  name:
-    | 'candidate'
-    | 'page'
-    | 'related'
-    | 'serialize'
-    | 'frame-load'
-    | 'frame-fallback';
+  name: string;
   duration: number;
+  queryCount?: number;
 };
 
 export type TimingEntry = {
@@ -15,7 +10,19 @@ export type TimingEntry = {
 };
 
 const maximumEntries = 50;
-const serverPhases = new Set(['candidate', 'page', 'related', 'serialize']);
+const serverPhases = new Set([
+  'candidate',
+  'page',
+  'related',
+  'serialize',
+  'sql',
+  'sql-blueprint-load',
+  'sql-table-sort-resolve',
+  'sql-search-resolve',
+  'sql-relationship-facet',
+  'sql-entities-page',
+  'sql-related-hydrate',
+]);
 const framePhases = new Set(['frame-load', 'frame-fallback']);
 const entries: TimingEntry[] = [];
 const listeners = new Set<() => void>();
@@ -33,12 +40,23 @@ const addEntry = (phases: TimingPhase[]) => {
 export const recordServerTiming = (header: string | null) => {
   if (!__CATALOG_DEVTOOLS__ || !header) return;
   const phases = header.split(',').flatMap((part) => {
-    const match = /^\s*([a-z-]+);dur=([0-9]+(?:\.[0-9]+)?)\s*$/.exec(part);
+    const match = /^\s*([a-z-]+);dur=([0-9]+(?:\.[0-9]+)?)(?:;desc=queries-([0-9]+))?\s*$/.exec(part);
     if (!match || !serverPhases.has(match[1])) return [];
     const duration = Number(match[2]);
-    return Number.isFinite(duration) && duration >= 0
-      ? [{ name: match[1] as TimingPhase['name'], duration }]
-      : [];
+    const queryCount = match[1].startsWith('sql') && match[3] ? Number(match[3]) : undefined;
+    if (
+      !Number.isFinite(duration) ||
+      duration < 0 ||
+      (queryCount !== undefined && !Number.isSafeInteger(queryCount))
+    )
+      return [];
+    return [
+      {
+        name: match[1],
+        duration,
+        ...(queryCount === undefined ? {} : { queryCount }),
+      },
+    ];
   });
   addEntry(phases);
 };
