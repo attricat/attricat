@@ -5,6 +5,7 @@
 use std::{sync::Arc, time::Duration};
 
 use chrono::Utc;
+use thiserror::Error;
 use tokio::sync::mpsc;
 use uuid::Uuid;
 
@@ -13,17 +14,27 @@ use crate::{
     repository::CatalogRepository, storage::ObjectStore,
 };
 
+#[derive(Debug, Error)]
+pub enum AgentDispatchError {
+    #[error("agent dispatcher is stopped")]
+    Stopped,
+}
+
 #[derive(Clone)]
 pub struct AgentDispatcher {
     sender: mpsc::Sender<(Uuid, Uuid)>,
 }
 
 impl AgentDispatcher {
-    pub async fn enqueue(&self, workspace_id: Uuid, run_id: Uuid) -> Result<(), ()> {
+    pub async fn enqueue(
+        &self,
+        workspace_id: Uuid,
+        run_id: Uuid,
+    ) -> Result<(), AgentDispatchError> {
         self.sender
             .send((workspace_id, run_id))
             .await
-            .map_err(|_| ())
+            .map_err(|_| AgentDispatchError::Stopped)
     }
 }
 

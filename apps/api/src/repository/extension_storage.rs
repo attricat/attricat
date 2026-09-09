@@ -84,7 +84,7 @@ impl CatalogRepository {
         )
         .bind(self.extension_workspace())
         .bind(extension_id)
-        .bind(&key)
+        .bind(key)
         .fetch_optional(&mut *transaction)
         .await?;
         if expected_revision
@@ -107,8 +107,8 @@ impl CatalogRepository {
             return Err(ExtensionStorageError::QuotaExceeded);
         }
         sqlx::query("INSERT INTO extension_storage_entries (workspace_id, extension_id, key, value, revision, byte_size) VALUES ($1, $2, $3, $4, $5, $6) ON CONFLICT (workspace_id, extension_id, key) DO UPDATE SET value = EXCLUDED.value, revision = EXCLUDED.revision, byte_size = EXCLUDED.byte_size, updated_at = clock_timestamp()")
-            .bind(self.extension_workspace()).bind(extension_id).bind(&key).bind(value).bind(revision).bind(byte_size as i32).execute(&mut *transaction).await?;
-        self.commit_storage_mutation(transaction, "set", extension_id, &key)
+            .bind(self.extension_workspace()).bind(extension_id).bind(key).bind(value).bind(revision).bind(byte_size as i32).execute(&mut *transaction).await?;
+        self.commit_storage_mutation(transaction, "set", extension_id, key)
             .await?;
         Ok(revision)
     }
@@ -127,14 +127,14 @@ impl CatalogRepository {
         let revision: Option<i64> = sqlx::query_scalar(
             "SELECT revision FROM extension_storage_entries WHERE workspace_id = $1 AND extension_id = $2 AND key = $3 FOR UPDATE",
         )
-        .bind(self.extension_workspace()).bind(extension_id).bind(&key)
+        .bind(self.extension_workspace()).bind(extension_id).bind(key)
         .fetch_optional(&mut *transaction).await?;
         if expected_revision.is_some_and(|item| revision != Some(item)) {
             return Err(ExtensionStorageError::Conflict);
         }
         sqlx::query("DELETE FROM extension_storage_entries WHERE workspace_id = $1 AND extension_id = $2 AND key = $3")
-            .bind(self.extension_workspace()).bind(extension_id).bind(&key).execute(&mut *transaction).await?;
-        self.commit_storage_mutation(transaction, "delete", extension_id, &key)
+            .bind(self.extension_workspace()).bind(extension_id).bind(key).execute(&mut *transaction).await?;
+        self.commit_storage_mutation(transaction, "delete", extension_id, key)
             .await?;
         Ok(())
     }

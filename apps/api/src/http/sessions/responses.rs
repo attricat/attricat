@@ -39,6 +39,8 @@ pub(super) struct SessionCapabilities {
     extensions_manage: bool,
 }
 
+// Cookie issuance intentionally keeps the response inputs explicit at this boundary.
+#[allow(clippy::too_many_arguments)]
 pub(super) async fn session_response(
     state: &AppState,
     user_id: Uuid,
@@ -58,6 +60,8 @@ pub(super) async fn session_response(
     Ok(response)
 }
 
+// Cookie issuance intentionally keeps the response inputs explicit at this boundary.
+#[allow(clippy::too_many_arguments)]
 pub(crate) async fn onboarding_session_response(
     state: &AppState,
     user_id: Uuid,

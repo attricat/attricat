@@ -330,7 +330,7 @@ async fn reads_file_metadata_and_downloads_with_safe_range_headers(pool: PgPool)
     assert_eq!(response.headers()["cache-control"], "private, no-store");
     assert_eq!(
         response.headers()["content-disposition"],
-        "attachment; filename=\"unsafe_name___.png\""
+        "attachment; filename=\"_.png\""
     );
     assert_eq!(response.bytes().await.unwrap(), &PNG[2..6]);
     let object_key =

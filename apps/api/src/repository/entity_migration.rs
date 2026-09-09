@@ -7,6 +7,9 @@ use serde_json::{Map, Value};
 use std::collections::{HashMap, HashSet};
 use uuid::Uuid;
 
+type FileReferenceKey = (String, Option<Uuid>);
+type FileReferencesByAttribute = HashMap<FileReferenceKey, Vec<(Uuid, i32)>>;
+
 impl CatalogRepository {
     pub async fn preview_entity_migration(
         &self,
@@ -71,19 +74,16 @@ impl CatalogRepository {
                 Some(target) => {
                     if let (Some(schema), FormAttributeValue::Scalar { value, .. }) =
                         (&target.value_schema, value)
-                    {
-                        if !validate_json_schema(schema, value)
+                        && !validate_json_schema(schema, value)
                             .map_err(RepositoryError::invalid_blueprint_definition)?
                             .is_empty()
-                        {
-                            issues.push(MigrationIssue {
-                                attribute_code: Some(source.code.clone()),
-                                kind: "attribute_schema_mismatch".to_owned(),
-                                message:
-                                    "The stored value does not meet the target attribute schema"
-                                        .to_owned(),
-                            });
-                        }
+                    {
+                        issues.push(MigrationIssue {
+                            attribute_code: Some(source.code.clone()),
+                            kind: "attribute_schema_mismatch".to_owned(),
+                            message: "The stored value does not meet the target attribute schema"
+                                .to_owned(),
+                        });
                     }
                 }
             }
@@ -261,8 +261,7 @@ impl CatalogRepository {
             .collect();
         let mut carried_values = Vec::new();
         let mut carried_relationships: HashMap<(String, Option<Uuid>), Vec<Uuid>> = HashMap::new();
-        let mut carried_file_references: HashMap<(String, Option<Uuid>), Vec<(Uuid, i32)>> =
-            HashMap::new();
+        let mut carried_file_references: FileReferencesByAttribute = HashMap::new();
         let mut unresolved = HashSet::new();
         for value in source_values {
             match value {

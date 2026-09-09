@@ -10,7 +10,10 @@ use api::{
     storage::{FakeObjectStore, ObjectStore},
 };
 use axum::{Router, routing::post};
-use support::{BOOTSTRAP_OWNER_ID, BOOTSTRAP_WORKSPACE_ID, authenticated_client, start_server};
+use support::{
+    BOOTSTRAP_OWNER_ID, BOOTSTRAP_WORKSPACE_ID, TestMailDelivery, authenticated_client,
+    start_server, start_server_with_test_mail,
+};
 use tokio::net::TcpListener;
 use uuid::Uuid;
 
@@ -337,7 +340,8 @@ async fn invitation_acceptance_audits_the_invitation_workspace(pool: sqlx::PgPoo
         .await
         .unwrap();
 
-    let (base_url, server) = start_server(pool.clone()).await;
+    let mail_delivery = Arc::new(TestMailDelivery::default());
+    let (base_url, server) = start_server_with_test_mail(pool.clone(), mail_delivery.clone()).await;
     let mut inviter_headers = HeaderMap::new();
     inviter_headers.insert(
         "x-catalog-user-id",
@@ -369,10 +373,15 @@ async fn invitation_acceptance_audits_the_invitation_workspace(pool: sqlx::PgPoo
         "{}",
         created.text().await.unwrap()
     );
-    let secret = created.json::<support::Value>().await.unwrap()["secret"]
-        .as_str()
+    let invitation_url = mail_delivery
+        .workspace_invitation_url("audit-invitee@example.test")
+        .await
+        .expect("invitation delivery is recorded");
+    let secret = url::Url::parse(&invitation_url)
         .unwrap()
-        .to_owned();
+        .query_pairs()
+        .find_map(|(key, value)| (key == "secret").then(|| value.into_owned()))
+        .expect("invitation URL contains its secret");
 
     let mut invitee_headers = HeaderMap::new();
     invitee_headers.insert(

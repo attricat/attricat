@@ -480,7 +480,7 @@ async fn download(
         response_headers.insert(
             header::CONTENT_DISPOSITION,
             HeaderValue::from_str(&format!(
-                "attachment; filename=\\\"{}\\\"",
+                "attachment; filename=\"{}\"",
                 safe_download_name(&file.display_filename)
             ))
             .expect("sanitized filename is valid"),
@@ -538,9 +538,11 @@ fn safe_download_name(filename: &str) -> String {
             }
         })
         .collect();
-    (!value.is_empty())
-        .then_some(value)
-        .unwrap_or_else(|| "download".to_owned())
+    if !value.is_empty() {
+        value
+    } else {
+        "download".to_owned()
+    }
 }
 
 async fn stage_field(

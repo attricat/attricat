@@ -464,12 +464,12 @@ impl Manifest {
                 "event contract consumption requires events.subscribe".into(),
             ));
         }
-        if let Some(configuration) = &self.configuration {
-            if configuration.version == 0 || !configuration.schema.is_object() {
-                return Err(ManifestError::Invalid(
-                    "configuration requires a positive version and object JSON Schema".into(),
-                ));
-            }
+        if let Some(configuration) = &self.configuration
+            && (configuration.version == 0 || !configuration.schema.is_object())
+        {
+            return Err(ManifestError::Invalid(
+                "configuration requires a positive version and object JSON Schema".into(),
+            ));
         }
         if let Some(configuration) = &self.scoped_configuration {
             require_next_host_api(&range)?;
@@ -917,9 +917,7 @@ fn valid_id(value: &str, label: &str) -> Result<(), ManifestError> {
 }
 
 fn validate_url_pattern(pattern: &str) -> Result<(), ManifestError> {
-    if pattern.contains(|character| matches!(character, '?' | '#' | '@'))
-        || !pattern.ends_with("/*")
-    {
+    if pattern.contains(['?', '#', '@']) || !pattern.ends_with("/*") {
         return Err(ManifestError::Invalid(format!(
             "URL pattern '{pattern}' must be a query-free path prefix ending in /*"
         )));
@@ -955,12 +953,12 @@ fn validate_url_pattern(pattern: &str) -> Result<(), ManifestError> {
             "URL pattern '{pattern}' has an invalid host or port"
         )));
     }
-    if let Ok(ip) = host.parse::<IpAddr>() {
-        if !is_public_destination(ip) {
-            return Err(ManifestError::Invalid(format!(
-                "URL pattern '{pattern}' targets an unsafe destination"
-            )));
-        }
+    if let Ok(ip) = host.parse::<IpAddr>()
+        && !is_public_destination(ip)
+    {
+        return Err(ManifestError::Invalid(format!(
+            "URL pattern '{pattern}' targets an unsafe destination"
+        )));
     }
     if !host.split('.').all(|part| {
         !part.is_empty() && part.bytes().all(|c| c.is_ascii_alphanumeric() || c == b'-')
@@ -969,12 +967,12 @@ fn validate_url_pattern(pattern: &str) -> Result<(), ManifestError> {
             "URL pattern '{pattern}' has an invalid host"
         )));
     }
-    if let Some((_, port)) = authority.rsplit_once(':') {
-        if port.parse::<u16>().ok().filter(|p| *p > 0).is_none() {
-            return Err(ManifestError::Invalid(format!(
-                "URL pattern '{pattern}' has an invalid port"
-            )));
-        }
+    if let Some((_, port)) = authority.rsplit_once(':')
+        && port.parse::<u16>().ok().filter(|p| *p > 0).is_none()
+    {
+        return Err(ManifestError::Invalid(format!(
+            "URL pattern '{pattern}' has an invalid port"
+        )));
     }
     Ok(())
 }

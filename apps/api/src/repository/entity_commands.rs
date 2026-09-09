@@ -553,7 +553,7 @@ impl CatalogRepository {
                     .await?
                 }
                 (None, Some(attribute_code)) => {
-                    validate_code(&attribute_code)?;
+                    validate_code(attribute_code)?;
                     sqlx::query_as::<_, (Uuid, String, Option<Value>, Option<String>, String)>(
                         r#"SELECT id, value_type, value_schema, target_blueprint_code, context_editable
                    FROM attributes
@@ -593,8 +593,8 @@ impl CatalogRepository {
         } else {
             Some(NativeValue::parse(ValueType::parse(&value_type)?, payload)?)
         };
-        if let (Some(schema), Some(native)) = (&value_schema, &native) {
-            if let Some(error) = validate_json_schema(schema, &native.json())
+        if let (Some(schema), Some(native)) = (&value_schema, &native)
+            && let Some(error) = validate_json_schema(schema, &native.json())
                 .map_err(|message| RepositoryError::AttributeValueSchemaMismatch {
                     attribute: attribute_label
                         .clone()
@@ -604,13 +604,12 @@ impl CatalogRepository {
                 })?
                 .into_iter()
                 .next()
-            {
-                return Err(RepositoryError::AttributeValueSchemaMismatch {
-                    attribute: attribute_label.unwrap_or_else(|| attribute_id.to_string()),
-                    instance_path: error.instance_path,
-                    message: error.message,
-                });
-            }
+        {
+            return Err(RepositoryError::AttributeValueSchemaMismatch {
+                attribute: attribute_label.unwrap_or_else(|| attribute_id.to_string()),
+                instance_path: error.instance_path,
+                message: error.message,
+            });
         }
 
         self.archive_current_value(

@@ -169,6 +169,8 @@ impl CatalogRepository {
         })
     }
 
+    // Search filters are currently normalized by the HTTP boundary as discrete inputs.
+    #[allow(clippy::too_many_arguments)]
     pub async fn search_entity_previews(
         &self,
         blueprint_id: Uuid,
@@ -247,6 +249,8 @@ impl CatalogRepository {
         Ok((items, next_cursor))
     }
 
+    // Facet traversal inputs are explicit to keep query scope auditable.
+    #[allow(clippy::too_many_arguments)]
     pub async fn relationship_tree_facet(
         &self,
         source_blueprint_id: Uuid,
@@ -377,6 +381,8 @@ impl CatalogRepository {
         ))
     }
 
+    // Facet traversal inputs are explicit to keep query scope auditable.
+    #[allow(clippy::too_many_arguments)]
     pub async fn relationship_tree_facet_children(
         &self,
         source_blueprint_id: Uuid,
@@ -665,7 +671,7 @@ impl CatalogRepository {
                 .ok_or(RepositoryError::NotFound("target blueprint"))?;
             return Ok(TermPlan::Relationship {
                 field: relationship.code.clone(),
-                target,
+                target: Box::new(target),
                 attribute: None,
             });
         }
@@ -702,7 +708,7 @@ impl CatalogRepository {
             })?;
         Ok(TermPlan::Relationship {
             field: relationship.code.clone(),
-            target,
+            target: Box::new(target),
             attribute: Some(attribute),
         })
     }
@@ -767,17 +773,14 @@ impl CatalogRepository {
         let mut witnesses: HashMap<Uuid, MatchExplanation> = HashMap::new();
         let mut frontier = VecDeque::new();
         for (id, attribute) in rows {
-            if !witnesses.contains_key(&id) {
-                witnesses.insert(
-                    id,
-                    MatchExplanation {
-                        term: term.original.clone(),
-                        matching_entity_id: id,
-                        matching_attribute_code: Some(attribute),
-                        traversal_depth: 0,
-                        relationship_path: vec![],
-                    },
-                );
+            if let std::collections::hash_map::Entry::Vacant(e) = witnesses.entry(id) {
+                e.insert(MatchExplanation {
+                    term: term.original.clone(),
+                    matching_entity_id: id,
+                    matching_attribute_code: Some(attribute),
+                    traversal_depth: 0,
+                    relationship_path: vec![],
+                });
                 frontier.push_back(id);
             }
         }
@@ -868,7 +871,7 @@ enum TermPlan {
     SelectedAttribute(Option<String>),
     Relationship {
         field: String,
-        target: BlueprintWithAttributes,
+        target: Box<BlueprintWithAttributes>,
         attribute: Option<String>,
     },
 }

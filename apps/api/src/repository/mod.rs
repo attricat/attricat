@@ -306,12 +306,11 @@ impl CatalogRepository {
             });
         }
         self.ensure_default_context(workspace_id).await?;
-        if pools.len() >= MAX_WORKSPACE_POOLS {
-            if let Some(workspace_id) = pools.keys().next().copied() {
-                if let Some(pool) = pools.remove(&workspace_id) {
-                    pool.close().await;
-                }
-            }
+        if pools.len() >= MAX_WORKSPACE_POOLS
+            && let Some(workspace_id) = pools.keys().next().copied()
+            && let Some(pool) = pools.remove(&workspace_id)
+        {
+            pool.close().await;
         }
         let pool = PgPoolOptions::new()
             .max_connections(REQUEST_POOL_CONNECTIONS)

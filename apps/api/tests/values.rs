@@ -299,15 +299,14 @@ value_type = "time"
         .unwrap(),
         "12.50".parse().unwrap()
     );
-    assert_eq!(
+    assert!(
         sqlx::query_scalar::<_, bool>(
             "SELECT value_boolean FROM attribute_values WHERE entity_id = $1 AND value_boolean IS NOT NULL"
         )
         .bind(entity_id)
         .fetch_one(&pool)
         .await
-        .unwrap(),
-        true
+        .unwrap()
     );
 
     server.abort();

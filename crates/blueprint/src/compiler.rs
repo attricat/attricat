@@ -47,28 +47,17 @@ pub fn compile(
             context_editable,
             readonly,
         ) = match declaration {
-            AttributeDeclaration::Local {
-                code,
-                value_type,
-                value_schema,
-                default_value,
-                file_policy,
-                target_blueprint,
-                tags,
-                context_fallback,
-                context_editable,
-                readonly,
-            } => (
-                code.clone(),
-                value_type.clone(),
-                value_schema.clone(),
-                default_value.clone(),
-                file_policy.clone(),
-                target_blueprint.clone(),
-                tags.clone(),
-                context_fallback.clone(),
-                context_editable.clone(),
-                *readonly,
+            AttributeDeclaration::Local(local) => (
+                local.code.clone(),
+                local.value_type.clone(),
+                local.value_schema.clone(),
+                local.default_value.clone(),
+                local.file_policy.clone(),
+                local.target_blueprint.clone(),
+                local.tags.clone(),
+                local.context_fallback.clone(),
+                local.context_editable.clone(),
+                local.readonly,
             ),
             AttributeDeclaration::Selection {
                 code,
@@ -114,10 +103,10 @@ pub fn compile(
             position: position as i64,
         });
     }
-    if definition.kind == BlueprintKind::Entity {
-        if let Some(schema) = &definition.entity_schema {
-            validate_entity_schema_attributes(schema, &attributes)?;
-        }
+    if definition.kind == BlueprintKind::Entity
+        && let Some(schema) = &definition.entity_schema
+    {
+        validate_entity_schema_attributes(schema, &attributes)?;
     }
     if definition.kind == BlueprintKind::Entity && !definition.views.contains_key("dropdown_option")
     {

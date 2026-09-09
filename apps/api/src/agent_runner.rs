@@ -280,75 +280,73 @@ async fn request_message(
     object_store: &Arc<dyn ObjectStore>,
     message: crate::repository::ConversationMessage,
 ) -> ChatMessage {
-    if message.role == "assistant" {
-        if let Some(tool_calls) = message.content.get("tool_calls") {
-            if let Ok(tool_calls) = serde_json::from_value::<Vec<ToolCall>>(tool_calls.clone()) {
-                return ChatMessage {
-                    role: message.role,
-                    content: Value::Null,
-                    tool_call_id: None,
-                    tool_calls: Some(tool_calls),
-                };
-            }
-        }
+    if message.role == "assistant"
+        && let Some(tool_calls) = message.content.get("tool_calls")
+        && let Ok(tool_calls) = serde_json::from_value::<Vec<ToolCall>>(tool_calls.clone())
+    {
+        return ChatMessage {
+            role: message.role,
+            content: Value::Null,
+            tool_call_id: None,
+            tool_calls: Some(tool_calls),
+        };
     }
-    if message.role == "tool" {
-        if let Some(tool_call_id) = message.content.get("tool_call_id").and_then(Value::as_str) {
-            let content = message
-                .content
-                .get("result")
-                .cloned()
-                .unwrap_or(Value::Null);
-            let mut parts = vec![json!({"type":"text","text":content.to_string()})];
-            let tool_name = message.content.get("name").and_then(Value::as_str);
-            for attachment in message.attachments {
-                if attachment.mime_type.starts_with("image/") {
-                    let file = match repository.file_object(attachment.id, Some("display")).await {
+    if message.role == "tool"
+        && let Some(tool_call_id) = message.content.get("tool_call_id").and_then(Value::as_str)
+    {
+        let content = message
+            .content
+            .get("result")
+            .cloned()
+            .unwrap_or(Value::Null);
+        let mut parts = vec![json!({"type":"text","text":content.to_string()})];
+        let tool_name = message.content.get("name").and_then(Value::as_str);
+        for attachment in message.attachments {
+            if attachment.mime_type.starts_with("image/") {
+                let file = match repository.file_object(attachment.id, Some("display")).await {
+                    Ok(file) => file,
+                    Err(_) => match repository.file_object(attachment.id, None).await {
                         Ok(file) => file,
-                        Err(_) => match repository.file_object(attachment.id, None).await {
-                            Ok(file) => file,
-                            Err(_) => continue,
-                        },
-                    };
-                    if file.byte_size > MAX_INLINE_TOOL_IMAGE_BYTES {
-                        continue;
-                    }
-                    if let Ok(object) = object_store.get(&file.object_key).await {
-                        if object.bytes.len() as i64 <= MAX_INLINE_TOOL_IMAGE_BYTES {
-                            let data_url = format!(
-                                "data:{};base64,{}",
-                                file.mime_type,
-                                STANDARD.encode(object.bytes),
-                            );
-                            parts.push(json!({"type":"image_url","image_url":{"url":data_url}}));
-                        }
-                    }
-                } else if tool_name == Some("read_file") {
-                    let Ok(file) = repository.file_object(attachment.id, None).await else {
-                        continue;
-                    };
-                    if file.byte_size > MAX_INLINE_TOOL_TEXT_BYTES {
-                        continue;
-                    }
-                    if let Ok(object) = object_store.get(&file.object_key).await {
-                        if object.bytes.len() as i64 <= MAX_INLINE_TOOL_TEXT_BYTES {
-                            if let Ok(text) = std::str::from_utf8(&object.bytes) {
-                                parts.push(json!({
-                                    "type":"text",
-                                    "text":format!("Contents of {}:\n{text}", file.display_filename),
-                                }));
-                            }
-                        }
-                    }
+                        Err(_) => continue,
+                    },
+                };
+                if file.byte_size > MAX_INLINE_TOOL_IMAGE_BYTES {
+                    continue;
+                }
+                if let Ok(object) = object_store.get(&file.object_key).await
+                    && object.bytes.len() as i64 <= MAX_INLINE_TOOL_IMAGE_BYTES
+                {
+                    let data_url = format!(
+                        "data:{};base64,{}",
+                        file.mime_type,
+                        STANDARD.encode(object.bytes),
+                    );
+                    parts.push(json!({"type":"image_url","image_url":{"url":data_url}}));
+                }
+            } else if tool_name == Some("read_file") {
+                let Ok(file) = repository.file_object(attachment.id, None).await else {
+                    continue;
+                };
+                if file.byte_size > MAX_INLINE_TOOL_TEXT_BYTES {
+                    continue;
+                }
+                if let Ok(object) = object_store.get(&file.object_key).await
+                    && object.bytes.len() as i64 <= MAX_INLINE_TOOL_TEXT_BYTES
+                    && let Ok(text) = std::str::from_utf8(&object.bytes)
+                {
+                    parts.push(json!({
+                        "type":"text",
+                        "text":format!("Contents of {}:\n{text}", file.display_filename),
+                    }));
                 }
             }
-            return ChatMessage {
-                role: message.role,
-                content: Value::Array(parts),
-                tool_call_id: Some(tool_call_id.to_owned()),
-                tool_calls: None,
-            };
         }
+        return ChatMessage {
+            role: message.role,
+            content: Value::Array(parts),
+            tool_call_id: Some(tool_call_id.to_owned()),
+            tool_calls: None,
+        };
     }
     if message.attachments.is_empty() {
         return ChatMessage {

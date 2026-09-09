@@ -8,7 +8,7 @@ mod view_validation;
 pub use ast::{
     AttributeDeclaration, BlueprintDefinition, BlueprintKind, CompiledBlueprint,
     ComponentReference, EffectiveAttribute, FilePolicy, IncludeRef, IncomingRelationship,
-    ResolvedInclude, ViewDefinition, ViewNode, ViewSection, ViewTab,
+    LocalAttributeDeclaration, ResolvedInclude, ViewDefinition, ViewNode, ViewSection, ViewTab,
 };
 pub use compiler::{compile, raw_hash};
 pub use error::BlueprintError;

@@ -109,10 +109,10 @@ impl ComponentCache {
         }
         self.components.insert(key.clone(), component.clone());
         self.lru.push_back(key);
-        if self.components.len() > MAX_CACHED_COMPONENTS {
-            if let Some(evicted) = self.lru.pop_front() {
-                self.components.remove(&evicted);
-            }
+        if self.components.len() > MAX_CACHED_COMPONENTS
+            && let Some(evicted) = self.lru.pop_front()
+        {
+            self.components.remove(&evicted);
         }
         component
     }
@@ -925,6 +925,14 @@ impl EventHandler for WasmExtensionHandler {
     }
 }
 
+pub fn registry_with_wasm(
+    runtime: ExtensionRuntime,
+) -> crate::event_dispatcher::EventHandlerRegistry {
+    crate::event_dispatcher::EventHandlerRegistry::default_handlers()
+        .with_handler(Arc::new(WasmExtensionHandler::new(runtime)))
+        .expect("WASM extension handler is valid")
+}
+
 #[cfg(test)]
 mod tests {
     use super::{host_v11, parse_bounded_json, to_configuration_scope, uses_v11};
@@ -950,12 +958,4 @@ mod tests {
             .is_err()
         );
     }
-}
-
-pub fn registry_with_wasm(
-    runtime: ExtensionRuntime,
-) -> crate::event_dispatcher::EventHandlerRegistry {
-    crate::event_dispatcher::EventHandlerRegistry::default_handlers()
-        .with_handler(Arc::new(WasmExtensionHandler::new(runtime)))
-        .expect("WASM extension handler is valid")
 }

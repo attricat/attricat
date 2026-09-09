@@ -15,6 +15,8 @@ pub struct PersonalApiToken {
 }
 
 impl CatalogRepository {
+    // Token issuance receives every audited, security-relevant input explicitly.
+    #[allow(clippy::too_many_arguments)]
     pub async fn issue_personal_api_token(
         &self,
         token_id: Uuid,
@@ -67,7 +69,7 @@ impl CatalogRepository {
         .fetch_optional(&self.pool)
         .await
         .map(|row: Option<(Uuid, Uuid, Uuid)>| {
-            row.map(|(token_id, user_id, workspace_id)| (token_id, user_id, workspace_id))
+            row
         })?)
     }
 

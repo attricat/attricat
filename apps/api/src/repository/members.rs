@@ -7,6 +7,7 @@ use uuid::Uuid;
 use super::{CatalogRepository, RepositoryError};
 
 const OWNER_ROLE_ID: Uuid = Uuid::from_u128(0x00000000000040008000000000000101);
+type WorkspaceUserInvitation = (Uuid, Uuid, String, Uuid, Vec<u8>, DateTime<Utc>);
 
 #[derive(Debug, Serialize, sqlx::FromRow)]
 pub struct WorkspaceMember {
@@ -55,7 +56,7 @@ impl CatalogRepository {
         workspace_id: Uuid,
         email: &str,
         display_name: Option<&str>,
-        invitation: Option<(Uuid, Uuid, String, Uuid, Vec<u8>, DateTime<Utc>)>,
+        invitation: Option<WorkspaceUserInvitation>,
         action_digest: Option<Vec<u8>>,
     ) -> Result<CreatedWorkspaceUser, RepositoryError> {
         self.require_member_permission(actor_id, workspace_id, "members.manage")
@@ -420,6 +421,8 @@ impl CatalogRepository {
         self.commit_mutation(tx).await?;
         Ok(())
     }
+    // The durable invitation record maps directly to the authorization inputs.
+    #[allow(clippy::too_many_arguments)]
     pub async fn create_workspace_invitation(
         &self,
         id: Uuid,

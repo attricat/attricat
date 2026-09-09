@@ -460,17 +460,16 @@ fn validate_attribute_default_value(
             attribute.code
         ))
     })?;
-    if let Some(schema) = &attribute.value_schema {
-        if let Some(error) = validate_json_schema(schema, &native.json())
+    if let Some(schema) = &attribute.value_schema
+        && let Some(error) = validate_json_schema(schema, &native.json())
             .map_err(RepositoryError::invalid_blueprint_definition)?
             .into_iter()
             .next()
-        {
-            return Err(RepositoryError::InvalidBlueprintDefinition(format!(
-                "default value for attribute '{}' does not match its schema at '{}': {}",
-                attribute.code, error.instance_path, error.message
-            )));
-        }
+    {
+        return Err(RepositoryError::InvalidBlueprintDefinition(format!(
+            "default value for attribute '{}' does not match its schema at '{}': {}",
+            attribute.code, error.instance_path, error.message
+        )));
     }
     Ok(())
 }

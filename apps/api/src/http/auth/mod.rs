@@ -209,14 +209,13 @@ pub(super) async fn authorize(
         {
             return Err(ApiError::forbidden());
         }
-        if let Some(token_id) = token_id {
-            if !state
+        if let Some(token_id) = token_id
+            && !state
                 .repository
                 .personal_api_token_permits(token_id, policy.permission)
                 .await?
-            {
-                return Err(ApiError::forbidden());
-            }
+        {
+            return Err(ApiError::forbidden());
         }
     } else if !path.starts_with("/auth/") && !accepting_invitation {
         return Err(ApiError::forbidden());

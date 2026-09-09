@@ -5,7 +5,7 @@ use serde::Deserialize;
 
 use crate::{
     AttributeDeclaration, BlueprintDefinition, BlueprintError, BlueprintKind, FilePolicy,
-    IncludeRef, ViewDefinition,
+    IncludeRef, LocalAttributeDeclaration, ViewDefinition,
 };
 
 #[derive(Deserialize)]
@@ -186,7 +186,7 @@ pub fn parse(source: &str) -> Result<BlueprintDefinition, BlueprintError> {
                             return Err(BlueprintError::InvalidAttributeTag(attribute.code));
                         }
                     }
-                    AttributeDeclaration::Local {
+                    AttributeDeclaration::Local(Box::new(LocalAttributeDeclaration {
                         code: attribute.code,
                         value_type,
                         value_schema,
@@ -197,7 +197,7 @@ pub fn parse(source: &str) -> Result<BlueprintDefinition, BlueprintError> {
                         context_fallback: attribute.context_fallback,
                         context_editable: attribute.context_editable,
                         readonly: attribute.readonly,
-                    }
+                    }))
                 }
                 (None, Some(source)) if attribute.target_blueprint.is_none() => {
                     let (include_alias, attribute_code) =

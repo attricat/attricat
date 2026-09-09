@@ -2,6 +2,8 @@
 
 use std::{net::SocketAddr, sync::Arc};
 
+use tokio::sync::Mutex;
+
 use api::{
     extension_registry::{GitHubRegistry, GitHubRepository},
     extension_runtime::{ExtensionRuntime, ExtensionRuntimeConfig},
@@ -20,14 +22,36 @@ pub use sqlx::PgPool;
 pub use tokio::{net::TcpListener, task::JoinHandle};
 pub use uuid::Uuid;
 
-pub struct TestMailDelivery;
+#[derive(Default)]
+pub struct TestMailDelivery {
+    workspace_invitation_urls: Mutex<Vec<(String, String)>>,
+}
+
+impl TestMailDelivery {
+    pub async fn workspace_invitation_url(&self, recipient: &str) -> Option<String> {
+        self.workspace_invitation_urls
+            .lock()
+            .await
+            .iter()
+            .rev()
+            .find_map(|(delivered_to, url)| (delivered_to == recipient).then(|| url.clone()))
+    }
+}
 
 #[async_trait]
 impl MailDelivery for TestMailDelivery {
     async fn deliver_password_reset(&self, _: &str, _: &str) -> Result<(), MailError> {
         Ok(())
     }
-    async fn deliver_workspace_invitation(&self, _: &str, _: &str) -> Result<(), MailError> {
+    async fn deliver_workspace_invitation(
+        &self,
+        recipient: &str,
+        invitation_url: &str,
+    ) -> Result<(), MailError> {
+        self.workspace_invitation_urls
+            .lock()
+            .await
+            .push((recipient.to_owned(), invitation_url.to_owned()));
         Ok(())
     }
     async fn deliver_workspace_onboarding(&self, _: &str, _: &str) -> Result<(), MailError> {
@@ -39,12 +63,34 @@ pub async fn start_server(pool: PgPool) -> (String, JoinHandle<()>) {
     start_server_with_data_health_cache_ttl(pool, 0).await
 }
 
+pub async fn start_server_with_test_mail(
+    pool: PgPool,
+    mail_delivery: Arc<TestMailDelivery>,
+) -> (String, JoinHandle<()>) {
+    start_server_with_auth_mode_and_store(
+        pool,
+        0,
+        true,
+        Arc::new(FakeObjectStore::available()),
+        Arc::new(AllowFileAccess),
+        mail_delivery,
+    )
+    .await
+}
+
 pub async fn start_server_with_object_store(
     pool: PgPool,
     object_store: Arc<FakeObjectStore>,
 ) -> (String, JoinHandle<()>) {
-    start_server_with_auth_mode_and_store(pool, 0, true, object_store, Arc::new(AllowFileAccess))
-        .await
+    start_server_with_auth_mode_and_store(
+        pool,
+        0,
+        true,
+        object_store,
+        Arc::new(AllowFileAccess),
+        Arc::new(TestMailDelivery::default()),
+    )
+    .await
 }
 
 pub async fn start_server_with_file_access_policy(
@@ -52,7 +98,15 @@ pub async fn start_server_with_file_access_policy(
     object_store: Arc<FakeObjectStore>,
     file_access_policy: Arc<dyn FileAccessPolicy>,
 ) -> (String, JoinHandle<()>) {
-    start_server_with_auth_mode_and_store(pool, 0, true, object_store, file_access_policy).await
+    start_server_with_auth_mode_and_store(
+        pool,
+        0,
+        true,
+        object_store,
+        file_access_policy,
+        Arc::new(TestMailDelivery::default()),
+    )
+    .await
 }
 
 pub async fn start_session_server(pool: PgPool) -> (String, JoinHandle<()>) {
@@ -80,6 +134,7 @@ async fn start_server_with_auth_mode(
         allow_trusted_headers,
         Arc::new(FakeObjectStore::available()),
         Arc::new(AllowFileAccess),
+        Arc::new(TestMailDelivery::default()),
     )
     .await
 }
@@ -90,6 +145,7 @@ async fn start_server_with_auth_mode_and_store(
     allow_trusted_headers: bool,
     object_store: Arc<FakeObjectStore>,
     file_access_policy: Arc<dyn FileAccessPolicy>,
+    mail_delivery: Arc<dyn MailDelivery>,
 ) -> (String, JoinHandle<()>) {
     let workspace_id = BOOTSTRAP_WORKSPACE_ID.parse::<Uuid>().unwrap();
     let owner_id = BOOTSTRAP_OWNER_ID.parse::<Uuid>().unwrap();
@@ -153,7 +209,7 @@ async fn start_server_with_auth_mode_and_store(
         .unwrap(),
         object_store,
         file_access_policy,
-        mail_delivery: Arc::new(TestMailDelivery),
+        mail_delivery,
         password_reset_url: "http://127.0.0.1/password-reset/confirm".to_owned(),
         workspace_invitation_url: "http://127.0.0.1/invitations/accept".to_owned(),
         workspace_onboarding_url: "http://127.0.0.1/onboarding".to_owned(),

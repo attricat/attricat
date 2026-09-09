@@ -244,6 +244,33 @@ pub(super) fn policy(method: &Method, path: &str) -> Option<Policy> {
     None
 }
 
+pub(super) fn target(path: &str, kind: TargetKind) -> (Option<Uuid>, Option<String>) {
+    let segments: Vec<_> = path
+        .split('/')
+        .filter(|segment| !segment.is_empty())
+        .collect();
+    match kind {
+        TargetKind::None => (None, None),
+        TargetKind::BlueprintId => (segments.get(1).and_then(|value| value.parse().ok()), None),
+        TargetKind::BlueprintCode => (None, segments.get(2).map(|value| (*value).to_owned())),
+        TargetKind::FileRead | TargetKind::WorkspaceNavigation => (None, None),
+        TargetKind::EntityId => {
+            let index = if segments.first() == Some(&"v1") {
+                2
+            } else {
+                1
+            };
+            (
+                segments.get(index).and_then(|value| value.parse().ok()),
+                None,
+            )
+        }
+        TargetKind::ContextId => (segments.get(2).and_then(|value| value.parse().ok()), None),
+        TargetKind::ContextCode => (None, segments.get(1).map(|value| (*value).to_owned())),
+        TargetKind::ContextList => (None, Some("__context_list__".to_owned())),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -297,32 +324,5 @@ mod tests {
             .permission,
             "entities.write"
         );
-    }
-}
-
-pub(super) fn target(path: &str, kind: TargetKind) -> (Option<Uuid>, Option<String>) {
-    let segments: Vec<_> = path
-        .split('/')
-        .filter(|segment| !segment.is_empty())
-        .collect();
-    match kind {
-        TargetKind::None => (None, None),
-        TargetKind::BlueprintId => (segments.get(1).and_then(|value| value.parse().ok()), None),
-        TargetKind::BlueprintCode => (None, segments.get(2).map(|value| (*value).to_owned())),
-        TargetKind::FileRead | TargetKind::WorkspaceNavigation => (None, None),
-        TargetKind::EntityId => {
-            let index = if segments.first() == Some(&"v1") {
-                2
-            } else {
-                1
-            };
-            (
-                segments.get(index).and_then(|value| value.parse().ok()),
-                None,
-            )
-        }
-        TargetKind::ContextId => (segments.get(2).and_then(|value| value.parse().ok()), None),
-        TargetKind::ContextCode => (None, segments.get(1).map(|value| (*value).to_owned())),
-        TargetKind::ContextList => (None, Some("__context_list__".to_owned())),
     }
 }

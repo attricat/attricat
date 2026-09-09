@@ -230,11 +230,14 @@ impl CatalogRepository {
             .bind(installation_id)
             .fetch_all(&self.pool)
             .await?;
-            let client_configuration = capabilities
+            let client_configuration = if capabilities
                 .iter()
                 .any(|capability| capability == "configuration.read")
-                .then_some(configuration.clone())
-                .unwrap_or_else(|| json!({}));
+            {
+                configuration.clone()
+            } else {
+                json!({})
+            };
             let manifest: Manifest = serde_json::from_value(stored_manifest).map_err(|_| {
                 RepositoryError::InvalidExtension("stored extension manifest is invalid".into())
             })?;
@@ -950,6 +953,8 @@ impl CatalogRepository {
         sqlx::query_as("UPDATE extension_installations SET state = $2, updated_at = clock_timestamp() WHERE id = $1 RETURNING id, workspace_id, extension_id, installed_release_id, state, configuration, configuration_version, created_at, updated_at")
             .bind(current.id).bind(state.as_str()).fetch_one(&mut **transaction).await.map_err(Into::into)
     }
+    // Lifecycle persistence mirrors the complete immutable transition record.
+    #[allow(clippy::too_many_arguments)]
     async fn write_extension_lifecycle(
         &self,
         transaction: &mut Transaction<'_, Postgres>,

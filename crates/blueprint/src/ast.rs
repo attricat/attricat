@@ -185,19 +185,22 @@ pub struct FilePolicy {
 }
 
 #[derive(Clone, Debug, PartialEq)]
+pub struct LocalAttributeDeclaration {
+    pub code: String,
+    pub value_type: String,
+    pub value_schema: Option<serde_json::Value>,
+    pub default_value: Option<serde_json::Value>,
+    pub file_policy: Option<FilePolicy>,
+    pub target_blueprint: Option<String>,
+    pub tags: Vec<String>,
+    pub context_fallback: String,
+    pub context_editable: String,
+    pub readonly: bool,
+}
+
+#[derive(Clone, Debug, PartialEq)]
 pub enum AttributeDeclaration {
-    Local {
-        code: String,
-        value_type: String,
-        value_schema: Option<serde_json::Value>,
-        default_value: Option<serde_json::Value>,
-        file_policy: Option<FilePolicy>,
-        target_blueprint: Option<String>,
-        tags: Vec<String>,
-        context_fallback: String,
-        context_editable: String,
-        readonly: bool,
-    },
+    Local(Box<LocalAttributeDeclaration>),
     Selection {
         code: String,
         include_alias: String,
