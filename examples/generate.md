@@ -1,57 +1,66 @@
-# Manual Test Data Generator
+# Demo Catalog Generator
 
-`generate.mjs` seeds additive, realistic-looking catalog data through the public
-HTTP API. It uses Node.js 18 or later and has no package dependencies.
+`generate.mjs` creates a deterministic, fictional **ByteForge Components** PC-parts catalog through the public HTTP API. It is intended for demos, API verification, and local Explorer performance testing. It never connects to PostgreSQL.
 
-Start the development services, then run it from the repository root:
+## Prerequisites
 
-The generator authenticates every request with a required personal access token.
-Create one in the profile section of the app with these permissions:
-`blueprints.read`, `blueprints.write`, `blueprints.publish`, `contexts.read`,
-`contexts.write`, and `entities.write`. Then provide it as `CATALOG_TOKEN`.
-`just generate` loads this variable from `.env`.
+Start the local stack and create a personal access token in the profile section. The token needs:
+
+- `blueprints.read`, `blueprints.write`, and `blueprints.publish`;
+- `contexts.read` and `contexts.write`;
+- `entities.read` and `entities.write`.
+
+File upload, metadata, and download authorization uses the existing entity permissions; there is intentionally no separate `files.read` personal-token permission.
+
+Pass the token as `CATALOG_TOKEN`. The generator refuses non-local targets unless `ALLOW_NON_LOCAL_GENERATOR_TARGET=1` is explicitly set.
 
 ```sh
+just setup
+just dev
 CATALOG_TOKEN=cat_pat_... just generate
 ```
 
-Set `CATALOG_SERVER` to target another API URL. `PRODUCT_COUNT` controls the
-number of parent products and is clamped to a minimum of 100:
+## Profiles
+
+Profiles preserve the same component types, distributions, and bounded compatibility relationships. They differ only in scale.
+
+| Profile  | Total entities | Use                                           |
+| -------- | -------------: | --------------------------------------------- |
+| `micro`  |          1,000 | Fast API-backed verification and resume tests |
+| `small`  |         10,000 | Normal local demo (the default)               |
+| `medium` |        100,000 | Routine local performance dataset             |
+| `large`  |      1,000,000 | Full local benchmark dataset                  |
 
 ```sh
-CATALOG_SERVER=http://127.0.0.1:3000 PRODUCT_COUNT=150 node examples/generate.mjs
+CATALOG_TOKEN=cat_pat_... just generate micro
+CATALOG_TOKEN=cat_pat_... just generate medium
+CATALOG_TOKEN=cat_pat_... just generate large
 ```
 
-Set `SEED_BLUEPRINTS_ONLY=1` to create updated blueprint revisions without
-creating entities or contexts:
+The current industry pack is `pc-components`. It creates fictional manufacturers, hierarchical categories, product families, sellable SKUs, realistic technical facets, product-family/category/manufacturer relationships, and bounded SKU compatibility links. It also uploads a fixed, small set of fictional product images and documentation; this does not grow with the selected profile.
+
+## Long-running runs
+
+The generator writes an atomic local checkpoint under `.catalog-generator/`, keyed by industry, schema version, profile, and seed. It prints entity and request progress, rolling throughput, retries, and an ETA. A large run can take a substantial time because every entity and relationship is written through the API.
 
 ```sh
-SEED_BLUEPRINTS_ONLY=1 just generate
+# Preview the exact work plan without contacting the API.
+node examples/generate.mjs --size large --dry-run
+
+# Continue a stopped run with the matching checkpoint.
+CATALOG_TOKEN=cat_pat_... just generate-resume large
+
+# Inspect checkpoint state without making API requests.
+node examples/generate.mjs --size large --status
+
+# Machine-readable progress for log collection.
+CATALOG_TOKEN=cat_pat_... node examples/generate.mjs --size medium --progress json
 ```
 
-The generator loads its blueprint definitions from `examples/generator/products/` and
-creates or reuses the `product_seo`, `category`, `color`, and `product`
-blueprints. The product blueprint demonstrates
-mixins and version-pinned includes, selected attributes, tags, scalar and entity
-JSON Schema validation, dropdown-option and screen views, context policies, all native
-scalar types, constrained relationships, and configured views and components.
-Category, color, and product detail views also demonstrate lazy,
-cursor-paginated incoming relationship lists.
-When a generated blueprint definition changes, the generator creates a new blueprint
-revision. Existing entities remain pinned to their original revision and can be
-upgraded through the entity migration flow.
-Generated revisions are published automatically after their pinned mixin revisions,
-so generated entities always use published blueprints.
+Use `--no-files` for a pure Explorer dataset when file processing is not required. The generator marks the checkpoint `benchmark_ready` only after all planned writes, file processing (when enabled), and API-level sample verification complete.
 
-Each run creates a fictional but realistic Alder & Row fashion assortment: seven
-clothing, footwear, outerwear, activewear, and accessories categories; six named
-colors; and at least 100 parent products. Product titles, descriptions, prices,
-SKUs, launch codes, stock, SEO metadata, and size variants are assembled from a
-curated deterministic collection, so the same product number is easy to locate
-and reason about during manual tests. Products and variants receive category and
-color relationships; parents additionally receive their variant relationships.
-Accessories have one `One Size` variant, while apparel and footwear receive their
-applicable real-world size range. A `seed-us -> seed-us-web` context chain and a
-Studio Leather Tote with regional overrides demonstrate context fallback. Runs
-are additive, so use a fresh development database when a clean data set is
-needed.
+## Safety and reproducibility
+
+Use a dedicated local database for `large` runs. Do not point the generator at shared or production environments. Choose a different `--seed` to create a separate deterministic dataset; an existing matching checkpoint requires `--resume` rather than silently adding a second copy.
+
+Each record is tagged and annotated with its generator dataset identity. Checkpoints retain the exact seed, profile, schema version, phase, and counts so an interrupted run reports whether it is resumable or complete.

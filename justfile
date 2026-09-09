@@ -29,5 +29,16 @@ reset-db: _assert-env
     sqlx database create --database-url "$DATABASE_URL"
     sqlx migrate run --source apps/api/migrations --database-url "$DATABASE_URL"
 
-generate: _assert-env
-    CATALOG_SERVER="$CATALOG_API_URL" node examples/generate.mjs
+generate size="small" industry="pc-components": _assert-env
+    CATALOG_SERVER="$CATALOG_API_URL" node examples/generate.mjs --industry "{{industry}}" --size "{{size}}"
+
+generate-resume size="small" industry="pc-components": _assert-env
+    CATALOG_SERVER="$CATALOG_API_URL" node examples/generate.mjs --industry "{{industry}}" --size "{{size}}" --resume
+
+test-generator:
+    node --test examples/generator/industries/*.test.mjs
+
+perf profile="smoke": _assert-env
+    test -n "$CATALOG_TOKEN" || { echo "Set CATALOG_TOKEN before running performance tests." >&2; exit 1; }
+    command -v k6 >/dev/null || { echo "Install k6 before running performance tests." >&2; exit 1; }
+    CATALOG_SERVER="$CATALOG_API_URL" PERF_PROFILE="{{profile}}" k6 run perf/explorer.js

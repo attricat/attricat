@@ -182,7 +182,8 @@ const viewDefinitionSchema: z.ZodType<ViewDefinition> = z.lazy(() =>
             renderer: componentReferenceSchema.nullish(),
           }),
         )
-        .optional(),
+        .nullish()
+        .transform((columns) => columns ?? undefined),
       component: componentReferenceSchema.nullish(),
     }),
     z.object({

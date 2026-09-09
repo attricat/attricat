@@ -34,6 +34,17 @@ describe('JSON Schema validation', () => {
     ).toBeNull();
   });
 
+  it('accepts API table views with null legacy columns', () => {
+    expect(
+      blueprintSchema.parse({
+        code: 'product',
+        name: 'Product',
+        version: 1,
+        views: { table: { type: 'table', fields: ['sku'], columns: null } },
+      }).views.table,
+    ).toMatchObject({ type: 'table', fields: ['sku'], columns: undefined });
+  });
+
   it('validates values against schema constraints', () => {
     const schema = { type: 'string', minLength: 3 };
 

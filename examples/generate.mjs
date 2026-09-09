@@ -1,228 +1,691 @@
 #!/usr/bin/env node
 
-import { readFile } from 'node:fs/promises';
+import { existsSync } from "node:fs";
+import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
+import { dirname, resolve } from "node:path";
+import process from "node:process";
+import * as pcComponents from "./generator/industries/pc-components.mjs";
 
-const server = (process.env.CATALOG_SERVER ?? 'http://127.0.0.1:3000').replace(/\/$/, '');
-const productCount = Math.max(Number.parseInt(process.env.PRODUCT_COUNT ?? '100', 10) || 100, 100);
-const defaultContextId = '00000000-0000-4000-8000-000000000001';
-const blueprintsOnly = process.env.SEED_BLUEPRINTS_ONLY === '1';
+const industries = { "pc-components": pcComponents };
+const rootContextId = "00000000-0000-4000-8000-000000000001";
+const startedAt = Date.now();
 
-const catalogToken = `${process.env.CATALOG_TOKEN ?? ''}`.trim();
-const storeName = 'Alder & Row';
+const usage = `Usage: node examples/generate.mjs [options]
 
-const definition = (file) => readFile(new URL(`./generator/products/${file}`, import.meta.url), 'utf8');
+Options:
+  --industry <name>       Industry pack (default: pc-components)
+  --size <profile>        micro, small, medium, or large (default: small)
+  --seed <number>         Deterministic seed (default: 214)
+  --concurrency <number>  Concurrent family work items (default: 1)
+  --resume                Resume the matching local checkpoint
+  --status                Print matching checkpoint status without writing
+  --dry-run               Print the work plan without contacting the API
+  --no-files              Skip the fixed demo asset bundle
+  --progress <tty|json>   Progress format (default: tty when interactive)
+  --checkpoint <path>     Override checkpoint location
+  --help                  Show this help
 
-const request = async (path, options = {}) => {
-  const headers = {
-    'content-type': 'application/json',
-    authorization: `Bearer ${catalogToken}`,
-    ...options.headers,
+CATALOG_TOKEN is required for writes. CATALOG_SERVER defaults to http://127.0.0.1:3000.
+The generator refuses non-local targets unless ALLOW_NON_LOCAL_GENERATOR_TARGET=1.`;
+
+const parseArgs = (argv) => {
+  const options = {
+    industry: process.env.CATALOG_INDUSTRY ?? "pc-components",
+    size: process.env.CATALOG_SIZE ?? "small",
+    seed: Number(process.env.CATALOG_SEED ?? 214),
+    concurrency: Number(process.env.CATALOG_CONCURRENCY ?? 1),
+    resume: false,
+    status: false,
+    dryRun: false,
+    files: process.env.CATALOG_INCLUDE_FILES !== "0",
+    progress: process.stdout.isTTY ? "tty" : "json",
   };
-  const response = await fetch(`${server}${path}`, {
-    ...options,
-    headers,
-  });
-  const body = await response.json().catch(() => null);
-  if (!response.ok) {
-    const message = body?.error?.message ?? response.statusText;
-    throw new Error(`${options.method ?? 'GET'} ${path} failed (${response.status}): ${message}`);
+  for (let index = 0; index < argv.length; index += 1) {
+    const arg = argv[index];
+    if (arg === "--help") return { help: true };
+    if (arg === "--resume") options.resume = true;
+    else if (arg === "--status") options.status = true;
+    else if (arg === "--dry-run") options.dryRun = true;
+    else if (arg === "--no-files") options.files = false;
+    else if (
+      [
+        "--industry",
+        "--size",
+        "--seed",
+        "--concurrency",
+        "--progress",
+        "--checkpoint",
+      ].includes(arg)
+    ) {
+      const value = argv[++index];
+      if (!value || value.startsWith("--"))
+        throw new Error(`${arg} requires a value`);
+      const key = arg
+        .slice(2)
+        .replace(/-([a-z])/g, (_, letter) => letter.toUpperCase());
+      options[key] =
+        key === "seed" || key === "concurrency" ? Number(value) : value;
+    } else throw new Error(`Unknown option: ${arg}`);
   }
-  return body;
+  if (!Number.isInteger(options.seed) || options.seed < 0)
+    throw new Error("--seed must be a non-negative integer");
+  if (
+    !Number.isInteger(options.concurrency) ||
+    options.concurrency < 1 ||
+    options.concurrency > 32
+  )
+    throw new Error("--concurrency must be an integer from 1 to 32");
+  if (!["tty", "json"].includes(options.progress))
+    throw new Error("--progress must be tty or json");
+  return options;
 };
 
-const ensureBlueprint = async (code, source) => {
-  const publish = (blueprint) => request(
-    `/blueprints/${blueprint.blueprint.id}/versions/${blueprint.blueprint.version}/publish`,
-    { method: 'POST' },
-  );
-  try {
-    const current = await request(`/blueprints/by-code/${code}?include_drafts=true`);
-    if (current.blueprint.definition === source) {
-      return current.blueprint.status === 'published' ? current : publish(current);
+const assertLocalTarget = (server) => {
+  const url = new URL(server);
+  const localHosts = new Set(["127.0.0.1", "localhost", "::1"]);
+  if (
+    !localHosts.has(url.hostname) &&
+    process.env.ALLOW_NON_LOCAL_GENERATOR_TARGET !== "1"
+  ) {
+    throw new Error(
+      `Refusing non-local generator target ${url.origin}; set ALLOW_NON_LOCAL_GENERATOR_TARGET=1 to override deliberately.`,
+    );
+  }
+  return url.origin.replace(/\/$/, "");
+};
+
+const scalar = (attribute_code, value, context_id = rootContextId) => ({
+  kind: "scalar",
+  attribute_code,
+  context_id,
+  value,
+});
+const now = () => new Date().toISOString();
+const pad = (value, width = 6) => String(value).padStart(width, "0");
+
+class Progress {
+  constructor(options, plan) {
+    this.options = options;
+    this.plan = plan;
+    this.completedEntities = 0;
+    this.completedRequests = 0;
+    this.failedRequests = 0;
+    this.retriedRequests = 0;
+    this.phase = "preflight";
+    this.lastRender = 0;
+    this.lastSample = { at: Date.now(), entities: 0 };
+    this.rate = 0;
+  }
+
+  event(event, extra = {}) {
+    const elapsedSeconds = Math.max((Date.now() - startedAt) / 1000, 0.001);
+    const remaining = Math.max(this.plan.entities - this.completedEntities, 0);
+    const etaSeconds = this.rate > 0 ? Math.ceil(remaining / this.rate) : null;
+    const payload = {
+      event,
+      phase: this.phase,
+      entities: {
+        completed: this.completedEntities,
+        total: this.plan.entities,
+      },
+      requests: {
+        completed: this.completedRequests,
+        failed: this.failedRequests,
+        retried: this.retriedRequests,
+      },
+      elapsed_seconds: Number(elapsedSeconds.toFixed(1)),
+      entities_per_second: Number(this.rate.toFixed(2)),
+      eta_seconds: etaSeconds,
+      ...extra,
+    };
+    if (this.options.progress === "json")
+      process.stdout.write(`${JSON.stringify(payload)}\n`);
+    else if (event === "progress" || event === "complete") {
+      const percent = (
+        (this.completedEntities / this.plan.entities) *
+        100
+      ).toFixed(1);
+      const eta =
+        etaSeconds === null ? "calculating" : `${Math.ceil(etaSeconds / 60)}m`;
+      process.stdout.write(
+        `\r[${this.phase}] ${pad(this.completedEntities, 7)}/${this.plan.entities} entities (${percent}%) · ${this.rate.toFixed(1)}/s · ETA ${eta} · retries ${this.retriedRequests}`,
+      );
+      if (event === "complete") process.stdout.write("\n");
+    } else process.stdout.write(`[${this.phase}] ${event}\n`);
+  }
+
+  tick({ entities = 0, requests = 0, retries = 0 } = {}) {
+    this.completedEntities += entities;
+    this.completedRequests += requests;
+    this.retriedRequests += retries;
+    const sampleNow = Date.now();
+    const deltaSeconds = (sampleNow - this.lastSample.at) / 1000;
+    if (deltaSeconds >= 2) {
+      const sampleRate =
+        (this.completedEntities - this.lastSample.entities) / deltaSeconds;
+      this.rate =
+        this.rate === 0 ? sampleRate : this.rate * 0.7 + sampleRate * 0.3;
+      this.lastSample = { at: sampleNow, entities: this.completedEntities };
     }
-    return publish(await request(`/blueprints/${current.blueprint.id}/versions`, {
-      method: 'POST', body: JSON.stringify({ definition: source }),
-    }));
+    if (sampleNow - this.lastRender >= 1000) {
+      this.lastRender = sampleNow;
+      this.event("progress");
+    }
+  }
+}
+
+const atomicJson = async (path, value) => {
+  await mkdir(dirname(path), { recursive: true });
+  const temporary = `${path}.${process.pid}.tmp`;
+  await writeFile(temporary, `${JSON.stringify(value, null, 2)}\n`);
+  await rename(temporary, path);
+};
+
+const checkpointPathFor = (options, pack) =>
+  options.checkpoint
+    ? resolve(options.checkpoint)
+    : resolve(
+        ".catalog-generator",
+        `${options.industry}-v${pack.schemaVersion}-${options.size}-seed${options.seed}.json`,
+      );
+
+const createClient = (server, token, progress) => {
+  const request = async (path, options = {}, attempt = 0) => {
+    const headers = { authorization: `Bearer ${token}`, ...options.headers };
+    if (options.body && !(options.body instanceof FormData))
+      headers["content-type"] = "application/json";
+    try {
+      const response = await fetch(`${server}${path}`, { ...options, headers });
+      const body = await response.json().catch(() => null);
+      progress.tick({ requests: 1 });
+      if (response.ok) return body;
+      const retryable = response.status === 429 || response.status >= 500;
+      if (retryable && attempt < 5) {
+        progress.retriedRequests += 1;
+        progress.event("retry", {
+          method: options.method ?? "GET",
+          path,
+          status: response.status,
+          attempt: attempt + 1,
+        });
+        await new Promise((done) => setTimeout(done, 200 * 2 ** attempt));
+        return request(path, options, attempt + 1);
+      }
+      const message = body?.error?.message ?? response.statusText;
+      throw new Error(
+        `${options.method ?? "GET"} ${path} failed (${response.status}): ${message}`,
+      );
+    } catch (error) {
+      if (attempt < 5 && error instanceof TypeError) {
+        progress.retriedRequests += 1;
+        progress.event("retry", {
+          method: options.method ?? "GET",
+          path,
+          reason: error.message,
+          attempt: attempt + 1,
+        });
+        await new Promise((done) => setTimeout(done, 200 * 2 ** attempt));
+        return request(path, options, attempt + 1);
+      }
+      throw error;
+    }
+  };
+  return {
+    request,
+    createEntity: (blueprint, values, metadata, tag) =>
+      request("/v1/entities", {
+        method: "POST",
+        body: JSON.stringify({
+          blueprint: { code: blueprint },
+          values,
+          system_tags: [tag],
+          system_metadata: metadata,
+        }),
+      }),
+    replaceRelationships: (id, relationships) =>
+      request(`/entities/${id}/relationships/replace`, {
+        method: "POST",
+        body: JSON.stringify({ relationships }),
+      }),
+  };
+};
+
+const ensureBlueprint = async (client, code, source) => {
+  const publish = (blueprint) =>
+    client.request(
+      `/blueprints/${blueprint.blueprint.id}/versions/${blueprint.blueprint.version}/publish`,
+      { method: "POST" },
+    );
+  try {
+    const current = await client.request(
+      `/blueprints/by-code/${code}?include_drafts=true`,
+    );
+    if (current.blueprint.definition === source)
+      return current.blueprint.status === "published"
+        ? current
+        : publish(current);
+    return publish(
+      await client.request(`/blueprints/${current.blueprint.id}/versions`, {
+        method: "POST",
+        body: JSON.stringify({ definition: source }),
+      }),
+    );
   } catch (error) {
-    if (!error.message.includes('(404)')) throw error;
-    return publish(await request('/blueprints', {
-      method: 'POST', body: JSON.stringify({ definition: source }),
-    }));
+    if (!error.message.includes("(404)")) throw error;
+    return publish(
+      await client.request("/blueprints", {
+        method: "POST",
+        body: JSON.stringify({ definition: source }),
+      }),
+    );
   }
 };
 
-const ensureContext = async (code, data, parentId) => {
+const ensureContext = async (client, code, data, parentId) => {
   try {
-    return await request(`/contexts/${code}`);
+    return await client.request(`/contexts/${code}`);
   } catch (error) {
-    if (!error.message.includes('(404)')) throw error;
-    return request('/contexts', {
-      method: 'POST', body: JSON.stringify({ code, data, parent_id: parentId }),
+    if (!error.message.includes("(404)")) throw error;
+    return client.request("/contexts", {
+      method: "POST",
+      body: JSON.stringify({ code, data, parent_id: parentId }),
     });
   }
 };
 
-const scalar = (attribute_code, value, context_id = defaultContextId) => ({
-  kind: 'scalar', attribute_code, context_id, value,
+const countPlan = (profile, includeFiles, pack) => ({
+  entities: Object.values(profile).reduce((total, value) => total + value, 0),
+  requests:
+    profile.categories * 2 +
+    profile.manufacturers +
+    profile.families * 2 +
+    profile.skus * 2 +
+    (includeFiles ? pack.assets.length * 2 : 0),
 });
 
-const createEntity = (blueprint, values) => request('/v1/entities', {
-  method: 'POST', body: JSON.stringify({ blueprint: { code: blueprint }, values }),
-});
+const readCheckpoint = async (path) => JSON.parse(await readFile(path, "utf8"));
 
-const replaceRelationships = (entityId, relationships) => request(
-  `/entities/${entityId}/relationships/replace`,
-  { method: 'POST', body: JSON.stringify({ relationships }) },
-);
-
-const catalogColors = [
-  { name: 'Black', hex: '#1c1917', code: 'BLK' },
-  { name: 'Ivory', hex: '#f5f1e8', code: 'IVR' },
-  { name: 'Navy', hex: '#1e3a5f', code: 'NVY' },
-  { name: 'Olive', hex: '#59634a', code: 'OLV' },
-  { name: 'Camel', hex: '#b68a5a', code: 'CAM' },
-  { name: 'Burgundy', hex: '#6f1d2b', code: 'BRG' },
-];
-
-const catalogProducts = [
-  ['WDR-LIN', "Women's Clothing", 'Linen Wrap Midi Dress', 'Breathable washed linen with a softly defined waist and side pockets.', 148, ['XS', 'S', 'M', 'L', 'XL']],
-  ['WTOP-RIB', "Women's Clothing", 'Ribbed Cotton Tank', 'A close-fitting organic cotton layer with a square neckline.', 42, ['XS', 'S', 'M', 'L', 'XL']],
-  ['WJN-STR', "Women's Clothing", 'High-Rise Straight Jean', 'Rigid denim with a high waist and an easy straight leg.', 128, ['24', '26', '28', '30', '32']],
-  ['WKN-MER', "Women's Clothing", 'Merino Crewneck Sweater', 'Fine-gauge merino wool knitted for lightweight everyday warmth.', 118, ['XS', 'S', 'M', 'L', 'XL']],
-  ['WBL-WOL', "Women's Clothing", 'Tailored Wool Blazer', 'A single-button blazer cut from Italian wool with a relaxed shoulder.', 298, ['2', '4', '6', '8', '10']],
-  ['WSK-SAT', "Women's Clothing", 'Satin Bias Midi Skirt', 'Fluid satin with a bias cut that moves easily from day to evening.', 98, ['XS', 'S', 'M', 'L', 'XL']],
-  ['WSH-POP', "Women's Clothing", 'Cotton Poplin Shirt', 'Crisp cotton poplin with a longer hem designed for layering.', 88, ['XS', 'S', 'M', 'L', 'XL']],
-  ['WJK-QUI', 'Outerwear', 'Quilted Field Jacket', 'Lightly insulated recycled fill and a corduroy-trimmed collar.', 218, ['XS', 'S', 'M', 'L', 'XL']],
-  ['MSH-OXF', "Men's Clothing", 'Oxford Button-Down Shirt', 'Midweight Oxford cloth with a button-down collar and box pleat.', 89, ['S', 'M', 'L', 'XL', 'XXL']],
-  ['MPT-CHI', "Men's Clothing", 'Slim Taper Chino', 'Stretch cotton twill in a clean, tapered everyday fit.', 98, ['28', '30', '32', '34', '36']],
-  ['MKN-HZF', "Men's Clothing", 'Merino Half-Zip Sweater', 'Soft merino knit with a polished metal half-zip.', 138, ['S', 'M', 'L', 'XL', 'XXL']],
-  ['MOV-WOL', "Men's Clothing", 'Wool Overshirt', 'Brushed wool blend with utility pockets and horn-style buttons.', 188, ['S', 'M', 'L', 'XL', 'XXL']],
-  ['MTS-JER', "Men's Clothing", 'Heavyweight Jersey Tee', 'Substantial combed cotton with a relaxed, straight fit.', 48, ['S', 'M', 'L', 'XL', 'XXL']],
-  ['MJK-MAC', 'Outerwear', 'Water-Resistant Mac Coat', 'A rain-ready cotton-blend mac with a removable throat latch.', 268, ['S', 'M', 'L', 'XL', 'XXL']],
-  ['WSN-CRT', 'Footwear', 'Retro Court Sneaker', 'Leather low-top sneaker with a cushioned cupsole.', 125, ['6', '7', '8', '9', '10']],
-  ['WFT-BAL', 'Footwear', 'Leather Ballet Flat', 'Soft leather flat with a rounded toe and flexible sole.', 118, ['5', '6', '7', '8', '9']],
-  ['MSH-LFT', 'Footwear', 'Suede Penny Loafer', 'Unlined suede loafer finished with a traditional penny slot.', 178, ['7', '8', '9', '10', '11']],
-  ['MBT-CHL', 'Footwear', 'Leather Chelsea Boot', 'Goodyear-welted leather boot with elastic side panels.', 248, ['7', '8', '9', '10', '11']],
-  ['BAG-STU', 'Bags & Accessories', 'Studio Leather Tote', 'Structured full-grain leather tote with a padded laptop sleeve.', 325, ['One Size']],
-  ['BAG-WEK', 'Bags & Accessories', 'Weekender Canvas Duffel', 'Waxed canvas carryall with a detachable shoulder strap.', 195, ['One Size']],
-  ['ACC-SIL', 'Bags & Accessories', 'Silk Twill Scarf', 'Printed silk twill scarf with hand-rolled edges.', 78, ['One Size']],
-  ['ACC-LTH', 'Bags & Accessories', 'Reversible Leather Belt', 'Vegetable-tanned leather belt with black and tan sides.', 85, ['S', 'M', 'L', 'XL']],
-  ['ACT-LEG', 'Activewear', 'Performance Pocket Legging', 'Four-way stretch fabric with a secure side pocket.', 92, ['XS', 'S', 'M', 'L', 'XL']],
-  ['ACT-HOD', 'Activewear', 'French Terry Zip Hoodie', 'Midweight French terry with a two-way zip and clean finish.', 112, ['S', 'M', 'L', 'XL', 'XXL']],
-  ['ACT-SHR', 'Activewear', 'Technical Run Short', 'Quick-drying shell short with a breathable liner.', 68, ['S', 'M', 'L', 'XL', 'XXL']],
-];
-
-const productForIndex = (index) => {
-  const [styleCode, category, styleName, description, price, sizes] = catalogProducts[(index - 1) % catalogProducts.length];
-  const color = catalogColors[(index - 1) % catalogColors.length];
-  const sequence = String(index).padStart(3, '0');
-  return {
-    category,
-    color,
-    description,
-    name: `${styleName} in ${color.name}`,
-    price,
-    sizes,
-    sku: `AR-${styleCode}-${color.code}-${sequence}`,
-    launchCode: `SS26-${styleCode}-${sequence}`,
+const runPool = async (items, concurrency, work) => {
+  let cursor = 0;
+  const worker = async () => {
+    while (cursor < items.length) {
+      const item = items[cursor++];
+      await work(item);
+    }
   };
+  await Promise.all(
+    Array.from({ length: Math.min(concurrency, items.length) }, worker),
+  );
 };
 
-const productValues = (product, sku, index) => {
-  const month = String(((index - 1) % 6) + 1).padStart(2, '0');
-  const day = String(((index - 1) % 24) + 1).padStart(2, '0');
-  return [
-    scalar('title', product.name), scalar('sku', sku),
-    scalar('description', product.description), scalar('price', product.price),
-    scalar('stock_on_hand', String(4 + ((index * 7) % 47))), scalar('available', index % 9 !== 0),
-    scalar('launch_code', product.launchCode), scalar('available_on', `2026-${month}-${day}`),
-    scalar('released_at', `2026-${month}-${day}T10:30:00Z`),
-    scalar('order_cutoff', { time: '16:30:00', time_zone: 'America/New_York' }),
-    scalar('meta_title', `${product.name} | ${storeName}`),
-    scalar('meta_description', `${product.description} Available in ${product.color.name.toLowerCase()}.`),
-  ];
-};
+const fileBody = (asset) =>
+  asset.type === "image/png"
+    ? Uint8Array.from(Buffer.from(asset.body, "base64"))
+    : asset.body;
 
 const run = async () => {
-  if (!catalogToken) throw new Error('Set CATALOG_TOKEN to a personal access token before running the generator.');
-  await request('/health');
-  const [seo, category, color, product] = await Promise.all([
-    definition('product-seo.toml'), definition('category.toml'),
-    definition('color.toml'), definition('product.toml'),
-  ]);
-  await ensureBlueprint('product_seo', seo);
-  await Promise.all([ensureBlueprint('category', category), ensureBlueprint('color', color)]);
-  await ensureBlueprint('product', product);
-  if (blueprintsOnly) return console.log('Ensured generated blueprint revisions.');
-
-  const regional = await ensureContext('seed-us', { market: 'US' }, defaultContextId);
-  const web = await ensureContext('seed-us-web', { channel: 'web' }, regional.id);
-  const categories = await Promise.all([
-    ['Clothing', 'clothing', null], ["Women's Clothing", 'womens-clothing', 'Clothing'],
-    ["Men's Clothing", 'mens-clothing', 'Clothing'], ['Footwear', 'footwear', null],
-    ['Bags & Accessories', 'bags-accessories', null], ['Outerwear', 'outerwear', 'Clothing'],
-    ['Activewear', 'activewear', 'Clothing'],
-  ].map(async ([name, slug, parent]) => ({
-    id: (await createEntity('category', [scalar('name', name), scalar('slug', slug)])).id,
-    name,
-    parent,
-  })));
-  await Promise.all(categories.flatMap(({ id, parent }) => {
-    const parentId = categories.find((category) => category.name === parent)?.id;
-    return parentId ? [replaceRelationships(id, [
-      { attribute_code: 'parent_category', context_id: defaultContextId, target_entity_ids: [parentId] },
-    ])] : [];
-  }));
-  const colorIds = new Map(await Promise.all(catalogColors.map(async ({ name, hex }) => [
-    name, (await createEntity('color', [scalar('name', name), scalar('hex', hex)])).id,
-  ])));
-
-  let variantCount = 0;
-  for (let index = 1; index <= productCount; index += 1) {
-    const product = productForIndex(index);
-    const parent = await createEntity('product', productValues(product, product.sku, index));
-    const variants = [];
-    for (const [variantIndex, size] of product.sizes.entries()) {
-      const variant = {
-        ...product,
-        name: `${product.name} — Size ${size}`,
-        sku: `${product.sku}-${String(variantIndex + 1).padStart(2, '0')}`,
-      };
-      variants.push(await createEntity(
-        'product', productValues(variant, variant.sku, index * 10 + variantIndex),
-      ));
-    }
-    variantCount += variants.length;
-    const categoryId = categories.find((category) => category.name === product.category).id;
-    const colorId = colorIds.get(product.color.name);
-    await replaceRelationships(parent.id, [
-      { attribute_code: 'categories', context_id: defaultContextId, target_entity_ids: [categoryId] },
-      { attribute_code: 'colors', context_id: defaultContextId, target_entity_ids: [colorId] },
-      { attribute_code: 'variants', context_id: defaultContextId, target_entity_ids: variants.map(({ id }) => id) },
-    ]);
-    for (const variant of variants) {
-      await replaceRelationships(variant.id, [
-        { attribute_code: 'categories', context_id: defaultContextId, target_entity_ids: [categoryId] },
-        { attribute_code: 'colors', context_id: defaultContextId, target_entity_ids: [colorId] },
-      ]);
-    }
-    if (index % 10 === 0) console.log(`Created ${index}/${productCount} parent products`);
+  const options = parseArgs(process.argv.slice(2));
+  if (options.help) return process.stdout.write(`${usage}\n`);
+  const pack = industries[options.industry];
+  if (!pack)
+    throw new Error(
+      `Unknown industry ${options.industry}; available: ${Object.keys(industries).join(", ")}`,
+    );
+  const profile = pack.profiles[options.size];
+  if (!profile)
+    throw new Error(
+      `Unknown size ${options.size}; available: ${Object.keys(pack.profiles).join(", ")}`,
+    );
+  const plan = countPlan(profile, options.files, pack);
+  const checkpointPath = checkpointPathFor(options, pack);
+  const datasetId = `${options.industry}:v${pack.schemaVersion}:${options.size}:seed${options.seed}`;
+  const output = {
+    industry: options.industry,
+    size: options.size,
+    schema_version: pack.schemaVersion,
+    seed: options.seed,
+    dataset_id: datasetId,
+    plan,
+    checkpoint: checkpointPath,
+  };
+  if (options.dryRun)
+    return process.stdout.write(`${JSON.stringify(output, null, 2)}\n`);
+  if (options.status) {
+    if (!existsSync(checkpointPath))
+      return process.stdout.write(
+        `${JSON.stringify({ ...output, status: "not_started" }, null, 2)}\n`,
+      );
+    return process.stdout.write(
+      `${JSON.stringify({ ...output, ...(await readCheckpoint(checkpointPath)) }, null, 2)}\n`,
+    );
   }
+  const server = assertLocalTarget(
+    process.env.CATALOG_SERVER ?? "http://127.0.0.1:3000",
+  );
+  const token = `${process.env.CATALOG_TOKEN ?? ""}`.trim();
+  if (!token)
+    throw new Error(
+      "Set CATALOG_TOKEN to a personal access token before running the generator.",
+    );
+  if (existsSync(checkpointPath) && !options.resume)
+    throw new Error(
+      `Checkpoint already exists at ${checkpointPath}; use --resume or choose a new --seed/checkpoint.`,
+    );
+  const progress = new Progress(options, plan);
+  const client = createClient(server, token, progress);
+  let checkpoint = existsSync(checkpointPath)
+    ? await readCheckpoint(checkpointPath)
+    : {
+        dataset_id: datasetId,
+        industry: options.industry,
+        schema_version: pack.schemaVersion,
+        size: options.size,
+        seed: options.seed,
+        started_at: now(),
+        phase: "blueprints",
+        manufacturer_ids: [],
+        category_ids: [],
+        family_cursor: 0,
+        file_targets: [],
+        counts: { entities: 0 },
+        files: options.files,
+      };
+  if (checkpoint.dataset_id !== datasetId)
+    throw new Error(
+      "Checkpoint does not match the selected industry, schema version, size, and seed.",
+    );
+  progress.completedEntities = checkpoint.counts.entities;
+  progress.lastSample.entities = checkpoint.counts.entities;
+  const persist = async () => atomicJson(checkpointPath, checkpoint);
+  const tag = `generator:${options.industry}:v${pack.schemaVersion}`;
+  const metadata = (kind, ordinal) => ({
+    generator_dataset: datasetId,
+    generator_schema_version: pack.schemaVersion,
+    generator_kind: kind,
+    generator_ordinal: ordinal,
+  });
+  const definitions = pack.blueprints(
+    `demo_${options.industry.replace(/-/g, "_")}_v${pack.schemaVersion}`,
+  );
+  const codes = Object.fromEntries(
+    Object.keys(definitions).map((key) => [
+      key,
+      `demo_${options.industry.replace(/-/g, "_")}_v${pack.schemaVersion}_${key}`,
+    ]),
+  );
+  const fields = pack.relationshipFields;
 
-  const contextProduct = productForIndex(19);
-  const sample = await createEntity('product', productValues(contextProduct, 'AR-BAG-STU-BLK-CONTEXT', 999));
-  await replaceRelationships(sample.id, [
-    { attribute_code: 'categories', context_id: defaultContextId, target_entity_ids: [categories.find((category) => category.name === contextProduct.category).id] },
-    { attribute_code: 'colors', context_id: defaultContextId, target_entity_ids: [colorIds.get(contextProduct.color.name)] },
-  ]);
-  await request(`/entities/${sample.id}/values`, { method: 'POST', body: JSON.stringify({ values: [
-    scalar('title', `${contextProduct.name} — US`, regional.id), scalar('price', 335, regional.id),
-    scalar('title', `${contextProduct.name} — US Online`, web.id),
-  ] }) });
-  console.log(`Created ${productCount} parent products, ${variantCount} size variants, ${categories.length} categories, and ${colorIds.size} colors.`);
+  let interrupted = false;
+  const stop = () => {
+    interrupted = true;
+  };
+  const stopIfRequested = async () => {
+    if (!interrupted) return false;
+    checkpoint.interrupted_at = now();
+    checkpoint.benchmark_ready = false;
+    await persist();
+    progress.event("interrupted", {
+      checkpoint: checkpointPath,
+      resumable: true,
+    });
+    process.exitCode = 130;
+    return true;
+  };
+  process.once("SIGINT", stop);
+  try {
+    progress.phase = "preflight";
+    progress.event("starting", { dataset_id: datasetId, server });
+    await client.request("/health");
+    if (checkpoint.phase === "blueprints") {
+      progress.phase = "blueprints";
+      for (const [key, definition] of Object.entries(definitions))
+        await ensureBlueprint(client, codes[key], definition);
+      checkpoint.phase = "contexts";
+      await persist();
+      if (await stopIfRequested()) return;
+    }
+    if (checkpoint.phase === "contexts") {
+      progress.phase = "contexts";
+      const root = await ensureContext(
+        client,
+        `demo-${options.industry}-v${pack.schemaVersion}`,
+        { industry: options.industry, dataset: datasetId },
+        rootContextId,
+      );
+      await ensureContext(
+        client,
+        `demo-${options.industry}-v${pack.schemaVersion}-web`,
+        { channel: "web", dataset: datasetId },
+        root.id,
+      );
+      checkpoint.phase = "manufacturers";
+      await persist();
+      if (await stopIfRequested()) return;
+    }
+    if (checkpoint.phase === "manufacturers") {
+      progress.phase = "manufacturers";
+      for (
+        let index = checkpoint.manufacturer_ids.length;
+        index < profile.manufacturers;
+        index += 1
+      ) {
+        const manufacturer = pack.manufacturerFor(index);
+        const entity = await client.createEntity(
+          codes.manufacturer,
+          [
+            scalar("name", manufacturer.name),
+            scalar("vendor_code", manufacturer.code),
+          ],
+          metadata("manufacturer", index),
+          tag,
+        );
+        checkpoint.manufacturer_ids.push(entity.id);
+        checkpoint.counts.entities += 1;
+        progress.tick({ entities: 1 });
+        await persist();
+        if (await stopIfRequested()) return;
+      }
+      checkpoint.phase = "categories";
+      await persist();
+    }
+    if (checkpoint.phase === "categories") {
+      progress.phase = "categories";
+      for (
+        let index = checkpoint.category_ids.length;
+        index < profile.categories;
+        index += 1
+      ) {
+        const category = pack.categoryFor(index);
+        const entity = await client.createEntity(
+          codes.category,
+          [scalar("name", category.name), scalar("slug", category.slug)],
+          metadata("category", index),
+          tag,
+        );
+        if (category.parentIndex !== null)
+          await client.replaceRelationships(entity.id, [
+            {
+              attribute_code: fields.categoryParent,
+              context_id: rootContextId,
+              target_entity_ids: [
+                checkpoint.category_ids[category.parentIndex],
+              ],
+            },
+          ]);
+        checkpoint.category_ids.push(entity.id);
+        checkpoint.counts.entities += 1;
+        progress.tick({ entities: 1 });
+        await persist();
+        if (await stopIfRequested()) return;
+      }
+      checkpoint.phase = "families";
+      await persist();
+    }
+    if (checkpoint.phase === "families") {
+      progress.phase = "families";
+      const familiesPerRun = Math.min(options.concurrency, 32);
+      while (checkpoint.family_cursor < profile.families) {
+        const start = checkpoint.family_cursor;
+        const end = Math.min(start + familiesPerRun, profile.families);
+        await runPool(
+          Array.from({ length: end - start }, (_, offset) => start + offset),
+          options.concurrency,
+          async (index) => {
+            const family = pack.familyFor(index, options.seed);
+            const categoryId =
+              checkpoint.category_ids[index % checkpoint.category_ids.length];
+            const manufacturerId =
+              checkpoint.manufacturer_ids[
+                index % checkpoint.manufacturer_ids.length
+              ];
+            const familyEntity = await client.createEntity(
+              codes.family,
+              pack
+                .familyValues(family)
+                .map(([code, value]) => scalar(code, value)),
+              metadata("family", index),
+              tag,
+            );
+            await client.replaceRelationships(familyEntity.id, [
+              {
+                attribute_code: fields.familyCategory,
+                context_id: rootContextId,
+                target_entity_ids: [categoryId],
+              },
+              {
+                attribute_code: fields.familyManufacturer,
+                context_id: rootContextId,
+                target_entity_ids: [manufacturerId],
+              },
+            ]);
+            const skuEntities = [];
+            for (let variant = 0; variant < 4; variant += 1) {
+              const sku = pack.skuFor(family, index, variant, options.seed);
+              const entity = await client.createEntity(
+                codes.sku,
+                pack
+                  .skuValues(sku, family)
+                  .map(([code, value]) => scalar(code, value)),
+                metadata("sku", index * 4 + variant),
+                tag,
+              );
+              skuEntities.push(entity);
+            }
+            // Relationship replacement mutates current-value history. Keep the four
+            // variant writes serial so a normal seed does not manufacture avoidable
+            // transient database conflicts and retries.
+            for (const [variant, entity] of skuEntities.entries()) {
+              await client.replaceRelationships(entity.id, [
+                {
+                  attribute_code: fields.skuFamily,
+                  context_id: rootContextId,
+                  target_entity_ids: [familyEntity.id],
+                },
+                {
+                  attribute_code: fields.skuCategory,
+                  context_id: rootContextId,
+                  target_entity_ids: [categoryId],
+                },
+                {
+                  attribute_code: fields.skuManufacturer,
+                  context_id: rootContextId,
+                  target_entity_ids: [manufacturerId],
+                },
+                {
+                  attribute_code: fields.skuCompatible,
+                  context_id: rootContextId,
+                  target_entity_ids: [
+                    skuEntities[(variant + 1) % skuEntities.length].id,
+                  ],
+                },
+              ]);
+            }
+            if (index < pack.assets.length)
+              checkpoint.file_targets[index] = skuEntities[0].id;
+            progress.tick({ entities: 5 });
+          },
+        );
+        checkpoint.family_cursor = end;
+        checkpoint.counts.entities =
+          profile.manufacturers + profile.categories + end * 5;
+        await persist();
+        if (await stopIfRequested()) return;
+      }
+      checkpoint.phase = options.files ? "files" : "verify";
+      await persist();
+    }
+    if (checkpoint.phase === "files") {
+      progress.phase = "files";
+      for (
+        let index = checkpoint.files_completed ?? 0;
+        index < pack.assets.length;
+        index += 1
+      ) {
+        const asset = pack.assets[index];
+        const form = new FormData();
+        form.append(
+          "file",
+          new Blob([fileBody(asset)], { type: asset.type }),
+          asset.name,
+        );
+        const uploaded = await client.request(
+          `/entities/${checkpoint.file_targets[index]}/file-attributes/${fields.skuFiles}/uploads`,
+          { method: "POST", body: form },
+        );
+        const file = uploaded.files?.[0];
+        if (!file?.id)
+          throw new Error(
+            `File upload response for ${asset.name} did not contain a file ID`,
+          );
+        let metadataResponse = file;
+        for (
+          let attempt = 0;
+          attempt < 30 && metadataResponse.status !== "ready";
+          attempt += 1
+        ) {
+          await new Promise((done) => setTimeout(done, 1000));
+          try {
+            metadataResponse = await client.request(`/files/${file.id}`);
+          } catch (error) {
+            if (error.message.includes("(403)"))
+              throw new Error(
+                "File verification requires entities.read for the uploaded entity; recreate CATALOG_TOKEN with entities.read and entities.write, or rerun a clean dataset with --no-files.",
+              );
+            throw error;
+          }
+        }
+        if (metadataResponse.status !== "ready")
+          throw new Error(`File ${asset.name} did not finish processing`);
+        checkpoint.files_completed = index + 1;
+        await persist();
+        if (await stopIfRequested()) return;
+      }
+      checkpoint.phase = "verify";
+      await persist();
+    }
+    if (checkpoint.phase === "verify") {
+      progress.phase = "verify";
+      const sampleIds = [
+        checkpoint.manufacturer_ids[0],
+        checkpoint.category_ids.at(-1),
+        checkpoint.file_targets[0],
+      ].filter(Boolean);
+      for (const id of sampleIds) await client.request(`/entities/${id}`);
+      checkpoint.phase = "complete";
+      checkpoint.completed_at = now();
+      checkpoint.benchmark_ready = true;
+      await persist();
+    }
+    progress.event("complete", {
+      checkpoint: checkpointPath,
+      benchmark_ready: checkpoint.benchmark_ready,
+    });
+  } finally {
+    process.removeListener("SIGINT", stop);
+  }
 };
 
 run().catch((error) => {
-  console.error(error.message);
+  console.error(`Generator failed: ${error.message}`);
   process.exitCode = 1;
 });

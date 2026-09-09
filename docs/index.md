@@ -55,8 +55,8 @@ settings before running the ignored RustFS compatibility test.
   graph traversal and structured query-language semantics.
 - [Relationships walkthrough](../examples/relationships/README.md): create
   blueprints, entities, contextual values, and relationships end to end.
-- [Manual test-data generator](../examples/generate.md): create a larger,
-  additive development data set.
+- [Demo catalog generator](../examples/generate.md): create deterministic,
+  industry-scoped demo and local performance data sets.
 - [Internal roadmap](roadmap.html): dated planning material, not a capability
   reference.
 

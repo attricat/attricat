@@ -92,7 +92,7 @@ export const CreateEntityPage = ({
         contextId={defaultContextId}
         defaultContextId={defaultContextId}
         error={blueprint.error ?? create.error}
-        isLoadingBlueprint={blueprint.isPending || create.isPending}
+        isLoadingBlueprint={blueprint.isFetching || create.isPending}
         lockedBlueprint={search.locked}
         onLoadBlueprint={(code, version) =>
           setSelectedBlueprint({ code, version })

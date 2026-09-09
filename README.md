@@ -72,7 +72,7 @@ change summary, use a least-privileged provider account, and only grant
 - [Database model](docs/database.md)
 - [File storage, worker, and retention configuration](docs/configuration.md#file-storage-operations)
 - [Local account lifecycle](docs/authentication.md)
-- [Manual test-data generator](examples/generate.md)
+- [Demo catalog generator](examples/generate.md)
 - [Relationships walkthrough](examples/relationships/README.md)
 
 ## Applications
