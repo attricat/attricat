@@ -168,3 +168,70 @@ value_type = "boolean"
 
     server.abort();
 }
+
+#[sqlx::test]
+async fn saves_rich_table_columns_with_resolved_relationship_targets(pool: PgPool) {
+    let (base_url, server) = start_server(pool).await;
+    let client = authenticated_client();
+    create_blueprint(
+        &client,
+        &base_url,
+        r#"
+format_version = 1
+code = "table_category"
+name = "Table category"
+kind = "entity"
+
+[views.dropdown_option]
+type = "dropdown_option"
+fields = ["name"]
+
+[[attributes]]
+code = "name"
+value_type = "string"
+"#,
+    )
+    .await;
+    let response = client
+        .post(format!("{base_url}/blueprints"))
+        .json(&json!({
+            "definition": r#"
+format_version = 1
+code = "table_product"
+name = "Table product"
+kind = "entity"
+
+[views.dropdown_option]
+type = "dropdown_option"
+fields = ["title"]
+
+[views.table]
+type = "table"
+columns = [{ field = "category.name", renderer = { id = "catalog.table_display", version = 1 } }]
+
+[[attributes]]
+code = "title"
+value_type = "string"
+
+[[attributes]]
+code = "category"
+value_type = "relationship"
+target_blueprint = "table_category"
+cardinality = "one_to_one"
+"#
+        }))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::CREATED);
+    let saved = response.json::<Value>().await.unwrap();
+    assert_eq!(
+        saved["attributes"][1]["relationship_cardinality"],
+        "one_to_one"
+    );
+    assert_eq!(
+        saved["blueprint"]["views"]["table"]["columns"][0]["field"],
+        "category.name"
+    );
+    server.abort();
+}

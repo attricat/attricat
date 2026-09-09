@@ -45,6 +45,7 @@ pub struct Attribute {
     pub default_value: Option<Value>,
     pub file_policy: Option<Value>,
     pub target_blueprint_code: Option<String>,
+    pub relationship_cardinality: Option<String>,
     pub tags: Value,
     pub context_fallback: String,
     pub context_editable: String,

@@ -44,6 +44,7 @@ from = "seo.meta_title"
                     default_value: None,
                     file_policy: None,
                     target_blueprint: None,
+                    relationship_cardinality: None,
                     tags: vec![],
                     context_fallback: "default".to_owned(),
                     context_editable: "all".to_owned(),
@@ -57,6 +58,7 @@ from = "seo.meta_title"
                     default_value: None,
                     file_policy: None,
                     target_blueprint: None,
+                    relationship_cardinality: None,
                     tags: vec![],
                     context_fallback: "default".to_owned(),
                     context_editable: "all".to_owned(),
@@ -782,4 +784,59 @@ target_blueprint = "category"
         "target_blueprint = \"product\"",
     );
     assert!(compile(parse(&invalid).unwrap(), &[], &invalid).is_err());
+}
+
+#[test]
+fn table_columns_preserve_legacy_fields_and_reject_invalid_paths() {
+    let source = r#"
+format_version = 1
+code = "product"
+name = "Product"
+kind = "entity"
+
+[views.dropdown_option]
+type = "dropdown_option"
+fields = ["title"]
+
+[views.table]
+type = "table"
+columns = [
+  { field = "title", label = "Title", renderer = { id = "catalog.table_display", version = 1 } },
+  { field = "category.name" },
+]
+
+[[attributes]]
+code = "title"
+value_type = "string"
+
+[[attributes]]
+code = "category"
+value_type = "relationship"
+target_blueprint = "category"
+cardinality = "one_to_one"
+"#;
+    let compiled = compile(parse(source).unwrap(), &[], source).unwrap();
+    assert_eq!(
+        compiled.attributes[1].relationship_cardinality.as_deref(),
+        Some("one_to_one")
+    );
+    assert!(
+        compile(
+            parse(&source.replace("category.name", "category.parent.name")).unwrap(),
+            &[],
+            source
+        )
+        .is_err()
+    );
+    assert!(
+        compile(
+            parse(&source.replace("columns = [", "fields = [\"title\"]\ncolumns = [")).unwrap(),
+            &[],
+            source
+        )
+        .is_err()
+    );
+    assert!(
+        parse(&source.replace("cardinality = \"one_to_one\"", "cardinality = \"many\"")).is_err()
+    );
 }

@@ -140,7 +140,8 @@ pub fn parse(source: &str) -> Result<BlueprintDefinition, BlueprintError> {
                             code: attribute.code,
                         });
                     }
-                    let has_file_policy = attribute.cardinality.is_some()
+                    let has_file_policy = (attribute.cardinality.is_some()
+                        && value_type != "relationship")
                         || attribute.ordered.is_some()
                         || !attribute.allowed_mime_groups.is_empty()
                         || !attribute.allowed_extensions.is_empty()
@@ -150,6 +151,19 @@ pub fn parse(source: &str) -> Result<BlueprintDefinition, BlueprintError> {
                     if value_type != "file" && has_file_policy {
                         return Err(BlueprintError::InvalidAttributeDeclaration(attribute.code));
                     }
+                    let relationship_cardinality = if value_type == "relationship" {
+                        match attribute.cardinality.as_deref() {
+                            None => None,
+                            Some("one_to_one") => Some("one_to_one".to_owned()),
+                            Some(_) => {
+                                return Err(BlueprintError::InvalidRelationshipCardinality(
+                                    attribute.code,
+                                ));
+                            }
+                        }
+                    } else {
+                        None
+                    };
                     if value_type == "file"
                         && (attribute.value_schema.is_some()
                             || attribute.target_blueprint.is_some())
@@ -193,6 +207,7 @@ pub fn parse(source: &str) -> Result<BlueprintDefinition, BlueprintError> {
                         default_value: attribute.default_value,
                         file_policy,
                         target_blueprint: attribute.target_blueprint,
+                        relationship_cardinality,
                         tags: attribute.tags,
                         context_fallback: attribute.context_fallback,
                         context_editable: attribute.context_editable,

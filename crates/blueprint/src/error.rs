@@ -42,6 +42,8 @@ pub enum BlueprintError {
     DefaultValueOnNonScalarAttribute { code: String },
     #[error("file attribute '{0}' has an invalid file policy")]
     InvalidFilePolicy(String),
+    #[error("relationship attribute '{0}' has an invalid cardinality")]
+    InvalidRelationshipCardinality(String),
     #[error("{field} is not valid JSON Schema: {message}")]
     InvalidJsonSchema { field: String, message: String },
     #[error("only entity blueprints can define an entity schema")]
@@ -96,6 +98,18 @@ pub enum BlueprintError {
     UnknownViewField { view: String, field: String },
     #[error("view '{view}' field '{field}' must be scalar")]
     NonScalarViewField { view: String, field: String },
+    #[error("table view cannot define both fields and columns")]
+    TableFieldsAndColumns,
+    #[error("table view must define fields or columns")]
+    EmptyTableColumns,
+    #[error("table column '{field}' is invalid")]
+    InvalidTableColumnPath { field: String },
+    #[error("table column '{field}' is duplicated")]
+    DuplicateTableColumn { field: String },
+    #[error("table column '{field}' must begin with a relationship")]
+    TableColumnRelationshipRequired { field: String },
+    #[error("table column renderer props must be an object")]
+    InvalidTableColumnRendererProps,
     #[error("view '{view}' relationship_list '{field}' must be a relationship")]
     NonRelationshipViewField { view: String, field: String },
     #[error("view '{view}' hierarchy field '{field}' must target its own blueprint")]

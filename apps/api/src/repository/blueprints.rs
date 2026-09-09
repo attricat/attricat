@@ -198,9 +198,9 @@ impl CatalogRepository {
             validate_attribute_default_value(&attribute)?;
             attributes.push(
                 sqlx::query_as::<_, Attribute>(
-                    r#"INSERT INTO attributes (id, workspace_id, blueprint_id, blueprint_version, code, value_type, value_schema, default_value, file_policy, target_blueprint_code, tags, context_fallback, context_editable, readonly, position)
-                       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
-                       RETURNING id, blueprint_id, blueprint_version, code, value_type, value_schema, default_value, file_policy, target_blueprint_code, tags, context_fallback, context_editable, readonly, position, created_at, updated_at, deleted_at"#,
+                    r#"INSERT INTO attributes (id, workspace_id, blueprint_id, blueprint_version, code, value_type, value_schema, default_value, file_policy, target_blueprint_code, relationship_cardinality, tags, context_fallback, context_editable, readonly, position)
+                       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)
+                       RETURNING id, blueprint_id, blueprint_version, code, value_type, value_schema, default_value, file_policy, target_blueprint_code, relationship_cardinality, tags, context_fallback, context_editable, readonly, position, created_at, updated_at, deleted_at"#,
                 )
                 .bind(Uuid::new_v4())
                 .bind(self.workspace_id.unwrap_or(Self::DEFAULT_WORKSPACE_ID))
@@ -212,6 +212,7 @@ impl CatalogRepository {
                 .bind(attribute.default_value)
                 .bind(attribute.file_policy.map(|policy| serde_json::to_value(policy).expect("file policy serializes")))
                 .bind(attribute.target_blueprint)
+                .bind(attribute.relationship_cardinality)
                 .bind(serde_json::to_value(attribute.tags).expect("attribute tags serialize"))
                 .bind(attribute.context_fallback)
                 .bind(attribute.context_editable)
@@ -363,6 +364,14 @@ impl CatalogRepository {
         .await?
         .ok_or(RepositoryError::NotFound("blueprint version"))?;
         if blueprint.status == "draft" {
+            // Installed renderers and target revisions can change after a draft
+            // is saved, so repeat resolution at the publication boundary.
+            crate::blueprint_resolver::compile_definition(
+                &mut transaction,
+                self.workspace_id.unwrap_or(Self::DEFAULT_WORKSPACE_ID),
+                &blueprint.definition,
+            )
+            .await?;
             let includes_published = sqlx::query_scalar::<_, bool>(
                 r#"SELECT NOT EXISTS (
                        SELECT 1
@@ -413,7 +422,7 @@ impl CatalogRepository {
         blueprint_version: i64,
     ) -> Result<Vec<Attribute>, RepositoryError> {
         Ok(sqlx::query_as::<_, Attribute>(
-            r#"SELECT id, blueprint_id, blueprint_version, code, value_type, value_schema, default_value, file_policy, target_blueprint_code, tags, context_fallback, context_editable, readonly, position, created_at, updated_at, deleted_at
+            r#"SELECT id, blueprint_id, blueprint_version, code, value_type, value_schema, default_value, file_policy, target_blueprint_code, relationship_cardinality, tags, context_fallback, context_editable, readonly, position, created_at, updated_at, deleted_at
                FROM attributes
                WHERE blueprint_id = $1 AND blueprint_version = $2 AND workspace_id = $3 AND deleted_at IS NULL
                ORDER BY position"#,

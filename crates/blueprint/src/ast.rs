@@ -53,7 +53,11 @@ pub enum ViewDefinition {
         separator: String,
     },
     Table {
-        fields: Vec<String>,
+        /// Legacy scalar-field shorthand. New definitions use `columns`.
+        #[serde(default)]
+        fields: Option<Vec<String>>,
+        #[serde(default)]
+        columns: Option<Vec<TableColumn>>,
         #[serde(default)]
         component: Option<ComponentReference>,
     },
@@ -82,6 +86,17 @@ pub enum ViewDefinition {
         #[serde(default)]
         component: Option<ComponentReference>,
     },
+}
+
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct TableColumn {
+    /// A local scalar field or exactly one `relationship.scalar_field` hop.
+    pub field: String,
+    #[serde(default)]
+    pub label: Option<String>,
+    #[serde(default)]
+    pub renderer: Option<ComponentReference>,
 }
 
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
@@ -192,6 +207,7 @@ pub struct LocalAttributeDeclaration {
     pub default_value: Option<serde_json::Value>,
     pub file_policy: Option<FilePolicy>,
     pub target_blueprint: Option<String>,
+    pub relationship_cardinality: Option<String>,
     pub tags: Vec<String>,
     pub context_fallback: String,
     pub context_editable: String,
@@ -224,6 +240,7 @@ pub struct EffectiveAttribute {
     pub default_value: Option<serde_json::Value>,
     pub file_policy: Option<FilePolicy>,
     pub target_blueprint: Option<String>,
+    pub relationship_cardinality: Option<String>,
     pub tags: Vec<String>,
     pub context_fallback: String,
     pub context_editable: String,

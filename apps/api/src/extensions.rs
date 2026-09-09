@@ -106,6 +106,10 @@ pub struct Manifest {
     pub server: Option<Server>,
     #[serde(default)]
     pub ui: Vec<UiContribution>,
+    /// Declarative cell renderers available to blueprint table columns. Runtime
+    /// loading is deliberately outside this contract.
+    #[serde(default)]
+    pub cell_renderers: Vec<CellRenderer>,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -280,6 +284,16 @@ pub enum WebhookAuthenticationKind {
 /// A client contribution is either a namespaced full page or an embedded view
 /// at a host-owned outlet. The host never accepts arbitrary route paths or DOM
 /// selectors from an extension.
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct CellRenderer {
+    pub id: String,
+    pub version: u32,
+    pub value_types: Vec<String>,
+    #[serde(default)]
+    pub allowed_props: Vec<String>,
+}
+
 #[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct UiContribution {
@@ -545,6 +559,31 @@ impl Manifest {
             "UI contribution",
         )?;
         let mut outlets = HashSet::new();
+        unique(
+            self.cell_renderers.iter().map(|renderer| &renderer.id),
+            "cell renderer",
+        )?;
+        for renderer in &self.cell_renderers {
+            valid_id(&renderer.id, "cell renderer")?;
+            if renderer.version == 0 || renderer.value_types.is_empty() {
+                return Err(ManifestError::Invalid(format!(
+                    "cell renderer '{}' requires a positive version and value types",
+                    renderer.id
+                )));
+            }
+            for value_type in &renderer.value_types {
+                if !matches!(
+                    value_type.as_str(),
+                    "string" | "number" | "integer" | "boolean" | "date" | "datetime" | "time"
+                ) {
+                    return Err(ManifestError::Invalid(format!(
+                        "cell renderer '{}' has unsupported value type '{value_type}'",
+                        renderer.id
+                    )));
+                }
+            }
+            unique(renderer.allowed_props.iter(), "cell renderer prop")?;
+        }
         for contribution in &self.ui {
             valid_id(&contribution.id, "UI contribution id")?;
             if contribution.version == 0

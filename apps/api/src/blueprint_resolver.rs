@@ -1,7 +1,11 @@
 use std::collections::HashSet;
 
+use crate::extensions::Manifest;
 use async_recursion::async_recursion;
-use catalog_blueprint::{BlueprintKind, CompiledBlueprint, ResolvedInclude, compile, parse};
+use catalog_blueprint::{
+    BlueprintKind, CompiledBlueprint, ResolvedInclude, ViewDefinition, compile, parse,
+    validate_table_renderer,
+};
 use sqlx::{Postgres, Transaction};
 use uuid::Uuid;
 
@@ -85,8 +89,120 @@ async fn compile_source(
         });
     }
 
-    compile(definition, &resolved_includes, source)
-        .map_err(RepositoryError::invalid_blueprint_definition)
+    let compiled = compile(definition, &resolved_includes, source)
+        .map_err(RepositoryError::invalid_blueprint_definition)?;
+    validate_table_columns(transaction, workspace_id, &compiled).await?;
+    Ok(compiled)
+}
+
+async fn validate_table_columns(
+    transaction: &mut Transaction<'_, Postgres>,
+    workspace_id: Uuid,
+    compiled: &CompiledBlueprint,
+) -> Result<(), RepositoryError> {
+    for view in compiled.views.values() {
+        let ViewDefinition::Table {
+            columns: Some(columns),
+            ..
+        } = view
+        else {
+            continue;
+        };
+        for column in columns {
+            let value_type = if let Some((relationship, target_field)) =
+                column.field.split_once('.')
+            {
+                let source = compiled
+                    .attributes
+                    .iter()
+                    .find(|attribute| attribute.code == relationship)
+                    .expect("compiler validated table relationship");
+                if source.relationship_cardinality.as_deref() != Some("one_to_one") {
+                    return Err(RepositoryError::InvalidBlueprintDefinition(format!(
+                        "table column '{}' requires a one_to_one relationship",
+                        column.field
+                    )));
+                }
+                let target = source.target_blueprint.as_deref().ok_or_else(|| {
+                    RepositoryError::InvalidBlueprintDefinition(format!(
+                        "table column '{}' relationship has no target blueprint",
+                        column.field
+                    ))
+                })?;
+                let target_type = sqlx::query_scalar::<_, String>(
+                    "SELECT a.value_type FROM blueprints b JOIN attributes a ON a.blueprint_id = b.id AND a.blueprint_version = b.version WHERE b.code = $1 AND b.workspace_id = $2 AND b.deleted_at IS NULL AND a.code = $3 AND a.deleted_at IS NULL ORDER BY b.version DESC LIMIT 1",
+                )
+                .bind(target)
+                .bind(workspace_id)
+                .bind(target_field)
+                .fetch_optional(&mut **transaction)
+                .await?
+                .ok_or_else(|| RepositoryError::InvalidBlueprintDefinition(format!(
+                    "table column '{}' target field was not found", column.field
+                )))?;
+                if target_type == "relationship" || target_type == "file" {
+                    return Err(RepositoryError::InvalidBlueprintDefinition(format!(
+                        "table column '{}' target field must be scalar",
+                        column.field
+                    )));
+                }
+                target_type
+            } else {
+                compiled
+                    .attributes
+                    .iter()
+                    .find(|attribute| attribute.code == column.field)
+                    .expect("compiler validated table field")
+                    .value_type
+                    .clone()
+            };
+            if let Some(renderer) = &column.renderer {
+                validate_renderer(transaction, workspace_id, renderer, &value_type).await?;
+            }
+        }
+    }
+    Ok(())
+}
+
+async fn validate_renderer(
+    transaction: &mut Transaction<'_, Postgres>,
+    workspace_id: Uuid,
+    renderer: &catalog_blueprint::ComponentReference,
+    value_type: &str,
+) -> Result<(), RepositoryError> {
+    if renderer.id.starts_with("catalog.") {
+        return validate_table_renderer(renderer, value_type)
+            .map_err(RepositoryError::invalid_blueprint_definition);
+    }
+    let manifests = sqlx::query_scalar::<_, serde_json::Value>(
+        "SELECT r.manifest FROM extension_installations i JOIN installed_extension_releases r ON r.id = i.installed_release_id WHERE i.workspace_id = $1 AND i.state = 'enabled'",
+    )
+    .bind(workspace_id)
+    .fetch_all(&mut **transaction)
+    .await?;
+    let valid = manifests
+        .into_iter()
+        .filter_map(|raw| serde_json::from_value::<Manifest>(raw).ok())
+        .flat_map(|manifest| manifest.cell_renderers)
+        .any(|candidate| {
+            candidate.id == renderer.id
+                && candidate.version == renderer.version as u32
+                && candidate.value_types.iter().any(|item| item == value_type)
+                && (renderer.props.is_null()
+                    || renderer.props.as_object().is_some_and(|props| {
+                        props
+                            .keys()
+                            .all(|key| candidate.allowed_props.iter().any(|prop| prop == key))
+                    }))
+        });
+    if valid {
+        Ok(())
+    } else {
+        Err(RepositoryError::InvalidBlueprintDefinition(format!(
+            "table column renderer '{}@{}' is not declared for {value_type}",
+            renderer.id, renderer.version
+        )))
+    }
 }
 
 #[derive(sqlx::FromRow)]

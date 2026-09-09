@@ -1,7 +1,7 @@
 use std::collections::HashSet;
 
 use crate::{
-    BlueprintError, ComponentReference, EffectiveAttribute, ViewDefinition, ViewNode,
+    BlueprintError, ComponentReference, EffectiveAttribute, TableColumn, ViewDefinition, ViewNode,
     component_manifest::validate_component, parser::validate_code,
 };
 
@@ -24,7 +24,21 @@ pub(crate) fn validate_view(
                 validate_view_field(view, field, attributes, false)?;
             }
         }
-        ViewDefinition::Table { fields, component } => {
+        ViewDefinition::Table {
+            fields,
+            columns,
+            component,
+        } => {
+            let Some(fields) = fields else {
+                if columns.is_none() {
+                    return Err(BlueprintError::EmptyTableColumns);
+                }
+                validate_table_columns(columns.as_deref().unwrap_or_default(), attributes)?;
+                return Ok(());
+            };
+            if columns.is_some() {
+                return Err(BlueprintError::TableFieldsAndColumns);
+            }
             for field in fields {
                 let attribute = validate_view_field(view, field, attributes, false)?;
                 validate_component(
@@ -184,6 +198,80 @@ fn validate_view_nodes(
                 validate_component(component.as_ref(), view, "incoming_relationship_list", None)?;
             }
             _ => {}
+        }
+    }
+    Ok(())
+}
+
+fn validate_table_columns(
+    columns: &[TableColumn],
+    attributes: &[EffectiveAttribute],
+) -> Result<(), BlueprintError> {
+    if columns.is_empty() {
+        return Err(BlueprintError::EmptyTableColumns);
+    }
+    let mut seen = HashSet::new();
+    for column in columns {
+        if !seen.insert(&column.field) {
+            return Err(BlueprintError::DuplicateTableColumn {
+                field: column.field.clone(),
+            });
+        }
+        if column
+            .label
+            .as_ref()
+            .is_some_and(|label| label.trim().is_empty())
+        {
+            return Err(BlueprintError::InvalidTableColumnPath {
+                field: column.field.clone(),
+            });
+        }
+        if let Some(renderer) = &column.renderer {
+            if !renderer.props.is_null() && !renderer.props.is_object() {
+                return Err(BlueprintError::InvalidTableColumnRendererProps);
+            }
+            // Extension renderers are resolved while saving/publishing. The
+            // compiler can still reject malformed references without knowing
+            // the workspace's installed extensions.
+            if renderer.id.is_empty()
+                || !renderer
+                    .id
+                    .bytes()
+                    .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'.' | b'_' | b'-'))
+                || renderer.version <= 0
+            {
+                return Err(BlueprintError::InvalidTableColumnPath {
+                    field: column.field.clone(),
+                });
+            }
+        }
+        let parts: Vec<_> = column.field.split('.').collect();
+        match parts.as_slice() {
+            [field] => {
+                validate_code(field, "table column field")?;
+                validate_view_field("table", field, attributes, false)?;
+            }
+            [relationship, target_field] => {
+                validate_code(relationship, "table column relationship")?;
+                validate_code(target_field, "table column target field")?;
+                let attribute = attributes
+                    .iter()
+                    .find(|attribute| attribute.code == *relationship)
+                    .ok_or_else(|| BlueprintError::UnknownViewField {
+                        view: "table".to_owned(),
+                        field: (*relationship).to_owned(),
+                    })?;
+                if attribute.value_type != "relationship" {
+                    return Err(BlueprintError::TableColumnRelationshipRequired {
+                        field: column.field.clone(),
+                    });
+                }
+            }
+            _ => {
+                return Err(BlueprintError::InvalidTableColumnPath {
+                    field: column.field.clone(),
+                });
+            }
         }
     }
     Ok(())

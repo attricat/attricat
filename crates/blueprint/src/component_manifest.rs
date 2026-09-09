@@ -24,6 +24,13 @@ static COMPONENT_MANIFEST: LazyLock<ComponentManifest> = LazyLock::new(|| {
         .expect("component manifest must be valid JSON")
 });
 
+pub fn validate_table_renderer(
+    renderer: &ComponentReference,
+    value_type: &str,
+) -> Result<(), BlueprintError> {
+    validate_component(Some(renderer), "table", "table", Some(value_type))
+}
+
 pub(crate) fn validate_component(
     component: Option<&ComponentReference>,
     view: &str,
