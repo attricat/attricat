@@ -10,7 +10,7 @@ use crate::{
         RelationshipTreeFacetChildrenRequest, RelationshipTreeFacetChildrenResponse,
         ResolvedEntityPreviewResponse, SearchEntitiesRequest,
     },
-    repository::decode_search_cursor,
+    repository::{EntitySearchSort, decode_search_cursor},
 };
 use axum::{Json, extract::State};
 use serde::Deserialize;
@@ -182,12 +182,14 @@ pub(super) async fn search_entity_previews(
         ),
         None => None,
     };
-    let cursor = match input.page.cursor.as_deref() {
-        Some(cursor) => Some(
+    let sort = resolve_table_sort(&repository, &current, input.sort.as_ref()).await?;
+    let cursor = match (sort.is_some(), input.page.cursor.as_deref()) {
+        (true, _) => None,
+        (false, Some(cursor)) => Some(
             decode_search_cursor(cursor)
                 .ok_or_else(|| ApiError::invalid_input("page.cursor is invalid".to_owned()))?,
         ),
-        None => None,
+        (false, None) => None,
     };
     let query = input
         .query
@@ -275,19 +277,38 @@ pub(super) async fn search_entity_previews(
             });
         }
     }
-    let (mut items, next_cursor) = repository
-        .search_entity_previews(
-            current.blueprint.id,
-            selected,
-            None,
-            limit.into(),
-            cursor,
-            matching.as_deref(),
-            &input.system_tags,
-            input.outdated,
-            current.blueprint.version,
-        )
-        .await?;
+    let (mut items, next_cursor) = match sort.as_ref() {
+        Some(sort) => {
+            repository
+                .search_entity_previews_sorted(
+                    current.blueprint.id,
+                    selected,
+                    limit.into(),
+                    input.page.cursor.as_deref(),
+                    matching.as_deref(),
+                    &input.system_tags,
+                    input.outdated,
+                    current.blueprint.version,
+                    sort,
+                )
+                .await?
+        }
+        None => {
+            repository
+                .search_entity_previews(
+                    current.blueprint.id,
+                    selected,
+                    None,
+                    limit.into(),
+                    cursor,
+                    matching.as_deref(),
+                    &input.system_tags,
+                    input.outdated,
+                    current.blueprint.version,
+                )
+                .await?
+        }
+    };
     for item in &mut items {
         item.schema_outdated = item.blueprint_version != current.blueprint.version;
         item.match_explanations = resolved
@@ -337,6 +358,92 @@ fn table_relationships(
                 })
         })
         .collect()
+}
+
+async fn resolve_table_sort(
+    repository: &crate::repository::CatalogRepository,
+    blueprint: &crate::model::BlueprintWithAttributes,
+    sort: Option<&crate::model::SearchSort>,
+) -> Result<Option<EntitySearchSort>, ApiError> {
+    let Some(sort) = sort else { return Ok(None) };
+    let descending = match sort.direction.as_str() {
+        "asc" => false,
+        "desc" => true,
+        _ => {
+            return Err(ApiError::invalid_input(
+                "sort.direction must be asc or desc".to_owned(),
+            ));
+        }
+    };
+    let configured = blueprint
+        .blueprint
+        .views
+        .get("table")
+        .and_then(|table| table.get("columns"))
+        .and_then(serde_json::Value::as_array)
+        .is_some_and(|columns| {
+            columns.iter().any(|column| {
+                column.get("field").and_then(serde_json::Value::as_str) == Some(&sort.field)
+            })
+        });
+    if !configured {
+        return Err(ApiError::invalid_input(
+            "sort.field must be a configured table column".to_owned(),
+        ));
+    }
+    let (relationship, attribute_code) = match sort.field.split_once('.') {
+        Some((relationship, field)) => (Some(relationship.to_owned()), field),
+        None => (None, sort.field.as_str()),
+    };
+    let value_type = match &relationship {
+        None => blueprint
+            .attributes
+            .iter()
+            .find(|attribute| attribute.code == attribute_code)
+            .map(|attribute| attribute.value_type.clone()),
+        Some(relationship) => {
+            let source = blueprint
+                .attributes
+                .iter()
+                .find(|attribute| {
+                    attribute.code == *relationship && attribute.value_type == "relationship"
+                })
+                .ok_or_else(|| {
+                    ApiError::invalid_input("sort.field relationship is invalid".to_owned())
+                })?;
+            let target_code = source.target_blueprint_code.as_deref().ok_or_else(|| {
+                ApiError::invalid_input(
+                    "sort.field relationship has no target blueprint".to_owned(),
+                )
+            })?;
+            let target = repository
+                .get_blueprint_by_code(target_code)
+                .await?
+                .ok_or_else(|| ApiError::not_found("target blueprint"))?;
+            target
+                .attributes
+                .iter()
+                .find(|attribute| attribute.code == attribute_code)
+                .map(|attribute| attribute.value_type.clone())
+        }
+    }
+    .ok_or_else(|| {
+        ApiError::invalid_input("sort.field must resolve to a scalar table column".to_owned())
+    })?;
+    if !matches!(
+        value_type.as_str(),
+        "string" | "number" | "integer" | "boolean" | "date" | "datetime" | "time"
+    ) {
+        return Err(ApiError::invalid_input(
+            "sort.field must resolve to a scalar table column".to_owned(),
+        ));
+    }
+    Ok(Some(EntitySearchSort {
+        field: sort.field.clone(),
+        relationship,
+        value_type,
+        descending,
+    }))
 }
 
 pub(super) async fn relationship_tree_facet_children(

@@ -222,5 +222,71 @@ cardinality = "one_to_one"
             .is_none()
     );
 
+    // Related typed scalar ordering selects source IDs first, then reuses page-only hydration.
+    // The unlinked v1 entity has an explicit NULL-last position.
+    let first_page: Value = client
+        .post(format!("{base_url}/v1/entities/search"))
+        .json(&json!({
+            "blueprint": { "code": "search_projection_product" },
+            "sort": { "field": "categories.name", "direction": "asc" },
+            "page": { "size": 1 }
+        }))
+        .send()
+        .await
+        .unwrap()
+        .error_for_status()
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    assert_eq!(
+        first_page["items"][0]["id"], first_source["id"],
+        "sorted page: {first_page}"
+    );
+    let second_page: Value = client
+        .post(format!("{base_url}/v1/entities/search"))
+        .json(&json!({
+            "blueprint": { "code": "search_projection_product" },
+            "sort": { "field": "categories.name", "direction": "asc" },
+            "page": { "size": 1, "cursor": first_page["next_cursor"] }
+        }))
+        .send()
+        .await
+        .unwrap()
+        .error_for_status()
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    assert_eq!(second_page["items"][0]["id"], second_source["id"]);
+    let third_page: Value = client
+        .post(format!("{base_url}/v1/entities/search"))
+        .json(&json!({
+            "blueprint": { "code": "search_projection_product" },
+            "sort": { "field": "categories.name", "direction": "asc" },
+            "page": { "size": 1, "cursor": second_page["next_cursor"] }
+        }))
+        .send()
+        .await
+        .unwrap()
+        .error_for_status()
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    assert_eq!(third_page["items"][0]["id"], old_source["id"]);
+    assert!(third_page["next_cursor"].is_null());
+
+    let invalid = client
+        .post(format!("{base_url}/v1/entities/search"))
+        .json(&json!({
+            "blueprint": { "code": "search_projection_product" },
+            "sort": { "field": "title", "direction": "up" }
+        }))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(invalid.status(), reqwest::StatusCode::UNPROCESSABLE_ENTITY);
+
     server.abort();
 }

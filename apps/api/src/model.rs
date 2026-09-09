@@ -327,6 +327,8 @@ pub struct SearchEntitiesRequest {
     #[serde(default)]
     pub relationship_tree_facets: Vec<RelationshipTreeFacetRequest>,
     #[serde(default)]
+    pub sort: Option<SearchSort>,
+    #[serde(default)]
     pub page: SearchPage,
 }
 
@@ -397,6 +399,13 @@ pub struct SearchFilter {
     pub field: String,
     pub operator: String,
     pub value: Value,
+}
+
+#[derive(Clone, Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct SearchSort {
+    pub field: String,
+    pub direction: String,
 }
 
 #[derive(Clone, Debug, Default, Deserialize)]

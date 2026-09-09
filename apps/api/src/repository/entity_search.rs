@@ -16,6 +16,36 @@ struct EntityPreviewRow {
 }
 
 #[derive(sqlx::FromRow)]
+struct SortedEntityPreviewRow {
+    id: Uuid,
+    blueprint_version: i64,
+    created_at: DateTime<Utc>,
+    preview: Value,
+    blueprint_views: Value,
+    blueprint_context_fallback: Value,
+    sort_value: Option<String>,
+    sort_is_null: bool,
+}
+
+#[derive(Clone, Debug)]
+pub(crate) struct EntitySearchSort {
+    pub field: String,
+    pub relationship: Option<String>,
+    pub value_type: String,
+    pub descending: bool,
+}
+
+#[derive(Clone, Debug, serde::Deserialize, serde::Serialize)]
+struct SortedSearchCursor {
+    version: u8,
+    field: String,
+    descending: bool,
+    is_null: bool,
+    value: Option<String>,
+    id: Uuid,
+}
+
+#[derive(sqlx::FromRow)]
 struct RelationshipTreeNodeRow {
     id: Uuid,
     preview: Value,
@@ -261,6 +291,130 @@ impl CatalogRepository {
             None
         };
         Ok((items, next_cursor))
+    }
+
+    /// Selects a page by a configured scalar table column without hydrating projections for
+    /// every candidate. NULL values are always last and entity IDs make the ordering stable.
+    #[allow(clippy::too_many_arguments)]
+    pub(crate) async fn search_entity_previews_sorted(
+        &self,
+        blueprint_id: Uuid,
+        blueprint_version: Option<i64>,
+        limit: i64,
+        cursor: Option<&str>,
+        matching_entity_ids: Option<&[Uuid]>,
+        system_tags: &[String],
+        outdated: bool,
+        current_blueprint_version: i64,
+        sort: &EntitySearchSort,
+    ) -> Result<(Vec<EntityPreview>, Option<String>), RepositoryError> {
+        validate_system_tags(system_tags)?;
+        let cursor = cursor.map(decode_sorted_search_cursor).transpose()?;
+        if let Some(cursor) = &cursor
+            && (cursor.field != sort.field
+                || cursor.descending != sort.descending
+                || cursor.version != 1)
+        {
+            return Err(RepositoryError::InvalidBlueprintDefinition(
+                "page.cursor does not match sort".to_owned(),
+            ));
+        }
+        let cursor_value = cursor.as_ref().and_then(|cursor| cursor.value.clone());
+        let cursor_is_null = cursor
+            .as_ref()
+            .map(|cursor| cursor.is_null)
+            .unwrap_or(false);
+        let cursor_id = cursor.as_ref().map(|cursor| cursor.id);
+        let column = native_sort_column(&sort.value_type)?;
+        let comparison = if sort.descending { "<" } else { ">" };
+        let direction = if sort.descending { "DESC" } else { "ASC" };
+        let joins = match &sort.relationship {
+            None => format!(
+                "LEFT JOIN attributes sort_attribute ON sort_attribute.blueprint_id = e.blueprint_id
+                    AND sort_attribute.blueprint_version = e.blueprint_version
+                    AND sort_attribute.code = $10 AND sort_attribute.value_type = $11
+                 LEFT JOIN attribute_values sort_value ON sort_value.entity_id = e.id
+                    AND sort_value.attribute_id = sort_attribute.id
+                    AND sort_value.context_id = (SELECT id FROM attribute_contexts WHERE code = 'default')
+                    AND sort_value.relationship_target_entity_id IS NULL AND sort_value.active"
+            ),
+            Some(_) => format!(
+                "LEFT JOIN attributes relationship_attribute ON relationship_attribute.blueprint_id = e.blueprint_id
+                    AND relationship_attribute.blueprint_version = e.blueprint_version
+                    AND relationship_attribute.code = $10 AND relationship_attribute.value_type = 'relationship'
+                 LEFT JOIN attribute_values edge ON edge.entity_id = e.id
+                    AND edge.attribute_id = relationship_attribute.id AND edge.active
+                    AND edge.relationship_target_entity_id IS NOT NULL
+                 LEFT JOIN entities target ON target.id = edge.relationship_target_entity_id AND target.deleted_at IS NULL
+                 LEFT JOIN attributes sort_attribute ON sort_attribute.blueprint_id = target.blueprint_id
+                    AND sort_attribute.blueprint_version = target.blueprint_version
+                    AND sort_attribute.code = $11 AND sort_attribute.value_type = $12
+                 LEFT JOIN attribute_values sort_value ON sort_value.entity_id = target.id
+                    AND sort_value.attribute_id = sort_attribute.id
+                    AND sort_value.context_id = (SELECT id FROM attribute_contexts WHERE code = 'default')
+                    AND sort_value.relationship_target_entity_id IS NULL AND sort_value.active"
+            ),
+        };
+        let (field_bind, type_bind) = match &sort.relationship {
+            Some(relationship) => (
+                relationship.as_str(),
+                sort.field.split_once('.').map_or("", |(_, field)| field),
+            ),
+            None => (sort.field.as_str(), sort.value_type.as_str()),
+        };
+        let sql = format!(
+            r#"SELECT e.id, e.blueprint_version, e.created_at, e.projections -> 'preview' AS preview,
+                      b.views AS blueprint_views,
+                      (SELECT COALESCE(jsonb_object_agg(attribute.code, attribute.context_fallback), '{{}}'::jsonb)
+                         FROM attributes attribute WHERE attribute.blueprint_id = e.blueprint_id
+                           AND attribute.blueprint_version = e.blueprint_version AND attribute.deleted_at IS NULL) AS blueprint_context_fallback,
+                      sort_value.{column}::text AS sort_value, sort_value.{column} IS NULL AS sort_is_null
+                FROM entities e
+                JOIN blueprints b ON b.id = e.blueprint_id AND b.version = e.blueprint_version
+                {joins}
+                WHERE e.blueprint_id = $1 AND ($2::bigint IS NULL OR e.blueprint_version = $2)
+                  AND e.deleted_at IS NULL
+                  AND ($3::uuid[] IS NULL OR e.id = ANY($3))
+                  AND ($4::text[] IS NULL OR e.system_tags @> $4)
+                  AND (NOT $5 OR e.blueprint_version <> $6)
+                  AND ($9::uuid IS NULL
+                    OR (sort_value.{column} IS NULL AND NOT $8)
+                    OR (sort_value.{column} IS NOT NULL AND NOT $8 AND
+                        (sort_value.{column} {comparison} $7::{column_type} OR (sort_value.{column} = $7::{column_type} AND e.id > $9)))
+                    OR (sort_value.{column} IS NULL AND $8 AND e.id > $9))
+                ORDER BY sort_value.{column} {direction} NULLS LAST, e.id ASC
+                LIMIT $13"#,
+            column = column,
+            column_type = native_sort_cast(&sort.value_type)?,
+        );
+        let rows = sqlx::query_as::<_, SortedEntityPreviewRow>(&sql)
+            .bind(blueprint_id)
+            .bind(blueprint_version)
+            .bind(matching_entity_ids)
+            .bind((!system_tags.is_empty()).then_some(system_tags))
+            .bind(outdated)
+            .bind(current_blueprint_version)
+            .bind(cursor_value)
+            .bind(cursor_is_null)
+            .bind(cursor_id)
+            .bind(field_bind)
+            .bind(type_bind)
+            .bind(sort.value_type.as_str())
+            .bind(limit + 1)
+            .fetch_all(&self.pool)
+            .await?;
+        let mut rows = rows;
+        let next_cursor = if rows.len() > limit as usize {
+            rows.pop();
+            rows.last()
+                .map(|row| encode_sorted_search_cursor(sort, row))
+        } else {
+            None
+        };
+        Ok((
+            rows.into_iter().map(sorted_entity_preview).collect(),
+            next_cursor,
+        ))
     }
 
     /// Adds direct relationship targets used by table columns in one query for the entire page.
@@ -1010,6 +1164,55 @@ fn parse_search_terms(query: &str) -> Result<Vec<SearchTerm>, RepositoryError> {
         })
         .collect()
 }
+fn native_sort_column(value_type: &str) -> Result<&'static str, RepositoryError> {
+    match value_type {
+        "string" => Ok("value_text"),
+        "number" => Ok("value_number"),
+        "integer" => Ok("value_integer"),
+        "boolean" => Ok("value_boolean"),
+        "date" => Ok("value_date"),
+        "datetime" => Ok("value_datetime"),
+        "time" => Ok("value_time"),
+        _ => Err(RepositoryError::InvalidBlueprintDefinition(format!(
+            "{value_type} is not sortable"
+        ))),
+    }
+}
+
+fn native_sort_cast(value_type: &str) -> Result<&'static str, RepositoryError> {
+    match value_type {
+        "string" => Ok("text"),
+        "number" => Ok("numeric"),
+        "integer" => Ok("bigint"),
+        "boolean" => Ok("boolean"),
+        "date" => Ok("date"),
+        "datetime" => Ok("timestamptz"),
+        "time" => Ok("time"),
+        _ => native_sort_column(value_type).map(|_| unreachable!()),
+    }
+}
+
+fn decode_sorted_search_cursor(cursor: &str) -> Result<SortedSearchCursor, RepositoryError> {
+    let bytes = URL_SAFE_NO_PAD.decode(cursor).map_err(|_| {
+        RepositoryError::InvalidBlueprintDefinition("page.cursor is invalid".to_owned())
+    })?;
+    serde_json::from_slice(&bytes).map_err(|_| {
+        RepositoryError::InvalidBlueprintDefinition("page.cursor is invalid".to_owned())
+    })
+}
+
+fn encode_sorted_search_cursor(sort: &EntitySearchSort, row: &SortedEntityPreviewRow) -> String {
+    let cursor = SortedSearchCursor {
+        version: 1,
+        field: sort.field.clone(),
+        descending: sort.descending,
+        is_null: row.sort_is_null,
+        value: row.sort_value.clone(),
+        id: row.id,
+    };
+    URL_SAFE_NO_PAD.encode(serde_json::to_vec(&cursor).expect("cursor serializes"))
+}
+
 pub(crate) fn decode_search_cursor(cursor: &str) -> Option<(DateTime<Utc>, Uuid)> {
     let decoded = URL_SAFE_NO_PAD.decode(cursor).ok()?;
     let value = String::from_utf8(decoded).ok()?;
@@ -1030,6 +1233,17 @@ pub(super) fn empty_preview() -> Value {
 
 pub(super) fn empty_projections() -> Value {
     Value::Object(Map::from_iter([(String::from("preview"), empty_preview())]))
+}
+
+fn sorted_entity_preview(row: SortedEntityPreviewRow) -> EntityPreview {
+    entity_preview(EntityPreviewRow {
+        id: row.id,
+        blueprint_version: row.blueprint_version,
+        created_at: row.created_at,
+        preview: row.preview,
+        blueprint_views: row.blueprint_views,
+        blueprint_context_fallback: row.blueprint_context_fallback,
+    })
 }
 
 fn entity_preview(row: EntityPreviewRow) -> EntityPreview {
