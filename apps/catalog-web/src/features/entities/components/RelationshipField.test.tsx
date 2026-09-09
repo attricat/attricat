@@ -4,7 +4,11 @@ import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
 import '../../../i18n';
-import { searchEntities, type EntitySearchResponse } from '../api';
+import {
+  searchEntities,
+  type Attribute,
+  type EntitySearchResponse,
+} from '../api';
 import { RelationshipField } from './RelationshipField';
 
 vi.mock('../api', () => ({
@@ -38,20 +42,20 @@ const page = (
   next_cursor: nextCursor,
 });
 
-const renderField = (onChange = vi.fn()) => {
+const renderField = (onChange = vi.fn(), field: Attribute = attribute) => {
   const queryClient = new QueryClient({
     defaultOptions: { queries: { retry: false } },
   });
   render(
     <QueryClientProvider client={queryClient}>
-      <RelationshipField attribute={attribute} onChange={onChange} value="" />
+      <RelationshipField attribute={field} onChange={onChange} value="" />
     </QueryClientProvider>,
   );
   return onChange;
 };
 
 describe('RelationshipField', () => {
-  it('loads and selects a target from a later server search page', async () => {
+  it('uses a multi-select picker for unrestricted relationships', async () => {
     vi.mocked(searchEntities).mockImplementation((_, __, query, cursor) =>
       Promise.resolve(
         cursor === 'second-page'
@@ -87,5 +91,27 @@ describe('RelationshipField', () => {
       undefined,
       expect.any(AbortSignal),
     );
+  });
+
+  it('uses a single-select picker for one-to-one relationships', async () => {
+    vi.mocked(searchEntities).mockResolvedValue(
+      page([{ id: firstId, label: 'First product' }], null),
+    );
+    const onChange = renderField(vi.fn(), {
+      ...attribute,
+      relationship_cardinality: 'one_to_one',
+    });
+    const user = userEvent.setup();
+
+    const input = await screen.findByRole('combobox', {
+      name: 'related_products',
+    });
+    await user.click(input);
+    await user.click(
+      await screen.findByRole('option', { name: 'First product' }),
+    );
+
+    expect(onChange).toHaveBeenLastCalledWith(firstId);
+    expect(screen.queryByRole('checkbox')).toBeNull();
   });
 });

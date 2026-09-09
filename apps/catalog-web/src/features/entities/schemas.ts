@@ -224,6 +224,7 @@ export const attributeSchema = z
     code: z.string(),
     value_type: valueTypeSchema,
     target_blueprint_code: z.string().nullable().optional(),
+    relationship_cardinality: z.literal('one_to_one').nullable().optional(),
     context_fallback: z.enum(['default', 'none']).optional(),
     context_editable: z.enum(['all', 'default']).optional(),
     readonly: z.boolean().optional(),

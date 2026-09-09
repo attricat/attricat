@@ -88,39 +88,73 @@ export const RelationshipField = ({
     return target ? [target] : [];
   });
 
+  const isOneToOne = attribute.relationship_cardinality === 'one_to_one';
+
   return (
     <Stack spacing={0.5}>
       <FormControl error={Boolean(error)} fullWidth>
-        <Autocomplete
-          disableCloseOnSelect
-          disabled={disabled}
-          filterOptions={(items) => items}
-          getOptionLabel={targetLabel}
-          inputValue={query}
-          isOptionEqualToValue={(option, selected) => option.id === selected.id}
-          multiple
-          onChange={(_, selected) =>
-            onChange(selected.map((target) => target.id).join(', '))
-          }
-          onInputChange={(_, input, reason) => {
-            if (reason === 'input' || reason === 'clear') setQuery(input);
-          }}
-          options={options}
-          renderInput={(params) => (
-            <TextField
-              {...params}
-              error={Boolean(error)}
-              label={attribute.code}
-            />
-          )}
-          renderOption={(props, target, { selected }) => (
-            <li {...props} key={target.id}>
-              <Checkbox checked={selected} />
-              <ListItemText primary={targetLabel(target)} />
-            </li>
-          )}
-          value={selectedTargets}
-        />
+        {isOneToOne ? (
+          <Autocomplete
+            disabled={disabled}
+            filterOptions={(items) => items}
+            getOptionLabel={targetLabel}
+            inputValue={query}
+            isOptionEqualToValue={(option, selected) =>
+              option.id === selected.id
+            }
+            onChange={(_, selected) => onChange(selected?.id ?? '')}
+            onInputChange={(_, input, reason) => {
+              if (reason === 'input' || reason === 'clear') setQuery(input);
+            }}
+            options={options}
+            renderInput={(params) => (
+              <TextField
+                {...params}
+                error={Boolean(error)}
+                label={attribute.code}
+              />
+            )}
+            renderOption={(props, target) => (
+              <li {...props} key={target.id}>
+                <ListItemText primary={targetLabel(target)} />
+              </li>
+            )}
+            value={selectedTargets[0] ?? null}
+          />
+        ) : (
+          <Autocomplete
+            disableCloseOnSelect
+            disabled={disabled}
+            filterOptions={(items) => items}
+            getOptionLabel={targetLabel}
+            inputValue={query}
+            isOptionEqualToValue={(option, selected) =>
+              option.id === selected.id
+            }
+            multiple
+            onChange={(_, selected) =>
+              onChange(selected.map((target) => target.id).join(', '))
+            }
+            onInputChange={(_, input, reason) => {
+              if (reason === 'input' || reason === 'clear') setQuery(input);
+            }}
+            options={options}
+            renderInput={(params) => (
+              <TextField
+                {...params}
+                error={Boolean(error)}
+                label={attribute.code}
+              />
+            )}
+            renderOption={(props, target, { selected }) => (
+              <li {...props} key={target.id}>
+                <Checkbox checked={selected} />
+                <ListItemText primary={targetLabel(target)} />
+              </li>
+            )}
+            value={selectedTargets}
+          />
+        )}
         {targets.hasNextPage && (
           <LoadMoreButton
             disabled={disabled}
