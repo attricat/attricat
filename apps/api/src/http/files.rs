@@ -454,13 +454,10 @@ async fn download(
             (status == StatusCode::PARTIAL_CONTENT).then(|| format!("bytes={start}-{end}"));
         let object = state
             .object_store
-            .get_range(&file.object_key, provider_range.as_deref())
+            .get_range_stream(&file.object_key, provider_range.as_deref())
             .await
             .map_err(storage_error)?;
-        if object.bytes.len() != end - start + 1 {
-            return Err(ApiError::internal("file download failed"));
-        }
-        let mut response = Response::new(Body::from(object.bytes));
+        let mut response = Response::new(Body::from_stream(object.stream));
         *response.status_mut() = status;
         let response_headers = response.headers_mut();
         response_headers.insert(

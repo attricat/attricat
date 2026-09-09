@@ -596,7 +596,7 @@ pub(super) async fn artifact(
         .map_err(ApiError::from)?;
     let object = state
         .object_store
-        .get(&contribution.artifact_key)
+        .get_stream(&contribution.artifact_key)
         .await
         .map_err(|error| match error {
             ObjectStoreError::Unavailable | ObjectStoreError::TimedOut(_) => {
@@ -606,7 +606,7 @@ pub(super) async fn artifact(
                 ApiError::internal("extension artifact could not be loaded")
             }
         })?;
-    let mut response = Response::new(Body::from(object.bytes));
+    let mut response = Response::new(Body::from_stream(object.stream));
     let headers = response.headers_mut();
     headers.insert(
         header::CONTENT_TYPE,

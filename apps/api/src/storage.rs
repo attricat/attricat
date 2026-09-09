@@ -7,6 +7,7 @@ use std::{
     collections::BTreeMap,
     env,
     path::Path,
+    pin::Pin,
     sync::atomic::{AtomicBool, Ordering},
     time::Duration,
 };
@@ -16,6 +17,7 @@ use aws_config::{BehaviorVersion, Region};
 use aws_credential_types::Credentials;
 use aws_sdk_s3::{Client, config::Builder as S3ConfigBuilder, primitives::ByteStream};
 use bytes::Bytes;
+use futures_util::Stream;
 use secrecy::{ExposeSecret, SecretString};
 use thiserror::Error;
 use tokio::{sync::Mutex, time::timeout};
@@ -125,6 +127,15 @@ pub struct StoredObject {
     pub content_type: Option<String>,
 }
 
+pub type ObjectByteStream = Pin<Box<dyn Stream<Item = Result<Bytes, ObjectStoreError>> + Send>>;
+
+/// A provider response whose bytes remain streamed until the HTTP consumer
+/// writes them to the client.
+pub struct StoredObjectStream {
+    pub stream: ObjectByteStream,
+    pub content_type: Option<String>,
+}
+
 #[derive(Debug, Error)]
 pub enum ObjectStoreError {
     #[error("object storage is unavailable")]
@@ -147,12 +158,20 @@ pub trait ObjectStore: Send + Sync {
         content_type: Option<&str>,
     ) -> Result<(), ObjectStoreError>;
     async fn get(&self, key: &str) -> Result<StoredObject, ObjectStoreError>;
+    /// Fetch an object without materializing it in the API process.
+    async fn get_stream(&self, key: &str) -> Result<StoredObjectStream, ObjectStoreError>;
     /// Fetch a requested range through the provider; callers never receive an object URL.
     async fn get_range(
         &self,
         key: &str,
         range: Option<&str>,
     ) -> Result<StoredObject, ObjectStoreError>;
+    /// Fetch a requested range without materializing it in the API process.
+    async fn get_range_stream(
+        &self,
+        key: &str,
+        range: Option<&str>,
+    ) -> Result<StoredObjectStream, ObjectStoreError>;
     async fn delete(&self, key: &str) -> Result<(), ObjectStoreError>;
     async fn readiness(&self) -> Result<(), ObjectStoreError>;
 }
@@ -289,6 +308,10 @@ impl ObjectStore for S3ObjectStore {
         })
     }
 
+    async fn get_stream(&self, key: &str) -> Result<StoredObjectStream, ObjectStoreError> {
+        self.get_range_stream(key, None).await
+    }
+
     async fn get_range(
         &self,
         key: &str,
@@ -318,6 +341,53 @@ impl ObjectStore for S3ObjectStore {
         record_operation(DOWNLOAD_OPERATION, "success");
         Ok(StoredObject {
             bytes,
+            content_type,
+        })
+    }
+
+    async fn get_range_stream(
+        &self,
+        key: &str,
+        range: Option<&str>,
+    ) -> Result<StoredObjectStream, ObjectStoreError> {
+        let mut request = self.client.get_object().bucket(&self.bucket).key(key);
+        if let Some(range) = range {
+            request = request.range(range);
+        }
+        let result = timeout(self.download_timeout, request.send())
+            .await
+            .map_err(|_| ObjectStoreError::TimedOut(DOWNLOAD_OPERATION))
+            .and_then(|result| result.map_err(|_| ObjectStoreError::Operation(DOWNLOAD_OPERATION)));
+        if result.is_err() {
+            record_operation(DOWNLOAD_OPERATION, "failure");
+        }
+        let result = result?;
+        let content_type = result.content_type().map(str::to_owned);
+        let download_timeout = self.download_timeout;
+        let stream = async_stream::stream! {
+            let mut body = result.body;
+            loop {
+                match timeout(download_timeout, body.try_next()).await {
+                    Ok(Ok(Some(bytes))) => yield Ok(bytes),
+                    Ok(Ok(None)) => {
+                        record_operation(DOWNLOAD_OPERATION, "success");
+                        break;
+                    }
+                    Ok(Err(_)) => {
+                        record_operation(DOWNLOAD_OPERATION, "failure");
+                        yield Err(ObjectStoreError::Operation(DOWNLOAD_OPERATION));
+                        break;
+                    }
+                    Err(_) => {
+                        record_operation(DOWNLOAD_OPERATION, "failure");
+                        yield Err(ObjectStoreError::TimedOut(DOWNLOAD_OPERATION));
+                        break;
+                    }
+                }
+            }
+        };
+        Ok(StoredObjectStream {
+            stream: Box::pin(stream),
             content_type,
         })
     }
@@ -485,6 +555,22 @@ impl ObjectStore for FakeObjectStore {
         })
     }
 
+    async fn get_stream(&self, key: &str) -> Result<StoredObjectStream, ObjectStoreError> {
+        self.get_range_stream(key, None).await
+    }
+
+    async fn get_range_stream(
+        &self,
+        key: &str,
+        range: Option<&str>,
+    ) -> Result<StoredObjectStream, ObjectStoreError> {
+        let object = self.get_range(key, range).await?;
+        Ok(StoredObjectStream {
+            stream: Box::pin(futures_util::stream::once(async move { Ok(object.bytes) })),
+            content_type: object.content_type,
+        })
+    }
+
     async fn delete(&self, key: &str) -> Result<(), ObjectStoreError> {
         if let Err(error) = self.ensure_available() {
             record_operation(DELETE_OPERATION, "failure");
@@ -504,6 +590,8 @@ impl ObjectStore for FakeObjectStore {
 
 #[cfg(test)]
 mod tests {
+    use futures_util::TryStreamExt;
+
     use super::*;
 
     fn values(name: &str) -> Option<String> {
@@ -571,6 +659,19 @@ mod tests {
         };
         store.put("opaque-key", object.clone()).await.unwrap();
         assert_eq!(store.get("opaque-key").await.unwrap(), object);
+        let streamed = store
+            .get_range_stream("opaque-key", Some("bytes=0-3"))
+            .await
+            .unwrap();
+        let bytes = streamed
+            .stream
+            .try_fold(Vec::new(), |mut collected, chunk| async move {
+                collected.extend_from_slice(&chunk);
+                Ok(collected)
+            })
+            .await
+            .unwrap();
+        assert_eq!(bytes, b"file");
         store.delete("opaque-key").await.unwrap();
         assert!(store.get("opaque-key").await.is_err());
         store.set_available(false);
