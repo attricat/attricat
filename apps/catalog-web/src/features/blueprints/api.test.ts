@@ -82,6 +82,42 @@ describe('blueprint API client', () => {
     );
   });
 
+  it('normalizes null legacy table fields in rich-column save responses', async () => {
+    const richTableResponse = {
+      blueprint: {
+        ...blueprint,
+        views: {
+          table: {
+            type: 'table',
+            fields: null,
+            columns: [{ field: 'name', label: 'Product name' }],
+          },
+        },
+      },
+      attributes: [],
+    };
+
+    respond(richTableResponse);
+    await expect(createBlueprint('format_version = 1')).resolves.toMatchObject({
+      blueprint: {
+        views: {
+          table: { fields: [], columns: [{ field: 'name' }] },
+        },
+      },
+    });
+
+    respond(richTableResponse);
+    await expect(
+      createBlueprintRevision(blueprintId, 'format_version = 1'),
+    ).resolves.toMatchObject({
+      blueprint: {
+        views: {
+          table: { fields: [], columns: [{ field: 'name' }] },
+        },
+      },
+    });
+  });
+
   it('preserves structured validation errors for editor feedback', async () => {
     fetchMock.mockResolvedValue({
       json: () =>

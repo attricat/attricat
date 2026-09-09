@@ -170,7 +170,10 @@ const viewDefinitionSchema: z.ZodType<ViewDefinition> = z.lazy(() =>
     }),
     z.object({
       type: z.literal(viewBlockTypes.table),
-      fields: z.array(z.string()).default([]),
+      fields: z
+        .array(z.string())
+        .nullish()
+        .transform((fields) => fields ?? []),
       columns: z
         .array(
           z.object({
