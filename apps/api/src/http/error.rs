@@ -256,6 +256,11 @@ impl From<RepositoryError> for ApiError {
                 code: "relationship_target_type_mismatch",
                 message: error.to_string(),
             },
+            RepositoryError::RelationshipCardinalityConflict { .. } => Self {
+                status: StatusCode::CONFLICT,
+                code: "relationship_cardinality_conflict",
+                message: error.to_string(),
+            },
             RepositoryError::InvalidPreview
             | RepositoryError::InvalidHierarchyRelationship
             | RepositoryError::InvalidAgentState(_)

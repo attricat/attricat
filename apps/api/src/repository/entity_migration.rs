@@ -88,6 +88,37 @@ impl CatalogRepository {
                 }
             }
         }
+        let mut relationship_targets: HashMap<(String, Option<Uuid>), HashSet<Uuid>> =
+            HashMap::new();
+        for value in &values {
+            if let FormAttributeValue::Relationship {
+                attribute_code,
+                context_id,
+                target_entity_id,
+            } = value
+                && target_attributes
+                    .get(attribute_code.as_str())
+                    .is_some_and(|attribute| {
+                        attribute.relationship_cardinality.as_deref() == Some("one_to_one")
+                    })
+            {
+                relationship_targets
+                    .entry((attribute_code.clone(), *context_id))
+                    .or_default()
+                    .insert(*target_entity_id);
+            }
+        }
+        for ((attribute_code, _), targets) in relationship_targets {
+            if targets.len() > 1 {
+                issues.push(MigrationIssue {
+                    attribute_code: Some(attribute_code),
+                    kind: "relationship_cardinality_conflict".to_owned(),
+                    message:
+                        "The target revision permits only one relationship target in each context"
+                            .to_owned(),
+                });
+            }
+        }
         if let Some(schema) = &target.blueprint.entity_schema {
             let mut document = Map::new();
             for value in &values {

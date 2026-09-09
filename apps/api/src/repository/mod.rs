@@ -212,6 +212,14 @@ pub enum RepositoryError {
     InvalidStoredAttributeValue,
     #[error("relationship target does not match the attribute target blueprint")]
     RelationshipTargetTypeMismatch,
+    #[error("one-to-one relationship cardinality conflict for '{attribute}'")]
+    RelationshipCardinalityConflict {
+        attribute: String,
+        context_id: Option<Uuid>,
+        source_entity_id: Uuid,
+        target_entity_id: Uuid,
+        conflicting_source_entity_id: Option<Uuid>,
+    },
     #[error("entity preview must be a JSON object organized by context")]
     InvalidPreview,
     #[error("hierarchy field must be a self-targeting relationship")]
