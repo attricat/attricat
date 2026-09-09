@@ -113,6 +113,22 @@ can create entities or serve as migration targets. See [Blueprint Publication](d
 [Relationship Tree Facets](search-facets.md) for its request and response
 contract.
 
+### Search table relationship projections
+
+For every direct `relationship.scalar_field` column in the current blueprint's
+`views.table.columns`, each returned item has `related[relationship]`. It is an
+array of direct targets with `id`, `blueprint_id`, pinned `blueprint_version`,
+`relationship_context_id`, `relationship_context_code`, `display`, and `preview`.
+`preview` is the target's cached scalar preview for every direct context; it
+never recursively expands relationships. Targets are bulk-hydrated for the
+selected page and are shared by all columns using the same relationship.
+
+Every requested relationship key is present with `[]` when a source entity's
+pinned revision lacks that relationship or its target metadata is incompatible.
+This preserves one response item per source entity across older revisions and
+relationship cardinalities. The response `blueprint` and its table column
+metadata remain the renderer contract for interpreting these projections.
+
 ## Entity system annotations
 
 Entities include `system_tags` (an array of unique, non-empty strings) and

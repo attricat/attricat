@@ -14,6 +14,7 @@ use crate::{
 };
 use axum::{Json, extract::State};
 use serde::Deserialize;
+use std::collections::HashMap;
 use uuid::Uuid;
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -295,12 +296,49 @@ pub(super) async fn search_entity_previews(
             .cloned()
             .unwrap_or_default();
     }
+    repository
+        .hydrate_related_table_previews(&mut items, &table_relationships(&current))
+        .await?;
     Ok(Json(EntitySearchResponse {
         blueprint: current,
         items,
         next_cursor,
     }))
 }
+
+/// Only relationship hops used by rich table columns need page-level hydration.
+fn table_relationships(
+    blueprint: &crate::model::BlueprintWithAttributes,
+) -> HashMap<String, String> {
+    let Some(columns) = blueprint
+        .blueprint
+        .views
+        .get("table")
+        .and_then(|table| table.get("columns"))
+        .and_then(serde_json::Value::as_array)
+    else {
+        return HashMap::new();
+    };
+    columns
+        .iter()
+        .filter_map(|column| column.get("field").and_then(serde_json::Value::as_str))
+        .filter_map(|field| field.split_once('.').map(|(relationship, _)| relationship))
+        .filter_map(|relationship| {
+            blueprint
+                .attributes
+                .iter()
+                .find(|attribute| attribute.code == relationship)
+                .filter(|attribute| attribute.value_type == "relationship")
+                .and_then(|attribute| {
+                    attribute
+                        .target_blueprint_code
+                        .as_ref()
+                        .map(|target| (relationship.to_owned(), target.clone()))
+                })
+        })
+        .collect()
+}
+
 pub(super) async fn relationship_tree_facet_children(
     State(state): State<AppState>,
     super::auth::ScopedRepository(repository): super::auth::ScopedRepository,

@@ -64,7 +64,12 @@ export type ViewDefinition =
       fields: string[];
       separator?: string;
     }
-  | { type: 'table'; fields: string[]; component?: ComponentReference | null }
+  | {
+      type: 'table';
+      fields: string[];
+      columns?: { field: string; label?: string | null; renderer?: ComponentReference | null }[];
+      component?: ComponentReference | null;
+    }
   | Exclude<
       ViewNode,
       {
@@ -161,7 +166,16 @@ const viewDefinitionSchema: z.ZodType<ViewDefinition> = z.lazy(() =>
     }),
     z.object({
       type: z.literal(viewBlockTypes.table),
-      fields: z.array(z.string()),
+      fields: z.array(z.string()).default([]),
+      columns: z
+        .array(
+          z.object({
+            field: z.string(),
+            label: z.string().nullable().optional(),
+            renderer: componentReferenceSchema.nullish(),
+          }),
+        )
+        .optional(),
       component: componentReferenceSchema.nullish(),
     }),
     z.object({
@@ -286,6 +300,22 @@ const entityItemSchema = z.object({
   schema_outdated: z.boolean(),
   display: z.record(z.string(), z.string()),
   preview: z.record(z.string(), jsonObjectSchema),
+  related: z
+    .record(
+      z.string(),
+      z.array(
+        z.object({
+          id: uuidSchema,
+          blueprint_id: uuidSchema,
+          blueprint_version: z.number().int().positive(),
+          relationship_context_id: uuidSchema,
+          relationship_context_code: z.string(),
+          display: z.record(z.string(), z.string()),
+          preview: z.record(z.string(), jsonObjectSchema),
+        }),
+      ),
+    )
+    .optional(),
   match_explanations: z
     .array(
       z.object({

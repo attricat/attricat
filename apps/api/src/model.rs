@@ -2,6 +2,7 @@ use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use sqlx::FromRow;
+use std::collections::HashMap;
 use uuid::Uuid;
 
 #[derive(Clone, Debug, Deserialize, FromRow, PartialEq, Serialize)]
@@ -221,8 +222,23 @@ pub struct EntityPreview {
     pub created_at: DateTime<Utc>,
     pub preview: Value,
     pub display: Value,
+    /// Direct relationship targets required by the current table columns, keyed by relationship
+    /// attribute code. Each target is loaded once for the page and carries scalar cache only.
+    #[serde(default)]
+    pub related: HashMap<String, Vec<RelatedEntityPreview>>,
     #[serde(default)]
     pub match_explanations: Vec<MatchExplanation>,
+}
+
+#[derive(Clone, Debug, Serialize)]
+pub struct RelatedEntityPreview {
+    pub id: Uuid,
+    pub blueprint_id: Uuid,
+    pub blueprint_version: i64,
+    pub relationship_context_id: Uuid,
+    pub relationship_context_code: String,
+    pub display: Value,
+    pub preview: Value,
 }
 
 #[derive(Clone, Debug, Serialize)]

@@ -34,6 +34,20 @@ struct RelationshipTreeChildRow {
 }
 
 #[derive(sqlx::FromRow)]
+struct RelatedTablePreviewRow {
+    source_id: Uuid,
+    attribute_code: String,
+    relationship_context_id: Uuid,
+    relationship_context_code: String,
+    id: Uuid,
+    blueprint_id: Uuid,
+    blueprint_version: i64,
+    preview: Value,
+    blueprint_views: Value,
+    blueprint_context_fallback: Value,
+}
+
+#[derive(sqlx::FromRow)]
 struct IncomingRelationshipRow {
     id: Uuid,
     blueprint_code: String,
@@ -247,6 +261,96 @@ impl CatalogRepository {
             None
         };
         Ok((items, next_cursor))
+    }
+
+    /// Adds direct relationship targets used by table columns in one query for the entire page.
+    /// The requested target code is matched against the pinned source attribute, so an older
+    /// source revision with removed or incompatible relationship metadata gets an empty cell.
+    pub async fn hydrate_related_table_previews(
+        &self,
+        items: &mut [EntityPreview],
+        relationships: &HashMap<String, String>,
+    ) -> Result<(), RepositoryError> {
+        if items.is_empty() || relationships.is_empty() {
+            return Ok(());
+        }
+        for item in items.iter_mut() {
+            item.related = relationships
+                .keys()
+                .cloned()
+                .map(|code| (code, Vec::new()))
+                .collect();
+        }
+        let requested = serde_json::to_value(
+            relationships
+                .iter()
+                .map(|(attribute_code, target_blueprint_code)| {
+                    serde_json::json!({
+                        "attribute_code": attribute_code,
+                        "target_blueprint_code": target_blueprint_code,
+                    })
+                })
+                .collect::<Vec<_>>(),
+        )
+        .map_err(|error| RepositoryError::InvalidBlueprintDefinition(error.to_string()))?;
+        let rows = sqlx::query_as::<_, RelatedTablePreviewRow>(
+            r#"SELECT source.id AS source_id, a.code AS attribute_code,
+                      context.id AS relationship_context_id,
+                      context.code AS relationship_context_code,
+                      target.id, target.blueprint_id, target.blueprint_version,
+                      target.projections -> 'preview' AS preview,
+                      target_blueprint.views AS blueprint_views,
+                      (SELECT COALESCE(jsonb_object_agg(target_attribute.code, target_attribute.context_fallback), '{}'::jsonb)
+                         FROM attributes target_attribute
+                        WHERE target_attribute.blueprint_id = target.blueprint_id
+                          AND target_attribute.blueprint_version = target.blueprint_version
+                          AND target_attribute.deleted_at IS NULL) AS blueprint_context_fallback
+                 FROM entities source
+                 JOIN attribute_values av ON av.entity_id = source.id
+                  AND av.active
+                  AND av.relationship_target_entity_id IS NOT NULL
+                 JOIN attributes a ON a.id = av.attribute_id
+                  AND a.blueprint_id = source.blueprint_id
+                  AND a.blueprint_version = source.blueprint_version
+                  AND a.deleted_at IS NULL
+                 JOIN LATERAL jsonb_to_recordset($2::jsonb)
+                    AS requested(attribute_code text, target_blueprint_code text)
+                    ON requested.attribute_code = a.code
+                   AND requested.target_blueprint_code = a.target_blueprint_code
+                 JOIN attribute_contexts context ON context.id = av.context_id
+                 JOIN entities target ON target.id = av.relationship_target_entity_id
+                  AND target.deleted_at IS NULL
+                 JOIN blueprints target_blueprint ON target_blueprint.id = target.blueprint_id
+                  AND target_blueprint.version = target.blueprint_version
+                WHERE source.id = ANY($1)
+                  AND source.deleted_at IS NULL
+                ORDER BY source.id, a.code, context.code, av.id"#,
+        )
+        .bind(items.iter().map(|item| item.id).collect::<Vec<_>>())
+        .bind(requested)
+        .fetch_all(&self.pool)
+        .await?;
+        let mut by_id: HashMap<_, _> = items.iter_mut().map(|item| (item.id, item)).collect();
+        for row in rows {
+            if let Some(item) = by_id.get_mut(&row.source_id)
+                && let Some(targets) = item.related.get_mut(&row.attribute_code)
+            {
+                targets.push(RelatedEntityPreview {
+                    id: row.id,
+                    blueprint_id: row.blueprint_id,
+                    blueprint_version: row.blueprint_version,
+                    relationship_context_id: row.relationship_context_id,
+                    relationship_context_code: row.relationship_context_code,
+                    display: super::entity_projection::display_labels(
+                        &row.preview,
+                        &row.blueprint_views,
+                        &row.blueprint_context_fallback,
+                    ),
+                    preview: row.preview,
+                });
+            }
+        }
+        Ok(())
     }
 
     // Facet traversal inputs are explicit to keep query scope auditable.
@@ -940,6 +1044,7 @@ fn entity_preview(row: EntityPreviewRow) -> EntityPreview {
             &row.blueprint_context_fallback,
         ),
         preview: row.preview,
+        related: HashMap::new(),
         match_explanations: Vec::new(),
     }
 }
