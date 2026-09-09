@@ -1,53 +1,22 @@
 import { Box } from '@mui/material';
-import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
-import { z } from 'zod';
+import {
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+  type ReactNode,
+} from 'react';
 import { ExtensionFrame } from '../extensions/ExtensionFrame';
 import type { ExtensionContribution } from '../extensions/api';
 import { recordFrameTiming } from '../inspector/timing';
 
-export const explorerTableCellContextSchema = z
-  .object({
-    context_version: z.literal(1),
-    column: z
-      .object({
-        field: z.string().min(1),
-        label: z.string().nullable(),
-        renderer: z
-          .object({
-            id: z.string().min(1),
-            version: z.number().int().positive(),
-            props: z.record(z.string(), z.unknown()),
-          })
-          .strict(),
-      })
-      .strict(),
-    primary_value: z.unknown(),
-    related_entity: z
-      .object({
-        id: z.uuid(),
-        blueprint_id: z.uuid(),
-        blueprint_version: z.number().int().positive(),
-        relationship_context_id: z.uuid(),
-        relationship_context_code: z.string(),
-      })
-      .strict()
-      .nullable(),
-    related_preview: z.record(z.string(), z.unknown()).nullable(),
-    source_row: z
-      .object({
-        entity_id: z.uuid(),
-        blueprint_version: z.number().int().positive(),
-        preview: z.record(z.string(), z.unknown()),
-      })
-      .strict(),
-  })
-  .strict();
+import type { ExplorerTableCellContext } from './schemas';
 
 const cellStartTimeout = 1_500;
 
 type Props = {
   contribution?: ExtensionContribution;
-  context: z.infer<typeof explorerTableCellContextSchema>;
+  context: ExplorerTableCellContext;
   fallback: ReactNode;
   frameAllowed: boolean;
 };
@@ -65,7 +34,12 @@ export const ExtensionTableCell = ({
 }: Props) => {
   const [ready, setReady] = useState(false);
   const [failed, setFailed] = useState(false);
-  const startedAt = useRef(performance.now());
+  const startedAt = useRef<number | null>(null);
+
+  useEffect(() => {
+    startedAt.current = performance.now();
+  }, []);
+
   useEffect(() => {
     if (!contribution || !frameAllowed || ready || failed) return;
     const timer = window.setTimeout(() => setFailed(true), cellStartTimeout);
@@ -74,15 +48,20 @@ export const ExtensionTableCell = ({
 
   const handleFailure = useCallback(() => {
     setFailed((wasFailed) => {
-      if (!wasFailed)
-        recordFrameTiming('frame-fallback', performance.now() - startedAt.current);
+      if (!wasFailed && startedAt.current !== null) {
+        recordFrameTiming(
+          'frame-fallback',
+          performance.now() - startedAt.current,
+        );
+      }
       return true;
     });
   }, []);
   const handleReady = useCallback(() => {
     setReady((wasReady) => {
-      if (!wasReady)
+      if (!wasReady && startedAt.current !== null) {
         recordFrameTiming('frame-load', performance.now() - startedAt.current);
+      }
       return true;
     });
   }, []);

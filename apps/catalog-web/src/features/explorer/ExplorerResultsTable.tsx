@@ -37,10 +37,8 @@ import { AttributeValue } from '../views/components/values/AttributeValue';
 import { ExtensionPopoverOutlet } from '../extensions/ExtensionOutlet';
 import { getExtensionRuntime } from '../extensions/api';
 import { extensionQueryKeys } from '../extensions/query-keys';
-import {
-  ExtensionTableCell,
-  explorerTableCellContextSchema,
-} from './ExtensionTableCell';
+import { ExtensionTableCell } from './ExtensionTableCell';
+import { explorerTableCellContextSchema } from './schemas';
 
 const maximumExplorerCellFrames = 32;
 

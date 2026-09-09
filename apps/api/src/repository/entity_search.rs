@@ -329,17 +329,15 @@ impl CatalogRepository {
         let comparison = if sort.descending { "<" } else { ">" };
         let direction = if sort.descending { "DESC" } else { "ASC" };
         let joins = match &sort.relationship {
-            None => format!(
-                "LEFT JOIN attributes sort_attribute ON sort_attribute.blueprint_id = e.blueprint_id
+            None => "LEFT JOIN attributes sort_attribute ON sort_attribute.blueprint_id = e.blueprint_id
                     AND sort_attribute.blueprint_version = e.blueprint_version
                     AND sort_attribute.code = $10 AND sort_attribute.value_type = $11
                  LEFT JOIN attribute_values sort_value ON sort_value.entity_id = e.id
                     AND sort_value.attribute_id = sort_attribute.id
                     AND sort_value.context_id = (SELECT id FROM attribute_contexts WHERE code = 'default')
                     AND sort_value.relationship_target_entity_id IS NULL AND sort_value.active"
-            ),
-            Some(_) => format!(
-                "LEFT JOIN attributes relationship_attribute ON relationship_attribute.blueprint_id = e.blueprint_id
+                .to_owned(),
+            Some(_) => "LEFT JOIN attributes relationship_attribute ON relationship_attribute.blueprint_id = e.blueprint_id
                     AND relationship_attribute.blueprint_version = e.blueprint_version
                     AND relationship_attribute.code = $10 AND relationship_attribute.value_type = 'relationship'
                  LEFT JOIN attribute_values edge ON edge.entity_id = e.id
@@ -353,7 +351,7 @@ impl CatalogRepository {
                     AND sort_value.attribute_id = sort_attribute.id
                     AND sort_value.context_id = (SELECT id FROM attribute_contexts WHERE code = 'default')
                     AND sort_value.relationship_target_entity_id IS NULL AND sort_value.active"
-            ),
+                .to_owned(),
         };
         let (field_bind, type_bind) = match &sort.relationship {
             Some(relationship) => (

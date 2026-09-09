@@ -313,15 +313,10 @@ describe('entity API client', () => {
       next_cursor: null,
     });
 
-    await searchEntities(
-      'product',
-      undefined,
-      '',
-      null,
-      undefined,
-      undefined,
-      { field: 'category.name', direction: 'desc' },
-    );
+    await searchEntities('product', undefined, '', null, undefined, undefined, {
+      field: 'category.name',
+      direction: 'desc',
+    });
 
     expect(fetchMock).toHaveBeenLastCalledWith('/api/v1/entities/search', {
       method: 'POST',

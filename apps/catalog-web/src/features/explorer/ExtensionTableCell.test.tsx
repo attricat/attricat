@@ -2,14 +2,18 @@
 import { fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { ExtensionContribution } from '../extensions/api';
-import {
-  ExtensionTableCell,
-  explorerTableCellContextSchema,
-} from './ExtensionTableCell';
+import { ExtensionTableCell } from './ExtensionTableCell';
+import { explorerTableCellContextSchema } from './schemas';
 import { clearTimingsForTest, recentTimings } from '../inspector/timing';
 
 vi.mock('../extensions/ExtensionFrame', () => ({
-  ExtensionFrame: ({ onFailure, onReady }: { onFailure?: () => void; onReady?: () => void }) => (
+  ExtensionFrame: ({
+    onFailure,
+    onReady,
+  }: {
+    onFailure?: () => void;
+    onReady?: () => void;
+  }) => (
     <div>
       <button onClick={onReady}>Renderer ready</button>
       <button onClick={onFailure}>Renderer failed</button>

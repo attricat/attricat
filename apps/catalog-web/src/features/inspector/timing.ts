@@ -1,5 +1,11 @@
 export type TimingPhase = {
-  name: 'candidate' | 'page' | 'related' | 'serialize' | 'frame-load' | 'frame-fallback';
+  name:
+    | 'candidate'
+    | 'page'
+    | 'related'
+    | 'serialize'
+    | 'frame-load'
+    | 'frame-fallback';
   duration: number;
 };
 

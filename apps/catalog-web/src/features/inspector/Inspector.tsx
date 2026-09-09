@@ -133,9 +133,14 @@ export const Inspector = () => {
             </Typography>
           ) : (
             timings.map((entry) => (
-              <Typography key={`${entry.recordedAt}-${entry.phases[0]?.name}`} variant="body2">
+              <Typography
+                key={`${entry.recordedAt}-${entry.phases[0]?.name}`}
+                variant="body2"
+              >
                 {entry.phases
-                  .map((phase) => `${phase.name}: ${phase.duration.toFixed(2)} ms`)
+                  .map(
+                    (phase) => `${phase.name}: ${phase.duration.toFixed(2)} ms`,
+                  )
                   .join(' · ')}
               </Typography>
             ))

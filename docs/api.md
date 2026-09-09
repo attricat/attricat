@@ -113,21 +113,41 @@ can create entities or serve as migration targets. See [Blueprint Publication](d
 [Relationship Tree Facets](search-facets.md) for its request and response
 contract.
 
+### Search table sorting
+
+A search request may include `sort` when its `field` is a scalar column
+configured in the selected blueprint's `views.table.columns` and `direction` is
+`"asc"` or `"desc"`:
+
+```json
+{
+  "blueprint": { "code": "product" },
+  "sort": { "field": "category.name", "direction": "asc" },
+  "page": { "size": 50 }
+}
+```
+
+The field may be local or a configured one-hop relationship path. Sorted
+responses use an opaque keyset `next_cursor`; return it unchanged as
+`page.cursor` with the same sort to request the following page. An invalid
+direction, unconfigured field, or non-scalar column returns `422`.
+
 ### Search table relationship projections
 
-For every direct `relationship.scalar_field` column in the current blueprint's
-`views.table.columns`, each returned item has `related[relationship]`. It is an
-array of direct targets with `id`, `blueprint_id`, pinned `blueprint_version`,
-`relationship_context_id`, `relationship_context_code`, `display`, and `preview`.
-`preview` is the target's cached scalar preview for every direct context; it
-never recursively expands relationships. Targets are bulk-hydrated for the
-selected page and are shared by all columns using the same relationship.
+For every configured `one_to_one` `relationship.scalar_field` column in the
+current blueprint's `views.table.columns`, each returned item has
+`related[relationship]`. It is an array of direct targets with `id`,
+`blueprint_id`, pinned `blueprint_version`, `relationship_context_id`,
+`relationship_context_code`, `display`, and `preview`. `preview` is the target's
+cached scalar preview for every direct context; it never recursively expands
+relationships. Targets are bulk-hydrated for the selected page and are shared
+by all columns using the same relationship.
 
 Every requested relationship key is present with `[]` when a source entity's
 pinned revision lacks that relationship or its target metadata is incompatible.
-This preserves one response item per source entity across older revisions and
-relationship cardinalities. The response `blueprint` and its table column
-metadata remain the renderer contract for interpreting these projections.
+This preserves one response item per source entity across older revisions. The
+response `blueprint` and its table column metadata remain the renderer contract
+for interpreting these projections.
 
 ## Entity system annotations
 

@@ -70,14 +70,23 @@ value_type = "string"
 default_value = "draft"
 ```
 
-A relationship may restrict its target type:
+A relationship may restrict its target type. Set `cardinality = "one_to_one"`
+to allow at most one active target for the source entity in each context and to
+prevent another source entity from claiming that target in the same context.
+Omit `cardinality` for the default many-target relationship.
 
 ```toml
 [[attributes]]
-code = "categories"
+code = "category"
 value_type = "relationship"
 target_blueprint = "category"
+cardinality = "one_to_one"
 ```
+
+A relationship write that would violate this invariant returns
+`409 relationship_cardinality_conflict`. A migration preview reports the same
+kind of issue when existing relationship values cannot fit a target revision's
+one-to-one declaration.
 
 File attributes declare their cardinality and upload policy. `many` values are
 ordered by default; set `ordered = false` when callers must not rely on their
@@ -172,8 +181,36 @@ field = "stock_on_hand"
 
 [views.table]
 type = "table"
-fields = ["title", "stock_on_hand"]
+
+[[views.table.columns]]
+field = "title"
+label = "Product"
+
+[[views.table.columns]]
+field = "category.name"
+label = "Category"
 ```
+
+`columns` is the current table syntax. Each column names either a local scalar
+field or one scalar field exactly one hop through a `one_to_one` relationship.
+Column paths must be unique; the relationship and target field must exist.
+`label` is optional. The legacy `fields = ["title", "stock_on_hand"]`
+shorthand remains supported for local scalar fields, but cannot be combined
+with `columns`.
+
+A column can use an installed extension cell renderer. The renderer ID and
+positive version must match an enabled extension declaration for the resolved
+scalar value type, and `props` must be an object:
+
+```toml
+[[views.table.columns]]
+field = "price"
+label = "Price"
+renderer = { id = "example.currency", version = 1, props = { currency = "USD" } }
+```
+
+See [Extensions](extensions.md#client-extension-runtime-v1) for the renderer
+manifest and sandbox contract.
 
 `stack`, `grid`, `section`, `tabs`, and `accordion` are recursive layout
 blocks. `heading`, `text`, and `divider` are static blocks. `field` renders a

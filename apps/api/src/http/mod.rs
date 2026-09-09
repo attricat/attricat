@@ -575,6 +575,14 @@ pub fn router(state: AppState) -> Router {
         .layer(middleware::from_fn_with_state(state, server_timing))
 }
 
+async fn metrics(State(state): State<AppState>) -> Response {
+    (
+        [("content-type", "text/plain; version=0.0.4; charset=utf-8")],
+        state.metrics.render(),
+    )
+        .into_response()
+}
+
 #[cfg(test)]
 mod timing_tests {
     use super::*;
@@ -593,12 +601,4 @@ mod timing_tests {
         assert!(!header.contains("sql"));
         assert!(!header.contains("SELECT"));
     }
-}
-
-async fn metrics(State(state): State<AppState>) -> Response {
-    (
-        [("content-type", "text/plain; version=0.0.4; charset=utf-8")],
-        state.metrics.render(),
-    )
-        .into_response()
 }
