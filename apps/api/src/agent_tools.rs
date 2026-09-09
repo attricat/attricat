@@ -14,7 +14,7 @@ use crate::{
     catalog_service::CatalogMutationService,
     constants::{DEFAULT_ENTITY_PAGE_SIZE, DEFAULT_PAGE_SIZE},
     file_access::{AllowFileAccess, FileAccessOperation, authorize_file_read},
-    repository::{CatalogRepository, RepositoryError},
+    repository::{CatalogRepository, EntitySearchSort, RepositoryError},
 };
 const BLUEPRINT_AUTHORING_GUIDE: &str = include_str!("../../../docs/blueprints.md");
 const VIEW_CONFIGURATION_GUIDE: &str = include_str!("../../../docs/views.md");
@@ -88,8 +88,8 @@ pub fn definitions() -> Vec<ToolDefinition> {
         ),
         definition(
             "search_entities",
-            "Search entities of a blueprint by scalar values reachable through active relationships and system tags. Query terms are whitespace-separated AND terms. Free text traverses incoming active relationships up to three edges. Use attribute:value for a selected-blueprint attribute, relationship:value or relationship.attribute:value for a direct relationship target, and blueprint:value or blueprint.attribute:value for the selected blueprint (code or name). A trailing * means prefix matching. Results include match_explanations with deterministic match witnesses and relationship paths. Omit blueprint.version to include every published revision; set outdated to true to return only entities that are not on the latest published revision. Results are paginated in ascending creation order.",
-            json!({"type":"object","required":["blueprint"],"properties":{"blueprint":{"type":"object","required":["code"],"properties":{"code":{"type":"string"},"version":{"type":"integer","minimum":1}},"additionalProperties":false},"query":{"type":"string"},"system_tags":{"type":"array","items":{"type":"string"}},"outdated":{"type":"boolean"},"page":{"type":"object","properties":{"size":{"type":"integer","minimum":1,"maximum":100},"cursor":{"type":"string"}},"additionalProperties":false}},"additionalProperties":false}),
+            "Search entities of a blueprint by scalar values reachable through active relationships and system tags. Query terms are whitespace-separated AND terms. Free text traverses incoming active relationships up to three edges. Use attribute:value for a selected-blueprint attribute, relationship:value or relationship.attribute:value for a direct relationship target, and blueprint:value or blueprint.attribute:value for the selected blueprint (code or name). A trailing * means prefix matching. Results include match_explanations with deterministic match witnesses and relationship paths. Omit blueprint.version to include every published revision; set outdated to true to return only entities that are not on the latest published revision. Use sort with a configured scalar table-column field and asc or desc direction; relationship table columns use relationship.field paths. Without sort, results are paginated in ascending creation order.",
+            json!({"type":"object","required":["blueprint"],"properties":{"blueprint":{"type":"object","required":["code"],"properties":{"code":{"type":"string"},"version":{"type":"integer","minimum":1}},"additionalProperties":false},"query":{"type":"string"},"system_tags":{"type":"array","items":{"type":"string"}},"outdated":{"type":"boolean"},"sort":{"type":"object","required":["field","direction"],"properties":{"field":{"type":"string"},"direction":{"type":"string","enum":["asc","desc"]}},"additionalProperties":false},"page":{"type":"object","properties":{"size":{"type":"integer","minimum":1,"maximum":100},"cursor":{"type":"string"}},"additionalProperties":false}},"additionalProperties":false}),
         ),
         definition(
             "create_blueprint",
@@ -305,6 +305,8 @@ pub async fn execute_read(
                 #[serde(default)]
                 outdated: bool,
                 #[serde(default)]
+                sort: Option<crate::model::SearchSort>,
+                #[serde(default)]
                 page: crate::model::SearchPage,
             }
 
@@ -334,11 +336,15 @@ pub async fn execute_read(
                 ),
                 None => None,
             };
-            let cursor = match input.page.cursor.as_deref() {
-                Some(cursor) => Some(super::repository::decode_search_cursor(cursor).ok_or_else(
-                    || ToolError::InvalidArguments("page.cursor is invalid".to_owned()),
-                )?),
-                None => None,
+            let sort = resolve_agent_search_sort(repository, &current, input.sort.as_ref()).await?;
+            let cursor = match (sort.is_some(), input.page.cursor.as_deref()) {
+                (true, _) => None,
+                (false, Some(cursor)) => Some(
+                    super::repository::decode_search_cursor(cursor).ok_or_else(|| {
+                        ToolError::InvalidArguments("page.cursor is invalid".to_owned())
+                    })?,
+                ),
+                (false, None) => None,
             };
             let query = input
                 .query
@@ -357,19 +363,38 @@ pub async fn execute_read(
                 .await
                 .map_err(|error| ToolError::InvalidArguments(error.to_string()))?;
             let matching: Vec<_> = resolved.ids.iter().copied().collect();
-            let (mut items, next_cursor) = repository
-                .search_entity_previews(
-                    current.blueprint.id,
-                    selected,
-                    None,
-                    limit.into(),
-                    cursor,
-                    Some(&matching),
-                    &input.system_tags,
-                    input.outdated,
-                    current.blueprint.version,
-                )
-                .await?;
+            let (mut items, next_cursor) = match sort.as_ref() {
+                Some(sort) => {
+                    repository
+                        .search_entity_previews_sorted(
+                            current.blueprint.id,
+                            selected,
+                            limit.into(),
+                            input.page.cursor.as_deref(),
+                            Some(&matching),
+                            &input.system_tags,
+                            input.outdated,
+                            current.blueprint.version,
+                            sort,
+                        )
+                        .await?
+                }
+                None => {
+                    repository
+                        .search_entity_previews(
+                            current.blueprint.id,
+                            selected,
+                            None,
+                            limit.into(),
+                            cursor,
+                            Some(&matching),
+                            &input.system_tags,
+                            input.outdated,
+                            current.blueprint.version,
+                        )
+                        .await?
+                }
+            };
             for item in &mut items {
                 item.schema_outdated = item.blueprint_version != current.blueprint.version;
                 item.match_explanations = resolved
@@ -580,6 +605,92 @@ pub async fn execute_mutation(
     bounded(result)
 }
 
+async fn resolve_agent_search_sort(
+    repository: &CatalogRepository,
+    blueprint: &crate::model::BlueprintWithAttributes,
+    sort: Option<&crate::model::SearchSort>,
+) -> Result<Option<EntitySearchSort>, ToolError> {
+    let Some(sort) = sort else { return Ok(None) };
+    let descending = match sort.direction.as_str() {
+        "asc" => false,
+        "desc" => true,
+        _ => {
+            return Err(ToolError::InvalidArguments(
+                "sort.direction must be asc or desc".to_owned(),
+            ));
+        }
+    };
+    let configured = blueprint
+        .blueprint
+        .views
+        .get("table")
+        .and_then(|table| table.get("columns"))
+        .and_then(Value::as_array)
+        .is_some_and(|columns| {
+            columns
+                .iter()
+                .any(|column| column.get("field").and_then(Value::as_str) == Some(&sort.field))
+        });
+    if !configured {
+        return Err(ToolError::InvalidArguments(
+            "sort.field must be a configured table column".to_owned(),
+        ));
+    }
+    let (relationship, attribute_code) = match sort.field.split_once('.') {
+        Some((relationship, field)) => (Some(relationship.to_owned()), field),
+        None => (None, sort.field.as_str()),
+    };
+    let value_type = match &relationship {
+        None => blueprint
+            .attributes
+            .iter()
+            .find(|attribute| attribute.code == attribute_code)
+            .map(|attribute| attribute.value_type.clone()),
+        Some(relationship) => {
+            let source = blueprint
+                .attributes
+                .iter()
+                .find(|attribute| {
+                    attribute.code == *relationship && attribute.value_type == "relationship"
+                })
+                .ok_or_else(|| {
+                    ToolError::InvalidArguments("sort.field relationship is invalid".to_owned())
+                })?;
+            let target_code = source.target_blueprint_code.as_deref().ok_or_else(|| {
+                ToolError::InvalidArguments(
+                    "sort.field relationship has no target blueprint".to_owned(),
+                )
+            })?;
+            let target = repository
+                .get_blueprint_by_code(target_code)
+                .await?
+                .ok_or(RepositoryError::NotFound("target blueprint"))?;
+            target
+                .attributes
+                .iter()
+                .find(|attribute| attribute.code == attribute_code)
+                .map(|attribute| attribute.value_type.clone())
+        }
+    }
+    .ok_or_else(|| {
+        ToolError::InvalidArguments("sort.field must resolve to a scalar table column".to_owned())
+    })?;
+    if !matches!(
+        value_type.as_str(),
+        "string" | "number" | "integer" | "boolean" | "date" | "datetime" | "time"
+    ) {
+        return Err(ToolError::InvalidArguments(
+            "sort.field must resolve to a scalar table column".to_owned(),
+        ));
+    }
+    Ok(Some(EntitySearchSort {
+        field: sort.field.clone(),
+        relationship,
+        value_type,
+        descending,
+    }))
+}
+
 async fn read_authorized(
     repository: &CatalogRepository,
     actor: Uuid,
@@ -700,7 +811,7 @@ mod tests {
             .expect("search_entities definition");
         assert_eq!(
             search.function.parameters,
-            json!({"type":"object","required":["blueprint"],"properties":{"blueprint":{"type":"object","required":["code"],"properties":{"code":{"type":"string"},"version":{"type":"integer","minimum":1}},"additionalProperties":false},"query":{"type":"string"},"system_tags":{"type":"array","items":{"type":"string"}},"outdated":{"type":"boolean"},"page":{"type":"object","properties":{"size":{"type":"integer","minimum":1,"maximum":100},"cursor":{"type":"string"}},"additionalProperties":false}},"additionalProperties":false})
+            json!({"type":"object","required":["blueprint"],"properties":{"blueprint":{"type":"object","required":["code"],"properties":{"code":{"type":"string"},"version":{"type":"integer","minimum":1}},"additionalProperties":false},"query":{"type":"string"},"system_tags":{"type":"array","items":{"type":"string"}},"outdated":{"type":"boolean"},"sort":{"type":"object","required":["field","direction"],"properties":{"field":{"type":"string"},"direction":{"type":"string","enum":["asc","desc"]}},"additionalProperties":false},"page":{"type":"object","properties":{"size":{"type":"integer","minimum":1,"maximum":100},"cursor":{"type":"string"}},"additionalProperties":false}},"additionalProperties":false})
         );
     }
 
