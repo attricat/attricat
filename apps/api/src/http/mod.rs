@@ -86,9 +86,50 @@ pub struct AppState {
     pub request_permits: Arc<Semaphore>,
     pub request_timeout: Duration,
     pub default_body_limit: usize,
+    /// Enables sanitized development-only timing phases for the Explorer.
+    pub devtools_enabled: bool,
 }
 
 pub type DataHealthCache = Arc<Mutex<HashMap<String, (Instant, Value)>>>;
+
+const TIMING_PHASES: [&str; 4] = ["candidate", "page", "related", "serialize"];
+
+/// Request-local, aggregate timings. Its API only permits a fixed set of names,
+/// so headers cannot accidentally contain SQL, identifiers, parameters, or bodies.
+#[derive(Clone)]
+pub(super) struct RequestTiming {
+    enabled: bool,
+    phases: Arc<std::sync::Mutex<Vec<(&'static str, f64)>>>,
+}
+
+impl RequestTiming {
+    fn new(enabled: bool) -> Self {
+        Self {
+            enabled,
+            phases: Arc::new(std::sync::Mutex::new(Vec::new())),
+        }
+    }
+
+    pub(super) fn record(&self, phase: &'static str, started: Instant) {
+        if !self.enabled || !TIMING_PHASES.contains(&phase) {
+            return;
+        }
+        self.phases
+            .lock()
+            .expect("timing lock is not poisoned")
+            .push((phase, started.elapsed().as_secs_f64() * 1_000.0));
+    }
+
+    fn server_timing(&self) -> String {
+        self.phases
+            .lock()
+            .expect("timing lock is not poisoned")
+            .iter()
+            .map(|(phase, duration)| format!("{phase};dur={duration:.2}"))
+            .collect::<Vec<_>>()
+            .join(", ")
+    }
+}
 
 async fn request_limits(
     State(state): State<AppState>,
@@ -104,7 +145,13 @@ async fn request_limits(
     }
 }
 
-async fn server_timing(request: axum::extract::Request, next: Next) -> Response {
+async fn server_timing(
+    State(state): State<AppState>,
+    mut request: axum::extract::Request,
+    next: Next,
+) -> Response {
+    let timing = RequestTiming::new(state.devtools_enabled);
+    request.extensions_mut().insert(timing.clone());
     let method = request.method().to_string();
     let route = request
         .extensions()
@@ -133,13 +180,16 @@ async fn server_timing(request: axum::extract::Request, next: Next) -> Response 
     }
     let duration_ms = started_at.elapsed().as_secs_f64() * 1_000.0;
     let server_timing = HeaderName::from_static("server-timing");
+    let phases = timing.server_timing();
     let value = match response
         .headers()
         .get(&server_timing)
         .and_then(|value| value.to_str().ok())
     {
-        Some(existing) => format!("{existing}, app;dur={duration_ms:.2}"),
-        None => format!("app;dur={duration_ms:.2}"),
+        Some(existing) if phases.is_empty() => format!("{existing}, app;dur={duration_ms:.2}"),
+        Some(existing) => format!("{existing}, {phases}, app;dur={duration_ms:.2}"),
+        None if phases.is_empty() => format!("app;dur={duration_ms:.2}"),
+        None => format!("{phases}, app;dur={duration_ms:.2}"),
     };
     response.headers_mut().insert(
         server_timing,
@@ -522,7 +572,27 @@ pub fn router(state: AppState) -> Router {
             state.clone(),
             request_limits,
         ))
-        .layer(middleware::from_fn(server_timing))
+        .layer(middleware::from_fn_with_state(state, server_timing))
+}
+
+#[cfg(test)]
+mod timing_tests {
+    use super::*;
+
+    #[test]
+    fn development_phases_are_gated_and_allowlisted() {
+        let disabled = RequestTiming::new(false);
+        disabled.record("candidate", Instant::now());
+        assert!(disabled.server_timing().is_empty());
+
+        let enabled = RequestTiming::new(true);
+        enabled.record("candidate", Instant::now());
+        enabled.record("sql", Instant::now());
+        let header = enabled.server_timing();
+        assert!(header.starts_with("candidate;dur="));
+        assert!(!header.contains("sql"));
+        assert!(!header.contains("SELECT"));
+    }
 }
 
 async fn metrics(State(state): State<AppState>) -> Response {

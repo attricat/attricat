@@ -7,6 +7,7 @@ export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, '../..', '');
   const apiUrl = process.env.CATALOG_API_URL ?? env.CATALOG_API_URL;
   const devtoolsEnabled =
+    mode === 'test' ||
     (process.env.CATALOG_DEVTOOLS ?? env.CATALOG_DEVTOOLS) === 'true';
 
   return {

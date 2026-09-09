@@ -1,8 +1,9 @@
 import { Box } from '@mui/material';
-import { useCallback, useEffect, useState, type ReactNode } from 'react';
+import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
 import { z } from 'zod';
 import { ExtensionFrame } from '../extensions/ExtensionFrame';
 import type { ExtensionContribution } from '../extensions/api';
+import { recordFrameTiming } from '../inspector/timing';
 
 export const explorerTableCellContextSchema = z
   .object({
@@ -64,14 +65,27 @@ export const ExtensionTableCell = ({
 }: Props) => {
   const [ready, setReady] = useState(false);
   const [failed, setFailed] = useState(false);
+  const startedAt = useRef(performance.now());
   useEffect(() => {
     if (!contribution || !frameAllowed || ready || failed) return;
     const timer = window.setTimeout(() => setFailed(true), cellStartTimeout);
     return () => window.clearTimeout(timer);
   }, [contribution, failed, frameAllowed, ready]);
 
-  const handleFailure = useCallback(() => setFailed(true), []);
-  const handleReady = useCallback(() => setReady(true), []);
+  const handleFailure = useCallback(() => {
+    setFailed((wasFailed) => {
+      if (!wasFailed)
+        recordFrameTiming('frame-fallback', performance.now() - startedAt.current);
+      return true;
+    });
+  }, []);
+  const handleReady = useCallback(() => {
+    setReady((wasReady) => {
+      if (!wasReady)
+        recordFrameTiming('frame-load', performance.now() - startedAt.current);
+      return true;
+    });
+  }, []);
   if (!contribution || !frameAllowed || failed) return <>{fallback}</>;
   return (
     <Box sx={{ minWidth: 0 }}>

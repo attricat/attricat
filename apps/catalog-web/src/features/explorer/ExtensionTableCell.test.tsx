@@ -1,14 +1,20 @@
 // @vitest-environment jsdom
-import { render, screen } from '@testing-library/react';
-import { describe, expect, it, vi } from 'vitest';
+import { fireEvent, render, screen } from '@testing-library/react';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { ExtensionContribution } from '../extensions/api';
 import {
   ExtensionTableCell,
   explorerTableCellContextSchema,
 } from './ExtensionTableCell';
+import { clearTimingsForTest, recentTimings } from '../inspector/timing';
 
 vi.mock('../extensions/ExtensionFrame', () => ({
-  ExtensionFrame: () => <div>Renderer frame</div>,
+  ExtensionFrame: ({ onFailure, onReady }: { onFailure?: () => void; onReady?: () => void }) => (
+    <div>
+      <button onClick={onReady}>Renderer ready</button>
+      <button onClick={onFailure}>Renderer failed</button>
+    </div>
+  ),
 }));
 
 const context = explorerTableCellContextSchema.parse({
@@ -45,10 +51,31 @@ const contribution: ExtensionContribution = {
 };
 
 describe('ExtensionTableCell', () => {
+  afterEach(clearTimingsForTest);
+
   it('keeps scalar rendering when no enabled compatible renderer is available', () => {
     render(<ExtensionTableCell context={context} fallback="12" frameAllowed />);
     expect(screen.getByText('12')).toBeTruthy();
     expect(screen.queryByText('Renderer frame')).toBeNull();
+  });
+
+  it('records only aggregate frame load and fallback durations', () => {
+    render(
+      <ExtensionTableCell
+        context={context}
+        contribution={contribution}
+        fallback="12"
+        frameAllowed
+      />,
+    );
+    const [readyButton] = document.querySelectorAll('button');
+    fireEvent.click(readyButton!);
+    fireEvent.click(screen.getByRole('button', { name: 'Renderer failed' }));
+    expect(recentTimings().map((entry) => entry.phases[0]?.name)).toEqual([
+      'frame-fallback',
+      'frame-load',
+    ]);
+    expect(JSON.stringify(recentTimings())).not.toContain('example.extension');
   });
 
   it('does not exceed the caller-provided virtual-cell frame budget', () => {

@@ -51,6 +51,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     let bind_addr: SocketAddr = std::env::var("BIND_ADDR")
         .unwrap_or_else(|_| "127.0.0.1:3000".to_owned())
         .parse()?;
+    let devtools_enabled = std::env::var("CATALOG_DEVTOOLS").is_ok_and(|value| value == "true");
     let max_preview_relationship_depth = std::env::var("PREVIEW_MAX_RELATIONSHIP_DEPTH")
         .unwrap_or_else(|_| DEFAULT_PREVIEW_RELATIONSHIP_DEPTH.to_string())
         .parse()?;
@@ -272,6 +273,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
                 "HTTP_DEFAULT_BODY_BYTES",
                 DEFAULT_HTTP_DEFAULT_BODY_BYTES,
             )?,
+            devtools_enabled,
         }),
     )
     .with_graceful_shutdown(async move {

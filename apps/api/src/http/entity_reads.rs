@@ -1,5 +1,5 @@
 use super::{
-    AppState,
+    AppState, RequestTiming,
     error::ApiError,
     extractors::{ApiJson, ApiPath, ApiQuery},
 };
@@ -12,9 +12,13 @@ use crate::{
     },
     repository::{EntitySearchSort, decode_search_cursor},
 };
-use axum::{Json, extract::State};
+use axum::{
+    Json,
+    extract::{Extension, State},
+    response::{IntoResponse, Response},
+};
 use serde::Deserialize;
-use std::collections::HashMap;
+use std::{collections::HashMap, time::Instant};
 use uuid::Uuid;
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -148,8 +152,9 @@ pub(super) async fn list_previews(
 pub(super) async fn search_entity_previews(
     State(state): State<AppState>,
     super::auth::ScopedRepository(repository): super::auth::ScopedRepository,
+    Extension(timing): Extension<RequestTiming>,
     ApiJson(input): ApiJson<SearchEntitiesRequest>,
-) -> Result<Json<EntitySearchResponse>, ApiError> {
+) -> Result<Response, ApiError> {
     let code = &input.blueprint.code;
     if code.is_empty() {
         return Err(ApiError::invalid_input(
@@ -203,6 +208,7 @@ pub(super) async fn search_entity_previews(
             .expect("selected version was checked above"),
         None => current.clone(),
     };
+    let candidate_started = Instant::now();
     let resolved = repository
         .resolve_search(&search_blueprint, selected, query)
         .await
@@ -277,6 +283,8 @@ pub(super) async fn search_entity_previews(
             });
         }
     }
+    timing.record("candidate", candidate_started);
+    let page_started = Instant::now();
     let (mut items, next_cursor) = match sort.as_ref() {
         Some(sort) => {
             repository
@@ -309,6 +317,7 @@ pub(super) async fn search_entity_previews(
                 .await?
         }
     };
+    timing.record("page", page_started);
     for item in &mut items {
         item.schema_outdated = item.blueprint_version != current.blueprint.version;
         item.match_explanations = resolved
@@ -317,14 +326,20 @@ pub(super) async fn search_entity_previews(
             .cloned()
             .unwrap_or_default();
     }
+    let related_started = Instant::now();
     repository
         .hydrate_related_table_previews(&mut items, &table_relationships(&current))
         .await?;
-    Ok(Json(EntitySearchResponse {
+    timing.record("related", related_started);
+    let serialization_started = Instant::now();
+    let response = Json(EntitySearchResponse {
         blueprint: current,
         items,
         next_cursor,
-    }))
+    })
+    .into_response();
+    timing.record("serialize", serialization_started);
+    Ok(response)
 }
 
 /// Only relationship hops used by rich table columns need page-level hydration.

@@ -63,6 +63,19 @@ pub async fn start_server(pool: PgPool) -> (String, JoinHandle<()>) {
     start_server_with_data_health_cache_ttl(pool, 0).await
 }
 
+pub async fn start_server_with_devtools(pool: PgPool) -> (String, JoinHandle<()>) {
+    start_server_with_auth_mode_and_store_with_devtools(
+        pool,
+        0,
+        true,
+        Arc::new(FakeObjectStore::available()),
+        Arc::new(AllowFileAccess),
+        Arc::new(TestMailDelivery::default()),
+        true,
+    )
+    .await
+}
+
 pub async fn start_server_with_test_mail(
     pool: PgPool,
     mail_delivery: Arc<TestMailDelivery>,
@@ -147,6 +160,27 @@ async fn start_server_with_auth_mode_and_store(
     file_access_policy: Arc<dyn FileAccessPolicy>,
     mail_delivery: Arc<dyn MailDelivery>,
 ) -> (String, JoinHandle<()>) {
+    start_server_with_auth_mode_and_store_with_devtools(
+        pool,
+        data_health_cache_ttl_seconds,
+        allow_trusted_headers,
+        object_store,
+        file_access_policy,
+        mail_delivery,
+        false,
+    )
+    .await
+}
+
+async fn start_server_with_auth_mode_and_store_with_devtools(
+    pool: PgPool,
+    data_health_cache_ttl_seconds: u64,
+    allow_trusted_headers: bool,
+    object_store: Arc<FakeObjectStore>,
+    file_access_policy: Arc<dyn FileAccessPolicy>,
+    mail_delivery: Arc<dyn MailDelivery>,
+    devtools_enabled: bool,
+) -> (String, JoinHandle<()>) {
     let workspace_id = BOOTSTRAP_WORKSPACE_ID.parse::<Uuid>().unwrap();
     let owner_id = BOOTSTRAP_OWNER_ID.parse::<Uuid>().unwrap();
     let membership_id = Uuid::from_u128(0x00000000000040008000000000000202);
@@ -228,6 +262,7 @@ async fn start_server_with_auth_mode_and_store(
         request_permits: Arc::new(tokio::sync::Semaphore::new(256)),
         request_timeout: std::time::Duration::from_secs(30),
         default_body_limit: 2 * 1024 * 1024,
+        devtools_enabled,
     });
     let server = tokio::spawn(async move { axum::serve(listener, router).await.unwrap() });
 

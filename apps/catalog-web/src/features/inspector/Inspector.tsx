@@ -11,12 +11,13 @@ import {
   Typography,
 } from '@mui/material';
 import { useQuery } from '@tanstack/react-query';
-import { useState, type ReactNode } from 'react';
+import { useEffect, useState, type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
 import { currentSession } from '../auth/api';
 import { authQueryKeys } from '../auth/query-keys';
 import { getApiHealth } from './api';
 import { inspectorQueryKeys } from './query-keys';
+import { recentTimings, subscribeTimings, type TimingEntry } from './timing';
 
 type InspectorPane = {
   id: string;
@@ -62,7 +63,9 @@ const readInspectorState = (): InspectorState => {
 export const Inspector = () => {
   const { t } = useTranslation();
   const [inspectorState, setInspectorState] = useState(readInspectorState);
+  const [timings, setTimings] = useState<TimingEntry[]>(recentTimings);
   const { activePane, expanded } = inspectorState;
+  useEffect(() => subscribeTimings(() => setTimings(recentTimings())), []);
   const updateInspectorState = (updates: Partial<InspectorState>) => {
     const nextState = { ...inspectorState, ...updates };
     setInspectorState(nextState);
@@ -115,6 +118,30 @@ export const Inspector = () => {
             {apiRestarting
               ? t('inspector.waitingForHealthCheck')
               : t('inspector.healthCheckInterval')}
+          </Typography>
+        </Box>
+      ),
+    },
+    {
+      id: 'performance',
+      label: t('inspector.performance'),
+      content: (
+        <Box sx={{ display: 'grid', gap: 0.5 }}>
+          {timings.length === 0 ? (
+            <Typography color="text.secondary" variant="body2">
+              {t('inspector.noTimings')}
+            </Typography>
+          ) : (
+            timings.map((entry) => (
+              <Typography key={`${entry.recordedAt}-${entry.phases[0]?.name}`} variant="body2">
+                {entry.phases
+                  .map((phase) => `${phase.name}: ${phase.duration.toFixed(2)} ms`)
+                  .join(' · ')}
+              </Typography>
+            ))
+          )}
+          <Typography color="text.secondary" variant="caption">
+            {t('inspector.timingPrivacy')}
           </Typography>
         </Box>
       ),
