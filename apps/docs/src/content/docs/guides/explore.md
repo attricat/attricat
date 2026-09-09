@@ -7,7 +7,7 @@ Open **Entity explorer** to browse the entities available in your workspace.
 
 ## Find records
 
-Choose a blueprint to start exploring its entities. Use the search field to match display values and attributes. Queries can target a field, for example `sku:123*`, or a nested field, for example `color.name:red`.
+Choose a blueprint to start exploring its entities. A bare search term matches scalar values on that blueprint only. Use `*:red` to explicitly search connected records through up to three relationship edges. Queries can target a field, for example `sku:123*`, or explicitly search a related entity through one relationship, for example `color.name:red`.
 
 Use the context selector to see values as they resolve in a particular context. A value can come directly from that context or be inherited from its default value.
 

@@ -7,7 +7,7 @@ Otwórz **Eksplorator encji**, aby przeglądać encje dostępne w przestrzeni ro
 
 ## Wyszukiwanie rekordów
 
-Wybierz blueprint, aby rozpocząć przeglądanie jego encji. Pole wyszukiwania dopasowuje wartości wyświetlane i atrybuty. Zapytanie może wskazać pole, na przykład `sku:123*`, lub pole zagnieżdżone, na przykład `color.name:red`.
+Wybierz blueprint, aby rozpocząć przeglądanie jego encji. Zwykły termin wyszukuje wartości skalarne tylko w tym schemacie. Użyj `*:red`, aby jawnie przeszukać powiązane rekordy przez maksymalnie trzy krawędzie relacji. Zapytanie może wskazać pole, na przykład `sku:123*`, albo jawnie przeszukać powiązaną encję przez jedną relację, na przykład `color.name:red`.
 
 Użyj wyboru kontekstu, aby zobaczyć wartości rozwiązywane dla określonego kontekstu. Wartość może być zdefiniowana bezpośrednio w kontekście albo odziedziczona z wartości domyślnej.
 

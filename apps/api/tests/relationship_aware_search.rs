@@ -18,9 +18,7 @@ async fn set_values(client: &reqwest::Client, base_url: &str, entity: &Value, va
 }
 
 #[sqlx::test]
-async fn relationship_aware_search_supports_traversal_selectors_wildcards_and_witnesses(
-    pool: sqlx::PgPool,
-) {
+async fn search_requires_an_explicit_relationship_selector_for_traversal(pool: sqlx::PgPool) {
     let (base_url, server) = start_server(pool).await;
     let client = authenticated_client();
     let color = create_blueprint(
@@ -81,7 +79,20 @@ target_blueprint = "search_color"
         .json(&json!({ "relationships": [{ "attribute_code": "color", "target_entity_ids": [red["id"]] }] }))
         .send().await.unwrap().error_for_status().unwrap();
 
-    for query in ["Crimson", "color.name:Crimson", "sku:ABC*"] {
+    let bare_response: Value = client
+        .post(format!("{base_url}/v1/entities/search"))
+        .json(&json!({ "blueprint": { "code": "search_product" }, "query": "Crimson", "page": { "size": 25 } }))
+        .send()
+        .await
+        .unwrap()
+        .error_for_status()
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    assert!(bare_response["items"].as_array().unwrap().is_empty());
+
+    for query in ["ABC", "*:Crimson", "color.name:Crimson", "sku:ABC*"] {
         let response: Value = client.post(format!("{base_url}/v1/entities/search"))
             .json(&json!({ "blueprint": { "code": "search_product" }, "query": query, "page": { "size": 25 } }))
             .send().await.unwrap().error_for_status().unwrap().json().await.unwrap();
@@ -92,6 +103,10 @@ target_blueprint = "search_color"
             assert_eq!(witness["matching_entity_id"], red["id"]);
             assert_eq!(witness["traversal_depth"], 1);
             assert_eq!(witness["relationship_path"][0]["attribute_code"], "color");
+        } else {
+            assert_eq!(witness["matching_entity_id"], item["id"]);
+            assert_eq!(witness["traversal_depth"], 0);
+            assert!(witness["relationship_path"].as_array().unwrap().is_empty());
         }
     }
     let invalid = client.post(format!("{base_url}/v1/entities/search"))

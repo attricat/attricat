@@ -873,6 +873,9 @@ impl CatalogRepository {
         let Some(selector) = &term.selector else {
             return Ok(TermPlan::Any);
         };
+        if selector == "*" {
+            return Ok(TermPlan::Reachable);
+        }
         let parts: Vec<_> = selector.split('.').collect();
         if parts.len() > 2 || parts.iter().any(|part| part.is_empty()) {
             return Err(RepositoryError::InvalidBlueprintDefinition(
@@ -996,7 +999,10 @@ impl CatalogRepository {
         plan: TermPlan,
     ) -> Result<HashMap<Uuid, MatchExplanation>, RepositoryError> {
         let (match_blueprint, attribute, direct_field) = match &plan {
-            TermPlan::Any => (None, None, None),
+            // Bare terms only search scalar values on the selected blueprint.
+            TermPlan::Any => (Some(selected.blueprint.id), None, None),
+            // `*:` explicitly opts into global relationship-aware discovery.
+            TermPlan::Reachable => (None, None, None),
             TermPlan::SelectedAttribute(attribute) => (
                 Some(selected.blueprint.id),
                 attribute.clone(),
@@ -1043,8 +1049,8 @@ impl CatalogRepository {
         let mut visited: HashSet<_> = witnesses.keys().copied().collect();
         let max_depth = match &plan {
             TermPlan::Relationship { .. } => 1,
-            TermPlan::SelectedAttribute(_) => 0,
-            TermPlan::Any => 3,
+            TermPlan::SelectedAttribute(_) | TermPlan::Any => 0,
+            TermPlan::Reachable => 3,
         };
         let restrict_source = matches!(&plan, TermPlan::Relationship { .. });
         for depth in 1..=max_depth {
@@ -1124,6 +1130,7 @@ struct SearchTerm {
 }
 enum TermPlan {
     Any,
+    Reachable,
     SelectedAttribute(Option<String>),
     Relationship {
         field: String,

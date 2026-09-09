@@ -19,19 +19,21 @@ query behavior is introduced.
 Search produces candidate IDs for the selected blueprint, then applies the
 existing version, system-tag, outdated, facet, ordering, and cursor filters.
 
-For a free-text term, the server:
+For a bare free-text term, the server searches only non-relationship scalar
+values on entities of the selected blueprint (depth 0). It does not traverse
+relationships.
 
-1. Finds non-relationship scalar values that match the term.
-2. Includes matching entities of the selected blueprint (depth 0).
-3. Traverses **incoming active relationship edges** in breadth-first batches:
-   an edge from Product to Color allows a matching Color value to select that
-   Product.
-4. Stops after three edges, de-duplicates every frontier, and never revisits an
-   entity. Deleted entities and inactive edges are excluded at every step.
+A relationship-qualified term, such as `color:red` or `color.name:red`, first
+finds matching scalar values on that relationship's target blueprint, then
+traverses the named **incoming active relationship edge** in one batched step:
+an edge from Product to Color allows a matching Color value to select that
+Product. Deleted entities and inactive edges are excluded.
 
-The depth limit is server controlled, defaults to three, and has a hard
-configuration cap. Intermediate ID sets may be large; traversal deliberately
-uses set queries per breadth-first level rather than N+1 queries.
+The `*:` selector explicitly opts into global relationship-aware discovery. It
+first finds matching scalar values across blueprints, then traverses incoming
+active relationship edges in breadth-first batches for up to three edges before
+returning selected-blueprint entities. Intermediate ID sets use batched set
+reads rather than N+1 queries.
 
 Every query term independently produces a candidate set. Multiple whitespace-
 separated terms are intersected (implicit `AND`). Relationship-tree facet
@@ -50,7 +52,8 @@ without rerunning the search; it is explanatory metadata, not ranking input.
 
 | Form | Meaning |
 | --- | --- |
-| `red` | Free text across the reachable entity graph. |
+| `red` | Free text across scalar values on the selected blueprint only. |
+| `*:red` | Explicit global relationship-aware search through up to three incoming edges. |
 | `color:red` | Match values on entities reached through selected-blueprint relationship `color`. |
 | `color.name:red` | As above, restricted to related attribute `name`. |
 | `Produkt:czerwony` | Free text limited to the selected blueprint, identified by its user-specified name (its code, `product:czerwony`, also works). |
@@ -79,8 +82,9 @@ Unknown, ambiguous, or incompatible names and malformed terms return a clear
 and means prefix matching. Values are always passed to SQL as parameters;
 query wildcards are never interpolated into SQL.
 
-Explicit multi-hop selectors (such as `category.parent.name:summer`), boolean
-operators other than implicit `AND`, and ranking are out of scope.
+Implicit relationship traversal, explicit multi-hop selectors (such as
+`category.parent.name:summer`), boolean operators other than implicit `AND`,
+and ranking are out of scope. `*:` is the only global multi-hop mode.
 
 ## API and UI Contract
 
@@ -109,11 +113,12 @@ representative catalogue data is available.
 
 ## Acceptance Coverage
 
-Integration tests must cover direct and multi-hop matches, depth bounds, cycles,
+Integration tests must cover direct matches, the fact that bare terms do not
+traverse relationships, `*:` global traversal, explicit relationship matches,
 deleted entities, inactive relationships, structured selectors (including
 selected-blueprint code and user-specified-name aliases in both `blueprint:term`
 and `blueprint.attribute:term` forms), wildcard matching, invalid or ambiguous
-syntax/selectors, AND intersections, pagination, facet
-counts/filtering, and deterministic per-term match explanations. Frontend tests
-must cover URL parsing/submission and request forwarding for structured query
-text, plus rendering or otherwise exposing the returned match rationale.
+syntax/selectors, AND intersections, pagination, facet counts/filtering, and
+deterministic per-term match explanations. Frontend tests must cover URL
+parsing/submission and request forwarding for structured query text, plus
+rendering or otherwise exposing the returned match rationale.
