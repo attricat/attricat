@@ -34,6 +34,7 @@ const tokenPermissionPresets = [
       'blueprints.publish',
       'contexts.read',
       'contexts.write',
+      'entities.read',
       'entities.write',
     ],
   },

@@ -8,6 +8,8 @@ import '../i18n';
 import { AppLayout, SessionErrorState } from './AppLayout';
 import { authQueryKeys } from '../features/auth/query-keys';
 
+let pathname = '/catalog';
+
 const { currentSessionMock, logoutMock, navigateMock } = vi.hoisted(() => ({
   currentSessionMock: vi.fn(),
   logoutMock: vi.fn(),
@@ -15,11 +17,13 @@ const { currentSessionMock, logoutMock, navigateMock } = vi.hoisted(() => ({
 }));
 
 vi.mock('@tanstack/react-router', () => ({
-  Navigate: () => null,
+  Navigate: ({ to }: { to: string }) => (
+    <div data-testid="navigate" data-to={to} />
+  ),
   Outlet: () => null,
   useNavigate: () => navigateMock,
   useRouterState: ({ select }: { select: (state: unknown) => unknown }) =>
-    select({ location: { pathname: '/catalog' } }),
+    select({ location: { pathname } }),
 }));
 
 vi.mock('@mui/material', async (importOriginal) => ({
@@ -63,17 +67,40 @@ const renderAppLayout = () => {
 describe('SessionErrorState', () => {
   it('renders an accessible session error with a retry control', () => {
     const markup = renderToStaticMarkup(
-      <SessionErrorState onRetry={vi.fn()} />,
+      <SessionErrorState onRetry={vi.fn()} onSignOut={vi.fn()} />,
     );
 
     expect(markup).toContain('role="alert"');
     expect(markup).toContain('We couldn&#x27;t restore your session');
     expect(markup).toContain('Retry');
     expect(markup).toMatch(/<button[^>]*>Retry<\/button>/);
+    expect(markup).toMatch(/<button[^>]*>Sign out<\/button>/);
   });
 });
 
 describe('AppLayout sign out', () => {
+  it('redirects signed-in users away from login', async () => {
+    pathname = '/login';
+    currentSessionMock.mockResolvedValue(session);
+    renderAppLayout();
+
+    expect((await screen.findByTestId('navigate')).dataset.to).toBe('/');
+    pathname = '/catalog';
+  });
+
+  it('redirects to login from a session error even when sign out fails', async () => {
+    currentSessionMock.mockRejectedValueOnce(new Error('Service unavailable'));
+    logoutMock.mockRejectedValueOnce(new Error('Service unavailable'));
+    renderAppLayout();
+    const user = userEvent.setup();
+
+    await user.click(await screen.findByRole('button', { name: 'Sign out' }));
+
+    await waitFor(() =>
+      expect(navigateMock).toHaveBeenCalledWith({ to: '/login' }),
+    );
+  });
+
   it('keeps the session and provides a retry when sign out fails, then clears it after a successful retry', async () => {
     currentSessionMock.mockResolvedValue(session);
     logoutMock.mockRejectedValueOnce(new Error('Service unavailable'));

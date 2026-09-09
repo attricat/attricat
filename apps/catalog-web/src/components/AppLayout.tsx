@@ -25,7 +25,13 @@ import { currentSession, logout } from '../features/auth/api';
 import { authQueryKeys } from '../features/auth/query-keys';
 import { drawerWidth, SideNavigation } from './SideNavigation';
 
-export const SessionErrorState = ({ onRetry }: { onRetry: () => void }) => {
+export const SessionErrorState = ({
+  onRetry,
+  onSignOut,
+}: {
+  onRetry: () => void;
+  onSignOut: () => void;
+}) => {
   const { t } = useTranslation();
 
   return (
@@ -40,9 +46,14 @@ export const SessionErrorState = ({ onRetry }: { onRetry: () => void }) => {
     >
       <Alert
         action={
-          <Button color="inherit" onClick={onRetry} size="small">
-            {t('auth.retrySession')}
-          </Button>
+          <Box sx={{ display: 'flex', gap: 1 }}>
+            <Button color="inherit" onClick={onRetry} size="small">
+              {t('auth.retrySession')}
+            </Button>
+            <Button color="inherit" onClick={onSignOut} size="small">
+              {t('navigation.signOut')}
+            </Button>
+          </Box>
         }
         role="alert"
         severity="error"
@@ -88,6 +99,11 @@ export const AppLayout = () => {
   const [mobileOpen, setMobileOpen] = useState(false);
   const [signOutError, setSignOutError] = useState(false);
   const closeMobileNavigation = () => setMobileOpen(false);
+  const completeSignOut = async () => {
+    queryClient.clear();
+    queryClient.setQueryData(authQueryKeys.session(), null);
+    await navigate({ to: '/login' });
+  };
   const signOut = async () => {
     try {
       await logout();
@@ -95,13 +111,18 @@ export const AppLayout = () => {
       setSignOutError(true);
       return;
     }
-    queryClient.clear();
-    queryClient.setQueryData(authQueryKeys.session(), null);
-    await navigate({ to: '/login' });
+    await completeSignOut();
   };
+  const signOutAfterSessionFailure = async () => {
+    try {
+      await logout();
+    } catch {
+      // The login route remains available even if the invalid session cannot be cleared.
+    }
+    await completeSignOut();
+  };
+  const isLoginRoute = pathname === '/login' || pathname.startsWith('/login/');
   if (
-    pathname === '/login' ||
-    pathname.startsWith('/login/') ||
     pathname === '/password-reset' ||
     pathname.startsWith('/password-reset/') ||
     pathname === '/onboarding'
@@ -121,8 +142,14 @@ export const AppLayout = () => {
         <CircularProgress />
       </Box>
     );
+  if (isLoginRoute) return session.data ? <Navigate to="/" /> : <Outlet />;
   if (session.isError)
-    return <SessionErrorState onRetry={() => void session.refetch()} />;
+    return (
+      <SessionErrorState
+        onRetry={() => void session.refetch()}
+        onSignOut={() => void signOutAfterSessionFailure()}
+      />
+    );
   if (!session.data) {
     sessionStorage.setItem(
       'catalog.return-to',

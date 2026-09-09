@@ -1,5 +1,6 @@
 import { useQuery } from '@tanstack/react-query';
-import { Alert, Box, Paper, Stack, Typography } from '@mui/material';
+import { Alert, Box, Button, Paper, Stack, Typography } from '@mui/material';
+import { Link } from '@tanstack/react-router';
 import { useTranslation } from 'react-i18next';
 import { currentSession } from '../auth/api';
 import { authQueryKeys } from '../auth/query-keys';
@@ -43,9 +44,25 @@ export const ProfilePage = () => {
           </Typography>
         </Paper>
         <Box id="personal-api-tokens">
-          <Typography gutterBottom variant="h5">
-            {t('profile.tokenList')}
-          </Typography>
+          <Stack
+            direction="row"
+            sx={{
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              mb: 1,
+            }}
+          >
+            <Typography variant="h5">{t('profile.tokenList')}</Typography>
+            {account?.capabilities?.tokens_manage === true && (
+              <Button
+                component={Link}
+                to="/profile/personal-access-tokens"
+                variant="contained"
+              >
+                {t('profile.createToken')}
+              </Button>
+            )}
+          </Stack>
           <PersonalTokens
             canManage={account?.capabilities?.tokens_manage === true}
           />

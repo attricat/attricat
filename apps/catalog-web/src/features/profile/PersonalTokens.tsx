@@ -7,7 +7,6 @@ import {
   ListItemText,
   Paper,
 } from '@mui/material';
-import { Link } from '@tanstack/react-router';
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import i18n from '../../i18n';
@@ -84,13 +83,6 @@ export const PersonalTokens = ({ canManage }: { canManage: boolean }) => {
           )}
         </List>
       </Paper>
-      <Button
-        component={Link}
-        to="/profile/personal-access-tokens"
-        variant="contained"
-      >
-        {t('profile.createToken')}
-      </Button>
     </>
   );
 };
