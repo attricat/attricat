@@ -35,6 +35,7 @@ import {
 import { BlueprintViewsPreview } from './BlueprintViewsPreview';
 import { formatBlueprintDateTime } from './date-time';
 import { blueprintQueryKeys } from './query-keys';
+import { JsonMetadata } from './BlueprintMetadata';
 import { RevisionHistory } from './RevisionHistory';
 import { ExtensionOutlet } from '../extensions/ExtensionOutlet';
 
@@ -42,26 +43,6 @@ const TomlDiffEditor = lazy(() =>
   import('./TomlDiffEditor').then(({ TomlDiffEditor }) => ({
     default: TomlDiffEditor,
   })),
-);
-
-const JsonMetadata = ({ label, value }: { label: string; value: unknown }) => (
-  <Box>
-    <Typography color="text.secondary" variant="caption">
-      {label}
-    </Typography>
-    <Typography
-      component="pre"
-      sx={{
-        fontFamily: 'monospace',
-        fontSize: '0.75rem',
-        m: 0,
-        overflowX: 'auto',
-        whiteSpace: 'pre-wrap',
-      }}
-    >
-      {JSON.stringify(value, null, 2)}
-    </Typography>
-  </Box>
 );
 
 export const BlueprintDetailPage = ({

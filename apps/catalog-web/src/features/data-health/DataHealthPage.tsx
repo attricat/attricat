@@ -6,7 +6,6 @@ import {
   Accordion,
   AccordionDetails,
   AccordionSummary,
-  Alert,
   Box,
   Chip,
   Paper,
@@ -34,27 +33,11 @@ import {
 import { dataHealthQueryKeys } from './query-keys';
 import { DataHealthControls } from './DataHealthControls';
 import { DataHealthSummaryCards } from './DataHealthSummaryCards';
-import {
-  byteDisplayPrecision,
-  bytesPerKilobyte,
-  dataHealthStaleTime,
-  defaultStaleAfterDays,
-} from './constants';
+import { dataHealthStaleTime, defaultStaleAfterDays } from './constants';
 import type { DataHealthSearch } from './schemas';
 import { formatDataHealthDate } from './date-format';
-
-const formatBytes = (bytes: number) => {
-  if (bytes < bytesPerKilobyte) return `${bytes} B`;
-  const units = ['KB', 'MB', 'GB', 'TB'];
-  const unit = Math.min(
-    Math.floor(Math.log(bytes) / Math.log(bytesPerKilobyte)),
-    units.length,
-  );
-  return `${(bytes / bytesPerKilobyte ** unit).toFixed(byteDisplayPrecision)} ${units[unit - 1]}`;
-};
-
-const SectionError = ({ error }: { error: Error | null }) =>
-  error ? <Alert severity="error">{error.message}</Alert> : null;
+import { SectionError } from './data-health-display';
+import { formatBytes } from './data-health-format';
 
 export const DataHealthPage = ({ search }: { search: DataHealthSearch }) => {
   const { i18n, t } = useTranslation();
