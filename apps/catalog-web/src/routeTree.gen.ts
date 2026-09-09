@@ -26,6 +26,8 @@ import { Route as ManageAuditLogRouteImport } from './routes/manage/audit-log'
 import { Route as ManageDataHealthRouteImport } from './routes/manage/data-health'
 import { Route as PasswordResetIndexRouteImport } from './routes/password-reset/index'
 import { Route as PasswordResetConfirmRouteImport } from './routes/password-reset/confirm'
+import { Route as ProfileIndexRouteImport } from './routes/profile/index'
+import { Route as ProfilePersonalAccessTokensRouteImport } from './routes/profile/personal-access-tokens'
 import { Route as EntitiesEntityIdIndexRouteImport } from './routes/entities/$entityId/index'
 import { Route as EntitiesEntityIdChangesRouteImport } from './routes/entities/$entityId/changes'
 import { Route as EntitiesEntityIdEditRouteImport } from './routes/entities/$entityId/edit'
@@ -133,6 +135,17 @@ const PasswordResetConfirmRoute = PasswordResetConfirmRouteImport.update({
   path: '/password-reset/confirm',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ProfileIndexRoute = ProfileIndexRouteImport.update({
+  id: '/',
+  path: '/',
+  getParentRoute: () => ProfileRoute,
+} as any)
+const ProfilePersonalAccessTokensRoute =
+  ProfilePersonalAccessTokensRouteImport.update({
+    id: '/personal-access-tokens',
+    path: '/personal-access-tokens',
+    getParentRoute: () => ProfileRoute,
+  } as any)
 const EntitiesEntityIdIndexRoute = EntitiesEntityIdIndexRouteImport.update({
   id: '/',
   path: '/',
@@ -252,7 +265,7 @@ export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/login': typeof LoginRouteWithChildren
   '/onboarding': typeof OnboardingRoute
-  '/profile': typeof ProfileRoute
+  '/profile': typeof ProfileRouteWithChildren
   '/agents/$conversationId': typeof AgentsConversationIdRoute
   '/agents/new': typeof AgentsNewRoute
   '/agents/schedules': typeof AgentsSchedulesRoute
@@ -263,9 +276,11 @@ export interface FileRoutesByFullPath {
   '/manage/audit-log': typeof ManageAuditLogRoute
   '/manage/data-health': typeof ManageDataHealthRoute
   '/password-reset/confirm': typeof PasswordResetConfirmRoute
+  '/profile/personal-access-tokens': typeof ProfilePersonalAccessTokensRoute
   '/agents/': typeof AgentsIndexRoute
   '/login/': typeof LoginIndexRoute
   '/password-reset/': typeof PasswordResetIndexRoute
+  '/profile/': typeof ProfileIndexRoute
   '/entities/$entityId/changes': typeof EntitiesEntityIdChangesRoute
   '/entities/$entityId/edit': typeof EntitiesEntityIdEditRoute
   '/entities/$entityId/migrate': typeof EntitiesEntityIdMigrateRoute
@@ -291,7 +306,6 @@ export interface FileRoutesByFullPath {
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/onboarding': typeof OnboardingRoute
-  '/profile': typeof ProfileRoute
   '/agents/$conversationId': typeof AgentsConversationIdRoute
   '/agents/new': typeof AgentsNewRoute
   '/agents/schedules': typeof AgentsSchedulesRoute
@@ -301,9 +315,11 @@ export interface FileRoutesByTo {
   '/manage/audit-log': typeof ManageAuditLogRoute
   '/manage/data-health': typeof ManageDataHealthRoute
   '/password-reset/confirm': typeof PasswordResetConfirmRoute
+  '/profile/personal-access-tokens': typeof ProfilePersonalAccessTokensRoute
   '/agents': typeof AgentsIndexRoute
   '/login': typeof LoginIndexRoute
   '/password-reset': typeof PasswordResetIndexRoute
+  '/profile': typeof ProfileIndexRoute
   '/entities/$entityId/changes': typeof EntitiesEntityIdChangesRoute
   '/entities/$entityId/edit': typeof EntitiesEntityIdEditRoute
   '/entities/$entityId/migrate': typeof EntitiesEntityIdMigrateRoute
@@ -330,7 +346,7 @@ export interface FileRoutesById {
   '/': typeof IndexRoute
   '/login': typeof LoginRouteWithChildren
   '/onboarding': typeof OnboardingRoute
-  '/profile': typeof ProfileRoute
+  '/profile': typeof ProfileRouteWithChildren
   '/agents/$conversationId': typeof AgentsConversationIdRoute
   '/agents/new': typeof AgentsNewRoute
   '/agents/schedules': typeof AgentsSchedulesRoute
@@ -341,9 +357,11 @@ export interface FileRoutesById {
   '/manage/audit-log': typeof ManageAuditLogRoute
   '/manage/data-health': typeof ManageDataHealthRoute
   '/password-reset/confirm': typeof PasswordResetConfirmRoute
+  '/profile/personal-access-tokens': typeof ProfilePersonalAccessTokensRoute
   '/agents/': typeof AgentsIndexRoute
   '/login/': typeof LoginIndexRoute
   '/password-reset/': typeof PasswordResetIndexRoute
+  '/profile/': typeof ProfileIndexRoute
   '/entities/$entityId/changes': typeof EntitiesEntityIdChangesRoute
   '/entities/$entityId/edit': typeof EntitiesEntityIdEditRoute
   '/entities/$entityId/migrate': typeof EntitiesEntityIdMigrateRoute
@@ -383,9 +401,11 @@ export interface FileRouteTypes {
     | '/manage/audit-log'
     | '/manage/data-health'
     | '/password-reset/confirm'
+    | '/profile/personal-access-tokens'
     | '/agents/'
     | '/login/'
     | '/password-reset/'
+    | '/profile/'
     | '/entities/$entityId/changes'
     | '/entities/$entityId/edit'
     | '/entities/$entityId/migrate'
@@ -411,7 +431,6 @@ export interface FileRouteTypes {
   to:
     | '/'
     | '/onboarding'
-    | '/profile'
     | '/agents/$conversationId'
     | '/agents/new'
     | '/agents/schedules'
@@ -421,9 +440,11 @@ export interface FileRouteTypes {
     | '/manage/audit-log'
     | '/manage/data-health'
     | '/password-reset/confirm'
+    | '/profile/personal-access-tokens'
     | '/agents'
     | '/login'
     | '/password-reset'
+    | '/profile'
     | '/entities/$entityId/changes'
     | '/entities/$entityId/edit'
     | '/entities/$entityId/migrate'
@@ -460,9 +481,11 @@ export interface FileRouteTypes {
     | '/manage/audit-log'
     | '/manage/data-health'
     | '/password-reset/confirm'
+    | '/profile/personal-access-tokens'
     | '/agents/'
     | '/login/'
     | '/password-reset/'
+    | '/profile/'
     | '/entities/$entityId/changes'
     | '/entities/$entityId/edit'
     | '/entities/$entityId/migrate'
@@ -490,7 +513,7 @@ export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   LoginRoute: typeof LoginRouteWithChildren
   OnboardingRoute: typeof OnboardingRoute
-  ProfileRoute: typeof ProfileRoute
+  ProfileRoute: typeof ProfileRouteWithChildren
   AgentsConversationIdRoute: typeof AgentsConversationIdRoute
   AgentsNewRoute: typeof AgentsNewRoute
   AgentsSchedulesRoute: typeof AgentsSchedulesRoute
@@ -639,6 +662,20 @@ declare module '@tanstack/react-router' {
       fullPath: '/password-reset/confirm'
       preLoaderRoute: typeof PasswordResetConfirmRouteImport
       parentRoute: typeof rootRouteImport
+    }
+    '/profile/': {
+      id: '/profile/'
+      path: '/'
+      fullPath: '/profile/'
+      preLoaderRoute: typeof ProfileIndexRouteImport
+      parentRoute: typeof ProfileRoute
+    }
+    '/profile/personal-access-tokens': {
+      id: '/profile/personal-access-tokens'
+      path: '/personal-access-tokens'
+      fullPath: '/profile/personal-access-tokens'
+      preLoaderRoute: typeof ProfilePersonalAccessTokensRouteImport
+      parentRoute: typeof ProfileRoute
     }
     '/entities/$entityId/': {
       id: '/entities/$entityId/'
@@ -802,6 +839,19 @@ const LoginRouteChildren: LoginRouteChildren = {
 
 const LoginRouteWithChildren = LoginRoute._addFileChildren(LoginRouteChildren)
 
+interface ProfileRouteChildren {
+  ProfilePersonalAccessTokensRoute: typeof ProfilePersonalAccessTokensRoute
+  ProfileIndexRoute: typeof ProfileIndexRoute
+}
+
+const ProfileRouteChildren: ProfileRouteChildren = {
+  ProfilePersonalAccessTokensRoute: ProfilePersonalAccessTokensRoute,
+  ProfileIndexRoute: ProfileIndexRoute,
+}
+
+const ProfileRouteWithChildren =
+  ProfileRoute._addFileChildren(ProfileRouteChildren)
+
 interface EntitiesEntityIdRouteChildren {
   EntitiesEntityIdChangesRoute: typeof EntitiesEntityIdChangesRoute
   EntitiesEntityIdEditRoute: typeof EntitiesEntityIdEditRoute
@@ -841,7 +891,7 @@ const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   LoginRoute: LoginRouteWithChildren,
   OnboardingRoute: OnboardingRoute,
-  ProfileRoute: ProfileRoute,
+  ProfileRoute: ProfileRouteWithChildren,
   AgentsConversationIdRoute: AgentsConversationIdRoute,
   AgentsNewRoute: AgentsNewRoute,
   AgentsSchedulesRoute: AgentsSchedulesRoute,
