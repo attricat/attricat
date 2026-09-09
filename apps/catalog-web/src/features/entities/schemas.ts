@@ -67,7 +67,11 @@ export type ViewDefinition =
   | {
       type: 'table';
       fields: string[];
-      columns?: { field: string; label?: string | null; renderer?: ComponentReference | null }[];
+      columns?: {
+        field: string;
+        label?: string | null;
+        renderer?: ComponentReference | null;
+      }[];
       component?: ComponentReference | null;
     }
   | Exclude<
@@ -452,6 +456,12 @@ export const searchEntitiesRequestSchema = z.object({
         selected_target_ids: z.array(uuidSchema),
       }),
     )
+    .optional(),
+  sort: z
+    .object({
+      field: z.string().min(1),
+      direction: z.enum(['asc', 'desc']),
+    })
     .optional(),
   page: z.object({
     size: z.number().int().positive(),

@@ -24,6 +24,7 @@ import {
   TableContainer,
   TableHead,
   TableRow,
+  TableSortLabel,
   Typography,
 } from '@mui/material';
 import { LoadMoreButton } from '../../components/LoadMoreButton';
@@ -120,12 +121,16 @@ export const ExplorerResultsTable = ({
   isFetchingNextPage,
   items,
   onLoadMore,
+  onSortChange,
+  sort,
 }: {
   blueprint: BlueprintWithAttributes;
   hasNextPage: boolean;
   isFetchingNextPage: boolean;
   items: EntityItem[];
   onLoadMore: () => void;
+  onSortChange: (field: string) => void;
+  sort?: { field: string; direction: 'asc' | 'desc' };
 }) => {
   const { t } = useTranslation();
   const columnHelper = legacyCreateColumnHelper<EntityItem>();
@@ -141,9 +146,10 @@ export const ExplorerResultsTable = ({
       version: number;
       props: Record<string, unknown>;
     } | null;
+    sortable: boolean;
   }[] = tableView?.columns?.length
-    ? tableView.columns
-    : (tableView?.fields ?? []).map((field) => ({ field }));
+    ? tableView.columns.map((column) => ({ ...column, sortable: true }))
+    : (tableView?.fields ?? []).map((field) => ({ field, sortable: false }));
   const runtime = useQuery({
     queryKey: extensionQueryKeys.runtime(),
     queryFn: getExtensionRuntime,
@@ -211,7 +217,20 @@ export const ExplorerResultsTable = ({
       return [
         columnHelper.display({
           id: column.field,
-          header: column.label ?? column.field.replaceAll('_', ' '),
+          header: () => {
+            const label = column.label ?? column.field.replaceAll('_', ' ');
+            if (!column.sortable) return label;
+            const active = sort?.field === column.field;
+            return (
+              <TableSortLabel
+                active={active}
+                direction={active ? sort.direction : 'asc'}
+                onClick={() => onSortChange(column.field)}
+              >
+                {label}
+              </TableSortLabel>
+            );
+          },
           cell: (info) => {
             const entity = info.row.original;
             const related = targetField
@@ -220,9 +239,24 @@ export const ExplorerResultsTable = ({
             const primaryValue = targetField
               ? related?.preview.default?.[targetField]
               : entity.preview.default?.[relationship];
+            // Search projections contain the related target's scalar but not
+            // its attribute definition. Keep that rendering deliberately
+            // defensive: an absent relation or incompatible value is not an
+            // excuse to fetch a row (or to break virtualized rendering).
             const fallback = targetField ? (
-              <Typography variant="body2">
-                {String(primaryValue ?? '')}
+              <Typography
+                color={
+                  primaryValue === null || primaryValue === undefined
+                    ? 'text.secondary'
+                    : undefined
+                }
+                variant="body2"
+              >
+                {primaryValue === null || primaryValue === undefined
+                  ? t('views.notSet')
+                  : typeof primaryValue === 'object'
+                    ? JSON.stringify(primaryValue)
+                    : String(primaryValue)}
               </Typography>
             ) : (
               <AttributeValue

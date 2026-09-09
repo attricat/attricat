@@ -12,6 +12,13 @@ export const explorerSearchSchema = z.object({
   version: z.coerce.number().int().positive().optional().catch(undefined),
   query: z.string().trim().min(1).optional().catch(undefined),
   locked: z.boolean().optional().catch(undefined),
+  sort: z
+    .object({
+      field: z.string().trim().min(1),
+      direction: z.enum(['asc', 'desc']),
+    })
+    .optional()
+    .catch(undefined),
   relationshipFacets: z
     .array(relationshipFacetSearchSchema)
     .optional()

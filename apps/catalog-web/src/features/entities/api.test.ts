@@ -306,6 +306,36 @@ describe('entity API client', () => {
     });
   });
 
+  it('posts configured sort state for Explorer table columns', async () => {
+    respond({
+      blueprint: blueprintWithAttributes,
+      items: [],
+      next_cursor: null,
+    });
+
+    await searchEntities(
+      'product',
+      undefined,
+      '',
+      null,
+      undefined,
+      undefined,
+      { field: 'category.name', direction: 'desc' },
+    );
+
+    expect(fetchMock).toHaveBeenLastCalledWith('/api/v1/entities/search', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        blueprint: { code: 'product' },
+        query: '',
+        filters: [],
+        sort: { field: 'category.name', direction: 'desc' },
+        page: { size: 25, cursor: null },
+      }),
+    });
+  });
+
   it('posts relationship-tree facet selections', async () => {
     respond({
       blueprint: blueprintWithAttributes,

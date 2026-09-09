@@ -101,6 +101,7 @@ export const Explorer = ({ search: urlSearch }: { search: ExplorerSearch }) => {
       search.version,
       search.query,
       relationshipTreeFacets,
+      search.sort,
     ),
     queryFn: ({ pageParam, signal }) =>
       searchEntities(
@@ -110,6 +111,7 @@ export const Explorer = ({ search: urlSearch }: { search: ExplorerSearch }) => {
         pageParam,
         relationshipTreeFacets,
         signal,
+        search.sort,
       ),
     initialPageParam: null as string | null,
     getNextPageParam: (page) => page.next_cursor,
@@ -253,11 +255,24 @@ export const Explorer = ({ search: urlSearch }: { search: ExplorerSearch }) => {
                 search.version,
                 search.query,
                 relationshipTreeFacets,
+                search.sort,
               ])}
               hasNextPage={results.hasNextPage}
               isFetchingNextPage={results.isFetchingNextPage}
               items={resultItems}
               onLoadMore={() => void results.fetchNextPage()}
+              onSortChange={(field) => {
+                const direction =
+                  search.sort?.field === field &&
+                  search.sort.direction === 'asc'
+                    ? 'desc'
+                    : 'asc';
+                void navigate({
+                  to: '/',
+                  search: { ...search, sort: { field, direction } },
+                });
+              }}
+              sort={search.sort}
             />
           )}
         </Box>

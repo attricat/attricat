@@ -31,7 +31,16 @@ export const entityQueryKeys = {
       context_id: string;
       selected_target_ids: string[];
     }[],
-  ) => ['entities', blueprint, version, query, relationshipTreeFacets] as const,
+    sort?: { field: string; direction: 'asc' | 'desc' },
+  ) =>
+    [
+      'entities',
+      blueprint,
+      version,
+      query,
+      relationshipTreeFacets,
+      sort,
+    ] as const,
   relationshipTreeFacetChildren: (
     blueprint: string,
     version: number | undefined,

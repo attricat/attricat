@@ -17,6 +17,24 @@ describe('parseExplorerSearch', () => {
     });
   });
 
+  it('preserves valid table sort state and drops malformed values', () => {
+    expect(
+      parseExplorerSearch({
+        blueprint: 'product',
+        sort: { field: 'category.name', direction: 'desc' },
+      }),
+    ).toEqual({
+      blueprint: 'product',
+      sort: { field: 'category.name', direction: 'desc' },
+    });
+    expect(
+      parseExplorerSearch({
+        blueprint: 'product',
+        sort: { field: '', direction: 'up' },
+      }),
+    ).toEqual({ blueprint: 'product', sort: undefined });
+  });
+
   it('preserves locked mode for pinned navigation shortcuts', () => {
     expect(parseExplorerSearch({ blueprint: 'product', locked: true })).toEqual(
       {
