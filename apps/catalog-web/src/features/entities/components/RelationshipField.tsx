@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { useInfiniteQuery } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
 import {
@@ -19,7 +19,10 @@ import { RelationshipPickerIcon } from '../../../components/system-icons';
 import { searchEntities, type Attribute } from '../api';
 import { RelationshipSelectionPills } from './RelationshipSelectionPills';
 import { useRelationshipSelectionLabels } from './useRelationshipSelectionLabels';
-import { useRecentlyPreviewedEntities } from './useRecentlyPreviewedEntities';
+import {
+  scrollRelationshipPickerToTop,
+  useRecentlyPreviewedEntities,
+} from './useRecentlyPreviewedEntities';
 import {
   attributeLabel,
   displayLabel,
@@ -47,6 +50,7 @@ export const RelationshipField = ({
   const [query, setQuery] = useState('');
   const [draftIds, setDraftIds] = useState<string[]>([]);
   const [knownLabels, setKnownLabels] = useState<Record<string, string>>({});
+  const pickerContentRoot = useRef<HTMLDivElement>(null);
   const targetBlueprint = attribute.target_blueprint_code;
   const selectedIds = value
     .split(',')
@@ -62,6 +66,7 @@ export const RelationshipField = ({
       setDraftIds((current) =>
         isOneToOne ? [id] : current.includes(id) ? current : [...current, id],
       );
+      scrollRelationshipPickerToTop(pickerContentRoot.current);
     });
   const targets = useInfiniteQuery({
     queryKey: entityQueryKeys.relationshipTargets(targetBlueprint, query),
@@ -194,7 +199,7 @@ export const RelationshipField = ({
           { blueprint: targetBlueprint },
         )}
       >
-        <Stack spacing={2}>
+        <Stack ref={pickerContentRoot} spacing={2}>
           <TextField
             fullWidth
             label={t('entities.searchRelationshipOptions')}

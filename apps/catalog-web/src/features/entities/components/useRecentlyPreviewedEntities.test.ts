@@ -1,12 +1,28 @@
 // @vitest-environment jsdom
 import { act, renderHook } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { useRecentlyPreviewedEntities } from './useRecentlyPreviewedEntities';
+import {
+  scrollRelationshipPickerToTop,
+  useRecentlyPreviewedEntities,
+} from './useRecentlyPreviewedEntities';
 
 describe('useRecentlyPreviewedEntities', () => {
   afterEach(() => {
     vi.useRealTimers();
     vi.unstubAllGlobals();
+  });
+
+  it('scrolls the containing picker dialog to the top', () => {
+    const content = document.createElement('div');
+    content.className = 'MuiDialogContent-root';
+    const child = document.createElement('div');
+    content.append(child);
+    const scrollTo = vi.fn();
+    content.scrollTo = scrollTo;
+
+    scrollRelationshipPickerToTop(child);
+
+    expect(scrollTo).toHaveBeenCalledWith({ top: 0 });
   });
 
   it('creates picker tokens when randomUUID is unavailable', () => {

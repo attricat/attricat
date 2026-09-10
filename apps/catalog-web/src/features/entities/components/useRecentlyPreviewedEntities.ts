@@ -21,6 +21,11 @@ export const relationshipPickerSearchParameter = 'relationshipPicker';
 export const relationshipPickerMessageType =
   'attricat.relationship-picker.select';
 
+export const scrollRelationshipPickerToTop = (element: Element | null) => {
+  const content = element?.closest('.MuiDialogContent-root');
+  if (content instanceof HTMLElement) content.scrollTo({ top: 0 });
+};
+
 type RelationshipPickerMessage = {
   type: typeof relationshipPickerMessageType;
   token: string;

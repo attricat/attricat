@@ -16,13 +16,16 @@ import {
   TextField,
   Typography,
 } from '@mui/material';
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { LoadMoreButton } from '../../components/LoadMoreButton';
 import type { AttributeContext } from '../contexts/api';
 import { getRelationshipTreeFacetChildren } from '../entities/api';
 import { entityQueryKeys } from '../entities/query-keys';
-import { useRecentlyPreviewedEntities } from '../entities/components/useRecentlyPreviewedEntities';
+import {
+  scrollRelationshipPickerToTop,
+  useRecentlyPreviewedEntities,
+} from '../entities/components/useRecentlyPreviewedEntities';
 
 export type RelationshipTreeFacetItem = {
   id: string;
@@ -75,6 +78,7 @@ const RelationshipTreeFacetContent = ({
   onSelectedIdsChange,
 }: Props) => {
   const { t } = useTranslation();
+  const pickerContentRoot = useRef<HTMLDivElement>(null);
   const { isPreviewed, markPreviewed, openPreview, previewHref } =
     useRecentlyPreviewedEntities((id) => {
       onSelectedIdsChange(
@@ -84,6 +88,7 @@ const RelationshipTreeFacetContent = ({
             ? selectedIds
             : [...selectedIds, id],
       );
+      scrollRelationshipPickerToTop(pickerContentRoot.current);
     });
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
   const [cursors, setCursors] = useState<Map<string, (string | null)[]>>(
@@ -319,7 +324,7 @@ const RelationshipTreeFacetContent = ({
   };
 
   return (
-    <Stack spacing={2}>
+    <Stack ref={pickerContentRoot} spacing={2}>
       {selectedIds.length > 0 && (
         <Stack spacing={0.5}>
           <Typography variant="subtitle2">
