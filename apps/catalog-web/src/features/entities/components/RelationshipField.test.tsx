@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { render, screen } from '@testing-library/react';
+import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
 import '../../../i18n';
@@ -44,20 +44,31 @@ const page = (
   total_count_capped: false,
 });
 
-const renderField = (onChange = vi.fn(), field: Attribute = attribute) => {
+const renderField = (
+  onChange = vi.fn(),
+  field: Attribute = attribute,
+  value = '',
+) => {
   const queryClient = new QueryClient({
     defaultOptions: { queries: { retry: false } },
   });
   render(
     <QueryClientProvider client={queryClient}>
-      <RelationshipField attribute={field} onChange={onChange} value="" />
+      <RelationshipField attribute={field} onChange={onChange} value={value} />
     </QueryClientProvider>,
   );
   return onChange;
 };
 
+const openSelector = async (user: ReturnType<typeof userEvent.setup>) => {
+  await user.click(
+    await screen.findByRole('button', { name: 'related_products' }),
+  );
+  return screen.findByRole('dialog', { name: /^Select product/ });
+};
+
 describe('RelationshipField', () => {
-  it('uses a multi-select picker for unrestricted relationships', async () => {
+  it('keeps multi-selection draft changes in a closeable modal until applied', async () => {
     vi.mocked(searchEntities).mockImplementation((_, __, query, cursor) =>
       Promise.resolve(
         cursor === 'second-page'
@@ -71,18 +82,24 @@ describe('RelationshipField', () => {
     const onChange = renderField();
     const user = userEvent.setup();
 
-    const input = await screen.findByRole('combobox', {
-      name: 'related_products',
-    });
-    await user.type(input, 'later');
-    await screen.findByRole('option', { name: 'later product' });
+    await openSelector(user);
+    const search = screen.getByRole('textbox', { name: 'Search options' });
+    await user.type(search, 'later');
+    await screen.findByRole('button', { name: 'later product' });
 
     await user.click(screen.getByRole('button', { name: 'Load more' }));
-    await user.click(input);
-    const laterOption = await screen.findByRole('option', {
-      name: 'Later product',
-    });
-    await user.click(laterOption);
+    await user.click(
+      await screen.findByRole('button', { name: 'Later product' }),
+    );
+
+    expect(onChange).not.toHaveBeenCalled();
+    expect(
+      screen
+        .getByText('Selected')
+        .compareDocumentPosition(screen.getByText('Options')) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+    await user.click(screen.getByRole('button', { name: 'Apply' }));
 
     expect(onChange).toHaveBeenLastCalledWith(laterId);
     expect(searchEntities).toHaveBeenCalledWith(
@@ -95,9 +112,34 @@ describe('RelationshipField', () => {
     );
   });
 
-  it('uses a single-select picker for one-to-one relationships', async () => {
+  it('discards draft changes when the modal is closed', async () => {
     vi.mocked(searchEntities).mockResolvedValue(
       page([{ id: firstId, label: 'First product' }], null),
+    );
+    const onChange = renderField();
+    const user = userEvent.setup();
+
+    await openSelector(user);
+    await user.click(
+      await screen.findByRole('button', { name: 'First product' }),
+    );
+    await user.click(
+      screen.getByRole('button', { name: 'Close relationship selector' }),
+    );
+
+    expect(onChange).not.toHaveBeenCalled();
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+  });
+
+  it('allows only one draft selection for one-to-one relationships', async () => {
+    vi.mocked(searchEntities).mockResolvedValue(
+      page(
+        [
+          { id: firstId, label: 'First product' },
+          { id: laterId, label: 'Later product' },
+        ],
+        null,
+      ),
     );
     const onChange = renderField(vi.fn(), {
       ...attribute,
@@ -105,15 +147,17 @@ describe('RelationshipField', () => {
     });
     const user = userEvent.setup();
 
-    const input = await screen.findByRole('combobox', {
-      name: 'related_products',
-    });
-    await user.click(input);
     await user.click(
-      await screen.findByRole('option', { name: 'First product' }),
+      await screen.findByRole('button', { name: 'related_products' }),
     );
+    await screen.findByRole('dialog', { name: /^Select one product/ });
+    await user.click(
+      await screen.findByRole('button', { name: 'First product' }),
+    );
+    await user.click(screen.getByRole('button', { name: 'Later product' }));
 
-    expect(onChange).toHaveBeenLastCalledWith(firstId);
-    expect(screen.queryByRole('checkbox')).toBeNull();
+    expect(screen.getAllByRole('radio', { checked: true })).toHaveLength(1);
+    await user.click(screen.getByRole('button', { name: 'Apply' }));
+    expect(onChange).toHaveBeenLastCalledWith(laterId);
   });
 });

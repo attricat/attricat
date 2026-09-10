@@ -1,8 +1,5 @@
-import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import {
-  Accordion,
-  AccordionDetails,
-  AccordionSummary,
+  Button,
   CircularProgress,
   MenuItem,
   Paper,
@@ -16,6 +13,8 @@ import type { Attribute, Blueprint } from '../entities/api';
 import type { AttributeContext } from '../contexts/api';
 import { getBlueprintByCode } from '../entities/api';
 import { entityQueryKeys } from '../entities/query-keys';
+import { RelationshipSelectorDialog } from '../../components/RelationshipSelectorDialog';
+import { RelationshipIcon } from '../../components/system-icons';
 import { ExplorerAttributeFilters } from './ExplorerAttributeFilters';
 import { RelationshipTreeFacet } from './RelationshipTreeFacet';
 import type { AttributeFilter } from './search';
@@ -166,7 +165,11 @@ const Facet = ({
   version,
 }: FacetProps) => {
   const { t } = useTranslation();
-  const [expanded, setExpanded] = useState(facet.selectedIds.length > 0);
+  const [open, setOpen] = useState(false);
+  const [draftIds, setDraftIds] = useState<string[]>([]);
+  const [draftHierarchy, setDraftHierarchy] = useState(
+    facet.hierarchyField ?? '',
+  );
   const targetBlueprint = useQuery({
     queryKey: entityQueryKeys.blueprintByCode(
       facet.sourceRelationship.target_blueprint_code ?? undefined,
@@ -178,7 +181,7 @@ const Facet = ({
         undefined,
         signal,
       ),
-    enabled: expanded,
+    enabled: open,
   });
   const hierarchyFields = (targetBlueprint.data?.attributes ?? [])
     .filter(
@@ -188,22 +191,62 @@ const Facet = ({
           facet.sourceRelationship.target_blueprint_code,
     )
     .map((attribute) => attribute.code);
-  const hierarchyField = hierarchyFields.includes(facet.hierarchyField ?? '')
-    ? facet.hierarchyField
+  const hierarchyField = hierarchyFields.includes(draftHierarchy)
+    ? draftHierarchy
     : hierarchyFields[0];
 
+  const singleSelect =
+    facet.sourceRelationship.relationship_cardinality === 'one_to_one';
+  const openSelector = () => {
+    setDraftIds(
+      singleSelect ? facet.selectedIds.slice(0, 1) : facet.selectedIds,
+    );
+    setDraftHierarchy(facet.hierarchyField ?? '');
+    setOpen(true);
+  };
+
   return (
-    <Accordion
-      disableGutters
-      elevation={0}
-      expanded={expanded}
-      onChange={(_, isExpanded) => setExpanded(isExpanded)}
-      sx={{ '&:before': { display: 'none' }, mt: 1 }}
-    >
-      <AccordionSummary expandIcon={<ExpandMoreIcon />}>
-        <Typography variant="body2">{label}</Typography>
-      </AccordionSummary>
-      <AccordionDetails>
+    <>
+      <Button
+        aria-label={label}
+        fullWidth
+        onClick={openSelector}
+        startIcon={<RelationshipIcon />}
+        sx={{ justifyContent: 'space-between', mt: 1 }}
+        variant="outlined"
+      >
+        <span>{label}</span>
+        <Typography color="text.secondary" component="span" variant="body2">
+          {t('entities.relationshipSelected', {
+            count: facet.selectedIds.length,
+          })}
+        </Typography>
+      </Button>
+      <RelationshipSelectorDialog
+        applyLabel={t('entities.applyRelationshipSelection')}
+        cancelLabel={t('entities.cancelRelationshipSelection')}
+        clearLabel={t('entities.clearRelationshipSelection')}
+        closeLabel={t('entities.closeRelationshipSelector')}
+        onApply={() => {
+          onUpdate(facet.sourceRelationship.code, {
+            ...(hierarchyField ? { hierarchy: hierarchyField } : {}),
+            selectedIds: singleSelect ? draftIds.slice(0, 1) : draftIds,
+          });
+          setOpen(false);
+        }}
+        onClear={() => setDraftIds([])}
+        onClose={() => setOpen(false)}
+        open={open}
+        selectedLabel={t('entities.relationshipSelected', {
+          count: draftIds.length,
+        })}
+        title={t(
+          singleSelect
+            ? 'entities.selectOneRelationship'
+            : 'entities.selectRelationships',
+          { blueprint: label },
+        )}
+      >
         {targetBlueprint.isPending ? (
           <CircularProgress
             aria-label={t('explorer.loadingFacetOptions')}
@@ -220,25 +263,19 @@ const Facet = ({
             contexts={contexts}
             hierarchyField={hierarchyField}
             hierarchyFields={hierarchyFields}
-            onHierarchyFieldChange={(hierarchy) =>
-              onUpdate(facet.sourceRelationship.code, {
-                hierarchy,
-                selectedIds: [],
-              })
-            }
-            onSelectedIdsChange={(selectedIds) =>
-              onUpdate(facet.sourceRelationship.code, {
-                ...(hierarchyField ? { hierarchy: hierarchyField } : {}),
-                selectedIds,
-              })
-            }
+            onHierarchyFieldChange={(hierarchy) => {
+              setDraftHierarchy(hierarchy);
+              setDraftIds([]);
+            }}
+            onSelectedIdsChange={setDraftIds}
             query={query}
-            selectedIds={facet.selectedIds}
+            selectedIds={draftIds}
+            singleSelect={singleSelect}
             sourceField={facet.sourceRelationship.code}
             version={version}
           />
         )}
-      </AccordionDetails>
-    </Accordion>
+      </RelationshipSelectorDialog>
+    </>
   );
 };

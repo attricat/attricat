@@ -11,6 +11,8 @@ import {
   List,
   ListItem,
   MenuItem,
+  Radio,
+  Stack,
   TextField,
   Typography,
 } from '@mui/material';
@@ -38,6 +40,7 @@ type Props = {
   contexts: AttributeContext[];
   contextCode?: string;
   selectedIds: string[];
+  singleSelect?: boolean;
   onHierarchyFieldChange: (field: string) => void;
   onSelectedIdsChange: (ids: string[]) => void;
 };
@@ -66,6 +69,7 @@ const RelationshipTreeFacetContent = ({
   contexts,
   contextCode,
   selectedIds,
+  singleSelect = false,
   onHierarchyFieldChange,
   onSelectedIdsChange,
 }: Props) => {
@@ -123,13 +127,17 @@ const RelationshipTreeFacetContent = ({
     })),
   });
   const byParent = new Map<string, RelationshipTreeFacetItem[]>();
+  const selectedLabels = new Map<string, string>();
   const nextCursorByParent = new Map<string, string | null>();
   pages.forEach(({ parentId }, index) => {
     const page = results[index]?.data;
     if (!page) return;
+    page.selected_items.forEach((item) =>
+      selectedLabels.set(item.id, item.display),
+    );
     const key = parentId ?? 'root';
     const items = byParent.get(key) ?? [];
-    items.push(...page.items);
+    items.push(...page.items.filter((item) => !selected.has(item.id)));
     byParent.set(key, items);
     nextCursorByParent.set(key, page.next_cursor);
   });
@@ -151,6 +159,10 @@ const RelationshipTreeFacetContent = ({
     return false;
   };
   const toggleSelected = (id: string) => {
+    if (singleSelect) {
+      onSelectedIdsChange(selected.has(id) ? [] : [id]);
+      return;
+    }
     const next = new Set(selected);
     if (next.has(id)) next.delete(id);
     else next.add(id);
@@ -210,11 +222,19 @@ const RelationshipTreeFacetContent = ({
           </Box>
           <FormControlLabel
             control={
-              <Checkbox
-                checked={selected.has(item.id)}
-                onChange={() => toggleSelected(item.id)}
-                size="small"
-              />
+              singleSelect ? (
+                <Radio
+                  checked={selected.has(item.id)}
+                  onChange={() => toggleSelected(item.id)}
+                  size="small"
+                />
+              ) : (
+                <Checkbox
+                  checked={selected.has(item.id)}
+                  onChange={() => toggleSelected(item.id)}
+                  size="small"
+                />
+              )
             }
             label={`${item.display} (${item.count})`}
             sx={{ m: 0 }}
@@ -240,7 +260,39 @@ const RelationshipTreeFacetContent = ({
   };
 
   return (
-    <>
+    <Stack spacing={2}>
+      {selectedIds.length > 0 && (
+        <Stack spacing={0.5}>
+          <Typography variant="subtitle2">
+            {t('entities.selectedRelationships')}
+          </Typography>
+          <List dense disablePadding>
+            {selectedIds.map((id) => (
+              <ListItem dense disableGutters key={id}>
+                <FormControlLabel
+                  control={
+                    singleSelect ? (
+                      <Radio
+                        checked
+                        onChange={() => toggleSelected(id)}
+                        size="small"
+                      />
+                    ) : (
+                      <Checkbox
+                        checked
+                        onChange={() => toggleSelected(id)}
+                        size="small"
+                      />
+                    )
+                  }
+                  label={selectedLabels.get(id) ?? id}
+                  sx={{ m: 0 }}
+                />
+              </ListItem>
+            ))}
+          </List>
+        </Stack>
+      )}
       <List dense disablePadding>
         {(byParent.get('root') ?? []).map((item) =>
           renderNode(item, new Set()),
@@ -255,7 +307,7 @@ const RelationshipTreeFacetContent = ({
         )}
       </List>
       {hierarchyFields.length > 0 && (
-        <Accordion disableGutters elevation={0} sx={{ mt: 1 }}>
+        <Accordion disableGutters elevation={0}>
           <AccordionSummary expandIcon={<ExpandMoreIcon />}>
             <Typography variant="body2">{t('explorer.treeOptions')}</Typography>
           </AccordionSummary>
@@ -277,6 +329,6 @@ const RelationshipTreeFacetContent = ({
           </AccordionDetails>
         </Accordion>
       )}
-    </>
+    </Stack>
   );
 };

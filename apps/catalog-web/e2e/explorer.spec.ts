@@ -165,7 +165,12 @@ target_blueprint = "${categoryCode}"`,
     page.getByRole('checkbox', { name: 'Departments (1)' }),
   ).toBeVisible();
   await page.getByRole('button', { name: 'Expand Departments' }).click();
-  await page.getByRole('checkbox', { name: 'Shoes (1)' }).check();
+  await page.getByRole('checkbox', { name: 'Shoes (1)' }).click();
+  await expect(
+    page.getByRole('heading', { name: 'Selected', exact: true }),
+  ).toBeVisible();
+  expect(new URL(page.url()).searchParams.get('relationshipFacets')).toBeNull();
+  await page.getByRole('button', { name: 'Apply' }).click();
 
   await expect
     .poll(() => new URL(page.url()).searchParams.get('relationshipFacets'))
@@ -204,7 +209,8 @@ tags = ["searchable"]
 [[attributes]]
 code = "color"
 value_type = "relationship"
-target_blueprint = "${colorCode}"`,
+target_blueprint = "${colorCode}"
+cardinality = "one_to_one"`,
   );
   await createEntity(product, [
     scalar('title', 'Red shirt'),
@@ -217,10 +223,11 @@ target_blueprint = "${colorCode}"`,
 
   await page.goto(`/?blueprint=${productCode}`);
   await page.getByRole('button', { name: 'Facet colors' }).click();
-  await expect(page.getByRole('checkbox', { name: 'Red (1)' })).toBeVisible();
-  await expect(page.getByRole('checkbox', { name: 'Blue (1)' })).toBeVisible();
+  await expect(page.getByRole('radio', { name: 'Red (1)' })).toBeVisible();
+  await expect(page.getByRole('radio', { name: 'Blue (1)' })).toBeVisible();
   await expect(page.getByLabel('Context').first()).toBeVisible();
-  await page.getByRole('checkbox', { name: 'Red (1)' }).check();
+  await page.getByRole('radio', { name: 'Red (1)' }).click();
+  await page.getByRole('button', { name: 'Apply' }).click();
 
   await expect
     .poll(() => new URL(page.url()).searchParams.get('relationshipFacets'))
@@ -286,11 +293,13 @@ target_blueprint = "${sizeCode}"`,
 
   await page.goto(`/?blueprint=${productCode}`);
   await page.getByRole('button', { name: 'Colors' }).click();
-  await page.getByRole('button', { name: 'Sizes' }).click();
   await expect(page.getByRole('checkbox', { name: 'Red (2)' })).toBeVisible();
+  await page.getByRole('checkbox', { name: 'Red (2)' }).click();
+  await page.getByRole('button', { name: 'Apply' }).click();
+  await page.getByRole('button', { name: 'Sizes' }).click();
   await expect(page.getByRole('checkbox', { name: 'Large (2)' })).toBeVisible();
-  await page.getByRole('checkbox', { name: 'Red (2)' }).check();
-  await page.getByRole('checkbox', { name: 'Large (2)' }).check();
+  await page.getByRole('checkbox', { name: 'Large (2)' }).click();
+  await page.getByRole('button', { name: 'Apply' }).click();
 
   await expect(page.getByText('1 result')).toBeVisible();
   await expect(
