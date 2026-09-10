@@ -16,7 +16,9 @@ import type { Attribute, Blueprint } from '../entities/api';
 import type { AttributeContext } from '../contexts/api';
 import { getBlueprintByCode } from '../entities/api';
 import { entityQueryKeys } from '../entities/query-keys';
+import { ExplorerAttributeFilters } from './ExplorerAttributeFilters';
 import { RelationshipTreeFacet } from './RelationshipTreeFacet';
+import type { AttributeFilter } from './search';
 
 export type ExplorerRelationshipFacet = {
   hierarchyField?: string;
@@ -30,11 +32,14 @@ type Props = {
   contexts: AttributeContext[];
   contextCode: string;
   facets: ExplorerRelationshipFacet[];
+  attributes: Attribute[];
+  activeAttributeFilterCount: number;
   query?: string;
   version?: number;
   fullHeight?: boolean;
   onBlueprintChange?: (blueprint: string) => void;
   onContextChange: (contextCode: string) => void;
+  onAddAttributeFilter: (filter: AttributeFilter) => void;
   onUpdate: (
     field: string,
     updates: {
@@ -45,17 +50,27 @@ type Props = {
   ) => void;
 };
 
-type FacetProps = Omit<Props, 'facets' | 'onContextChange'> & {
+type FacetProps = Omit<
+  Props,
+  | 'activeAttributeFilterCount'
+  | 'attributes'
+  | 'facets'
+  | 'onAddAttributeFilter'
+  | 'onContextChange'
+> & {
   facet: ExplorerRelationshipFacet;
 };
 
 export const ExplorerFacetSidebar = ({
+  activeAttributeFilterCount,
+  attributes,
   blueprint,
   blueprints = [],
   contexts,
   contextCode,
   facets,
   fullHeight = false,
+  onAddAttributeFilter,
   onBlueprintChange,
   query,
   version,
@@ -123,6 +138,14 @@ export const ExplorerFacetSidebar = ({
           version={version}
         />
       ))}
+      <Typography sx={{ mt: 2 }} variant="subtitle2">
+        {t('explorer.attributeFilters')}
+      </Typography>
+      <ExplorerAttributeFilters
+        activeFilterCount={activeAttributeFilterCount}
+        attributes={attributes}
+        onAdd={onAddAttributeFilter}
+      />
     </Paper>
   );
 };

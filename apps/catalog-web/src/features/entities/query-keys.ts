@@ -32,6 +32,11 @@ export const entityQueryKeys = {
       selected_target_ids: string[];
     }[],
     sort?: { field: string; direction: 'asc' | 'desc' },
+    filters?: {
+      field: string;
+      operator: string;
+      value: string | number | boolean;
+    }[],
   ) =>
     [
       'entities',
@@ -40,6 +45,7 @@ export const entityQueryKeys = {
       query,
       relationshipTreeFacets,
       sort,
+      filters,
     ] as const,
   relationshipTreeFacetChildren: (
     blueprint: string,
@@ -50,6 +56,7 @@ export const entityQueryKeys = {
     contextId: string,
     parentId: string | undefined,
     cursor: string | null,
+    selectedTargetIds: string[] = [],
   ) =>
     [
       'relationship-tree-facet-children',
@@ -61,5 +68,6 @@ export const entityQueryKeys = {
       contextId,
       parentId,
       cursor,
+      selectedTargetIds,
     ] as const,
 } as const;

@@ -376,6 +376,9 @@ export const relationshipTreeFacetChildrenResponseSchema = z.object({
       has_children: z.boolean(),
     }),
   ),
+  selected_items: z
+    .array(z.object({ id: uuidSchema, display: z.string() }))
+    .default([]),
   next_cursor: uuidSchema.nullable(),
 });
 const incomingRelationshipItemSchema = z.object({
@@ -446,13 +449,18 @@ export const entityMigrationPreviewSchema = z.object({
   status: z.enum(['ready', 'needs_input', 'blocked']),
   issues: z.array(migrationIssueSchema),
 });
+export const entitySearchFilterSchema = z.object({
+  field: z.string().min(1),
+  operator: z.enum(['eq', 'contains', 'starts_with', 'gt', 'gte', 'lt', 'lte']),
+  value: z.union([z.string(), z.number().finite(), z.boolean()]),
+});
 export const searchEntitiesRequestSchema = z.object({
   blueprint: z.object({
     code: z.string().min(1),
     version: z.number().int().positive().optional(),
   }),
   query: z.string(),
-  filters: z.array(z.never()),
+  filters: z.array(entitySearchFilterSchema),
   system_tags: z.array(z.string()).optional(),
   relationship_tree_facets: z
     .array(
@@ -520,6 +528,7 @@ export type RelationshipTargets = z.infer<typeof relationshipTargetsSchema>;
 export type Entity = z.infer<typeof entitySchema>;
 export type EntityAuditChange = z.infer<typeof entityAuditChangeSchema>;
 export type EntityItem = z.infer<typeof entityItemSchema>;
+export type EntitySearchFilter = z.infer<typeof entitySearchFilterSchema>;
 export type EntitySearchResponse = z.infer<typeof entitySearchResponseSchema>;
 export type RelationshipTreeFacetChildrenResponse = z.infer<
   typeof relationshipTreeFacetChildrenResponseSchema

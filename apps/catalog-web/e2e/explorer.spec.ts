@@ -48,6 +48,55 @@ test('shows explorer empty states and configured table fields', async ({
   await expect(page.getByText('12', { exact: true })).toBeVisible();
 });
 
+test('applies and removes an attribute filter on mobile', async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  const code = `attribute_filter_${suffix()}`;
+  const blueprint = await createEntityBlueprint(
+    code,
+    'Attribute filter products',
+    `[[attributes]]
+code = "title"
+value_type = "string"
+
+[[attributes]]
+code = "stock"
+value_type = "integer"`,
+    { views: '[views.table]\ntype = "table"\nfields = ["title", "stock"]' },
+  );
+  await createEntity(blueprint, [
+    scalar('title', 'In stock'),
+    scalar('stock', 12),
+  ]);
+  await createEntity(blueprint, [
+    scalar('title', 'Low stock'),
+    scalar('stock', 2),
+  ]);
+
+  await page.goto(`/?blueprint=${code}`);
+  await expect(page.getByText('2 results')).toBeVisible();
+  const mobileFilters = page.locator('aside:visible');
+  await expect(mobileFilters.getByText('Attribute filters')).toBeVisible();
+  await mobileFilters.getByLabel('Attribute').click();
+  await page.getByRole('option', { name: 'stock' }).click();
+  await mobileFilters.getByLabel('Operator').click();
+  await page.getByRole('option', { name: 'Greater than', exact: true }).click();
+  await mobileFilters.getByLabel('Value').fill('5');
+  await mobileFilters.getByRole('button', { name: 'Apply filter' }).click();
+
+  await expect(page.getByText('stock > 5')).toBeVisible();
+  await expect(page.getByText('1 result')).toBeVisible();
+  await expect(
+    page.getByRole('cell', { name: 'In stock' }).first(),
+  ).toBeVisible();
+  await expect(page.getByRole('cell', { name: 'Low stock' })).toBeHidden();
+  await expect
+    .poll(() => new URL(page.url()).searchParams.get('attributeFilters'))
+    .toContain('stock');
+
+  await page.getByLabel('Remove filter stock > 5').click();
+  await expect(page.getByText('2 results')).toBeVisible();
+});
+
 test('filters explorer results with a relationship hierarchy facet', async ({
   page,
 }) => {
@@ -105,9 +154,13 @@ target_blueprint = "${categoryCode}"`,
   await expect
     .poll(() => new URL(page.url()).searchParams.get('relationshipFacets'))
     .toContain(child.id);
+  await expect(page.getByText('category: Shoes')).toBeVisible();
   await expect(page.getByText('1 result')).toBeVisible();
   await expect(page.getByRole('cell', { name: 'Running shoe' })).toBeVisible();
   await expect(page.getByRole('cell', { name: 'Canvas bag' })).toBeHidden();
+
+  await page.getByLabel('Remove relationship filter category: Shoes').click();
+  await expect(page.getByText('2 results')).toBeVisible();
 });
 
 test('filters explorer results with a one-level relationship facet', async ({

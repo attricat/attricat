@@ -148,6 +148,121 @@ value_type = "string"
 }
 
 #[sqlx::test]
+async fn search_filters_scalar_attributes_with_type_appropriate_operators(pool: PgPool) {
+    let (base_url, server) = start_server(pool).await;
+    let client = authenticated_client();
+    let blueprint = create_blueprint(
+        &client,
+        &base_url,
+        r#"
+format_version = 1
+code = "filter_product"
+name = "Filter product"
+kind = "entity"
+
+[views.dropdown_option]
+type = "dropdown_option"
+fields = ["name"]
+
+[[attributes]]
+code = "name"
+value_type = "string"
+
+[[attributes]]
+code = "price"
+value_type = "number"
+
+[[attributes]]
+code = "stock"
+value_type = "integer"
+
+[[attributes]]
+code = "available"
+value_type = "boolean"
+
+[[attributes]]
+code = "released_on"
+value_type = "date"
+"#,
+    )
+    .await;
+    let first = create_entity(&client, &base_url, &blueprint).await;
+    let second = create_entity(&client, &base_url, &blueprint).await;
+    for (entity, values) in [
+        (
+            &first,
+            json!([
+                { "kind": "scalar", "attribute_code": "name", "value": "Red shoe" },
+                { "kind": "scalar", "attribute_code": "price", "value": 120.5 },
+                { "kind": "scalar", "attribute_code": "stock", "value": 8 },
+                { "kind": "scalar", "attribute_code": "available", "value": true },
+                { "kind": "scalar", "attribute_code": "released_on", "value": "2026-04-01" }
+            ]),
+        ),
+        (
+            &second,
+            json!([
+                { "kind": "scalar", "attribute_code": "name", "value": "Blue bag" },
+                { "kind": "scalar", "attribute_code": "price", "value": 75 },
+                { "kind": "scalar", "attribute_code": "stock", "value": 2 },
+                { "kind": "scalar", "attribute_code": "available", "value": false },
+                { "kind": "scalar", "attribute_code": "released_on", "value": "2025-01-01" }
+            ]),
+        ),
+    ] {
+        client
+            .post(format!(
+                "{base_url}/entities/{}/values",
+                entity["id"].as_str().unwrap()
+            ))
+            .json(&json!({ "values": values }))
+            .send()
+            .await
+            .unwrap()
+            .error_for_status()
+            .unwrap();
+    }
+
+    let response: Value = client
+        .post(format!("{base_url}/v1/entities/search"))
+        .json(&json!({
+            "blueprint": { "code": "filter_product" },
+            "filters": [
+                { "field": "name", "operator": "contains", "value": "shoe" },
+                { "field": "price", "operator": "gte", "value": 100 },
+                { "field": "stock", "operator": "gt", "value": 5 },
+                { "field": "available", "operator": "eq", "value": true },
+                { "field": "released_on", "operator": "gt", "value": "2026-01-01" }
+            ],
+            "include_total": true
+        }))
+        .send()
+        .await
+        .unwrap()
+        .error_for_status()
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    assert_eq!(response["items"].as_array().unwrap().len(), 1);
+    assert_eq!(response["items"][0]["id"], first["id"]);
+    assert_eq!(response["total_count"], 1);
+
+    let invalid = client
+        .post(format!("{base_url}/v1/entities/search"))
+        .json(&json!({
+            "blueprint": { "code": "filter_product" },
+            "filters": [{ "field": "available", "operator": "gt", "value": true }]
+        }))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(invalid.status(), StatusCode::UNPROCESSABLE_ENTITY);
+
+    server.abort();
+}
+
+#[sqlx::test]
 async fn search_returns_contextual_relationship_tree_facet_and_filters_selected_subtrees(
     pool: PgPool,
 ) {
@@ -371,6 +486,7 @@ target_blueprint = "facet_category"
             "source_relationship_field": "categories",
             "hierarchy_field": "parent",
             "context_id": context["id"],
+            "selected_target_ids": [root["id"]]
         }))
         .send()
         .await
@@ -381,6 +497,8 @@ target_blueprint = "facet_category"
         .await
         .unwrap();
     assert_eq!(root_page["next_cursor"], Value::Null);
+    assert_eq!(root_page["selected_items"][0]["id"], root["id"]);
+    assert_eq!(root_page["selected_items"][0]["display"], "Root");
     let root_item = root_page["items"]
         .as_array()
         .unwrap()

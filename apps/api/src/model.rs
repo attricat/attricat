@@ -373,6 +373,8 @@ pub struct RelationshipTreeFacetChildrenRequest {
     pub parent_id: Option<Uuid>,
     #[serde(default)]
     pub cursor: Option<Uuid>,
+    #[serde(default)]
+    pub selected_target_ids: Vec<Uuid>,
 }
 
 #[derive(Clone, Debug, Serialize)]
@@ -386,6 +388,7 @@ pub struct RelationshipTreeFacetChildItem {
 #[derive(Clone, Debug, Serialize)]
 pub struct RelationshipTreeFacetChildrenResponse {
     pub items: Vec<RelationshipTreeFacetChildItem>,
+    pub selected_items: Vec<EntityHierarchyItem>,
     pub next_cursor: Option<Uuid>,
 }
 

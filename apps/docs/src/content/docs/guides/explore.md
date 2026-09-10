@@ -11,6 +11,12 @@ Choose a blueprint to start exploring its entities. A bare search term matches s
 
 Use the context selector to see values as they resolve in a particular context. A value can come directly from that context or be inherited from its default value.
 
+## Filter records
+
+Relationship filters narrow results using connected records and hierarchies. Attribute filters appear directly below them and operate on scalar values in the default context. String attributes support equality, contains, and starts-with filters. Numbers, integers, dates, date-times, and times support equality and range comparisons; booleans support equality.
+
+Applied attribute and relationship filters appear as removable pills below the search box. Relationship pills use the target blueprint's dropdown-option view to name selected records. When that view cannot produce labels, the pill falls back to the number of selected records. Multiple filters are combined with each other and the text query, so every active condition must match. Filter selections are stored in the page URL and can be shared or restored after a refresh.
+
 ## Work with an entity
 
 Open a result to inspect its values, schema revision, files, relationships, and change history. If you can edit the entity, save changes from its detail page. Read-only fields remain visible but are managed by a system integration rather than the browser.

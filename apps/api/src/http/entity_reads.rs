@@ -8,9 +8,9 @@ use crate::{
     model::{
         Entity, EntityIdentity, EntityPreviewPage, EntityPreviewResponse, EntitySearchResponse,
         RelationshipTreeFacetChildrenRequest, RelationshipTreeFacetChildrenResponse,
-        ResolvedEntityPreviewResponse, SearchEntitiesRequest,
+        ResolvedEntityPreviewResponse, SearchEntitiesRequest, SearchFilter,
     },
-    repository::{EntitySearchSort, decode_search_cursor},
+    repository::{EntitySearchFilter, EntitySearchSort, decode_search_cursor},
 };
 use axum::{
     Json,
@@ -18,11 +18,15 @@ use axum::{
     response::{IntoResponse, Response},
 };
 use serde::Deserialize;
-use std::{collections::HashMap, time::Instant};
+use std::{
+    collections::{HashMap, HashSet},
+    time::Instant,
+};
 use tracing::Instrument;
 use uuid::Uuid;
 
 const SEARCH_TOTAL_COUNT_CAP: i64 = 1_000;
+const MAX_SEARCH_FILTERS: usize = 20;
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
 pub(super) struct PreviewQuery {
@@ -164,10 +168,10 @@ pub(super) async fn search_entity_previews(
             "blueprint.code must not be empty".to_owned(),
         ));
     }
-    if !input.filters.is_empty() {
-        return Err(ApiError::invalid_input(
-            "field filters are not supported by v1 search yet".to_owned(),
-        ));
+    if input.filters.len() > MAX_SEARCH_FILTERS {
+        return Err(ApiError::invalid_input(format!(
+            "filters must contain at most {MAX_SEARCH_FILTERS} items"
+        )));
     }
     let limit = input.page.size.unwrap_or(DEFAULT_PAGE_SIZE);
     if limit == 0 || limit > state.max_entity_page_size {
@@ -228,6 +232,11 @@ pub(super) async fn search_entity_previews(
             .expect("selected version was checked above"),
         None => current.clone(),
     };
+    let filters = input
+        .filters
+        .iter()
+        .map(|filter| resolve_search_filter(&search_blueprint, filter))
+        .collect::<Result<Vec<_>, _>>()?;
     let candidate_started = Instant::now();
     // An unfiltered current-version search is already constrained by the page query.
     // Avoid materializing every entity ID only to pass it back as `id = ANY(...)`.
@@ -254,6 +263,16 @@ pub(super) async fn search_entity_previews(
             .copied()
             .collect()
     });
+    if !filters.is_empty() {
+        let filtered = repository
+            .filter_entity_ids(current.blueprint.id, selected, &filters)
+            .instrument(tracing::info_span!(
+                "sql.operation",
+                label = "attribute-filter"
+            ))
+            .await?;
+        matching = Some(intersect_entity_ids(matching, filtered));
+    }
     for facet in input.relationship_tree_facets {
         let source = &search_blueprint
             .attributes
@@ -304,6 +323,9 @@ pub(super) async fn search_entity_previews(
                 ));
             }
         }
+        let facet_candidates = matching
+            .as_ref()
+            .map(|ids| ids.iter().copied().collect::<HashSet<_>>());
         let facet_matching = repository
             .relationship_tree_facet(
                 current.blueprint.id,
@@ -312,7 +334,7 @@ pub(super) async fn search_entity_previews(
                 facet.hierarchy_field.as_deref(),
                 facet.context_id,
                 &facet.selected_target_ids,
-                ids,
+                facet_candidates.as_ref(),
             )
             .instrument(tracing::info_span!(
                 "sql.operation",
@@ -321,13 +343,7 @@ pub(super) async fn search_entity_previews(
             .await?
             .1;
         if let Some(facet_matching) = facet_matching {
-            matching = Some(match matching {
-                Some(current_matching) => current_matching
-                    .into_iter()
-                    .filter(|id| facet_matching.contains(id))
-                    .collect(),
-                None => facet_matching,
-            });
+            matching = Some(intersect_entity_ids(matching, facet_matching));
         }
     }
     timing.record("candidate", candidate_started);
@@ -430,6 +446,82 @@ pub(super) async fn search_entity_previews(
     .into_response();
     timing.record("serialize", serialization_started);
     Ok(response)
+}
+
+fn intersect_entity_ids(current: Option<Vec<Uuid>>, next: Vec<Uuid>) -> Vec<Uuid> {
+    match current {
+        None => next,
+        Some(current) => {
+            let next: HashSet<_> = next.into_iter().collect();
+            current.into_iter().filter(|id| next.contains(id)).collect()
+        }
+    }
+}
+
+fn resolve_search_filter(
+    blueprint: &crate::model::BlueprintWithAttributes,
+    filter: &SearchFilter,
+) -> Result<EntitySearchFilter, ApiError> {
+    let attribute = blueprint
+        .attributes
+        .iter()
+        .find(|attribute| attribute.code == filter.field)
+        .ok_or_else(|| {
+            ApiError::invalid_input(format!(
+                "filters.field '{}' is not an attribute",
+                filter.field
+            ))
+        })?;
+    let value_type = attribute.value_type.as_str();
+    let valid_operator = match value_type {
+        "string" => matches!(filter.operator.as_str(), "eq" | "contains" | "starts_with"),
+        "number" | "integer" | "date" | "datetime" | "time" => {
+            matches!(filter.operator.as_str(), "eq" | "gt" | "gte" | "lt" | "lte")
+        }
+        "boolean" => filter.operator == "eq",
+        _ => false,
+    };
+    if !valid_operator {
+        return Err(ApiError::invalid_input(format!(
+            "operator '{}' is not supported for {} attribute '{}'",
+            filter.operator, value_type, filter.field
+        )));
+    }
+    let value = match value_type {
+        "string" => filter.value.as_str().map(str::to_owned),
+        "number" => filter.value.as_number().map(ToString::to_string),
+        "integer" => filter.value.as_i64().map(|value| value.to_string()),
+        "boolean" => filter.value.as_bool().map(|value| value.to_string()),
+        "date" => filter.value.as_str().and_then(|value| {
+            chrono::NaiveDate::parse_from_str(value, "%Y-%m-%d")
+                .ok()
+                .map(|_| value.to_owned())
+        }),
+        "datetime" => filter.value.as_str().and_then(|value| {
+            chrono::DateTime::parse_from_rfc3339(value)
+                .ok()
+                .map(|_| value.to_owned())
+        }),
+        "time" => filter.value.as_str().and_then(|value| {
+            ["%H:%M", "%H:%M:%S", "%H:%M:%S%.f"]
+                .iter()
+                .any(|format| chrono::NaiveTime::parse_from_str(value, format).is_ok())
+                .then(|| value.to_owned())
+        }),
+        _ => None,
+    }
+    .ok_or_else(|| {
+        ApiError::invalid_input(format!(
+            "filters.value is invalid for {} attribute '{}'",
+            value_type, filter.field
+        ))
+    })?;
+    Ok(EntitySearchFilter {
+        field: filter.field.clone(),
+        operator: filter.operator.clone(),
+        value_type: value_type.to_owned(),
+        value,
+    })
 }
 
 /// Only relationship hops used by rich table columns need page-level hydration.
@@ -647,6 +739,7 @@ pub(super) async fn relationship_tree_facet_children(
                 input.context_id,
                 input.parent_id,
                 input.cursor,
+                &input.selected_target_ids,
                 state.max_relationship_facet_nodes.into(),
             )
             .instrument(tracing::info_span!(

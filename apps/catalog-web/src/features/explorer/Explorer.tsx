@@ -1,6 +1,7 @@
 import {
   keepPreviousData,
   useInfiniteQuery,
+  useQueries,
   useQuery,
 } from '@tanstack/react-query';
 import { useNavigate } from '@tanstack/react-router';
@@ -14,6 +15,7 @@ import { listContexts } from '../contexts/api';
 import { contextQueryKeys } from '../contexts/query-keys';
 import {
   getBlueprintByCode,
+  getRelationshipTreeFacetChildren,
   listEntityBlueprints,
   searchEntities,
 } from '../entities/api';
@@ -22,9 +24,10 @@ import {
   ExplorerFacetSidebar,
   type ExplorerRelationshipFacet,
 } from './ExplorerFacetSidebar';
+import { ActiveExplorerFilters } from './ActiveExplorerFilters';
 import { ExplorerResultsTable } from './ExplorerResultsTable';
 import { ExplorerSearchForm } from './ExplorerSearchForm';
-import type { ExplorerSearch } from './search';
+import type { AttributeFilter, ExplorerSearch } from './search';
 
 const lastBlueprintStorageKey = 'catalog.explorer.last-blueprint';
 
@@ -102,6 +105,7 @@ export const Explorer = ({ search: urlSearch }: { search: ExplorerSearch }) => {
       search.query,
       relationshipTreeFacets,
       search.sort,
+      search.attributeFilters,
     ),
     queryFn: ({ pageParam, signal }) =>
       searchEntities(
@@ -113,6 +117,7 @@ export const Explorer = ({ search: urlSearch }: { search: ExplorerSearch }) => {
         signal,
         search.sort,
         pageParam === null,
+        search.attributeFilters,
       ),
     initialPageParam: null as string | null,
     getNextPageParam: (page) => page.next_cursor,
@@ -163,6 +168,90 @@ export const Explorer = ({ search: urlSearch }: { search: ExplorerSearch }) => {
     });
   };
 
+  const selectedRelationshipFacets = explorerFacets.filter(
+    (facet) => facet.selectedIds.length > 0,
+  );
+  const relationshipFilterLabelQueries = useQueries({
+    queries: selectedRelationshipFacets.map((facet) => {
+      const contextId = contexts.data?.find(
+        (context) => context.code === facetContextCode,
+      )?.id;
+      return {
+        queryKey: entityQueryKeys.relationshipTreeFacetChildren(
+          search.blueprint ?? '',
+          search.version,
+          search.query,
+          facet.sourceRelationship.code,
+          facet.hierarchyField ?? '',
+          facetContextCode,
+          undefined,
+          null,
+          facet.selectedIds,
+        ),
+        queryFn: ({ signal }: { signal: AbortSignal }) =>
+          getRelationshipTreeFacetChildren(
+            {
+              blueprint: {
+                code: search.blueprint!,
+                ...(search.version === undefined
+                  ? {}
+                  : { version: search.version }),
+              },
+              ...(search.query ? { query: search.query } : {}),
+              source_relationship_field: facet.sourceRelationship.code,
+              ...(facet.hierarchyField
+                ? { hierarchy_field: facet.hierarchyField }
+                : {}),
+              context_id: contextId!,
+              selected_target_ids: facet.selectedIds,
+              cursor: null,
+            },
+            signal,
+          ),
+        enabled: Boolean(search.blueprint && contextId),
+      };
+    }),
+  });
+  const activeRelationshipFilters = selectedRelationshipFacets.map(
+    (facet, index) => {
+      const selectedItems =
+        relationshipFilterLabelQueries[index]?.data?.selected_items;
+      const labels =
+        selectedItems?.length === facet.selectedIds.length &&
+        selectedItems.every((item) => item.display)
+          ? selectedItems.map((item) => item.display)
+          : undefined;
+      return {
+        field: facet.sourceRelationship.code,
+        selectedCount: facet.selectedIds.length,
+        labels,
+      };
+    },
+  );
+  const addAttributeFilter = (filter: AttributeFilter) => {
+    void navigate({
+      to: '/',
+      search: {
+        ...search,
+        attributeFilters: [...(search.attributeFilters ?? []), filter],
+      },
+    });
+  };
+  const removeAttributeFilter = (index: number) => {
+    const attributeFilters = (search.attributeFilters ?? []).filter(
+      (_, filterIndex) => filterIndex !== index,
+    );
+    void navigate({
+      to: '/',
+      search: {
+        ...search,
+        attributeFilters: attributeFilters.length
+          ? attributeFilters
+          : undefined,
+      },
+    });
+  };
+
   const lockedBlueprintName =
     selectedBlueprint.data?.blueprint.name ?? search.blueprint;
   const selectBlueprint = (blueprint: string) => {
@@ -172,6 +261,7 @@ export const Explorer = ({ search: urlSearch }: { search: ExplorerSearch }) => {
         blueprint,
         query: search.query,
         relationshipFacets: undefined,
+        attributeFilters: undefined,
       },
     });
   };
@@ -186,12 +276,15 @@ export const Explorer = ({ search: urlSearch }: { search: ExplorerSearch }) => {
         }}
       >
         <ExplorerFacetSidebar
+          activeAttributeFilterCount={search.attributeFilters?.length ?? 0}
+          attributes={selectedBlueprint.data?.attributes ?? []}
           blueprint={search.blueprint ?? ''}
           blueprints={blueprints.data ?? []}
           contextCode={facetContextCode}
           contexts={contexts.data ?? []}
           facets={explorerFacets}
           fullHeight
+          onAddAttributeFilter={addAttributeFilter}
           onBlueprintChange={search.locked ? undefined : selectBlueprint}
           onContextChange={updateFacetContext}
           onUpdate={updateFacet}
@@ -243,12 +336,23 @@ export const Explorer = ({ search: urlSearch }: { search: ExplorerSearch }) => {
                 search: {
                   ...(value.blueprint === search.blueprint
                     ? search
-                    : { relationshipFacets: undefined }),
+                    : {
+                        relationshipFacets: undefined,
+                        attributeFilters: undefined,
+                      }),
                   ...value,
                 },
               });
             }}
             search={search}
+          />
+          <ActiveExplorerFilters
+            attributeFilters={search.attributeFilters ?? []}
+            onRemoveAttribute={removeAttributeFilter}
+            onRemoveRelationship={(field) =>
+              updateFacet(field, { selectedIds: [] })
+            }
+            relationshipFilters={activeRelationshipFilters}
           />
           {!search.blueprint && (
             <Typography sx={{ py: 3 }}>{t('explorer.start')}</Typography>
@@ -269,11 +373,16 @@ export const Explorer = ({ search: urlSearch }: { search: ExplorerSearch }) => {
             >
               <Box sx={{ display: { lg: 'none' }, mb: 3 }}>
                 <ExplorerFacetSidebar
+                  activeAttributeFilterCount={
+                    search.attributeFilters?.length ?? 0
+                  }
+                  attributes={selectedBlueprint.data?.attributes ?? []}
                   blueprint={search.blueprint ?? ''}
                   blueprints={blueprints.data ?? []}
                   contextCode={facetContextCode}
                   contexts={contexts.data ?? []}
                   facets={explorerFacets}
+                  onAddAttributeFilter={addAttributeFilter}
                   onBlueprintChange={
                     search.locked ? undefined : selectBlueprint
                   }
@@ -292,6 +401,7 @@ export const Explorer = ({ search: urlSearch }: { search: ExplorerSearch }) => {
                     search.query,
                     relationshipTreeFacets,
                     search.sort,
+                    search.attributeFilters,
                   ])}
                   hasNextPage={results.hasNextPage}
                   isFetchingNextPage={results.isFetchingNextPage}

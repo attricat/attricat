@@ -33,6 +33,7 @@ export type {
   EntityMigrationPreview,
   FormAttributeValue,
   EntityItem,
+  EntitySearchFilter,
   EntitySearchResponse,
   IncomingRelationshipsPage,
   JsonSchema,
@@ -60,6 +61,7 @@ export const searchEntities = (
   signal?: AbortSignal,
   sort?: { field: string; direction: 'asc' | 'desc' },
   includeTotal = false,
+  filters: import('./schemas').EntitySearchFilter[] = [],
 ) => {
   const payload = searchEntitiesRequestSchema.parse({
     blueprint: {
@@ -67,7 +69,7 @@ export const searchEntities = (
       ...(version === undefined ? {} : { version }),
     },
     query,
-    filters: [],
+    filters,
     relationship_tree_facets: relationshipTreeFacets,
     sort,
     ...(includeTotal ? { include_total: true } : {}),
@@ -90,6 +92,7 @@ export const getRelationshipTreeFacetChildren = (
     context_id: string;
     parent_id?: string;
     cursor?: string | null;
+    selected_target_ids?: string[];
   },
   signal?: AbortSignal,
 ) =>

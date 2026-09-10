@@ -35,6 +35,14 @@ pub(crate) struct EntitySearchSort {
     pub descending: bool,
 }
 
+#[derive(Clone, Debug, serde::Serialize)]
+pub(crate) struct EntitySearchFilter {
+    pub field: String,
+    pub operator: String,
+    pub value_type: String,
+    pub value: String,
+}
+
 #[derive(Clone, Debug, serde::Deserialize, serde::Serialize)]
 struct SortedSearchCursor {
     version: u8,
@@ -213,7 +221,112 @@ impl CatalogRepository {
         })
     }
 
-    // Search filters are currently normalized by the HTTP boundary as discrete inputs.
+    /// Resolves entities which satisfy every typed scalar filter in the default context.
+    pub(crate) async fn filter_entity_ids(
+        &self,
+        blueprint_id: Uuid,
+        blueprint_version: Option<i64>,
+        filters: &[EntitySearchFilter],
+    ) -> Result<Vec<Uuid>, RepositoryError> {
+        if filters.is_empty() {
+            return Ok(Vec::new());
+        }
+        let filters = serde_json::to_value(filters)
+            .map_err(|error| RepositoryError::InvalidBlueprintDefinition(error.to_string()))?;
+        Ok(sqlx::query_scalar::<_, Uuid>(
+            r#"SELECT e.id
+                 FROM entities e
+                WHERE e.blueprint_id = $1
+                  AND ($2::bigint IS NULL OR e.blueprint_version = $2)
+                  AND e.deleted_at IS NULL
+                  AND NOT EXISTS (
+                      SELECT 1
+                        FROM jsonb_to_recordset($3::jsonb)
+                          AS criterion(field text, operator text, value_type text, value text)
+                       WHERE NOT EXISTS (
+                           SELECT 1
+                             FROM attribute_values av
+                             JOIN attributes a ON a.id = av.attribute_id
+                              AND a.blueprint_id = e.blueprint_id
+                              AND a.blueprint_version = e.blueprint_version
+                              AND a.deleted_at IS NULL
+                            WHERE av.entity_id = e.id
+                              AND av.active
+                              AND av.relationship_target_entity_id IS NULL
+                              AND av.context_id = (SELECT id FROM attribute_contexts WHERE code = 'default')
+                              AND a.code = criterion.field
+                              AND a.value_type = criterion.value_type
+                              AND CASE
+                                  WHEN criterion.value_type = 'string' AND criterion.operator = 'eq'
+                                      THEN av.value_text = criterion.value
+                                  WHEN criterion.value_type = 'string' AND criterion.operator = 'contains'
+                                      THEN strpos(lower(av.value_text), lower(criterion.value)) > 0
+                                  WHEN criterion.value_type = 'string' AND criterion.operator = 'starts_with'
+                                      THEN left(lower(av.value_text), char_length(criterion.value)) = lower(criterion.value)
+                                  WHEN criterion.value_type = 'number' AND criterion.operator = 'eq'
+                                      THEN av.value_number = criterion.value::numeric
+                                  WHEN criterion.value_type = 'number' AND criterion.operator = 'gt'
+                                      THEN av.value_number > criterion.value::numeric
+                                  WHEN criterion.value_type = 'number' AND criterion.operator = 'gte'
+                                      THEN av.value_number >= criterion.value::numeric
+                                  WHEN criterion.value_type = 'number' AND criterion.operator = 'lt'
+                                      THEN av.value_number < criterion.value::numeric
+                                  WHEN criterion.value_type = 'number' AND criterion.operator = 'lte'
+                                      THEN av.value_number <= criterion.value::numeric
+                                  WHEN criterion.value_type = 'integer' AND criterion.operator = 'eq'
+                                      THEN av.value_integer = criterion.value::bigint
+                                  WHEN criterion.value_type = 'integer' AND criterion.operator = 'gt'
+                                      THEN av.value_integer > criterion.value::bigint
+                                  WHEN criterion.value_type = 'integer' AND criterion.operator = 'gte'
+                                      THEN av.value_integer >= criterion.value::bigint
+                                  WHEN criterion.value_type = 'integer' AND criterion.operator = 'lt'
+                                      THEN av.value_integer < criterion.value::bigint
+                                  WHEN criterion.value_type = 'integer' AND criterion.operator = 'lte'
+                                      THEN av.value_integer <= criterion.value::bigint
+                                  WHEN criterion.value_type = 'boolean' AND criterion.operator = 'eq'
+                                      THEN av.value_boolean = criterion.value::boolean
+                                  WHEN criterion.value_type = 'date' AND criterion.operator = 'eq'
+                                      THEN av.value_date = criterion.value::date
+                                  WHEN criterion.value_type = 'date' AND criterion.operator = 'gt'
+                                      THEN av.value_date > criterion.value::date
+                                  WHEN criterion.value_type = 'date' AND criterion.operator = 'gte'
+                                      THEN av.value_date >= criterion.value::date
+                                  WHEN criterion.value_type = 'date' AND criterion.operator = 'lt'
+                                      THEN av.value_date < criterion.value::date
+                                  WHEN criterion.value_type = 'date' AND criterion.operator = 'lte'
+                                      THEN av.value_date <= criterion.value::date
+                                  WHEN criterion.value_type = 'datetime' AND criterion.operator = 'eq'
+                                      THEN av.value_datetime = criterion.value::timestamptz
+                                  WHEN criterion.value_type = 'datetime' AND criterion.operator = 'gt'
+                                      THEN av.value_datetime > criterion.value::timestamptz
+                                  WHEN criterion.value_type = 'datetime' AND criterion.operator = 'gte'
+                                      THEN av.value_datetime >= criterion.value::timestamptz
+                                  WHEN criterion.value_type = 'datetime' AND criterion.operator = 'lt'
+                                      THEN av.value_datetime < criterion.value::timestamptz
+                                  WHEN criterion.value_type = 'datetime' AND criterion.operator = 'lte'
+                                      THEN av.value_datetime <= criterion.value::timestamptz
+                                  WHEN criterion.value_type = 'time' AND criterion.operator = 'eq'
+                                      THEN av.value_time = criterion.value::time
+                                  WHEN criterion.value_type = 'time' AND criterion.operator = 'gt'
+                                      THEN av.value_time > criterion.value::time
+                                  WHEN criterion.value_type = 'time' AND criterion.operator = 'gte'
+                                      THEN av.value_time >= criterion.value::time
+                                  WHEN criterion.value_type = 'time' AND criterion.operator = 'lt'
+                                      THEN av.value_time < criterion.value::time
+                                  WHEN criterion.value_type = 'time' AND criterion.operator = 'lte'
+                                      THEN av.value_time <= criterion.value::time
+                                  ELSE FALSE
+                              END
+                       )
+                  )"#,
+        )
+        .bind(blueprint_id)
+        .bind(blueprint_version)
+        .bind(filters)
+        .fetch_all(&self.pool)
+        .await?)
+    }
+
     #[allow(clippy::too_many_arguments)]
     pub async fn search_entity_previews(
         &self,
@@ -689,6 +802,7 @@ impl CatalogRepository {
         context_id: Uuid,
         parent_id: Option<Uuid>,
         cursor: Option<Uuid>,
+        selected_target_ids: &[Uuid],
         limit: i64,
     ) -> Result<RelationshipTreeFacetChildrenResponse, RepositoryError> {
         let requested_context = self
@@ -812,7 +926,53 @@ impl CatalogRepository {
         } else {
             None
         };
-        Ok(RelationshipTreeFacetChildrenResponse { items, next_cursor })
+        let selected_rows = if selected_target_ids.is_empty() {
+            Vec::new()
+        } else {
+            sqlx::query_as::<_, RelationshipTreeNodeRow>(
+                r#"SELECT entity.id, entity.projections -> 'preview' AS preview,
+                          blueprint.views,
+                          (SELECT COALESCE(jsonb_object_agg(attribute.code, attribute.context_fallback), '{}'::jsonb)
+                             FROM attributes attribute
+                            WHERE attribute.blueprint_id = entity.blueprint_id
+                              AND attribute.blueprint_version = entity.blueprint_version
+                              AND attribute.deleted_at IS NULL) AS context_fallback
+                     FROM entities entity
+                     JOIN blueprints blueprint ON blueprint.id = entity.blueprint_id
+                      AND blueprint.version = entity.blueprint_version
+                    WHERE entity.blueprint_id = $1
+                      AND entity.id = ANY($2)
+                      AND entity.deleted_at IS NULL
+                    ORDER BY entity.id"#,
+            )
+            .bind(target_blueprint_id)
+            .bind(selected_target_ids)
+            .fetch_all(&self.pool)
+            .await?
+        };
+        if selected_rows.len() != selected_target_ids.iter().collect::<HashSet<_>>().len() {
+            return Err(RepositoryError::RelationshipTargetTypeMismatch);
+        }
+        let selected_items = selected_rows
+            .into_iter()
+            .map(|row| EntityHierarchyItem {
+                id: row.id,
+                display: display_label(
+                    &row.preview,
+                    &row.views,
+                    &row.context_fallback,
+                    &requested_context.code,
+                )
+                .as_str()
+                .unwrap_or_default()
+                .to_owned(),
+            })
+            .collect();
+        Ok(RelationshipTreeFacetChildrenResponse {
+            items,
+            selected_items,
+            next_cursor,
+        })
     }
 
     async fn resolved_relationship_edges(

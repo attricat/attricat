@@ -79,13 +79,18 @@ const RelationshipTreeFacetContent = ({
     (context) => context.code === contextCode,
   )?.id;
   const pages = [...cursors.entries()].flatMap(([parentKey, pageCursors]) =>
-    pageCursors.map((cursor) => ({
-      parentId: parentKey === 'root' ? undefined : parentKey,
-      cursor,
-    })),
+    pageCursors.map((cursor) => {
+      const parentId = parentKey === 'root' ? undefined : parentKey;
+      return {
+        parentId,
+        cursor,
+        selectedTargetIds:
+          parentId === undefined && cursor === null ? selectedIds : [],
+      };
+    }),
   );
   const results = useQueries({
-    queries: pages.map(({ parentId, cursor }) => ({
+    queries: pages.map(({ parentId, cursor, selectedTargetIds }) => ({
       queryKey: entityQueryKeys.relationshipTreeFacetChildren(
         blueprint,
         version,
@@ -95,6 +100,7 @@ const RelationshipTreeFacetContent = ({
         contextCode ?? '',
         parentId,
         cursor,
+        selectedTargetIds,
       ),
       queryFn: ({ signal }) =>
         getRelationshipTreeFacetChildren(
@@ -109,6 +115,7 @@ const RelationshipTreeFacetContent = ({
             context_id: contextId!,
             ...(parentId === undefined ? {} : { parent_id: parentId }),
             cursor,
+            selected_target_ids: selectedTargetIds,
           },
           signal,
         ),

@@ -368,6 +368,37 @@ describe('entity API client', () => {
     });
   });
 
+  it('posts typed attribute filters', async () => {
+    respond({
+      blueprint: blueprintWithAttributes,
+      items: [],
+      next_cursor: null,
+    });
+
+    await searchEntities(
+      'product',
+      undefined,
+      '',
+      null,
+      undefined,
+      undefined,
+      undefined,
+      false,
+      [{ field: 'price', operator: 'gte', value: 100 }],
+    );
+
+    expect(fetchMock).toHaveBeenLastCalledWith('/api/v1/entities/search', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        blueprint: { code: 'product' },
+        query: '',
+        filters: [{ field: 'price', operator: 'gte', value: 100 }],
+        page: { size: 25, cursor: null },
+      }),
+    });
+  });
+
   it('posts relationship-tree facet selections', async () => {
     respond({
       blueprint: blueprintWithAttributes,

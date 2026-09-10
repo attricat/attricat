@@ -35,6 +35,30 @@ describe('parseExplorerSearch', () => {
     ).toEqual({ blueprint: 'product', sort: undefined });
   });
 
+  it('preserves valid attribute filters and drops malformed filter state', () => {
+    expect(
+      parseExplorerSearch({
+        blueprint: 'product',
+        attributeFilters: [
+          { field: 'price', operator: 'gte', value: 100 },
+          { field: 'available', operator: 'eq', value: true },
+        ],
+      }),
+    ).toEqual({
+      blueprint: 'product',
+      attributeFilters: [
+        { field: 'price', operator: 'gte', value: 100 },
+        { field: 'available', operator: 'eq', value: true },
+      ],
+    });
+    expect(
+      parseExplorerSearch({
+        blueprint: 'product',
+        attributeFilters: [{ field: '', operator: 'nope', value: {} }],
+      }),
+    ).toEqual({ blueprint: 'product', attributeFilters: undefined });
+  });
+
   it('preserves locked mode for pinned navigation shortcuts', () => {
     expect(parseExplorerSearch({ blueprint: 'product', locked: true })).toEqual(
       {

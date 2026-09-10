@@ -1,5 +1,23 @@
 import { z } from 'zod';
 
+export const maximumAttributeFilters = 20;
+
+const attributeFilterOperatorSchema = z.enum([
+  'eq',
+  'contains',
+  'starts_with',
+  'gt',
+  'gte',
+  'lt',
+  'lte',
+]);
+
+const attributeFilterSearchSchema = z.object({
+  field: z.string().trim().min(1),
+  operator: attributeFilterOperatorSchema,
+  value: z.union([z.string(), z.number().finite(), z.boolean()]),
+});
+
 const relationshipFacetSearchSchema = z.object({
   field: z.string().trim().min(1),
   hierarchy: z.string().trim().min(1).optional(),
@@ -23,8 +41,14 @@ export const explorerSearchSchema = z.object({
     .array(relationshipFacetSearchSchema)
     .optional()
     .catch(undefined),
+  attributeFilters: z
+    .array(attributeFilterSearchSchema)
+    .max(maximumAttributeFilters)
+    .optional()
+    .catch(undefined),
 });
 
+export type AttributeFilter = z.infer<typeof attributeFilterSearchSchema>;
 export type ExplorerSearch = z.infer<typeof explorerSearchSchema>;
 
 export const parseExplorerSearch = (
