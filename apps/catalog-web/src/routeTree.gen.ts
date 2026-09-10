@@ -22,6 +22,7 @@ import { Route as EntitiesNewRouteImport } from './routes/entities/new'
 import { Route as InvitationsAcceptRouteImport } from './routes/invitations/accept'
 import { Route as LoginIndexRouteImport } from './routes/login/index'
 import { Route as LoginIdentifierRouteImport } from './routes/login/$identifier'
+import { Route as ManageIndexRouteImport } from './routes/manage/index'
 import { Route as ManageAuditLogRouteImport } from './routes/manage/audit-log'
 import { Route as ManageDataHealthRouteImport } from './routes/manage/data-health'
 import { Route as PasswordResetIndexRouteImport } from './routes/password-reset/index'
@@ -114,6 +115,11 @@ const LoginIdentifierRoute = LoginIdentifierRouteImport.update({
   id: '/$identifier',
   path: '/$identifier',
   getParentRoute: () => LoginRoute,
+} as any)
+const ManageIndexRoute = ManageIndexRouteImport.update({
+  id: '/manage/',
+  path: '/manage/',
+  getParentRoute: () => rootRouteImport,
 } as any)
 const ManageAuditLogRoute = ManageAuditLogRouteImport.update({
   id: '/manage/audit-log',
@@ -279,6 +285,7 @@ export interface FileRoutesByFullPath {
   '/profile/personal-access-tokens': typeof ProfilePersonalAccessTokensRoute
   '/agents/': typeof AgentsIndexRoute
   '/login/': typeof LoginIndexRoute
+  '/manage/': typeof ManageIndexRoute
   '/password-reset/': typeof PasswordResetIndexRoute
   '/profile/': typeof ProfileIndexRoute
   '/entities/$entityId/changes': typeof EntitiesEntityIdChangesRoute
@@ -318,6 +325,7 @@ export interface FileRoutesByTo {
   '/profile/personal-access-tokens': typeof ProfilePersonalAccessTokensRoute
   '/agents': typeof AgentsIndexRoute
   '/login': typeof LoginIndexRoute
+  '/manage': typeof ManageIndexRoute
   '/password-reset': typeof PasswordResetIndexRoute
   '/profile': typeof ProfileIndexRoute
   '/entities/$entityId/changes': typeof EntitiesEntityIdChangesRoute
@@ -360,6 +368,7 @@ export interface FileRoutesById {
   '/profile/personal-access-tokens': typeof ProfilePersonalAccessTokensRoute
   '/agents/': typeof AgentsIndexRoute
   '/login/': typeof LoginIndexRoute
+  '/manage/': typeof ManageIndexRoute
   '/password-reset/': typeof PasswordResetIndexRoute
   '/profile/': typeof ProfileIndexRoute
   '/entities/$entityId/changes': typeof EntitiesEntityIdChangesRoute
@@ -404,6 +413,7 @@ export interface FileRouteTypes {
     | '/profile/personal-access-tokens'
     | '/agents/'
     | '/login/'
+    | '/manage/'
     | '/password-reset/'
     | '/profile/'
     | '/entities/$entityId/changes'
@@ -443,6 +453,7 @@ export interface FileRouteTypes {
     | '/profile/personal-access-tokens'
     | '/agents'
     | '/login'
+    | '/manage'
     | '/password-reset'
     | '/profile'
     | '/entities/$entityId/changes'
@@ -484,6 +495,7 @@ export interface FileRouteTypes {
     | '/profile/personal-access-tokens'
     | '/agents/'
     | '/login/'
+    | '/manage/'
     | '/password-reset/'
     | '/profile/'
     | '/entities/$entityId/changes'
@@ -524,6 +536,7 @@ export interface RootRouteChildren {
   ManageDataHealthRoute: typeof ManageDataHealthRoute
   PasswordResetConfirmRoute: typeof PasswordResetConfirmRoute
   AgentsIndexRoute: typeof AgentsIndexRoute
+  ManageIndexRoute: typeof ManageIndexRoute
   PasswordResetIndexRoute: typeof PasswordResetIndexRoute
   ExtensionsExtensionIdContributionIdRoute: typeof ExtensionsExtensionIdContributionIdRoute
   ManageBlueprintsBlueprintIdRoute: typeof ManageBlueprintsBlueprintIdRouteWithChildren
@@ -634,6 +647,13 @@ declare module '@tanstack/react-router' {
       fullPath: '/login/$identifier'
       preLoaderRoute: typeof LoginIdentifierRouteImport
       parentRoute: typeof LoginRoute
+    }
+    '/manage/': {
+      id: '/manage/'
+      path: '/manage'
+      fullPath: '/manage/'
+      preLoaderRoute: typeof ManageIndexRouteImport
+      parentRoute: typeof rootRouteImport
     }
     '/manage/audit-log': {
       id: '/manage/audit-log'
@@ -902,6 +922,7 @@ const rootRouteChildren: RootRouteChildren = {
   ManageDataHealthRoute: ManageDataHealthRoute,
   PasswordResetConfirmRoute: PasswordResetConfirmRoute,
   AgentsIndexRoute: AgentsIndexRoute,
+  ManageIndexRoute: ManageIndexRoute,
   PasswordResetIndexRoute: PasswordResetIndexRoute,
   ExtensionsExtensionIdContributionIdRoute:
     ExtensionsExtensionIdContributionIdRoute,

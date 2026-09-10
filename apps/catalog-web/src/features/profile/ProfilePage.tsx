@@ -4,6 +4,7 @@ import { Link } from '@tanstack/react-router';
 import { useTranslation } from 'react-i18next';
 import { currentSession } from '../auth/api';
 import { authQueryKeys } from '../auth/query-keys';
+import { LanguageSwitcher } from '../../components/LanguageSwitcher';
 import { PersonalTokens } from './PersonalTokens';
 
 export const ProfilePage = () => {
@@ -42,6 +43,12 @@ export const ProfilePage = () => {
               value: account?.workspace_id ?? t('profile.loading'),
             })}
           </Typography>
+        </Paper>
+        <Paper sx={{ p: 2 }}>
+          <Stack direction="row" spacing={2} sx={{ alignItems: 'center' }}>
+            <Typography variant="h6">{t('language.label')}</Typography>
+            <LanguageSwitcher />
+          </Stack>
         </Paper>
         <Box id="personal-api-tokens">
           <Stack

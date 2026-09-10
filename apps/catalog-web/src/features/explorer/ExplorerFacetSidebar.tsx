@@ -12,7 +12,7 @@ import {
 import { useQuery } from '@tanstack/react-query';
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import type { Attribute } from '../entities/api';
+import type { Attribute, Blueprint } from '../entities/api';
 import type { AttributeContext } from '../contexts/api';
 import { getBlueprintByCode } from '../entities/api';
 import { entityQueryKeys } from '../entities/query-keys';
@@ -26,11 +26,14 @@ export type ExplorerRelationshipFacet = {
 
 type Props = {
   blueprint: string;
+  blueprints?: Blueprint[];
   contexts: AttributeContext[];
   contextCode: string;
   facets: ExplorerRelationshipFacet[];
   query?: string;
   version?: number;
+  fullHeight?: boolean;
+  onBlueprintChange?: (blueprint: string) => void;
   onContextChange: (contextCode: string) => void;
   onUpdate: (
     field: string,
@@ -48,9 +51,12 @@ type FacetProps = Omit<Props, 'facets' | 'onContextChange'> & {
 
 export const ExplorerFacetSidebar = ({
   blueprint,
+  blueprints = [],
   contexts,
   contextCode,
   facets,
+  fullHeight = false,
+  onBlueprintChange,
   query,
   version,
   onContextChange,
@@ -62,14 +68,32 @@ export const ExplorerFacetSidebar = ({
       component="aside"
       sx={{
         alignSelf: 'start',
-        maxHeight: { md: 'calc(100dvh - 104px)' },
-        overflowY: { md: 'auto' },
+        borderRadius: fullHeight ? 0 : undefined,
+        height: fullHeight ? '100dvh' : undefined,
+        maxHeight: fullHeight ? undefined : { md: 'calc(100dvh - 104px)' },
+        overflowY: fullHeight ? 'auto' : { md: 'auto' },
         p: 2,
-        position: { md: 'sticky' },
-        top: { md: 88 },
+        position: fullHeight ? 'sticky' : { md: 'sticky' },
+        top: fullHeight ? 0 : { md: 88 },
       }}
     >
-      <Typography variant="subtitle2">
+      {onBlueprintChange && (
+        <TextField
+          fullWidth
+          label={t('explorer.selectBlueprint')}
+          onChange={(event) => onBlueprintChange(event.target.value)}
+          select
+          size="small"
+          value={blueprint}
+        >
+          {blueprints.map((item) => (
+            <MenuItem key={item.code} value={item.code}>
+              {item.name} ({item.code})
+            </MenuItem>
+          ))}
+        </TextField>
+      )}
+      <Typography sx={{ mt: onBlueprintChange ? 2 : 0 }} variant="subtitle2">
         {t('explorer.relationshipFilters')}
       </Typography>
       <TextField

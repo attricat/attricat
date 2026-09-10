@@ -165,121 +165,158 @@ export const Explorer = ({ search: urlSearch }: { search: ExplorerSearch }) => {
 
   const lockedBlueprintName =
     selectedBlueprint.data?.blueprint.name ?? search.blueprint;
+  const selectBlueprint = (blueprint: string) => {
+    void navigate({
+      to: '/',
+      search: {
+        blueprint,
+        query: search.query,
+        relationshipFacets: undefined,
+      },
+    });
+  };
 
   return (
-    <PageContainer>
-      <PageHeader
-        actions={
-          <RouterButton
-            search={
-              search.locked && search.blueprint
-                ? { blueprint: search.blueprint, locked: true }
-                : {}
-            }
-            to="/entities/new"
-            variant="contained"
-          >
-            {search.locked && lockedBlueprintName
-              ? t('explorer.createBlueprint', {
-                  blueprint: lockedBlueprintName,
-                })
-              : t('explorer.create')}
-          </RouterButton>
-        }
-        description={
-          search.locked && lockedBlueprintName
-            ? t('explorer.blueprintDescription', {
-                blueprint: lockedBlueprintName,
-              })
-            : t('explorer.description')
-        }
-        title={
-          search.locked && lockedBlueprintName
-            ? t('explorer.blueprintTitle', { blueprint: lockedBlueprintName })
-            : t('explorer.title')
-        }
-      />
-      <ExplorerSearchForm
-        blueprints={blueprints.data ?? []}
-        lockedBlueprint={search.locked}
-        onSubmit={(value) => {
-          void navigate({
-            to: '/',
-            search: {
-              ...(value.blueprint === search.blueprint
-                ? search
-                : { relationshipFacets: undefined }),
-              ...value,
-            },
-          });
+    <Box sx={{ display: 'flex', minHeight: '100dvh' }}>
+      <Box
+        sx={{
+          display: { xs: 'none', lg: 'block' },
+          flexShrink: 0,
+          width: 300,
         }}
-        search={search}
-      />
-      {!search.blueprint && (
-        <Typography sx={{ py: 3 }}>{t('explorer.start')}</Typography>
-      )}
-      {search.blueprint && results.isPending && (
-        <Typography sx={{ py: 3 }}>{t('explorer.loading')}</Typography>
-      )}
-      {results.isError && (
-        <Alert severity="error" sx={{ mt: 3 }}>
-          {results.error.message}
-        </Alert>
-      )}
-      {results.data && (
-        <Box
-          sx={{
-            display: 'grid',
-            gap: 3,
-            gridTemplateColumns: {
-              xs: '1fr',
-              lg: 'minmax(240px, 300px) minmax(0, 1fr)',
-            },
-            mt: 3,
-          }}
-        >
-          <ExplorerFacetSidebar
-            blueprint={search.blueprint ?? ''}
-            contextCode={facetContextCode}
-            contexts={contexts.data ?? []}
-            facets={explorerFacets}
-            onContextChange={updateFacetContext}
-            onUpdate={updateFacet}
-            query={search.query}
-            version={search.version}
+      >
+        <ExplorerFacetSidebar
+          blueprint={search.blueprint ?? ''}
+          blueprints={blueprints.data ?? []}
+          contextCode={facetContextCode}
+          contexts={contexts.data ?? []}
+          facets={explorerFacets}
+          fullHeight
+          onBlueprintChange={search.locked ? undefined : selectBlueprint}
+          onContextChange={updateFacetContext}
+          onUpdate={updateFacet}
+          query={search.query}
+          version={search.version}
+        />
+      </Box>
+      <Box sx={{ flexGrow: 1, minWidth: 0 }}>
+        <PageContainer>
+          <PageHeader
+            actions={
+              <RouterButton
+                search={
+                  search.locked && search.blueprint
+                    ? { blueprint: search.blueprint, locked: true }
+                    : {}
+                }
+                to="/entities/new"
+                variant="contained"
+              >
+                {search.locked && lockedBlueprintName
+                  ? t('explorer.createBlueprint', {
+                      blueprint: lockedBlueprintName,
+                    })
+                  : t('explorer.create')}
+              </RouterButton>
+            }
+            description={
+              search.locked && lockedBlueprintName
+                ? t('explorer.blueprintDescription', {
+                    blueprint: lockedBlueprintName,
+                  })
+                : t('explorer.description')
+            }
+            title={
+              search.locked && lockedBlueprintName
+                ? t('explorer.blueprintTitle', {
+                    blueprint: lockedBlueprintName,
+                  })
+                : t('explorer.title')
+            }
           />
-          {resultBlueprint && (
-            <ExplorerResultsTable
-              blueprint={resultBlueprint}
-              key={JSON.stringify([
-                search.blueprint,
-                search.version,
-                search.query,
-                relationshipTreeFacets,
-                search.sort,
-              ])}
-              hasNextPage={results.hasNextPage}
-              isFetchingNextPage={results.isFetchingNextPage}
-              items={resultItems}
-              totalCount={resultPages[0]?.total_count ?? null}
-              totalCountCapped={resultPages[0]?.total_count_capped ?? false}
-              onLoadMore={() => void results.fetchNextPage()}
-              onSortChange={(field) => {
-                const direction =
-                  search.sort?.field === field &&
-                  search.sort.direction === 'asc'
-                    ? 'desc'
-                    : 'asc';
-                void navigate({
-                  to: '/',
-                  search: { ...search, sort: { field, direction } },
-                });
-              }}
-              sort={search.sort}
-            />
+          <ExplorerSearchForm
+            blueprints={blueprints.data ?? []}
+            lockedBlueprint
+            onSubmit={(value) => {
+              void navigate({
+                to: '/',
+                search: {
+                  ...(value.blueprint === search.blueprint
+                    ? search
+                    : { relationshipFacets: undefined }),
+                  ...value,
+                },
+              });
+            }}
+            search={search}
+          />
+          {!search.blueprint && (
+            <Typography sx={{ py: 3 }}>{t('explorer.start')}</Typography>
           )}
-        </Box>
-      )}
-    </PageContainer>
+          {search.blueprint && results.isPending && (
+            <Typography sx={{ py: 3 }}>{t('explorer.loading')}</Typography>
+          )}
+          {results.isError && (
+            <Alert severity="error" sx={{ mt: 3 }}>
+              {results.error.message}
+            </Alert>
+          )}
+          {results.data && (
+            <Box
+              sx={{
+                mt: 3,
+              }}
+            >
+              <Box sx={{ display: { lg: 'none' }, mb: 3 }}>
+                <ExplorerFacetSidebar
+                  blueprint={search.blueprint ?? ''}
+                  blueprints={blueprints.data ?? []}
+                  contextCode={facetContextCode}
+                  contexts={contexts.data ?? []}
+                  facets={explorerFacets}
+                  onBlueprintChange={
+                    search.locked ? undefined : selectBlueprint
+                  }
+                  onContextChange={updateFacetContext}
+                  onUpdate={updateFacet}
+                  query={search.query}
+                  version={search.version}
+                />
+              </Box>
+              {resultBlueprint && (
+                <ExplorerResultsTable
+                  blueprint={resultBlueprint}
+                  key={JSON.stringify([
+                    search.blueprint,
+                    search.version,
+                    search.query,
+                    relationshipTreeFacets,
+                    search.sort,
+                  ])}
+                  hasNextPage={results.hasNextPage}
+                  isFetchingNextPage={results.isFetchingNextPage}
+                  items={resultItems}
+                  totalCount={resultPages[0]?.total_count ?? null}
+                  totalCountCapped={resultPages[0]?.total_count_capped ?? false}
+                  onLoadMore={() => void results.fetchNextPage()}
+                  onSortChange={(field) => {
+                    const direction =
+                      search.sort?.field === field &&
+                      search.sort.direction === 'asc'
+                        ? 'desc'
+                        : 'asc';
+                    void navigate({
+                      to: '/',
+                      search: { ...search, sort: { field, direction } },
+                    });
+                  }}
+                  sort={search.sort}
+                />
+              )}
+            </Box>
+          )}
+        </PageContainer>
+      </Box>
+    </Box>
   );
 };

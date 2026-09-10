@@ -23,6 +23,8 @@
   "navigation": {
     "open": "Open navigation",
     "entityExplorer": "Entity explorer",
+    "allEntities": "All entities",
+    "shortcuts": "Shortcuts",
     "blueprints": "Blueprints",
     "contexts": "Contexts",
     "agents": "Agents",
@@ -31,6 +33,7 @@
     "extensions": "Extensions",
     "profile": "Profile",
     "workspaceManagement": "Workspace management",
+    "dashboard": "Dashboard",
     "manage": "Manage",
     "signOut": "Sign out"
   },
@@ -392,6 +395,21 @@
     "system": "System",
     "workspace": "Workspace",
     "actionCategoryPlaceholder": "catalog"
+  },
+  "management": {
+    "dashboardTitle": "Management dashboard",
+    "dashboardDescription": "A central place for catalog administration.",
+    "catalogTitle": "Catalog configuration",
+    "catalogDescription": "Manage blueprints, contexts, and data health.",
+    "blueprintsDescription": "Define the entity schemas used by your catalog.",
+    "contextsDescription": "Configure contexts for scoped entity values.",
+    "dataHealthDescription": "Review catalog data quality and health checks.",
+    "workspaceTitle": "Workspace access",
+    "workspaceDescription": "Manage members, roles, and navigation.",
+    "governanceTitle": "Governance",
+    "governanceDescription": "Review activity and audit history.",
+    "extensionsTitle": "Extensions",
+    "extensionsDescription": "Manage installed integrations and their permissions."
   },
   "profile": {
     "never": "Never",

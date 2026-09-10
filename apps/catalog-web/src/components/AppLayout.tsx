@@ -23,7 +23,11 @@ import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { currentSession, logout } from '../features/auth/api';
 import { authQueryKeys } from '../features/auth/query-keys';
-import { drawerWidth, SideNavigation } from './SideNavigation';
+import {
+  drawerWidth,
+  managementSidebarWidth,
+  SideNavigation,
+} from './SideNavigation';
 
 export const SessionErrorState = ({
   onRetry,
@@ -97,6 +101,11 @@ export const AppLayout = () => {
   const theme = useTheme();
   const isDesktop = useMediaQuery(theme.breakpoints.up('md'));
   const [mobileOpen, setMobileOpen] = useState(false);
+  const [desktopManageOpen, setDesktopManageOpen] = useState(
+    pathname === '/' ||
+      pathname === '/manage' ||
+      pathname.startsWith('/manage/'),
+  );
   const [signOutError, setSignOutError] = useState(false);
   const closeMobileNavigation = () => setMobileOpen(false);
   const completeSignOut = async () => {
@@ -176,11 +185,29 @@ export const AppLayout = () => {
       {isDesktop ? (
         <Drawer
           open
-          sx={{ flexShrink: 0, width: drawerWidth }}
-          slotProps={{ paper: { sx: { width: drawerWidth } } }}
+          sx={{
+            flexShrink: 0,
+            width:
+              drawerWidth + (desktopManageOpen ? managementSidebarWidth : 0),
+          }}
+          slotProps={{
+            paper: {
+              sx: {
+                overflow: 'hidden',
+                width:
+                  drawerWidth +
+                  (desktopManageOpen ? managementSidebarWidth : 0),
+              },
+            },
+          }}
           variant="permanent"
         >
-          <SideNavigation onSignOut={signOut} />
+          <SideNavigation
+            compact
+            compactManageOpen={desktopManageOpen}
+            onCompactManageOpenChange={setDesktopManageOpen}
+            onSignOut={signOut}
+          />
         </Drawer>
       ) : (
         <>
