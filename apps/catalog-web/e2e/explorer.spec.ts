@@ -92,14 +92,20 @@ value_type = "integer"`,
   await expect(page.getByText('2 results')).toBeVisible();
   const mobileFilters = page.locator('aside:visible');
   await expect(mobileFilters.getByText('Attribute filters')).toBeVisible();
-  await mobileFilters.getByLabel('Attribute').click();
+  await mobileFilters.getByRole('button', { name: 'Add filter' }).click();
+  const filterDialog = page.getByRole('dialog', {
+    name: /^Add attribute filter/,
+  });
+  await filterDialog
+    .getByRole('combobox', { name: 'Attribute', exact: true })
+    .click();
   await page.getByRole('option', { name: 'stock' }).click();
-  await mobileFilters.getByLabel('Operator').click();
+  await filterDialog.getByLabel('Operator').click();
   await page.getByRole('option', { name: 'Greater than', exact: true }).click();
-  await mobileFilters.getByLabel('Value').fill('5');
-  await mobileFilters.getByRole('button', { name: 'Apply filter' }).click();
+  await filterDialog.getByLabel('Value').fill('5');
+  await filterDialog.getByLabel('Value').press('Enter');
 
-  await expect(page.getByText('stock > "5"')).toBeVisible();
+  await expect(mobileFilters.getByText('stock > "5"')).toBeVisible();
   await expect(page.getByText('1 result')).toBeVisible();
   await expect(
     page.getByRole('cell', { name: 'In stock' }).first(),
@@ -109,7 +115,16 @@ value_type = "integer"`,
     .poll(() => new URL(page.url()).searchParams.get('attributeFilters'))
     .toContain('stock');
 
-  await page.getByLabel('Remove attribute filter stock > "5"').click();
+  await mobileFilters.getByText('stock > "5"').click();
+  const editDialog = page.getByRole('dialog', {
+    name: /^Edit attribute filter/,
+  });
+  await expect(editDialog.getByLabel('Value')).toHaveValue('5');
+  await editDialog.getByLabel('Value').fill('10');
+  await editDialog.getByLabel('Value').press('Enter');
+  await expect(mobileFilters.getByText('stock > "10"')).toBeVisible();
+
+  await page.getByLabel('Remove attribute filter stock > "10"').click();
   await expect(page.getByText('2 results')).toBeVisible();
 });
 
@@ -162,10 +177,10 @@ target_blueprint = "${categoryCode}"`,
   await expect(page.getByText('2 results')).toBeVisible();
   await page.getByRole('button', { name: 'Facet categories' }).click();
   await expect(
-    page.getByRole('checkbox', { name: 'Departments (1)' }),
+    page.getByRole('button', { name: 'Select Departments' }),
   ).toBeVisible();
   await page.getByRole('button', { name: 'Expand Departments' }).click();
-  await page.getByRole('checkbox', { name: 'Shoes (1)' }).click();
+  await page.getByRole('button', { name: 'Select Shoes' }).click();
   await expect(
     page.getByRole('heading', { name: 'Selected', exact: true }),
   ).toBeVisible();
@@ -223,10 +238,11 @@ cardinality = "one_to_one"`,
 
   await page.goto(`/?blueprint=${productCode}`);
   await page.getByRole('button', { name: 'Facet colors' }).click();
-  await expect(page.getByRole('radio', { name: 'Red (1)' })).toBeVisible();
-  await expect(page.getByRole('radio', { name: 'Blue (1)' })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Select Red' })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Select Blue' })).toBeVisible();
+  await expect(page.getByRole('radio')).toHaveCount(0);
   await expect(page.getByLabel('Context').first()).toBeVisible();
-  await page.getByRole('radio', { name: 'Red (1)' }).click();
+  await page.getByRole('button', { name: 'Select Red' }).click();
   await page.getByRole('button', { name: 'Apply' }).click();
 
   await expect
@@ -293,12 +309,14 @@ target_blueprint = "${sizeCode}"`,
 
   await page.goto(`/?blueprint=${productCode}`);
   await page.getByRole('button', { name: 'Colors' }).click();
-  await expect(page.getByRole('checkbox', { name: 'Red (2)' })).toBeVisible();
-  await page.getByRole('checkbox', { name: 'Red (2)' }).click();
+  await expect(page.getByRole('button', { name: 'Select Red' })).toBeVisible();
+  await page.getByRole('button', { name: 'Select Red' }).click();
   await page.getByRole('button', { name: 'Apply' }).click();
   await page.getByRole('button', { name: 'Sizes' }).click();
-  await expect(page.getByRole('checkbox', { name: 'Large (2)' })).toBeVisible();
-  await page.getByRole('checkbox', { name: 'Large (2)' }).click();
+  await expect(
+    page.getByRole('button', { name: 'Select Large' }),
+  ).toBeVisible();
+  await page.getByRole('button', { name: 'Select Large' }).click();
   await page.getByRole('button', { name: 'Apply' }).click();
 
   await expect(page.getByText('1 result')).toBeVisible();

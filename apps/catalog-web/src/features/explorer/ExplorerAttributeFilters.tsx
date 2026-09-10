@@ -1,8 +1,17 @@
 import AddIcon from '@mui/icons-material/Add';
-import { Button, MenuItem, Stack, TextField, Typography } from '@mui/material';
-import { useMemo, useState } from 'react';
+import {
+  Button,
+  Chip,
+  MenuItem,
+  Stack,
+  TextField,
+  Typography,
+} from '@mui/material';
+import { useMemo, useState, type KeyboardEvent } from 'react';
 import { useTranslation } from 'react-i18next';
+import { RelationshipSelectorDialog } from '../../components/RelationshipSelectorDialog';
 import type { Attribute } from '../entities/api';
+import { attributeLabel } from '../entities/entity-display';
 import {
   isFilterableAttribute,
   operatorsForValueType,
@@ -11,40 +20,38 @@ import {
 import { maximumAttributeFilters, type AttributeFilter } from './search';
 
 type Props = {
-  activeFilterCount: number;
+  filters: AttributeFilter[];
   attributes: Attribute[];
   onAdd: (filter: AttributeFilter) => void;
+  onRemove: (index: number) => void;
+  onUpdate: (index: number, filter: AttributeFilter) => void;
 };
 
 export const ExplorerAttributeFilters = ({
-  activeFilterCount,
+  filters,
   attributes,
   onAdd,
+  onRemove,
+  onUpdate,
 }: Props) => {
   const { t } = useTranslation();
   const filterableAttributes = useMemo(
     () => attributes.filter(isFilterableAttribute),
     [attributes],
   );
+  const [open, setOpen] = useState(false);
+  const [editingIndex, setEditingIndex] = useState<number | null>(null);
   const [field, setField] = useState('');
   const [operator, setOperator] = useState<AttributeFilterOperator>('eq');
   const [value, setValue] = useState('');
-  const effectiveField = filterableAttributes.some(
-    (item) => item.code === field,
-  )
-    ? field
-    : (filterableAttributes[0]?.code ?? '');
-  const attribute = filterableAttributes.find(
-    (item) => item.code === effectiveField,
-  );
+  const attribute = filterableAttributes.find((item) => item.code === field);
   const availableOperators = operatorsForValueType(
     attribute?.value_type ?? 'string',
   );
   const effectiveOperator = availableOperators.includes(operator)
     ? operator
     : 'eq';
-
-  const maximumReached = activeFilterCount >= maximumAttributeFilters;
+  const maximumReached = filters.length >= maximumAttributeFilters;
 
   if (!filterableAttributes.length) {
     return (
@@ -54,23 +61,15 @@ export const ExplorerAttributeFilters = ({
     );
   }
 
-  const addFilter = () => {
-    if (!attribute || value === '') return;
-    let parsedValue: string | number | boolean = value;
-    if (attribute.value_type === 'number') parsedValue = Number(value);
-    if (attribute.value_type === 'integer')
-      parsedValue = Number.parseInt(value, 10);
-    if (attribute.value_type === 'boolean') parsedValue = value === 'true';
+  const valueAsFilterValue = () => {
+    if (!attribute) return value;
+    if (attribute.value_type === 'number') return Number(value);
+    if (attribute.value_type === 'integer') return Number.parseInt(value, 10);
+    if (attribute.value_type === 'boolean') return value === 'true';
     if (attribute.value_type === 'datetime')
-      parsedValue = new Date(value).toISOString();
-    onAdd({
-      field: effectiveField,
-      operator: effectiveOperator,
-      value: parsedValue,
-    });
-    setValue('');
+      return new Date(value).toISOString();
+    return value;
   };
-
   const numericValue = Number(value);
   const valueIsValid =
     value !== '' &&
@@ -89,69 +88,108 @@ export const ExplorerAttributeFilters = ({
           : attribute?.value_type === 'time'
             ? 'time'
             : 'text';
+  const close = () => {
+    setOpen(false);
+    setEditingIndex(null);
+    setField('');
+    setOperator('eq');
+    setValue('');
+  };
+  const openNewFilter = () => {
+    setEditingIndex(null);
+    setField('');
+    setOperator('eq');
+    setValue('');
+    setOpen(true);
+  };
+  const openFilter = (filter: AttributeFilter, index: number) => {
+    const filterAttribute = filterableAttributes.find(
+      (item) => item.code === filter.field,
+    );
+    const inputValue = String(filter.value);
+    const datetimeValue =
+      filterAttribute?.value_type === 'datetime'
+        ? new Date(
+            new Date(inputValue).getTime() -
+              new Date(inputValue).getTimezoneOffset() * 60_000,
+          )
+            .toISOString()
+            .slice(0, 16)
+        : inputValue;
+    setEditingIndex(index);
+    setField(filter.field);
+    setOperator(filter.operator);
+    setValue(datetimeValue);
+    setOpen(true);
+  };
+  const apply = () => {
+    if (
+      !attribute ||
+      !valueIsValid ||
+      (maximumReached && editingIndex === null)
+    )
+      return;
+    const filter = {
+      field: attribute.code,
+      operator: effectiveOperator,
+      value: valueAsFilterValue(),
+    };
+    if (editingIndex === null) onAdd(filter);
+    else onUpdate(editingIndex, filter);
+    close();
+  };
+  const applyOnEnter = (event: KeyboardEvent<HTMLInputElement>) => {
+    if (event.key !== 'Enter') return;
+    event.preventDefault();
+    apply();
+  };
+  const filterValueLabel = (filter: AttributeFilter) =>
+    typeof filter.value === 'boolean'
+      ? t(filter.value ? 'explorer.true' : 'explorer.false')
+      : String(filter.value);
 
   return (
     <Stack spacing={1} sx={{ mt: 1 }}>
-      <TextField
-        fullWidth
-        label={t('explorer.attribute')}
-        onChange={(event) => {
-          setField(event.target.value);
-          setOperator('eq');
-          setValue('');
-        }}
-        select
-        size="small"
-        value={effectiveField}
+      <Stack
+        direction="row"
+        spacing={0.5}
+        sx={{ alignItems: 'center', flexWrap: 'wrap' }}
+        useFlexGap
       >
-        {filterableAttributes.map((item) => (
-          <MenuItem key={item.code} value={item.code}>
-            {item.code}
-          </MenuItem>
+        {filters.map((filter, index) => (
+          <Chip
+            key={`${filter.field}-${index}`}
+            label={`${attributeLabel(
+              filterableAttributes.find(
+                (item) => item.code === filter.field,
+              ) ?? { code: filter.field },
+            )} ${t(
+              `explorer.filterOperatorSymbols.${filter.operator}`,
+            )} ${JSON.stringify(filterValueLabel(filter))}`}
+            onClick={() => openFilter(filter, index)}
+            onDelete={() => onRemove(index)}
+            size="small"
+          />
         ))}
-      </TextField>
-      <TextField
-        fullWidth
-        label={t('explorer.operator')}
-        onChange={(event) =>
-          setOperator(event.target.value as AttributeFilterOperator)
-        }
-        select
-        size="small"
-        value={effectiveOperator}
-      >
-        {availableOperators.map((item) => (
-          <MenuItem key={item} value={item}>
-            {t(`explorer.filterOperators.${item}`)}
-          </MenuItem>
-        ))}
-      </TextField>
-      {attribute?.value_type === 'boolean' ? (
-        <TextField
-          fullWidth
-          label={t('explorer.value')}
-          onChange={(event) => setValue(event.target.value)}
-          select
+        <Button
+          color="primary"
+          disabled={maximumReached}
+          onClick={openNewFilter}
           size="small"
-          value={value}
-        >
-          <MenuItem value="true">{t('explorer.true')}</MenuItem>
-          <MenuItem value="false">{t('explorer.false')}</MenuItem>
-        </TextField>
-      ) : (
-        <TextField
-          fullWidth
-          slotProps={{
-            htmlInput:
-              attribute?.value_type === 'integer' ? { step: 1 } : undefined,
+          startIcon={<AddIcon fontSize="small" />}
+          sx={{
+            borderRadius: 999,
+            flexShrink: 0,
+            height: 24,
+            minHeight: 24,
+            px: 1,
+            '& .MuiButton-startIcon': { mr: 0.5 },
           }}
-          label={t('explorer.value')}
-          onChange={(event) => setValue(event.target.value)}
-          size="small"
-          type={inputType}
-          value={value}
-        />
-      )}
+          variant="outlined"
+        >
+          {t('explorer.addAttributeFilter')}
+        </Button>
+      </Stack>
       {maximumReached && (
         <Typography color="text.secondary" variant="body2">
           {t('explorer.maximumAttributeFilters', {
@@ -159,15 +197,98 @@ export const ExplorerAttributeFilters = ({
           })}
         </Typography>
       )}
-      <Button
-        disabled={!valueIsValid || maximumReached}
-        fullWidth
-        onClick={addFilter}
-        startIcon={<AddIcon />}
-        variant="outlined"
+      <RelationshipSelectorDialog
+        applyDisabled={
+          !attribute ||
+          !valueIsValid ||
+          (maximumReached && editingIndex === null)
+        }
+        applyLabel={t(
+          editingIndex === null
+            ? 'explorer.applyAttributeFilter'
+            : 'explorer.updateAttributeFilter',
+        )}
+        cancelLabel={t('explorer.cancelAttributeFilter')}
+        clearLabel={t('explorer.clearAttributeFilter')}
+        closeLabel={t('explorer.closeAttributeFilter')}
+        onApply={apply}
+        onClear={() => setValue('')}
+        onClose={close}
+        open={open}
+        selectedLabel={t('explorer.attributeFilterDescription')}
+        title={t(
+          editingIndex === null
+            ? 'explorer.addAttributeFilterTitle'
+            : 'explorer.editAttributeFilterTitle',
+        )}
       >
-        {t('explorer.applyAttributeFilter')}
-      </Button>
+        <Stack spacing={1.5}>
+          <TextField
+            fullWidth
+            label={t('explorer.attribute')}
+            onChange={(event) => {
+              setField(event.target.value);
+              setOperator('eq');
+              setValue('');
+            }}
+            select
+            value={field}
+          >
+            {filterableAttributes.map((item) => (
+              <MenuItem key={item.code} value={item.code}>
+                {attributeLabel(item)}
+              </MenuItem>
+            ))}
+          </TextField>
+          {attribute && (
+            <>
+              <TextField
+                fullWidth
+                label={t('explorer.operator')}
+                onChange={(event) =>
+                  setOperator(event.target.value as AttributeFilterOperator)
+                }
+                select
+                value={effectiveOperator}
+              >
+                {availableOperators.map((item) => (
+                  <MenuItem key={item} value={item}>
+                    {t(`explorer.filterOperators.${item}`)}
+                  </MenuItem>
+                ))}
+              </TextField>
+              {attribute.value_type === 'boolean' ? (
+                <TextField
+                  fullWidth
+                  label={t('explorer.value')}
+                  onChange={(event) => setValue(event.target.value)}
+                  onKeyDown={applyOnEnter}
+                  select
+                  value={value}
+                >
+                  <MenuItem value="true">{t('explorer.true')}</MenuItem>
+                  <MenuItem value="false">{t('explorer.false')}</MenuItem>
+                </TextField>
+              ) : (
+                <TextField
+                  fullWidth
+                  slotProps={{
+                    htmlInput:
+                      attribute.value_type === 'integer'
+                        ? { step: 1 }
+                        : undefined,
+                  }}
+                  label={t('explorer.value')}
+                  onChange={(event) => setValue(event.target.value)}
+                  onKeyDown={applyOnEnter}
+                  type={inputType}
+                  value={value}
+                />
+              )}
+            </>
+          )}
+        </Stack>
+      </RelationshipSelectorDialog>
     </Stack>
   );
 };

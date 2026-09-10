@@ -2,22 +2,28 @@ import { useState } from 'react';
 import { useInfiniteQuery } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
 import {
+  Box,
   Button,
-  Checkbox,
+  Chip,
   FormControl,
   List,
-  ListItemButton,
+  ListItem,
   ListItemText,
-  Radio,
   Stack,
   TextField,
   Typography,
 } from '@mui/material';
 import { LoadMoreButton } from '../../../components/LoadMoreButton';
 import { RelationshipSelectorDialog } from '../../../components/RelationshipSelectorDialog';
-import { RelationshipIcon } from '../../../components/system-icons';
+import { RelationshipPickerIcon } from '../../../components/system-icons';
 import { searchEntities, type Attribute } from '../api';
-import { displayLabel, dropdownOptionLabel } from '../entity-display';
+import { RelationshipSelectionPills } from './RelationshipSelectionPills';
+import { useRelationshipSelectionLabels } from './useRelationshipSelectionLabels';
+import {
+  attributeLabel,
+  displayLabel,
+  dropdownOptionLabel,
+} from '../entity-display';
 import { entityQueryKeys } from '../query-keys';
 
 export const RelationshipField = ({
@@ -46,6 +52,10 @@ export const RelationshipField = ({
     .map((targetId) => targetId.trim())
     .filter(Boolean);
   const isOneToOne = attribute.relationship_cardinality === 'one_to_one';
+  const selectionLabels = useRelationshipSelectionLabels(
+    targetBlueprint,
+    selectedIds,
+  );
   const targets = useInfiniteQuery({
     queryKey: entityQueryKeys.relationshipTargets(targetBlueprint, query),
     queryFn: ({ pageParam, signal }) =>
@@ -68,7 +78,7 @@ export const RelationshipField = ({
         fullWidth
         disabled={disabled}
         error={Boolean(error)}
-        label={attribute.code}
+        label={attributeLabel(attribute)}
         helperText={error ?? t('entities.commaSeparatedUuids')}
         onChange={(event) => onChange(event.target.value)}
         value={value}
@@ -84,7 +94,8 @@ export const RelationshipField = ({
   const labelById = new Map(
     options.map((target) => [target.id, targetLabel(target)]),
   );
-  const labelForId = (id: string) => knownLabels[id] ?? labelById.get(id) ?? id;
+  const labelForId = (id: string) =>
+    knownLabels[id] ?? labelById.get(id) ?? selectionLabels.get(id) ?? id;
   const availableOptions = options.filter(
     (target) => !draftIds.includes(target.id),
   );
@@ -108,21 +119,41 @@ export const RelationshipField = ({
   return (
     <Stack spacing={0.5}>
       <FormControl error={Boolean(error)} fullWidth>
-        <Button
-          aria-label={attribute.code}
-          disabled={disabled}
-          onClick={openSelector}
-          startIcon={<RelationshipIcon />}
-          sx={{ justifyContent: 'space-between', minHeight: 56 }}
-          variant="outlined"
-        >
-          <span>{attribute.code}</span>
-          <Typography color="text.secondary" component="span" variant="body2">
-            {t('entities.relationshipSelected', {
-              count: selectedIds.length,
-            })}
-          </Typography>
-        </Button>
+        <Stack spacing={0.5}>
+          <Typography variant="body2">{attributeLabel(attribute)}</Typography>
+          <RelationshipSelectionPills
+            action={
+              <Button
+                aria-label={attribute.code}
+                color="primary"
+                disabled={disabled}
+                onClick={openSelector}
+                size="small"
+                startIcon={<RelationshipPickerIcon fontSize="small" />}
+                sx={{
+                  borderRadius: 999,
+                  flexShrink: 0,
+                  height: 24,
+                  minHeight: 24,
+                  px: 1,
+                  '& .MuiButton-startIcon': { mr: 0.5 },
+                }}
+                variant="outlined"
+              >
+                {t('entities.openRelationshipSelector')}
+              </Button>
+            }
+            ids={selectedIds}
+            labels={selectionLabels}
+            onRemove={(id) =>
+              onChange(
+                selectedIds
+                  .filter((selectedId) => selectedId !== id)
+                  .join(', '),
+              )
+            }
+          />
+        </Stack>
         {error && (
           <Typography color="error" variant="caption">
             {error}
@@ -168,21 +199,22 @@ export const RelationshipField = ({
               <Typography variant="subtitle2">
                 {t('entities.selectedRelationships')}
               </Typography>
-              <List dense disablePadding>
+              <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5 }}>
                 {draftIds.map((id) => (
-                  <ListItemButton
+                  <Chip
+                    color="primary"
                     key={id}
-                    onClick={() =>
+                    label={labelForId(id)}
+                    onDelete={() =>
                       setDraftIds((current) =>
                         current.filter((selectedId) => selectedId !== id),
                       )
                     }
-                  >
-                    {isOneToOne ? <Radio checked /> : <Checkbox checked />}
-                    <ListItemText primary={labelForId(id)} />
-                  </ListItemButton>
+                    size="small"
+                    variant="outlined"
+                  />
                 ))}
-              </List>
+              </Box>
             </Stack>
           )}
           <Stack spacing={0.5}>
@@ -191,13 +223,28 @@ export const RelationshipField = ({
             </Typography>
             <List dense disablePadding>
               {availableOptions.map((target) => (
-                <ListItemButton
+                <ListItem
                   key={target.id}
-                  onClick={() => selectTarget(target.id, targetLabel(target))}
+                  secondaryAction={
+                    <Button
+                      aria-label={t('entities.selectRelationshipOptionLabel', {
+                        option: targetLabel(target),
+                      })}
+                      onClick={() =>
+                        selectTarget(target.id, targetLabel(target))
+                      }
+                      size="small"
+                    >
+                      {t('entities.selectRelationshipOption')}
+                    </Button>
+                  }
+                  sx={{
+                    borderRadius: 1,
+                    '&:hover': { bgcolor: 'action.hover' },
+                  }}
                 >
-                  {isOneToOne ? <Radio checked={false} /> : <Checkbox />}
                   <ListItemText primary={targetLabel(target)} />
-                </ListItemButton>
+                </ListItem>
               ))}
             </List>
             {!targets.isPending &&

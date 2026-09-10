@@ -37,6 +37,7 @@ import {
   getCurrentBlueprint,
   getResolvedEntityPreview,
 } from './api';
+import { attributeLabel } from './entity-display';
 import { entityQueryKeys } from './query-keys';
 import { EntityView } from '../views/components/EntityView';
 import {
@@ -253,7 +254,7 @@ export const EntityPreviewPage = ({ entityId }: { entityId: string }) => {
                         }}
                         key={String(attribute.id)}
                         label={t('entities.viewExtensionContent', {
-                          attribute: attribute.code.replaceAll('_', ' '),
+                          attribute: attributeLabel(attribute),
                         })}
                         outlet="entity_attribute_decoration"
                       />

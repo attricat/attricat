@@ -1,3 +1,12 @@
+export const attributeLabel = (attribute: {
+  code: string;
+  name?: unknown;
+}): string => {
+  if (typeof attribute.name === 'string' && attribute.name.trim())
+    return attribute.name;
+  return attribute.code.replaceAll('_', ' ');
+};
+
 export const displayLabel = (
   display: Record<string, string> | undefined,
   entityId: string,

@@ -8,6 +8,7 @@ import {
   entityAuditChangeSchema,
   entityFormResponseSchema,
   entityMigrationPreviewSchema,
+  entityPreviewResponseSchema,
   entitySchema,
   entitySearchResponseSchema,
   getBlueprintRequestSchema,
@@ -111,6 +112,12 @@ export const listEntityBlueprints = (signal?: AbortSignal) =>
   request(
     '/api/blueprints',
     z.array(blueprintSchema),
+    signal === undefined ? undefined : { signal },
+  );
+export const getEntityPreview = (id: string, signal?: AbortSignal) =>
+  request(
+    `/api/entities/${encodeURIComponent(uuidSchema.parse(id))}/preview?relationship_depth=0&relationship_limit=1`,
+    entityPreviewResponseSchema,
     signal === undefined ? undefined : { signal },
   );
 export const getResolvedEntityPreview = (id: string, contextId: string) =>

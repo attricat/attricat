@@ -1,10 +1,12 @@
 // @vitest-environment jsdom
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { render, screen, waitFor } from '@testing-library/react';
+import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
 import '../../../i18n';
 import {
+  getBlueprintByCode,
+  getEntityPreview,
   searchEntities,
   type Attribute,
   type EntitySearchResponse,
@@ -12,6 +14,8 @@ import {
 import { RelationshipField } from './RelationshipField';
 
 vi.mock('../api', () => ({
+  getBlueprintByCode: vi.fn(),
+  getEntityPreview: vi.fn(),
   searchEntities: vi.fn(),
 }));
 
@@ -68,6 +72,46 @@ const openSelector = async (user: ReturnType<typeof userEvent.setup>) => {
 };
 
 describe('RelationshipField', () => {
+  it('resolves up to ten selected IDs into name pills', async () => {
+    const selectedIds = Array.from(
+      { length: 11 },
+      (_, index) =>
+        `123e4567-e89b-12d3-a456-${String(index).padStart(12, '0')}`,
+    );
+    vi.mocked(getBlueprintByCode).mockResolvedValue({
+      blueprint: {
+        code: 'product',
+        name: 'Product',
+        version: 1,
+        views: {
+          dropdown_option: { type: 'dropdown_option', fields: ['name'] },
+        },
+      },
+      attributes: [],
+    });
+    vi.mocked(getEntityPreview).mockImplementation((id) =>
+      Promise.resolve({
+        entity: {
+          id,
+          blueprint_id: firstId,
+          blueprint_version: 1,
+        },
+        context: { default: { name: `Product ${id.slice(-2)}` } },
+      }),
+    );
+
+    const onChange = renderField(vi.fn(), attribute, selectedIds.join(', '));
+    const user = userEvent.setup();
+
+    expect(await screen.findByText('Product 00')).toBeTruthy();
+    expect(screen.getByText(selectedIds[10])).toBeTruthy();
+    expect(getEntityPreview).toHaveBeenCalledTimes(10);
+
+    const firstPill = screen.getByRole('button', { name: 'Product 00' });
+    await user.click(firstPill.querySelector('.MuiChip-deleteIcon')!);
+    expect(onChange).toHaveBeenLastCalledWith(selectedIds.slice(1).join(', '));
+  });
+
   it('keeps multi-selection draft changes in a closeable modal until applied', async () => {
     vi.mocked(searchEntities).mockImplementation((_, __, query, cursor) =>
       Promise.resolve(
@@ -85,11 +129,11 @@ describe('RelationshipField', () => {
     await openSelector(user);
     const search = screen.getByRole('textbox', { name: 'Search options' });
     await user.type(search, 'later');
-    await screen.findByRole('button', { name: 'later product' });
+    await screen.findByRole('button', { name: 'Select later product' });
 
     await user.click(screen.getByRole('button', { name: 'Load more' }));
     await user.click(
-      await screen.findByRole('button', { name: 'Later product' }),
+      await screen.findByRole('button', { name: 'Select Later product' }),
     );
 
     expect(onChange).not.toHaveBeenCalled();
@@ -121,7 +165,7 @@ describe('RelationshipField', () => {
 
     await openSelector(user);
     await user.click(
-      await screen.findByRole('button', { name: 'First product' }),
+      await screen.findByRole('button', { name: 'Select First product' }),
     );
     await user.click(
       screen.getByRole('button', { name: 'Close relationship selector' }),
@@ -151,12 +195,21 @@ describe('RelationshipField', () => {
       await screen.findByRole('button', { name: 'related_products' }),
     );
     await screen.findByRole('dialog', { name: /^Select one product/ });
+    expect(screen.queryByRole('radio')).toBeNull();
     await user.click(
-      await screen.findByRole('button', { name: 'First product' }),
+      await screen.findByRole('button', { name: 'Select First product' }),
     );
-    await user.click(screen.getByRole('button', { name: 'Later product' }));
+    await user.click(
+      screen.getByRole('button', { name: 'Select Later product' }),
+    );
 
-    expect(screen.getAllByRole('radio', { checked: true })).toHaveLength(1);
+    const selectedSection = screen.getByText('Selected').parentElement!;
+    expect(
+      within(selectedSection).getByRole('button', { name: 'Later product' }),
+    ).toBeTruthy();
+    expect(
+      within(selectedSection).queryByRole('button', { name: 'First product' }),
+    ).toBeNull();
     await user.click(screen.getByRole('button', { name: 'Apply' }));
     expect(onChange).toHaveBeenLastCalledWith(laterId);
   });

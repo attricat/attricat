@@ -239,6 +239,14 @@ export const Explorer = ({ search: urlSearch }: { search: ExplorerSearch }) => {
       },
     });
   };
+  const updateAttributeFilter = (index: number, filter: AttributeFilter) => {
+    const attributeFilters = [...(search.attributeFilters ?? [])];
+    attributeFilters[index] = filter;
+    void navigate({
+      to: '/',
+      search: { ...search, attributeFilters },
+    });
+  };
   const removeAttributeFilter = (index: number) => {
     const attributeFilters = (search.attributeFilters ?? []).filter(
       (_, filterIndex) => filterIndex !== index,
@@ -278,7 +286,7 @@ export const Explorer = ({ search: urlSearch }: { search: ExplorerSearch }) => {
         }}
       >
         <ExplorerFacetSidebar
-          activeAttributeFilterCount={search.attributeFilters?.length ?? 0}
+          attributeFilters={search.attributeFilters ?? []}
           attributes={selectedBlueprint.data?.attributes ?? []}
           blueprint={search.blueprint ?? ''}
           blueprints={blueprints.data ?? []}
@@ -289,7 +297,9 @@ export const Explorer = ({ search: urlSearch }: { search: ExplorerSearch }) => {
           onAddAttributeFilter={addAttributeFilter}
           onBlueprintChange={search.locked ? undefined : selectBlueprint}
           onContextChange={updateFacetContext}
+          onRemoveAttributeFilter={removeAttributeFilter}
           onUpdate={updateFacet}
+          onUpdateAttributeFilter={updateAttributeFilter}
           query={search.query}
           version={search.version}
         />
@@ -385,9 +395,7 @@ export const Explorer = ({ search: urlSearch }: { search: ExplorerSearch }) => {
             >
               <Box sx={{ display: { lg: 'none' }, mb: 3 }}>
                 <ExplorerFacetSidebar
-                  activeAttributeFilterCount={
-                    search.attributeFilters?.length ?? 0
-                  }
+                  attributeFilters={search.attributeFilters ?? []}
                   attributes={selectedBlueprint.data?.attributes ?? []}
                   blueprint={search.blueprint ?? ''}
                   blueprints={blueprints.data ?? []}
@@ -399,7 +407,9 @@ export const Explorer = ({ search: urlSearch }: { search: ExplorerSearch }) => {
                     search.locked ? undefined : selectBlueprint
                   }
                   onContextChange={updateFacetContext}
+                  onRemoveAttributeFilter={removeAttributeFilter}
                   onUpdate={updateFacet}
+                  onUpdateAttributeFilter={updateAttributeFilter}
                   query={search.query}
                   version={search.version}
                 />

@@ -6,12 +6,11 @@ import {
   AccordionDetails,
   AccordionSummary,
   Box,
-  Checkbox,
-  FormControlLabel,
+  Button,
+  Chip,
   List,
   ListItem,
   MenuItem,
-  Radio,
   Stack,
   TextField,
   Typography,
@@ -177,7 +176,15 @@ const RelationshipTreeFacetContent = ({
     const open = expanded.has(item.id);
     return (
       <Box key={item.id}>
-        <ListItem dense disableGutters sx={{ minHeight: 32 }}>
+        <ListItem
+          dense
+          disableGutters
+          sx={{
+            borderRadius: 1,
+            minHeight: 32,
+            '&:hover': { bgcolor: 'action.hover' },
+          }}
+        >
           <Box sx={{ width: 28 }}>
             {canExpand && (
               <Box
@@ -220,25 +227,29 @@ const RelationshipTreeFacetContent = ({
               </Box>
             )}
           </Box>
-          <FormControlLabel
-            control={
-              singleSelect ? (
-                <Radio
-                  checked={selected.has(item.id)}
-                  onChange={() => toggleSelected(item.id)}
-                  size="small"
-                />
-              ) : (
-                <Checkbox
-                  checked={selected.has(item.id)}
-                  onChange={() => toggleSelected(item.id)}
-                  size="small"
-                />
-              )
-            }
-            label={`${item.display} (${item.count})`}
-            sx={{ m: 0 }}
-          />
+          <Box
+            sx={{
+              alignItems: 'center',
+              display: 'flex',
+              flex: 1,
+              gap: 1,
+              justifyContent: 'space-between',
+              minWidth: 0,
+            }}
+          >
+            <Typography variant="body2">
+              {item.display} ({item.count})
+            </Typography>
+            <Button
+              aria-label={t('entities.selectRelationshipOptionLabel', {
+                option: item.display,
+              })}
+              onClick={() => toggleSelected(item.id)}
+              size="small"
+            >
+              {t('entities.selectRelationshipOption')}
+            </Button>
+          </Box>
         </ListItem>
         {canExpand && open && (
           <List dense disablePadding sx={{ pl: 3 }}>
@@ -266,31 +277,18 @@ const RelationshipTreeFacetContent = ({
           <Typography variant="subtitle2">
             {t('entities.selectedRelationships')}
           </Typography>
-          <List dense disablePadding>
+          <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5 }}>
             {selectedIds.map((id) => (
-              <ListItem dense disableGutters key={id}>
-                <FormControlLabel
-                  control={
-                    singleSelect ? (
-                      <Radio
-                        checked
-                        onChange={() => toggleSelected(id)}
-                        size="small"
-                      />
-                    ) : (
-                      <Checkbox
-                        checked
-                        onChange={() => toggleSelected(id)}
-                        size="small"
-                      />
-                    )
-                  }
-                  label={selectedLabels.get(id) ?? id}
-                  sx={{ m: 0 }}
-                />
-              </ListItem>
+              <Chip
+                color="primary"
+                key={id}
+                label={selectedLabels.get(id) ?? id}
+                onDelete={() => toggleSelected(id)}
+                size="small"
+                variant="outlined"
+              />
             ))}
-          </List>
+          </Box>
         </Stack>
       )}
       <List dense disablePadding>

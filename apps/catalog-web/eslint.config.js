@@ -31,6 +31,7 @@ export default tseslint.config(
             '@mui/icons-material/CategoryOutlined',
             '@mui/icons-material/FactCheckOutlined',
             '@mui/icons-material/FolderOutlined',
+            '@mui/icons-material/ChecklistOutlined',
             '@mui/icons-material/HubOutlined',
             '@mui/icons-material/ManageAccountsOutlined',
             '@mui/icons-material/PersonOutlined',

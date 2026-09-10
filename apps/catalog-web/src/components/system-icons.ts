@@ -12,4 +12,5 @@ export { default as InspectorIcon } from '@mui/icons-material/BuildOutlined';
 export { default as ManagementIcon } from '@mui/icons-material/SettingsOutlined';
 export { default as ProfileIcon } from '@mui/icons-material/PersonOutlined';
 export { default as RelationshipIcon } from '@mui/icons-material/HubOutlined';
+export { default as RelationshipPickerIcon } from '@mui/icons-material/ChecklistOutlined';
 export { default as WorkspaceIcon } from '@mui/icons-material/ManageAccountsOutlined';

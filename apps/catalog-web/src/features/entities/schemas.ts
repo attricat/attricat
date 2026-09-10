@@ -344,6 +344,14 @@ const entityItemSchema = z.object({
     .default([]),
 });
 const entityContextSchema = z.record(z.string(), jsonObjectSchema);
+export const entityPreviewResponseSchema = z.object({
+  entity: z.object({
+    id: uuidSchema,
+    blueprint_id: uuidSchema,
+    blueprint_version: z.number().int().positive(),
+  }),
+  context: entityContextSchema,
+});
 const resolvedPreviewValueSchema = z.union([
   scalarValueSchema,
   jsonObjectSchema,

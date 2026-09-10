@@ -1,7 +1,18 @@
 import { describe, expect, it } from 'vitest';
-import { displayLabel, dropdownOptionLabel } from './entity-display';
+import {
+  attributeLabel,
+  displayLabel,
+  dropdownOptionLabel,
+} from './entity-display';
 
 describe('displayLabel', () => {
+  it('uses an attribute name and humanizes its code as a fallback', () => {
+    expect(attributeLabel({ code: 'product_family', name: 'Family' })).toBe(
+      'Family',
+    );
+    expect(attributeLabel({ code: 'product_family' })).toBe('product family');
+  });
+
   it('uses the backend default label and falls back to the entity ID', () => {
     expect(displayLabel({ default: 'Summer shirt' }, 'entity-id')).toBe(
       'Summer shirt',

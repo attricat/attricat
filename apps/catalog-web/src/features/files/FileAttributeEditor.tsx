@@ -14,6 +14,7 @@ import {
 import { useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { Attribute } from '../entities/api';
+import { attributeLabel } from '../entities/entity-display';
 import { fileDownloadUrl, uploadFiles } from './api';
 import { FileThumbnail } from './FileThumbnail';
 import type { FileMetadata } from './schemas';
@@ -147,7 +148,7 @@ export const FileAttributeEditor = ({
   };
   return (
     <Stack spacing={1}>
-      <Typography>{attribute.code}</Typography>
+      <Typography>{attributeLabel(attribute)}</Typography>
       {!entityId && (
         <Alert severity="info">{t('files.saveEntityBeforeUploading')}</Alert>
       )}

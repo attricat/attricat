@@ -15,6 +15,7 @@ import {
 import type { ReactNode } from 'react';
 
 type Props = {
+  applyDisabled?: boolean;
   applyLabel: string;
   cancelLabel: string;
   children: ReactNode;
@@ -29,6 +30,7 @@ type Props = {
 };
 
 export const RelationshipSelectorDialog = ({
+  applyDisabled = false,
   applyLabel,
   cancelLabel,
   children,
@@ -89,7 +91,11 @@ export const RelationshipSelectorDialog = ({
           <Button color="inherit" onClick={onClose}>
             {cancelLabel}
           </Button>
-          <Button onClick={onApply} variant="contained">
+          <Button
+            disabled={applyDisabled}
+            onClick={onApply}
+            variant="contained"
+          >
             {applyLabel}
           </Button>
         </Stack>

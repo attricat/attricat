@@ -100,7 +100,10 @@ describe('RelationshipTreeFacet', () => {
         Node.DOCUMENT_POSITION_FOLLOWING,
     ).toBeTruthy();
 
-    await user.click(screen.getByLabelText('Other category (1)'));
+    expect(screen.queryByRole('radio')).toBeNull();
+    await user.click(
+      screen.getByRole('button', { name: 'Select Other category' }),
+    );
     expect(onSelectedIdsChange).toHaveBeenLastCalledWith([secondId]);
   });
 });

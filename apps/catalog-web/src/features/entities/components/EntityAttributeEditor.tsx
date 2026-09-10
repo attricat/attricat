@@ -3,6 +3,7 @@ import { MenuItem, TextField, Tooltip } from '@mui/material';
 import { useTranslation } from 'react-i18next';
 import type { Attribute } from '../api';
 import type { FileMetadata } from '../../files/schemas';
+import { attributeLabel } from '../entity-display';
 import { attributeValueTypes } from '../value-types';
 import { FileAttributeEditor } from '../../files/FileAttributeEditor';
 import { RelationshipField } from './RelationshipField';
@@ -73,7 +74,7 @@ export const EntityAttributeEditor = ({
           error={Boolean(error)}
           helperText={error ?? helperText}
           select
-          label={attribute.code}
+          label={attributeLabel(attribute)}
           onChange={(event) => onChange(event.target.value)}
           value={value}
         >
@@ -91,7 +92,7 @@ export const EntityAttributeEditor = ({
         disabled={disabled}
         error={Boolean(error)}
         helperText={error ?? helperText}
-        label={attribute.code}
+        label={attributeLabel(attribute)}
         onChange={(event) => onChange(event.target.value)}
         placeholder={
           attribute.value_type === attributeValueTypes.time

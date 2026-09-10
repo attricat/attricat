@@ -25,6 +25,7 @@ import {
   resolveValueRenderer,
   resolveViewComponent,
 } from './registry';
+import { attributeLabel } from '../../entities/entity-display';
 import { AttributeValue } from './values/AttributeValue';
 import { IncomingRelationshipListDisplay } from './IncomingRelationshipListDisplay';
 
@@ -43,8 +44,6 @@ type Props = {
   entityId?: string;
 };
 
-const labelFor = (field: string) => field.replaceAll('_', ' ');
-
 const ValueField = ({
   attribute,
   resolved,
@@ -62,7 +61,7 @@ const ValueField = ({
   contextId?: string;
   entityId?: string;
 }) => (
-  <FieldErrorBoundary label={labelFor(attribute.code)}>
+  <FieldErrorBoundary label={attributeLabel(attribute)}>
     <Stack spacing={0.5}>
       {renderEditor ? (
         renderEditor(attribute)
@@ -70,7 +69,7 @@ const ValueField = ({
         <>
           <Box sx={{ alignItems: 'center', display: 'flex', gap: 0.5 }}>
             <Typography sx={{ fontWeight: 700 }} variant="subtitle2">
-              {labelFor(attribute.code)}
+              {attributeLabel(attribute)}
             </Typography>
             {renderAttributeDecoration?.(attribute)}
           </Box>

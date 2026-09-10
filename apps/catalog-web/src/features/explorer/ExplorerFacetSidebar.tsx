@@ -3,6 +3,7 @@ import {
   CircularProgress,
   MenuItem,
   Paper,
+  Stack,
   TextField,
   Typography,
 } from '@mui/material';
@@ -14,7 +15,12 @@ import type { AttributeContext } from '../contexts/api';
 import { getBlueprintByCode } from '../entities/api';
 import { entityQueryKeys } from '../entities/query-keys';
 import { RelationshipSelectorDialog } from '../../components/RelationshipSelectorDialog';
-import { RelationshipIcon } from '../../components/system-icons';
+import {
+  RelationshipIcon,
+  RelationshipPickerIcon,
+} from '../../components/system-icons';
+import { RelationshipSelectionPills } from '../entities/components/RelationshipSelectionPills';
+import { useRelationshipSelectionLabels } from '../entities/components/useRelationshipSelectionLabels';
 import { ExplorerAttributeFilters } from './ExplorerAttributeFilters';
 import { RelationshipTreeFacet } from './RelationshipTreeFacet';
 import type { AttributeFilter } from './search';
@@ -32,13 +38,15 @@ type Props = {
   contextCode: string;
   facets: ExplorerRelationshipFacet[];
   attributes: Attribute[];
-  activeAttributeFilterCount: number;
+  attributeFilters: AttributeFilter[];
   query?: string;
   version?: number;
   fullHeight?: boolean;
   onBlueprintChange?: (blueprint: string) => void;
   onContextChange: (contextCode: string) => void;
   onAddAttributeFilter: (filter: AttributeFilter) => void;
+  onRemoveAttributeFilter: (index: number) => void;
+  onUpdateAttributeFilter: (index: number, filter: AttributeFilter) => void;
   onUpdate: (
     field: string,
     updates: {
@@ -58,7 +66,7 @@ type FacetProps = Pick<
 };
 
 export const ExplorerFacetSidebar = ({
-  activeAttributeFilterCount,
+  attributeFilters,
   attributes,
   blueprint,
   blueprints = [],
@@ -67,6 +75,8 @@ export const ExplorerFacetSidebar = ({
   facets,
   fullHeight = false,
   onAddAttributeFilter,
+  onRemoveAttributeFilter,
+  onUpdateAttributeFilter,
   onBlueprintChange,
   query,
   version,
@@ -104,51 +114,71 @@ export const ExplorerFacetSidebar = ({
           ))}
         </TextField>
       )}
-      <Typography sx={{ mt: onBlueprintChange ? 2 : 0 }} variant="subtitle2">
+      <Typography
+        color="text.secondary"
+        component="h2"
+        sx={{
+          display: 'block',
+          fontWeight: 700,
+          lineHeight: 1.5,
+          mt: onBlueprintChange ? 2.5 : 0,
+        }}
+        variant="overline"
+      >
         {t('explorer.relationshipFilters')}
       </Typography>
-      <TextField
-        fullWidth
-        label={t('explorer.context')}
-        onChange={(event) => onContextChange(event.target.value)}
-        select
-        size="small"
-        sx={{ mt: 1 }}
-        value={contextCode}
-      >
-        {contexts.map((context) => (
-          <MenuItem key={context.id} value={context.code}>
-            {context.code === 'default' ? t('explorer.default') : context.code}
-          </MenuItem>
+      <Stack spacing={1.5} sx={{ mt: 1 }}>
+        <TextField
+          fullWidth
+          label={t('explorer.context')}
+          onChange={(event) => onContextChange(event.target.value)}
+          select
+          size="small"
+          value={contextCode}
+        >
+          {contexts.map((context) => (
+            <MenuItem key={context.id} value={context.code}>
+              {context.code === 'default'
+                ? t('explorer.default')
+                : context.code}
+            </MenuItem>
+          ))}
+        </TextField>
+        {facets.map((facet) => (
+          <Facet
+            blueprint={blueprint}
+            contextCode={contextCode}
+            contexts={contexts}
+            facet={facet}
+            key={facet.sourceRelationship.code}
+            label={
+              blueprints.find(
+                (item) =>
+                  item.code === facet.sourceRelationship.target_blueprint_code,
+              )?.name ??
+              facet.sourceRelationship.target_blueprint_code ??
+              facet.sourceRelationship.code
+            }
+            onUpdate={onUpdate}
+            query={query}
+            version={version}
+          />
         ))}
-      </TextField>
-      {facets.map((facet) => (
-        <Facet
-          blueprint={blueprint}
-          contextCode={contextCode}
-          contexts={contexts}
-          facet={facet}
-          key={facet.sourceRelationship.code}
-          label={
-            blueprints.find(
-              (item) =>
-                item.code === facet.sourceRelationship.target_blueprint_code,
-            )?.name ??
-            facet.sourceRelationship.target_blueprint_code ??
-            facet.sourceRelationship.code
-          }
-          onUpdate={onUpdate}
-          query={query}
-          version={version}
-        />
-      ))}
-      <Typography sx={{ mt: 2 }} variant="subtitle2">
+      </Stack>
+      <Typography
+        color="text.secondary"
+        component="h2"
+        sx={{ display: 'block', fontWeight: 700, lineHeight: 1.5, mt: 3 }}
+        variant="overline"
+      >
         {t('explorer.attributeFilters')}
       </Typography>
       <ExplorerAttributeFilters
-        activeFilterCount={activeAttributeFilterCount}
         attributes={attributes}
+        filters={attributeFilters}
         onAdd={onAddAttributeFilter}
+        onRemove={onRemoveAttributeFilter}
+        onUpdate={onUpdateAttributeFilter}
       />
     </Paper>
   );
@@ -169,6 +199,10 @@ const Facet = ({
   const [draftIds, setDraftIds] = useState<string[]>([]);
   const [draftHierarchy, setDraftHierarchy] = useState(
     facet.hierarchyField ?? '',
+  );
+  const selectionLabels = useRelationshipSelectionLabels(
+    facet.sourceRelationship.target_blueprint_code,
+    facet.selectedIds,
   );
   const targetBlueprint = useQuery({
     queryKey: entityQueryKeys.blueprintByCode(
@@ -206,22 +240,59 @@ const Facet = ({
   };
 
   return (
-    <>
-      <Button
-        aria-label={label}
-        fullWidth
-        onClick={openSelector}
-        startIcon={<RelationshipIcon />}
-        sx={{ justifyContent: 'space-between', mt: 1 }}
-        variant="outlined"
-      >
-        <span>{label}</span>
-        <Typography color="text.secondary" component="span" variant="body2">
-          {t('entities.relationshipSelected', {
-            count: facet.selectedIds.length,
-          })}
-        </Typography>
-      </Button>
+    <Stack spacing={0.5}>
+      <Stack spacing={0.5}>
+        <Stack
+          direction="row"
+          spacing={0.5}
+          sx={{
+            alignItems: 'center',
+            color:
+              facet.selectedIds.length > 0 ? 'primary.main' : 'text.secondary',
+          }}
+        >
+          <RelationshipIcon sx={{ fontSize: 15 }} />
+          <Typography
+            color="inherit"
+            component="h3"
+            sx={{ fontWeight: 700, letterSpacing: '0.01em', lineHeight: 1.4 }}
+            variant="subtitle2"
+          >
+            {label}
+          </Typography>
+        </Stack>
+        <RelationshipSelectionPills
+          action={
+            <Button
+              aria-label={label}
+              color="primary"
+              onClick={openSelector}
+              size="small"
+              startIcon={<RelationshipPickerIcon fontSize="small" />}
+              sx={{
+                borderRadius: 999,
+                flexShrink: 0,
+                height: 24,
+                minHeight: 24,
+                px: 1,
+                '& .MuiButton-startIcon': { mr: 0.5 },
+              }}
+              variant="outlined"
+            >
+              {t('entities.openRelationshipSelector')}
+            </Button>
+          }
+          ids={facet.selectedIds}
+          labels={selectionLabels}
+          onRemove={(id) =>
+            onUpdate(facet.sourceRelationship.code, {
+              selectedIds: facet.selectedIds.filter(
+                (selectedId) => selectedId !== id,
+              ),
+            })
+          }
+        />
+      </Stack>
       <RelationshipSelectorDialog
         applyLabel={t('entities.applyRelationshipSelection')}
         cancelLabel={t('entities.cancelRelationshipSelection')}
@@ -276,6 +347,6 @@ const Facet = ({
           />
         )}
       </RelationshipSelectorDialog>
-    </>
+    </Stack>
   );
 };
