@@ -121,6 +121,8 @@ export const ExplorerResultsTable = ({
   onLoadMore,
   onSortChange,
   sort,
+  totalCount,
+  totalCountCapped,
 }: {
   blueprint: BlueprintWithAttributes;
   hasNextPage: boolean;
@@ -129,6 +131,8 @@ export const ExplorerResultsTable = ({
   onLoadMore: () => void;
   onSortChange: (field: string) => void;
   sort?: { field: string; direction: 'asc' | 'desc' };
+  totalCount: number | null;
+  totalCountCapped: boolean;
 }) => {
   const { t } = useTranslation();
   const columnHelper = legacyCreateColumnHelper<EntityItem>();
@@ -339,7 +343,11 @@ export const ExplorerResultsTable = ({
   return (
     <Paper component="section">
       <Typography sx={{ borderBottom: 1, borderColor: 'divider', p: 2 }}>
-        {t('explorer.resultCount', { count: items.length })}
+        {totalCount === null
+          ? t('explorer.resultCount', { count: items.length })
+          : totalCountCapped
+            ? t('explorer.resultCountCapped', { count: totalCount })
+            : t('explorer.resultCount', { count: totalCount })}
       </Typography>
       <TableContainer
         aria-label={t('explorer.results')}

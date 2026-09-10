@@ -355,6 +355,7 @@
     "resultCount_one": "{{count}} wynik",
     "resultCount_few": "{{count}} wyniki",
     "resultCount_many": "{{count}} wyników",
+    "resultCountCapped": "{{count}}+ wyników",
     "resultCount_other": "{{count}} wyniku",
     "noMatchingEntities": "Żadna encja nie pasuje do tego wyszukiwania.",
     "matchViaRelationship_one": "{{term}} przez {{count}} relację",

@@ -40,6 +40,8 @@ const page = (
     preview: {},
   })),
   next_cursor: nextCursor,
+  total_count: null,
+  total_count_capped: false,
 });
 
 const renderField = (onChange = vi.fn(), field: Attribute = attribute) => {

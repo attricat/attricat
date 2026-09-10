@@ -407,6 +407,8 @@ pub async fn execute_read(
                 blueprint: current,
                 items,
                 next_cursor,
+                total_count: None,
+                total_count_capped: false,
             })
             .expect("models serialize")
         }

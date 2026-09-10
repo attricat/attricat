@@ -59,6 +59,7 @@ export const searchEntities = (
   }[],
   signal?: AbortSignal,
   sort?: { field: string; direction: 'asc' | 'desc' },
+  includeTotal = false,
 ) => {
   const payload = searchEntitiesRequestSchema.parse({
     blueprint: {
@@ -69,6 +70,7 @@ export const searchEntities = (
     filters: [],
     relationship_tree_facets: relationshipTreeFacets,
     sort,
+    ...(includeTotal ? { include_total: true } : {}),
     page: { size: 25, cursor },
   });
   return request('/api/v1/entities/search', entitySearchResponseSchema, {

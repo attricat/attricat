@@ -285,6 +285,43 @@ describe('entity API client', () => {
     });
   });
 
+  it('requests a total only for the first Explorer page', async () => {
+    respond({
+      blueprint: blueprintWithAttributes,
+      items: [],
+      next_cursor: null,
+      total_count: 1000,
+      total_count_capped: true,
+    });
+
+    const result = await searchEntities(
+      'product',
+      undefined,
+      '',
+      null,
+      undefined,
+      undefined,
+      undefined,
+      true,
+    );
+
+    expect(result).toMatchObject({
+      total_count: 1000,
+      total_count_capped: true,
+    });
+    expect(fetchMock).toHaveBeenLastCalledWith('/api/v1/entities/search', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        blueprint: { code: 'product' },
+        query: '',
+        filters: [],
+        include_total: true,
+        page: { size: 25, cursor: null },
+      }),
+    });
+  });
+
   it('posts an opaque search cursor for subsequent pages', async () => {
     respond({
       blueprint: blueprintWithAttributes,

@@ -293,6 +293,44 @@ impl CatalogRepository {
         Ok((items, next_cursor))
     }
 
+    /// Counts matching entities up to `limit`, so broad searches never scan the entire catalog.
+    #[allow(clippy::too_many_arguments)]
+    pub async fn count_entity_previews(
+        &self,
+        blueprint_id: Uuid,
+        blueprint_version: Option<i64>,
+        matching_entity_ids: Option<&[Uuid]>,
+        system_tags: &[String],
+        outdated: bool,
+        current_blueprint_version: i64,
+        limit: i64,
+    ) -> Result<i64, RepositoryError> {
+        validate_system_tags(system_tags)?;
+        Ok(sqlx::query_scalar::<_, i64>(
+            r#"SELECT COUNT(*)
+                 FROM (
+                    SELECT 1
+                      FROM entities e
+                     WHERE e.blueprint_id = $1
+                       AND ($2::bigint IS NULL OR e.blueprint_version = $2)
+                       AND e.deleted_at IS NULL
+                       AND ($3::uuid[] IS NULL OR e.id = ANY($3))
+                       AND ($4::text[] IS NULL OR e.system_tags @> $4)
+                       AND (NOT $5 OR e.blueprint_version <> $6)
+                     LIMIT $7
+                 ) matches"#,
+        )
+        .bind(blueprint_id)
+        .bind(blueprint_version)
+        .bind(matching_entity_ids)
+        .bind((!system_tags.is_empty()).then_some(system_tags))
+        .bind(outdated)
+        .bind(current_blueprint_version)
+        .bind(limit)
+        .fetch_one(&self.pool)
+        .await?)
+    }
+
     /// Selects a page by a configured scalar table column without hydrating projections for
     /// every candidate. NULL values are always last and entity IDs make the ordering stable.
     #[allow(clippy::too_many_arguments)]

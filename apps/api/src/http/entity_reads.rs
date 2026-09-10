@@ -21,6 +21,8 @@ use serde::Deserialize;
 use std::{collections::HashMap, time::Instant};
 use tracing::Instrument;
 use uuid::Uuid;
+
+const SEARCH_TOTAL_COUNT_CAP: i64 = 1_000;
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
 pub(super) struct PreviewQuery {
@@ -330,47 +332,76 @@ pub(super) async fn search_entity_previews(
     }
     timing.record("candidate", candidate_started);
     let page_started = Instant::now();
-    let (mut items, next_cursor) = match sort.as_ref() {
-        Some(sort) => {
-            repository
-                .search_entity_previews_sorted(
-                    current.blueprint.id,
-                    selected,
-                    limit.into(),
-                    input.page.cursor.as_deref(),
-                    matching.as_deref(),
-                    &input.system_tags,
-                    input.outdated,
-                    current.blueprint.version,
-                    sort,
-                )
-                .instrument(tracing::info_span!(
-                    "sql.operation",
-                    label = "entities-page"
-                ))
-                .await?
-        }
-        None => {
-            repository
-                .search_entity_previews(
-                    current.blueprint.id,
-                    selected,
-                    None,
-                    limit.into(),
-                    cursor,
-                    matching.as_deref(),
-                    &input.system_tags,
-                    input.outdated,
-                    current.blueprint.version,
-                )
-                .instrument(tracing::info_span!(
-                    "sql.operation",
-                    label = "entities-page"
-                ))
-                .await?
+    let page = async {
+        match sort.as_ref() {
+            Some(sort) => {
+                repository
+                    .search_entity_previews_sorted(
+                        current.blueprint.id,
+                        selected,
+                        limit.into(),
+                        input.page.cursor.as_deref(),
+                        matching.as_deref(),
+                        &input.system_tags,
+                        input.outdated,
+                        current.blueprint.version,
+                        sort,
+                    )
+                    .instrument(tracing::info_span!(
+                        "sql.operation",
+                        label = "entities-page"
+                    ))
+                    .await
+            }
+            None => {
+                repository
+                    .search_entity_previews(
+                        current.blueprint.id,
+                        selected,
+                        None,
+                        limit.into(),
+                        cursor,
+                        matching.as_deref(),
+                        &input.system_tags,
+                        input.outdated,
+                        current.blueprint.version,
+                    )
+                    .instrument(tracing::info_span!(
+                        "sql.operation",
+                        label = "entities-page"
+                    ))
+                    .await
+            }
         }
     };
+    // Totals are intentionally limited and only calculated for a first page.
+    // Cursor pages retain the first response's total in the client cache.
+    let include_total = input.include_total && input.page.cursor.is_none();
+    let total = async {
+        if !include_total {
+            return Ok(None);
+        }
+        let count = repository
+            .count_entity_previews(
+                current.blueprint.id,
+                selected,
+                matching.as_deref(),
+                &input.system_tags,
+                input.outdated,
+                current.blueprint.version,
+                SEARCH_TOTAL_COUNT_CAP + 1,
+            )
+            .instrument(tracing::info_span!(
+                "sql.operation",
+                label = "entities-count"
+            ))
+            .await?;
+        Ok(Some(count))
+    };
+    let ((mut items, next_cursor), total_count) = tokio::try_join!(page, total)?;
     timing.record("page", page_started);
+    let total_count_capped = total_count.is_some_and(|count| count > SEARCH_TOTAL_COUNT_CAP);
+    let total_count = total_count.map(|count| count.min(SEARCH_TOTAL_COUNT_CAP));
     for item in &mut items {
         item.schema_outdated = item.blueprint_version != current.blueprint.version;
         item.match_explanations = resolved
@@ -393,6 +424,8 @@ pub(super) async fn search_entity_previews(
         blueprint: current,
         items,
         next_cursor,
+        total_count,
+        total_count_capped,
     })
     .into_response();
     timing.record("serialize", serialization_started);

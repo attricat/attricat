@@ -350,6 +350,7 @@
     "current": "Current",
     "resultCount_one": "{{count}} result",
     "resultCount_other": "{{count}} results",
+    "resultCountCapped": "{{count}}+ results",
     "noMatchingEntities": "No entities matched this search.",
     "matchViaRelationship_one": "{{term}} via {{count}} relationship",
     "matchViaRelationship_other": "{{term}} via {{count}} relationships",

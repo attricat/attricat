@@ -328,6 +328,9 @@ pub struct SearchEntitiesRequest {
     pub relationship_tree_facets: Vec<RelationshipTreeFacetRequest>,
     #[serde(default)]
     pub sort: Option<SearchSort>,
+    /// Include a bounded result count. Clients should request this only for the first page.
+    #[serde(default)]
+    pub include_total: bool,
     #[serde(default)]
     pub page: SearchPage,
 }
@@ -420,6 +423,8 @@ pub struct EntitySearchResponse {
     pub blueprint: BlueprintWithAttributes,
     pub items: Vec<EntityPreview>,
     pub next_cursor: Option<String>,
+    pub total_count: Option<i64>,
+    pub total_count_capped: bool,
 }
 
 #[derive(Clone, Debug, Deserialize)]

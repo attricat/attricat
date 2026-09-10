@@ -76,6 +76,7 @@ value_type = "string"
                 .post(format!("{base_url}/v1/entities/search"))
                 .json(&json!({
                     "blueprint": { "code": "product", "version": version },
+                    "include_total": true,
                     "filters": [],
                     "page": { "size": 25, "cursor": null }
                 }))
@@ -93,6 +94,8 @@ value_type = "string"
     let all_versions = search(None).await;
     assert_eq!(all_versions["blueprint"]["blueprint"]["version"], 2);
     assert_eq!(all_versions["items"].as_array().unwrap().len(), 2);
+    assert_eq!(all_versions["total_count"], 2);
+    assert_eq!(all_versions["total_count_capped"], false);
     assert!(
         all_versions["items"]
             .as_array()
@@ -137,6 +140,7 @@ value_type = "string"
 
     let first_version = search(Some(1)).await;
     assert_eq!(first_version["items"].as_array().unwrap().len(), 1);
+    assert_eq!(first_version["total_count"], 1);
     assert_eq!(first_version["items"][0]["id"], first_entity["id"]);
     assert_eq!(first_version["items"][0]["schema_outdated"], true);
 

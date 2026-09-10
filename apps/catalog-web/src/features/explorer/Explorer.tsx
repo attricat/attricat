@@ -112,6 +112,7 @@ export const Explorer = ({ search: urlSearch }: { search: ExplorerSearch }) => {
         relationshipTreeFacets,
         signal,
         search.sort,
+        pageParam === null,
       ),
     initialPageParam: null as string | null,
     getNextPageParam: (page) => page.next_cursor,
@@ -260,6 +261,8 @@ export const Explorer = ({ search: urlSearch }: { search: ExplorerSearch }) => {
               hasNextPage={results.hasNextPage}
               isFetchingNextPage={results.isFetchingNextPage}
               items={resultItems}
+              totalCount={resultPages[0]?.total_count ?? null}
+              totalCountCapped={resultPages[0]?.total_count_capped ?? false}
               onLoadMore={() => void results.fetchNextPage()}
               onSortChange={(field) => {
                 const direction =

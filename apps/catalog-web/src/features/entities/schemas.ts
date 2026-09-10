@@ -364,6 +364,8 @@ const entitySearchResponseSchema = z.object({
   blueprint: blueprintWithAttributesSchema,
   items: z.array(entityItemSchema),
   next_cursor: z.string().nullable(),
+  total_count: z.number().int().nonnegative().nullable().default(null),
+  total_count_capped: z.boolean().default(false),
 });
 export const relationshipTreeFacetChildrenResponseSchema = z.object({
   items: z.array(
@@ -468,6 +470,7 @@ export const searchEntitiesRequestSchema = z.object({
       direction: z.enum(['asc', 'desc']),
     })
     .optional(),
+  include_total: z.boolean().optional(),
   page: z.object({
     size: z.number().int().positive(),
     cursor: z.string().nullable(),
