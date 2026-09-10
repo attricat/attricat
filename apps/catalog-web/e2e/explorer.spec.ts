@@ -179,7 +179,7 @@ target_blueprint = "${categoryCode}"`,
   await expect(
     page.getByRole('button', { name: 'Select Departments' }),
   ).toBeVisible();
-  await page.getByRole('button', { name: 'Expand Departments' }).click();
+  await page.getByText('Departments (1)').click();
   await page.getByRole('button', { name: 'Select Shoes' }).click();
   await expect(
     page.getByRole('heading', { name: 'Selected', exact: true }),

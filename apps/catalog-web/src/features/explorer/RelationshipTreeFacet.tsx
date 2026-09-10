@@ -174,13 +174,29 @@ const RelationshipTreeFacetContent = ({
     const children = byParent.get(item.id) ?? [];
     const canExpand = item.has_children && !ancestry.has(item.id);
     const open = expanded.has(item.id);
+    const toggleExpanded = () => {
+      setExpanded((current) => {
+        const next = new Set(current);
+        if (next.has(item.id)) next.delete(item.id);
+        else {
+          next.add(item.id);
+          setCursors((currentCursors) => {
+            if (currentCursors.has(item.id)) return currentCursors;
+            return new Map(currentCursors).set(item.id, [null]);
+          });
+        }
+        return next;
+      });
+    };
     return (
       <Box key={item.id}>
         <ListItem
           dense
           disableGutters
+          onClick={canExpand ? toggleExpanded : undefined}
           sx={{
             borderRadius: 1,
+            cursor: canExpand ? 'pointer' : 'default',
             minHeight: 32,
             '&:hover': { bgcolor: 'action.hover' },
           }}
@@ -194,19 +210,9 @@ const RelationshipTreeFacetContent = ({
                     : t('explorer.expand', { item: item.display })
                 }
                 component="button"
-                onClick={() => {
-                  setExpanded((current) => {
-                    const next = new Set(current);
-                    if (next.has(item.id)) next.delete(item.id);
-                    else {
-                      next.add(item.id);
-                      setCursors((current) => {
-                        if (current.has(item.id)) return current;
-                        return new Map(current).set(item.id, [null]);
-                      });
-                    }
-                    return next;
-                  });
+                onClick={(event) => {
+                  event.stopPropagation();
+                  toggleExpanded();
                 }}
                 sx={{
                   alignItems: 'center',
@@ -244,7 +250,10 @@ const RelationshipTreeFacetContent = ({
               aria-label={t('entities.selectRelationshipOptionLabel', {
                 option: item.display,
               })}
-              onClick={() => toggleSelected(item.id)}
+              onClick={(event) => {
+                event.stopPropagation();
+                toggleSelected(item.id);
+              }}
               size="small"
             >
               {t('entities.selectRelationshipOption')}

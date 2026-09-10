@@ -47,6 +47,38 @@ const renderFacet = (
 };
 
 describe('RelationshipTreeFacet', () => {
+  it('expands a branch when its item row is clicked', async () => {
+    vi.mocked(getRelationshipTreeFacetChildren).mockImplementation((request) =>
+      Promise.resolve({
+        items: request.parent_id
+          ? [
+              {
+                id: secondId,
+                display: 'Child category',
+                count: 1,
+                has_children: false,
+              },
+            ]
+          : [
+              {
+                id: firstId,
+                display: 'Parent category',
+                count: 1,
+                has_children: true,
+              },
+            ],
+        selected_items: [],
+        next_cursor: null,
+      }),
+    );
+    renderFacet([defaultContext]);
+    const user = userEvent.setup();
+
+    await user.click(await screen.findByText('Parent category (1)'));
+
+    expect(await screen.findByText('Child category (1)')).toBeTruthy();
+  });
+
   it.each([
     { contexts: [], state: 'contexts are loading' },
     {
