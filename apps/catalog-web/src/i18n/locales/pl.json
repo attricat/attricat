@@ -200,6 +200,8 @@
     "selectOneRelationship": "Wybierz jedną encję: {{blueprint}}",
     "selectRelationshipOption": "Wybierz",
     "selectRelationshipOptionLabel": "Wybierz: {{option}}",
+    "previewRelationshipOption": "Podgląd",
+    "previewRelationshipOptionLabel": "Podejrzyj {{option}} w nowej karcie",
     "searchRelationshipOptions": "Szukaj opcji",
     "selectedRelationships": "Wybrane",
     "relationshipOptions": "Opcje",

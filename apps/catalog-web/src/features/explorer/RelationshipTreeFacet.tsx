@@ -8,6 +8,7 @@ import {
   Box,
   Button,
   Chip,
+  Link,
   List,
   ListItem,
   MenuItem,
@@ -21,6 +22,7 @@ import { LoadMoreButton } from '../../components/LoadMoreButton';
 import type { AttributeContext } from '../contexts/api';
 import { getRelationshipTreeFacetChildren } from '../entities/api';
 import { entityQueryKeys } from '../entities/query-keys';
+import { useRecentlyPreviewedEntities } from '../entities/components/useRecentlyPreviewedEntities';
 
 export type RelationshipTreeFacetItem = {
   id: string;
@@ -73,6 +75,7 @@ const RelationshipTreeFacetContent = ({
   onSelectedIdsChange,
 }: Props) => {
   const { t } = useTranslation();
+  const { isPreviewed, markPreviewed } = useRecentlyPreviewedEntities();
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
   const [cursors, setCursors] = useState<Map<string, (string | null)[]>>(
     new Map([['root', [null]]]),
@@ -157,6 +160,14 @@ const RelationshipTreeFacetContent = ({
     }
     return false;
   };
+  const previewTarget = (id: string) => {
+    markPreviewed(id);
+    window.open(
+      `/entities/${encodeURIComponent(id)}`,
+      '_blank',
+      'noopener,noreferrer',
+    );
+  };
   const toggleSelected = (id: string) => {
     if (singleSelect) {
       onSelectedIdsChange(selected.has(id) ? [] : [id]);
@@ -195,6 +206,7 @@ const RelationshipTreeFacetContent = ({
           disableGutters
           onClick={canExpand ? toggleExpanded : undefined}
           sx={{
+            bgcolor: isPreviewed(item.id) ? 'action.selected' : undefined,
             borderRadius: 1,
             cursor: canExpand ? 'pointer' : 'default',
             minHeight: 32,
@@ -243,21 +255,47 @@ const RelationshipTreeFacetContent = ({
               minWidth: 0,
             }}
           >
-            <Typography variant="body2">
-              {item.display} ({item.count})
+            <Typography component="div" variant="body2">
+              <Link
+                href={`/entities/${encodeURIComponent(item.id)}`}
+                onClick={(event) => {
+                  event.stopPropagation();
+                  markPreviewed(item.id);
+                }}
+                rel="noopener noreferrer"
+                target="_blank"
+              >
+                {item.display}
+              </Link>{' '}
+              ({item.count})
             </Typography>
-            <Button
-              aria-label={t('entities.selectRelationshipOptionLabel', {
-                option: item.display,
-              })}
-              onClick={(event) => {
-                event.stopPropagation();
-                toggleSelected(item.id);
-              }}
-              size="small"
-            >
-              {t('entities.selectRelationshipOption')}
-            </Button>
+            <Stack direction="row" spacing={0.5}>
+              <Button
+                aria-label={t('entities.previewRelationshipOptionLabel', {
+                  option: item.display,
+                })}
+                color={isPreviewed(item.id) ? 'secondary' : 'inherit'}
+                onClick={(event) => {
+                  event.stopPropagation();
+                  previewTarget(item.id);
+                }}
+                size="small"
+              >
+                {t('entities.previewRelationshipOption')}
+              </Button>
+              <Button
+                aria-label={t('entities.selectRelationshipOptionLabel', {
+                  option: item.display,
+                })}
+                onClick={(event) => {
+                  event.stopPropagation();
+                  toggleSelected(item.id);
+                }}
+                size="small"
+              >
+                {t('entities.selectRelationshipOption')}
+              </Button>
+            </Stack>
           </Box>
         </ListItem>
         {canExpand && open && (

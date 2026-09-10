@@ -74,9 +74,15 @@ describe('RelationshipTreeFacet', () => {
     renderFacet([defaultContext]);
     const user = userEvent.setup();
 
-    await user.click(await screen.findByText('Parent category (1)'));
+    const parentLink = await screen.findByRole('link', {
+      name: 'Parent category',
+    });
+    expect(parentLink.getAttribute('target')).toBe('_blank');
+    await user.click(parentLink.closest('li')!);
 
-    expect(await screen.findByText('Child category (1)')).toBeTruthy();
+    expect(
+      await screen.findByRole('link', { name: 'Child category' }),
+    ).toBeTruthy();
   });
 
   it.each([
@@ -128,8 +134,9 @@ describe('RelationshipTreeFacet', () => {
     expect(
       screen
         .getByText('Selected')
-        .compareDocumentPosition(screen.getByText('Other category (1)')) &
-        Node.DOCUMENT_POSITION_FOLLOWING,
+        .compareDocumentPosition(
+          screen.getByRole('link', { name: 'Other category' }),
+        ) & Node.DOCUMENT_POSITION_FOLLOWING,
     ).toBeTruthy();
 
     expect(screen.queryByRole('radio')).toBeNull();

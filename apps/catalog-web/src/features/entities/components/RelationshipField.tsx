@@ -6,9 +6,9 @@ import {
   Button,
   Chip,
   FormControl,
+  Link,
   List,
   ListItem,
-  ListItemText,
   Stack,
   TextField,
   Typography,
@@ -19,6 +19,7 @@ import { RelationshipPickerIcon } from '../../../components/system-icons';
 import { searchEntities, type Attribute } from '../api';
 import { RelationshipSelectionPills } from './RelationshipSelectionPills';
 import { useRelationshipSelectionLabels } from './useRelationshipSelectionLabels';
+import { useRecentlyPreviewedEntities } from './useRecentlyPreviewedEntities';
 import {
   attributeLabel,
   displayLabel,
@@ -56,6 +57,7 @@ export const RelationshipField = ({
     targetBlueprint,
     selectedIds,
   );
+  const { isPreviewed, markPreviewed } = useRecentlyPreviewedEntities();
   const targets = useInfiniteQuery({
     queryKey: entityQueryKeys.relationshipTargets(targetBlueprint, query),
     queryFn: ({ pageParam, signal }) =>
@@ -104,6 +106,14 @@ export const RelationshipField = ({
     setKnownLabels({});
     setQuery('');
     setOpen(true);
+  };
+  const previewTarget = (id: string) => {
+    markPreviewed(id);
+    window.open(
+      `/entities/${encodeURIComponent(id)}`,
+      '_blank',
+      'noopener,noreferrer',
+    );
   };
   const selectTarget = (id: string, label: string) => {
     setKnownLabels((current) => ({ ...current, [id]: label }));
@@ -225,7 +235,35 @@ export const RelationshipField = ({
               {availableOptions.map((target) => (
                 <ListItem
                   key={target.id}
-                  secondaryAction={
+                  sx={{
+                    alignItems: 'center',
+                    bgcolor: isPreviewed(target.id)
+                      ? 'action.selected'
+                      : undefined,
+                    borderRadius: 1,
+                    '&:hover': { bgcolor: 'action.hover' },
+                  }}
+                >
+                  <Link
+                    href={`/entities/${encodeURIComponent(target.id)}`}
+                    onClick={() => markPreviewed(target.id)}
+                    rel="noopener noreferrer"
+                    sx={{ flexGrow: 1, minWidth: 0, mr: 1 }}
+                    target="_blank"
+                  >
+                    {targetLabel(target)}
+                  </Link>
+                  <Stack direction="row" spacing={0.5}>
+                    <Button
+                      aria-label={t('entities.previewRelationshipOptionLabel', {
+                        option: targetLabel(target),
+                      })}
+                      color={isPreviewed(target.id) ? 'secondary' : 'inherit'}
+                      onClick={() => previewTarget(target.id)}
+                      size="small"
+                    >
+                      {t('entities.previewRelationshipOption')}
+                    </Button>
                     <Button
                       aria-label={t('entities.selectRelationshipOptionLabel', {
                         option: targetLabel(target),
@@ -237,13 +275,7 @@ export const RelationshipField = ({
                     >
                       {t('entities.selectRelationshipOption')}
                     </Button>
-                  }
-                  sx={{
-                    borderRadius: 1,
-                    '&:hover': { bgcolor: 'action.hover' },
-                  }}
-                >
-                  <ListItemText primary={targetLabel(target)} />
+                  </Stack>
                 </ListItem>
               ))}
             </List>

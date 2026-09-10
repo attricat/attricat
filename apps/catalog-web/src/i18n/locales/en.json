@@ -200,6 +200,8 @@
     "selectOneRelationship": "Select one {{blueprint}}",
     "selectRelationshipOption": "Select",
     "selectRelationshipOptionLabel": "Select {{option}}",
+    "previewRelationshipOption": "Preview",
+    "previewRelationshipOptionLabel": "Preview {{option}} in a new tab",
     "searchRelationshipOptions": "Search options",
     "selectedRelationships": "Selected",
     "relationshipOptions": "Options",

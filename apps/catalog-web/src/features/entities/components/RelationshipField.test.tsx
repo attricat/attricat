@@ -130,6 +130,20 @@ describe('RelationshipField', () => {
     const search = screen.getByRole('textbox', { name: 'Search options' });
     await user.type(search, 'later');
     await screen.findByRole('button', { name: 'Select later product' });
+    const entityLink = screen.getByRole('link', { name: 'later product' });
+    expect(entityLink.getAttribute('target')).toBe('_blank');
+    const openPreview = vi.spyOn(window, 'open').mockImplementation(() => null);
+    const previewButton = screen.getByRole('button', {
+      name: 'Preview later product in a new tab',
+    });
+    await user.click(previewButton);
+    expect(openPreview).toHaveBeenCalledWith(
+      `/entities/${firstId}`,
+      '_blank',
+      'noopener,noreferrer',
+    );
+    expect(previewButton.className).toContain('MuiButton-colorSecondary');
+    openPreview.mockRestore();
 
     await user.click(screen.getByRole('button', { name: 'Load more' }));
     await user.click(

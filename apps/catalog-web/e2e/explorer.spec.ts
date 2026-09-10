@@ -179,7 +179,10 @@ target_blueprint = "${categoryCode}"`,
   await expect(
     page.getByRole('button', { name: 'Select Departments' }),
   ).toBeVisible();
-  await page.getByText('Departments (1)').click();
+  const departmentsItem = page
+    .getByRole('listitem')
+    .filter({ has: page.getByRole('link', { name: 'Departments' }) });
+  await departmentsItem.evaluate((item) => item.click());
   await page.getByRole('button', { name: 'Select Shoes' }).click();
   await expect(
     page.getByRole('heading', { name: 'Selected', exact: true }),
