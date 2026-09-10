@@ -10,6 +10,11 @@ import i18n from './i18n';
 import { router } from './app/router';
 
 const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: {
+      refetchOnWindowFocus: false,
+    },
+  },
   mutationCache: new MutationCache({
     onSuccess: (_, __, ___, mutation) => {
       if (mutation.options.meta?.toast === false) return;

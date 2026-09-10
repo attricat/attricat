@@ -3,6 +3,7 @@ import {
   useInfiniteQuery,
   useQueries,
   useQuery,
+  useQueryClient,
 } from '@tanstack/react-query';
 import { useNavigate } from '@tanstack/react-router';
 import { Alert, Box, Typography } from '@mui/material';
@@ -46,6 +47,7 @@ export const Explorer = ({ search: urlSearch }: { search: ExplorerSearch }) => {
     blueprint: urlSearch.blueprint ?? getLastBlueprint(),
   };
   const navigate = useNavigate({ from: '/' });
+  const queryClient = useQueryClient();
 
   useEffect(() => {
     if (urlSearch.blueprint)
@@ -331,18 +333,28 @@ export const Explorer = ({ search: urlSearch }: { search: ExplorerSearch }) => {
             blueprints={blueprints.data ?? []}
             lockedBlueprint
             onSubmit={(value) => {
-              void navigate({
-                to: '/',
-                search: {
-                  ...(value.blueprint === search.blueprint
-                    ? search
-                    : {
-                        relationshipFacets: undefined,
-                        attributeFilters: undefined,
-                      }),
-                  ...value,
-                },
+              const keepsBlueprint = value.blueprint === search.blueprint;
+              const nextSearch: ExplorerSearch = {
+                ...(keepsBlueprint
+                  ? search
+                  : {
+                      relationshipFacets: undefined,
+                      attributeFilters: undefined,
+                    }),
+                ...value,
+              };
+              void queryClient.invalidateQueries({
+                exact: true,
+                queryKey: entityQueryKeys.search(
+                  nextSearch.blueprint,
+                  nextSearch.version,
+                  nextSearch.query,
+                  keepsBlueprint ? relationshipTreeFacets : [],
+                  nextSearch.sort,
+                  nextSearch.attributeFilters,
+                ),
               });
+              void navigate({ to: '/', search: nextSearch });
             }}
             search={search}
           />

@@ -38,7 +38,9 @@ export const ActiveExplorerFilters = ({
         const label = filter.labels
           ? t('explorer.relationshipFilterLabel', {
               field: filter.field,
-              value: filter.labels.join(', '),
+              value: filter.labels
+                .map((label) => JSON.stringify(label))
+                .join(', '),
             })
           : t('explorer.relationshipFilterPill', {
               field: filter.field,
@@ -72,7 +74,7 @@ export const ActiveExplorerFilters = ({
             : String(filter.value);
         const label = `${filter.field} ${t(
           `explorer.filterOperatorSymbols.${filter.operator}`,
-        )} ${value}`;
+        )} ${JSON.stringify(value)}`;
         return (
           <Chip
             deleteIcon={

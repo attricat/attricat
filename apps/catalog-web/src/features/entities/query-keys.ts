@@ -1,4 +1,5 @@
 export const entityQueryKeys = {
+  searches: () => ['entities'] as const,
   blueprints: () => ['entity-blueprints'] as const,
   contexts: () => ['attribute-contexts'] as const,
   blueprintRevision: (id: string | undefined, version: number | undefined) =>
@@ -39,7 +40,7 @@ export const entityQueryKeys = {
     }[],
   ) =>
     [
-      'entities',
+      ...entityQueryKeys.searches(),
       blueprint,
       version,
       query,

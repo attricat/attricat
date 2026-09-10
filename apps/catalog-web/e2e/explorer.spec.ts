@@ -46,6 +46,22 @@ test('shows explorer empty states and configured table fields', async ({
     page.getByRole('cell', { name: 'Table product' }).first(),
   ).toBeVisible();
   await expect(page.getByText('12', { exact: true })).toBeVisible();
+
+  const repeatedButtonSearch = page.waitForResponse(
+    (response) =>
+      response.url().endsWith('/api/v1/entities/search') &&
+      response.request().method() === 'POST',
+  );
+  await page.getByRole('button', { name: 'Search' }).click();
+  await repeatedButtonSearch;
+
+  const repeatedKeyboardSearch = page.waitForResponse(
+    (response) =>
+      response.url().endsWith('/api/v1/entities/search') &&
+      response.request().method() === 'POST',
+  );
+  await page.getByLabel('Query').press('Enter');
+  await repeatedKeyboardSearch;
 });
 
 test('applies and removes an attribute filter on mobile', async ({ page }) => {
@@ -83,7 +99,7 @@ value_type = "integer"`,
   await mobileFilters.getByLabel('Value').fill('5');
   await mobileFilters.getByRole('button', { name: 'Apply filter' }).click();
 
-  await expect(page.getByText('stock > 5')).toBeVisible();
+  await expect(page.getByText('stock > "5"')).toBeVisible();
   await expect(page.getByText('1 result')).toBeVisible();
   await expect(
     page.getByRole('cell', { name: 'In stock' }).first(),
@@ -93,7 +109,7 @@ value_type = "integer"`,
     .poll(() => new URL(page.url()).searchParams.get('attributeFilters'))
     .toContain('stock');
 
-  await page.getByLabel('Remove filter stock > 5').click();
+  await page.getByLabel('Remove attribute filter stock > "5"').click();
   await expect(page.getByText('2 results')).toBeVisible();
 });
 
@@ -154,12 +170,12 @@ target_blueprint = "${categoryCode}"`,
   await expect
     .poll(() => new URL(page.url()).searchParams.get('relationshipFacets'))
     .toContain(child.id);
-  await expect(page.getByText('category: Shoes')).toBeVisible();
+  await expect(page.getByText('category: "Shoes"')).toBeVisible();
   await expect(page.getByText('1 result')).toBeVisible();
   await expect(page.getByRole('cell', { name: 'Running shoe' })).toBeVisible();
   await expect(page.getByRole('cell', { name: 'Canvas bag' })).toBeHidden();
 
-  await page.getByLabel('Remove relationship filter category: Shoes').click();
+  await page.getByLabel('Remove relationship filter category: "Shoes"').click();
   await expect(page.getByText('2 results')).toBeVisible();
 });
 
