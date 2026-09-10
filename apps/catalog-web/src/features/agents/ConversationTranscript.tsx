@@ -1,4 +1,4 @@
-import SmartToyOutlinedIcon from '@mui/icons-material/SmartToyOutlined';
+import { AgentIcon } from '../../components/system-icons';
 import { useEffect, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
@@ -76,7 +76,7 @@ export const ConversationTranscript = ({
               {isUser ? (
                 t('agents.you').slice(0, 1)
               ) : (
-                <SmartToyOutlinedIcon fontSize="small" />
+                <AgentIcon fontSize="small" />
               )}
             </Avatar>
             <Box
@@ -139,7 +139,7 @@ export const ConversationTranscript = ({
           sx={{ alignItems: 'center' }}
         >
           <Avatar sx={{ bgcolor: 'primary.main', height: 30, width: 30 }}>
-            <SmartToyOutlinedIcon fontSize="small" />
+            <AgentIcon fontSize="small" />
           </Avatar>
           <Typography color="text.secondary" variant="body2">
             {t('agents.thinking')}

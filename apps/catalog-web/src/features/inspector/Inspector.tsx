@@ -1,4 +1,4 @@
-import BuildOutlinedIcon from '@mui/icons-material/BuildOutlined';
+import { InspectorIcon } from '../../components/system-icons';
 import CloseIcon from '@mui/icons-material/Close';
 import {
   Box,
@@ -214,7 +214,7 @@ export const Inspector = () => {
             },
           }}
         >
-          <BuildOutlinedIcon fontSize="small" />
+          <InspectorIcon fontSize="small" />
           <Box
             aria-label={apiStatus}
             role="status"

@@ -1,6 +1,6 @@
 import { useQuery } from '@tanstack/react-query';
 import { Link } from '@tanstack/react-router';
-import CategoryOutlinedIcon from '@mui/icons-material/CategoryOutlined';
+import { BlueprintIcon } from '../../components/system-icons';
 import CheckCircleOutlinedIcon from '@mui/icons-material/CheckCircleOutlined';
 import CloseIcon from '@mui/icons-material/Close';
 import EditOutlinedIcon from '@mui/icons-material/EditOutlined';
@@ -94,7 +94,7 @@ export const EntityPreviewPage = ({ entityId }: { entityId: string }) => {
               <RouterButton
                 params={{ blueprintId: String(blueprint.data.blueprint.id) }}
                 size="small"
-                startIcon={<CategoryOutlinedIcon />}
+                startIcon={<BlueprintIcon />}
                 to="/manage/blueprints/$blueprintId"
                 variant="text"
               >

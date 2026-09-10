@@ -1,6 +1,6 @@
 import { useMutation, useQuery } from '@tanstack/react-query';
 import { Link, useNavigate } from '@tanstack/react-router';
-import CategoryOutlinedIcon from '@mui/icons-material/CategoryOutlined';
+import { BlueprintIcon } from '../../components/system-icons';
 import CheckCircleOutlinedIcon from '@mui/icons-material/CheckCircleOutlined';
 import UpgradeOutlinedIcon from '@mui/icons-material/UpgradeOutlined';
 import ViewListOutlinedIcon from '@mui/icons-material/ViewListOutlined';
@@ -79,7 +79,7 @@ export const EditEntityPage = ({ entityId }: { entityId: string }) => {
               <RouterButton
                 params={{ blueprintId: entityForm.data.entity.blueprint_id! }}
                 size="small"
-                startIcon={<CategoryOutlinedIcon />}
+                startIcon={<BlueprintIcon />}
                 to="/manage/blueprints/$blueprintId"
                 variant="text"
               >

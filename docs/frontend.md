@@ -31,6 +31,12 @@ These conventions apply to `apps/catalog-web`.
   Ajv helper for immediate form feedback, but treat server-side `422` schema
   validation as authoritative.
 
+## Icons
+
+- Import icons assigned to Attricat concepts from `src/components/system-icons.ts` so the same concept is represented consistently across navigation, headings, menus, and other surfaces.
+- Keep generic action and status icons, such as add, edit, delete, close, expand, and warnings, local to the component using them.
+- Add a semantic export to the registry before introducing an icon for another system concept.
+
 ## Bundle size
 
 - Run `pnpm --dir apps/catalog-web inspect:bundle` when changing dependencies

@@ -1,9 +1,11 @@
-import AssessmentOutlinedIcon from '@mui/icons-material/AssessmentOutlined';
-import BoltOutlinedIcon from '@mui/icons-material/BoltOutlined';
-import CategoryOutlinedIcon from '@mui/icons-material/CategoryOutlined';
-import FactCheckOutlinedIcon from '@mui/icons-material/FactCheckOutlined';
-import FolderOutlinedIcon from '@mui/icons-material/FolderOutlined';
-import ManageAccountsOutlinedIcon from '@mui/icons-material/ManageAccountsOutlined';
+import {
+  AuditLogIcon,
+  BlueprintIcon,
+  ContextIcon,
+  DataHealthIcon,
+  ExtensionIcon,
+  WorkspaceIcon,
+} from '../../components/system-icons';
 import { Box, Paper, Stack, Typography } from '@mui/material';
 import { Link } from '@tanstack/react-router';
 import { useTranslation } from 'react-i18next';
@@ -13,37 +15,37 @@ import { PageHeader } from '../../components/PageHeader';
 const dashboardItems = [
   {
     descriptionKey: 'management.blueprintsDescription',
-    icon: <CategoryOutlinedIcon color="primary" />,
+    icon: <BlueprintIcon color="primary" />,
     titleKey: 'navigation.blueprints',
     to: '/manage/blueprints',
   },
   {
     descriptionKey: 'management.contextsDescription',
-    icon: <FolderOutlinedIcon color="primary" />,
+    icon: <ContextIcon color="primary" />,
     titleKey: 'navigation.contexts',
     to: '/manage/contexts',
   },
   {
     descriptionKey: 'management.dataHealthDescription',
-    icon: <AssessmentOutlinedIcon color="primary" />,
+    icon: <DataHealthIcon color="primary" />,
     titleKey: 'navigation.dataHealth',
     to: '/manage/data-health',
   },
   {
     descriptionKey: 'management.workspaceDescription',
-    icon: <ManageAccountsOutlinedIcon color="primary" />,
+    icon: <WorkspaceIcon color="primary" />,
     titleKey: 'navigation.workspaceManagement',
     to: '/manage/workspace/members',
   },
   {
     descriptionKey: 'management.governanceDescription',
-    icon: <FactCheckOutlinedIcon color="primary" />,
+    icon: <AuditLogIcon color="primary" />,
     titleKey: 'navigation.auditLog',
     to: '/manage/audit-log',
   },
   {
     descriptionKey: 'management.extensionsDescription',
-    icon: <BoltOutlinedIcon color="primary" />,
+    icon: <ExtensionIcon color="primary" />,
     titleKey: 'navigation.extensions',
     to: '/manage/extensions',
   },

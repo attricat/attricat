@@ -1,17 +1,6 @@
-import AssessmentOutlinedIcon from '@mui/icons-material/AssessmentOutlined';
-import BookmarkBorderOutlinedIcon from '@mui/icons-material/BookmarkBorderOutlined';
-import BoltOutlinedIcon from '@mui/icons-material/BoltOutlined';
-import CategoryOutlinedIcon from '@mui/icons-material/CategoryOutlined';
 import ChevronRightIcon from '@mui/icons-material/ChevronRight';
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
-import FactCheckOutlinedIcon from '@mui/icons-material/FactCheckOutlined';
-import FolderOutlinedIcon from '@mui/icons-material/FolderOutlined';
 import LogoutOutlinedIcon from '@mui/icons-material/LogoutOutlined';
-import ManageAccountsOutlinedIcon from '@mui/icons-material/ManageAccountsOutlined';
-import PersonOutlinedIcon from '@mui/icons-material/PersonOutlined';
-import SmartToyOutlinedIcon from '@mui/icons-material/SmartToyOutlined';
-import SettingsOutlinedIcon from '@mui/icons-material/SettingsOutlined';
-import TravelExploreOutlinedIcon from '@mui/icons-material/TravelExploreOutlined';
 import { useQuery } from '@tanstack/react-query';
 import { Link, useRouterState } from '@tanstack/react-router';
 import { useState } from 'react';
@@ -23,6 +12,19 @@ import { listSidebarExploreNavigation } from '../features/workspace/api';
 import { workspaceQueryKeys } from '../features/workspace/query-keys';
 import { QueryErrorNotice } from './QueryErrorNotice';
 import { RouterListItemButton } from './RouterLink';
+import {
+  AgentIcon,
+  AuditLogIcon,
+  BlueprintIcon,
+  ContextIcon,
+  DataHealthIcon,
+  ExplorerIcon,
+  ExplorerShortcutIcon,
+  ExtensionIcon,
+  ManagementIcon,
+  ProfileIcon,
+  WorkspaceIcon,
+} from './system-icons';
 import {
   Box,
   Collapse,
@@ -38,47 +40,47 @@ import {
 
 const navigationItems = [
   {
-    icon: <TravelExploreOutlinedIcon />,
+    icon: <ExplorerIcon />,
     labelKey: 'navigation.entityExplorer',
     to: '/',
   },
   {
-    icon: <CategoryOutlinedIcon />,
+    icon: <BlueprintIcon />,
     labelKey: 'navigation.blueprints',
     to: '/manage/blueprints',
   },
   {
-    icon: <FolderOutlinedIcon />,
+    icon: <ContextIcon />,
     labelKey: 'navigation.contexts',
     to: '/manage/contexts',
   },
   {
-    icon: <SmartToyOutlinedIcon />,
+    icon: <AgentIcon />,
     labelKey: 'navigation.agents',
     to: '/agents',
   },
   {
-    icon: <AssessmentOutlinedIcon />,
+    icon: <DataHealthIcon />,
     labelKey: 'navigation.dataHealth',
     to: '/manage/data-health',
   },
   {
-    icon: <FactCheckOutlinedIcon />,
+    icon: <AuditLogIcon />,
     labelKey: 'navigation.auditLog',
     to: '/manage/audit-log',
   },
   {
-    icon: <BoltOutlinedIcon />,
+    icon: <ExtensionIcon />,
     labelKey: 'navigation.extensions',
     to: '/manage/extensions',
   },
   {
-    icon: <PersonOutlinedIcon />,
+    icon: <ProfileIcon />,
     labelKey: 'navigation.profile',
     to: '/profile',
   },
   {
-    icon: <ManageAccountsOutlinedIcon />,
+    icon: <WorkspaceIcon />,
     labelKey: 'navigation.workspaceManagement',
     to: '/manage/workspace/members',
   },
@@ -297,7 +299,7 @@ export const SideNavigation = ({
                 to="/"
               >
                 <ListItemIcon sx={compact ? { minWidth: 0 } : undefined}>
-                  <TravelExploreOutlinedIcon />
+                  <ExplorerIcon />
                 </ListItemIcon>
                 {compact ? (
                   <Typography
@@ -331,7 +333,7 @@ export const SideNavigation = ({
               to="/manage"
             >
               <ListItemIcon sx={{ minWidth: 0 }}>
-                <SettingsOutlinedIcon />
+                <ManagementIcon />
               </ListItemIcon>
               <Typography
                 sx={{
@@ -369,6 +371,9 @@ export const SideNavigation = ({
                 selected={pathname === '/manage' || pathname === '/manage/'}
                 to="/manage"
               >
+                <ListItemIcon>
+                  <ManagementIcon />
+                </ListItemIcon>
                 <ListItemText primary={t('navigation.dashboard')} />
               </ListItemButton>
               {managementItems.map((item) => (
@@ -416,6 +421,9 @@ export const SideNavigation = ({
               selected={pathname === '/manage' || pathname === '/manage/'}
               to="/manage"
             >
+              <ListItemIcon>
+                <ManagementIcon />
+              </ListItemIcon>
               <ListItemText primary={t('navigation.dashboard')} />
             </ListItemButton>
             {managementItems.map((item) => (
@@ -426,6 +434,7 @@ export const SideNavigation = ({
                 selected={pathname.startsWith(item.to)}
                 to={item.to}
               >
+                <ListItemIcon>{item.icon}</ListItemIcon>
                 <ListItemText primary={t(item.labelKey)} />
               </ListItemButton>
             ))}
@@ -463,7 +472,7 @@ export const SideNavigation = ({
               to="/"
             >
               <ListItemIcon>
-                <TravelExploreOutlinedIcon />
+                <ExplorerIcon />
               </ListItemIcon>
               <ListItemText primary={t('navigation.allEntities')} />
             </ListItemButton>
@@ -483,7 +492,7 @@ export const SideNavigation = ({
                 to="/"
               >
                 <ListItemIcon>
-                  <BookmarkBorderOutlinedIcon />
+                  <ExplorerShortcutIcon />
                 </ListItemIcon>
                 <ListItemText primary={item.blueprint_name} />
               </RouterListItemButton>
