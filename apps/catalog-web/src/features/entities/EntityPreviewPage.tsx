@@ -18,7 +18,6 @@ import {
   Drawer,
   IconButton,
   Paper,
-  Stack,
   Tooltip,
   Typography,
 } from '@mui/material';
@@ -115,35 +114,19 @@ export const EntityPreviewPage = ({ entityId }: { entityId: string }) => {
     <PageContainer>
       <PageHeader
         actions={
-          <Stack
-            direction="row"
-            spacing={1}
-            sx={{ flexWrap: 'wrap' }}
-            useFlexGap
-          >
-            {canSelectForPicker && (
-              <Button
-                onClick={selectForPicker}
-                startIcon={<RelationshipPickerIcon />}
-                variant="contained"
+          blueprint.data && (
+            <Tooltip title={blueprint.data.blueprint.name}>
+              <RouterButton
+                params={{ blueprintId: String(blueprint.data.blueprint.id) }}
+                size="small"
+                startIcon={<BlueprintIcon />}
+                to="/manage/blueprints/$blueprintId"
+                variant="text"
               >
-                {t('entities.selectThisEntityAndClose')}
-              </Button>
-            )}
-            {blueprint.data && (
-              <Tooltip title={blueprint.data.blueprint.name}>
-                <RouterButton
-                  params={{ blueprintId: String(blueprint.data.blueprint.id) }}
-                  size="small"
-                  startIcon={<BlueprintIcon />}
-                  to="/manage/blueprints/$blueprintId"
-                  variant="text"
-                >
-                  {t('entities.blueprint')}: {blueprint.data.blueprint.name}
-                </RouterButton>
-              </Tooltip>
-            )}
-          </Stack>
+                {t('entities.blueprint')}: {blueprint.data.blueprint.name}
+              </RouterButton>
+            </Tooltip>
+          )
         }
         eyebrow={
           blueprint.data ? (
@@ -164,6 +147,32 @@ export const EntityPreviewPage = ({ entityId }: { entityId: string }) => {
           )
         }
       />
+      {canSelectForPicker && (
+        <Paper
+          aria-label={t('entities.relationshipPickerAction')}
+          component="aside"
+          sx={{
+            alignItems: 'center',
+            bgcolor: 'action.hover',
+            borderColor: 'primary.main',
+            display: 'flex',
+            justifyContent: 'center',
+            mb: 2,
+            p: { xs: 1.5, sm: 2 },
+          }}
+          variant="outlined"
+        >
+          <Button
+            onClick={selectForPicker}
+            size="large"
+            startIcon={<RelationshipPickerIcon />}
+            sx={{ minWidth: { sm: 300 } }}
+            variant="contained"
+          >
+            {t('entities.selectThisEntityAndClose')}
+          </Button>
+        </Paper>
+      )}
       {resolved.data && blueprint.data && HeadingRenderer
         ? createElement(HeadingRenderer, {
             attributes: blueprint.data.attributes,

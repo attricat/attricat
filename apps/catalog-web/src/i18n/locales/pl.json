@@ -216,6 +216,7 @@
     "closeRelationshipSelector": "Zamknij wybór relacji",
     "viewPreview": "Wyświetl podgląd",
     "selectThisEntityAndClose": "Wybierz tę encję i zamknij",
+    "relationshipPickerAction": "Akcja wyboru relacji",
     "viewAll": "Zobacz wszystkie",
     "changes": "Zmiany",
     "schemaOutdated": "Schemat jest nieaktualny",

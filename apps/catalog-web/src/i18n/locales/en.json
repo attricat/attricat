@@ -214,6 +214,7 @@
     "closeRelationshipSelector": "Close relationship selector",
     "viewPreview": "View preview",
     "selectThisEntityAndClose": "Select this entity and close",
+    "relationshipPickerAction": "Relationship picker action",
     "viewAll": "See all",
     "changes": "Changes",
     "schemaOutdated": "Schema is outdated",
