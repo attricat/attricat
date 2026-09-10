@@ -1,7 +1,6 @@
 import {
   keepPreviousData,
   useInfiniteQuery,
-  useQueries,
   useQuery,
   useQueryClient,
 } from '@tanstack/react-query';
@@ -17,7 +16,6 @@ import { contextQueryKeys } from '../contexts/query-keys';
 import { defaultContextCode } from '../contexts/constants';
 import {
   getBlueprintByCode,
-  getRelationshipTreeFacetChildren,
   listEntityBlueprints,
   searchEntities,
 } from '../entities/api';
@@ -30,16 +28,8 @@ import { ActiveExplorerFilters } from './ActiveExplorerFilters';
 import { ExplorerResultsTable } from './ExplorerResultsTable';
 import { ExplorerSearchForm } from './ExplorerSearchForm';
 import type { AttributeFilter, ExplorerSearch } from './search';
-
-const lastBlueprintStorageKey = 'catalog.explorer.last-blueprint';
-
-const getLastBlueprint = () => {
-  try {
-    return sessionStorage.getItem(lastBlueprintStorageKey) || undefined;
-  } catch {
-    return undefined;
-  }
-};
+import { useActiveRelationshipFilters } from './useActiveRelationshipFilters';
+import { getLastBlueprint, setLastBlueprint } from './last-blueprint';
 
 export const Explorer = ({ search: urlSearch }: { search: ExplorerSearch }) => {
   const { t } = useTranslation();
@@ -51,8 +41,7 @@ export const Explorer = ({ search: urlSearch }: { search: ExplorerSearch }) => {
   const queryClient = useQueryClient();
 
   useEffect(() => {
-    if (urlSearch.blueprint)
-      sessionStorage.setItem(lastBlueprintStorageKey, urlSearch.blueprint);
+    if (urlSearch.blueprint) setLastBlueprint(urlSearch.blueprint);
   }, [urlSearch.blueprint]);
 
   const contexts = useQuery({
@@ -74,6 +63,9 @@ export const Explorer = ({ search: urlSearch }: { search: ExplorerSearch }) => {
   );
   const facetContextCode =
     search.relationshipFacets?.[0]?.context ?? defaultContextCode;
+  const facetContextId = contexts.data?.find(
+    (context) => context.code === facetContextCode,
+  )?.id;
   const explorerFacets: ExplorerRelationshipFacet[] = relationshipFields.map(
     (sourceRelationship) => {
       const saved = search.relationshipFacets?.find(
@@ -87,17 +79,14 @@ export const Explorer = ({ search: urlSearch }: { search: ExplorerSearch }) => {
     },
   );
   const relationshipTreeFacets = explorerFacets.flatMap((facet) => {
-    const contextId = contexts.data?.find(
-      (context) => context.code === facetContextCode,
-    )?.id;
-    if (!facet.selectedIds.length || !contextId) return [];
+    if (!facet.selectedIds.length || !facetContextId) return [];
     return [
       {
         source_relationship_field: facet.sourceRelationship.code,
         ...(facet.hierarchyField
           ? { hierarchy_field: facet.hierarchyField }
           : {}),
-        context_id: contextId,
+        context_id: facetContextId,
         selected_target_ids: facet.selectedIds,
       },
     ];
@@ -172,66 +161,12 @@ export const Explorer = ({ search: urlSearch }: { search: ExplorerSearch }) => {
     });
   };
 
-  const selectedRelationshipFacets = explorerFacets.filter(
-    (facet) => facet.selectedIds.length > 0,
-  );
-  const relationshipFilterLabelQueries = useQueries({
-    queries: selectedRelationshipFacets.map((facet) => {
-      const contextId = contexts.data?.find(
-        (context) => context.code === facetContextCode,
-      )?.id;
-      return {
-        queryKey: entityQueryKeys.relationshipTreeFacetChildren(
-          search.blueprint ?? '',
-          search.version,
-          search.query,
-          facet.sourceRelationship.code,
-          facet.hierarchyField ?? '',
-          facetContextCode,
-          undefined,
-          null,
-          facet.selectedIds,
-        ),
-        queryFn: ({ signal }: { signal: AbortSignal }) =>
-          getRelationshipTreeFacetChildren(
-            {
-              blueprint: {
-                code: search.blueprint!,
-                ...(search.version === undefined
-                  ? {}
-                  : { version: search.version }),
-              },
-              ...(search.query ? { query: search.query } : {}),
-              source_relationship_field: facet.sourceRelationship.code,
-              ...(facet.hierarchyField
-                ? { hierarchy_field: facet.hierarchyField }
-                : {}),
-              context_id: contextId!,
-              selected_target_ids: facet.selectedIds,
-              cursor: null,
-            },
-            signal,
-          ),
-        enabled: Boolean(search.blueprint && contextId),
-      };
-    }),
+  const activeRelationshipFilters = useActiveRelationshipFilters({
+    contextCode: facetContextCode,
+    contextId: facetContextId,
+    facets: explorerFacets,
+    search,
   });
-  const activeRelationshipFilters = selectedRelationshipFacets.map(
-    (facet, index) => {
-      const selectedItems =
-        relationshipFilterLabelQueries[index]?.data?.selected_items;
-      const labels =
-        selectedItems?.length === facet.selectedIds.length &&
-        selectedItems.every((item) => item.display)
-          ? selectedItems.map((item) => item.display)
-          : undefined;
-      return {
-        field: facet.sourceRelationship.code,
-        selectedCount: facet.selectedIds.length,
-        labels,
-      };
-    },
-  );
   const addAttributeFilter = (filter: AttributeFilter) => {
     void navigate({
       to: '/',

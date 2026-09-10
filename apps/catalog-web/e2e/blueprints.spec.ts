@@ -83,14 +83,16 @@ value_type = "string"`,
   await expect(
     page.getByRole('heading', { name: 'Catalogue product revision' }),
   ).toBeVisible();
+  await page.getByRole('tab', { name: 'Revision history' }).click();
   await expect(
     page.getByRole('heading', { name: 'Revision history' }),
   ).toBeVisible();
   await expect(page.getByRole('cell', { name: 'v2' })).toBeVisible();
-  await page.getByRole('button', { name: 'Compare definitions' }).click();
+  await page.getByRole('tab', { name: 'Compare definitions' }).click();
   await page.getByLabel('Left version').click();
   await page.getByRole('option', { name: 'v1 (published)' }).click();
   await expect(page.getByText('code = "title"').first()).toBeVisible();
+  await page.getByRole('tab', { name: /Version \d+ metadata/ }).click();
   await page.getByRole('tab', { name: /Attributes/ }).click();
   await expect(page.getByText('title', { exact: true })).toBeVisible();
 });

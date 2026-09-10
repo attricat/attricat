@@ -14,11 +14,6 @@ import {
   Paper,
   Stack,
   Tab,
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableRow,
   TextField,
   Tabs,
   Typography,
@@ -32,11 +27,10 @@ import {
   listBlueprintRevisions,
   publishBlueprintRevision,
 } from './api';
-import { BlueprintViewsPreview } from './BlueprintViewsPreview';
 import { formatBlueprintDateTime } from './date-time';
 import { blueprintQueryKeys } from './query-keys';
-import { JsonMetadata } from './BlueprintMetadata';
 import { RevisionHistory } from './RevisionHistory';
+import { BlueprintVersionMetadata } from './BlueprintVersionMetadata';
 import { ExtensionOutlet } from '../extensions/ExtensionOutlet';
 
 const TomlDiffEditor = lazy(() =>
@@ -54,7 +48,6 @@ export const BlueprintDetailPage = ({
   const [leftSelection, setLeftSelection] = useState<number | null>(null);
   const [rightSelection, setRightSelection] = useState<number | null>(null);
   const [pageTab, setPageTab] = useState(0);
-  const [dataTab, setDataTab] = useState(0);
   const [publishConfirmationOpen, setPublishConfirmationOpen] = useState(false);
   const queryClient = useQueryClient();
   const publish = useMutation({
@@ -187,94 +180,7 @@ export const BlueprintDetailPage = ({
             />
           )}
           {pageTab === 0 && left.data && (
-            <Paper component="section" sx={{ mt: 3, p: 2.5 }}>
-              <Typography component="h2" variant="h6">
-                {t('blueprints.versionMetadata', {
-                  version: left.data.blueprint.version,
-                })}
-              </Typography>
-              <Tabs
-                allowScrollButtonsMobile
-                onChange={(_, value: number) => setDataTab(value)}
-                scrollButtons="auto"
-                sx={{ mt: 1 }}
-                value={dataTab}
-                variant="scrollable"
-              >
-                <Tab
-                  label={t('blueprints.attributes', {
-                    count: left.data.attributes.length,
-                  })}
-                />
-                <Tab label={t('blueprints.views')} />
-                <Tab label={t('blueprints.viewDefinition')} />
-                <Tab label={t('blueprints.entitySchema')} />
-                <Tab label={t('blueprints.includes')} />
-              </Tabs>
-              <Box sx={{ mt: 2 }}>
-                {dataTab === 4 && (
-                  <JsonMetadata
-                    label={t('blueprints.includes')}
-                    value={left.data.blueprint.includes}
-                  />
-                )}
-                {dataTab === 1 && (
-                  <BlueprintViewsPreview
-                    attributes={left.data.attributes}
-                    views={left.data.blueprint.views}
-                  />
-                )}
-                {dataTab === 2 && (
-                  <JsonMetadata
-                    label={t('blueprints.views')}
-                    value={left.data.blueprint.views}
-                  />
-                )}
-                {dataTab === 3 && (
-                  <JsonMetadata
-                    label={t('blueprints.entitySchema')}
-                    value={left.data.blueprint.entity_schema}
-                  />
-                )}
-                {dataTab === 0 && (
-                  <Box sx={{ overflowX: 'auto' }}>
-                    <Table size="small">
-                      <TableHead>
-                        <TableRow>
-                          <TableCell>{t('blueprints.code')}</TableCell>
-                          <TableCell>{t('blueprints.type')}</TableCell>
-                          <TableCell>{t('blueprints.target')}</TableCell>
-                          <TableCell>{t('blueprints.tags')}</TableCell>
-                          <TableCell>{t('blueprints.valueSchema')}</TableCell>
-                          <TableCell>{t('blueprints.context')}</TableCell>
-                        </TableRow>
-                      </TableHead>
-                      <TableBody>
-                        {left.data.attributes.map((attribute) => (
-                          <TableRow key={attribute.id}>
-                            <TableCell>{attribute.code}</TableCell>
-                            <TableCell>{attribute.value_type}</TableCell>
-                            <TableCell>
-                              {attribute.target_blueprint_code ?? '—'}
-                            </TableCell>
-                            <TableCell>
-                              {JSON.stringify(attribute.tags)}
-                            </TableCell>
-                            <TableCell>
-                              {JSON.stringify(attribute.value_schema)}
-                            </TableCell>
-                            <TableCell>
-                              {attribute.context_fallback} /{' '}
-                              {attribute.context_editable}
-                            </TableCell>
-                          </TableRow>
-                        ))}
-                      </TableBody>
-                    </Table>
-                  </Box>
-                )}
-              </Box>
-            </Paper>
+            <BlueprintVersionMetadata blueprint={left.data} />
           )}
           {pageTab === 0 && left.data && (
             <Box component="aside" sx={{ mt: 3 }}>

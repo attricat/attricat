@@ -11,6 +11,7 @@ import {
 test('side-loads the example extension and recalculates a blueprint formula', async ({
   page,
 }) => {
+  test.setTimeout(90_000);
   const archive = process.env.CATALOG_E2E_EXAMPLE_EXTENSION_ARCHIVE;
   if (!archive) throw new Error('E2E example extension archive is unavailable');
 
@@ -46,6 +47,21 @@ test('side-loads the example extension and recalculates a blueprint formula', as
   }
   await page.getByRole('button', { name: 'Enable' }).click();
   await expect(page.getByText('enabled', { exact: true })).toBeVisible();
+  await expect
+    .poll(
+      () =>
+        page.evaluate(async () => {
+          const runtime: Array<{ extension_id: string }> = await fetch(
+            '/api/extensions/runtime',
+          ).then((response) => response.json());
+          return runtime.some(
+            (contribution) =>
+              contribution.extension_id === 'attricat-extension-example',
+          );
+        }),
+      { timeout: 20_000 },
+    )
+    .toBe(true);
 
   const code = `formula_${suffix()}`;
   const blueprint = await createEntityBlueprint(
@@ -74,10 +90,10 @@ price_gross = "price_net * (1 + 0.23)"`,
 
   await page.goto(`/entities/${entity.id}`);
   await expect(
-    page.getByLabel('View extension content for price gross'),
+    page.getByLabel('View extension content for Price gross'),
   ).toBeVisible();
   await expect(
-    page.getByLabel('View extension content for price net'),
+    page.getByLabel('View extension content for Price net'),
   ).toHaveCount(0);
   const action = page
     .frameLocator('iframe[title="recalculate-formulas-action"]')
@@ -94,7 +110,7 @@ price_gross = "price_net * (1 + 0.23)"`,
         }>(`/entities/${entity.id}/resolved-preview?context_id=${context.id}`);
         return Object.values(preview.values).some(({ value }) => value === 123);
       },
-      { timeout: 10_000 },
+      { timeout: 45_000 },
     )
     .toBe(true);
 

@@ -43,74 +43,22 @@ import { explorerTableCellContextSchema } from './schemas';
 
 const maximumExplorerCellFrames = 32;
 
-const EntityActionsMenu = ({
-  blueprintId,
-  entity,
+const EntityActionsButton = ({
+  entityId,
+  onOpen,
 }: {
-  blueprintId: string;
-  entity: EntityItem;
+  entityId: string;
+  onOpen: (anchor: HTMLElement) => void;
 }) => {
   const { t } = useTranslation();
-  const [anchor, setAnchor] = useState<HTMLElement | null>(null);
-  const [searchInfoOpen, setSearchInfoOpen] = useState(false);
-  const label = t('explorer.entityActionsFor', { entityId: entity.id });
-  const matchSummary = entity.match_explanations
-    .map((explanation) =>
-      explanation.traversal_depth
-        ? t('explorer.matchViaRelationship', {
-            count: explanation.traversal_depth,
-            term: explanation.term,
-          })
-        : explanation.matching_attribute_code
-          ? t('explorer.matchInAttribute', {
-              attribute: explanation.matching_attribute_code,
-              term: explanation.term,
-            })
-          : explanation.term,
-    )
-    .join('; ');
   return (
-    <>
-      <IconButton
-        aria-label={label}
-        onClick={(event) => setAnchor(event.currentTarget)}
-        size="small"
-      >
-        <MoreVertIcon fontSize="inherit" />
-      </IconButton>
-      <Menu
-        anchorEl={anchor}
-        onClose={() => setAnchor(null)}
-        open={Boolean(anchor)}
-      >
-        <MenuItem
-          onClick={() => {
-            setAnchor(null);
-            setSearchInfoOpen(true);
-          }}
-        >
-          {t('explorer.searchInfo')}
-        </MenuItem>
-        <ExtensionPopoverOutlet
-          context={{
-            context_version: 1,
-            blueprint_id: blueprintId,
-            blueprint_version: entity.blueprint_version,
-            entity_id: entity.id,
-          }}
-          label={t('explorer.extensionActions')}
-          outlet="explorer_row_action"
-        />
-      </Menu>
-      <Dialog onClose={() => setSearchInfoOpen(false)} open={searchInfoOpen}>
-        <DialogTitle>{t('explorer.searchInfo')}</DialogTitle>
-        <DialogContent>
-          <Typography>
-            {matchSummary || t('explorer.noSearchDetails')}
-          </Typography>
-        </DialogContent>
-      </Dialog>
-    </>
+    <IconButton
+      aria-label={t('explorer.entityActionsFor', { entityId })}
+      onClick={(event) => onOpen(event.currentTarget)}
+      size="small"
+    >
+      <MoreVertIcon fontSize="inherit" />
+    </IconButton>
   );
 };
 
@@ -136,6 +84,9 @@ export const ExplorerResultsTable = ({
   totalCountCapped: boolean;
 }) => {
   const { t } = useTranslation();
+  const [actionAnchor, setActionAnchor] = useState<HTMLElement | null>(null);
+  const [actionEntity, setActionEntity] = useState<EntityItem | null>(null);
+  const [searchInfoOpen, setSearchInfoOpen] = useState(false);
   const columnHelper = legacyCreateColumnHelper<EntityItem>();
   const tableView =
     blueprint.blueprint.views.table?.type === 'table'
@@ -312,9 +263,12 @@ export const ExplorerResultsTable = ({
       id: 'actions',
       header: '',
       cell: (info) => (
-        <EntityActionsMenu
-          blueprintId={String(blueprint.blueprint.id)}
-          entity={info.row.original}
+        <EntityActionsButton
+          entityId={info.row.original.id}
+          onOpen={(anchor) => {
+            setActionEntity(info.row.original);
+            setActionAnchor(anchor);
+          }}
         />
       ),
     }) as LegacyColumnDef<EntityItem, string>,
@@ -457,6 +411,54 @@ export const ExplorerResultsTable = ({
           {t('explorer.noMatchingEntities')}
         </Typography>
       )}
+      <Menu
+        anchorEl={actionAnchor}
+        onClose={() => setActionAnchor(null)}
+        open={Boolean(actionAnchor)}
+      >
+        <MenuItem
+          onClick={() => {
+            setActionAnchor(null);
+            setSearchInfoOpen(true);
+          }}
+        >
+          {t('explorer.searchInfo')}
+        </MenuItem>
+        {actionEntity && (
+          <ExtensionPopoverOutlet
+            context={{
+              context_version: 1,
+              blueprint_id: String(blueprint.blueprint.id),
+              blueprint_version: actionEntity.blueprint_version,
+              entity_id: actionEntity.id,
+            }}
+            label={t('explorer.extensionActions')}
+            outlet="explorer_row_action"
+          />
+        )}
+      </Menu>
+      <Dialog onClose={() => setSearchInfoOpen(false)} open={searchInfoOpen}>
+        <DialogTitle>{t('explorer.searchInfo')}</DialogTitle>
+        <DialogContent>
+          <Typography>
+            {actionEntity?.match_explanations
+              .map((explanation) =>
+                explanation.traversal_depth
+                  ? t('explorer.matchViaRelationship', {
+                      count: explanation.traversal_depth,
+                      term: explanation.term,
+                    })
+                  : explanation.matching_attribute_code
+                    ? t('explorer.matchInAttribute', {
+                        attribute: explanation.matching_attribute_code,
+                        term: explanation.term,
+                      })
+                    : explanation.term,
+              )
+              .join('; ') || t('explorer.noSearchDetails')}
+          </Typography>
+        </DialogContent>
+      </Dialog>
     </Paper>
   );
 };

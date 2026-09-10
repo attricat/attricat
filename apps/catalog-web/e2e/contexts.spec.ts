@@ -27,21 +27,25 @@ test('resolves inherited values and saves a context-specific override', async ({
   );
 
   await page.goto(`/entities/${entity.id}`);
-  await page.getByLabel('Context').click();
-  await page.getByRole('option', { name: context.code }).click();
+  await page.getByRole('tab', { name: context.code }).click();
   await expect(
     page.getByText('Inherited from default context').first(),
   ).toBeVisible();
   await expect(page.getByText('Default title')).toBeVisible();
 
   await page.getByRole('link', { name: 'Edit entity' }).click();
-  await page.getByLabel('Context').click();
-  await page.getByRole('option', { name: context.code }).click();
+  await expect(page).toHaveURL(new RegExp(`/entities/${entity.id}/edit$`));
+  await expect(page.getByRole('tab', { name: 'Default' })).toHaveAttribute(
+    'aria-selected',
+    'true',
+  );
+  const editContextTab = page.getByRole('tab', { name: context.code });
+  await editContextTab.click();
+  await expect(editContextTab).toHaveAttribute('aria-selected', 'true');
   await expect(page.getByLabel('stock')).toBeDisabled();
   await page.getByLabel('title').fill('UK title');
   await page.getByRole('button', { name: 'Save changes' }).click();
   await expect(page).toHaveURL(new RegExp(`/entities/${entity.id}$`));
-  await page.getByLabel('Context').click();
-  await page.getByRole('option', { name: context.code }).click();
+  await page.getByRole('tab', { name: context.code }).click();
   await expect(page.getByText('UK title')).toBeVisible();
 });

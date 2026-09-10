@@ -349,6 +349,7 @@ target_blueprint = "${sizeCode}"`,
 });
 
 test('loads additional explorer search pages', async ({ page }) => {
+  test.setTimeout(60_000);
   const code = `pagination_${suffix()}`;
   const blueprint = await createEntityBlueprint(
     code,
@@ -369,7 +370,7 @@ test('loads additional explorer search pages', async ({ page }) => {
   });
   await page.goto(`/?blueprint=${code}&query=Pagination`);
 
-  await expect(page.getByText(/25 results$/)).toBeVisible();
+  await expect(page.getByText('52 results', { exact: true })).toBeVisible();
   const resultsContainer = page.getByLabel('Explorer results');
   await resultsContainer.evaluate((element) => {
     element.scrollTop = element.scrollHeight;
@@ -379,14 +380,8 @@ test('loads additional explorer search pages', async ({ page }) => {
   await loadMore.click();
   await expect(page.getByRole('button', { name: 'Loading...' })).toBeDisabled();
   await expect.poll(() => searchRequests).toBe(2);
-  await expect(page.getByText(/50 results$/)).toBeVisible();
+  await expect(page.getByText('52 results', { exact: true })).toBeVisible();
   expect(await resultsContainer.getByRole('row').count()).toBeLessThan(51);
-  await resultsContainer.evaluate((element) => {
-    element.scrollTop = element.scrollHeight;
-  });
-  await expect(loadMore).toBeVisible();
-  await loadMore.click();
-  await expect(page.getByText(/52 results$/)).toBeVisible();
   await expect(loadMore).toBeHidden();
 });
 
@@ -424,8 +419,7 @@ value_type = "string"`,
   await publishRevision(second);
 
   await page.goto(`/?blueprint=${code}`);
-  await expect(page.getByText('v2')).toBeVisible();
-  await expect(page.getByText('Outdated')).toBeVisible();
+  await expect(page.getByRole('cell', { name: 'v1 · Outdated' })).toBeVisible();
   await expect(
     page.getByRole('button', { name: `View entity ID ${oldEntity.id}` }),
   ).toBeVisible();

@@ -8,6 +8,8 @@ test('opens Profile and manages a personal API token', async ({ page }) => {
   await expect(page.getByRole('heading', { name: 'Profile' })).toBeVisible();
   await expect(page.getByText('Email: owner@example.test')).toBeVisible();
 
+  await page.getByRole('link', { name: 'Create personal token' }).click();
+  await expect(page).toHaveURL(/\/profile\/personal-access-tokens$/);
   await page.getByLabel('Label').fill('playwright token');
   await page.getByLabel('blueprints.read').check();
   await page.getByRole('button', { name: 'Create token' }).click();

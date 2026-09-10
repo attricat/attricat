@@ -56,7 +56,7 @@ test('restores the last selected blueprint and prioritizes the URL', async ({
   }, storedCode);
   await page.goto(`/?blueprint=${urlCode}`);
 
-  const blueprintSelect = page.getByLabel('Select a Blueprint');
+  const blueprintSelect = page.getByLabel('Select a Blueprint').first();
   await expect(blueprintSelect).toContainText(urlCode);
 
   await page.goto('/');
@@ -102,12 +102,12 @@ test('creates an entity with typed scalar values', async ({ page }) => {
   await page.getByLabel('quantity').fill('4');
   await page.getByLabel('available').click();
   await page.getByRole('option', { name: 'True' }).click();
-  await page.getByLabel('launch_date').fill('2026-08-20');
-  await page.getByLabel('opening_time').fill('09:30:00 America/New_York');
+  await page.getByLabel('Launch date').fill('2026-08-20');
+  await page.getByLabel('Opening time').fill('09:30:00 America/New_York');
   await page.getByRole('button', { name: 'Create entity' }).click();
 
   await expect(page).toHaveURL(/\/entities\/[0-9a-f-]{36}$/);
-  await expect(page.getByText('Typed product')).toBeVisible();
+  await expect(page.getByText('Typed product', { exact: true })).toBeVisible();
   await expect(page.getByText('19.95')).toBeVisible();
   await expect(page.getByText('4', { exact: true })).toBeVisible();
   await expect(page.getByText('Yes')).toBeVisible();
@@ -283,11 +283,14 @@ test('edits scalar values and replaces a typed relationship', async ({
 
   await page.goto(`/entities/${entity.id}`);
   await page.getByRole('link', { name: 'Edit entity' }).click();
-  await expect(page.getByLabel('Context')).toHaveText('default');
+  await expect(page.getByRole('tab', { name: 'Default' })).toHaveAttribute(
+    'aria-selected',
+    'true',
+  );
   await page.getByLabel('title').fill('After edit');
   await page.getByLabel('categories').click();
-  await page.getByRole('option', { name: 'Sale' }).click();
-  await page.keyboard.press('Escape');
+  await page.getByRole('button', { name: 'Select Sale' }).click();
+  await page.getByRole('button', { name: 'Apply' }).click();
   await page.getByRole('button', { name: 'Save changes' }).click();
 
   await expect(page).toHaveURL(new RegExp(`/entities/${entity.id}$`));

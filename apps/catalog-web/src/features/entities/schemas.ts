@@ -91,7 +91,7 @@ export const uuidSchema = z.uuid();
 const jsonObjectSchema = z.record(z.string(), z.unknown());
 const jsonSchemaSchema = z.union([jsonObjectSchema, z.boolean()]);
 const componentReferenceSchema = z.object({
-  id: z.string().regex(/^[a-z][a-z0-9_]*(\.[a-z][a-z0-9_]*)*$/),
+  id: z.string().regex(/^[a-z][a-z0-9_-]*(\.[a-z][a-z0-9_-]*)*$/),
   version: z.number().int().positive(),
   props: jsonObjectSchema.nullish().transform((props) => props ?? {}),
 });

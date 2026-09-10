@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   createEntity,
   getBlueprintByCode,
+  getBlueprintRevision,
   getEntityChanges,
   getEntityForm,
   getEntityHierarchy,
@@ -58,6 +59,31 @@ describe('entity API client', () => {
     });
     await getEntityForm(entityId);
     expect(fetchMock).toHaveBeenCalledWith(`/api/v1/entities/${entityId}`);
+  });
+
+  it('accepts extension component IDs containing hyphens', async () => {
+    respond({
+      blueprint: {
+        ...blueprint,
+        views: {
+          table: {
+            type: 'table',
+            columns: [
+              {
+                field: 'price',
+                renderer: {
+                  id: 'attricat-extension-example.table-cell',
+                  version: 1,
+                },
+              },
+            ],
+          },
+        },
+      },
+      attributes: [],
+    });
+
+    await expect(getBlueprintRevision(entityId, 2)).resolves.toBeDefined();
   });
 
   it('loads entity changes from the timeline route', async () => {

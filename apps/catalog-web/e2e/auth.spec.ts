@@ -69,12 +69,12 @@ test('resets a password using a Mailpit-delivered one-time link', async ({
 
   await page.goto(url!);
   await page.getByLabel('New password').fill('new-e2e-reset-password');
-  await page.getByRole('button', { name: 'Reset password' }).click();
+  await page.getByRole('button', { name: 'Reset your password' }).click();
   await expect(page.getByText(/Your password has been reset/)).toBeVisible();
 
   await page.goto(url!);
   await page.getByLabel('New password').fill('another-e2e-fixture-password');
-  await page.getByRole('button', { name: 'Reset password' }).click();
+  await page.getByRole('button', { name: 'Reset your password' }).click();
   await expect(page.getByText(/invalid or expired/)).toBeVisible();
 
   await page.context().clearCookies();
