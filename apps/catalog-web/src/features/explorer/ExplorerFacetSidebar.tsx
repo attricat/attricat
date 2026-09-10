@@ -50,15 +50,12 @@ type Props = {
   ) => void;
 };
 
-type FacetProps = Omit<
+type FacetProps = Pick<
   Props,
-  | 'activeAttributeFilterCount'
-  | 'attributes'
-  | 'facets'
-  | 'onAddAttributeFilter'
-  | 'onContextChange'
+  'blueprint' | 'contextCode' | 'contexts' | 'onUpdate' | 'query' | 'version'
 > & {
   facet: ExplorerRelationshipFacet;
+  label: string;
 };
 
 export const ExplorerFacetSidebar = ({
@@ -133,6 +130,14 @@ export const ExplorerFacetSidebar = ({
           contexts={contexts}
           facet={facet}
           key={facet.sourceRelationship.code}
+          label={
+            blueprints.find(
+              (item) =>
+                item.code === facet.sourceRelationship.target_blueprint_code,
+            )?.name ??
+            facet.sourceRelationship.target_blueprint_code ??
+            facet.sourceRelationship.code
+          }
           onUpdate={onUpdate}
           query={query}
           version={version}
@@ -155,6 +160,7 @@ const Facet = ({
   contextCode,
   contexts,
   facet,
+  label,
   onUpdate,
   query,
   version,
@@ -195,7 +201,7 @@ const Facet = ({
       sx={{ '&:before': { display: 'none' }, mt: 1 }}
     >
       <AccordionSummary expandIcon={<ExpandMoreIcon />}>
-        <Typography variant="body2">{facet.sourceRelationship.code}</Typography>
+        <Typography variant="body2">{label}</Typography>
       </AccordionSummary>
       <AccordionDetails>
         {targetBlueprint.isPending ? (

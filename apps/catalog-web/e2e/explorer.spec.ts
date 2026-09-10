@@ -160,7 +160,7 @@ target_blueprint = "${categoryCode}"`,
 
   await page.goto(`/?blueprint=${productCode}`);
   await expect(page.getByText('2 results')).toBeVisible();
-  await page.getByRole('button', { name: 'category' }).click();
+  await page.getByRole('button', { name: 'Facet categories' }).click();
   await expect(
     page.getByRole('checkbox', { name: 'Departments (1)' }),
   ).toBeVisible();
@@ -216,10 +216,10 @@ target_blueprint = "${colorCode}"`,
   ]);
 
   await page.goto(`/?blueprint=${productCode}`);
-  await page.getByRole('button', { name: 'color' }).click();
+  await page.getByRole('button', { name: 'Facet colors' }).click();
   await expect(page.getByRole('checkbox', { name: 'Red (1)' })).toBeVisible();
   await expect(page.getByRole('checkbox', { name: 'Blue (1)' })).toBeVisible();
-  await expect(page.getByLabel('Context')).toBeVisible();
+  await expect(page.getByLabel('Context').first()).toBeVisible();
   await page.getByRole('checkbox', { name: 'Red (1)' }).check();
 
   await expect
@@ -285,8 +285,8 @@ target_blueprint = "${sizeCode}"`,
   ]);
 
   await page.goto(`/?blueprint=${productCode}`);
-  await page.getByRole('button', { name: 'color' }).click();
-  await page.getByRole('button', { name: 'size' }).click();
+  await page.getByRole('button', { name: 'Colors' }).click();
+  await page.getByRole('button', { name: 'Sizes' }).click();
   await expect(page.getByRole('checkbox', { name: 'Red (2)' })).toBeVisible();
   await expect(page.getByRole('checkbox', { name: 'Large (2)' })).toBeVisible();
   await page.getByRole('checkbox', { name: 'Red (2)' }).check();
