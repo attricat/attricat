@@ -19,6 +19,7 @@ or inaccessible configured bucket.
 | `CATALOG_BOOTSTRAP_OWNER_PASSWORD` | Unset | API | Optional one-time local password for a newly bootstrapped owner. It is hashed before persistence and never updates an existing credential. |
 | `SESSION_COOKIE_SECURE` | `true` | API | Adds `Secure` to browser session and CSRF cookies. Set `false` only for local HTTP development or test servers. |
 | `RUST_LOG` | `info` | API | Structured tracing filter (for example, `api=debug`). |
+| `OTEL_EXPORTER_OTLP_TRACES_ENDPOINT` | Unset | API and file worker | Optional OTLP/gRPC trace collector endpoint. Local development sends traces to Jaeger. Unset it to disable trace export. |
 | `CATALOG_DEVTOOLS` | `true` locally | API process and Vite | Shared switch for development tooling. It controls the web Inspector and sanitized Explorer `Server-Timing` metrics, including aggregate SQL execution time and query count; these Explorer metrics are absent when disabled, and the Inspector is excluded from production builds. SQL statements and bind values are never exposed. |
 | `LLM_API_KEY` | Unset (agents unavailable) | API only | Secret API key for the OpenAI-compatible provider. Never send, persist, or log it. |
 | `LLM_BASE_URL` | `https://api.openai.com/v1` | API only | Absolute HTTP(S) base URL for OpenAI-compatible Chat Completions. |
@@ -56,6 +57,8 @@ or inaccessible configured bucket.
 | `WORKSPACE_ONBOARDING_URL` | Local onboarding URL | API local development | Absolute web URL used for delivered new-user onboarding links. |
 | `MAILPIT_SMTP_PORT` | `1025` | Docker Compose | Worktree-specific host port mapped to Mailpit SMTP. |
 | `MAILPIT_UI_PORT` | `8025` | Docker Compose | Worktree-specific host port for Mailpit's UI and REST API. |
+| `JAEGER_OTLP_GRPC_PORT` | `4317` | Docker Compose | Worktree-specific host port for Jaeger's OTLP/gRPC receiver. |
+| `JAEGER_UI_PORT` | `16686` | Docker Compose | Worktree-specific host port for Jaeger's trace UI. |
 | `S3_ENDPOINT` | Required | API and file worker | Absolute HTTP(S) URL for the S3-compatible endpoint. Local development uses RustFS. |
 | `S3_REGION` | Required | API and file worker | S3 signing region. |
 | `S3_BUCKET` | Required | API and file worker | Existing bucket used for catalog objects. Local startup creates it. |

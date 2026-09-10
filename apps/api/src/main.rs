@@ -30,7 +30,7 @@ use uuid::Uuid;
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     dotenvy::dotenv().ok();
-    init_tracing()?;
+    init_tracing("attricat-api")?;
     let metrics = init_metrics()?;
     let agent_provider = AgentProviderConfig::from_env()
         .map_err(|error| format!("invalid agent provider configuration: {error}"))?;

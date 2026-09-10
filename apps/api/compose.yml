@@ -20,6 +20,11 @@ services:
     ports:
       - "${MAILPIT_SMTP_PORT:-1025}:1025"
       - "${MAILPIT_UI_PORT:-8025}:8025"
+  jaeger:
+    image: jaegertracing/jaeger:2.20.0
+    ports:
+      - "${JAEGER_OTLP_GRPC_PORT:-4317}:4317"
+      - "${JAEGER_UI_PORT:-16686}:16686"
   # RustFS is an actively maintained local S3-compatible adapter. Production
   # configuration remains S3-generic and can point to AWS or another provider.
   rustfs:

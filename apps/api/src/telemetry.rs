@@ -5,6 +5,9 @@ use std::{
 };
 
 use metrics_exporter_prometheus::{PrometheusBuilder, PrometheusHandle};
+use opentelemetry::{KeyValue, global, trace::TracerProvider};
+use opentelemetry_otlp::SpanExporter;
+use opentelemetry_sdk::{resource::Resource, trace::SdkTracerProvider};
 use tracing::{Event, Id, Subscriber};
 use tracing_subscriber::{
     EnvFilter, Layer, fmt,
@@ -136,12 +139,32 @@ impl tracing::field::Visit for ElapsedSeconds {
     fn record_debug(&mut self, _: &tracing::field::Field, _: &dyn std::fmt::Debug) {}
 }
 
-pub fn init_tracing() -> Result<(), Box<dyn Error + Send + Sync>> {
+pub fn init_tracing(service_name: &str) -> Result<(), Box<dyn Error + Send + Sync>> {
     let filter = EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new("info"));
-    tracing_subscriber::registry()
+    let subscriber = tracing_subscriber::registry()
         .with(fmt::layer().with_target(false).with_filter(filter))
-        .with(SqlTimingLayer)
-        .try_init()?;
+        .with(SqlTimingLayer);
+
+    if std::env::var("OTEL_EXPORTER_OTLP_TRACES_ENDPOINT")
+        .is_ok_and(|endpoint| !endpoint.trim().is_empty())
+    {
+        let exporter = SpanExporter::builder().with_tonic().build()?;
+        let provider = SdkTracerProvider::builder()
+            .with_resource(
+                Resource::builder()
+                    .with_attribute(KeyValue::new("service.name", service_name.to_owned()))
+                    .build(),
+            )
+            .with_batch_exporter(exporter)
+            .build();
+        let tracer = provider.tracer(service_name.to_owned());
+        global::set_tracer_provider(provider);
+        subscriber
+            .with(tracing_opentelemetry::layer().with_tracer(tracer))
+            .try_init()?;
+    } else {
+        subscriber.try_init()?;
+    }
     Ok(())
 }
 

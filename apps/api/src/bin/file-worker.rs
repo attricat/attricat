@@ -10,7 +10,7 @@ use sqlx::postgres::PgPoolOptions;
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     dotenvy::dotenv().ok();
-    init_tracing()?;
+    init_tracing("attricat-file-worker")?;
     init_metrics()?;
     let database_url = std::env::var("DATABASE_URL")
         .map_err(|_| "DATABASE_URL must be set to start the file worker")?;

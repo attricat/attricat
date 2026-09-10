@@ -6,10 +6,11 @@
    `process-compose`, and `watchexec`.
 2. Run `just dev`. Its setup step installs the frontend dependencies, creates
    `.env` from `.env.example`, assigns persistent ports for this worktree,
-   starts PostgreSQL, Mailpit, and RustFS, then watches the API, file worker,
+   starts PostgreSQL, Mailpit, Jaeger, and RustFS, then watches the API, file worker,
    and web app.
 3. Open the worktree-specific Vite URL printed by `just dev`; the selected
-   ports are also recorded in the ignored `.catalog-worktree` file.
+   ports and `JAEGER_UI_URL` are recorded in the ignored `.catalog-worktree` file.
+   Open `JAEGER_UI_URL` to inspect local API and file-worker traces.
 
 The API applies embedded SQLx migrations when it starts. To run them manually:
 
