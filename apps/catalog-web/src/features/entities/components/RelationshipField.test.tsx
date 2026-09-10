@@ -138,9 +138,10 @@ describe('RelationshipField', () => {
     });
     await user.click(previewButton);
     expect(openPreview).toHaveBeenCalledWith(
-      `/entities/${firstId}`,
+      expect.stringMatching(
+        new RegExp(`^/entities/${firstId}\\?relationshipPicker=`),
+      ),
       '_blank',
-      'noopener,noreferrer',
     );
     expect(previewButton.className).toContain('MuiButton-colorSecondary');
     openPreview.mockRestore();

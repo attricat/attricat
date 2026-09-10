@@ -57,7 +57,12 @@ export const RelationshipField = ({
     targetBlueprint,
     selectedIds,
   );
-  const { isPreviewed, markPreviewed } = useRecentlyPreviewedEntities();
+  const { isPreviewed, markPreviewed, openPreview, previewHref } =
+    useRecentlyPreviewedEntities((id) => {
+      setDraftIds((current) =>
+        isOneToOne ? [id] : current.includes(id) ? current : [...current, id],
+      );
+    });
   const targets = useInfiniteQuery({
     queryKey: entityQueryKeys.relationshipTargets(targetBlueprint, query),
     queryFn: ({ pageParam, signal }) =>
@@ -106,14 +111,6 @@ export const RelationshipField = ({
     setKnownLabels({});
     setQuery('');
     setOpen(true);
-  };
-  const previewTarget = (id: string) => {
-    markPreviewed(id);
-    window.open(
-      `/entities/${encodeURIComponent(id)}`,
-      '_blank',
-      'noopener,noreferrer',
-    );
   };
   const selectTarget = (id: string, label: string) => {
     setKnownLabels((current) => ({ ...current, [id]: label }));
@@ -245,9 +242,9 @@ export const RelationshipField = ({
                   }}
                 >
                   <Link
-                    href={`/entities/${encodeURIComponent(target.id)}`}
+                    href={previewHref(target.id)}
                     onClick={() => markPreviewed(target.id)}
-                    rel="noopener noreferrer"
+                    rel="opener"
                     sx={{ flexGrow: 1, minWidth: 0, mr: 1 }}
                     target="_blank"
                   >
@@ -259,7 +256,7 @@ export const RelationshipField = ({
                         option: targetLabel(target),
                       })}
                       color={isPreviewed(target.id) ? 'secondary' : 'inherit'}
-                      onClick={() => previewTarget(target.id)}
+                      onClick={() => openPreview(target.id)}
                       size="small"
                     >
                       {t('entities.previewRelationshipOption')}

@@ -183,7 +183,15 @@ target_blueprint = "${categoryCode}"`,
     .getByRole('listitem')
     .filter({ has: page.getByRole('link', { name: 'Departments' }) });
   await departmentsItem.evaluate((item) => item.click());
-  await page.getByRole('button', { name: 'Select Shoes' }).click();
+  const previewPagePromise = page.waitForEvent('popup');
+  await page
+    .getByRole('button', { name: 'Preview Shoes in a new tab' })
+    .click();
+  const previewPage = await previewPagePromise;
+  await previewPage
+    .getByRole('button', { name: 'Select this entity and close' })
+    .click();
+  await expect.poll(() => previewPage.isClosed()).toBe(true);
   await expect(
     page.getByRole('heading', { name: 'Selected', exact: true }),
   ).toBeVisible();

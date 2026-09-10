@@ -213,6 +213,7 @@
     "clearRelationshipSelection": "Clear selection",
     "closeRelationshipSelector": "Close relationship selector",
     "viewPreview": "View preview",
+    "selectThisEntityAndClose": "Select this entity and close",
     "viewAll": "See all",
     "changes": "Changes",
     "schemaOutdated": "Schema is outdated",

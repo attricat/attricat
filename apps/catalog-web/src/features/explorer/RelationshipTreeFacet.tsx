@@ -75,7 +75,16 @@ const RelationshipTreeFacetContent = ({
   onSelectedIdsChange,
 }: Props) => {
   const { t } = useTranslation();
-  const { isPreviewed, markPreviewed } = useRecentlyPreviewedEntities();
+  const { isPreviewed, markPreviewed, openPreview, previewHref } =
+    useRecentlyPreviewedEntities((id) => {
+      onSelectedIdsChange(
+        singleSelect
+          ? [id]
+          : selectedIds.includes(id)
+            ? selectedIds
+            : [...selectedIds, id],
+      );
+    });
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
   const [cursors, setCursors] = useState<Map<string, (string | null)[]>>(
     new Map([['root', [null]]]),
@@ -159,14 +168,6 @@ const RelationshipTreeFacetContent = ({
         return results[index]?.isFetching ?? false;
     }
     return false;
-  };
-  const previewTarget = (id: string) => {
-    markPreviewed(id);
-    window.open(
-      `/entities/${encodeURIComponent(id)}`,
-      '_blank',
-      'noopener,noreferrer',
-    );
   };
   const toggleSelected = (id: string) => {
     if (singleSelect) {
@@ -257,12 +258,12 @@ const RelationshipTreeFacetContent = ({
           >
             <Typography component="div" variant="body2">
               <Link
-                href={`/entities/${encodeURIComponent(item.id)}`}
+                href={previewHref(item.id)}
                 onClick={(event) => {
                   event.stopPropagation();
                   markPreviewed(item.id);
                 }}
-                rel="noopener noreferrer"
+                rel="opener"
                 target="_blank"
               >
                 {item.display}
@@ -277,7 +278,7 @@ const RelationshipTreeFacetContent = ({
                 color={isPreviewed(item.id) ? 'secondary' : 'inherit'}
                 onClick={(event) => {
                   event.stopPropagation();
-                  previewTarget(item.id);
+                  openPreview(item.id);
                 }}
                 size="small"
               >

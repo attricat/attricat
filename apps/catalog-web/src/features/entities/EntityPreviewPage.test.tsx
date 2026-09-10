@@ -39,6 +39,39 @@ const renderPage = () => {
 };
 
 describe('EntityPreviewPage', () => {
+  it('returns a picker selection to its opener and closes the preview', () => {
+    const postMessage = vi.fn();
+    const close = vi.spyOn(window, 'close').mockImplementation(() => undefined);
+    Object.defineProperty(window, 'opener', {
+      configurable: true,
+      value: { postMessage },
+    });
+    window.history.replaceState({}, '', '?relationshipPicker=picker-token');
+    vi.mocked(listContexts).mockResolvedValue([]);
+
+    renderPage();
+    screen
+      .getByRole('button', { name: 'Select this entity and close' })
+      .click();
+
+    expect(postMessage).toHaveBeenCalledWith(
+      {
+        type: 'attricat.relationship-picker.select',
+        token: 'picker-token',
+        entityId: '00000000-0000-4000-8000-000000000001',
+      },
+      window.location.origin,
+    );
+    expect(close).toHaveBeenCalled();
+
+    close.mockRestore();
+    Object.defineProperty(window, 'opener', {
+      configurable: true,
+      value: null,
+    });
+    window.history.replaceState({}, '', '/');
+  });
+
   it('shows a retryable error instead of a blank preview when contexts fail to load', async () => {
     vi.mocked(listContexts).mockRejectedValue(
       new Error('contexts unavailable'),

@@ -1,6 +1,9 @@
 import { useQuery } from '@tanstack/react-query';
 import { Link } from '@tanstack/react-router';
-import { BlueprintIcon } from '../../components/system-icons';
+import {
+  BlueprintIcon,
+  RelationshipPickerIcon,
+} from '../../components/system-icons';
 import CheckCircleOutlinedIcon from '@mui/icons-material/CheckCircleOutlined';
 import CloseIcon from '@mui/icons-material/Close';
 import EditOutlinedIcon from '@mui/icons-material/EditOutlined';
@@ -11,9 +14,11 @@ import WarningAmberOutlinedIcon from '@mui/icons-material/WarningAmberOutlined';
 import {
   Alert,
   Box,
+  Button,
   Drawer,
   IconButton,
   Paper,
+  Stack,
   Tooltip,
   Typography,
 } from '@mui/material';
@@ -40,6 +45,10 @@ import {
 import { attributeLabel } from './entity-display';
 import { entityQueryKeys } from './query-keys';
 import { EntityView } from '../views/components/EntityView';
+import {
+  relationshipPickerMessageType,
+  relationshipPickerSearchParameter,
+} from './components/useRecentlyPreviewedEntities';
 import {
   entityHeadingComponentId,
   findEntityHeading,
@@ -86,23 +95,55 @@ export const EntityPreviewPage = ({ entityId }: { entityId: string }) => {
   const heading = findEntityHeading(detailView);
   const HeadingRenderer = resolveHeadingRenderer(heading?.component);
   const [extensionPanelOpen, setExtensionPanelOpen] = useState(false);
+  const relationshipPickerToken = new URLSearchParams(
+    window.location.search,
+  ).get(relationshipPickerSearchParameter);
+  const canSelectForPicker = Boolean(relationshipPickerToken && window.opener);
+  const selectForPicker = () => {
+    if (!relationshipPickerToken || !window.opener) return;
+    window.opener.postMessage(
+      {
+        type: relationshipPickerMessageType,
+        token: relationshipPickerToken,
+        entityId,
+      },
+      window.location.origin,
+    );
+    window.close();
+  };
   return (
     <PageContainer>
       <PageHeader
         actions={
-          blueprint.data && (
-            <Tooltip title={blueprint.data.blueprint.name}>
-              <RouterButton
-                params={{ blueprintId: String(blueprint.data.blueprint.id) }}
-                size="small"
-                startIcon={<BlueprintIcon />}
-                to="/manage/blueprints/$blueprintId"
-                variant="text"
+          <Stack
+            direction="row"
+            spacing={1}
+            sx={{ flexWrap: 'wrap' }}
+            useFlexGap
+          >
+            {canSelectForPicker && (
+              <Button
+                onClick={selectForPicker}
+                startIcon={<RelationshipPickerIcon />}
+                variant="contained"
               >
-                {t('entities.blueprint')}: {blueprint.data.blueprint.name}
-              </RouterButton>
-            </Tooltip>
-          )
+                {t('entities.selectThisEntityAndClose')}
+              </Button>
+            )}
+            {blueprint.data && (
+              <Tooltip title={blueprint.data.blueprint.name}>
+                <RouterButton
+                  params={{ blueprintId: String(blueprint.data.blueprint.id) }}
+                  size="small"
+                  startIcon={<BlueprintIcon />}
+                  to="/manage/blueprints/$blueprintId"
+                  variant="text"
+                >
+                  {t('entities.blueprint')}: {blueprint.data.blueprint.name}
+                </RouterButton>
+              </Tooltip>
+            )}
+          </Stack>
         }
         eyebrow={
           blueprint.data ? (
