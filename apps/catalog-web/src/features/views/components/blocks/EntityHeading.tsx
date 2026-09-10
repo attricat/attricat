@@ -1,4 +1,5 @@
 import { Box, Typography } from '@mui/material';
+import i18n from '../../../../i18n';
 import {
   viewBlockTypes,
   type Attribute,
@@ -39,7 +40,10 @@ export const EntityHeading = ({
     return fallback;
   return (
     <Box>
-      <FieldErrorBoundary label="entity heading">
+      <FieldErrorBoundary
+        fallbackMessage={i18n.t('views.unableToRenderEntityHeading')}
+        logLabel="entity heading"
+      >
         <Typography component="h1" variant="h3">
           {formatAttributeValue(titleAttribute, titleValue)}
         </Typography>

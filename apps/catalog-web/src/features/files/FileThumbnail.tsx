@@ -59,7 +59,7 @@ const ThumbnailPreviewContent = ({
   return (
     <Box
       aria-busy={!loaded && !isUnavailable}
-      aria-label={`Thumbnail for ${filename}`}
+      aria-label={t('files.thumbnailFor', { filename })}
       role="img"
       sx={{
         bgcolor: 'action.hover',

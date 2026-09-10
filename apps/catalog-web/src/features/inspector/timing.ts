@@ -40,10 +40,14 @@ const addEntry = (phases: TimingPhase[]) => {
 export const recordServerTiming = (header: string | null) => {
   if (!__CATALOG_DEVTOOLS__ || !header) return;
   const phases = header.split(',').flatMap((part) => {
-    const match = /^\s*([a-z-]+);dur=([0-9]+(?:\.[0-9]+)?)(?:;desc=queries-([0-9]+))?\s*$/.exec(part);
+    const match =
+      /^\s*([a-z-]+);dur=([0-9]+(?:\.[0-9]+)?)(?:;desc=queries-([0-9]+))?\s*$/.exec(
+        part,
+      );
     if (!match || !serverPhases.has(match[1])) return [];
     const duration = Number(match[2]);
-    const queryCount = match[1].startsWith('sql') && match[3] ? Number(match[3]) : undefined;
+    const queryCount =
+      match[1].startsWith('sql') && match[3] ? Number(match[3]) : undefined;
     if (
       !Number.isFinite(duration) ||
       duration < 0 ||

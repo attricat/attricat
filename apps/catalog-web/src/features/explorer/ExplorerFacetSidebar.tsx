@@ -12,6 +12,7 @@ import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { Attribute, Blueprint } from '../entities/api';
 import type { AttributeContext } from '../contexts/api';
+import { defaultContextCode } from '../contexts/constants';
 import { getBlueprintByCode } from '../entities/api';
 import { entityQueryKeys } from '../entities/query-keys';
 import { RelationshipSelectorDialog } from '../../components/RelationshipSelectorDialog';
@@ -138,7 +139,7 @@ export const ExplorerFacetSidebar = ({
         >
           {contexts.map((context) => (
             <MenuItem key={context.id} value={context.code}>
-              {context.code === 'default'
+              {context.code === defaultContextCode
                 ? t('explorer.default')
                 : context.code}
             </MenuItem>

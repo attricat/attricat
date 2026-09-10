@@ -84,11 +84,26 @@ export const hasInvalidScalarField = (
       !scalarValueForField(attribute, fields[attribute.code]),
   );
 
+export type EntityFormValidationMessages = {
+  invalidRelationship: string;
+  invalidValue: string;
+  required: string;
+  schema: string;
+};
+
+const defaultValidationMessages: EntityFormValidationMessages = {
+  invalidRelationship: 'Enter comma-separated entity UUIDs.',
+  invalidValue: "Enter a value that meets this field's requirements.",
+  required: 'A value is required for the target schema.',
+  schema: 'Does not meet the schema requirements.',
+};
+
 export const validateEntityForm = (
   attributes: readonly Attribute[],
   fields: Record<string, string>,
   requiredAttributes: readonly string[] = [],
   entitySchema?: JsonSchema | null,
+  messages: EntityFormValidationMessages = defaultValidationMessages,
 ): EntityFormValidation => {
   const fieldErrors: Record<string, string> = {};
   const document: Record<string, unknown> = {};
@@ -100,10 +115,9 @@ export const validateEntityForm = (
     if (attribute.value_type === attributeValueTypes.relationship) {
       const targetEntityIds = relationshipIdsForField(value);
       if (required && targetEntityIds.length === 0) {
-        fieldErrors[attribute.code] =
-          'A value is required for the target schema.';
+        fieldErrors[attribute.code] = messages.required;
       } else if (!relationshipIdsAreValid(targetEntityIds)) {
-        fieldErrors[attribute.code] = 'Enter comma-separated entity UUIDs.';
+        fieldErrors[attribute.code] = messages.invalidRelationship;
       } else if (targetEntityIds.length > 0) {
         document[attribute.code] = targetEntityIds;
       }
@@ -111,14 +125,12 @@ export const validateEntityForm = (
     }
 
     if (required && !value.trim()) {
-      fieldErrors[attribute.code] =
-        'A value is required for the target schema.';
+      fieldErrors[attribute.code] = messages.required;
       continue;
     }
     const scalar = scalarValueForField(attribute, value);
     if (value.trim() && !scalar) {
-      fieldErrors[attribute.code] =
-        "Enter a value that meets this field's requirements.";
+      fieldErrors[attribute.code] = messages.invalidValue;
     } else if (scalar) {
       document[attribute.code] = scalar.value;
     }
@@ -129,7 +141,7 @@ export const validateEntityForm = (
   if (schemaErrors === undefined)
     return {
       fieldErrors,
-      formError: 'Does not meet the schema requirements.',
+      formError: messages.schema,
     };
   const formError = schemaErrors
     .map((error) => {
@@ -138,11 +150,10 @@ export const validateEntityForm = (
         attributeCode &&
         attributes.some((attribute) => attribute.code === attributeCode)
       ) {
-        fieldErrors[attributeCode] ??=
-          error.message ?? 'Does not meet the schema requirements.';
+        fieldErrors[attributeCode] ??= messages.schema;
         return undefined;
       }
-      return error.message ?? 'Does not meet the schema requirements.';
+      return messages.schema;
     })
     .find(Boolean);
   return formError ? { fieldErrors, formError } : { fieldErrors };

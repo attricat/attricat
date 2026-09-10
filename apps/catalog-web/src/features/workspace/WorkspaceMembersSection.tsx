@@ -137,7 +137,7 @@ export const WorkspaceMembersSection = ({
                         .catch((e) => setError(e.message))
                     }
                   >
-                    Transfer ownership
+                    {t('workspace.transferOwnership')}
                   </Button>
                 )}
               </Stack>
@@ -205,7 +205,7 @@ export const WorkspaceMembersSection = ({
             )}
           </form.Subscribe>
           <Button type="submit" variant="contained">
-            Grant role
+            {t('workspace.grantRole')}
           </Button>
         </Stack>
       </Paper>

@@ -14,6 +14,7 @@ import { PageHeader } from '../../components/PageHeader';
 import { RouterButton } from '../../components/RouterLink';
 import { listContexts } from '../contexts/api';
 import { contextQueryKeys } from '../contexts/query-keys';
+import { defaultContextCode } from '../contexts/constants';
 import {
   getBlueprintByCode,
   getRelationshipTreeFacetChildren,
@@ -71,7 +72,8 @@ export const Explorer = ({ search: urlSearch }: { search: ExplorerSearch }) => {
       attribute.value_type === 'relationship' &&
       typeof attribute.target_blueprint_code === 'string',
   );
-  const facetContextCode = search.relationshipFacets?.[0]?.context ?? 'default';
+  const facetContextCode =
+    search.relationshipFacets?.[0]?.context ?? defaultContextCode;
   const explorerFacets: ExplorerRelationshipFacet[] = relationshipFields.map(
     (sourceRelationship) => {
       const saved = search.relationshipFacets?.find(

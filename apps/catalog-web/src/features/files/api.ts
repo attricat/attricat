@@ -1,6 +1,5 @@
 import { z } from 'zod';
-import { apiRequestError, request } from '../../api/request';
-import { csrfToken } from '../../api/fetch';
+import { request, requestUpload } from '../../api/request';
 import {
   conversationUploadResultSchema,
   fileMetadataSchema,
@@ -35,49 +34,7 @@ export const uploadFiles = async ({
     data.append(files.length === 1 ? 'file' : 'files', file),
   );
   const path = `/api/entities/${encodeURIComponent(z.uuid().parse(entityId))}/file-attributes/${encodeURIComponent(attributeCode)}/uploads`;
-  if (typeof XMLHttpRequest === 'undefined') {
-    const result = await request(path, fileUploadResultSchema, {
-      method: 'POST',
-      body: data,
-    });
-    onProgress?.(100);
-    return result;
-  }
-  return new Promise<z.infer<typeof fileUploadResultSchema>>(
-    (resolve, reject) => {
-      const request = new XMLHttpRequest();
-      request.open('POST', path);
-      request.withCredentials = true;
-      const csrf = csrfToken();
-      if (csrf) request.setRequestHeader('X-Catalog-Csrf', csrf);
-      request.upload.onprogress = (event) => {
-        if (event.lengthComputable)
-          onProgress?.(Math.round((event.loaded / event.total) * 100));
-      };
-      request.onerror = () =>
-        reject(apiRequestError(0, undefined, 'Upload failed'));
-      request.onload = () => {
-        const body: unknown = (() => {
-          try {
-            return JSON.parse(request.responseText);
-          } catch {
-            return undefined;
-          }
-        })();
-        if (request.status < 200 || request.status >= 300) {
-          reject(apiRequestError(request.status, body));
-          return;
-        }
-        try {
-          onProgress?.(100);
-          resolve(fileUploadResultSchema.parse(body));
-        } catch (error) {
-          reject(error);
-        }
-      };
-      request.send(data);
-    },
-  );
+  return requestUpload(path, data, fileUploadResultSchema, onProgress);
 };
 
 export const uploadConversationFiles = async (

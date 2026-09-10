@@ -1,5 +1,6 @@
 export const defaultExtensionFrameHeight = 48;
 export const extensionStartTimeout = 10_000;
+export const extensionRuntimeRefetchInterval = 15_000;
 export const maximumExtensionFrameHeight = 2_048;
 export const maximumExtensionStorageKeyBytes = 256;
 export const maximumExtensionRequestBytes = 65_536;

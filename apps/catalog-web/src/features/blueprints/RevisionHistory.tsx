@@ -54,10 +54,16 @@ export const RevisionHistory = ({
                   />
                 </TableCell>
                 <TableCell>
-                  {formatBlueprintDateTime(revision.created_at)}
+                  {formatBlueprintDateTime(
+                    revision.created_at,
+                    t('blueprints.notPublished'),
+                  )}
                 </TableCell>
                 <TableCell>
-                  {formatBlueprintDateTime(revision.published_at)}
+                  {formatBlueprintDateTime(
+                    revision.published_at,
+                    t('blueprints.notPublished'),
+                  )}
                 </TableCell>
                 <TableCell sx={{ fontFamily: 'monospace' }}>
                   {revision.definition_hash}

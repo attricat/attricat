@@ -109,8 +109,3 @@ export const WorkspaceManagementPage = ({
     </Box>
   );
 };
-
-export {
-  AcceptInvitationPage,
-  PasswordSetupPage,
-} from './WorkspaceOnboardingPages';

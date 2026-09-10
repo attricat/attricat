@@ -1,6 +1,12 @@
 import { createFileRoute } from '@tanstack/react-router';
-import { AcceptInvitationPage } from '../../features/workspace/WorkspaceManagementPage';
+import { z } from 'zod';
+import { AcceptInvitationPage } from '../../features/workspace/AcceptInvitationPage';
+
+const AcceptInvitationRoute = () => (
+  <AcceptInvitationPage secret={Route.useSearch().secret} />
+);
 
 export const Route = createFileRoute('/invitations/accept')({
-  component: AcceptInvitationPage,
+  validateSearch: z.object({ secret: z.string().optional() }),
+  component: AcceptInvitationRoute,
 });

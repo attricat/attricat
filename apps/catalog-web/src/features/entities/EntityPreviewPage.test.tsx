@@ -24,7 +24,7 @@ vi.mock('../contexts/api', () => ({
   listContexts: vi.fn(),
 }));
 
-const renderPage = () => {
+const renderPage = (relationshipPickerToken?: string) => {
   const queryClient = new QueryClient({
     defaultOptions: { queries: { retry: false } },
   });
@@ -32,7 +32,10 @@ const renderPage = () => {
   return render(
     <QueryClientProvider client={queryClient}>
       <ToastProvider>
-        <EntityPreviewPage entityId="00000000-0000-4000-8000-000000000001" />
+        <EntityPreviewPage
+          entityId="00000000-0000-4000-8000-000000000001"
+          relationshipPickerToken={relationshipPickerToken}
+        />
       </ToastProvider>
     </QueryClientProvider>,
   );
@@ -46,10 +49,9 @@ describe('EntityPreviewPage', () => {
       configurable: true,
       value: { postMessage },
     });
-    window.history.replaceState({}, '', '?relationshipPicker=picker-token');
     vi.mocked(listContexts).mockResolvedValue([]);
 
-    renderPage();
+    renderPage('picker-token');
     screen
       .getByRole('button', { name: 'Select this entity and close' })
       .click();
@@ -69,7 +71,6 @@ describe('EntityPreviewPage', () => {
       configurable: true,
       value: null,
     });
-    window.history.replaceState({}, '', '/');
   });
 
   it('shows a retryable error instead of a blank preview when contexts fail to load', async () => {

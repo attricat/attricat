@@ -1,6 +1,7 @@
 import { Box, MenuItem, Tab, Tabs, TextField } from '@mui/material';
 import { useTranslation } from 'react-i18next';
 import type { AttributeContext } from '../../contexts/api';
+import { defaultContextCode } from '../../contexts/constants';
 
 type EntityContextPickerProps = {
   contexts: readonly AttributeContext[];
@@ -56,7 +57,9 @@ export const EntityContextPicker = ({
             disabled={disabled}
             key={context.id}
             label={
-              context.code === 'default' ? t('entities.default') : context.code
+              context.code === defaultContextCode
+                ? t('entities.default')
+                : context.code
             }
             sx={{ minHeight: 32, minWidth: 0, px: 1, py: 0.25 }}
             value={context.id}
@@ -75,7 +78,7 @@ export const EntityContextPicker = ({
         >
           {remainingContexts.map((context) => (
             <MenuItem key={context.id} value={context.id}>
-              {context.code === 'default'
+              {context.code === defaultContextCode
                 ? t('entities.default')
                 : context.code}
             </MenuItem>

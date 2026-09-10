@@ -165,7 +165,7 @@ export const WorkspaceRolesSection = ({
             )}
           </form.Field>
           <Button type="submit" variant="contained">
-            Create role
+            {t('workspace.createRole')}
           </Button>
         </Stack>
       </Paper>

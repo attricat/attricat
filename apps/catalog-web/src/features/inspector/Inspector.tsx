@@ -140,7 +140,7 @@ export const Inspector = () => {
                 {entry.phases
                   .map((phase) =>
                     phase.name.startsWith('sql')
-                      ? `${phase.name === 'sql' ? 'SQL' : `SQL ${phase.name.slice(4).replaceAll('-', ' ')}`} (${phase.queryCount ?? '?'} queries): ${phase.duration.toFixed(2)} ms`
+                      ? `${phase.name === 'sql' ? 'SQL' : `SQL ${phase.name.slice(4).replaceAll('-', ' ')}`} (${t('inspector.queryCount', { count: phase.queryCount ?? '?' })}): ${phase.duration.toFixed(2)} ms`
                       : `${phase.name}: ${phase.duration.toFixed(2)} ms`,
                   )
                   .join(' · ')}

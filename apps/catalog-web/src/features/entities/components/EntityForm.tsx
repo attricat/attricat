@@ -99,6 +99,12 @@ export const EntityForm = ({
       contextId === defaultContextId
         ? blueprint.blueprint.entity_schema
         : undefined,
+      {
+        invalidRelationship: t('entities.invalidRelationshipValue'),
+        invalidValue: t('entities.invalidAttributeValue'),
+        required: t('entities.requiredAttributeValue'),
+        schema: t('entities.schemaValidationFailed'),
+      },
     );
   };
   const form = useForm({

@@ -1,32 +1,36 @@
 import {
-  Button,
   Alert,
   Box,
+  Button,
   Stack,
   TextField,
   Typography,
 } from '@mui/material';
+import { useNavigate } from '@tanstack/react-router';
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { useNavigate } from '@tanstack/react-router';
-import { acceptInvitation, completeOnboarding } from './api';
+import { completeOnboarding } from './api';
 
-export const PasswordSetupPage = () => {
+type Notice = { severity: 'error' | 'success'; text: string };
+
+export const PasswordSetupPage = ({
+  initialInvitationSecret = '',
+  initialOnboardingSecret = '',
+}: {
+  initialInvitationSecret?: string;
+  initialOnboardingSecret?: string;
+}) => {
   const { t } = useTranslation();
   const navigate = useNavigate();
   const [invitationSecret, setInvitationSecret] = useState(
-    () =>
-      new URLSearchParams(window.location.search).get('invitation_secret') ??
-      '',
+    initialInvitationSecret,
   );
   const [onboardingSecret, setOnboardingSecret] = useState(
-    () =>
-      new URLSearchParams(window.location.search).get('onboarding_secret') ??
-      '',
+    initialOnboardingSecret,
   );
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
-  const [message, setMessage] = useState<string>();
+  const [notice, setNotice] = useState<Notice>();
   const submit = async () => {
     try {
       if (password.length < 12)
@@ -40,11 +44,13 @@ export const PasswordSetupPage = () => {
       });
       await navigate({ to: '/' });
     } catch (reason) {
-      setMessage(
-        reason instanceof Error
-          ? reason.message
-          : t('workspace.onboardingFailed'),
-      );
+      setNotice({
+        severity: 'error',
+        text:
+          reason instanceof Error
+            ? reason.message
+            : t('workspace.onboardingFailed'),
+      });
     }
   };
   return (
@@ -79,62 +85,9 @@ export const PasswordSetupPage = () => {
           type="password"
           value={confirmPassword}
         />
-        {message && (
-          <Alert
-            severity={message.startsWith('Password set') ? 'success' : 'error'}
-          >
-            {message}
-          </Alert>
-        )}
+        {notice && <Alert severity={notice.severity}>{notice.text}</Alert>}
         <Button onClick={submit} variant="contained">
-          Set password and join workspace
-        </Button>
-      </Stack>
-    </Box>
-  );
-};
-
-export const AcceptInvitationPage = () => {
-  const { t } = useTranslation();
-  const [secret, setSecret] = useState(
-    () => new URLSearchParams(window.location.search).get('secret') ?? '',
-  );
-  const [message, setMessage] = useState<string>();
-  const submit = async () => {
-    try {
-      await acceptInvitation(secret);
-      setSecret('');
-      setMessage(t('workspace.invitationAccepted'));
-    } catch (reason) {
-      setMessage(
-        reason instanceof Error
-          ? reason.message
-          : t('workspace.acceptInvitationFailed'),
-      );
-    }
-  };
-  return (
-    <Box sx={{ maxWidth: 500, mx: 'auto', p: 3 }}>
-      <Typography variant="h4">{t('workspace.acceptTitle')}</Typography>
-      <Stack spacing={2} sx={{ mt: 3 }}>
-        <TextField
-          autoComplete="off"
-          label={t('workspace.invitationSecret')}
-          onChange={(event) => setSecret(event.target.value)}
-          type="password"
-          value={secret}
-        />
-        {message && (
-          <Alert
-            severity={
-              message.startsWith('Invitation accepted') ? 'success' : 'error'
-            }
-          >
-            {message}
-          </Alert>
-        )}
-        <Button onClick={submit} variant="contained">
-          Accept invitation
+          {t('workspace.setPassword')}
         </Button>
       </Stack>
     </Box>

@@ -6,11 +6,13 @@ import {
   useReducer,
   type ReactNode,
 } from 'react';
+import { useTranslation } from 'react-i18next';
 import { ToastContext } from './toast-context';
 import { reduceToasts, type Toast } from './toast-queue';
 import { subscribeToToasts, type ToastOptions } from './toast';
 
 const maximumVisibleToasts = 3;
+const defaultToastAutoHideDuration = 6_000;
 let nextToastId = 0;
 
 const ToastAlert = ({
@@ -20,8 +22,10 @@ const ToastAlert = ({
   dismiss: (id: number) => void;
   toast: Toast;
 }) => {
+  const { t } = useTranslation();
   useEffect(() => {
-    const autoHideDuration = toast.autoHideDuration ?? 6000;
+    const autoHideDuration =
+      toast.autoHideDuration ?? defaultToastAutoHideDuration;
     if (autoHideDuration === null) return;
 
     const timer = window.setTimeout(() => dismiss(toast.id), autoHideDuration);
@@ -58,7 +62,9 @@ const ToastAlert = ({
       </Alert>
       {toast.count > 1 && (
         <Box
-          aria-label={`${toast.count} grouped notifications`}
+          aria-label={t('common.groupedNotifications', {
+            count: toast.count,
+          })}
           component="span"
           sx={{
             bgcolor: 'background.paper',

@@ -15,6 +15,7 @@ import { z } from 'zod';
 import { ExtensionFrame } from './ExtensionFrame';
 import { getExtensionRuntime, type ExtensionContribution } from './api';
 import { extensionQueryKeys } from './query-keys';
+import { extensionRuntimeRefetchInterval } from './constants';
 
 type Outlet =
   | 'navigation'
@@ -81,7 +82,7 @@ export const ExtensionOutlet = ({ outlet, context }: Props) => {
     // Runtime state can change outside this browser (safe mode, quarantine, or
     // grant revocation). Polling makes mounted frames unmount promptly; every
     // broker call remains server-gated between refreshes.
-    refetchInterval: 15_000,
+    refetchInterval: extensionRuntimeRefetchInterval,
     retry: false,
   });
   if (runtime.isPending)
@@ -140,7 +141,7 @@ export const ExtensionPopoverOutlet = ({
   const runtime = useQuery({
     queryKey: extensionQueryKeys.runtime(),
     queryFn: getExtensionRuntime,
-    refetchInterval: 15_000,
+    refetchInterval: extensionRuntimeRefetchInterval,
     retry: false,
   });
   const contributions =
@@ -207,7 +208,7 @@ export const ExtensionRoutePage = ({
   const runtime = useQuery({
     queryKey: extensionQueryKeys.runtime(),
     queryFn: getExtensionRuntime,
-    refetchInterval: 15_000,
+    refetchInterval: extensionRuntimeRefetchInterval,
     retry: false,
   });
   if (runtime.isPending)

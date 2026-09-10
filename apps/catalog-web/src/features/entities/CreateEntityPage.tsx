@@ -4,6 +4,7 @@ import { useNavigate } from '@tanstack/react-router';
 import { useTranslation } from 'react-i18next';
 import { listContexts } from '../contexts/api';
 import { contextQueryKeys } from '../contexts/query-keys';
+import { defaultContextCode } from '../contexts/constants';
 import { createEntity, getBlueprintByCode } from './api';
 import { EntityForm } from './components/EntityForm';
 import { EntityPage } from './components/EntityPage';
@@ -43,7 +44,7 @@ export const CreateEntityPage = ({
     queryFn: ({ signal }) => listContexts(signal),
   });
   const defaultContextId = contexts.data?.find(
-    (context) => context.code === 'default',
+    (context) => context.code === defaultContextCode,
   )?.id;
   const create = useMutation({
     mutationFn: ({

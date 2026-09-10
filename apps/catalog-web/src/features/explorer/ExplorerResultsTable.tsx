@@ -37,6 +37,7 @@ import { AttributeValue } from '../views/components/values/AttributeValue';
 import { ExtensionPopoverOutlet } from '../extensions/ExtensionOutlet';
 import { getExtensionRuntime } from '../extensions/api';
 import { extensionQueryKeys } from '../extensions/query-keys';
+import { extensionRuntimeRefetchInterval } from '../extensions/constants';
 import { ExtensionTableCell } from './ExtensionTableCell';
 import { explorerTableCellContextSchema } from './schemas';
 
@@ -155,7 +156,7 @@ export const ExplorerResultsTable = ({
   const runtime = useQuery({
     queryKey: extensionQueryKeys.runtime(),
     queryFn: getExtensionRuntime,
-    refetchInterval: 15_000,
+    refetchInterval: extensionRuntimeRefetchInterval,
     retry: false,
   });
   const attributes = new Map(

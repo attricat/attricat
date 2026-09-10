@@ -47,21 +47,22 @@ export const CreateContextPage = () => {
     defaultValues: { code: '', data: '{}', parentId: '' },
     onSubmit: ({ value }) => {
       setValidationError(undefined);
+      let data: unknown;
       try {
-        const data: unknown = JSON.parse(value.data);
-        if (typeof data !== 'object' || data === null || Array.isArray(data)) {
-          throw new Error('Metadata must be a JSON object');
-        }
-        create.mutate({
-          code: value.code.trim(),
-          data: data as Record<string, unknown>,
-          parentId: value.parentId,
-        });
-      } catch (error) {
-        setValidationError(
-          error instanceof Error ? error.message : 'Invalid metadata',
-        );
+        data = JSON.parse(value.data);
+      } catch {
+        setValidationError(t('contexts.invalidMetadataJson'));
+        return;
       }
+      if (typeof data !== 'object' || data === null || Array.isArray(data)) {
+        setValidationError(t('contexts.metadataMustBeObject'));
+        return;
+      }
+      create.mutate({
+        code: value.code.trim(),
+        data: data as Record<string, unknown>,
+        parentId: value.parentId,
+      });
     },
   });
   return (

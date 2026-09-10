@@ -11,6 +11,7 @@ import { createElement, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { listContexts } from '../contexts/api';
 import { contextQueryKeys } from '../contexts/query-keys';
+import { defaultContextCode } from '../contexts/constants';
 import {
   getEntityForm,
   getCurrentBlueprint,
@@ -59,9 +60,12 @@ export const EditEntityPage = ({ entityId }: { entityId: string }) => {
   });
   const contextId =
     selectedContext ||
-    (contexts.data?.find((context) => context.code === 'default')?.id ?? null);
+    (contexts.data?.find((context) => context.code === defaultContextCode)
+      ?.id ??
+      null);
   const defaultContextId =
-    contexts.data?.find((context) => context.code === 'default')?.id ?? null;
+    contexts.data?.find((context) => context.code === defaultContextCode)?.id ??
+    null;
   const resolvedPreview = useQuery({
     queryKey: entityQueryKeys.resolvedPreview(entityId, contextId ?? undefined),
     queryFn: () => getResolvedEntityPreview(entityId, contextId!),

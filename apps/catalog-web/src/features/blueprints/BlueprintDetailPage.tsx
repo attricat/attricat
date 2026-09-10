@@ -154,7 +154,10 @@ export const BlueprintDetailPage = ({
             </Box>
             {' · '}
             {t('blueprints.updated')}:{' '}
-            {formatBlueprintDateTime(blueprint.updated_at)}
+            {formatBlueprintDateTime(
+              blueprint.updated_at,
+              t('blueprints.notPublished'),
+            )}
           </Typography>
           {publish.isError && (
             <Alert severity="error" sx={{ mt: 2 }}>
@@ -341,9 +344,15 @@ export const BlueprintDetailPage = ({
                   {left.data && right.data && (
                     <TomlDiffEditor
                       modified={right.data.blueprint.definition}
-                      modifiedTitle={`Version ${right.data.blueprint.version} · ${right.data.blueprint.status}`}
+                      modifiedTitle={t('blueprints.revisionTitle', {
+                        version: right.data.blueprint.version,
+                        status: right.data.blueprint.status,
+                      })}
                       original={left.data.blueprint.definition}
-                      originalTitle={`Version ${left.data.blueprint.version} · ${left.data.blueprint.status}`}
+                      originalTitle={t('blueprints.revisionTitle', {
+                        version: left.data.blueprint.version,
+                        status: left.data.blueprint.status,
+                      })}
                     />
                   )}
                 </Suspense>

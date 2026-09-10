@@ -1,41 +1,24 @@
 import { useQuery } from '@tanstack/react-query';
 import { Link } from '@tanstack/react-router';
-import {
-  BlueprintIcon,
-  RelationshipPickerIcon,
-} from '../../components/system-icons';
-import CheckCircleOutlinedIcon from '@mui/icons-material/CheckCircleOutlined';
-import CloseIcon from '@mui/icons-material/Close';
-import EditOutlinedIcon from '@mui/icons-material/EditOutlined';
-import HistoryOutlinedIcon from '@mui/icons-material/HistoryOutlined';
-import UpgradeOutlinedIcon from '@mui/icons-material/UpgradeOutlined';
-import ViewSidebarOutlinedIcon from '@mui/icons-material/ViewSidebarOutlined';
-import WarningAmberOutlinedIcon from '@mui/icons-material/WarningAmberOutlined';
-import {
-  Alert,
-  Box,
-  Button,
-  Drawer,
-  IconButton,
-  Paper,
-  Tooltip,
-  Typography,
-} from '@mui/material';
+import { BlueprintIcon } from '../../components/system-icons';
+import { Alert, Box, Paper, Tooltip, Typography } from '@mui/material';
 import { createElement, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { PageContainer } from '../../components/PageContainer';
 import { PageHeader } from '../../components/PageHeader';
 import { QueryErrorNotice } from '../../components/QueryErrorNotice';
-import { RouterButton, RouterIconButton } from '../../components/RouterLink';
+import { RouterButton } from '../../components/RouterLink';
 import { EntityContextPicker } from './components/EntityContextPicker';
 import { EntitySchemaSubheader } from './components/EntitySchemaSubheader';
-import { EntityToolbar } from './components/EntityToolbar';
+import { EntityExtensionDrawer } from './components/EntityExtensionDrawer';
+import { EntityPreviewToolbar } from './components/EntityPreviewToolbar';
 import {
   ExtensionOutlet,
   ExtensionPopoverOutlet,
 } from '../extensions/ExtensionOutlet';
 import { listContexts } from '../contexts/api';
 import { contextQueryKeys } from '../contexts/query-keys';
+import { defaultContextCode } from '../contexts/constants';
 import {
   getBlueprintRevision,
   getCurrentBlueprint,
@@ -44,16 +27,19 @@ import {
 import { attributeLabel } from './entity-display';
 import { entityQueryKeys } from './query-keys';
 import { EntityView } from '../views/components/EntityView';
-import {
-  relationshipPickerMessageType,
-  relationshipPickerSearchParameter,
-} from './components/useRecentlyPreviewedEntities';
+import { RelationshipPickerActionBar } from './components/RelationshipPickerActionBar';
 import {
   entityHeadingComponentId,
   findEntityHeading,
 } from '../views/components/blocks/EntityHeadingDefinition';
 import { resolveHeadingRenderer } from '../views/components/registry';
-export const EntityPreviewPage = ({ entityId }: { entityId: string }) => {
+export const EntityPreviewPage = ({
+  entityId,
+  relationshipPickerToken,
+}: {
+  entityId: string;
+  relationshipPickerToken?: string;
+}) => {
   const { t } = useTranslation();
   const [selectedContext, setSelectedContext] = useState('');
   const contexts = useQuery({
@@ -62,7 +48,7 @@ export const EntityPreviewPage = ({ entityId }: { entityId: string }) => {
   });
   const selectedContextId =
     selectedContext ||
-    contexts.data?.find((context) => context.code === 'default')?.id;
+    contexts.data?.find((context) => context.code === defaultContextCode)?.id;
   const resolved = useQuery({
     queryKey: entityQueryKeys.resolvedPreview(entityId, selectedContextId),
     queryFn: () => getResolvedEntityPreview(entityId, selectedContextId!),
@@ -94,22 +80,11 @@ export const EntityPreviewPage = ({ entityId }: { entityId: string }) => {
   const heading = findEntityHeading(detailView);
   const HeadingRenderer = resolveHeadingRenderer(heading?.component);
   const [extensionPanelOpen, setExtensionPanelOpen] = useState(false);
-  const relationshipPickerToken = new URLSearchParams(
-    window.location.search,
-  ).get(relationshipPickerSearchParameter);
-  const canSelectForPicker = Boolean(relationshipPickerToken && window.opener);
-  const selectForPicker = () => {
-    if (!relationshipPickerToken || !window.opener) return;
-    window.opener.postMessage(
-      {
-        type: relationshipPickerMessageType,
-        token: relationshipPickerToken,
-        entityId,
-      },
-      window.location.origin,
-    );
-    window.close();
-  };
+  const schemaOutdated =
+    currentBlueprint.data && resolved.data
+      ? currentBlueprint.data.blueprint.version >
+        (resolved.data.entity.blueprint_version ?? Infinity)
+      : undefined;
   return (
     <PageContainer>
       <PageHeader
@@ -147,31 +122,11 @@ export const EntityPreviewPage = ({ entityId }: { entityId: string }) => {
           )
         }
       />
-      {canSelectForPicker && (
-        <Paper
-          aria-label={t('entities.relationshipPickerAction')}
-          component="aside"
-          sx={{
-            alignItems: 'center',
-            bgcolor: 'action.hover',
-            borderColor: 'primary.main',
-            display: 'flex',
-            justifyContent: 'center',
-            mb: 2,
-            p: { xs: 1.5, sm: 2 },
-          }}
-          variant="outlined"
-        >
-          <Button
-            onClick={selectForPicker}
-            size="large"
-            startIcon={<RelationshipPickerIcon />}
-            sx={{ minWidth: { sm: 300 } }}
-            variant="contained"
-          >
-            {t('entities.selectThisEntityAndClose')}
-          </Button>
-        </Paper>
+      {relationshipPickerToken && (
+        <RelationshipPickerActionBar
+          entityId={entityId}
+          pickerToken={relationshipPickerToken}
+        />
       )}
       {resolved.data && blueprint.data && HeadingRenderer
         ? createElement(HeadingRenderer, {
@@ -181,68 +136,13 @@ export const EntityPreviewPage = ({ entityId }: { entityId: string }) => {
             view: detailView,
           })
         : null}
-      <EntityToolbar label={t('entities.entityPreview')}>
-        <Tooltip title={t('entities.editEntity')}>
-          <RouterIconButton
-            aria-label={t('entities.editEntity')}
-            params={{ entityId }}
-            to="/entities/$entityId/edit"
-          >
-            <EditOutlinedIcon />
-          </RouterIconButton>
-        </Tooltip>
-        <Tooltip title={t('entities.changes')}>
-          <RouterIconButton
-            aria-label={t('entities.changes')}
-            params={{ entityId }}
-            to="/entities/$entityId/changes"
-          >
-            <HistoryOutlinedIcon />
-          </RouterIconButton>
-        </Tooltip>
-        {currentBlueprint.data && resolved.data && (
-          <>
-            {currentBlueprint.data.blueprint.version >
-            (resolved.data.entity.blueprint_version ?? Infinity) ? (
-              <>
-                <Tooltip title={t('entities.schemaOutdated')}>
-                  <WarningAmberOutlinedIcon color="warning" fontSize="small" />
-                </Tooltip>
-                <Tooltip title={t('entities.upgradeBlueprint')}>
-                  <RouterIconButton
-                    aria-label={t('entities.upgradeBlueprint')}
-                    params={{ entityId }}
-                    to="/entities/$entityId/migrate"
-                  >
-                    <UpgradeOutlinedIcon />
-                  </RouterIconButton>
-                </Tooltip>
-              </>
-            ) : (
-              <Tooltip title={t('entities.matchesCurrentSchema')}>
-                <CheckCircleOutlinedIcon color="success" fontSize="small" />
-              </Tooltip>
-            )}
-          </>
-        )}
-        <Box sx={{ flexGrow: 1 }} />
-        {resolved.data && blueprint.data && (
-          <Tooltip title={t('entities.extensionContributions')}>
-            <IconButton
-              aria-controls={
-                extensionPanelOpen
-                  ? 'entity-extension-contributions'
-                  : undefined
-              }
-              aria-expanded={extensionPanelOpen}
-              aria-label={t('entities.extensionContributions')}
-              onClick={() => setExtensionPanelOpen(true)}
-            >
-              <ViewSidebarOutlinedIcon />
-            </IconButton>
-          </Tooltip>
-        )}
-      </EntityToolbar>
+      <EntityPreviewToolbar
+        entityId={entityId}
+        extensionPanelOpen={extensionPanelOpen}
+        onOpenExtensions={() => setExtensionPanelOpen(true)}
+        schemaOutdated={schemaOutdated}
+        showExtensions={Boolean(resolved.data && blueprint.data)}
+      />
       <EntitySchemaSubheader
         entityId={entityId}
         name={blueprint.data?.blueprint.name}
@@ -326,40 +226,13 @@ export const EntityPreviewPage = ({ entityId }: { entityId: string }) => {
           )}
         </>
       )}
-      <Drawer
-        anchor="right"
+      <EntityExtensionDrawer
+        contextId={selectedContextId}
+        entityId={entityId}
         onClose={() => setExtensionPanelOpen(false)}
         open={extensionPanelOpen}
-        variant="persistent"
-      >
-        <Box
-          id="entity-extension-contributions"
-          sx={{ p: 3, width: { xs: '100vw', sm: 480 } }}
-        >
-          <Box sx={{ alignItems: 'center', display: 'flex' }}>
-            <Typography sx={{ flexGrow: 1 }} variant="h6">
-              {t('entities.extensionContributions')}
-            </Typography>
-            <IconButton
-              aria-label={t('entities.closeExtensionContributions')}
-              onClick={() => setExtensionPanelOpen(false)}
-            >
-              <CloseIcon />
-            </IconButton>
-          </Box>
-          {resolved.data && blueprint.data && (
-            <Box sx={{ mt: 2 }}>
-              <ExtensionOutlet
-                context={{
-                  entity_id: entityId,
-                  context_id: selectedContextId,
-                }}
-                outlet="entity_preview_panel"
-              />
-            </Box>
-          )}
-        </Box>
-      </Drawer>
+        showContent={Boolean(resolved.data && blueprint.data)}
+      />
     </PageContainer>
   );
 };

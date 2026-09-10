@@ -166,7 +166,7 @@ export const WorkspaceInvitationsSection = ({
                         .catch((e) => setError(e.message))
                     }
                   >
-                    Revoke
+                    {t('workspace.revokeInvitation')}
                   </Button>
                 )
               }
@@ -254,7 +254,7 @@ export const WorkspaceInvitationsSection = ({
             )}
           </userForm.Field>
           <Button type="submit" variant="contained">
-            Create user and invite
+            {t('workspace.createUserInvite')}
           </Button>
         </Stack>
       </Paper>
@@ -321,7 +321,7 @@ export const WorkspaceInvitationsSection = ({
             )}
           </form.Field>
           <Button type="submit" variant="contained">
-            Create invitation
+            {t('workspace.createInvitation')}
           </Button>
         </Stack>
       </Paper>

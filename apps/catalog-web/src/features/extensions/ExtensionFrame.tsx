@@ -1,6 +1,7 @@
 import { Alert, Box, Skeleton, Typography } from '@mui/material';
 import { useNavigate } from '@tanstack/react-router';
 import { useEffect, useRef, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { z } from 'zod';
 import { toast } from '../../components/toast';
 import { requestText } from '../../api/request';
@@ -94,6 +95,7 @@ export const ExtensionFrame = ({
   onFailure,
   onReady,
 }: Props) => {
+  const { t } = useTranslation();
   const iframe = useRef<HTMLIFrameElement>(null);
   const onContentHeightRef = useRef(onContentHeight);
   const portRef = useRef<MessagePort | undefined>(undefined);
@@ -125,7 +127,7 @@ export const ExtensionFrame = ({
     const timer = window.setTimeout(() => {
       if (disposed) return;
       onFailure?.();
-      setError('The extension timed out while starting.');
+      setError(t('extensions.startTimedOut'));
     }, extensionStartTimeout);
     const start = async () => {
       try {
@@ -146,7 +148,7 @@ export const ExtensionFrame = ({
           }
           if (data.type === 'catalog:error.v1') {
             onFailure?.();
-            return setError('The extension could not be started.');
+            return setError(t('extensions.startFailed'));
           }
           if (
             data.type === 'catalog:resize.v1' &&
@@ -281,7 +283,7 @@ export const ExtensionFrame = ({
       } catch {
         if (!disposed) {
           onFailure?.();
-          setError('The extension could not be loaded.');
+          setError(t('extensions.contentLoadFailed'));
         }
       }
     };
@@ -293,7 +295,7 @@ export const ExtensionFrame = ({
       port?.close();
       if (portRef.current === port) portRef.current = undefined;
     };
-  }, [contribution, frameKey, loadedFrame, navigate, onFailure, onReady]);
+  }, [contribution, frameKey, loadedFrame, navigate, onFailure, onReady, t]);
 
   useEffect(() => {
     if (!ready) return;
@@ -337,7 +339,7 @@ export const ExtensionFrame = ({
           <Skeleton animation="wave" height={20} variant="text" width="45%" />
           <Skeleton animation="wave" height={16} variant="text" width="75%" />
           <Typography sx={{ clip: 'rect(0 0 0 0)', position: 'absolute' }}>
-            Loading extension content…
+            {t('extensions.loadingContent')}
           </Typography>
         </Box>
       )}

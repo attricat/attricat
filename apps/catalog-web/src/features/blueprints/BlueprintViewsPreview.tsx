@@ -87,6 +87,7 @@ const RenderedView = ({
   values: ReturnType<typeof sandboxValuesForFields>;
   view: ViewDefinition;
 }) => {
+  const { t } = useTranslation();
   if (view.type === 'table' || view.type === 'dropdown_option')
     return (
       <TableViewPreview
@@ -102,7 +103,7 @@ const RenderedView = ({
       {HeadingRenderer &&
         createElement(HeadingRenderer, {
           attributes,
-          entityId: 'Sandbox entity',
+          entityId: t('blueprints.sandboxEntity'),
           values,
           view,
         })}

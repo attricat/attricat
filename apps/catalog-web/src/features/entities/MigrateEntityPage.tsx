@@ -12,6 +12,7 @@ import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { listContexts } from '../contexts/api';
 import { contextQueryKeys } from '../contexts/query-keys';
+import { defaultContextCode } from '../contexts/constants';
 import { migrateEntity, previewEntityMigration } from './api';
 import { valueForField } from './attribute-values';
 import { EntityForm } from './components/EntityForm';
@@ -32,7 +33,8 @@ export const MigrateEntityPage = ({ entityId }: { entityId: string }) => {
     queryFn: ({ signal }) => listContexts(signal),
   });
   const defaultContextId =
-    contexts.data?.find((context) => context.code === 'default')?.id ?? null;
+    contexts.data?.find((context) => context.code === defaultContextCode)?.id ??
+    null;
   const targetAttributeCodes = new Set(
     preview.data?.target.attributes.map((attribute) => attribute.code) ?? [],
   );

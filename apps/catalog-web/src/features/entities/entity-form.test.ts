@@ -157,7 +157,9 @@ describe('entity form values', () => {
           properties: { price: { minimum: 3 } },
         },
       ),
-    ).toEqual({ fieldErrors: { price: 'must be >= 3' } });
+    ).toEqual({
+      fieldErrors: { price: 'Does not meet the schema requirements.' },
+    });
   });
 
   it('maps required entity schema properties to their fields', () => {
@@ -167,7 +169,7 @@ describe('entity form values', () => {
         required: ['title'],
       }),
     ).toEqual({
-      fieldErrors: { title: "must have required property 'title'" },
+      fieldErrors: { title: 'Does not meet the schema requirements.' },
     });
   });
 });

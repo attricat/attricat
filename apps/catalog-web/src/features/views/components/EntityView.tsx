@@ -12,6 +12,7 @@ import {
 } from '@mui/material';
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import { createElement, useState, type ReactNode } from 'react';
+import { useTranslation } from 'react-i18next';
 import {
   viewBlockTypes,
   type Attribute,
@@ -60,45 +61,54 @@ const ValueField = ({
   component?: ComponentReference | null;
   contextId?: string;
   entityId?: string;
-}) => (
-  <FieldErrorBoundary label={attributeLabel(attribute)}>
-    <Stack spacing={0.5}>
-      {renderEditor ? (
-        renderEditor(attribute)
-      ) : (
-        <>
-          <Box sx={{ alignItems: 'center', display: 'flex', gap: 0.5 }}>
-            <Typography sx={{ fontWeight: 700 }} variant="subtitle2">
-              {attributeLabel(attribute)}
-            </Typography>
-            {renderAttributeDecoration?.(attribute)}
-          </Box>
-          {(() => {
-            const ValueRenderer =
-              resolveValueRenderer(component) ?? AttributeValue;
-            return (
-              <ValueRenderer
-                attribute={attribute}
-                component={component}
-                contextId={contextId}
-                entityId={entityId}
-                value={resolved?.value}
-              />
-            );
-          })()}
-          {resolved?.source_context &&
-            contextId &&
-            resolved.source_context.id !== contextId && (
-              <Typography color="text.secondary" variant="caption">
-                Inherited from {resolved.source_context.code} context
+}) => {
+  const { t } = useTranslation();
+  const label = attributeLabel(attribute);
+  return (
+    <FieldErrorBoundary
+      fallbackMessage={t('views.unableToRenderAttribute', { attribute: label })}
+      logLabel={label}
+    >
+      <Stack spacing={0.5}>
+        {renderEditor ? (
+          renderEditor(attribute)
+        ) : (
+          <>
+            <Box sx={{ alignItems: 'center', display: 'flex', gap: 0.5 }}>
+              <Typography sx={{ fontWeight: 700 }} variant="subtitle2">
+                {attributeLabel(attribute)}
               </Typography>
-            )}
-        </>
-      )}
-      {renderEditor && renderAttributeDecoration?.(attribute)}
-    </Stack>
-  </FieldErrorBoundary>
-);
+              {renderAttributeDecoration?.(attribute)}
+            </Box>
+            {(() => {
+              const ValueRenderer =
+                resolveValueRenderer(component) ?? AttributeValue;
+              return (
+                <ValueRenderer
+                  attribute={attribute}
+                  component={component}
+                  contextId={contextId}
+                  entityId={entityId}
+                  value={resolved?.value}
+                />
+              );
+            })()}
+            {resolved?.source_context &&
+              contextId &&
+              resolved.source_context.id !== contextId && (
+                <Typography color="text.secondary" variant="caption">
+                  {t('views.inheritedFromContext', {
+                    context: resolved.source_context.code,
+                  })}
+                </Typography>
+              )}
+          </>
+        )}
+        {renderEditor && renderAttributeDecoration?.(attribute)}
+      </Stack>
+    </FieldErrorBoundary>
+  );
+};
 
 const ViewTabs = ({
   tabs,
@@ -134,6 +144,7 @@ export const EntityView = ({
   contextId,
   entityId,
 }: Props) => {
+  const { t } = useTranslation();
   const byCode = new Map(
     attributes.map((attribute) => [attribute.code, attribute]),
   );
@@ -149,8 +160,12 @@ export const EntityView = ({
   const renderNode = (node: ViewNode, key: string): ReactNode => {
     if (node.component && !resolveViewComponent(node.component)) {
       return (
-        <FieldErrorBoundary key={key} label="view component">
-          Unable to render component.
+        <FieldErrorBoundary
+          fallbackMessage={t('views.unableToRenderComponent')}
+          key={key}
+          logLabel="view component"
+        >
+          {t('views.unableToRenderComponent')}
         </FieldErrorBoundary>
       );
     }

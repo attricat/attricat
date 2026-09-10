@@ -21,16 +21,15 @@ import { authQueryKeys } from '../auth/query-keys';
 import {
   configureExtension,
   extensionDetail,
-  grantExtension,
   lifecycleExtension,
   registryDetails,
   removeExtension,
-  revokeExtensionGrant,
   upgradeExtension,
 } from './management-api';
 import { extensionManagementQueryKeys } from './management-query-keys';
 import { ErrorNotice } from './ExtensionErrorNotice';
 import { invalidateExtensions, repositoryParts } from './extension-page-utils';
+import { ExtensionPermissionsSection } from './ExtensionPermissionsSection';
 
 export const InstalledExtensionPage = ({
   extensionId,
@@ -64,11 +63,6 @@ export const InstalledExtensionPage = ({
   });
   const config = useMutation({
     mutationFn: (value: unknown) => configureExtension(extensionId, value),
-    onSuccess: () => invalidateExtensions(client, extensionId),
-  });
-  const revoke = useMutation({
-    mutationFn: ({ kind, grant }: { kind: string; grant: string }) =>
-      revokeExtensionGrant(extensionId, kind, grant),
     onSuccess: () => invalidateExtensions(client, extensionId),
   });
   const [configurationError, setConfigurationError] = useState<string>();
@@ -114,7 +108,10 @@ export const InstalledExtensionPage = ({
         title={installation?.extension_id ?? t('extensions.extensionFallback')}
         description={
           installation
-            ? `v${installation.version} from ${installation.source}`
+            ? t('extensions.installationVersion', {
+                version: installation.version,
+                source: installation.source,
+              })
             : t('extensions.loadingInstallation')
         }
         actions={<Link to="/manage/extensions">{t('extensions.back')}</Link>}
@@ -122,7 +119,6 @@ export const InstalledExtensionPage = ({
       <ErrorNotice error={detail.error} />
       <ErrorNotice error={action.error} />
       <ErrorNotice error={config.error} />
-      <ErrorNotice error={revoke.error} />
       {configurationError && (
         <Alert severity="error">{configurationError}</Alert>
       )}
@@ -155,7 +151,7 @@ export const InstalledExtensionPage = ({
                 }
                 onClick={() => action.mutate({ action: 'enable' })}
               >
-                Enable
+                {t('extensions.enable')}
               </Button>
               <Button
                 disabled={
@@ -165,7 +161,7 @@ export const InstalledExtensionPage = ({
                 }
                 onClick={() => action.mutate({ action: 'disable' })}
               >
-                Disable
+                {t('extensions.disable')}
               </Button>
               <Button
                 color="warning"
@@ -176,14 +172,14 @@ export const InstalledExtensionPage = ({
                 }
                 onClick={() => action.mutate({ action: 'quarantine' })}
               >
-                Quarantine
+                {t('extensions.quarantine')}
               </Button>
               <Button
                 color="error"
                 disabled={!manage || action.isPending}
                 onClick={() => action.mutate({ action: 'remove' })}
               >
-                Remove
+                {t('extensions.remove')}
               </Button>
             </Stack>
           </Paper>
@@ -216,7 +212,7 @@ export const InstalledExtensionPage = ({
                       })
                     }
                   >
-                    Upgrade
+                    {t('extensions.upgrade')}
                   </Button>
                 </Stack>
               ))}
@@ -253,46 +249,22 @@ export const InstalledExtensionPage = ({
                 type="submit"
                 variant="contained"
               >
-                Save configuration
+                {t('extensions.saveConfiguration')}
               </Button>
             </form>
           </Paper>
-          <Paper sx={{ p: 2 }}>
-            <Typography variant="h6">{t('extensions.permissions')}</Typography>
-            {detail.data.grants.map((grant) => (
-              <Stack
-                direction="row"
-                key={`${grant.grant_kind}:${grant.grant_id}`}
-                spacing={1}
-                sx={{ alignItems: 'center' }}
-              >
-                <Chip label={`${grant.grant_kind}: ${grant.grant_id}`} />
-                <Button
-                  disabled={!manage || revoke.isPending}
-                  onClick={() =>
-                    revoke.mutate({
-                      kind: grant.grant_kind,
-                      grant: grant.grant_id,
-                    })
-                  }
-                >
-                  Revoke
-                </Button>
-              </Stack>
-            ))}
-            <DeclaredPermissions
-              extensionId={extensionId}
-              manifest={installation!.manifest}
-              grants={detail.data.grants}
-              enabled={manage}
-              onGrant={() => invalidateExtensions(client, extensionId)}
-            />
-          </Paper>
+          <ExtensionPermissionsSection
+            enabled={manage}
+            extensionId={extensionId}
+            grants={detail.data.grants}
+            manifest={installation!.manifest}
+            onChanged={() => invalidateExtensions(client, extensionId)}
+          />
           <Paper sx={{ p: 2 }}>
             <Typography variant="h6">{t('extensions.lifecycle')}</Typography>
             {detail.data.lifecycle.length === 0 ? (
               <Typography color="text.secondary">
-                No lifecycle history.
+                {t('extensions.noLifecycle')}
               </Typography>
             ) : (
               detail.data.lifecycle.map((item) => (
@@ -303,7 +275,11 @@ export const InstalledExtensionPage = ({
                   </Typography>
                   <Typography color="text.secondary" variant="body2">
                     {new Date(item.created_at).toLocaleString()}{' '}
-                    {item.actor_user_id ? `· actor ${item.actor_user_id}` : ''}{' '}
+                    {item.actor_user_id
+                      ? t('extensions.lifecycleActor', {
+                          actor: item.actor_user_id,
+                        })
+                      : ''}{' '}
                     {Object.keys(item.diagnostics as object).length
                       ? `· ${JSON.stringify(item.diagnostics)}`
                       : ''}
@@ -316,89 +292,5 @@ export const InstalledExtensionPage = ({
         </Stack>
       )}
     </PageContainer>
-  );
-};
-const DeclaredPermissions = ({
-  extensionId,
-  manifest,
-  grants,
-  enabled,
-  onGrant,
-}: {
-  extensionId: string;
-  manifest: unknown;
-  grants: {
-    grant_kind:
-      'capability' | 'host_permission' | 'event_publish' | 'event_subscribe';
-    grant_id: string;
-  }[];
-  enabled: boolean;
-  onGrant: () => void;
-}) => {
-  const { t } = useTranslation();
-  const grant = useMutation({
-    mutationFn: ({
-      kind,
-      id,
-    }: {
-      kind:
-        'capability' | 'host_permission' | 'event_publish' | 'event_subscribe';
-      id: string;
-    }) => grantExtension(extensionId, kind, id),
-    onSuccess: onGrant,
-  });
-  const value = manifest as {
-    permissions?: string[];
-    optional_permissions?: string[];
-    host_permissions?: { id: string }[];
-    optional_host_permissions?: { id: string }[];
-    event_contracts?: {
-      exports?: { id: string }[];
-      consumes?: { provider: string; contract: string }[];
-    };
-  };
-  const requested: Array<
-    readonly [
-      'capability' | 'host_permission' | 'event_publish' | 'event_subscribe',
-      string,
-    ]
-  > = [...(value.permissions ?? []), ...(value.optional_permissions ?? [])].map(
-    (id) => ['capability', id] as const,
-  );
-  requested.push(
-    ...[
-      ...(value.host_permissions ?? []),
-      ...(value.optional_host_permissions ?? []),
-    ].map((item) => ['host_permission', item.id] as const),
-    ...(value.event_contracts?.exports ?? []).map(
-      (item) => ['event_publish', item.id] as const,
-    ),
-    ...(value.event_contracts?.consumes ?? []).map(
-      (item) =>
-        ['event_subscribe', `${item.provider}:${item.contract}`] as const,
-    ),
-  );
-  return (
-    <Stack spacing={1} sx={{ mt: 1 }}>
-      <ErrorNotice error={grant.error} />
-      {requested
-        .filter(
-          ([kind, id]) =>
-            !grants.some(
-              (grant) => grant.grant_kind === kind && grant.grant_id === id,
-            ),
-        )
-        .map(([kind, id]) => (
-          <Stack direction="row" key={`${kind}:${id}`} spacing={1}>
-            <Chip label={t('extensions.requestedGrant', { kind, id })} />
-            <Button
-              disabled={!enabled || grant.isPending}
-              onClick={() => grant.mutate({ kind, id })}
-            >
-              Grant
-            </Button>
-          </Stack>
-        ))}
-    </Stack>
   );
 };

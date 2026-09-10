@@ -131,10 +131,16 @@ export const BlueprintsPage = () => {
                       />
                     </TableCell>
                     <TableCell>
-                      {formatBlueprintDateTime(blueprint.published_at)}
+                      {formatBlueprintDateTime(
+                        blueprint.published_at,
+                        t('blueprints.notPublished'),
+                      )}
                     </TableCell>
                     <TableCell>
-                      {formatBlueprintDateTime(blueprint.updated_at)}
+                      {formatBlueprintDateTime(
+                        blueprint.updated_at,
+                        t('blueprints.notPublished'),
+                      )}
                     </TableCell>
                     <TableCell align="right">
                       <RouterButton

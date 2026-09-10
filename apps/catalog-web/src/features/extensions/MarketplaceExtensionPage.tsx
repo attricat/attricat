@@ -49,15 +49,15 @@ export const MarketplaceExtensionPage = ({
         <>
           <Paper sx={{ p: 2 }}>
             <Typography color="text.secondary">
-              Origin: {details.data.extension.registry_source}
+              {t('extensions.origin', {
+                origin: details.data.extension.registry_source,
+              })}
             </Typography>
             <Typography sx={{ mt: 2 }} variant="h6">
-              Requested release
+              {t('extensions.requestedRelease')}
             </Typography>
             {details.data.releases.length === 0 ? (
-              <Alert severity="info">
-                No installable stable releases were found.
-              </Alert>
+              <Alert severity="info">{t('extensions.noStableReleases')}</Alert>
             ) : (
               <Stack spacing={1} sx={{ mt: 1 }}>
                 {details.data.releases.map((release) => (
@@ -82,7 +82,7 @@ export const MarketplaceExtensionPage = ({
                       }
                       variant="contained"
                     >
-                      Install
+                      {t('extensions.install')}
                     </Button>
                   </Stack>
                 ))}

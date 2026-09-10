@@ -1,5 +1,6 @@
 import type { Attribute } from './api';
 import type { AttributeContext } from '../contexts/api';
+import { defaultContextCode } from '../contexts/constants';
 
 export const resolvePreviewContext = (
   context: Record<string, Record<string, unknown>>,
@@ -16,7 +17,7 @@ export const resolvePreviewContext = (
     current = current.parent_id ? byId.get(current.parent_id) : undefined;
   }
   const selectedExists = path.length > 0;
-  if (!selectedExists) path.push('default');
+  if (!selectedExists) path.push(defaultContextCode);
   return Object.fromEntries(
     attributes.flatMap((attribute) => {
       for (const [index, contextCode] of path.entries()) {

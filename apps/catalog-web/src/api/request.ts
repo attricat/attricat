@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { apiFetch } from './fetch';
+import { apiFetch, csrfToken } from './fetch';
 
 export const apiErrorSchema = z.object({
   error: z.object({ code: z.string(), message: z.string() }),
@@ -58,6 +58,54 @@ const responseFor = async (path: string, init?: RequestInit) => {
     : apiFetch(path, init));
   if (!response.ok) throw await responseError(response);
   return response;
+};
+
+export const requestUpload = async <T>(
+  path: string,
+  data: FormData,
+  schema: z.ZodType<T>,
+  onProgress?: (progress: number) => void,
+): Promise<T> => {
+  if (typeof XMLHttpRequest === 'undefined') {
+    const result = await request(path, schema, { method: 'POST', body: data });
+    onProgress?.(100);
+    return result;
+  }
+  return new Promise<T>((resolve, reject) => {
+    const upload = new XMLHttpRequest();
+    upload.open('POST', path);
+    upload.withCredentials = true;
+    const csrf = csrfToken();
+    if (csrf) upload.setRequestHeader('X-Catalog-Csrf', csrf);
+    upload.upload.onprogress = (event) => {
+      if (event.lengthComputable)
+        onProgress?.(Math.round((event.loaded / event.total) * 100));
+    };
+    upload.onerror = () =>
+      reject(apiRequestError(0, undefined, 'Upload failed'));
+    upload.onload = () => {
+      let body: unknown;
+      try {
+        body = JSON.parse(upload.responseText);
+      } catch {
+        body = undefined;
+      }
+      if (upload.status < 200 || upload.status >= 300) {
+        reject(apiRequestError(upload.status, body));
+        return;
+      }
+      const result = schema.safeParse(body);
+      if (!result.success) {
+        reject(
+          new Error(`Invalid API response: ${z.prettifyError(result.error)}`),
+        );
+        return;
+      }
+      onProgress?.(100);
+      resolve(result.data);
+    };
+    upload.send(data);
+  });
 };
 
 export const requestText = async (path: string, init?: RequestInit) =>
