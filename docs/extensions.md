@@ -360,15 +360,8 @@ contextual actions—not an application-wide navigation tree.
   `context_version: 1`; it deliberately does not include search state or entity
   values.
 - **`explorer_table_cell`** (`embedded`, requiring
-  `client.explorer_table_cell`) is a sandboxed renderer for a visible Explorer
-  cell. A root `cell_renderers` declaration and its contribution share the
-  stable renderer `id` and positive `version`; it declares supported scalar
-  `value_types` and allowed renderer props. The strict v1 context contains the
-  column configuration, `primary_value`, source row identity and preview, and
-  nullable related-entity metadata and related preview. Catalog mounts only
-  virtualized visible cells, bounds simultaneous frames, sends a versioned
-  context update when a frame is reused, and falls back to scalar rendering for
-  unavailable, disabled, incompatible, slow, or failed renderers.
+  `client.explorer_table_cell`) is reserved for a future sandboxed Explorer
+  table-cell renderer. The current web runtime does not mount this outlet.
 - **`blueprint_detail_panel`** (`panel`, requiring
   `client.blueprint_detail_panel`) is a read-only region on a blueprint detail
   page. Its strict context is `blueprint_id`, `blueprint_version`, and
@@ -475,7 +468,8 @@ uses the signed-in browser session in the parent and the server still applies
 normal authorization. Invalid messages, missing grants, failures, and startup
 timeouts are denied; frame startup failures render as host-owned warnings
 without exposing extension source or host internals. Runtime-descriptor
-fetch failures are currently suppressed by outlets rather than rendered. Extension UI must provide its own localized
+fetch failures render host-owned warning alerts while the affected outlet has no
+runtime descriptor. Extension UI must provide its own localized
 text and accessible labels; the host owns the surrounding landmarks, focus,
 loading state, and failure announcements.
 

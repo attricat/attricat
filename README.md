@@ -20,12 +20,8 @@ worktree-specific ports, writes them and ready-to-open `WEB_URL`, `DOCS_URL`,
 `.catalog-worktree` file, and creates `.env` from `.env.example`. `just dev`
 starts PostgreSQL, Mailpit, Jaeger, and RustFS (the local S3-compatible object store)
 before starting the API, file worker, web app, and public documentation site.
-Stop `process-compose` with
-`Ctrl-C`; the containers remain available until stopped with:
-
-```sh
-just down
-```
+Stop `just dev` with `Ctrl-C`; its exit trap also runs `just down`, stopping
+and removing the local containers.
 
 For database debugging, `just sql` opens an interactive `psql` session inside
 this worktree's PostgreSQL container.

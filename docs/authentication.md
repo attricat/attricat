@@ -113,7 +113,7 @@ Production cookies are `Secure`, `HttpOnly` (session only), `SameSite=Lax`, and
 path-scoped to `/`. `SESSION_COOKIE_SECURE=false` is exclusively for local HTTP
 development and test servers. Every cookie-authenticated unsafe request must send
 `X-Catalog-Csrf` equal to the current CSRF cookie. Login attempts are durably limited
-to five failures per normalized email in fifteen minutes.
+to five failures per normalized workspace/email pair in fifteen minutes.
 
 ## Personal API tokens
 

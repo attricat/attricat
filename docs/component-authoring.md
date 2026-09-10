@@ -48,18 +48,20 @@ export const priceDisplayComponent = {
 } satisfies ViewComponentDefinition;
 ```
 
-Use lowercase dotted IDs. A component ID and version uniquely identify the
+Use lowercase dotted IDs whose dot-delimited segments are lowercase,
+underscore-separated words. A component ID and version uniquely identify the
 implementation, so increment the version when making an incompatible change.
 
 ## Metadata
 
 `capabilities` limits a component to display or edit views. `placements`
-selects the supported view block type: `field`, `relationship_list`, `table`,
-or `stack`. `value_types` limits the attribute types for data placements.
+selects the supported view block type: `field`, `relationship_list`,
+`incoming_relationship_list`, `table`, or `stack`. `value_types` limits the attribute types for data placements.
 
 The compiler enforces capabilities, placements, and value types against the
-component reference. When `props` is an object, it also rejects keys outside
-`allowed_props`; component props must therefore be an object. Do not add props
+component reference. When `props` is an object, it also rejects keys outside `allowed_props`.
+Non-object JSON props are currently accepted but receive no key validation; use
+an object for forward-compatible props. Do not add props
 to `allowed_props` until the applicable renderer consumes them: component props
 are currently validated but are not passed to frontend renderers.
 

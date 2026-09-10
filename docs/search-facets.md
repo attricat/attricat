@@ -69,8 +69,9 @@ only once to a node's roll-up count.
 
 Counts respect the text query and selected blueprint version, but intentionally
 do not apply the category selection itself. This lets users see useful sibling
-counts after choosing a category. Other search filters, once supported, should
-also be applied before the facet is aggregated.
+counts after choosing a category. Attribute filters apply to the main Explorer
+search but are not included in the separately loaded facet-child request, so
+they do not currently affect facet counts.
 
 Selection is an OR over the selected nodes and their descendants within a
 facet. Selections across different facets are combined with AND semantics.

@@ -1,12 +1,15 @@
 # API Reference
 
 The API is JSON over HTTP. Successful responses are JSON; failures use an
-`error` object with a machine-readable code, message, and HTTP status. The
+`error` object with a machine-readable code and message; the HTTP status is the
+response status code. The
 [CLI](cli.md) is the preferred interface for shell automation.
 
 ## Authorization
 
-`GET /health`, `POST /auth/discover`, and `POST /auth/login` are public. Browser requests authenticate
+`GET /health`, `POST /auth/discover`, `POST /auth/login`,
+`POST /auth/password-reset`, `POST /auth/password-reset/confirm`, and
+`POST /onboarding/complete` are public. Browser requests authenticate
 with the opaque HttpOnly `catalog_session` cookie created by login; missing,
 expired, rotated, or revoked sessions return `401`. Unsafe cookie-authenticated
 requests must also supply `X-Catalog-Csrf` with the readable `catalog_csrf`
@@ -41,15 +44,29 @@ password, cookie, CSRF, expiry, and revocation contract is documented in
 | `DELETE` | `/extension-registries/{id}` | Remove one workspace custom source (`extensions.manage`). |
 | `GET` | `/extension-registries/discover` | Load extension metadata from configured trusted registry `registry.json` indexes (`extensions.read`). |
 | `GET` | `/extension-registries/extensions/{owner}/{repository}` | Resolve a repository listed in a current trusted index, returning its README and non-draft, non-prerelease `.tar.zst` GitHub Release assets (`extensions.read`). |
+| `GET`, `POST` | `/extensions` | List installed extensions or install a validated release (`extensions.read` / `extensions.manage`). |
 | `POST` | `/extensions/sideload` | Install a local `.tar.zst` archive supplied as an `application/zstd` request body. The 32 MiB archive limit and normal package validation apply; installations start disabled (`extensions.manage`). |
+| `GET`, `DELETE` | `/extensions/{extension_id}` | Read or remove an installation (`extensions.read` / `extensions.manage`). |
+| `POST` | `/extensions/{extension_id}/upgrade`, `/enable`, `/disable`, `/quarantine` | Change the installed release or lifecycle state (`extensions.manage`). |
+| `PUT` | `/extensions/{extension_id}/configure` | Update validated installation configuration (`extensions.manage`). |
+| `POST`; `DELETE` | `/extensions/{extension_id}/grants`; `/grants/{grant_kind}/{grant_id}` | Grant or revoke a declared extension permission (`extensions.manage`). |
+| `GET` | `/extensions/{extension_id}/{contribution_id}/artifact` | Fetch a validated client artifact for an enabled release. |
+| `POST` | `/extensions/{extension_id}/{contribution_id}/storage/{release_id}` | Perform a bounded client-mediated extension storage operation. |
+| `PUT` | `/workspace/extensions-mode` | Enable or disable extensions for the current workspace (`extensions.manage`). |
 | `GET` | `/extensions/runtime` | Return enabled, client-safe extension contributions and their fixed host outlets (`entities.read`). |
 | `POST` | `/extensions/{extension_id}/{contribution_id}/command` | Validate a bounded, manifest-declared client-mediated extension command against the enabled exact release and grants (`entities.write`). |
 | `POST` | `/auth/discover` | Resolve a normalized workspace identifier and return its sign-in methods; rate-limited and intentionally minimal. |
 | `POST` | `/auth/login` | Sign in with a previously resolved workspace identifier, email, and password. |
+| `POST` | `/auth/password-reset` | Request a password-reset message for a local account. |
+| `POST` | `/auth/password-reset/confirm` | Consume a password-reset secret and set a new password. |
+| `POST` | `/onboarding/complete` | Complete the public onboarding flow with its verified invitation or lifecycle secret. |
 | `GET` | `/metrics` | Scrape Prometheus service metrics (`data_health.read`). |
+| `GET` | `/audit-events` | List workspace audit evidence (`audit.read`). |
 | `GET` | `/event-deliveries/dead-letters` | List terminal event-handler deliveries for the active workspace (`data_health.read`). |
 | `POST` | `/event-deliveries/{consumer_id}/{event_id}/replay` | Reactivate one terminal delivery as pending; it preserves the event and attempts (`roles.manage`). |
 | `GET` | `/workspace/roles` | List fixed and workspace-local roles with permissions (`roles.manage`). |
+| `GET`, `PUT` | `/workspace/navigation` | Read or replace configured workspace navigation (`workspace_navigation.manage`). |
+| `GET` | `/workspace/navigation/sidebar` | Read the caller-visible navigation tree. |
 | `POST` | `/workspace/roles` | Create a workspace-local role. |
 | `PUT` | `/workspace/roles/{role_id}` | Update a workspace-local role. Fixed roles are immutable. |
 | `POST` | `/workspace/roles/{role_id}/duplicate` | Duplicate a fixed or local role as a custom role. |
@@ -64,6 +81,7 @@ password, cookie, CSRF, expiry, and revocation contract is documented in
 | `DELETE` | `/workspace/members/{member_id}/grants/{grant_id}` | Revoke a role grant. |
 | `POST` | `/workspace/members/{member_id}/transfer-ownership` | Transfer ownership to an active member (owner only). |
 | `GET`, `POST` | `/workspace/invitations` | List or create expiring email invitations. |
+| `POST` | `/workspace/users` | Create a workspace user and membership (`members.manage`). |
 | `DELETE` | `/workspace/invitations/{invitation_id}` | Revoke a pending invitation. |
 | `POST` | `/workspace/invitations/accept` | Accept `{ "secret": "cat_inv_..." }` as the verified intended account. |
 | `GET`, `POST` | `/personal-access-tokens` | List or issue a personal token; creation returns its secret exactly once. |
@@ -83,6 +101,11 @@ password, cookie, CSRF, expiry, and revocation contract is documented in
 | `GET` | `/entities` | Browse relationship targets. |
 | `GET`, `DELETE` | `/entities/{id}` | Read or soft-delete an entity. |
 | `GET` | `/entities/{id}/preview` | Read direct contextual preview values. |
+| `POST` | `/v1/entities/{id}/incoming-relationships` | Browse active incoming relationship edges. |
+| `GET` | `/entities/{id}/hierarchy` | Read the configured relationship hierarchy for an entity. |
+| `GET` | `/entities/{id}/changes` | Read entity audit changes. |
+| `GET` | `/entities/{id}/values/history` | Read retained attribute-value history. |
+| `POST` | `/entities/{id}/values/history/{history_id}/restore` | Restore one retained value-history entry. |
 | `GET` | `/entities/{id}/resolved-preview` | Resolve values through a requested context's ancestors. |
 | `POST` | `/entities/{id}/values` | Append value history. |
 | `GET` | `/entities/{id}/values/current` | Read current direct values and edges. |
@@ -109,8 +132,9 @@ password, cookie, CSRF, expiry, and revocation contract is documented in
 Blueprint creation and revision routes create drafts. Only published revisions
 can create entities or serve as migration targets. See [Blueprint Publication](database.md#blueprint-publication).
 
-`POST /v1/entities/search` optionally accepts multiple relationship tree facets. See
-[Relationship Tree Facets](search-facets.md) for its request and response
+`POST /v1/entities/search` optionally accepts multiple relationship tree facets;
+`POST /v1/entities/facets/relationship-tree/children` loads a facet page. See
+[Relationship Tree Facets](search-facets.md) for their request and response
 contract.
 
 ### Search table sorting

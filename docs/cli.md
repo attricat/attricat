@@ -45,7 +45,7 @@ catalog blueprint resolve <code> --version <version>
 catalog context list
 catalog context create --file locale.toml
 catalog context create --code en_GB --data '{"language":"en-GB"}' [--parent-id <context-id>]
-catalog context get en-GB
+catalog context get en_GB
 catalog context update <context-id> --parent-id <context-id> --data '{"language":"en-GB"}'
 catalog context delete <context-id>
 

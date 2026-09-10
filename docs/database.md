@@ -50,7 +50,7 @@ An owner grant must be workspace-scoped, and repository transactions preserve at
 
 ### Audit events
 
-`audit_events` is append-only evidence for catalog writes and security lifecycle changes. Events retain actor user/token identifiers when available, workspace, request and correlation IDs, action, authorization scope, target, outcome, and JSON metadata. HTTP metadata is derived from server-controlled routes; the redaction boundary removes password, secret, token, authorization, credential, and API-key fields. Agent-executed mutations additionally record a normalized executor discriminator plus the durable agent run, conversation, tool-call, tool name, approval decision, and approving user; the initiating user remains `actor_user_id`. Tool arguments, prompts, provider credentials, and tokens are never copied to agent audit metadata. Repository transactions persist successful mutation audits with identifiers and safe state only, never password hashes or token digests. Audit insertion is part of the mutation transaction, so an audit failure rolls back the mutation. Authorization denials are intentionally not audited because they never enter a mutation transaction. This issue intentionally exposes no audit-read API or UI.
+`audit_events` is append-only evidence for catalog writes and security lifecycle changes. Events retain actor user/token identifiers when available, workspace, request and correlation IDs, action, authorization scope, target, outcome, and JSON metadata. HTTP metadata is derived from server-controlled routes; the redaction boundary removes password, secret, token, authorization, credential, and API-key fields. Agent-executed mutations additionally record a normalized executor discriminator plus the durable agent run, conversation, tool-call, tool name, approval decision, and approving user; the initiating user remains `actor_user_id`. Tool arguments, prompts, provider credentials, and tokens are never copied to agent audit metadata. Repository transactions persist successful mutation audits with identifiers and safe state only, never password hashes or token digests. Audit insertion is part of the mutation transaction, so an audit failure rolls back the mutation. Authorization denials are intentionally not audited because they never enter a mutation transaction. `GET /audit-events` provides permission-gated audit reads; the web app exposes them in its management area.
 
 ### `blueprints`
 
@@ -422,5 +422,6 @@ Authoring](blueprints.md) for the definition grammar and attribute policies.
 
 - `preview` is the only automatic projection. Search is a separate current-value
   query and there are no projection repair or backfill commands yet.
-- Search supports case-insensitive text matching across scalar values only;
-  typed filters and sorting are not yet available.
+- Search supports case-insensitive text matching across scalar values,
+  relationship-aware terms, system-tag filters, relationship-tree facets, and
+  configured scalar-column sorting. Typed attribute filters are not yet available.

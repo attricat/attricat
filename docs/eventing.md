@@ -95,8 +95,10 @@ A handler implements `api::event_dispatcher::EventHandler` and is installed in
 an `EventHandlerRegistry`. Its `name()` is a durable consumer identity, so make
 it stable across deploys (for example, `acme.search_index`). Renaming it creates
 a new consumer at the current watermark and does not migrate its old delivery
-history. Names must be unique in the registry and use the database's lowercase
-dotted identifier format.
+history. Handler names must be unique in the registry and use the database's lowercase
+dotted consumer-identifier format. Event `source_name` is broader: it accepts
+letter-led names containing letters, digits, `.`, `_`, `:`, or `-` (for example,
+`extension:attricat-extension-example`).
 
 `event_types()` returns an exact, non-empty list of supported version strings.
 Do not subscribe broadly and inspect an unknown payload in `handle`; register

@@ -4,13 +4,12 @@
 
 1. Install a Docker-compatible runtime, Rust, Node.js 18 or newer, `just`,
    `process-compose`, and `watchexec`.
-2. Run `just dev`. Its setup step installs the frontend dependencies, creates
-   `.env` from `.env.example`, assigns persistent ports for this worktree,
-   starts PostgreSQL, Mailpit, Jaeger, and RustFS, then watches the API, file worker,
-   and web app.
-3. Open the worktree-specific Vite URL printed by `just dev`; the selected
-   ports and `JAEGER_UI_URL` are recorded in the ignored `.catalog-worktree` file.
-   Open `JAEGER_UI_URL` to inspect local API and file-worker traces.
+2. Run `just setup` once. It installs frontend dependencies, creates `.env`
+   from `.env.example`, and assigns persistent ports for this worktree.
+3. Run `just dev`. It starts PostgreSQL, Mailpit, Jaeger, and RustFS, then
+   watches the API, file worker, and web app.
+4. Source `.catalog-worktree`, then open the worktree-specific `WEB_URL` and
+   `JAEGER_UI_URL`. Jaeger shows local API and file-worker traces.
 
 The API applies embedded SQLx migrations when it starts. To run them manually:
 
@@ -18,8 +17,8 @@ The API applies embedded SQLx migrations when it starts. To run them manually:
 just migrate
 ```
 
-Stop the application processes with `Ctrl-C`. The local containers persist
-until you run `just down`.
+Stop `just dev` with `Ctrl-C`. Its exit trap also runs `just down`, stopping
+and removing the local containers.
 
 See [Configuration](configuration.md) for connection, proxy, file-storage, and API limit
 settings. The local RustFS-backed production-compatibility check is opt-in and
@@ -30,8 +29,8 @@ just dev # leave this running in another terminal to start RustFS
 just test-s3-compat
 ```
 
-`test-s3-compat` creates the worktree environment and loads its generated S3
-settings before running the ignored RustFS compatibility test.
+Run `just setup` first. `test-s3-compat` uses that generated environment and
+runs the ignored RustFS compatibility test.
 
 ## Learn The Model
 

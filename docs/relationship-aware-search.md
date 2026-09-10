@@ -1,18 +1,19 @@
 # Relationship-Aware Explore Search
 
-> **Status: planned.** This document defines the implementation target for issue
-> #123; it does not describe the behavior currently deployed.
+> **Status: deployed.** This document describes the relationship-aware search
+> behavior used by the Explorer and `POST /v1/entities/search`.
 
-Explore will find entities of the selected blueprint from values on the entity
+Explore finds entities of the selected blueprint from values on the entity
 itself and values on entities connected to it through relationships. It also
 introduces a small, typed query language so that later search features extend a
 query plan rather than ad-hoc SQL text matching.
 
 The query pipeline is application-owned Rust code: it parses and validates the
 query, plans every term, performs breadth-first traversal, and combines
-candidate ID sets. PostgreSQL is used only for parameterized batched set reads;
-no recursive SQL, database functions, triggers, or other database-resident
-query behavior is introduced.
+candidate ID sets. PostgreSQL is used only for parameterized batched set reads in the
+relationship-aware candidate resolver; it introduces no database functions,
+triggers, or other database-resident query behavior. Relationship-facet tree
+queries may use recursive CTEs for hierarchy traversal.
 
 ## Matching Model
 
@@ -40,8 +41,8 @@ separated terms are intersected (implicit `AND`). Relationship-tree facet
 counts, selected-facet filtering, and paginated result pages consume that same
 candidate set, so they cannot disagree about which source entities match.
 
-The resolver must also retain a match witness for every accepted result and
-term. The search response will add `match_explanations` to each item: an array
+The resolver retains a match witness for every accepted result and term. The
+search response includes `match_explanations` to each item: an array
 with one deterministic witness per matched term containing the original term,
 the matching entity ID, matching attribute code when applicable, traversal
 depth, and the relationship-edge path from the returned entity to that match.
@@ -102,18 +103,17 @@ CLI client.
 
 ## Implementation Boundaries
 
-The backend will parse into typed query terms, compile validated terms using
-blueprint metadata, and invoke a shared candidate-ID resolver. The main entity
-search and relationship-tree facet child/count paths must both invoke this
-resolver. Direct-text predicates embedded in individual facet queries will be
-removed so all paths share semantics.
+The backend parses typed query terms, compiles validated terms using blueprint
+metadata, and invokes a shared candidate-ID resolver. Main entity search and
+relationship-tree facet child/count paths use that resolver so their text-query
+semantics agree.
 
-No migration is required. Index and query-telemetry work is deferred until
+No migration is required. Index and query-telemetry work remain deferred until
 representative catalogue data is available.
 
-## Acceptance Coverage
+## Coverage
 
-Integration tests must cover direct matches, the fact that bare terms do not
+Integration tests cover direct matches, the fact that bare terms do not
 traverse relationships, `*:` global traversal, explicit relationship matches,
 deleted entities, inactive relationships, structured selectors (including
 selected-blueprint code and user-specified-name aliases in both `blueprint:term`

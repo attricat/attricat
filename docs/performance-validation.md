@@ -39,4 +39,7 @@ Save the k6 JSON summary, the generator checkpoint, API git revision, PostgreSQL
 
 For index changes or unexpected latency, capture `EXPLAIN (ANALYZE, BUFFERS)` for the equivalent scalar-sort and relationship-sort selection queries using `just sql`. Do not put query text, fixture values, UUIDs, or SQL text into `Server-Timing` or the browser inspector.
 
-The API emits only aggregate `candidate`, `page`, `related`, and `serialize` Explorer timings. Browser tests continue to cover the bounded timing buffer and extension-cell frame load/fallback records.
+When development tools are enabled, Explorer responses emit aggregate `app`,
+`sql`, allowlisted `sql-*` query-count, and phase (`candidate`, `page`,
+`related`, and `serialize`) timings. Browser tests continue to cover the
+bounded timing buffer and extension-cell frame load/fallback records.

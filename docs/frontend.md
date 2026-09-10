@@ -4,7 +4,7 @@ These conventions apply to `apps/catalog-web`.
 
 ## TypeScript
 
-- Use arrow functions for TypeScript functions.
+- Prefer arrow functions for TypeScript functions; route declarations may use a named function when it improves stack traces or route readability.
 - Use semicolons and two-space indentation.
 - Keep feature code under `src/features/<feature>`.
 - Prefer relative imports within and between features; no path aliases are configured.

@@ -1,9 +1,9 @@
 # Configuration Reference
 
-The API loads `.env` from the working directory at startup. `just setup` and
-`just dev` create it from `.env.example` with persistent, worktree-specific
-ports. Those port assignments, plus ready-to-open `WEB_URL` and
-`MAILPIT_UI_URL`, and `RUSTFS_UI_URL` values, are recorded in the ignored
+The API loads `.env` from the working directory at startup. Run `just setup`
+once before `just dev`; it creates `.env` from `.env.example` and assigns
+persistent, worktree-specific ports. Those port assignments, plus ready-to-open
+`WEB_URL`, `MAILPIT_UI_URL`, `JAEGER_UI_URL`, and `RUSTFS_UI_URL` values, are recorded in the ignored
 `.catalog-worktree` file. The API and file worker validate object-storage
 configuration and bucket access during startup; neither starts with a missing
 or inaccessible configured bucket.
@@ -32,6 +32,9 @@ or inaccessible configured bucket.
 | `PREVIEW_MAX_RELATIONSHIP_ITEMS` | `10` | API | Maximum inline targets per relationship. |
 | `ENTITY_MAX_PAGE_SIZE` | `100` | API | Maximum page size for relationship browsing. |
 | `DATA_HEALTH_CACHE_TTL_SECONDS` | `300` | API | Data-health response cache lifetime. |
+| `INCOMING_RELATIONSHIP_MAX_PAGE_SIZE` | `50` | API | Maximum page size for incoming-relationship browsing. |
+| `RELATIONSHIP_FACET_MAX_NODES` | `100` | API | Maximum relationship nodes considered while building Explorer facets. |
+| `ATTRIBUTE_VALUE_HISTORY_RETENTION_DAYS` | `90` | API | Number of days of attribute-value history retained during API startup; must be a positive integer. |
 | `HTTP_REQUEST_TIMEOUT_SECONDS` | `30` | API | Positive wall-clock limit for a request after routing. Timed-out requests return `408`. |
 | `HTTP_MAX_CONCURRENT_REQUESTS` | `256` | API | Positive process-local in-flight request cap. Excess requests return `503` rather than waiting unboundedly. |
 | `HTTP_DEFAULT_BODY_BYTES` | `2097152` | API | Positive default body limit. Streaming upload routes explicitly disable it and enforce their file-specific limits. |
@@ -51,6 +54,8 @@ or inaccessible configured bucket.
 | `WEB_PORT` | `5173` | Vite | Listener port for the development web app. |
 | `SMTP_HOST` | `127.0.0.1` | API local development | Mailpit SMTP host. |
 | `SMTP_PORT` | `1025` | API local development | Mailpit SMTP port; `just setup` sets it to the worktree-specific port. |
+| `SMTP_USERNAME` | Unset | API | Optional SMTP username. |
+| `SMTP_PASSWORD` | Unset | API | Optional SMTP password; keep it in a secret manager outside local development. |
 | `MAIL_FROM` | `Catalog <no-reply@catalog.local>` | API local development | Sender address for lifecycle email. |
 | `PASSWORD_RESET_URL` | Local web confirmation URL | API local development | Absolute web URL used in reset email; `just setup` uses the worktree's `WEB_PORT`. |
 | `WORKSPACE_INVITATION_URL` | Local invitation URL | API local development | Absolute web URL used for delivered existing-user workspace invitations. |
@@ -74,6 +79,8 @@ or inaccessible configured bucket.
 | `FILE_WORKER_MAX_PIXELS` | `40000000` | File worker | Maximum decoded image pixels accepted for processing. |
 | `FILE_WORKER_MAX_ATTEMPTS` | `5` | File worker | Attempts before a job becomes terminally failed. |
 | `FILE_DELETE_GRACE_SECONDS` | `86400` | File worker | Delay between an unreferenced file being soft-deleted and its object purge. |
+| `CATALOG_E2E_FIXTURE_EMAIL` | Unset | API test environments | Optional test fixture user email. It takes effect only when paired with `CATALOG_E2E_FIXTURE_PASSWORD`; do not set either in production. |
+| `CATALOG_E2E_FIXTURE_PASSWORD` | Unset | API test environments | Optional test fixture user password paired with `CATALOG_E2E_FIXTURE_EMAIL`; do not set either in production. |
 | `RUSTFS_PORT` | `9000` | Docker Compose | Worktree-specific host port for the local RustFS S3 API. |
 | `RUSTFS_CONSOLE_PORT` | `9001` | Docker Compose | Worktree-specific host port for the local RustFS console. |
 

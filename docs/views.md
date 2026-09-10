@@ -108,7 +108,7 @@ field = "price"
 component = { id = "catalog.field_edit", version = 1 }
 ```
 
-Component IDs use lowercase dotted namespaces. The frontend registry lives at
+Component IDs use dot-delimited lowercase, underscore-separated segments. The frontend registry lives at
 `apps/catalog-web/src/features/views/components/registry.ts`; each registered
 component has its own module in that directory. A module exports its typed
 definition and, when it has one, its React renderer. `EntityView` resolves a
