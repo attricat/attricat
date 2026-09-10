@@ -1,5 +1,8 @@
 import http from 'node:http';
+import path from 'node:path';
 import { Readable } from 'node:stream';
+
+process.loadEnvFile(path.join(process.cwd(), '.env'));
 
 const upstreamValue = process.env.LLM_UPSTREAM_BASE_URL;
 const port = Number(process.env.LLM_LOOPBACK_PROXY_PORT ?? 4010);
