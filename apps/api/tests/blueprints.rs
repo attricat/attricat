@@ -217,7 +217,7 @@ value_type = "string"
 code = "category"
 value_type = "relationship"
 target_blueprint = "table_category"
-cardinality = "one_to_one"
+cardinality = "one"
 "#
         }))
         .send()
@@ -225,10 +225,8 @@ cardinality = "one_to_one"
         .unwrap();
     assert_eq!(response.status(), StatusCode::CREATED);
     let saved = response.json::<Value>().await.unwrap();
-    assert_eq!(
-        saved["attributes"][1]["relationship_cardinality"],
-        "one_to_one"
-    );
+    assert_eq!(saved["attributes"][1]["cardinality"], "one");
+    assert_eq!(saved["attributes"][1]["target_cardinality"], "many");
     assert_eq!(
         saved["blueprint"]["views"]["table"]["columns"][0]["field"],
         "category.name"

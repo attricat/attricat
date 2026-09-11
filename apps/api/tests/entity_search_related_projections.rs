@@ -126,7 +126,7 @@ value_type = "string"
 code = "categories"
 value_type = "relationship"
 target_blueprint = "search_projection_category"
-cardinality = "one_to_one"
+cardinality = "one"
 "# }))
         .send()
         .await

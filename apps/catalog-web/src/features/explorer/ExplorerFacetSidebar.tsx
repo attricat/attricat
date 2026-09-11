@@ -39,6 +39,7 @@ type Props = {
   contextCode: string;
   facets: ExplorerRelationshipFacet[];
   attributes: Attribute[];
+  pathAttributes?: { code: string; value_type: Attribute['value_type'] }[];
   attributeFilters: AttributeFilter[];
   query?: string;
   version?: number;
@@ -79,6 +80,7 @@ export const ExplorerFacetSidebar = ({
   onRemoveAttributeFilter,
   onUpdateAttributeFilter,
   onBlueprintChange,
+  pathAttributes,
   query,
   version,
   onContextChange,
@@ -177,6 +179,7 @@ export const ExplorerFacetSidebar = ({
       <ExplorerAttributeFilters
         attributes={attributes}
         filters={attributeFilters}
+        pathAttributes={pathAttributes}
         onAdd={onAddAttributeFilter}
         onRemove={onRemoveAttributeFilter}
         onUpdate={onUpdateAttributeFilter}
@@ -230,8 +233,7 @@ const Facet = ({
     ? draftHierarchy
     : hierarchyFields[0];
 
-  const singleSelect =
-    facet.sourceRelationship.relationship_cardinality === 'one_to_one';
+  const singleSelect = facet.sourceRelationship.cardinality === 'one';
   const openSelector = () => {
     setDraftIds(
       singleSelect ? facet.selectedIds.slice(0, 1) : facet.selectedIds,

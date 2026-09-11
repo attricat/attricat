@@ -46,7 +46,8 @@ pub struct Attribute {
     pub default_value: Option<Value>,
     pub file_policy: Option<Value>,
     pub target_blueprint_code: Option<String>,
-    pub relationship_cardinality: Option<String>,
+    pub cardinality: Option<String>,
+    pub target_cardinality: Option<String>,
     pub tags: Value,
     pub context_fallback: String,
     pub context_editable: String,
@@ -195,6 +196,15 @@ pub struct AttributeValueSelector {
 pub struct BlueprintWithAttributes {
     pub blueprint: Blueprint,
     pub attributes: Vec<Attribute>,
+    #[serde(default)]
+    pub table_path_attributes: Vec<TablePathAttribute>,
+}
+
+#[derive(Clone, Debug, Serialize)]
+pub struct TablePathAttribute {
+    pub code: String,
+    pub value_type: String,
+    pub sortable: bool,
 }
 
 #[derive(Clone, Debug, Serialize)]
@@ -222,6 +232,9 @@ pub struct EntityPreview {
     pub created_at: DateTime<Utc>,
     pub preview: Value,
     pub display: Value,
+    /// Scalar table values keyed by their configured local or relationship path.
+    #[serde(default)]
+    pub table_values: HashMap<String, Vec<Value>>,
     /// Direct relationship targets required by the current table columns, keyed by relationship
     /// attribute code. Each target is loaded once for the page and carries scalar cache only.
     #[serde(default)]

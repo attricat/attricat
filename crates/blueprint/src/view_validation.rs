@@ -246,29 +246,27 @@ fn validate_table_columns(
             }
         }
         let parts: Vec<_> = column.field.split('.').collect();
-        match parts.as_slice() {
-            [field] => {
-                validate_code(field, "table column field")?;
-                validate_view_field("table", field, attributes, false)?;
-            }
-            [relationship, target_field] => {
-                validate_code(relationship, "table column relationship")?;
-                validate_code(target_field, "table column target field")?;
-                let attribute = attributes
-                    .iter()
-                    .find(|attribute| attribute.code == *relationship)
-                    .ok_or_else(|| BlueprintError::UnknownViewField {
-                        view: "table".to_owned(),
-                        field: (*relationship).to_owned(),
-                    })?;
-                if attribute.value_type != "relationship" {
-                    return Err(BlueprintError::TableColumnRelationshipRequired {
-                        field: column.field.clone(),
-                    });
-                }
-            }
-            _ => {
-                return Err(BlueprintError::InvalidTableColumnPath {
+        if parts.is_empty() || parts.len() > 4 {
+            return Err(BlueprintError::InvalidTableColumnPath {
+                field: column.field.clone(),
+            });
+        }
+        for part in &parts {
+            validate_code(part, "table column path segment")?;
+        }
+        if parts.len() == 1 {
+            validate_view_field("table", parts[0], attributes, false)?;
+        } else {
+            let relationship = parts[0];
+            let attribute = attributes
+                .iter()
+                .find(|attribute| attribute.code == relationship)
+                .ok_or_else(|| BlueprintError::UnknownViewField {
+                    view: "table".to_owned(),
+                    field: relationship.to_owned(),
+                })?;
+            if attribute.value_type != "relationship" {
+                return Err(BlueprintError::TableColumnRelationshipRequired {
                     field: column.field.clone(),
                 });
             }

@@ -236,7 +236,7 @@ tags = ["searchable"]
 code = "color"
 value_type = "relationship"
 target_blueprint = "${colorCode}"
-cardinality = "one_to_one"`,
+cardinality = "one"`,
   );
   await createEntity(product, [
     scalar('title', 'Red shirt'),

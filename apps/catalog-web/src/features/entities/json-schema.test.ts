@@ -20,9 +20,15 @@ describe('JSON Schema validation', () => {
         value_schema: { minLength: 3 },
       }).value_schema,
     ).toEqual({ minLength: 3 });
-    expect(
-      attributeSchema.parse({ code: 'sku', value_type: 'string' }).value_schema,
-    ).toBeUndefined();
+    const scalarAttribute = attributeSchema.parse({
+      code: 'sku',
+      value_type: 'string',
+      cardinality: null,
+      target_cardinality: null,
+    });
+    expect(scalarAttribute.value_schema).toBeUndefined();
+    expect(scalarAttribute.cardinality).toBeNull();
+    expect(scalarAttribute.target_cardinality).toBeNull();
     expect(
       blueprintSchema.parse({
         code: 'product',

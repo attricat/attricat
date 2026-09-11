@@ -34,6 +34,7 @@ const page = (
   blueprint: {
     blueprint: { code: 'product', name: 'Product', version: 1, views: {} },
     attributes: [],
+    table_path_attributes: [],
   },
   items: items.map(({ id, label }) => ({
     id,
@@ -42,6 +43,7 @@ const page = (
     display: { default: label },
     match_explanations: [],
     preview: {},
+    table_values: {},
   })),
   next_cursor: nextCursor,
   total_count: null,
@@ -88,6 +90,7 @@ describe('RelationshipField', () => {
         },
       },
       attributes: [],
+      table_path_attributes: [],
     });
     vi.mocked(getEntityPreview).mockImplementation((id) =>
       Promise.resolve({
@@ -202,7 +205,8 @@ describe('RelationshipField', () => {
     );
     const onChange = renderField(vi.fn(), {
       ...attribute,
-      relationship_cardinality: 'one_to_one',
+      cardinality: 'one',
+      target_cardinality: 'many',
     });
     const user = userEvent.setup();
 

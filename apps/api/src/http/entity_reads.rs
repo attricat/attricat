@@ -25,7 +25,7 @@ use std::{
 use tracing::Instrument;
 use uuid::Uuid;
 
-const SEARCH_TOTAL_COUNT_CAP: i64 = 1_000;
+const SEARCH_TOTAL_COUNT_CAP: i64 = 500;
 const MAX_SEARCH_FILTERS: usize = 20;
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -202,7 +202,18 @@ pub(super) async fn search_entity_previews(
         ),
         None => None,
     };
-    let sort = resolve_table_sort(&repository, &current, input.sort.as_ref())
+    let search_blueprint = match selected {
+        Some(version) => repository
+            .get_blueprint_by_code_and_version(code, version)
+            .instrument(tracing::info_span!(
+                "sql.operation",
+                label = "blueprint-load"
+            ))
+            .await?
+            .expect("selected version was checked above"),
+        None => current.clone(),
+    };
+    let sort = resolve_table_sort(&repository, &search_blueprint, input.sort.as_ref())
         .instrument(tracing::info_span!(
             "sql.operation",
             label = "table-sort-resolve"
@@ -221,22 +232,10 @@ pub(super) async fn search_entity_previews(
         .as_deref()
         .map(str::trim)
         .filter(|v| !v.is_empty());
-    let search_blueprint = match selected {
-        Some(version) => repository
-            .get_blueprint_by_code_and_version(code, version)
-            .instrument(tracing::info_span!(
-                "sql.operation",
-                label = "blueprint-load"
-            ))
-            .await?
-            .expect("selected version was checked above"),
-        None => current.clone(),
-    };
-    let filters = input
-        .filters
-        .iter()
-        .map(|filter| resolve_search_filter(&search_blueprint, filter))
-        .collect::<Result<Vec<_>, _>>()?;
+    let mut filters = Vec::with_capacity(input.filters.len());
+    for filter in &input.filters {
+        filters.push(resolve_search_filter(&repository, &search_blueprint, filter).await?);
+    }
     let candidate_started = Instant::now();
     // An unfiltered current-version search is already constrained by the page query.
     // Avoid materializing every entity ID only to pass it back as `id = ANY(...)`.
@@ -427,6 +426,14 @@ pub(super) async fn search_entity_previews(
             .unwrap_or_default();
     }
     let related_started = Instant::now();
+    let table_paths = table_paths(&current);
+    repository
+        .hydrate_table_path_values(&mut items, &table_paths)
+        .instrument(tracing::info_span!(
+            "sql.operation",
+            label = "table-path-hydrate"
+        ))
+        .await?;
     repository
         .hydrate_related_table_previews(&mut items, &table_relationships(&current))
         .instrument(tracing::info_span!(
@@ -458,18 +465,57 @@ fn intersect_entity_ids(current: Option<Vec<Uuid>>, next: Vec<Uuid>) -> Vec<Uuid
     }
 }
 
-fn resolve_search_filter(
+async fn resolve_search_filter(
+    repository: &crate::repository::CatalogRepository,
     blueprint: &crate::model::BlueprintWithAttributes,
     filter: &SearchFilter,
 ) -> Result<EntitySearchFilter, ApiError> {
-    let attribute = blueprint
+    let parts: Vec<_> = filter.field.split('.').collect();
+    if parts.is_empty() || parts.len() > 4 || parts.iter().any(|part| part.is_empty()) {
+        return Err(ApiError::invalid_input(
+            "filters.field may contain at most three relationship hops and a scalar leaf"
+                .to_owned(),
+        ));
+    }
+    let mut current = blueprint.clone();
+    let mut relationship_path = Vec::new();
+    for relationship_name in &parts[..parts.len() - 1] {
+        let relationship = current
+            .attributes
+            .iter()
+            .find(|attribute| {
+                attribute.code == *relationship_name && attribute.value_type == "relationship"
+            })
+            .ok_or_else(|| {
+                ApiError::invalid_input(format!(
+                    "filters.field segment '{}' is not a relationship",
+                    relationship_name
+                ))
+            })?;
+        relationship_path.push(relationship.code.clone());
+        let target = relationship
+            .target_blueprint_code
+            .as_deref()
+            .ok_or_else(|| {
+                ApiError::invalid_input(format!(
+                    "filters.field relationship '{}' has no target blueprint",
+                    relationship_name
+                ))
+            })?;
+        current = repository
+            .get_blueprint_by_code(target)
+            .await?
+            .ok_or_else(|| ApiError::not_found("target blueprint"))?;
+    }
+    let leaf_field = parts[parts.len() - 1];
+    let attribute = current
         .attributes
         .iter()
-        .find(|attribute| attribute.code == filter.field)
+        .find(|attribute| attribute.code == leaf_field)
         .ok_or_else(|| {
             ApiError::invalid_input(format!(
-                "filters.field '{}' is not an attribute",
-                filter.field
+                "filters.field leaf '{}' is not an attribute",
+                leaf_field
             ))
         })?;
     let value_type = attribute.value_type.as_str();
@@ -518,13 +564,23 @@ fn resolve_search_filter(
     })?;
     Ok(EntitySearchFilter {
         field: filter.field.clone(),
+        relationship_path,
+        leaf_field: attribute.code.clone(),
         operator: filter.operator.clone(),
         value_type: value_type.to_owned(),
         value,
     })
 }
 
-/// Only relationship hops used by rich table columns need page-level hydration.
+fn table_paths(blueprint: &crate::model::BlueprintWithAttributes) -> HashMap<String, String> {
+    blueprint
+        .table_path_attributes
+        .iter()
+        .map(|attribute| (attribute.code.clone(), attribute.value_type.clone()))
+        .collect()
+}
+
+/// Only direct relationship hops used by legacy rich table columns need hydration.
 fn table_relationships(
     blueprint: &crate::model::BlueprintWithAttributes,
 ) -> HashMap<String, String> {
@@ -588,45 +644,50 @@ async fn resolve_table_sort(
             "sort.field must be a configured table column".to_owned(),
         ));
     }
-    let (relationship, attribute_code) = match sort.field.split_once('.') {
-        Some((relationship, field)) => (Some(relationship.to_owned()), field),
-        None => (None, sort.field.as_str()),
-    };
-    let value_type = match &relationship {
-        None => blueprint
+    let parts: Vec<_> = sort.field.split('.').collect();
+    if parts.is_empty() || parts.len() > 4 {
+        return Err(ApiError::invalid_input(
+            "sort.field may contain at most three relationship hops and a scalar leaf".to_owned(),
+        ));
+    }
+    let mut current = blueprint.clone();
+    let mut relationship_path = Vec::new();
+    for relationship_name in &parts[..parts.len() - 1] {
+        let relationship = current
             .attributes
             .iter()
-            .find(|attribute| attribute.code == attribute_code)
-            .map(|attribute| attribute.value_type.clone()),
-        Some(relationship) => {
-            let source = blueprint
-                .attributes
-                .iter()
-                .find(|attribute| {
-                    attribute.code == *relationship && attribute.value_type == "relationship"
-                })
-                .ok_or_else(|| {
-                    ApiError::invalid_input("sort.field relationship is invalid".to_owned())
-                })?;
-            let target_code = source.target_blueprint_code.as_deref().ok_or_else(|| {
-                ApiError::invalid_input(
-                    "sort.field relationship has no target blueprint".to_owned(),
-                )
+            .find(|attribute| {
+                attribute.code == *relationship_name && attribute.value_type == "relationship"
+            })
+            .ok_or_else(|| {
+                ApiError::invalid_input("sort.field relationship is invalid".to_owned())
             })?;
-            let target = repository
-                .get_blueprint_by_code(target_code)
-                .await?
-                .ok_or_else(|| ApiError::not_found("target blueprint"))?;
-            target
-                .attributes
-                .iter()
-                .find(|attribute| attribute.code == attribute_code)
-                .map(|attribute| attribute.value_type.clone())
+        if relationship.cardinality.as_deref() != Some("one") {
+            return Err(ApiError::invalid_input(
+                "sort.field relationship path must be single-valued".to_owned(),
+            ));
         }
+        relationship_path.push(relationship.code.clone());
+        current = repository
+            .get_blueprint_by_code(relationship.target_blueprint_code.as_deref().ok_or_else(
+                || {
+                    ApiError::invalid_input(
+                        "sort.field relationship has no target blueprint".to_owned(),
+                    )
+                },
+            )?)
+            .await?
+            .ok_or_else(|| ApiError::not_found("target blueprint"))?;
     }
-    .ok_or_else(|| {
-        ApiError::invalid_input("sort.field must resolve to a scalar table column".to_owned())
-    })?;
+    let leaf_field = parts[parts.len() - 1];
+    let value_type = current
+        .attributes
+        .iter()
+        .find(|attribute| attribute.code == leaf_field)
+        .map(|attribute| attribute.value_type.clone())
+        .ok_or_else(|| {
+            ApiError::invalid_input("sort.field must resolve to a scalar table column".to_owned())
+        })?;
     if !matches!(
         value_type.as_str(),
         "string" | "number" | "integer" | "boolean" | "date" | "datetime" | "time"
@@ -637,7 +698,8 @@ async fn resolve_table_sort(
     }
     Ok(Some(EntitySearchSort {
         field: sort.field.clone(),
-        relationship,
+        relationship_path,
+        leaf_field: leaf_field.to_owned(),
         value_type,
         descending,
     }))

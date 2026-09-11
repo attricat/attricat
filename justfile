@@ -25,9 +25,48 @@ test-s3-compat: _assert-env
     cargo test -p api --test s3_compat -- --ignored
 
 reset-db: _assert-env
-    sqlx database drop -y --database-url "$DATABASE_URL"
-    sqlx database create --database-url "$DATABASE_URL"
-    sqlx migrate run --source apps/api/migrations --database-url "$DATABASE_URL"
+    #!/usr/bin/env bash
+    set -euo pipefail
+    worktree="$(pwd -P)"
+    pids=()
+    while IFS= read -r pid; do
+        cwd="$(lsof -a -p "$pid" -d cwd -Fn 2>/dev/null | awk '/^n/ { print substr($0, 2); exit }')"
+        if [[ "$cwd" == "$worktree" ]]; then
+            pids+=("$pid")
+        fi
+    done < <(pgrep -f 'target/debug/(api|file-worker)( |$)' || true)
+
+    restart_services() {
+        if ((${#pids[@]})); then
+            touch apps/api/src/lib.rs
+            echo "Restarting API and file worker through watchexec."
+        fi
+    }
+    trap restart_services EXIT
+
+    if ((${#pids[@]})); then
+        echo "Stopping API and file-worker processes: ${pids[*]}"
+        kill "${pids[@]}"
+        for _ in {1..100}; do
+            running=false
+            for pid in "${pids[@]}"; do
+                if kill -0 "$pid" 2>/dev/null; then
+                    running=true
+                    break
+                fi
+            done
+            $running || break
+            sleep 0.1
+        done
+        for pid in "${pids[@]}"; do
+            if kill -0 "$pid" 2>/dev/null; then
+                echo "Timed out waiting for process $pid to stop." >&2
+                exit 1
+            fi
+        done
+    fi
+
+    sqlx database reset -y --force --source ./apps/api/migrations --database-url "$DATABASE_URL"
 
 generate size="small" industry="pc-components": _assert-env
     CATALOG_SERVER="$CATALOG_API_URL" node examples/generate.mjs --industry "{{industry}}" --size "{{size}}" --concurrency 8

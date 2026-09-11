@@ -237,6 +237,7 @@ export const Explorer = ({ search: urlSearch }: { search: ExplorerSearch }) => {
           onRemoveAttributeFilter={removeAttributeFilter}
           onUpdate={updateFacet}
           onUpdateAttributeFilter={updateAttributeFilter}
+          pathAttributes={selectedBlueprint.data?.table_path_attributes}
           query={search.query}
           version={search.version}
         />
@@ -347,6 +348,7 @@ export const Explorer = ({ search: urlSearch }: { search: ExplorerSearch }) => {
                   onRemoveAttributeFilter={removeAttributeFilter}
                   onUpdate={updateFacet}
                   onUpdateAttributeFilter={updateAttributeFilter}
+                  pathAttributes={selectedBlueprint.data?.table_path_attributes}
                   query={search.query}
                   version={search.version}
                 />

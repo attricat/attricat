@@ -24,9 +24,10 @@ For a bare free-text term, the server searches only non-relationship scalar
 values on entities of the selected blueprint (depth 0). It does not traverse
 relationships.
 
-A relationship-qualified term, such as `color:red` or `color.name:red`, first
-finds matching scalar values on that relationship's target blueprint, then
-traverses the named **incoming active relationship edge** in one batched step:
+A relationship-qualified term, such as `color.name:red` or
+`family.product_type.name:graphics`, first finds matching scalar values on the
+path's target blueprint, then traverses up to three named **incoming active
+relationship edges** in batched steps:
 an edge from Product to Color allows a matching Color value to select that
 Product. Deleted entities and inactive edges are excluded.
 
@@ -83,9 +84,10 @@ Unknown, ambiguous, or incompatible names and malformed terms return a clear
 and means prefix matching. Values are always passed to SQL as parameters;
 query wildcards are never interpolated into SQL.
 
-Implicit relationship traversal, explicit multi-hop selectors (such as
-`category.parent.name:summer`), boolean operators other than implicit `AND`,
-and ranking are out of scope. `*:` is the only global multi-hop mode.
+Explicit selectors may contain up to three relationship hops followed by a
+scalar leaf, such as `category.parent.name:summer`. Deeper selectors, implicit
+relationship traversal, boolean operators other than implicit `AND`, and ranking
+are out of scope. `*:` remains the only global multi-hop mode.
 
 ## API and UI Contract
 

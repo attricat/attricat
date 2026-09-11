@@ -109,45 +109,8 @@ async fn validate_table_columns(
             continue;
         };
         for column in columns {
-            let value_type = if let Some((relationship, target_field)) =
-                column.field.split_once('.')
-            {
-                let source = compiled
-                    .attributes
-                    .iter()
-                    .find(|attribute| attribute.code == relationship)
-                    .expect("compiler validated table relationship");
-                if source.relationship_cardinality.as_deref() != Some("one_to_one") {
-                    return Err(RepositoryError::InvalidBlueprintDefinition(format!(
-                        "table column '{}' requires a one_to_one relationship",
-                        column.field
-                    )));
-                }
-                let target = source.target_blueprint.as_deref().ok_or_else(|| {
-                    RepositoryError::InvalidBlueprintDefinition(format!(
-                        "table column '{}' relationship has no target blueprint",
-                        column.field
-                    ))
-                })?;
-                let target_type = sqlx::query_scalar::<_, String>(
-                    "SELECT a.value_type FROM blueprints b JOIN attributes a ON a.blueprint_id = b.id AND a.blueprint_version = b.version WHERE b.code = $1 AND b.workspace_id = $2 AND b.deleted_at IS NULL AND a.code = $3 AND a.deleted_at IS NULL ORDER BY b.version DESC LIMIT 1",
-                )
-                .bind(target)
-                .bind(workspace_id)
-                .bind(target_field)
-                .fetch_optional(&mut **transaction)
-                .await?
-                .ok_or_else(|| RepositoryError::InvalidBlueprintDefinition(format!(
-                    "table column '{}' target field was not found", column.field
-                )))?;
-                if target_type == "relationship" || target_type == "file" {
-                    return Err(RepositoryError::InvalidBlueprintDefinition(format!(
-                        "table column '{}' target field must be scalar",
-                        column.field
-                    )));
-                }
-                target_type
-            } else {
+            let parts: Vec<_> = column.field.split('.').collect();
+            let value_type = if parts.len() == 1 {
                 compiled
                     .attributes
                     .iter()
@@ -155,6 +118,55 @@ async fn validate_table_columns(
                     .expect("compiler validated table field")
                     .value_type
                     .clone()
+            } else {
+                let source = compiled
+                    .attributes
+                    .iter()
+                    .find(|attribute| attribute.code == parts[0])
+                    .expect("compiler validated table relationship");
+                let mut target = source.target_blueprint.clone().ok_or_else(|| {
+                    RepositoryError::InvalidBlueprintDefinition(format!(
+                        "table column '{}' relationship has no target blueprint",
+                        column.field
+                    ))
+                })?;
+                let mut leaf_type = None;
+                for (index, field) in parts[1..].iter().enumerate() {
+                    let (value_type, next_target) = sqlx::query_as::<_, (String, Option<String>)>(
+                        "SELECT a.value_type, a.target_blueprint_code FROM blueprints b JOIN attributes a ON a.blueprint_id = b.id AND a.blueprint_version = b.version WHERE b.code = $1 AND b.workspace_id = $2 AND b.status = 'published' AND b.deleted_at IS NULL AND a.code = $3 AND a.deleted_at IS NULL ORDER BY b.version DESC LIMIT 1",
+                    )
+                    .bind(&target)
+                    .bind(workspace_id)
+                    .bind(field)
+                    .fetch_optional(&mut **transaction)
+                    .await?
+                    .ok_or_else(|| RepositoryError::InvalidBlueprintDefinition(format!(
+                        "table column '{}' path segment '{}' was not found", column.field, field
+                    )))?;
+                    let is_leaf = index + 1 == parts.len() - 1;
+                    if is_leaf {
+                        if value_type == "relationship" || value_type == "file" {
+                            return Err(RepositoryError::InvalidBlueprintDefinition(format!(
+                                "table column '{}' leaf must be scalar",
+                                column.field
+                            )));
+                        }
+                        leaf_type = Some(value_type);
+                    } else if value_type != "relationship" {
+                        return Err(RepositoryError::InvalidBlueprintDefinition(format!(
+                            "table column '{}' segment '{}' must be a relationship",
+                            column.field, field
+                        )));
+                    } else {
+                        target = next_target.ok_or_else(|| {
+                            RepositoryError::InvalidBlueprintDefinition(format!(
+                                "table column '{}' segment '{}' has no target blueprint",
+                                column.field, field
+                            ))
+                        })?;
+                    }
+                }
+                leaf_type.expect("relationship table path has a leaf")
             };
             if let Some(renderer) = &column.renderer {
                 validate_renderer(transaction, workspace_id, renderer, &value_type).await?;

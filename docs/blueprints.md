@@ -70,23 +70,26 @@ value_type = "string"
 default_value = "draft"
 ```
 
-A relationship may restrict its target type. Set `cardinality = "one_to_one"`
-to allow at most one active target for the source entity in each context and to
-prevent another source entity from claiming that target in the same context.
-Omit `cardinality` for the default many-target relationship.
+A relationship may restrict its target type and directional cardinality.
+`cardinality = "one"` allows at most one active target per source and context;
+`target_cardinality = "one"` allows at most one source to claim a target for the
+versioned field and context. Each defaults to `"many"`, so `cardinality = "one"`
+alone models a reusable single-select relationship.
 
 ```toml
 [[attributes]]
 code = "category"
 value_type = "relationship"
 target_blueprint = "category"
-cardinality = "one_to_one"
+cardinality = "one"
 ```
 
 A relationship write that would violate this invariant returns
 `409 relationship_cardinality_conflict`. A migration preview reports the same
 kind of issue when existing relationship values cannot fit a target revision's
-one-to-one declaration.
+source limit. Set both cardinalities to `"one"` only for exclusive pairing; see
+[Tags, labels, and classifications](classifications.md) for the recommended
+model for controlled classifications.
 
 File attributes declare their cardinality and upload policy. `many` values are
 ordered by default; set `ordered = false` when callers must not rely on their
@@ -192,8 +195,8 @@ label = "Category"
 ```
 
 `columns` is the current table syntax. Each column names either a local scalar
-field or one scalar field exactly one hop through a `one_to_one` relationship.
-Column paths must be unique; the relationship and target field must exist.
+field or a scalar field through at most three relationship hops. Column paths
+must be unique; each relationship and the scalar leaf must exist.
 `label` is optional. The legacy `fields = ["title", "stock_on_hand"]`
 shorthand remains supported for local scalar fields, but cannot be combined
 with `columns`.

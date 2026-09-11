@@ -1,5 +1,5 @@
 export const id = "pc-components";
-export const schemaVersion = 1;
+export const schemaVersion = 3;
 
 export const profiles = {
   micro: { families: 199, skus: 796, categories: 4, manufacturers: 1 },
@@ -64,6 +64,42 @@ value_type = "relationship"
 target_blueprint = "${prefix}_category"
 context_fallback = "none"`,
   ),
+  product_type: blueprint(
+    `${prefix}_product_type`,
+    "PC product type",
+    `[[attributes]]
+code = "name"
+value_type = "string"
+tags = ["display", "searchable"]
+
+[[attributes]]
+code = "code"
+value_type = "string"`,
+  ),
+  interface_standard: blueprint(
+    `${prefix}_interface_standard`,
+    "PC interface standard",
+    `[[attributes]]
+code = "name"
+value_type = "string"
+tags = ["display", "searchable"]
+
+[[attributes]]
+code = "code"
+value_type = "string"`,
+  ),
+  form_factor: blueprint(
+    `${prefix}_form_factor`,
+    "PC form factor",
+    `[[attributes]]
+code = "name"
+value_type = "string"
+tags = ["display", "searchable"]
+
+[[attributes]]
+code = "code"
+value_type = "string"`,
+  ),
   family: blueprint(
     `${prefix}_family`,
     "PC product family",
@@ -82,17 +118,33 @@ value_type = "string"
 
 [[attributes]]
 code = "product_type"
-value_type = "string"
+value_type = "relationship"
+target_blueprint = "${prefix}_product_type"
+cardinality = "one"
+
+[[attributes]]
+code = "interface_standard"
+value_type = "relationship"
+target_blueprint = "${prefix}_interface_standard"
+cardinality = "one"
+
+[[attributes]]
+code = "form_factor"
+value_type = "relationship"
+target_blueprint = "${prefix}_form_factor"
+cardinality = "one"
 
 [[attributes]]
 code = "category"
 value_type = "relationship"
 target_blueprint = "${prefix}_category"
+cardinality = "one"
 
 [[attributes]]
 code = "manufacturer"
 value_type = "relationship"
-target_blueprint = "${prefix}_manufacturer"`,
+target_blueprint = "${prefix}_manufacturer"
+cardinality = "one"`,
   ),
   sku: blueprint(
     `${prefix}_sku`,
@@ -111,10 +163,6 @@ code = "description"
 value_type = "string"
 
 [[attributes]]
-code = "product_type"
-value_type = "string"
-
-[[attributes]]
 code = "price"
 value_type = "number"
 
@@ -127,15 +175,7 @@ code = "availability"
 value_type = "string"
 
 [[attributes]]
-code = "interface"
-value_type = "string"
-
-[[attributes]]
 code = "capacity"
-value_type = "string"
-
-[[attributes]]
-code = "form_factor"
 value_type = "string"
 
 [[attributes]]
@@ -146,23 +186,22 @@ value_type = "number"
 code = "family"
 value_type = "relationship"
 target_blueprint = "${prefix}_family"
-
-[[attributes]]
-code = "category"
-value_type = "relationship"
-target_blueprint = "${prefix}_category"
-
-[[attributes]]
-code = "manufacturer"
-value_type = "relationship"
-target_blueprint = "${prefix}_manufacturer"
+cardinality = "one"
 
 [[attributes]]
 code = "compatible_skus"
 value_type = "relationship"
 target_blueprint = "${prefix}_sku"
-cardinality = "one_to_one"
 context_fallback = "none"
+
+[[attributes]]
+code = "main_photo"
+value_type = "file"
+allowed_mime_groups = ["image"]
+allowed_extensions = ["png"]
+max_bytes = 1048576
+purposes = ["product_image"]
+image_only = true
 
 [[attributes]]
 code = "product_files"
@@ -174,14 +213,16 @@ max_bytes = 1048576`,
     `[
   { field = "name", label = "Product" },
   { field = "sku", label = "SKU" },
-  { field = "product_type", label = "Type" },
-  { field = "compatible_skus.name", label = "Compatible SKU" },
+  { field = "family.name", label = "Family" },
+  { field = "family.product_type.name", label = "Product type" },
+  { field = "family.interface_standard.name", label = "Interface" },
+  { field = "family.form_factor.name", label = "Form factor" },
+  { field = "family.category.name", label = "Category" },
+  { field = "family.manufacturer.name", label = "Manufacturer" },
   { field = "price", label = "Price" },
   { field = "stock_on_hand", label = "Stock" },
   { field = "availability", label = "Availability" },
-  { field = "interface", label = "Interface" },
   { field = "capacity", label = "Capacity" },
-  { field = "form_factor", label = "Form factor" },
   { field = "wattage", label = "Wattage" },
 ]`,
   ),
@@ -210,6 +251,14 @@ const types = [
   ["Computer Case", "USB-C", "Mid tower", 0],
 ];
 const capacity = ["8 GB", "16 GB", "32 GB", "64 GB", "1 TB", "2 TB", "4 TB"];
+
+export const classificationValues = {
+  product_type: types.map(([name]) => name),
+  interface_standard: [
+    ...new Set(types.map(([, interfaceName]) => interfaceName)),
+  ],
+  form_factor: [...new Set(types.map(([, , formFactor]) => formFactor))],
+};
 
 export const categoryFor = (index) => ({
   name: `${["Components", "Storage", "Memory", "Networking", "Cooling", "Cases", "Power", "Accessories"][index % 8]} ${String(index + 1).padStart(4, "0")}`,
@@ -284,31 +333,29 @@ export const familyValues = (family) => [
   ["name", family.name],
   ["family_code", family.code],
   ["description", family.description],
-  ["product_type", family.type],
 ];
 
 export const skuValues = (sku, family) => [
   ["name", sku.name],
   ["sku", sku.sku],
   ["description", sku.description],
-  ["product_type", family.type],
   ["price", sku.price],
   ["stock_on_hand", sku.stock],
   ["availability", sku.availability],
-  ["interface", family.interfaceName],
   ["capacity", sku.capacity],
-  ["form_factor", family.formFactor],
   ["wattage", family.wattage],
 ];
 
 export const relationshipFields = {
   categoryParent: "parent_category",
+  familyProductType: "product_type",
+  familyInterfaceStandard: "interface_standard",
+  familyFormFactor: "form_factor",
   familyCategory: "category",
   familyManufacturer: "manufacturer",
   skuFamily: "family",
-  skuCategory: "category",
-  skuManufacturer: "manufacturer",
   skuCompatible: "compatible_skus",
+  skuMainPhoto: "main_photo",
   skuFiles: "product_files",
 };
 

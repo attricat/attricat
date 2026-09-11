@@ -38,6 +38,8 @@ runs the ignored RustFS compatibility test.
   views, and validation.
 - [Database model](database.md): persisted model, value history, projections,
   contexts, and publication behavior.
+- [Tags, labels, and classifications](classifications.md): model controlled
+  vocabularies with entities, relationships, contexts, and hierarchies.
 - [Domain eventing](eventing.md): transactional outbox contract and delivery semantics.
 - [Extensions](extensions.md): strict manifest, permissions, webhook, and lifecycle contracts.
 - [Authentication and identity adapters](authentication.md): local password

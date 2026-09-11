@@ -44,7 +44,8 @@ from = "seo.meta_title"
                     default_value: None,
                     file_policy: None,
                     target_blueprint: None,
-                    relationship_cardinality: None,
+                    cardinality: None,
+                    target_cardinality: None,
                     tags: vec![],
                     context_fallback: "default".to_owned(),
                     context_editable: "all".to_owned(),
@@ -58,7 +59,8 @@ from = "seo.meta_title"
                     default_value: None,
                     file_policy: None,
                     target_blueprint: None,
-                    relationship_cardinality: None,
+                    cardinality: None,
+                    target_cardinality: None,
                     tags: vec![],
                     context_fallback: "default".to_owned(),
                     context_editable: "all".to_owned(),
@@ -813,18 +815,31 @@ value_type = "string"
 code = "category"
 value_type = "relationship"
 target_blueprint = "category"
-cardinality = "one_to_one"
+cardinality = "one"
 "#;
     let compiled = compile(parse(source).unwrap(), &[], source).unwrap();
+    assert_eq!(compiled.attributes[1].cardinality.as_deref(), Some("one"));
     assert_eq!(
-        compiled.attributes[1].relationship_cardinality.as_deref(),
-        Some("one_to_one")
+        compiled.attributes[1].target_cardinality.as_deref(),
+        Some("many")
+    );
+    let legacy = compile(
+        parse(&source.replace("cardinality = \"one\"", "cardinality = \"one_to_one\"")).unwrap(),
+        &[],
+        source,
+    )
+    .unwrap();
+    assert_eq!(legacy.attributes[1].cardinality.as_deref(), Some("one"));
+    assert_eq!(
+        legacy.attributes[1].target_cardinality.as_deref(),
+        Some("one")
     );
     assert!(
         compile(
-            parse(&source.replace("category.name", "category.parent.name")).unwrap(),
+            parse(&source.replace("category.name", "category.parent.parent.parent.name",),)
+                .unwrap(),
             &[],
-            source
+            source,
         )
         .is_err()
     );
@@ -836,7 +851,5 @@ cardinality = "one_to_one"
         )
         .is_err()
     );
-    assert!(
-        parse(&source.replace("cardinality = \"one_to_one\"", "cardinality = \"many\"")).is_err()
-    );
+    assert!(parse(&source.replace("cardinality = \"one\"", "cardinality = \"invalid\"")).is_err());
 }

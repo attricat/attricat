@@ -98,9 +98,7 @@ impl CatalogRepository {
             } = value
                 && target_attributes
                     .get(attribute_code.as_str())
-                    .is_some_and(|attribute| {
-                        attribute.relationship_cardinality.as_deref() == Some("one_to_one")
-                    })
+                    .is_some_and(|attribute| attribute.cardinality.as_deref() == Some("one"))
             {
                 relationship_targets
                     .entry((attribute_code.clone(), *context_id))
@@ -114,7 +112,7 @@ impl CatalogRepository {
                     attribute_code: Some(attribute_code),
                     kind: "relationship_cardinality_conflict".to_owned(),
                     message:
-                        "The target revision permits only one relationship target in each context"
+                        "The target revision permits only one relationship target per source in each context"
                             .to_owned(),
                 });
             }
@@ -203,6 +201,8 @@ impl CatalogRepository {
     ) -> Result<Entity, RepositoryError> {
         let migration_input = serde_json::to_value(&input).expect("migration input serializes");
         let mut transaction = self.pool.begin().await?;
+        self.lock_relationship_cardinality_writes(&mut transaction)
+            .await?;
         let entity = self.lock_entity(&mut transaction, entity_id).await?;
         let migration = sqlx::query_as::<_, (Uuid, i64, i64, String)>(
             "SELECT entity_id, source_version, target_version, status FROM entity_blueprint_migrations WHERE id = $1 AND workspace_id = $2 FOR UPDATE",

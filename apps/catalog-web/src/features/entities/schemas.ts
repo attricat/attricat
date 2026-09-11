@@ -224,7 +224,8 @@ export const attributeSchema = z
     code: z.string(),
     value_type: valueTypeSchema,
     target_blueprint_code: z.string().nullable().optional(),
-    relationship_cardinality: z.literal('one_to_one').nullable().optional(),
+    cardinality: z.enum(['one', 'many']).nullable().optional(),
+    target_cardinality: z.enum(['one', 'many']).nullable().optional(),
     context_fallback: z.enum(['default', 'none']).optional(),
     context_editable: z.enum(['all', 'default']).optional(),
     readonly: z.boolean().optional(),
@@ -255,6 +256,15 @@ export const blueprintSchema = z
 export const blueprintWithAttributesSchema = z.object({
   blueprint: blueprintSchema,
   attributes: z.array(attributeSchema),
+  table_path_attributes: z
+    .array(
+      z.object({
+        code: z.string(),
+        value_type: valueTypeSchema,
+        sortable: z.boolean(),
+      }),
+    )
+    .default([]),
 });
 const scalarValueSchema = z.union([
   z.string(),
@@ -309,6 +319,7 @@ const entityItemSchema = z.object({
   schema_outdated: z.boolean(),
   display: z.record(z.string(), z.string()),
   preview: z.record(z.string(), jsonObjectSchema),
+  table_values: z.record(z.string(), z.array(z.unknown())).default({}),
   related: z
     .record(
       z.string(),

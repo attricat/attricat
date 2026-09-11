@@ -293,15 +293,24 @@ const ensureContext = async (client, code, data, parentId) => {
   }
 };
 
-const countPlan = (profile, includeFiles, pack) => ({
-  entities: Object.values(profile).reduce((total, value) => total + value, 0),
-  requests:
-    profile.categories * 2 +
-    profile.manufacturers +
-    profile.families * 2 +
-    profile.skus * 2 +
-    (includeFiles ? pack.assets.length * 2 : 0),
-});
+const countPlan = (profile, includeFiles, pack) => {
+  const classifications = Object.values(pack.classificationValues).reduce(
+    (total, values) => total + values.length,
+    0,
+  );
+  return {
+    entities:
+      Object.values(profile).reduce((total, value) => total + value, 0) +
+      classifications,
+    requests:
+      classifications +
+      profile.categories * 2 +
+      profile.manufacturers +
+      profile.families * 2 +
+      profile.skus * 2 +
+      (includeFiles ? pack.assets.length * 2 : 0),
+  };
+};
 
 const readCheckpoint = async (path) => JSON.parse(await readFile(path, "utf8"));
 
@@ -385,6 +394,7 @@ const run = async () => {
         phase: "blueprints",
         manufacturer_ids: [],
         category_ids: [],
+        classification_ids: {},
         family_cursor: 0,
         file_targets: [],
         counts: { entities: 0 },
@@ -458,9 +468,33 @@ const run = async () => {
         { channel: "web", dataset: datasetId },
         root.id,
       );
-      checkpoint.phase = "manufacturers";
+      checkpoint.phase = "classifications";
       await persist();
       if (await stopIfRequested()) return;
+    }
+    if (checkpoint.phase === "classifications") {
+      progress.phase = "classifications";
+      for (const [kind, values] of Object.entries(pack.classificationValues)) {
+        const ids = (checkpoint.classification_ids[kind] ??= []);
+        for (let index = ids.length; index < values.length; index += 1) {
+          const entity = await client.createEntity(
+            codes[kind],
+            [
+              scalar("name", values[index]),
+              scalar("code", `pc-${kind}-${index + 1}`),
+            ],
+            metadata(kind, index),
+            tag,
+          );
+          ids.push(entity.id);
+          checkpoint.counts.entities += 1;
+          progress.tick({ entities: 1 });
+          await persist();
+          if (await stopIfRequested()) return;
+        }
+      }
+      checkpoint.phase = "manufacturers";
+      await persist();
     }
     if (checkpoint.phase === "manufacturers") {
       progress.phase = "manufacturers";
@@ -546,7 +580,34 @@ const run = async () => {
               metadata("family", index),
               tag,
             );
+            const classificationId = (kind, value) => {
+              const valueIndex = pack.classificationValues[kind].indexOf(value);
+              if (valueIndex < 0)
+                throw new Error(`Missing ${kind} classification for ${value}`);
+              return checkpoint.classification_ids[kind][valueIndex];
+            };
             await client.replaceRelationships(familyEntity.id, [
+              {
+                attribute_code: fields.familyProductType,
+                context_id: rootContextId,
+                target_entity_ids: [
+                  classificationId("product_type", family.type),
+                ],
+              },
+              {
+                attribute_code: fields.familyInterfaceStandard,
+                context_id: rootContextId,
+                target_entity_ids: [
+                  classificationId("interface_standard", family.interfaceName),
+                ],
+              },
+              {
+                attribute_code: fields.familyFormFactor,
+                context_id: rootContextId,
+                target_entity_ids: [
+                  classificationId("form_factor", family.formFactor),
+                ],
+              },
               {
                 attribute_code: fields.familyCategory,
                 context_id: rootContextId,
@@ -582,16 +643,6 @@ const run = async () => {
                   target_entity_ids: [familyEntity.id],
                 },
                 {
-                  attribute_code: fields.skuCategory,
-                  context_id: rootContextId,
-                  target_entity_ids: [categoryId],
-                },
-                {
-                  attribute_code: fields.skuManufacturer,
-                  context_id: rootContextId,
-                  target_entity_ids: [manufacturerId],
-                },
-                {
                   attribute_code: fields.skuCompatible,
                   context_id: rootContextId,
                   target_entity_ids: [
@@ -607,7 +658,13 @@ const run = async () => {
         );
         checkpoint.family_cursor = end;
         checkpoint.counts.entities =
-          profile.manufacturers + profile.categories + end * 5;
+          Object.values(pack.classificationValues).reduce(
+            (total, values) => total + values.length,
+            0,
+          ) +
+          profile.manufacturers +
+          profile.categories +
+          end * 5;
         await persist();
         if (await stopIfRequested()) return;
       }
@@ -628,8 +685,11 @@ const run = async () => {
           new Blob([fileBody(asset)], { type: asset.type }),
           asset.name,
         );
+        const attributeCode = asset.type.startsWith("image/")
+          ? fields.skuMainPhoto
+          : fields.skuFiles;
         const uploaded = await client.request(
-          `/entities/${checkpoint.file_targets[index]}/file-attributes/${fields.skuFiles}/uploads`,
+          `/entities/${checkpoint.file_targets[index]}/file-attributes/${attributeCode}/uploads`,
           { method: "POST", body: form },
         );
         const file = uploaded.files?.[0];

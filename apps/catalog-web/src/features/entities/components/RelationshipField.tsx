@@ -56,7 +56,7 @@ export const RelationshipField = ({
     .split(',')
     .map((targetId) => targetId.trim())
     .filter(Boolean);
-  const isOneToOne = attribute.relationship_cardinality === 'one_to_one';
+  const isSingle = attribute.cardinality === 'one';
   const selectionLabels = useRelationshipSelectionLabels(
     targetBlueprint,
     selectedIds,
@@ -64,7 +64,7 @@ export const RelationshipField = ({
   const { isPreviewed, markPreviewed, openPreview, previewHref } =
     useRecentlyPreviewedEntities((id) => {
       setDraftIds((current) =>
-        isOneToOne ? [id] : current.includes(id) ? current : [...current, id],
+        isSingle ? [id] : current.includes(id) ? current : [...current, id],
       );
       scrollRelationshipPickerToTop(pickerContentRoot.current);
     });
@@ -112,7 +112,7 @@ export const RelationshipField = ({
     (target) => !draftIds.includes(target.id),
   );
   const openSelector = () => {
-    setDraftIds(isOneToOne ? selectedIds.slice(0, 1) : selectedIds);
+    setDraftIds(isSingle ? selectedIds.slice(0, 1) : selectedIds);
     setKnownLabels({});
     setQuery('');
     setOpen(true);
@@ -120,7 +120,7 @@ export const RelationshipField = ({
   const selectTarget = (id: string, label: string) => {
     setKnownLabels((current) => ({ ...current, [id]: label }));
     setDraftIds((current) =>
-      isOneToOne
+      isSingle
         ? [id]
         : current.includes(id)
           ? current.filter((selectedId) => selectedId !== id)
@@ -193,7 +193,7 @@ export const RelationshipField = ({
           count: draftIds.length,
         })}
         title={t(
-          isOneToOne
+          isSingle
             ? 'entities.selectOneRelationship'
             : 'entities.selectRelationships',
           { blueprint: targetBlueprint },

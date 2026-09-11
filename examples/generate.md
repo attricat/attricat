@@ -26,10 +26,10 @@ Profiles preserve the same component types, distributions, and bounded compatibi
 
 | Profile  | Total entities | Use                                           |
 | -------- | -------------: | --------------------------------------------- |
-| `micro`  |          1,000 | Fast API-backed verification and resume tests |
-| `small`  |         10,000 | Normal local demo (the default)               |
-| `medium` |        100,000 | Routine local performance dataset             |
-| `large`  |      1,000,000 | Full local benchmark dataset                  |
+| `micro`  |          1,022 | Fast API-backed verification and resume tests |
+| `small`  |         10,022 | Normal local demo (the default)               |
+| `medium` |        100,022 | Routine local performance dataset             |
+| `large`  |      1,000,022 | Full local benchmark dataset                  |
 
 ```sh
 CATALOG_TOKEN=cat_pat_... just generate micro
@@ -37,7 +37,7 @@ CATALOG_TOKEN=cat_pat_... just generate medium
 CATALOG_TOKEN=cat_pat_... just generate large
 ```
 
-The current industry pack is `pc-components`. It creates fictional manufacturers, hierarchical categories, product families, sellable SKUs, realistic technical facets, product-family/category/manufacturer relationships, and bounded SKU compatibility links. It also uploads a fixed, small set of fictional product images and documentation; this does not grow with the selected profile.
+The current industry pack is `pc-components`. It creates fictional manufacturers, hierarchical categories, product families, sellable SKUs, and reference-data entities for product types, interface standards, and form factors. Families relate to those controlled classifications as well as category and manufacturer; sellable SKUs relate to their family and bounded compatibility links, reaching category, manufacturer, and technical classifications through that family. Each generated product image is assigned as a SKU's `main_photo`; a fixed, small set of documentation files is assigned to `product_files`. This does not grow with the selected profile.
 
 ## Long-running runs
 

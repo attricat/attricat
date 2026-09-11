@@ -88,7 +88,7 @@ pub fn definitions() -> Vec<ToolDefinition> {
         ),
         definition(
             "search_entities",
-            "Search entities of a blueprint by scalar values and system tags. Query terms are whitespace-separated AND terms. Bare free text searches scalar values on the selected blueprint only. Use *:value for global relationship-aware discovery through up to three incoming edges. Use attribute:value for a selected-blueprint attribute; use relationship:value or relationship.attribute:value to search through one explicit relationship; and use blueprint:value or blueprint.attribute:value for the selected blueprint (code or name). A trailing * means prefix matching. Results include match_explanations with deterministic match witnesses and relationship paths. Omit blueprint.version to include every published revision; set outdated to true to return only entities that are not on the latest published revision. Use sort with a configured scalar table-column field and asc or desc direction; relationship table columns use relationship.field paths. Without sort, results are paginated in ascending creation order.",
+            "Search entities of a blueprint by scalar values and system tags. Query terms are whitespace-separated AND terms. Bare free text searches scalar values on the selected blueprint only. Use *:value for global relationship-aware discovery through up to three incoming edges. Use attribute:value for a selected-blueprint attribute; use relationship:value or an explicit path with up to three relationship hops and a scalar leaf; and use blueprint:value or blueprint.attribute:value for the selected blueprint (code or name). A trailing * means prefix matching. Results include match_explanations with deterministic match witnesses and relationship paths. Omit blueprint.version to include every published revision; set outdated to true to return only entities that are not on the latest published revision. Use sort with a configured scalar table-column field and asc or desc direction; relationship table columns use relationship.field paths. Without sort, results are paginated in ascending creation order.",
             json!({"type":"object","required":["blueprint"],"properties":{"blueprint":{"type":"object","required":["code"],"properties":{"code":{"type":"string"},"version":{"type":"integer","minimum":1}},"additionalProperties":false},"query":{"type":"string"},"system_tags":{"type":"array","items":{"type":"string"}},"outdated":{"type":"boolean"},"sort":{"type":"object","required":["field","direction"],"properties":{"field":{"type":"string"},"direction":{"type":"string","enum":["asc","desc"]}},"additionalProperties":false},"page":{"type":"object","properties":{"size":{"type":"integer","minimum":1,"maximum":100},"cursor":{"type":"string"}},"additionalProperties":false}},"additionalProperties":false}),
         ),
         definition(
@@ -336,7 +336,16 @@ pub async fn execute_read(
                 ),
                 None => None,
             };
-            let sort = resolve_agent_search_sort(repository, &current, input.sort.as_ref()).await?;
+            let search_blueprint = match selected {
+                Some(version) => repository
+                    .get_blueprint_by_code_and_version(&input.blueprint.code, version)
+                    .await?
+                    .expect("selected version was checked above"),
+                None => current.clone(),
+            };
+            let sort =
+                resolve_agent_search_sort(repository, &search_blueprint, input.sort.as_ref())
+                    .await?;
             let cursor = match (sort.is_some(), input.page.cursor.as_deref()) {
                 (true, _) => None,
                 (false, Some(cursor)) => Some(
@@ -351,13 +360,6 @@ pub async fn execute_read(
                 .as_deref()
                 .map(str::trim)
                 .filter(|value| !value.is_empty());
-            let search_blueprint = match selected {
-                Some(version) => repository
-                    .get_blueprint_by_code_and_version(&input.blueprint.code, version)
-                    .await?
-                    .expect("selected version was checked above"),
-                None => current.clone(),
-            };
             let resolved = repository
                 .resolve_search(&search_blueprint, selected, query)
                 .await
@@ -638,45 +640,52 @@ async fn resolve_agent_search_sort(
             "sort.field must be a configured table column".to_owned(),
         ));
     }
-    let (relationship, attribute_code) = match sort.field.split_once('.') {
-        Some((relationship, field)) => (Some(relationship.to_owned()), field),
-        None => (None, sort.field.as_str()),
-    };
-    let value_type = match &relationship {
-        None => blueprint
+    let parts: Vec<_> = sort.field.split('.').collect();
+    if parts.is_empty() || parts.len() > 4 {
+        return Err(ToolError::InvalidArguments(
+            "sort.field may contain at most three relationship hops and a scalar leaf".to_owned(),
+        ));
+    }
+    let mut current = blueprint.clone();
+    let mut relationship_path = Vec::new();
+    for relationship_name in &parts[..parts.len() - 1] {
+        let relationship = current
             .attributes
             .iter()
-            .find(|attribute| attribute.code == attribute_code)
-            .map(|attribute| attribute.value_type.clone()),
-        Some(relationship) => {
-            let source = blueprint
-                .attributes
-                .iter()
-                .find(|attribute| {
-                    attribute.code == *relationship && attribute.value_type == "relationship"
-                })
-                .ok_or_else(|| {
-                    ToolError::InvalidArguments("sort.field relationship is invalid".to_owned())
-                })?;
-            let target_code = source.target_blueprint_code.as_deref().ok_or_else(|| {
-                ToolError::InvalidArguments(
-                    "sort.field relationship has no target blueprint".to_owned(),
-                )
+            .find(|attribute| {
+                attribute.code == *relationship_name && attribute.value_type == "relationship"
+            })
+            .ok_or_else(|| {
+                ToolError::InvalidArguments("sort.field relationship is invalid".to_owned())
             })?;
-            let target = repository
-                .get_blueprint_by_code(target_code)
-                .await?
-                .ok_or(RepositoryError::NotFound("target blueprint"))?;
-            target
-                .attributes
-                .iter()
-                .find(|attribute| attribute.code == attribute_code)
-                .map(|attribute| attribute.value_type.clone())
+        if relationship.cardinality.as_deref() != Some("one") {
+            return Err(ToolError::InvalidArguments(
+                "sort.field relationship path must be single-valued".to_owned(),
+            ));
         }
+        relationship_path.push(relationship.code.clone());
+        current = repository
+            .get_blueprint_by_code(relationship.target_blueprint_code.as_deref().ok_or_else(
+                || {
+                    ToolError::InvalidArguments(
+                        "sort.field relationship has no target blueprint".to_owned(),
+                    )
+                },
+            )?)
+            .await?
+            .ok_or(RepositoryError::NotFound("target blueprint"))?;
     }
-    .ok_or_else(|| {
-        ToolError::InvalidArguments("sort.field must resolve to a scalar table column".to_owned())
-    })?;
+    let leaf_field = parts[parts.len() - 1];
+    let value_type = current
+        .attributes
+        .iter()
+        .find(|attribute| attribute.code == leaf_field)
+        .map(|attribute| attribute.value_type.clone())
+        .ok_or_else(|| {
+            ToolError::InvalidArguments(
+                "sort.field must resolve to a scalar table column".to_owned(),
+            )
+        })?;
     if !matches!(
         value_type.as_str(),
         "string" | "number" | "integer" | "boolean" | "date" | "datetime" | "time"
@@ -687,7 +696,8 @@ async fn resolve_agent_search_sort(
     }
     Ok(Some(EntitySearchSort {
         field: sort.field.clone(),
-        relationship,
+        relationship_path,
+        leaf_field: leaf_field.to_owned(),
         value_type,
         descending,
     }))

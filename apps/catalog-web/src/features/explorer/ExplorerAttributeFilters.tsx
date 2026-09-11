@@ -22,6 +22,7 @@ import { maximumAttributeFilters, type AttributeFilter } from './search';
 type Props = {
   filters: AttributeFilter[];
   attributes: Attribute[];
+  pathAttributes?: { code: string; value_type: Attribute['value_type'] }[];
   onAdd: (filter: AttributeFilter) => void;
   onRemove: (index: number) => void;
   onUpdate: (index: number, filter: AttributeFilter) => void;
@@ -30,14 +31,24 @@ type Props = {
 export const ExplorerAttributeFilters = ({
   filters,
   attributes,
+  pathAttributes = [],
   onAdd,
   onRemove,
   onUpdate,
 }: Props) => {
   const { t } = useTranslation();
   const filterableAttributes = useMemo(
-    () => attributes.filter(isFilterableAttribute),
-    [attributes],
+    () => [
+      ...attributes.filter(isFilterableAttribute),
+      ...pathAttributes.map(
+        (attribute) =>
+          ({
+            code: attribute.code,
+            value_type: attribute.value_type,
+          }) as Attribute,
+      ),
+    ],
+    [attributes, pathAttributes],
   );
   const [open, setOpen] = useState(false);
   const [editingIndex, setEditingIndex] = useState<number | null>(null);

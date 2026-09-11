@@ -102,7 +102,13 @@ export const ExplorerResultsTable = ({
     } | null;
     sortable: boolean;
   }[] = tableView?.columns?.length
-    ? tableView.columns.map((column) => ({ ...column, sortable: true }))
+    ? tableView.columns.map((column) => ({
+        ...column,
+        sortable:
+          blueprint.table_path_attributes.find(
+            (attribute) => attribute.code === column.field,
+          )?.sortable ?? false,
+      }))
     : (tableView?.fields ?? []).map((field) => ({ field, sortable: false }));
   const runtime = useQuery({
     queryKey: extensionQueryKeys.runtime(),
@@ -154,7 +160,8 @@ export const ExplorerResultsTable = ({
       },
     }) as LegacyColumnDef<EntityItem, string>,
     ...tableColumns.flatMap((column) => {
-      const [relationship, targetField] = column.field.split('.', 2);
+      const [relationship] = column.field.split('.');
+      const relatedPath = column.field.includes('.');
       const attribute = attributes.get(relationship);
       if (!attribute) return [];
       const renderer = column.renderer;
@@ -187,17 +194,17 @@ export const ExplorerResultsTable = ({
           },
           cell: (info) => {
             const entity = info.row.original;
-            const related = targetField
+            const related = relatedPath
               ? entity.related?.[relationship]?.[0]
               : undefined;
-            const primaryValue = targetField
-              ? related?.preview.default?.[targetField]
-              : entity.preview.default?.[relationship];
+            const pathValues = entity.table_values[column.field] ?? [];
+            const primaryValue =
+              pathValues.length > 1 ? pathValues : pathValues[0];
             // Search projections contain the related target's scalar but not
             // its attribute definition. Keep that rendering deliberately
             // defensive: an absent relation or incompatible value is not an
             // excuse to fetch a row (or to break virtualized rendering).
-            const fallback = targetField ? (
+            const fallback = relatedPath ? (
               <Typography
                 color={
                   primaryValue === null || primaryValue === undefined
@@ -208,9 +215,17 @@ export const ExplorerResultsTable = ({
               >
                 {primaryValue === null || primaryValue === undefined
                   ? t('views.notSet')
-                  : typeof primaryValue === 'object'
-                    ? JSON.stringify(primaryValue)
-                    : String(primaryValue)}
+                  : Array.isArray(primaryValue)
+                    ? primaryValue
+                        .map((value) =>
+                          typeof value === 'object'
+                            ? JSON.stringify(value)
+                            : String(value),
+                        )
+                        .join(', ')
+                    : typeof primaryValue === 'object'
+                      ? JSON.stringify(primaryValue)
+                      : String(primaryValue)}
               </Typography>
             ) : (
               <AttributeValue

@@ -92,6 +92,9 @@ they are never independently authored or edited.
   normalized scalar value. It is versioned with the attribute definition.
 - Relationship attributes may declare `target_blueprint` in TOML. Its compiled
   `target_blueprint_code` restricts targets to that entity blueprint family.
+- `cardinality` and `target_cardinality` are directional blueprint metadata.
+  Repository transactions enforce them; the database deliberately has no
+  business-value check or uniqueness constraint for cardinality.
 - `tags` is a JSONB array compiled from the attribute TOML. Tags are generic,
   unique, non-empty metadata with no reserved display tag.
 

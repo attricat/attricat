@@ -25,7 +25,8 @@ struct CardinalityCheck<'a> {
     entity: &'a Entity,
     attribute_id: Uuid,
     attribute_code: &'a str,
-    cardinality: Option<&'a str>,
+    cardinality: &'a str,
+    target_cardinality: &'a str,
     context_id: Option<Uuid>,
     target_entity_id: Uuid,
 }
@@ -44,6 +45,13 @@ impl CatalogRepository {
         // Do not expose an entity before its initial values and derived preview
         // agree; otherwise a concurrent reader can observe a partial create.
         let mut transaction = self.pool.begin().await?;
+        if values
+            .iter()
+            .any(|value| matches!(value, NewAttributeValue::Relationship { .. }))
+        {
+            self.lock_relationship_cardinality_writes(&mut transaction)
+                .await?;
+        }
         let entity = self
             .insert_entity(
                 &mut transaction,
@@ -138,6 +146,14 @@ impl CatalogRepository {
             validate_system_metadata(metadata)?;
         }
         let mut transaction = self.pool.begin().await?;
+        if !relationships.is_empty()
+            || values
+                .iter()
+                .any(|value| matches!(value, NewAttributeValue::Relationship { .. }))
+        {
+            self.lock_relationship_cardinality_writes(&mut transaction)
+                .await?;
+        }
         let before = self
             .entity_audit_snapshot(&mut transaction, entity_id)
             .await?;
@@ -271,6 +287,14 @@ impl CatalogRepository {
         input: AppendAttributeValues,
     ) -> Result<Vec<AttributeValue>, RepositoryError> {
         let mut transaction = self.pool.begin().await?;
+        if input
+            .values
+            .iter()
+            .any(|value| matches!(value, NewAttributeValue::Relationship { .. }))
+        {
+            self.lock_relationship_cardinality_writes(&mut transaction)
+                .await?;
+        }
         let before = self
             .entity_audit_snapshot(&mut transaction, entity_id)
             .await?;
@@ -375,6 +399,10 @@ impl CatalogRepository {
         replace: bool,
     ) -> Result<Vec<AttributeValue>, RepositoryError> {
         let mut transaction = self.pool.begin().await?;
+        if !input.relationships.is_empty() {
+            self.lock_relationship_cardinality_writes(&mut transaction)
+                .await?;
+        }
         let before = self
             .entity_audit_snapshot(&mut transaction, entity_id)
             .await?;
@@ -544,11 +572,11 @@ impl CatalogRepository {
         let context_id = self.resolve_context_id(transaction, context_id).await?;
 
         let attribute_label = attribute_code.clone();
-        let (attribute_id, attribute_code, value_type, value_schema, target_blueprint_code, relationship_cardinality, context_editable) =
+        let (attribute_id, attribute_code, value_type, value_schema, target_blueprint_code, cardinality, target_cardinality, context_editable) =
             match (attribute_id, attribute_code.as_deref()) {
                 (Some(attribute_id), None) => {
-                    sqlx::query_as::<_, (Uuid, String, String, Option<Value>, Option<String>, Option<String>, String)>(
-                        r#"SELECT id, code, value_type, value_schema, target_blueprint_code, relationship_cardinality, context_editable
+                    sqlx::query_as::<_, (Uuid, String, String, Option<Value>, Option<String>, Option<String>, Option<String>, String)>(
+                        r#"SELECT id, code, value_type, value_schema, target_blueprint_code, cardinality, target_cardinality, context_editable
                    FROM attributes
                    WHERE id = $1
                      AND blueprint_id = $2
@@ -563,8 +591,8 @@ impl CatalogRepository {
                 }
                 (None, Some(attribute_code)) => {
                     validate_code(attribute_code)?;
-                    sqlx::query_as::<_, (Uuid, String, String, Option<Value>, Option<String>, Option<String>, String)>(
-                        r#"SELECT id, code, value_type, value_schema, target_blueprint_code, relationship_cardinality, context_editable
+                    sqlx::query_as::<_, (Uuid, String, String, Option<Value>, Option<String>, Option<String>, Option<String>, String)>(
+                        r#"SELECT id, code, value_type, value_schema, target_blueprint_code, cardinality, target_cardinality, context_editable
                    FROM attributes
                    WHERE code = $1
                      AND blueprint_id = $2
@@ -601,7 +629,8 @@ impl CatalogRepository {
                     entity,
                     attribute_id,
                     attribute_code: &attribute_code,
-                    cardinality: relationship_cardinality.as_deref(),
+                    cardinality: cardinality.as_deref().unwrap_or("many"),
+                    target_cardinality: target_cardinality.as_deref().unwrap_or("many"),
                     context_id,
                     target_entity_id,
                 },
@@ -978,6 +1007,25 @@ impl CatalogRepository {
         .collect())
     }
 
+    pub(super) async fn lock_relationship_cardinality_writes(
+        &self,
+        transaction: &mut Transaction<'_, Postgres>,
+    ) -> Result<(), RepositoryError> {
+        // All relationship writers in a workspace acquire the same lock before
+        // entity rows, cardinality validation, or relationship mutations. A
+        // single canonical key avoids opposite-order deadlocks across payloads
+        // that claim more than one target while keeping workspaces independent.
+        let lock_key = format!(
+            "relationship-cardinality:{}",
+            self.workspace_id.unwrap_or(Self::DEFAULT_WORKSPACE_ID)
+        );
+        sqlx::query("SELECT pg_advisory_xact_lock(hashtextextended($1, 0))")
+            .bind(lock_key)
+            .execute(&mut **transaction)
+            .await?;
+        Ok(())
+    }
+
     async fn validate_relationship_cardinality(
         &self,
         transaction: &mut Transaction<'_, Postgres>,
@@ -988,41 +1036,45 @@ impl CatalogRepository {
             attribute_id,
             attribute_code,
             cardinality,
+            target_cardinality,
             context_id,
             target_entity_id,
         } = check;
-        if cardinality != Some("one_to_one") {
+        let target_is_one = if target_cardinality == "one" {
+            true
+        } else {
+            sqlx::query_scalar::<_, bool>(
+                "SELECT EXISTS (SELECT 1 FROM attributes a JOIN blueprints b ON b.id = a.blueprint_id AND b.version = a.blueprint_version WHERE a.blueprint_id = $1 AND a.code = $2 AND a.target_cardinality = 'one' AND a.workspace_id = $3 AND a.deleted_at IS NULL AND b.status = 'published' AND b.deleted_at IS NULL)",
+            )
+            .bind(entity.blueprint_id)
+            .bind(attribute_code)
+            .bind(self.workspace_id.unwrap_or(Self::DEFAULT_WORKSPACE_ID))
+            .fetch_one(&mut **transaction)
+            .await?
+        };
+        if cardinality != "one" && !target_is_one {
             return Ok(());
         }
 
-        // Serialize contenders for this versioned field and target with a
-        // transaction-scoped advisory lock. Unlike locking a target entity row
-        // after its source row, this cannot deadlock for reciprocal writes.
-        // Callers sort multi-target payloads before reaching this point.
-        let lock_key = format!(
-            "{}:{attribute_code}:{context_id:?}:{target_entity_id}",
-            entity.blueprint_id
-        );
-        sqlx::query("SELECT pg_advisory_xact_lock(hashtextextended($1, 0))")
-            .bind(lock_key)
-            .execute(&mut **transaction)
-            .await?;
-
-        let source_conflict = sqlx::query_scalar::<_, Uuid>(
-            r#"SELECT relationship_target_entity_id
+        let source_conflict = if cardinality == "one" {
+            sqlx::query_scalar::<_, Uuid>(
+                r#"SELECT relationship_target_entity_id
                FROM attribute_values
                WHERE entity_id = $1 AND attribute_id = $2
                  AND context_id IS NOT DISTINCT FROM $3
                  AND relationship_target_entity_id IS NOT NULL AND active
                  AND relationship_target_entity_id <> $4
                FOR UPDATE"#,
-        )
-        .bind(entity.id)
-        .bind(attribute_id)
-        .bind(context_id)
-        .bind(target_entity_id)
-        .fetch_optional(&mut **transaction)
-        .await?;
+            )
+            .bind(entity.id)
+            .bind(attribute_id)
+            .bind(context_id)
+            .bind(target_entity_id)
+            .fetch_optional(&mut **transaction)
+            .await?
+        } else {
+            None
+        };
         if let Some(existing_target) = source_conflict {
             return Err(RepositoryError::RelationshipCardinalityConflict {
                 attribute: attribute_code.to_owned(),
@@ -1034,26 +1086,31 @@ impl CatalogRepository {
         }
 
         // Attribute IDs are revision-local. Field identity is the blueprint
-        // family plus code, so two pinned one-to-one revisions cannot claim the
+        // family plus code, so revisions with a target limit cannot claim the
         // same target merely because their attribute IDs differ.
-        let target_conflict = sqlx::query_scalar::<_, Uuid>(
-            r#"SELECT av.entity_id
+        let target_conflict = if target_is_one {
+            sqlx::query_scalar::<_, Uuid>(
+                r#"SELECT av.entity_id
                FROM attribute_values av
                JOIN attributes a ON a.id = av.attribute_id
                WHERE a.blueprint_id = $1 AND a.code = $2
-                 AND a.relationship_cardinality = 'one_to_one'
+                 AND a.workspace_id = $6 AND av.workspace_id = $6
                  AND av.context_id IS NOT DISTINCT FROM $3
                  AND av.relationship_target_entity_id = $4 AND av.active
                  AND av.entity_id <> $5
                FOR UPDATE OF av"#,
-        )
-        .bind(entity.blueprint_id)
-        .bind(attribute_code)
-        .bind(context_id)
-        .bind(target_entity_id)
-        .bind(entity.id)
-        .fetch_optional(&mut **transaction)
-        .await?;
+            )
+            .bind(entity.blueprint_id)
+            .bind(attribute_code)
+            .bind(context_id)
+            .bind(target_entity_id)
+            .bind(entity.id)
+            .bind(self.workspace_id.unwrap_or(Self::DEFAULT_WORKSPACE_ID))
+            .fetch_optional(&mut **transaction)
+            .await?
+        } else {
+            None
+        };
         if let Some(conflicting_source_entity_id) = target_conflict {
             return Err(RepositoryError::RelationshipCardinalityConflict {
                 attribute: attribute_code.to_owned(),
@@ -1077,8 +1134,8 @@ impl CatalogRepository {
     ) -> Result<AttributeValue, RepositoryError> {
         if active {
             let entity = self.lock_entity(transaction, entity_id).await?;
-            let (attribute_code, cardinality) = sqlx::query_as::<_, (String, Option<String>)>(
-                "SELECT code, relationship_cardinality FROM attributes WHERE id = $1 AND blueprint_id = $2 AND blueprint_version = $3 AND value_type = 'relationship'",
+            let (attribute_code, cardinality, target_cardinality) = sqlx::query_as::<_, (String, Option<String>, Option<String>)>(
+                "SELECT code, cardinality, target_cardinality FROM attributes WHERE id = $1 AND blueprint_id = $2 AND blueprint_version = $3 AND value_type = 'relationship'",
             )
             .bind(attribute_id)
             .bind(entity.blueprint_id)
@@ -1092,7 +1149,8 @@ impl CatalogRepository {
                     entity: &entity,
                     attribute_id,
                     attribute_code: &attribute_code,
-                    cardinality: cardinality.as_deref(),
+                    cardinality: cardinality.as_deref().unwrap_or("many"),
+                    target_cardinality: target_cardinality.as_deref().unwrap_or("many"),
                     context_id,
                     target_entity_id,
                 },

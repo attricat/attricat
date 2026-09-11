@@ -35,6 +35,7 @@ struct RawAttributeDeclaration {
     value_schema: Option<String>,
     default_value: Option<serde_json::Value>,
     cardinality: Option<String>,
+    target_cardinality: Option<String>,
     ordered: Option<bool>,
     #[serde(default)]
     allowed_mime_groups: Vec<String>,
@@ -151,18 +152,42 @@ pub fn parse(source: &str) -> Result<BlueprintDefinition, BlueprintError> {
                     if value_type != "file" && has_file_policy {
                         return Err(BlueprintError::InvalidAttributeDeclaration(attribute.code));
                     }
-                    let relationship_cardinality = if value_type == "relationship" {
-                        match attribute.cardinality.as_deref() {
-                            None => None,
-                            Some("one_to_one") => Some("one_to_one".to_owned()),
-                            Some(_) => {
+                    let (cardinality, target_cardinality) = if value_type == "relationship" {
+                        let cardinality = attribute
+                            .cardinality
+                            .clone()
+                            .unwrap_or_else(|| "many".to_owned());
+                        let (cardinality, target_cardinality) = if cardinality == "one_to_one" {
+                            if attribute.target_cardinality.is_some() {
                                 return Err(BlueprintError::InvalidRelationshipCardinality(
                                     attribute.code,
                                 ));
                             }
+                            ("one".to_owned(), "one".to_owned())
+                        } else {
+                            (
+                                cardinality,
+                                attribute
+                                    .target_cardinality
+                                    .clone()
+                                    .unwrap_or_else(|| "many".to_owned()),
+                            )
+                        };
+                        if !matches!(cardinality.as_str(), "one" | "many")
+                            || !matches!(target_cardinality.as_str(), "one" | "many")
+                        {
+                            return Err(BlueprintError::InvalidRelationshipCardinality(
+                                attribute.code,
+                            ));
                         }
+                        (Some(cardinality), Some(target_cardinality))
                     } else {
-                        None
+                        if attribute.target_cardinality.is_some() {
+                            return Err(BlueprintError::InvalidAttributeDeclaration(
+                                attribute.code,
+                            ));
+                        }
+                        (None, None)
                     };
                     if value_type == "file"
                         && (attribute.value_schema.is_some()
@@ -207,7 +232,8 @@ pub fn parse(source: &str) -> Result<BlueprintDefinition, BlueprintError> {
                         default_value: attribute.default_value,
                         file_policy,
                         target_blueprint: attribute.target_blueprint,
-                        relationship_cardinality,
+                        cardinality,
+                        target_cardinality,
                         tags: attribute.tags,
                         context_fallback: attribute.context_fallback,
                         context_editable: attribute.context_editable,

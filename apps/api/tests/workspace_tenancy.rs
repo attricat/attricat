@@ -230,3 +230,97 @@ async fn current_values_hides_foreign_entity_values(pool: PgPool) {
             .is_empty()
     );
 }
+
+#[sqlx::test]
+async fn reachable_search_never_traverses_another_workspace(pool: PgPool) {
+    use api::model::{CreateBlueprint, NewAttributeValue};
+
+    let bootstrap_workspace: Uuid = BOOTSTRAP_WORKSPACE_ID.parse().unwrap();
+    let other_workspace = Uuid::new_v4();
+    sqlx::query("INSERT INTO workspaces (id, slug, name, login_identifier) VALUES ($1, 'tenant-search', 'Tenant search', 'tenant-search.local')")
+        .bind(other_workspace)
+        .execute(&pool)
+        .await
+        .unwrap();
+    let repository = CatalogRepository::new(pool);
+    let bootstrap = repository.for_workspace(bootstrap_workspace).await.unwrap();
+    let other = repository.for_workspace(other_workspace).await.unwrap();
+    let target_definition = "format_version = 1\ncode = 'shared_search_target'\nname = 'Shared target'\nkind = 'entity'\n\n[views.dropdown_option]\ntype = 'dropdown_option'\nfields = ['name']\n\n[[attributes]]\ncode = 'name'\nvalue_type = 'string'";
+    let source_definition = "format_version = 1\ncode = 'shared_search_source'\nname = 'Shared source'\nkind = 'entity'\n\n[views.dropdown_option]\ntype = 'dropdown_option'\nfields = ['name']\n\n[[attributes]]\ncode = 'name'\nvalue_type = 'string'\n\n[[attributes]]\ncode = 'target'\nvalue_type = 'relationship'\ntarget_blueprint = 'shared_search_target'";
+
+    for scoped in [&bootstrap, &other] {
+        let target = scoped
+            .create_blueprint(CreateBlueprint {
+                definition: target_definition.to_owned(),
+            })
+            .await
+            .unwrap();
+        scoped
+            .publish_blueprint_revision(target.blueprint.id, 1)
+            .await
+            .unwrap();
+        let source = scoped
+            .create_blueprint(CreateBlueprint {
+                definition: source_definition.to_owned(),
+            })
+            .await
+            .unwrap();
+        scoped
+            .publish_blueprint_revision(source.blueprint.id, 1)
+            .await
+            .unwrap();
+    }
+
+    let other_target_blueprint = other
+        .get_blueprint_by_code("shared_search_target")
+        .await
+        .unwrap()
+        .unwrap();
+    let other_source_blueprint = other
+        .get_blueprint_by_code("shared_search_source")
+        .await
+        .unwrap()
+        .unwrap();
+    let target = other
+        .create_entity_with_values(
+            other_target_blueprint.blueprint.id,
+            1,
+            vec![NewAttributeValue::Scalar {
+                attribute_id: None,
+                attribute_code: Some("name".to_owned()),
+                context_id: None,
+                value: json!("cross-workspace-secret"),
+            }],
+            Vec::new(),
+            json!({}),
+        )
+        .await
+        .unwrap();
+    other
+        .create_entity_with_values(
+            other_source_blueprint.blueprint.id,
+            1,
+            vec![NewAttributeValue::Relationship {
+                attribute_id: None,
+                attribute_code: Some("target".to_owned()),
+                context_id: None,
+                target_entity_id: target.id,
+            }],
+            Vec::new(),
+            json!({}),
+        )
+        .await
+        .unwrap();
+
+    let bootstrap_source = bootstrap
+        .get_blueprint_by_code("shared_search_source")
+        .await
+        .unwrap()
+        .unwrap();
+    let resolved = bootstrap
+        .resolve_search(&bootstrap_source, None, Some("*:cross-workspace-secret"))
+        .await
+        .unwrap();
+    assert!(resolved.ids.is_empty());
+    assert!(resolved.explanations.is_empty());
+}

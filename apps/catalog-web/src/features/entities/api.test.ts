@@ -316,7 +316,7 @@ describe('entity API client', () => {
       blueprint: blueprintWithAttributes,
       items: [],
       next_cursor: null,
-      total_count: 1000,
+      total_count: 500,
       total_count_capped: true,
     });
 
@@ -332,7 +332,7 @@ describe('entity API client', () => {
     );
 
     expect(result).toMatchObject({
-      total_count: 1000,
+      total_count: 500,
       total_count_capped: true,
     });
     expect(fetchMock).toHaveBeenLastCalledWith('/api/v1/entities/search', {

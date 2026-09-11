@@ -30,7 +30,8 @@ struct SortedEntityPreviewRow {
 #[derive(Clone, Debug)]
 pub(crate) struct EntitySearchSort {
     pub field: String,
-    pub relationship: Option<String>,
+    pub relationship_path: Vec<String>,
+    pub leaf_field: String,
     pub value_type: String,
     pub descending: bool,
 }
@@ -38,6 +39,8 @@ pub(crate) struct EntitySearchSort {
 #[derive(Clone, Debug, serde::Serialize)]
 pub(crate) struct EntitySearchFilter {
     pub field: String,
+    pub relationship_path: Vec<String>,
+    pub leaf_field: String,
     pub operator: String,
     pub value_type: String,
     pub value: String,
@@ -69,6 +72,18 @@ struct RelationshipTreeChildRow {
     context_fallback: Value,
     count: i64,
     has_children: bool,
+}
+
+#[derive(sqlx::FromRow)]
+struct TablePathEdgeRow {
+    source_id: Uuid,
+    target_id: Uuid,
+}
+
+#[derive(sqlx::FromRow)]
+struct TablePathLeafRow {
+    id: Uuid,
+    value: Value,
 }
 
 #[derive(sqlx::FromRow)]
@@ -222,109 +237,109 @@ impl CatalogRepository {
     }
 
     /// Resolves entities which satisfy every typed scalar filter in the default context.
+    /// Dotted fields traverse at most three relationship hops using each source
+    /// entity's pinned blueprint revision.
     pub(crate) async fn filter_entity_ids(
         &self,
         blueprint_id: Uuid,
         blueprint_version: Option<i64>,
         filters: &[EntitySearchFilter],
     ) -> Result<Vec<Uuid>, RepositoryError> {
-        if filters.is_empty() {
-            return Ok(Vec::new());
+        let mut matching: Option<HashSet<Uuid>> = None;
+        for filter in filters {
+            let ids = sqlx::query_scalar::<_, Uuid>(
+                r#"WITH RECURSIVE reached(root_id, current_id, depth) AS (
+                       SELECT e.id, e.id, 0
+                         FROM entities e
+                        WHERE e.blueprint_id = $1
+                          AND ($2::bigint IS NULL OR e.blueprint_version = $2)
+                          AND e.workspace_id = $8 AND e.deleted_at IS NULL
+                       UNION ALL
+                       SELECT reached.root_id, av.relationship_target_entity_id, reached.depth + 1
+                         FROM reached
+                         JOIN entities source ON source.id = reached.current_id
+                          AND source.workspace_id = $8 AND source.deleted_at IS NULL
+                         JOIN attributes relationship ON relationship.blueprint_id = source.blueprint_id
+                          AND relationship.blueprint_version = source.blueprint_version
+                          AND relationship.workspace_id = $8
+                          AND relationship.code = $3[reached.depth + 1]
+                          AND relationship.value_type = 'relationship'
+                         JOIN attribute_values av ON av.entity_id = source.id
+                          AND av.workspace_id = $8
+                          AND av.attribute_id = relationship.id AND av.active
+                          AND av.context_id = (SELECT id FROM attribute_contexts WHERE workspace_id = $8 AND code = 'default')
+                          AND av.relationship_target_entity_id IS NOT NULL
+                         JOIN entities target ON target.id = av.relationship_target_entity_id
+                          AND target.workspace_id = $8 AND target.deleted_at IS NULL
+                         JOIN blueprints target_blueprint ON target_blueprint.id = target.blueprint_id
+                          AND target_blueprint.version = target.blueprint_version
+                          AND target_blueprint.code = relationship.target_blueprint_code
+                        WHERE reached.depth < cardinality($3)
+                   )
+                   SELECT DISTINCT reached.root_id
+                     FROM reached
+                     JOIN entities leaf ON leaf.id = reached.current_id
+                      AND leaf.workspace_id = $8 AND leaf.deleted_at IS NULL
+                     JOIN attributes a ON a.blueprint_id = leaf.blueprint_id
+                      AND a.blueprint_version = leaf.blueprint_version
+                      AND a.workspace_id = $8
+                      AND a.code = $4 AND a.value_type = $5 AND a.deleted_at IS NULL
+                     JOIN attribute_values av ON av.entity_id = leaf.id AND av.attribute_id = a.id
+                      AND av.workspace_id = $8
+                      AND av.active AND av.relationship_target_entity_id IS NULL
+                      AND av.context_id = (SELECT id FROM attribute_contexts WHERE workspace_id = $8 AND code = 'default')
+                    WHERE reached.depth = cardinality($3)
+                      AND CASE
+                          WHEN $5 = 'string' AND $6 = 'eq' THEN av.value_text = $7
+                          WHEN $5 = 'string' AND $6 = 'contains' THEN strpos(lower(av.value_text), lower($7)) > 0
+                          WHEN $5 = 'string' AND $6 = 'starts_with' THEN left(lower(av.value_text), char_length($7)) = lower($7)
+                          WHEN $5 = 'number' AND $6 = 'eq' THEN av.value_number = $7::numeric
+                          WHEN $5 = 'number' AND $6 = 'gt' THEN av.value_number > $7::numeric
+                          WHEN $5 = 'number' AND $6 = 'gte' THEN av.value_number >= $7::numeric
+                          WHEN $5 = 'number' AND $6 = 'lt' THEN av.value_number < $7::numeric
+                          WHEN $5 = 'number' AND $6 = 'lte' THEN av.value_number <= $7::numeric
+                          WHEN $5 = 'integer' AND $6 = 'eq' THEN av.value_integer = $7::bigint
+                          WHEN $5 = 'integer' AND $6 = 'gt' THEN av.value_integer > $7::bigint
+                          WHEN $5 = 'integer' AND $6 = 'gte' THEN av.value_integer >= $7::bigint
+                          WHEN $5 = 'integer' AND $6 = 'lt' THEN av.value_integer < $7::bigint
+                          WHEN $5 = 'integer' AND $6 = 'lte' THEN av.value_integer <= $7::bigint
+                          WHEN $5 = 'boolean' AND $6 = 'eq' THEN av.value_boolean = $7::boolean
+                          WHEN $5 = 'date' AND $6 = 'eq' THEN av.value_date = $7::date
+                          WHEN $5 = 'date' AND $6 = 'gt' THEN av.value_date > $7::date
+                          WHEN $5 = 'date' AND $6 = 'gte' THEN av.value_date >= $7::date
+                          WHEN $5 = 'date' AND $6 = 'lt' THEN av.value_date < $7::date
+                          WHEN $5 = 'date' AND $6 = 'lte' THEN av.value_date <= $7::date
+                          WHEN $5 = 'datetime' AND $6 = 'eq' THEN av.value_datetime = $7::timestamptz
+                          WHEN $5 = 'datetime' AND $6 = 'gt' THEN av.value_datetime > $7::timestamptz
+                          WHEN $5 = 'datetime' AND $6 = 'gte' THEN av.value_datetime >= $7::timestamptz
+                          WHEN $5 = 'datetime' AND $6 = 'lt' THEN av.value_datetime < $7::timestamptz
+                          WHEN $5 = 'datetime' AND $6 = 'lte' THEN av.value_datetime <= $7::timestamptz
+                          WHEN $5 = 'time' AND $6 = 'eq' THEN av.value_time = $7::time
+                          WHEN $5 = 'time' AND $6 = 'gt' THEN av.value_time > $7::time
+                          WHEN $5 = 'time' AND $6 = 'gte' THEN av.value_time >= $7::time
+                          WHEN $5 = 'time' AND $6 = 'lt' THEN av.value_time < $7::time
+                          WHEN $5 = 'time' AND $6 = 'lte' THEN av.value_time <= $7::time
+                          ELSE FALSE
+                      END"#,
+            )
+            .bind(blueprint_id)
+            .bind(blueprint_version)
+            .bind(&filter.relationship_path)
+            .bind(&filter.leaf_field)
+            .bind(&filter.value_type)
+            .bind(&filter.operator)
+            .bind(&filter.value)
+            .bind(self.workspace_id.unwrap_or(Self::DEFAULT_WORKSPACE_ID))
+            .fetch_all(&self.pool)
+            .await?
+            .into_iter()
+            .collect::<HashSet<_>>();
+            matching = Some(match matching {
+                Some(current) => current.intersection(&ids).copied().collect(),
+                None => ids,
+            });
         }
-        let filters = serde_json::to_value(filters)
-            .map_err(|error| RepositoryError::InvalidBlueprintDefinition(error.to_string()))?;
-        Ok(sqlx::query_scalar::<_, Uuid>(
-            r#"SELECT e.id
-                 FROM entities e
-                WHERE e.blueprint_id = $1
-                  AND ($2::bigint IS NULL OR e.blueprint_version = $2)
-                  AND e.deleted_at IS NULL
-                  AND NOT EXISTS (
-                      SELECT 1
-                        FROM jsonb_to_recordset($3::jsonb)
-                          AS criterion(field text, operator text, value_type text, value text)
-                       WHERE NOT EXISTS (
-                           SELECT 1
-                             FROM attribute_values av
-                             JOIN attributes a ON a.id = av.attribute_id
-                              AND a.blueprint_id = e.blueprint_id
-                              AND a.blueprint_version = e.blueprint_version
-                              AND a.deleted_at IS NULL
-                            WHERE av.entity_id = e.id
-                              AND av.active
-                              AND av.relationship_target_entity_id IS NULL
-                              AND av.context_id = (SELECT id FROM attribute_contexts WHERE code = 'default')
-                              AND a.code = criterion.field
-                              AND a.value_type = criterion.value_type
-                              AND CASE
-                                  WHEN criterion.value_type = 'string' AND criterion.operator = 'eq'
-                                      THEN av.value_text = criterion.value
-                                  WHEN criterion.value_type = 'string' AND criterion.operator = 'contains'
-                                      THEN strpos(lower(av.value_text), lower(criterion.value)) > 0
-                                  WHEN criterion.value_type = 'string' AND criterion.operator = 'starts_with'
-                                      THEN left(lower(av.value_text), char_length(criterion.value)) = lower(criterion.value)
-                                  WHEN criterion.value_type = 'number' AND criterion.operator = 'eq'
-                                      THEN av.value_number = criterion.value::numeric
-                                  WHEN criterion.value_type = 'number' AND criterion.operator = 'gt'
-                                      THEN av.value_number > criterion.value::numeric
-                                  WHEN criterion.value_type = 'number' AND criterion.operator = 'gte'
-                                      THEN av.value_number >= criterion.value::numeric
-                                  WHEN criterion.value_type = 'number' AND criterion.operator = 'lt'
-                                      THEN av.value_number < criterion.value::numeric
-                                  WHEN criterion.value_type = 'number' AND criterion.operator = 'lte'
-                                      THEN av.value_number <= criterion.value::numeric
-                                  WHEN criterion.value_type = 'integer' AND criterion.operator = 'eq'
-                                      THEN av.value_integer = criterion.value::bigint
-                                  WHEN criterion.value_type = 'integer' AND criterion.operator = 'gt'
-                                      THEN av.value_integer > criterion.value::bigint
-                                  WHEN criterion.value_type = 'integer' AND criterion.operator = 'gte'
-                                      THEN av.value_integer >= criterion.value::bigint
-                                  WHEN criterion.value_type = 'integer' AND criterion.operator = 'lt'
-                                      THEN av.value_integer < criterion.value::bigint
-                                  WHEN criterion.value_type = 'integer' AND criterion.operator = 'lte'
-                                      THEN av.value_integer <= criterion.value::bigint
-                                  WHEN criterion.value_type = 'boolean' AND criterion.operator = 'eq'
-                                      THEN av.value_boolean = criterion.value::boolean
-                                  WHEN criterion.value_type = 'date' AND criterion.operator = 'eq'
-                                      THEN av.value_date = criterion.value::date
-                                  WHEN criterion.value_type = 'date' AND criterion.operator = 'gt'
-                                      THEN av.value_date > criterion.value::date
-                                  WHEN criterion.value_type = 'date' AND criterion.operator = 'gte'
-                                      THEN av.value_date >= criterion.value::date
-                                  WHEN criterion.value_type = 'date' AND criterion.operator = 'lt'
-                                      THEN av.value_date < criterion.value::date
-                                  WHEN criterion.value_type = 'date' AND criterion.operator = 'lte'
-                                      THEN av.value_date <= criterion.value::date
-                                  WHEN criterion.value_type = 'datetime' AND criterion.operator = 'eq'
-                                      THEN av.value_datetime = criterion.value::timestamptz
-                                  WHEN criterion.value_type = 'datetime' AND criterion.operator = 'gt'
-                                      THEN av.value_datetime > criterion.value::timestamptz
-                                  WHEN criterion.value_type = 'datetime' AND criterion.operator = 'gte'
-                                      THEN av.value_datetime >= criterion.value::timestamptz
-                                  WHEN criterion.value_type = 'datetime' AND criterion.operator = 'lt'
-                                      THEN av.value_datetime < criterion.value::timestamptz
-                                  WHEN criterion.value_type = 'datetime' AND criterion.operator = 'lte'
-                                      THEN av.value_datetime <= criterion.value::timestamptz
-                                  WHEN criterion.value_type = 'time' AND criterion.operator = 'eq'
-                                      THEN av.value_time = criterion.value::time
-                                  WHEN criterion.value_type = 'time' AND criterion.operator = 'gt'
-                                      THEN av.value_time > criterion.value::time
-                                  WHEN criterion.value_type = 'time' AND criterion.operator = 'gte'
-                                      THEN av.value_time >= criterion.value::time
-                                  WHEN criterion.value_type = 'time' AND criterion.operator = 'lt'
-                                      THEN av.value_time < criterion.value::time
-                                  WHEN criterion.value_type = 'time' AND criterion.operator = 'lte'
-                                      THEN av.value_time <= criterion.value::time
-                                  ELSE FALSE
-                              END
-                       )
-                  )"#,
-        )
-        .bind(blueprint_id)
-        .bind(blueprint_version)
-        .bind(filters)
-        .fetch_all(&self.pool)
-        .await?)
+        Ok(matching.unwrap_or_default().into_iter().collect())
     }
 
     #[allow(clippy::too_many_arguments)]
@@ -479,37 +494,53 @@ impl CatalogRepository {
         let column = native_sort_column(&sort.value_type)?;
         let comparison = if sort.descending { "<" } else { ">" };
         let direction = if sort.descending { "DESC" } else { "ASC" };
-        let joins = match &sort.relationship {
-            None => "LEFT JOIN attributes sort_attribute ON sort_attribute.blueprint_id = e.blueprint_id
+        let joins = if sort.relationship_path.is_empty() {
+            "LEFT JOIN attributes sort_attribute ON sort_attribute.blueprint_id = e.blueprint_id
                     AND sort_attribute.blueprint_version = e.blueprint_version
-                    AND sort_attribute.code = $10 AND sort_attribute.value_type = $11
+                    AND sort_attribute.workspace_id = $14
+                    AND sort_attribute.code = $11 AND sort_attribute.value_type = $12
                  LEFT JOIN attribute_values sort_value ON sort_value.entity_id = e.id
+                    AND sort_value.workspace_id = $14
                     AND sort_value.attribute_id = sort_attribute.id
-                    AND sort_value.context_id = (SELECT id FROM attribute_contexts WHERE code = 'default')
+                    AND sort_value.context_id = (SELECT id FROM attribute_contexts WHERE workspace_id = $14 AND code = 'default')
                     AND sort_value.relationship_target_entity_id IS NULL AND sort_value.active"
-                .to_owned(),
-            Some(_) => "LEFT JOIN attributes relationship_attribute ON relationship_attribute.blueprint_id = e.blueprint_id
-                    AND relationship_attribute.blueprint_version = e.blueprint_version
-                    AND relationship_attribute.code = $10 AND relationship_attribute.value_type = 'relationship'
-                 LEFT JOIN attribute_values edge ON edge.entity_id = e.id
-                    AND edge.attribute_id = relationship_attribute.id AND edge.active
-                    AND edge.relationship_target_entity_id IS NOT NULL
-                 LEFT JOIN entities target ON target.id = edge.relationship_target_entity_id AND target.deleted_at IS NULL
+                .to_owned()
+        } else {
+            "LEFT JOIN LATERAL (
+                    WITH RECURSIVE reached(current_id, depth) AS (
+                        SELECT e.id, 0
+                        UNION ALL
+                        SELECT edge.relationship_target_entity_id, reached.depth + 1
+                        FROM reached
+                        JOIN entities path_source ON path_source.id = reached.current_id
+                         AND path_source.workspace_id = $14 AND path_source.deleted_at IS NULL
+                        JOIN attributes path_attribute ON path_attribute.blueprint_id = path_source.blueprint_id
+                         AND path_attribute.blueprint_version = path_source.blueprint_version
+                         AND path_attribute.workspace_id = $14
+                         AND path_attribute.code = $10[reached.depth + 1]
+                         AND path_attribute.value_type = 'relationship'
+                         AND path_attribute.cardinality = 'one'
+                        JOIN attribute_values edge ON edge.entity_id = path_source.id
+                         AND edge.workspace_id = $14
+                         AND edge.attribute_id = path_attribute.id AND edge.active
+                         AND edge.context_id = (SELECT id FROM attribute_contexts WHERE workspace_id = $14 AND code = 'default')
+                         AND edge.relationship_target_entity_id IS NOT NULL
+                        WHERE reached.depth < cardinality($10)
+                    )
+                    SELECT current_id FROM reached WHERE depth = cardinality($10) LIMIT 1
+                 ) resolved_path ON true
+                 LEFT JOIN entities target ON target.id = resolved_path.current_id
+                    AND target.workspace_id = $14 AND target.deleted_at IS NULL
                  LEFT JOIN attributes sort_attribute ON sort_attribute.blueprint_id = target.blueprint_id
                     AND sort_attribute.blueprint_version = target.blueprint_version
+                    AND sort_attribute.workspace_id = $14
                     AND sort_attribute.code = $11 AND sort_attribute.value_type = $12
                  LEFT JOIN attribute_values sort_value ON sort_value.entity_id = target.id
+                    AND sort_value.workspace_id = $14
                     AND sort_value.attribute_id = sort_attribute.id
-                    AND sort_value.context_id = (SELECT id FROM attribute_contexts WHERE code = 'default')
+                    AND sort_value.context_id = (SELECT id FROM attribute_contexts WHERE workspace_id = $14 AND code = 'default')
                     AND sort_value.relationship_target_entity_id IS NULL AND sort_value.active"
-                .to_owned(),
-        };
-        let (field_bind, type_bind) = match &sort.relationship {
-            Some(relationship) => (
-                relationship.as_str(),
-                sort.field.split_once('.').map_or("", |(_, field)| field),
-            ),
-            None => (sort.field.as_str(), sort.value_type.as_str()),
+                .to_owned()
         };
         let sql = format!(
             r#"SELECT e.id, e.blueprint_version, e.created_at, e.projections -> 'preview' AS preview,
@@ -522,7 +553,7 @@ impl CatalogRepository {
                 JOIN blueprints b ON b.id = e.blueprint_id AND b.version = e.blueprint_version
                 {joins}
                 WHERE e.blueprint_id = $1 AND ($2::bigint IS NULL OR e.blueprint_version = $2)
-                  AND e.deleted_at IS NULL
+                  AND e.workspace_id = $14 AND e.deleted_at IS NULL
                   AND ($3::uuid[] IS NULL OR e.id = ANY($3))
                   AND ($4::text[] IS NULL OR e.system_tags @> $4)
                   AND (NOT $5 OR e.blueprint_version <> $6)
@@ -546,10 +577,11 @@ impl CatalogRepository {
             .bind(cursor_value)
             .bind(cursor_is_null)
             .bind(cursor_id)
-            .bind(field_bind)
-            .bind(type_bind)
+            .bind(&sort.relationship_path)
+            .bind(&sort.leaf_field)
             .bind(sort.value_type.as_str())
             .bind(limit + 1)
+            .bind(self.workspace_id.unwrap_or(Self::DEFAULT_WORKSPACE_ID))
             .fetch_all(&self.pool)
             .await?;
         let mut rows = rows;
@@ -564,6 +596,163 @@ impl CatalogRepository {
             rows.into_iter().map(sorted_entity_preview).collect(),
             next_cursor,
         ))
+    }
+
+    /// Resolves configured table paths in bounded, page-level batches. Relationship
+    /// metadata is selected from every entity's pinned blueprint revision and scalar
+    /// leaves come from preview projections.
+    pub async fn hydrate_table_path_values(
+        &self,
+        items: &mut [EntityPreview],
+        paths: &HashMap<String, String>,
+    ) -> Result<(), RepositoryError> {
+        if items.is_empty() {
+            return Ok(());
+        }
+        let roots: Vec<_> = items.iter().map(|item| item.id).collect();
+        let mut values_by_root: HashMap<Uuid, HashMap<String, Vec<Value>>> = HashMap::new();
+        for (path, expected_leaf_type) in paths {
+            let parts: Vec<_> = path.split('.').collect();
+            if parts.is_empty() || parts.len() > 4 {
+                continue;
+            }
+            if parts.len() == 1 {
+                let compatible_ids: HashSet<_> = sqlx::query_scalar::<_, Uuid>(
+                    r#"SELECT e.id
+                         FROM entities e
+                         JOIN attributes a ON a.blueprint_id = e.blueprint_id
+                          AND a.blueprint_version = e.blueprint_version
+                          AND a.workspace_id = $3 AND a.code = $2 AND a.value_type = $4
+                        WHERE e.id = ANY($1) AND e.workspace_id = $3 AND e.deleted_at IS NULL"#,
+                )
+                .bind(&roots)
+                .bind(parts[0])
+                .bind(self.workspace_id.unwrap_or(Self::DEFAULT_WORKSPACE_ID))
+                .bind(expected_leaf_type)
+                .fetch_all(&self.pool)
+                .await?
+                .into_iter()
+                .collect();
+                for item in items
+                    .iter()
+                    .filter(|item| compatible_ids.contains(&item.id))
+                {
+                    if let Some(value) = item
+                        .preview
+                        .get("default")
+                        .and_then(|preview| preview.get(parts[0]))
+                        .filter(|value| !value.is_null())
+                    {
+                        values_by_root
+                            .entry(item.id)
+                            .or_default()
+                            .insert(path.clone(), vec![value.clone()]);
+                    }
+                }
+                continue;
+            }
+
+            let mut reached: Vec<(Uuid, Uuid)> = roots.iter().map(|id| (*id, *id)).collect();
+            for relationship in &parts[..parts.len() - 1] {
+                let current_ids: Vec<_> = reached
+                    .iter()
+                    .map(|(_, current)| *current)
+                    .collect::<HashSet<_>>()
+                    .into_iter()
+                    .collect();
+                if current_ids.is_empty() {
+                    break;
+                }
+                let edges = sqlx::query_as::<_, TablePathEdgeRow>(
+                    r#"SELECT av.entity_id AS source_id, target.id AS target_id
+                       FROM attribute_values av
+                       JOIN entities source ON source.id = av.entity_id
+                        AND source.workspace_id = $3 AND source.deleted_at IS NULL
+                       JOIN attributes a ON a.id = av.attribute_id
+                        AND a.blueprint_id = source.blueprint_id
+                        AND a.blueprint_version = source.blueprint_version
+                        AND a.workspace_id = $3
+                        AND a.code = $2 AND a.value_type = 'relationship'
+                       JOIN entities target ON target.id = av.relationship_target_entity_id
+                        AND target.workspace_id = $3 AND target.deleted_at IS NULL
+                       JOIN blueprints target_blueprint ON target_blueprint.id = target.blueprint_id
+                        AND target_blueprint.version = target.blueprint_version
+                        AND target_blueprint.code = a.target_blueprint_code
+                      WHERE av.entity_id = ANY($1) AND av.workspace_id = $3
+                        AND av.context_id = (SELECT id FROM attribute_contexts WHERE workspace_id = $3 AND code = 'default')
+                        AND av.active AND av.relationship_target_entity_id IS NOT NULL"#,
+                )
+                .bind(current_ids)
+                .bind(relationship)
+                .bind(self.workspace_id.unwrap_or(Self::DEFAULT_WORKSPACE_ID))
+                .fetch_all(&self.pool)
+                .await?;
+                let mut targets: HashMap<Uuid, Vec<Uuid>> = HashMap::new();
+                for edge in edges {
+                    targets
+                        .entry(edge.source_id)
+                        .or_default()
+                        .push(edge.target_id);
+                }
+                reached = reached
+                    .into_iter()
+                    .flat_map(|(root, current)| {
+                        targets
+                            .get(&current)
+                            .into_iter()
+                            .flatten()
+                            .map(move |target| (root, *target))
+                    })
+                    .collect();
+            }
+            if reached.is_empty() {
+                continue;
+            }
+            let leaf = parts[parts.len() - 1];
+            let leaf_ids: Vec<_> = reached
+                .iter()
+                .map(|(_, id)| *id)
+                .collect::<HashSet<_>>()
+                .into_iter()
+                .collect();
+            let leaves = sqlx::query_as::<_, TablePathLeafRow>(
+                r#"SELECT e.id, e.projections -> 'preview' -> 'default' -> $2 AS value
+                   FROM entities e
+                   JOIN attributes a ON a.blueprint_id = e.blueprint_id
+                    AND a.blueprint_version = e.blueprint_version
+                    AND a.code = $2 AND a.value_type = $3
+                    AND a.workspace_id = $4 AND a.deleted_at IS NULL
+                  WHERE e.id = ANY($1) AND e.workspace_id = $4 AND e.deleted_at IS NULL
+                    AND e.projections -> 'preview' -> 'default' ? $2"#,
+            )
+            .bind(leaf_ids)
+            .bind(leaf)
+            .bind(expected_leaf_type)
+            .bind(self.workspace_id.unwrap_or(Self::DEFAULT_WORKSPACE_ID))
+            .fetch_all(&self.pool)
+            .await?;
+            let leaves: HashMap<_, _> = leaves
+                .into_iter()
+                .filter(|leaf| !leaf.value.is_null())
+                .map(|leaf| (leaf.id, leaf.value))
+                .collect();
+            for (root, id) in reached {
+                if let Some(value) = leaves.get(&id) {
+                    let values = values_by_root
+                        .entry(root)
+                        .or_default()
+                        .entry(path.clone())
+                        .or_default();
+                    if !values.contains(value) {
+                        values.push(value.clone());
+                    }
+                }
+            }
+        }
+        for item in items {
+            item.table_values = values_by_root.remove(&item.id).unwrap_or_default();
+        }
+        Ok(())
     }
 
     /// Adds direct relationship targets used by table columns in one query for the entire page.
@@ -1027,8 +1216,12 @@ impl CatalogRepository {
         query: Option<&str>,
     ) -> Result<ResolvedSearch, RepositoryError> {
         let Some(query) = query else {
-            let ids = sqlx::query_scalar::<_, Uuid>("SELECT id FROM entities WHERE blueprint_id = $1 AND ($2::bigint IS NULL OR blueprint_version = $2) AND deleted_at IS NULL")
-                .bind(selected.blueprint.id).bind(selected_version).fetch_all(&self.pool).await?;
+            let ids = sqlx::query_scalar::<_, Uuid>("SELECT id FROM entities WHERE blueprint_id = $1 AND ($2::bigint IS NULL OR blueprint_version = $2) AND workspace_id = $3 AND deleted_at IS NULL")
+                .bind(selected.blueprint.id)
+                .bind(selected_version)
+                .bind(self.workspace_id.unwrap_or(Self::DEFAULT_WORKSPACE_ID))
+                .fetch_all(&self.pool)
+                .await?;
             return Ok(ResolvedSearch {
                 ids: ids.into_iter().collect(),
                 explanations: HashMap::new(),
@@ -1076,9 +1269,10 @@ impl CatalogRepository {
             return Ok(TermPlan::Reachable);
         }
         let parts: Vec<_> = selector.split('.').collect();
-        if parts.len() > 2 || parts.iter().any(|part| part.is_empty()) {
+        if parts.len() > 4 || parts.iter().any(|part| part.is_empty()) {
             return Err(RepositoryError::InvalidBlueprintDefinition(
-                "search selector must have one or two parts".into(),
+                "search selector may contain at most three relationship hops and a scalar leaf"
+                    .into(),
             ));
         }
         if parts.len() == 1 && alias(parts[0]) {
@@ -1128,45 +1322,60 @@ impl CatalogRepository {
                 .await?
                 .ok_or(RepositoryError::NotFound("target blueprint"))?;
             return Ok(TermPlan::Relationship {
-                field: relationship.code.clone(),
+                fields: vec![relationship.code.clone()],
+                source_blueprint_ids: vec![selected.blueprint.id],
                 target: Box::new(target),
                 attribute: None,
             });
         }
-        let relationship = selected
+        let mut current = selected.clone();
+        let mut fields = Vec::new();
+        let mut source_blueprint_ids = Vec::new();
+        for relationship_name in &parts[..parts.len() - 1] {
+            let relationship = current
+                .attributes
+                .iter()
+                .find(|a| {
+                    a.code.eq_ignore_ascii_case(relationship_name) && a.value_type == "relationship"
+                })
+                .ok_or_else(|| {
+                    RepositoryError::InvalidBlueprintDefinition(format!(
+                        "unknown relationship '{}' in search path",
+                        relationship_name
+                    ))
+                })?;
+            fields.push(relationship.code.clone());
+            source_blueprint_ids.push(current.blueprint.id);
+            current = self
+                .get_blueprint_by_code(relationship.target_blueprint_code.as_deref().ok_or_else(
+                    || {
+                        RepositoryError::InvalidBlueprintDefinition(
+                            "relationship has no target blueprint".into(),
+                        )
+                    },
+                )?)
+                .await?
+                .ok_or(RepositoryError::NotFound("target blueprint"))?;
+        }
+        let leaf = parts[parts.len() - 1];
+        let attribute = current
             .attributes
             .iter()
-            .find(|a| a.code.eq_ignore_ascii_case(parts[0]) && a.value_type == "relationship")
-            .ok_or_else(|| {
-                RepositoryError::InvalidBlueprintDefinition(format!(
-                    "unknown relationship '{}'",
-                    parts[0]
-                ))
-            })?;
-        let target = self
-            .get_blueprint_by_code(relationship.target_blueprint_code.as_deref().ok_or_else(
-                || {
-                    RepositoryError::InvalidBlueprintDefinition(
-                        "relationship has no target blueprint".into(),
-                    )
-                },
-            )?)
-            .await?
-            .ok_or(RepositoryError::NotFound("target blueprint"))?;
-        let attribute = target
-            .attributes
-            .iter()
-            .find(|a| a.code.eq_ignore_ascii_case(parts[1]) && a.value_type != "relationship")
+            .find(|a| {
+                a.code.eq_ignore_ascii_case(leaf)
+                    && !matches!(a.value_type.as_str(), "relationship" | "file")
+            })
             .map(|attribute| attribute.code.clone())
             .ok_or_else(|| {
                 RepositoryError::InvalidBlueprintDefinition(format!(
-                    "unknown relationship attribute '{}'",
-                    parts[1]
+                    "unknown scalar search-path leaf '{}'",
+                    leaf
                 ))
             })?;
         Ok(TermPlan::Relationship {
-            field: relationship.code.clone(),
-            target: Box::new(target),
+            fields,
+            source_blueprint_ids,
+            target: Box::new(current),
             attribute: Some(attribute),
         })
     }
@@ -1208,13 +1417,14 @@ impl CatalogRepository {
                 Some(String::new()),
             ),
             TermPlan::Relationship {
-                field,
+                fields,
                 target,
                 attribute,
+                ..
             } => (
                 Some(target.blueprint.id),
                 attribute.clone(),
-                Some(field.clone()),
+                fields.first().cloned(),
             ),
         };
         let pattern = if term.prefix {
@@ -1230,14 +1440,16 @@ impl CatalogRepository {
             r#"WITH matching_values AS MATERIALIZED (
                     SELECT entity_id, attribute_id
                     FROM attribute_values
-                    WHERE active AND relationship_target_entity_id IS NULL
+                    WHERE workspace_id = $4 AND active
+                      AND relationship_target_entity_id IS NULL
                       AND value_text ILIKE $3
                 )
                 SELECT DISTINCT e.id, a.code
                 FROM matching_values av
                 JOIN attributes a ON a.id = av.attribute_id AND a.deleted_at IS NULL
                 JOIN entities e ON e.id = av.entity_id
-                WHERE e.deleted_at IS NULL
+                WHERE e.deleted_at IS NULL AND e.workspace_id = $4
+                  AND a.workspace_id = $4
                   AND ($1::uuid IS NULL OR e.blueprint_id = $1)
                   AND ($2::text IS NULL OR a.code = $2)
                 ORDER BY e.id, a.code"#
@@ -1245,7 +1457,9 @@ impl CatalogRepository {
             r#"SELECT DISTINCT e.id, a.code
                 FROM entities e JOIN attribute_values av ON av.entity_id = e.id
                 JOIN attributes a ON a.id = av.attribute_id AND a.deleted_at IS NULL
-                WHERE e.deleted_at IS NULL AND av.relationship_target_entity_id IS NULL
+                WHERE e.deleted_at IS NULL AND e.workspace_id = $4
+                  AND av.workspace_id = $4 AND a.workspace_id = $4
+                  AND av.relationship_target_entity_id IS NULL
                   AND ($1::uuid IS NULL OR e.blueprint_id = $1)
                   AND ($2::text IS NULL OR a.code = $2)
                   AND COALESCE(av.value_text, av.value_number::text, av.value_integer::text, av.value_boolean::text, av.value_date::text, av.value_datetime::text, av.value_time::text) ILIKE $3
@@ -1255,6 +1469,7 @@ impl CatalogRepository {
             .bind(match_blueprint)
             .bind(attribute)
             .bind(pattern)
+            .bind(self.workspace_id.unwrap_or(Self::DEFAULT_WORKSPACE_ID))
             .fetch_all(&self.pool)
             .await?;
         let mut witnesses: HashMap<Uuid, MatchExplanation> = HashMap::new();
@@ -1272,12 +1487,22 @@ impl CatalogRepository {
             }
         }
         let mut visited: HashSet<_> = witnesses.keys().copied().collect();
-        let max_depth = match &plan {
-            TermPlan::Relationship { .. } => 1,
-            TermPlan::SelectedAttribute(_) | TermPlan::Any => 0,
-            TermPlan::Reachable => 3,
+        let (path_fields, path_source_blueprints) = match &plan {
+            TermPlan::Relationship {
+                fields,
+                source_blueprint_ids,
+                ..
+            } => (
+                Some(fields.as_slice()),
+                Some(source_blueprint_ids.as_slice()),
+            ),
+            _ => (None, None),
         };
-        let restrict_source = matches!(&plan, TermPlan::Relationship { .. });
+        let max_depth = match path_fields {
+            Some(fields) => fields.len(),
+            None if matches!(&plan, TermPlan::Reachable) => 3,
+            None => 0,
+        };
         for depth in 1..=max_depth {
             let level: Vec<_> = frontier.drain(..).collect();
             if level.is_empty() {
@@ -1289,14 +1514,21 @@ impl CatalogRepository {
                 JOIN attributes a ON a.id = av.attribute_id AND a.deleted_at IS NULL
                 JOIN entities target ON target.id = av.relationship_target_entity_id
                 WHERE source.deleted_at IS NULL AND target.deleted_at IS NULL AND av.active
+                  AND source.workspace_id = $4 AND target.workspace_id = $4
+                  AND av.workspace_id = $4 AND a.workspace_id = $4
                   AND av.relationship_target_entity_id = ANY($1) AND a.value_type = 'relationship'
                   AND ($2::uuid IS NULL OR source.blueprint_id = $2)
                   AND ($3::text IS NULL OR a.code = $3)
                 ORDER BY source.id, a.code, av.relationship_target_entity_id"#,
             )
             .bind(&level)
-            .bind(restrict_source.then_some(selected.blueprint.id))
-            .bind(direct_field.as_ref().filter(|v| !v.is_empty()))
+            .bind(path_source_blueprints.and_then(|ids| ids.get(ids.len() - depth)))
+            .bind(
+                path_fields
+                    .and_then(|fields| fields.get(fields.len() - depth))
+                    .or_else(|| direct_field.as_ref().filter(|v| !v.is_empty())),
+            )
+            .bind(self.workspace_id.unwrap_or(Self::DEFAULT_WORKSPACE_ID))
             .fetch_all(&self.pool)
             .await?;
             for (source, field, target) in edges {
@@ -1317,7 +1549,7 @@ impl CatalogRepository {
                         term: term.original.clone(),
                         matching_entity_id: parent.matching_entity_id,
                         matching_attribute_code: parent.matching_attribute_code.clone(),
-                        traversal_depth: depth,
+                        traversal_depth: depth as u8,
                         relationship_path: path,
                     },
                 );
@@ -1332,8 +1564,13 @@ impl CatalogRepository {
                 *id != Uuid::nil()
             })
             .collect::<HashMap<_, _>>();
-        let selected_ids = sqlx::query_scalar::<_, Uuid>("SELECT id FROM entities WHERE blueprint_id = $1 AND ($2::bigint IS NULL OR blueprint_version = $2) AND deleted_at IS NULL AND id = ANY($3)")
-            .bind(selected.blueprint.id).bind(selected_version).bind(ids.keys().copied().collect::<Vec<_>>()).fetch_all(&self.pool).await?;
+        let selected_ids = sqlx::query_scalar::<_, Uuid>("SELECT id FROM entities WHERE blueprint_id = $1 AND ($2::bigint IS NULL OR blueprint_version = $2) AND deleted_at IS NULL AND id = ANY($3) AND workspace_id = $4")
+            .bind(selected.blueprint.id)
+            .bind(selected_version)
+            .bind(ids.keys().copied().collect::<Vec<_>>())
+            .bind(self.workspace_id.unwrap_or(Self::DEFAULT_WORKSPACE_ID))
+            .fetch_all(&self.pool)
+            .await?;
         Ok(selected_ids
             .into_iter()
             .filter_map(|id| ids.get(&id).cloned().map(|w| (id, w)))
@@ -1358,7 +1595,8 @@ enum TermPlan {
     Reachable,
     SelectedAttribute(Option<String>),
     Relationship {
-        field: String,
+        fields: Vec<String>,
+        source_blueprint_ids: Vec<Uuid>,
         target: Box<BlueprintWithAttributes>,
         attribute: Option<String>,
     },
@@ -1495,6 +1733,7 @@ fn entity_preview(row: EntityPreviewRow) -> EntityPreview {
             &row.blueprint_context_fallback,
         ),
         preview: row.preview,
+        table_values: HashMap::new(),
         related: HashMap::new(),
         match_explanations: Vec::new(),
     }

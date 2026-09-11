@@ -135,7 +135,17 @@ can create entities or serve as migration targets. See [Blueprint Publication](d
 `POST /v1/entities/search` optionally accepts multiple relationship tree facets;
 `POST /v1/entities/facets/relationship-tree/children` loads a facet page. See
 [Relationship Tree Facets](search-facets.md) for their request and response
-contract.
+contract. Optional first-page totals are capped at 500 and set
+`total_count_capped = true` when more results exist; keyset result pagination is
+not capped.
+
+### Scalar filters
+
+Structured `filters.field` values may name a local scalar or a scalar leaf
+through up to three relationship hops, for example
+`family.product_type.name`. Operators are validated against the resolved leaf
+type. A many-valued path matches when any reachable scalar satisfies the
+criterion. Each hop uses the linked entity's pinned blueprint revision.
 
 ### Search table sorting
 
@@ -151,27 +161,26 @@ configured in the selected blueprint's `views.table.columns` and `direction` is
 }
 ```
 
-The field may be local or a configured one-hop relationship path. Sorted
-responses use an opaque keyset `next_cursor`; return it unchanged as
+The field may be local or a configured path with up to three relationship hops.
+Every relationship hop must declare `cardinality = "one"`. Sorted responses use
+an opaque keyset `next_cursor`; return it unchanged as
 `page.cursor` with the same sort to request the following page. An invalid
 direction, unconfigured field, or non-scalar column returns `422`.
 
-### Search table relationship projections
+### Search table path projections
 
-For every configured `one_to_one` `relationship.scalar_field` column in the
-current blueprint's `views.table.columns`, each returned item has
-`related[relationship]`. It is an array of direct targets with `id`,
-`blueprint_id`, pinned `blueprint_version`, `relationship_context_id`,
-`relationship_context_code`, `display`, and `preview`. `preview` is the target's
-cached scalar preview for every direct context; it never recursively expands
-relationships. Targets are bulk-hydrated for the selected page and are shared
-by all columns using the same relationship.
+For every configured table column, each returned item has
+`table_values[field_path]`, an array of scalar values. Relationship edges are
+traversed in page-level batches and scalar leaves are read from the target
+entities' preview projections. Each hop uses the linked entity's pinned
+blueprint revision. A missing or incompatible segment yields an empty array;
+many-valued paths may yield multiple values.
 
-Every requested relationship key is present with `[]` when a source entity's
-pinned revision lacks that relationship or its target metadata is incompatible.
-This preserves one response item per source entity across older revisions. The
-response `blueprint` and its table column metadata remain the renderer contract
-for interpreting these projections.
+Direct `related[relationship]` previews remain available for compatibility with
+custom one-hop cell renderers. Blueprint responses expose
+`table_path_attributes` with each configured path's scalar `value_type` and
+whether every hop is single-valued; the Explorer uses that metadata for filter
+controls and sortable headers.
 
 ## Entity system annotations
 

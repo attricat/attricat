@@ -12,8 +12,7 @@ that do not define them.
 - `table`: configured columns in the entity explorer.
 
 `detail` and `edit` use recursive layout roots. A table column may reference a
-local scalar field or a scalar field one hop through a `one_to_one`
-relationship.
+local scalar field or a scalar leaf through at most three relationship hops.
 
 ```toml
 [views.table]
@@ -24,20 +23,22 @@ field = "title"
 label = "Product"
 
 [[views.table.columns]]
-field = "category.name"
-label = "Category"
+field = "family.product_type.name"
+label = "Product type"
 ```
 
-`columns` must be non-empty and has unique `field` paths. A relationship path
-requires an existing relationship, an existing scalar target field, and
-`cardinality = "one_to_one"` on the relationship. `label` is optional.
+`columns` must be non-empty and have unique `field` paths. Every intermediate
+segment must be a relationship and the final segment must be scalar. Paths are
+resolved with each linked entity's pinned blueprint revision; incompatible
+historical revisions yield an empty cell. `label` is optional.
 `fields = ["title", "price", "available"]` remains a legacy shorthand for
 local scalar columns; do not combine it with `columns`.
 
 Explorer users can sort a configured scalar column in ascending or descending
 order. The table uses the API's keyset cursor for the selected field, including
-for a configured relationship path. Columns that resolve to non-scalar values
-are not sortable.
+for a configured relationship path. Relationship-path sorting requires
+`cardinality = "one"` on every hop. Many-valued paths are displayable but are
+not sortable, and columns that resolve to non-scalar values are rejected.
 
 ## Blocks
 

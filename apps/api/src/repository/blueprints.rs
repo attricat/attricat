@@ -4,6 +4,7 @@ use crate::domain_events::{
     BLUEPRINT_CREATED_V1, BLUEPRINT_PUBLISHED_V1, BLUEPRINT_REVISION_CREATED_V1,
     BlueprintRevisionV1, EventSource, EventSourceKind, NewDomainEvent,
 };
+use crate::model::TablePathAttribute;
 use catalog_validation::validate_json_schema;
 use serde_json::json;
 use uuid::Uuid;
@@ -109,7 +110,9 @@ impl CatalogRepository {
             blueprint_event(self, BLUEPRINT_CREATED_V1, &result.blueprint),
         )
         .await?;
-        Ok(result)
+        self.get_blueprint_by_code_and_version(&result.blueprint.code, result.blueprint.version)
+            .await?
+            .ok_or(RepositoryError::NotFound("blueprint"))
     }
 
     pub async fn create_blueprint_revision(
@@ -153,7 +156,9 @@ impl CatalogRepository {
             blueprint_event(self, BLUEPRINT_REVISION_CREATED_V1, &result.blueprint),
         )
         .await?;
-        Ok(result)
+        self.get_blueprint_by_code_and_version(&result.blueprint.code, result.blueprint.version)
+            .await?
+            .ok_or(RepositoryError::NotFound("blueprint"))
     }
 
     async fn insert_blueprint_revision_in_transaction(
@@ -198,9 +203,9 @@ impl CatalogRepository {
             validate_attribute_default_value(&attribute)?;
             attributes.push(
                 sqlx::query_as::<_, Attribute>(
-                    r#"INSERT INTO attributes (id, workspace_id, blueprint_id, blueprint_version, code, value_type, value_schema, default_value, file_policy, target_blueprint_code, relationship_cardinality, tags, context_fallback, context_editable, readonly, position)
-                       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)
-                       RETURNING id, blueprint_id, blueprint_version, code, value_type, value_schema, default_value, file_policy, target_blueprint_code, relationship_cardinality, tags, context_fallback, context_editable, readonly, position, created_at, updated_at, deleted_at"#,
+                    r#"INSERT INTO attributes (id, workspace_id, blueprint_id, blueprint_version, code, value_type, value_schema, default_value, file_policy, target_blueprint_code, cardinality, target_cardinality, tags, context_fallback, context_editable, readonly, position)
+                       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17)
+                       RETURNING id, blueprint_id, blueprint_version, code, value_type, value_schema, default_value, file_policy, target_blueprint_code, cardinality, target_cardinality, tags, context_fallback, context_editable, readonly, position, created_at, updated_at, deleted_at"#,
                 )
                 .bind(Uuid::new_v4())
                 .bind(self.workspace_id.unwrap_or(Self::DEFAULT_WORKSPACE_ID))
@@ -212,7 +217,8 @@ impl CatalogRepository {
                 .bind(attribute.default_value)
                 .bind(attribute.file_policy.map(|policy| serde_json::to_value(policy).expect("file policy serializes")))
                 .bind(attribute.target_blueprint)
-                .bind(attribute.relationship_cardinality)
+                .bind(attribute.cardinality)
+                .bind(attribute.target_cardinality)
                 .bind(serde_json::to_value(attribute.tags).expect("attribute tags serialize"))
                 .bind(attribute.context_fallback)
                 .bind(attribute.context_editable)
@@ -226,6 +232,7 @@ impl CatalogRepository {
         Ok(BlueprintWithAttributes {
             blueprint,
             attributes,
+            table_path_attributes: Vec::new(),
         })
     }
 
@@ -422,7 +429,7 @@ impl CatalogRepository {
         blueprint_version: i64,
     ) -> Result<Vec<Attribute>, RepositoryError> {
         Ok(sqlx::query_as::<_, Attribute>(
-            r#"SELECT id, blueprint_id, blueprint_version, code, value_type, value_schema, default_value, file_policy, target_blueprint_code, relationship_cardinality, tags, context_fallback, context_editable, readonly, position, created_at, updated_at, deleted_at
+            r#"SELECT id, blueprint_id, blueprint_version, code, value_type, value_schema, default_value, file_policy, target_blueprint_code, cardinality, target_cardinality, tags, context_fallback, context_editable, readonly, position, created_at, updated_at, deleted_at
                FROM attributes
                WHERE blueprint_id = $1 AND blueprint_version = $2 AND workspace_id = $3 AND deleted_at IS NULL
                ORDER BY position"#,
@@ -434,6 +441,87 @@ impl CatalogRepository {
         .await?)
     }
 
+    async fn resolve_table_path_attributes(
+        &self,
+        blueprint: &Blueprint,
+        attributes: &[Attribute],
+    ) -> Result<Vec<TablePathAttribute>, RepositoryError> {
+        let Some(columns) = blueprint
+            .views
+            .get("table")
+            .and_then(|table| table.get("columns"))
+            .and_then(Value::as_array)
+        else {
+            return Ok(Vec::new());
+        };
+        let mut resolved = Vec::new();
+        for path in columns
+            .iter()
+            .filter_map(|column| column.get("field").and_then(Value::as_str))
+        {
+            let parts: Vec<_> = path.split('.').collect();
+            let Some(first) = attributes
+                .iter()
+                .find(|attribute| attribute.code == parts[0])
+            else {
+                continue;
+            };
+            if parts.len() == 1 {
+                if !matches!(first.value_type.as_str(), "relationship" | "file") {
+                    resolved.push(TablePathAttribute {
+                        code: path.to_owned(),
+                        value_type: first.value_type.clone(),
+                        sortable: true,
+                    });
+                }
+                continue;
+            }
+            let mut attribute = first.clone();
+            let mut sortable = true;
+            for field in &parts[1..] {
+                if attribute.value_type != "relationship" {
+                    break;
+                }
+                sortable &= attribute.cardinality.as_deref() == Some("one");
+                let Some(target) = attribute.target_blueprint_code.as_deref() else {
+                    break;
+                };
+                let Some(next) = sqlx::query_as::<_, Attribute>(
+                    r#"SELECT a.id, a.blueprint_id, a.blueprint_version, a.code, a.value_type,
+                              a.value_schema, a.default_value, a.file_policy, a.target_blueprint_code,
+                              a.cardinality, a.target_cardinality, a.tags, a.context_fallback,
+                              a.context_editable, a.readonly, a.position, a.created_at, a.updated_at,
+                              a.deleted_at
+                         FROM blueprints b
+                         JOIN attributes a ON a.blueprint_id = b.id AND a.blueprint_version = b.version
+                        WHERE b.workspace_id = $1 AND b.code = $2
+                          AND b.status = 'published' AND b.deleted_at IS NULL
+                          AND a.code = $3 AND a.deleted_at IS NULL
+                        ORDER BY b.version DESC LIMIT 1"#,
+                )
+                .bind(self.workspace_id.unwrap_or(Self::DEFAULT_WORKSPACE_ID))
+                .bind(target)
+                .bind(field)
+                .fetch_optional(&self.pool)
+                .await?
+                else {
+                    break;
+                };
+                attribute = next;
+            }
+            if !matches!(attribute.value_type.as_str(), "relationship" | "file")
+                && attribute.code == parts[parts.len() - 1]
+            {
+                resolved.push(TablePathAttribute {
+                    code: path.to_owned(),
+                    value_type: attribute.value_type,
+                    sortable,
+                });
+            }
+        }
+        Ok(resolved)
+    }
+
     async fn with_attributes(
         &self,
         blueprint: Option<Blueprint>,
@@ -443,9 +531,13 @@ impl CatalogRepository {
                 let attributes = self
                     .list_attributes(blueprint.id, blueprint.version)
                     .await?;
+                let table_path_attributes = self
+                    .resolve_table_path_attributes(&blueprint, &attributes)
+                    .await?;
                 Ok(Some(BlueprintWithAttributes {
                     blueprint,
                     attributes,
+                    table_path_attributes,
                 }))
             }
             None => Ok(None),
