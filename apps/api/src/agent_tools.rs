@@ -6,6 +6,7 @@
 
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
+use std::collections::HashMap;
 use uuid::Uuid;
 
 use crate::{
@@ -88,7 +89,7 @@ pub fn definitions() -> Vec<ToolDefinition> {
         ),
         definition(
             "search_entities",
-            "Search entities of a blueprint by scalar values and system tags. Query terms are whitespace-separated AND terms. Bare free text searches scalar values on the selected blueprint only. Use *:value for global relationship-aware discovery through up to three incoming edges. Use attribute:value for a selected-blueprint attribute; use relationship:value or an explicit path with up to three relationship hops and a scalar leaf; and use blueprint:value or blueprint.attribute:value for the selected blueprint (code or name). A trailing * means prefix matching. Results include match_explanations with deterministic match witnesses and relationship paths. Omit blueprint.version to include every published revision; set outdated to true to return only entities that are not on the latest published revision. Use sort with a configured scalar table-column field and asc or desc direction; relationship table columns use relationship.field paths. Without sort, results are paginated in ascending creation order.",
+            "Search entities of a blueprint by scalar values and system tags. Query terms are whitespace-separated AND terms. Bare free text searches scalar values on the selected blueprint only. Use *:value for global relationship-aware discovery through up to three incoming edges. Use attribute:value for a selected-blueprint attribute; use relationship:value or an explicit path with up to three relationship hops and a scalar leaf; and use blueprint:value or blueprint.attribute:value for the selected blueprint (code or name). A trailing * means prefix matching. Results include match_explanations with deterministic match witnesses and relationship paths. Omit blueprint.version to include every published revision; set outdated to true to return only entities that are not on the latest published revision. Use sort with a configured scalar table-column field and asc or desc direction; relationship table columns use paths of up to three hops. A relationship-path sort without blueprint.version is accepted only when the complete matching result uses one source version. Without sort, results are paginated in ascending creation order.",
             json!({"type":"object","required":["blueprint"],"properties":{"blueprint":{"type":"object","required":["code"],"properties":{"code":{"type":"string"},"version":{"type":"integer","minimum":1}},"additionalProperties":false},"query":{"type":"string"},"system_tags":{"type":"array","items":{"type":"string"}},"outdated":{"type":"boolean"},"sort":{"type":"object","required":["field","direction"],"properties":{"field":{"type":"string"},"direction":{"type":"string","enum":["asc","desc"]}},"additionalProperties":false},"page":{"type":"object","properties":{"size":{"type":"integer","minimum":1,"maximum":100},"cursor":{"type":"string"}},"additionalProperties":false}},"additionalProperties":false}),
         ),
         definition(
@@ -329,7 +330,7 @@ pub async fn execute_read(
             let selected = match input.blueprint.version {
                 Some(version) => Some(
                     repository
-                        .get_blueprint_by_code_and_version(&input.blueprint.code, version)
+                        .get_published_blueprint_by_code_and_version(&input.blueprint.code, version)
                         .await?
                         .map(|blueprint| blueprint.blueprint.version)
                         .ok_or(RepositoryError::NotFound("blueprint"))?,
@@ -338,14 +339,68 @@ pub async fn execute_read(
             };
             let search_blueprint = match selected {
                 Some(version) => repository
-                    .get_blueprint_by_code_and_version(&input.blueprint.code, version)
+                    .get_published_blueprint_by_code_and_version(&input.blueprint.code, version)
                     .await?
                     .expect("selected version was checked above"),
                 None => current.clone(),
             };
-            let sort =
-                resolve_agent_search_sort(repository, &search_blueprint, input.sort.as_ref())
-                    .await?;
+            let query = input
+                .query
+                .as_deref()
+                .map(str::trim)
+                .filter(|value| !value.is_empty());
+            let resolved = if query.is_some() {
+                Some(
+                    repository
+                        .resolve_search(&search_blueprint, selected, query)
+                        .await
+                        .map_err(|error| ToolError::InvalidArguments(error.to_string()))?,
+                )
+            } else {
+                None
+            };
+            let matching = resolved
+                .as_ref()
+                .map(|resolved| resolved.ids.iter().copied().collect::<Vec<_>>());
+            let versions = repository
+                .search_result_versions(
+                    current.blueprint.id,
+                    selected,
+                    matching.as_deref(),
+                    &input.system_tags,
+                    input.outdated,
+                    current.blueprint.version,
+                )
+                .await?;
+            let relationship_sort = input
+                .sort
+                .as_ref()
+                .is_some_and(|sort| sort.field.contains('.'));
+            if selected.is_none() && relationship_sort && versions.len() != 1 {
+                return Err(ToolError::InvalidArguments(
+                    "relationship_path_sort_requires_single_result_version".to_owned(),
+                ));
+            }
+            let effective_source_version = match versions.as_slice() {
+                [version] => Some(*version),
+                _ => selected,
+            };
+            let sort_blueprint = match effective_source_version {
+                Some(version) if version != current.blueprint.version => repository
+                    .get_published_blueprint_by_code_and_version(&input.blueprint.code, version)
+                    .await?
+                    .ok_or(RepositoryError::NotFound("blueprint"))?,
+                _ => search_blueprint.clone(),
+            };
+            let sort = resolve_agent_search_sort(
+                repository,
+                &sort_blueprint,
+                input.sort.as_ref(),
+                relationship_sort
+                    .then_some(effective_source_version)
+                    .flatten(),
+            )
+            .await?;
             let cursor = match (sort.is_some(), input.page.cursor.as_deref()) {
                 (true, _) => None,
                 (false, Some(cursor)) => Some(
@@ -355,25 +410,19 @@ pub async fn execute_read(
                 ),
                 (false, None) => None,
             };
-            let query = input
-                .query
-                .as_deref()
-                .map(str::trim)
-                .filter(|value| !value.is_empty());
-            let resolved = repository
-                .resolve_search(&search_blueprint, selected, query)
-                .await
-                .map_err(|error| ToolError::InvalidArguments(error.to_string()))?;
-            let matching: Vec<_> = resolved.ids.iter().copied().collect();
             let (mut items, next_cursor) = match sort.as_ref() {
                 Some(sort) => {
                     repository
                         .search_entity_previews_sorted(
                             current.blueprint.id,
-                            selected,
+                            if relationship_sort {
+                                effective_source_version
+                            } else {
+                                selected
+                            },
                             limit.into(),
                             input.page.cursor.as_deref(),
-                            Some(&matching),
+                            matching.as_deref(),
                             &input.system_tags,
                             input.outdated,
                             current.blueprint.version,
@@ -389,7 +438,7 @@ pub async fn execute_read(
                             None,
                             limit.into(),
                             cursor,
-                            Some(&matching),
+                            matching.as_deref(),
                             &input.system_tags,
                             input.outdated,
                             current.blueprint.version,
@@ -400,17 +449,54 @@ pub async fn execute_read(
             for item in &mut items {
                 item.schema_outdated = item.blueprint_version != current.blueprint.version;
                 item.match_explanations = resolved
-                    .explanations
-                    .get(&item.id)
+                    .as_ref()
+                    .and_then(|resolved| resolved.explanations.get(&item.id))
                     .cloned()
                     .unwrap_or_default();
             }
+            let table_paths = agent_table_paths(&sort_blueprint);
+            repository
+                .hydrate_table_path_values(&mut items, &table_paths)
+                .await?;
+            repository
+                .hydrate_related_table_previews(
+                    &mut items,
+                    &agent_table_relationships(&sort_blueprint),
+                )
+                .await?;
+            let result_version_scope = match versions.as_slice() {
+                [] => crate::model::SearchResultVersionScope::Empty,
+                [version] => crate::model::SearchResultVersionScope::Single { version: *version },
+                _ => crate::model::SearchResultVersionScope::Multiple,
+            };
+            let hidden_outdated_count =
+                if selected == Some(current.blueprint.version) && input.page.cursor.is_none() {
+                    Some(
+                        repository
+                            .count_entity_previews(
+                                current.blueprint.id,
+                                None,
+                                None,
+                                &[],
+                                true,
+                                current.blueprint.version,
+                                501,
+                            )
+                            .await?,
+                    )
+                } else {
+                    None
+                };
             serde_json::to_value(crate::model::EntitySearchResponse {
-                blueprint: current,
+                blueprint: sort_blueprint,
                 items,
                 next_cursor,
                 total_count: None,
                 total_count_capped: false,
+                result_version_scope,
+                hidden_outdated_count: hidden_outdated_count.map(|count| count.min(500)),
+                hidden_outdated_count_capped: hidden_outdated_count
+                    .is_some_and(|count| count > 500),
             })
             .expect("models serialize")
         }
@@ -609,10 +695,66 @@ pub async fn execute_mutation(
     bounded(result)
 }
 
+fn agent_table_paths(blueprint: &crate::model::BlueprintWithAttributes) -> HashMap<String, String> {
+    let mut paths: HashMap<_, _> = blueprint
+        .table_path_attributes
+        .iter()
+        .map(|attribute| (attribute.code.clone(), attribute.value_type.clone()))
+        .collect();
+    if let Some(fields) = blueprint
+        .blueprint
+        .views
+        .get("table")
+        .and_then(|table| table.get("fields"))
+        .and_then(Value::as_array)
+    {
+        for field in fields.iter().filter_map(Value::as_str) {
+            if let Some(attribute) = blueprint
+                .attributes
+                .iter()
+                .find(|attribute| attribute.code == field && attribute.value_type != "relationship")
+            {
+                paths.insert(attribute.code.clone(), attribute.value_type.clone());
+            }
+        }
+    }
+    paths
+}
+
+fn agent_table_relationships(
+    blueprint: &crate::model::BlueprintWithAttributes,
+) -> HashMap<String, String> {
+    blueprint
+        .blueprint
+        .views
+        .get("table")
+        .and_then(|table| table.get("columns"))
+        .and_then(Value::as_array)
+        .into_iter()
+        .flatten()
+        .filter_map(|column| column.get("field").and_then(Value::as_str))
+        .filter_map(|field| field.split_once('.').map(|(relationship, _)| relationship))
+        .filter_map(|relationship| {
+            blueprint
+                .attributes
+                .iter()
+                .find(|attribute| attribute.code == relationship)
+                .filter(|attribute| attribute.value_type == "relationship")
+                .and_then(|attribute| {
+                    attribute
+                        .target_blueprint_code
+                        .as_ref()
+                        .map(|target| (relationship.to_owned(), target.clone()))
+                })
+        })
+        .collect()
+}
+
 async fn resolve_agent_search_sort(
     repository: &CatalogRepository,
     blueprint: &crate::model::BlueprintWithAttributes,
     sort: Option<&crate::model::SearchSort>,
+    effective_source_version: Option<i64>,
 ) -> Result<Option<EntitySearchSort>, ToolError> {
     let Some(sort) = sort else { return Ok(None) };
     let descending = match sort.direction.as_str() {
@@ -698,8 +840,10 @@ async fn resolve_agent_search_sort(
         field: sort.field.clone(),
         relationship_path,
         leaf_field: leaf_field.to_owned(),
+        leaf_blueprint_id: current.blueprint.id,
         value_type,
         descending,
+        effective_source_version,
     }))
 }
 

@@ -222,12 +222,13 @@ cardinality = "one"
             .is_none()
     );
 
-    // Related typed scalar ordering selects source IDs first, then reuses page-only hydration.
-    // The unlinked v1 entity has an explicit NULL-last position.
+    let unlinked_current_source = create_entity(&client, &base_url, &source_v2).await;
+    // Related typed scalar ordering scans indexed leaves first, then reuses page-only hydration.
+    // An unlinked entity in the selected revision has an explicit NULL-last position.
     let first_page: Value = client
         .post(format!("{base_url}/v1/entities/search"))
         .json(&json!({
-            "blueprint": { "code": "search_projection_product" },
+            "blueprint": { "code": "search_projection_product", "version": 2 },
             "sort": { "field": "categories.name", "direction": "asc" },
             "page": { "size": 1 }
         }))
@@ -246,7 +247,7 @@ cardinality = "one"
     let second_page: Value = client
         .post(format!("{base_url}/v1/entities/search"))
         .json(&json!({
-            "blueprint": { "code": "search_projection_product" },
+            "blueprint": { "code": "search_projection_product", "version": 2 },
             "sort": { "field": "categories.name", "direction": "asc" },
             "page": { "size": 1, "cursor": first_page["next_cursor"] }
         }))
@@ -262,7 +263,7 @@ cardinality = "one"
     let third_page: Value = client
         .post(format!("{base_url}/v1/entities/search"))
         .json(&json!({
-            "blueprint": { "code": "search_projection_product" },
+            "blueprint": { "code": "search_projection_product", "version": 2 },
             "sort": { "field": "categories.name", "direction": "asc" },
             "page": { "size": 1, "cursor": second_page["next_cursor"] }
         }))
@@ -274,7 +275,7 @@ cardinality = "one"
         .json()
         .await
         .unwrap();
-    assert_eq!(third_page["items"][0]["id"], old_source["id"]);
+    assert_eq!(third_page["items"][0]["id"], unlinked_current_source["id"]);
     assert!(third_page["next_cursor"].is_null());
 
     let invalid = client

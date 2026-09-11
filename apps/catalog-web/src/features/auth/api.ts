@@ -10,6 +10,7 @@ const sessionSchema = z.object({
   capabilities: z
     .object({
       audit_read: z.boolean(),
+      data_health_read: z.boolean().default(false),
       members_manage: z.boolean(),
       roles_manage: z.boolean(),
       tokens_manage: z.boolean(),

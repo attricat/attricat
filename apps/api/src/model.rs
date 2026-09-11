@@ -435,12 +435,23 @@ pub struct SearchPage {
 }
 
 #[derive(Clone, Debug, Serialize)]
+#[serde(tag = "kind", rename_all = "snake_case")]
+pub enum SearchResultVersionScope {
+    Empty,
+    Single { version: i64 },
+    Multiple,
+}
+
+#[derive(Clone, Debug, Serialize)]
 pub struct EntitySearchResponse {
     pub blueprint: BlueprintWithAttributes,
     pub items: Vec<EntityPreview>,
     pub next_cursor: Option<String>,
     pub total_count: Option<i64>,
     pub total_count_capped: bool,
+    pub result_version_scope: SearchResultVersionScope,
+    pub hidden_outdated_count: Option<i64>,
+    pub hidden_outdated_count_capped: bool,
 }
 
 #[derive(Clone, Debug, Deserialize)]

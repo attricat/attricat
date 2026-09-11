@@ -43,10 +43,12 @@ describe('blueprint API client', () => {
     await listBlueprints();
     expect(fetchMock).toHaveBeenLastCalledWith('/api/blueprints/catalogue');
 
+    const controller = new AbortController();
     respond([blueprint]);
-    await listBlueprintRevisions(blueprintId);
+    await listBlueprintRevisions(blueprintId, controller.signal);
     expect(fetchMock).toHaveBeenLastCalledWith(
       `/api/blueprints/${blueprintId}/versions`,
+      { signal: controller.signal },
     );
 
     respond({ blueprint, attributes: [] });

@@ -25,6 +25,7 @@ struct SortedEntityPreviewRow {
     blueprint_context_fallback: Value,
     sort_value: Option<String>,
     sort_is_null: bool,
+    sort_target_id: Uuid,
 }
 
 #[derive(Clone, Debug)]
@@ -32,8 +33,10 @@ pub(crate) struct EntitySearchSort {
     pub field: String,
     pub relationship_path: Vec<String>,
     pub leaf_field: String,
+    pub leaf_blueprint_id: Uuid,
     pub value_type: String,
     pub descending: bool,
+    pub effective_source_version: Option<i64>,
 }
 
 #[derive(Clone, Debug, serde::Serialize)]
@@ -51,8 +54,10 @@ struct SortedSearchCursor {
     version: u8,
     field: String,
     descending: bool,
+    effective_source_version: Option<i64>,
     is_null: bool,
     value: Option<String>,
+    target_id: Uuid,
     id: Uuid,
 }
 
@@ -459,6 +464,41 @@ impl CatalogRepository {
         .await?)
     }
 
+    pub async fn search_result_versions(
+        &self,
+        blueprint_id: Uuid,
+        blueprint_version: Option<i64>,
+        matching_entity_ids: Option<&[Uuid]>,
+        system_tags: &[String],
+        outdated: bool,
+        current_blueprint_version: i64,
+    ) -> Result<Vec<i64>, RepositoryError> {
+        validate_system_tags(system_tags)?;
+        Ok(sqlx::query_scalar::<_, i64>(
+            r#"SELECT e.blueprint_version
+                 FROM entities e
+                WHERE e.blueprint_id = $1
+                  AND ($2::bigint IS NULL OR e.blueprint_version = $2)
+                  AND e.workspace_id = $3
+                  AND e.deleted_at IS NULL
+                  AND ($4::uuid[] IS NULL OR e.id = ANY($4))
+                  AND ($5::text[] IS NULL OR e.system_tags @> $5)
+                  AND (NOT $6 OR e.blueprint_version <> $7)
+                GROUP BY e.blueprint_version
+                ORDER BY e.blueprint_version DESC
+                LIMIT 2"#,
+        )
+        .bind(blueprint_id)
+        .bind(blueprint_version)
+        .bind(self.workspace_id.unwrap_or(Self::DEFAULT_WORKSPACE_ID))
+        .bind(matching_entity_ids)
+        .bind((!system_tags.is_empty()).then_some(system_tags))
+        .bind(outdated)
+        .bind(current_blueprint_version)
+        .fetch_all(&self.pool)
+        .await?)
+    }
+
     /// Selects a page by a configured scalar table column without hydrating projections for
     /// every candidate. NULL values are always last and entity IDs make the ordering stable.
     #[allow(clippy::too_many_arguments)]
@@ -479,7 +519,8 @@ impl CatalogRepository {
         if let Some(cursor) = &cursor
             && (cursor.field != sort.field
                 || cursor.descending != sort.descending
-                || cursor.version != 1)
+                || cursor.effective_source_version != sort.effective_source_version
+                || cursor.version != 3)
         {
             return Err(RepositoryError::InvalidBlueprintDefinition(
                 "page.cursor does not match sort".to_owned(),
@@ -491,6 +532,25 @@ impl CatalogRepository {
             .map(|cursor| cursor.is_null)
             .unwrap_or(false);
         let cursor_id = cursor.as_ref().map(|cursor| cursor.id);
+        let cursor_target_id = cursor.as_ref().map(|cursor| cursor.target_id);
+        if !sort.relationship_path.is_empty() {
+            return self
+                .search_entity_previews_sorted_relationship(
+                    blueprint_id,
+                    blueprint_version,
+                    limit,
+                    matching_entity_ids,
+                    system_tags,
+                    outdated,
+                    current_blueprint_version,
+                    sort,
+                    cursor_value,
+                    cursor_is_null,
+                    cursor_target_id,
+                    cursor_id,
+                )
+                .await;
+        }
         let column = native_sort_column(&sort.value_type)?;
         let comparison = if sort.descending { "<" } else { ">" };
         let direction = if sort.descending { "DESC" } else { "ASC" };
@@ -548,7 +608,8 @@ impl CatalogRepository {
                       (SELECT COALESCE(jsonb_object_agg(attribute.code, attribute.context_fallback), '{{}}'::jsonb)
                          FROM attributes attribute WHERE attribute.blueprint_id = e.blueprint_id
                            AND attribute.blueprint_version = e.blueprint_version AND attribute.deleted_at IS NULL) AS blueprint_context_fallback,
-                      sort_value.{column}::text AS sort_value, sort_value.{column} IS NULL AS sort_is_null
+                      sort_value.{column}::text AS sort_value, sort_value.{column} IS NULL AS sort_is_null,
+                      e.id AS sort_target_id
                 FROM entities e
                 JOIN blueprints b ON b.id = e.blueprint_id AND b.version = e.blueprint_version
                 {joins}
@@ -585,6 +646,167 @@ impl CatalogRepository {
             .fetch_all(&self.pool)
             .await?;
         let mut rows = rows;
+        let next_cursor = if rows.len() > limit as usize {
+            rows.pop();
+            rows.last()
+                .map(|row| encode_sorted_search_cursor(sort, row))
+        } else {
+            None
+        };
+        Ok((
+            rows.into_iter().map(sorted_entity_preview).collect(),
+            next_cursor,
+        ))
+    }
+
+    /// Sorts a single-valued relationship path from its indexed scalar leaf back to
+    /// source entities. Non-null values are paged first; missing/incompatible paths
+    /// use a separate source-ID phase so they do not force a full mixed-value sort.
+    #[allow(clippy::too_many_arguments)]
+    async fn search_entity_previews_sorted_relationship(
+        &self,
+        blueprint_id: Uuid,
+        blueprint_version: Option<i64>,
+        limit: i64,
+        matching_entity_ids: Option<&[Uuid]>,
+        system_tags: &[String],
+        outdated: bool,
+        current_blueprint_version: i64,
+        sort: &EntitySearchSort,
+        cursor_value: Option<String>,
+        cursor_is_null: bool,
+        cursor_target_id: Option<Uuid>,
+        cursor_id: Option<Uuid>,
+    ) -> Result<(Vec<EntityPreview>, Option<String>), RepositoryError> {
+        let column = native_sort_column(&sort.value_type)?;
+        let column_type = native_sort_cast(&sort.value_type)?;
+        let comparison = if sort.descending { "<" } else { ">" };
+        let direction = if sort.descending { "DESC" } else { "ASC" };
+        let workspace_id = self.workspace_id.unwrap_or(Self::DEFAULT_WORKSPACE_ID);
+        let default_context_id = sqlx::query_scalar::<_, Uuid>(
+            "SELECT id FROM attribute_contexts WHERE workspace_id = $1 AND code = 'default'",
+        )
+        .bind(workspace_id)
+        .fetch_one(&self.pool)
+        .await?;
+        let leaf_attribute_ids = sqlx::query_scalar::<_, Uuid>(
+            "SELECT id FROM attributes WHERE workspace_id = $1 AND blueprint_id = $2 AND code = $3 AND value_type = $4 AND deleted_at IS NULL",
+        )
+        .bind(workspace_id)
+        .bind(sort.leaf_blueprint_id)
+        .bind(&sort.leaf_field)
+        .bind(&sort.value_type)
+        .fetch_all(&self.pool)
+        .await?;
+        let mut rows = Vec::new();
+
+        if !cursor_is_null {
+            let reverse_joins = relationship_sort_reverse_joins(sort.relationship_path.len())?;
+            let sql = format!(
+                r#"SELECT e.id, e.blueprint_version, e.created_at, e.projections -> 'preview' AS preview,
+                          b.views AS blueprint_views,
+                          (SELECT COALESCE(jsonb_object_agg(attribute.code, attribute.context_fallback), '{{}}'::jsonb)
+                             FROM attributes attribute WHERE attribute.blueprint_id = e.blueprint_id
+                               AND attribute.blueprint_version = e.blueprint_version
+                               AND attribute.workspace_id = $14 AND attribute.deleted_at IS NULL) AS blueprint_context_fallback,
+                          sort_value.{column}::text AS sort_value, false AS sort_is_null,
+                          sort_value.entity_id AS sort_target_id
+                     FROM (
+                         SELECT leaf.entity_id, leaf.{column}
+                           FROM attribute_values leaf
+                          WHERE leaf.workspace_id = $14 AND leaf.context_id = $15
+                            AND leaf.active AND leaf.relationship_target_entity_id IS NULL
+                            AND leaf.attribute_id = ANY($17) AND leaf.{column} IS NOT NULL
+                            AND ($9::uuid IS NULL OR leaf.{column} {comparison} $7::{column_type}
+                                 OR (leaf.{column} = $7::{column_type} AND leaf.entity_id >= $16))
+                          ORDER BY leaf.{column} {direction}, leaf.entity_id
+                          OFFSET 0
+                     ) sort_value
+                     {reverse_joins}
+                     JOIN blueprints b ON b.id = e.blueprint_id AND b.version = e.blueprint_version
+                    WHERE e.blueprint_id = $1 AND ($2::bigint IS NULL OR e.blueprint_version = $2)
+                      AND e.workspace_id = $14 AND e.deleted_at IS NULL
+                      AND ($3::uuid[] IS NULL OR e.id = ANY($3))
+                      AND ($4::text[] IS NULL OR e.system_tags @> $4)
+                      AND (NOT $5 OR e.blueprint_version <> $6)
+                      AND NOT $8
+                      AND ($9::uuid IS NULL OR sort_value.{column} {comparison} $7::{column_type}
+                           OR (sort_value.{column} = $7::{column_type}
+                               AND (sort_value.entity_id > $16
+                                    OR (sort_value.entity_id = $16 AND e.id > $9))))
+                    ORDER BY sort_value.{column} {direction}, sort_value.entity_id ASC, e.id ASC
+                    LIMIT $13"#,
+            );
+            rows = sqlx::query_as::<_, SortedEntityPreviewRow>(&sql)
+                .bind(blueprint_id)
+                .bind(blueprint_version)
+                .bind(matching_entity_ids)
+                .bind((!system_tags.is_empty()).then_some(system_tags))
+                .bind(outdated)
+                .bind(current_blueprint_version)
+                .bind(cursor_value.as_deref())
+                .bind(false)
+                .bind(cursor_id)
+                .bind(&sort.relationship_path)
+                .bind(&sort.leaf_field)
+                .bind(sort.value_type.as_str())
+                .bind(limit + 1)
+                .bind(workspace_id)
+                .bind(default_context_id)
+                .bind(cursor_target_id)
+                .bind(&leaf_attribute_ids)
+                .fetch_all(&self.pool)
+                .await?;
+        }
+
+        if rows.len() <= limit as usize {
+            let remaining = limit + 1 - rows.len() as i64;
+            let forward_joins = relationship_sort_forward_joins(sort.relationship_path.len())?;
+            let null_cursor_id = cursor_is_null.then_some(cursor_id).flatten();
+            let sql = format!(
+                r#"SELECT e.id, e.blueprint_version, e.created_at, e.projections -> 'preview' AS preview,
+                          b.views AS blueprint_views,
+                          (SELECT COALESCE(jsonb_object_agg(attribute.code, attribute.context_fallback), '{{}}'::jsonb)
+                             FROM attributes attribute WHERE attribute.blueprint_id = e.blueprint_id
+                               AND attribute.blueprint_version = e.blueprint_version
+                               AND attribute.workspace_id = $14 AND attribute.deleted_at IS NULL) AS blueprint_context_fallback,
+                          NULL::text AS sort_value, true AS sort_is_null,
+                          e.id AS sort_target_id
+                     FROM entities e
+                     JOIN blueprints b ON b.id = e.blueprint_id AND b.version = e.blueprint_version
+                     {forward_joins}
+                    WHERE e.blueprint_id = $1 AND ($2::bigint IS NULL OR e.blueprint_version = $2)
+                      AND e.workspace_id = $14 AND e.deleted_at IS NULL
+                      AND sort_value.id IS NULL
+                      AND ($3::uuid[] IS NULL OR e.id = ANY($3))
+                      AND ($4::text[] IS NULL OR e.system_tags @> $4)
+                      AND (NOT $5 OR e.blueprint_version <> $6)
+                      AND $7::text IS NULL AND $8
+                      AND ($9::uuid IS NULL OR e.id > $9)
+                    ORDER BY e.id ASC
+                    LIMIT $13"#,
+            );
+            let mut null_rows = sqlx::query_as::<_, SortedEntityPreviewRow>(&sql)
+                .bind(blueprint_id)
+                .bind(blueprint_version)
+                .bind(matching_entity_ids)
+                .bind((!system_tags.is_empty()).then_some(system_tags))
+                .bind(outdated)
+                .bind(current_blueprint_version)
+                .bind(Option::<String>::None)
+                .bind(true)
+                .bind(null_cursor_id)
+                .bind(&sort.relationship_path)
+                .bind(&sort.leaf_field)
+                .bind(sort.value_type.as_str())
+                .bind(remaining)
+                .bind(workspace_id)
+                .bind(default_context_id)
+                .fetch_all(&self.pool)
+                .await?;
+            rows.append(&mut null_rows);
+        }
+
         let next_cursor = if rows.len() > limit as usize {
             rows.pop();
             rows.last()
@@ -1639,6 +1861,154 @@ fn text_only_search(value: &str) -> bool {
         && value.chars().any(|character| character.is_alphabetic())
 }
 
+fn relationship_sort_reverse_joins(depth: usize) -> Result<String, RepositoryError> {
+    if !(1..=3).contains(&depth) {
+        return Err(RepositoryError::InvalidBlueprintDefinition(
+            "relationship sort path must contain one to three hops".to_owned(),
+        ));
+    }
+
+    // The correlated lateral boundary keeps the ordered leaf scan outside the
+    // reverse traversal. PostgreSQL can then use an incremental sort for source
+    // ties instead of sorting the complete source candidate set before LIMIT.
+    let mut sql =
+        format!("JOIN LATERAL (SELECT path_source.id AS source_id FROM entities target_{depth}");
+    for level in (1..=depth).rev() {
+        sql.push_str(&format!(
+            " JOIN attribute_values edge_{level} ON edge_{level}.relationship_target_entity_id = target_{level}.id \
+             AND edge_{level}.workspace_id = $14 AND edge_{level}.context_id = $15 AND edge_{level}.active \
+             JOIN attributes path_attribute_{level} ON path_attribute_{level}.id = edge_{level}.attribute_id \
+             AND path_attribute_{level}.workspace_id = $14 AND path_attribute_{level}.code = $10[{level}] \
+             AND path_attribute_{level}.value_type = 'relationship' \
+             AND path_attribute_{level}.cardinality = 'one' AND path_attribute_{level}.deleted_at IS NULL"
+        ));
+        if level == 1 {
+            sql.push_str(
+                " JOIN entities path_source ON path_source.id = edge_1.entity_id \
+                 AND path_source.blueprint_id = path_attribute_1.blueprint_id \
+                 AND path_source.blueprint_version = path_attribute_1.blueprint_version",
+            );
+        } else {
+            let next = level - 1;
+            sql.push_str(&format!(
+                " JOIN entities target_{next} ON target_{next}.id = edge_{level}.entity_id \
+                 AND target_{next}.workspace_id = $14 AND target_{next}.deleted_at IS NULL \
+                 AND target_{next}.blueprint_id = path_attribute_{level}.blueprint_id \
+                 AND target_{next}.blueprint_version = path_attribute_{level}.blueprint_version"
+            ));
+        }
+    }
+    sql.push_str(&format!(
+        " WHERE target_{depth}.id = sort_value.entity_id ORDER BY path_source.id) resolved_source ON true \
+         JOIN entities e ON e.id = resolved_source.source_id AND e.workspace_id = $14 AND e.deleted_at IS NULL"
+    ));
+    Ok(sql)
+}
+
+fn relationship_sort_forward_joins(depth: usize) -> Result<&'static str, RepositoryError> {
+    match depth {
+        1 => Ok(
+            r#"LEFT JOIN attributes path_attribute_1 ON path_attribute_1.blueprint_id = e.blueprint_id
+                    AND path_attribute_1.blueprint_version = e.blueprint_version
+                    AND path_attribute_1.workspace_id = $14 AND path_attribute_1.code = $10[1]
+                    AND path_attribute_1.value_type = 'relationship'
+                    AND path_attribute_1.cardinality = 'one' AND path_attribute_1.deleted_at IS NULL
+                 LEFT JOIN attribute_values edge_1 ON edge_1.entity_id = e.id
+                    AND edge_1.workspace_id = $14 AND edge_1.attribute_id = path_attribute_1.id
+                    AND edge_1.context_id = $15 AND edge_1.active
+                    AND edge_1.relationship_target_entity_id IS NOT NULL
+                 LEFT JOIN entities target_1 ON target_1.id = edge_1.relationship_target_entity_id
+                    AND target_1.workspace_id = $14 AND target_1.deleted_at IS NULL
+                 LEFT JOIN attributes sort_attribute ON sort_attribute.blueprint_id = target_1.blueprint_id
+                    AND sort_attribute.blueprint_version = target_1.blueprint_version
+                    AND sort_attribute.workspace_id = $14 AND sort_attribute.code = $11
+                    AND sort_attribute.value_type = $12 AND sort_attribute.deleted_at IS NULL
+                 LEFT JOIN attribute_values sort_value ON sort_value.entity_id = target_1.id
+                    AND sort_value.workspace_id = $14 AND sort_value.attribute_id = sort_attribute.id
+                    AND sort_value.context_id = $15 AND sort_value.active
+                    AND sort_value.relationship_target_entity_id IS NULL"#,
+        ),
+        2 => Ok(
+            r#"LEFT JOIN attributes path_attribute_1 ON path_attribute_1.blueprint_id = e.blueprint_id
+                    AND path_attribute_1.blueprint_version = e.blueprint_version
+                    AND path_attribute_1.workspace_id = $14 AND path_attribute_1.code = $10[1]
+                    AND path_attribute_1.value_type = 'relationship'
+                    AND path_attribute_1.cardinality = 'one' AND path_attribute_1.deleted_at IS NULL
+                 LEFT JOIN attribute_values edge_1 ON edge_1.entity_id = e.id
+                    AND edge_1.workspace_id = $14 AND edge_1.attribute_id = path_attribute_1.id
+                    AND edge_1.context_id = $15 AND edge_1.active
+                    AND edge_1.relationship_target_entity_id IS NOT NULL
+                 LEFT JOIN entities target_1 ON target_1.id = edge_1.relationship_target_entity_id
+                    AND target_1.workspace_id = $14 AND target_1.deleted_at IS NULL
+                 LEFT JOIN attributes path_attribute_2 ON path_attribute_2.blueprint_id = target_1.blueprint_id
+                    AND path_attribute_2.blueprint_version = target_1.blueprint_version
+                    AND path_attribute_2.workspace_id = $14 AND path_attribute_2.code = $10[2]
+                    AND path_attribute_2.value_type = 'relationship'
+                    AND path_attribute_2.cardinality = 'one' AND path_attribute_2.deleted_at IS NULL
+                 LEFT JOIN attribute_values edge_2 ON edge_2.entity_id = target_1.id
+                    AND edge_2.workspace_id = $14 AND edge_2.attribute_id = path_attribute_2.id
+                    AND edge_2.context_id = $15 AND edge_2.active
+                    AND edge_2.relationship_target_entity_id IS NOT NULL
+                 LEFT JOIN entities target_2 ON target_2.id = edge_2.relationship_target_entity_id
+                    AND target_2.workspace_id = $14 AND target_2.deleted_at IS NULL
+                 LEFT JOIN attributes sort_attribute ON sort_attribute.blueprint_id = target_2.blueprint_id
+                    AND sort_attribute.blueprint_version = target_2.blueprint_version
+                    AND sort_attribute.workspace_id = $14 AND sort_attribute.code = $11
+                    AND sort_attribute.value_type = $12 AND sort_attribute.deleted_at IS NULL
+                 LEFT JOIN attribute_values sort_value ON sort_value.entity_id = target_2.id
+                    AND sort_value.workspace_id = $14 AND sort_value.attribute_id = sort_attribute.id
+                    AND sort_value.context_id = $15 AND sort_value.active
+                    AND sort_value.relationship_target_entity_id IS NULL"#,
+        ),
+        3 => Ok(
+            r#"LEFT JOIN attributes path_attribute_1 ON path_attribute_1.blueprint_id = e.blueprint_id
+                    AND path_attribute_1.blueprint_version = e.blueprint_version
+                    AND path_attribute_1.workspace_id = $14 AND path_attribute_1.code = $10[1]
+                    AND path_attribute_1.value_type = 'relationship'
+                    AND path_attribute_1.cardinality = 'one' AND path_attribute_1.deleted_at IS NULL
+                 LEFT JOIN attribute_values edge_1 ON edge_1.entity_id = e.id
+                    AND edge_1.workspace_id = $14 AND edge_1.attribute_id = path_attribute_1.id
+                    AND edge_1.context_id = $15 AND edge_1.active
+                    AND edge_1.relationship_target_entity_id IS NOT NULL
+                 LEFT JOIN entities target_1 ON target_1.id = edge_1.relationship_target_entity_id
+                    AND target_1.workspace_id = $14 AND target_1.deleted_at IS NULL
+                 LEFT JOIN attributes path_attribute_2 ON path_attribute_2.blueprint_id = target_1.blueprint_id
+                    AND path_attribute_2.blueprint_version = target_1.blueprint_version
+                    AND path_attribute_2.workspace_id = $14 AND path_attribute_2.code = $10[2]
+                    AND path_attribute_2.value_type = 'relationship'
+                    AND path_attribute_2.cardinality = 'one' AND path_attribute_2.deleted_at IS NULL
+                 LEFT JOIN attribute_values edge_2 ON edge_2.entity_id = target_1.id
+                    AND edge_2.workspace_id = $14 AND edge_2.attribute_id = path_attribute_2.id
+                    AND edge_2.context_id = $15 AND edge_2.active
+                    AND edge_2.relationship_target_entity_id IS NOT NULL
+                 LEFT JOIN entities target_2 ON target_2.id = edge_2.relationship_target_entity_id
+                    AND target_2.workspace_id = $14 AND target_2.deleted_at IS NULL
+                 LEFT JOIN attributes path_attribute_3 ON path_attribute_3.blueprint_id = target_2.blueprint_id
+                    AND path_attribute_3.blueprint_version = target_2.blueprint_version
+                    AND path_attribute_3.workspace_id = $14 AND path_attribute_3.code = $10[3]
+                    AND path_attribute_3.value_type = 'relationship'
+                    AND path_attribute_3.cardinality = 'one' AND path_attribute_3.deleted_at IS NULL
+                 LEFT JOIN attribute_values edge_3 ON edge_3.entity_id = target_2.id
+                    AND edge_3.workspace_id = $14 AND edge_3.attribute_id = path_attribute_3.id
+                    AND edge_3.context_id = $15 AND edge_3.active
+                    AND edge_3.relationship_target_entity_id IS NOT NULL
+                 LEFT JOIN entities target_3 ON target_3.id = edge_3.relationship_target_entity_id
+                    AND target_3.workspace_id = $14 AND target_3.deleted_at IS NULL
+                 LEFT JOIN attributes sort_attribute ON sort_attribute.blueprint_id = target_3.blueprint_id
+                    AND sort_attribute.blueprint_version = target_3.blueprint_version
+                    AND sort_attribute.workspace_id = $14 AND sort_attribute.code = $11
+                    AND sort_attribute.value_type = $12 AND sort_attribute.deleted_at IS NULL
+                 LEFT JOIN attribute_values sort_value ON sort_value.entity_id = target_3.id
+                    AND sort_value.workspace_id = $14 AND sort_value.attribute_id = sort_attribute.id
+                    AND sort_value.context_id = $15 AND sort_value.active
+                    AND sort_value.relationship_target_entity_id IS NULL"#,
+        ),
+        _ => Err(RepositoryError::InvalidBlueprintDefinition(
+            "relationship sort path must contain one to three hops".to_owned(),
+        )),
+    }
+}
+
 fn native_sort_column(value_type: &str) -> Result<&'static str, RepositoryError> {
     match value_type {
         "string" => Ok("value_text"),
@@ -1678,11 +2048,13 @@ fn decode_sorted_search_cursor(cursor: &str) -> Result<SortedSearchCursor, Repos
 
 fn encode_sorted_search_cursor(sort: &EntitySearchSort, row: &SortedEntityPreviewRow) -> String {
     let cursor = SortedSearchCursor {
-        version: 1,
+        version: 3,
         field: sort.field.clone(),
         descending: sort.descending,
+        effective_source_version: sort.effective_source_version,
         is_null: row.sort_is_null,
         value: row.sort_value.clone(),
+        target_id: row.sort_target_id,
         id: row.id,
     };
     URL_SAFE_NO_PAD.encode(serde_json::to_vec(&cursor).expect("cursor serializes"))

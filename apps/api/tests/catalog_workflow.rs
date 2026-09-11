@@ -474,7 +474,7 @@ tags = ["searchable"]
         .json()
         .await
         .unwrap();
-    assert_eq!(search_page["blueprint"]["blueprint"]["version"], 2);
+    assert_eq!(search_page["blueprint"]["blueprint"]["version"], 1);
     assert_eq!(search_page["items"][0]["id"], source["id"]);
     assert_eq!(search_page["items"][0]["schema_outdated"], true);
     assert_eq!(

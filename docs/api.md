@@ -155,17 +155,31 @@ configured in the selected blueprint's `views.table.columns` and `direction` is
 
 ```json
 {
-  "blueprint": { "code": "product" },
+  "blueprint": { "code": "product", "version": 3 },
   "sort": { "field": "category.name", "direction": "asc" },
   "page": { "size": 50 }
 }
 ```
 
 The field may be local or a configured path with up to three relationship hops.
-Every relationship hop must declare `cardinality = "one"`. Sorted responses use
-an opaque keyset `next_cursor`; return it unchanged as
-`page.cursor` with the same sort to request the following page. An invalid
-direction, unconfigured field, or non-scalar column returns `422`.
+Every relationship hop must declare `cardinality = "one"`. A relationship-path
+sort normally names an explicit published source version. When `version` is
+omitted, it is accepted only if the complete matching result set contains one
+source blueprint version; otherwise the API returns
+`422 relationship_path_sort_requires_single_result_version`.
+
+Search responses report `result_version_scope` as `empty`, `single` (with its
+version), or `multiple`. This summary uses the complete query/filter/facet/tag
+candidate set, not the current page. Sorted responses use an opaque keyset
+`next_cursor`; return it unchanged as `page.cursor` with the same sort. The
+cursor includes the effective source version, so a changed all-version result
+scope rejects the stale cursor. An invalid direction, unconfigured field, or
+non-scalar column also returns `422`.
+
+When an explicit current version is selected, first-page responses also return
+`hidden_outdated_count` and `hidden_outdated_count_capped`. This count ignores
+the active search predicates and describes older entities across the blueprint
+family.
 
 ### Search table path projections
 

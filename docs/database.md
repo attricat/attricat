@@ -426,5 +426,7 @@ Authoring](blueprints.md) for the definition grammar and attribute policies.
 - `preview` is the only automatic projection. Search is a separate current-value
   query and there are no projection repair or backfill commands yet.
 - Search supports case-insensitive text matching across scalar values,
-  relationship-aware terms, system-tag filters, relationship-tree facets, and
-  configured scalar-column sorting. Typed attribute filters are not yet available.
+  relationship-aware terms, system-tag filters, relationship-tree facets,
+  typed scalar/path filters, and configured scalar-column sorting. Relationship
+  sorts scan indexed non-null leaves and traverse up to three incoming edges;
+  missing paths are paged separately as null values.

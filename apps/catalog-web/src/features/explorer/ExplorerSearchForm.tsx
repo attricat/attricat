@@ -7,14 +7,24 @@ import type { ExplorerSearch } from './search';
 
 type Props = {
   blueprints: Blueprint[];
+  currentVersion?: number;
+  revisions?: Blueprint[];
+  revisionsError?: string;
+  revisionsLoading?: boolean;
   search: ExplorerSearch;
+  onRetryRevisions?: () => void;
   onSubmit: (value: ExplorerSearch) => void;
   lockedBlueprint?: boolean;
 };
 
 export const ExplorerSearchForm = ({
   blueprints,
+  currentVersion,
+  revisions = [],
+  revisionsError,
+  revisionsLoading = false,
   search,
+  onRetryRevisions,
   onSubmit,
   lockedBlueprint = false,
 }: Props) => {
@@ -23,11 +33,21 @@ export const ExplorerSearchForm = ({
     defaultValues: {
       blueprint: search.blueprint ?? '',
       query: search.query ?? '',
+      versionScope: search.allVersions
+        ? 'all'
+        : search.version === undefined
+          ? 'current'
+          : String(search.version),
     },
     onSubmit: ({ value }) => {
+      const historicalVersion = Number(value.versionScope);
       onSubmit({
         blueprint: value.blueprint || undefined,
-        version: undefined,
+        ...(value.versionScope === 'all'
+          ? { allVersions: true }
+          : Number.isInteger(historicalVersion)
+            ? { version: historicalVersion }
+            : {}),
         query: value.query || undefined,
       });
     },
@@ -37,8 +57,19 @@ export const ExplorerSearchForm = ({
     form.reset({
       blueprint: search.blueprint ?? '',
       query: search.query ?? '',
+      versionScope: search.allVersions
+        ? 'all'
+        : search.version === undefined
+          ? 'current'
+          : String(search.version),
     });
-  }, [form, search.blueprint, search.query, search.version]);
+  }, [
+    form,
+    search.allVersions,
+    search.blueprint,
+    search.query,
+    search.version,
+  ]);
 
   return (
     <Paper
@@ -75,6 +106,45 @@ export const ExplorerSearchForm = ({
               </TextField>
             )}
           </form.Field>
+        )}
+        {search.blueprint && (
+          <form.Field name="versionScope">
+            {(field) => (
+              <TextField
+                disabled={revisionsLoading}
+                error={Boolean(revisionsError)}
+                helperText={revisionsError}
+                label={t('explorer.versionScope')}
+                onChange={(event) => field.handleChange(event.target.value)}
+                select
+                sx={{ minWidth: 190 }}
+                value={field.state.value}
+              >
+                <MenuItem value="current">
+                  {t('explorer.currentVersion', {
+                    version: currentVersion ?? '…',
+                  })}
+                </MenuItem>
+                {revisions
+                  .filter((revision) => revision.version !== currentVersion)
+                  .sort((left, right) => right.version - left.version)
+                  .map((revision) => (
+                    <MenuItem
+                      key={revision.version}
+                      value={String(revision.version)}
+                    >
+                      {t('explorer.version', { version: revision.version })}
+                    </MenuItem>
+                  ))}
+                <MenuItem value="all">{t('explorer.allVersions')}</MenuItem>
+              </TextField>
+            )}
+          </form.Field>
+        )}
+        {revisionsError && onRetryRevisions && (
+          <Button onClick={onRetryRevisions} variant="text">
+            {t('common.retry')}
+          </Button>
         )}
         <form.Field name="query">
           {(field) => (

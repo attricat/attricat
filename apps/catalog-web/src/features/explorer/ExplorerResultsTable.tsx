@@ -10,6 +10,7 @@ import {
 } from '@tanstack/react-table/legacy';
 import MoreVertIcon from '@mui/icons-material/MoreVert';
 import {
+  ButtonBase,
   Chip,
   Dialog,
   DialogContent,
@@ -25,6 +26,7 @@ import {
   TableHead,
   TableRow,
   TableSortLabel,
+  Tooltip,
   Typography,
 } from '@mui/material';
 import { LoadMoreButton } from '../../components/LoadMoreButton';
@@ -69,6 +71,7 @@ export const ExplorerResultsTable = ({
   items,
   onLoadMore,
   onSortChange,
+  relationshipSortAvailable = true,
   sort,
   totalCount,
   totalCountCapped,
@@ -79,6 +82,7 @@ export const ExplorerResultsTable = ({
   items: EntityItem[];
   onLoadMore: () => void;
   onSortChange: (field: string) => void;
+  relationshipSortAvailable?: boolean;
   sort?: { field: string; direction: 'asc' | 'desc' };
   totalCount: number | null;
   totalCountCapped: boolean;
@@ -100,16 +104,29 @@ export const ExplorerResultsTable = ({
       version: number;
       props: Record<string, unknown>;
     } | null;
+    relationshipSortBlocked: boolean;
     sortable: boolean;
   }[] = tableView?.columns?.length
-    ? tableView.columns.map((column) => ({
-        ...column,
-        sortable:
+    ? tableView.columns.map((column) => {
+        const configuredSortable =
           blueprint.table_path_attributes.find(
             (attribute) => attribute.code === column.field,
-          )?.sortable ?? false,
-      }))
-    : (tableView?.fields ?? []).map((field) => ({ field, sortable: false }));
+          )?.sortable ?? false;
+        const relationshipSortBlocked =
+          configuredSortable &&
+          column.field.includes('.') &&
+          !relationshipSortAvailable;
+        return {
+          ...column,
+          relationshipSortBlocked,
+          sortable: configuredSortable && !relationshipSortBlocked,
+        };
+      })
+    : (tableView?.fields ?? []).map((field) => ({
+        field,
+        relationshipSortBlocked: false,
+        sortable: false,
+      }));
   const runtime = useQuery({
     queryKey: extensionQueryKeys.runtime(),
     queryFn: getExtensionRuntime,
@@ -180,6 +197,21 @@ export const ExplorerResultsTable = ({
           id: column.field,
           header: () => {
             const label = column.label ?? column.field.replaceAll('_', ' ');
+            if (column.relationshipSortBlocked)
+              return (
+                <Tooltip
+                  title={t('explorer.relationshipSortNeedsSingleVersion')}
+                >
+                  <ButtonBase
+                    aria-disabled="true"
+                    aria-label={`${label}. ${t('explorer.relationshipSortNeedsSingleVersion')}`}
+                    disableRipple
+                    sx={{ cursor: 'help', font: 'inherit' }}
+                  >
+                    {label}
+                  </ButtonBase>
+                </Tooltip>
+              );
             if (!column.sortable) return label;
             const active = sort?.field === column.field;
             return (

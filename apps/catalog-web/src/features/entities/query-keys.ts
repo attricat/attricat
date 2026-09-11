@@ -7,6 +7,8 @@ export const entityQueryKeys = {
   blueprintByCode: (code: string | undefined, version: number | undefined) =>
     ['blueprint-by-code', code, version] as const,
   currentBlueprint: (id: string) => ['current-blueprint', id] as const,
+  blueprintRevisions: (id: string | undefined) =>
+    ['blueprint-revisions', id] as const,
   relationshipTargets: (blueprint: string | null | undefined, query: string) =>
     ['relationship-targets', blueprint, query] as const,
   form: (entityId: string) => ['entity-form', entityId] as const,
@@ -39,6 +41,7 @@ export const entityQueryKeys = {
       operator: string;
       value: string | number | boolean;
     }[],
+    allVersions = false,
   ) =>
     [
       ...entityQueryKeys.searches(),
@@ -48,6 +51,7 @@ export const entityQueryKeys = {
       relationshipTreeFacets,
       sort,
       filters,
+      allVersions,
     ] as const,
   relationshipTreeFacetChildren: (
     blueprint: string,

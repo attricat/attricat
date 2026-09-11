@@ -48,6 +48,9 @@ const page = (
   next_cursor: nextCursor,
   total_count: null,
   total_count_capped: false,
+  result_version_scope: { kind: 'single', version: 1 },
+  hidden_outdated_count: null,
+  hidden_outdated_count_capped: false,
 });
 
 const renderField = (

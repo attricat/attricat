@@ -246,9 +246,11 @@ export const attributeSchema = z
   .passthrough();
 export const blueprintSchema = z
   .object({
+    id: uuidSchema.optional(),
     code: z.string(),
     name: z.string(),
     version: z.number().int().positive(),
+    status: z.enum(['draft', 'published']).optional(),
     views: viewsSchema.default({}),
     entity_schema: jsonSchemaSchema.nullish(),
   })
@@ -379,12 +381,25 @@ const resolvedEntityPreviewSchema = z.object({
     }),
   ),
 });
+const resultVersionScopeSchema = z.discriminatedUnion('kind', [
+  z.object({ kind: z.literal('empty') }),
+  z.object({ kind: z.literal('single'), version: z.number().int().positive() }),
+  z.object({ kind: z.literal('multiple') }),
+]);
 const entitySearchResponseSchema = z.object({
   blueprint: blueprintWithAttributesSchema,
   items: z.array(entityItemSchema),
   next_cursor: z.string().nullable(),
   total_count: z.number().int().nonnegative().nullable().default(null),
   total_count_capped: z.boolean().default(false),
+  result_version_scope: resultVersionScopeSchema.default({ kind: 'empty' }),
+  hidden_outdated_count: z
+    .number()
+    .int()
+    .nonnegative()
+    .nullable()
+    .default(null),
+  hidden_outdated_count_capped: z.boolean().default(false),
 });
 export const relationshipTreeFacetChildrenResponseSchema = z.object({
   items: z.array(

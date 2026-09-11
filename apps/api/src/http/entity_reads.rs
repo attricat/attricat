@@ -9,6 +9,7 @@ use crate::{
         Entity, EntityIdentity, EntityPreviewPage, EntityPreviewResponse, EntitySearchResponse,
         RelationshipTreeFacetChildrenRequest, RelationshipTreeFacetChildrenResponse,
         ResolvedEntityPreviewResponse, SearchEntitiesRequest, SearchFilter,
+        SearchResultVersionScope,
     },
     repository::{EntitySearchFilter, EntitySearchSort, decode_search_cursor},
 };
@@ -191,7 +192,7 @@ pub(super) async fn search_entity_previews(
     let selected = match input.blueprint.version {
         Some(version) => Some(
             repository
-                .get_blueprint_by_code_and_version(code, version)
+                .get_published_blueprint_by_code_and_version(code, version)
                 .instrument(tracing::info_span!(
                     "sql.operation",
                     label = "blueprint-load"
@@ -204,7 +205,7 @@ pub(super) async fn search_entity_previews(
     };
     let search_blueprint = match selected {
         Some(version) => repository
-            .get_blueprint_by_code_and_version(code, version)
+            .get_published_blueprint_by_code_and_version(code, version)
             .instrument(tracing::info_span!(
                 "sql.operation",
                 label = "blueprint-load"
@@ -212,20 +213,6 @@ pub(super) async fn search_entity_previews(
             .await?
             .expect("selected version was checked above"),
         None => current.clone(),
-    };
-    let sort = resolve_table_sort(&repository, &search_blueprint, input.sort.as_ref())
-        .instrument(tracing::info_span!(
-            "sql.operation",
-            label = "table-sort-resolve"
-        ))
-        .await?;
-    let cursor = match (sort.is_some(), input.page.cursor.as_deref()) {
-        (true, _) => None,
-        (false, Some(cursor)) => Some(
-            decode_search_cursor(cursor)
-                .ok_or_else(|| ApiError::invalid_input("page.cursor is invalid".to_owned()))?,
-        ),
-        (false, None) => None,
     };
     let query = input
         .query
@@ -345,7 +332,70 @@ pub(super) async fn search_entity_previews(
             matching = Some(intersect_entity_ids(matching, facet_matching));
         }
     }
+    let matching_versions = repository
+        .search_result_versions(
+            current.blueprint.id,
+            selected,
+            matching.as_deref(),
+            &input.system_tags,
+            input.outdated,
+            current.blueprint.version,
+        )
+        .instrument(tracing::info_span!(
+            "sql.operation",
+            label = "result-version-scope"
+        ))
+        .await?;
+    let result_version_scope = match matching_versions.as_slice() {
+        [] => SearchResultVersionScope::Empty,
+        [version] => SearchResultVersionScope::Single { version: *version },
+        _ => SearchResultVersionScope::Multiple,
+    };
+    let effective_source_version = match matching_versions.as_slice() {
+        [version] => Some(*version),
+        _ => selected,
+    };
+    let sort_uses_relationship = input
+        .sort
+        .as_ref()
+        .is_some_and(|sort| sort.field.contains('.'));
+    if selected.is_none() && sort_uses_relationship && matching_versions.len() != 1 {
+        return Err(ApiError::relationship_sort_requires_single_version());
+    }
+    let result_blueprint = match effective_source_version {
+        Some(version) if version != current.blueprint.version => repository
+            .get_published_blueprint_by_code_and_version(code, version)
+            .await?
+            .ok_or_else(|| ApiError::not_found("blueprint"))?,
+        _ => search_blueprint.clone(),
+    };
+    let sort = resolve_table_sort(
+        &repository,
+        &result_blueprint,
+        input.sort.as_ref(),
+        sort_uses_relationship
+            .then_some(effective_source_version)
+            .flatten(),
+    )
+    .instrument(tracing::info_span!(
+        "sql.operation",
+        label = "table-sort-resolve"
+    ))
+    .await?;
+    let cursor = match (sort.is_some(), input.page.cursor.as_deref()) {
+        (true, _) => None,
+        (false, Some(cursor)) => Some(
+            decode_search_cursor(cursor)
+                .ok_or_else(|| ApiError::invalid_input("page.cursor is invalid".to_owned()))?,
+        ),
+        (false, None) => None,
+    };
     timing.record("candidate", candidate_started);
+    let page_blueprint_version = if sort_uses_relationship {
+        effective_source_version
+    } else {
+        selected
+    };
     let page_started = Instant::now();
     let page = async {
         match sort.as_ref() {
@@ -353,7 +403,7 @@ pub(super) async fn search_entity_previews(
                 repository
                     .search_entity_previews_sorted(
                         current.blueprint.id,
-                        selected,
+                        page_blueprint_version,
                         limit.into(),
                         input.page.cursor.as_deref(),
                         matching.as_deref(),
@@ -413,10 +463,32 @@ pub(super) async fn search_entity_previews(
             .await?;
         Ok(Some(count))
     };
-    let ((mut items, next_cursor), total_count) = tokio::try_join!(page, total)?;
+    let hidden_outdated = async {
+        if selected != Some(current.blueprint.version) || input.page.cursor.is_some() {
+            return Ok(None);
+        }
+        repository
+            .count_entity_previews(
+                current.blueprint.id,
+                None,
+                None,
+                &[],
+                true,
+                current.blueprint.version,
+                SEARCH_TOTAL_COUNT_CAP + 1,
+            )
+            .await
+            .map(Some)
+    };
+    let ((mut items, next_cursor), total_count, hidden_outdated_count) =
+        tokio::try_join!(page, total, hidden_outdated)?;
     timing.record("page", page_started);
     let total_count_capped = total_count.is_some_and(|count| count > SEARCH_TOTAL_COUNT_CAP);
     let total_count = total_count.map(|count| count.min(SEARCH_TOTAL_COUNT_CAP));
+    let hidden_outdated_count_capped =
+        hidden_outdated_count.is_some_and(|count| count > SEARCH_TOTAL_COUNT_CAP);
+    let hidden_outdated_count =
+        hidden_outdated_count.map(|count| count.min(SEARCH_TOTAL_COUNT_CAP));
     for item in &mut items {
         item.schema_outdated = item.blueprint_version != current.blueprint.version;
         item.match_explanations = resolved
@@ -426,7 +498,7 @@ pub(super) async fn search_entity_previews(
             .unwrap_or_default();
     }
     let related_started = Instant::now();
-    let table_paths = table_paths(&current);
+    let table_paths = table_paths(&result_blueprint);
     repository
         .hydrate_table_path_values(&mut items, &table_paths)
         .instrument(tracing::info_span!(
@@ -435,7 +507,7 @@ pub(super) async fn search_entity_previews(
         ))
         .await?;
     repository
-        .hydrate_related_table_previews(&mut items, &table_relationships(&current))
+        .hydrate_related_table_previews(&mut items, &table_relationships(&result_blueprint))
         .instrument(tracing::info_span!(
             "sql.operation",
             label = "related-hydrate"
@@ -444,11 +516,14 @@ pub(super) async fn search_entity_previews(
     timing.record("related", related_started);
     let serialization_started = Instant::now();
     let response = Json(EntitySearchResponse {
-        blueprint: current,
+        blueprint: result_blueprint,
         items,
         next_cursor,
         total_count,
         total_count_capped,
+        result_version_scope,
+        hidden_outdated_count,
+        hidden_outdated_count_capped,
     })
     .into_response();
     timing.record("serialize", serialization_started);
@@ -573,11 +648,29 @@ async fn resolve_search_filter(
 }
 
 fn table_paths(blueprint: &crate::model::BlueprintWithAttributes) -> HashMap<String, String> {
-    blueprint
+    let mut paths: HashMap<_, _> = blueprint
         .table_path_attributes
         .iter()
         .map(|attribute| (attribute.code.clone(), attribute.value_type.clone()))
-        .collect()
+        .collect();
+    if let Some(fields) = blueprint
+        .blueprint
+        .views
+        .get("table")
+        .and_then(|table| table.get("fields"))
+        .and_then(serde_json::Value::as_array)
+    {
+        for field in fields.iter().filter_map(serde_json::Value::as_str) {
+            if let Some(attribute) = blueprint
+                .attributes
+                .iter()
+                .find(|attribute| attribute.code == field && attribute.value_type != "relationship")
+            {
+                paths.insert(attribute.code.clone(), attribute.value_type.clone());
+            }
+        }
+    }
+    paths
 }
 
 /// Only direct relationship hops used by legacy rich table columns need hydration.
@@ -617,6 +710,7 @@ async fn resolve_table_sort(
     repository: &crate::repository::CatalogRepository,
     blueprint: &crate::model::BlueprintWithAttributes,
     sort: Option<&crate::model::SearchSort>,
+    effective_source_version: Option<i64>,
 ) -> Result<Option<EntitySearchSort>, ApiError> {
     let Some(sort) = sort else { return Ok(None) };
     let descending = match sort.direction.as_str() {
@@ -700,8 +794,10 @@ async fn resolve_table_sort(
         field: sort.field.clone(),
         relationship_path,
         leaf_field: leaf_field.to_owned(),
+        leaf_blueprint_id: current.blueprint.id,
         value_type,
         descending,
+        effective_source_version,
     }))
 }
 
@@ -722,7 +818,7 @@ pub(super) async fn relationship_tree_facet_children(
     let version = match input.blueprint.version {
         Some(v) => Some(
             repository
-                .get_blueprint_by_code_and_version(&input.blueprint.code, v)
+                .get_published_blueprint_by_code_and_version(&input.blueprint.code, v)
                 .await?
                 .ok_or_else(|| ApiError::not_found("blueprint"))?
                 .blueprint
@@ -773,7 +869,7 @@ pub(super) async fn relationship_tree_facet_children(
         .filter(|v| !v.is_empty());
     let search_blueprint = match version {
         Some(version) => repository
-            .get_blueprint_by_code_and_version(&input.blueprint.code, version)
+            .get_published_blueprint_by_code_and_version(&input.blueprint.code, version)
             .await?
             .expect("selected version was checked above"),
         None => source.clone(),

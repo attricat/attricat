@@ -5,8 +5,8 @@ import {
   useQueryClient,
 } from '@tanstack/react-query';
 import { useNavigate } from '@tanstack/react-router';
-import { Alert, Box, Typography } from '@mui/material';
-import { useEffect } from 'react';
+import { Alert, Box, Button, Stack, Typography } from '@mui/material';
+import { useEffect, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 import { PageContainer } from '../../components/PageContainer';
 import { PageHeader } from '../../components/PageHeader';
@@ -19,6 +19,7 @@ import {
   listEntityBlueprints,
   searchEntities,
 } from '../entities/api';
+import { listBlueprintRevisions } from '../blueprints/api';
 import { entityQueryKeys } from '../entities/query-keys';
 import {
   ExplorerFacetSidebar,
@@ -30,13 +31,19 @@ import { ExplorerSearchForm } from './ExplorerSearchForm';
 import type { AttributeFilter, ExplorerSearch } from './search';
 import { useActiveRelationshipFilters } from './useActiveRelationshipFilters';
 import { getLastBlueprint, setLastBlueprint } from './last-blueprint';
+import { currentSession } from '../auth/api';
+import { authQueryKeys } from '../auth/query-keys';
+import { ApiRequestError } from '../../api/request';
 
 export const Explorer = ({ search: urlSearch }: { search: ExplorerSearch }) => {
   const { t } = useTranslation();
-  const search = {
-    ...urlSearch,
-    blueprint: urlSearch.blueprint ?? getLastBlueprint(),
-  };
+  const search = useMemo(
+    () => ({
+      ...urlSearch,
+      blueprint: urlSearch.blueprint ?? getLastBlueprint(),
+    }),
+    [urlSearch],
+  );
   const navigate = useNavigate({ from: '/' });
   const queryClient = useQueryClient();
 
@@ -44,16 +51,65 @@ export const Explorer = ({ search: urlSearch }: { search: ExplorerSearch }) => {
     if (urlSearch.blueprint) setLastBlueprint(urlSearch.blueprint);
   }, [urlSearch.blueprint]);
 
+  const blueprints = useQuery({
+    queryKey: entityQueryKeys.blueprints(),
+    queryFn: ({ signal }) => listEntityBlueprints(signal),
+  });
+  const currentBlueprint = blueprints.data?.find(
+    (blueprint) => blueprint.code === search.blueprint,
+  );
+  const effectiveVersion = search.allVersions
+    ? undefined
+    : (search.version ?? currentBlueprint?.version);
   const contexts = useQuery({
     queryKey: contextQueryKeys.all(),
     queryFn: ({ signal }) => listContexts(signal),
   });
   const selectedBlueprint = useQuery({
-    queryKey: entityQueryKeys.blueprintByCode(search.blueprint, search.version),
+    queryKey: entityQueryKeys.blueprintByCode(
+      search.blueprint,
+      effectiveVersion,
+    ),
     queryFn: ({ signal }) =>
-      getBlueprintByCode(search.blueprint!, search.version, signal),
-    enabled: Boolean(search.blueprint),
+      getBlueprintByCode(search.blueprint!, effectiveVersion, signal),
+    enabled: Boolean(
+      search.blueprint &&
+      (search.allVersions || effectiveVersion !== undefined),
+    ),
   });
+  const revisions = useQuery({
+    queryKey: entityQueryKeys.blueprintRevisions(currentBlueprint?.id),
+    queryFn: async ({ signal }) =>
+      (await listBlueprintRevisions(currentBlueprint!.id!, signal)).filter(
+        (revision) => revision.status === 'published',
+      ),
+    enabled: Boolean(currentBlueprint?.id),
+  });
+  const session = useQuery({
+    queryKey: authQueryKeys.session(),
+    queryFn: currentSession,
+  });
+
+  useEffect(() => {
+    if (
+      search.version !== undefined &&
+      revisions.data &&
+      !revisions.data.some((revision) => revision.version === search.version)
+    ) {
+      void navigate({
+        to: '/',
+        search: {
+          ...search,
+          version: undefined,
+          relationshipFacets: undefined,
+          attributeFilters: undefined,
+          sort: undefined,
+        },
+        replace: true,
+      });
+    }
+  }, [navigate, revisions.data, search]);
+
   const relationshipFields = (selectedBlueprint.data?.attributes ?? []).filter(
     (
       attribute,
@@ -94,16 +150,17 @@ export const Explorer = ({ search: urlSearch }: { search: ExplorerSearch }) => {
   const results = useInfiniteQuery({
     queryKey: entityQueryKeys.search(
       search.blueprint,
-      search.version,
+      effectiveVersion,
       search.query,
       relationshipTreeFacets,
       search.sort,
       search.attributeFilters,
+      Boolean(search.allVersions),
     ),
     queryFn: ({ pageParam, signal }) =>
       searchEntities(
         search.blueprint!,
-        search.version,
+        effectiveVersion,
         search.query ?? '',
         pageParam,
         relationshipTreeFacets,
@@ -114,16 +171,29 @@ export const Explorer = ({ search: urlSearch }: { search: ExplorerSearch }) => {
       ),
     initialPageParam: null as string | null,
     getNextPageParam: (page) => page.next_cursor,
-    enabled: Boolean(search.blueprint),
+    enabled: Boolean(
+      search.blueprint &&
+      (search.allVersions || effectiveVersion !== undefined),
+    ),
     placeholderData: keepPreviousData,
   });
+  useEffect(() => {
+    if (
+      results.error instanceof ApiRequestError &&
+      results.error.code ===
+        'relationship_path_sort_requires_single_result_version' &&
+      search.sort?.field.includes('.')
+    ) {
+      void navigate({
+        to: '/',
+        search: { ...search, sort: undefined },
+        replace: true,
+      });
+    }
+  }, [navigate, results.error, search]);
   const resultPages = results.data?.pages ?? [];
   const resultItems = resultPages.flatMap((page) => page.items);
   const resultBlueprint = resultPages[0]?.blueprint;
-  const blueprints = useQuery({
-    queryKey: entityQueryKeys.blueprints(),
-    queryFn: ({ signal }) => listEntityBlueprints(signal),
-  });
   const updateFacetContext = (context: string) => {
     const current = search.relationshipFacets ?? [];
     void navigate({
@@ -239,7 +309,7 @@ export const Explorer = ({ search: urlSearch }: { search: ExplorerSearch }) => {
           onUpdateAttributeFilter={updateAttributeFilter}
           pathAttributes={selectedBlueprint.data?.table_path_attributes}
           query={search.query}
-          version={search.version}
+          version={effectiveVersion}
         />
       </Box>
       <Box sx={{ flexGrow: 1, minWidth: 0 }}>
@@ -279,9 +349,17 @@ export const Explorer = ({ search: urlSearch }: { search: ExplorerSearch }) => {
           />
           <ExplorerSearchForm
             blueprints={blueprints.data ?? []}
+            currentVersion={currentBlueprint?.version}
+            revisions={revisions.data}
+            revisionsError={revisions.error?.message}
+            revisionsLoading={revisions.isPending}
+            onRetryRevisions={() => void revisions.refetch()}
             lockedBlueprint
             onSubmit={(value) => {
               const keepsBlueprint = value.blueprint === search.blueprint;
+              const scopeChanged =
+                value.version !== search.version ||
+                Boolean(value.allVersions) !== Boolean(search.allVersions);
               const nextSearch: ExplorerSearch = {
                 ...(keepsBlueprint
                   ? search
@@ -289,17 +367,33 @@ export const Explorer = ({ search: urlSearch }: { search: ExplorerSearch }) => {
                       relationshipFacets: undefined,
                       attributeFilters: undefined,
                     }),
+                version: undefined,
+                allVersions: undefined,
                 ...value,
+                ...(scopeChanged
+                  ? {
+                      relationshipFacets: undefined,
+                      attributeFilters: search.attributeFilters?.filter(
+                        (filter) => !filter.field.includes('.'),
+                      ),
+                      sort: search.sort?.field.includes('.')
+                        ? undefined
+                        : search.sort,
+                    }
+                  : {}),
               };
               void queryClient.invalidateQueries({
                 exact: true,
                 queryKey: entityQueryKeys.search(
                   nextSearch.blueprint,
-                  nextSearch.version,
+                  nextSearch.allVersions
+                    ? undefined
+                    : (nextSearch.version ?? currentBlueprint?.version),
                   nextSearch.query,
-                  keepsBlueprint ? relationshipTreeFacets : [],
+                  keepsBlueprint && !scopeChanged ? relationshipTreeFacets : [],
                   nextSearch.sort,
                   nextSearch.attributeFilters,
+                  Boolean(nextSearch.allVersions),
                 ),
               });
               void navigate({ to: '/', search: nextSearch });
@@ -350,15 +444,68 @@ export const Explorer = ({ search: urlSearch }: { search: ExplorerSearch }) => {
                   onUpdateAttributeFilter={updateAttributeFilter}
                   pathAttributes={selectedBlueprint.data?.table_path_attributes}
                   query={search.query}
-                  version={search.version}
+                  version={effectiveVersion}
                 />
               </Box>
+              {!search.allVersions &&
+                effectiveVersion === currentBlueprint?.version &&
+                (resultPages[0]?.hidden_outdated_count ?? 0) > 0 && (
+                  <Alert
+                    action={
+                      <Stack direction="row" spacing={1}>
+                        <Button
+                          onClick={() =>
+                            void navigate({
+                              to: '/',
+                              search: {
+                                ...search,
+                                version: undefined,
+                                allVersions: true,
+                                relationshipFacets: undefined,
+                                attributeFilters:
+                                  search.attributeFilters?.filter(
+                                    (filter) => !filter.field.includes('.'),
+                                  ),
+                                sort: search.sort?.field.includes('.')
+                                  ? undefined
+                                  : search.sort,
+                              },
+                            })
+                          }
+                          size="small"
+                        >
+                          {t('explorer.showAllVersions')}
+                        </Button>
+                        {session.data?.capabilities?.data_health_read && (
+                          <RouterButton
+                            size="small"
+                            to="/manage/data-health"
+                            variant="text"
+                          >
+                            {t('explorer.reviewMigrations')}
+                          </RouterButton>
+                        )}
+                      </Stack>
+                    }
+                    severity="info"
+                    sx={{ mb: 2 }}
+                  >
+                    {resultPages[0]?.hidden_outdated_count_capped
+                      ? t('explorer.hiddenOutdatedCapped', {
+                          count: resultPages[0].hidden_outdated_count,
+                        })
+                      : t('explorer.hiddenOutdated', {
+                          count: resultPages[0]?.hidden_outdated_count,
+                        })}
+                  </Alert>
+                )}
               {resultBlueprint && (
                 <ExplorerResultsTable
                   blueprint={resultBlueprint}
                   key={JSON.stringify([
                     search.blueprint,
-                    search.version,
+                    effectiveVersion,
+                    search.allVersions,
                     search.query,
                     relationshipTreeFacets,
                     search.sort,
@@ -370,6 +517,10 @@ export const Explorer = ({ search: urlSearch }: { search: ExplorerSearch }) => {
                   totalCount={resultPages[0]?.total_count ?? null}
                   totalCountCapped={resultPages[0]?.total_count_capped ?? false}
                   onLoadMore={() => void results.fetchNextPage()}
+                  relationshipSortAvailable={
+                    !search.allVersions ||
+                    resultPages[0]?.result_version_scope.kind === 'single'
+                  }
                   onSortChange={(field) => {
                     const direction =
                       search.sort?.field === field &&

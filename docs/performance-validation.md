@@ -37,7 +37,7 @@ Save the k6 JSON summary, the generator checkpoint, API git revision, PostgreSQL
 
 ## Query plans
 
-For index changes or unexpected latency, capture `EXPLAIN (ANALYZE, BUFFERS)` for the equivalent scalar-sort and relationship-sort selection queries using `just sql`. Do not put query text, fixture values, UUIDs, or SQL text into `Server-Timing` or the browser inspector.
+For index changes or unexpected latency, capture `EXPLAIN (ANALYZE, BUFFERS)` for the equivalent scalar-sort and relationship-sort selection queries using `just sql`. Relationship sorts use fixed one-, two-, or three-hop SQL: indexed non-null leaf values traverse incoming edges back to sources, while missing paths use a separate source-ID/null phase. Compare index scans, buffers, rows removed, and warm/cold timings before adding another declarative index. Do not put query text, fixture values, UUIDs, or SQL text into `Server-Timing` or the browser inspector.
 
 When development tools are enabled, Explorer responses emit aggregate `app`,
 `sql`, allowlisted `sql-*` query-count, and phase (`candidate`, `page`,

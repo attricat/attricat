@@ -12,10 +12,14 @@ export type { Attribute, Blueprint, BlueprintWithAttributes } from './schemas';
 export const listBlueprints = (): Promise<Blueprint[]> =>
   request('/api/blueprints/catalogue', z.array(blueprintSchema));
 
-export const listBlueprintRevisions = (id: string): Promise<Blueprint[]> =>
+export const listBlueprintRevisions = (
+  id: string,
+  signal?: AbortSignal,
+): Promise<Blueprint[]> =>
   request(
     `/api/blueprints/${encodeURIComponent(z.uuid().parse(id))}/versions`,
     z.array(blueprintSchema),
+    signal === undefined ? undefined : { signal },
   );
 
 export const getBlueprintRevision = (

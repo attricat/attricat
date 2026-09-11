@@ -419,12 +419,30 @@ value_type = "string"`,
   await publishRevision(second);
 
   await page.goto(`/?blueprint=${code}`);
-  await expect(page.getByRole('cell', { name: 'v1 · Outdated' })).toBeVisible();
+  await expect(
+    page.getByText(
+      'Showing current-version entities. 1 older-version entity is hidden.',
+    ),
+  ).toBeVisible();
+  await expect(
+    page.getByRole('button', { name: 'Show all versions' }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole('link', { name: 'Review migrations' }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole('button', { name: `View entity ID ${oldEntity.id}` }),
+  ).toBeHidden();
+
+  await page.getByRole('button', { name: 'Show all versions' }).click();
+  await expect(page).toHaveURL(/allVersions=true/);
   await expect(
     page.getByRole('button', { name: `View entity ID ${oldEntity.id}` }),
   ).toBeVisible();
 
-  await page.goto(`/?blueprint=${code}&version=1`);
+  await page.getByLabel('Version scope').click();
+  await page.getByRole('option', { name: 'Version 1' }).click();
+  await page.getByRole('button', { name: 'Search' }).click();
   await expect(page).toHaveURL(new RegExp(`blueprint=${code}.*version=1`));
   await expect(page.getByRole('cell', { name: 'v1 · Outdated' })).toBeVisible();
 });

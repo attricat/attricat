@@ -1,9 +1,11 @@
 mod support;
 
+use api::{agent_tools, repository::CatalogRepository};
 use support::*;
 
 #[sqlx::test]
 async fn search_resolves_three_hop_table_query_filter_and_sort_paths(pool: PgPool) {
+    let repository_pool = pool.clone();
     let (base_url, server) = start_server(pool).await;
     let client = authenticated_client();
 
@@ -171,6 +173,30 @@ cardinality = "one""#,
         );
     }
 
+    let workspace = BOOTSTRAP_WORKSPACE_ID.parse().unwrap();
+    let repository = CatalogRepository::new(repository_pool)
+        .for_workspace(workspace)
+        .await
+        .unwrap();
+    let agent_result = agent_tools::execute_read(
+        &repository,
+        BOOTSTRAP_OWNER_ID.parse().unwrap(),
+        workspace,
+        "search_entities",
+        json!({
+            "blueprint": {"code": "deep_sku"},
+            "sort": {"field": "family.class.kind.name", "direction": "asc"},
+            "page": {"size": 25}
+        }),
+    )
+    .await
+    .unwrap();
+    assert_eq!(
+        agent_result["items"][0]["table_values"]["family.class.kind.name"],
+        json!(["Graphics Card"]),
+        "agent results hydrate the related value that explains their order"
+    );
+
     let kind_blueprint_id = kind["blueprint"]["id"].as_str().unwrap();
     let kind_draft: Value = client
         .post(format!(
@@ -248,7 +274,7 @@ value_type = "integer""#}))
 }
 
 #[sqlx::test]
-async fn all_revision_sort_treats_historical_many_hops_as_null(pool: PgPool) {
+async fn relationship_sort_requires_one_effective_source_version(pool: PgPool) {
     let (base_url, server) = start_server(pool).await;
     let client = authenticated_client();
     let leaf = create_blueprint(
@@ -374,7 +400,85 @@ target_blueprint = "versioned_sort_middle""#;
         .unwrap();
     assert_eq!(historical_sort.status(), StatusCode::UNPROCESSABLE_ENTITY);
 
-    let first: Value = client
+    let all_versions: Value = client
+        .post(format!("{base_url}/v1/entities/search"))
+        .json(&json!({
+            "blueprint": {"code": "versioned_sort_source"},
+            "page": {"size": 25}
+        }))
+        .send()
+        .await
+        .unwrap()
+        .error_for_status()
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    assert_eq!(all_versions["result_version_scope"]["kind"], "multiple");
+
+    let all_version_sort = client
+        .post(format!("{base_url}/v1/entities/search"))
+        .json(&json!({
+            "blueprint": {"code": "versioned_sort_source"},
+            "sort": {"field": "middle.leaf.name", "direction": "asc"},
+            "page": {"size": 1}
+        }))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(all_version_sort.status(), StatusCode::UNPROCESSABLE_ENTITY);
+    let error: Value = all_version_sort.json().await.unwrap();
+    assert_eq!(
+        error["error"]["code"],
+        "relationship_path_sort_requires_single_result_version"
+    );
+
+    let current_only: Value = client
+        .post(format!("{base_url}/v1/entities/search"))
+        .json(&json!({
+            "blueprint": {"code": "versioned_sort_source", "version": version},
+            "sort": {"field": "middle.leaf.name", "direction": "asc"},
+            "page": {"size": 1}
+        }))
+        .send()
+        .await
+        .unwrap()
+        .error_for_status()
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    assert_eq!(current_only["items"][0]["id"], current_source["id"]);
+    assert_eq!(current_only["result_version_scope"]["version"], version);
+    assert_eq!(current_only["hidden_outdated_count"], 1);
+    assert_eq!(current_only["hidden_outdated_count_capped"], false);
+
+    client
+        .delete(format!(
+            "{base_url}/entities/{}",
+            old_source["id"].as_str().unwrap()
+        ))
+        .send()
+        .await
+        .unwrap()
+        .error_for_status()
+        .unwrap();
+    let second_current = create_entity(&client, &base_url, &source_v2).await;
+    client
+        .post(format!(
+            "{base_url}/entities/{}/relationships/replace",
+            second_current["id"].as_str().unwrap()
+        ))
+        .json(&json!({"relationships": [{
+            "attribute_code": "middle",
+            "target_entity_ids": [middle_entity["id"]]
+        }]}))
+        .send()
+        .await
+        .unwrap()
+        .error_for_status()
+        .unwrap();
+    let single_version_page: Value = client
         .post(format!("{base_url}/v1/entities/search"))
         .json(&json!({
             "blueprint": {"code": "versioned_sort_source"},
@@ -389,14 +493,19 @@ target_blueprint = "versioned_sort_middle""#;
         .json()
         .await
         .unwrap();
-    assert_eq!(first["items"][0]["id"], current_source["id"]);
-    let cursor = first["next_cursor"].as_str().expect("first page cursor");
-    let second: Value = client
+    assert_eq!(
+        single_version_page["result_version_scope"]["version"],
+        version
+    );
+    let stale_cursor = single_version_page["next_cursor"]
+        .as_str()
+        .expect("two current entities produce a cursor");
+    let shared_target_next_page: Value = client
         .post(format!("{base_url}/v1/entities/search"))
         .json(&json!({
             "blueprint": {"code": "versioned_sort_source"},
             "sort": {"field": "middle.leaf.name", "direction": "asc"},
-            "page": {"size": 1, "cursor": cursor}
+            "page": {"size": 1, "cursor": stale_cursor}
         }))
         .send()
         .await
@@ -406,7 +515,55 @@ target_blueprint = "versioned_sort_middle""#;
         .json()
         .await
         .unwrap();
-    assert_eq!(second["items"][0]["id"], old_source["id"]);
-    assert!(second["next_cursor"].is_null());
+    assert_ne!(
+        shared_target_next_page["items"][0]["id"], single_version_page["items"][0]["id"],
+        "the target/source cursor must page distinct sources that share one leaf target"
+    );
+
+    let revision_v3: Value = client
+        .post(format!("{base_url}/blueprints/{source_id}/versions"))
+        .json(&json!({"definition": source_v1_definition
+        .replace(
+            "target_blueprint = \"versioned_sort_middle\"",
+            "target_blueprint = \"versioned_sort_middle\"\ncardinality = \"one\"",
+        )
+        .replace(
+            "name = \"Versioned sort source\"",
+            "name = \"Versioned sort source v3\"",
+        )}))
+        .send()
+        .await
+        .unwrap()
+        .error_for_status()
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    let version_v3 = revision_v3["blueprint"]["version"].as_i64().unwrap();
+    let source_v3: Value = client
+        .post(format!(
+            "{base_url}/blueprints/{source_id}/versions/{version_v3}/publish"
+        ))
+        .send()
+        .await
+        .unwrap()
+        .error_for_status()
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    create_entity(&client, &base_url, &source_v3).await;
+
+    let stale = client
+        .post(format!("{base_url}/v1/entities/search"))
+        .json(&json!({
+            "blueprint": {"code": "versioned_sort_source"},
+            "sort": {"field": "middle.leaf.name", "direction": "asc"},
+            "page": {"size": 1, "cursor": stale_cursor}
+        }))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(stale.status(), StatusCode::UNPROCESSABLE_ENTITY);
     server.abort();
 }

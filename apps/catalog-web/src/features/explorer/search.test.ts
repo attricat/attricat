@@ -7,9 +7,15 @@ describe('parseExplorerSearch', () => {
       parseExplorerSearch({
         blueprint: 'product',
         version: '3',
+        allVersions: true,
         query: 'shirt',
       }),
-    ).toEqual({ blueprint: 'product', version: 3, query: 'shirt' });
+    ).toEqual({
+      blueprint: 'product',
+      version: 3,
+      allVersions: true,
+      query: 'shirt',
+    });
     expect(parseExplorerSearch({ blueprint: '', version: 'zero' })).toEqual({
       blueprint: undefined,
       version: undefined,

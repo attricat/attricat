@@ -34,11 +34,18 @@ historical revisions yield an empty cell. `label` is optional.
 `fields = ["title", "price", "available"]` remains a legacy shorthand for
 local scalar columns; do not combine it with `columns`.
 
-Explorer users can sort a configured scalar column in ascending or descending
-order. The table uses the API's keyset cursor for the selected field, including
-for a configured relationship path. Relationship-path sorting requires
-`cardinality = "one"` on every hop. Many-valued paths are displayable but are
-not sortable, and columns that resolve to non-scalar values are rejected.
+Explorer's version-scope selector defaults to the current published revision,
+can select an older published revision, and provides an explicit **All
+versions** option. Current and historical single-version scopes can sort a
+configured scalar column in ascending or descending order. In an all-version
+scope, relationship sorting is enabled only when the complete matching result
+set contains one source revision.
+
+The table uses the API's version-bound keyset cursor for the selected field.
+Relationship-path sorting requires `cardinality = "one"` on every hop and uses
+fixed-depth, leaf-first traversal for paths of up to three hops. Many-valued
+paths are displayable but are not sortable, and columns that resolve to
+non-scalar values are rejected.
 
 ## Blocks
 

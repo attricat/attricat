@@ -85,6 +85,13 @@ impl ApiError {
             message,
         }
     }
+    pub(super) fn relationship_sort_requires_single_version() -> Self {
+        Self {
+            status: StatusCode::UNPROCESSABLE_ENTITY,
+            code: "relationship_path_sort_requires_single_result_version",
+            message: "related-value sorting requires results from one blueprint version".to_owned(),
+        }
+    }
     pub(super) fn storage_conflict() -> Self {
         Self {
             status: StatusCode::CONFLICT,
