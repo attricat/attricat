@@ -1,3 +1,0 @@
-- button "Open Inspector" [ref=e1] [cursor=pointer]:
-  - img [ref=e2]
-  - status "API ready" [ref=e5]
