@@ -273,6 +273,7 @@
     "migrateCompatibleEntitiesDescription": "Start a background migration from version {{source}} to version {{target}}. Each entity is validated again before it is migrated.",
     "startMigration": "Start migration",
     "startingMigration": "Starting migration…",
+    "automaticMigrationUnavailable": "Automatic migration is unavailable for this revision. Existing entities can still be migrated individually for review.",
     "cancel": "Cancel",
     "latestVersion": "Latest: v{{version}}",
     "updated": "Updated",

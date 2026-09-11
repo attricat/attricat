@@ -277,6 +277,7 @@
     "migrateCompatibleEntitiesDescription": "Uruchom migrację w tle z wersji {{source}} do wersji {{target}}. Każda encja zostanie ponownie zwalidowana przed migracją.",
     "startMigration": "Rozpocznij migrację",
     "startingMigration": "Rozpoczynanie migracji…",
+    "automaticMigrationUnavailable": "Automatyczna migracja nie jest dostępna dla tej wersji. Istniejące encje nadal można migrować pojedynczo do sprawdzenia.",
     "cancel": "Anuluj",
     "latestVersion": "Najnowsza: w{{version}}",
     "updated": "Zaktualizowano",

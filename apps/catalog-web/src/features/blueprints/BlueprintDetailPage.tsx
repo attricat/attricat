@@ -127,6 +127,10 @@ export const BlueprintDetailPage = ({
       safeMigrationSource.data,
       safeMigrationTarget.data,
     );
+  const safeMigrationWasEvaluated =
+    latestPublished !== undefined &&
+    safeMigrationSource.isSuccess &&
+    safeMigrationTarget.isSuccess;
 
   return (
     <PageContainer>
@@ -202,6 +206,11 @@ export const BlueprintDetailPage = ({
           {publish.isError && (
             <Alert severity="error" sx={{ mt: 2 }}>
               {publish.error.message}
+            </Alert>
+          )}
+          {safeMigrationWasEvaluated && !canStartSafeMigration && (
+            <Alert severity="info" sx={{ mt: 2 }}>
+              {t('blueprints.automaticMigrationUnavailable')}
             </Alert>
           )}
           <Tabs
