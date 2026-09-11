@@ -26,6 +26,7 @@ import {
   getBlueprintRevision,
   listBlueprintRevisions,
   publishBlueprintRevision,
+  startSafeBlueprintMigrationBatch,
 } from './api';
 import { formatBlueprintDateTime } from './date-time';
 import { blueprintQueryKeys } from './query-keys';
@@ -49,6 +50,8 @@ export const BlueprintDetailPage = ({
   const [rightSelection, setRightSelection] = useState<number | null>(null);
   const [pageTab, setPageTab] = useState(0);
   const [publishConfirmationOpen, setPublishConfirmationOpen] = useState(false);
+  const [safeMigrationConfirmationOpen, setSafeMigrationConfirmationOpen] =
+    useState(false);
   const queryClient = useQueryClient();
   const publish = useMutation({
     mutationFn: (version: number) =>
@@ -67,6 +70,11 @@ export const BlueprintDetailPage = ({
         }),
       ]);
     },
+  });
+  const safeMigration = useMutation({
+    mutationFn: (version: number) =>
+      startSafeBlueprintMigrationBatch(blueprintId, version),
+    onSuccess: () => setSafeMigrationConfirmationOpen(false),
   });
   const revisions = useQuery({
     queryKey: blueprintQueryKeys.revisions(blueprintId),
@@ -88,6 +96,37 @@ export const BlueprintDetailPage = ({
     enabled: rightVersion !== undefined,
   });
   const blueprint = revisionItems[0];
+  const latestPublished = revisionItems.find(
+    (revision) => revision.status === 'published',
+  );
+  const safeMigrationSourceVersion = latestPublished
+    ? latestPublished.version - 1
+    : undefined;
+  const safeMigrationSource = useQuery({
+    queryKey: blueprintQueryKeys.revision(
+      blueprintId,
+      safeMigrationSourceVersion ?? 0,
+    ),
+    queryFn: () =>
+      getBlueprintRevision(blueprintId, safeMigrationSourceVersion!),
+    enabled: safeMigrationSourceVersion !== undefined,
+  });
+  const safeMigrationTarget = useQuery({
+    queryKey: blueprintQueryKeys.revision(
+      blueprintId,
+      latestPublished?.version ?? 0,
+    ),
+    queryFn: () => getBlueprintRevision(blueprintId, latestPublished!.version),
+    enabled: latestPublished !== undefined,
+  });
+  const canStartSafeMigration =
+    latestPublished !== undefined &&
+    safeMigrationSource.data !== undefined &&
+    safeMigrationTarget.data !== undefined &&
+    isSafeAutomaticMigration(
+      safeMigrationSource.data,
+      safeMigrationTarget.data,
+    );
 
   return (
     <PageContainer>
@@ -120,6 +159,14 @@ export const BlueprintDetailPage = ({
                     variant="contained"
                   >
                     {t('blueprints.publish')}
+                  </Button>
+                )}
+                {canStartSafeMigration && (
+                  <Button
+                    onClick={() => setSafeMigrationConfirmationOpen(true)}
+                    variant="contained"
+                  >
+                    {t('blueprints.migrateCompatibleEntities')}
                   </Button>
                 )}
               </Stack>
@@ -265,6 +312,47 @@ export const BlueprintDetailPage = ({
               </Box>
             </Paper>
           )}
+          {safeMigration.isError && (
+            <Alert severity="error" sx={{ mt: 2 }}>
+              {safeMigration.error.message}
+            </Alert>
+          )}
+          <Dialog
+            onClose={() =>
+              !safeMigration.isPending &&
+              setSafeMigrationConfirmationOpen(false)
+            }
+            open={safeMigrationConfirmationOpen}
+          >
+            <DialogTitle>
+              {t('blueprints.migrateCompatibleEntities')}
+            </DialogTitle>
+            <DialogContent>
+              <DialogContentText>
+                {t('blueprints.migrateCompatibleEntitiesDescription', {
+                  source: safeMigrationSourceVersion,
+                  target: latestPublished?.version,
+                })}
+              </DialogContentText>
+            </DialogContent>
+            <DialogActions>
+              <Button
+                disabled={safeMigration.isPending}
+                onClick={() => setSafeMigrationConfirmationOpen(false)}
+              >
+                {t('blueprints.cancel')}
+              </Button>
+              <Button
+                disabled={safeMigration.isPending}
+                onClick={() => safeMigration.mutate(latestPublished!.version)}
+                variant="contained"
+              >
+                {safeMigration.isPending
+                  ? t('blueprints.startingMigration')
+                  : t('blueprints.startMigration')}
+              </Button>
+            </DialogActions>
+          </Dialog>
           <Dialog
             onClose={() =>
               !publish.isPending && setPublishConfirmationOpen(false)
@@ -302,4 +390,39 @@ export const BlueprintDetailPage = ({
       )}
     </PageContainer>
   );
+};
+
+const isSafeAutomaticMigration = (
+  source: Awaited<ReturnType<typeof getBlueprintRevision>>,
+  target: Awaited<ReturnType<typeof getBlueprintRevision>>,
+) => {
+  if (
+    JSON.stringify(source.blueprint.entity_schema) !==
+    JSON.stringify(target.blueprint.entity_schema)
+  ) {
+    return false;
+  }
+  const targetAttributes = new Map(
+    target.attributes.map((attribute) => [attribute.code, attribute]),
+  );
+  return source.attributes.every((attribute) => {
+    const targetAttribute = targetAttributes.get(attribute.code);
+    return (
+      targetAttribute !== undefined &&
+      attribute.value_type === targetAttribute.value_type &&
+      JSON.stringify(attribute.value_schema) ===
+        JSON.stringify(targetAttribute.value_schema) &&
+      JSON.stringify(attribute.default_value) ===
+        JSON.stringify(targetAttribute.default_value) &&
+      JSON.stringify(attribute.file_policy) ===
+        JSON.stringify(targetAttribute.file_policy) &&
+      attribute.target_blueprint_code ===
+        targetAttribute.target_blueprint_code &&
+      attribute.cardinality === targetAttribute.cardinality &&
+      attribute.target_cardinality === targetAttribute.target_cardinality &&
+      attribute.context_fallback === targetAttribute.context_fallback &&
+      attribute.context_editable === targetAttribute.context_editable &&
+      attribute.readonly === targetAttribute.readonly
+    );
+  });
 };

@@ -34,6 +34,7 @@ use crate::{
 
 mod agents;
 mod audit_events;
+mod blueprint_migration_batches;
 mod blueprints;
 mod contexts;
 mod domain_events;
@@ -236,6 +237,8 @@ pub enum RepositoryError {
     MigrationTargetChanged,
     #[error("migration does not apply to this entity")]
     MigrationNotApplicable,
+    #[error("this blueprint revision is not eligible for safe automatic migration")]
+    BlueprintMigrationNotSafe,
     #[error("migration needs resolutions for: {}", .0.join(", "))]
     MigrationNeedsResolution(Vec<String>),
     #[error("invalid agent state: {0}")]

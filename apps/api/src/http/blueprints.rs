@@ -6,7 +6,7 @@ use super::{
 };
 use crate::{
     catalog_service::CatalogMutationService,
-    model::{Blueprint, BlueprintWithAttributes, CreateBlueprint},
+    model::{Blueprint, BlueprintMigrationBatch, BlueprintWithAttributes, CreateBlueprint},
 };
 use axum::{Json, extract::State, http::StatusCode};
 use serde::Deserialize;
@@ -89,6 +89,25 @@ pub(super) async fn get_blueprint_revision(
         .map(Json)
         .ok_or_else(|| ApiError::not_found("blueprint version"))
 }
+pub(super) async fn start_safe_blueprint_migration_batch(
+    State(state): State<AppState>,
+    super::auth::ScopedRepository(repository): super::auth::ScopedRepository,
+    ApiPath((blueprint_id, version)): ApiPath<(Uuid, i64)>,
+) -> Result<(StatusCode, Json<BlueprintMigrationBatch>), ApiError> {
+    let batch = repository
+        .start_safe_blueprint_migration_batch(blueprint_id, version)
+        .await?;
+    let worker = repository.clone();
+    let batch_id = batch.id;
+    tokio::spawn(async move {
+        if let Err(error) = worker.run_safe_blueprint_migration_batch(batch_id).await {
+            tracing::error!(%batch_id, %error, "safe blueprint migration batch failed");
+        }
+    });
+    invalidate_data_health(&state).await;
+    Ok((StatusCode::ACCEPTED, Json(batch)))
+}
+
 pub(super) async fn publish_blueprint_revision(
     State(state): State<AppState>,
     super::auth::ScopedRepository(repository): super::auth::ScopedRepository,

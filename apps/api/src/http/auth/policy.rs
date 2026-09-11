@@ -31,7 +31,7 @@ pub(super) fn policy(method: &Method, path: &str) -> Option<Policy> {
     };
     let blueprint = if method == Method::GET {
         "blueprints.read"
-    } else if path.ends_with("/publish") {
+    } else if path.ends_with("/publish") || path.ends_with("/safe-migration-batches") {
         "blueprints.publish"
     } else {
         "blueprints.write"

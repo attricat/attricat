@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import { request } from '../../api/request';
 import {
+  blueprintMigrationBatchSchema,
   blueprintSchema,
   blueprintWithAttributesSchema,
   type Blueprint,
@@ -52,6 +53,13 @@ export const createBlueprintRevision = (
       headers: { 'Content-Type': 'application/json' },
       method: 'POST',
     },
+  );
+
+export const startSafeBlueprintMigrationBatch = (id: string, version: number) =>
+  request(
+    `/api/blueprints/${encodeURIComponent(z.uuid().parse(id))}/versions/${z.number().int().positive().parse(version)}/safe-migration-batches`,
+    blueprintMigrationBatchSchema,
+    { method: 'POST' },
   );
 
 export const publishBlueprintRevision = (

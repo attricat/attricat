@@ -543,6 +543,17 @@ pub struct EntityMigrationPreview {
 }
 
 #[derive(Clone, Debug, FromRow, Serialize)]
+pub struct BlueprintMigrationBatch {
+    pub id: Uuid,
+    pub blueprint_id: Uuid,
+    pub target_version: i64,
+    pub status: String,
+    pub created_at: DateTime<Utc>,
+    pub started_at: Option<DateTime<Utc>>,
+    pub completed_at: Option<DateTime<Utc>>,
+}
+
+#[derive(Clone, Debug, FromRow, Serialize)]
 pub struct DataHealthSummary {
     pub active_entities: i64,
     pub entity_blueprints: i64,
