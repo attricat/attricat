@@ -1,7 +1,12 @@
 // @vitest-environment jsdom
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { fireEvent, render, screen, within } from '@testing-library/react';
-import type { ComponentPropsWithoutRef, ElementType, ReactNode } from 'react';
+import type {
+  ComponentProps,
+  ComponentPropsWithoutRef,
+  ElementType,
+  ReactNode,
+} from 'react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import '../i18n';
 import { currentSession } from '../features/auth/api';
@@ -80,14 +85,17 @@ vi.mock('../features/extensions/ExtensionOutlet', () => ({
   ExtensionOutlet: () => null,
 }));
 
-const renderNavigation = (onNavigate = vi.fn()) => {
+const renderNavigation = (
+  onNavigate = vi.fn(),
+  props: Partial<ComponentProps<typeof SideNavigation>> = {},
+) => {
   const client = new QueryClient({
     defaultOptions: { queries: { retry: false } },
   });
 
   render(
     <QueryClientProvider client={client}>
-      <SideNavigation onNavigate={onNavigate} />
+      <SideNavigation {...props} onNavigate={onNavigate} />
     </QueryClientProvider>,
   );
 
@@ -102,6 +110,57 @@ beforeEach(() => {
 });
 
 describe('SideNavigation', () => {
+  it('replaces the mobile primary navigation with sub-navigation and supports going back', async () => {
+    renderNavigation();
+
+    expect(
+      screen.getByRole('heading', { name: /entity explorer/i }),
+    ).toBeTruthy();
+    expect(screen.getByRole('link', { name: 'All entities' })).toBeTruthy();
+    expect(await screen.findByRole('link', { name: 'Products' })).toBeTruthy();
+    expect(screen.queryByRole('link', { name: 'Agents' })).toBeNull();
+
+    fireEvent.click(
+      screen.getByRole('button', { name: 'Back to main navigation' }),
+    );
+    fireEvent.click(screen.getByRole('button', { name: 'Manage' }));
+
+    expect(screen.getByRole('heading', { name: 'Manage' })).toBeTruthy();
+    expect(
+      screen.getByRole('button', { name: 'Back to main navigation' }),
+    ).toBeTruthy();
+    expect(screen.queryByRole('link', { name: 'Agents' })).toBeNull();
+    expect(
+      await screen.findByRole('link', { name: 'Blueprints' }),
+    ).toBeTruthy();
+
+    fireEvent.click(
+      screen.getByRole('button', { name: 'Back to main navigation' }),
+    );
+
+    expect(screen.getByRole('link', { name: 'Agents' })).toBeTruthy();
+    expect(screen.queryByRole('link', { name: 'Blueprints' })).toBeNull();
+  });
+
+  it('keeps compact Explore and Manage panels mutually exclusive', async () => {
+    const onCompactManageOpenChange = vi.fn();
+    renderNavigation(vi.fn(), {
+      compact: true,
+      onCompactManageOpenChange,
+    });
+
+    fireEvent.click(screen.getByRole('link', { name: 'Manage' }));
+    onCompactManageOpenChange.mockClear();
+    fireEvent.click(screen.getByRole('link', { name: /entity explorer/i }));
+
+    expect(onCompactManageOpenChange).toHaveBeenCalledOnce();
+    expect(onCompactManageOpenChange).toHaveBeenCalledWith(false);
+    expect(screen.queryByRole('navigation', { name: 'Manage' })).toBeNull();
+    expect(
+      screen.getByRole('navigation', { name: /entity explorer/i }),
+    ).toBeTruthy();
+  });
+
   it('renders a pinned Explore item as a selected link without a nested button', async () => {
     const onNavigate = renderNavigation();
     const productsLink = await screen.findByRole('link', { name: 'Products' });

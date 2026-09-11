@@ -1,58 +1,23 @@
-import {
-  AuditLogIcon,
-  BlueprintIcon,
-  ContextIcon,
-  DataHealthIcon,
-  ExtensionIcon,
-  WorkspaceIcon,
-} from '../../components/system-icons';
+import { createElement } from 'react';
 import { Box, Paper, Stack, Typography } from '@mui/material';
+import { useQuery } from '@tanstack/react-query';
 import { Link } from '@tanstack/react-router';
 import { useTranslation } from 'react-i18next';
 import { PageContainer } from '../../components/PageContainer';
 import { PageHeader } from '../../components/PageHeader';
-
-const dashboardItems = [
-  {
-    descriptionKey: 'management.blueprintsDescription',
-    icon: <BlueprintIcon color="primary" />,
-    titleKey: 'navigation.blueprints',
-    to: '/manage/blueprints',
-  },
-  {
-    descriptionKey: 'management.contextsDescription',
-    icon: <ContextIcon color="primary" />,
-    titleKey: 'navigation.contexts',
-    to: '/manage/contexts',
-  },
-  {
-    descriptionKey: 'management.dataHealthDescription',
-    icon: <DataHealthIcon color="primary" />,
-    titleKey: 'navigation.dataHealth',
-    to: '/manage/data-health',
-  },
-  {
-    descriptionKey: 'management.workspaceDescription',
-    icon: <WorkspaceIcon color="primary" />,
-    titleKey: 'navigation.workspaceManagement',
-    to: '/manage/workspace/members',
-  },
-  {
-    descriptionKey: 'management.governanceDescription',
-    icon: <AuditLogIcon color="primary" />,
-    titleKey: 'navigation.auditLog',
-    to: '/manage/audit-log',
-  },
-  {
-    descriptionKey: 'management.extensionsDescription',
-    icon: <ExtensionIcon color="primary" />,
-    titleKey: 'navigation.extensions',
-    to: '/manage/extensions',
-  },
-] as const;
+import { getVisibleManagementNavigationItems } from '../../components/navigation';
+import { currentSession } from '../auth/api';
+import { authQueryKeys } from '../auth/query-keys';
 
 export const ManagementDashboardPage = () => {
   const { t } = useTranslation();
+  const session = useQuery({
+    queryKey: authQueryKeys.session(),
+    queryFn: currentSession,
+  });
+  const dashboardItems = getVisibleManagementNavigationItems(
+    session.data?.capabilities,
+  );
 
   return (
     <PageContainer>
@@ -83,8 +48,8 @@ export const ManagementDashboardPage = () => {
               }}
             >
               <Stack spacing={1.5}>
-                {item.icon}
-                <Typography variant="h6">{t(item.titleKey)}</Typography>
+                {createElement(item.icon, { color: 'primary' })}
+                <Typography variant="h6">{t(item.labelKey)}</Typography>
                 <Typography color="text.secondary">
                   {t(item.descriptionKey)}
                 </Typography>

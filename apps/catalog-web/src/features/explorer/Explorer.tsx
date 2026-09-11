@@ -7,7 +7,9 @@ import {
 import { useNavigate } from '@tanstack/react-router';
 import { Alert, Box, Button, Stack, Typography } from '@mui/material';
 import { useEffect, useMemo } from 'react';
+import { createPortal } from 'react-dom';
 import { useTranslation } from 'react-i18next';
+import { useMobileExplorePanelTarget } from '../../components/mobile-navigation-panel-context';
 import { PageContainer } from '../../components/PageContainer';
 import { PageHeader } from '../../components/PageHeader';
 import { RouterButton } from '../../components/RouterLink';
@@ -37,6 +39,7 @@ import { ApiRequestError } from '../../api/request';
 
 export const Explorer = ({ search: urlSearch }: { search: ExplorerSearch }) => {
   const { t } = useTranslation();
+  const mobileExplorePanelTarget = useMobileExplorePanelTarget();
   const search = useMemo(
     () => ({
       ...urlSearch,
@@ -282,6 +285,24 @@ export const Explorer = ({ search: urlSearch }: { search: ExplorerSearch }) => {
       },
     });
   };
+  const facetSidebarProps = {
+    attributeFilters: search.attributeFilters ?? [],
+    attributes: selectedBlueprint.data?.attributes ?? [],
+    blueprint: search.blueprint ?? '',
+    blueprints: blueprints.data ?? [],
+    contextCode: facetContextCode,
+    contexts: contexts.data ?? [],
+    facets: explorerFacets,
+    onAddAttributeFilter: addAttributeFilter,
+    onBlueprintChange: search.locked ? undefined : selectBlueprint,
+    onContextChange: updateFacetContext,
+    onRemoveAttributeFilter: removeAttributeFilter,
+    onUpdate: updateFacet,
+    onUpdateAttributeFilter: updateAttributeFilter,
+    pathAttributes: selectedBlueprint.data?.table_path_attributes,
+    query: search.query,
+    version: effectiveVersion,
+  };
 
   return (
     <Box sx={{ display: 'flex', minHeight: '100dvh' }}>
@@ -292,25 +313,7 @@ export const Explorer = ({ search: urlSearch }: { search: ExplorerSearch }) => {
           width: 300,
         }}
       >
-        <ExplorerFacetSidebar
-          attributeFilters={search.attributeFilters ?? []}
-          attributes={selectedBlueprint.data?.attributes ?? []}
-          blueprint={search.blueprint ?? ''}
-          blueprints={blueprints.data ?? []}
-          contextCode={facetContextCode}
-          contexts={contexts.data ?? []}
-          facets={explorerFacets}
-          fullHeight
-          onAddAttributeFilter={addAttributeFilter}
-          onBlueprintChange={search.locked ? undefined : selectBlueprint}
-          onContextChange={updateFacetContext}
-          onRemoveAttributeFilter={removeAttributeFilter}
-          onUpdate={updateFacet}
-          onUpdateAttributeFilter={updateAttributeFilter}
-          pathAttributes={selectedBlueprint.data?.table_path_attributes}
-          query={search.query}
-          version={effectiveVersion}
-        />
+        <ExplorerFacetSidebar {...facetSidebarProps} fullHeight />
       </Box>
       <Box sx={{ flexGrow: 1, minWidth: 0 }}>
         <PageContainer>
@@ -425,28 +428,6 @@ export const Explorer = ({ search: urlSearch }: { search: ExplorerSearch }) => {
                 mt: 3,
               }}
             >
-              <Box sx={{ display: { lg: 'none' }, mb: 3 }}>
-                <ExplorerFacetSidebar
-                  attributeFilters={search.attributeFilters ?? []}
-                  attributes={selectedBlueprint.data?.attributes ?? []}
-                  blueprint={search.blueprint ?? ''}
-                  blueprints={blueprints.data ?? []}
-                  contextCode={facetContextCode}
-                  contexts={contexts.data ?? []}
-                  facets={explorerFacets}
-                  onAddAttributeFilter={addAttributeFilter}
-                  onBlueprintChange={
-                    search.locked ? undefined : selectBlueprint
-                  }
-                  onContextChange={updateFacetContext}
-                  onRemoveAttributeFilter={removeAttributeFilter}
-                  onUpdate={updateFacet}
-                  onUpdateAttributeFilter={updateAttributeFilter}
-                  pathAttributes={selectedBlueprint.data?.table_path_attributes}
-                  query={search.query}
-                  version={effectiveVersion}
-                />
-              </Box>
               {!search.allVersions &&
                 effectiveVersion === currentBlueprint?.version &&
                 (resultPages[0]?.hidden_outdated_count ?? 0) > 0 && (
@@ -539,6 +520,11 @@ export const Explorer = ({ search: urlSearch }: { search: ExplorerSearch }) => {
           )}
         </PageContainer>
       </Box>
+      {mobileExplorePanelTarget &&
+        createPortal(
+          <ExplorerFacetSidebar {...facetSidebarProps} />,
+          mobileExplorePanelTarget,
+        )}
     </Box>
   );
 };

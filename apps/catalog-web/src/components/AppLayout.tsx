@@ -23,8 +23,11 @@ import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { currentSession, logout } from '../features/auth/api';
 import { authQueryKeys } from '../features/auth/query-keys';
+import { MobileNavigationPanelProvider } from './MobileNavigationPanel';
+import { navigationRoutes } from './navigation';
 import {
-  drawerWidth,
+  compactNavigationWidth,
+  expandedNavigationWidth,
   managementSidebarWidth,
   SideNavigation,
 } from './SideNavigation';
@@ -102,9 +105,8 @@ export const AppLayout = () => {
   const isDesktop = useMediaQuery(theme.breakpoints.up('md'));
   const [mobileOpen, setMobileOpen] = useState(false);
   const [desktopManageOpen, setDesktopManageOpen] = useState(
-    pathname === '/' ||
-      pathname === '/manage' ||
-      pathname.startsWith('/manage/'),
+    pathname === navigationRoutes.manage ||
+      pathname.startsWith(`${navigationRoutes.manage}/`),
   );
   const [signOutError, setSignOutError] = useState(false);
   const closeMobileNavigation = () => setMobileOpen(false);
@@ -151,7 +153,12 @@ export const AppLayout = () => {
         <CircularProgress />
       </Box>
     );
-  if (isLoginRoute) return session.data ? <Navigate to="/" /> : <Outlet />;
+  if (isLoginRoute)
+    return session.data ? (
+      <Navigate to={navigationRoutes.explore} />
+    ) : (
+      <Outlet />
+    );
   if (session.isError)
     return (
       <SessionErrorState
@@ -168,91 +175,95 @@ export const AppLayout = () => {
   }
 
   return (
-    <Box sx={{ display: 'flex', minHeight: '100dvh' }}>
-      {signOutError && (
-        <Box
-          sx={{
-            left: 24,
-            maxWidth: 480,
-            position: 'fixed',
-            top: 24,
-            zIndex: (theme) => theme.zIndex.snackbar,
-          }}
-        >
-          <SignOutErrorState onRetry={() => void signOut()} />
-        </Box>
-      )}
-      {isDesktop ? (
-        <Drawer
-          open
-          sx={{
-            flexShrink: 0,
-            width:
-              drawerWidth + (desktopManageOpen ? managementSidebarWidth : 0),
-          }}
-          slotProps={{
-            paper: {
-              sx: {
-                overflow: 'hidden',
-                width:
-                  drawerWidth +
-                  (desktopManageOpen ? managementSidebarWidth : 0),
-              },
-            },
-          }}
-          variant="permanent"
-        >
-          <SideNavigation
-            compact
-            compactManageOpen={desktopManageOpen}
-            onCompactManageOpenChange={setDesktopManageOpen}
-            onSignOut={signOut}
-          />
-        </Drawer>
-      ) : (
-        <>
-          <AppBar position="fixed">
-            <Toolbar>
-              <IconButton
-                aria-label={t('navigation.open')}
-                color="inherit"
-                edge="start"
-                onClick={() => setMobileOpen(true)}
-              >
-                <MenuIcon />
-              </IconButton>
-              <Typography
-                component="div"
-                sx={{ flexGrow: 1, ml: 1 }}
-                variant="h6"
-              >
-                {t('app.attricat')}
-              </Typography>
-            </Toolbar>
-          </AppBar>
+    <MobileNavigationPanelProvider>
+      <Box sx={{ display: 'flex', minHeight: '100dvh' }}>
+        {signOutError && (
+          <Box
+            sx={{
+              left: 24,
+              maxWidth: 480,
+              position: 'fixed',
+              top: 24,
+              zIndex: (theme) => theme.zIndex.snackbar,
+            }}
+          >
+            <SignOutErrorState onRetry={() => void signOut()} />
+          </Box>
+        )}
+        {isDesktop ? (
           <Drawer
-            onClose={closeMobileNavigation}
-            open={mobileOpen}
-            slotProps={{ paper: { sx: { width: drawerWidth } } }}
-            variant="temporary"
+            open
+            sx={{
+              flexShrink: 0,
+              width:
+                compactNavigationWidth +
+                (desktopManageOpen ? managementSidebarWidth : 0),
+            }}
+            slotProps={{
+              paper: {
+                sx: {
+                  overflow: 'hidden',
+                  width:
+                    compactNavigationWidth +
+                    (desktopManageOpen ? managementSidebarWidth : 0),
+                },
+              },
+            }}
+            variant="permanent"
           >
             <SideNavigation
-              onNavigate={closeMobileNavigation}
+              compact
+              compactManageOpen={desktopManageOpen}
+              onCompactManageOpenChange={setDesktopManageOpen}
               onSignOut={signOut}
             />
           </Drawer>
-        </>
-      )}
-      <Box
-        component="main"
-        sx={{
-          flexGrow: 1,
-          minWidth: 0,
-          pt: { xs: 7, md: 0 },
-        }}
-      >
-        <Outlet />
+        ) : (
+          <>
+            <AppBar position="fixed">
+              <Toolbar>
+                <IconButton
+                  aria-label={t('navigation.open')}
+                  color="inherit"
+                  edge="start"
+                  onClick={() => setMobileOpen(true)}
+                >
+                  <MenuIcon />
+                </IconButton>
+                <Typography
+                  component="div"
+                  sx={{ flexGrow: 1, ml: 1 }}
+                  variant="h6"
+                >
+                  {t('app.attricat')}
+                </Typography>
+              </Toolbar>
+            </AppBar>
+            <Drawer
+              onClose={closeMobileNavigation}
+              open={mobileOpen}
+              slotProps={{ paper: { sx: { width: expandedNavigationWidth } } }}
+              variant="temporary"
+            >
+              <SideNavigation
+                key={`${pathname}:${mobileOpen ? 'open' : 'closed'}`}
+                onNavigate={closeMobileNavigation}
+                onSignOut={signOut}
+              />
+            </Drawer>
+          </>
+        )}
+        <Box
+          component="main"
+          sx={{
+            flexGrow: 1,
+            minWidth: 0,
+            pt: { xs: 7, md: 0 },
+          }}
+        >
+          <Outlet />
+        </Box>
       </Box>
-    </Box>
+    </MobileNavigationPanelProvider>
   );
 };

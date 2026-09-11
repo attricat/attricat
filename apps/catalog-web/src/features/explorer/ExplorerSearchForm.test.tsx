@@ -23,6 +23,22 @@ const revisions = [
 ];
 
 describe('ExplorerSearchForm version scope', () => {
+  it('shows the blueprint selector when the route is not locked', () => {
+    render(
+      <ExplorerSearchForm
+        blueprints={revisions}
+        currentVersion={3}
+        onSubmit={vi.fn()}
+        revisions={revisions}
+        search={{}}
+      />,
+    );
+
+    expect(
+      screen.getByRole('combobox', { name: /select a blueprint/i }),
+    ).toBeTruthy();
+  });
+
   it('defaults to current and searches immediately for a historical version', async () => {
     const onSubmit = vi.fn();
     const user = userEvent.setup();

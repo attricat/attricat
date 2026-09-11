@@ -22,6 +22,7 @@
   },
   "navigation": {
     "open": "Open navigation",
+    "back": "Back to main navigation",
     "entityExplorer": "Entity explorer",
     "allEntities": "All entities",
     "shortcuts": "Shortcuts",

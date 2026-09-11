@@ -9,6 +9,7 @@ import { AppLayout, SessionErrorState } from './AppLayout';
 import { authQueryKeys } from '../features/auth/query-keys';
 
 let pathname = '/catalog';
+let isDesktop = true;
 
 const { currentSessionMock, logoutMock, navigateMock } = vi.hoisted(() => ({
   currentSessionMock: vi.fn(),
@@ -28,7 +29,7 @@ vi.mock('@tanstack/react-router', () => ({
 
 vi.mock('@mui/material', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@mui/material')>()),
-  useMediaQuery: () => true,
+  useMediaQuery: () => isDesktop,
 }));
 
 vi.mock('../features/auth/api', () => ({
@@ -37,7 +38,9 @@ vi.mock('../features/auth/api', () => ({
 }));
 
 vi.mock('./SideNavigation', () => ({
-  drawerWidth: 264,
+  compactNavigationWidth: 88,
+  expandedNavigationWidth: 264,
+  managementSidebarWidth: 248,
   SideNavigation: ({ onSignOut }: { onSignOut?: () => void }) => (
     <button onClick={onSignOut}>Sign out</button>
   ),
@@ -75,6 +78,25 @@ describe('SessionErrorState', () => {
     expect(markup).toContain('Retry');
     expect(markup).toMatch(/<button[^>]*>Retry<\/button>/);
     expect(markup).toMatch(/<button[^>]*>Sign out<\/button>/);
+  });
+});
+
+describe('AppLayout navigation', () => {
+  it('uses the expanded navigation width on mobile', async () => {
+    isDesktop = false;
+    currentSessionMock.mockResolvedValue(session);
+    renderAppLayout();
+    const user = userEvent.setup();
+
+    await user.click(
+      await screen.findByRole('button', { name: 'Open navigation' }),
+    );
+
+    const navigation = await screen.findByRole('button', { name: 'Sign out' });
+    const drawerPaper = navigation.closest('.MuiDrawer-paper');
+    expect(drawerPaper).not.toBeNull();
+    expect(window.getComputedStyle(drawerPaper as Element).width).toBe('264px');
+    isDesktop = true;
   });
 });
 
