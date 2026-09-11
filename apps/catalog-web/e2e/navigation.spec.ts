@@ -27,6 +27,14 @@ test('navigates from the desktop rail and management panel', async ({
 
   await expect(page).toHaveURL(/\/manage\/blueprints$/);
   await expect(page.getByRole('heading', { name: 'Blueprints' })).toBeVisible();
+
+  await page.setViewportSize({ width: 1000, height: 800 });
+  await page.goto('/');
+  const tabletBlueprintSelector = page.getByRole('combobox', {
+    name: /select a blueprint/i,
+  });
+  await expect(tabletBlueprintSelector).toHaveCount(1);
+  await expect(tabletBlueprintSelector).toBeVisible();
 });
 
 test('opens mobile navigation and closes it after navigation', async ({

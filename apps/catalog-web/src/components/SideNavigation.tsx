@@ -197,60 +197,71 @@ export const SideNavigation = ({
           width: '100%',
         }}
       >
+        {!compact && mobileSection === 'primary' && (
+          <ListItemButton
+            aria-controls="mobile-explore-panel"
+            aria-expanded={false}
+            aria-label={t('navigation.entityExplorer')}
+            onClick={() => setMobileSection('explore')}
+          >
+            <ListItemIcon>
+              <ExplorerIcon />
+            </ListItemIcon>
+            <ListItemText primary={t('navigation.entityExplorer')} />
+            <ChevronRightIcon />
+          </ListItemButton>
+        )}
         {showPrimaryNavigation &&
-          primaryNavigationItems.map((item) => (
-            <Tooltip
-              key={item.to}
-              placement="right"
-              title={compact ? t(item.labelKey) : ''}
-            >
-              <ListItemButton
-                aria-label={t(item.labelKey)}
-                component={Link}
-                onClick={(event) => {
-                  if (!compact && item.to === navigationRoutes.explore) {
-                    event.preventDefault();
-                    setMobileSection('explore');
-                    return;
-                  }
-                  if (compact && item.to === navigationRoutes.explore) {
-                    setCompactExplore(!compactExploreOpen);
-                    return;
-                  }
-                  if (compact) {
-                    setCompactManageOpen(false);
-                    setCompactExploreOpen(false);
-                  }
-                  onNavigate?.();
-                }}
-                selected={
-                  item.to === navigationRoutes.explore
-                    ? pathname === item.to && !search.locked
-                    : pathname.startsWith(item.to)
-                }
-                sx={itemSx}
-                to={item.to}
+          primaryNavigationItems
+            .filter((item) => compact || item.to !== navigationRoutes.explore)
+            .map((item) => (
+              <Tooltip
+                key={item.to}
+                placement="right"
+                title={compact ? t(item.labelKey) : ''}
               >
-                <ListItemIcon sx={compact ? { minWidth: 0 } : undefined}>
-                  {createElement(item.icon)}
-                </ListItemIcon>
-                {compact ? (
-                  <Typography
-                    sx={{
-                      fontSize: '0.65rem',
-                      lineHeight: 1.1,
-                      textAlign: 'center',
-                    }}
-                    variant="caption"
-                  >
-                    {t(item.labelKey)}
-                  </Typography>
-                ) : (
-                  <ListItemText primary={t(item.labelKey)} />
-                )}
-              </ListItemButton>
-            </Tooltip>
-          ))}
+                <ListItemButton
+                  aria-label={t(item.labelKey)}
+                  component={Link}
+                  onClick={() => {
+                    if (compact && item.to === navigationRoutes.explore) {
+                      setCompactExplore(!compactExploreOpen);
+                      return;
+                    }
+                    if (compact) {
+                      setCompactManageOpen(false);
+                      setCompactExploreOpen(false);
+                    }
+                    onNavigate?.();
+                  }}
+                  selected={
+                    item.to === navigationRoutes.explore
+                      ? pathname === item.to && !search.locked
+                      : pathname.startsWith(item.to)
+                  }
+                  sx={itemSx}
+                  to={item.to}
+                >
+                  <ListItemIcon sx={compact ? { minWidth: 0 } : undefined}>
+                    {createElement(item.icon)}
+                  </ListItemIcon>
+                  {compact ? (
+                    <Typography
+                      sx={{
+                        fontSize: '0.65rem',
+                        lineHeight: 1.1,
+                        textAlign: 'center',
+                      }}
+                      variant="caption"
+                    >
+                      {t(item.labelKey)}
+                    </Typography>
+                  ) : (
+                    <ListItemText primary={t(item.labelKey)} />
+                  )}
+                </ListItemButton>
+              </Tooltip>
+            ))}
         {(compact || mobileSection === 'explore') && (
           <Box sx={compact ? { width: '100%' } : { px: 1 }}>
             <QueryErrorNotice
@@ -261,44 +272,52 @@ export const SideNavigation = ({
           </Box>
         )}
         {!compact && mobileSection === 'explore' && (
-          <>
-            <ListItemButton
-              component={Link}
-              onClick={onNavigate}
-              selected={pathname === navigationRoutes.explore && !search.locked}
-              to={navigationRoutes.explore}
-            >
-              <ListItemIcon>
-                <ExplorerIcon />
-              </ListItemIcon>
-              <ListItemText primary={t('navigation.allEntities')} />
-            </ListItemButton>
-            {pinnedExplore.data?.length ? (
-              <ListSubheader disableSticky>
-                {t('navigation.shortcuts')}
-              </ListSubheader>
-            ) : null}
-            {pinnedExplore.data?.map((item) => (
-              <RouterListItemButton
-                aria-label={item.blueprint_name}
-                key={item.blueprint_code}
+          <Box
+            aria-label={t('navigation.entityExplorer')}
+            component="nav"
+            id="mobile-explore-panel"
+          >
+            <List disablePadding>
+              <ListItemButton
+                component={Link}
                 onClick={onNavigate}
-                search={{ blueprint: item.blueprint_code, locked: true }}
                 selected={
-                  pathname === navigationRoutes.explore &&
-                  search.blueprint === item.blueprint_code
+                  pathname === navigationRoutes.explore && !search.locked
                 }
-                style={{ color: 'inherit', textDecoration: 'none' }}
                 to={navigationRoutes.explore}
               >
                 <ListItemIcon>
-                  <ExplorerShortcutIcon />
+                  <ExplorerIcon />
                 </ListItemIcon>
-                <ListItemText primary={item.blueprint_name} />
-              </RouterListItemButton>
-            ))}
+                <ListItemText primary={t('navigation.allEntities')} />
+              </ListItemButton>
+              {pinnedExplore.data?.length ? (
+                <ListSubheader disableSticky>
+                  {t('navigation.shortcuts')}
+                </ListSubheader>
+              ) : null}
+              {pinnedExplore.data?.map((item) => (
+                <RouterListItemButton
+                  aria-label={item.blueprint_name}
+                  key={item.blueprint_code}
+                  onClick={onNavigate}
+                  search={{ blueprint: item.blueprint_code, locked: true }}
+                  selected={
+                    pathname === navigationRoutes.explore &&
+                    search.blueprint === item.blueprint_code
+                  }
+                  style={{ color: 'inherit', textDecoration: 'none' }}
+                  to={navigationRoutes.explore}
+                >
+                  <ListItemIcon>
+                    <ExplorerShortcutIcon />
+                  </ListItemIcon>
+                  <ListItemText primary={item.blueprint_name} />
+                </RouterListItemButton>
+              ))}
+            </List>
             <Box ref={setMobileExplorePanelTarget} sx={{ mt: 2 }} />
-          </>
+          </Box>
         )}
         {showPrimaryNavigation && <ExtensionOutlet outlet="navigation" />}
         {compact && (
@@ -487,6 +506,7 @@ export const SideNavigation = ({
                 <ListItemText primary={item.blueprint_name} />
               </RouterListItemButton>
             ))}
+            <Box ref={setMobileExplorePanelTarget} sx={{ mt: 2 }} />
           </List>
         </Box>
       )}

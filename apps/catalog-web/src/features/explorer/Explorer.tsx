@@ -5,7 +5,15 @@ import {
   useQueryClient,
 } from '@tanstack/react-query';
 import { useNavigate } from '@tanstack/react-router';
-import { Alert, Box, Button, Stack, Typography } from '@mui/material';
+import {
+  Alert,
+  Box,
+  Button,
+  Stack,
+  Typography,
+  useMediaQuery,
+  useTheme,
+} from '@mui/material';
 import { useEffect, useMemo } from 'react';
 import { createPortal } from 'react-dom';
 import { useTranslation } from 'react-i18next';
@@ -39,6 +47,8 @@ import { ApiRequestError } from '../../api/request';
 
 export const Explorer = ({ search: urlSearch }: { search: ExplorerSearch }) => {
   const { t } = useTranslation();
+  const theme = useTheme();
+  const isWideDesktop = useMediaQuery(theme.breakpoints.up('lg'));
   const mobileExplorePanelTarget = useMobileExplorePanelTarget();
   const search = useMemo(
     () => ({
@@ -521,6 +531,7 @@ export const Explorer = ({ search: urlSearch }: { search: ExplorerSearch }) => {
         </PageContainer>
       </Box>
       {mobileExplorePanelTarget &&
+        !isWideDesktop &&
         createPortal(
           <ExplorerFacetSidebar {...facetSidebarProps} />,
           mobileExplorePanelTarget,
