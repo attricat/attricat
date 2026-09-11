@@ -1,0 +1,135 @@
+- generic [ref=e6]:
+  - generic [ref=e42]:
+    - generic [ref=e45]:
+      - heading "Attricat" [level=6] [ref=e2714]: A
+      - separator [ref=e48]
+      - list [ref=e49]:
+        - link "Entity explorer" [ref=e2715] [cursor=pointer]:
+          - /url: /
+          - img [ref=e52]
+          - generic [ref=e54]: Entity explorer
+        - link "Agents" [ref=e2716] [cursor=pointer]:
+          - /url: /agents
+          - img [ref=e57]
+          - generic [ref=e59]: Agents
+        - link "Manage" [ref=e2717] [cursor=pointer]:
+          - /url: /manage
+          - img [ref=e62]
+          - generic [ref=e64]: Manage
+      - navigation "Entity explorer" [ref=e2718]:
+        - heading "Entity explorer" [level=6] [ref=e2719]
+        - separator [ref=e68]
+        - list [ref=e69]:
+          - link "All entities" [ref=e2720] [cursor=pointer]:
+            - /url: /
+            - img [ref=e72]
+            - generic [ref=e75]: All entities
+          - listitem [ref=e76]: Shortcuts
+          - link "PC sellable SKU" [ref=e2721] [cursor=pointer]:
+            - /url: /?blueprint=demo_pc_components_v1_sku&locked=true
+            - img [ref=e79]
+            - generic [ref=e82]: PC sellable SKU
+      - separator [ref=e84]
+      - list [ref=e85]:
+        - link "Profile" [ref=e2722] [cursor=pointer]:
+          - /url: /profile
+          - img [ref=e88]
+          - generic [ref=e90]: Profile
+        - button "Sign out" [ref=e2723] [cursor=pointer]:
+          - img [ref=e93]
+          - generic [ref=e95]: Sign out
+    - main [ref=e96]:
+      - generic [ref=e2944]:
+        - generic [ref=e2945]:
+          - generic [ref=e2947]:
+            - text: Entity preview ·
+            - link "See all" [ref=e2948] [cursor=pointer]:
+              - /url: /?blueprint=demo_pc_components_v1_sku&version=2
+          - link "PC sellable SKU" [ref=e2950] [cursor=pointer]:
+            - /url: /manage/blueprints/e305d150-691a-46f5-a87b-b1d1254cad94
+            - img [ref=e2952]
+            - text: "Blueprint: PC sellable SKU"
+        - navigation "Entity preview" [ref=e2954]:
+          - link "Edit entity" [ref=e2955] [cursor=pointer]:
+            - /url: /entities/90a865c9-15f6-4f3b-96e5-6881f8211380/edit
+            - img [ref=e2956]
+          - link "Changes" [ref=e2958] [cursor=pointer]:
+            - /url: /entities/90a865c9-15f6-4f3b-96e5-6881f8211380/changes
+            - img [ref=e2959]
+          - img [ref=e2961]
+          - button "Extension contributions" [ref=e2963] [cursor=pointer]:
+            - img [ref=e2964]
+        - generic [ref=e2966]:
+          - heading "PC sellable SKU" [level=2] [ref=e2967]
+          - button "View entity ID 90a865c9-15f6-4f3b-96e5-6881f8211380" [ref=e2968] [cursor=pointer]:
+            - img [ref=e2969]
+        - generic [ref=e2973]:
+          - navigation "Context" [ref=e2974]:
+            - tablist "Context" [ref=e2977]:
+              - tab "Default" [selected] [ref=e2978] [cursor=pointer]
+              - tab "demo-pc-components-v1" [ref=e2979] [cursor=pointer]
+              - tab "demo-pc-components-v1-web" [ref=e2980] [cursor=pointer]
+          - generic [ref=e2982]:
+            - generic [ref=e2983]:
+              - heading "name" [level=6] [ref=e2985]
+              - paragraph [ref=e2986]: Kestrel Microdevices Arc 5276 Power Supply, 1 TB
+            - generic [ref=e2987]:
+              - heading "sku" [level=6] [ref=e2989]
+              - paragraph [ref=e2990]: BFG-ARC-5276-01-A
+            - generic [ref=e2991]:
+              - heading "description" [level=6] [ref=e2993]
+              - paragraph [ref=e2994]: Power Supply for ByteForge Components system builders, with ATX 3.1 connectivity and validated integration specifications. Revision A; selected for regular availability.
+            - generic [ref=e2995]:
+              - heading "product type" [level=6] [ref=e2997]
+              - paragraph [ref=e2998]: Power Supply
+            - generic [ref=e2999]:
+              - heading "price" [level=6] [ref=e3001]
+              - paragraph [ref=e3002]: "1507.99"
+            - generic [ref=e3003]:
+              - heading "stock on hand" [level=6] [ref=e3005]
+              - paragraph [ref=e3006]: "13"
+            - generic [ref=e3007]:
+              - heading "availability" [level=6] [ref=e3009]
+              - paragraph [ref=e3010]: in_stock
+            - generic [ref=e3011]:
+              - heading "interface" [level=6] [ref=e3013]
+              - paragraph [ref=e3014]: ATX 3.1
+            - generic [ref=e3015]:
+              - heading "capacity" [level=6] [ref=e3017]
+              - paragraph [ref=e3018]: 1 TB
+            - generic [ref=e3019]:
+              - heading "form factor" [level=6] [ref=e3021]
+              - paragraph [ref=e3022]: ATX
+            - generic [ref=e3023]:
+              - heading "wattage" [level=6] [ref=e3025]
+              - paragraph [ref=e3026]: "850"
+            - generic [ref=e3027]:
+              - heading "family" [level=6] [ref=e3029]
+              - link "Kestrel Microdevices Arc 5276 Power Supply" [ref=e3031] [cursor=pointer]:
+                - /url: /entities/00133575-bbc5-4ab7-9c87-7336ca950277
+                - button "Kestrel Microdevices Arc 5276 Power Supply" [ref=e3032]:
+                  - generic [ref=e3033]: Kestrel Microdevices Arc 5276 Power Supply
+            - generic [ref=e3034]:
+              - heading "category" [level=6] [ref=e3036]
+              - link "Power 0007" [ref=e3038] [cursor=pointer]:
+                - /url: /entities/ad49ab21-6af7-4a9d-9cb2-8a4a36175599
+                - button "Power 0007" [ref=e3039]:
+                  - generic [ref=e3040]: Power 0007
+            - generic [ref=e3041]:
+              - heading "manufacturer" [level=6] [ref=e3043]
+              - link "Noric Display" [ref=e3045] [cursor=pointer]:
+                - /url: /entities/c397294a-5dc4-4388-97e9-942623f38123
+                - button "Noric Display" [ref=e3046]:
+                  - generic [ref=e3047]: Noric Display
+            - generic [ref=e3048]:
+              - heading "compatible skus" [level=6] [ref=e3050]
+              - link "Kestrel Microdevices Arc 5276 Power Supply, 2 TB" [ref=e3052] [cursor=pointer]:
+                - /url: /entities/e2a1c902-325b-4f0e-af6e-1a55ff6ad98d
+                - button "Kestrel Microdevices Arc 5276 Power Supply, 2 TB" [ref=e3053]:
+                  - generic [ref=e3054]: Kestrel Microdevices Arc 5276 Power Supply, 2 TB
+            - generic [ref=e3055]:
+              - heading "product files" [level=6] [ref=e3057]
+              - paragraph [ref=e3058]: File value not set
+  - button "Open Inspector" [ref=e2942] [cursor=pointer]:
+    - img [ref=e2]
+    - status "API ready" [ref=e2943]

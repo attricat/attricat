@@ -1,0 +1,965 @@
+- generic [ref=e1]:
+  - generic [ref=e2]:
+    - generic [ref=e3]:
+      - generic [ref=e6]:
+        - heading [level=6] [ref=e383]: A
+        - separator [ref=e9]
+        - list [ref=e10]:
+          - link [ref=e384] [cursor=pointer]:
+            - /url: /
+            - img [ref=e13]
+            - generic [ref=e15]: Entity explorer
+          - link [ref=e385] [cursor=pointer]:
+            - /url: /agents
+            - img [ref=e18]
+            - generic [ref=e20]: Agents
+          - link [expanded] [ref=e386] [cursor=pointer]:
+            - /url: /manage
+            - img [ref=e23]
+            - generic [ref=e25]: Manage
+        - navigation [ref=e387]:
+          - heading [level=6] [ref=e388]: Manage
+          - separator [ref=e29]
+          - list [ref=e30]:
+            - link [ref=e389] [cursor=pointer]:
+              - /url: /manage
+              - img [ref=e33]
+              - generic [ref=e36]: Dashboard
+            - link [ref=e390] [cursor=pointer]:
+              - /url: /manage/blueprints
+              - img [ref=e39]
+              - generic [ref=e42]: Blueprints
+            - link [ref=e391] [cursor=pointer]:
+              - /url: /manage/contexts
+              - img [ref=e45]
+              - generic [ref=e48]: Contexts
+            - link [ref=e392] [cursor=pointer]:
+              - /url: /manage/data-health
+              - img [ref=e51]
+              - generic [ref=e54]: Data health
+            - link [ref=e393] [cursor=pointer]:
+              - /url: /manage/audit-log
+              - img [ref=e57]
+              - generic [ref=e62]: Activity / Audit log
+            - link [ref=e394] [cursor=pointer]:
+              - /url: /manage/extensions
+              - img [ref=e65]
+              - generic [ref=e68]: Extensions
+            - link [ref=e395] [cursor=pointer]:
+              - /url: /manage/workspace/members
+              - img [ref=e71]
+              - generic [ref=e74]: Workspace management
+        - navigation [ref=e396]:
+          - heading [level=6] [ref=e397]: Entity explorer
+          - separator [ref=e78]
+          - list [ref=e79]:
+            - link [ref=e398] [cursor=pointer]:
+              - /url: /
+              - img [ref=e82]
+              - generic [ref=e85]: All entities
+            - listitem [ref=e86]: Shortcuts
+            - link [ref=e399] [cursor=pointer]:
+              - /url: /?blueprint=demo_pc_components_v1_sku&locked=true
+              - img [ref=e89]
+              - generic [ref=e92]: PC sellable SKU
+        - separator [ref=e94]
+        - list [ref=e95]:
+          - link [ref=e400] [cursor=pointer]:
+            - /url: /profile
+            - img [ref=e98]
+            - generic [ref=e100]: Profile
+          - button [ref=e401] [cursor=pointer]:
+            - img [ref=e103]
+            - generic [ref=e105]: Sign out
+      - main [ref=e106]:
+        - generic [ref=e107]:
+          - complementary [ref=e109]:
+            - heading [level=6] [ref=e402]: Relationship filters
+            - generic [ref=e111]:
+              - generic [ref=e112]: Context
+              - generic [ref=e113]:
+                - combobox [ref=e403] [cursor=pointer]: Default
+                - textbox: default
+                - img
+                - group:
+                  - generic: Context
+            - generic [ref=e115]:
+              - button [ref=e404] [cursor=pointer]:
+                - img [ref=e118]
+                - generic [ref=e120]: PC product family
+                - generic [ref=e121]: 1 selected
+              - generic [ref=e124]: Kestrel Microdevices Arc 5276 Power Supply
+            - button [ref=e405] [cursor=pointer]:
+              - img [ref=e128]
+              - generic [ref=e130]: PC category
+              - generic [ref=e131]: 0 selected
+            - button [ref=e406] [cursor=pointer]:
+              - img [ref=e135]
+              - generic [ref=e137]: PC manufacturer
+              - generic [ref=e138]: 0 selected
+            - button [ref=e407] [cursor=pointer]:
+              - img [ref=e142]
+              - generic [ref=e144]: PC sellable SKU
+              - generic [ref=e145]: 0 selected
+            - heading [level=6] [ref=e408]: Attribute filters
+            - generic [ref=e147]:
+              - generic [ref=e148]:
+                - generic [ref=e149]: Attribute
+                - generic [ref=e150]:
+                  - combobox [ref=e409] [cursor=pointer]: name
+                  - textbox: name
+                  - img
+                  - group:
+                    - generic: Attribute
+              - generic [ref=e152]:
+                - generic [ref=e153]: Operator
+                - generic [ref=e154]:
+                  - combobox [ref=e410] [cursor=pointer]: Equals
+                  - textbox: eq
+                  - img
+                  - group:
+                    - generic: Operator
+              - generic [ref=e156]:
+                - generic: Value
+                - generic [ref=e157]:
+                  - textbox [ref=e411]
+                  - group:
+                    - generic: Value
+              - button [disabled]:
+                - generic:
+                  - img
+                - text: Apply filter
+          - generic [ref=e160]:
+            - generic [ref=e161]:
+              - generic [ref=e162]:
+                - heading [level=1] [ref=e412]: PC sellable SKU
+                - paragraph [ref=e164]: Search and browse PC sellable SKU.
+              - link [ref=e413] [cursor=pointer]:
+                - /url: /entities/new?blueprint=demo_pc_components_v1_sku&locked=true
+                - text: Create PC sellable SKU
+            - generic [ref=e168]:
+              - generic [ref=e169]:
+                - generic: Query
+                - generic [ref=e170]:
+                  - textbox [ref=e414]:
+                    - /placeholder: Search this blueprint, e.g. term
+                  - group:
+                    - generic: Query
+                - paragraph [ref=e172]: "This blueprint: term · One field: sku:term* · All fields on a related record: relationship:term · A related field: relationship.field:term · Global connected search (up to 3 hops): *:term"
+              - button [ref=e415] [cursor=pointer]: Search
+            - button [ref=e417]:
+              - generic [ref=e176]: "family: \"Kestrel Microdevices Arc 5276 Power Supply\""
+              - img [ref=e177] [cursor=pointer]
+            - generic [ref=e180]:
+              - paragraph [ref=e181]: 4 results
+              - table [ref=e183]:
+                - rowgroup [ref=e184]:
+                  - row [ref=e419]:
+                    - columnheader [ref=e420]: ID
+                    - columnheader [ref=e421]: Display
+                    - columnheader [ref=e422]: Schema
+                    - columnheader [ref=e423]:
+                      - button [ref=e424] [cursor=pointer]:
+                        - text: Product
+                        - img [ref=e191]
+                    - columnheader [ref=e425]:
+                      - button [ref=e426] [cursor=pointer]:
+                        - text: SKU
+                        - img [ref=e195]
+                    - columnheader [ref=e427]:
+                      - button [ref=e428] [cursor=pointer]:
+                        - text: Type
+                        - img [ref=e199]
+                    - columnheader [ref=e429]:
+                      - button [ref=e430] [cursor=pointer]:
+                        - text: Compatible SKU
+                        - img [ref=e203]
+                    - columnheader [ref=e431]:
+                      - button [ref=e432] [cursor=pointer]:
+                        - text: Price
+                        - img [ref=e207]
+                    - columnheader [ref=e433]:
+                      - button [ref=e434] [cursor=pointer]:
+                        - text: Stock
+                        - img [ref=e211]
+                    - columnheader [ref=e435]:
+                      - button [ref=e436] [cursor=pointer]:
+                        - text: Availability
+                        - img [ref=e215]
+                    - columnheader [ref=e437]:
+                      - button [ref=e438] [cursor=pointer]:
+                        - text: Interface
+                        - img [ref=e219]
+                    - columnheader [ref=e439]:
+                      - button [ref=e440] [cursor=pointer]:
+                        - text: Capacity
+                        - img [ref=e223]
+                    - columnheader [ref=e441]:
+                      - button [ref=e442] [cursor=pointer]:
+                        - text: Form factor
+                        - img [ref=e227]
+                    - columnheader [ref=e443]:
+                      - button [ref=e444] [cursor=pointer]:
+                        - text: Wattage
+                        - img [ref=e231]
+                    - columnheader [ref=e233]
+                - rowgroup [ref=e234]:
+                  - row [ref=e445]:
+                    - cell [ref=e446]:
+                      - button [ref=e447] [cursor=pointer]:
+                        - img [ref=e238]
+                    - cell [ref=e448]:
+                      - link [ref=e449] [cursor=pointer]:
+                        - /url: /entities/90a865c9-15f6-4f3b-96e5-6881f8211380
+                        - text: Kestrel Microdevices Arc 5276 Power Supply, 1 TB
+                    - cell [ref=e450]:
+                      - generic [ref=e244]: v2 · Current
+                    - cell [ref=e451]:
+                      - paragraph [ref=e246]: Kestrel Microdevices Arc 5276 Power Supply, 1 TB
+                    - cell [ref=e452]:
+                      - paragraph [ref=e248]: BFG-ARC-5276-01-A
+                    - cell [ref=e453]:
+                      - paragraph [ref=e250]: Power Supply
+                    - cell [ref=e454]:
+                      - paragraph [ref=e252]: Kestrel Microdevices Arc 5276 Power Supply, 2 TB
+                    - cell [ref=e455]:
+                      - paragraph [ref=e254]: "1507.99"
+                    - cell [ref=e456]:
+                      - paragraph [ref=e256]: "13"
+                    - cell [ref=e457]:
+                      - paragraph [ref=e258]: in_stock
+                    - cell [ref=e458]:
+                      - paragraph [ref=e260]: ATX 3.1
+                    - cell [ref=e459]:
+                      - paragraph [ref=e262]: 1 TB
+                    - cell [ref=e460]:
+                      - paragraph [ref=e264]: ATX
+                    - cell [ref=e461]:
+                      - paragraph [ref=e266]: "850"
+                    - cell [ref=e462]:
+                      - button [ref=e463] [cursor=pointer]:
+                        - img [ref=e269]
+                  - row [ref=e464]:
+                    - cell [ref=e465]:
+                      - button [ref=e466] [cursor=pointer]:
+                        - img [ref=e274]
+                    - cell [ref=e467]:
+                      - link [ref=e468] [cursor=pointer]:
+                        - /url: /entities/e2a1c902-325b-4f0e-af6e-1a55ff6ad98d
+                        - text: Kestrel Microdevices Arc 5276 Power Supply, 2 TB
+                    - cell [ref=e469]:
+                      - generic [ref=e280]: v2 · Current
+                    - cell [ref=e470]:
+                      - paragraph [ref=e282]: Kestrel Microdevices Arc 5276 Power Supply, 2 TB
+                    - cell [ref=e471]:
+                      - paragraph [ref=e284]: BFG-ARC-5276-02-B
+                    - cell [ref=e472]:
+                      - paragraph [ref=e286]: Power Supply
+                    - cell [ref=e473]:
+                      - paragraph [ref=e288]: Kestrel Microdevices Arc 5276 Power Supply, 4 TB
+                    - cell [ref=e474]:
+                      - paragraph [ref=e290]: "1578.99"
+                    - cell [ref=e475]:
+                      - paragraph [ref=e292]: "26"
+                    - cell [ref=e476]:
+                      - paragraph [ref=e294]: in_stock
+                    - cell [ref=e477]:
+                      - paragraph [ref=e296]: ATX 3.1
+                    - cell [ref=e478]:
+                      - paragraph [ref=e298]: 2 TB
+                    - cell [ref=e479]:
+                      - paragraph [ref=e300]: ATX
+                    - cell [ref=e480]:
+                      - paragraph [ref=e302]: "850"
+                    - cell [ref=e481]:
+                      - button [ref=e482] [cursor=pointer]:
+                        - img [ref=e305]
+                  - row [ref=e483]:
+                    - cell [ref=e484]:
+                      - button [ref=e485] [cursor=pointer]:
+                        - img [ref=e310]
+                    - cell [ref=e486]:
+                      - link [ref=e487] [cursor=pointer]:
+                        - /url: /entities/c349b201-9eb8-487c-9207-6f2eda77bbd0
+                        - text: Kestrel Microdevices Arc 5276 Power Supply, 4 TB
+                    - cell [ref=e488]:
+                      - generic [ref=e316]: v2 · Current
+                    - cell [ref=e489]:
+                      - paragraph [ref=e318]: Kestrel Microdevices Arc 5276 Power Supply, 4 TB
+                    - cell [ref=e490]:
+                      - paragraph [ref=e320]: BFG-ARC-5276-03-C
+                    - cell [ref=e491]:
+                      - paragraph [ref=e322]: Power Supply
+                    - cell [ref=e492]:
+                      - paragraph [ref=e324]: Kestrel Microdevices Arc 5276 Power Supply, 8 GB
+                    - cell [ref=e493]:
+                      - paragraph [ref=e326]: "1649.99"
+                    - cell [ref=e494]:
+                      - paragraph [ref=e328]: "39"
+                    - cell [ref=e495]:
+                      - paragraph [ref=e330]: in_stock
+                    - cell [ref=e496]:
+                      - paragraph [ref=e332]: ATX 3.1
+                    - cell [ref=e497]:
+                      - paragraph [ref=e334]: 4 TB
+                    - cell [ref=e498]:
+                      - paragraph [ref=e336]: ATX
+                    - cell [ref=e499]:
+                      - paragraph [ref=e338]: "850"
+                    - cell [ref=e500]:
+                      - button [ref=e501] [cursor=pointer]:
+                        - img [ref=e341]
+                  - row [ref=e502]:
+                    - cell [ref=e503]:
+                      - button [ref=e504] [cursor=pointer]:
+                        - img [ref=e346]
+                    - cell [ref=e505]:
+                      - link [ref=e506] [cursor=pointer]:
+                        - /url: /entities/dc8db5aa-abb5-4ee6-ae6d-40bc7c471977
+                        - text: Kestrel Microdevices Arc 5276 Power Supply, 8 GB
+                    - cell [ref=e507]:
+                      - generic [ref=e352]: v2 · Current
+                    - cell [ref=e508]:
+                      - paragraph [ref=e354]: Kestrel Microdevices Arc 5276 Power Supply, 8 GB
+                    - cell [ref=e509]:
+                      - paragraph [ref=e356]: BFG-ARC-5276-04-D
+                    - cell [ref=e510]:
+                      - paragraph [ref=e358]: Power Supply
+                    - cell [ref=e511]:
+                      - paragraph [ref=e360]: Kestrel Microdevices Arc 5276 Power Supply, 1 TB
+                    - cell [ref=e512]:
+                      - paragraph [ref=e362]: "1720.99"
+                    - cell [ref=e513]:
+                      - paragraph [ref=e364]: "52"
+                    - cell [ref=e514]:
+                      - paragraph [ref=e366]: in_stock
+                    - cell [ref=e515]:
+                      - paragraph [ref=e368]: ATX 3.1
+                    - cell [ref=e516]:
+                      - paragraph [ref=e370]: 8 GB
+                    - cell [ref=e517]:
+                      - paragraph [ref=e372]: ATX
+                    - cell [ref=e518]:
+                      - paragraph [ref=e374]: "850"
+                    - cell [ref=e519]:
+                      - button [ref=e520] [cursor=pointer]:
+                        - img [ref=e377]
+    - button [ref=e521] [cursor=pointer]:
+      - img [ref=e380]
+      - status [ref=e522]
+  - dialog "Select PC product family 1 selected Close relationship selector" [active] [ref=e525]:
+    - heading "Select PC product family 1 selected Close relationship selector" [level=2] [ref=e526]:
+      - generic [ref=e527]:
+        - generic [ref=e528]:
+          - text: Select PC product family
+          - paragraph [ref=e529]: 1 selected
+        - button "Close relationship selector" [ref=e530] [cursor=pointer]:
+          - img [ref=e531]
+    - generic [ref=e534]:
+      - generic [ref=e535]:
+        - heading "Selected" [level=6] [ref=e536]
+        - button "Kestrel Microdevices Arc 5276 Power Supply" [ref=e538]:
+          - generic [ref=e539]: Kestrel Microdevices Arc 5276 Power Supply
+          - img [ref=e540] [cursor=pointer]
+      - list [ref=e542]:
+        - listitem [ref=e544]:
+          - generic [ref=e545] [cursor=pointer]:
+            - generic [ref=e546]:
+              - checkbox "Cobalt Peripherals Summit 6312 Graphics Card (4)" [ref=e547]
+              - img [ref=e548]
+            - generic [ref=e550]: Cobalt Peripherals Summit 6312 Graphics Card (4)
+        - listitem [ref=e552]:
+          - generic [ref=e553] [cursor=pointer]:
+            - generic [ref=e554]:
+              - checkbox "Ridgepoint Thermal Pulse 9651 Memory Kit (4)" [ref=e555]
+              - img [ref=e556]
+            - generic [ref=e558]: Ridgepoint Thermal Pulse 9651 Memory Kit (4)
+        - listitem [ref=e560]:
+          - generic [ref=e561] [cursor=pointer]:
+            - generic [ref=e562]:
+              - checkbox "Solvane Storage Summit 1280 Graphics Card (4)" [ref=e563]
+              - img [ref=e564]
+            - generic [ref=e566]: Solvane Storage Summit 1280 Graphics Card (4)
+        - listitem [ref=e568]:
+          - generic [ref=e569] [cursor=pointer]:
+            - generic [ref=e570]:
+              - checkbox "Ridgepoint Thermal Forge 2621 CPU Cooler (4)" [ref=e571]
+              - img [ref=e572]
+            - generic [ref=e574]: Ridgepoint Thermal Forge 2621 CPU Cooler (4)
+        - listitem [ref=e576]:
+          - generic [ref=e577] [cursor=pointer]:
+            - generic [ref=e578]:
+              - checkbox "Meridian Boardworks Vector 1483 Computer Case (4)" [ref=e579]
+              - img [ref=e580]
+            - generic [ref=e582]: Meridian Boardworks Vector 1483 Computer Case (4)
+        - listitem [ref=e584]:
+          - generic [ref=e585] [cursor=pointer]:
+            - generic [ref=e586]:
+              - checkbox "Noric Display Summit 1548 Graphics Card (4)" [ref=e587]
+              - img [ref=e588]
+            - generic [ref=e590]: Noric Display Summit 1548 Graphics Card (4)
+        - listitem [ref=e592]:
+          - generic [ref=e593] [cursor=pointer]:
+            - generic [ref=e594]:
+              - checkbox "Meridian Boardworks Pulse 8143 Memory Kit (4)" [ref=e595]
+              - img [ref=e596]
+            - generic [ref=e598]: Meridian Boardworks Pulse 8143 Memory Kit (4)
+        - listitem [ref=e600]:
+          - generic [ref=e601] [cursor=pointer]:
+            - generic [ref=e602]:
+              - checkbox "Voltarra Power Arc 6164 Power Supply (4)" [ref=e603]
+              - img [ref=e604]
+            - generic [ref=e606]: Voltarra Power Arc 6164 Power Supply (4)
+        - listitem [ref=e608]:
+          - generic [ref=e609] [cursor=pointer]:
+            - generic [ref=e610]:
+              - checkbox "Asterion Memory Vector 4147 Computer Case (4)" [ref=e611]
+              - img [ref=e612]
+            - generic [ref=e614]: Asterion Memory Vector 4147 Computer Case (4)
+        - listitem [ref=e616]:
+          - generic [ref=e617] [cursor=pointer]:
+            - generic [ref=e618]:
+              - checkbox "Noric Display Flux 4018 Solid State Drive (4)" [ref=e619]
+              - img [ref=e620]
+            - generic [ref=e622]: Noric Display Flux 4018 Solid State Drive (4)
+        - listitem [ref=e624]:
+          - generic [ref=e625] [cursor=pointer]:
+            - generic [ref=e626]:
+              - checkbox "Asterion Memory Pulse 2787 Memory Kit (0)" [ref=e627]
+              - img [ref=e628]
+            - generic [ref=e630]: Asterion Memory Pulse 2787 Memory Kit (0)
+        - listitem [ref=e632]:
+          - generic [ref=e633] [cursor=pointer]:
+            - generic [ref=e634]:
+              - checkbox "Voltarra Power Arc 5784 Power Supply (4)" [ref=e635]
+              - img [ref=e636]
+            - generic [ref=e638]: Voltarra Power Arc 5784 Power Supply (4)
+        - listitem [ref=e640]:
+          - generic [ref=e641] [cursor=pointer]:
+            - generic [ref=e642]:
+              - checkbox "Helix Networking Nova 2445 Motherboard (4)" [ref=e643]
+              - img [ref=e644]
+            - generic [ref=e646]: Helix Networking Nova 2445 Motherboard (4)
+        - listitem [ref=e648]:
+          - generic [ref=e649] [cursor=pointer]:
+            - generic [ref=e650]:
+              - checkbox "Helix Networking Pulse 2575 Memory Kit (4)" [ref=e651]
+              - img [ref=e652]
+            - generic [ref=e654]: Helix Networking Pulse 2575 Memory Kit (4)
+        - listitem [ref=e656]:
+          - generic [ref=e657] [cursor=pointer]:
+            - generic [ref=e658]:
+              - checkbox "Kestrel Microdevices Flux 3426 Solid State Drive (4)" [ref=e659]
+              - img [ref=e660]
+            - generic [ref=e662]: Kestrel Microdevices Flux 3426 Solid State Drive (4)
+        - listitem [ref=e664]:
+          - generic [ref=e665] [cursor=pointer]:
+            - generic [ref=e666]:
+              - checkbox "Asterion Memory Pulse 7607 Memory Kit (4)" [ref=e667]
+              - img [ref=e668]
+            - generic [ref=e670]: Asterion Memory Pulse 7607 Memory Kit (4)
+        - listitem [ref=e672]:
+          - generic [ref=e673] [cursor=pointer]:
+            - generic [ref=e674]:
+              - checkbox "Helix Networking Pulse 0955 Memory Kit (4)" [ref=e675]
+              - img [ref=e676]
+            - generic [ref=e678]: Helix Networking Pulse 0955 Memory Kit (4)
+        - listitem [ref=e680]:
+          - generic [ref=e681] [cursor=pointer]:
+            - generic [ref=e682]:
+              - checkbox "Asterion Memory Nova 1557 Motherboard (4)" [ref=e683]
+              - img [ref=e684]
+            - generic [ref=e686]: Asterion Memory Nova 1557 Motherboard (4)
+        - listitem [ref=e688]:
+          - generic [ref=e689] [cursor=pointer]:
+            - generic [ref=e690]:
+              - checkbox "Helix Networking Pulse 7015 Memory Kit (4)" [ref=e691]
+              - img [ref=e692]
+            - generic [ref=e694]: Helix Networking Pulse 7015 Memory Kit (4)
+        - listitem [ref=e696]:
+          - generic [ref=e697] [cursor=pointer]:
+            - generic [ref=e698]:
+              - checkbox "Noric Display Flux 1918 Solid State Drive (4)" [ref=e699]
+              - img [ref=e700]
+            - generic [ref=e702]: Noric Display Flux 1918 Solid State Drive (4)
+        - listitem [ref=e704]:
+          - generic [ref=e705] [cursor=pointer]:
+            - generic [ref=e706]:
+              - checkbox "Asterion Memory Forge 5877 CPU Cooler (4)" [ref=e707]
+              - img [ref=e708]
+            - generic [ref=e710]: Asterion Memory Forge 5877 CPU Cooler (4)
+        - listitem [ref=e712]:
+          - generic [ref=e713] [cursor=pointer]:
+            - generic [ref=e714]:
+              - checkbox "Helix Networking Pulse 4295 Memory Kit (4)" [ref=e715]
+              - img [ref=e716]
+            - generic [ref=e718]: Helix Networking Pulse 4295 Memory Kit (4)
+        - listitem [ref=e720]:
+          - generic [ref=e721] [cursor=pointer]:
+            - generic [ref=e722]:
+              - checkbox "Cobalt Peripherals Arc 7912 Power Supply (4)" [ref=e723]
+              - img [ref=e724]
+            - generic [ref=e726]: Cobalt Peripherals Arc 7912 Power Supply (4)
+        - listitem [ref=e728]:
+          - generic [ref=e729] [cursor=pointer]:
+            - generic [ref=e730]:
+              - checkbox "Noric Display Arc 3768 Power Supply (4)" [ref=e731]
+              - img [ref=e732]
+            - generic [ref=e734]: Noric Display Arc 3768 Power Supply (4)
+        - listitem [ref=e736]:
+          - generic [ref=e737] [cursor=pointer]:
+            - generic [ref=e738]:
+              - checkbox "Asterion Memory Vector 1807 Computer Case (4)" [ref=e739]
+              - img [ref=e740]
+            - generic [ref=e742]: Asterion Memory Vector 1807 Computer Case (4)
+        - listitem [ref=e744]:
+          - generic [ref=e745] [cursor=pointer]:
+            - generic [ref=e746]:
+              - checkbox "Ridgepoint Thermal Pulse 4351 Memory Kit (4)" [ref=e747]
+              - img [ref=e748]
+            - generic [ref=e750]: Ridgepoint Thermal Pulse 4351 Memory Kit (4)
+        - listitem [ref=e752]:
+          - generic [ref=e753] [cursor=pointer]:
+            - generic [ref=e754]:
+              - checkbox "Noric Display Arc 7348 Power Supply (4)" [ref=e755]
+              - img [ref=e756]
+            - generic [ref=e758]: Noric Display Arc 7348 Power Supply (4)
+        - listitem [ref=e760]:
+          - generic [ref=e761] [cursor=pointer]:
+            - generic [ref=e762]:
+              - checkbox "Solvane Storage Summit 0900 Graphics Card (4)" [ref=e763]
+              - img [ref=e764]
+            - generic [ref=e766]: Solvane Storage Summit 0900 Graphics Card (4)
+        - listitem [ref=e768]:
+          - generic [ref=e769] [cursor=pointer]:
+            - generic [ref=e770]:
+              - checkbox "Ridgepoint Thermal Vector 9531 Computer Case (4)" [ref=e771]
+              - img [ref=e772]
+            - generic [ref=e774]: Ridgepoint Thermal Vector 9531 Computer Case (4)
+        - listitem [ref=e776]:
+          - generic [ref=e777] [cursor=pointer]:
+            - generic [ref=e778]:
+              - checkbox "Ridgepoint Thermal Forge 0761 CPU Cooler (4)" [ref=e779]
+              - img [ref=e780]
+            - generic [ref=e782]: Ridgepoint Thermal Forge 0761 CPU Cooler (4)
+        - listitem [ref=e784]:
+          - generic [ref=e785] [cursor=pointer]:
+            - generic [ref=e786]:
+              - checkbox "Solvane Storage Flux 1030 Solid State Drive (4)" [ref=e787]
+              - img [ref=e788]
+            - generic [ref=e790]: Solvane Storage Flux 1030 Solid State Drive (4)
+        - listitem [ref=e792]:
+          - generic [ref=e793] [cursor=pointer]:
+            - generic [ref=e794]:
+              - checkbox "Helix Networking Nova 3065 Motherboard (4)" [ref=e795]
+              - img [ref=e796]
+            - generic [ref=e798]: Helix Networking Nova 3065 Motherboard (4)
+        - listitem [ref=e800]:
+          - generic [ref=e801] [cursor=pointer]:
+            - generic [ref=e802]:
+              - checkbox "Voltarra Power Apex 5054 Network Adapter (4)" [ref=e803]
+              - img [ref=e804]
+            - generic [ref=e806]: Voltarra Power Apex 5054 Network Adapter (4)
+        - listitem [ref=e808]:
+          - generic [ref=e809] [cursor=pointer]:
+            - generic [ref=e810]:
+              - checkbox "Kestrel Microdevices Summit 8976 Graphics Card (4)" [ref=e811]
+              - img [ref=e812]
+            - generic [ref=e814]: Kestrel Microdevices Summit 8976 Graphics Card (4)
+        - listitem [ref=e816]:
+          - generic [ref=e817] [cursor=pointer]:
+            - generic [ref=e818]:
+              - checkbox "Kestrel Microdevices Arc 7616 Power Supply (4)" [ref=e819]
+              - img [ref=e820]
+            - generic [ref=e822]: Kestrel Microdevices Arc 7616 Power Supply (4)
+        - listitem [ref=e824]:
+          - generic [ref=e825] [cursor=pointer]:
+            - generic [ref=e826]:
+              - checkbox "Voltarra Power Flux 2214 Solid State Drive (4)" [ref=e827]
+              - img [ref=e828]
+            - generic [ref=e830]: Voltarra Power Flux 2214 Solid State Drive (4)
+        - listitem [ref=e832]:
+          - generic [ref=e833] [cursor=pointer]:
+            - generic [ref=e834]:
+              - checkbox "Solvane Storage Apex 2010 Network Adapter (0)" [ref=e835]
+              - img [ref=e836]
+            - generic [ref=e838]: Solvane Storage Apex 2010 Network Adapter (0)
+        - listitem [ref=e840]:
+          - generic [ref=e841] [cursor=pointer]:
+            - generic [ref=e842]:
+              - checkbox "Meridian Boardworks Forge 7653 CPU Cooler (4)" [ref=e843]
+              - img [ref=e844]
+            - generic [ref=e846]: Meridian Boardworks Forge 7653 CPU Cooler (4)
+        - listitem [ref=e848]:
+          - generic [ref=e849] [cursor=pointer]:
+            - generic [ref=e850]:
+              - checkbox "Voltarra Power Flux 7274 Solid State Drive (4)" [ref=e851]
+              - img [ref=e852]
+            - generic [ref=e854]: Voltarra Power Flux 7274 Solid State Drive (4)
+        - listitem [ref=e856]:
+          - generic [ref=e857] [cursor=pointer]:
+            - generic [ref=e858]:
+              - checkbox "Ternion Systems Forge 5849 CPU Cooler (4)" [ref=e859]
+              - img [ref=e860]
+            - generic [ref=e862]: Ternion Systems Forge 5849 CPU Cooler (4)
+        - listitem [ref=e864]:
+          - generic [ref=e865] [cursor=pointer]:
+            - generic [ref=e866]:
+              - checkbox "Solvane Storage Arc 3500 Power Supply (4)" [ref=e867]
+              - img [ref=e868]
+            - generic [ref=e870]: Solvane Storage Arc 3500 Power Supply (4)
+        - listitem [ref=e872]:
+          - generic [ref=e873] [cursor=pointer]:
+            - generic [ref=e874]:
+              - checkbox "Voltarra Power Flux 0974 Solid State Drive (4)" [ref=e875]
+              - img [ref=e876]
+            - generic [ref=e878]: Voltarra Power Flux 0974 Solid State Drive (4)
+        - listitem [ref=e880]:
+          - generic [ref=e881] [cursor=pointer]:
+            - generic [ref=e882]:
+              - checkbox "Meridian Boardworks Pulse 4943 Memory Kit (4)" [ref=e883]
+              - img [ref=e884]
+            - generic [ref=e886]: Meridian Boardworks Pulse 4943 Memory Kit (4)
+        - listitem [ref=e888]:
+          - generic [ref=e889] [cursor=pointer]:
+            - generic [ref=e890]:
+              - checkbox "Cobalt Peripherals Flux 8402 Solid State Drive (4)" [ref=e891]
+              - img [ref=e892]
+            - generic [ref=e894]: Cobalt Peripherals Flux 8402 Solid State Drive (4)
+        - listitem [ref=e896]:
+          - generic [ref=e897] [cursor=pointer]:
+            - generic [ref=e898]:
+              - checkbox "Solvane Storage Flux 5710 Solid State Drive (4)" [ref=e899]
+              - img [ref=e900]
+            - generic [ref=e902]: Solvane Storage Flux 5710 Solid State Drive (4)
+        - listitem [ref=e904]:
+          - generic [ref=e905] [cursor=pointer]:
+            - generic [ref=e906]:
+              - checkbox "Noric Display Arc 1048 Power Supply (4)" [ref=e907]
+              - img [ref=e908]
+            - generic [ref=e910]: Noric Display Arc 1048 Power Supply (4)
+        - listitem [ref=e912]:
+          - generic [ref=e913] [cursor=pointer]:
+            - generic [ref=e914]:
+              - checkbox "Solvane Storage Summit 2760 Graphics Card (4)" [ref=e915]
+              - img [ref=e916]
+            - generic [ref=e918]: Solvane Storage Summit 2760 Graphics Card (4)
+        - listitem [ref=e920]:
+          - generic [ref=e921] [cursor=pointer]:
+            - generic [ref=e922]:
+              - checkbox "Asterion Memory Nova 5137 Motherboard (4)" [ref=e923]
+              - img [ref=e924]
+            - generic [ref=e926]: Asterion Memory Nova 5137 Motherboard (4)
+        - listitem [ref=e928]:
+          - generic [ref=e929] [cursor=pointer]:
+            - generic [ref=e930]:
+              - checkbox "Voltarra Power Apex 0614 Network Adapter (4)" [ref=e931]
+              - img [ref=e932]
+            - generic [ref=e934]: Voltarra Power Apex 0614 Network Adapter (4)
+        - listitem [ref=e936]:
+          - generic [ref=e937] [cursor=pointer]:
+            - generic [ref=e938]:
+              - checkbox "Kestrel Microdevices Flux 3426 Solid State Drive (4)" [ref=e939]
+              - img [ref=e940]
+            - generic [ref=e942]: Kestrel Microdevices Flux 3426 Solid State Drive (4)
+        - listitem [ref=e944]:
+          - generic [ref=e945] [cursor=pointer]:
+            - generic [ref=e946]:
+              - checkbox "Solvane Storage Flux 8430 Solid State Drive (4)" [ref=e947]
+              - img [ref=e948]
+            - generic [ref=e950]: Solvane Storage Flux 8430 Solid State Drive (4)
+        - listitem [ref=e952]:
+          - generic [ref=e953] [cursor=pointer]:
+            - generic [ref=e954]:
+              - checkbox "Kestrel Microdevices Arc 9336 Power Supply (4)" [ref=e955]
+              - img [ref=e956]
+            - generic [ref=e958]: Kestrel Microdevices Arc 9336 Power Supply (4)
+        - listitem [ref=e960]:
+          - generic [ref=e961] [cursor=pointer]:
+            - generic [ref=e962]:
+              - checkbox "Solvane Storage Flux 9050 Solid State Drive (4)" [ref=e963]
+              - img [ref=e964]
+            - generic [ref=e966]: Solvane Storage Flux 9050 Solid State Drive (4)
+        - listitem [ref=e968]:
+          - generic [ref=e969] [cursor=pointer]:
+            - generic [ref=e970]:
+              - checkbox "Solvane Storage Summit 1140 Graphics Card (4)" [ref=e971]
+              - img [ref=e972]
+            - generic [ref=e974]: Solvane Storage Summit 1140 Graphics Card (4)
+        - listitem [ref=e976]:
+          - generic [ref=e977] [cursor=pointer]:
+            - generic [ref=e978]:
+              - checkbox "Helix Networking Forge 9725 CPU Cooler (4)" [ref=e979]
+              - img [ref=e980]
+            - generic [ref=e982]: Helix Networking Forge 9725 CPU Cooler (4)
+        - listitem [ref=e984]:
+          - generic [ref=e985] [cursor=pointer]:
+            - generic [ref=e986]:
+              - checkbox "Ternion Systems Nova 6829 Motherboard (4)" [ref=e987]
+              - img [ref=e988]
+            - generic [ref=e990]: Ternion Systems Nova 6829 Motherboard (4)
+        - listitem [ref=e992]:
+          - generic [ref=e993] [cursor=pointer]:
+            - generic [ref=e994]:
+              - checkbox "Ternion Systems Pulse 7579 Memory Kit (4)" [ref=e995]
+              - img [ref=e996]
+            - generic [ref=e998]: Ternion Systems Pulse 7579 Memory Kit (4)
+        - listitem [ref=e1000]:
+          - generic [ref=e1001] [cursor=pointer]:
+            - generic [ref=e1002]:
+              - checkbox "Meridian Boardworks Vector 2343 Computer Case (4)" [ref=e1003]
+              - img [ref=e1004]
+            - generic [ref=e1006]: Meridian Boardworks Vector 2343 Computer Case (4)
+        - listitem [ref=e1008]:
+          - generic [ref=e1009] [cursor=pointer]:
+            - generic [ref=e1010]:
+              - checkbox "Asterion Memory Pulse 1687 Memory Kit (4)" [ref=e1011]
+              - img [ref=e1012]
+            - generic [ref=e1014]: Asterion Memory Pulse 1687 Memory Kit (4)
+        - listitem [ref=e1016]:
+          - generic [ref=e1017] [cursor=pointer]:
+            - generic [ref=e1018]:
+              - checkbox "Ternion Systems Nova 1529 Motherboard (4)" [ref=e1019]
+              - img [ref=e1020]
+            - generic [ref=e1022]: Ternion Systems Nova 1529 Motherboard (4)
+        - listitem [ref=e1024]:
+          - generic [ref=e1025] [cursor=pointer]:
+            - generic [ref=e1026]:
+              - checkbox "Ternion Systems Forge 2509 CPU Cooler (4)" [ref=e1027]
+              - img [ref=e1028]
+            - generic [ref=e1030]: Ternion Systems Forge 2509 CPU Cooler (4)
+        - listitem [ref=e1032]:
+          - generic [ref=e1033] [cursor=pointer]:
+            - generic [ref=e1034]:
+              - checkbox "Noric Display Flux 1058 Solid State Drive (4)" [ref=e1035]
+              - img [ref=e1036]
+            - generic [ref=e1038]: Noric Display Flux 1058 Solid State Drive (4)
+        - listitem [ref=e1040]:
+          - generic [ref=e1041] [cursor=pointer]:
+            - generic [ref=e1042]:
+              - checkbox "Ridgepoint Thermal Nova 3981 Motherboard (4)" [ref=e1043]
+              - img [ref=e1044]
+            - generic [ref=e1046]: Ridgepoint Thermal Nova 3981 Motherboard (4)
+        - listitem [ref=e1048]:
+          - generic [ref=e1049] [cursor=pointer]:
+            - generic [ref=e1050]:
+              - checkbox "Cobalt Peripherals Arc 0992 Power Supply (4)" [ref=e1051]
+              - img [ref=e1052]
+            - generic [ref=e1054]: Cobalt Peripherals Arc 0992 Power Supply (4)
+        - listitem [ref=e1056]:
+          - generic [ref=e1057] [cursor=pointer]:
+            - generic [ref=e1058]:
+              - checkbox "Cobalt Peripherals Flux 2722 Solid State Drive (4)" [ref=e1059]
+              - img [ref=e1060]
+            - generic [ref=e1062]: Cobalt Peripherals Flux 2722 Solid State Drive (4)
+        - listitem [ref=e1064]:
+          - generic [ref=e1065] [cursor=pointer]:
+            - generic [ref=e1066]:
+              - checkbox "Helix Networking Nova 5165 Motherboard (4)" [ref=e1067]
+              - img [ref=e1068]
+            - generic [ref=e1070]: Helix Networking Nova 5165 Motherboard (4)
+        - listitem [ref=e1072]:
+          - generic [ref=e1073] [cursor=pointer]:
+            - generic [ref=e1074]:
+              - checkbox "Meridian Boardworks Nova 3093 Motherboard (4)" [ref=e1075]
+              - img [ref=e1076]
+            - generic [ref=e1078]: Meridian Boardworks Nova 3093 Motherboard (4)
+        - listitem [ref=e1080]:
+          - generic [ref=e1081] [cursor=pointer]:
+            - generic [ref=e1082]:
+              - checkbox "Ternion Systems Pulse 4859 Memory Kit (4)" [ref=e1083]
+              - img [ref=e1084]
+            - generic [ref=e1086]: Ternion Systems Pulse 4859 Memory Kit (4)
+        - listitem [ref=e1088]:
+          - generic [ref=e1089] [cursor=pointer]:
+            - generic [ref=e1090]:
+              - checkbox "Ridgepoint Thermal Pulse 2251 Memory Kit (4)" [ref=e1091]
+              - img [ref=e1092]
+            - generic [ref=e1094]: Ridgepoint Thermal Pulse 2251 Memory Kit (4)
+        - listitem [ref=e1096]:
+          - generic [ref=e1097] [cursor=pointer]:
+            - generic [ref=e1098]:
+              - checkbox "Ternion Systems Nova 0669 Motherboard (4)" [ref=e1099]
+              - img [ref=e1100]
+            - generic [ref=e1102]: Ternion Systems Nova 0669 Motherboard (4)
+        - listitem [ref=e1104]:
+          - generic [ref=e1105] [cursor=pointer]:
+            - generic [ref=e1106]:
+              - checkbox "Noric Display Arc 0428 Power Supply (4)" [ref=e1107]
+              - img [ref=e1108]
+            - generic [ref=e1110]: Noric Display Arc 0428 Power Supply (4)
+        - listitem [ref=e1112]:
+          - generic [ref=e1113] [cursor=pointer]:
+            - generic [ref=e1114]:
+              - checkbox "Kestrel Microdevices Flux 5386 Solid State Drive (4)" [ref=e1115]
+              - img [ref=e1116]
+            - generic [ref=e1118]: Kestrel Microdevices Flux 5386 Solid State Drive (4)
+        - listitem [ref=e1120]:
+          - generic [ref=e1121] [cursor=pointer]:
+            - generic [ref=e1122]:
+              - checkbox "Voltarra Power Summit 7144 Graphics Card (4)" [ref=e1123]
+              - img [ref=e1124]
+            - generic [ref=e1126]: Voltarra Power Summit 7144 Graphics Card (4)
+        - listitem [ref=e1128]:
+          - generic [ref=e1129] [cursor=pointer]:
+            - generic [ref=e1130]:
+              - checkbox "Noric Display Arc 6968 Power Supply (2)" [ref=e1131]
+              - img [ref=e1132]
+            - generic [ref=e1134]: Noric Display Arc 6968 Power Supply (2)
+        - listitem [ref=e1136]:
+          - generic [ref=e1137] [cursor=pointer]:
+            - generic [ref=e1138]:
+              - checkbox "Cobalt Peripherals Flux 1862 Solid State Drive (4)" [ref=e1139]
+              - img [ref=e1140]
+            - generic [ref=e1142]: Cobalt Peripherals Flux 1862 Solid State Drive (4)
+        - listitem [ref=e1144]:
+          - generic [ref=e1145] [cursor=pointer]:
+            - generic [ref=e1146]:
+              - checkbox "Ternion Systems Forge 8569 CPU Cooler (4)" [ref=e1147]
+              - img [ref=e1148]
+            - generic [ref=e1150]: Ternion Systems Forge 8569 CPU Cooler (4)
+        - listitem [ref=e1152]:
+          - generic [ref=e1153] [cursor=pointer]:
+            - generic [ref=e1154]:
+              - checkbox "Ridgepoint Thermal Nova 5701 Motherboard (4)" [ref=e1155]
+              - img [ref=e1156]
+            - generic [ref=e1158]: Ridgepoint Thermal Nova 5701 Motherboard (4)
+        - listitem [ref=e1160]:
+          - generic [ref=e1161] [cursor=pointer]:
+            - generic [ref=e1162]:
+              - checkbox "Solvane Storage Apex 8550 Network Adapter (4)" [ref=e1163]
+              - img [ref=e1164]
+            - generic [ref=e1166]: Solvane Storage Apex 8550 Network Adapter (4)
+        - listitem [ref=e1168]:
+          - generic [ref=e1169] [cursor=pointer]:
+            - generic [ref=e1170]:
+              - checkbox "Meridian Boardworks Nova 1613 Motherboard (4)" [ref=e1171]
+              - img [ref=e1172]
+            - generic [ref=e1174]: Meridian Boardworks Nova 1613 Motherboard (4)
+        - listitem [ref=e1176]:
+          - generic [ref=e1177] [cursor=pointer]:
+            - generic [ref=e1178]:
+              - checkbox "Kestrel Microdevices Arc 6996 Power Supply (4)" [ref=e1179]
+              - img [ref=e1180]
+            - generic [ref=e1182]: Kestrel Microdevices Arc 6996 Power Supply (4)
+        - listitem [ref=e1184]:
+          - generic [ref=e1185] [cursor=pointer]:
+            - generic [ref=e1186]:
+              - checkbox "Helix Networking Forge 4425 CPU Cooler (4)" [ref=e1187]
+              - img [ref=e1188]
+            - generic [ref=e1190]: Helix Networking Forge 4425 CPU Cooler (4)
+        - listitem [ref=e1192]:
+          - generic [ref=e1193] [cursor=pointer]:
+            - generic [ref=e1194]:
+              - checkbox "Kestrel Microdevices Summit 1436 Graphics Card (4)" [ref=e1195]
+              - img [ref=e1196]
+            - generic [ref=e1198]: Kestrel Microdevices Summit 1436 Graphics Card (4)
+        - listitem [ref=e1200]:
+          - generic [ref=e1201] [cursor=pointer]:
+            - generic [ref=e1202]:
+              - checkbox "Ridgepoint Thermal Vector 8911 Computer Case (4)" [ref=e1203]
+              - img [ref=e1204]
+            - generic [ref=e1206]: Ridgepoint Thermal Vector 8911 Computer Case (4)
+        - listitem [ref=e1208]:
+          - generic [ref=e1209] [cursor=pointer]:
+            - generic [ref=e1210]:
+              - checkbox "Solvane Storage Arc 6700 Power Supply (4)" [ref=e1211]
+              - img [ref=e1212]
+            - generic [ref=e1214]: Solvane Storage Arc 6700 Power Supply (4)
+        - listitem [ref=e1216]:
+          - generic [ref=e1217] [cursor=pointer]:
+            - generic [ref=e1218]:
+              - checkbox "Cobalt Peripherals Flux 6682 Solid State Drive (4)" [ref=e1219]
+              - img [ref=e1220]
+            - generic [ref=e1222]: Cobalt Peripherals Flux 6682 Solid State Drive (4)
+        - listitem [ref=e1224]:
+          - generic [ref=e1225] [cursor=pointer]:
+            - generic [ref=e1226]:
+              - checkbox "Asterion Memory Pulse 3167 Memory Kit (4)" [ref=e1227]
+              - img [ref=e1228]
+            - generic [ref=e1230]: Asterion Memory Pulse 3167 Memory Kit (4)
+        - listitem [ref=e1232]:
+          - generic [ref=e1233] [cursor=pointer]:
+            - generic [ref=e1234]:
+              - checkbox "Kestrel Microdevices Flux 1806 Solid State Drive (4)" [ref=e1235]
+              - img [ref=e1236]
+            - generic [ref=e1238]: Kestrel Microdevices Flux 1806 Solid State Drive (4)
+        - listitem [ref=e1240]:
+          - generic [ref=e1241] [cursor=pointer]:
+            - generic [ref=e1242]:
+              - checkbox "Solvane Storage Summit 7680 Graphics Card (4)" [ref=e1243]
+              - img [ref=e1244]
+            - generic [ref=e1246]: Solvane Storage Summit 7680 Graphics Card (4)
+        - listitem [ref=e1248]:
+          - generic [ref=e1249] [cursor=pointer]:
+            - generic [ref=e1250]:
+              - checkbox "Noric Display Flux 6598 Solid State Drive (4)" [ref=e1251]
+              - img [ref=e1252]
+            - generic [ref=e1254]: Noric Display Flux 6598 Solid State Drive (4)
+        - listitem [ref=e1256]:
+          - generic [ref=e1257] [cursor=pointer]:
+            - generic [ref=e1258]:
+              - checkbox "Asterion Memory Pulse 1927 Memory Kit (4)" [ref=e1259]
+              - img [ref=e1260]
+            - generic [ref=e1262]: Asterion Memory Pulse 1927 Memory Kit (4)
+        - listitem [ref=e1264]:
+          - generic [ref=e1265] [cursor=pointer]:
+            - generic [ref=e1266]:
+              - checkbox "Noric Display Arc 6108 Power Supply (4)" [ref=e1267]
+              - img [ref=e1268]
+            - generic [ref=e1270]: Noric Display Arc 6108 Power Supply (4)
+        - listitem [ref=e1272]:
+          - generic [ref=e1273] [cursor=pointer]:
+            - generic [ref=e1274]:
+              - checkbox "Ridgepoint Thermal Nova 2741 Motherboard (4)" [ref=e1275]
+              - img [ref=e1276]
+            - generic [ref=e1278]: Ridgepoint Thermal Nova 2741 Motherboard (4)
+        - listitem [ref=e1280]:
+          - generic [ref=e1281] [cursor=pointer]:
+            - generic [ref=e1282]:
+              - checkbox "Asterion Memory Forge 3537 CPU Cooler (4)" [ref=e1283]
+              - img [ref=e1284]
+            - generic [ref=e1286]: Asterion Memory Forge 3537 CPU Cooler (4)
+        - listitem [ref=e1288]:
+          - generic [ref=e1289] [cursor=pointer]:
+            - generic [ref=e1290]:
+              - checkbox "Ternion Systems Nova 3389 Motherboard (4)" [ref=e1291]
+              - img [ref=e1292]
+            - generic [ref=e1294]: Ternion Systems Nova 3389 Motherboard (4)
+        - listitem [ref=e1296]:
+          - generic [ref=e1297] [cursor=pointer]:
+            - generic [ref=e1298]:
+              - checkbox "Voltarra Power Flux 5414 Solid State Drive (4)" [ref=e1299]
+              - img [ref=e1300]
+            - generic [ref=e1302]: Voltarra Power Flux 5414 Solid State Drive (4)
+        - listitem [ref=e1304]:
+          - generic [ref=e1305] [cursor=pointer]:
+            - generic [ref=e1306]:
+              - checkbox "Ridgepoint Thermal Forge 1621 CPU Cooler (4)" [ref=e1307]
+              - img [ref=e1308]
+            - generic [ref=e1310]: Ridgepoint Thermal Forge 1621 CPU Cooler (4)
+        - listitem [ref=e1312]:
+          - generic [ref=e1313] [cursor=pointer]:
+            - generic [ref=e1314]:
+              - checkbox "Kestrel Microdevices Apex 1066 Network Adapter (4)" [ref=e1315]
+              - img [ref=e1316]
+            - generic [ref=e1318]: Kestrel Microdevices Apex 1066 Network Adapter (4)
+        - listitem [ref=e1320]:
+          - generic [ref=e1321] [cursor=pointer]:
+            - generic [ref=e1322]:
+              - checkbox "Kestrel Microdevices Arc 1696 Power Supply (4)" [ref=e1323]
+              - img [ref=e1324]
+            - generic [ref=e1326]: Kestrel Microdevices Arc 1696 Power Supply (4)
+        - listitem [ref=e1328]:
+          - generic [ref=e1329] [cursor=pointer]:
+            - generic [ref=e1330]:
+              - checkbox "Noric Display Arc 8448 Power Supply (4)" [ref=e1331]
+              - img [ref=e1332]
+            - generic [ref=e1334]: Noric Display Arc 8448 Power Supply (4)
+        - listitem [ref=e1335]:
+          - button "Load more" [ref=e1336] [cursor=pointer]
+    - generic [ref=e1337]:
+      - button "Clear selection" [ref=e1338] [cursor=pointer]
+      - generic [ref=e1339]:
+        - button "Cancel" [ref=e1340] [cursor=pointer]
+        - button "Apply" [ref=e1341] [cursor=pointer]

@@ -1,0 +1,1311 @@
+- generic [ref=e5]:
+  - generic [ref=e6]:
+    - generic [ref=e42]:
+      - generic [ref=e45]:
+        - heading [level=6] [ref=e750]: A
+        - separator [ref=e48]
+        - list [ref=e49]:
+          - link [ref=e751] [cursor=pointer]:
+            - /url: /
+            - img [ref=e52]
+            - generic [ref=e54]: Entity explorer
+          - link [ref=e752] [cursor=pointer]:
+            - /url: /agents
+            - img [ref=e57]
+            - generic [ref=e59]: Agents
+          - link [ref=e753] [cursor=pointer]:
+            - /url: /manage
+            - img [ref=e62]
+            - generic [ref=e64]: Manage
+        - navigation [ref=e754]:
+          - heading [level=6] [ref=e755]: Entity explorer
+          - separator [ref=e68]
+          - list [ref=e69]:
+            - link [ref=e756] [cursor=pointer]:
+              - /url: /
+              - img [ref=e72]
+              - generic [ref=e75]: All entities
+            - listitem [ref=e76]: Shortcuts
+            - link [ref=e757] [cursor=pointer]:
+              - /url: /?blueprint=demo_pc_components_v1_sku&locked=true
+              - img [ref=e79]
+              - generic [ref=e82]: PC sellable SKU
+        - separator [ref=e84]
+        - list [ref=e85]:
+          - link [ref=e758] [cursor=pointer]:
+            - /url: /profile
+            - img [ref=e88]
+            - generic [ref=e90]: Profile
+          - button [ref=e759] [cursor=pointer]:
+            - img [ref=e93]
+            - generic [ref=e95]: Sign out
+      - main [ref=e96]:
+        - generic [ref=e97]:
+          - complementary [ref=e99]:
+            - heading [level=6] [ref=e760]: Relationship filters
+            - generic [ref=e104]:
+              - generic [ref=e105]: Context
+              - generic [ref=e106]:
+                - combobox [ref=e761] [cursor=pointer]: Default
+                - textbox: default
+                - img
+                - group:
+                  - generic: Context
+            - button [ref=e762] [cursor=pointer]:
+              - generic [ref=e127]: PC product family
+              - generic [ref=e128]: 0 selected
+            - button [ref=e763] [cursor=pointer]:
+              - generic [ref=e130]: PC category
+              - generic [ref=e131]: 0 selected
+            - button [ref=e764] [cursor=pointer]:
+              - generic [ref=e133]: PC manufacturer
+              - generic [ref=e134]: 0 selected
+            - button [ref=e765] [cursor=pointer]:
+              - generic [ref=e136]: PC sellable SKU
+              - generic [ref=e137]: 0 selected
+            - heading [level=6] [ref=e766]: Attribute filters
+            - generic [ref=e138]:
+              - generic [ref=e139]:
+                - generic [ref=e140]: Attribute
+                - generic [ref=e141]:
+                  - combobox [ref=e767] [cursor=pointer]: name
+                  - textbox: name
+                  - img
+                  - group:
+                    - generic: Attribute
+              - generic [ref=e143]:
+                - generic [ref=e144]: Operator
+                - generic [ref=e145]:
+                  - combobox [ref=e768] [cursor=pointer]: Equals
+                  - textbox: eq
+                  - img
+                  - group:
+                    - generic: Operator
+              - generic [ref=e147]:
+                - generic: Value
+                - generic [ref=e148]:
+                  - textbox [ref=e769]
+                  - group:
+                    - generic: Value
+              - button [disabled]:
+                - generic:
+                  - img
+                - text: Apply filter
+          - generic [ref=e111]:
+            - generic [ref=e112]:
+              - generic [ref=e113]:
+                - heading [level=1] [ref=e770]: PC sellable SKU
+                - paragraph [ref=e115]: Search and browse PC sellable SKU.
+              - link [ref=e771] [cursor=pointer]:
+                - /url: /entities/new?blueprint=demo_pc_components_v1_sku&locked=true
+                - text: Create PC sellable SKU
+            - generic [ref=e119]:
+              - generic [ref=e120]:
+                - generic: Query
+                - generic [ref=e121]:
+                  - textbox [ref=e772]:
+                    - /placeholder: Search this blueprint, e.g. term
+                  - group:
+                    - generic: Query
+                - paragraph [ref=e123]: "This blueprint: term · One field: sku:term* · All fields on a related record: relationship:term · A related field: relationship.field:term · Global connected search (up to 3 hops): *:term"
+              - button [ref=e773] [cursor=pointer]: Search
+            - generic [ref=e153]:
+              - paragraph [ref=e154]: 1000+ results
+              - table [ref=e156]:
+                - rowgroup [ref=e157]:
+                  - row [ref=e775]:
+                    - columnheader [ref=e776]: ID
+                    - columnheader [ref=e777]: Display
+                    - columnheader [ref=e778]: Schema
+                    - columnheader [ref=e779]:
+                      - button [ref=e780] [cursor=pointer]:
+                        - text: Product
+                        - img [ref=e164]
+                    - columnheader [ref=e781]:
+                      - button [ref=e782] [cursor=pointer]:
+                        - text: SKU
+                        - img [ref=e168]
+                    - columnheader [ref=e783]:
+                      - button [ref=e784] [cursor=pointer]:
+                        - text: Type
+                        - img [ref=e172]
+                    - columnheader [ref=e785]:
+                      - button [ref=e786] [cursor=pointer]:
+                        - text: Compatible SKU
+                        - img [ref=e176]
+                    - columnheader [ref=e787]:
+                      - button [ref=e788] [cursor=pointer]:
+                        - text: Price
+                        - img [ref=e180]
+                    - columnheader [ref=e789]:
+                      - button [ref=e790] [cursor=pointer]:
+                        - text: Stock
+                        - img [ref=e184]
+                    - columnheader [ref=e791]:
+                      - button [ref=e792] [cursor=pointer]:
+                        - text: Availability
+                        - img [ref=e188]
+                    - columnheader [ref=e793]:
+                      - button [ref=e794] [cursor=pointer]:
+                        - text: Interface
+                        - img [ref=e192]
+                    - columnheader [ref=e795]:
+                      - button [ref=e796] [cursor=pointer]:
+                        - text: Capacity
+                        - img [ref=e196]
+                    - columnheader [ref=e797]:
+                      - button [ref=e798] [cursor=pointer]:
+                        - text: Form factor
+                        - img [ref=e200]
+                    - columnheader [ref=e799]:
+                      - button [ref=e800] [cursor=pointer]:
+                        - text: Wattage
+                        - img [ref=e204]
+                    - columnheader [ref=e206]
+                - rowgroup [ref=e207]:
+                  - row [ref=e801]:
+                    - cell [ref=e802]:
+                      - button [ref=e803] [cursor=pointer]:
+                        - img [ref=e211]
+                    - cell [ref=e804]:
+                      - link [ref=e805] [cursor=pointer]:
+                        - /url: /entities/708838cb-69a9-49a4-9c6f-fbff717dd923
+                        - text: Voltarra Power Apex 0614 Network Adapter, 1 TB
+                    - cell [ref=e806]:
+                      - generic [ref=e217]: v2 · Current
+                    - cell [ref=e807]:
+                      - paragraph [ref=e219]: Voltarra Power Apex 0614 Network Adapter, 1 TB
+                    - cell [ref=e808]:
+                      - paragraph [ref=e221]: BFG-APE-0614-01-A
+                    - cell [ref=e809]:
+                      - paragraph [ref=e223]: Network Adapter
+                    - cell [ref=e810]:
+                      - paragraph [ref=e225]: Voltarra Power Apex 0614 Network Adapter, 2 TB
+                    - cell [ref=e811]:
+                      - paragraph [ref=e227]: "253.99"
+                    - cell [ref=e812]:
+                      - paragraph [ref=e229]: "1"
+                    - cell [ref=e813]:
+                      - paragraph [ref=e231]: low_stock
+                    - cell [ref=e814]:
+                      - paragraph [ref=e233]: PCIe
+                    - cell [ref=e815]:
+                      - paragraph [ref=e235]: 1 TB
+                    - cell [ref=e816]:
+                      - paragraph [ref=e237]: Low profile
+                    - cell [ref=e817]:
+                      - paragraph [ref=e239]: "9"
+                    - cell [ref=e818]:
+                      - button [ref=e819] [cursor=pointer]:
+                        - img [ref=e242]
+                  - row [ref=e820]:
+                    - cell [ref=e821]:
+                      - button [ref=e822] [cursor=pointer]:
+                        - img [ref=e247]
+                    - cell [ref=e823]:
+                      - link [ref=e824] [cursor=pointer]:
+                        - /url: /entities/48de0d72-9057-4e7e-aebf-0223440b69b2
+                        - text: Voltarra Power Apex 0614 Network Adapter, 2 TB
+                    - cell [ref=e825]:
+                      - generic [ref=e253]: v2 · Current
+                    - cell [ref=e826]:
+                      - paragraph [ref=e255]: Voltarra Power Apex 0614 Network Adapter, 2 TB
+                    - cell [ref=e827]:
+                      - paragraph [ref=e257]: BFG-APE-0614-02-B
+                    - cell [ref=e828]:
+                      - paragraph [ref=e259]: Network Adapter
+                    - cell [ref=e829]:
+                      - paragraph [ref=e261]: Not set
+                    - cell [ref=e830]:
+                      - paragraph [ref=e263]: "324.99"
+                    - cell [ref=e831]:
+                      - paragraph [ref=e265]: "14"
+                    - cell [ref=e832]:
+                      - paragraph [ref=e267]: in_stock
+                    - cell [ref=e833]:
+                      - paragraph [ref=e269]: PCIe
+                    - cell [ref=e834]:
+                      - paragraph [ref=e271]: 2 TB
+                    - cell [ref=e835]:
+                      - paragraph [ref=e273]: Low profile
+                    - cell [ref=e836]:
+                      - paragraph [ref=e275]: "9"
+                    - cell [ref=e837]:
+                      - button [ref=e838] [cursor=pointer]:
+                        - img [ref=e278]
+                  - row [ref=e839]:
+                    - cell [ref=e840]:
+                      - button [ref=e841] [cursor=pointer]:
+                        - img [ref=e283]
+                    - cell [ref=e842]:
+                      - link [ref=e843] [cursor=pointer]:
+                        - /url: /entities/13d9398a-8f7a-4fbe-84a6-02a9f6fddc2c
+                        - text: Voltarra Power Apex 0614 Network Adapter, 4 TB
+                    - cell [ref=e844]:
+                      - generic [ref=e289]: v2 · Current
+                    - cell [ref=e845]:
+                      - paragraph [ref=e291]: Voltarra Power Apex 0614 Network Adapter, 4 TB
+                    - cell [ref=e846]:
+                      - paragraph [ref=e293]: BFG-APE-0614-03-C
+                    - cell [ref=e847]:
+                      - paragraph [ref=e295]: Network Adapter
+                    - cell [ref=e848]:
+                      - paragraph [ref=e297]: Not set
+                    - cell [ref=e849]:
+                      - paragraph [ref=e299]: "395.99"
+                    - cell [ref=e850]:
+                      - paragraph [ref=e301]: "27"
+                    - cell [ref=e851]:
+                      - paragraph [ref=e303]: in_stock
+                    - cell [ref=e852]:
+                      - paragraph [ref=e305]: PCIe
+                    - cell [ref=e853]:
+                      - paragraph [ref=e307]: 4 TB
+                    - cell [ref=e854]:
+                      - paragraph [ref=e309]: Low profile
+                    - cell [ref=e855]:
+                      - paragraph [ref=e311]: "9"
+                    - cell [ref=e856]:
+                      - button [ref=e857] [cursor=pointer]:
+                        - img [ref=e314]
+                  - row [ref=e858]:
+                    - cell [ref=e859]:
+                      - button [ref=e860] [cursor=pointer]:
+                        - img [ref=e319]
+                    - cell [ref=e861]:
+                      - link [ref=e862] [cursor=pointer]:
+                        - /url: /entities/09664afe-2bb6-406d-a641-f0fc9b3767ec
+                        - text: Voltarra Power Apex 0614 Network Adapter, 8 GB
+                    - cell [ref=e863]:
+                      - generic [ref=e325]: v1 · Outdated
+                    - cell [ref=e864]:
+                      - paragraph [ref=e327]: Voltarra Power Apex 0614 Network Adapter, 8 GB
+                    - cell [ref=e865]:
+                      - paragraph [ref=e329]: BFG-APE-0614-04-D
+                    - cell [ref=e866]:
+                      - paragraph [ref=e331]: Network Adapter
+                    - cell [ref=e867]:
+                      - paragraph [ref=e333]: Not set
+                    - cell [ref=e868]:
+                      - paragraph [ref=e335]: "466.99"
+                    - cell [ref=e869]:
+                      - paragraph [ref=e337]: "40"
+                    - cell [ref=e870]:
+                      - paragraph [ref=e339]: in_stock
+                    - cell [ref=e871]:
+                      - paragraph [ref=e341]: PCIe
+                    - cell [ref=e872]:
+                      - paragraph [ref=e343]: 8 GB
+                    - cell [ref=e873]:
+                      - paragraph [ref=e345]: Low profile
+                    - cell [ref=e874]:
+                      - paragraph [ref=e347]: "9"
+                    - cell [ref=e875]:
+                      - button [ref=e876] [cursor=pointer]:
+                        - img [ref=e350]
+                  - row [ref=e877]:
+                    - cell [ref=e878]:
+                      - button [ref=e879] [cursor=pointer]:
+                        - img [ref=e355]
+                    - cell [ref=e880]:
+                      - link [ref=e881] [cursor=pointer]:
+                        - /url: /entities/071c621e-6836-429e-9ffc-4c25f8d508f8
+                        - text: Voltarra Power Apex 0614 Network Adapter, 1 TB
+                    - cell [ref=e882]:
+                      - generic [ref=e361]: v2 · Current
+                    - cell [ref=e883]:
+                      - paragraph [ref=e363]: Voltarra Power Apex 0614 Network Adapter, 1 TB
+                    - cell [ref=e884]:
+                      - paragraph [ref=e365]: BFG-APE-0614-01-A
+                    - cell [ref=e885]:
+                      - paragraph [ref=e367]: Network Adapter
+                    - cell [ref=e886]:
+                      - paragraph [ref=e369]: Voltarra Power Apex 0614 Network Adapter, 2 TB
+                    - cell [ref=e887]:
+                      - paragraph [ref=e371]: "253.99"
+                    - cell [ref=e888]:
+                      - paragraph [ref=e373]: "1"
+                    - cell [ref=e889]:
+                      - paragraph [ref=e375]: low_stock
+                    - cell [ref=e890]:
+                      - paragraph [ref=e377]: PCIe
+                    - cell [ref=e891]:
+                      - paragraph [ref=e379]: 1 TB
+                    - cell [ref=e892]:
+                      - paragraph [ref=e381]: Low profile
+                    - cell [ref=e893]:
+                      - paragraph [ref=e383]: "9"
+                    - cell [ref=e894]:
+                      - button [ref=e895] [cursor=pointer]:
+                        - img [ref=e386]
+                  - row [ref=e896]:
+                    - cell [ref=e897]:
+                      - button [ref=e898] [cursor=pointer]:
+                        - img [ref=e391]
+                    - cell [ref=e899]:
+                      - link [ref=e900] [cursor=pointer]:
+                        - /url: /entities/14b24142-e1fd-4a7f-9929-8dfc37ef20a4
+                        - text: Voltarra Power Apex 0614 Network Adapter, 2 TB
+                    - cell [ref=e901]:
+                      - generic [ref=e397]: v2 · Current
+                    - cell [ref=e902]:
+                      - paragraph [ref=e399]: Voltarra Power Apex 0614 Network Adapter, 2 TB
+                    - cell [ref=e903]:
+                      - paragraph [ref=e401]: BFG-APE-0614-02-B
+                    - cell [ref=e904]:
+                      - paragraph [ref=e403]: Network Adapter
+                    - cell [ref=e905]:
+                      - paragraph [ref=e405]: Voltarra Power Apex 0614 Network Adapter, 4 TB
+                    - cell [ref=e906]:
+                      - paragraph [ref=e407]: "324.99"
+                    - cell [ref=e907]:
+                      - paragraph [ref=e409]: "14"
+                    - cell [ref=e908]:
+                      - paragraph [ref=e411]: in_stock
+                    - cell [ref=e909]:
+                      - paragraph [ref=e413]: PCIe
+                    - cell [ref=e910]:
+                      - paragraph [ref=e415]: 2 TB
+                    - cell [ref=e911]:
+                      - paragraph [ref=e417]: Low profile
+                    - cell [ref=e912]:
+                      - paragraph [ref=e419]: "9"
+                    - cell [ref=e913]:
+                      - button [ref=e914] [cursor=pointer]:
+                        - img [ref=e422]
+                  - row [ref=e915]:
+                    - cell [ref=e916]:
+                      - button [ref=e917] [cursor=pointer]:
+                        - img [ref=e427]
+                    - cell [ref=e918]:
+                      - link [ref=e919] [cursor=pointer]:
+                        - /url: /entities/836a3f12-ec76-4791-b347-2cc0cfb510f7
+                        - text: Voltarra Power Apex 0614 Network Adapter, 4 TB
+                    - cell [ref=e920]:
+                      - generic [ref=e433]: v2 · Current
+                    - cell [ref=e921]:
+                      - paragraph [ref=e435]: Voltarra Power Apex 0614 Network Adapter, 4 TB
+                    - cell [ref=e922]:
+                      - paragraph [ref=e437]: BFG-APE-0614-03-C
+                    - cell [ref=e923]:
+                      - paragraph [ref=e439]: Network Adapter
+                    - cell [ref=e924]:
+                      - paragraph [ref=e441]: Voltarra Power Apex 0614 Network Adapter, 8 GB
+                    - cell [ref=e925]:
+                      - paragraph [ref=e443]: "395.99"
+                    - cell [ref=e926]:
+                      - paragraph [ref=e445]: "27"
+                    - cell [ref=e927]:
+                      - paragraph [ref=e447]: in_stock
+                    - cell [ref=e928]:
+                      - paragraph [ref=e449]: PCIe
+                    - cell [ref=e929]:
+                      - paragraph [ref=e451]: 4 TB
+                    - cell [ref=e930]:
+                      - paragraph [ref=e453]: Low profile
+                    - cell [ref=e931]:
+                      - paragraph [ref=e455]: "9"
+                    - cell [ref=e932]:
+                      - button [ref=e933] [cursor=pointer]:
+                        - img [ref=e458]
+                  - row [ref=e934]:
+                    - cell [ref=e935]:
+                      - button [ref=e936] [cursor=pointer]:
+                        - img [ref=e463]
+                    - cell [ref=e937]:
+                      - link [ref=e938] [cursor=pointer]:
+                        - /url: /entities/0b676ff0-ee3b-48d9-af87-a19774e3b116
+                        - text: Voltarra Power Apex 0614 Network Adapter, 8 GB
+                    - cell [ref=e939]:
+                      - generic [ref=e469]: v2 · Current
+                    - cell [ref=e940]:
+                      - paragraph [ref=e471]: Voltarra Power Apex 0614 Network Adapter, 8 GB
+                    - cell [ref=e941]:
+                      - paragraph [ref=e473]: BFG-APE-0614-04-D
+                    - cell [ref=e942]:
+                      - paragraph [ref=e475]: Network Adapter
+                    - cell [ref=e943]:
+                      - paragraph [ref=e477]: Voltarra Power Apex 0614 Network Adapter, 1 TB
+                    - cell [ref=e944]:
+                      - paragraph [ref=e479]: "466.99"
+                    - cell [ref=e945]:
+                      - paragraph [ref=e481]: "40"
+                    - cell [ref=e946]:
+                      - paragraph [ref=e483]: in_stock
+                    - cell [ref=e947]:
+                      - paragraph [ref=e485]: PCIe
+                    - cell [ref=e948]:
+                      - paragraph [ref=e487]: 8 GB
+                    - cell [ref=e949]:
+                      - paragraph [ref=e489]: Low profile
+                    - cell [ref=e950]:
+                      - paragraph [ref=e491]: "9"
+                    - cell [ref=e951]:
+                      - button [ref=e952] [cursor=pointer]:
+                        - img [ref=e494]
+                  - row [ref=e953]:
+                    - cell [ref=e954]:
+                      - button [ref=e955] [cursor=pointer]:
+                        - img [ref=e499]
+                    - cell [ref=e956]:
+                      - link [ref=e957] [cursor=pointer]:
+                        - /url: /entities/2c67bf37-4ff3-4b23-b861-0e0c0445ff49
+                        - text: Ridgepoint Thermal Vector 0651 Computer Case, 2 TB
+                    - cell [ref=e958]:
+                      - generic [ref=e505]: v2 · Current
+                    - cell [ref=e959]:
+                      - paragraph [ref=e507]: Ridgepoint Thermal Vector 0651 Computer Case, 2 TB
+                    - cell [ref=e960]:
+                      - paragraph [ref=e509]: BFG-VEC-0651-01-A
+                    - cell [ref=e961]:
+                      - paragraph [ref=e511]: Computer Case
+                    - cell [ref=e962]:
+                      - paragraph [ref=e513]: Ridgepoint Thermal Vector 0651 Computer Case, 4 TB
+                    - cell [ref=e963]:
+                      - paragraph [ref=e515]: "282.99"
+                    - cell [ref=e964]:
+                      - paragraph [ref=e517]: "18"
+                    - cell [ref=e965]:
+                      - paragraph [ref=e519]: in_stock
+                    - cell [ref=e966]:
+                      - paragraph [ref=e521]: USB-C
+                    - cell [ref=e967]:
+                      - paragraph [ref=e523]: 2 TB
+                    - cell [ref=e968]:
+                      - paragraph [ref=e525]: Mid tower
+                    - cell [ref=e969]:
+                      - paragraph [ref=e527]: "0"
+                    - cell [ref=e970]:
+                      - button [ref=e971] [cursor=pointer]:
+                        - img [ref=e530]
+                  - row [ref=e972]:
+                    - cell [ref=e973]:
+                      - button [ref=e974] [cursor=pointer]:
+                        - img [ref=e535]
+                    - cell [ref=e975]:
+                      - link [ref=e976] [cursor=pointer]:
+                        - /url: /entities/ca8e353a-4b59-495b-9d2a-5b62fd9b4bd7
+                        - text: Ridgepoint Thermal Vector 0651 Computer Case, 4 TB
+                    - cell [ref=e977]:
+                      - generic [ref=e541]: v2 · Current
+                    - cell [ref=e978]:
+                      - paragraph [ref=e543]: Ridgepoint Thermal Vector 0651 Computer Case, 4 TB
+                    - cell [ref=e979]:
+                      - paragraph [ref=e545]: BFG-VEC-0651-02-B
+                    - cell [ref=e980]:
+                      - paragraph [ref=e547]: Computer Case
+                    - cell [ref=e981]:
+                      - paragraph [ref=e549]: Ridgepoint Thermal Vector 0651 Computer Case, 8 GB
+                    - cell [ref=e982]:
+                      - paragraph [ref=e551]: "353.99"
+                    - cell [ref=e983]:
+                      - paragraph [ref=e553]: "31"
+                    - cell [ref=e984]:
+                      - paragraph [ref=e555]: in_stock
+                    - cell [ref=e985]:
+                      - paragraph [ref=e557]: USB-C
+                    - cell [ref=e986]:
+                      - paragraph [ref=e559]: 4 TB
+                    - cell [ref=e987]:
+                      - paragraph [ref=e561]: Mid tower
+                    - cell [ref=e988]:
+                      - paragraph [ref=e563]: "0"
+                    - cell [ref=e989]:
+                      - button [ref=e990] [cursor=pointer]:
+                        - img [ref=e566]
+                  - row [ref=e991]:
+                    - cell [ref=e992]:
+                      - button [ref=e993] [cursor=pointer]:
+                        - img [ref=e571]
+                    - cell [ref=e994]:
+                      - link [ref=e995] [cursor=pointer]:
+                        - /url: /entities/7fb6243f-e101-4bdb-9c7f-90dd4727a7fb
+                        - text: Ridgepoint Thermal Vector 0651 Computer Case, 8 GB
+                    - cell [ref=e996]:
+                      - generic [ref=e577]: v2 · Current
+                    - cell [ref=e997]:
+                      - paragraph [ref=e579]: Ridgepoint Thermal Vector 0651 Computer Case, 8 GB
+                    - cell [ref=e998]:
+                      - paragraph [ref=e581]: BFG-VEC-0651-03-C
+                    - cell [ref=e999]:
+                      - paragraph [ref=e583]: Computer Case
+                    - cell [ref=e1000]:
+                      - paragraph [ref=e585]: Ridgepoint Thermal Vector 0651 Computer Case, 16 GB
+                    - cell [ref=e1001]:
+                      - paragraph [ref=e587]: "424.99"
+                    - cell [ref=e1002]:
+                      - paragraph [ref=e589]: "44"
+                    - cell [ref=e1003]:
+                      - paragraph [ref=e591]: in_stock
+                    - cell [ref=e1004]:
+                      - paragraph [ref=e593]: USB-C
+                    - cell [ref=e1005]:
+                      - paragraph [ref=e595]: 8 GB
+                    - cell [ref=e1006]:
+                      - paragraph [ref=e597]: Mid tower
+                    - cell [ref=e1007]:
+                      - paragraph [ref=e599]: "0"
+                    - cell [ref=e1008]:
+                      - button [ref=e1009] [cursor=pointer]:
+                        - img [ref=e602]
+                  - row [ref=e1010]:
+                    - cell [ref=e1011]:
+                      - button [ref=e1012] [cursor=pointer]:
+                        - img [ref=e607]
+                    - cell [ref=e1013]:
+                      - link [ref=e1014] [cursor=pointer]:
+                        - /url: /entities/166b0ab2-2799-47b6-bae6-1664c47f2013
+                        - text: Ridgepoint Thermal Vector 0651 Computer Case, 16 GB
+                    - cell [ref=e1015]:
+                      - generic [ref=e613]: v2 · Current
+                    - cell [ref=e1016]:
+                      - paragraph [ref=e615]: Ridgepoint Thermal Vector 0651 Computer Case, 16 GB
+                    - cell [ref=e1017]:
+                      - paragraph [ref=e617]: BFG-VEC-0651-04-D
+                    - cell [ref=e1018]:
+                      - paragraph [ref=e619]: Computer Case
+                    - cell [ref=e1019]:
+                      - paragraph [ref=e621]: Ridgepoint Thermal Vector 0651 Computer Case, 2 TB
+                    - cell [ref=e1020]:
+                      - paragraph [ref=e623]: "495.99"
+                    - cell [ref=e1021]:
+                      - paragraph [ref=e625]: "57"
+                    - cell [ref=e1022]:
+                      - paragraph [ref=e627]: in_stock
+                    - cell [ref=e1023]:
+                      - paragraph [ref=e629]: USB-C
+                    - cell [ref=e1024]:
+                      - paragraph [ref=e631]: 16 GB
+                    - cell [ref=e1025]:
+                      - paragraph [ref=e633]: Mid tower
+                    - cell [ref=e1026]:
+                      - paragraph [ref=e635]: "0"
+                    - cell [ref=e1027]:
+                      - button [ref=e1028] [cursor=pointer]:
+                        - img [ref=e638]
+                  - row [ref=e1029]:
+                    - cell [ref=e1030]:
+                      - button [ref=e1031] [cursor=pointer]:
+                        - img [ref=e643]
+                    - cell [ref=e1032]:
+                      - link [ref=e1033] [cursor=pointer]:
+                        - /url: /entities/e9a2bf5f-563f-4c44-91c7-bd1f7ced7bee
+                        - text: Noric Display Summit 0688 Graphics Card, 4 TB
+                    - cell [ref=e1034]:
+                      - generic [ref=e649]: v2 · Current
+                    - cell [ref=e1035]:
+                      - paragraph [ref=e651]: Noric Display Summit 0688 Graphics Card, 4 TB
+                    - cell [ref=e1036]:
+                      - paragraph [ref=e653]: BFG-SUM-0688-01-A
+                    - cell [ref=e1037]:
+                      - paragraph [ref=e655]: Graphics Card
+                    - cell [ref=e1038]:
+                      - paragraph [ref=e657]: Noric Display Summit 0688 Graphics Card, 8 GB
+                    - cell [ref=e1039]:
+                      - paragraph [ref=e659]: "311.99"
+                    - cell [ref=e1040]:
+                      - paragraph [ref=e661]: "35"
+                    - cell [ref=e1041]:
+                      - paragraph [ref=e663]: in_stock
+                    - cell [ref=e1042]:
+                      - paragraph [ref=e665]: PCIe 4.0
+                    - cell [ref=e1043]:
+                      - paragraph [ref=e667]: 4 TB
+                    - cell [ref=e1044]:
+                      - paragraph [ref=e669]: ATX
+                    - cell [ref=e1045]:
+                      - paragraph [ref=e671]: "285"
+                    - cell [ref=e1046]:
+                      - button [ref=e1047] [cursor=pointer]:
+                        - img [ref=e674]
+                  - row [ref=e1048]:
+                    - cell [ref=e1049]:
+                      - button [ref=e1050] [cursor=pointer]:
+                        - img [ref=e679]
+                    - cell [ref=e1051]:
+                      - link [ref=e1052] [cursor=pointer]:
+                        - /url: /entities/6d8b26f5-8d2a-4625-b41e-951b86554d7f
+                        - text: Noric Display Summit 0688 Graphics Card, 8 GB
+                    - cell [ref=e1053]:
+                      - generic [ref=e685]: v2 · Current
+                    - cell [ref=e1054]:
+                      - paragraph [ref=e687]: Noric Display Summit 0688 Graphics Card, 8 GB
+                    - cell [ref=e1055]:
+                      - paragraph [ref=e689]: BFG-SUM-0688-02-B
+                    - cell [ref=e1056]:
+                      - paragraph [ref=e691]: Graphics Card
+                    - cell [ref=e1057]:
+                      - paragraph [ref=e693]: Noric Display Summit 0688 Graphics Card, 16 GB
+                    - cell [ref=e1058]:
+                      - paragraph [ref=e695]: "382.99"
+                    - cell [ref=e1059]:
+                      - paragraph [ref=e697]: "48"
+                    - cell [ref=e1060]:
+                      - paragraph [ref=e699]: in_stock
+                    - cell [ref=e1061]:
+                      - paragraph [ref=e701]: PCIe 4.0
+                    - cell [ref=e1062]:
+                      - paragraph [ref=e703]: 8 GB
+                    - cell [ref=e1063]:
+                      - paragraph [ref=e705]: ATX
+                    - cell [ref=e1064]:
+                      - paragraph [ref=e707]: "285"
+                    - cell [ref=e1065]:
+                      - button [ref=e1066] [cursor=pointer]:
+                        - img [ref=e710]
+                  - row [ref=e1067]:
+                    - cell [ref=e1068]:
+                      - button [ref=e1069] [cursor=pointer]:
+                        - img [ref=e715]
+                    - cell [ref=e1070]:
+                      - link [ref=e1071] [cursor=pointer]:
+                        - /url: /entities/53487dfc-7af9-4871-a353-b009d756e43d
+                        - text: Noric Display Summit 0688 Graphics Card, 16 GB
+                    - cell [ref=e1072]:
+                      - generic [ref=e721]: v2 · Current
+                    - cell [ref=e1073]:
+                      - paragraph [ref=e723]: Noric Display Summit 0688 Graphics Card, 16 GB
+                    - cell [ref=e1074]:
+                      - paragraph [ref=e725]: BFG-SUM-0688-03-C
+                    - cell [ref=e1075]:
+                      - paragraph [ref=e727]: Graphics Card
+                    - cell [ref=e1076]:
+                      - paragraph [ref=e729]: Noric Display Summit 0688 Graphics Card, 32 GB
+                    - cell [ref=e1077]:
+                      - paragraph [ref=e731]: "453.99"
+                    - cell [ref=e1078]:
+                      - paragraph [ref=e733]: "61"
+                    - cell [ref=e1079]:
+                      - paragraph [ref=e735]: in_stock
+                    - cell [ref=e1080]:
+                      - paragraph [ref=e737]: PCIe 4.0
+                    - cell [ref=e1081]:
+                      - paragraph [ref=e739]: 16 GB
+                    - cell [ref=e1082]:
+                      - paragraph [ref=e741]: ATX
+                    - cell [ref=e1083]:
+                      - paragraph [ref=e743]: "285"
+                    - cell [ref=e1084]:
+                      - button [ref=e1085] [cursor=pointer]:
+                        - img [ref=e746]
+                  - row [ref=e748]:
+                    - cell [ref=e749]
+    - button [ref=e1086] [cursor=pointer]:
+      - img [ref=e2]
+      - status [ref=e1087]
+  - dialog "Select PC product family 0 selected Close relationship selector" [active] [ref=e1090]:
+    - heading "Select PC product family 0 selected Close relationship selector" [level=2] [ref=e1091]:
+      - generic [ref=e1092]:
+        - generic [ref=e1093]:
+          - text: Select PC product family
+          - paragraph [ref=e1094]: 0 selected
+        - button "Close relationship selector" [ref=e1095] [cursor=pointer]:
+          - img [ref=e1096]
+    - list [ref=e1100]:
+      - listitem [ref=e1102]:
+        - generic [ref=e1103] [cursor=pointer]:
+          - generic [ref=e1104]:
+            - checkbox "Kestrel Microdevices Arc 5276 Power Supply (4)" [ref=e1105]
+            - img [ref=e1106]
+          - generic [ref=e1108]: Kestrel Microdevices Arc 5276 Power Supply (4)
+      - listitem [ref=e1110]:
+        - generic [ref=e1111] [cursor=pointer]:
+          - generic [ref=e1112]:
+            - checkbox "Cobalt Peripherals Summit 6312 Graphics Card (4)" [ref=e1113]
+            - img [ref=e1114]
+          - generic [ref=e1116]: Cobalt Peripherals Summit 6312 Graphics Card (4)
+      - listitem [ref=e1118]:
+        - generic [ref=e1119] [cursor=pointer]:
+          - generic [ref=e1120]:
+            - checkbox "Ridgepoint Thermal Pulse 9651 Memory Kit (4)" [ref=e1121]
+            - img [ref=e1122]
+          - generic [ref=e1124]: Ridgepoint Thermal Pulse 9651 Memory Kit (4)
+      - listitem [ref=e1126]:
+        - generic [ref=e1127] [cursor=pointer]:
+          - generic [ref=e1128]:
+            - checkbox "Solvane Storage Summit 1280 Graphics Card (4)" [ref=e1129]
+            - img [ref=e1130]
+          - generic [ref=e1132]: Solvane Storage Summit 1280 Graphics Card (4)
+      - listitem [ref=e1134]:
+        - generic [ref=e1135] [cursor=pointer]:
+          - generic [ref=e1136]:
+            - checkbox "Ridgepoint Thermal Forge 2621 CPU Cooler (4)" [ref=e1137]
+            - img [ref=e1138]
+          - generic [ref=e1140]: Ridgepoint Thermal Forge 2621 CPU Cooler (4)
+      - listitem [ref=e1142]:
+        - generic [ref=e1143] [cursor=pointer]:
+          - generic [ref=e1144]:
+            - checkbox "Meridian Boardworks Vector 1483 Computer Case (4)" [ref=e1145]
+            - img [ref=e1146]
+          - generic [ref=e1148]: Meridian Boardworks Vector 1483 Computer Case (4)
+      - listitem [ref=e1150]:
+        - generic [ref=e1151] [cursor=pointer]:
+          - generic [ref=e1152]:
+            - checkbox "Noric Display Summit 1548 Graphics Card (4)" [ref=e1153]
+            - img [ref=e1154]
+          - generic [ref=e1156]: Noric Display Summit 1548 Graphics Card (4)
+      - listitem [ref=e1158]:
+        - generic [ref=e1159] [cursor=pointer]:
+          - generic [ref=e1160]:
+            - checkbox "Meridian Boardworks Pulse 8143 Memory Kit (4)" [ref=e1161]
+            - img [ref=e1162]
+          - generic [ref=e1164]: Meridian Boardworks Pulse 8143 Memory Kit (4)
+      - listitem [ref=e1166]:
+        - generic [ref=e1167] [cursor=pointer]:
+          - generic [ref=e1168]:
+            - checkbox "Voltarra Power Arc 6164 Power Supply (4)" [ref=e1169]
+            - img [ref=e1170]
+          - generic [ref=e1172]: Voltarra Power Arc 6164 Power Supply (4)
+      - listitem [ref=e1174]:
+        - generic [ref=e1175] [cursor=pointer]:
+          - generic [ref=e1176]:
+            - checkbox "Asterion Memory Vector 4147 Computer Case (4)" [ref=e1177]
+            - img [ref=e1178]
+          - generic [ref=e1180]: Asterion Memory Vector 4147 Computer Case (4)
+      - listitem [ref=e1182]:
+        - generic [ref=e1183] [cursor=pointer]:
+          - generic [ref=e1184]:
+            - checkbox "Noric Display Flux 4018 Solid State Drive (4)" [ref=e1185]
+            - img [ref=e1186]
+          - generic [ref=e1188]: Noric Display Flux 4018 Solid State Drive (4)
+      - listitem [ref=e1190]:
+        - generic [ref=e1191] [cursor=pointer]:
+          - generic [ref=e1192]:
+            - checkbox "Asterion Memory Pulse 2787 Memory Kit (0)" [ref=e1193]
+            - img [ref=e1194]
+          - generic [ref=e1196]: Asterion Memory Pulse 2787 Memory Kit (0)
+      - listitem [ref=e1198]:
+        - generic [ref=e1199] [cursor=pointer]:
+          - generic [ref=e1200]:
+            - checkbox "Voltarra Power Arc 5784 Power Supply (4)" [ref=e1201]
+            - img [ref=e1202]
+          - generic [ref=e1204]: Voltarra Power Arc 5784 Power Supply (4)
+      - listitem [ref=e1206]:
+        - generic [ref=e1207] [cursor=pointer]:
+          - generic [ref=e1208]:
+            - checkbox "Helix Networking Nova 2445 Motherboard (4)" [ref=e1209]
+            - img [ref=e1210]
+          - generic [ref=e1212]: Helix Networking Nova 2445 Motherboard (4)
+      - listitem [ref=e1214]:
+        - generic [ref=e1215] [cursor=pointer]:
+          - generic [ref=e1216]:
+            - checkbox "Helix Networking Pulse 2575 Memory Kit (4)" [ref=e1217]
+            - img [ref=e1218]
+          - generic [ref=e1220]: Helix Networking Pulse 2575 Memory Kit (4)
+      - listitem [ref=e1222]:
+        - generic [ref=e1223] [cursor=pointer]:
+          - generic [ref=e1224]:
+            - checkbox "Kestrel Microdevices Flux 3426 Solid State Drive (4)" [ref=e1225]
+            - img [ref=e1226]
+          - generic [ref=e1228]: Kestrel Microdevices Flux 3426 Solid State Drive (4)
+      - listitem [ref=e1230]:
+        - generic [ref=e1231] [cursor=pointer]:
+          - generic [ref=e1232]:
+            - checkbox "Asterion Memory Pulse 7607 Memory Kit (4)" [ref=e1233]
+            - img [ref=e1234]
+          - generic [ref=e1236]: Asterion Memory Pulse 7607 Memory Kit (4)
+      - listitem [ref=e1238]:
+        - generic [ref=e1239] [cursor=pointer]:
+          - generic [ref=e1240]:
+            - checkbox "Helix Networking Pulse 0955 Memory Kit (4)" [ref=e1241]
+            - img [ref=e1242]
+          - generic [ref=e1244]: Helix Networking Pulse 0955 Memory Kit (4)
+      - listitem [ref=e1246]:
+        - generic [ref=e1247] [cursor=pointer]:
+          - generic [ref=e1248]:
+            - checkbox "Asterion Memory Nova 1557 Motherboard (4)" [ref=e1249]
+            - img [ref=e1250]
+          - generic [ref=e1252]: Asterion Memory Nova 1557 Motherboard (4)
+      - listitem [ref=e1254]:
+        - generic [ref=e1255] [cursor=pointer]:
+          - generic [ref=e1256]:
+            - checkbox "Helix Networking Pulse 7015 Memory Kit (4)" [ref=e1257]
+            - img [ref=e1258]
+          - generic [ref=e1260]: Helix Networking Pulse 7015 Memory Kit (4)
+      - listitem [ref=e1262]:
+        - generic [ref=e1263] [cursor=pointer]:
+          - generic [ref=e1264]:
+            - checkbox "Noric Display Flux 1918 Solid State Drive (4)" [ref=e1265]
+            - img [ref=e1266]
+          - generic [ref=e1268]: Noric Display Flux 1918 Solid State Drive (4)
+      - listitem [ref=e1270]:
+        - generic [ref=e1271] [cursor=pointer]:
+          - generic [ref=e1272]:
+            - checkbox "Asterion Memory Forge 5877 CPU Cooler (4)" [ref=e1273]
+            - img [ref=e1274]
+          - generic [ref=e1276]: Asterion Memory Forge 5877 CPU Cooler (4)
+      - listitem [ref=e1278]:
+        - generic [ref=e1279] [cursor=pointer]:
+          - generic [ref=e1280]:
+            - checkbox "Helix Networking Pulse 4295 Memory Kit (4)" [ref=e1281]
+            - img [ref=e1282]
+          - generic [ref=e1284]: Helix Networking Pulse 4295 Memory Kit (4)
+      - listitem [ref=e1286]:
+        - generic [ref=e1287] [cursor=pointer]:
+          - generic [ref=e1288]:
+            - checkbox "Cobalt Peripherals Arc 7912 Power Supply (4)" [ref=e1289]
+            - img [ref=e1290]
+          - generic [ref=e1292]: Cobalt Peripherals Arc 7912 Power Supply (4)
+      - listitem [ref=e1294]:
+        - generic [ref=e1295] [cursor=pointer]:
+          - generic [ref=e1296]:
+            - checkbox "Noric Display Arc 3768 Power Supply (4)" [ref=e1297]
+            - img [ref=e1298]
+          - generic [ref=e1300]: Noric Display Arc 3768 Power Supply (4)
+      - listitem [ref=e1302]:
+        - generic [ref=e1303] [cursor=pointer]:
+          - generic [ref=e1304]:
+            - checkbox "Asterion Memory Vector 1807 Computer Case (4)" [ref=e1305]
+            - img [ref=e1306]
+          - generic [ref=e1308]: Asterion Memory Vector 1807 Computer Case (4)
+      - listitem [ref=e1310]:
+        - generic [ref=e1311] [cursor=pointer]:
+          - generic [ref=e1312]:
+            - checkbox "Ridgepoint Thermal Pulse 4351 Memory Kit (4)" [ref=e1313]
+            - img [ref=e1314]
+          - generic [ref=e1316]: Ridgepoint Thermal Pulse 4351 Memory Kit (4)
+      - listitem [ref=e1318]:
+        - generic [ref=e1319] [cursor=pointer]:
+          - generic [ref=e1320]:
+            - checkbox "Noric Display Arc 7348 Power Supply (4)" [ref=e1321]
+            - img [ref=e1322]
+          - generic [ref=e1324]: Noric Display Arc 7348 Power Supply (4)
+      - listitem [ref=e1326]:
+        - generic [ref=e1327] [cursor=pointer]:
+          - generic [ref=e1328]:
+            - checkbox "Solvane Storage Summit 0900 Graphics Card (4)" [ref=e1329]
+            - img [ref=e1330]
+          - generic [ref=e1332]: Solvane Storage Summit 0900 Graphics Card (4)
+      - listitem [ref=e1334]:
+        - generic [ref=e1335] [cursor=pointer]:
+          - generic [ref=e1336]:
+            - checkbox "Ridgepoint Thermal Vector 9531 Computer Case (4)" [ref=e1337]
+            - img [ref=e1338]
+          - generic [ref=e1340]: Ridgepoint Thermal Vector 9531 Computer Case (4)
+      - listitem [ref=e1342]:
+        - generic [ref=e1343] [cursor=pointer]:
+          - generic [ref=e1344]:
+            - checkbox "Ridgepoint Thermal Forge 0761 CPU Cooler (4)" [ref=e1345]
+            - img [ref=e1346]
+          - generic [ref=e1348]: Ridgepoint Thermal Forge 0761 CPU Cooler (4)
+      - listitem [ref=e1350]:
+        - generic [ref=e1351] [cursor=pointer]:
+          - generic [ref=e1352]:
+            - checkbox "Solvane Storage Flux 1030 Solid State Drive (4)" [ref=e1353]
+            - img [ref=e1354]
+          - generic [ref=e1356]: Solvane Storage Flux 1030 Solid State Drive (4)
+      - listitem [ref=e1358]:
+        - generic [ref=e1359] [cursor=pointer]:
+          - generic [ref=e1360]:
+            - checkbox "Helix Networking Nova 3065 Motherboard (4)" [ref=e1361]
+            - img [ref=e1362]
+          - generic [ref=e1364]: Helix Networking Nova 3065 Motherboard (4)
+      - listitem [ref=e1366]:
+        - generic [ref=e1367] [cursor=pointer]:
+          - generic [ref=e1368]:
+            - checkbox "Voltarra Power Apex 5054 Network Adapter (4)" [ref=e1369]
+            - img [ref=e1370]
+          - generic [ref=e1372]: Voltarra Power Apex 5054 Network Adapter (4)
+      - listitem [ref=e1374]:
+        - generic [ref=e1375] [cursor=pointer]:
+          - generic [ref=e1376]:
+            - checkbox "Kestrel Microdevices Summit 8976 Graphics Card (4)" [ref=e1377]
+            - img [ref=e1378]
+          - generic [ref=e1380]: Kestrel Microdevices Summit 8976 Graphics Card (4)
+      - listitem [ref=e1382]:
+        - generic [ref=e1383] [cursor=pointer]:
+          - generic [ref=e1384]:
+            - checkbox "Kestrel Microdevices Arc 7616 Power Supply (4)" [ref=e1385]
+            - img [ref=e1386]
+          - generic [ref=e1388]: Kestrel Microdevices Arc 7616 Power Supply (4)
+      - listitem [ref=e1390]:
+        - generic [ref=e1391] [cursor=pointer]:
+          - generic [ref=e1392]:
+            - checkbox "Voltarra Power Flux 2214 Solid State Drive (4)" [ref=e1393]
+            - img [ref=e1394]
+          - generic [ref=e1396]: Voltarra Power Flux 2214 Solid State Drive (4)
+      - listitem [ref=e1398]:
+        - generic [ref=e1399] [cursor=pointer]:
+          - generic [ref=e1400]:
+            - checkbox "Solvane Storage Apex 2010 Network Adapter (0)" [ref=e1401]
+            - img [ref=e1402]
+          - generic [ref=e1404]: Solvane Storage Apex 2010 Network Adapter (0)
+      - listitem [ref=e1406]:
+        - generic [ref=e1407] [cursor=pointer]:
+          - generic [ref=e1408]:
+            - checkbox "Meridian Boardworks Forge 7653 CPU Cooler (4)" [ref=e1409]
+            - img [ref=e1410]
+          - generic [ref=e1412]: Meridian Boardworks Forge 7653 CPU Cooler (4)
+      - listitem [ref=e1414]:
+        - generic [ref=e1415] [cursor=pointer]:
+          - generic [ref=e1416]:
+            - checkbox "Voltarra Power Flux 7274 Solid State Drive (4)" [ref=e1417]
+            - img [ref=e1418]
+          - generic [ref=e1420]: Voltarra Power Flux 7274 Solid State Drive (4)
+      - listitem [ref=e1422]:
+        - generic [ref=e1423] [cursor=pointer]:
+          - generic [ref=e1424]:
+            - checkbox "Ternion Systems Forge 5849 CPU Cooler (4)" [ref=e1425]
+            - img [ref=e1426]
+          - generic [ref=e1428]: Ternion Systems Forge 5849 CPU Cooler (4)
+      - listitem [ref=e1430]:
+        - generic [ref=e1431] [cursor=pointer]:
+          - generic [ref=e1432]:
+            - checkbox "Solvane Storage Arc 3500 Power Supply (4)" [ref=e1433]
+            - img [ref=e1434]
+          - generic [ref=e1436]: Solvane Storage Arc 3500 Power Supply (4)
+      - listitem [ref=e1438]:
+        - generic [ref=e1439] [cursor=pointer]:
+          - generic [ref=e1440]:
+            - checkbox "Voltarra Power Flux 0974 Solid State Drive (4)" [ref=e1441]
+            - img [ref=e1442]
+          - generic [ref=e1444]: Voltarra Power Flux 0974 Solid State Drive (4)
+      - listitem [ref=e1446]:
+        - generic [ref=e1447] [cursor=pointer]:
+          - generic [ref=e1448]:
+            - checkbox "Meridian Boardworks Pulse 4943 Memory Kit (4)" [ref=e1449]
+            - img [ref=e1450]
+          - generic [ref=e1452]: Meridian Boardworks Pulse 4943 Memory Kit (4)
+      - listitem [ref=e1454]:
+        - generic [ref=e1455] [cursor=pointer]:
+          - generic [ref=e1456]:
+            - checkbox "Cobalt Peripherals Flux 8402 Solid State Drive (4)" [ref=e1457]
+            - img [ref=e1458]
+          - generic [ref=e1460]: Cobalt Peripherals Flux 8402 Solid State Drive (4)
+      - listitem [ref=e1462]:
+        - generic [ref=e1463] [cursor=pointer]:
+          - generic [ref=e1464]:
+            - checkbox "Solvane Storage Flux 5710 Solid State Drive (4)" [ref=e1465]
+            - img [ref=e1466]
+          - generic [ref=e1468]: Solvane Storage Flux 5710 Solid State Drive (4)
+      - listitem [ref=e1470]:
+        - generic [ref=e1471] [cursor=pointer]:
+          - generic [ref=e1472]:
+            - checkbox "Noric Display Arc 1048 Power Supply (4)" [ref=e1473]
+            - img [ref=e1474]
+          - generic [ref=e1476]: Noric Display Arc 1048 Power Supply (4)
+      - listitem [ref=e1478]:
+        - generic [ref=e1479] [cursor=pointer]:
+          - generic [ref=e1480]:
+            - checkbox "Solvane Storage Summit 2760 Graphics Card (4)" [ref=e1481]
+            - img [ref=e1482]
+          - generic [ref=e1484]: Solvane Storage Summit 2760 Graphics Card (4)
+      - listitem [ref=e1486]:
+        - generic [ref=e1487] [cursor=pointer]:
+          - generic [ref=e1488]:
+            - checkbox "Asterion Memory Nova 5137 Motherboard (4)" [ref=e1489]
+            - img [ref=e1490]
+          - generic [ref=e1492]: Asterion Memory Nova 5137 Motherboard (4)
+      - listitem [ref=e1494]:
+        - generic [ref=e1495] [cursor=pointer]:
+          - generic [ref=e1496]:
+            - checkbox "Voltarra Power Apex 0614 Network Adapter (4)" [ref=e1497]
+            - img [ref=e1498]
+          - generic [ref=e1500]: Voltarra Power Apex 0614 Network Adapter (4)
+      - listitem [ref=e1502]:
+        - generic [ref=e1503] [cursor=pointer]:
+          - generic [ref=e1504]:
+            - checkbox "Kestrel Microdevices Flux 3426 Solid State Drive (4)" [ref=e1505]
+            - img [ref=e1506]
+          - generic [ref=e1508]: Kestrel Microdevices Flux 3426 Solid State Drive (4)
+      - listitem [ref=e1510]:
+        - generic [ref=e1511] [cursor=pointer]:
+          - generic [ref=e1512]:
+            - checkbox "Solvane Storage Flux 8430 Solid State Drive (4)" [ref=e1513]
+            - img [ref=e1514]
+          - generic [ref=e1516]: Solvane Storage Flux 8430 Solid State Drive (4)
+      - listitem [ref=e1518]:
+        - generic [ref=e1519] [cursor=pointer]:
+          - generic [ref=e1520]:
+            - checkbox "Kestrel Microdevices Arc 9336 Power Supply (4)" [ref=e1521]
+            - img [ref=e1522]
+          - generic [ref=e1524]: Kestrel Microdevices Arc 9336 Power Supply (4)
+      - listitem [ref=e1526]:
+        - generic [ref=e1527] [cursor=pointer]:
+          - generic [ref=e1528]:
+            - checkbox "Solvane Storage Flux 9050 Solid State Drive (4)" [ref=e1529]
+            - img [ref=e1530]
+          - generic [ref=e1532]: Solvane Storage Flux 9050 Solid State Drive (4)
+      - listitem [ref=e1534]:
+        - generic [ref=e1535] [cursor=pointer]:
+          - generic [ref=e1536]:
+            - checkbox "Solvane Storage Summit 1140 Graphics Card (4)" [ref=e1537]
+            - img [ref=e1538]
+          - generic [ref=e1540]: Solvane Storage Summit 1140 Graphics Card (4)
+      - listitem [ref=e1542]:
+        - generic [ref=e1543] [cursor=pointer]:
+          - generic [ref=e1544]:
+            - checkbox "Helix Networking Forge 9725 CPU Cooler (4)" [ref=e1545]
+            - img [ref=e1546]
+          - generic [ref=e1548]: Helix Networking Forge 9725 CPU Cooler (4)
+      - listitem [ref=e1550]:
+        - generic [ref=e1551] [cursor=pointer]:
+          - generic [ref=e1552]:
+            - checkbox "Ternion Systems Nova 6829 Motherboard (4)" [ref=e1553]
+            - img [ref=e1554]
+          - generic [ref=e1556]: Ternion Systems Nova 6829 Motherboard (4)
+      - listitem [ref=e1558]:
+        - generic [ref=e1559] [cursor=pointer]:
+          - generic [ref=e1560]:
+            - checkbox "Ternion Systems Pulse 7579 Memory Kit (4)" [ref=e1561]
+            - img [ref=e1562]
+          - generic [ref=e1564]: Ternion Systems Pulse 7579 Memory Kit (4)
+      - listitem [ref=e1566]:
+        - generic [ref=e1567] [cursor=pointer]:
+          - generic [ref=e1568]:
+            - checkbox "Meridian Boardworks Vector 2343 Computer Case (4)" [ref=e1569]
+            - img [ref=e1570]
+          - generic [ref=e1572]: Meridian Boardworks Vector 2343 Computer Case (4)
+      - listitem [ref=e1574]:
+        - generic [ref=e1575] [cursor=pointer]:
+          - generic [ref=e1576]:
+            - checkbox "Asterion Memory Pulse 1687 Memory Kit (4)" [ref=e1577]
+            - img [ref=e1578]
+          - generic [ref=e1580]: Asterion Memory Pulse 1687 Memory Kit (4)
+      - listitem [ref=e1582]:
+        - generic [ref=e1583] [cursor=pointer]:
+          - generic [ref=e1584]:
+            - checkbox "Ternion Systems Nova 1529 Motherboard (4)" [ref=e1585]
+            - img [ref=e1586]
+          - generic [ref=e1588]: Ternion Systems Nova 1529 Motherboard (4)
+      - listitem [ref=e1590]:
+        - generic [ref=e1591] [cursor=pointer]:
+          - generic [ref=e1592]:
+            - checkbox "Ternion Systems Forge 2509 CPU Cooler (4)" [ref=e1593]
+            - img [ref=e1594]
+          - generic [ref=e1596]: Ternion Systems Forge 2509 CPU Cooler (4)
+      - listitem [ref=e1598]:
+        - generic [ref=e1599] [cursor=pointer]:
+          - generic [ref=e1600]:
+            - checkbox "Noric Display Flux 1058 Solid State Drive (4)" [ref=e1601]
+            - img [ref=e1602]
+          - generic [ref=e1604]: Noric Display Flux 1058 Solid State Drive (4)
+      - listitem [ref=e1606]:
+        - generic [ref=e1607] [cursor=pointer]:
+          - generic [ref=e1608]:
+            - checkbox "Ridgepoint Thermal Nova 3981 Motherboard (4)" [ref=e1609]
+            - img [ref=e1610]
+          - generic [ref=e1612]: Ridgepoint Thermal Nova 3981 Motherboard (4)
+      - listitem [ref=e1614]:
+        - generic [ref=e1615] [cursor=pointer]:
+          - generic [ref=e1616]:
+            - checkbox "Cobalt Peripherals Arc 0992 Power Supply (4)" [ref=e1617]
+            - img [ref=e1618]
+          - generic [ref=e1620]: Cobalt Peripherals Arc 0992 Power Supply (4)
+      - listitem [ref=e1622]:
+        - generic [ref=e1623] [cursor=pointer]:
+          - generic [ref=e1624]:
+            - checkbox "Cobalt Peripherals Flux 2722 Solid State Drive (4)" [ref=e1625]
+            - img [ref=e1626]
+          - generic [ref=e1628]: Cobalt Peripherals Flux 2722 Solid State Drive (4)
+      - listitem [ref=e1630]:
+        - generic [ref=e1631] [cursor=pointer]:
+          - generic [ref=e1632]:
+            - checkbox "Helix Networking Nova 5165 Motherboard (4)" [ref=e1633]
+            - img [ref=e1634]
+          - generic [ref=e1636]: Helix Networking Nova 5165 Motherboard (4)
+      - listitem [ref=e1638]:
+        - generic [ref=e1639] [cursor=pointer]:
+          - generic [ref=e1640]:
+            - checkbox "Meridian Boardworks Nova 3093 Motherboard (4)" [ref=e1641]
+            - img [ref=e1642]
+          - generic [ref=e1644]: Meridian Boardworks Nova 3093 Motherboard (4)
+      - listitem [ref=e1646]:
+        - generic [ref=e1647] [cursor=pointer]:
+          - generic [ref=e1648]:
+            - checkbox "Ternion Systems Pulse 4859 Memory Kit (4)" [ref=e1649]
+            - img [ref=e1650]
+          - generic [ref=e1652]: Ternion Systems Pulse 4859 Memory Kit (4)
+      - listitem [ref=e1654]:
+        - generic [ref=e1655] [cursor=pointer]:
+          - generic [ref=e1656]:
+            - checkbox "Ridgepoint Thermal Pulse 2251 Memory Kit (4)" [ref=e1657]
+            - img [ref=e1658]
+          - generic [ref=e1660]: Ridgepoint Thermal Pulse 2251 Memory Kit (4)
+      - listitem [ref=e1662]:
+        - generic [ref=e1663] [cursor=pointer]:
+          - generic [ref=e1664]:
+            - checkbox "Ternion Systems Nova 0669 Motherboard (4)" [ref=e1665]
+            - img [ref=e1666]
+          - generic [ref=e1668]: Ternion Systems Nova 0669 Motherboard (4)
+      - listitem [ref=e1670]:
+        - generic [ref=e1671] [cursor=pointer]:
+          - generic [ref=e1672]:
+            - checkbox "Noric Display Arc 0428 Power Supply (4)" [ref=e1673]
+            - img [ref=e1674]
+          - generic [ref=e1676]: Noric Display Arc 0428 Power Supply (4)
+      - listitem [ref=e1678]:
+        - generic [ref=e1679] [cursor=pointer]:
+          - generic [ref=e1680]:
+            - checkbox "Kestrel Microdevices Flux 5386 Solid State Drive (4)" [ref=e1681]
+            - img [ref=e1682]
+          - generic [ref=e1684]: Kestrel Microdevices Flux 5386 Solid State Drive (4)
+      - listitem [ref=e1686]:
+        - generic [ref=e1687] [cursor=pointer]:
+          - generic [ref=e1688]:
+            - checkbox "Voltarra Power Summit 7144 Graphics Card (4)" [ref=e1689]
+            - img [ref=e1690]
+          - generic [ref=e1692]: Voltarra Power Summit 7144 Graphics Card (4)
+      - listitem [ref=e1694]:
+        - generic [ref=e1695] [cursor=pointer]:
+          - generic [ref=e1696]:
+            - checkbox "Noric Display Arc 6968 Power Supply (2)" [ref=e1697]
+            - img [ref=e1698]
+          - generic [ref=e1700]: Noric Display Arc 6968 Power Supply (2)
+      - listitem [ref=e1702]:
+        - generic [ref=e1703] [cursor=pointer]:
+          - generic [ref=e1704]:
+            - checkbox "Cobalt Peripherals Flux 1862 Solid State Drive (4)" [ref=e1705]
+            - img [ref=e1706]
+          - generic [ref=e1708]: Cobalt Peripherals Flux 1862 Solid State Drive (4)
+      - listitem [ref=e1710]:
+        - generic [ref=e1711] [cursor=pointer]:
+          - generic [ref=e1712]:
+            - checkbox "Ternion Systems Forge 8569 CPU Cooler (4)" [ref=e1713]
+            - img [ref=e1714]
+          - generic [ref=e1716]: Ternion Systems Forge 8569 CPU Cooler (4)
+      - listitem [ref=e1718]:
+        - generic [ref=e1719] [cursor=pointer]:
+          - generic [ref=e1720]:
+            - checkbox "Ridgepoint Thermal Nova 5701 Motherboard (4)" [ref=e1721]
+            - img [ref=e1722]
+          - generic [ref=e1724]: Ridgepoint Thermal Nova 5701 Motherboard (4)
+      - listitem [ref=e1726]:
+        - generic [ref=e1727] [cursor=pointer]:
+          - generic [ref=e1728]:
+            - checkbox "Solvane Storage Apex 8550 Network Adapter (4)" [ref=e1729]
+            - img [ref=e1730]
+          - generic [ref=e1732]: Solvane Storage Apex 8550 Network Adapter (4)
+      - listitem [ref=e1734]:
+        - generic [ref=e1735] [cursor=pointer]:
+          - generic [ref=e1736]:
+            - checkbox "Meridian Boardworks Nova 1613 Motherboard (4)" [ref=e1737]
+            - img [ref=e1738]
+          - generic [ref=e1740]: Meridian Boardworks Nova 1613 Motherboard (4)
+      - listitem [ref=e1742]:
+        - generic [ref=e1743] [cursor=pointer]:
+          - generic [ref=e1744]:
+            - checkbox "Kestrel Microdevices Arc 6996 Power Supply (4)" [ref=e1745]
+            - img [ref=e1746]
+          - generic [ref=e1748]: Kestrel Microdevices Arc 6996 Power Supply (4)
+      - listitem [ref=e1750]:
+        - generic [ref=e1751] [cursor=pointer]:
+          - generic [ref=e1752]:
+            - checkbox "Helix Networking Forge 4425 CPU Cooler (4)" [ref=e1753]
+            - img [ref=e1754]
+          - generic [ref=e1756]: Helix Networking Forge 4425 CPU Cooler (4)
+      - listitem [ref=e1758]:
+        - generic [ref=e1759] [cursor=pointer]:
+          - generic [ref=e1760]:
+            - checkbox "Kestrel Microdevices Summit 1436 Graphics Card (4)" [ref=e1761]
+            - img [ref=e1762]
+          - generic [ref=e1764]: Kestrel Microdevices Summit 1436 Graphics Card (4)
+      - listitem [ref=e1766]:
+        - generic [ref=e1767] [cursor=pointer]:
+          - generic [ref=e1768]:
+            - checkbox "Ridgepoint Thermal Vector 8911 Computer Case (4)" [ref=e1769]
+            - img [ref=e1770]
+          - generic [ref=e1772]: Ridgepoint Thermal Vector 8911 Computer Case (4)
+      - listitem [ref=e1774]:
+        - generic [ref=e1775] [cursor=pointer]:
+          - generic [ref=e1776]:
+            - checkbox "Solvane Storage Arc 6700 Power Supply (4)" [ref=e1777]
+            - img [ref=e1778]
+          - generic [ref=e1780]: Solvane Storage Arc 6700 Power Supply (4)
+      - listitem [ref=e1782]:
+        - generic [ref=e1783] [cursor=pointer]:
+          - generic [ref=e1784]:
+            - checkbox "Cobalt Peripherals Flux 6682 Solid State Drive (4)" [ref=e1785]
+            - img [ref=e1786]
+          - generic [ref=e1788]: Cobalt Peripherals Flux 6682 Solid State Drive (4)
+      - listitem [ref=e1790]:
+        - generic [ref=e1791] [cursor=pointer]:
+          - generic [ref=e1792]:
+            - checkbox "Asterion Memory Pulse 3167 Memory Kit (4)" [ref=e1793]
+            - img [ref=e1794]
+          - generic [ref=e1796]: Asterion Memory Pulse 3167 Memory Kit (4)
+      - listitem [ref=e1798]:
+        - generic [ref=e1799] [cursor=pointer]:
+          - generic [ref=e1800]:
+            - checkbox "Kestrel Microdevices Flux 1806 Solid State Drive (4)" [ref=e1801]
+            - img [ref=e1802]
+          - generic [ref=e1804]: Kestrel Microdevices Flux 1806 Solid State Drive (4)
+      - listitem [ref=e1806]:
+        - generic [ref=e1807] [cursor=pointer]:
+          - generic [ref=e1808]:
+            - checkbox "Solvane Storage Summit 7680 Graphics Card (4)" [ref=e1809]
+            - img [ref=e1810]
+          - generic [ref=e1812]: Solvane Storage Summit 7680 Graphics Card (4)
+      - listitem [ref=e1814]:
+        - generic [ref=e1815] [cursor=pointer]:
+          - generic [ref=e1816]:
+            - checkbox "Noric Display Flux 6598 Solid State Drive (4)" [ref=e1817]
+            - img [ref=e1818]
+          - generic [ref=e1820]: Noric Display Flux 6598 Solid State Drive (4)
+      - listitem [ref=e1822]:
+        - generic [ref=e1823] [cursor=pointer]:
+          - generic [ref=e1824]:
+            - checkbox "Asterion Memory Pulse 1927 Memory Kit (4)" [ref=e1825]
+            - img [ref=e1826]
+          - generic [ref=e1828]: Asterion Memory Pulse 1927 Memory Kit (4)
+      - listitem [ref=e1830]:
+        - generic [ref=e1831] [cursor=pointer]:
+          - generic [ref=e1832]:
+            - checkbox "Noric Display Arc 6108 Power Supply (4)" [ref=e1833]
+            - img [ref=e1834]
+          - generic [ref=e1836]: Noric Display Arc 6108 Power Supply (4)
+      - listitem [ref=e1838]:
+        - generic [ref=e1839] [cursor=pointer]:
+          - generic [ref=e1840]:
+            - checkbox "Ridgepoint Thermal Nova 2741 Motherboard (4)" [ref=e1841]
+            - img [ref=e1842]
+          - generic [ref=e1844]: Ridgepoint Thermal Nova 2741 Motherboard (4)
+      - listitem [ref=e1846]:
+        - generic [ref=e1847] [cursor=pointer]:
+          - generic [ref=e1848]:
+            - checkbox "Asterion Memory Forge 3537 CPU Cooler (4)" [ref=e1849]
+            - img [ref=e1850]
+          - generic [ref=e1852]: Asterion Memory Forge 3537 CPU Cooler (4)
+      - listitem [ref=e1854]:
+        - generic [ref=e1855] [cursor=pointer]:
+          - generic [ref=e1856]:
+            - checkbox "Ternion Systems Nova 3389 Motherboard (4)" [ref=e1857]
+            - img [ref=e1858]
+          - generic [ref=e1860]: Ternion Systems Nova 3389 Motherboard (4)
+      - listitem [ref=e1862]:
+        - generic [ref=e1863] [cursor=pointer]:
+          - generic [ref=e1864]:
+            - checkbox "Voltarra Power Flux 5414 Solid State Drive (4)" [ref=e1865]
+            - img [ref=e1866]
+          - generic [ref=e1868]: Voltarra Power Flux 5414 Solid State Drive (4)
+      - listitem [ref=e1870]:
+        - generic [ref=e1871] [cursor=pointer]:
+          - generic [ref=e1872]:
+            - checkbox "Ridgepoint Thermal Forge 1621 CPU Cooler (4)" [ref=e1873]
+            - img [ref=e1874]
+          - generic [ref=e1876]: Ridgepoint Thermal Forge 1621 CPU Cooler (4)
+      - listitem [ref=e1878]:
+        - generic [ref=e1879] [cursor=pointer]:
+          - generic [ref=e1880]:
+            - checkbox "Kestrel Microdevices Apex 1066 Network Adapter (4)" [ref=e1881]
+            - img [ref=e1882]
+          - generic [ref=e1884]: Kestrel Microdevices Apex 1066 Network Adapter (4)
+      - listitem [ref=e1886]:
+        - generic [ref=e1887] [cursor=pointer]:
+          - generic [ref=e1888]:
+            - checkbox "Kestrel Microdevices Arc 1696 Power Supply (4)" [ref=e1889]
+            - img [ref=e1890]
+          - generic [ref=e1892]: Kestrel Microdevices Arc 1696 Power Supply (4)
+      - listitem [ref=e1894]:
+        - generic [ref=e1895] [cursor=pointer]:
+          - generic [ref=e1896]:
+            - checkbox "Noric Display Arc 8448 Power Supply (4)" [ref=e1897]
+            - img [ref=e1898]
+          - generic [ref=e1900]: Noric Display Arc 8448 Power Supply (4)
+      - listitem [ref=e1901]:
+        - button "Load more" [ref=e1902] [cursor=pointer]
+    - generic [ref=e1903]:
+      - button "Clear selection" [ref=e1904] [cursor=pointer]
+      - generic [ref=e1905]:
+        - button "Cancel" [ref=e1906] [cursor=pointer]
+        - button "Apply" [ref=e1907] [cursor=pointer]

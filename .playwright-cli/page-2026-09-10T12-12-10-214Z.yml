@@ -1,0 +1,147 @@
+- generic [active] [ref=e1]:
+  - generic [ref=e2]:
+    - generic [ref=e3]:
+      - generic [ref=e6]:
+        - heading "Attricat" [level=6] [ref=e8]: A
+        - separator [ref=e9]
+        - list [ref=e10]:
+          - link "Entity explorer" [ref=e11] [cursor=pointer]:
+            - /url: /
+            - img [ref=e13]
+            - generic [ref=e15]: Entity explorer
+          - link "Agents" [ref=e16] [cursor=pointer]:
+            - /url: /agents
+            - img [ref=e18]
+            - generic [ref=e20]: Agents
+          - link "Manage" [ref=e21] [cursor=pointer]:
+            - /url: /manage
+            - img [ref=e23]
+            - generic [ref=e25]: Manage
+        - separator [ref=e27]
+        - list [ref=e28]:
+          - link "Profile" [ref=e29] [cursor=pointer]:
+            - /url: /profile
+            - img [ref=e31]
+            - generic [ref=e33]: Profile
+          - button "Sign out" [ref=e34] [cursor=pointer]:
+            - img [ref=e36]
+            - generic [ref=e38]: Sign out
+      - main [ref=e39]:
+        - generic [ref=e40]:
+          - generic [ref=e41]:
+            - generic [ref=e43]:
+              - text: Edit entity ·
+              - link "See all" [ref=e44] [cursor=pointer]:
+                - /url: /?blueprint=demo_pc_components_v1_sku&version=2
+            - link "PC sellable SKU" [ref=e46] [cursor=pointer]:
+              - /url: /manage/blueprints/e305d150-691a-46f5-a87b-b1d1254cad94
+              - img [ref=e48]
+              - text: "Blueprint: PC sellable SKU"
+          - navigation "Edit entity" [ref=e50]:
+            - link "View preview" [ref=e51] [cursor=pointer]:
+              - /url: /entities/90a865c9-15f6-4f3b-96e5-6881f8211380
+              - img [ref=e52]
+            - link "See all" [ref=e54] [cursor=pointer]:
+              - /url: /?blueprint=demo_pc_components_v1_sku&version=2
+              - img [ref=e55]
+            - img [ref=e57]
+          - generic [ref=e59]:
+            - heading "PC sellable SKU" [level=2] [ref=e60]
+            - button "View entity ID 90a865c9-15f6-4f3b-96e5-6881f8211380" [ref=e61] [cursor=pointer]:
+              - img [ref=e62]
+          - generic [ref=e65]:
+            - navigation "Context" [ref=e66]:
+              - tablist "Context" [ref=e69]:
+                - tab "Default" [selected] [ref=e70] [cursor=pointer]
+                - tab "demo-pc-components-v1" [ref=e71] [cursor=pointer]
+                - tab "demo-pc-components-v1-web" [ref=e72] [cursor=pointer]
+            - generic [ref=e74]:
+              - generic [ref=e76]:
+                - generic [ref=e77]: name
+                - generic [ref=e78]:
+                  - textbox "name" [ref=e79]: Kestrel Microdevices Arc 5276 Power Supply, 1 TB
+                  - group:
+                    - generic: name
+              - generic [ref=e81]:
+                - generic [ref=e82]: sku
+                - generic [ref=e83]:
+                  - textbox "sku" [ref=e84]: BFG-ARC-5276-01-A
+                  - group:
+                    - generic: sku
+              - generic [ref=e86]:
+                - generic [ref=e87]: description
+                - generic [ref=e88]:
+                  - textbox "description" [ref=e89]: Power Supply for ByteForge Components system builders, with ATX 3.1 connectivity and validated integration specifications. Revision A; selected for regular availability.
+                  - group:
+                    - generic: description
+              - generic [ref=e91]:
+                - generic [ref=e92]: product_type
+                - generic [ref=e93]:
+                  - textbox "product_type" [ref=e94]: Power Supply
+                  - group:
+                    - generic: product_type
+              - generic [ref=e96]:
+                - generic [ref=e97]: price
+                - generic [ref=e98]:
+                  - spinbutton "price" [ref=e99]: "1507.99"
+                  - group:
+                    - generic: price
+              - generic [ref=e101]:
+                - generic [ref=e102]: stock_on_hand
+                - generic [ref=e103]:
+                  - spinbutton "stock_on_hand" [ref=e104]: "13"
+                  - group:
+                    - generic: stock_on_hand
+              - generic [ref=e106]:
+                - generic [ref=e107]: availability
+                - generic [ref=e108]:
+                  - textbox "availability" [ref=e109]: in_stock
+                  - group:
+                    - generic: availability
+              - generic [ref=e111]:
+                - generic [ref=e112]: interface
+                - generic [ref=e113]:
+                  - textbox "interface" [ref=e114]: ATX 3.1
+                  - group:
+                    - generic: interface
+              - generic [ref=e116]:
+                - generic [ref=e117]: capacity
+                - generic [ref=e118]:
+                  - textbox "capacity" [ref=e119]: 1 TB
+                  - group:
+                    - generic: capacity
+              - generic [ref=e121]:
+                - generic [ref=e122]: form_factor
+                - generic [ref=e123]:
+                  - textbox "form_factor" [ref=e124]: ATX
+                  - group:
+                    - generic: form_factor
+              - generic [ref=e126]:
+                - generic [ref=e127]: wattage
+                - generic [ref=e128]:
+                  - spinbutton "wattage" [ref=e129]: "850"
+                  - group:
+                    - generic: wattage
+              - button "family" [ref=e133] [cursor=pointer]:
+                - generic [ref=e134]: family
+                - generic [ref=e135]: 1 selected
+              - button "category" [ref=e139] [cursor=pointer]:
+                - generic [ref=e140]: category
+                - generic [ref=e141]: 1 selected
+              - button "manufacturer" [ref=e145] [cursor=pointer]:
+                - generic [ref=e146]: manufacturer
+                - generic [ref=e147]: 1 selected
+              - button "compatible_skus" [ref=e151] [cursor=pointer]:
+                - generic [ref=e152]: compatible_skus
+                - generic [ref=e153]: 1 selected
+              - generic [ref=e155]:
+                - paragraph [ref=e156]: product_files
+                - button "Choose or drop files" [ref=e158] [cursor=pointer]:
+                  - img [ref=e160]
+                  - text: Choose or drop files
+            - button "Save changes" [ref=e162] [cursor=pointer]
+    - button "Open Inspector" [ref=e163] [cursor=pointer]:
+      - img [ref=e164]
+      - status "API ready" [ref=e166]
+  - tooltip "View preview" [ref=e167]:
+    - generic [ref=e168]: View preview

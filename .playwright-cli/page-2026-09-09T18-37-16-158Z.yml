@@ -1,0 +1,74 @@
+- generic [ref=e5]:
+  - generic [ref=e6]:
+    - generic [ref=e42]:
+      - generic [ref=e45]:
+        - generic [ref=e46]:
+          - heading "Attricat" [level=6] [ref=e128]
+          - paragraph [ref=e48]: Data management
+        - separator [ref=e49]
+        - list [ref=e50]:
+          - link "Entity explorer" [ref=e129] [cursor=pointer]:
+            - /url: /
+            - img [ref=e53]
+            - generic [ref=e56]: Entity explorer
+          - link "Agents" [ref=e130] [cursor=pointer]:
+            - /url: /agents
+            - img [ref=e59]
+            - generic [ref=e62]: Agents
+          - button "Manage" [ref=e131] [cursor=pointer]:
+            - generic [ref=e64]: Manage
+            - img [ref=e65]
+        - separator [ref=e67]
+        - generic [ref=e69]:
+          - generic [ref=e70]: Language
+          - generic [ref=e71]:
+            - combobox "Language" [ref=e132] [cursor=pointer]: English
+            - textbox: en
+            - img
+            - group:
+              - generic: Language
+        - list [ref=e73]:
+          - link "Profile" [ref=e133] [cursor=pointer]:
+            - /url: /profile
+            - img [ref=e76]
+            - generic [ref=e79]: Profile
+          - button "Sign out" [ref=e134] [cursor=pointer]:
+            - img [ref=e82]
+            - generic [ref=e85]: Sign out
+      - main [ref=e86]:
+        - generic [ref=e87]:
+          - generic [ref=e88]:
+            - generic [ref=e89]:
+              - heading "Entity explorer" [level=1] [ref=e135]
+              - paragraph [ref=e91]: Search and browse your catalog.
+            - link "Create entity" [ref=e136] [cursor=pointer]:
+              - /url: /entities/new
+          - generic [ref=e95]:
+            - generic [ref=e96]:
+              - generic [ref=e114]:
+                - text: Select a blueprint
+                - generic [ref=e115]: "*"
+              - generic [ref=e97]:
+                - combobox "Select a blueprint" [active] [ref=e137] [cursor=pointer]: PC product family (demo_pc_components_v1_family)
+                - textbox: demo_pc_components_v1_family
+                - img
+                - group:
+                  - generic: Select a blueprint *
+            - generic [ref=e99]:
+              - generic: Query
+              - generic [ref=e100]:
+                - textbox "Query" [ref=e138]:
+                  - /placeholder: Search terms
+                - group:
+                  - generic: Query
+              - paragraph [ref=e102]: "Examples: red, sku:123*, color.name:red"
+            - button "Search" [ref=e139] [cursor=pointer]
+          - paragraph [ref=e104]: Enter a blueprint code to start exploring.
+    - button "Open Inspector" [ref=e140] [cursor=pointer]:
+      - img [ref=e2]
+      - status "API ready" [ref=e141]
+  - listbox [ref=e143]:
+    - option [selected] [ref=e144] [cursor=pointer]: PC product family (demo_pc_components_v1_family)
+    - option [ref=e145] [cursor=pointer]: PC category (demo_pc_components_v1_category)
+    - option [ref=e146] [cursor=pointer]: PC manufacturer (demo_pc_components_v1_manufacturer)
+    - option [ref=e147] [cursor=pointer]: PC sellable SKU (demo_pc_components_v1_sku)

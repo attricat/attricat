@@ -1,0 +1,698 @@
+- generic [ref=e2]:
+  - generic [ref=e26]:
+    - generic [ref=e29]:
+      - generic [ref=e30]:
+        - heading "Attricat" [level=6] [ref=e31]
+        - paragraph [ref=e32]: Data management
+      - separator [ref=e33]
+      - list [ref=e34]:
+        - link "Entity explorer" [ref=e35] [cursor=pointer]:
+          - /url: /
+          - img [ref=e37]
+          - generic [ref=e40]: Entity explorer
+        - link "Agents" [ref=e41] [cursor=pointer]:
+          - /url: /agents
+          - img [ref=e43]
+          - generic [ref=e46]: Agents
+        - button "Manage" [ref=e47] [cursor=pointer]:
+          - generic [ref=e48]: Manage
+          - img [ref=e49]
+      - separator [ref=e51]
+      - generic [ref=e53]:
+        - generic [ref=e54]: Language
+        - generic [ref=e55]:
+          - combobox "Language" [ref=e56] [cursor=pointer]: English
+          - textbox: en
+          - img
+          - group:
+            - generic: Language
+      - list [ref=e57]:
+        - link "Profile" [ref=e58] [cursor=pointer]:
+          - /url: /profile
+          - img [ref=e60]
+          - generic [ref=e63]: Profile
+        - button "Sign out" [ref=e64] [cursor=pointer]:
+          - img [ref=e66]
+          - generic [ref=e69]: Sign out
+    - main [ref=e70]:
+      - generic [ref=e71]:
+        - generic [ref=e72]:
+          - generic [ref=e73]:
+            - heading "Entity explorer" [level=1] [ref=e74]
+            - paragraph [ref=e75]: Search and browse your catalog.
+          - link "Create entity" [ref=e77] [cursor=pointer]:
+            - /url: /entities/new
+        - generic [ref=e79]:
+          - generic [ref=e80]:
+            - generic [ref=e81]:
+              - text: Select a blueprint
+              - generic [ref=e82]: "*"
+            - generic [ref=e83]:
+              - combobox "Select a blueprint" [ref=e84] [cursor=pointer]: PC sellable SKU (demo_pc_components_v1_sku)
+              - textbox: demo_pc_components_v1_sku
+              - img
+              - group:
+                - generic: Select a blueprint *
+          - generic [ref=e85]:
+            - generic [ref=e86]: Query
+            - generic [ref=e87]:
+              - textbox "Query" [ref=e88]:
+                - /placeholder: Search terms
+                - text: memory
+              - group:
+                - generic: Query
+            - paragraph [ref=e89]: "Examples: red, sku:123*, color.name:red"
+          - button "Search" [ref=e90] [cursor=pointer]
+        - generic [ref=e91]:
+          - complementary [ref=e92]:
+            - heading "Relationship filters" [level=6] [ref=e93]
+            - generic [ref=e94]:
+              - generic [ref=e95]: Context
+              - generic [ref=e96]:
+                - combobox "Context" [ref=e97] [cursor=pointer]: Default
+                - textbox: default
+                - img
+                - group:
+                  - generic: Context
+            - heading "family" [level=3] [ref=e99]:
+              - button "family" [ref=e100] [cursor=pointer]:
+                - paragraph [ref=e102]: family
+                - img [ref=e104]
+            - heading "category" [level=3] [ref=e107]:
+              - button "category" [ref=e108] [cursor=pointer]:
+                - paragraph [ref=e110]: category
+                - img [ref=e112]
+            - heading "manufacturer" [level=3] [ref=e115]:
+              - button "manufacturer" [ref=e116] [cursor=pointer]:
+                - paragraph [ref=e118]: manufacturer
+                - img [ref=e120]
+            - generic [ref=e122]:
+              - heading "compatible_skus" [level=3] [ref=e123]:
+                - button "compatible_skus" [ref=e124] [cursor=pointer]:
+                  - paragraph [ref=e126]: compatible_skus
+                  - img [ref=e128]
+              - generic: Build tree using
+          - generic [ref=e130]:
+            - paragraph [ref=e131]: 25 results
+            - generic "Explorer results" [ref=e132]:
+              - table [ref=e133]:
+                - rowgroup [ref=e134]:
+                  - row "ID Display Schema Product SKU Type Compatible SKU Price Stock Availability Interface Capacity Form factor Wattage" [ref=e135]:
+                    - columnheader "ID" [ref=e136]
+                    - columnheader "Display" [ref=e137]
+                    - columnheader "Schema" [ref=e138]
+                    - columnheader "Product" [ref=e139]:
+                      - button "Product" [ref=e140] [cursor=pointer]:
+                        - text: Product
+                        - img [ref=e141]
+                    - columnheader "SKU" [ref=e143]:
+                      - button "SKU" [ref=e144] [cursor=pointer]:
+                        - text: SKU
+                        - img [ref=e145]
+                    - columnheader "Type" [ref=e147]:
+                      - button "Type" [ref=e148] [cursor=pointer]:
+                        - text: Type
+                        - img [ref=e149]
+                    - columnheader "Compatible SKU" [ref=e151]:
+                      - button "Compatible SKU" [ref=e152] [cursor=pointer]:
+                        - text: Compatible SKU
+                        - img [ref=e153]
+                    - columnheader "Price" [ref=e155]:
+                      - button "Price" [ref=e156] [cursor=pointer]:
+                        - text: Price
+                        - img [ref=e157]
+                    - columnheader "Stock" [ref=e159]:
+                      - button "Stock" [ref=e160] [cursor=pointer]:
+                        - text: Stock
+                        - img [ref=e161]
+                    - columnheader "Availability" [ref=e163]:
+                      - button "Availability" [ref=e164] [cursor=pointer]:
+                        - text: Availability
+                        - img [ref=e165]
+                    - columnheader "Interface" [ref=e167]:
+                      - button "Interface" [ref=e168] [cursor=pointer]:
+                        - text: Interface
+                        - img [ref=e169]
+                    - columnheader "Capacity" [ref=e171]:
+                      - button "Capacity" [ref=e172] [cursor=pointer]:
+                        - text: Capacity
+                        - img [ref=e173]
+                    - columnheader "Form factor" [ref=e175]:
+                      - button "Form factor" [ref=e176] [cursor=pointer]:
+                        - text: Form factor
+                        - img [ref=e177]
+                    - columnheader "Wattage" [ref=e179]:
+                      - button "Wattage" [ref=e180] [cursor=pointer]:
+                        - text: Wattage
+                        - img [ref=e181]
+                    - columnheader [ref=e183]
+                - rowgroup [ref=e184]:
+                  - row "View entity ID e9a2bf5f-563f-4c44-91c7-bd1f7ced7bee Noric Display Summit 0688 Graphics Card, 4 TB v2 · Current Noric Display Summit 0688 Graphics Card, 4 TB BFG-SUM-0688-01-A Graphics Card Noric Display Summit 0688 Graphics Card, 8 GB 311.99 35 in_stock PCIe 4.0 4 TB ATX 285 Entity actions for e9a2bf5f-563f-4c44-91c7-bd1f7ced7bee" [ref=e185]:
+                    - cell "View entity ID e9a2bf5f-563f-4c44-91c7-bd1f7ced7bee" [ref=e186]:
+                      - button "View entity ID e9a2bf5f-563f-4c44-91c7-bd1f7ced7bee" [ref=e187] [cursor=pointer]:
+                        - img [ref=e188]
+                    - cell "Noric Display Summit 0688 Graphics Card, 4 TB" [ref=e190]:
+                      - link "Noric Display Summit 0688 Graphics Card, 4 TB" [ref=e191] [cursor=pointer]:
+                        - /url: /entities/e9a2bf5f-563f-4c44-91c7-bd1f7ced7bee
+                    - cell "v2 · Current" [ref=e192]:
+                      - generic [ref=e194]: v2 · Current
+                    - cell "Noric Display Summit 0688 Graphics Card, 4 TB" [ref=e195]:
+                      - paragraph [ref=e196]: Noric Display Summit 0688 Graphics Card, 4 TB
+                    - cell "BFG-SUM-0688-01-A" [ref=e197]:
+                      - paragraph [ref=e198]: BFG-SUM-0688-01-A
+                    - cell "Graphics Card" [ref=e199]:
+                      - paragraph [ref=e200]: Graphics Card
+                    - cell "Noric Display Summit 0688 Graphics Card, 8 GB" [ref=e201]:
+                      - paragraph [ref=e202]: Noric Display Summit 0688 Graphics Card, 8 GB
+                    - cell "311.99" [ref=e203]:
+                      - paragraph [ref=e204]: "311.99"
+                    - cell "35" [ref=e205]:
+                      - paragraph [ref=e206]: "35"
+                    - cell "in_stock" [ref=e207]:
+                      - paragraph [ref=e208]: in_stock
+                    - cell "PCIe 4.0" [ref=e209]:
+                      - paragraph [ref=e210]: PCIe 4.0
+                    - cell "4 TB" [ref=e211]:
+                      - paragraph [ref=e212]: 4 TB
+                    - cell "ATX" [ref=e213]:
+                      - paragraph [ref=e214]: ATX
+                    - cell "285" [ref=e215]:
+                      - paragraph [ref=e216]: "285"
+                    - cell "Entity actions for e9a2bf5f-563f-4c44-91c7-bd1f7ced7bee" [ref=e217]:
+                      - button "Entity actions for e9a2bf5f-563f-4c44-91c7-bd1f7ced7bee" [ref=e218] [cursor=pointer]:
+                        - img [ref=e219]
+                  - row "View entity ID 6d8b26f5-8d2a-4625-b41e-951b86554d7f Noric Display Summit 0688 Graphics Card, 8 GB v2 · Current Noric Display Summit 0688 Graphics Card, 8 GB BFG-SUM-0688-02-B Graphics Card Noric Display Summit 0688 Graphics Card, 16 GB 382.99 48 in_stock PCIe 4.0 8 GB ATX 285 Entity actions for 6d8b26f5-8d2a-4625-b41e-951b86554d7f" [ref=e221]:
+                    - cell "View entity ID 6d8b26f5-8d2a-4625-b41e-951b86554d7f" [ref=e222]:
+                      - button "View entity ID 6d8b26f5-8d2a-4625-b41e-951b86554d7f" [ref=e223] [cursor=pointer]:
+                        - img [ref=e224]
+                    - cell "Noric Display Summit 0688 Graphics Card, 8 GB" [ref=e226]:
+                      - link "Noric Display Summit 0688 Graphics Card, 8 GB" [ref=e227] [cursor=pointer]:
+                        - /url: /entities/6d8b26f5-8d2a-4625-b41e-951b86554d7f
+                    - cell "v2 · Current" [ref=e228]:
+                      - generic [ref=e230]: v2 · Current
+                    - cell "Noric Display Summit 0688 Graphics Card, 8 GB" [ref=e231]:
+                      - paragraph [ref=e232]: Noric Display Summit 0688 Graphics Card, 8 GB
+                    - cell "BFG-SUM-0688-02-B" [ref=e233]:
+                      - paragraph [ref=e234]: BFG-SUM-0688-02-B
+                    - cell "Graphics Card" [ref=e235]:
+                      - paragraph [ref=e236]: Graphics Card
+                    - cell "Noric Display Summit 0688 Graphics Card, 16 GB" [ref=e237]:
+                      - paragraph [ref=e238]: Noric Display Summit 0688 Graphics Card, 16 GB
+                    - cell "382.99" [ref=e239]:
+                      - paragraph [ref=e240]: "382.99"
+                    - cell "48" [ref=e241]:
+                      - paragraph [ref=e242]: "48"
+                    - cell "in_stock" [ref=e243]:
+                      - paragraph [ref=e244]: in_stock
+                    - cell "PCIe 4.0" [ref=e245]:
+                      - paragraph [ref=e246]: PCIe 4.0
+                    - cell "8 GB" [ref=e247]:
+                      - paragraph [ref=e248]: 8 GB
+                    - cell "ATX" [ref=e249]:
+                      - paragraph [ref=e250]: ATX
+                    - cell "285" [ref=e251]:
+                      - paragraph [ref=e252]: "285"
+                    - cell "Entity actions for 6d8b26f5-8d2a-4625-b41e-951b86554d7f" [ref=e253]:
+                      - button "Entity actions for 6d8b26f5-8d2a-4625-b41e-951b86554d7f" [ref=e254] [cursor=pointer]:
+                        - img [ref=e255]
+                  - row "View entity ID 53487dfc-7af9-4871-a353-b009d756e43d Noric Display Summit 0688 Graphics Card, 16 GB v2 · Current Noric Display Summit 0688 Graphics Card, 16 GB BFG-SUM-0688-03-C Graphics Card Noric Display Summit 0688 Graphics Card, 32 GB 453.99 61 in_stock PCIe 4.0 16 GB ATX 285 Entity actions for 53487dfc-7af9-4871-a353-b009d756e43d" [ref=e257]:
+                    - cell "View entity ID 53487dfc-7af9-4871-a353-b009d756e43d" [ref=e258]:
+                      - button "View entity ID 53487dfc-7af9-4871-a353-b009d756e43d" [ref=e259] [cursor=pointer]:
+                        - img [ref=e260]
+                    - cell "Noric Display Summit 0688 Graphics Card, 16 GB" [ref=e262]:
+                      - link "Noric Display Summit 0688 Graphics Card, 16 GB" [ref=e263] [cursor=pointer]:
+                        - /url: /entities/53487dfc-7af9-4871-a353-b009d756e43d
+                    - cell "v2 · Current" [ref=e264]:
+                      - generic [ref=e266]: v2 · Current
+                    - cell "Noric Display Summit 0688 Graphics Card, 16 GB" [ref=e267]:
+                      - paragraph [ref=e268]: Noric Display Summit 0688 Graphics Card, 16 GB
+                    - cell "BFG-SUM-0688-03-C" [ref=e269]:
+                      - paragraph [ref=e270]: BFG-SUM-0688-03-C
+                    - cell "Graphics Card" [ref=e271]:
+                      - paragraph [ref=e272]: Graphics Card
+                    - cell "Noric Display Summit 0688 Graphics Card, 32 GB" [ref=e273]:
+                      - paragraph [ref=e274]: Noric Display Summit 0688 Graphics Card, 32 GB
+                    - cell "453.99" [ref=e275]:
+                      - paragraph [ref=e276]: "453.99"
+                    - cell "61" [ref=e277]:
+                      - paragraph [ref=e278]: "61"
+                    - cell "in_stock" [ref=e279]:
+                      - paragraph [ref=e280]: in_stock
+                    - cell "PCIe 4.0" [ref=e281]:
+                      - paragraph [ref=e282]: PCIe 4.0
+                    - cell "16 GB" [ref=e283]:
+                      - paragraph [ref=e284]: 16 GB
+                    - cell "ATX" [ref=e285]:
+                      - paragraph [ref=e286]: ATX
+                    - cell "285" [ref=e287]:
+                      - paragraph [ref=e288]: "285"
+                    - cell "Entity actions for 53487dfc-7af9-4871-a353-b009d756e43d" [ref=e289]:
+                      - button "Entity actions for 53487dfc-7af9-4871-a353-b009d756e43d" [ref=e290] [cursor=pointer]:
+                        - img [ref=e291]
+                  - row "View entity ID c807bdd1-8647-4cd7-9759-62dbb802b779 Noric Display Summit 0688 Graphics Card, 32 GB v2 · Current Noric Display Summit 0688 Graphics Card, 32 GB BFG-SUM-0688-04-D Graphics Card Noric Display Summit 0688 Graphics Card, 4 TB 524.99 3 low_stock PCIe 4.0 32 GB ATX 285 Entity actions for c807bdd1-8647-4cd7-9759-62dbb802b779" [ref=e293]:
+                    - cell "View entity ID c807bdd1-8647-4cd7-9759-62dbb802b779" [ref=e294]:
+                      - button "View entity ID c807bdd1-8647-4cd7-9759-62dbb802b779" [ref=e295] [cursor=pointer]:
+                        - img [ref=e296]
+                    - cell "Noric Display Summit 0688 Graphics Card, 32 GB" [ref=e298]:
+                      - link "Noric Display Summit 0688 Graphics Card, 32 GB" [ref=e299] [cursor=pointer]:
+                        - /url: /entities/c807bdd1-8647-4cd7-9759-62dbb802b779
+                    - cell "v2 · Current" [ref=e300]:
+                      - generic [ref=e302]: v2 · Current
+                    - cell "Noric Display Summit 0688 Graphics Card, 32 GB" [ref=e303]:
+                      - paragraph [ref=e304]: Noric Display Summit 0688 Graphics Card, 32 GB
+                    - cell "BFG-SUM-0688-04-D" [ref=e305]:
+                      - paragraph [ref=e306]: BFG-SUM-0688-04-D
+                    - cell "Graphics Card" [ref=e307]:
+                      - paragraph [ref=e308]: Graphics Card
+                    - cell "Noric Display Summit 0688 Graphics Card, 4 TB" [ref=e309]:
+                      - paragraph [ref=e310]: Noric Display Summit 0688 Graphics Card, 4 TB
+                    - cell "524.99" [ref=e311]:
+                      - paragraph [ref=e312]: "524.99"
+                    - cell "3" [ref=e313]:
+                      - paragraph [ref=e314]: "3"
+                    - cell "low_stock" [ref=e315]:
+                      - paragraph [ref=e316]: low_stock
+                    - cell "PCIe 4.0" [ref=e317]:
+                      - paragraph [ref=e318]: PCIe 4.0
+                    - cell "32 GB" [ref=e319]:
+                      - paragraph [ref=e320]: 32 GB
+                    - cell "ATX" [ref=e321]:
+                      - paragraph [ref=e322]: ATX
+                    - cell "285" [ref=e323]:
+                      - paragraph [ref=e324]: "285"
+                    - cell "Entity actions for c807bdd1-8647-4cd7-9759-62dbb802b779" [ref=e325]:
+                      - button "Entity actions for c807bdd1-8647-4cd7-9759-62dbb802b779" [ref=e326] [cursor=pointer]:
+                        - img [ref=e327]
+                  - row "View entity ID ff93269b-e674-4442-a577-f708f1338801 Ternion Systems Pulse 0799 Memory Kit, 32 GB v2 · Current Ternion Systems Pulse 0799 Memory Kit, 32 GB BFG-PUL-0799-01-A Memory Kit Ternion Systems Pulse 0799 Memory Kit, 64 GB 398.99 15 in_stock DDR5 32 GB DIMM 12 Entity actions for ff93269b-e674-4442-a577-f708f1338801" [ref=e329]:
+                    - cell "View entity ID ff93269b-e674-4442-a577-f708f1338801" [ref=e330]:
+                      - button "View entity ID ff93269b-e674-4442-a577-f708f1338801" [ref=e331] [cursor=pointer]:
+                        - img [ref=e332]
+                    - cell "Ternion Systems Pulse 0799 Memory Kit, 32 GB" [ref=e334]:
+                      - link "Ternion Systems Pulse 0799 Memory Kit, 32 GB" [ref=e335] [cursor=pointer]:
+                        - /url: /entities/ff93269b-e674-4442-a577-f708f1338801
+                    - cell "v2 · Current" [ref=e336]:
+                      - generic [ref=e338]: v2 · Current
+                    - cell "Ternion Systems Pulse 0799 Memory Kit, 32 GB" [ref=e339]:
+                      - paragraph [ref=e340]: Ternion Systems Pulse 0799 Memory Kit, 32 GB
+                    - cell "BFG-PUL-0799-01-A" [ref=e341]:
+                      - paragraph [ref=e342]: BFG-PUL-0799-01-A
+                    - cell "Memory Kit" [ref=e343]:
+                      - paragraph [ref=e344]: Memory Kit
+                    - cell "Ternion Systems Pulse 0799 Memory Kit, 64 GB" [ref=e345]:
+                      - paragraph [ref=e346]: Ternion Systems Pulse 0799 Memory Kit, 64 GB
+                    - cell "398.99" [ref=e347]:
+                      - paragraph [ref=e348]: "398.99"
+                    - cell "15" [ref=e349]:
+                      - paragraph [ref=e350]: "15"
+                    - cell "in_stock" [ref=e351]:
+                      - paragraph [ref=e352]: in_stock
+                    - cell "DDR5" [ref=e353]:
+                      - paragraph [ref=e354]: DDR5
+                    - cell "32 GB" [ref=e355]:
+                      - paragraph [ref=e356]: 32 GB
+                    - cell "DIMM" [ref=e357]:
+                      - paragraph [ref=e358]: DIMM
+                    - cell "12" [ref=e359]:
+                      - paragraph [ref=e360]: "12"
+                    - cell "Entity actions for ff93269b-e674-4442-a577-f708f1338801" [ref=e361]:
+                      - button "Entity actions for ff93269b-e674-4442-a577-f708f1338801" [ref=e362] [cursor=pointer]:
+                        - img [ref=e363]
+                  - row "View entity ID 16b24448-d679-4578-9dc4-f66e84ffecfc Ternion Systems Pulse 0799 Memory Kit, 64 GB v2 · Current Ternion Systems Pulse 0799 Memory Kit, 64 GB BFG-PUL-0799-02-B Memory Kit Ternion Systems Pulse 0799 Memory Kit, 1 TB 469.99 28 in_stock DDR5 64 GB DIMM 12 Entity actions for 16b24448-d679-4578-9dc4-f66e84ffecfc" [ref=e365]:
+                    - cell "View entity ID 16b24448-d679-4578-9dc4-f66e84ffecfc" [ref=e366]:
+                      - button "View entity ID 16b24448-d679-4578-9dc4-f66e84ffecfc" [ref=e367] [cursor=pointer]:
+                        - img [ref=e368]
+                    - cell "Ternion Systems Pulse 0799 Memory Kit, 64 GB" [ref=e370]:
+                      - link "Ternion Systems Pulse 0799 Memory Kit, 64 GB" [ref=e371] [cursor=pointer]:
+                        - /url: /entities/16b24448-d679-4578-9dc4-f66e84ffecfc
+                    - cell "v2 · Current" [ref=e372]:
+                      - generic [ref=e374]: v2 · Current
+                    - cell "Ternion Systems Pulse 0799 Memory Kit, 64 GB" [ref=e375]:
+                      - paragraph [ref=e376]: Ternion Systems Pulse 0799 Memory Kit, 64 GB
+                    - cell "BFG-PUL-0799-02-B" [ref=e377]:
+                      - paragraph [ref=e378]: BFG-PUL-0799-02-B
+                    - cell "Memory Kit" [ref=e379]:
+                      - paragraph [ref=e380]: Memory Kit
+                    - cell "Ternion Systems Pulse 0799 Memory Kit, 1 TB" [ref=e381]:
+                      - paragraph [ref=e382]: Ternion Systems Pulse 0799 Memory Kit, 1 TB
+                    - cell "469.99" [ref=e383]:
+                      - paragraph [ref=e384]: "469.99"
+                    - cell "28" [ref=e385]:
+                      - paragraph [ref=e386]: "28"
+                    - cell "in_stock" [ref=e387]:
+                      - paragraph [ref=e388]: in_stock
+                    - cell "DDR5" [ref=e389]:
+                      - paragraph [ref=e390]: DDR5
+                    - cell "64 GB" [ref=e391]:
+                      - paragraph [ref=e392]: 64 GB
+                    - cell "DIMM" [ref=e393]:
+                      - paragraph [ref=e394]: DIMM
+                    - cell "12" [ref=e395]:
+                      - paragraph [ref=e396]: "12"
+                    - cell "Entity actions for 16b24448-d679-4578-9dc4-f66e84ffecfc" [ref=e397]:
+                      - button "Entity actions for 16b24448-d679-4578-9dc4-f66e84ffecfc" [ref=e398] [cursor=pointer]:
+                        - img [ref=e399]
+                  - row "View entity ID ab7fedc6-40b9-4afa-a79b-43e6e39f0d83 Ternion Systems Pulse 0799 Memory Kit, 1 TB v2 · Current Ternion Systems Pulse 0799 Memory Kit, 1 TB BFG-PUL-0799-03-C Memory Kit Ternion Systems Pulse 0799 Memory Kit, 2 TB 540.99 41 in_stock DDR5 1 TB DIMM 12 Entity actions for ab7fedc6-40b9-4afa-a79b-43e6e39f0d83" [ref=e401]:
+                    - cell "View entity ID ab7fedc6-40b9-4afa-a79b-43e6e39f0d83" [ref=e402]:
+                      - button "View entity ID ab7fedc6-40b9-4afa-a79b-43e6e39f0d83" [ref=e403] [cursor=pointer]:
+                        - img [ref=e404]
+                    - cell "Ternion Systems Pulse 0799 Memory Kit, 1 TB" [ref=e406]:
+                      - link "Ternion Systems Pulse 0799 Memory Kit, 1 TB" [ref=e407] [cursor=pointer]:
+                        - /url: /entities/ab7fedc6-40b9-4afa-a79b-43e6e39f0d83
+                    - cell "v2 · Current" [ref=e408]:
+                      - generic [ref=e410]: v2 · Current
+                    - cell "Ternion Systems Pulse 0799 Memory Kit, 1 TB" [ref=e411]:
+                      - paragraph [ref=e412]: Ternion Systems Pulse 0799 Memory Kit, 1 TB
+                    - cell "BFG-PUL-0799-03-C" [ref=e413]:
+                      - paragraph [ref=e414]: BFG-PUL-0799-03-C
+                    - cell "Memory Kit" [ref=e415]:
+                      - paragraph [ref=e416]: Memory Kit
+                    - cell "Ternion Systems Pulse 0799 Memory Kit, 2 TB" [ref=e417]:
+                      - paragraph [ref=e418]: Ternion Systems Pulse 0799 Memory Kit, 2 TB
+                    - cell "540.99" [ref=e419]:
+                      - paragraph [ref=e420]: "540.99"
+                    - cell "41" [ref=e421]:
+                      - paragraph [ref=e422]: "41"
+                    - cell "in_stock" [ref=e423]:
+                      - paragraph [ref=e424]: in_stock
+                    - cell "DDR5" [ref=e425]:
+                      - paragraph [ref=e426]: DDR5
+                    - cell "1 TB" [ref=e427]:
+                      - paragraph [ref=e428]: 1 TB
+                    - cell "DIMM" [ref=e429]:
+                      - paragraph [ref=e430]: DIMM
+                    - cell "12" [ref=e431]:
+                      - paragraph [ref=e432]: "12"
+                    - cell "Entity actions for ab7fedc6-40b9-4afa-a79b-43e6e39f0d83" [ref=e433]:
+                      - button "Entity actions for ab7fedc6-40b9-4afa-a79b-43e6e39f0d83" [ref=e434] [cursor=pointer]:
+                        - img [ref=e435]
+                  - row "View entity ID 325ac801-d048-44c3-8ae8-445b5e0ef3dc Ternion Systems Pulse 0799 Memory Kit, 2 TB v2 · Current Ternion Systems Pulse 0799 Memory Kit, 2 TB BFG-PUL-0799-04-D Memory Kit Ternion Systems Pulse 0799 Memory Kit, 32 GB 611.99 54 in_stock DDR5 2 TB DIMM 12 Entity actions for 325ac801-d048-44c3-8ae8-445b5e0ef3dc" [ref=e437]:
+                    - cell "View entity ID 325ac801-d048-44c3-8ae8-445b5e0ef3dc" [ref=e438]:
+                      - button "View entity ID 325ac801-d048-44c3-8ae8-445b5e0ef3dc" [ref=e439] [cursor=pointer]:
+                        - img [ref=e440]
+                    - cell "Ternion Systems Pulse 0799 Memory Kit, 2 TB" [ref=e442]:
+                      - link "Ternion Systems Pulse 0799 Memory Kit, 2 TB" [ref=e443] [cursor=pointer]:
+                        - /url: /entities/325ac801-d048-44c3-8ae8-445b5e0ef3dc
+                    - cell "v2 · Current" [ref=e444]:
+                      - generic [ref=e446]: v2 · Current
+                    - cell "Ternion Systems Pulse 0799 Memory Kit, 2 TB" [ref=e447]:
+                      - paragraph [ref=e448]: Ternion Systems Pulse 0799 Memory Kit, 2 TB
+                    - cell "BFG-PUL-0799-04-D" [ref=e449]:
+                      - paragraph [ref=e450]: BFG-PUL-0799-04-D
+                    - cell "Memory Kit" [ref=e451]:
+                      - paragraph [ref=e452]: Memory Kit
+                    - cell "Ternion Systems Pulse 0799 Memory Kit, 32 GB" [ref=e453]:
+                      - paragraph [ref=e454]: Ternion Systems Pulse 0799 Memory Kit, 32 GB
+                    - cell "611.99" [ref=e455]:
+                      - paragraph [ref=e456]: "611.99"
+                    - cell "54" [ref=e457]:
+                      - paragraph [ref=e458]: "54"
+                    - cell "in_stock" [ref=e459]:
+                      - paragraph [ref=e460]: in_stock
+                    - cell "DDR5" [ref=e461]:
+                      - paragraph [ref=e462]: DDR5
+                    - cell "2 TB" [ref=e463]:
+                      - paragraph [ref=e464]: 2 TB
+                    - cell "DIMM" [ref=e465]:
+                      - paragraph [ref=e466]: DIMM
+                    - cell "12" [ref=e467]:
+                      - paragraph [ref=e468]: "12"
+                    - cell "Entity actions for 325ac801-d048-44c3-8ae8-445b5e0ef3dc" [ref=e469]:
+                      - button "Entity actions for 325ac801-d048-44c3-8ae8-445b5e0ef3dc" [ref=e470] [cursor=pointer]:
+                        - img [ref=e471]
+                  - row "View entity ID 01e57584-87ae-405e-9d35-31ae7baf15a4 Kestrel Microdevices Arc 0836 Power Supply, 64 GB v2 · Current Kestrel Microdevices Arc 0836 Power Supply, 64 GB BFG-ARC-0836-01-A Power Supply Kestrel Microdevices Arc 0836 Power Supply, 1 TB 427.99 32 in_stock ATX 3.1 64 GB ATX 850 Entity actions for 01e57584-87ae-405e-9d35-31ae7baf15a4" [ref=e473]:
+                    - cell "View entity ID 01e57584-87ae-405e-9d35-31ae7baf15a4" [ref=e474]:
+                      - button "View entity ID 01e57584-87ae-405e-9d35-31ae7baf15a4" [ref=e475] [cursor=pointer]:
+                        - img [ref=e476]
+                    - cell "Kestrel Microdevices Arc 0836 Power Supply, 64 GB" [ref=e478]:
+                      - link "Kestrel Microdevices Arc 0836 Power Supply, 64 GB" [ref=e479] [cursor=pointer]:
+                        - /url: /entities/01e57584-87ae-405e-9d35-31ae7baf15a4
+                    - cell "v2 · Current" [ref=e480]:
+                      - generic [ref=e482]: v2 · Current
+                    - cell "Kestrel Microdevices Arc 0836 Power Supply, 64 GB" [ref=e483]:
+                      - paragraph [ref=e484]: Kestrel Microdevices Arc 0836 Power Supply, 64 GB
+                    - cell "BFG-ARC-0836-01-A" [ref=e485]:
+                      - paragraph [ref=e486]: BFG-ARC-0836-01-A
+                    - cell "Power Supply" [ref=e487]:
+                      - paragraph [ref=e488]: Power Supply
+                    - cell "Kestrel Microdevices Arc 0836 Power Supply, 1 TB" [ref=e489]:
+                      - paragraph [ref=e490]: Kestrel Microdevices Arc 0836 Power Supply, 1 TB
+                    - cell "427.99" [ref=e491]:
+                      - paragraph [ref=e492]: "427.99"
+                    - cell "32" [ref=e493]:
+                      - paragraph [ref=e494]: "32"
+                    - cell "in_stock" [ref=e495]:
+                      - paragraph [ref=e496]: in_stock
+                    - cell "ATX 3.1" [ref=e497]:
+                      - paragraph [ref=e498]: ATX 3.1
+                    - cell "64 GB" [ref=e499]:
+                      - paragraph [ref=e500]: 64 GB
+                    - cell "ATX" [ref=e501]:
+                      - paragraph [ref=e502]: ATX
+                    - cell "850" [ref=e503]:
+                      - paragraph [ref=e504]: "850"
+                    - cell "Entity actions for 01e57584-87ae-405e-9d35-31ae7baf15a4" [ref=e505]:
+                      - button "Entity actions for 01e57584-87ae-405e-9d35-31ae7baf15a4" [ref=e506] [cursor=pointer]:
+                        - img [ref=e507]
+                  - row "View entity ID 0d3e77ab-a90d-42c9-bcea-1191e1243973 Kestrel Microdevices Arc 0836 Power Supply, 1 TB v2 · Current Kestrel Microdevices Arc 0836 Power Supply, 1 TB BFG-ARC-0836-02-B Power Supply Kestrel Microdevices Arc 0836 Power Supply, 2 TB 498.99 45 in_stock ATX 3.1 1 TB ATX 850 Entity actions for 0d3e77ab-a90d-42c9-bcea-1191e1243973" [ref=e509]:
+                    - cell "View entity ID 0d3e77ab-a90d-42c9-bcea-1191e1243973" [ref=e510]:
+                      - button "View entity ID 0d3e77ab-a90d-42c9-bcea-1191e1243973" [ref=e511] [cursor=pointer]:
+                        - img [ref=e512]
+                    - cell "Kestrel Microdevices Arc 0836 Power Supply, 1 TB" [ref=e514]:
+                      - link "Kestrel Microdevices Arc 0836 Power Supply, 1 TB" [ref=e515] [cursor=pointer]:
+                        - /url: /entities/0d3e77ab-a90d-42c9-bcea-1191e1243973
+                    - cell "v2 · Current" [ref=e516]:
+                      - generic [ref=e518]: v2 · Current
+                    - cell "Kestrel Microdevices Arc 0836 Power Supply, 1 TB" [ref=e519]:
+                      - paragraph [ref=e520]: Kestrel Microdevices Arc 0836 Power Supply, 1 TB
+                    - cell "BFG-ARC-0836-02-B" [ref=e521]:
+                      - paragraph [ref=e522]: BFG-ARC-0836-02-B
+                    - cell "Power Supply" [ref=e523]:
+                      - paragraph [ref=e524]: Power Supply
+                    - cell "Kestrel Microdevices Arc 0836 Power Supply, 2 TB" [ref=e525]:
+                      - paragraph [ref=e526]: Kestrel Microdevices Arc 0836 Power Supply, 2 TB
+                    - cell "498.99" [ref=e527]:
+                      - paragraph [ref=e528]: "498.99"
+                    - cell "45" [ref=e529]:
+                      - paragraph [ref=e530]: "45"
+                    - cell "in_stock" [ref=e531]:
+                      - paragraph [ref=e532]: in_stock
+                    - cell "ATX 3.1" [ref=e533]:
+                      - paragraph [ref=e534]: ATX 3.1
+                    - cell "1 TB" [ref=e535]:
+                      - paragraph [ref=e536]: 1 TB
+                    - cell "ATX" [ref=e537]:
+                      - paragraph [ref=e538]: ATX
+                    - cell "850" [ref=e539]:
+                      - paragraph [ref=e540]: "850"
+                    - cell "Entity actions for 0d3e77ab-a90d-42c9-bcea-1191e1243973" [ref=e541]:
+                      - button "Entity actions for 0d3e77ab-a90d-42c9-bcea-1191e1243973" [ref=e542] [cursor=pointer]:
+                        - img [ref=e543]
+                  - row "View entity ID 67987a3b-fdad-495e-bbd7-3621a167ea3a Kestrel Microdevices Arc 0836 Power Supply, 2 TB v2 · Current Kestrel Microdevices Arc 0836 Power Supply, 2 TB BFG-ARC-0836-03-C Power Supply Kestrel Microdevices Arc 0836 Power Supply, 4 TB 569.99 58 in_stock ATX 3.1 2 TB ATX 850 Entity actions for 67987a3b-fdad-495e-bbd7-3621a167ea3a" [ref=e545]:
+                    - cell "View entity ID 67987a3b-fdad-495e-bbd7-3621a167ea3a" [ref=e546]:
+                      - button "View entity ID 67987a3b-fdad-495e-bbd7-3621a167ea3a" [ref=e547] [cursor=pointer]:
+                        - img [ref=e548]
+                    - cell "Kestrel Microdevices Arc 0836 Power Supply, 2 TB" [ref=e550]:
+                      - link "Kestrel Microdevices Arc 0836 Power Supply, 2 TB" [ref=e551] [cursor=pointer]:
+                        - /url: /entities/67987a3b-fdad-495e-bbd7-3621a167ea3a
+                    - cell "v2 · Current" [ref=e552]:
+                      - generic [ref=e554]: v2 · Current
+                    - cell "Kestrel Microdevices Arc 0836 Power Supply, 2 TB" [ref=e555]:
+                      - paragraph [ref=e556]: Kestrel Microdevices Arc 0836 Power Supply, 2 TB
+                    - cell "BFG-ARC-0836-03-C" [ref=e557]:
+                      - paragraph [ref=e558]: BFG-ARC-0836-03-C
+                    - cell "Power Supply" [ref=e559]:
+                      - paragraph [ref=e560]: Power Supply
+                    - cell "Kestrel Microdevices Arc 0836 Power Supply, 4 TB" [ref=e561]:
+                      - paragraph [ref=e562]: Kestrel Microdevices Arc 0836 Power Supply, 4 TB
+                    - cell "569.99" [ref=e563]:
+                      - paragraph [ref=e564]: "569.99"
+                    - cell "58" [ref=e565]:
+                      - paragraph [ref=e566]: "58"
+                    - cell "in_stock" [ref=e567]:
+                      - paragraph [ref=e568]: in_stock
+                    - cell "ATX 3.1" [ref=e569]:
+                      - paragraph [ref=e570]: ATX 3.1
+                    - cell "2 TB" [ref=e571]:
+                      - paragraph [ref=e572]: 2 TB
+                    - cell "ATX" [ref=e573]:
+                      - paragraph [ref=e574]: ATX
+                    - cell "850" [ref=e575]:
+                      - paragraph [ref=e576]: "850"
+                    - cell "Entity actions for 67987a3b-fdad-495e-bbd7-3621a167ea3a" [ref=e577]:
+                      - button "Entity actions for 67987a3b-fdad-495e-bbd7-3621a167ea3a" [ref=e578] [cursor=pointer]:
+                        - img [ref=e579]
+                  - row "View entity ID 3842b108-6c6f-4a3c-b7c6-0c68f404d526 Kestrel Microdevices Arc 0836 Power Supply, 4 TB v2 · Current Kestrel Microdevices Arc 0836 Power Supply, 4 TB BFG-ARC-0836-04-D Power Supply Kestrel Microdevices Arc 0836 Power Supply, 64 GB 640.99 0 special_order ATX 3.1 4 TB ATX 850 Entity actions for 3842b108-6c6f-4a3c-b7c6-0c68f404d526" [ref=e581]:
+                    - cell "View entity ID 3842b108-6c6f-4a3c-b7c6-0c68f404d526" [ref=e582]:
+                      - button "View entity ID 3842b108-6c6f-4a3c-b7c6-0c68f404d526" [ref=e583] [cursor=pointer]:
+                        - img [ref=e584]
+                    - cell "Kestrel Microdevices Arc 0836 Power Supply, 4 TB" [ref=e586]:
+                      - link "Kestrel Microdevices Arc 0836 Power Supply, 4 TB" [ref=e587] [cursor=pointer]:
+                        - /url: /entities/3842b108-6c6f-4a3c-b7c6-0c68f404d526
+                    - cell "v2 · Current" [ref=e588]:
+                      - generic [ref=e590]: v2 · Current
+                    - cell "Kestrel Microdevices Arc 0836 Power Supply, 4 TB" [ref=e591]:
+                      - paragraph [ref=e592]: Kestrel Microdevices Arc 0836 Power Supply, 4 TB
+                    - cell "BFG-ARC-0836-04-D" [ref=e593]:
+                      - paragraph [ref=e594]: BFG-ARC-0836-04-D
+                    - cell "Power Supply" [ref=e595]:
+                      - paragraph [ref=e596]: Power Supply
+                    - cell "Kestrel Microdevices Arc 0836 Power Supply, 64 GB" [ref=e597]:
+                      - paragraph [ref=e598]: Kestrel Microdevices Arc 0836 Power Supply, 64 GB
+                    - cell "640.99" [ref=e599]:
+                      - paragraph [ref=e600]: "640.99"
+                    - cell "0" [ref=e601]:
+                      - paragraph [ref=e602]: "0"
+                    - cell "special_order" [ref=e603]:
+                      - paragraph [ref=e604]: special_order
+                    - cell "ATX 3.1" [ref=e605]:
+                      - paragraph [ref=e606]: ATX 3.1
+                    - cell "4 TB" [ref=e607]:
+                      - paragraph [ref=e608]: 4 TB
+                    - cell "ATX" [ref=e609]:
+                      - paragraph [ref=e610]: ATX
+                    - cell "850" [ref=e611]:
+                      - paragraph [ref=e612]: "850"
+                    - cell "Entity actions for 3842b108-6c6f-4a3c-b7c6-0c68f404d526" [ref=e613]:
+                      - button "Entity actions for 3842b108-6c6f-4a3c-b7c6-0c68f404d526" [ref=e614] [cursor=pointer]:
+                        - img [ref=e615]
+                  - row "View entity ID 2f3d0623-3216-4f73-8a17-32feaadd46b5 Asterion Memory Vector 0947 Computer Case, 4 TB v2 · Current Asterion Memory Vector 0947 Computer Case, 4 TB BFG-VEC-0947-01-A Computer Case Asterion Memory Vector 0947 Computer Case, 8 GB 514.99 12 in_stock USB-C 4 TB Mid tower 0 Entity actions for 2f3d0623-3216-4f73-8a17-32feaadd46b5" [ref=e617]:
+                    - cell "View entity ID 2f3d0623-3216-4f73-8a17-32feaadd46b5" [ref=e618]:
+                      - button "View entity ID 2f3d0623-3216-4f73-8a17-32feaadd46b5" [ref=e619] [cursor=pointer]:
+                        - img [ref=e620]
+                    - cell "Asterion Memory Vector 0947 Computer Case, 4 TB" [ref=e622]:
+                      - link "Asterion Memory Vector 0947 Computer Case, 4 TB" [ref=e623] [cursor=pointer]:
+                        - /url: /entities/2f3d0623-3216-4f73-8a17-32feaadd46b5
+                    - cell "v2 · Current" [ref=e624]:
+                      - generic [ref=e626]: v2 · Current
+                    - cell "Asterion Memory Vector 0947 Computer Case, 4 TB" [ref=e627]:
+                      - paragraph [ref=e628]: Asterion Memory Vector 0947 Computer Case, 4 TB
+                    - cell "BFG-VEC-0947-01-A" [ref=e629]:
+                      - paragraph [ref=e630]: BFG-VEC-0947-01-A
+                    - cell "Computer Case" [ref=e631]:
+                      - paragraph [ref=e632]: Computer Case
+                    - cell "Asterion Memory Vector 0947 Computer Case, 8 GB" [ref=e633]:
+                      - paragraph [ref=e634]: Asterion Memory Vector 0947 Computer Case, 8 GB
+                    - cell "514.99" [ref=e635]:
+                      - paragraph [ref=e636]: "514.99"
+                    - cell "12" [ref=e637]:
+                      - paragraph [ref=e638]: "12"
+                    - cell "in_stock" [ref=e639]:
+                      - paragraph [ref=e640]: in_stock
+                    - cell "USB-C" [ref=e641]:
+                      - paragraph [ref=e642]: USB-C
+                    - cell "4 TB" [ref=e643]:
+                      - paragraph [ref=e644]: 4 TB
+                    - cell "Mid tower" [ref=e645]:
+                      - paragraph [ref=e646]: Mid tower
+                    - cell "0" [ref=e647]:
+                      - paragraph [ref=e648]: "0"
+                    - cell "Entity actions for 2f3d0623-3216-4f73-8a17-32feaadd46b5" [ref=e649]:
+                      - button "Entity actions for 2f3d0623-3216-4f73-8a17-32feaadd46b5" [ref=e650] [cursor=pointer]:
+                        - img [ref=e651]
+                  - row "View entity ID 1be63058-6ada-4f2a-8ccc-e7e6134690cc Asterion Memory Vector 0947 Computer Case, 8 GB v2 · Current Asterion Memory Vector 0947 Computer Case, 8 GB BFG-VEC-0947-02-B Computer Case Asterion Memory Vector 0947 Computer Case, 16 GB 585.99 25 in_stock USB-C 8 GB Mid tower 0 Entity actions for 1be63058-6ada-4f2a-8ccc-e7e6134690cc" [ref=e653]:
+                    - cell "View entity ID 1be63058-6ada-4f2a-8ccc-e7e6134690cc" [ref=e654]:
+                      - button "View entity ID 1be63058-6ada-4f2a-8ccc-e7e6134690cc" [ref=e655] [cursor=pointer]:
+                        - img [ref=e656]
+                    - cell "Asterion Memory Vector 0947 Computer Case, 8 GB" [ref=e658]:
+                      - link "Asterion Memory Vector 0947 Computer Case, 8 GB" [ref=e659] [cursor=pointer]:
+                        - /url: /entities/1be63058-6ada-4f2a-8ccc-e7e6134690cc
+                    - cell "v2 · Current" [ref=e660]:
+                      - generic [ref=e662]: v2 · Current
+                    - cell "Asterion Memory Vector 0947 Computer Case, 8 GB" [ref=e663]:
+                      - paragraph [ref=e664]: Asterion Memory Vector 0947 Computer Case, 8 GB
+                    - cell "BFG-VEC-0947-02-B" [ref=e665]:
+                      - paragraph [ref=e666]: BFG-VEC-0947-02-B
+                    - cell "Computer Case" [ref=e667]:
+                      - paragraph [ref=e668]: Computer Case
+                    - cell "Asterion Memory Vector 0947 Computer Case, 16 GB" [ref=e669]:
+                      - paragraph [ref=e670]: Asterion Memory Vector 0947 Computer Case, 16 GB
+                    - cell "585.99" [ref=e671]:
+                      - paragraph [ref=e672]: "585.99"
+                    - cell "25" [ref=e673]:
+                      - paragraph [ref=e674]: "25"
+                    - cell "in_stock" [ref=e675]:
+                      - paragraph [ref=e676]: in_stock
+                    - cell "USB-C" [ref=e677]:
+                      - paragraph [ref=e678]: USB-C
+                    - cell "8 GB" [ref=e679]:
+                      - paragraph [ref=e680]: 8 GB
+                    - cell "Mid tower" [ref=e681]:
+                      - paragraph [ref=e682]: Mid tower
+                    - cell "0" [ref=e683]:
+                      - paragraph [ref=e684]: "0"
+                    - cell "Entity actions for 1be63058-6ada-4f2a-8ccc-e7e6134690cc" [ref=e685]:
+                      - button "Entity actions for 1be63058-6ada-4f2a-8ccc-e7e6134690cc" [ref=e686] [cursor=pointer]:
+                        - img [ref=e687]
+                  - row "View entity ID 59d8770b-e54d-4e43-9d8e-144586894242 Asterion Memory Vector 0947 Computer Case, 16 GB v2 · Current Asterion Memory Vector 0947 Computer Case, 16 GB BFG-VEC-0947-03-C Computer Case Asterion Memory Vector 0947 Computer Case, 32 GB 656.99 38 in_stock USB-C 16 GB Mid tower 0 Entity actions for 59d8770b-e54d-4e43-9d8e-144586894242" [ref=e689]:
+                    - cell "View entity ID 59d8770b-e54d-4e43-9d8e-144586894242" [ref=e690]:
+                      - button "View entity ID 59d8770b-e54d-4e43-9d8e-144586894242" [ref=e691] [cursor=pointer]:
+                        - img [ref=e692]
+                    - cell "Asterion Memory Vector 0947 Computer Case, 16 GB" [ref=e694]:
+                      - link "Asterion Memory Vector 0947 Computer Case, 16 GB" [ref=e695] [cursor=pointer]:
+                        - /url: /entities/59d8770b-e54d-4e43-9d8e-144586894242
+                    - cell "v2 · Current" [ref=e696]:
+                      - generic [ref=e698]: v2 · Current
+                    - cell "Asterion Memory Vector 0947 Computer Case, 16 GB" [ref=e699]:
+                      - paragraph [ref=e700]: Asterion Memory Vector 0947 Computer Case, 16 GB
+                    - cell "BFG-VEC-0947-03-C" [ref=e701]:
+                      - paragraph [ref=e702]: BFG-VEC-0947-03-C
+                    - cell "Computer Case" [ref=e703]:
+                      - paragraph [ref=e704]: Computer Case
+                    - cell "Asterion Memory Vector 0947 Computer Case, 32 GB" [ref=e705]:
+                      - paragraph [ref=e706]: Asterion Memory Vector 0947 Computer Case, 32 GB
+                    - cell "656.99" [ref=e707]:
+                      - paragraph [ref=e708]: "656.99"
+                    - cell "38" [ref=e709]:
+                      - paragraph [ref=e710]: "38"
+                    - cell "in_stock" [ref=e711]:
+                      - paragraph [ref=e712]: in_stock
+                    - cell "USB-C" [ref=e713]:
+                      - paragraph [ref=e714]: USB-C
+                    - cell "16 GB" [ref=e715]:
+                      - paragraph [ref=e716]: 16 GB
+                    - cell "Mid tower" [ref=e717]:
+                      - paragraph [ref=e718]: Mid tower
+                    - cell "0" [ref=e719]:
+                      - paragraph [ref=e720]: "0"
+                    - cell "Entity actions for 59d8770b-e54d-4e43-9d8e-144586894242" [ref=e721]:
+                      - button "Entity actions for 59d8770b-e54d-4e43-9d8e-144586894242" [ref=e722] [cursor=pointer]:
+                        - img [ref=e723]
+                  - row "View entity ID 33c67f9a-f0ad-4cb4-af41-ccab7c025e9b Asterion Memory Vector 0947 Computer Case, 32 GB v2 · Current Asterion Memory Vector 0947 Computer Case, 32 GB BFG-VEC-0947-04-D Computer Case Asterion Memory Vector 0947 Computer Case, 4 TB 727.99 51 in_stock USB-C 32 GB Mid tower 0 Entity actions for 33c67f9a-f0ad-4cb4-af41-ccab7c025e9b" [ref=e725]:
+                    - cell "View entity ID 33c67f9a-f0ad-4cb4-af41-ccab7c025e9b" [ref=e726]:
+                      - button "View entity ID 33c67f9a-f0ad-4cb4-af41-ccab7c025e9b" [ref=e727] [cursor=pointer]:
+                        - img [ref=e728]
+                    - cell "Asterion Memory Vector 0947 Computer Case, 32 GB" [ref=e730]:
+                      - link "Asterion Memory Vector 0947 Computer Case, 32 GB" [ref=e731] [cursor=pointer]:
+                        - /url: /entities/33c67f9a-f0ad-4cb4-af41-ccab7c025e9b
+                    - cell "v2 · Current" [ref=e732]:
+                      - generic [ref=e734]: v2 · Current
+                    - cell "Asterion Memory Vector 0947 Computer Case, 32 GB" [ref=e735]:
+                      - paragraph [ref=e736]: Asterion Memory Vector 0947 Computer Case, 32 GB
+                    - cell "BFG-VEC-0947-04-D" [ref=e737]:
+                      - paragraph [ref=e738]: BFG-VEC-0947-04-D
+                    - cell "Computer Case" [ref=e739]:
+                      - paragraph [ref=e740]: Computer Case
+                    - cell "Asterion Memory Vector 0947 Computer Case, 4 TB" [ref=e741]:
+                      - paragraph [ref=e742]: Asterion Memory Vector 0947 Computer Case, 4 TB
+                    - cell "727.99" [ref=e743]:
+                      - paragraph [ref=e744]: "727.99"
+                    - cell "51" [ref=e745]:
+                      - paragraph [ref=e746]: "51"
+                    - cell "in_stock" [ref=e747]:
+                      - paragraph [ref=e748]: in_stock
+                    - cell "USB-C" [ref=e749]:
+                      - paragraph [ref=e750]: USB-C
+                    - cell "32 GB" [ref=e751]:
+                      - paragraph [ref=e752]: 32 GB
+                    - cell "Mid tower" [ref=e753]:
+                      - paragraph [ref=e754]: Mid tower
+                    - cell "0" [ref=e755]:
+                      - paragraph [ref=e756]: "0"
+                    - cell "Entity actions for 33c67f9a-f0ad-4cb4-af41-ccab7c025e9b" [ref=e757]:
+                      - button "Entity actions for 33c67f9a-f0ad-4cb4-af41-ccab7c025e9b" [ref=e758] [cursor=pointer]:
+                        - img [ref=e759]
+                  - row [ref=e761]:
+                    - cell [ref=e762]
+  - button "Open Inspector" [ref=e763] [cursor=pointer]:
+    - img [ref=e764]
+    - status "API ready" [ref=e766]

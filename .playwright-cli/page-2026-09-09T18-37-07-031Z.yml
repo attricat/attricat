@@ -1,0 +1,68 @@
+- generic [ref=e6]:
+  - generic [ref=e42]:
+    - generic [ref=e45]:
+      - generic [ref=e46]:
+        - heading "Attricat" [level=6] [ref=e47]
+        - paragraph [ref=e48]: Data management
+      - separator [ref=e49]
+      - list [ref=e50]:
+        - link "Entity explorer" [ref=e51] [cursor=pointer]:
+          - /url: /
+          - img [ref=e53]
+          - generic [ref=e56]: Entity explorer
+        - link "Agents" [ref=e57] [cursor=pointer]:
+          - /url: /agents
+          - img [ref=e59]
+          - generic [ref=e62]: Agents
+        - button "Manage" [ref=e63] [cursor=pointer]:
+          - generic [ref=e64]: Manage
+          - img [ref=e65]
+      - separator [ref=e67]
+      - generic [ref=e69]:
+        - generic [ref=e70]: Language
+        - generic [ref=e71]:
+          - combobox "Language" [ref=e72] [cursor=pointer]: English
+          - textbox: en
+          - img
+          - group:
+            - generic: Language
+      - list [ref=e73]:
+        - link "Profile" [ref=e74] [cursor=pointer]:
+          - /url: /profile
+          - img [ref=e76]
+          - generic [ref=e79]: Profile
+        - button "Sign out" [ref=e80] [cursor=pointer]:
+          - img [ref=e82]
+          - generic [ref=e85]: Sign out
+    - main [ref=e86]:
+      - generic [ref=e87]:
+        - generic [ref=e88]:
+          - generic [ref=e89]:
+            - heading "Entity explorer" [level=1] [ref=e90]
+            - paragraph [ref=e91]: Search and browse your catalog.
+          - link "Create entity" [ref=e93] [cursor=pointer]:
+            - /url: /entities/new
+        - generic [ref=e95]:
+          - generic [ref=e96]:
+            - generic:
+              - text: Select a blueprint
+              - generic: "*"
+            - generic [ref=e97]:
+              - combobox "Select a blueprint" [ref=e98] [cursor=pointer]
+              - textbox
+              - img
+              - group:
+                - generic: Select a blueprint *
+          - generic [ref=e99]:
+            - generic: Query
+            - generic [ref=e100]:
+              - textbox "Query" [ref=e101]:
+                - /placeholder: Search terms
+              - group:
+                - generic: Query
+            - paragraph [ref=e102]: "Examples: red, sku:123*, color.name:red"
+          - button "Search" [ref=e103] [cursor=pointer]
+        - paragraph [ref=e104]: Enter a blueprint code to start exploring.
+  - button "Open Inspector" [ref=e1] [cursor=pointer]:
+    - img [ref=e2]
+    - status "API ready" [ref=e4]

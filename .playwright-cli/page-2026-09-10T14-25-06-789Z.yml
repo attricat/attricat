@@ -1,0 +1,345 @@
+- generic [ref=e2]:
+  - generic [ref=e3]:
+    - generic [ref=e6]:
+      - heading "Attricat" [level=6] [ref=e8]: A
+      - separator [ref=e9]
+      - list [ref=e10]:
+        - link "Entity explorer" [ref=e11] [cursor=pointer]:
+          - /url: /
+          - img [ref=e13]
+          - generic [ref=e15]: Entity explorer
+        - link "Agents" [ref=e16] [cursor=pointer]:
+          - /url: /agents
+          - img [ref=e18]
+          - generic [ref=e20]: Agents
+        - link "Manage" [expanded] [ref=e21] [cursor=pointer]:
+          - /url: /manage
+          - img [ref=e23]
+          - generic [ref=e25]: Manage
+      - navigation "Manage" [ref=e26]:
+        - heading "Manage" [level=6] [ref=e28]
+        - separator [ref=e29]
+        - list [ref=e30]:
+          - link "Dashboard" [ref=e31] [cursor=pointer]:
+            - /url: /manage
+            - img [ref=e33]
+            - generic [ref=e36]: Dashboard
+          - link "Blueprints" [ref=e37] [cursor=pointer]:
+            - /url: /manage/blueprints
+            - img [ref=e39]
+            - generic [ref=e42]: Blueprints
+          - link "Contexts" [ref=e43] [cursor=pointer]:
+            - /url: /manage/contexts
+            - img [ref=e45]
+            - generic [ref=e48]: Contexts
+          - link "Data health" [ref=e49] [cursor=pointer]:
+            - /url: /manage/data-health
+            - img [ref=e51]
+            - generic [ref=e54]: Data health
+          - link "Activity / Audit log" [ref=e55] [cursor=pointer]:
+            - /url: /manage/audit-log
+            - img [ref=e57]
+            - generic [ref=e62]: Activity / Audit log
+          - link "Extensions" [ref=e63] [cursor=pointer]:
+            - /url: /manage/extensions
+            - img [ref=e65]
+            - generic [ref=e68]: Extensions
+          - link "Workspace management" [ref=e69] [cursor=pointer]:
+            - /url: /manage/workspace/members
+            - img [ref=e71]
+            - generic [ref=e74]: Workspace management
+      - navigation "Entity explorer" [ref=e75]:
+        - heading "Entity explorer" [level=6] [ref=e77]
+        - separator [ref=e78]
+        - list [ref=e79]:
+          - link "All entities" [ref=e80] [cursor=pointer]:
+            - /url: /
+            - img [ref=e82]
+            - generic [ref=e85]: All entities
+          - listitem [ref=e86]: Shortcuts
+          - link "PC sellable SKU" [ref=e87] [cursor=pointer]:
+            - /url: /?blueprint=demo_pc_components_v1_sku&locked=true
+            - img [ref=e89]
+            - generic [ref=e92]: PC sellable SKU
+      - separator [ref=e94]
+      - list [ref=e95]:
+        - link "Profile" [ref=e96] [cursor=pointer]:
+          - /url: /profile
+          - img [ref=e98]
+          - generic [ref=e100]: Profile
+        - button "Sign out" [ref=e101] [cursor=pointer]:
+          - img [ref=e103]
+          - generic [ref=e105]: Sign out
+    - main [ref=e106]:
+      - generic [ref=e107]:
+        - complementary [ref=e109]:
+          - heading "Relationship filters" [level=2] [ref=e110]
+          - generic [ref=e111]:
+            - generic [ref=e112]:
+              - generic [ref=e113]: Context
+              - generic [ref=e114]:
+                - combobox "Context" [ref=e115] [cursor=pointer]: Default
+                - textbox: default
+                - img
+                - group:
+                  - generic: Context
+            - generic [ref=e117]:
+              - paragraph [ref=e118]: PC product family
+              - generic [ref=e121]: Kestrel Microdevices Arc 5276 Power Supply
+              - button "PC product family" [ref=e122] [cursor=pointer]:
+                - img [ref=e123]
+            - generic [ref=e126]:
+              - paragraph [ref=e127]: PC category
+              - button "PC category" [ref=e128] [cursor=pointer]:
+                - img [ref=e129]
+            - generic [ref=e132]:
+              - paragraph [ref=e133]: PC manufacturer
+              - button "PC manufacturer" [ref=e134] [cursor=pointer]:
+                - img [ref=e135]
+            - generic [ref=e138]:
+              - paragraph [ref=e139]: PC sellable SKU
+              - button "PC sellable SKU" [ref=e140] [cursor=pointer]:
+                - img [ref=e141]
+          - heading "Attribute filters" [level=2] [ref=e143]
+          - generic [ref=e144]:
+            - generic [ref=e145]:
+              - generic [ref=e146]: Attribute
+              - generic [ref=e147]:
+                - combobox "Attribute" [ref=e148] [cursor=pointer]: name
+                - textbox: name
+                - img
+                - group:
+                  - generic: Attribute
+            - generic [ref=e149]:
+              - generic [ref=e150]: Operator
+              - generic [ref=e151]:
+                - combobox "Operator" [ref=e152] [cursor=pointer]: Equals
+                - textbox: eq
+                - img
+                - group:
+                  - generic: Operator
+            - generic [ref=e153]:
+              - generic: Value
+              - generic [ref=e154]:
+                - textbox "Value" [ref=e155]
+                - group:
+                  - generic: Value
+            - button "Apply filter" [disabled]:
+              - generic:
+                - img
+              - text: Apply filter
+        - generic [ref=e157]:
+          - generic [ref=e158]:
+            - generic [ref=e159]:
+              - heading "PC sellable SKU" [level=1] [ref=e160]
+              - paragraph [ref=e161]: Search and browse PC sellable SKU.
+            - link "Create PC sellable SKU" [ref=e163] [cursor=pointer]:
+              - /url: /entities/new?blueprint=demo_pc_components_v1_sku&locked=true
+          - generic [ref=e165]:
+            - generic [ref=e166]:
+              - generic: Query
+              - generic [ref=e167]:
+                - textbox "Query" [ref=e168]:
+                  - /placeholder: Search this blueprint, e.g. term
+                - group:
+                  - generic: Query
+              - paragraph [ref=e169]: "This blueprint: term · One field: sku:term* · All fields on a related record: relationship:term · A related field: relationship.field:term · Global connected search (up to 3 hops): *:term"
+            - button "Search" [ref=e170] [cursor=pointer]
+          - generic "Active filters" [ref=e171]:
+            - 'button "family: \"Kestrel Microdevices Arc 5276 Power Supply\"" [ref=e172]':
+              - generic [ref=e173]: "family: \"Kestrel Microdevices Arc 5276 Power Supply\""
+              - img [ref=e174] [cursor=pointer]
+          - generic [ref=e177]:
+            - paragraph [ref=e178]: 4 results
+            - generic "Explorer results" [ref=e179]:
+              - table [ref=e180]:
+                - rowgroup [ref=e181]:
+                  - row "ID Display Schema Product SKU Type Compatible SKU Price Stock Availability Interface Capacity Form factor Wattage" [ref=e182]:
+                    - columnheader "ID" [ref=e183]
+                    - columnheader "Display" [ref=e184]
+                    - columnheader "Schema" [ref=e185]
+                    - columnheader "Product" [ref=e186]:
+                      - button "Product" [ref=e187] [cursor=pointer]:
+                        - text: Product
+                        - img [ref=e188]
+                    - columnheader "SKU" [ref=e190]:
+                      - button "SKU" [ref=e191] [cursor=pointer]:
+                        - text: SKU
+                        - img [ref=e192]
+                    - columnheader "Type" [ref=e194]:
+                      - button "Type" [ref=e195] [cursor=pointer]:
+                        - text: Type
+                        - img [ref=e196]
+                    - columnheader "Compatible SKU" [ref=e198]:
+                      - button "Compatible SKU" [ref=e199] [cursor=pointer]:
+                        - text: Compatible SKU
+                        - img [ref=e200]
+                    - columnheader "Price" [ref=e202]:
+                      - button "Price" [ref=e203] [cursor=pointer]:
+                        - text: Price
+                        - img [ref=e204]
+                    - columnheader "Stock" [ref=e206]:
+                      - button "Stock" [ref=e207] [cursor=pointer]:
+                        - text: Stock
+                        - img [ref=e208]
+                    - columnheader "Availability" [ref=e210]:
+                      - button "Availability" [ref=e211] [cursor=pointer]:
+                        - text: Availability
+                        - img [ref=e212]
+                    - columnheader "Interface" [ref=e214]:
+                      - button "Interface" [ref=e215] [cursor=pointer]:
+                        - text: Interface
+                        - img [ref=e216]
+                    - columnheader "Capacity" [ref=e218]:
+                      - button "Capacity" [ref=e219] [cursor=pointer]:
+                        - text: Capacity
+                        - img [ref=e220]
+                    - columnheader "Form factor" [ref=e222]:
+                      - button "Form factor" [ref=e223] [cursor=pointer]:
+                        - text: Form factor
+                        - img [ref=e224]
+                    - columnheader "Wattage" [ref=e226]:
+                      - button "Wattage" [ref=e227] [cursor=pointer]:
+                        - text: Wattage
+                        - img [ref=e228]
+                    - columnheader [ref=e230]
+                - rowgroup [ref=e231]:
+                  - row "View entity ID 90a865c9-15f6-4f3b-96e5-6881f8211380 Kestrel Microdevices Arc 5276 Power Supply, 1 TB v2 · Current Kestrel Microdevices Arc 5276 Power Supply, 1 TB BFG-ARC-5276-01-A Power Supply Kestrel Microdevices Arc 5276 Power Supply, 2 TB 1507.99 13 in_stock ATX 3.1 1 TB ATX 850 Entity actions for 90a865c9-15f6-4f3b-96e5-6881f8211380" [ref=e232]:
+                    - cell "View entity ID 90a865c9-15f6-4f3b-96e5-6881f8211380" [ref=e233]:
+                      - button "View entity ID 90a865c9-15f6-4f3b-96e5-6881f8211380" [ref=e234] [cursor=pointer]:
+                        - img [ref=e235]
+                    - cell "Kestrel Microdevices Arc 5276 Power Supply, 1 TB" [ref=e237]:
+                      - link "Kestrel Microdevices Arc 5276 Power Supply, 1 TB" [ref=e238] [cursor=pointer]:
+                        - /url: /entities/90a865c9-15f6-4f3b-96e5-6881f8211380
+                    - cell "v2 · Current" [ref=e239]:
+                      - generic [ref=e241]: v2 · Current
+                    - cell "Kestrel Microdevices Arc 5276 Power Supply, 1 TB" [ref=e242]:
+                      - paragraph [ref=e243]: Kestrel Microdevices Arc 5276 Power Supply, 1 TB
+                    - cell "BFG-ARC-5276-01-A" [ref=e244]:
+                      - paragraph [ref=e245]: BFG-ARC-5276-01-A
+                    - cell "Power Supply" [ref=e246]:
+                      - paragraph [ref=e247]: Power Supply
+                    - cell "Kestrel Microdevices Arc 5276 Power Supply, 2 TB" [ref=e248]:
+                      - paragraph [ref=e249]: Kestrel Microdevices Arc 5276 Power Supply, 2 TB
+                    - cell "1507.99" [ref=e250]:
+                      - paragraph [ref=e251]: "1507.99"
+                    - cell "13" [ref=e252]:
+                      - paragraph [ref=e253]: "13"
+                    - cell "in_stock" [ref=e254]:
+                      - paragraph [ref=e255]: in_stock
+                    - cell "ATX 3.1" [ref=e256]:
+                      - paragraph [ref=e257]: ATX 3.1
+                    - cell "1 TB" [ref=e258]:
+                      - paragraph [ref=e259]: 1 TB
+                    - cell "ATX" [ref=e260]:
+                      - paragraph [ref=e261]: ATX
+                    - cell "850" [ref=e262]:
+                      - paragraph [ref=e263]: "850"
+                    - cell "Entity actions for 90a865c9-15f6-4f3b-96e5-6881f8211380" [ref=e264]:
+                      - button "Entity actions for 90a865c9-15f6-4f3b-96e5-6881f8211380" [ref=e265] [cursor=pointer]:
+                        - img [ref=e266]
+                  - row "View entity ID e2a1c902-325b-4f0e-af6e-1a55ff6ad98d Kestrel Microdevices Arc 5276 Power Supply, 2 TB v2 · Current Kestrel Microdevices Arc 5276 Power Supply, 2 TB BFG-ARC-5276-02-B Power Supply Kestrel Microdevices Arc 5276 Power Supply, 4 TB 1578.99 26 in_stock ATX 3.1 2 TB ATX 850 Entity actions for e2a1c902-325b-4f0e-af6e-1a55ff6ad98d" [ref=e268]:
+                    - cell "View entity ID e2a1c902-325b-4f0e-af6e-1a55ff6ad98d" [ref=e269]:
+                      - button "View entity ID e2a1c902-325b-4f0e-af6e-1a55ff6ad98d" [ref=e270] [cursor=pointer]:
+                        - img [ref=e271]
+                    - cell "Kestrel Microdevices Arc 5276 Power Supply, 2 TB" [ref=e273]:
+                      - link "Kestrel Microdevices Arc 5276 Power Supply, 2 TB" [ref=e274] [cursor=pointer]:
+                        - /url: /entities/e2a1c902-325b-4f0e-af6e-1a55ff6ad98d
+                    - cell "v2 · Current" [ref=e275]:
+                      - generic [ref=e277]: v2 · Current
+                    - cell "Kestrel Microdevices Arc 5276 Power Supply, 2 TB" [ref=e278]:
+                      - paragraph [ref=e279]: Kestrel Microdevices Arc 5276 Power Supply, 2 TB
+                    - cell "BFG-ARC-5276-02-B" [ref=e280]:
+                      - paragraph [ref=e281]: BFG-ARC-5276-02-B
+                    - cell "Power Supply" [ref=e282]:
+                      - paragraph [ref=e283]: Power Supply
+                    - cell "Kestrel Microdevices Arc 5276 Power Supply, 4 TB" [ref=e284]:
+                      - paragraph [ref=e285]: Kestrel Microdevices Arc 5276 Power Supply, 4 TB
+                    - cell "1578.99" [ref=e286]:
+                      - paragraph [ref=e287]: "1578.99"
+                    - cell "26" [ref=e288]:
+                      - paragraph [ref=e289]: "26"
+                    - cell "in_stock" [ref=e290]:
+                      - paragraph [ref=e291]: in_stock
+                    - cell "ATX 3.1" [ref=e292]:
+                      - paragraph [ref=e293]: ATX 3.1
+                    - cell "2 TB" [ref=e294]:
+                      - paragraph [ref=e295]: 2 TB
+                    - cell "ATX" [ref=e296]:
+                      - paragraph [ref=e297]: ATX
+                    - cell "850" [ref=e298]:
+                      - paragraph [ref=e299]: "850"
+                    - cell "Entity actions for e2a1c902-325b-4f0e-af6e-1a55ff6ad98d" [ref=e300]:
+                      - button "Entity actions for e2a1c902-325b-4f0e-af6e-1a55ff6ad98d" [ref=e301] [cursor=pointer]:
+                        - img [ref=e302]
+                  - row "View entity ID c349b201-9eb8-487c-9207-6f2eda77bbd0 Kestrel Microdevices Arc 5276 Power Supply, 4 TB v2 · Current Kestrel Microdevices Arc 5276 Power Supply, 4 TB BFG-ARC-5276-03-C Power Supply Kestrel Microdevices Arc 5276 Power Supply, 8 GB 1649.99 39 in_stock ATX 3.1 4 TB ATX 850 Entity actions for c349b201-9eb8-487c-9207-6f2eda77bbd0" [ref=e304]:
+                    - cell "View entity ID c349b201-9eb8-487c-9207-6f2eda77bbd0" [ref=e305]:
+                      - button "View entity ID c349b201-9eb8-487c-9207-6f2eda77bbd0" [ref=e306] [cursor=pointer]:
+                        - img [ref=e307]
+                    - cell "Kestrel Microdevices Arc 5276 Power Supply, 4 TB" [ref=e309]:
+                      - link "Kestrel Microdevices Arc 5276 Power Supply, 4 TB" [ref=e310] [cursor=pointer]:
+                        - /url: /entities/c349b201-9eb8-487c-9207-6f2eda77bbd0
+                    - cell "v2 · Current" [ref=e311]:
+                      - generic [ref=e313]: v2 · Current
+                    - cell "Kestrel Microdevices Arc 5276 Power Supply, 4 TB" [ref=e314]:
+                      - paragraph [ref=e315]: Kestrel Microdevices Arc 5276 Power Supply, 4 TB
+                    - cell "BFG-ARC-5276-03-C" [ref=e316]:
+                      - paragraph [ref=e317]: BFG-ARC-5276-03-C
+                    - cell "Power Supply" [ref=e318]:
+                      - paragraph [ref=e319]: Power Supply
+                    - cell "Kestrel Microdevices Arc 5276 Power Supply, 8 GB" [ref=e320]:
+                      - paragraph [ref=e321]: Kestrel Microdevices Arc 5276 Power Supply, 8 GB
+                    - cell "1649.99" [ref=e322]:
+                      - paragraph [ref=e323]: "1649.99"
+                    - cell "39" [ref=e324]:
+                      - paragraph [ref=e325]: "39"
+                    - cell "in_stock" [ref=e326]:
+                      - paragraph [ref=e327]: in_stock
+                    - cell "ATX 3.1" [ref=e328]:
+                      - paragraph [ref=e329]: ATX 3.1
+                    - cell "4 TB" [ref=e330]:
+                      - paragraph [ref=e331]: 4 TB
+                    - cell "ATX" [ref=e332]:
+                      - paragraph [ref=e333]: ATX
+                    - cell "850" [ref=e334]:
+                      - paragraph [ref=e335]: "850"
+                    - cell "Entity actions for c349b201-9eb8-487c-9207-6f2eda77bbd0" [ref=e336]:
+                      - button "Entity actions for c349b201-9eb8-487c-9207-6f2eda77bbd0" [ref=e337] [cursor=pointer]:
+                        - img [ref=e338]
+                  - row "View entity ID dc8db5aa-abb5-4ee6-ae6d-40bc7c471977 Kestrel Microdevices Arc 5276 Power Supply, 8 GB v2 · Current Kestrel Microdevices Arc 5276 Power Supply, 8 GB BFG-ARC-5276-04-D Power Supply Kestrel Microdevices Arc 5276 Power Supply, 1 TB 1720.99 52 in_stock ATX 3.1 8 GB ATX 850 Entity actions for dc8db5aa-abb5-4ee6-ae6d-40bc7c471977" [ref=e340]:
+                    - cell "View entity ID dc8db5aa-abb5-4ee6-ae6d-40bc7c471977" [ref=e341]:
+                      - button "View entity ID dc8db5aa-abb5-4ee6-ae6d-40bc7c471977" [ref=e342] [cursor=pointer]:
+                        - img [ref=e343]
+                    - cell "Kestrel Microdevices Arc 5276 Power Supply, 8 GB" [ref=e345]:
+                      - link "Kestrel Microdevices Arc 5276 Power Supply, 8 GB" [ref=e346] [cursor=pointer]:
+                        - /url: /entities/dc8db5aa-abb5-4ee6-ae6d-40bc7c471977
+                    - cell "v2 · Current" [ref=e347]:
+                      - generic [ref=e349]: v2 · Current
+                    - cell "Kestrel Microdevices Arc 5276 Power Supply, 8 GB" [ref=e350]:
+                      - paragraph [ref=e351]: Kestrel Microdevices Arc 5276 Power Supply, 8 GB
+                    - cell "BFG-ARC-5276-04-D" [ref=e352]:
+                      - paragraph [ref=e353]: BFG-ARC-5276-04-D
+                    - cell "Power Supply" [ref=e354]:
+                      - paragraph [ref=e355]: Power Supply
+                    - cell "Kestrel Microdevices Arc 5276 Power Supply, 1 TB" [ref=e356]:
+                      - paragraph [ref=e357]: Kestrel Microdevices Arc 5276 Power Supply, 1 TB
+                    - cell "1720.99" [ref=e358]:
+                      - paragraph [ref=e359]: "1720.99"
+                    - cell "52" [ref=e360]:
+                      - paragraph [ref=e361]: "52"
+                    - cell "in_stock" [ref=e362]:
+                      - paragraph [ref=e363]: in_stock
+                    - cell "ATX 3.1" [ref=e364]:
+                      - paragraph [ref=e365]: ATX 3.1
+                    - cell "8 GB" [ref=e366]:
+                      - paragraph [ref=e367]: 8 GB
+                    - cell "ATX" [ref=e368]:
+                      - paragraph [ref=e369]: ATX
+                    - cell "850" [ref=e370]:
+                      - paragraph [ref=e371]: "850"
+                    - cell "Entity actions for dc8db5aa-abb5-4ee6-ae6d-40bc7c471977" [ref=e372]:
+                      - button "Entity actions for dc8db5aa-abb5-4ee6-ae6d-40bc7c471977" [ref=e373] [cursor=pointer]:
+                        - img [ref=e374]
+  - button "Open Inspector" [ref=e376] [cursor=pointer]:
+    - img [ref=e377]
+    - status "API ready" [ref=e379]
