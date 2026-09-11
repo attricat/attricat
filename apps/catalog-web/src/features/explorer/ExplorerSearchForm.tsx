@@ -29,6 +29,22 @@ export const ExplorerSearchForm = ({
   lockedBlueprint = false,
 }: Props) => {
   const { t } = useTranslation();
+  const submitValues = (value: {
+    blueprint: string;
+    query: string;
+    versionScope: string;
+  }) => {
+    const historicalVersion = Number(value.versionScope);
+    onSubmit({
+      blueprint: value.blueprint || undefined,
+      ...(value.versionScope === 'all'
+        ? { allVersions: true }
+        : Number.isInteger(historicalVersion)
+          ? { version: historicalVersion }
+          : {}),
+      query: value.query || undefined,
+    });
+  };
   const form = useForm({
     defaultValues: {
       blueprint: search.blueprint ?? '',
@@ -39,18 +55,7 @@ export const ExplorerSearchForm = ({
           ? 'current'
           : String(search.version),
     },
-    onSubmit: ({ value }) => {
-      const historicalVersion = Number(value.versionScope);
-      onSubmit({
-        blueprint: value.blueprint || undefined,
-        ...(value.versionScope === 'all'
-          ? { allVersions: true }
-          : Number.isInteger(historicalVersion)
-            ? { version: historicalVersion }
-            : {}),
-        query: value.query || undefined,
-      });
-    },
+    onSubmit: ({ value }) => submitValues(value),
   });
 
   useEffect(() => {
@@ -115,7 +120,11 @@ export const ExplorerSearchForm = ({
                 error={Boolean(revisionsError)}
                 helperText={revisionsError}
                 label={t('explorer.versionScope')}
-                onChange={(event) => field.handleChange(event.target.value)}
+                onChange={(event) => {
+                  const versionScope = event.target.value;
+                  field.handleChange(versionScope);
+                  submitValues({ ...form.state.values, versionScope });
+                }}
                 select
                 sx={{ minWidth: 190 }}
                 value={field.state.value}

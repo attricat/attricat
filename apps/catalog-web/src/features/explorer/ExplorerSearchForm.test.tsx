@@ -23,7 +23,7 @@ const revisions = [
 ];
 
 describe('ExplorerSearchForm version scope', () => {
-  it('defaults to current and submits a historical version', async () => {
+  it('defaults to current and searches immediately for a historical version', async () => {
     const onSubmit = vi.fn();
     const user = userEvent.setup();
     render(
@@ -42,8 +42,8 @@ describe('ExplorerSearchForm version scope', () => {
     );
     await user.click(screen.getByLabelText('Version scope'));
     await user.click(screen.getByRole('option', { name: 'Version 2' }));
-    await user.click(screen.getByRole('button', { name: 'Search' }));
 
+    expect(onSubmit).toHaveBeenCalledOnce();
     expect(onSubmit).toHaveBeenCalledWith({
       blueprint: 'product',
       version: 2,
