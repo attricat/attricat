@@ -78,6 +78,16 @@ pub(super) fn policy(method: &Method, path: &str) -> Option<Policy> {
             target: TargetKind::None,
         });
     }
+    if path == "/workflows" || path == "/workflows/validate" || path.starts_with("/workflows/") {
+        return Some(Policy {
+            permission: if method == Method::GET {
+                "workflows.read"
+            } else {
+                "workflows.manage"
+            },
+            target: TargetKind::None,
+        });
+    }
     if path.starts_with("/agent/") {
         return Some(Policy {
             permission: "agents.run",
@@ -274,6 +284,32 @@ pub(super) fn target(path: &str, kind: TargetKind) -> (Option<Uuid>, Option<Stri
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn workflow_routes_require_read_or_manage_permissions() {
+        assert_eq!(
+            policy(&Method::GET, "/workflows").unwrap().permission,
+            "workflows.read"
+        );
+        assert_eq!(
+            policy(&Method::GET, "/workflows/{workflow_id}/versions/1")
+                .unwrap()
+                .permission,
+            "workflows.read"
+        );
+        assert_eq!(
+            policy(&Method::POST, "/workflows/validate")
+                .unwrap()
+                .permission,
+            "workflows.manage"
+        );
+        assert_eq!(
+            policy(&Method::POST, "/workflows/{workflow_id}/disable")
+                .unwrap()
+                .permission,
+            "workflows.manage"
+        );
+    }
 
     #[test]
     fn extension_management_routes_require_extension_permissions() {

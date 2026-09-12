@@ -611,3 +611,24 @@ pub struct CompletenessHealth {
     pub outdated_entities: i64,
     pub default_complete_entities: i64,
 }
+
+#[derive(Clone, Debug, Deserialize, FromRow, PartialEq, Serialize)]
+pub struct Workflow {
+    pub id: Uuid,
+    pub code: String,
+    pub name: String,
+    pub version: i64,
+    pub status: String,
+    pub definition: String,
+    pub definition_hash: String,
+    pub compiled_plan: Value,
+    pub published_at: Option<DateTime<Utc>>,
+    pub created_at: DateTime<Utc>,
+    pub enabled_version: Option<i64>,
+}
+
+#[derive(Clone, Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct CreateWorkflow {
+    pub definition: String,
+}

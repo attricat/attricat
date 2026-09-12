@@ -17,6 +17,7 @@ mod members;
 mod roles;
 mod sessions;
 mod tokens;
+mod workflows;
 mod workspace_navigation;
 
 use self::error::ApiError;
@@ -511,6 +512,26 @@ pub fn router(state: AppState) -> Router {
             "/blueprints",
             get(blueprints::list_entity_blueprints).post(blueprints::create_blueprint),
         )
+        .route("/workflows", get(workflows::list).post(workflows::create))
+        .route("/workflows/validate", post(workflows::validate))
+        .route("/workflows/{workflow_id}", get(workflows::get))
+        .route(
+            "/workflows/{workflow_id}/versions",
+            get(workflows::list_versions).post(workflows::create_revision),
+        )
+        .route(
+            "/workflows/{workflow_id}/versions/{version}",
+            get(workflows::get_version),
+        )
+        .route(
+            "/workflows/{workflow_id}/versions/{version}/publish",
+            post(workflows::publish),
+        )
+        .route(
+            "/workflows/{workflow_id}/versions/{version}/enable",
+            post(workflows::enable),
+        )
+        .route("/workflows/{workflow_id}/disable", post(workflows::disable))
         .route("/blueprints/catalogue", get(blueprints::list_blueprints))
         .route(
             "/blueprints/{blueprint_id}/versions",

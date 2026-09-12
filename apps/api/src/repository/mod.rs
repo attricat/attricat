@@ -53,6 +53,7 @@ mod roles;
 mod sessions;
 mod tokens;
 mod values;
+mod workflows;
 mod workspace_navigation;
 
 pub use agents::{
@@ -229,6 +230,12 @@ pub enum RepositoryError {
     InvalidBlueprintDefinition(String),
     #[error("blueprint code is already owned by another blueprint")]
     BlueprintCodeTaken,
+    #[error("workflow code is already in use")]
+    WorkflowCodeTaken,
+    #[error("invalid workflow definition: {0}")]
+    InvalidWorkflowDefinition(String),
+    #[error("workflow revision must be published before it can be enabled")]
+    WorkflowNotPublished,
     #[error("blueprint revision is not published")]
     BlueprintNotPublished,
     #[error("entity is already on the latest blueprint revision")]

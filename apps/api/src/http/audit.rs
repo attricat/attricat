@@ -90,6 +90,8 @@ fn audit_permission(method: &Method, route: &str) -> &'static str {
         "entities.write"
     } else if route.starts_with("/extension-registries") || route.starts_with("/extensions") {
         "extensions.manage"
+    } else if route.starts_with("/workflows") {
+        "workflows.manage"
     } else if route.starts_with("/blueprints") {
         if route.ends_with("/publish") {
             "blueprints.publish"
@@ -127,6 +129,8 @@ fn audit_context(method: &Method, route: &str, path: &str) -> (Value, Value) {
         "extension_registry"
     } else if route.starts_with("/extensions") {
         "extension"
+    } else if route.contains("/workflows") {
+        "workflow"
     } else if route.contains("/blueprints") {
         "blueprint"
     } else if route.contains("/contexts") {
@@ -210,6 +214,20 @@ mod tests {
             ),
             "entities.write"
         );
+    }
+
+    #[test]
+    fn workflow_mutations_audit_workflow_management_permission() {
+        assert_eq!(
+            audit_permission(&Method::POST, "/workflows/{workflow_id}/disable"),
+            "workflows.manage"
+        );
+        let (_, target) = audit_context(
+            &Method::POST,
+            "/workflows/{workflow_id}/disable",
+            "/workflows/00000000-0000-4000-8000-000000000001/disable",
+        );
+        assert_eq!(target["type"], "workflow");
     }
 
     #[test]
