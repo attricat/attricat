@@ -500,7 +500,8 @@ impl CatalogRepository {
     }
 
     /// Selects a page by a configured scalar table column without hydrating projections for
-    /// every candidate. NULL values are always last and entity IDs make the ordering stable.
+    /// every candidate. NULL values sort first ascending and last descending; entity IDs make
+    /// the ordering stable.
     #[allow(clippy::too_many_arguments)]
     pub(crate) async fn search_entity_previews_sorted(
         &self,
@@ -520,7 +521,7 @@ impl CatalogRepository {
             && (cursor.field != sort.field
                 || cursor.descending != sort.descending
                 || cursor.effective_source_version != sort.effective_source_version
-                || cursor.version != 3)
+                || cursor.version != 4)
         {
             return Err(RepositoryError::InvalidBlueprintDefinition(
                 "page.cursor does not match sort".to_owned(),
@@ -554,6 +555,8 @@ impl CatalogRepository {
         let column = native_sort_column(&sort.value_type)?;
         let comparison = if sort.descending { "<" } else { ">" };
         let direction = if sort.descending { "DESC" } else { "ASC" };
+        let null_order = if sort.descending { "LAST" } else { "FIRST" };
+        let nulls_first = !sort.descending;
         let joins = if sort.relationship_path.is_empty() {
             "LEFT JOIN attributes sort_attribute ON sort_attribute.blueprint_id = e.blueprint_id
                     AND sort_attribute.blueprint_version = e.blueprint_version
@@ -619,14 +622,24 @@ impl CatalogRepository {
                   AND ($4::text[] IS NULL OR e.system_tags @> $4)
                   AND (NOT $5 OR e.blueprint_version <> $6)
                   AND ($9::uuid IS NULL
-                    OR (sort_value.{column} IS NULL AND NOT $8)
-                    OR (sort_value.{column} IS NOT NULL AND NOT $8 AND
+                    OR ({nulls_first} AND (
+                      (sort_value.{column} IS NULL AND $8 AND e.id > $9)
+                      OR (sort_value.{column} IS NOT NULL AND ($8 OR
+                        sort_value.{column} {comparison} $7::{column_type}
+                        OR (sort_value.{column} = $7::{column_type} AND e.id > $9)))
+                    ))
+                    OR (NOT {nulls_first} AND (
+                      (sort_value.{column} IS NULL AND NOT $8)
+                      OR (sort_value.{column} IS NOT NULL AND NOT $8 AND
                         (sort_value.{column} {comparison} $7::{column_type} OR (sort_value.{column} = $7::{column_type} AND e.id > $9)))
-                    OR (sort_value.{column} IS NULL AND $8 AND e.id > $9))
-                ORDER BY sort_value.{column} {direction} NULLS LAST, e.id ASC
+                      OR (sort_value.{column} IS NULL AND $8 AND e.id > $9)
+                    )))
+                ORDER BY sort_value.{column} {direction} NULLS {null_order}, e.id ASC
                 LIMIT $13"#,
             column = column,
             column_type = native_sort_cast(&sort.value_type)?,
+            nulls_first = nulls_first,
+            null_order = null_order,
         );
         let rows = sqlx::query_as::<_, SortedEntityPreviewRow>(&sql)
             .bind(blueprint_id)
@@ -2048,7 +2061,7 @@ fn decode_sorted_search_cursor(cursor: &str) -> Result<SortedSearchCursor, Repos
 
 fn encode_sorted_search_cursor(sort: &EntitySearchSort, row: &SortedEntityPreviewRow) -> String {
     let cursor = SortedSearchCursor {
-        version: 3,
+        version: 4,
         field: sort.field.clone(),
         descending: sort.descending,
         effective_source_version: sort.effective_source_version,

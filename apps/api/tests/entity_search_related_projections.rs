@@ -115,7 +115,8 @@ fields = ["title"]
 type = "table"
 columns = [
   { field = "categories.name", label = "Category" },
-  { field = "categories.sku", label = "Category SKU" }
+  { field = "categories.sku", label = "Category SKU" },
+  { field = "rank", label = "Rank" }
 ]
 
 [[attributes]]
@@ -127,6 +128,10 @@ code = "categories"
 value_type = "relationship"
 target_blueprint = "search_projection_category"
 cardinality = "one"
+
+[[attributes]]
+code = "rank"
+value_type = "integer"
 "# }))
         .send()
         .await
@@ -223,6 +228,76 @@ cardinality = "one"
     );
 
     let unlinked_current_source = create_entity(&client, &base_url, &source_v2).await;
+    for (entity, rank) in [
+        (&first_source, 1),
+        (&second_source, 2),
+        (&unlinked_current_source, 3),
+    ] {
+        client
+            .post(format!(
+                "{base_url}/entities/{}/values",
+                entity["id"].as_str().unwrap()
+            ))
+            .json(&json!({
+                "values": [{ "kind": "scalar", "attribute_code": "rank", "value": rank }]
+            }))
+            .send()
+            .await
+            .unwrap()
+            .error_for_status()
+            .unwrap();
+    }
+
+    let ascending_direct: Value = client
+        .post(format!("{base_url}/v1/entities/search"))
+        .json(&json!({
+            "blueprint": { "code": "search_projection_product" },
+            "sort": { "field": "rank", "direction": "asc" },
+            "page": { "size": 1 }
+        }))
+        .send()
+        .await
+        .unwrap()
+        .error_for_status()
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    assert_eq!(ascending_direct["items"][0]["id"], old_source["id"]);
+    let ascending_direct_next: Value = client
+        .post(format!("{base_url}/v1/entities/search"))
+        .json(&json!({
+            "blueprint": { "code": "search_projection_product" },
+            "sort": { "field": "rank", "direction": "asc" },
+            "page": { "size": 1, "cursor": ascending_direct["next_cursor"] }
+        }))
+        .send()
+        .await
+        .unwrap()
+        .error_for_status()
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    assert_eq!(ascending_direct_next["items"][0]["id"], first_source["id"]);
+
+    let descending_direct: Value = client
+        .post(format!("{base_url}/v1/entities/search"))
+        .json(&json!({
+            "blueprint": { "code": "search_projection_product" },
+            "sort": { "field": "rank", "direction": "desc" },
+            "page": { "size": 25 }
+        }))
+        .send()
+        .await
+        .unwrap()
+        .error_for_status()
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    assert_eq!(descending_direct["items"][3]["id"], old_source["id"]);
+
     // Related typed scalar ordering scans indexed leaves first, then reuses page-only hydration.
     // An unlinked entity in the selected revision has an explicit NULL-last position.
     let first_page: Value = client
@@ -277,6 +352,25 @@ cardinality = "one"
         .unwrap();
     assert_eq!(third_page["items"][0]["id"], unlinked_current_source["id"]);
     assert!(third_page["next_cursor"].is_null());
+
+    let descending: Value = client
+        .post(format!("{base_url}/v1/entities/search"))
+        .json(&json!({
+            "blueprint": { "code": "search_projection_product", "version": 2 },
+            "sort": { "field": "categories.name", "direction": "desc" },
+            "page": { "size": 25 }
+        }))
+        .send()
+        .await
+        .unwrap()
+        .error_for_status()
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    assert_eq!(descending["items"][0]["id"], second_source["id"]);
+    assert_eq!(descending["items"][1]["id"], first_source["id"]);
+    assert_eq!(descending["items"][2]["id"], unlinked_current_source["id"]);
 
     let invalid = client
         .post(format!("{base_url}/v1/entities/search"))
