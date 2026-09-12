@@ -67,6 +67,23 @@ describe('ExplorerSearchForm version scope', () => {
     });
   });
 
+  it('opens search syntax from the query field help button', async () => {
+    const user = userEvent.setup();
+    render(
+      <ExplorerSearchForm
+        blueprints={revisions}
+        currentVersion={3}
+        onSubmit={vi.fn()}
+        revisions={revisions}
+        search={{}}
+      />,
+    );
+
+    await user.click(screen.getByRole('button', { name: 'Search syntax' }));
+
+    expect(screen.getByText(/This blueprint: term/)).toBeTruthy();
+  });
+
   it('submits all versions as the explicit all-version scope', async () => {
     const onSubmit = vi.fn();
     const user = userEvent.setup();

@@ -1,6 +1,18 @@
+import HelpOutlinedIcon from '@mui/icons-material/HelpOutlined';
 import { useForm } from '@tanstack/react-form';
-import { Button, MenuItem, Paper, Stack, TextField } from '@mui/material';
-import { useEffect } from 'react';
+import {
+  Button,
+  IconButton,
+  InputAdornment,
+  MenuItem,
+  Paper,
+  Popover,
+  Stack,
+  TextField,
+  Tooltip,
+  Typography,
+} from '@mui/material';
+import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { Blueprint } from '../entities/api';
 import type { ExplorerSearch } from './search';
@@ -29,6 +41,7 @@ export const ExplorerSearchForm = ({
   lockedBlueprint = false,
 }: Props) => {
   const { t } = useTranslation();
+  const [syntaxAnchor, setSyntaxAnchor] = useState<HTMLElement | null>(null);
   const submitValues = (value: {
     blueprint: string;
     query: string;
@@ -158,8 +171,27 @@ export const ExplorerSearchForm = ({
               fullWidth
               label={t('explorer.query')}
               onChange={(event) => field.handleChange(event.target.value)}
-              helperText={t('explorer.queryExamples')}
               placeholder={t('explorer.searchTerms')}
+              slotProps={{
+                input: {
+                  endAdornment: (
+                    <InputAdornment position="end">
+                      <Tooltip title={t('explorer.searchSyntax')}>
+                        <IconButton
+                          aria-label={t('explorer.searchSyntax')}
+                          onClick={(event) =>
+                            setSyntaxAnchor(event.currentTarget)
+                          }
+                          size="small"
+                          type="button"
+                        >
+                          <HelpOutlinedIcon fontSize="small" />
+                        </IconButton>
+                      </Tooltip>
+                    </InputAdornment>
+                  ),
+                },
+              }}
               value={field.state.value}
             />
           )}
@@ -168,6 +200,16 @@ export const ExplorerSearchForm = ({
           {t('explorer.search')}
         </Button>
       </Stack>
+      <Popover
+        anchorEl={syntaxAnchor}
+        anchorOrigin={{ horizontal: 'right', vertical: 'bottom' }}
+        onClose={() => setSyntaxAnchor(null)}
+        open={Boolean(syntaxAnchor)}
+        slotProps={{ paper: { sx: { maxWidth: 440, p: 2 } } }}
+        transformOrigin={{ horizontal: 'right', vertical: 'top' }}
+      >
+        <Typography variant="body2">{t('explorer.queryExamples')}</Typography>
+      </Popover>
     </Paper>
   );
 };

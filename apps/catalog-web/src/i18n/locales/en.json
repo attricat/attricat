@@ -372,6 +372,7 @@
     "hiddenOutdatedCapped": "Showing current-version entities. {{count}}+ older-version entities are hidden.",
     "relationshipSortNeedsSingleVersion": "Related-value sorting requires results from one blueprint version.",
     "query": "Query",
+    "searchSyntax": "Search syntax",
     "queryExamples": "This blueprint: term · One field: sku:term* · All fields on a related record: relationship:term · A related field: relationship.field:term · Global connected search (up to 3 hops): *:term",
     "searchTerms": "Search this blueprint, e.g. term",
     "search": "Search",
