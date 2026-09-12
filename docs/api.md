@@ -330,3 +330,7 @@ accepted). A schedule request contains `conversation_id` and a six-field UTC
 principal; scheduled mutations are re-authorized as that user, while a manual
 run uses the user who requested it. Overlapping scheduled occurrences become durable
 skipped runs with a `schedule_skipped` event instead of executing concurrently.
+
+## Workflow run operations
+
+`GET /workflow-runs` lists workspace-scoped run diagnostics and requires `workflows.read`. `POST /workflow-runs/{run_id}/replay` requeues only a terminal dead-letter run and requires `workflows.manage`. Neither endpoint exposes internal domain-event payloads.

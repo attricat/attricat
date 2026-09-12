@@ -20,3 +20,11 @@ tags = ["new"]
 ```
 
 The lifecycle records the current domain-event sequence as an internal activation high-water boundary when enabled. The capture is serialized with application outbox appends so it cannot skip an in-flight committed event. It is intentionally not exposed through the management API. **Event dispatch, action execution/workers, and UI are later slices; this foundation never executes a workflow.**
+
+## Durable execution (slice 2)
+
+`catalog.workflows` is a stable internal outbox consumer subscribed only to the listed exact v1 core events. It only fans matching enabled revisions into immutable `workflow_runs`; it never runs actions while holding a shared event-delivery lease. A run is unique for `(workspace, workflow revision, trigger event)`, stores the compiled revision and event reference/snapshot, and is eligible only when the event sequence is **strictly greater** than the enable activation boundary. Thus an event committed before enablement cannot run if delivered later.
+
+Workflow runs use an independent PostgreSQL leased queue. They are at-least-once and unordered, retry with bounded exponential delay, and become `dead_letter` after five attempts. A failing run cannot block other matching workflows. Operators inspect tenant-scoped diagnostics with `GET /workflow-runs` (`workflows.read`) and replay only terminal runs using `POST /workflow-runs/{run_id}/replay` (`workflows.manage`). Internal event payloads are never returned.
+
+Actions execute in definition order against current locked entity state through the normal entity mutation service; event facts are only used for immutable trigger/filter and declared event-field input. Actions are recorded durably by run/action index so completed actions are skipped on a retry. Workflow-originated events use `workflow:<workflow-id>`, retain trigger correlation/causation, and are excluded from default workflow intake to prevent feedback. Operators should investigate dead letters, repair the underlying catalog/schema condition, then replay; do not assume chronological arrival or exactly-once execution.

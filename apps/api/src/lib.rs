@@ -24,6 +24,7 @@ pub mod model;
 pub mod repository;
 pub mod storage;
 pub mod telemetry;
+pub mod workflow_runtime;
 
 use sqlx::migrate::Migrator;
 

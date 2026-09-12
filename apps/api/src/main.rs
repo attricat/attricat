@@ -22,6 +22,7 @@ use api::{
     repository::CatalogRepository,
     storage::{ObjectStore, S3ObjectStore, StorageConfig},
     telemetry::{init_metrics, init_tracing},
+    workflow_runtime,
 };
 use sqlx::postgres::{PgConnectOptions, PgPoolOptions};
 use tokio::sync::Semaphore;
@@ -220,12 +221,17 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     let extension_runtime =
         ExtensionRuntime::new(object_store.clone(), ExtensionRuntimeConfig::default())
             .map_err(|error| format!("invalid extension runtime configuration: {error}"))?;
+    let workflow_repository =
+        CatalogRepository::with_workspace_pool_factory(pool.clone(), connect_options.clone());
     let dispatcher_handles = event_dispatcher::start(
-        CatalogRepository::with_workspace_pool_factory(pool.clone(), connect_options.clone()),
-        extension_runtime::registry_with_wasm(extension_runtime.clone()),
+        workflow_repository.clone(),
+        workflow_runtime::add_to_registry(extension_runtime::registry_with_wasm(
+            extension_runtime.clone(),
+        )),
         dispatcher_config,
-        shutdown_receiver,
+        shutdown_receiver.clone(),
     );
+    let workflow_worker = workflow_runtime::start(workflow_repository, shutdown_receiver);
 
     let listener = tokio::net::TcpListener::bind(bind_addr).await?;
     tracing::info!(address = %listener.local_addr()?, "API listening");
@@ -290,6 +296,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     for handle in dispatcher_handles {
         handle.await?;
     }
+    workflow_worker.await?;
 
     Ok(())
 }

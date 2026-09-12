@@ -2,7 +2,10 @@ use super::{
     error::ApiError,
     extractors::{ApiJson, ApiPath},
 };
-use crate::model::{CreateWorkflow, Workflow};
+use crate::{
+    model::{CreateWorkflow, Workflow},
+    repository::WorkflowRun,
+};
 use axum::{Json, http::StatusCode};
 use uuid::Uuid;
 
@@ -81,4 +84,22 @@ pub(super) async fn disable(
     ApiPath(id): ApiPath<Uuid>,
 ) -> Result<Json<Workflow>, ApiError> {
     Ok(Json(repo.disable_workflow(id).await?))
+}
+
+/// Diagnostics intentionally expose run state and trigger references, never the
+/// internal domain-event payload snapshot.
+pub(super) async fn list_runs(
+    super::auth::ScopedRepository(repo): super::auth::ScopedRepository,
+) -> Result<Json<Vec<WorkflowRun>>, ApiError> {
+    Ok(Json(repo.list_workflow_runs().await?))
+}
+pub(super) async fn replay_run(
+    super::auth::ScopedRepository(repo): super::auth::ScopedRepository,
+    ApiPath(id): ApiPath<Uuid>,
+) -> Result<StatusCode, ApiError> {
+    if repo.replay_workflow_run(id).await? {
+        Ok(StatusCode::NO_CONTENT)
+    } else {
+        Err(ApiError::not_found("terminal workflow run"))
+    }
 }

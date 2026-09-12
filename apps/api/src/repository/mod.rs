@@ -53,6 +53,7 @@ mod roles;
 mod sessions;
 mod tokens;
 mod values;
+mod workflow_runs;
 mod workflows;
 mod workspace_navigation;
 
@@ -77,6 +78,8 @@ pub(crate) use files::{FileMetadata, FileObject, FilePolicy, FileUploadResult, N
 pub(crate) use members::{WorkspaceInvitation, WorkspaceMember};
 pub(crate) use roles::{Permission, WorkspaceGrantTarget, WorkspaceRole};
 pub(crate) use tokens::PersonalApiToken;
+pub(crate) use workflow_runs::ClaimedWorkflowRun;
+pub use workflow_runs::WorkflowRun;
 pub(crate) use workspace_navigation::{ExploreNavigationEntry, ExploreNavigationItem};
 
 #[derive(Debug, sqlx::FromRow)]
@@ -104,6 +107,7 @@ pub(crate) struct EventCommandContext {
     pub handler_name: String,
     pub initiating_actor_user_id: Option<Uuid>,
     pub initiating_actor_token_id: Option<Uuid>,
+    pub workflow_causal_depth: usize,
 }
 
 /// Server-derived request metadata written with the same transaction as a
@@ -358,7 +362,51 @@ impl CatalogRepository {
             handler_name: handler_name.to_owned(),
             initiating_actor_user_id: event_metadata_uuid(event, "initiating_actor_user_id"),
             initiating_actor_token_id: event_metadata_uuid(event, "initiating_actor_token_id"),
+            workflow_causal_depth: event
+                .metadata
+                .get("workflow_causal_depth")
+                .and_then(Value::as_u64)
+                .unwrap_or(0) as usize,
         });
+        // Background mutations must retain audit evidence even though there is
+        // no HTTP request audit middleware. The original initiating actor is
+        // recovered from the durable event envelope, never supplied by a worker.
+        if repository.audit_context.is_none() {
+            repository.audit_context = Some(AuditContext {
+                actor_user_id: event_metadata_uuid(event, "initiating_actor_user_id"),
+                actor_token_id: event_metadata_uuid(event, "initiating_actor_token_id"),
+                request_id: Uuid::new_v4(),
+                correlation_id: event.correlation_id,
+                action: format!("{}.execute", handler_name),
+                authorization_scope: serde_json::json!({"worker": handler_name}),
+                target: serde_json::json!({"trigger_event_id": event.id}),
+                metadata: serde_json::json!({"trigger_event_id": event.id, "causation_id": event.id, "worker_source": handler_name}),
+                agent: None,
+            });
+        }
+        repository
+    }
+
+    /// Adds immutable workflow run provenance to the worker audit/event context.
+    pub(crate) fn for_workflow_run(
+        &self,
+        workflow_id: Uuid,
+        revision: i64,
+        run_id: Uuid,
+        action_index: usize,
+    ) -> Self {
+        let mut repository = self.clone();
+        if let Some(audit) = repository.audit_context.as_mut() {
+            audit.metadata = serde_json::json!({
+                "workflow_id": workflow_id,
+                "workflow_revision": revision,
+                "workflow_run_id": run_id,
+                "trigger_event_id": repository.event_context.as_ref().map(|context| context.causation_id),
+                "action_index": action_index,
+                "workflow_causal_depth": repository.event_context.as_ref().map(|context| context.workflow_causal_depth + 1).unwrap_or(1),
+            });
+            audit.target = serde_json::json!({"workflow_id": workflow_id, "workflow_revision": revision, "run_id": run_id, "trigger_event_id": repository.event_context.as_ref().map(|context| context.causation_id), "action_index": action_index});
+        }
         repository
     }
 
@@ -408,6 +456,20 @@ fn event_metadata_uuid(event: &crate::domain_events::DomainEvent, key: &str) -> 
 fn initiating_actor_metadata(audit: Option<&AuditContext>) -> Value {
     let mut metadata = Value::Object(serde_json::Map::new());
     add_initiating_actor_metadata(&mut metadata, audit);
+    metadata
+}
+
+fn event_metadata(audit: Option<&AuditContext>, is_worker: bool) -> Value {
+    let mut metadata = initiating_actor_metadata(audit);
+    if is_worker
+        && let (Some(target), Some(source)) = (
+            metadata.as_object_mut(),
+            audit.map(|context| &context.metadata),
+        )
+        && let Some(source) = source.as_object()
+    {
+        target.extend(source.clone());
+    }
     metadata
 }
 
@@ -614,7 +676,7 @@ impl CatalogRepository {
                     })
                     .unwrap_or_else(|| "catalog_api".to_owned()),
             },
-            metadata: initiating_actor_metadata(self.audit_context.as_ref()),
+            metadata: event_metadata(self.audit_context.as_ref(), self.event_context.is_some()),
             payload,
         }
     }

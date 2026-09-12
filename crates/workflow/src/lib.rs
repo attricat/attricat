@@ -16,7 +16,7 @@ pub enum WorkflowError {
     Invalid(String),
 }
 
-#[derive(Clone, Debug, Serialize, PartialEq)]
+#[derive(Clone, Debug, Deserialize, Serialize, PartialEq)]
 pub struct WorkflowDefinition {
     pub format_version: u32,
     pub code: String,
@@ -24,13 +24,13 @@ pub struct WorkflowDefinition {
     pub triggers: Vec<Trigger>,
     pub actions: Vec<Action>,
 }
-#[derive(Clone, Debug, Serialize, PartialEq)]
+#[derive(Clone, Debug, Deserialize, Serialize, PartialEq)]
 pub struct Trigger {
     pub event_type: String,
     pub envelope: BTreeMap<String, Value>,
     pub facts: BTreeMap<String, Value>,
 }
-#[derive(Clone, Debug, Serialize, PartialEq)]
+#[derive(Clone, Debug, Deserialize, Serialize, PartialEq)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum Action {
     SystemTagsAdd {
@@ -50,13 +50,13 @@ pub enum Action {
         value: ScalarSource,
     },
 }
-#[derive(Clone, Debug, Serialize, PartialEq)]
+#[derive(Clone, Debug, Deserialize, Serialize, PartialEq)]
 #[serde(untagged)]
 pub enum ScalarSource {
     Fixed { fixed: Value },
     Event { event_field: String },
 }
-#[derive(Clone, Debug, Serialize, PartialEq)]
+#[derive(Clone, Debug, Deserialize, Serialize, PartialEq)]
 pub struct CompiledWorkflow {
     pub code: String,
     pub name: String,

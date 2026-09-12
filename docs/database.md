@@ -430,3 +430,7 @@ Authoring](blueprints.md) for the definition grammar and attribute policies.
   typed scalar/path filters, and configured scalar-column sorting. Relationship
   sorts scan indexed non-null leaves and traverse up to three incoming edges;
   missing paths are paged separately as null values.
+
+## Workflow run persistence
+
+`workflow_runs` is the tenant-scoped durable execution queue. It retains an immutable compiled revision and triggering event snapshot/reference, a lease/retry/dead-letter state, and a uniqueness constraint on workflow revision/event. `workflow_run_actions` records completed ordered action indexes for retry recovery. These tables contain no database business logic; workers own state transitions.

@@ -78,7 +78,12 @@ pub(super) fn policy(method: &Method, path: &str) -> Option<Policy> {
             target: TargetKind::None,
         });
     }
-    if path == "/workflows" || path == "/workflows/validate" || path.starts_with("/workflows/") {
+    if path == "/workflows"
+        || path == "/workflows/validate"
+        || path.starts_with("/workflows/")
+        || path == "/workflow-runs"
+        || path.starts_with("/workflow-runs/")
+    {
         return Some(Policy {
             permission: if method == Method::GET {
                 "workflows.read"

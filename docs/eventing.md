@@ -215,3 +215,7 @@ separate, client-safe DOM protocol. It contains coarse IDs and change hints
 only, validates strict detail schemas at the host boundary, and is not derived
 from or connected to the outbox. It conveys neither authorization nor internal
 event facts.
+
+## Workflow consumer
+
+`catalog.workflows` is an internal consumer of the exact supported core v1 event list. Its delivery handler is intentionally limited to durable workflow-run fan-out; independent workflow-run leases perform mutations. Runs and actions are at-least-once, delivery order is not guaranteed, and the run-action key is the durable deduplication boundary. Workflow emitted events retain correlation and direct causation, use `workflow:<id>` as source, and are not fed back into workflows by default. Workflow diagnostics expose no domain-event payloads.

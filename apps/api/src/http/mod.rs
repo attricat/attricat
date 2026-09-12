@@ -532,6 +532,11 @@ pub fn router(state: AppState) -> Router {
             post(workflows::enable),
         )
         .route("/workflows/{workflow_id}/disable", post(workflows::disable))
+        .route("/workflow-runs", get(workflows::list_runs))
+        .route(
+            "/workflow-runs/{run_id}/replay",
+            post(workflows::replay_run),
+        )
         .route("/blueprints/catalogue", get(blueprints::list_blueprints))
         .route(
             "/blueprints/{blueprint_id}/versions",
