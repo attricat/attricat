@@ -170,12 +170,22 @@ pub fn compile(source: &str) -> Result<CompiledWorkflow, WorkflowError> {
 pub fn raw_hash(source: &str) -> String {
     format!("{:x}", Sha256::digest(source.as_bytes()))
 }
+// Keep this explicit allowlist aligned with the v1 core event contract. Workflows
+// deliberately do not accept plugin or merely syntactically versioned event types.
 const CORE_EVENTS: &[&str] = &[
     "entity.created.v1",
     "entity.updated.v1",
     "entity.deleted.v1",
-    "attribute_value.appended.v1",
+    "entity.migrated.v1",
+    "attribute_value.changed.v1",
+    "attribute_value.restored.v1",
+    "relationship.changed.v1",
+    "blueprint.created.v1",
+    "blueprint.revision_created.v1",
     "blueprint.published.v1",
+    "context.created.v1",
+    "context.updated.v1",
+    "context.deleted.v1",
 ];
 fn action(a: RawAction) -> Result<Action, WorkflowError> {
     match a {
@@ -288,6 +298,13 @@ mod tests {
             parse("format_version=1\ncode='x'\nname='x'\nscript='evil'\ntriggers=[]\nactions=[]")
                 .is_err()
         );
-        assert!(parse("format_version=1\ncode='x'\nname='x'\n[[triggers]]\nevent_type='entity.created.v1'\n[[actions]]\ntype='http'\nurl='x'").is_err())
+        assert!(parse("format_version=1\ncode='x'\nname='x'\n[[triggers]]\nevent_type='entity.created.v1'\n[[actions]]\ntype='http'\nurl='x'").is_err());
+        assert!(parse("format_version=1\ncode='x'\nname='x'\n[[triggers]]\nevent_type='attribute_value.appended.v1'\n[[actions]]\ntype='system_tags_add'\ntags=['x']").is_err());
+    }
+
+    #[test]
+    fn accepts_registered_core_event_types() {
+        let source = "format_version=1\ncode='x'\nname='x'\n[[triggers]]\nevent_type='attribute_value.changed.v1'\n[[actions]]\ntype='system_tags_add'\ntags=['x']";
+        assert!(parse(source).is_ok());
     }
 }

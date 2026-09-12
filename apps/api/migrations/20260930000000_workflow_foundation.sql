@@ -12,7 +12,8 @@ CREATE TABLE workflows (
     published_at TIMESTAMPTZ,
     created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     PRIMARY KEY (id, version),
-    UNIQUE (id, definition_hash)
+    UNIQUE (id, definition_hash),
+    UNIQUE (workspace_id, id, version)
 );
 CREATE INDEX workflows_workspace_code_idx ON workflows (workspace_id, code);
 CREATE INDEX workflows_workspace_current_idx ON workflows (workspace_id, id, version DESC);
@@ -27,6 +28,7 @@ CREATE TABLE workflow_lifecycles (
     enabled_at TIMESTAMPTZ,
     disabled_at TIMESTAMPTZ,
     updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-    FOREIGN KEY (workflow_id, enabled_version) REFERENCES workflows(id, version)
+    FOREIGN KEY (workspace_id, workflow_id, enabled_version)
+        REFERENCES workflows(workspace_id, id, version)
 );
 CREATE INDEX workflow_lifecycles_workspace_enabled_idx ON workflow_lifecycles (workspace_id, enabled_version) WHERE enabled_version IS NOT NULL;

@@ -73,6 +73,12 @@ impl CatalogRepository {
             .map_err(|e| RepositoryError::InvalidWorkflowDefinition(e.to_string()))?;
         let ws = self.workspace_id.unwrap_or(Self::DEFAULT_WORKSPACE_ID);
         let mut tx = self.pool.begin().await?;
+        // A versioned primary key cannot express a unique workflow family code.
+        // Serialize first revisions by workspace and code, as blueprint creation does.
+        sqlx::query("SELECT pg_advisory_xact_lock(hashtextextended($1, 0))")
+            .bind(format!("workflow-code:{ws}:{}", compiled.code))
+            .execute(&mut *tx)
+            .await?;
         let exists: bool = sqlx::query_scalar(
             "SELECT EXISTS(SELECT 1 FROM workflows WHERE workspace_id=$1 AND code=$2)",
         )
@@ -150,6 +156,14 @@ impl CatalogRepository {
         if !published {
             return Err(RepositoryError::WorkflowNotPublished);
         };
+        // Event enqueue acquires this same transaction-scoped workspace lock before
+        // allocating an outbox sequence. Holding it through the high-water read and
+        // lifecycle update prevents a later-committing event from falling below the
+        // activation boundary.
+        sqlx::query("SELECT pg_advisory_xact_lock(hashtextextended($1, 0))")
+            .bind(format!("workflow-activation-boundary:{ws}"))
+            .execute(&mut *tx)
+            .await?;
         sqlx::query("UPDATE workflow_lifecycles SET enabled_version=$2, activation_sequence=(SELECT COALESCE(max(sequence), 0) FROM domain_events WHERE workspace_id=$3), enabled_at=now(), disabled_at=NULL, updated_at=now() WHERE workflow_id=$1 AND workspace_id=$3").bind(id).bind(version).bind(ws).execute(&mut *tx).await?;
         self.commit_mutation(tx).await?;
         self.get_workflow_revision(id, version)
