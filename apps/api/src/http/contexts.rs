@@ -7,7 +7,10 @@ use super::{
 };
 use crate::{
     catalog_service::CatalogMutationService,
-    model::{AttributeContext, CreateAttributeContext, UpdateAttributeContext},
+    model::{
+        AttributeContext, CreateAttributeContext, PublicationChannel, UpdateAttributeContext,
+        UpdatePublicationChannel,
+    },
 };
 use axum::{Json, extract::State, http::StatusCode};
 use uuid::Uuid;
@@ -31,6 +34,24 @@ pub(super) async fn list_contexts(
     Ok(Json(
         repository
             .list_authorized_contexts(user_id, workspace_id)
+            .await?,
+    ))
+}
+pub(super) async fn list_publication_channels(
+    State(_state): State<AppState>,
+    super::auth::ScopedRepository(repository): super::auth::ScopedRepository,
+) -> Result<Json<Vec<PublicationChannel>>, ApiError> {
+    Ok(Json(repository.list_publication_channels().await?))
+}
+pub(super) async fn set_publication_channel(
+    State(_state): State<AppState>,
+    super::auth::ScopedRepository(repository): super::auth::ScopedRepository,
+    ApiPath(context_id): ApiPath<Uuid>,
+    ApiJson(input): ApiJson<UpdatePublicationChannel>,
+) -> Result<Json<PublicationChannel>, ApiError> {
+    Ok(Json(
+        repository
+            .set_publication_channel(context_id, input.enabled)
             .await?,
     ))
 }

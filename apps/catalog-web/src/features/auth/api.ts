@@ -17,6 +17,7 @@ const sessionSchema = z.object({
       workspace_navigation_manage: z.boolean(),
       extensions_read: z.boolean(),
       extensions_manage: z.boolean(),
+      entities_publish: z.boolean().default(false),
     })
     .optional(),
 });

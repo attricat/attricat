@@ -273,6 +273,26 @@ impl From<RepositoryError> for ApiError {
                 code: "relationship_cardinality_conflict",
                 message: error.to_string(),
             },
+            RepositoryError::PublicationChannelDisabled => Self {
+                status: StatusCode::UNPROCESSABLE_ENTITY,
+                code: "publication_channel_disabled",
+                message: error.to_string(),
+            },
+            RepositoryError::PublicationDependenciesMissing(_) => Self {
+                status: StatusCode::UNPROCESSABLE_ENTITY,
+                code: "publication_dependencies_missing",
+                message: error.to_string(),
+            },
+            RepositoryError::PublicationHasDependents(_) => Self {
+                status: StatusCode::CONFLICT,
+                code: "publication_has_dependents",
+                message: error.to_string(),
+            },
+            RepositoryError::EntityPublicationProtected => Self {
+                status: StatusCode::CONFLICT,
+                code: "entity_publication_protected",
+                message: error.to_string(),
+            },
             RepositoryError::InvalidPreview
             | RepositoryError::InvalidHierarchyRelationship
             | RepositoryError::InvalidAgentState(_)

@@ -38,6 +38,7 @@ pub(super) struct SessionCapabilities {
     workspace_navigation_manage: bool,
     extensions_read: bool,
     extensions_manage: bool,
+    entities_publish: bool,
 }
 
 // Cookie issuance intentionally keeps the response inputs explicit at this boundary.
@@ -154,6 +155,10 @@ async fn session_capabilities(
         extensions_manage: state
             .repository
             .is_authorized(user_id, workspace_id, "extensions.manage", None, None)
+            .await?,
+        entities_publish: state
+            .repository
+            .is_authorized(user_id, workspace_id, "entities.publish", None, None)
             .await?,
     })
 }

@@ -128,6 +128,26 @@ pub fn definitions() -> Vec<ToolDefinition> {
             json!({"type":"object","required":["entity_id"],"properties":{"entity_id":{"type":"string","format":"uuid"},"values":{"type":"array"},"relationships":{"type":"array"},"discard_attributes":{"type":"array","items":{"type":"string"}}},"additionalProperties":false}),
         ),
         definition(
+            "get_entity_publications",
+            "List this entity's enabled channel publication status. Use this before proposing channel publication.",
+            json!({"type":"object","required":["entity_id"],"properties":{"entity_id":{"type":"string","format":"uuid"}},"additionalProperties":false}),
+        ),
+        definition(
+            "publish_entity",
+            "Publish or republish an entity's resolved snapshot to one enabled channel context. This change requires approval.",
+            json!({"type":"object","required":["entity_id","context_id"],"properties":{"entity_id":{"type":"string","format":"uuid"},"context_id":{"type":"string","format":"uuid"}},"additionalProperties":false}),
+        ),
+        definition(
+            "unpublish_entity",
+            "Unpublish an entity from one channel context. This change requires approval.",
+            json!({"type":"object","required":["entity_id","context_id"],"properties":{"entity_id":{"type":"string","format":"uuid"},"context_id":{"type":"string","format":"uuid"}},"additionalProperties":false}),
+        ),
+        definition(
+            "publish_entity_to_all_channels",
+            "Publish or republish an entity in every enabled channel. This change requires approval.",
+            json!({"type":"object","required":["entity_id"],"properties":{"entity_id":{"type":"string","format":"uuid"}},"additionalProperties":false}),
+        ),
+        definition(
             "link_file",
             "Attach an existing workspace file to an entity file attribute. Conversation attachments include their file IDs. This change requires approval.",
             json!({"type":"object","required":["entity_id","attribute_code","file_id"],"properties":{"entity_id":{"type":"string","format":"uuid"},"attribute_code":{"type":"string"},"file_id":{"type":"string","format":"uuid"},"context_id":{"type":["string","null"],"format":"uuid"}},"additionalProperties":false}),
@@ -159,7 +179,8 @@ pub fn kind(name: &str) -> Result<ToolKind, ToolError> {
         | "get_entity"
         | "view_image"
         | "read_file"
-        | "search_entities" => Ok(ToolKind::Read),
+        | "search_entities"
+        | "get_entity_publications" => Ok(ToolKind::Read),
         "create_blueprint"
         | "create_blueprint_revision"
         | "publish_blueprint"
@@ -168,7 +189,10 @@ pub fn kind(name: &str) -> Result<ToolKind, ToolError> {
         | "set_entity_values"
         | "migrate_entity"
         | "link_file"
-        | "create_context" => Ok(ToolKind::Mutation),
+        | "create_context"
+        | "publish_entity"
+        | "unpublish_entity"
+        | "publish_entity_to_all_channels" => Ok(ToolKind::Mutation),
         _ => Err(ToolError::UnknownTool(name.to_owned())),
     }
 }
@@ -210,6 +234,20 @@ pub fn change_summary(name: &str, arguments: &Value) -> Result<String, ToolError
             "Upgrade entity {} to its latest published blueprint revision.",
             required_string(arguments, "entity_id")?
         )),
+        "publish_entity" => Ok(format!(
+            "Publish entity {} to channel {}.",
+            required_string(arguments, "entity_id")?,
+            required_string(arguments, "context_id")?,
+        )),
+        "unpublish_entity" => Ok(format!(
+            "Unpublish entity {} from channel {}.",
+            required_string(arguments, "entity_id")?,
+            required_string(arguments, "context_id")?,
+        )),
+        "publish_entity_to_all_channels" => Ok(format!(
+            "Publish entity {} to all enabled channels.",
+            required_string(arguments, "entity_id")?,
+        )),
         "link_file" => Ok(format!(
             "Attach file {} to attribute '{}' on entity {}.",
             required_string(arguments, "file_id")?,
@@ -249,6 +287,12 @@ pub async fn execute_read(
                 .await?,
         )
         .expect("models serialize"),
+        "get_entity_publications" => serde_json::to_value(
+            repository
+                .publication_statuses(parse_uuid(&arguments, "entity_id")?)
+                .await?,
+        )
+        .expect("publication status serializes"),
         "get_entity" => {
             let id = parse_uuid(&arguments, "entity_id")?;
             let (entity, values) = CatalogReadService::new(repository)
@@ -659,6 +703,43 @@ pub async fn execute_mutation(
                 json!({"migrated": true, "entity": entity})
             }
         }
+        "publish_entity" => {
+            #[derive(Deserialize)]
+            #[serde(deny_unknown_fields)]
+            struct Input {
+                entity_id: Uuid,
+                context_id: Uuid,
+            }
+            let input: Input = decode(arguments)?;
+            serde_json::to_value(
+                CatalogMutationService::new(repository)
+                    .publish_entity(input.entity_id, input.context_id)
+                    .await?,
+            )
+            .expect("publication status serializes")
+        }
+        "unpublish_entity" => {
+            #[derive(Deserialize)]
+            #[serde(deny_unknown_fields)]
+            struct Input {
+                entity_id: Uuid,
+                context_id: Uuid,
+            }
+            let input: Input = decode(arguments)?;
+            CatalogMutationService::new(repository)
+                .unpublish_entity(input.entity_id, input.context_id)
+                .await?;
+            json!({"unpublished": true})
+        }
+        "publish_entity_to_all_channels" => {
+            let entity_id = parse_uuid(&arguments, "entity_id")?;
+            serde_json::to_value(
+                CatalogMutationService::new(repository)
+                    .publish_entity_all_channels(entity_id)
+                    .await?,
+            )
+            .expect("publication statuses serialize")
+        }
         "link_file" => {
             #[derive(Deserialize)]
             #[serde(deny_unknown_fields)]
@@ -859,7 +940,7 @@ async fn read_authorized(
         "blueprint_authoring_guide" => return Ok(true),
         "list_blueprints" => ("blueprints.read", None, None),
         "list_contexts" => ("contexts.read", None, Some("__context_list__")),
-        "get_entity" => (
+        "get_entity" | "get_entity_publications" => (
             "entities.read",
             Some(parse_uuid(arguments, "entity_id")?),
             None,

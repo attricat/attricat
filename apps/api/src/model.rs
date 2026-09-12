@@ -104,7 +104,45 @@ pub struct AttributeValueHistory {
     pub archived_at: DateTime<Utc>,
 }
 
+#[derive(Clone, Debug, Deserialize, FromRow, Serialize)]
+pub struct PublicationChannel {
+    pub context_id: Uuid,
+    pub context_code: String,
+    pub enabled: bool,
+}
+
+#[derive(Clone, Debug, Deserialize, FromRow, Serialize)]
+pub struct EntityPublicationStatus {
+    pub context_id: Uuid,
+    pub context_code: String,
+    pub status: String,
+    pub revision: Option<i64>,
+    pub published_at: Option<DateTime<Utc>>,
+}
+
+#[derive(Clone, Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct PublicationContextRequest {
+    pub context_id: Uuid,
+}
+
 #[derive(Clone, Debug, FromRow, Serialize)]
+pub struct EntityPublicationSnapshot {
+    pub id: Uuid,
+    pub context_id: Uuid,
+    pub revision: i64,
+    pub payload: Value,
+    pub payload_hash: String,
+    pub published_at: DateTime<Utc>,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct UpdatePublicationChannel {
+    pub enabled: bool,
+}
+
+#[derive(Clone, Debug, Deserialize, FromRow, PartialEq, Serialize)]
 pub struct EntityAuditChange {
     pub audit_event_id: Uuid,
     pub occurred_at: DateTime<Utc>,

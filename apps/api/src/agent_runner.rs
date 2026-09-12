@@ -17,7 +17,7 @@ use uuid::Uuid;
 const MAX_INLINE_TOOL_IMAGE_BYTES: i64 = 1024 * 1024;
 const MAX_INLINE_TOOL_TEXT_BYTES: i64 = 64 * 1024;
 
-const SYSTEM_PROMPT: &str = "You are a catalogue assistant. Use tools for catalogue facts. Before drafting a blueprint, call blueprint_authoring_guide and use create_blueprint with complete TOML; every entity blueprint must include a views.dropdown_option definition. To modify a blueprint, use create_blueprint_revision with its id and a complete revised TOML definition. New blueprints and revisions are drafts: use publish_blueprint with the returned id and version before creating entities from them. Never put blueprint attributes or a definition in create_entity. Use list_blueprints to find an existing blueprint before creating an entity. Use search_entities to find matching entities; set outdated to true when looking for entities that need a blueprint upgrade. Use migrate_entity to upgrade a compatible entity to its latest published blueprint revision; report its issues if it needs input. Use view_image with an image file ID from get_entity when visual inspection is needed, or read_file for UTF-8 text files. When a conversation attachment should be retained on an entity, use link_file with its file_id and an applicable file attribute. Never claim a mutation happened until its tool result says so. All mutations require human approval.";
+const SYSTEM_PROMPT: &str = "You are a catalogue assistant. Use tools for catalogue facts. Before drafting a blueprint, call blueprint_authoring_guide and use create_blueprint with complete TOML; every entity blueprint must include a views.dropdown_option definition. To modify a blueprint, use create_blueprint_revision with its id and a complete revised TOML definition. New blueprints and revisions are drafts: use publish_blueprint with the returned id and version before creating entities from them. Entity edits are not channel exports: inspect publication status and explicitly publish an entity to a requested channel only after human approval. Never put blueprint attributes or a definition in create_entity. Use list_blueprints to find an existing blueprint before creating an entity. Use search_entities to find matching entities; set outdated to true when looking for entities that need a blueprint upgrade. Use migrate_entity to upgrade a compatible entity to its latest published blueprint revision; report its issues if it needs input. Use view_image with an image file ID from get_entity when visual inspection is needed, or read_file for UTF-8 text files. When a conversation attachment should be retained on an entity, use link_file with its file_id and an applicable file attribute. Never claim a mutation happened until its tool result says so. All mutations require human approval.";
 
 #[derive(Debug, thiserror::Error)]
 pub enum RunError {
@@ -481,6 +481,13 @@ fn mutation_authorization(name: &str, arguments: &Value) -> Option<(&'static str
         "create_blueprint" | "create_blueprint_revision" => ("blueprints.write", None),
         "publish_blueprint" => ("blueprints.publish", None),
         "create_entity" | "link_file" => ("entities.write", None),
+        "publish_entity" | "unpublish_entity" | "publish_entity_to_all_channels" => (
+            "entities.publish",
+            arguments
+                .get("entity_id")
+                .and_then(Value::as_str)
+                .and_then(|id| id.parse().ok()),
+        ),
         "set_entity_values" | "migrate_entity" => (
             "entities.write",
             arguments

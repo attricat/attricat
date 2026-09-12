@@ -263,7 +263,16 @@
     "fileCount_one": "{{count}} plik",
     "fileCount_few": "{{count}} pliki",
     "fileCount_many": "{{count}} plików",
-    "fileCount_other": "{{count}} pliku"
+    "fileCount_other": "{{count}} pliku",
+    "publish": "Opublikuj",
+    "republish": "Opublikuj ponownie",
+    "unpublish": "Cofnij publikację",
+    "publishAllChannels": "Opublikuj we wszystkich kanałach",
+    "publication": {
+      "not_published": "Nieopublikowano",
+      "published": "Opublikowano",
+      "changes_pending": "Zmiany oczekują na publikację"
+    }
   },
   "blueprints": {
     "blueprint": "Schemat",

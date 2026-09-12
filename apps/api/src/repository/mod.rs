@@ -23,9 +23,10 @@ use crate::{
         AppendAttributeValues, Attribute, AttributeContext, AttributeValue, AttributeValueHistory,
         AttributeValueSelector, Blueprint, BlueprintWithAttributes, CreateBlueprint, Entity,
         EntityAuditChange, EntityHierarchyItem, EntityHierarchyResponse, EntityIdentity,
-        EntityMigrationPreview, EntityPreview, EntityPreviewPage, FormAttributeValue,
-        IncomingRelationshipItem, IncomingRelationshipSelector, IncomingRelationshipsPage,
-        MatchExplanation, MatchPathEdge, MigrateEntityRequest, MigrationIssue, NewAttributeValue,
+        EntityMigrationPreview, EntityPreview, EntityPreviewPage, EntityPublicationSnapshot,
+        EntityPublicationStatus, FormAttributeValue, IncomingRelationshipItem,
+        IncomingRelationshipSelector, IncomingRelationshipsPage, MatchExplanation, MatchPathEdge,
+        MigrateEntityRequest, MigrationIssue, NewAttributeValue, PublicationChannel,
         RelatedEntityPreview, RelationshipMutation, RelationshipTargets,
         RelationshipTreeFacetChildItem, RelationshipTreeFacetChildrenResponse,
         RelationshipTreeFacetItem, RelationshipTreeFacetResponse, ResolvedEntityPreviewResponse,
@@ -41,6 +42,7 @@ mod domain_events;
 mod entity_commands;
 mod entity_migration;
 mod entity_projection;
+mod entity_publications;
 mod entity_search;
 mod extension_registries;
 mod extension_scoped_configuration;
@@ -251,6 +253,14 @@ pub enum RepositoryError {
     ExtensionAlreadyInstalled,
     #[error("invalid domain event: {0}")]
     InvalidDomainEvent(#[from] crate::domain_events::EventContractError),
+    #[error("publication context is not an enabled channel")]
+    PublicationChannelDisabled,
+    #[error("relationship targets are not published in this channel: {0}")]
+    PublicationDependenciesMissing(String),
+    #[error("cannot unpublish while active publications depend on this entity: {0}")]
+    PublicationHasDependents(String),
+    #[error("cannot delete an entity while it has an active publication or is required by one")]
+    EntityPublicationProtected,
     #[error("an approval decision has already been recorded")]
     ApprovalAlreadyDecided,
     #[error(transparent)]

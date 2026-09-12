@@ -103,6 +103,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         .ensure_audit_permissions()
         .await?;
     CatalogRepository::new(maintenance_pool.clone())
+        .ensure_entity_publication_permissions()
+        .await?;
+    CatalogRepository::new(maintenance_pool.clone())
         .ensure_extension_registry_permissions()
         .await?;
     // The identity/membership migration consumes this durable bootstrap owner

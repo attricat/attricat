@@ -223,6 +223,10 @@ async fn start_server_with_auth_mode_and_store_with_devtools(
         .ensure_extension_registry_permissions()
         .await
         .unwrap();
+    CatalogRepository::new(pool.clone())
+        .ensure_entity_publication_permissions()
+        .await
+        .unwrap();
     let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
     let address: SocketAddr = listener.local_addr().unwrap();
     let router = router(AppState {

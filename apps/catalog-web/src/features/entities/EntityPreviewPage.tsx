@@ -1,4 +1,4 @@
-import { useQuery } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link } from '@tanstack/react-router';
 import { BlueprintIcon } from '../../components/system-icons';
 import { Alert, Box, Paper, Tooltip, Typography } from '@mui/material';
@@ -23,6 +23,10 @@ import {
   getBlueprintRevision,
   getCurrentBlueprint,
   getResolvedEntityPreview,
+  getEntityPublications,
+  publishEntity,
+  publishEntityAllChannels,
+  unpublishEntity,
 } from './api';
 import { attributeLabel } from './entity-display';
 import { entityQueryKeys } from './query-keys';
@@ -33,6 +37,8 @@ import {
   findEntityHeading,
 } from '../views/components/blocks/EntityHeadingDefinition';
 import { resolveHeadingRenderer } from '../views/components/registry';
+import { currentSession } from '../auth/api';
+import { authQueryKeys } from '../auth/query-keys';
 export const EntityPreviewPage = ({
   entityId,
   relationshipPickerToken,
@@ -41,6 +47,7 @@ export const EntityPreviewPage = ({
   relationshipPickerToken?: string;
 }) => {
   const { t } = useTranslation();
+  const client = useQueryClient();
   const [selectedContext, setSelectedContext] = useState('');
   const contexts = useQuery({
     queryKey: contextQueryKeys.all(),
@@ -49,6 +56,33 @@ export const EntityPreviewPage = ({
   const selectedContextId =
     selectedContext ||
     contexts.data?.find((context) => context.code === defaultContextCode)?.id;
+  const session = useQuery({
+    queryKey: authQueryKeys.session(),
+    queryFn: currentSession,
+  });
+  const publications = useQuery({
+    queryKey: entityQueryKeys.publications(entityId),
+    queryFn: () => getEntityPublications(entityId),
+  });
+  const invalidatePublications = () =>
+    client.invalidateQueries({
+      queryKey: entityQueryKeys.publications(entityId),
+    });
+  const publish = useMutation({
+    mutationFn: (contextId: string) => publishEntity(entityId, contextId),
+    onSuccess: invalidatePublications,
+  });
+  const publishAll = useMutation({
+    mutationFn: () => publishEntityAllChannels(entityId),
+    onSuccess: invalidatePublications,
+  });
+  const unpublish = useMutation({
+    mutationFn: (contextId: string) => unpublishEntity(entityId, contextId),
+    onSuccess: invalidatePublications,
+  });
+  const publication = publications.data?.find(
+    (item) => item.context_id === selectedContextId,
+  );
   const resolved = useQuery({
     queryKey: entityQueryKeys.resolvedPreview(entityId, selectedContextId),
     queryFn: () => getResolvedEntityPreview(entityId, selectedContextId!),
@@ -142,6 +176,16 @@ export const EntityPreviewPage = ({
         onOpenExtensions={() => setExtensionPanelOpen(true)}
         schemaOutdated={schemaOutdated}
         showExtensions={Boolean(resolved.data && blueprint.data)}
+        publication={publication}
+        canPublish={session.data?.capabilities?.entities_publish === true}
+        onPublish={() => selectedContextId && publish.mutate(selectedContextId)}
+        onPublishAll={() => publishAll.mutate()}
+        onUnpublish={() =>
+          selectedContextId && unpublish.mutate(selectedContextId)
+        }
+        publicationPending={
+          publish.isPending || publishAll.isPending || unpublish.isPending
+        }
       />
       <EntitySchemaSubheader
         entityId={entityId}

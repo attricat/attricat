@@ -18,6 +18,7 @@ pub(super) enum TargetKind {
     ContextId,
     ContextCode,
     ContextList,
+    PublicationChannelContext,
 }
 
 pub(super) fn policy(method: &Method, path: &str) -> Option<Policy> {
@@ -183,6 +184,18 @@ pub(super) fn policy(method: &Method, path: &str) -> Option<Policy> {
             target: TargetKind::None,
         });
     }
+    if path == "/publication-channels" {
+        return Some(Policy {
+            permission: "contexts.read",
+            target: TargetKind::None,
+        });
+    }
+    if path == "/publication-channels/{context_id}" {
+        return Some(Policy {
+            permission: "contexts.write",
+            target: TargetKind::PublicationChannelContext,
+        });
+    }
     if path == "/contexts/{code}" {
         return Some(Policy {
             permission: if method == Method::GET {
@@ -219,6 +232,12 @@ pub(super) fn policy(method: &Method, path: &str) -> Option<Policy> {
     }
     if path.starts_with("/files/{file_id}") {
         return Some(read(TargetKind::FileRead));
+    }
+    if path.starts_with("/v1/entities/{entity_id}/publications") && method != Method::GET {
+        return Some(Policy {
+            permission: "entities.publish",
+            target: TargetKind::EntityId,
+        });
     }
     if path.starts_with("/v1/entities/{entity_id}") || path.starts_with("/entities/{entity_id}") {
         return Some(if method == Method::DELETE {
@@ -266,6 +285,9 @@ pub(super) fn target(path: &str, kind: TargetKind) -> (Option<Uuid>, Option<Stri
             )
         }
         TargetKind::ContextId => (segments.get(2).and_then(|value| value.parse().ok()), None),
+        TargetKind::PublicationChannelContext => {
+            (segments.get(1).and_then(|value| value.parse().ok()), None)
+        }
         TargetKind::ContextCode => (None, segments.get(1).map(|value| (*value).to_owned())),
         TargetKind::ContextList => (None, Some("__context_list__".to_owned())),
     }
@@ -274,6 +296,44 @@ pub(super) fn target(path: &str, kind: TargetKind) -> (Option<Uuid>, Option<Stri
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn publication_channel_routes_target_their_context() {
+        let context_id = Uuid::new_v4();
+        let route = "/publication-channels/{context_id}";
+        let policy = policy(&Method::PUT, route).unwrap();
+        assert_eq!(policy.permission, "contexts.write");
+        assert!(matches!(
+            policy.target,
+            TargetKind::PublicationChannelContext
+        ));
+        assert_eq!(
+            target(
+                &format!("/publication-channels/{context_id}"),
+                policy.target
+            ),
+            (Some(context_id), None)
+        );
+    }
+
+    #[test]
+    fn entity_publication_routes_require_publish_permission() {
+        assert_eq!(
+            policy(&Method::POST, "/v1/entities/{entity_id}/publications")
+                .unwrap()
+                .permission,
+            "entities.publish"
+        );
+        assert_eq!(
+            policy(
+                &Method::POST,
+                "/v1/entities/{entity_id}/publications/publish-all"
+            )
+            .unwrap()
+            .permission,
+            "entities.publish"
+        );
+    }
 
     #[test]
     fn extension_management_routes_require_extension_permissions() {

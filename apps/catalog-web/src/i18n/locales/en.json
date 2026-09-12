@@ -259,7 +259,16 @@
     "loadMigrationFirst": "Load the migration preview first",
     "currentValue": "Current value: {{value}}.",
     "fileCount_one": "{{count}} file",
-    "fileCount_other": "{{count}} files"
+    "fileCount_other": "{{count}} files",
+    "publish": "Publish",
+    "republish": "Republish",
+    "unpublish": "Unpublish",
+    "publishAllChannels": "Publish to all channels",
+    "publication": {
+      "not_published": "Not published",
+      "published": "Published",
+      "changes_pending": "Changes pending"
+    }
   },
   "blueprints": {
     "blueprint": "Blueprint",
