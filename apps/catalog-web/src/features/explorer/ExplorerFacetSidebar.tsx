@@ -178,6 +178,9 @@ export const ExplorerFacetSidebar = ({
       </Typography>
       <ExplorerAttributeFilters
         attributes={attributes}
+        blueprintName={
+          blueprints.find((item) => item.code === blueprint)?.name ?? blueprint
+        }
         filters={attributeFilters}
         pathAttributes={pathAttributes}
         onAdd={onAddAttributeFilter}

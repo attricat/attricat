@@ -22,6 +22,7 @@ import { maximumAttributeFilters, type AttributeFilter } from './search';
 type Props = {
   filters: AttributeFilter[];
   attributes: Attribute[];
+  blueprintName: string;
   pathAttributes?: { code: string; value_type: Attribute['value_type'] }[];
   onAdd: (filter: AttributeFilter) => void;
   onRemove: (index: number) => void;
@@ -31,6 +32,7 @@ type Props = {
 export const ExplorerAttributeFilters = ({
   filters,
   attributes,
+  blueprintName,
   pathAttributes = [],
   onAdd,
   onRemove,
@@ -247,7 +249,10 @@ export const ExplorerAttributeFilters = ({
           >
             {filterableAttributes.map((item) => (
               <MenuItem key={item.code} value={item.code}>
-                {attributeLabel(item)}
+                <Stack alignItems="center" direction="row" spacing={1}>
+                  <Chip label={blueprintName} size="small" />
+                  <Typography>{attributeLabel(item)}</Typography>
+                </Stack>
               </MenuItem>
             ))}
           </TextField>

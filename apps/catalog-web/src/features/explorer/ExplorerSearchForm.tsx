@@ -86,9 +86,6 @@ export const ExplorerSearchForm = ({
       sx={{
         mt: 2.5,
         p: 1.5,
-        position: 'sticky',
-        top: 0,
-        zIndex: 2,
       }}
     >
       <Stack direction={{ xs: 'column', md: 'row' }} spacing={1.5}>
