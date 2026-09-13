@@ -6,6 +6,7 @@ import {
   DataHealthIcon,
   ExplorerIcon,
   ExtensionIcon,
+  ExportIcon,
   ProfileIcon,
   WorkflowIcon,
   WorkspaceIcon,
@@ -28,6 +29,7 @@ export const navigationRoutes = {
   dataHealth: '/manage/data-health',
   explore: '/',
   extensions: '/manage/extensions',
+  exports: '/manage/exports',
   manage: '/manage',
   profile: '/profile',
   workflows: '/manage/workflows',
@@ -59,6 +61,12 @@ export const managementNavigationItems = [
     icon: ContextIcon,
     labelKey: 'navigation.contexts',
     to: navigationRoutes.contexts,
+  },
+  {
+    descriptionKey: 'management.exportsDescription',
+    icon: ExportIcon,
+    labelKey: 'navigation.exports',
+    to: navigationRoutes.exports,
   },
   {
     descriptionKey: 'management.dataHealthDescription',

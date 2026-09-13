@@ -32,6 +32,7 @@
     "dataHealth": "Stan danych",
     "auditLog": "Aktywność / dziennik audytu",
     "extensions": "Rozszerzenia",
+    "exports": "Eksporty",
     "workflows": "Przepływy pracy",
     "profile": "Profil",
     "workspaceManagement": "Zarządzanie obszarem roboczym",
@@ -272,8 +273,22 @@
     "publication": {
       "not_published": "Nieopublikowano",
       "published": "Opublikowano",
-      "changes_pending": "Zmiany oczekują na publikację"
+      "changes_pending": "Zmiany oczekują na publikację",
+      "channelDisabled": "To nie jest kanał eksportu",
+      "channelDisabledDescription": "Włącz ten kontekst jako kanał eksportu w Zarządzanie > Eksporty przed publikacją."
     }
+  },
+  "exports": {
+    "title": "Eksporty",
+    "description": "Włącz konteksty jako kanały eksportu. Encje są publikowane niezależnie dla każdego włączonego kanału.",
+    "loading": "Ładowanie kanałów eksportu...",
+    "context": "Kontekst",
+    "channel": "Kanał eksportu",
+    "actions": "Akcje",
+    "enabled": "Włączony",
+    "disabled": "Wyłączony",
+    "openInExplore": "Otwórz w przeglądarce",
+    "noContexts": "Brak dostępnych kontekstów."
   },
   "blueprints": {
     "blueprint": "Schemat",
@@ -393,12 +408,14 @@
     "searchTerms": "Przeszukaj ten schemat, np. tekst",
     "search": "Szukaj",
     "context": "Kontekst",
+    "publicationForContext": "Publikacja ({{context}})",
     "loadingFacetOptions": "Ładowanie opcji filtrów",
     "extensionActions": "Akcje rozszerzenia",
     "viewEntityId": "Wyświetl identyfikator encji",
     "results": "Wyniki przeglądarki",
     "buildTreeUsing": "Zbuduj drzewo używając",
     "relationshipFilters": "Filtry relacji",
+    "contextAndRelationshipFilters": "Kontekst i filtry relacji",
     "attributeFilters": "Filtry atrybutów",
     "attributeFilterDescription": "Wybierz operator i wartość",
     "cancelAttributeFilter": "Anuluj",
@@ -572,6 +589,7 @@
     "catalogDescription": "Zarządzaj schematami, kontekstami i stanem danych.",
     "blueprintsDescription": "Definiuj schematy encji używane w katalogu.",
     "contextsDescription": "Konfiguruj konteksty dla zakresowych wartości encji.",
+    "exportsDescription": "Konfiguruj kanały eksportu i publikuj encje katalogu.",
     "dataHealthDescription": "Przeglądaj jakość danych katalogu i kontrole stanu.",
     "workspaceTitle": "Dostęp do obszaru roboczego",
     "workspaceDescription": "Zarządzaj członkami, rolami i nawigacją.",

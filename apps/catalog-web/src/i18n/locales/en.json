@@ -32,6 +32,7 @@
     "dataHealth": "Data health",
     "auditLog": "Activity / Audit log",
     "extensions": "Extensions",
+    "exports": "Exports",
     "workflows": "Workflows",
     "profile": "Profile",
     "workspaceManagement": "Workspace management",
@@ -268,8 +269,22 @@
     "publication": {
       "not_published": "Not published",
       "published": "Published",
-      "changes_pending": "Changes pending"
+      "changes_pending": "Changes pending",
+      "channelDisabled": "Not an export channel",
+      "channelDisabledDescription": "Enable this context as an export channel in Manage > Exports before publishing."
     }
+  },
+  "exports": {
+    "title": "Exports",
+    "description": "Enable contexts as export channels. Entities are published independently for each enabled channel.",
+    "loading": "Loading export channels...",
+    "context": "Context",
+    "channel": "Export channel",
+    "actions": "Actions",
+    "enabled": "Enabled",
+    "disabled": "Disabled",
+    "openInExplore": "Open in Explore",
+    "noContexts": "No contexts are available."
   },
   "blueprints": {
     "blueprint": "Blueprint",
@@ -387,12 +402,14 @@
     "searchTerms": "Search this blueprint, e.g. term",
     "search": "Search",
     "context": "Context",
+    "publicationForContext": "Publication ({{context}})",
     "loadingFacetOptions": "Loading facet options",
     "extensionActions": "Extension actions",
     "viewEntityId": "View entity ID",
     "results": "Explorer results",
     "buildTreeUsing": "Build tree using",
     "relationshipFilters": "Relationship filters",
+    "contextAndRelationshipFilters": "Context and relationship filters",
     "attributeFilters": "Attribute filters",
     "attributeFilterDescription": "Choose an operator and value",
     "cancelAttributeFilter": "Cancel",
@@ -558,6 +575,7 @@
     "catalogDescription": "Manage blueprints, contexts, and data health.",
     "blueprintsDescription": "Define the entity schemas used by your catalog.",
     "contextsDescription": "Configure contexts for scoped entity values.",
+    "exportsDescription": "Configure export channels and publish catalog entities.",
     "dataHealthDescription": "Review catalog data quality and health checks.",
     "workspaceTitle": "Workspace access",
     "workspaceDescription": "Manage members, roles, and navigation.",

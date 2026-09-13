@@ -80,10 +80,16 @@ export const EntityPreviewToolbar = ({
           </Tooltip>
         ))}
       <Box sx={{ flexGrow: 1 }} />
-      {publication && (
+      {publication ? (
         <Tooltip title={t(`entities.publication.${publication.status}`)}>
           <Button color="inherit" size="small" variant="text">
             {t(`entities.publication.${publication.status}`)}
+          </Button>
+        </Tooltip>
+      ) : (
+        <Tooltip title={t('entities.publication.channelDisabledDescription')}>
+          <Button color="inherit" size="small" variant="text">
+            {t('entities.publication.channelDisabled')}
           </Button>
         </Tooltip>
       )}

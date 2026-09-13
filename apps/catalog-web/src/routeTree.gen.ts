@@ -25,6 +25,7 @@ import { Route as LoginIdentifierRouteImport } from './routes/login/$identifier'
 import { Route as ManageIndexRouteImport } from './routes/manage/index'
 import { Route as ManageAuditLogRouteImport } from './routes/manage/audit-log'
 import { Route as ManageDataHealthRouteImport } from './routes/manage/data-health'
+import { Route as ManageExportsRouteImport } from './routes/manage/exports'
 import { Route as PasswordResetIndexRouteImport } from './routes/password-reset/index'
 import { Route as PasswordResetConfirmRouteImport } from './routes/password-reset/confirm'
 import { Route as ProfileIndexRouteImport } from './routes/profile/index'
@@ -134,6 +135,11 @@ const ManageAuditLogRoute = ManageAuditLogRouteImport.update({
 const ManageDataHealthRoute = ManageDataHealthRouteImport.update({
   id: '/manage/data-health',
   path: '/manage/data-health',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ManageExportsRoute = ManageExportsRouteImport.update({
+  id: '/manage/exports',
+  path: '/manage/exports',
   getParentRoute: () => rootRouteImport,
 } as any)
 const PasswordResetIndexRoute = PasswordResetIndexRouteImport.update({
@@ -314,6 +320,7 @@ export interface FileRoutesByFullPath {
   '/login/$identifier': typeof LoginIdentifierRoute
   '/manage/audit-log': typeof ManageAuditLogRoute
   '/manage/data-health': typeof ManageDataHealthRoute
+  '/manage/exports': typeof ManageExportsRoute
   '/password-reset/confirm': typeof PasswordResetConfirmRoute
   '/profile/personal-access-tokens': typeof ProfilePersonalAccessTokensRoute
   '/agents/': typeof AgentsIndexRoute
@@ -359,6 +366,7 @@ export interface FileRoutesByTo {
   '/login/$identifier': typeof LoginIdentifierRoute
   '/manage/audit-log': typeof ManageAuditLogRoute
   '/manage/data-health': typeof ManageDataHealthRoute
+  '/manage/exports': typeof ManageExportsRoute
   '/password-reset/confirm': typeof PasswordResetConfirmRoute
   '/profile/personal-access-tokens': typeof ProfilePersonalAccessTokensRoute
   '/agents': typeof AgentsIndexRoute
@@ -406,6 +414,7 @@ export interface FileRoutesById {
   '/login/$identifier': typeof LoginIdentifierRoute
   '/manage/audit-log': typeof ManageAuditLogRoute
   '/manage/data-health': typeof ManageDataHealthRoute
+  '/manage/exports': typeof ManageExportsRoute
   '/password-reset/confirm': typeof PasswordResetConfirmRoute
   '/profile/personal-access-tokens': typeof ProfilePersonalAccessTokensRoute
   '/agents/': typeof AgentsIndexRoute
@@ -456,6 +465,7 @@ export interface FileRouteTypes {
     | '/login/$identifier'
     | '/manage/audit-log'
     | '/manage/data-health'
+    | '/manage/exports'
     | '/password-reset/confirm'
     | '/profile/personal-access-tokens'
     | '/agents/'
@@ -501,6 +511,7 @@ export interface FileRouteTypes {
     | '/login/$identifier'
     | '/manage/audit-log'
     | '/manage/data-health'
+    | '/manage/exports'
     | '/password-reset/confirm'
     | '/profile/personal-access-tokens'
     | '/agents'
@@ -547,6 +558,7 @@ export interface FileRouteTypes {
     | '/login/$identifier'
     | '/manage/audit-log'
     | '/manage/data-health'
+    | '/manage/exports'
     | '/password-reset/confirm'
     | '/profile/personal-access-tokens'
     | '/agents/'
@@ -595,6 +607,7 @@ export interface RootRouteChildren {
   InvitationsAcceptRoute: typeof InvitationsAcceptRoute
   ManageAuditLogRoute: typeof ManageAuditLogRoute
   ManageDataHealthRoute: typeof ManageDataHealthRoute
+  ManageExportsRoute: typeof ManageExportsRoute
   PasswordResetConfirmRoute: typeof PasswordResetConfirmRoute
   AgentsIndexRoute: typeof AgentsIndexRoute
   ManageIndexRoute: typeof ManageIndexRoute
@@ -731,6 +744,13 @@ declare module '@tanstack/react-router' {
       path: '/manage/data-health'
       fullPath: '/manage/data-health'
       preLoaderRoute: typeof ManageDataHealthRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/manage/exports': {
+      id: '/manage/exports'
+      path: '/manage/exports'
+      fullPath: '/manage/exports'
+      preLoaderRoute: typeof ManageExportsRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/password-reset/': {
@@ -1036,6 +1056,7 @@ const rootRouteChildren: RootRouteChildren = {
   InvitationsAcceptRoute: InvitationsAcceptRoute,
   ManageAuditLogRoute: ManageAuditLogRoute,
   ManageDataHealthRoute: ManageDataHealthRoute,
+  ManageExportsRoute: ManageExportsRoute,
   PasswordResetConfirmRoute: PasswordResetConfirmRoute,
   AgentsIndexRoute: AgentsIndexRoute,
   ManageIndexRoute: ManageIndexRoute,

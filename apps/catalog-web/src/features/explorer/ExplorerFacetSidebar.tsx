@@ -128,7 +128,7 @@ export const ExplorerFacetSidebar = ({
         }}
         variant="overline"
       >
-        {t('explorer.relationshipFilters')}
+        {t('explorer.contextAndRelationshipFilters')}
       </Typography>
       <Stack spacing={1.5} sx={{ mt: 1 }}>
         <TextField

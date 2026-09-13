@@ -30,6 +30,7 @@ export const explorerSearchSchema = z.object({
   version: z.coerce.number().int().positive().optional().catch(undefined),
   allVersions: z.boolean().optional().catch(undefined),
   query: z.string().trim().min(1).optional().catch(undefined),
+  context: z.string().trim().min(1).optional().catch(undefined),
   locked: z.boolean().optional().catch(undefined),
   sort: z
     .object({

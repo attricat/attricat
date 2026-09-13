@@ -131,7 +131,9 @@ export const Explorer = ({ search: urlSearch }: { search: ExplorerSearch }) => {
       typeof attribute.target_blueprint_code === 'string',
   );
   const facetContextCode =
-    search.relationshipFacets?.[0]?.context ?? defaultContextCode;
+    search.context ??
+    search.relationshipFacets?.[0]?.context ??
+    defaultContextCode;
   const facetContextId = contexts.data?.find(
     (context) => context.code === facetContextCode,
   )?.id;
@@ -213,6 +215,7 @@ export const Explorer = ({ search: urlSearch }: { search: ExplorerSearch }) => {
       to: '/',
       search: {
         ...search,
+        context,
         relationshipFacets: relationshipFields.map((field) => {
           const existing = current.find((facet) => facet.field === field.code);
           return {
@@ -502,9 +505,14 @@ export const Explorer = ({ search: urlSearch }: { search: ExplorerSearch }) => {
                     search.sort,
                     search.attributeFilters,
                   ])}
+                  canPublish={
+                    session.data?.capabilities?.entities_publish === true
+                  }
                   hasNextPage={results.hasNextPage}
                   isFetchingNextPage={results.isFetchingNextPage}
                   items={resultItems}
+                  publicationContextCode={facetContextCode}
+                  publicationContextId={facetContextId}
                   totalCount={resultPages[0]?.total_count ?? null}
                   totalCountCapped={resultPages[0]?.total_count_capped ?? false}
                   onLoadMore={() => void results.fetchNextPage()}

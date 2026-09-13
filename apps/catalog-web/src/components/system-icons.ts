@@ -8,6 +8,7 @@ export { default as DataHealthIcon } from '@mui/icons-material/AssessmentOutline
 export { default as ExplorerIcon } from '@mui/icons-material/TravelExploreOutlined';
 export { default as ExplorerShortcutIcon } from '@mui/icons-material/BookmarkBorderOutlined';
 export { default as ExtensionIcon } from '@mui/icons-material/BoltOutlined';
+export { default as ExportIcon } from '@mui/icons-material/PublishOutlined';
 export { default as InspectorIcon } from '@mui/icons-material/BuildOutlined';
 export { default as ManagementIcon } from '@mui/icons-material/SettingsOutlined';
 export { default as ProfileIcon } from '@mui/icons-material/PersonOutlined';

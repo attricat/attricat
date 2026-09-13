@@ -1,7 +1,12 @@
 import { Link } from '@tanstack/react-router';
 import { flexRender } from '@tanstack/react-table';
 import { useVirtualizer } from '@tanstack/react-virtual';
-import { useQuery } from '@tanstack/react-query';
+import {
+  useMutation,
+  useQueries,
+  useQuery,
+  useQueryClient,
+} from '@tanstack/react-query';
 import {
   getCoreRowModel,
   legacyCreateColumnHelper,
@@ -32,7 +37,13 @@ import {
 import { LoadMoreButton } from '../../components/LoadMoreButton';
 import { useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import type { BlueprintWithAttributes, EntityItem } from '../entities/api';
+import {
+  getEntityPublications,
+  publishEntity,
+  unpublishEntity,
+  type BlueprintWithAttributes,
+  type EntityItem,
+} from '../entities/api';
 import { EntityIdPopover } from '../entities/components/EntityIdPopover';
 import { displayLabel } from '../entities/entity-display';
 import { AttributeValue } from '../views/components/values/AttributeValue';
@@ -42,6 +53,7 @@ import { extensionQueryKeys } from '../extensions/query-keys';
 import { extensionRuntimeRefetchInterval } from '../extensions/constants';
 import { ExtensionTableCell } from './ExtensionTableCell';
 import { explorerTableCellContextSchema } from './schemas';
+import { entityQueryKeys } from '../entities/query-keys';
 
 const maximumExplorerCellFrames = 32;
 
@@ -71,6 +83,9 @@ export const ExplorerResultsTable = ({
   items,
   onLoadMore,
   onSortChange,
+  publicationContextCode,
+  publicationContextId,
+  canPublish,
   relationshipSortAvailable = true,
   sort,
   totalCount,
@@ -82,6 +97,9 @@ export const ExplorerResultsTable = ({
   items: EntityItem[];
   onLoadMore: () => void;
   onSortChange: (field: string) => void;
+  publicationContextCode: string;
+  publicationContextId: string | undefined;
+  canPublish: boolean;
   relationshipSortAvailable?: boolean;
   sort?: { field: string; direction: 'asc' | 'desc' };
   totalCount: number | null;
@@ -91,6 +109,36 @@ export const ExplorerResultsTable = ({
   const [actionAnchor, setActionAnchor] = useState<HTMLElement | null>(null);
   const [actionEntity, setActionEntity] = useState<EntityItem | null>(null);
   const [searchInfoOpen, setSearchInfoOpen] = useState(false);
+  const queryClient = useQueryClient();
+  const publicationQueries = useQueries({
+    queries: items.map((entity) => ({
+      queryKey: entityQueryKeys.publications(entity.id),
+      queryFn: () => getEntityPublications(entity.id),
+      enabled: Boolean(publicationContextId),
+    })),
+  });
+  const publicationsByEntityId = new Map(
+    items.map((entity, index) => [
+      entity.id,
+      publicationQueries[index]?.data?.find(
+        (publication) => publication.context_id === publicationContextId,
+      ),
+    ]),
+  );
+  const invalidatePublication = (entityId: string) =>
+    queryClient.invalidateQueries({
+      queryKey: entityQueryKeys.publications(entityId),
+    });
+  const publish = useMutation({
+    mutationFn: (entityId: string) =>
+      publishEntity(entityId, publicationContextId!),
+    onSuccess: (_, entityId) => invalidatePublication(entityId),
+  });
+  const unpublish = useMutation({
+    mutationFn: (entityId: string) =>
+      unpublishEntity(entityId, publicationContextId!),
+    onSuccess: (_, entityId) => invalidatePublication(entityId),
+  });
   const columnHelper = legacyCreateColumnHelper<EntityItem>();
   const tableView =
     blueprint.blueprint.views.table?.type === 'table'
@@ -157,6 +205,29 @@ export const ExplorerResultsTable = ({
           {displayLabel(info.row.original.display, info.row.original.id)}
         </Link>
       ),
+    }) as LegacyColumnDef<EntityItem, string>,
+    columnHelper.display({
+      id: 'publication',
+      header: t('explorer.publicationForContext', {
+        context: publicationContextCode,
+      }),
+      cell: (info) => {
+        const publication = publicationsByEntityId.get(info.row.original.id);
+        if (!publication) return '—';
+        return (
+          <Chip
+            color={
+              publication.status === 'published'
+                ? 'success'
+                : publication.status === 'changes_pending'
+                  ? 'warning'
+                  : 'default'
+            }
+            label={t(`entities.publication.${publication.status}`)}
+            size="small"
+          />
+        );
+      },
     }) as LegacyColumnDef<EntityItem, string>,
     columnHelper.display({
       id: 'schema',
@@ -471,6 +542,46 @@ export const ExplorerResultsTable = ({
         >
           {t('explorer.searchInfo')}
         </MenuItem>
+        {canPublish &&
+          actionEntity &&
+          publicationContextId &&
+          publicationsByEntityId.get(actionEntity.id) && (
+            <>
+              {publicationsByEntityId.get(actionEntity.id)?.status ===
+              'not_published' ? (
+                <MenuItem
+                  disabled={publish.isPending}
+                  onClick={() => {
+                    publish.mutate(actionEntity.id);
+                    setActionAnchor(null);
+                  }}
+                >
+                  {t('entities.publish')}
+                </MenuItem>
+              ) : (
+                <>
+                  <MenuItem
+                    disabled={publish.isPending}
+                    onClick={() => {
+                      publish.mutate(actionEntity.id);
+                      setActionAnchor(null);
+                    }}
+                  >
+                    {t('entities.republish')}
+                  </MenuItem>
+                  <MenuItem
+                    disabled={unpublish.isPending}
+                    onClick={() => {
+                      unpublish.mutate(actionEntity.id);
+                      setActionAnchor(null);
+                    }}
+                  >
+                    {t('entities.unpublish')}
+                  </MenuItem>
+                </>
+              )}
+            </>
+          )}
         {actionEntity && (
           <ExtensionPopoverOutlet
             context={{

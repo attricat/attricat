@@ -1,0 +1,127 @@
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import {
+  Alert,
+  Chip,
+  FormControlLabel,
+  Paper,
+  Switch,
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableRow,
+  Typography,
+} from '@mui/material';
+import { useTranslation } from 'react-i18next';
+import { PageContainer } from '../../components/PageContainer';
+import { PageHeader } from '../../components/PageHeader';
+import { RouterButton } from '../../components/RouterLink';
+import { listContexts } from '../contexts/api';
+import { contextQueryKeys } from '../contexts/query-keys';
+import { listPublicationChannels, updatePublicationChannel } from './api';
+import { exportQueryKeys } from './query-keys';
+
+export const ExportsPage = () => {
+  const { t } = useTranslation();
+  const client = useQueryClient();
+  const contexts = useQuery({
+    queryKey: contextQueryKeys.all(),
+    queryFn: ({ signal }) => listContexts(signal),
+  });
+  const channels = useQuery({
+    queryKey: exportQueryKeys.channels(),
+    queryFn: listPublicationChannels,
+  });
+  const updateChannel = useMutation({
+    mutationFn: ({
+      contextId,
+      enabled,
+    }: {
+      contextId: string;
+      enabled: boolean;
+    }) => updatePublicationChannel(contextId, enabled),
+    onSuccess: () =>
+      client.invalidateQueries({ queryKey: exportQueryKeys.channels() }),
+  });
+  const channelsByContextId = new Map(
+    channels.data?.map((channel) => [channel.context_id, channel]) ?? [],
+  );
+
+  return (
+    <PageContainer>
+      <PageHeader title={t('exports.title')} />
+      <Typography color="text.secondary" sx={{ mt: 1 }}>
+        {t('exports.description')}
+      </Typography>
+      {(contexts.isError || channels.isError) && (
+        <Alert severity="error" sx={{ mt: 3 }}>
+          {contexts.error?.message ?? channels.error?.message}
+        </Alert>
+      )}
+      {(contexts.isPending || channels.isPending) && (
+        <Typography sx={{ mt: 3 }}>{t('exports.loading')}</Typography>
+      )}
+      {contexts.data && channels.data && (
+        <Paper sx={{ mt: 3 }}>
+          <Table>
+            <TableHead>
+              <TableRow>
+                <TableCell>{t('exports.context')}</TableCell>
+                <TableCell>{t('exports.channel')}</TableCell>
+                <TableCell>{t('exports.actions')}</TableCell>
+              </TableRow>
+            </TableHead>
+            <TableBody>
+              {contexts.data.map((context) => {
+                const channel = channelsByContextId.get(context.id);
+                const enabled = channel?.enabled ?? false;
+                return (
+                  <TableRow key={context.id}>
+                    <TableCell>{context.code}</TableCell>
+                    <TableCell>
+                      <FormControlLabel
+                        control={
+                          <Switch
+                            checked={enabled}
+                            disabled={updateChannel.isPending}
+                            onChange={(_, checked) =>
+                              updateChannel.mutate({
+                                contextId: context.id,
+                                enabled: checked,
+                              })
+                            }
+                          />
+                        }
+                        label={
+                          <Chip
+                            color={enabled ? 'success' : 'default'}
+                            label={
+                              enabled
+                                ? t('exports.enabled')
+                                : t('exports.disabled')
+                            }
+                            size="small"
+                          />
+                        }
+                      />
+                    </TableCell>
+                    <TableCell>
+                      <RouterButton search={{ context: context.code }} to="/">
+                        {t('exports.openInExplore')}
+                      </RouterButton>
+                    </TableCell>
+                  </TableRow>
+                );
+              })}
+              {!contexts.data.length && (
+                <TableRow>
+                  <TableCell colSpan={3}>{t('exports.noContexts')}</TableCell>
+                </TableRow>
+              )}
+            </TableBody>
+          </Table>
+        </Paper>
+      )}
+    </PageContainer>
+  );
+};
