@@ -18,7 +18,11 @@ import { PageHeader } from '../../components/PageHeader';
 import { RouterButton } from '../../components/RouterLink';
 import { listContexts } from '../contexts/api';
 import { contextQueryKeys } from '../contexts/query-keys';
-import { listPublicationChannels, updatePublicationChannel } from './api';
+import {
+  listPublicationChannels,
+  updatePublicationChannel,
+  type PublicationChannel,
+} from './api';
 import { exportQueryKeys } from './query-keys';
 
 export const ExportsPage = () => {
@@ -40,8 +44,17 @@ export const ExportsPage = () => {
       contextId: string;
       enabled: boolean;
     }) => updatePublicationChannel(contextId, enabled),
-    onSuccess: () =>
-      client.invalidateQueries({ queryKey: exportQueryKeys.channels() }),
+    onSuccess: (channel) => {
+      client.setQueryData<PublicationChannel[]>(
+        exportQueryKeys.channels(),
+        (current) => [
+          ...(current ?? []).filter(
+            (item) => item.context_id !== channel.context_id,
+          ),
+          channel,
+        ],
+      );
+    },
   });
   const channelsByContextId = new Map(
     channels.data?.map((channel) => [channel.context_id, channel]) ?? [],
@@ -53,9 +66,11 @@ export const ExportsPage = () => {
       <Typography color="text.secondary" sx={{ mt: 1 }}>
         {t('exports.description')}
       </Typography>
-      {(contexts.isError || channels.isError) && (
+      {(contexts.isError || channels.isError || updateChannel.isError) && (
         <Alert severity="error" sx={{ mt: 3 }}>
-          {contexts.error?.message ?? channels.error?.message}
+          {contexts.error?.message ??
+            channels.error?.message ??
+            updateChannel.error.message}
         </Alert>
       )}
       {(contexts.isPending || channels.isPending) && (
