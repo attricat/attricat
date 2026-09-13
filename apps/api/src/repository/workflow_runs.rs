@@ -55,7 +55,10 @@ impl CatalogRepository {
         let ws = self.workspace_id.unwrap_or(Self::DEFAULT_WORKSPACE_ID);
         let mut tx = self.pool.begin().await?;
         let rows: Vec<(Uuid, i64, Value)> = sqlx::query_as(
-            "SELECT w.id, w.version, w.compiled_plan FROM workflows w JOIN workflow_lifecycles l ON l.workflow_id=w.id AND l.workspace_id=w.workspace_id WHERE w.workspace_id=$1 AND w.status='published' AND l.enabled_version=w.version AND $2 > COALESCE(l.activation_sequence, 0)"
+            // Hold a shared lifecycle lock through insertion. disable/enable
+            // acquire the conflicting row lock, so a run selected before a
+            // disable cannot be committed after that disable.
+            "SELECT w.id, w.version, w.compiled_plan FROM workflows w JOIN workflow_lifecycles l ON l.workflow_id=w.id AND l.workspace_id=w.workspace_id WHERE w.workspace_id=$1 AND w.status='published' AND l.enabled_version=w.version AND $2 > COALESCE(l.activation_sequence, 0) FOR SHARE OF l"
         ).bind(ws).bind(event.sequence).fetch_all(&mut *tx).await?;
         let snapshot = serde_json::to_value(event).expect("domain event serializes");
         let mut inserted = 0;
@@ -100,7 +103,7 @@ impl CatalogRepository {
     ) -> Result<Option<ClaimedWorkflowRun>, RepositoryError> {
         let ws = self.workspace_id.unwrap_or(Self::DEFAULT_WORKSPACE_ID);
         let row = sqlx::query_as::<_, (Uuid,Uuid,i64,Uuid,i64,String,i32,Option<DateTime<Utc>>,Option<DateTime<Utc>>,Option<String>,DateTime<Utc>,Option<DateTime<Utc>>,Uuid,i32,Value,Value)>(
-            "WITH candidate AS (SELECT id FROM workflow_runs WHERE workspace_id=$1 AND ((status='pending' AND next_attempt_at<=clock_timestamp()) OR (status='leased' AND lease_until<=clock_timestamp())) ORDER BY next_attempt_at,id FOR UPDATE SKIP LOCKED LIMIT 1), leased AS (UPDATE workflow_runs r SET status='leased', attempts=attempts+1, lease_owner=$2, lease_until=clock_timestamp()+($3 * interval '1 millisecond'), last_error=NULL, updated_at=clock_timestamp() FROM candidate c WHERE r.id=c.id RETURNING r.*) SELECT id,workflow_id,workflow_version,trigger_event_id,trigger_sequence,status,attempts,failed_at,completed_at,last_error,created_at,cancelled_at,root_trigger_event_id,causal_depth,trigger_event,compiled_plan FROM leased"
+            "WITH candidate AS (SELECT id FROM workflow_runs WHERE workspace_id=$1 AND ((status='pending' AND next_attempt_at<=clock_timestamp()) OR (status='leased' AND lease_until<=clock_timestamp())) ORDER BY next_attempt_at,id FOR UPDATE SKIP LOCKED LIMIT 1), leased AS (UPDATE workflow_runs r SET status='leased', attempts=attempts+1, lease_owner=$2, lease_until=clock_timestamp()+($3 * interval '1 millisecond'), last_error=NULL, updated_at=clock_timestamp() FROM candidate c WHERE r.id=c.id RETURNING r.*) SELECT id,workflow_id,workflow_version,trigger_event_id,trigger_sequence,status,attempts,failed_at,completed_at,last_error,created_at,cancelled_at,COALESCE(root_trigger_event_id, trigger_event_id),causal_depth,trigger_event,compiled_plan FROM leased"
         ).bind(ws).bind(owner).bind(lease.as_millis() as i64).fetch_optional(&self.pool).await?;
         Ok(row.map(|r| ClaimedWorkflowRun {
             run: WorkflowRun {
@@ -161,7 +164,7 @@ impl CatalogRepository {
     }
     pub async fn list_workflow_runs(&self) -> Result<Vec<WorkflowRun>, RepositoryError> {
         let ws = self.workspace_id.unwrap_or(Self::DEFAULT_WORKSPACE_ID);
-        Ok(sqlx::query_as("SELECT id,workflow_id,workflow_version,trigger_event_id,trigger_sequence,status,attempts,failed_at,completed_at,last_error,created_at,cancelled_at,root_trigger_event_id,causal_depth FROM workflow_runs WHERE workspace_id=$1 ORDER BY created_at DESC").bind(ws).fetch_all(&self.pool).await?)
+        Ok(sqlx::query_as("SELECT id,workflow_id,workflow_version,trigger_event_id,trigger_sequence,status,attempts,failed_at,completed_at,last_error,created_at,cancelled_at,COALESCE(root_trigger_event_id, trigger_event_id) AS root_trigger_event_id,causal_depth FROM workflow_runs WHERE workspace_id=$1 ORDER BY created_at DESC").bind(ws).fetch_all(&self.pool).await?)
     }
     pub async fn replay_workflow_run(&self, id: Uuid) -> Result<bool, RepositoryError> {
         let ws = self.workspace_id.unwrap_or(Self::DEFAULT_WORKSPACE_ID);

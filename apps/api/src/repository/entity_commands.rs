@@ -22,7 +22,31 @@ pub(super) struct AuditValueSnapshot {
 }
 
 fn workflow_event_path<'a>(value: &'a Value, path: &str) -> Option<&'a Value> {
-    path.split('.').try_fold(value, |value, key| value.get(key))
+    path.split('.').try_fold(value, |value, key| match value {
+        Value::Object(_) => value.get(key),
+        Value::Array(values) => key
+            .parse::<usize>()
+            .ok()
+            .and_then(|index| values.get(index)),
+        _ => None,
+    })
+}
+
+#[cfg(test)]
+mod workflow_event_path_tests {
+    use super::workflow_event_path;
+    use serde_json::json;
+
+    #[test]
+    fn resolves_the_compiled_facts_array_path_exactly() {
+        let event = json!({"facts": [{"attribute_code": "title"}]});
+        assert_eq!(
+            workflow_event_path(&event, "facts.0.attribute_code"),
+            Some(&json!("title"))
+        );
+        assert_eq!(workflow_event_path(&event, "facts.title"), None);
+        assert_eq!(workflow_event_path(&event, "facts.1.attribute_code"), None);
+    }
 }
 
 struct CardinalityCheck<'a> {
@@ -227,6 +251,17 @@ impl CatalogRepository {
     ) -> Result<super::WorkflowActionResult, RepositoryError> {
         let ws = self.workspace_id.unwrap_or(Self::DEFAULT_WORKSPACE_ID);
         let mut transaction = self.pool.begin().await?;
+        // Every path that changes workflow state takes this lock before a run
+        // lock. Keeping that order aligned with disable avoids a run/lifecycle
+        // deadlock while making disable a durable execution fence.
+        let enabled_version: Option<i64> = sqlx::query_scalar::<_, Option<i64>>(
+            "SELECT enabled_version FROM workflow_lifecycles WHERE workflow_id=$1 AND workspace_id=$2 FOR UPDATE",
+        )
+        .bind(run.run.workflow_id)
+        .bind(ws)
+        .fetch_optional(&mut *transaction)
+        .await?
+        .flatten();
         let status: Option<String> = sqlx::query_scalar(
             "SELECT status FROM workflow_runs WHERE id=$1 AND workspace_id=$2 FOR UPDATE",
         )
@@ -255,6 +290,15 @@ impl CatalogRepository {
             return Err(RepositoryError::InvalidWorkflowDefinition(
                 "workflow run lease was lost".into(),
             ));
+        }
+        if enabled_version != Some(run.run.workflow_version) {
+            sqlx::query("UPDATE workflow_runs SET status='cancelled',cancelled_at=clock_timestamp(),lease_owner=NULL,lease_until=NULL,updated_at=clock_timestamp() WHERE id=$1 AND status='leased' AND lease_owner=$2")
+                .bind(run.run.id)
+                .bind(&run.lease_owner)
+                .execute(&mut *transaction)
+                .await?;
+            transaction.commit().await?;
+            return Ok(super::WorkflowActionResult::Cancelled);
         }
         let marker = sqlx::query("INSERT INTO workflow_run_actions(run_id,action_index) VALUES($1,$2) ON CONFLICT DO NOTHING")
             .bind(run.run.id).bind(action_index).execute(&mut *transaction).await?;

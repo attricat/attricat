@@ -1,7 +1,7 @@
 mod support;
 use support::*;
 
-const DEFINITION: &str = "format_version = 1\ncode = \"tag_new_products\"\nname = \"Tag new products\"\n[[triggers]]\nevent_type = \"entity.created.v1\"\n[triggers.facts]\nblueprint = \"product\"\n[[actions]]\ntype = \"system_tags_add\"\ntags = [\"new\"]";
+const DEFINITION: &str = "format_version = 1\ncode = \"tag_new_products\"\nname = \"Tag new products\"\n[[triggers]]\nevent_type = \"entity.created.v1\"\n[[actions]]\ntype = \"system_tags_add\"\ntags = [\"new\"]";
 
 #[sqlx::test]
 async fn workflow_lifecycle_keeps_immutable_revisions(pool: PgPool) {

@@ -173,6 +173,18 @@ impl CatalogRepository {
     pub async fn disable_workflow(&self, id: Uuid) -> Result<Workflow, RepositoryError> {
         let ws = self.workspace_id.unwrap_or(Self::DEFAULT_WORKSPACE_ID);
         let mut tx = self.pool.begin().await?;
+        // This conflicts with fan-out's shared lock and action execution's
+        // exclusive lifecycle check, making disable a durable execution fence.
+        let lifecycle_id: Option<Uuid> = sqlx::query_scalar(
+            "SELECT workflow_id FROM workflow_lifecycles WHERE workflow_id=$1 AND workspace_id=$2 FOR UPDATE",
+        )
+        .bind(id)
+        .bind(ws)
+        .fetch_optional(&mut *tx)
+        .await?;
+        if lifecycle_id.is_none() {
+            return Err(RepositoryError::NotFound("workflow"));
+        }
         let n=sqlx::query("UPDATE workflow_lifecycles SET enabled_version=NULL,disabled_at=now(),updated_at=now() WHERE workflow_id=$1 AND workspace_id=$2").bind(id).bind(ws).execute(&mut *tx).await?;
         if n.rows_affected() == 0 {
             return Err(RepositoryError::NotFound("workflow"));
