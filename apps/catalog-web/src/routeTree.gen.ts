@@ -42,6 +42,9 @@ import { Route as ManageContextsNewRouteImport } from './routes/manage/contexts/
 import { Route as ManageExtensionsIndexRouteImport } from './routes/manage/extensions/index'
 import { Route as ManageExtensionsExtensionIdRouteImport } from './routes/manage/extensions/$extensionId'
 import { Route as ManageExtensionsSideloadRouteImport } from './routes/manage/extensions/sideload'
+import { Route as ManageWorkflowsIndexRouteImport } from './routes/manage/workflows/index'
+import { Route as ManageWorkflowsWorkflowIdRouteImport } from './routes/manage/workflows/$workflowId'
+import { Route as ManageWorkflowsNewRouteImport } from './routes/manage/workflows/new'
 import { Route as ManageWorkspaceIndexRouteImport } from './routes/manage/workspace/index'
 import { Route as ManageWorkspaceInvitationsRouteImport } from './routes/manage/workspace/invitations'
 import { Route as ManageWorkspaceMembersRouteImport } from './routes/manage/workspace/members'
@@ -49,7 +52,9 @@ import { Route as ManageWorkspaceNavigationRouteImport } from './routes/manage/w
 import { Route as ManageWorkspaceRolesRouteImport } from './routes/manage/workspace/roles'
 import { Route as ManageBlueprintsBlueprintIdIndexRouteImport } from './routes/manage/blueprints/$blueprintId/index'
 import { Route as ManageExtensionsOwnerRepositoryRouteImport } from './routes/manage/extensions/$owner/$repository'
+import { Route as ManageWorkflowsWorkflowIdIndexRouteImport } from './routes/manage/workflows/$workflowId/index'
 import { Route as ManageBlueprintsBlueprintIdRevisionsVersionNewRouteImport } from './routes/manage/blueprints/$blueprintId/revisions/$version/new'
+import { Route as ManageWorkflowsWorkflowIdRevisionsVersionNewRouteImport } from './routes/manage/workflows/$workflowId/revisions/$version/new'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
@@ -221,6 +226,22 @@ const ManageExtensionsSideloadRoute =
     path: '/manage/extensions/sideload',
     getParentRoute: () => rootRouteImport,
   } as any)
+const ManageWorkflowsIndexRoute = ManageWorkflowsIndexRouteImport.update({
+  id: '/manage/workflows/',
+  path: '/manage/workflows/',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ManageWorkflowsWorkflowIdRoute =
+  ManageWorkflowsWorkflowIdRouteImport.update({
+    id: '/manage/workflows/$workflowId',
+    path: '/manage/workflows/$workflowId',
+    getParentRoute: () => rootRouteImport,
+  } as any)
+const ManageWorkflowsNewRoute = ManageWorkflowsNewRouteImport.update({
+  id: '/manage/workflows/new',
+  path: '/manage/workflows/new',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ManageWorkspaceIndexRoute = ManageWorkspaceIndexRouteImport.update({
   id: '/manage/workspace/',
   path: '/manage/workspace/',
@@ -260,11 +281,23 @@ const ManageExtensionsOwnerRepositoryRoute =
     path: '/manage/extensions/$owner/$repository',
     getParentRoute: () => rootRouteImport,
   } as any)
+const ManageWorkflowsWorkflowIdIndexRoute =
+  ManageWorkflowsWorkflowIdIndexRouteImport.update({
+    id: '/',
+    path: '/',
+    getParentRoute: () => ManageWorkflowsWorkflowIdRoute,
+  } as any)
 const ManageBlueprintsBlueprintIdRevisionsVersionNewRoute =
   ManageBlueprintsBlueprintIdRevisionsVersionNewRouteImport.update({
     id: '/revisions/$version/new',
     path: '/revisions/$version/new',
     getParentRoute: () => ManageBlueprintsBlueprintIdRoute,
+  } as any)
+const ManageWorkflowsWorkflowIdRevisionsVersionNewRoute =
+  ManageWorkflowsWorkflowIdRevisionsVersionNewRouteImport.update({
+    id: '/revisions/$version/new',
+    path: '/revisions/$version/new',
+    getParentRoute: () => ManageWorkflowsWorkflowIdRoute,
   } as any)
 
 export interface FileRoutesByFullPath {
@@ -297,6 +330,8 @@ export interface FileRoutesByFullPath {
   '/manage/contexts/new': typeof ManageContextsNewRoute
   '/manage/extensions/$extensionId': typeof ManageExtensionsExtensionIdRoute
   '/manage/extensions/sideload': typeof ManageExtensionsSideloadRoute
+  '/manage/workflows/$workflowId': typeof ManageWorkflowsWorkflowIdRouteWithChildren
+  '/manage/workflows/new': typeof ManageWorkflowsNewRoute
   '/manage/workspace/invitations': typeof ManageWorkspaceInvitationsRoute
   '/manage/workspace/members': typeof ManageWorkspaceMembersRoute
   '/manage/workspace/navigation': typeof ManageWorkspaceNavigationRoute
@@ -305,10 +340,13 @@ export interface FileRoutesByFullPath {
   '/manage/blueprints/': typeof ManageBlueprintsIndexRoute
   '/manage/contexts/': typeof ManageContextsIndexRoute
   '/manage/extensions/': typeof ManageExtensionsIndexRoute
+  '/manage/workflows/': typeof ManageWorkflowsIndexRoute
   '/manage/workspace/': typeof ManageWorkspaceIndexRoute
   '/manage/extensions/$owner/$repository': typeof ManageExtensionsOwnerRepositoryRoute
   '/manage/blueprints/$blueprintId/': typeof ManageBlueprintsBlueprintIdIndexRoute
+  '/manage/workflows/$workflowId/': typeof ManageWorkflowsWorkflowIdIndexRoute
   '/manage/blueprints/$blueprintId/revisions/$version/new': typeof ManageBlueprintsBlueprintIdRevisionsVersionNewRoute
+  '/manage/workflows/$workflowId/revisions/$version/new': typeof ManageWorkflowsWorkflowIdRevisionsVersionNewRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
@@ -336,6 +374,7 @@ export interface FileRoutesByTo {
   '/manage/contexts/new': typeof ManageContextsNewRoute
   '/manage/extensions/$extensionId': typeof ManageExtensionsExtensionIdRoute
   '/manage/extensions/sideload': typeof ManageExtensionsSideloadRoute
+  '/manage/workflows/new': typeof ManageWorkflowsNewRoute
   '/manage/workspace/invitations': typeof ManageWorkspaceInvitationsRoute
   '/manage/workspace/members': typeof ManageWorkspaceMembersRoute
   '/manage/workspace/navigation': typeof ManageWorkspaceNavigationRoute
@@ -344,10 +383,13 @@ export interface FileRoutesByTo {
   '/manage/blueprints': typeof ManageBlueprintsIndexRoute
   '/manage/contexts': typeof ManageContextsIndexRoute
   '/manage/extensions': typeof ManageExtensionsIndexRoute
+  '/manage/workflows': typeof ManageWorkflowsIndexRoute
   '/manage/workspace': typeof ManageWorkspaceIndexRoute
   '/manage/extensions/$owner/$repository': typeof ManageExtensionsOwnerRepositoryRoute
   '/manage/blueprints/$blueprintId': typeof ManageBlueprintsBlueprintIdIndexRoute
+  '/manage/workflows/$workflowId': typeof ManageWorkflowsWorkflowIdIndexRoute
   '/manage/blueprints/$blueprintId/revisions/$version/new': typeof ManageBlueprintsBlueprintIdRevisionsVersionNewRoute
+  '/manage/workflows/$workflowId/revisions/$version/new': typeof ManageWorkflowsWorkflowIdRevisionsVersionNewRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -380,6 +422,8 @@ export interface FileRoutesById {
   '/manage/contexts/new': typeof ManageContextsNewRoute
   '/manage/extensions/$extensionId': typeof ManageExtensionsExtensionIdRoute
   '/manage/extensions/sideload': typeof ManageExtensionsSideloadRoute
+  '/manage/workflows/$workflowId': typeof ManageWorkflowsWorkflowIdRouteWithChildren
+  '/manage/workflows/new': typeof ManageWorkflowsNewRoute
   '/manage/workspace/invitations': typeof ManageWorkspaceInvitationsRoute
   '/manage/workspace/members': typeof ManageWorkspaceMembersRoute
   '/manage/workspace/navigation': typeof ManageWorkspaceNavigationRoute
@@ -388,10 +432,13 @@ export interface FileRoutesById {
   '/manage/blueprints/': typeof ManageBlueprintsIndexRoute
   '/manage/contexts/': typeof ManageContextsIndexRoute
   '/manage/extensions/': typeof ManageExtensionsIndexRoute
+  '/manage/workflows/': typeof ManageWorkflowsIndexRoute
   '/manage/workspace/': typeof ManageWorkspaceIndexRoute
   '/manage/extensions/$owner/$repository': typeof ManageExtensionsOwnerRepositoryRoute
   '/manage/blueprints/$blueprintId/': typeof ManageBlueprintsBlueprintIdIndexRoute
+  '/manage/workflows/$workflowId/': typeof ManageWorkflowsWorkflowIdIndexRoute
   '/manage/blueprints/$blueprintId/revisions/$version/new': typeof ManageBlueprintsBlueprintIdRevisionsVersionNewRoute
+  '/manage/workflows/$workflowId/revisions/$version/new': typeof ManageWorkflowsWorkflowIdRevisionsVersionNewRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -425,6 +472,8 @@ export interface FileRouteTypes {
     | '/manage/contexts/new'
     | '/manage/extensions/$extensionId'
     | '/manage/extensions/sideload'
+    | '/manage/workflows/$workflowId'
+    | '/manage/workflows/new'
     | '/manage/workspace/invitations'
     | '/manage/workspace/members'
     | '/manage/workspace/navigation'
@@ -433,10 +482,13 @@ export interface FileRouteTypes {
     | '/manage/blueprints/'
     | '/manage/contexts/'
     | '/manage/extensions/'
+    | '/manage/workflows/'
     | '/manage/workspace/'
     | '/manage/extensions/$owner/$repository'
     | '/manage/blueprints/$blueprintId/'
+    | '/manage/workflows/$workflowId/'
     | '/manage/blueprints/$blueprintId/revisions/$version/new'
+    | '/manage/workflows/$workflowId/revisions/$version/new'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
@@ -464,6 +516,7 @@ export interface FileRouteTypes {
     | '/manage/contexts/new'
     | '/manage/extensions/$extensionId'
     | '/manage/extensions/sideload'
+    | '/manage/workflows/new'
     | '/manage/workspace/invitations'
     | '/manage/workspace/members'
     | '/manage/workspace/navigation'
@@ -472,10 +525,13 @@ export interface FileRouteTypes {
     | '/manage/blueprints'
     | '/manage/contexts'
     | '/manage/extensions'
+    | '/manage/workflows'
     | '/manage/workspace'
     | '/manage/extensions/$owner/$repository'
     | '/manage/blueprints/$blueprintId'
+    | '/manage/workflows/$workflowId'
     | '/manage/blueprints/$blueprintId/revisions/$version/new'
+    | '/manage/workflows/$workflowId/revisions/$version/new'
   id:
     | '__root__'
     | '/'
@@ -507,6 +563,8 @@ export interface FileRouteTypes {
     | '/manage/contexts/new'
     | '/manage/extensions/$extensionId'
     | '/manage/extensions/sideload'
+    | '/manage/workflows/$workflowId'
+    | '/manage/workflows/new'
     | '/manage/workspace/invitations'
     | '/manage/workspace/members'
     | '/manage/workspace/navigation'
@@ -515,10 +573,13 @@ export interface FileRouteTypes {
     | '/manage/blueprints/'
     | '/manage/contexts/'
     | '/manage/extensions/'
+    | '/manage/workflows/'
     | '/manage/workspace/'
     | '/manage/extensions/$owner/$repository'
     | '/manage/blueprints/$blueprintId/'
+    | '/manage/workflows/$workflowId/'
     | '/manage/blueprints/$blueprintId/revisions/$version/new'
+    | '/manage/workflows/$workflowId/revisions/$version/new'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -544,6 +605,8 @@ export interface RootRouteChildren {
   ManageContextsNewRoute: typeof ManageContextsNewRoute
   ManageExtensionsExtensionIdRoute: typeof ManageExtensionsExtensionIdRoute
   ManageExtensionsSideloadRoute: typeof ManageExtensionsSideloadRoute
+  ManageWorkflowsWorkflowIdRoute: typeof ManageWorkflowsWorkflowIdRouteWithChildren
+  ManageWorkflowsNewRoute: typeof ManageWorkflowsNewRoute
   ManageWorkspaceInvitationsRoute: typeof ManageWorkspaceInvitationsRoute
   ManageWorkspaceMembersRoute: typeof ManageWorkspaceMembersRoute
   ManageWorkspaceNavigationRoute: typeof ManageWorkspaceNavigationRoute
@@ -551,6 +614,7 @@ export interface RootRouteChildren {
   ManageBlueprintsIndexRoute: typeof ManageBlueprintsIndexRoute
   ManageContextsIndexRoute: typeof ManageContextsIndexRoute
   ManageExtensionsIndexRoute: typeof ManageExtensionsIndexRoute
+  ManageWorkflowsIndexRoute: typeof ManageWorkflowsIndexRoute
   ManageWorkspaceIndexRoute: typeof ManageWorkspaceIndexRoute
   ManageExtensionsOwnerRepositoryRoute: typeof ManageExtensionsOwnerRepositoryRoute
 }
@@ -788,6 +852,27 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ManageExtensionsSideloadRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/manage/workflows/': {
+      id: '/manage/workflows/'
+      path: '/manage/workflows'
+      fullPath: '/manage/workflows/'
+      preLoaderRoute: typeof ManageWorkflowsIndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/manage/workflows/$workflowId': {
+      id: '/manage/workflows/$workflowId'
+      path: '/manage/workflows/$workflowId'
+      fullPath: '/manage/workflows/$workflowId'
+      preLoaderRoute: typeof ManageWorkflowsWorkflowIdRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/manage/workflows/new': {
+      id: '/manage/workflows/new'
+      path: '/manage/workflows/new'
+      fullPath: '/manage/workflows/new'
+      preLoaderRoute: typeof ManageWorkflowsNewRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/manage/workspace/': {
       id: '/manage/workspace/'
       path: '/manage/workspace'
@@ -837,12 +922,26 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ManageExtensionsOwnerRepositoryRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/manage/workflows/$workflowId/': {
+      id: '/manage/workflows/$workflowId/'
+      path: '/'
+      fullPath: '/manage/workflows/$workflowId/'
+      preLoaderRoute: typeof ManageWorkflowsWorkflowIdIndexRouteImport
+      parentRoute: typeof ManageWorkflowsWorkflowIdRoute
+    }
     '/manage/blueprints/$blueprintId/revisions/$version/new': {
       id: '/manage/blueprints/$blueprintId/revisions/$version/new'
       path: '/revisions/$version/new'
       fullPath: '/manage/blueprints/$blueprintId/revisions/$version/new'
       preLoaderRoute: typeof ManageBlueprintsBlueprintIdRevisionsVersionNewRouteImport
       parentRoute: typeof ManageBlueprintsBlueprintIdRoute
+    }
+    '/manage/workflows/$workflowId/revisions/$version/new': {
+      id: '/manage/workflows/$workflowId/revisions/$version/new'
+      path: '/revisions/$version/new'
+      fullPath: '/manage/workflows/$workflowId/revisions/$version/new'
+      preLoaderRoute: typeof ManageWorkflowsWorkflowIdRevisionsVersionNewRouteImport
+      parentRoute: typeof ManageWorkflowsWorkflowIdRoute
     }
   }
 }
@@ -907,6 +1006,23 @@ const ManageBlueprintsBlueprintIdRouteWithChildren =
     ManageBlueprintsBlueprintIdRouteChildren,
   )
 
+interface ManageWorkflowsWorkflowIdRouteChildren {
+  ManageWorkflowsWorkflowIdIndexRoute: typeof ManageWorkflowsWorkflowIdIndexRoute
+  ManageWorkflowsWorkflowIdRevisionsVersionNewRoute: typeof ManageWorkflowsWorkflowIdRevisionsVersionNewRoute
+}
+
+const ManageWorkflowsWorkflowIdRouteChildren: ManageWorkflowsWorkflowIdRouteChildren =
+  {
+    ManageWorkflowsWorkflowIdIndexRoute: ManageWorkflowsWorkflowIdIndexRoute,
+    ManageWorkflowsWorkflowIdRevisionsVersionNewRoute:
+      ManageWorkflowsWorkflowIdRevisionsVersionNewRoute,
+  }
+
+const ManageWorkflowsWorkflowIdRouteWithChildren =
+  ManageWorkflowsWorkflowIdRoute._addFileChildren(
+    ManageWorkflowsWorkflowIdRouteChildren,
+  )
+
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   LoginRoute: LoginRouteWithChildren,
@@ -932,6 +1048,8 @@ const rootRouteChildren: RootRouteChildren = {
   ManageContextsNewRoute: ManageContextsNewRoute,
   ManageExtensionsExtensionIdRoute: ManageExtensionsExtensionIdRoute,
   ManageExtensionsSideloadRoute: ManageExtensionsSideloadRoute,
+  ManageWorkflowsWorkflowIdRoute: ManageWorkflowsWorkflowIdRouteWithChildren,
+  ManageWorkflowsNewRoute: ManageWorkflowsNewRoute,
   ManageWorkspaceInvitationsRoute: ManageWorkspaceInvitationsRoute,
   ManageWorkspaceMembersRoute: ManageWorkspaceMembersRoute,
   ManageWorkspaceNavigationRoute: ManageWorkspaceNavigationRoute,
@@ -939,6 +1057,7 @@ const rootRouteChildren: RootRouteChildren = {
   ManageBlueprintsIndexRoute: ManageBlueprintsIndexRoute,
   ManageContextsIndexRoute: ManageContextsIndexRoute,
   ManageExtensionsIndexRoute: ManageExtensionsIndexRoute,
+  ManageWorkflowsIndexRoute: ManageWorkflowsIndexRoute,
   ManageWorkspaceIndexRoute: ManageWorkspaceIndexRoute,
   ManageExtensionsOwnerRepositoryRoute: ManageExtensionsOwnerRepositoryRoute,
 }

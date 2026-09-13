@@ -95,6 +95,15 @@ impl EventPublisher for CatalogRepository {
         event
             .validate()
             .map_err(RepositoryError::InvalidDomainEvent)?;
+        // Coordinate every application outbox append with workflow activation's
+        // high-water capture. This is a transaction-scoped lock, so an activation
+        // boundary cannot overtake an event that has allocated a sequence but has
+        // not committed yet.
+        let workspace_id = self.workspace_id.unwrap_or(Self::DEFAULT_WORKSPACE_ID);
+        sqlx::query("SELECT pg_advisory_xact_lock(hashtextextended($1, 0))")
+            .bind(format!("workflow-activation-boundary:{workspace_id}"))
+            .execute(&mut **transaction)
+            .await?;
         Ok(sqlx::query_as::<_, DomainEvent>(
             r#"INSERT INTO domain_events (
                     id, workspace_id, event_type, aggregate_kind, aggregate_id,
@@ -104,7 +113,7 @@ impl EventPublisher for CatalogRepository {
                     aggregate_id, correlation_id, causation_id, source_kind, source_name, metadata, payload"#,
         )
         .bind(Uuid::new_v4())
-        .bind(self.workspace_id.unwrap_or(Self::DEFAULT_WORKSPACE_ID))
+        .bind(workspace_id)
         .bind(event.event_type)
         .bind(event.aggregate_kind)
         .bind(event.aggregate_id)

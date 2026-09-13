@@ -215,3 +215,7 @@ separate, client-safe DOM protocol. It contains coarse IDs and change hints
 only, validates strict detail schemas at the host boundary, and is not derived
 from or connected to the outbox. It conveys neither authorization nor internal
 event facts.
+
+## Workflow consumer
+
+`catalog.workflows` is an internal consumer of the supported entity v1 events. Its delivery handler is intentionally limited to durable workflow-run fan-out; independent workflow-run leases perform mutations. Delivery and worker attempts are at-least-once and unordered, but each run/action key, entity mutation, audit record, and emitted outbox event commit in one transaction, so lease reclaim cannot duplicate effects. Workflow emitted events retain correlation/direct causation and persisted root/depth lineage, use `workflow:<id>` as source, and are not fed back into workflows by default (depth is capped at 8). Disabling cancels queued and leased runs; diagnostics expose no domain-event payloads.

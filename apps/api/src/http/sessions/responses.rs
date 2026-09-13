@@ -38,6 +38,8 @@ pub(super) struct SessionCapabilities {
     workspace_navigation_manage: bool,
     extensions_read: bool,
     extensions_manage: bool,
+    workflows_read: bool,
+    workflows_manage: bool,
     entities_publish: bool,
 }
 
@@ -155,6 +157,14 @@ async fn session_capabilities(
         extensions_manage: state
             .repository
             .is_authorized(user_id, workspace_id, "extensions.manage", None, None)
+            .await?,
+        workflows_read: state
+            .repository
+            .is_authorized(user_id, workspace_id, "workflows.read", None, None)
+            .await?,
+        workflows_manage: state
+            .repository
+            .is_authorized(user_id, workspace_id, "workflows.manage", None, None)
             .await?,
         entities_publish: state
             .repository

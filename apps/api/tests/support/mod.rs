@@ -224,6 +224,10 @@ async fn start_server_with_auth_mode_and_store_with_devtools(
         .await
         .unwrap();
     CatalogRepository::new(pool.clone())
+        .ensure_workflow_permissions()
+        .await
+        .unwrap();
+    CatalogRepository::new(pool.clone())
         .ensure_entity_publication_permissions()
         .await
         .unwrap();

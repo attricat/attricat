@@ -21,6 +21,17 @@ pub(super) struct AuditValueSnapshot {
     value: Value,
 }
 
+fn workflow_event_path<'a>(value: &'a Value, path: &str) -> Option<&'a Value> {
+    path.split('.').try_fold(value, |value, key| match value {
+        Value::Object(_) => value.get(key),
+        Value::Array(values) => key
+            .parse::<usize>()
+            .ok()
+            .and_then(|index| values.get(index)),
+        _ => None,
+    })
+}
+
 struct CardinalityCheck<'a> {
     entity: &'a Entity,
     attribute_id: Uuid,
@@ -209,6 +220,206 @@ impl CatalogRepository {
         self.commit_entity_mutation(transaction, changes, event)
             .await?;
         Ok(entity)
+    }
+
+    /// Executes one local workflow action and records its idempotency key in the
+    /// same transaction as the locked entity mutation, audit, and outbox event.
+    /// A reclaimed run therefore observes the key and cannot repeat catalog effects.
+    pub(crate) async fn execute_workflow_action(
+        &self,
+        run: &super::ClaimedWorkflowRun,
+        action_index: i32,
+        action: &catalog_workflow::Action,
+        event: &crate::domain_events::DomainEvent,
+    ) -> Result<super::WorkflowActionResult, RepositoryError> {
+        let ws = self.workspace_id.unwrap_or(Self::DEFAULT_WORKSPACE_ID);
+        let mut transaction = self.pool.begin().await?;
+        // Every path that changes workflow state takes this lock before a run
+        // lock. Keeping that order aligned with disable avoids a run/lifecycle
+        // deadlock while making disable a durable execution fence.
+        let enabled_version: Option<i64> = sqlx::query_scalar::<_, Option<i64>>(
+            "SELECT enabled_version FROM workflow_lifecycles WHERE workflow_id=$1 AND workspace_id=$2 FOR UPDATE",
+        )
+        .bind(run.run.workflow_id)
+        .bind(ws)
+        .fetch_optional(&mut *transaction)
+        .await?
+        .flatten();
+        let status: Option<String> = sqlx::query_scalar(
+            "SELECT status FROM workflow_runs WHERE id=$1 AND workspace_id=$2 FOR UPDATE",
+        )
+        .bind(run.run.id)
+        .bind(ws)
+        .fetch_optional(&mut *transaction)
+        .await?;
+        match status.as_deref() {
+            Some("cancelled") => {
+                transaction.commit().await?;
+                return Ok(super::WorkflowActionResult::Cancelled);
+            }
+            Some("leased") => {}
+            _ => {
+                return Err(RepositoryError::InvalidWorkflowDefinition(
+                    "workflow run is no longer leased".into(),
+                ));
+            }
+        }
+        let owner: Option<String> =
+            sqlx::query_scalar("SELECT lease_owner FROM workflow_runs WHERE id=$1")
+                .bind(run.run.id)
+                .fetch_one(&mut *transaction)
+                .await?;
+        if owner.as_deref() != Some(run.lease_owner.as_str()) {
+            return Err(RepositoryError::InvalidWorkflowDefinition(
+                "workflow run lease was lost".into(),
+            ));
+        }
+        if enabled_version != Some(run.run.workflow_version) {
+            sqlx::query("UPDATE workflow_runs SET status='cancelled',cancelled_at=clock_timestamp(),lease_owner=NULL,lease_until=NULL,updated_at=clock_timestamp() WHERE id=$1 AND status='leased' AND lease_owner=$2")
+                .bind(run.run.id)
+                .bind(&run.lease_owner)
+                .execute(&mut *transaction)
+                .await?;
+            transaction.commit().await?;
+            return Ok(super::WorkflowActionResult::Cancelled);
+        }
+        let marker = sqlx::query("INSERT INTO workflow_run_actions(run_id,action_index) VALUES($1,$2) ON CONFLICT DO NOTHING")
+            .bind(run.run.id).bind(action_index).execute(&mut *transaction).await?;
+        if marker.rows_affected() == 0 {
+            transaction.commit().await?;
+            return Ok(super::WorkflowActionResult::AlreadyCompleted);
+        }
+
+        // Lock first, then derive desired tags/metadata from current state: event
+        // payloads intentionally contain only immutable facts and are unordered.
+        let entity = self
+            .lock_entity(&mut transaction, event.aggregate_id)
+            .await?;
+        let before = self
+            .entity_audit_snapshot(&mut transaction, event.aggregate_id)
+            .await?;
+        let (values, system_tags, system_metadata) = match action {
+            catalog_workflow::Action::SystemTagsAdd { tags } => {
+                let mut result = entity.system_tags.clone();
+                for tag in tags {
+                    if !result.contains(tag) {
+                        result.push(tag.clone());
+                    }
+                }
+                validate_system_tags(&result)?;
+                (Vec::new(), Some(result), None)
+            }
+            catalog_workflow::Action::SystemTagsRemove { tags } => (
+                Vec::new(),
+                Some(
+                    entity
+                        .system_tags
+                        .iter()
+                        .filter(|tag| !tags.contains(*tag))
+                        .cloned()
+                        .collect(),
+                ),
+                None,
+            ),
+            catalog_workflow::Action::SystemMetadataMerge { values } => {
+                let mut metadata = entity
+                    .system_metadata
+                    .as_object()
+                    .cloned()
+                    .ok_or(RepositoryError::InvalidSystemMetadata)?;
+                for (key, value) in values {
+                    metadata.insert(key.clone(), value.clone());
+                }
+                let metadata = Value::Object(metadata);
+                validate_system_metadata(&metadata)?;
+                (Vec::new(), None, Some(metadata))
+            }
+            catalog_workflow::Action::SystemMetadataDelete { keys } => {
+                let mut metadata = entity
+                    .system_metadata
+                    .as_object()
+                    .cloned()
+                    .ok_or(RepositoryError::InvalidSystemMetadata)?;
+                for key in keys {
+                    metadata.remove(key);
+                }
+                (Vec::new(), None, Some(Value::Object(metadata)))
+            }
+            catalog_workflow::Action::AttributeWrite {
+                attribute_code,
+                value,
+            } => {
+                let value = match value {
+                    catalog_workflow::ScalarSource::Fixed { fixed } => fixed.clone(),
+                    catalog_workflow::ScalarSource::Event { event_field } => {
+                        workflow_event_path(&event.payload, event_field)
+                            .cloned()
+                            .ok_or_else(|| {
+                                RepositoryError::InvalidWorkflowDefinition(
+                                    "event field missing".into(),
+                                )
+                            })?
+                    }
+                };
+                if !(value.is_string()
+                    || value.is_number()
+                    || value.is_boolean()
+                    || value.is_null())
+                {
+                    return Err(RepositoryError::InvalidWorkflowDefinition(
+                        "event field must resolve to a scalar".into(),
+                    ));
+                }
+                (
+                    vec![NewAttributeValue::Scalar {
+                        attribute_id: None,
+                        attribute_code: Some(attribute_code.clone()),
+                        context_id: None,
+                        value,
+                    }],
+                    None,
+                    None,
+                )
+            }
+        };
+        if system_tags.is_some() || system_metadata.is_some() {
+            sqlx::query("UPDATE entities SET system_tags=COALESCE($2,system_tags),system_metadata=COALESCE($3,system_metadata),updated_at=now() WHERE id=$1 AND workspace_id=$4")
+                .bind(entity.id).bind(system_tags).bind(system_metadata).bind(ws).execute(&mut *transaction).await?;
+        }
+        for value in values {
+            self.insert_value(&mut transaction, &entity, value).await?;
+        }
+        self.validate_entity_schema(&mut transaction, &entity)
+            .await?;
+        let preview = Self::build_preview_projection(&mut transaction, entity.id).await?;
+        let entity = self
+            .store_preview(&mut transaction, entity.id, preview)
+            .await?;
+        let after = self
+            .entity_audit_snapshot(&mut transaction, entity.id)
+            .await?;
+        let changes = Self::audit_changes(entity.id, before, after, false);
+        let event = self.core_event(
+            ENTITY_UPDATED_V1,
+            "entity",
+            entity.id,
+            serde_json::to_value(EntityMutationV1 {
+                entity_id: entity.id,
+                blueprint_id: entity.blueprint_id,
+                blueprint_version: entity.blueprint_version,
+                facts: Self::affected_facts(&changes),
+            })
+            .expect("entity-updated payload serializes"),
+        );
+        if let Some(audit_event_id) = self.write_audit_event(&mut transaction).await? {
+            for change in changes {
+                sqlx::query("INSERT INTO audit_event_changes (id,audit_event_id,workspace_id,entity_id,attribute_id,attribute_code,context_id,context_code,change_kind,before_value,after_value) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)")
+                    .bind(Uuid::new_v4()).bind(audit_event_id).bind(ws).bind(change.entity_id).bind(change.attribute_id).bind(change.attribute_code).bind(change.context_id).bind(change.context_code).bind(change.change_kind).bind(change.before_value).bind(change.after_value).execute(&mut *transaction).await?;
+            }
+        }
+        self.enqueue_event(&mut transaction, event).await?;
+        transaction.commit().await?;
+        Ok(super::WorkflowActionResult::Executed)
     }
 
     pub async fn entity_audit_changes(
@@ -1437,4 +1648,21 @@ fn validate_system_metadata(metadata: &Value) -> Result<(), RepositoryError> {
         return Err(RepositoryError::InvalidSystemMetadata);
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod workflow_event_path_tests {
+    use super::workflow_event_path;
+    use serde_json::json;
+
+    #[test]
+    fn resolves_the_compiled_facts_array_path_exactly() {
+        let event = json!({"facts": [{"attribute_code": "title"}]});
+        assert_eq!(
+            workflow_event_path(&event, "facts.0.attribute_code"),
+            Some(&json!("title"))
+        );
+        assert_eq!(workflow_event_path(&event, "facts.title"), None);
+        assert_eq!(workflow_event_path(&event, "facts.1.attribute_code"), None);
+    }
 }

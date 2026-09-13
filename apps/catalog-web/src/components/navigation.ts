@@ -7,6 +7,7 @@ import {
   ExplorerIcon,
   ExtensionIcon,
   ProfileIcon,
+  WorkflowIcon,
   WorkspaceIcon,
 } from './system-icons';
 
@@ -16,6 +17,7 @@ type NavigationCapabilities = {
   members_manage?: boolean;
   roles_manage?: boolean;
   tokens_manage?: boolean;
+  workflows_read?: boolean;
 };
 
 export const navigationRoutes = {
@@ -28,6 +30,7 @@ export const navigationRoutes = {
   extensions: '/manage/extensions',
   manage: '/manage',
   profile: '/profile',
+  workflows: '/manage/workflows',
   workspace: '/manage/workspace/members',
 } as const;
 
@@ -81,6 +84,12 @@ export const managementNavigationItems = [
     labelKey: 'navigation.extensions',
     to: navigationRoutes.extensions,
   },
+  {
+    descriptionKey: 'management.workflowsDescription',
+    icon: WorkflowIcon,
+    labelKey: 'navigation.workflows',
+    to: navigationRoutes.workflows,
+  },
 ] as const;
 
 export const profileNavigationItem = {
@@ -103,5 +112,7 @@ export const getVisibleManagementNavigationItems = (
     if (item.to === navigationRoutes.auditLog) return capabilities?.audit_read;
     if (item.to === navigationRoutes.extensions)
       return capabilities?.extensions_read;
+    if (item.to === navigationRoutes.workflows)
+      return capabilities?.workflows_read;
     return true;
   });

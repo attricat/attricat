@@ -139,7 +139,7 @@ async fn channel_publication_is_authorized_snapshotted_and_protects_dependencies
     assert_eq!(republished["revision"], 2);
 
     let audit_count: i64 = sqlx::query_scalar(
-        "SELECT count(*) FROM audit_events WHERE workspace_id = $1 AND target ->> 'type' IN ('entity', 'context')", 
+        "SELECT count(*) FROM audit_events WHERE workspace_id = $1 AND target ->> 'type' IN ('entity', 'context')",
     )
     .bind(BOOTSTRAP_WORKSPACE_ID.parse::<Uuid>().unwrap())
     .fetch_one(&pool)

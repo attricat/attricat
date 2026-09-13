@@ -19,7 +19,7 @@ exists.
 
 Permissions are evaluated from active workspace membership role grants:
 blueprint reads/writes/publishing require `blueprints.read`, `blueprints.write`,
-and `blueprints.publish`; entity operations require `entities.read`,
+and `blueprints.publish`; workflow reads and management require `workflows.read` and `workflows.manage`; entity operations require `entities.read`,
 `entities.write`, `entities.delete`, or `entities.publish`; context operations require
 `contexts.read` or `contexts.write`; data-health, metrics, and event-delivery
 dead-letter inspection require `data_health.read`; event-delivery replay and
@@ -86,6 +86,11 @@ password, cookie, CSRF, expiry, and revocation contract is documented in
 | `POST` | `/workspace/invitations/accept` | Accept `{ "secret": "cat_inv_..." }` as the verified intended account. |
 | `GET`, `POST` | `/personal-access-tokens` | List or issue a personal token; creation returns its secret exactly once. |
 | `DELETE` | `/personal-access-tokens/{token_id}` | Revoke a personal token. |
+| `POST` | `/workflows/validate` | Strictly validate and compile a workflow TOML definition without persisting it (`workflows.manage`). |
+| `GET`, `POST` | `/workflows` | List workflow families/revisions or create the first draft (`workflows.read` / `workflows.manage`). |
+| `GET`, `POST` | `/workflows/{id}/versions` | List immutable revisions or create the next draft. |
+| `GET` | `/workflows/{id}`, `/workflows/{id}/versions/{version}` | Read the latest or exact workflow revision. |
+| `POST` | `/workflows/{id}/versions/{version}/publish`, `/enable`; `/workflows/{id}/disable` | Publish, enable an exact published revision, or disable it. |
 | `GET` | `/blueprints` | List published entity blueprints. |
 | `GET` | `/blueprints/catalogue` | List blueprint families and revisions. |
 | `POST` | `/blueprints` | Create the first draft revision from TOML. |
@@ -329,3 +334,7 @@ accepted). A schedule request contains `conversation_id` and a six-field UTC
 principal; scheduled mutations are re-authorized as that user, while a manual
 run uses the user who requested it. Overlapping scheduled occurrences become durable
 skipped runs with a `schedule_skipped` event instead of executing concurrently.
+
+## Workflow run operations
+
+`GET /workflow-runs` lists workspace-scoped run diagnostics and requires `workflows.read`. `POST /workflow-runs/{run_id}/replay` requeues only a terminal dead-letter run and requires `workflows.manage`. Neither endpoint exposes internal domain-event payloads.

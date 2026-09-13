@@ -1,0 +1,181 @@
+import { useForm } from '@tanstack/react-form';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useNavigate } from '@tanstack/react-router';
+import {
+  Alert,
+  Button,
+  Paper,
+  Stack,
+  TextField,
+  Typography,
+} from '@mui/material';
+import { useEffect } from 'react';
+import { useTranslation } from 'react-i18next';
+import { PageContainer } from '../../components/PageContainer';
+import { PageHeader } from '../../components/PageHeader';
+import { currentSession } from '../auth/api';
+import { authQueryKeys } from '../auth/query-keys';
+import {
+  createWorkflow,
+  createWorkflowRevision,
+  getWorkflowRevision,
+  validateWorkflow,
+} from './api';
+import { workflowQueryKeys } from './query-keys';
+
+const starterDefinition = `format_version = 1
+code = "example-workflow"
+name = "Example workflow"
+
+[[triggers]]
+event_type = "entity.created.v1"
+
+[[actions]]
+type = "system_tags_add"
+tags = ["example"]
+`;
+
+export const WorkflowEditorPage = ({
+  workflowId,
+  sourceVersion,
+}: {
+  workflowId?: string;
+  sourceVersion?: number;
+}) => {
+  const { t } = useTranslation();
+  const navigate = useNavigate();
+  const queryClient = useQueryClient();
+  const session = useQuery({
+    queryKey: authQueryKeys.session(),
+    queryFn: currentSession,
+  });
+  const canManage = session.data?.capabilities?.workflows_manage === true;
+  const source = useQuery({
+    queryKey: workflowQueryKeys.revision(workflowId ?? '', sourceVersion ?? 0),
+    queryFn: () => getWorkflowRevision(workflowId!, sourceVersion!),
+    enabled: Boolean(workflowId && sourceVersion && canManage),
+  });
+  const validate = useMutation({ mutationFn: validateWorkflow });
+  const save = useMutation({
+    mutationFn: (definition: string) =>
+      workflowId
+        ? createWorkflowRevision(workflowId, definition)
+        : createWorkflow(definition),
+    onSuccess: async (workflow) => {
+      await queryClient.invalidateQueries({
+        queryKey: workflowQueryKeys.all(),
+      });
+      await navigate({
+        params: { workflowId: workflow.id },
+        to: '/manage/workflows/$workflowId',
+      });
+    },
+  });
+  const form = useForm({
+    defaultValues: { definition: workflowId ? '' : starterDefinition },
+    onSubmit: ({ value }) => save.mutate(value.definition),
+  });
+  useEffect(() => {
+    if (source.data) form.setFieldValue('definition', source.data.definition);
+  }, [form, source.data]);
+
+  if (session.isPending || (workflowId && source.isPending))
+    return (
+      <PageContainer>
+        <Typography>{t('workflows.loading')}</Typography>
+      </PageContainer>
+    );
+  if (!canManage)
+    return (
+      <PageContainer>
+        <Alert severity="error">{t('workflows.notAuthorizedManage')}</Alert>
+      </PageContainer>
+    );
+
+  return (
+    <PageContainer>
+      <PageHeader
+        description={
+          workflowId
+            ? t('workflows.newRevisionDescription', { version: sourceVersion })
+            : t('workflows.newDescription')
+        }
+        title={
+          workflowId ? t('workflows.newRevision') : t('workflows.newWorkflow')
+        }
+      />
+      {source.isError && (
+        <Alert severity="error" sx={{ mt: 3 }}>
+          {source.error.message}
+        </Alert>
+      )}
+      <Paper
+        component="form"
+        onSubmit={(event) => {
+          event.preventDefault();
+          void form.handleSubmit();
+        }}
+        sx={{ mt: 3, p: 3 }}
+      >
+        <Stack spacing={2}>
+          <Typography color="text.secondary">
+            {t('workflows.validationHelp')}
+          </Typography>
+          <form.Field name="definition">
+            {(field) => (
+              <TextField
+                aria-label={t('workflows.tomlDefinition')}
+                disabled={source.isError}
+                label={t('workflows.tomlDefinition')}
+                minRows={20}
+                multiline
+                onChange={(event) => {
+                  validate.reset();
+                  field.handleChange(event.target.value);
+                }}
+                spellCheck={false}
+                value={field.state.value}
+              />
+            )}
+          </form.Field>
+          {(validate.error || save.error) && (
+            <Alert severity="error">
+              {(validate.error ?? save.error)?.message}
+            </Alert>
+          )}
+          {validate.data && (
+            <Alert severity="success">
+              {t('workflows.validationSucceeded', {
+                actions: validate.data.actions.length,
+                name: validate.data.name,
+                triggers: validate.data.triggers.length,
+              })}
+            </Alert>
+          )}
+          <Stack direction="row" spacing={1}>
+            <form.Subscribe selector={(state) => state.values.definition}>
+              {(definition) => (
+                <Button
+                  disabled={validate.isPending || !definition.trim()}
+                  onClick={() => validate.mutate(definition)}
+                  variant="outlined"
+                >
+                  {t('workflows.validate')}
+                </Button>
+              )}
+            </form.Subscribe>
+            <Button
+              disabled={save.isPending || source.isError}
+              type="submit"
+              variant="contained"
+            >
+              {save.isPending
+                ? t('workflows.saving')
+                : t('workflows.saveDraft')}
+            </Button>
+          </Stack>
+        </Stack>
+      </Paper>
+    </PageContainer>
+  );
+};
