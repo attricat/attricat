@@ -84,7 +84,9 @@ pub(super) async fn run_now(
     ApiPath(id): ApiPath<Uuid>,
     ApiJson(input): ApiJson<CreateManualWorkflowRun>,
 ) -> Result<(StatusCode, Json<serde_json::Value>), ApiError> {
-    let run_id = repo.create_manual_workflow_run(id, input.entity_id).await?;
+    let run_id = repo
+        .create_manual_workflow_run(id, input.entity_id, &input.idempotency_key)
+        .await?;
     Ok((
         StatusCode::ACCEPTED,
         Json(serde_json::json!({ "id": run_id })),

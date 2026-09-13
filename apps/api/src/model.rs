@@ -625,6 +625,7 @@ pub struct Workflow {
     pub published_at: Option<DateTime<Utc>>,
     pub created_at: DateTime<Utc>,
     pub enabled_version: Option<i64>,
+    pub manual_enabled: bool,
 }
 
 #[derive(Clone, Debug, Deserialize)]
@@ -638,4 +639,6 @@ pub struct CreateWorkflow {
 #[serde(deny_unknown_fields)]
 pub struct CreateManualWorkflowRun {
     pub entity_id: Uuid,
+    /// Client-generated opaque key. Reusing it retries the same durable run.
+    pub idempotency_key: String,
 }

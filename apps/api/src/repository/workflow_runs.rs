@@ -194,7 +194,14 @@ impl CatalogRepository {
         &self,
         workflow_id: Uuid,
         entity_id: Uuid,
+        idempotency_key: &str,
     ) -> Result<Uuid, RepositoryError> {
+        if idempotency_key.is_empty() || idempotency_key.len() > 128 || !idempotency_key.is_ascii()
+        {
+            return Err(RepositoryError::InvalidWorkflowDefinition(
+                "manual idempotency_key must be 1-128 ASCII bytes".into(),
+            ));
+        }
         let ws = self.workspace_id.unwrap_or(Self::DEFAULT_WORKSPACE_ID);
         let mut tx = self.pool.begin().await?;
         let row: Option<(i64, Value)> = sqlx::query_as(
@@ -219,12 +226,20 @@ impl CatalogRepository {
             return Err(RepositoryError::NotFound("entity"));
         }
         let id = Uuid::new_v4();
-        let event = synthetic_trigger(id, ws, entity_id, "manual");
+        let event = synthetic_trigger(id, ws, entity_id, "manual", self.audit_context.as_ref());
         let snapshot = serde_json::to_value(event).expect("domain event serializes");
-        sqlx::query("INSERT INTO workflow_runs(id,workspace_id,workflow_id,workflow_version,trigger_event,compiled_plan,source,idempotency_key,causal_depth) VALUES($1,$2,$3,$4,$5,$6,'manual',$7,0)")
-            .bind(id).bind(ws).bind(workflow_id).bind(version).bind(snapshot).bind(plan).bind(id.to_string()).execute(&mut *tx).await?;
-        tx.commit().await?;
-        Ok(id)
+        let inserted: Option<Uuid> = sqlx::query_scalar("INSERT INTO workflow_runs(id,workspace_id,workflow_id,workflow_version,trigger_event,compiled_plan,source,idempotency_key,causal_depth) VALUES($1,$2,$3,$4,$5,$6,'manual',$7,0) ON CONFLICT (workspace_id,workflow_id,workflow_version,source,idempotency_key) WHERE idempotency_key IS NOT NULL DO NOTHING RETURNING id")
+            .bind(id).bind(ws).bind(workflow_id).bind(version).bind(snapshot).bind(plan).bind(idempotency_key).fetch_optional(&mut *tx).await?;
+        if let Some(run_id) = inserted {
+            self.commit_mutation(tx).await?;
+            Ok(run_id)
+        } else {
+            // The unique key is the durable retry boundary; do not audit or enqueue a second run.
+            let run_id: Uuid = sqlx::query_scalar("SELECT id FROM workflow_runs WHERE workspace_id=$1 AND workflow_id=$2 AND workflow_version=$3 AND source='manual' AND idempotency_key=$4")
+                .bind(ws).bind(workflow_id).bind(version).bind(idempotency_key).fetch_one(&mut *tx).await?;
+            tx.commit().await?;
+            Ok(run_id)
+        }
     }
 
     /// Advances durable UTC schedule cursors. Misfires older than five minutes are recorded and
@@ -273,23 +288,39 @@ impl CatalogRepository {
                 if due > now {
                     continue;
                 };
-                let next = schedule.after(&now).next().ok_or_else(|| {
-                    RepositoryError::InvalidWorkflowDefinition(
-                        "schedule has no future occurrence".into(),
-                    )
-                })?;
-                let missed = due < now - ChronoDuration::minutes(5);
-                let active:bool=sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM workflow_runs WHERE workspace_id=$1 AND workflow_id=$2 AND status IN ('pending','leased'))").bind(ws).bind(workflow_id).fetch_one(&mut *tx).await?;
-                sqlx::query("UPDATE workflow_schedule_states SET next_run_at=$5,misfires=misfires+$6,updated_at=clock_timestamp() WHERE workspace_id=$1 AND workflow_id=$2 AND workflow_version=$3 AND trigger_index=$4").bind(ws).bind(workflow_id).bind(version).bind(index as i32).bind(next).bind(if missed||active {1_i64}else{0}).execute(&mut *tx).await?;
-                if missed || active {
-                    continue;
-                };
-                let id = Uuid::new_v4();
-                let occurrence = due.to_rfc3339();
-                let event = synthetic_trigger(id, ws, target, "schedule");
-                let snapshot = serde_json::to_value(event).expect("domain event serializes");
-                let result=sqlx::query("INSERT INTO workflow_runs(id,workspace_id,workflow_id,workflow_version,trigger_event,compiled_plan,source,idempotency_key,causal_depth) VALUES($1,$2,$3,$4,$5,$6,'schedule',$7,0) ON CONFLICT (workspace_id,workflow_id,workflow_version,source,idempotency_key) WHERE idempotency_key IS NOT NULL DO NOTHING").bind(id).bind(ws).bind(workflow_id).bind(version).bind(snapshot).bind(plan.clone()).bind(format!("{index}:{occurrence}")).execute(&mut *tx).await?;
-                created += result.rows_affected();
+                // Advance occurrence-by-occurrence, rather than jumping from an old
+                // cursor to now. This makes every overlap/misfire observable. The
+                // compiler's six-field cron admits a one-second cadence, so cap a
+                // single transaction at five minutes' worth plus a small margin.
+                let mut occurrence_due = due;
+                let mut skipped = 0_i64;
+                for _ in 0..512 {
+                    if occurrence_due > now {
+                        break;
+                    }
+                    let next = schedule.after(&occurrence_due).next().ok_or_else(|| {
+                        RepositoryError::InvalidWorkflowDefinition(
+                            "schedule has no future occurrence".into(),
+                        )
+                    })?;
+                    let missed = occurrence_due < now - ChronoDuration::minutes(5);
+                    let active: bool = sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM workflow_runs WHERE workspace_id=$1 AND workflow_id=$2 AND status IN ('pending','leased'))")
+                        .bind(ws).bind(workflow_id).fetch_one(&mut *tx).await?;
+                    if missed || active {
+                        skipped += 1;
+                    } else {
+                        let id = Uuid::new_v4();
+                        let event = synthetic_trigger(id, ws, target, "schedule", None);
+                        let snapshot =
+                            serde_json::to_value(event).expect("domain event serializes");
+                        let result = sqlx::query("INSERT INTO workflow_runs(id,workspace_id,workflow_id,workflow_version,trigger_event,compiled_plan,source,idempotency_key,causal_depth) VALUES($1,$2,$3,$4,$5,$6,'schedule',$7,0) ON CONFLICT (workspace_id,workflow_id,workflow_version,source,idempotency_key) WHERE idempotency_key IS NOT NULL DO NOTHING")
+                            .bind(id).bind(ws).bind(workflow_id).bind(version).bind(snapshot).bind(plan.clone()).bind(format!("{index}:{}", occurrence_due.to_rfc3339())).execute(&mut *tx).await?;
+                        created += result.rows_affected();
+                    }
+                    occurrence_due = next;
+                }
+                sqlx::query("UPDATE workflow_schedule_states SET next_run_at=$5,misfires=misfires+$6,updated_at=clock_timestamp() WHERE workspace_id=$1 AND workflow_id=$2 AND workflow_version=$3 AND trigger_index=$4")
+                    .bind(ws).bind(workflow_id).bind(version).bind(index as i32).bind(occurrence_due).bind(skipped).execute(&mut *tx).await?;
             }
         }
         tx.commit().await?;
@@ -302,7 +333,20 @@ impl CatalogRepository {
     }
 }
 
-fn synthetic_trigger(id: Uuid, workspace_id: Uuid, entity_id: Uuid, source: &str) -> DomainEvent {
+fn synthetic_trigger(
+    id: Uuid,
+    workspace_id: Uuid,
+    entity_id: Uuid,
+    source: &str,
+    audit: Option<&AuditContext>,
+) -> DomainEvent {
+    let mut metadata = serde_json::json!({"workflow_synthetic": true});
+    if let Some(actor) = audit.and_then(|context| context.actor_user_id) {
+        metadata["initiating_actor_user_id"] = Value::String(actor.to_string());
+    }
+    if let Some(token) = audit.and_then(|context| context.actor_token_id) {
+        metadata["initiating_actor_token_id"] = Value::String(token.to_string());
+    }
     DomainEvent {
         id,
         sequence: 0,
@@ -315,7 +359,7 @@ fn synthetic_trigger(id: Uuid, workspace_id: Uuid, entity_id: Uuid, source: &str
         causation_id: None,
         source_kind: "workflow".into(),
         source_name: format!("workflow:{source}"),
-        metadata: serde_json::json!({"workflow_synthetic": true}),
+        metadata,
         payload: serde_json::json!({"facts": []}),
     }
 }

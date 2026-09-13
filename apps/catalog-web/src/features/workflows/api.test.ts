@@ -45,9 +45,9 @@ describe('workflow API client', () => {
       json: () => Promise.resolve({ id: run.id }),
     });
 
-    await expect(runWorkflowNow(run.workflow_id, run.trigger_event_id)).resolves.toEqual({ id: run.id });
+    await expect(runWorkflowNow(run.workflow_id, run.trigger_event_id, 'manual-test-key')).resolves.toEqual({ id: run.id });
     expect(fetchMock).toHaveBeenCalledWith(`/api/workflows/${run.workflow_id}/run-now`, {
-      body: JSON.stringify({ entity_id: run.trigger_event_id }),
+      body: JSON.stringify({ entity_id: run.trigger_event_id, idempotency_key: 'manual-test-key' }),
       headers: { 'Content-Type': 'application/json' },
       method: 'POST',
     });

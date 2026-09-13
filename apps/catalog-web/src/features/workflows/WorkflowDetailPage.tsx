@@ -89,7 +89,8 @@ export const WorkflowDetailPage = ({ workflowId }: { workflowId: string }) => {
     onSuccess: refresh,
   });
   const runNow = useMutation({
-    mutationFn: () => runWorkflowNow(workflowId, manualEntityId),
+    mutationFn: () =>
+      runWorkflowNow(workflowId, manualEntityId, crypto.randomUUID()),
     onSuccess: refresh,
   });
   const disable = useMutation({
@@ -166,7 +167,7 @@ export const WorkflowDetailPage = ({ workflowId }: { workflowId: string }) => {
                     {t('workflows.enable')}
                   </Button>
                 )}
-              {current.enabled_version === current.version && (
+              {current.enabled_version === current.version && current.manual_enabled && (
                 <Stack direction="row" spacing={1}>
                   <TextField
                     aria-label="Manual run entity ID"

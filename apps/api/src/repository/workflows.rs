@@ -1,8 +1,11 @@
 use super::*;
 use crate::model::{CreateWorkflow, Workflow};
+use chrono::Utc;
+use cron::Schedule;
+use std::str::FromStr;
 use uuid::Uuid;
 
-const WORKFLOW_FIELDS: &str = "w.id, w.code, w.name, w.version, w.status, w.definition, w.definition_hash, w.compiled_plan, w.published_at, w.created_at, l.enabled_version";
+const WORKFLOW_FIELDS: &str = "w.id, w.code, w.name, w.version, w.status, w.definition, w.definition_hash, w.compiled_plan, w.published_at, w.created_at, l.enabled_version, (w.compiled_plan @> '{\"triggers\":[{\"type\":\"manual\"}]}'::jsonb) AS manual_enabled";
 
 impl CatalogRepository {
     /// Permissions are application data, leaving migrations declarative.
@@ -165,6 +168,33 @@ impl CatalogRepository {
             .execute(&mut *tx)
             .await?;
         sqlx::query("UPDATE workflow_lifecycles SET enabled_version=$2, activation_sequence=(SELECT COALESCE(max(sequence), 0) FROM domain_events WHERE workspace_id=$3), enabled_at=now(), disabled_at=NULL, updated_at=now() WHERE workflow_id=$1 AND workspace_id=$3").bind(id).bind(version).bind(ws).execute(&mut *tx).await?;
+        // Create schedule cursors in the enable transaction. A scheduler that starts
+        // later observes a durable post-enable boundary instead of inventing one.
+        let plan: Value = sqlx::query_scalar(
+            "SELECT compiled_plan FROM workflows WHERE id=$1 AND version=$2 AND workspace_id=$3",
+        )
+        .bind(id)
+        .bind(version)
+        .bind(ws)
+        .fetch_one(&mut *tx)
+        .await?;
+        let compiled: catalog_workflow::CompiledWorkflow = serde_json::from_value(plan)
+            .map_err(|error| RepositoryError::InvalidWorkflowDefinition(error.to_string()))?;
+        for (trigger_index, trigger) in compiled.triggers.iter().enumerate() {
+            let catalog_workflow::Trigger::Schedule { cron, .. } = trigger else {
+                continue;
+            };
+            let schedule = Schedule::from_str(cron).map_err(|_| {
+                RepositoryError::InvalidWorkflowDefinition("stored schedule cron is invalid".into())
+            })?;
+            let next = schedule.after(&Utc::now()).next().ok_or_else(|| {
+                RepositoryError::InvalidWorkflowDefinition(
+                    "schedule has no future occurrence".into(),
+                )
+            })?;
+            sqlx::query("INSERT INTO workflow_schedule_states(workspace_id,workflow_id,workflow_version,trigger_index,next_run_at) VALUES($1,$2,$3,$4,$5) ON CONFLICT DO NOTHING")
+                .bind(ws).bind(id).bind(version).bind(trigger_index as i32).bind(next).execute(&mut *tx).await?;
+        }
         self.commit_mutation(tx).await?;
         self.get_workflow_revision(id, version)
             .await?

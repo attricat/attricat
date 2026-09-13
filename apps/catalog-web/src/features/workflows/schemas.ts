@@ -12,6 +12,7 @@ export const workflowSchema = z.object({
   published_at: z.string().nullable(),
   created_at: z.string(),
   enabled_version: z.number().int().positive().nullable(),
+  manual_enabled: z.boolean(),
 });
 
 export const workflowRunSchema = z.object({
