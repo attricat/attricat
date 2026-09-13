@@ -18,7 +18,7 @@ import {
   TextField,
   Typography,
 } from '@mui/material';
-import { useState } from 'react';
+import { type ComponentType, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { PageContainer } from '../../components/PageContainer';
 import { PageHeader } from '../../components/PageHeader';
@@ -40,6 +40,11 @@ const dateTime = (value: string | null, locale: string, fallback: string) =>
         timeStyle: 'short',
       }).format(new Date(value))
     : fallback;
+
+const WorkflowRevisionLink = Link as unknown as ComponentType<{
+  params: { version: string; workflowId: string };
+  to: '/manage/workflows/$workflowId/revisions/$version/new';
+}>;
 
 export const WorkflowDetailPage = ({ workflowId }: { workflowId: string }) => {
   const { i18n, t } = useTranslation();
@@ -65,6 +70,9 @@ export const WorkflowDetailPage = ({ workflowId }: { workflowId: string }) => {
   const refresh = async () => {
     await Promise.all([
       queryClient.invalidateQueries({ queryKey: workflowQueryKeys.all() }),
+      queryClient.invalidateQueries({
+        queryKey: workflowQueryKeys.revisions(workflowId),
+      }),
       queryClient.invalidateQueries({ queryKey: workflowQueryKeys.runs() }),
     ]);
   };
@@ -125,12 +133,14 @@ export const WorkflowDetailPage = ({ workflowId }: { workflowId: string }) => {
         actions={
           canManage ? (
             <Stack direction="row" spacing={1} sx={{ flexWrap: 'wrap' }}>
-              <Link
+              <Button
+                component={WorkflowRevisionLink}
                 params={{ workflowId, version: String(current.version) }}
                 to="/manage/workflows/$workflowId/revisions/$version/new"
+                variant="outlined"
               >
-                <Button variant="outlined">{t('workflows.newRevision')}</Button>
-              </Link>
+                {t('workflows.newRevision')}
+              </Button>
               {current.status === 'draft' && (
                 <Button
                   disabled={publish.isPending}
@@ -169,7 +179,7 @@ export const WorkflowDetailPage = ({ workflowId }: { workflowId: string }) => {
         <Chip label={current.code} variant="outlined" />
         <Chip
           color={current.status === 'published' ? 'success' : 'warning'}
-          label={current.status}
+          label={t(`workflows.statuses.${current.status}`)}
         />
         <Chip
           color={current.enabled_version === null ? 'default' : 'success'}
@@ -205,51 +215,97 @@ export const WorkflowDetailPage = ({ workflowId }: { workflowId: string }) => {
         value={tab}
         variant="scrollable"
       >
-        <Tab label={t('workflows.revisions')} />
-        <Tab label={t('workflows.source')} />
-        <Tab label={t('workflows.compare')} />
-        <Tab label={t('workflows.runDiagnostics')} />
+        <Tab
+          aria-controls="workflow-tabpanel-0"
+          id="workflow-tab-0"
+          label={t('workflows.revisions')}
+        />
+        <Tab
+          aria-controls="workflow-tabpanel-1"
+          id="workflow-tab-1"
+          label={t('workflows.source')}
+        />
+        <Tab
+          aria-controls="workflow-tabpanel-2"
+          id="workflow-tab-2"
+          label={t('workflows.compare')}
+        />
+        <Tab
+          aria-controls="workflow-tabpanel-3"
+          id="workflow-tab-3"
+          label={t('workflows.runDiagnostics')}
+        />
       </Tabs>
-      {tab === 0 && <RevisionTable revisions={revisions.data} />}
+      {tab === 0 && (
+        <Box
+          aria-labelledby="workflow-tab-0"
+          id="workflow-tabpanel-0"
+          role="tabpanel"
+        >
+          <RevisionTable revisions={revisions.data} />
+        </Box>
+      )}
       {tab === 1 && (
-        <Source definition={current.definition} title={t('workflows.source')} />
+        <Box
+          aria-labelledby="workflow-tab-1"
+          id="workflow-tabpanel-1"
+          role="tabpanel"
+        >
+          <Source
+            definition={current.definition}
+            title={t('workflows.source')}
+          />
+        </Box>
       )}
       {tab === 2 && (
-        <Paper component="section" sx={{ mt: 3, p: 2 }}>
-          <TextField
-            label={t('workflows.compareRevision')}
-            onChange={(event) => setLeftVersion(Number(event.target.value))}
-            select
-            sx={{ minWidth: 220 }}
-            value={compared?.version ?? ''}
-          >
-            {revisions.data.map((revision) => (
-              <MenuItem key={revision.version} value={revision.version}>
-                v{revision.version} ({revision.status})
-              </MenuItem>
-            ))}
-          </TextField>
-          <Box
-            sx={{
-              display: 'grid',
-              gap: 2,
-              gridTemplateColumns: { md: '1fr 1fr' },
-              mt: 2,
-            }}
-          >
-            <Source
-              definition={compared?.definition ?? ''}
-              title={t('workflows.compareRevision')}
-            />
-            <Source
-              definition={current.definition}
-              title={t('workflows.currentRevision')}
-            />
-          </Box>
-        </Paper>
+        <Box
+          aria-labelledby="workflow-tab-2"
+          id="workflow-tabpanel-2"
+          role="tabpanel"
+        >
+          <Paper component="section" sx={{ mt: 3, p: 2 }}>
+            <TextField
+              label={t('workflows.compareRevision')}
+              onChange={(event) => setLeftVersion(Number(event.target.value))}
+              select
+              sx={{ minWidth: 220 }}
+              value={compared?.version ?? ''}
+            >
+              {revisions.data.map((revision) => (
+                <MenuItem key={revision.version} value={revision.version}>
+                  v{revision.version} (
+                  {t(`workflows.statuses.${revision.status}`)})
+                </MenuItem>
+              ))}
+            </TextField>
+            <Box
+              sx={{
+                display: 'grid',
+                gap: 2,
+                gridTemplateColumns: { md: '1fr 1fr' },
+                mt: 2,
+              }}
+            >
+              <Source
+                definition={compared?.definition ?? ''}
+                title={t('workflows.compareRevision')}
+              />
+              <Source
+                definition={current.definition}
+                title={t('workflows.currentRevision')}
+              />
+            </Box>
+          </Paper>
+        </Box>
       )}
       {tab === 3 && (
-        <RunTable canManage={canManage} locale={locale} runs={workflowRuns} />
+        <Box
+          aria-labelledby="workflow-tab-3"
+          id="workflow-tabpanel-3"
+          role="tabpanel"
+        >
+          <RunTable canManage={canManage} locale={locale} runs={workflowRuns} />
+        </Box>
       )}
     </PageContainer>
   );
@@ -284,7 +340,7 @@ const RevisionTable = ({
                     color={
                       revision.status === 'published' ? 'success' : 'warning'
                     }
-                    label={revision.status}
+                    label={t(`workflows.statuses.${revision.status}`)}
                     size="small"
                   />
                 </TableCell>
@@ -383,7 +439,7 @@ const RunTable = ({
                           ? 'success'
                           : 'default'
                     }
-                    label={run.status}
+                    label={t(`workflows.statuses.${run.status}`)}
                     size="small"
                   />
                 </TableCell>

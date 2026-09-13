@@ -14,6 +14,7 @@ import {
   TableRow,
   Typography,
 } from '@mui/material';
+import { type ComponentType } from 'react';
 import { useTranslation } from 'react-i18next';
 import { PageContainer } from '../../components/PageContainer';
 import { PageHeader } from '../../components/PageHeader';
@@ -29,6 +30,11 @@ const dateTime = (value: string | null, locale: string, fallback: string) =>
         timeStyle: 'short',
       }).format(new Date(value))
     : fallback;
+
+const WorkflowDetailLink = Link as unknown as ComponentType<{
+  params: { workflowId: string };
+  to: '/manage/workflows/$workflowId';
+}>;
 
 export const WorkflowsPage = () => {
   const { i18n, t } = useTranslation();
@@ -167,7 +173,7 @@ export const WorkflowsPage = () => {
                                 ? 'success'
                                 : 'warning'
                             }
-                            label={workflow.status}
+                            label={t(`workflows.statuses.${workflow.status}`)}
                             size="small"
                           />
                           <Typography>v{workflow.version}</Typography>
@@ -184,7 +190,12 @@ export const WorkflowsPage = () => {
                           />
                         ) : summary.latest ? (
                           <Stack spacing={0.25}>
-                            <Chip label={summary.latest.status} size="small" />
+                            <Chip
+                              label={t(
+                                `workflows.statuses.${summary.latest.status}`,
+                              )}
+                              size="small"
+                            />
                             <Typography
                               color="text.secondary"
                               variant="caption"
@@ -201,12 +212,14 @@ export const WorkflowsPage = () => {
                         )}
                       </TableCell>
                       <TableCell align="right">
-                        <Link
+                        <Button
+                          component={WorkflowDetailLink}
                           params={{ workflowId: workflow.id }}
                           to="/manage/workflows/$workflowId"
+                          size="small"
                         >
-                          <Button size="small">{t('workflows.inspect')}</Button>
-                        </Link>
+                          {t('workflows.inspect')}
+                        </Button>
                       </TableCell>
                     </TableRow>
                   );

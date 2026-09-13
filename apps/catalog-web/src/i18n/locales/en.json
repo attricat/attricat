@@ -521,6 +521,15 @@
     "compareRevision": "Revision to compare",
     "runDiagnostics": "Run diagnostics",
     "status": "Status",
+    "statuses": {
+      "draft": "Draft",
+      "published": "Published",
+      "pending": "Pending",
+      "leased": "Leased",
+      "completed": "Completed",
+      "dead_letter": "Dead letter",
+      "cancelled": "Cancelled"
+    },
     "created": "Created",
     "published": "Published",
     "definitionHash": "Definition hash",

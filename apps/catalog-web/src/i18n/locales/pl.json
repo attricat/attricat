@@ -535,6 +535,15 @@
     "compareRevision": "Wersja do porównania",
     "runDiagnostics": "Diagnostyka uruchomień",
     "status": "Stan",
+    "statuses": {
+      "draft": "Szkic",
+      "published": "Opublikowany",
+      "pending": "Oczekujący",
+      "leased": "Przydzielony",
+      "completed": "Ukończony",
+      "dead_letter": "Martwy list",
+      "cancelled": "Anulowany"
+    },
     "created": "Utworzono",
     "published": "Opublikowano",
     "definitionHash": "Skrót definicji",

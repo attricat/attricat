@@ -129,7 +129,10 @@ export const WorkflowEditorPage = ({
                 label={t('workflows.tomlDefinition')}
                 minRows={20}
                 multiline
-                onChange={(event) => field.handleChange(event.target.value)}
+                onChange={(event) => {
+                  validate.reset();
+                  field.handleChange(event.target.value);
+                }}
                 spellCheck={false}
                 value={field.state.value}
               />
