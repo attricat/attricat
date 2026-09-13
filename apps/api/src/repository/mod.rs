@@ -78,8 +78,8 @@ pub(crate) use files::{FileMetadata, FileObject, FilePolicy, FileUploadResult, N
 pub(crate) use members::{WorkspaceInvitation, WorkspaceMember};
 pub(crate) use roles::{Permission, WorkspaceGrantTarget, WorkspaceRole};
 pub(crate) use tokens::PersonalApiToken;
-pub(crate) use workflow_runs::ClaimedWorkflowRun;
 pub use workflow_runs::WorkflowRun;
+pub(crate) use workflow_runs::{ClaimedWorkflowRun, WorkflowActionResult};
 pub(crate) use workspace_navigation::{ExploreNavigationEntry, ExploreNavigationItem};
 
 #[derive(Debug, sqlx::FromRow)]
@@ -108,6 +108,7 @@ pub(crate) struct EventCommandContext {
     pub initiating_actor_user_id: Option<Uuid>,
     pub initiating_actor_token_id: Option<Uuid>,
     pub workflow_causal_depth: usize,
+    pub workflow_root_trigger_event_id: Uuid,
 }
 
 /// Server-derived request metadata written with the same transaction as a
@@ -366,7 +367,14 @@ impl CatalogRepository {
                 .metadata
                 .get("workflow_causal_depth")
                 .and_then(Value::as_u64)
+                .filter(|depth| *depth <= 8)
                 .unwrap_or(0) as usize,
+            workflow_root_trigger_event_id: event
+                .metadata
+                .get("workflow_root_trigger_event_id")
+                .and_then(Value::as_str)
+                .and_then(|id| id.parse().ok())
+                .unwrap_or(event.id),
         });
         // Background mutations must retain audit evidence even though there is
         // no HTTP request audit middleware. The original initiating actor is
@@ -404,6 +412,7 @@ impl CatalogRepository {
                 "trigger_event_id": repository.event_context.as_ref().map(|context| context.causation_id),
                 "action_index": action_index,
                 "workflow_causal_depth": repository.event_context.as_ref().map(|context| context.workflow_causal_depth + 1).unwrap_or(1),
+                "workflow_root_trigger_event_id": repository.event_context.as_ref().map(|context| context.workflow_root_trigger_event_id),
             });
             audit.target = serde_json::json!({"workflow_id": workflow_id, "workflow_revision": revision, "run_id": run_id, "trigger_event_id": repository.event_context.as_ref().map(|context| context.causation_id), "action_index": action_index});
         }

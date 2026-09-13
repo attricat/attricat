@@ -177,6 +177,10 @@ impl CatalogRepository {
         if n.rows_affected() == 0 {
             return Err(RepositoryError::NotFound("workflow"));
         };
+        // A disabled definition may not start (or continue) a previously queued
+        // revision. Claimed workers recheck this durable state per action.
+        sqlx::query("UPDATE workflow_runs SET status='cancelled',cancelled_at=clock_timestamp(),lease_owner=NULL,lease_until=NULL,updated_at=clock_timestamp() WHERE workspace_id=$1 AND workflow_id=$2 AND status IN ('pending','leased')")
+            .bind(ws).bind(id).execute(&mut *tx).await?;
         self.commit_mutation(tx).await?;
         self.get_workflow(id)
             .await?

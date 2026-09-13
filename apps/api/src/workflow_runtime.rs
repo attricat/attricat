@@ -2,7 +2,6 @@
 use crate::{
     domain_events::{ALL_EVENT_TYPES_V1, DomainEvent},
     event_dispatcher::{EventHandler, EventHandlerCommandContext},
-    model::NewAttributeValue,
     repository::CatalogRepository,
 };
 use async_trait::async_trait;
@@ -99,6 +98,7 @@ async fn execute(
     if event.aggregate_kind != "entity"
         || event.source_name.starts_with("workflow:")
         || causal_depth(&event) >= MAX_CAUSAL_DEPTH
+        || run.run.causal_depth as usize >= MAX_CAUSAL_DEPTH
     {
         return Ok(());
     }
@@ -106,140 +106,29 @@ async fn execute(
         serde_json::from_value(run.compiled_plan.clone())?;
     let worker = repository.for_event_handler(&event, &format!("workflow:{}", run.run.workflow_id));
     for (index, action) in plan.actions.iter().enumerate() {
-        if repository
-            .workflow_action_is_completed(run.run.id, index as i32)
-            .await?
-        {
-            continue;
-        }
         let action_worker = worker.for_workflow_run(
             run.run.workflow_id,
             run.run.workflow_version,
             run.run.id,
             index,
         );
-        let entity = action_worker
-            .get_entity(event.aggregate_id)
+        match action_worker
+            .execute_workflow_action(run, index as i32, action, &event)
             .await?
-            .ok_or("trigger entity no longer exists")?;
-        match action {
-            catalog_workflow::Action::SystemTagsAdd { tags } => {
-                let mut result = entity.system_tags;
-                for tag in tags {
-                    if !result.contains(tag) {
-                        result.push(tag.clone());
-                    }
-                }
-                action_worker
-                    .update_entity_with_values(
-                        event.aggregate_id,
-                        vec![],
-                        vec![],
-                        vec![],
-                        Some(result),
-                        None,
-                    )
-                    .await?;
-            }
-            catalog_workflow::Action::SystemTagsRemove { tags } => {
-                let result = entity
-                    .system_tags
-                    .into_iter()
-                    .filter(|tag| !tags.contains(tag))
-                    .collect();
-                action_worker
-                    .update_entity_with_values(
-                        event.aggregate_id,
-                        vec![],
-                        vec![],
-                        vec![],
-                        Some(result),
-                        None,
-                    )
-                    .await?;
-            }
-            catalog_workflow::Action::SystemMetadataMerge { values } => {
-                let mut metadata = entity
-                    .system_metadata
-                    .as_object()
-                    .cloned()
-                    .ok_or("entity metadata must be object")?;
-                for (key, value) in values {
-                    metadata.insert(key.clone(), value.clone());
-                }
-                action_worker
-                    .update_entity_with_values(
-                        event.aggregate_id,
-                        vec![],
-                        vec![],
-                        vec![],
-                        None,
-                        Some(Value::Object(metadata)),
-                    )
-                    .await?;
-            }
-            catalog_workflow::Action::SystemMetadataDelete { keys } => {
-                let mut metadata = entity
-                    .system_metadata
-                    .as_object()
-                    .cloned()
-                    .ok_or("entity metadata must be object")?;
-                for key in keys {
-                    metadata.remove(key);
-                }
-                action_worker
-                    .update_entity_with_values(
-                        event.aggregate_id,
-                        vec![],
-                        vec![],
-                        vec![],
-                        None,
-                        Some(Value::Object(metadata)),
-                    )
-                    .await?;
-            }
-            catalog_workflow::Action::AttributeWrite {
-                attribute_code,
-                value,
-            } => {
-                let value = match value {
-                    catalog_workflow::ScalarSource::Fixed { fixed } => fixed.clone(),
-                    catalog_workflow::ScalarSource::Event { event_field } => {
-                        event_path(&event.payload, event_field)
-                            .cloned()
-                            .ok_or("event field missing")?
-                    }
-                };
-                action_worker
-                    .update_entity_with_values(
-                        event.aggregate_id,
-                        vec![NewAttributeValue::Scalar {
-                            attribute_id: None,
-                            attribute_code: Some(attribute_code.clone()),
-                            context_id: None,
-                            value,
-                        }],
-                        vec![],
-                        vec![],
-                        None,
-                        None,
-                    )
-                    .await?;
-            }
+        {
+            crate::repository::WorkflowActionResult::Executed
+            | crate::repository::WorkflowActionResult::AlreadyCompleted => {}
+            // Disable/cancellation is terminal and intentionally has no further effect.
+            crate::repository::WorkflowActionResult::Cancelled => return Ok(()),
         }
-        repository
-            .complete_workflow_action(run.run.id, index as i32)
-            .await?;
     }
     Ok(())
-}
-fn event_path<'a>(value: &'a Value, path: &str) -> Option<&'a Value> {
-    path.split('.').try_fold(value, |value, key| value.get(key))
 }
 fn causal_depth(event: &DomainEvent) -> usize {
     event
         .metadata
         .get("workflow_causal_depth")
         .and_then(Value::as_u64)
+        .filter(|depth| *depth <= MAX_CAUSAL_DEPTH as u64)
         .unwrap_or(0) as usize
 }

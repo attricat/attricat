@@ -18,6 +18,16 @@ pub struct WorkflowRun {
     pub completed_at: Option<DateTime<Utc>>,
     pub last_error: Option<String>,
     pub created_at: DateTime<Utc>,
+    pub cancelled_at: Option<DateTime<Utc>>,
+    pub root_trigger_event_id: Uuid,
+    pub causal_depth: i32,
+}
+
+#[derive(Debug, Clone)]
+pub(crate) enum WorkflowActionResult {
+    Executed,
+    AlreadyCompleted,
+    Cancelled,
 }
 
 #[derive(Debug, Clone, sqlx::FromRow)]
@@ -32,7 +42,14 @@ impl CatalogRepository {
     /// Fan-out is deliberately limited to durable intake. No action is executed
     /// on the shared domain-event dispatcher lease.
     pub async fn fan_out_workflow_runs(&self, event: &DomainEvent) -> Result<u64, RepositoryError> {
-        if event.aggregate_kind != "entity" || event.source_name.starts_with("workflow:") {
+        if event.aggregate_kind != "entity"
+            || event.source_name.starts_with("workflow:")
+            || event
+                .metadata
+                .get("workflow_causal_depth")
+                .and_then(Value::as_u64)
+                .is_some_and(|depth| depth > 8)
+        {
             return Ok(0);
         }
         let ws = self.workspace_id.unwrap_or(Self::DEFAULT_WORKSPACE_ID);
@@ -56,8 +73,20 @@ impl CatalogRepository {
             {
                 continue;
             }
-            let result = sqlx::query("INSERT INTO workflow_runs (id, workspace_id, workflow_id, workflow_version, trigger_event_id, trigger_sequence, trigger_event, compiled_plan) VALUES ($1,$2,$3,$4,$5,$6,$7,$8) ON CONFLICT (workspace_id,workflow_id,workflow_version,trigger_event_id) DO NOTHING")
-                .bind(Uuid::new_v4()).bind(ws).bind(workflow_id).bind(version).bind(event.id).bind(event.sequence).bind(&snapshot).bind(plan).execute(&mut *tx).await?;
+            let root_trigger_event_id = event
+                .metadata
+                .get("workflow_root_trigger_event_id")
+                .and_then(Value::as_str)
+                .and_then(|id| id.parse::<Uuid>().ok())
+                .unwrap_or(event.id);
+            let causal_depth = event
+                .metadata
+                .get("workflow_causal_depth")
+                .and_then(Value::as_i64)
+                .filter(|depth| (0..=8).contains(depth))
+                .unwrap_or(0) as i32;
+            let result = sqlx::query("INSERT INTO workflow_runs (id, workspace_id, workflow_id, workflow_version, trigger_event_id, trigger_sequence, trigger_event, compiled_plan, root_trigger_event_id, causal_depth) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) ON CONFLICT (workspace_id,workflow_id,workflow_version,trigger_event_id) DO NOTHING")
+                .bind(Uuid::new_v4()).bind(ws).bind(workflow_id).bind(version).bind(event.id).bind(event.sequence).bind(&snapshot).bind(plan).bind(root_trigger_event_id).bind(causal_depth).execute(&mut *tx).await?;
             inserted += result.rows_affected();
         }
         tx.commit().await?;
@@ -70,8 +99,8 @@ impl CatalogRepository {
         lease: Duration,
     ) -> Result<Option<ClaimedWorkflowRun>, RepositoryError> {
         let ws = self.workspace_id.unwrap_or(Self::DEFAULT_WORKSPACE_ID);
-        let row = sqlx::query_as::<_, (Uuid,Uuid,i64,Uuid,i64,String,i32,Option<DateTime<Utc>>,Option<DateTime<Utc>>,Option<String>,DateTime<Utc>,Value,Value)>(
-            "WITH candidate AS (SELECT id FROM workflow_runs WHERE workspace_id=$1 AND ((status='pending' AND next_attempt_at<=clock_timestamp()) OR (status='leased' AND lease_until<=clock_timestamp())) ORDER BY next_attempt_at,id FOR UPDATE SKIP LOCKED LIMIT 1), leased AS (UPDATE workflow_runs r SET status='leased', attempts=attempts+1, lease_owner=$2, lease_until=clock_timestamp()+($3 * interval '1 millisecond'), last_error=NULL, updated_at=clock_timestamp() FROM candidate c WHERE r.id=c.id RETURNING r.*) SELECT id,workflow_id,workflow_version,trigger_event_id,trigger_sequence,status,attempts,failed_at,completed_at,last_error,created_at,trigger_event,compiled_plan FROM leased"
+        let row = sqlx::query_as::<_, (Uuid,Uuid,i64,Uuid,i64,String,i32,Option<DateTime<Utc>>,Option<DateTime<Utc>>,Option<String>,DateTime<Utc>,Option<DateTime<Utc>>,Uuid,i32,Value,Value)>(
+            "WITH candidate AS (SELECT id FROM workflow_runs WHERE workspace_id=$1 AND ((status='pending' AND next_attempt_at<=clock_timestamp()) OR (status='leased' AND lease_until<=clock_timestamp())) ORDER BY next_attempt_at,id FOR UPDATE SKIP LOCKED LIMIT 1), leased AS (UPDATE workflow_runs r SET status='leased', attempts=attempts+1, lease_owner=$2, lease_until=clock_timestamp()+($3 * interval '1 millisecond'), last_error=NULL, updated_at=clock_timestamp() FROM candidate c WHERE r.id=c.id RETURNING r.*) SELECT id,workflow_id,workflow_version,trigger_event_id,trigger_sequence,status,attempts,failed_at,completed_at,last_error,created_at,cancelled_at,root_trigger_event_id,causal_depth,trigger_event,compiled_plan FROM leased"
         ).bind(ws).bind(owner).bind(lease.as_millis() as i64).fetch_optional(&self.pool).await?;
         Ok(row.map(|r| ClaimedWorkflowRun {
             run: WorkflowRun {
@@ -86,9 +115,12 @@ impl CatalogRepository {
                 completed_at: r.8,
                 last_error: r.9,
                 created_at: r.10,
+                cancelled_at: r.11,
+                root_trigger_event_id: r.12,
+                causal_depth: r.13,
             },
-            trigger_event: r.11,
-            compiled_plan: r.12,
+            trigger_event: r.14,
+            compiled_plan: r.15,
             lease_owner: owner.to_owned(),
         }))
     }
@@ -96,7 +128,20 @@ impl CatalogRepository {
         &self,
         run: &ClaimedWorkflowRun,
     ) -> Result<(), RepositoryError> {
-        sqlx::query("UPDATE workflow_runs SET status='completed',completed_at=clock_timestamp(),lease_owner=NULL,lease_until=NULL,updated_at=clock_timestamp() WHERE id=$1 AND status='leased' AND lease_owner=$2").bind(run.run.id).bind(&run.lease_owner).execute(&self.pool).await?;
+        let result = sqlx::query("UPDATE workflow_runs SET status='completed',completed_at=clock_timestamp(),lease_owner=NULL,lease_until=NULL,updated_at=clock_timestamp() WHERE id=$1 AND status='leased' AND lease_owner=$2").bind(run.run.id).bind(&run.lease_owner).execute(&self.pool).await?;
+        if result.rows_affected() != 1 {
+            let cancelled: bool = sqlx::query_scalar(
+                "SELECT EXISTS(SELECT 1 FROM workflow_runs WHERE id=$1 AND status='cancelled')",
+            )
+            .bind(run.run.id)
+            .fetch_one(&self.pool)
+            .await?;
+            if !cancelled {
+                return Err(RepositoryError::InvalidWorkflowDefinition(
+                    "workflow run lease was lost".into(),
+                ));
+            }
+        }
         Ok(())
     }
     pub(crate) async fn retry_workflow_run(
@@ -106,37 +151,21 @@ impl CatalogRepository {
         delay: Duration,
         max_attempts: i32,
     ) -> Result<(), RepositoryError> {
-        sqlx::query("UPDATE workflow_runs SET status=CASE WHEN attempts >= $4 THEN 'dead_letter' ELSE 'pending' END,next_attempt_at=CASE WHEN attempts >= $4 THEN next_attempt_at ELSE clock_timestamp()+($3 * interval '1 millisecond') END,failed_at=clock_timestamp(),last_error=$2,lease_owner=NULL,lease_until=NULL,updated_at=clock_timestamp() WHERE id=$1 AND status='leased' AND lease_owner=$5").bind(run.run.id).bind(error).bind(delay.as_millis() as i64).bind(max_attempts).bind(&run.lease_owner).execute(&self.pool).await?;
+        let result = sqlx::query("UPDATE workflow_runs SET status=CASE WHEN attempts >= $4 THEN 'dead_letter' ELSE 'pending' END,next_attempt_at=CASE WHEN attempts >= $4 THEN next_attempt_at ELSE clock_timestamp()+($3 * interval '1 millisecond') END,failed_at=clock_timestamp(),last_error=$2,lease_owner=NULL,lease_until=NULL,updated_at=clock_timestamp() WHERE id=$1 AND status='leased' AND lease_owner=$5").bind(run.run.id).bind(error).bind(delay.as_millis() as i64).bind(max_attempts).bind(&run.lease_owner).execute(&self.pool).await?;
+        if result.rows_affected() != 1 {
+            return Err(RepositoryError::InvalidWorkflowDefinition(
+                "workflow run lease was lost or cancelled".into(),
+            ));
+        }
         Ok(())
     }
     pub async fn list_workflow_runs(&self) -> Result<Vec<WorkflowRun>, RepositoryError> {
         let ws = self.workspace_id.unwrap_or(Self::DEFAULT_WORKSPACE_ID);
-        Ok(sqlx::query_as("SELECT id,workflow_id,workflow_version,trigger_event_id,trigger_sequence,status,attempts,failed_at,completed_at,last_error,created_at FROM workflow_runs WHERE workspace_id=$1 ORDER BY created_at DESC").bind(ws).fetch_all(&self.pool).await?)
+        Ok(sqlx::query_as("SELECT id,workflow_id,workflow_version,trigger_event_id,trigger_sequence,status,attempts,failed_at,completed_at,last_error,created_at,cancelled_at,root_trigger_event_id,causal_depth FROM workflow_runs WHERE workspace_id=$1 ORDER BY created_at DESC").bind(ws).fetch_all(&self.pool).await?)
     }
     pub async fn replay_workflow_run(&self, id: Uuid) -> Result<bool, RepositoryError> {
         let ws = self.workspace_id.unwrap_or(Self::DEFAULT_WORKSPACE_ID);
         Ok(sqlx::query("UPDATE workflow_runs SET status='pending',attempts=0,next_attempt_at=clock_timestamp(),lease_owner=NULL,lease_until=NULL,failed_at=NULL,last_error=NULL,replayed_at=clock_timestamp(),updated_at=clock_timestamp() WHERE id=$1 AND workspace_id=$2 AND status='dead_letter'").bind(id).bind(ws).execute(&self.pool).await?.rows_affected()==1)
-    }
-    pub(crate) async fn workflow_action_is_completed(
-        &self,
-        run_id: Uuid,
-        index: i32,
-    ) -> Result<bool, RepositoryError> {
-        Ok(sqlx::query_scalar(
-            "SELECT EXISTS(SELECT 1 FROM workflow_run_actions WHERE run_id=$1 AND action_index=$2)",
-        )
-        .bind(run_id)
-        .bind(index)
-        .fetch_one(&self.pool)
-        .await?)
-    }
-    pub(crate) async fn complete_workflow_action(
-        &self,
-        run_id: Uuid,
-        index: i32,
-    ) -> Result<(), RepositoryError> {
-        sqlx::query("INSERT INTO workflow_run_actions(run_id,action_index) VALUES($1,$2) ON CONFLICT DO NOTHING").bind(run_id).bind(index).execute(&self.pool).await?;
-        Ok(())
     }
 }
 
@@ -150,7 +179,10 @@ fn workflow_trigger_matches(trigger: &catalog_workflow::Trigger, event: &DomainE
                 "aggregate_kind" => expected == &Value::String(event.aggregate_kind.clone()),
                 "source_kind" => expected == &Value::String(event.source_kind.clone()),
                 "source_name" => expected == &Value::String(event.source_name.clone()),
-                _ => value_path(&event.metadata, key).is_some_and(|actual| actual == expected),
+                _ => key
+                    .strip_prefix("metadata.")
+                    .and_then(|path| value_path(&event.metadata, path))
+                    .is_some_and(|actual| actual == expected),
             })
         && trigger.facts.iter().all(|(key, expected)| {
             value_path(&event.payload, key).is_some_and(|actual| actual == expected)
@@ -198,8 +230,20 @@ mod tests {
         assert!(workflow_trigger_matches(&trigger, &event));
         let different = DomainEvent {
             source_kind: "worker".into(),
-            ..event
+            ..event.clone()
         };
         assert!(!workflow_trigger_matches(&trigger, &different));
+
+        let metadata_trigger = catalog_workflow::Trigger {
+            event_type: "entity.updated.v1".into(),
+            envelope: [("metadata.tenant_hint".into(), json!("north"))].into(),
+            facts: Default::default(),
+        };
+        assert!(!workflow_trigger_matches(&metadata_trigger, &event));
+        let metadata_event = DomainEvent {
+            metadata: json!({"tenant_hint":"north"}),
+            ..event
+        };
+        assert!(workflow_trigger_matches(&metadata_trigger, &metadata_event));
     }
 }
