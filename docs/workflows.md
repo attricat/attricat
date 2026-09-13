@@ -1,32 +1,50 @@
 # Workflows
 
-Workflows are workspace-scoped, versioned TOML definitions. Published revisions are immutable; enabling records an outbox-sequence high-water boundary, so only events committed after enablement fan out. A run stores its exact compiled revision and trigger snapshot and is never switched to a newer definition.
+Workflows are workspace-scoped, versioned TOML definitions. Published revisions are immutable; enabling records an outbox-sequence high-water boundary, so only later events fan out. Each run snapshots its exact enabled compiled revision and never changes to a newer definition.
 
-v1 executes only local actions on the triggering, non-deleted entity: `system_tags_add`, `system_tags_remove`, `system_metadata_merge`, `system_metadata_delete`, and `attribute_write`. Attribute values are scalar fixed values or `facts.<index>.<field>` scalar inputs. Normal current blueprint/schema, readonly, default-context and annotation validation applies. Actions are ordered and derive tag/metadata changes from the entity row locked at execution time; event payloads are deliberately minimal and unordered.
+Local actions remain deliberately narrow: `system_tags_add`, `system_tags_remove`, `system_metadata_merge`, `system_metadata_delete`, and `attribute_write`. They only affect one existing entity, with normal schema/readonly validation. There are no scripts, templates, loops, queries, SQL, target selectors, or cross-entity writes.
 
-Triggers are exact matches for entity events only: `entity.created.v1`, `entity.updated.v1`, `entity.migrated.v1`, `attribute_value.changed.v1`, `attribute_value.restored.v1`, and `relationship.changed.v1`. `envelope` permits only `event_type`, `aggregate_kind`, `source_kind`, `source_name`, or explicit `metadata.<field>` paths. `facts` and dynamic attribute input are restricted to `facts.<index>.<field>` paths and all values are scalar. There is no template, query, script, target selector, loop, cross-entity write, schedule, webhook, or external effect.
+## Trigger contracts
+
+`format_version = 1` remains event-only and accepts only the documented catalog entity event types. `format_version = 2` additionally has these closed trigger types:
 
 ```toml
-format_version = 1
-code = "tag-new-products"
-name = "Tag new products"
+format_version = 2
+code = "retag-product"
+name = "Retag product"
 [[triggers]]
-event_type = "entity.created.v1"
-[triggers.envelope]
-source_name = "catalog_api"
+type = "manual"
 [[actions]]
 type = "system_tags_add"
-tags = ["new"]
+tags = ["reviewed"]
 ```
 
-## Management UI
+A manual run is available only to `workflows.manage`, only against the currently enabled published revision, and requires one existing `entity_id`. It accepts no arbitrary payload. `POST /workflows/{workflow_id}/run-now` returns a durable run identifier; diagnostics show source and safe status, never its private trigger snapshot.
 
-The **Manage → Workflows** page is available to members with `workflows.read`. It lists workflow families, lifecycle state, current revision, and safe run/dead-letter indicators. Members with `workflows.manage` can validate TOML with the server compiler, save drafts, publish, enable or disable revisions, and replay terminal dead letters. Revision source and comparisons are read-only; diagnostics expose only safe run state, timestamps, attempts, and outcome/error evidence—never internal domain-event payloads.
+Schedules are revisioned TOML, not mutable database jobs. They use a six-field cron and **must** explicitly declare `timezone = "UTC"`; local/DST time zones are rejected to eliminate DST duplicate/skipped ambiguity. `target_entity_id` is the single existing entity action target. Schedule actions require fixed attribute values (there are no event facts).
 
-## Delivery and operations
+```toml
+format_version = 2
+code = "hourly-retag"
+name = "Hourly retag"
+[[triggers]]
+type = "schedule"
+cron = "0 0 * * * *"
+timezone = "UTC"
+target_entity_id = "00000000-0000-0000-0000-000000000001"
+[[actions]]
+type = "system_tags_add"
+tags = ["hourly"]
+```
 
-The internal `catalog.workflows` outbox consumer only creates durable runs. Dispatcher redelivery is expected: `(workspace, workflow revision, trigger event)` is unique. A worker leases runs, retries with bounded exponential delay, and dead-letters after five attempts. Each action inserts its `(run, action index)` idempotency key in **the same transaction** as its entity row lock, mutation, audit evidence, and outgoing outbox event. A crash after commit but before a run acknowledgement therefore reclaims the run without duplicate catalog effects or audits.
+The Rust scheduler owns a durable cursor per revision/trigger. It skips downtime misfires older than five minutes, records them, and skips an occurrence while that workflow has a pending or leased run (no overlap). Occurrence keys are `(revision, trigger index, UTC due timestamp)`, so duplicate ticks/restarts cannot create duplicate runs. Disable cancels queued/leased runs and removes the lifecycle eligibility on the next scheduler transaction. Runs retain normal bounded exponential retry (five attempts) and dead-letter semantics.
 
-Disabling a workflow cancels queued and leased runs; every action rechecks that state while holding the run lock. Dead letters can be repaired and replayed via the tenant-scoped diagnostics endpoints (`GET /workflow-runs`, `workflows.read`; `POST /workflow-runs/{run_id}/replay`, `workflows.manage`). Diagnostics never expose internal domain-event payloads.
+`extension_event` is an explicit v2 parser contract containing `provider`, a versioned `plugin.*.v1` event type, and `contract_version`. It is **not delivered yet**: the event dispatcher currently has a static core event subscription and cannot safely recheck an extension provider/release/export grant at delivery. No extension event can trigger a workflow until a dynamic, tenant-scoped consumer can atomically pin and recheck those grants; client diagnostics do not expose extension payloads.
 
-Workflow events retain correlation and direct causation and include workflow/revision/run/action audit provenance plus a persisted root trigger and bounded causal depth (8). Workflow-originated sources are excluded from default intake, preventing feedback. Operators should investigate a dead letter, fix the schema/state condition, and replay; do not rely on chronological delivery or exactly-once worker attempts.
+## External effects
+
+Webhooks, network delivery, secrets, and external effects remain deferred. The extension network/secrets mediation runtime is not available, so workflows must not create raw clients or read secrets. A future outbound capability must be a permissioned mediated delivery queue with encrypted secret references, execution-time grant checks, bounded payloads, idempotency keys, retries and dead letters; it is not implemented by this slice.
+
+## Operations
+
+The `catalog.workflows` outbox consumer only creates durable event runs. Workers lease runs, retry with bounded exponential delay, and dead-letter after five attempts. Each action inserts its `(run, action index)` idempotency key in the same transaction as entity locking, mutation, audit evidence, and outgoing outbox event. Disabling cancels queued and leased runs; every action rechecks this execution fence. `GET /workflow-runs` needs `workflows.read`; manual runs, replay, and lifecycle changes need the narrow `workflows.manage` permission.

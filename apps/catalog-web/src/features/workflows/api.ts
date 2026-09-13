@@ -83,6 +83,13 @@ export const enableWorkflowRevision = (
     { method: 'POST' },
   );
 
+export const runWorkflowNow = (id: string, entityId: string): Promise<{ id: string }> =>
+  request(`/api/workflows/${workflowPath(id)}/run-now`, z.object({ id: z.uuid() }), {
+    body: JSON.stringify({ entity_id: z.uuid().parse(entityId) }),
+    headers: { 'Content-Type': 'application/json' },
+    method: 'POST',
+  });
+
 export const disableWorkflow = (id: string): Promise<Workflow> =>
   request(`/api/workflows/${workflowPath(id)}/disable`, workflowSchema, {
     method: 'POST',

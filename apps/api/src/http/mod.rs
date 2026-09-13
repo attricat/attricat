@@ -531,6 +531,7 @@ pub fn router(state: AppState) -> Router {
             "/workflows/{workflow_id}/versions/{version}/enable",
             post(workflows::enable),
         )
+        .route("/workflows/{workflow_id}/run-now", post(workflows::run_now))
         .route("/workflows/{workflow_id}/disable", post(workflows::disable))
         .route("/workflow-runs", get(workflows::list_runs))
         .route(

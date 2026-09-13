@@ -632,3 +632,10 @@ pub struct Workflow {
 pub struct CreateWorkflow {
     pub definition: String,
 }
+
+/// Bounded manual workflow input: the target is an existing entity and no caller payload is persisted.
+#[derive(Clone, Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct CreateManualWorkflowRun {
+    pub entity_id: Uuid,
+}

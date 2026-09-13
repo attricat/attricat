@@ -18,8 +18,9 @@ export const workflowRunSchema = z.object({
   id: z.uuid(),
   workflow_id: z.uuid(),
   workflow_version: z.number().int().positive(),
-  trigger_event_id: z.uuid(),
-  trigger_sequence: z.number().int(),
+  trigger_event_id: z.uuid().nullable(),
+  trigger_sequence: z.number().int().nullable(),
+  source: z.enum(['event', 'manual', 'schedule']).default('event'),
   status: z.enum([
     'pending',
     'leased',
@@ -33,7 +34,7 @@ export const workflowRunSchema = z.object({
   last_error: z.string().nullable(),
   created_at: z.string(),
   cancelled_at: z.string().nullable(),
-  root_trigger_event_id: z.uuid(),
+  root_trigger_event_id: z.uuid().nullable(),
   causal_depth: z.number().int().nonnegative(),
 });
 

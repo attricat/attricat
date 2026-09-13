@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { listWorkflowRuns, validateWorkflow } from './api';
+import { listWorkflowRuns, runWorkflowNow, validateWorkflow } from './api';
 
 const fetchMock = vi.fn();
 vi.stubGlobal('fetch', fetchMock);
@@ -13,6 +13,7 @@ const run = {
   workflow_version: 1,
   trigger_event_id: '323e4567-e89b-12d3-a456-426614174000',
   trigger_sequence: 4,
+  source: 'event',
   status: 'dead_letter',
   attempts: 5,
   failed_at: '2026-01-01T00:00:00Z',
@@ -36,6 +37,20 @@ describe('workflow API client', () => {
 
     await expect(listWorkflowRuns()).resolves.toEqual([run]);
     expect(fetchMock).toHaveBeenCalledWith('/api/workflow-runs');
+  });
+
+  it('starts a bounded manual run with only an entity target', async () => {
+    fetchMock.mockResolvedValue({
+      ok: true,
+      json: () => Promise.resolve({ id: run.id }),
+    });
+
+    await expect(runWorkflowNow(run.workflow_id, run.trigger_event_id)).resolves.toEqual({ id: run.id });
+    expect(fetchMock).toHaveBeenCalledWith(`/api/workflows/${run.workflow_id}/run-now`, {
+      body: JSON.stringify({ entity_id: run.trigger_event_id }),
+      headers: { 'Content-Type': 'application/json' },
+      method: 'POST',
+    });
   });
 
   it('sends TOML to the server compiler for canonical validation', async () => {

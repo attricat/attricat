@@ -3,7 +3,7 @@ use super::{
     extractors::{ApiJson, ApiPath},
 };
 use crate::{
-    model::{CreateWorkflow, Workflow},
+    model::{CreateManualWorkflowRun, CreateWorkflow, Workflow},
     repository::WorkflowRun,
 };
 use axum::{Json, http::StatusCode};
@@ -78,6 +78,17 @@ pub(super) async fn enable(
     ApiPath((id, version)): ApiPath<(Uuid, i64)>,
 ) -> Result<Json<Workflow>, ApiError> {
     Ok(Json(repo.enable_workflow_revision(id, version).await?))
+}
+pub(super) async fn run_now(
+    super::auth::ScopedRepository(repo): super::auth::ScopedRepository,
+    ApiPath(id): ApiPath<Uuid>,
+    ApiJson(input): ApiJson<CreateManualWorkflowRun>,
+) -> Result<(StatusCode, Json<serde_json::Value>), ApiError> {
+    let run_id = repo.create_manual_workflow_run(id, input.entity_id).await?;
+    Ok((
+        StatusCode::ACCEPTED,
+        Json(serde_json::json!({ "id": run_id })),
+    ))
 }
 pub(super) async fn disable(
     super::auth::ScopedRepository(repo): super::auth::ScopedRepository,

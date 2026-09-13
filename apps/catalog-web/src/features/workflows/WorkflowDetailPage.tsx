@@ -30,6 +30,7 @@ import {
   listWorkflowRevisions,
   listWorkflowRuns,
   publishWorkflowRevision,
+  runWorkflowNow,
 } from './api';
 import { workflowQueryKeys } from './query-keys';
 
@@ -51,6 +52,7 @@ export const WorkflowDetailPage = ({ workflowId }: { workflowId: string }) => {
   const queryClient = useQueryClient();
   const [tab, setTab] = useState(0);
   const [leftVersion, setLeftVersion] = useState<number>();
+  const [manualEntityId, setManualEntityId] = useState('');
   const session = useQuery({
     queryKey: authQueryKeys.session(),
     queryFn: currentSession,
@@ -86,6 +88,10 @@ export const WorkflowDetailPage = ({ workflowId }: { workflowId: string }) => {
       enableWorkflowRevision(workflowId, version),
     onSuccess: refresh,
   });
+  const runNow = useMutation({
+    mutationFn: () => runWorkflowNow(workflowId, manualEntityId),
+    onSuccess: refresh,
+  });
   const disable = useMutation({
     mutationFn: () => disableWorkflow(workflowId),
     onSuccess: refresh,
@@ -99,7 +105,7 @@ export const WorkflowDetailPage = ({ workflowId }: { workflowId: string }) => {
   const workflowRuns = (runs.data ?? []).filter(
     (run) => run.workflow_id === workflowId,
   );
-  const mutationError = publish.error ?? enable.error ?? disable.error;
+  const mutationError = publish.error ?? enable.error ?? runNow.error ?? disable.error;
   const locale = i18n.resolvedLanguage ?? i18n.language;
 
   if (session.isPending || revisions.isPending)
@@ -160,6 +166,24 @@ export const WorkflowDetailPage = ({ workflowId }: { workflowId: string }) => {
                     {t('workflows.enable')}
                   </Button>
                 )}
+              {current.enabled_version === current.version && (
+                <Stack direction="row" spacing={1}>
+                  <TextField
+                    aria-label="Manual run entity ID"
+                    label="Entity ID"
+                    onChange={(event) => setManualEntityId(event.target.value)}
+                    size="small"
+                    value={manualEntityId}
+                  />
+                  <Button
+                    disabled={runNow.isPending || !manualEntityId}
+                    onClick={() => runNow.mutate()}
+                    variant="outlined"
+                  >
+                    Run now
+                  </Button>
+                </Stack>
+              )}
               {current.enabled_version !== null && (
                 <Button
                   color="warning"
@@ -421,6 +445,7 @@ const RunTable = ({
           <TableHead>
             <TableRow>
               <TableCell>{t('workflows.status')}</TableCell>
+              <TableCell>Source</TableCell>
               <TableCell>{t('workflows.attempts')}</TableCell>
               <TableCell>{t('workflows.created')}</TableCell>
               <TableCell>{t('workflows.outcomeEvidence')}</TableCell>
@@ -443,6 +468,7 @@ const RunTable = ({
                     size="small"
                   />
                 </TableCell>
+                <TableCell>{run.source}</TableCell>
                 <TableCell>{run.attempts}</TableCell>
                 <TableCell>
                   {dateTime(

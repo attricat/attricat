@@ -10,8 +10,9 @@ pub struct WorkflowRun {
     pub id: Uuid,
     pub workflow_id: Uuid,
     pub workflow_version: i64,
-    pub trigger_event_id: Uuid,
-    pub trigger_sequence: i64,
+    pub trigger_event_id: Option<Uuid>,
+    pub trigger_sequence: Option<i64>,
+    pub source: String,
     pub status: String,
     pub attempts: i32,
     pub failed_at: Option<DateTime<Utc>>,
@@ -19,7 +20,7 @@ pub struct WorkflowRun {
     pub last_error: Option<String>,
     pub created_at: DateTime<Utc>,
     pub cancelled_at: Option<DateTime<Utc>>,
-    pub root_trigger_event_id: Uuid,
+    pub root_trigger_event_id: Option<Uuid>,
     pub causal_depth: i32,
 }
 
@@ -30,7 +31,27 @@ pub(crate) enum WorkflowActionResult {
     Cancelled,
 }
 
-#[derive(Debug, Clone, sqlx::FromRow)]
+#[derive(sqlx::FromRow)]
+struct ClaimedWorkflowRunRow {
+    id: Uuid,
+    workflow_id: Uuid,
+    workflow_version: i64,
+    trigger_event_id: Option<Uuid>,
+    trigger_sequence: Option<i64>,
+    source: String,
+    status: String,
+    attempts: i32,
+    failed_at: Option<DateTime<Utc>>,
+    completed_at: Option<DateTime<Utc>>,
+    last_error: Option<String>,
+    created_at: DateTime<Utc>,
+    cancelled_at: Option<DateTime<Utc>>,
+    root_trigger_event_id: Option<Uuid>,
+    causal_depth: i32,
+    trigger_event: Value,
+    compiled_plan: Value,
+}
+
 pub(crate) struct ClaimedWorkflowRun {
     pub run: WorkflowRun,
     pub trigger_event: Value,
@@ -102,28 +123,29 @@ impl CatalogRepository {
         lease: Duration,
     ) -> Result<Option<ClaimedWorkflowRun>, RepositoryError> {
         let ws = self.workspace_id.unwrap_or(Self::DEFAULT_WORKSPACE_ID);
-        let row = sqlx::query_as::<_, (Uuid,Uuid,i64,Uuid,i64,String,i32,Option<DateTime<Utc>>,Option<DateTime<Utc>>,Option<String>,DateTime<Utc>,Option<DateTime<Utc>>,Uuid,i32,Value,Value)>(
-            "WITH candidate AS (SELECT id FROM workflow_runs WHERE workspace_id=$1 AND ((status='pending' AND next_attempt_at<=clock_timestamp()) OR (status='leased' AND lease_until<=clock_timestamp())) ORDER BY next_attempt_at,id FOR UPDATE SKIP LOCKED LIMIT 1), leased AS (UPDATE workflow_runs r SET status='leased', attempts=attempts+1, lease_owner=$2, lease_until=clock_timestamp()+($3 * interval '1 millisecond'), last_error=NULL, updated_at=clock_timestamp() FROM candidate c WHERE r.id=c.id RETURNING r.*) SELECT id,workflow_id,workflow_version,trigger_event_id,trigger_sequence,status,attempts,failed_at,completed_at,last_error,created_at,cancelled_at,COALESCE(root_trigger_event_id, trigger_event_id),causal_depth,trigger_event,compiled_plan FROM leased"
+        let row = sqlx::query_as::<_, ClaimedWorkflowRunRow>(
+            "WITH candidate AS (SELECT id FROM workflow_runs WHERE workspace_id=$1 AND ((status='pending' AND next_attempt_at<=clock_timestamp()) OR (status='leased' AND lease_until<=clock_timestamp())) ORDER BY next_attempt_at,id FOR UPDATE SKIP LOCKED LIMIT 1), leased AS (UPDATE workflow_runs r SET status='leased', attempts=attempts+1, lease_owner=$2, lease_until=clock_timestamp()+($3 * interval '1 millisecond'), last_error=NULL, updated_at=clock_timestamp() FROM candidate c WHERE r.id=c.id RETURNING r.*) SELECT id,workflow_id,workflow_version,trigger_event_id,trigger_sequence,source,status,attempts,failed_at,completed_at,last_error,created_at,cancelled_at,root_trigger_event_id,causal_depth,trigger_event,compiled_plan FROM leased"
         ).bind(ws).bind(owner).bind(lease.as_millis() as i64).fetch_optional(&self.pool).await?;
         Ok(row.map(|r| ClaimedWorkflowRun {
             run: WorkflowRun {
-                id: r.0,
-                workflow_id: r.1,
-                workflow_version: r.2,
-                trigger_event_id: r.3,
-                trigger_sequence: r.4,
-                status: r.5,
-                attempts: r.6,
-                failed_at: r.7,
-                completed_at: r.8,
-                last_error: r.9,
-                created_at: r.10,
-                cancelled_at: r.11,
-                root_trigger_event_id: r.12,
-                causal_depth: r.13,
+                id: r.id,
+                workflow_id: r.workflow_id,
+                workflow_version: r.workflow_version,
+                trigger_event_id: r.trigger_event_id,
+                trigger_sequence: r.trigger_sequence,
+                source: r.source,
+                status: r.status,
+                attempts: r.attempts,
+                failed_at: r.failed_at,
+                completed_at: r.completed_at,
+                last_error: r.last_error,
+                created_at: r.created_at,
+                cancelled_at: r.cancelled_at,
+                root_trigger_event_id: r.root_trigger_event_id,
+                causal_depth: r.causal_depth,
             },
-            trigger_event: r.14,
-            compiled_plan: r.15,
+            trigger_event: r.trigger_event,
+            compiled_plan: r.compiled_plan,
             lease_owner: owner.to_owned(),
         }))
     }
@@ -164,30 +186,161 @@ impl CatalogRepository {
     }
     pub async fn list_workflow_runs(&self) -> Result<Vec<WorkflowRun>, RepositoryError> {
         let ws = self.workspace_id.unwrap_or(Self::DEFAULT_WORKSPACE_ID);
-        Ok(sqlx::query_as("SELECT id,workflow_id,workflow_version,trigger_event_id,trigger_sequence,status,attempts,failed_at,completed_at,last_error,created_at,cancelled_at,COALESCE(root_trigger_event_id, trigger_event_id) AS root_trigger_event_id,causal_depth FROM workflow_runs WHERE workspace_id=$1 ORDER BY created_at DESC").bind(ws).fetch_all(&self.pool).await?)
+        Ok(sqlx::query_as("SELECT id,workflow_id,workflow_version,trigger_event_id,trigger_sequence,source,status,attempts,failed_at,completed_at,last_error,created_at,cancelled_at,root_trigger_event_id,causal_depth FROM workflow_runs WHERE workspace_id=$1 ORDER BY created_at DESC").bind(ws).fetch_all(&self.pool).await?)
     }
+    /// Create a durable manual run only for the exact currently enabled revision.
+    /// The management route cannot select a draft or historical revision.
+    pub async fn create_manual_workflow_run(
+        &self,
+        workflow_id: Uuid,
+        entity_id: Uuid,
+    ) -> Result<Uuid, RepositoryError> {
+        let ws = self.workspace_id.unwrap_or(Self::DEFAULT_WORKSPACE_ID);
+        let mut tx = self.pool.begin().await?;
+        let row: Option<(i64, Value)> = sqlx::query_as(
+            "SELECT w.version,w.compiled_plan FROM workflows w JOIN workflow_lifecycles l ON l.workflow_id=w.id AND l.workspace_id=w.workspace_id WHERE w.workspace_id=$1 AND w.id=$2 AND w.status='published' AND l.enabled_version=w.version FOR SHARE OF l",
+        ).bind(ws).bind(workflow_id).fetch_optional(&mut *tx).await?;
+        let Some((version, plan)) = row else {
+            return Err(RepositoryError::WorkflowNotPublished);
+        };
+        let compiled: catalog_workflow::CompiledWorkflow = serde_json::from_value(plan.clone())
+            .map_err(|e| RepositoryError::InvalidWorkflowDefinition(e.to_string()))?;
+        if !compiled
+            .triggers
+            .iter()
+            .any(|trigger| matches!(trigger, catalog_workflow::Trigger::Manual))
+        {
+            return Err(RepositoryError::InvalidWorkflowDefinition(
+                "enabled revision does not allow manual runs".into(),
+            ));
+        }
+        let exists: bool = sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM entities WHERE id=$1 AND workspace_id=$2 AND deleted_at IS NULL)").bind(entity_id).bind(ws).fetch_one(&mut *tx).await?;
+        if !exists {
+            return Err(RepositoryError::NotFound("entity"));
+        }
+        let id = Uuid::new_v4();
+        let event = synthetic_trigger(id, ws, entity_id, "manual");
+        let snapshot = serde_json::to_value(event).expect("domain event serializes");
+        sqlx::query("INSERT INTO workflow_runs(id,workspace_id,workflow_id,workflow_version,trigger_event,compiled_plan,source,idempotency_key,causal_depth) VALUES($1,$2,$3,$4,$5,$6,'manual',$7,0)")
+            .bind(id).bind(ws).bind(workflow_id).bind(version).bind(snapshot).bind(plan).bind(id.to_string()).execute(&mut *tx).await?;
+        tx.commit().await?;
+        Ok(id)
+    }
+
+    /// Advances durable UTC schedule cursors. Misfires older than five minutes are recorded and
+    /// skipped; a workflow with an active run does not overlap and skips that occurrence.
+    pub async fn schedule_workflow_runs(&self) -> Result<u64, RepositoryError> {
+        use chrono::Duration as ChronoDuration;
+        use cron::Schedule;
+        use std::str::FromStr;
+        let ws = self.workspace_id.unwrap_or(Self::DEFAULT_WORKSPACE_ID);
+        let now = Utc::now();
+        let mut tx = self.pool.begin().await?;
+        let mut created = 0;
+        let rows: Vec<(Uuid,i64,Value)>=sqlx::query_as("SELECT w.id,w.version,w.compiled_plan FROM workflows w JOIN workflow_lifecycles l ON l.workflow_id=w.id AND l.workspace_id=w.workspace_id WHERE w.workspace_id=$1 AND w.status='published' AND l.enabled_version=w.version FOR SHARE OF l").bind(ws).fetch_all(&mut *tx).await?;
+        for (workflow_id, version, plan) in rows {
+            let compiled: catalog_workflow::CompiledWorkflow = serde_json::from_value(plan.clone())
+                .map_err(|e| RepositoryError::InvalidWorkflowDefinition(e.to_string()))?;
+            for (index, trigger) in compiled.triggers.iter().enumerate() {
+                let catalog_workflow::Trigger::Schedule {
+                    cron,
+                    target_entity_id,
+                    ..
+                } = trigger
+                else {
+                    continue;
+                };
+                let schedule = Schedule::from_str(cron).map_err(|_| {
+                    RepositoryError::InvalidWorkflowDefinition(
+                        "stored schedule cron is invalid".into(),
+                    )
+                })?;
+                let target = target_entity_id.parse::<Uuid>().map_err(|_| {
+                    RepositoryError::InvalidWorkflowDefinition(
+                        "stored schedule target is invalid".into(),
+                    )
+                })?;
+                let state:Option<(DateTime<Utc>,)>=sqlx::query_as("SELECT next_run_at FROM workflow_schedule_states WHERE workspace_id=$1 AND workflow_id=$2 AND workflow_version=$3 AND trigger_index=$4 FOR UPDATE").bind(ws).bind(workflow_id).bind(version).bind(index as i32).fetch_optional(&mut *tx).await?;
+                let Some((due,)) = state else {
+                    let next = schedule.after(&now).next().ok_or_else(|| {
+                        RepositoryError::InvalidWorkflowDefinition(
+                            "schedule has no future occurrence".into(),
+                        )
+                    })?;
+                    sqlx::query("INSERT INTO workflow_schedule_states(workspace_id,workflow_id,workflow_version,trigger_index,next_run_at) VALUES($1,$2,$3,$4,$5)").bind(ws).bind(workflow_id).bind(version).bind(index as i32).bind(next).execute(&mut *tx).await?;
+                    continue;
+                };
+                if due > now {
+                    continue;
+                };
+                let next = schedule.after(&now).next().ok_or_else(|| {
+                    RepositoryError::InvalidWorkflowDefinition(
+                        "schedule has no future occurrence".into(),
+                    )
+                })?;
+                let missed = due < now - ChronoDuration::minutes(5);
+                let active:bool=sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM workflow_runs WHERE workspace_id=$1 AND workflow_id=$2 AND status IN ('pending','leased'))").bind(ws).bind(workflow_id).fetch_one(&mut *tx).await?;
+                sqlx::query("UPDATE workflow_schedule_states SET next_run_at=$5,misfires=misfires+$6,updated_at=clock_timestamp() WHERE workspace_id=$1 AND workflow_id=$2 AND workflow_version=$3 AND trigger_index=$4").bind(ws).bind(workflow_id).bind(version).bind(index as i32).bind(next).bind(if missed||active {1_i64}else{0}).execute(&mut *tx).await?;
+                if missed || active {
+                    continue;
+                };
+                let id = Uuid::new_v4();
+                let occurrence = due.to_rfc3339();
+                let event = synthetic_trigger(id, ws, target, "schedule");
+                let snapshot = serde_json::to_value(event).expect("domain event serializes");
+                let result=sqlx::query("INSERT INTO workflow_runs(id,workspace_id,workflow_id,workflow_version,trigger_event,compiled_plan,source,idempotency_key,causal_depth) VALUES($1,$2,$3,$4,$5,$6,'schedule',$7,0) ON CONFLICT (workspace_id,workflow_id,workflow_version,source,idempotency_key) WHERE idempotency_key IS NOT NULL DO NOTHING").bind(id).bind(ws).bind(workflow_id).bind(version).bind(snapshot).bind(plan.clone()).bind(format!("{index}:{occurrence}")).execute(&mut *tx).await?;
+                created += result.rows_affected();
+            }
+        }
+        tx.commit().await?;
+        Ok(created)
+    }
+
     pub async fn replay_workflow_run(&self, id: Uuid) -> Result<bool, RepositoryError> {
         let ws = self.workspace_id.unwrap_or(Self::DEFAULT_WORKSPACE_ID);
         Ok(sqlx::query("UPDATE workflow_runs SET status='pending',attempts=0,next_attempt_at=clock_timestamp(),lease_owner=NULL,lease_until=NULL,failed_at=NULL,last_error=NULL,replayed_at=clock_timestamp(),updated_at=clock_timestamp() WHERE id=$1 AND workspace_id=$2 AND status='dead_letter'").bind(id).bind(ws).execute(&self.pool).await?.rows_affected()==1)
     }
 }
 
+fn synthetic_trigger(id: Uuid, workspace_id: Uuid, entity_id: Uuid, source: &str) -> DomainEvent {
+    DomainEvent {
+        id,
+        sequence: 0,
+        workspace_id,
+        occurred_at: Utc::now(),
+        event_type: format!("workflow.{source}.v1"),
+        aggregate_kind: "entity".into(),
+        aggregate_id: entity_id,
+        correlation_id: id,
+        causation_id: None,
+        source_kind: "workflow".into(),
+        source_name: format!("workflow:{source}"),
+        metadata: serde_json::json!({"workflow_synthetic": true}),
+        payload: serde_json::json!({"facts": []}),
+    }
+}
+
 fn workflow_trigger_matches(trigger: &catalog_workflow::Trigger, event: &DomainEvent) -> bool {
-    trigger.event_type == event.event_type
-        && trigger
-            .envelope
-            .iter()
-            .all(|(key, expected)| match key.as_str() {
-                "event_type" => expected == &Value::String(event.event_type.clone()),
-                "aggregate_kind" => expected == &Value::String(event.aggregate_kind.clone()),
-                "source_kind" => expected == &Value::String(event.source_kind.clone()),
-                "source_name" => expected == &Value::String(event.source_name.clone()),
-                _ => key
-                    .strip_prefix("metadata.")
-                    .and_then(|path| value_path(&event.metadata, path))
-                    .is_some_and(|actual| actual == expected),
-            })
-        && trigger.facts.iter().all(|(key, expected)| {
+    let catalog_workflow::Trigger::Event {
+        event_type,
+        envelope,
+        facts,
+    } = trigger
+    else {
+        return false;
+    };
+    event_type == &event.event_type
+        && envelope.iter().all(|(key, expected)| match key.as_str() {
+            "event_type" => expected == &Value::String(event.event_type.clone()),
+            "aggregate_kind" => expected == &Value::String(event.aggregate_kind.clone()),
+            "source_kind" => expected == &Value::String(event.source_kind.clone()),
+            "source_name" => expected == &Value::String(event.source_name.clone()),
+            _ => key
+                .strip_prefix("metadata.")
+                .and_then(|path| value_path(&event.metadata, path))
+                .is_some_and(|actual| actual == expected),
+        })
+        && facts.iter().all(|(key, expected)| {
             value_path(&event.payload, key).is_some_and(|actual| actual == expected)
         })
 }
@@ -210,7 +363,7 @@ mod tests {
 
     #[test]
     fn matching_uses_exact_event_and_immutable_facts() {
-        let trigger = catalog_workflow::Trigger {
+        let trigger = catalog_workflow::Trigger::Event {
             event_type: "entity.updated.v1".into(),
             envelope: [("source_kind".into(), json!("api"))].into(),
             facts: [("facts.0.attribute_code".into(), json!("title"))].into(),
@@ -237,7 +390,7 @@ mod tests {
         };
         assert!(!workflow_trigger_matches(&trigger, &different));
 
-        let metadata_trigger = catalog_workflow::Trigger {
+        let metadata_trigger = catalog_workflow::Trigger::Event {
             event_type: "entity.updated.v1".into(),
             envelope: [("metadata.tenant_hint".into(), json!("north"))].into(),
             facts: Default::default(),

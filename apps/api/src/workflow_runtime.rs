@@ -52,6 +52,15 @@ pub fn start(
                 Ok(true) => {}
                 Err(error) => tracing::error!(%error, "workflow run poll failed"),
             }
+            // This is a process-owned durable scheduler, not SQL behavior. Its cursors and
+            // occurrence keys make duplicate polls/restarts safe.
+            for workspace in repository.active_workspace_ids().await.unwrap_or_default() {
+                if let Ok(scoped) = repository.for_workspace(workspace).await
+                    && let Err(error) = scoped.schedule_workflow_runs().await
+                {
+                    tracing::error!(%error, "workflow schedule poll failed");
+                }
+            }
             tokio::select! { _ = tokio::time::sleep(Duration::from_millis(250)) => {}, _ = shutdown.changed() => return }
         }
     })
@@ -96,8 +105,8 @@ async fn execute(
     let event: DomainEvent = serde_json::from_value(run.trigger_event.clone())?;
     // Entity scope and causal chain protection are rechecked at execution, not trusted from intake.
     if event.aggregate_kind != "entity"
-        || event.source_name.starts_with("workflow:")
-        || causal_depth(&event) >= MAX_CAUSAL_DEPTH
+        || (run.run.source == "event" && event.source_name.starts_with("workflow:"))
+        || (run.run.source == "event" && causal_depth(&event) >= MAX_CAUSAL_DEPTH)
         || run.run.causal_depth as usize >= MAX_CAUSAL_DEPTH
     {
         return Ok(());
