@@ -15,6 +15,7 @@ import {
 } from '@tanstack/react-table/legacy';
 import MoreVertIcon from '@mui/icons-material/MoreVert';
 import {
+  Alert,
   ButtonBase,
   Chip,
   Dialog,
@@ -43,6 +44,7 @@ import {
   unpublishEntity,
   type BlueprintWithAttributes,
   type EntityItem,
+  type EntityPublicationStatus,
 } from '../entities/api';
 import { EntityIdPopover } from '../entities/components/EntityIdPopover';
 import { displayLabel } from '../entities/entity-display';
@@ -125,6 +127,19 @@ export const ExplorerResultsTable = ({
       ),
     ]),
   );
+  const updatePublication = (
+    entityId: string,
+    publication: EntityPublicationStatus,
+  ) =>
+    queryClient.setQueryData<EntityPublicationStatus[]>(
+      entityQueryKeys.publications(entityId),
+      (current) => [
+        ...(current ?? []).filter(
+          (item) => item.context_id !== publication.context_id,
+        ),
+        publication,
+      ],
+    );
   const invalidatePublication = (entityId: string) =>
     queryClient.invalidateQueries({
       queryKey: entityQueryKeys.publications(entityId),
@@ -132,12 +147,15 @@ export const ExplorerResultsTable = ({
   const publish = useMutation({
     mutationFn: (entityId: string) =>
       publishEntity(entityId, publicationContextId!),
-    onSuccess: (_, entityId) => invalidatePublication(entityId),
+    onSuccess: (publication, entityId) => {
+      updatePublication(entityId, publication);
+      void invalidatePublication(entityId);
+    },
   });
   const unpublish = useMutation({
     mutationFn: (entityId: string) =>
       unpublishEntity(entityId, publicationContextId!),
-    onSuccess: (_, entityId) => invalidatePublication(entityId),
+    onSuccess: (_, entityId) => void invalidatePublication(entityId),
   });
   const columnHelper = legacyCreateColumnHelper<EntityItem>();
   const tableView =
@@ -415,6 +433,11 @@ export const ExplorerResultsTable = ({
 
   return (
     <Paper component="section">
+      {(publish.isError || unpublish.isError) && (
+        <Alert severity="error" sx={{ m: 2 }}>
+          {publish.error?.message ?? unpublish.error?.message}
+        </Alert>
+      )}
       <Typography sx={{ borderBottom: 1, borderColor: 'divider', p: 2 }}>
         {totalCount === null
           ? t('explorer.resultCount', { count: items.length })
