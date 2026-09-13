@@ -9,6 +9,8 @@ pub const ENTITY_CREATED_V1: &str = "entity.created.v1";
 pub const ENTITY_UPDATED_V1: &str = "entity.updated.v1";
 pub const ENTITY_DELETED_V1: &str = "entity.deleted.v1";
 pub const ENTITY_MIGRATED_V1: &str = "entity.migrated.v1";
+pub const ENTITY_PUBLISHED_V1: &str = "entity.published.v1";
+pub const ENTITY_UNPUBLISHED_V1: &str = "entity.unpublished.v1";
 pub const ATTRIBUTE_VALUE_CHANGED_V1: &str = "attribute_value.changed.v1";
 pub const ATTRIBUTE_VALUE_RESTORED_V1: &str = "attribute_value.restored.v1";
 pub const RELATIONSHIP_CHANGED_V1: &str = "relationship.changed.v1";
@@ -24,6 +26,8 @@ pub const ALL_EVENT_TYPES_V1: &[&str] = &[
     ENTITY_UPDATED_V1,
     ENTITY_DELETED_V1,
     ENTITY_MIGRATED_V1,
+    ENTITY_PUBLISHED_V1,
+    ENTITY_UNPUBLISHED_V1,
     ATTRIBUTE_VALUE_CHANGED_V1,
     ATTRIBUTE_VALUE_RESTORED_V1,
     RELATIONSHIP_CHANGED_V1,
@@ -104,6 +108,15 @@ pub struct BlueprintRevisionV1 {
     pub code: String,
     pub kind: String,
     pub version: i64,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+pub struct EntityPublicationV1 {
+    pub entity_id: Uuid,
+    pub context_id: Uuid,
+    pub revision: Option<i64>,
+    pub blueprint_id: Option<Uuid>,
+    pub blueprint_version: Option<i64>,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]

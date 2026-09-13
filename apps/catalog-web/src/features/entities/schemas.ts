@@ -306,6 +306,18 @@ const attributeValueSelectorSchema = z.object({
   attribute_code: z.string().min(1),
   context_id: uuidSchema.nullable(),
 });
+export const entityPublicationStatusSchema = z.object({
+  context_id: uuidSchema,
+  context_code: z.string(),
+  status: z.enum(['not_published', 'published', 'changes_pending']),
+  revision: z.number().int().positive().nullable(),
+  published_at: z.string().datetime().nullable(),
+});
+export const publicationChannelSchema = z.object({
+  context_id: uuidSchema,
+  context_code: z.string(),
+  enabled: z.boolean(),
+});
 export const entitySchema = z
   .object({
     id: uuidSchema,
@@ -560,6 +572,10 @@ export type NewAttributeValue = z.infer<typeof newAttributeValueSchema>;
 export type FormAttributeValue = z.infer<typeof formAttributeValueSchema>;
 export type RelationshipTargets = z.infer<typeof relationshipTargetsSchema>;
 export type Entity = z.infer<typeof entitySchema>;
+export type EntityPublicationStatus = z.infer<
+  typeof entityPublicationStatusSchema
+>;
+export type PublicationChannel = z.infer<typeof publicationChannelSchema>;
 export type EntityAuditChange = z.infer<typeof entityAuditChangeSchema>;
 export type EntityItem = z.infer<typeof entityItemSchema>;
 export type EntitySearchFilter = z.infer<typeof entitySearchFilterSchema>;

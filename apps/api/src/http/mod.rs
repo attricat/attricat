@@ -568,6 +568,14 @@ pub fn router(state: AppState) -> Router {
             "/contexts",
             get(contexts::list_contexts).post(contexts::create_context),
         )
+        .route(
+            "/publication-channels",
+            get(contexts::list_publication_channels),
+        )
+        .route(
+            "/publication-channels/{context_id}",
+            put(contexts::set_publication_channel),
+        )
         .route("/contexts/{code}", get(contexts::get_context))
         .route(
             "/contexts/id/{id}",
@@ -589,6 +597,18 @@ pub fn router(state: AppState) -> Router {
         .route(
             "/v1/entities/{entity_id}/incoming-relationships",
             post(entities::list_incoming_relationships),
+        )
+        .route(
+            "/v1/entities/{entity_id}/publications",
+            get(entities::list_entity_publications).post(entities::publish_entity),
+        )
+        .route(
+            "/v1/entities/{entity_id}/publications/unpublish",
+            post(entities::unpublish_entity),
+        )
+        .route(
+            "/v1/entities/{entity_id}/publications/publish-all",
+            post(entities::publish_entity_all_channels),
         )
         .route(
             "/v1/entities/{entity_id}/blueprint-migration/preview",

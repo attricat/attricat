@@ -10,8 +10,8 @@ use crate::{
     model::{
         AppendAttributeValues, AttributeContext, AttributeValue, BlueprintWithAttributes,
         CreateAttributeContext, CreateBlueprint, CreateEntityFormRequest, Entity,
-        MigrateEntityRequest, RelationshipMutation, SearchBlueprint, UpdateAttributeContext,
-        UpdateEntityFormRequest,
+        EntityPublicationStatus, MigrateEntityRequest, RelationshipMutation, SearchBlueprint,
+        UpdateAttributeContext, UpdateEntityFormRequest,
     },
     repository::{CatalogRepository, FileMetadata, RepositoryError},
 };
@@ -86,6 +86,31 @@ impl<'a> CatalogMutationService<'a> {
                 input.system_tags,
                 input.system_metadata,
             )
+            .await
+    }
+
+    pub async fn publish_entity(
+        &self,
+        entity_id: Uuid,
+        context_id: Uuid,
+    ) -> Result<EntityPublicationStatus, RepositoryError> {
+        self.repository.publish_entity(entity_id, context_id).await
+    }
+
+    pub async fn publish_entity_all_channels(
+        &self,
+        entity_id: Uuid,
+    ) -> Result<Vec<EntityPublicationStatus>, RepositoryError> {
+        self.repository.publish_entity_all_channels(entity_id).await
+    }
+
+    pub async fn unpublish_entity(
+        &self,
+        entity_id: Uuid,
+        context_id: Uuid,
+    ) -> Result<(), RepositoryError> {
+        self.repository
+            .unpublish_entity(entity_id, context_id)
             .await
     }
 

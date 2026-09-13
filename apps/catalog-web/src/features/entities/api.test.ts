@@ -8,10 +8,15 @@ import {
   getEntityHierarchy,
   getIncomingRelationships,
   getRelationshipTreeFacetChildren,
+  getEntityPublications,
   listEntityBlueprints,
+  listPublicationChannels,
+  publishEntity,
+  publishEntityAllChannels,
   previewEntityMigration,
   getResolvedEntityPreview,
   searchEntities,
+  unpublishEntity,
   updateEntity,
 } from './api';
 
@@ -59,6 +64,54 @@ describe('entity API client', () => {
     });
     await getEntityForm(entityId);
     expect(fetchMock).toHaveBeenCalledWith(`/api/v1/entities/${entityId}`);
+  });
+
+  it('uses the publication endpoint contracts', async () => {
+    respond([{ context_id: entityId, context_code: 'web', enabled: true }]);
+    await listPublicationChannels();
+    expect(fetchMock).toHaveBeenLastCalledWith('/api/publication-channels');
+
+    const publication = {
+      context_id: entityId,
+      context_code: 'web',
+      status: 'not_published',
+      revision: null,
+      published_at: null,
+    };
+    respond([publication]);
+    await getEntityPublications(entityId);
+    expect(fetchMock).toHaveBeenLastCalledWith(
+      `/api/v1/entities/${entityId}/publications`,
+    );
+
+    respond({ ...publication, status: 'published', revision: 1 });
+    await publishEntity(entityId, entityId);
+    expect(fetchMock).toHaveBeenLastCalledWith(
+      `/api/v1/entities/${entityId}/publications`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ context_id: entityId }),
+      },
+    );
+
+    respond([{ ...publication, status: 'published', revision: 1 }]);
+    await publishEntityAllChannels(entityId);
+    expect(fetchMock).toHaveBeenLastCalledWith(
+      `/api/v1/entities/${entityId}/publications/publish-all`,
+      { method: 'POST' },
+    );
+
+    respond(undefined);
+    await unpublishEntity(entityId, entityId);
+    expect(fetchMock).toHaveBeenLastCalledWith(
+      `/api/v1/entities/${entityId}/publications/unpublish`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ context_id: entityId }),
+      },
+    );
   });
 
   it('accepts extension component IDs containing hyphens', async () => {

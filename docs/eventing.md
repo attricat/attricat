@@ -56,8 +56,8 @@ that state itself.
 
 Core types are constants in `api::domain_events` and currently include:
 
-- `entity.created.v1`, `entity.updated.v1`, `entity.deleted.v1`, and
-  `entity.migrated.v1`
+- `entity.created.v1`, `entity.updated.v1`, `entity.deleted.v1`,
+  `entity.migrated.v1`, `entity.published.v1`, and `entity.unpublished.v1`
 - `attribute_value.changed.v1` and `attribute_value.restored.v1`
 - `relationship.changed.v1`
 - `blueprint.created.v1`, `blueprint.revision_created.v1`, and

@@ -98,7 +98,9 @@ fn audit_permission(method: &Method, route: &str) -> &'static str {
         } else {
             "blueprints.write"
         }
-    } else if route.starts_with("/contexts") {
+    } else if route.starts_with("/v1/entities/{entity_id}/publications") {
+        "entities.publish"
+    } else if route.starts_with("/contexts") || route.starts_with("/publication-channels") {
         "contexts.write"
     } else if route.starts_with("/personal-access-tokens") {
         "tokens.manage"
@@ -133,7 +135,7 @@ fn audit_context(method: &Method, route: &str, path: &str) -> (Value, Value) {
         "workflow"
     } else if route.contains("/blueprints") {
         "blueprint"
-    } else if route.contains("/contexts") {
+    } else if route.contains("/contexts") || route.contains("/publication-channels") {
         "context"
     } else if route.contains("/entities") {
         "entity"

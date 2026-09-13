@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { request } from '../../api/request';
+import { request, requestNoContent } from '../../api/request';
 import {
   blueprintSchema,
   blueprintWithAttributesSchema,
@@ -19,6 +19,8 @@ import {
   searchEntitiesRequestSchema,
   migrateEntityRequestSchema,
   updateEntityRequestSchema,
+  entityPublicationStatusSchema,
+  publicationChannelSchema,
   uuidSchema,
 } from './schemas';
 
@@ -32,6 +34,8 @@ export type {
   EntityAuditChange,
   EntityFormResponse,
   EntityMigrationPreview,
+  EntityPublicationStatus,
+  PublicationChannel,
   FormAttributeValue,
   EntityItem,
   EntitySearchFilter,
@@ -216,6 +220,38 @@ export const updateEntity = (
   );
 };
 
+export const listPublicationChannels = () =>
+  request('/api/publication-channels', z.array(publicationChannelSchema));
+export const getEntityPublications = (id: string) =>
+  request(
+    `/api/v1/entities/${encodeURIComponent(uuidSchema.parse(id))}/publications`,
+    z.array(entityPublicationStatusSchema),
+  );
+export const publishEntity = (id: string, contextId: string) =>
+  request(
+    `/api/v1/entities/${encodeURIComponent(uuidSchema.parse(id))}/publications`,
+    entityPublicationStatusSchema,
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ context_id: uuidSchema.parse(contextId) }),
+    },
+  );
+export const publishEntityAllChannels = (id: string) =>
+  request(
+    `/api/v1/entities/${encodeURIComponent(uuidSchema.parse(id))}/publications/publish-all`,
+    z.array(entityPublicationStatusSchema),
+    { method: 'POST' },
+  );
+export const unpublishEntity = (id: string, contextId: string) =>
+  requestNoContent(
+    `/api/v1/entities/${encodeURIComponent(uuidSchema.parse(id))}/publications/unpublish`,
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ context_id: uuidSchema.parse(contextId) }),
+    },
+  );
 export const previewEntityMigration = (id: string) =>
   request(
     `/api/v1/entities/${encodeURIComponent(uuidSchema.parse(id))}/blueprint-migration/preview`,

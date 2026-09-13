@@ -11,8 +11,8 @@ use crate::{
     model::{
         AppendAttributeValues, AttributeValue, AttributeValueHistory, CreateEntityFormRequest,
         Entity, EntityAuditChange, EntityFormResponse, IncomingRelationshipsPage,
-        IncomingRelationshipsRequest, MigrateEntityRequest, RelationshipMutation,
-        UpdateEntityFormRequest,
+        IncomingRelationshipsRequest, MigrateEntityRequest, PublicationContextRequest,
+        RelationshipMutation, UpdateEntityFormRequest,
     },
     repository::decode_search_cursor,
 };
@@ -107,6 +107,48 @@ pub(super) async fn list_incoming_relationships(
             .incoming_relationships(entity_id, input.relationships, limit.into(), cursor)
             .await?,
     ))
+}
+pub(super) async fn list_entity_publications(
+    State(_state): State<AppState>,
+    super::auth::ScopedRepository(repository): super::auth::ScopedRepository,
+    ApiPath(entity_id): ApiPath<Uuid>,
+) -> Result<Json<Vec<crate::model::EntityPublicationStatus>>, ApiError> {
+    Ok(Json(repository.publication_statuses(entity_id).await?))
+}
+pub(super) async fn publish_entity(
+    State(state): State<AppState>,
+    super::auth::ScopedRepository(repository): super::auth::ScopedRepository,
+    ApiPath(entity_id): ApiPath<Uuid>,
+    ApiJson(input): ApiJson<PublicationContextRequest>,
+) -> Result<Json<crate::model::EntityPublicationStatus>, ApiError> {
+    let status = CatalogMutationService::new(&repository)
+        .publish_entity(entity_id, input.context_id)
+        .await?;
+    invalidate_data_health(&state).await;
+    Ok(Json(status))
+}
+pub(super) async fn publish_entity_all_channels(
+    State(state): State<AppState>,
+    super::auth::ScopedRepository(repository): super::auth::ScopedRepository,
+    ApiPath(entity_id): ApiPath<Uuid>,
+) -> Result<Json<Vec<crate::model::EntityPublicationStatus>>, ApiError> {
+    let status = CatalogMutationService::new(&repository)
+        .publish_entity_all_channels(entity_id)
+        .await?;
+    invalidate_data_health(&state).await;
+    Ok(Json(status))
+}
+pub(super) async fn unpublish_entity(
+    State(state): State<AppState>,
+    super::auth::ScopedRepository(repository): super::auth::ScopedRepository,
+    ApiPath(entity_id): ApiPath<Uuid>,
+    ApiJson(input): ApiJson<PublicationContextRequest>,
+) -> Result<StatusCode, ApiError> {
+    CatalogMutationService::new(&repository)
+        .unpublish_entity(entity_id, input.context_id)
+        .await?;
+    invalidate_data_health(&state).await;
+    Ok(StatusCode::NO_CONTENT)
 }
 pub(super) async fn preview_entity_migration(
     State(_state): State<AppState>,

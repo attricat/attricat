@@ -20,7 +20,7 @@ exists.
 Permissions are evaluated from active workspace membership role grants:
 blueprint reads/writes/publishing require `blueprints.read`, `blueprints.write`,
 and `blueprints.publish`; workflow reads and management require `workflows.read` and `workflows.manage`; entity operations require `entities.read`,
-`entities.write`, or `entities.delete`; context operations require
+`entities.write`, `entities.delete`, or `entities.publish`; context operations require
 `contexts.read` or `contexts.write`; data-health, metrics, and event-delivery
 dead-letter inspection require `data_health.read`; event-delivery replay and
 role management require `roles.manage`; extension release discovery requires `extensions.read` and trusted registry source management requires `extensions.manage`. A context-subtree grant applies to its root and descendants,
@@ -121,6 +121,10 @@ password, cookie, CSRF, expiry, and revocation contract is documented in
 | `GET`, `PUT` | `/v1/entities/{id}` | Read or update an entity form atomically, including optional system annotations. |
 | `POST` | `/v1/entities/{id}/blueprint-migration/preview` | Assess migration to the highest published revision. |
 | `POST` | `/v1/entities/{id}/blueprint-migration` | Migrate an entity to that revision. |
+| `GET`, `POST` | `/v1/entities/{id}/publications` | List channel publication status or publish to `{ "context_id": "…" }`. |
+| `POST` | `/v1/entities/{id}/publications/unpublish` | Unpublish from `{ "context_id": "…" }`. |
+| `POST` | `/v1/entities/{id}/publications/publish-all` | Publish atomically to every enabled channel. |
+| `GET`, `PUT` | `/publication-channels`, `/publication-channels/{context_id}` | List enabled channel contexts or enable/disable one. |
 | `POST` | `/entities/{entity_id}/file-attributes/{attribute_code}/uploads` | Stream one or more multipart file parts to a file attribute. |
 | `GET` | `/files/{file_id}` | Read safe file metadata and generated variant metadata. |
 | `GET` | `/files/{file_id}/download` | Download the original through the API, with one safe byte range. |

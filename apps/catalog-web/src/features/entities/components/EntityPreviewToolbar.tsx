@@ -4,10 +4,11 @@ import HistoryOutlinedIcon from '@mui/icons-material/HistoryOutlined';
 import UpgradeOutlinedIcon from '@mui/icons-material/UpgradeOutlined';
 import ViewSidebarOutlinedIcon from '@mui/icons-material/ViewSidebarOutlined';
 import WarningAmberOutlinedIcon from '@mui/icons-material/WarningAmberOutlined';
-import { Box, IconButton, Tooltip } from '@mui/material';
+import { Box, Button, IconButton, Tooltip } from '@mui/material';
 import { useTranslation } from 'react-i18next';
 import { RouterIconButton } from '../../../components/RouterLink';
 import { EntityToolbar } from './EntityToolbar';
+import type { EntityPublicationStatus } from '../schemas';
 
 type Props = {
   entityId: string;
@@ -15,6 +16,12 @@ type Props = {
   onOpenExtensions: () => void;
   schemaOutdated?: boolean;
   showExtensions: boolean;
+  publication?: EntityPublicationStatus;
+  canPublish: boolean;
+  onPublish: () => void;
+  onPublishAll: () => void;
+  onUnpublish: () => void;
+  publicationPending: boolean;
 };
 
 export const EntityPreviewToolbar = ({
@@ -23,6 +30,12 @@ export const EntityPreviewToolbar = ({
   onOpenExtensions,
   schemaOutdated,
   showExtensions,
+  publication,
+  canPublish,
+  onPublish,
+  onPublishAll,
+  onUnpublish,
+  publicationPending,
 }: Props) => {
   const { t } = useTranslation();
   return (
@@ -67,6 +80,51 @@ export const EntityPreviewToolbar = ({
           </Tooltip>
         ))}
       <Box sx={{ flexGrow: 1 }} />
+      {publication && (
+        <Tooltip title={t(`entities.publication.${publication.status}`)}>
+          <Button color="inherit" size="small" variant="text">
+            {t(`entities.publication.${publication.status}`)}
+          </Button>
+        </Tooltip>
+      )}
+      {canPublish &&
+        publication &&
+        (publication.status === 'not_published' ? (
+          <Button
+            disabled={publicationPending}
+            onClick={onPublish}
+            size="small"
+          >
+            {t('entities.publish')}
+          </Button>
+        ) : (
+          <>
+            <Button
+              disabled={publicationPending}
+              onClick={onPublish}
+              size="small"
+            >
+              {t('entities.republish')}
+            </Button>
+            <Button
+              color="warning"
+              disabled={publicationPending}
+              onClick={onUnpublish}
+              size="small"
+            >
+              {t('entities.unpublish')}
+            </Button>
+          </>
+        ))}
+      {canPublish && (
+        <Button
+          disabled={publicationPending}
+          onClick={onPublishAll}
+          size="small"
+        >
+          {t('entities.publishAllChannels')}
+        </Button>
+      )}
       {showExtensions && (
         <Tooltip title={t('entities.extensionContributions')}>
           <IconButton
