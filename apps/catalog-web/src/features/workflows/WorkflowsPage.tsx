@@ -1,0 +1,224 @@
+import { useQuery } from '@tanstack/react-query';
+import { Link } from '@tanstack/react-router';
+import {
+  Alert,
+  Box,
+  Button,
+  Chip,
+  Paper,
+  Stack,
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableRow,
+  Typography,
+} from '@mui/material';
+import { useTranslation } from 'react-i18next';
+import { PageContainer } from '../../components/PageContainer';
+import { PageHeader } from '../../components/PageHeader';
+import { currentSession } from '../auth/api';
+import { authQueryKeys } from '../auth/query-keys';
+import { listWorkflowRuns, listWorkflows, type Workflow } from './api';
+import { workflowQueryKeys } from './query-keys';
+
+const dateTime = (value: string | null, locale: string, fallback: string) =>
+  value
+    ? new Intl.DateTimeFormat(locale, {
+        dateStyle: 'medium',
+        timeStyle: 'short',
+      }).format(new Date(value))
+    : fallback;
+
+export const WorkflowsPage = () => {
+  const { i18n, t } = useTranslation();
+  const session = useQuery({
+    queryKey: authQueryKeys.session(),
+    queryFn: currentSession,
+  });
+  const canRead = session.data?.capabilities?.workflows_read === true;
+  const canManage = session.data?.capabilities?.workflows_manage === true;
+  const workflows = useQuery({
+    queryKey: workflowQueryKeys.all(),
+    queryFn: listWorkflows,
+    enabled: canRead,
+  });
+  const runs = useQuery({
+    queryKey: workflowQueryKeys.runs(),
+    queryFn: listWorkflowRuns,
+    enabled: canRead,
+  });
+  const locale = i18n.resolvedLanguage ?? i18n.language;
+  const families = Object.values(
+    (workflows.data ?? []).reduce<Record<string, Workflow>>(
+      (result, workflow) => {
+        if (
+          !result[workflow.id] ||
+          result[workflow.id].version < workflow.version
+        )
+          result[workflow.id] = workflow;
+        return result;
+      },
+      {},
+    ),
+  );
+  const runSummary = (id: string) => {
+    const matching = (runs.data ?? []).filter((run) => run.workflow_id === id);
+    const deadLetters = matching.filter(
+      (run) => run.status === 'dead_letter',
+    ).length;
+    const latest = matching.sort((a, b) =>
+      b.created_at.localeCompare(a.created_at),
+    )[0];
+    return { deadLetters, latest };
+  };
+
+  if (session.isPending)
+    return (
+      <PageContainer>
+        <Typography>{t('workflows.loading')}</Typography>
+      </PageContainer>
+    );
+  if (!canRead)
+    return (
+      <PageContainer>
+        <Alert severity="error">{t('workflows.notAuthorizedRead')}</Alert>
+      </PageContainer>
+    );
+
+  return (
+    <PageContainer>
+      <PageHeader
+        actions={
+          canManage ? (
+            <Button
+              component={Link}
+              to="/manage/workflows/new"
+              variant="contained"
+            >
+              {t('workflows.newWorkflow')}
+            </Button>
+          ) : undefined
+        }
+        description={t('workflows.description')}
+        title={t('workflows.title')}
+      />
+      {workflows.isError && (
+        <Alert severity="error" sx={{ mt: 3 }}>
+          {workflows.error.message}
+        </Alert>
+      )}
+      {runs.isError && (
+        <Alert severity="warning" sx={{ mt: 3 }}>
+          {t('workflows.runsUnavailable', { message: runs.error.message })}
+        </Alert>
+      )}
+      {workflows.isPending && (
+        <Typography sx={{ mt: 3 }}>{t('workflows.loading')}</Typography>
+      )}
+      {workflows.data && (
+        <Paper component="section" sx={{ mt: 3 }}>
+          <Box sx={{ overflowX: 'auto' }}>
+            <Table size="small">
+              <TableHead>
+                <TableRow>
+                  <TableCell>{t('workflows.workflow')}</TableCell>
+                  <TableCell>{t('workflows.lifecycle')}</TableCell>
+                  <TableCell>{t('workflows.currentRevision')}</TableCell>
+                  <TableCell>{t('workflows.latestRun')}</TableCell>
+                  <TableCell />
+                </TableRow>
+              </TableHead>
+              <TableBody>
+                {families.map((workflow) => {
+                  const summary = runSummary(workflow.id);
+                  const enabled = workflow.enabled_version !== null;
+                  return (
+                    <TableRow hover key={workflow.id}>
+                      <TableCell>
+                        <Stack spacing={0.25}>
+                          <Link
+                            params={{ workflowId: workflow.id }}
+                            to="/manage/workflows/$workflowId"
+                          >
+                            {workflow.name}
+                          </Link>
+                          <Typography color="text.secondary" variant="caption">
+                            {workflow.code}
+                          </Typography>
+                        </Stack>
+                      </TableCell>
+                      <TableCell>
+                        <Chip
+                          color={enabled ? 'success' : 'default'}
+                          label={
+                            enabled
+                              ? t('workflows.enabled')
+                              : t('workflows.disabled')
+                          }
+                          size="small"
+                        />
+                      </TableCell>
+                      <TableCell>
+                        <Stack direction="row" spacing={1}>
+                          <Chip
+                            color={
+                              workflow.status === 'published'
+                                ? 'success'
+                                : 'warning'
+                            }
+                            label={workflow.status}
+                            size="small"
+                          />
+                          <Typography>v{workflow.version}</Typography>
+                        </Stack>
+                      </TableCell>
+                      <TableCell>
+                        {summary.deadLetters > 0 ? (
+                          <Chip
+                            color="error"
+                            label={t('workflows.deadLetters', {
+                              count: summary.deadLetters,
+                            })}
+                            size="small"
+                          />
+                        ) : summary.latest ? (
+                          <Stack spacing={0.25}>
+                            <Chip label={summary.latest.status} size="small" />
+                            <Typography
+                              color="text.secondary"
+                              variant="caption"
+                            >
+                              {dateTime(
+                                summary.latest.created_at,
+                                locale,
+                                t('workflows.notAvailable'),
+                              )}
+                            </Typography>
+                          </Stack>
+                        ) : (
+                          t('workflows.noRuns')
+                        )}
+                      </TableCell>
+                      <TableCell align="right">
+                        <Link
+                          params={{ workflowId: workflow.id }}
+                          to="/manage/workflows/$workflowId"
+                        >
+                          <Button size="small">{t('workflows.inspect')}</Button>
+                        </Link>
+                      </TableCell>
+                    </TableRow>
+                  );
+                })}
+              </TableBody>
+            </Table>
+          </Box>
+          {families.length === 0 && (
+            <Typography sx={{ p: 2 }}>{t('workflows.empty')}</Typography>
+          )}
+        </Paper>
+      )}
+    </PageContainer>
+  );
+};

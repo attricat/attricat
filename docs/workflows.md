@@ -19,6 +19,10 @@ type = "system_tags_add"
 tags = ["new"]
 ```
 
+## Management UI
+
+The **Manage → Workflows** page is available to members with `workflows.read`. It lists workflow families, lifecycle state, current revision, and safe run/dead-letter indicators. Members with `workflows.manage` can validate TOML with the server compiler, save drafts, publish, enable or disable revisions, and replay terminal dead letters. Revision source and comparisons are read-only; diagnostics expose only safe run state, timestamps, attempts, and outcome/error evidence—never internal domain-event payloads.
+
 ## Delivery and operations
 
 The internal `catalog.workflows` outbox consumer only creates durable runs. Dispatcher redelivery is expected: `(workspace, workflow revision, trigger event)` is unique. A worker leases runs, retries with bounded exponential delay, and dead-letters after five attempts. Each action inserts its `(run, action index)` idempotency key in **the same transaction** as its entity row lock, mutation, audit evidence, and outgoing outbox event. A crash after commit but before a run acknowledgement therefore reclaims the run without duplicate catalog effects or audits.
