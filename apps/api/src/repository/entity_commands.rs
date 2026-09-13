@@ -32,23 +32,6 @@ fn workflow_event_path<'a>(value: &'a Value, path: &str) -> Option<&'a Value> {
     })
 }
 
-#[cfg(test)]
-mod workflow_event_path_tests {
-    use super::workflow_event_path;
-    use serde_json::json;
-
-    #[test]
-    fn resolves_the_compiled_facts_array_path_exactly() {
-        let event = json!({"facts": [{"attribute_code": "title"}]});
-        assert_eq!(
-            workflow_event_path(&event, "facts.0.attribute_code"),
-            Some(&json!("title"))
-        );
-        assert_eq!(workflow_event_path(&event, "facts.title"), None);
-        assert_eq!(workflow_event_path(&event, "facts.1.attribute_code"), None);
-    }
-}
-
 struct CardinalityCheck<'a> {
     entity: &'a Entity,
     attribute_id: Uuid,
@@ -1654,4 +1637,21 @@ fn validate_system_metadata(metadata: &Value) -> Result<(), RepositoryError> {
         return Err(RepositoryError::InvalidSystemMetadata);
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod workflow_event_path_tests {
+    use super::workflow_event_path;
+    use serde_json::json;
+
+    #[test]
+    fn resolves_the_compiled_facts_array_path_exactly() {
+        let event = json!({"facts": [{"attribute_code": "title"}]});
+        assert_eq!(
+            workflow_event_path(&event, "facts.0.attribute_code"),
+            Some(&json!("title"))
+        );
+        assert_eq!(workflow_event_path(&event, "facts.title"), None);
+        assert_eq!(workflow_event_path(&event, "facts.1.attribute_code"), None);
+    }
 }

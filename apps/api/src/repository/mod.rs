@@ -405,6 +405,10 @@ impl CatalogRepository {
     ) -> Self {
         let mut repository = self.clone();
         if let Some(audit) = repository.audit_context.as_mut() {
+            // Event sources include the immutable workflow UUID (`workflow:<id>`),
+            // but audit action identifiers deliberately use the constrained,
+            // stable operation name rather than a namespaced source identifier.
+            audit.action = "workflow.execute".to_owned();
             audit.metadata = serde_json::json!({
                 "workflow_id": workflow_id,
                 "workflow_revision": revision,
