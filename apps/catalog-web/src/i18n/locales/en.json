@@ -269,14 +269,14 @@
     "publication": {
       "not_published": "Not published",
       "published": "Published",
-      "changes_pending": "Changes pending",
+      "publishedDetails": "Published {{publishedAt}} by {{publishedBy}}",
       "channelDisabled": "Not an export channel",
       "channelDisabledDescription": "Enable this context as an export channel in Manage > Exports before publishing."
     }
   },
   "exports": {
     "title": "Exports",
-    "description": "Enable contexts as export channels. Entities are published independently for each enabled channel.",
+    "description": "Enable contexts as export channels. Publication approves an entity for each enabled channel; editing an entity withdraws that approval.",
     "loading": "Loading export channels...",
     "context": "Context",
     "channel": "Export channel",

@@ -234,13 +234,7 @@ export const ExplorerResultsTable = ({
         if (!publication) return '—';
         return (
           <Chip
-            color={
-              publication.status === 'published'
-                ? 'success'
-                : publication.status === 'changes_pending'
-                  ? 'warning'
-                  : 'default'
-            }
+            color={publication.status === 'published' ? 'success' : 'default'}
             label={t(`entities.publication.${publication.status}`)}
             size="small"
           />
@@ -590,7 +584,7 @@ export const ExplorerResultsTable = ({
                       setActionAnchor(null);
                     }}
                   >
-                    {t('entities.republish')}
+                    {t('entities.publish')}
                   </MenuItem>
                   <MenuItem
                     disabled={unpublish.isPending}

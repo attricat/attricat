@@ -23,13 +23,13 @@ use crate::{
         AppendAttributeValues, Attribute, AttributeContext, AttributeValue, AttributeValueHistory,
         AttributeValueSelector, Blueprint, BlueprintWithAttributes, CreateBlueprint, Entity,
         EntityAuditChange, EntityHierarchyItem, EntityHierarchyResponse, EntityIdentity,
-        EntityMigrationPreview, EntityPreview, EntityPreviewPage, EntityPublicationSnapshot,
-        EntityPublicationStatus, FormAttributeValue, IncomingRelationshipItem,
-        IncomingRelationshipSelector, IncomingRelationshipsPage, MatchExplanation, MatchPathEdge,
-        MigrateEntityRequest, MigrationIssue, NewAttributeValue, PublicationChannel,
-        RelatedEntityPreview, RelationshipMutation, RelationshipTargets,
-        RelationshipTreeFacetChildItem, RelationshipTreeFacetChildrenResponse,
-        RelationshipTreeFacetItem, RelationshipTreeFacetResponse, ResolvedEntityPreviewResponse,
+        EntityMigrationPreview, EntityPreview, EntityPreviewPage, EntityPublicationStatus,
+        FormAttributeValue, IncomingRelationshipItem, IncomingRelationshipSelector,
+        IncomingRelationshipsPage, MatchExplanation, MatchPathEdge, MigrateEntityRequest,
+        MigrationIssue, NewAttributeValue, PublicationChannel, RelatedEntityPreview,
+        RelationshipMutation, RelationshipTargets, RelationshipTreeFacetChildItem,
+        RelationshipTreeFacetChildrenResponse, RelationshipTreeFacetItem,
+        RelationshipTreeFacetResponse, ResolvedEntityPreviewResponse,
     },
 };
 
@@ -267,12 +267,8 @@ pub enum RepositoryError {
     InvalidDomainEvent(#[from] crate::domain_events::EventContractError),
     #[error("publication context is not an enabled channel")]
     PublicationChannelDisabled,
-    #[error("relationship targets are not published in this channel: {0}")]
-    PublicationDependenciesMissing(String),
-    #[error("cannot unpublish while active publications depend on this entity: {0}")]
-    PublicationHasDependents(String),
-    #[error("cannot delete an entity while it has an active publication or is required by one")]
-    EntityPublicationProtected,
+    #[error("an authenticated user is required to publish an entity")]
+    PublicationActorRequired,
     #[error("an approval decision has already been recorded")]
     ApprovalAlreadyDecided,
     #[error(transparent)]
@@ -728,6 +724,10 @@ impl CatalogRepository {
         changes: Vec<AuditEventChange>,
         event: NewDomainEvent,
     ) -> Result<(), RepositoryError> {
+        // Publication is an approval marker. Any entity mutation withdraws that
+        // approval before its accompanying event becomes externally visible.
+        self.clear_entity_publications(&mut transaction, event.aggregate_id, "entity_changed")
+            .await?;
         if let Some(audit_event_id) = self.write_audit_event(&mut transaction).await? {
             for change in changes {
                 sqlx::query("INSERT INTO audit_event_changes (id, audit_event_id, workspace_id, entity_id, attribute_id, attribute_code, context_id, context_code, change_kind, before_value, after_value) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)")

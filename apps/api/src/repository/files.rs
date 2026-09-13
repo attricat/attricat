@@ -205,6 +205,9 @@ impl CatalogRepository {
                 status,
             });
         }
+        self.clear_entity_publications(&mut transaction, entity_id, "entity_changed")
+            .await?;
+        self.write_audit_event(&mut transaction).await?;
         transaction.commit().await?;
         Ok(FileUploadResult {
             attribute_code: attribute_code.to_owned(),
@@ -309,6 +312,9 @@ impl CatalogRepository {
             .bind(position)
             .execute(&mut *transaction)
             .await?;
+        self.clear_entity_publications(&mut transaction, entity_id, "entity_changed")
+            .await?;
+        self.write_audit_event(&mut transaction).await?;
         transaction.commit().await?;
         self.file_metadata(file_id).await
     }

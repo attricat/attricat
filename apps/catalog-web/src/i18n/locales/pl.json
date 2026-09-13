@@ -273,14 +273,14 @@
     "publication": {
       "not_published": "Nieopublikowano",
       "published": "Opublikowano",
-      "changes_pending": "Zmiany oczekują na publikację",
+      "publishedDetails": "Opublikowano {{publishedAt}} przez {{publishedBy}}",
       "channelDisabled": "To nie jest kanał eksportu",
       "channelDisabledDescription": "Włącz ten kontekst jako kanał eksportu w Zarządzanie > Eksporty przed publikacją."
     }
   },
   "exports": {
     "title": "Eksporty",
-    "description": "Włącz konteksty jako kanały eksportu. Encje są publikowane niezależnie dla każdego włączonego kanału.",
+    "description": "Włącz konteksty jako kanały eksportu. Publikacja zatwierdza encję dla każdego włączonego kanału; edycja encji wycofuje zatwierdzenie.",
     "loading": "Ładowanie kanałów eksportu...",
     "context": "Kontekst",
     "channel": "Kanał eksportu",

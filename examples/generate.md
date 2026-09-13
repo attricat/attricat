@@ -8,7 +8,7 @@ Start the local stack and create a personal access token in the profile section.
 
 - `blueprints.read`, `blueprints.write`, and `blueprints.publish`;
 - `contexts.read` and `contexts.write`;
-- `entities.read` and `entities.write`.
+- `entities.read`, `entities.write`, and `entities.publish`.
 
 File upload, metadata, and download authorization uses the existing entity permissions; there is intentionally no separate `files.read` personal-token permission.
 
@@ -57,7 +57,7 @@ node examples/generate.mjs --size large --status
 CATALOG_TOKEN=cat_pat_... node examples/generate.mjs --size medium --progress json
 ```
 
-Use `--no-files` for a pure Explorer dataset when file processing is not required. The generator marks the checkpoint `benchmark_ready` only after all planned writes, file processing (when enabled), and API-level sample verification complete.
+Use `--no-files` for a pure Explorer dataset when file processing is not required. The generator publishes each completed entity to every enabled publication channel by default; pass `--no-publish` to leave generated entities unpublished. If no channels are enabled, publication is a successful no-op. The generator marks the checkpoint `benchmark_ready` only after all planned writes, file processing (when enabled), and API-level sample verification complete.
 
 ## Safety and reproducibility
 

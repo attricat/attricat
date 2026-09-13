@@ -116,24 +116,14 @@ pub struct EntityPublicationStatus {
     pub context_id: Uuid,
     pub context_code: String,
     pub status: String,
-    pub revision: Option<i64>,
     pub published_at: Option<DateTime<Utc>>,
+    pub published_by_user_id: Option<Uuid>,
 }
 
 #[derive(Clone, Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct PublicationContextRequest {
     pub context_id: Uuid,
-}
-
-#[derive(Clone, Debug, FromRow, Serialize)]
-pub struct EntityPublicationSnapshot {
-    pub id: Uuid,
-    pub context_id: Uuid,
-    pub revision: i64,
-    pub payload: Value,
-    pub payload_hash: String,
-    pub published_at: DateTime<Utc>,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]

@@ -171,6 +171,17 @@ impl CatalogRepository {
             self.validate_entity_schema(&mut transaction, entity)
                 .await?;
         }
+        let affected_contexts: Vec<Uuid> = sqlx::query_scalar(
+            "WITH RECURSIVE descendants AS (SELECT id FROM attribute_contexts WHERE workspace_id = $1 AND id = $2 UNION ALL SELECT child.id FROM attribute_contexts child JOIN descendants parent ON child.parent_id = parent.id WHERE child.workspace_id = $1) SELECT id FROM descendants",
+        )
+        .bind(self.workspace_id.unwrap_or(Self::DEFAULT_WORKSPACE_ID))
+        .bind(result.id)
+        .fetch_all(&mut *transaction)
+        .await?;
+        for context_id in affected_contexts {
+            self.clear_context_publications(&mut transaction, context_id)
+                .await?;
+        }
         self.commit_mutation_with_event(
             transaction,
             context_event(self, CONTEXT_UPDATED_V1, &result),
@@ -192,6 +203,18 @@ impl CatalogRepository {
             return Err(RepositoryError::DefaultContextProtected);
         }
         let mut transaction = self.pool.begin().await?;
+        sqlx::query(
+            "DELETE FROM entity_channel_publications WHERE workspace_id = $1 AND context_id = $2",
+        )
+        .bind(self.workspace_id.unwrap_or(Self::DEFAULT_WORKSPACE_ID))
+        .bind(id)
+        .execute(&mut *transaction)
+        .await?;
+        sqlx::query("DELETE FROM publication_channels WHERE workspace_id = $1 AND context_id = $2")
+            .bind(self.workspace_id.unwrap_or(Self::DEFAULT_WORKSPACE_ID))
+            .bind(id)
+            .execute(&mut *transaction)
+            .await?;
         let result = sqlx::query("DELETE FROM attribute_contexts c WHERE c.id = $1 AND c.workspace_id = $2 AND NOT EXISTS (SELECT 1 FROM attribute_contexts child WHERE child.parent_id = c.id AND child.workspace_id = c.workspace_id) AND NOT EXISTS (SELECT 1 FROM attribute_values value WHERE value.context_id = c.id AND value.workspace_id = c.workspace_id)")
             .bind(id).bind(self.workspace_id.unwrap_or(Self::DEFAULT_WORKSPACE_ID)).execute(&mut *transaction).await?;
         if result.rows_affected() == 0 {

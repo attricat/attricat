@@ -464,17 +464,13 @@ impl CatalogRepository {
             .entity_audit_snapshot(&mut transaction, entity_id)
             .await?;
         let entity = self.lock_entity(&mut transaction, entity_id).await?;
-        let workspace_id = self.workspace_id.unwrap_or(Self::DEFAULT_WORKSPACE_ID);
-        let publication_protected: bool = sqlx::query_scalar(
-            "SELECT EXISTS (SELECT 1 FROM entity_channel_publications p WHERE p.workspace_id = $1 AND p.entity_id = $2 AND p.active_snapshot_id IS NOT NULL) OR EXISTS (SELECT 1 FROM entity_channel_publications p JOIN entity_publication_dependencies d ON d.snapshot_id = p.active_snapshot_id WHERE p.workspace_id = $1 AND d.target_entity_id = $2 AND p.active_snapshot_id IS NOT NULL)",
+        sqlx::query(
+            "DELETE FROM entity_channel_publications WHERE workspace_id = $1 AND entity_id = $2",
         )
-        .bind(workspace_id)
+        .bind(self.workspace_id.unwrap_or(Self::DEFAULT_WORKSPACE_ID))
         .bind(entity_id)
-        .fetch_one(&mut *transaction)
+        .execute(&mut *transaction)
         .await?;
-        if publication_protected {
-            return Err(RepositoryError::EntityPublicationProtected);
-        }
         let result = sqlx::query(
             "UPDATE entities SET deleted_at = now(), updated_at = now() WHERE id = $1 AND workspace_id = $2 AND deleted_at IS NULL",
         )

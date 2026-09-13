@@ -114,9 +114,11 @@ pub struct BlueprintRevisionV1 {
 pub struct EntityPublicationV1 {
     pub entity_id: Uuid,
     pub context_id: Uuid,
-    pub revision: Option<i64>,
-    pub blueprint_id: Option<Uuid>,
-    pub blueprint_version: Option<i64>,
+    pub published_at: Option<DateTime<Utc>>,
+    pub published_by_user_id: Option<Uuid>,
+    /// `manual` identifies an explicit unpublish; other values identify the
+    /// mutation that automatically withdrew publication approval.
+    pub reason: Option<String>,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]

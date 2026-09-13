@@ -21,6 +21,7 @@ Options:
   --status                Print matching checkpoint status without writing
   --dry-run               Print the work plan without contacting the API
   --no-files              Skip the fixed demo asset bundle
+  --no-publish            Leave generated entities unpublished
   --progress <tty|json>   Progress format (default: tty when interactive)
   --checkpoint <path>     Override checkpoint location
   --help                  Show this help
@@ -38,6 +39,7 @@ const parseArgs = (argv) => {
     status: false,
     dryRun: false,
     files: process.env.CATALOG_INCLUDE_FILES !== "0",
+    publish: process.env.CATALOG_PUBLISH !== "0",
     progress: process.stdout.isTTY ? "tty" : "json",
   };
   for (let index = 0; index < argv.length; index += 1) {
@@ -47,6 +49,7 @@ const parseArgs = (argv) => {
     else if (arg === "--status") options.status = true;
     else if (arg === "--dry-run") options.dryRun = true;
     else if (arg === "--no-files") options.files = false;
+    else if (arg === "--no-publish") options.publish = false;
     else if (
       [
         "--industry",
@@ -247,6 +250,10 @@ const createClient = (server, token, progress) => {
         method: "POST",
         body: JSON.stringify({ relationships }),
       }),
+    publishAll: (id) =>
+      request(`/v1/entities/${id}/publications/publish-all`, {
+        method: "POST",
+      }),
   };
 };
 
@@ -382,6 +389,9 @@ const run = async () => {
     );
   const progress = new Progress(options, plan);
   const client = createClient(server, token, progress);
+  const publish = async (entityId) => {
+    if (options.publish) await client.publishAll(entityId);
+  };
   let checkpoint = existsSync(checkpointPath)
     ? await readCheckpoint(checkpointPath)
     : {
@@ -486,6 +496,7 @@ const run = async () => {
             metadata(kind, index),
             tag,
           );
+          await publish(entity.id);
           ids.push(entity.id);
           checkpoint.counts.entities += 1;
           progress.tick({ entities: 1 });
@@ -513,6 +524,7 @@ const run = async () => {
           metadata("manufacturer", index),
           tag,
         );
+        await publish(entity.id);
         checkpoint.manufacturer_ids.push(entity.id);
         checkpoint.counts.entities += 1;
         progress.tick({ entities: 1 });
@@ -546,6 +558,7 @@ const run = async () => {
               ],
             },
           ]);
+        await publish(entity.id);
         checkpoint.category_ids.push(entity.id);
         checkpoint.counts.entities += 1;
         progress.tick({ entities: 1 });
@@ -619,6 +632,7 @@ const run = async () => {
                 target_entity_ids: [manufacturerId],
               },
             ]);
+            await publish(familyEntity.id);
             const skuEntities = [];
             for (let variant = 0; variant < 4; variant += 1) {
               const sku = pack.skuFor(family, index, variant, options.seed);
@@ -651,6 +665,7 @@ const run = async () => {
                 },
               ]);
             }
+            for (const entity of skuEntities) await publish(entity.id);
             if (index < pack.assets.length)
               checkpoint.file_targets[index] = skuEntities[0].id;
             progress.tick({ entities: 5 });
@@ -716,6 +731,7 @@ const run = async () => {
         }
         if (metadataResponse.status !== "ready")
           throw new Error(`File ${asset.name} did not finish processing`);
+        await publish(checkpoint.file_targets[index]);
         checkpoint.files_completed = index + 1;
         await persist();
         if (await stopIfRequested()) return;

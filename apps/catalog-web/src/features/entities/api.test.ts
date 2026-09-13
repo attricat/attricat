@@ -75,8 +75,8 @@ describe('entity API client', () => {
       context_id: entityId,
       context_code: 'web',
       status: 'not_published',
-      revision: null,
       published_at: null,
+      published_by_user_id: null,
     };
     respond([publication]);
     await getEntityPublications(entityId);
@@ -84,7 +84,12 @@ describe('entity API client', () => {
       `/api/v1/entities/${entityId}/publications`,
     );
 
-    respond({ ...publication, status: 'published', revision: 1 });
+    respond({
+      ...publication,
+      status: 'published',
+      published_at: '2026-09-30T12:00:00.000Z',
+      published_by_user_id: entityId,
+    });
     await publishEntity(entityId, entityId);
     expect(fetchMock).toHaveBeenLastCalledWith(
       `/api/v1/entities/${entityId}/publications`,
@@ -95,7 +100,14 @@ describe('entity API client', () => {
       },
     );
 
-    respond([{ ...publication, status: 'published', revision: 1 }]);
+    respond([
+      {
+        ...publication,
+        status: 'published',
+        published_at: '2026-09-30T12:00:00.000Z',
+        published_by_user_id: entityId,
+      },
+    ]);
     await publishEntityAllChannels(entityId);
     expect(fetchMock).toHaveBeenLastCalledWith(
       `/api/v1/entities/${entityId}/publications/publish-all`,

@@ -115,19 +115,18 @@ Entities are catalog items.
 
 ### Entity publication
 
-Publication is a per-channel-context lifecycle separate from mutable entity values. A
-`publication_channels` row explicitly designates a context as exportable; not every
-context is a channel. Publishing writes an immutable row in
-`entity_publication_snapshots` containing the fully resolved values, blueprint
-revision, direct relationship IDs, and canonical payload hash. The mutable
-`entity_channel_publications` row points to the active snapshot for one
-entity/context pair. An edit never changes that snapshot; callers compare a current
-resolved-payload hash to report `published` or `changes_pending`.
+Publication is per channel/context approval metadata separate from mutable entity
+values. A `publication_channels` row explicitly designates a context as exportable;
+not every context is a channel. `entity_channel_publications` holds one row for an
+entity/context pair with nullable `published_at` and `published_by_user_id` fields.
+A populated pair is published; a null pair is not published.
 
-`entity_publication_dependencies` records direct relationship targets for each
-snapshot. A target must be active in the same exact channel before its source can be
-published, and it cannot be unpublished while an active source snapshot depends on
-it. Exporters select an exact channel and consume only active snapshots.
+Publishing records the current actor and timestamp. Entity-content changes withdraw
+approval in every channel by clearing those fields, and a context change withdraws
+approval for its channel. Publication has no effect on internal catalog reads or
+relationships. A channel exporter can select only rows with a populated
+`published_at` and resolve the entity's current values at export time; the database
+does not retain publication snapshots or relationship dependencies.
 
 ### `attribute_contexts`
 

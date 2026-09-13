@@ -134,7 +134,7 @@ pub fn definitions() -> Vec<ToolDefinition> {
         ),
         definition(
             "publish_entity",
-            "Publish or republish an entity's resolved snapshot to one enabled channel context. This change requires approval.",
+            "Approve an entity for one enabled channel context. Later entity edits withdraw this approval. This change requires approval.",
             json!({"type":"object","required":["entity_id","context_id"],"properties":{"entity_id":{"type":"string","format":"uuid"},"context_id":{"type":"string","format":"uuid"}},"additionalProperties":false}),
         ),
         definition(

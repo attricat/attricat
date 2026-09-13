@@ -309,9 +309,9 @@ const attributeValueSelectorSchema = z.object({
 export const entityPublicationStatusSchema = z.object({
   context_id: uuidSchema,
   context_code: z.string(),
-  status: z.enum(['not_published', 'published', 'changes_pending']),
-  revision: z.number().int().positive().nullable(),
+  status: z.enum(['not_published', 'published']),
   published_at: z.string().datetime().nullable(),
+  published_by_user_id: uuidSchema.nullable(),
 });
 export const publicationChannelSchema = z.object({
   context_id: uuidSchema,

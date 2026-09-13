@@ -22,7 +22,7 @@ value_type = "relationship"
 "#;
 
 #[sqlx::test]
-async fn channel_publication_is_authorized_snapshotted_and_protects_dependencies(pool: PgPool) {
+async fn channel_publication_is_authorized_and_entity_changes_withdraw_approval(pool: PgPool) {
     let (base_url, server) = start_server(pool.clone()).await;
     let client = authenticated_client();
 
@@ -48,15 +48,15 @@ async fn channel_publication_is_authorized_snapshotted_and_protects_dependencies
         .unwrap();
 
     let blueprint = create_blueprint(&client, &base_url, PUBLICATION_BLUEPRINT).await;
-    let target = create_entity(&client, &base_url, &blueprint).await;
-    let target_id = target["id"].as_str().unwrap();
-
-    let publish = |entity_id: &str| {
+    let entity = create_entity(&client, &base_url, &blueprint).await;
+    let entity_id = entity["id"].as_str().unwrap();
+    let publish = || {
         client
             .post(format!("{base_url}/v1/entities/{entity_id}/publications"))
             .json(&json!({ "context_id": context_id }))
     };
-    let target_status = publish(target_id)
+
+    let published = publish()
         .send()
         .await
         .unwrap()
@@ -65,39 +65,31 @@ async fn channel_publication_is_authorized_snapshotted_and_protects_dependencies
         .json::<Value>()
         .await
         .unwrap();
-    assert_eq!(target_status["status"], "published");
-    assert_eq!(target_status["revision"], 1);
+    assert_eq!(published["status"], "published");
+    assert!(published["published_at"].is_string());
+    assert!(published["published_by_user_id"].is_string());
+    assert!(published.get("revision").is_none());
 
-    let source = client
-        .post(format!("{base_url}/v1/entities"))
+    client
+        .put(format!("{base_url}/v1/entities/{entity_id}"))
         .json(&json!({
-            "blueprint": {
-                "code": blueprint["blueprint"]["code"],
-                "version": blueprint["blueprint"]["version"],
-            },
             "values": [{
-                "kind": "relationship",
-                "attribute_code": "related",
+                "kind": "scalar",
+                "attribute_code": "title",
                 "context_id": context_id,
-                "target_entity_id": target_id,
+                "value": "Changed",
             }],
+            "relationships": [],
+            "remove_values": [],
         }))
         .send()
         .await
         .unwrap()
         .error_for_status()
-        .unwrap()
-        .json::<Value>()
-        .await
         .unwrap();
-    let source_id = source["id"].as_str().unwrap();
-    assert_eq!(
-        publish(source_id).send().await.unwrap().status(),
-        StatusCode::OK
-    );
 
     let statuses = client
-        .get(format!("{base_url}/v1/entities/{source_id}/publications"))
+        .get(format!("{base_url}/v1/entities/{entity_id}/publications"))
         .send()
         .await
         .unwrap()
@@ -106,37 +98,38 @@ async fn channel_publication_is_authorized_snapshotted_and_protects_dependencies
         .json::<Vec<Value>>()
         .await
         .unwrap();
-    assert_eq!(statuses[0]["status"], "published");
+    assert_eq!(statuses[0]["status"], "not_published");
+    assert!(statuses[0]["published_at"].is_null());
+    assert!(statuses[0]["published_by_user_id"].is_null());
 
-    let unpublish = client
-        .post(format!(
-            "{base_url}/v1/entities/{target_id}/publications/unpublish"
-        ))
-        .json(&json!({ "context_id": context_id }))
+    publish().send().await.unwrap().error_for_status().unwrap();
+    client
+        .put(format!("{base_url}/contexts/id/{context_id}"))
+        .json(&json!({ "parent_id": context["parent_id"], "data": { "changed": true } }))
         .send()
         .await
+        .unwrap()
+        .error_for_status()
         .unwrap();
-    assert_eq!(unpublish.status(), StatusCode::CONFLICT);
-    assert_eq!(
-        client
-            .delete(format!("{base_url}/entities/{target_id}"))
-            .send()
-            .await
-            .unwrap()
-            .status(),
-        StatusCode::CONFLICT
-    );
-
-    let republished = publish(target_id)
+    let statuses = client
+        .get(format!("{base_url}/v1/entities/{entity_id}/publications"))
         .send()
         .await
         .unwrap()
         .error_for_status()
         .unwrap()
-        .json::<Value>()
+        .json::<Vec<Value>>()
         .await
         .unwrap();
-    assert_eq!(republished["revision"], 2);
+    assert_eq!(statuses[0]["status"], "not_published");
+
+    client
+        .delete(format!("{base_url}/entities/{entity_id}"))
+        .send()
+        .await
+        .unwrap()
+        .error_for_status()
+        .unwrap();
 
     let audit_count: i64 = sqlx::query_scalar(
         "SELECT count(*) FROM audit_events WHERE workspace_id = $1 AND target ->> 'type' IN ('entity', 'context')",
@@ -145,10 +138,7 @@ async fn channel_publication_is_authorized_snapshotted_and_protects_dependencies
     .fetch_one(&pool)
     .await
     .unwrap();
-    assert!(
-        audit_count >= 4,
-        "channel configuration and publication mutations are audited"
-    );
+    assert!(audit_count >= 4, "publication mutations are audited");
 
     server.abort();
 }

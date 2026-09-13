@@ -81,7 +81,18 @@ export const EntityPreviewToolbar = ({
         ))}
       <Box sx={{ flexGrow: 1 }} />
       {publication ? (
-        <Tooltip title={t(`entities.publication.${publication.status}`)}>
+        <Tooltip
+          title={
+            publication.status === 'published' && publication.published_at
+              ? t('entities.publication.publishedDetails', {
+                  publishedAt: new Date(
+                    publication.published_at,
+                  ).toLocaleString(),
+                  publishedBy: publication.published_by_user_id ?? '—',
+                })
+              : t(`entities.publication.${publication.status}`)
+          }
+        >
           <Button color="inherit" size="small" variant="text">
             {t(`entities.publication.${publication.status}`)}
           </Button>
@@ -110,7 +121,7 @@ export const EntityPreviewToolbar = ({
               onClick={onPublish}
               size="small"
             >
-              {t('entities.republish')}
+              {t('entities.publish')}
             </Button>
             <Button
               color="warning"
