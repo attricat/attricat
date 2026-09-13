@@ -57,6 +57,12 @@ export type BlueprintWithAttributes = z.infer<
   typeof blueprintWithAttributesSchema
 >;
 
+export const blueprintEntityPublicationSummarySchema = z.object({
+  entity_count: z.number().int().nonnegative(),
+  channel_count: z.number().int().nonnegative(),
+  publication_count: z.number().int().nonnegative(),
+});
+
 export const blueprintMigrationBatchSchema = z.object({
   id: z.uuid(),
   blueprint_id: z.uuid(),

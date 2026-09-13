@@ -553,6 +553,14 @@ pub fn router(state: AppState) -> Router {
             post(blueprints::publish_blueprint_revision),
         )
         .route(
+            "/blueprints/{blueprint_id}/versions/{version}/entity-publications",
+            post(blueprints::publish_blueprint_entities),
+        )
+        .route(
+            "/blueprints/{blueprint_id}/versions/{version}/entity-publications/publish-all",
+            post(blueprints::publish_blueprint_entities_all_channels),
+        )
+        .route(
             "/blueprints/{blueprint_id}/versions/{version}/safe-migration-batches",
             post(blueprints::start_safe_blueprint_migration_batch),
         )

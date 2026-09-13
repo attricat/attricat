@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import { request } from '../../api/request';
 import {
+  blueprintEntityPublicationSummarySchema,
   blueprintMigrationBatchSchema,
   blueprintSchema,
   blueprintWithAttributesSchema,
@@ -59,6 +60,31 @@ export const startSafeBlueprintMigrationBatch = (id: string, version: number) =>
   request(
     `/api/blueprints/${encodeURIComponent(z.uuid().parse(id))}/versions/${z.number().int().positive().parse(version)}/safe-migration-batches`,
     blueprintMigrationBatchSchema,
+    { method: 'POST' },
+  );
+
+export const publishBlueprintEntities = (
+  id: string,
+  version: number,
+  contextId: string,
+) =>
+  request(
+    `/api/blueprints/${encodeURIComponent(z.uuid().parse(id))}/versions/${z.number().int().positive().parse(version)}/entity-publications`,
+    blueprintEntityPublicationSummarySchema,
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ context_id: z.uuid().parse(contextId) }),
+    },
+  );
+
+export const publishBlueprintEntitiesAllChannels = (
+  id: string,
+  version: number,
+) =>
+  request(
+    `/api/blueprints/${encodeURIComponent(z.uuid().parse(id))}/versions/${z.number().int().positive().parse(version)}/entity-publications/publish-all`,
+    blueprintEntityPublicationSummarySchema,
     { method: 'POST' },
   );
 

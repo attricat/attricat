@@ -6,7 +6,10 @@ use super::{
 };
 use crate::{
     catalog_service::CatalogMutationService,
-    model::{Blueprint, BlueprintMigrationBatch, BlueprintWithAttributes, CreateBlueprint},
+    model::{
+        Blueprint, BlueprintEntityPublicationSummary, BlueprintMigrationBatch,
+        BlueprintWithAttributes, CreateBlueprint, PublicationContextRequest,
+    },
 };
 use axum::{Json, extract::State, http::StatusCode};
 use serde::Deserialize;
@@ -119,6 +122,31 @@ pub(super) async fn publish_blueprint_revision(
     invalidate_data_health(&state).await;
     Ok(Json(blueprint))
 }
+pub(super) async fn publish_blueprint_entities(
+    State(state): State<AppState>,
+    super::auth::ScopedRepository(repository): super::auth::ScopedRepository,
+    ApiPath((blueprint_id, version)): ApiPath<(Uuid, i64)>,
+    ApiJson(input): ApiJson<PublicationContextRequest>,
+) -> Result<Json<BlueprintEntityPublicationSummary>, ApiError> {
+    let summary = CatalogMutationService::new(&repository)
+        .publish_blueprint_entities(blueprint_id, version, Some(input.context_id))
+        .await?;
+    invalidate_data_health(&state).await;
+    Ok(Json(summary))
+}
+
+pub(super) async fn publish_blueprint_entities_all_channels(
+    State(state): State<AppState>,
+    super::auth::ScopedRepository(repository): super::auth::ScopedRepository,
+    ApiPath((blueprint_id, version)): ApiPath<(Uuid, i64)>,
+) -> Result<Json<BlueprintEntityPublicationSummary>, ApiError> {
+    let summary = CatalogMutationService::new(&repository)
+        .publish_blueprint_entities(blueprint_id, version, None)
+        .await?;
+    invalidate_data_health(&state).await;
+    Ok(Json(summary))
+}
+
 pub(super) async fn get_blueprint_by_code(
     State(_state): State<AppState>,
     super::auth::ScopedRepository(repository): super::auth::ScopedRepository,

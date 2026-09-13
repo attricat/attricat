@@ -144,6 +144,116 @@ async fn channel_publication_is_authorized_and_entity_changes_withdraw_approval(
 }
 
 #[sqlx::test]
+async fn blueprint_revision_can_publish_its_entities_by_channel(pool: PgPool) {
+    let (base_url, server) = start_server(pool).await;
+    let client = authenticated_client();
+    let web = client
+        .post(format!("{base_url}/contexts"))
+        .json(&json!({ "code": "blueprint-web", "data": {} }))
+        .send()
+        .await
+        .unwrap()
+        .error_for_status()
+        .unwrap()
+        .json::<Value>()
+        .await
+        .unwrap();
+    let api = client
+        .post(format!("{base_url}/contexts"))
+        .json(&json!({ "code": "blueprint-api", "data": {} }))
+        .send()
+        .await
+        .unwrap()
+        .error_for_status()
+        .unwrap()
+        .json::<Value>()
+        .await
+        .unwrap();
+    for context in [&web, &api] {
+        client
+            .put(format!(
+                "{base_url}/publication-channels/{}",
+                context["id"].as_str().unwrap()
+            ))
+            .json(&json!({ "enabled": true }))
+            .send()
+            .await
+            .unwrap()
+            .error_for_status()
+            .unwrap();
+    }
+    let blueprint = create_blueprint(&client, &base_url, PUBLICATION_BLUEPRINT).await;
+    let first = create_entity(&client, &base_url, &blueprint).await;
+    let second = create_entity(&client, &base_url, &blueprint).await;
+    let blueprint_id = blueprint["blueprint"]["id"].as_str().unwrap();
+    let version = blueprint["blueprint"]["version"].as_i64().unwrap();
+
+    let one_channel = client
+        .post(format!(
+            "{base_url}/blueprints/{blueprint_id}/versions/{version}/entity-publications"
+        ))
+        .json(&json!({ "context_id": web["id"] }))
+        .send()
+        .await
+        .unwrap()
+        .error_for_status()
+        .unwrap()
+        .json::<Value>()
+        .await
+        .unwrap();
+    assert_eq!(
+        one_channel,
+        json!({
+            "entity_count": 2,
+            "channel_count": 1,
+            "publication_count": 2,
+        })
+    );
+
+    let all_channels = client
+        .post(format!(
+            "{base_url}/blueprints/{blueprint_id}/versions/{version}/entity-publications/publish-all"
+        ))
+        .send()
+        .await
+        .unwrap()
+        .error_for_status()
+        .unwrap()
+        .json::<Value>()
+        .await
+        .unwrap();
+    assert_eq!(
+        all_channels,
+        json!({
+            "entity_count": 2,
+            "channel_count": 2,
+            "publication_count": 4,
+        })
+    );
+    for entity in [&first, &second] {
+        let statuses = client
+            .get(format!(
+                "{base_url}/v1/entities/{}/publications",
+                entity["id"].as_str().unwrap()
+            ))
+            .send()
+            .await
+            .unwrap()
+            .error_for_status()
+            .unwrap()
+            .json::<Vec<Value>>()
+            .await
+            .unwrap();
+        assert!(
+            statuses
+                .iter()
+                .all(|status| status["status"] == "published")
+        );
+    }
+    server.abort();
+}
+
+#[sqlx::test]
 async fn publication_endpoints_require_an_authenticated_publisher(pool: PgPool) {
     let (base_url, server) = start_server(pool).await;
     let response = Client::new()

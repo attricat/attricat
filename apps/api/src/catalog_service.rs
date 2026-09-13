@@ -8,10 +8,10 @@ use uuid::Uuid;
 
 use crate::{
     model::{
-        AppendAttributeValues, AttributeContext, AttributeValue, BlueprintWithAttributes,
-        CreateAttributeContext, CreateBlueprint, CreateEntityFormRequest, Entity,
-        EntityPublicationStatus, MigrateEntityRequest, RelationshipMutation, SearchBlueprint,
-        UpdateAttributeContext, UpdateEntityFormRequest,
+        AppendAttributeValues, AttributeContext, AttributeValue, BlueprintEntityPublicationSummary,
+        BlueprintWithAttributes, CreateAttributeContext, CreateBlueprint, CreateEntityFormRequest,
+        Entity, EntityPublicationStatus, MigrateEntityRequest, RelationshipMutation,
+        SearchBlueprint, UpdateAttributeContext, UpdateEntityFormRequest,
     },
     repository::{CatalogRepository, FileMetadata, RepositoryError},
 };
@@ -102,6 +102,17 @@ impl<'a> CatalogMutationService<'a> {
         entity_id: Uuid,
     ) -> Result<Vec<EntityPublicationStatus>, RepositoryError> {
         self.repository.publish_entity_all_channels(entity_id).await
+    }
+
+    pub async fn publish_blueprint_entities(
+        &self,
+        blueprint_id: Uuid,
+        version: i64,
+        context_id: Option<Uuid>,
+    ) -> Result<BlueprintEntityPublicationSummary, RepositoryError> {
+        self.repository
+            .publish_blueprint_entities(blueprint_id, version, context_id)
+            .await
     }
 
     pub async fn unpublish_entity(

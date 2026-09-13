@@ -181,6 +181,14 @@ pub(super) fn policy(method: &Method, path: &str) -> Option<Policy> {
             target: TargetKind::None,
         });
     }
+    if path == "/blueprints/{blueprint_id}/versions/{version}/entity-publications"
+        || path == "/blueprints/{blueprint_id}/versions/{version}/entity-publications/publish-all"
+    {
+        return Some(Policy {
+            permission: "entities.publish",
+            target: TargetKind::BlueprintId,
+        });
+    }
     if path.starts_with("/blueprints/by-code/{code}") {
         return Some(Policy {
             permission: blueprint,
@@ -354,6 +362,28 @@ mod tests {
                 policy.target
             ),
             (Some(context_id), None)
+        );
+    }
+
+    #[test]
+    fn blueprint_entity_publication_routes_require_publish_permission() {
+        assert_eq!(
+            policy(
+                &Method::POST,
+                "/blueprints/{blueprint_id}/versions/{version}/entity-publications"
+            )
+            .unwrap()
+            .permission,
+            "entities.publish"
+        );
+        assert_eq!(
+            policy(
+                &Method::POST,
+                "/blueprints/{blueprint_id}/versions/{version}/entity-publications/publish-all"
+            )
+            .unwrap()
+            .permission,
+            "entities.publish"
         );
     }
 

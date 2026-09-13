@@ -127,6 +127,13 @@ pub struct PublicationContextRequest {
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
+pub struct BlueprintEntityPublicationSummary {
+    pub entity_count: i64,
+    pub channel_count: i64,
+    pub publication_count: i64,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct UpdatePublicationChannel {
     pub enabled: bool,

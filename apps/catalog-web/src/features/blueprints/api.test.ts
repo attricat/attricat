@@ -5,6 +5,8 @@ import {
   createBlueprintRevision,
   getBlueprintRevision,
   listBlueprintRevisions,
+  publishBlueprintEntities,
+  publishBlueprintEntitiesAllChannels,
   publishBlueprintRevision,
   listBlueprints,
 } from './api';
@@ -74,6 +76,29 @@ describe('blueprint API client', () => {
         headers: { 'Content-Type': 'application/json' },
         method: 'POST',
       },
+    );
+
+    const publicationSummary = {
+      entity_count: 2,
+      channel_count: 1,
+      publication_count: 2,
+    };
+    respond(publicationSummary);
+    await publishBlueprintEntities(blueprintId, 2, blueprintId);
+    expect(fetchMock).toHaveBeenLastCalledWith(
+      `/api/blueprints/${blueprintId}/versions/2/entity-publications`,
+      {
+        body: JSON.stringify({ context_id: blueprintId }),
+        headers: { 'Content-Type': 'application/json' },
+        method: 'POST',
+      },
+    );
+
+    respond(publicationSummary);
+    await publishBlueprintEntitiesAllChannels(blueprintId, 2);
+    expect(fetchMock).toHaveBeenLastCalledWith(
+      `/api/blueprints/${blueprintId}/versions/2/entity-publications/publish-all`,
+      { method: 'POST' },
     );
 
     respond({ blueprint, attributes: [] });

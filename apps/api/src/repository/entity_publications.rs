@@ -142,6 +142,94 @@ impl CatalogRepository {
         Ok(statuses)
     }
 
+    pub async fn publish_blueprint_entities(
+        &self,
+        blueprint_id: Uuid,
+        blueprint_version: i64,
+        context_id: Option<Uuid>,
+    ) -> Result<BlueprintEntityPublicationSummary, RepositoryError> {
+        let workspace_id = self.workspace_id.unwrap_or(Self::DEFAULT_WORKSPACE_ID);
+        let mut tx = self.pool.begin().await?;
+        let blueprint_exists: bool = sqlx::query_scalar(
+            "SELECT EXISTS (SELECT 1 FROM blueprints WHERE workspace_id = $1 AND id = $2 AND version = $3 AND kind = 'entity' AND deleted_at IS NULL)",
+        )
+        .bind(workspace_id)
+        .bind(blueprint_id)
+        .bind(blueprint_version)
+        .fetch_one(&mut *tx)
+        .await?;
+        if !blueprint_exists {
+            return Err(RepositoryError::NotFound("entity blueprint revision"));
+        }
+        let entity_ids: Vec<Uuid> = sqlx::query_scalar(
+            "SELECT id FROM entities WHERE workspace_id = $1 AND blueprint_id = $2 AND blueprint_version = $3 AND deleted_at IS NULL ORDER BY id FOR UPDATE",
+        )
+        .bind(workspace_id)
+        .bind(blueprint_id)
+        .bind(blueprint_version)
+        .fetch_all(&mut *tx)
+        .await?;
+        let channel_ids: Vec<Uuid> = match context_id {
+            Some(context_id) => vec![context_id],
+            None => sqlx::query_scalar(
+                "SELECT context_id FROM publication_channels WHERE workspace_id = $1 AND enabled ORDER BY context_id FOR UPDATE",
+            )
+            .bind(workspace_id)
+            .fetch_all(&mut *tx)
+            .await?,
+        };
+        if let Some(context_id) = context_id {
+            let enabled: bool = sqlx::query_scalar(
+                "SELECT enabled FROM publication_channels WHERE workspace_id = $1 AND context_id = $2 FOR UPDATE",
+            )
+            .bind(workspace_id)
+            .bind(context_id)
+            .fetch_optional(&mut *tx)
+            .await?
+            .unwrap_or(false);
+            if !enabled {
+                return Err(RepositoryError::PublicationChannelDisabled);
+            }
+        }
+        let actor = self
+            .audit_context
+            .as_ref()
+            .and_then(|audit| audit.actor_user_id)
+            .ok_or(RepositoryError::PublicationActorRequired)?;
+        let published_at = chrono::Utc::now();
+        for entity_id in &entity_ids {
+            for context_id in &channel_ids {
+                sqlx::query("INSERT INTO entity_channel_publications (workspace_id, entity_id, context_id, published_at, published_by_user_id) VALUES ($1, $2, $3, $4, $5) ON CONFLICT (workspace_id, entity_id, context_id) DO UPDATE SET published_at = EXCLUDED.published_at, published_by_user_id = EXCLUDED.published_by_user_id")
+                    .bind(workspace_id)
+                    .bind(entity_id)
+                    .bind(context_id)
+                    .bind(published_at)
+                    .bind(actor)
+                    .execute(&mut *tx)
+                    .await?;
+                self.enqueue_event(
+                    &mut tx,
+                    self.publication_event(
+                        ENTITY_PUBLISHED_V1,
+                        *entity_id,
+                        *context_id,
+                        Some(published_at),
+                        Some(actor),
+                        Some("blueprint_bulk"),
+                    ),
+                )
+                .await?;
+            }
+        }
+        self.write_audit_event(&mut tx).await?;
+        tx.commit().await?;
+        Ok(BlueprintEntityPublicationSummary {
+            entity_count: entity_ids.len() as i64,
+            channel_count: channel_ids.len() as i64,
+            publication_count: (entity_ids.len() * channel_ids.len()) as i64,
+        })
+    }
+
     pub async fn unpublish_entity(
         &self,
         entity_id: Uuid,

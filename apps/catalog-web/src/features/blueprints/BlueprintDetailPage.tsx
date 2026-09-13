@@ -25,6 +25,8 @@ import { PageHeader } from '../../components/PageHeader';
 import {
   getBlueprintRevision,
   listBlueprintRevisions,
+  publishBlueprintEntities,
+  publishBlueprintEntitiesAllChannels,
   publishBlueprintRevision,
   startSafeBlueprintMigrationBatch,
 } from './api';
@@ -33,6 +35,8 @@ import { blueprintQueryKeys } from './query-keys';
 import { RevisionHistory } from './RevisionHistory';
 import { BlueprintVersionMetadata } from './BlueprintVersionMetadata';
 import { ExtensionOutlet } from '../extensions/ExtensionOutlet';
+import { listPublicationChannels } from '../exports/api';
+import { exportQueryKeys } from '../exports/query-keys';
 
 const TomlDiffEditor = lazy(() =>
   import('./TomlDiffEditor').then(({ TomlDiffEditor }) => ({
@@ -52,6 +56,8 @@ export const BlueprintDetailPage = ({
   const [publishConfirmationOpen, setPublishConfirmationOpen] = useState(false);
   const [safeMigrationConfirmationOpen, setSafeMigrationConfirmationOpen] =
     useState(false);
+  const [entityPublicationOpen, setEntityPublicationOpen] = useState(false);
+  const [publicationChannel, setPublicationChannel] = useState('all');
   const queryClient = useQueryClient();
   const publish = useMutation({
     mutationFn: (version: number) =>
@@ -75,6 +81,28 @@ export const BlueprintDetailPage = ({
     mutationFn: (version: number) =>
       startSafeBlueprintMigrationBatch(blueprintId, version),
     onSuccess: () => setSafeMigrationConfirmationOpen(false),
+  });
+  const publicationChannels = useQuery({
+    queryKey: exportQueryKeys.channels(),
+    queryFn: listPublicationChannels,
+  });
+  const publishEntities = useMutation({
+    mutationFn: ({
+      version,
+      contextId,
+    }: {
+      version: number;
+      contextId: string;
+    }) =>
+      contextId === 'all'
+        ? publishBlueprintEntitiesAllChannels(blueprintId, version)
+        : publishBlueprintEntities(blueprintId, version, contextId),
+    onSuccess: async () => {
+      setEntityPublicationOpen(false);
+      await queryClient.invalidateQueries({
+        queryKey: ['entity-publications'],
+      });
+    },
   });
   const revisions = useQuery({
     queryKey: blueprintQueryKeys.revisions(blueprintId),
@@ -163,6 +191,14 @@ export const BlueprintDetailPage = ({
                     variant="contained"
                   >
                     {t('blueprints.publish')}
+                  </Button>
+                )}
+                {blueprint.status === 'published' && (
+                  <Button
+                    onClick={() => setEntityPublicationOpen(true)}
+                    variant="outlined"
+                  >
+                    {t('blueprints.publishEntities')}
                   </Button>
                 )}
                 {canStartSafeMigration && (
@@ -321,11 +357,71 @@ export const BlueprintDetailPage = ({
               </Box>
             </Paper>
           )}
-          {safeMigration.isError && (
+          {(safeMigration.isError || publishEntities.isError) && (
             <Alert severity="error" sx={{ mt: 2 }}>
-              {safeMigration.error.message}
+              {safeMigration.error?.message ?? publishEntities.error?.message}
             </Alert>
           )}
+          <Dialog
+            onClose={() =>
+              !publishEntities.isPending && setEntityPublicationOpen(false)
+            }
+            open={entityPublicationOpen}
+          >
+            <DialogTitle>{t('blueprints.publishEntities')}</DialogTitle>
+            <DialogContent>
+              <DialogContentText>
+                {t('blueprints.publishEntitiesDescription', {
+                  name: blueprint.name,
+                  version: blueprint.version,
+                })}
+              </DialogContentText>
+              <TextField
+                fullWidth
+                label={t('blueprints.publicationChannel')}
+                onChange={(event) => setPublicationChannel(event.target.value)}
+                select
+                sx={{ mt: 2 }}
+                value={publicationChannel}
+              >
+                <MenuItem value="all">
+                  {t('blueprints.allEnabledChannels')}
+                </MenuItem>
+                {publicationChannels.data
+                  ?.filter((channel) => channel.enabled)
+                  .map((channel) => (
+                    <MenuItem
+                      key={channel.context_id}
+                      value={channel.context_id}
+                    >
+                      {channel.context_code}
+                    </MenuItem>
+                  ))}
+              </TextField>
+            </DialogContent>
+            <DialogActions>
+              <Button
+                disabled={publishEntities.isPending}
+                onClick={() => setEntityPublicationOpen(false)}
+              >
+                {t('blueprints.cancel')}
+              </Button>
+              <Button
+                disabled={publishEntities.isPending}
+                onClick={() =>
+                  publishEntities.mutate({
+                    version: blueprint.version,
+                    contextId: publicationChannel,
+                  })
+                }
+                variant="contained"
+              >
+                {publishEntities.isPending
+                  ? t('blueprints.publishing')
+                  : t('blueprints.publish')}
+              </Button>
+            </DialogActions>
+          </Dialog>
           <Dialog
             onClose={() =>
               !safeMigration.isPending &&
