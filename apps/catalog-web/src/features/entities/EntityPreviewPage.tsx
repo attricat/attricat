@@ -170,6 +170,13 @@ export const EntityPreviewPage = ({
             view: detailView,
           })
         : null}
+      {(publish.isError || publishAll.isError || unpublish.isError) && (
+        <Alert severity="error" sx={{ mt: 3 }}>
+          {publish.error?.message ??
+            publishAll.error?.message ??
+            unpublish.error?.message}
+        </Alert>
+      )}
       <EntityPreviewToolbar
         entityId={entityId}
         extensionPanelOpen={extensionPanelOpen}
