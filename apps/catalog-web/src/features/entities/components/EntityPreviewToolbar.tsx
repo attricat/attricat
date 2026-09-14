@@ -115,23 +115,14 @@ export const EntityPreviewToolbar = ({
             {t('entities.publish')}
           </Button>
         ) : (
-          <>
-            <Button
-              disabled={publicationPending}
-              onClick={onPublish}
-              size="small"
-            >
-              {t('entities.publish')}
-            </Button>
-            <Button
-              color="warning"
-              disabled={publicationPending}
-              onClick={onUnpublish}
-              size="small"
-            >
-              {t('entities.unpublish')}
-            </Button>
-          </>
+          <Button
+            color="warning"
+            disabled={publicationPending}
+            onClick={onUnpublish}
+            size="small"
+          >
+            {t('entities.unpublish')}
+          </Button>
         ))}
       {canPublish && (
         <Button
