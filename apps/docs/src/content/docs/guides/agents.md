@@ -15,8 +15,6 @@ Read-only work can run automatically. Every catalog mutation stops for a durable
 
 Before approving a change, inspect its proposed arguments and change summary. Approving authorizes only that proposed action. Reject it when the request is broader than intended or the result needs adjustment.
 
-Scheduled runs follow the same rule: an approved run is re-authorized as its initiating user before it writes.
-
 ## Keep access narrow
 
 Agent providers receive conversation content and tool results. Use a trusted provider account, grant `agents.run` only to people who should request changes, and review the activity log when needed.

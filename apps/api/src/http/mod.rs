@@ -297,23 +297,6 @@ pub fn router(state: AppState) -> Router {
             "/agent/tool-calls/{tool_call_id}/reject",
             post(agents::reject),
         )
-        .route(
-            "/agent/schedules",
-            get(agents::list_schedules).post(agents::create_schedule),
-        )
-        .route(
-            "/agent/schedules/{schedule_id}",
-            put(agents::update_schedule).delete(agents::delete_schedule),
-        )
-        .route(
-            "/agent/schedules/{schedule_id}/run-now",
-            post(agents::run_schedule_now),
-        )
-        // Keep the short form for clients built during the backend rollout.
-        .route(
-            "/agent/schedules/{schedule_id}/run",
-            post(agents::run_schedule_now),
-        )
         .route("/health", get(data_health::health))
         .route(
             "/extension-registries",

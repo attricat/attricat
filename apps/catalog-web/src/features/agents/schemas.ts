@@ -32,7 +32,6 @@ export const messageSchema = z.object({
 export const runSchema = z.object({
   id,
   conversation_id: id,
-  schedule_id: id.nullable(),
   origin: z.string(),
   status: z.string(),
   provider_base_url: z.string(),
@@ -59,18 +58,6 @@ export const toolCallSchema = z.object({
   created_at: dateTime,
   completed_at: dateTime.nullable(),
 });
-export const scheduleSchema = z.object({
-  id,
-  conversation_id: id,
-  initiated_by_user_id: id.nullable(),
-  cron_expression: z.string(),
-  timezone: z.string(),
-  enabled: z.boolean(),
-  next_run_at: dateTime.nullable(),
-  last_run_at: dateTime.nullable(),
-  created_at: dateTime,
-  updated_at: dateTime,
-});
 export const runResponseSchema = z.object({ id, status: z.string() });
 
 export type Conversation = z.infer<typeof conversationSchema>;
@@ -80,4 +67,3 @@ export type ConversationMessageAttachment = z.infer<
 >;
 export type AgentRun = z.infer<typeof runSchema>;
 export type AgentToolCall = z.infer<typeof toolCallSchema>;
-export type AgentSchedule = z.infer<typeof scheduleSchema>;

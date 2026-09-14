@@ -7,6 +7,4 @@ export const agentQueryKeys = {
   runs: (id: string) => ['agents', 'conversations', id, 'runs'] as const,
   approvals: (conversationId?: string) =>
     ['agents', 'approvals', conversationId ?? 'all'] as const,
-  schedules: (conversationId?: string) =>
-    ['agents', 'schedules', conversationId ?? 'all'] as const,
 };

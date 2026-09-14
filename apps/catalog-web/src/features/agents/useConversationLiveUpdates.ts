@@ -13,7 +13,6 @@ const updateEvents = [
   'approval_required',
   'error',
   'terminal',
-  'schedule_skipped',
 ];
 
 export const useConversationLiveUpdates = (runs: AgentRun[] | undefined) => {

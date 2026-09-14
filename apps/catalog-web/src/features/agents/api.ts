@@ -1,11 +1,10 @@
 import { z } from 'zod';
-import { request, requestNoContent } from '../../api/request';
+import { request } from '../../api/request';
 import {
   conversationSchema,
   messageSchema,
   runResponseSchema,
   runSchema,
-  scheduleSchema,
   toolCallSchema,
 } from './schemas';
 
@@ -56,42 +55,6 @@ export const decideApproval = (id: string, approved: boolean) =>
   request(
     `/api/agent/tool-calls/${uuidPathParam(id)}/${approved ? 'approve' : 'reject'}`,
     z.unknown(),
-    json('POST'),
-  );
-export const listSchedules = (conversationId?: string) =>
-  request(
-    `/api/agent/schedules${conversationId ? `?conversation_id=${queryParam(conversationId)}` : ''}`,
-    z.array(scheduleSchema),
-  );
-export const createSchedule = (
-  conversationId: string,
-  cronExpression: string,
-) =>
-  request(
-    '/api/agent/schedules',
-    scheduleSchema,
-    json('POST', {
-      conversation_id: conversationId,
-      cron_expression: cronExpression,
-    }),
-  );
-export const updateSchedule = (
-  id: string,
-  update: { cron_expression?: string; enabled?: boolean },
-) =>
-  request(
-    `/api/agent/schedules/${uuidPathParam(id)}`,
-    scheduleSchema,
-    json('PUT', update),
-  );
-export const deleteSchedule = async (id: string) =>
-  requestNoContent(`/api/agent/schedules/${uuidPathParam(id)}`, {
-    method: 'DELETE',
-  });
-export const runScheduleNow = (id: string) =>
-  request(
-    `/api/agent/schedules/${uuidPathParam(id)}/run-now`,
-    runResponseSchema,
     json('POST'),
   );
 export const agentRunEventsUrl = (id: string) =>

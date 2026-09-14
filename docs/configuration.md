@@ -26,7 +26,6 @@ or inaccessible configured bucket.
 | `LLM_MODEL` | `gpt-4o-mini` | API only | Provider model identifier captured on each run, never a browser-selected setting. |
 | `LLM_REQUEST_TIMEOUT_SECONDS` | `60` | API only | Per-provider-request timeout, 1–3600 seconds. |
 | `LLM_RUN_TIMEOUT_SECONDS` | `300` | API only | Total agent-run timeout, 1–3600 seconds. |
-| `AGENT_SCHEDULER_POLL_SECONDS` | `15` | API only | Durable schedule-worker polling interval, 1–3600 seconds. |
 | `AGENT_DISPATCH_QUEUE_CAPACITY` | `256` | API only | Positive process-local queue capacity for durable agent runs. Increase for expected bursts; queued runs remain durable in PostgreSQL. |
 | `PREVIEW_MAX_RELATIONSHIP_DEPTH` | `3` | API | Maximum recursive relationship preview depth. |
 | `PREVIEW_MAX_RELATIONSHIP_ITEMS` | `10` | API | Maximum inline targets per relationship. |
@@ -98,7 +97,7 @@ An enabled provider receives the conversation history and bounded catalogue
 results needed to answer it, including attachments as described below. Choose a
 provider and retention policy suitable for that data. Agent access requires the
 `agents.run` permission. Read-only tools execute automatically; all writes
-pause for a durable human approval, including scheduled runs. Approval is not a
+pause for a durable human approval. Approval is not a
 permission bypass: the initiating user is re-authorized when an approved write
 resumes. Restrict this permission to trusted operators and review each proposed
 input and change summary.
@@ -237,7 +236,3 @@ The API validates the five `EVENT_DISPATCHER_*` settings above during startup;
 zero, non-integer, or an unrepresentable `EVENT_DISPATCHER_MAX_ATTEMPTS` stops
 startup. They tune the internal at-least-once event dispatcher only. See
 [Domain eventing](eventing.md) for delivery, retry, and operator behavior.
-
-`AGENT_SCHEDULER_POLL_SECONDS` controls the API process UTC schedule poll
-interval (default `15`, range `1`–`3600`). Queued runs are recovered when the
-API process starts; no external scheduler is required.

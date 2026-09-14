@@ -1,10 +1,8 @@
-//! Process-owned dispatcher for durable agent runs and UTC schedules.
+//! Process-owned dispatcher for durable agent runs.
 //!
 //! HTTP only persists a queued run and sends its id here.  Losing a process
 //! message is safe because startup recovery re-enqueues every queued run.
-use std::{sync::Arc, time::Duration};
-
-use chrono::Utc;
+use std::sync::Arc;
 use thiserror::Error;
 use tokio::sync::mpsc;
 use uuid::Uuid;
@@ -130,53 +128,5 @@ pub async fn start(
             }
         }
     });
-
-    let scheduler_repository = repository;
-    let scheduler_dispatcher = dispatcher.clone();
-    tokio::spawn(async move {
-        // A scheduler panic or unexpected exit must not silently disable future
-        // runs. This supervisor owns restart backoff; normal poll failures are
-        // handled inside the scheduled loop without dropping due work.
-        loop {
-            let repository = scheduler_repository.clone();
-            let dispatcher = scheduler_dispatcher.clone();
-            let config = config.clone();
-            match tokio::spawn(async move { run_scheduler(repository, dispatcher, config).await })
-                .await
-            {
-                Ok(()) => tracing::error!("agent scheduler stopped; restarting"),
-                Err(error) => tracing::error!(%error, "agent scheduler task failed; restarting"),
-            }
-            tokio::time::sleep(Duration::from_secs(1)).await;
-        }
-    });
     dispatcher
-}
-
-async fn run_scheduler(
-    repository: CatalogRepository,
-    dispatcher: AgentDispatcher,
-    config: AgentProviderConfig,
-) {
-    let mut interval = tokio::time::interval(config.scheduler_poll_interval);
-    loop {
-        interval.tick().await;
-        match repository
-            .claim_due_agent_schedules(Utc::now(), config.base_url.as_str(), &config.model)
-            .await
-        {
-            Ok(runs) => {
-                for (workspace_id, run_id) in runs {
-                    if dispatcher.enqueue(workspace_id, run_id).await.is_err() {
-                        tracing::error!(%workspace_id, %run_id, "agent scheduler dispatcher stopped");
-                        return;
-                    }
-                }
-            }
-            Err(error) => {
-                tracing::error!(error = %error, "agent scheduler poll failed");
-                tokio::time::sleep(Duration::from_secs(1)).await;
-            }
-        }
-    }
 }

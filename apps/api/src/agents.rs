@@ -19,7 +19,6 @@ pub const MAX_CONVERSATION_TITLE_BYTES: usize = 512;
 pub const MAX_AGENT_MODEL_BYTES: usize = 512;
 pub const MAX_CONVERSATION_MESSAGE_BYTES: usize = 32 * 1024;
 pub const MAX_CONVERSATION_ATTACHMENTS: usize = 16;
-pub const MAX_SCHEDULE_CRON_BYTES: usize = 256;
 pub const MAX_INLINE_ATTACHMENT_BYTES: i64 = 5 * 1024 * 1024;
 pub const MAX_TOOL_CALL_ROUNDS: u8 = 8;
 pub const MAX_TOOL_RESULT_BYTES: usize = 64 * 1024;
@@ -37,7 +36,6 @@ pub const MAX_TOOL_CALLS: usize = 32;
 pub const DEFAULT_AGENT_DISPATCH_QUEUE_CAPACITY: usize = 256;
 const DEFAULT_REQUEST_TIMEOUT_SECONDS: u64 = 60;
 const DEFAULT_RUN_TIMEOUT_SECONDS: u64 = 300;
-const DEFAULT_SCHEDULER_POLL_SECONDS: u64 = 15;
 const MAX_TIMEOUT_SECONDS: u64 = 3_600;
 
 #[allow(dead_code)]
@@ -48,7 +46,6 @@ pub struct AgentProviderConfig {
     pub model: String,
     pub request_timeout: Duration,
     pub run_timeout: Duration,
-    pub scheduler_poll_interval: Duration,
     pub dispatch_queue_capacity: usize,
 }
 
@@ -94,11 +91,6 @@ impl AgentProviderConfig {
                 &value,
                 "LLM_RUN_TIMEOUT_SECONDS",
                 DEFAULT_RUN_TIMEOUT_SECONDS,
-            )?,
-            scheduler_poll_interval: duration_value(
-                &value,
-                "AGENT_SCHEDULER_POLL_SECONDS",
-                DEFAULT_SCHEDULER_POLL_SECONDS,
             )?,
             dispatch_queue_capacity: positive_usize_value(
                 &value,

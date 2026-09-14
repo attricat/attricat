@@ -1,8 +1,7 @@
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Link } from '@tanstack/react-router';
-import { Alert, Box, Button, Chip, Stack } from '@mui/material';
+import { Alert, Box, Chip, Stack } from '@mui/material';
 import { PageContainer } from '../../components/PageContainer';
 import { PageHeader } from '../../components/PageHeader';
 import {
@@ -89,9 +88,6 @@ export const ConversationDetailPage = ({
                   size="small"
                 />
               )}
-              <Button component={Link} to="/agents/schedules" variant="text">
-                {t('agents.schedules')}
-              </Button>
             </Stack>
           }
           eyebrow={t('agents.agentConversation')}

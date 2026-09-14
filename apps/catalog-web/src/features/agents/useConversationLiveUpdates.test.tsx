@@ -36,7 +36,6 @@ const run = {
   model: 'example',
   origin: 'conversation',
   provider_base_url: 'https://example.test',
-  schedule_id: null,
   started_at: null,
   status: 'running',
 } satisfies AgentRun;

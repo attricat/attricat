@@ -3,15 +3,11 @@ import {
   agentRunEventsUrl,
   createConversation,
   decideApproval,
-  deleteSchedule,
   getConversation,
   listApprovals,
   listMessages,
   listRuns,
-  listSchedules,
-  runScheduleNow,
   sendMessage,
-  updateSchedule,
 } from './api';
 
 const id = '123e4567-e89b-12d3-a456-426614174000';
@@ -65,11 +61,6 @@ describe('agent API client', () => {
     expect(() => listRuns(malformedId)).toThrow('Invalid UUID');
     expect(() => sendMessage(malformedId, 'Hello')).toThrow('Invalid UUID');
     expect(() => decideApproval(malformedId, true)).toThrow('Invalid UUID');
-    expect(() => updateSchedule(malformedId, { enabled: true })).toThrow(
-      'Invalid UUID',
-    );
-    await expect(deleteSchedule(malformedId)).rejects.toThrow('Invalid UUID');
-    expect(() => runScheduleNow(malformedId)).toThrow('Invalid UUID');
     expect(() => agentRunEventsUrl(malformedId)).toThrow('Invalid UUID');
     expect(fetchMock).not.toHaveBeenCalled();
   });
@@ -82,11 +73,9 @@ describe('agent API client', () => {
     });
 
     await listApprovals('space & slash/');
-    await listSchedules('space & slash/');
 
     expect(fetchMock.mock.calls.map(([path]) => path)).toEqual([
       '/api/agent/approvals?conversation_id=space%20%26%20slash%2F',
-      '/api/agent/schedules?conversation_id=space%20%26%20slash%2F',
     ]);
   });
 

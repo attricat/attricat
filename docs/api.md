@@ -326,15 +326,6 @@ never provider credentials or raw provider response bodies. Read tools run
 automatically; every mutation is emitted as an approval proposal before it
 reaches a repository write.
 
-Schedules are managed by `GET`/`POST /agent/schedules`,
-`PUT`/`DELETE /agent/schedules/{id}`, and
-`POST /agent/schedules/{id}/run-now` (the temporary `/run` alias is also
-accepted). A schedule request contains `conversation_id` and a six-field UTC
-`cron_expression`. The creating user is persisted as the scheduled execution
-principal; scheduled mutations are re-authorized as that user, while a manual
-run uses the user who requested it. Overlapping scheduled occurrences become durable
-skipped runs with a `schedule_skipped` event instead of executing concurrently.
-
 ## Workflow run operations
 
 `GET /workflow-runs` lists workspace-scoped run diagnostics and requires `workflows.read`. `POST /workflow-runs/{run_id}/replay` requeues only a terminal dead-letter run and requires `workflows.manage`. Neither endpoint exposes internal domain-event payloads.

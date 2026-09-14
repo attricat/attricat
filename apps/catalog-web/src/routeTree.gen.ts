@@ -16,7 +16,6 @@ import { Route as ProfileRouteImport } from './routes/profile'
 import { Route as AgentsIndexRouteImport } from './routes/agents/index'
 import { Route as AgentsConversationIdRouteImport } from './routes/agents/$conversationId'
 import { Route as AgentsNewRouteImport } from './routes/agents/new'
-import { Route as AgentsSchedulesRouteImport } from './routes/agents/schedules'
 import { Route as EntitiesEntityIdRouteImport } from './routes/entities/$entityId'
 import { Route as EntitiesNewRouteImport } from './routes/entities/new'
 import { Route as InvitationsAcceptRouteImport } from './routes/invitations/accept'
@@ -90,11 +89,6 @@ const AgentsConversationIdRoute = AgentsConversationIdRouteImport.update({
 const AgentsNewRoute = AgentsNewRouteImport.update({
   id: '/agents/new',
   path: '/agents/new',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const AgentsSchedulesRoute = AgentsSchedulesRouteImport.update({
-  id: '/agents/schedules',
-  path: '/agents/schedules',
   getParentRoute: () => rootRouteImport,
 } as any)
 const EntitiesEntityIdRoute = EntitiesEntityIdRouteImport.update({
@@ -313,7 +307,6 @@ export interface FileRoutesByFullPath {
   '/profile': typeof ProfileRouteWithChildren
   '/agents/$conversationId': typeof AgentsConversationIdRoute
   '/agents/new': typeof AgentsNewRoute
-  '/agents/schedules': typeof AgentsSchedulesRoute
   '/entities/$entityId': typeof EntitiesEntityIdRouteWithChildren
   '/entities/new': typeof EntitiesNewRoute
   '/invitations/accept': typeof InvitationsAcceptRoute
@@ -360,7 +353,6 @@ export interface FileRoutesByTo {
   '/onboarding': typeof OnboardingRoute
   '/agents/$conversationId': typeof AgentsConversationIdRoute
   '/agents/new': typeof AgentsNewRoute
-  '/agents/schedules': typeof AgentsSchedulesRoute
   '/entities/new': typeof EntitiesNewRoute
   '/invitations/accept': typeof InvitationsAcceptRoute
   '/login/$identifier': typeof LoginIdentifierRoute
@@ -407,7 +399,6 @@ export interface FileRoutesById {
   '/profile': typeof ProfileRouteWithChildren
   '/agents/$conversationId': typeof AgentsConversationIdRoute
   '/agents/new': typeof AgentsNewRoute
-  '/agents/schedules': typeof AgentsSchedulesRoute
   '/entities/$entityId': typeof EntitiesEntityIdRouteWithChildren
   '/entities/new': typeof EntitiesNewRoute
   '/invitations/accept': typeof InvitationsAcceptRoute
@@ -458,7 +449,6 @@ export interface FileRouteTypes {
     | '/profile'
     | '/agents/$conversationId'
     | '/agents/new'
-    | '/agents/schedules'
     | '/entities/$entityId'
     | '/entities/new'
     | '/invitations/accept'
@@ -505,7 +495,6 @@ export interface FileRouteTypes {
     | '/onboarding'
     | '/agents/$conversationId'
     | '/agents/new'
-    | '/agents/schedules'
     | '/entities/new'
     | '/invitations/accept'
     | '/login/$identifier'
@@ -551,7 +540,6 @@ export interface FileRouteTypes {
     | '/profile'
     | '/agents/$conversationId'
     | '/agents/new'
-    | '/agents/schedules'
     | '/entities/$entityId'
     | '/entities/new'
     | '/invitations/accept'
@@ -601,7 +589,6 @@ export interface RootRouteChildren {
   ProfileRoute: typeof ProfileRouteWithChildren
   AgentsConversationIdRoute: typeof AgentsConversationIdRoute
   AgentsNewRoute: typeof AgentsNewRoute
-  AgentsSchedulesRoute: typeof AgentsSchedulesRoute
   EntitiesEntityIdRoute: typeof EntitiesEntityIdRouteWithChildren
   EntitiesNewRoute: typeof EntitiesNewRoute
   InvitationsAcceptRoute: typeof InvitationsAcceptRoute
@@ -681,13 +668,6 @@ declare module '@tanstack/react-router' {
       path: '/agents/new'
       fullPath: '/agents/new'
       preLoaderRoute: typeof AgentsNewRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/agents/schedules': {
-      id: '/agents/schedules'
-      path: '/agents/schedules'
-      fullPath: '/agents/schedules'
-      preLoaderRoute: typeof AgentsSchedulesRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/entities/$entityId': {
@@ -1050,7 +1030,6 @@ const rootRouteChildren: RootRouteChildren = {
   ProfileRoute: ProfileRouteWithChildren,
   AgentsConversationIdRoute: AgentsConversationIdRoute,
   AgentsNewRoute: AgentsNewRoute,
-  AgentsSchedulesRoute: AgentsSchedulesRoute,
   EntitiesEntityIdRoute: EntitiesEntityIdRouteWithChildren,
   EntitiesNewRoute: EntitiesNewRoute,
   InvitationsAcceptRoute: InvitationsAcceptRoute,

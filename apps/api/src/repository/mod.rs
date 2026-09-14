@@ -60,8 +60,7 @@ mod workflows;
 mod workspace_navigation;
 
 pub use agents::{
-    AgentRun, AgentRunEvent, AgentSchedule, AgentToolCall, ApprovalDecision, Conversation,
-    ConversationMessage,
+    AgentRun, AgentRunEvent, AgentToolCall, ApprovalDecision, Conversation, ConversationMessage,
 };
 pub(crate) use audit_events::{AuditEventFilter, AuditEventPage};
 pub use domain_events::{EventConsumer, EventDelivery, EventPublisher, FailedEventDelivery};

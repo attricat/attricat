@@ -90,7 +90,6 @@ impl From<ConversationMessageAttachmentRow> for ConversationMessageAttachment {
 pub struct AgentRun {
     pub id: Uuid,
     pub conversation_id: Uuid,
-    pub schedule_id: Option<Uuid>,
     pub origin: String,
     pub status: String,
     pub provider_base_url: String,
@@ -128,20 +127,6 @@ pub struct AgentRunEvent {
     pub event_type: String,
     pub payload: Value,
     pub created_at: DateTime<Utc>,
-}
-
-#[derive(Clone, Debug, serde::Serialize, sqlx::FromRow)]
-pub struct AgentSchedule {
-    pub id: Uuid,
-    pub conversation_id: Uuid,
-    pub initiated_by_user_id: Option<Uuid>,
-    pub cron_expression: String,
-    pub timezone: String,
-    pub enabled: bool,
-    pub next_run_at: Option<DateTime<Utc>>,
-    pub last_run_at: Option<DateTime<Utc>>,
-    pub created_at: DateTime<Utc>,
-    pub updated_at: DateTime<Utc>,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -276,38 +261,6 @@ impl CatalogRepository {
         Ok(message)
     }
 
-    /// Creates a queued run with a provider metadata snapshot. The API key is
-    /// deliberately not an argument and cannot enter this table.
-    pub async fn create_agent_run(
-        &self,
-        conversation_id: Uuid,
-        schedule_id: Option<Uuid>,
-        origin: &str,
-        provider_base_url: &str,
-        model: &str,
-    ) -> Result<AgentRun, RepositoryError> {
-        if !matches!(origin, "interactive" | "scheduled" | "manual") {
-            return Err(RepositoryError::InvalidAgentState("invalid run origin"));
-        }
-        let workspace_id = self.workspace_id.unwrap_or(Self::DEFAULT_WORKSPACE_ID);
-        let mut tx = self.pool.begin().await?;
-        let exists = sqlx::query_scalar::<_, Uuid>(
-            "SELECT id FROM conversations WHERE id = $1 AND workspace_id = $2 FOR UPDATE",
-        )
-        .bind(conversation_id)
-        .bind(workspace_id)
-        .fetch_optional(&mut *tx)
-        .await?;
-        if exists.is_none() {
-            return Err(RepositoryError::NotFound("conversation"));
-        }
-        let run = sqlx::query_as("INSERT INTO agent_runs (id, workspace_id, conversation_id, schedule_id, origin, status, provider_base_url, model) VALUES ($1, $2, $3, $4, $5, 'queued', $6, $7) RETURNING id, conversation_id, schedule_id, origin, status, provider_base_url, model, started_at, finished_at, error_code, error_message, created_at")
-            .bind(Uuid::new_v4()).bind(workspace_id).bind(conversation_id).bind(schedule_id).bind(origin).bind(provider_base_url).bind(model)
-            .fetch_one(&mut *tx).await?;
-        tx.commit().await?;
-        Ok(run)
-    }
-
     /// Creates a run tied to the authenticated human that initiated it. The
     /// runner must re-authorize this principal before executing a mutation.
     pub async fn create_agent_run_for_user(
@@ -318,7 +271,7 @@ impl CatalogRepository {
         model: &str,
     ) -> Result<AgentRun, RepositoryError> {
         let workspace_id = self.workspace_id.unwrap_or(Self::DEFAULT_WORKSPACE_ID);
-        let run = sqlx::query_as("INSERT INTO agent_runs (id, workspace_id, conversation_id, origin, status, provider_base_url, model, initiated_by_user_id) SELECT $1, $2, $3, 'interactive', 'queued', $4, $5, $6 WHERE EXISTS (SELECT 1 FROM conversations WHERE id = $3 AND workspace_id = $2) RETURNING id, conversation_id, schedule_id, origin, status, provider_base_url, model, started_at, finished_at, error_code, error_message, created_at")
+        let run = sqlx::query_as("INSERT INTO agent_runs (id, workspace_id, conversation_id, origin, status, provider_base_url, model, initiated_by_user_id) SELECT $1, $2, $3, 'interactive', 'queued', $4, $5, $6 WHERE EXISTS (SELECT 1 FROM conversations WHERE id = $3 AND workspace_id = $2) RETURNING id, conversation_id, origin, status, provider_base_url, model, started_at, finished_at, error_code, error_message, created_at")
             .bind(Uuid::new_v4()).bind(workspace_id).bind(conversation_id).bind(provider_base_url).bind(model).bind(actor)
             .fetch_optional(&self.pool).await?.ok_or(RepositoryError::NotFound("conversation"))?;
         Ok(run)
@@ -334,7 +287,7 @@ impl CatalogRepository {
         error_message: Option<&str>,
     ) -> Result<AgentRun, RepositoryError> {
         let mut tx = self.pool.begin().await?;
-        let current: AgentRun = sqlx::query_as("SELECT id, conversation_id, schedule_id, origin, status, provider_base_url, model, started_at, finished_at, error_code, error_message, created_at FROM agent_runs WHERE id = $1 AND workspace_id = $2 FOR UPDATE")
+        let current: AgentRun = sqlx::query_as("SELECT id, conversation_id, origin, status, provider_base_url, model, started_at, finished_at, error_code, error_message, created_at FROM agent_runs WHERE id = $1 AND workspace_id = $2 FOR UPDATE")
             .bind(run_id).bind(self.workspace_id.unwrap_or(Self::DEFAULT_WORKSPACE_ID)).fetch_optional(&mut *tx).await?.ok_or(RepositoryError::NotFound("agent run"))?;
         let valid = matches!(
             (current.status.as_str(), next_status),
@@ -352,7 +305,7 @@ impl CatalogRepository {
             next_status,
             "completed" | "failed" | "cancelled" | "skipped"
         );
-        let run = sqlx::query_as("UPDATE agent_runs SET status = $2, started_at = CASE WHEN $2 = 'running' THEN COALESCE(started_at, now()) ELSE started_at END, finished_at = CASE WHEN $3 THEN now() ELSE NULL END, error_code = $4, error_message = $5 WHERE id = $1 RETURNING id, conversation_id, schedule_id, origin, status, provider_base_url, model, started_at, finished_at, error_code, error_message, created_at")
+        let run = sqlx::query_as("UPDATE agent_runs SET status = $2, started_at = CASE WHEN $2 = 'running' THEN COALESCE(started_at, now()) ELSE started_at END, finished_at = CASE WHEN $3 THEN now() ELSE NULL END, error_code = $4, error_message = $5 WHERE id = $1 RETURNING id, conversation_id, origin, status, provider_base_url, model, started_at, finished_at, error_code, error_message, created_at")
             .bind(run_id).bind(next_status).bind(terminal).bind(error_code).bind(error_message).fetch_one(&mut *tx).await?;
         let sequence: i64 = sqlx::query_scalar(
             "SELECT COALESCE(MAX(sequence) + 1, 0) FROM agent_run_events WHERE run_id = $1",
@@ -378,7 +331,7 @@ impl CatalogRepository {
         run_id: Uuid,
     ) -> Result<Option<AgentRun>, RepositoryError> {
         let mut tx = self.pool.begin().await?;
-        let run = sqlx::query_as("UPDATE agent_runs SET status = 'running', started_at = COALESCE(started_at, now()) WHERE id = $1 AND workspace_id = $2 AND status = 'queued' RETURNING id, conversation_id, schedule_id, origin, status, provider_base_url, model, started_at, finished_at, error_code, error_message, created_at")
+        let run = sqlx::query_as("UPDATE agent_runs SET status = 'running', started_at = COALESCE(started_at, now()) WHERE id = $1 AND workspace_id = $2 AND status = 'queued' RETURNING id, conversation_id, origin, status, provider_base_url, model, started_at, finished_at, error_code, error_message, created_at")
             .bind(run_id).bind(self.workspace_id.unwrap_or(Self::DEFAULT_WORKSPACE_ID)).fetch_optional(&mut *tx).await?;
         if run.is_some() {
             let sequence: i64 = sqlx::query_scalar(
@@ -425,7 +378,7 @@ impl CatalogRepository {
     }
 
     pub async fn get_agent_run(&self, run_id: Uuid) -> Result<AgentRun, RepositoryError> {
-        sqlx::query_as("SELECT id, conversation_id, schedule_id, origin, status, provider_base_url, model, started_at, finished_at, error_code, error_message, created_at FROM agent_runs WHERE id = $1 AND workspace_id = $2")
+        sqlx::query_as("SELECT id, conversation_id, origin, status, provider_base_url, model, started_at, finished_at, error_code, error_message, created_at FROM agent_runs WHERE id = $1 AND workspace_id = $2")
             .bind(run_id).bind(self.workspace_id.unwrap_or(Self::DEFAULT_WORKSPACE_ID)).fetch_optional(&self.pool).await?.ok_or(RepositoryError::NotFound("agent run"))
     }
 
@@ -609,7 +562,7 @@ impl CatalogRepository {
         &self,
         conversation_id: Uuid,
     ) -> Result<Vec<AgentRun>, RepositoryError> {
-        Ok(sqlx::query_as("SELECT r.id, r.conversation_id, r.schedule_id, r.origin, r.status, r.provider_base_url, r.model, r.started_at, r.finished_at, r.error_code, r.error_message, r.created_at FROM agent_runs r JOIN conversations c ON c.id = r.conversation_id WHERE r.conversation_id = $1 AND c.workspace_id = $2 ORDER BY r.created_at DESC")
+        Ok(sqlx::query_as("SELECT r.id, r.conversation_id, r.origin, r.status, r.provider_base_url, r.model, r.started_at, r.finished_at, r.error_code, r.error_message, r.created_at FROM agent_runs r JOIN conversations c ON c.id = r.conversation_id WHERE r.conversation_id = $1 AND c.workspace_id = $2 ORDER BY r.created_at DESC")
             .bind(conversation_id).bind(self.workspace_id.unwrap_or(Self::DEFAULT_WORKSPACE_ID)).fetch_all(&self.pool).await?)
     }
 
@@ -630,94 +583,6 @@ impl CatalogRepository {
             .bind(run_id).bind(self.workspace_id.unwrap_or(Self::DEFAULT_WORKSPACE_ID)).bind(after).fetch_all(&self.pool).await?)
     }
 
-    pub async fn create_agent_schedule(
-        &self,
-        conversation_id: Uuid,
-        actor: Uuid,
-        expression: &str,
-        next_run_at: DateTime<Utc>,
-    ) -> Result<AgentSchedule, RepositoryError> {
-        sqlx::query_as("INSERT INTO agent_schedules (id, workspace_id, conversation_id, initiated_by_user_id, cron_expression, next_run_at) SELECT $1, $2, $3, $4, $5, $6 WHERE EXISTS (SELECT 1 FROM conversations WHERE id = $3 AND workspace_id = $2) RETURNING id, conversation_id, initiated_by_user_id, cron_expression, timezone, enabled, next_run_at, last_run_at, created_at, updated_at")
-            .bind(Uuid::new_v4()).bind(self.workspace_id.unwrap_or(Self::DEFAULT_WORKSPACE_ID)).bind(conversation_id).bind(actor).bind(expression).bind(next_run_at).fetch_optional(&self.pool).await?
-            .ok_or(RepositoryError::NotFound("conversation"))
-    }
-
-    pub async fn list_agent_schedules(
-        &self,
-        conversation_id: Option<Uuid>,
-    ) -> Result<Vec<AgentSchedule>, RepositoryError> {
-        Ok(sqlx::query_as("SELECT id, conversation_id, initiated_by_user_id, cron_expression, timezone, enabled, next_run_at, last_run_at, created_at, updated_at FROM agent_schedules WHERE workspace_id = $1 AND ($2::uuid IS NULL OR conversation_id = $2) ORDER BY created_at DESC")
-            .bind(self.workspace_id.unwrap_or(Self::DEFAULT_WORKSPACE_ID)).bind(conversation_id).fetch_all(&self.pool).await?)
-    }
-
-    pub async fn update_agent_schedule(
-        &self,
-        schedule_id: Uuid,
-        expression: Option<&str>,
-        enabled: Option<bool>,
-        next_run_at: Option<DateTime<Utc>>,
-    ) -> Result<AgentSchedule, RepositoryError> {
-        sqlx::query_as("UPDATE agent_schedules SET cron_expression = COALESCE($3, cron_expression), enabled = COALESCE($4, enabled), next_run_at = CASE WHEN $4 = false THEN NULL WHEN $5 IS NOT NULL THEN $5 ELSE next_run_at END, updated_at = now() WHERE id = $1 AND workspace_id = $2 RETURNING id, conversation_id, initiated_by_user_id, cron_expression, timezone, enabled, next_run_at, last_run_at, created_at, updated_at")
-            .bind(schedule_id).bind(self.workspace_id.unwrap_or(Self::DEFAULT_WORKSPACE_ID)).bind(expression).bind(enabled).bind(next_run_at).fetch_optional(&self.pool).await?
-            .ok_or(RepositoryError::NotFound("agent schedule"))
-    }
-
-    pub async fn delete_agent_schedule(&self, schedule_id: Uuid) -> Result<(), RepositoryError> {
-        let result = sqlx::query("DELETE FROM agent_schedules WHERE id = $1 AND workspace_id = $2")
-            .bind(schedule_id)
-            .bind(self.workspace_id.unwrap_or(Self::DEFAULT_WORKSPACE_ID))
-            .execute(&self.pool)
-            .await?;
-        if result.rows_affected() == 0 {
-            return Err(RepositoryError::NotFound("agent schedule"));
-        }
-        Ok(())
-    }
-
-    pub async fn create_manual_agent_run(
-        &self,
-        schedule_id: Uuid,
-        actor: Uuid,
-        provider_base_url: &str,
-        model: &str,
-    ) -> Result<AgentRun, RepositoryError> {
-        sqlx::query_as("INSERT INTO agent_runs (id, workspace_id, conversation_id, schedule_id, origin, status, provider_base_url, model, initiated_by_user_id) SELECT $1, s.workspace_id, s.conversation_id, s.id, 'manual', 'queued', $3, $4, $2 FROM agent_schedules s WHERE s.id = $5 AND s.workspace_id = $6 RETURNING id, conversation_id, schedule_id, origin, status, provider_base_url, model, started_at, finished_at, error_code, error_message, created_at")
-            .bind(Uuid::new_v4()).bind(actor).bind(provider_base_url).bind(model).bind(schedule_id).bind(self.workspace_id.unwrap_or(Self::DEFAULT_WORKSPACE_ID)).fetch_optional(&self.pool).await?
-            .ok_or(RepositoryError::NotFound("agent schedule"))
-    }
-
-    /// Claims every due schedule under row locks. A due occurrence is advanced
-    /// before work starts, and an overlap is represented by a durable skipped run.
-    pub async fn claim_due_agent_schedules(
-        &self,
-        now: DateTime<Utc>,
-        provider_base_url: &str,
-        model: &str,
-    ) -> Result<Vec<(Uuid, Uuid)>, RepositoryError> {
-        let mut tx = self.pool.begin().await?;
-        let rows: Vec<(Uuid, Uuid, Uuid, String, Uuid)> = sqlx::query_as("SELECT s.id, s.workspace_id, s.conversation_id, s.cron_expression, s.initiated_by_user_id FROM agent_schedules s WHERE s.enabled AND s.initiated_by_user_id IS NOT NULL AND s.next_run_at <= $1 FOR UPDATE OF s SKIP LOCKED")
-            .bind(now).fetch_all(&mut *tx).await?;
-        let mut claimed = Vec::new();
-        for (schedule_id, workspace_id, conversation_id, cron, actor) in rows {
-            let next = crate::agent_service::next_utc_schedule_run(&cron, now).map_err(|_| {
-                RepositoryError::InvalidAgentState("stored schedule cron is invalid")
-            })?;
-            sqlx::query("UPDATE agent_schedules SET last_run_at = $2, next_run_at = $3, updated_at = now() WHERE id = $1").bind(schedule_id).bind(now).bind(next).execute(&mut *tx).await?;
-            let active: bool = sqlx::query_scalar("SELECT EXISTS (SELECT 1 FROM agent_runs WHERE schedule_id = $1 AND status IN ('queued', 'running', 'awaiting_approval'))").bind(schedule_id).fetch_one(&mut *tx).await?;
-            if active {
-                let run_id = Uuid::new_v4();
-                sqlx::query("INSERT INTO agent_runs (id, workspace_id, conversation_id, schedule_id, origin, status, provider_base_url, model, finished_at, error_code, error_message) VALUES ($1, $2, $3, $4, 'scheduled', 'skipped', '', '', now(), 'overlap', 'a prior scheduled run is still active')").bind(run_id).bind(workspace_id).bind(conversation_id).bind(schedule_id).execute(&mut *tx).await?;
-                sqlx::query("INSERT INTO agent_run_events (id, run_id, sequence, event_type, payload) VALUES ($1, $2, 0, 'schedule_skipped', $3)").bind(Uuid::new_v4()).bind(run_id).bind(serde_json::json!({"reason": "overlap"})).execute(&mut *tx).await?;
-            } else {
-                let run_id = Uuid::new_v4();
-                sqlx::query("INSERT INTO agent_runs (id, workspace_id, conversation_id, schedule_id, origin, status, provider_base_url, model, initiated_by_user_id) VALUES ($1, $2, $3, $4, 'scheduled', 'queued', $5, $6, $7)").bind(run_id).bind(workspace_id).bind(conversation_id).bind(schedule_id).bind(provider_base_url).bind(model).bind(actor).execute(&mut *tx).await?;
-                claimed.push((workspace_id, run_id));
-            }
-        }
-        tx.commit().await?;
-        Ok(claimed)
-    }
-
     pub async fn queued_agent_runs(&self) -> Result<Vec<(Uuid, Uuid)>, RepositoryError> {
         Ok(sqlx::query_as(
             "SELECT workspace_id, id FROM agent_runs WHERE status = 'queued' ORDER BY created_at",
@@ -736,16 +601,5 @@ impl CatalogRepository {
         sqlx::query_scalar("SELECT event.sequence FROM agent_run_events event JOIN agent_runs run ON run.id = event.run_id WHERE event.id = $1 AND event.run_id = $2 AND run.workspace_id = $3")
             .bind(event_id).bind(run_id).bind(self.workspace_id.unwrap_or(Self::DEFAULT_WORKSPACE_ID)).fetch_optional(&self.pool).await?
             .ok_or(RepositoryError::NotFound("agent run event"))
-    }
-}
-
-impl CatalogRepository {
-    pub async fn get_agent_schedule(
-        &self,
-        schedule_id: Uuid,
-    ) -> Result<AgentSchedule, RepositoryError> {
-        sqlx::query_as("SELECT id, conversation_id, initiated_by_user_id, cron_expression, timezone, enabled, next_run_at, last_run_at, created_at, updated_at FROM agent_schedules WHERE id = $1 AND workspace_id = $2")
-            .bind(schedule_id).bind(self.workspace_id.unwrap_or(Self::DEFAULT_WORKSPACE_ID)).fetch_optional(&self.pool).await?
-            .ok_or(RepositoryError::NotFound("agent schedule"))
     }
 }
