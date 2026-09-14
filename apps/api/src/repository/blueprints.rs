@@ -497,11 +497,11 @@ impl CatalogRepository {
                 continue;
             };
             if parts.len() == 1 {
-                if !matches!(first.value_type.as_str(), "relationship" | "file") {
+                if first.value_type != "relationship" {
                     resolved.push(TablePathAttribute {
                         code: path.to_owned(),
                         value_type: first.value_type.clone(),
-                        sortable: true,
+                        sortable: first.value_type != "file",
                     });
                 }
                 continue;

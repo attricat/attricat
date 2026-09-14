@@ -55,6 +55,7 @@ import { getExtensionRuntime } from '../extensions/api';
 import { extensionQueryKeys } from '../extensions/query-keys';
 import { extensionRuntimeRefetchInterval } from '../extensions/constants';
 import { ExtensionTableCell } from './ExtensionTableCell';
+import { ImageTableCell } from './ImageTableCell';
 import { explorerTableCellContextSchema } from './schemas';
 import { entityQueryKeys } from '../entities/query-keys';
 
@@ -352,6 +353,8 @@ export const ExplorerResultsTable = ({
                 value={primaryValue}
               />
             );
+            if (renderer?.id === 'catalog.table_image')
+              return <ImageTableCell value={primaryValue} />;
             if (!renderer || renderer.id.startsWith('catalog.'))
               return fallback;
             const context = explorerTableCellContextSchema.parse({

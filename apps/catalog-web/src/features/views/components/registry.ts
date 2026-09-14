@@ -5,6 +5,7 @@ import { relationshipListDisplayComponent } from './RelationshipListDisplay';
 import { relationshipListEditComponent } from './RelationshipListEdit';
 import { incomingRelationshipListDisplayComponent } from './IncomingRelationshipListDisplay';
 import { tableDisplayComponent } from './TableDisplay';
+import { tableImageComponent } from './TableImage';
 import { tableEditComponent } from './TableEdit';
 import { entityHeadingComponent } from './blocks/EntityHeadingConfig';
 import { relationshipHierarchyComponent } from './RelationshipHierarchy';
@@ -22,6 +23,7 @@ export const viewComponents: readonly ViewComponentDefinition[] = [
   relationshipListEditComponent,
   incomingRelationshipListDisplayComponent,
   tableDisplayComponent,
+  tableImageComponent,
   tableEditComponent,
   entityHeadingComponent,
   relationshipHierarchyComponent,

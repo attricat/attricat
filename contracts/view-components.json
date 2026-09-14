@@ -73,6 +73,14 @@
       "allowed_props": []
     },
     {
+      "id": "catalog.table_image",
+      "version": 1,
+      "capabilities": ["display"],
+      "placements": ["table"],
+      "value_types": ["file"],
+      "allowed_props": []
+    },
+    {
       "id": "catalog.table_edit",
       "version": 1,
       "capabilities": ["edit"],

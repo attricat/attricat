@@ -851,6 +851,58 @@ impl CatalogRepository {
             if parts.is_empty() || parts.len() > 4 {
                 continue;
             }
+            if parts.len() == 1 && expected_leaf_type == "file" {
+                let files = sqlx::query_as::<_, (Uuid, Value)>(
+                    r#"SELECT av.entity_id,
+                              jsonb_build_object(
+                                'id', f.id,
+                                'filename', f.display_filename,
+                                'mime_type', f.mime_type,
+                                'byte_size', f.byte_size,
+                                'sha256', f.sha256,
+                                'status', f.status,
+                                'variants', COALESCE(
+                                  jsonb_agg(jsonb_build_object(
+                                    'kind', fv.kind,
+                                    'mime_type', fv.mime_type,
+                                    'width', fv.width,
+                                    'height', fv.height,
+                                    'byte_size', fv.byte_size,
+                                    'sha256', fv.sha256
+                                  ) ORDER BY fv.kind) FILTER (WHERE fv.id IS NOT NULL),
+                                  '[]'::jsonb
+                                )
+                              )
+                       FROM attribute_values av
+                       JOIN attributes a ON a.id = av.attribute_id
+                        AND a.workspace_id = $3 AND a.deleted_at IS NULL
+                        AND a.code = $2 AND a.value_type = 'file'
+                       JOIN attribute_file_references r ON r.attribute_value_id = av.id
+                        AND r.workspace_id = $3
+                       JOIN files f ON f.id = r.file_id
+                        AND f.workspace_id = $3 AND f.deleted_at IS NULL
+                       LEFT JOIN file_variants fv ON fv.file_id = f.id AND fv.workspace_id = $3
+                      WHERE av.entity_id = ANY($1) AND av.workspace_id = $3 AND av.active
+                        AND av.context_id = (SELECT id FROM attribute_contexts WHERE workspace_id = $3 AND code = 'default')
+                      GROUP BY av.entity_id, f.id, f.display_filename, f.mime_type, f.byte_size,
+                               f.sha256, f.status, r.position
+                      ORDER BY av.entity_id, r.position"#,
+                )
+                .bind(&roots)
+                .bind(parts[0])
+                .bind(self.workspace_id.unwrap_or(Self::DEFAULT_WORKSPACE_ID))
+                .fetch_all(&self.pool)
+                .await?;
+                for (entity_id, file) in files {
+                    values_by_root
+                        .entry(entity_id)
+                        .or_default()
+                        .entry(path.clone())
+                        .or_default()
+                        .push(file);
+                }
+                continue;
+            }
             if parts.len() == 1 {
                 let compatible_ids: HashSet<_> = sqlx::query_scalar::<_, Uuid>(
                     r#"SELECT e.id

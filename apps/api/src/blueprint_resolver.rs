@@ -169,6 +169,28 @@ async fn validate_table_columns(
                 leaf_type.expect("relationship table path has a leaf")
             };
             if let Some(renderer) = &column.renderer {
+                if renderer.id == "catalog.table_image" {
+                    let image_attribute = (parts.len() == 1)
+                        .then(|| {
+                            compiled
+                                .attributes
+                                .iter()
+                                .find(|attribute| attribute.code == column.field)
+                        })
+                        .flatten();
+                    let valid_image_column = image_attribute.is_some_and(|attribute| {
+                        attribute.value_type == "file"
+                            && attribute.file_policy.as_ref().is_some_and(|policy| {
+                                policy.image_only && policy.cardinality == "one"
+                            })
+                    });
+                    if !valid_image_column {
+                        return Err(RepositoryError::InvalidBlueprintDefinition(format!(
+                            "table image renderer requires a direct image-only single-file attribute ('{}')",
+                            column.field
+                        )));
+                    }
+                }
                 validate_renderer(transaction, workspace_id, renderer, &value_type).await?;
             }
         }

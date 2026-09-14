@@ -195,15 +195,29 @@ label = "Category"
 ```
 
 `columns` is the current table syntax. Each column names either a local scalar
-field or a scalar field through at most three relationship hops. Column paths
+field, a renderer-compatible direct file field, or a scalar field through at
+most three relationship hops. Column paths
 must be unique; each relationship and the scalar leaf must exist.
 `label` is optional. The legacy `fields = ["title", "stock_on_hand"]`
 shorthand remains supported for local scalar fields, but cannot be combined
 with `columns`.
 
-A column can use an installed extension cell renderer. The renderer ID and
-positive version must match an enabled extension declaration for the resolved
-scalar value type, and `props` must be an object:
+A column can use a built-in `catalog.*` renderer or an installed extension cell
+renderer. Built-in `catalog.table_image@1` renders a direct image-only,
+single-file attribute as a thumbnail:
+
+```toml
+[[views.table.columns]]
+field = "main_photo"
+label = "Image"
+renderer = { id = "catalog.table_image", version = 1 }
+```
+
+It is not valid for relationship paths, multi-file attributes, or file
+attributes that are not `image_only = true`.
+
+An extension renderer ID and positive version must match an enabled extension
+declaration for the resolved scalar value type, and `props` must be an object:
 
 ```toml
 [[views.table.columns]]

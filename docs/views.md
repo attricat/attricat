@@ -28,9 +28,26 @@ label = "Product type"
 ```
 
 `columns` must be non-empty and have unique `field` paths. Every intermediate
-segment must be a relationship and the final segment must be scalar. Paths are
-resolved with each linked entity's pinned blueprint revision; incompatible
+segment must be a relationship and relationship-path leaves must be scalar.
+Direct columns may also be file attributes when a compatible renderer is used.
+Paths are resolved with each linked entity's pinned blueprint revision; incompatible
 historical revisions yield an empty cell. `label` is optional.
+
+Use `catalog.table_image@1` to render a direct, image-only single-file attribute
+as a thumbnail:
+
+```toml
+[[views.table.columns]]
+field = "main_photo"
+label = "Image"
+renderer = { id = "catalog.table_image", version = 1 }
+```
+
+The renderer is valid only when the attribute has `value_type = "file"`,
+`cardinality = "one"`, and `image_only = true`. It cannot be used on a
+relationship path or a multi-file/non-image attribute. Empty values display the
+normal unset state; files still processing or without a usable thumbnail show
+the thumbnail status UI.
 `fields = ["title", "price", "available"]` remains a legacy shorthand for
 local scalar columns; do not combine it with `columns`.
 

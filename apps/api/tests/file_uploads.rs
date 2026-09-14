@@ -27,6 +27,10 @@ kind = "entity"
 type = "dropdown_option"
 fields = ["image"]
 
+[views.table]
+type = "table"
+columns = [{ field = "image", renderer = { id = "catalog.table_image", version = 1 } }]
+
 [[attributes]]
 code = "image"
 value_type = "file"
@@ -140,6 +144,49 @@ async fn uploads_files_to_the_fake_store_and_persists_derived_metadata(pool: PgP
     assert_eq!(
         preview["values"]["image"]["value"][0]["filename"],
         "product.png"
+    );
+
+    let file_id = response["files"][0]["id"]
+        .as_str()
+        .unwrap()
+        .parse::<Uuid>()
+        .unwrap();
+    let object_key =
+        sqlx::query_scalar::<_, String>("SELECT original_key FROM files WHERE id = $1")
+            .bind(file_id)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+    sqlx::query("INSERT INTO file_variants (id, workspace_id, file_id, kind, mime_type, byte_size, object_key, sha256) SELECT $1, workspace_id, id, 'thumbnail', 'image/webp', byte_size, $2, sha256 FROM files WHERE id = $3")
+        .bind(Uuid::new_v4())
+        .bind(object_key)
+        .bind(file_id)
+        .execute(&pool)
+        .await
+        .unwrap();
+
+    let search: Value = client
+        .post(format!("{base_url}/v1/entities/search"))
+        .json(&serde_json::json!({
+            "blueprint": { "code": "file_upload_product" },
+            "filters": [],
+            "page": { "size": 25, "cursor": null }
+        }))
+        .send()
+        .await
+        .unwrap()
+        .error_for_status()
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    assert_eq!(
+        search["items"][0]["table_values"]["image"][0]["filename"],
+        "product.png"
+    );
+    assert_eq!(
+        search["items"][0]["table_values"]["image"][0]["variants"][0]["kind"],
+        "thumbnail"
     );
 
     client
