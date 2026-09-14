@@ -44,6 +44,7 @@ export const entityQueryKeys = {
       value: string | number | boolean;
     }[],
     allVersions = false,
+    relationshipFilters?: { field: string; selected_target_ids: string[] }[],
   ) =>
     [
       ...entityQueryKeys.searches(),
@@ -54,6 +55,7 @@ export const entityQueryKeys = {
       sort,
       filters,
       allVersions,
+      relationshipFilters,
     ] as const,
   relationshipTreeFacetChildren: (
     blueprint: string,

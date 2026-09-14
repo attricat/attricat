@@ -67,6 +67,7 @@ export const searchEntities = (
   sort?: { field: string; direction: 'asc' | 'desc' },
   includeTotal = false,
   filters: import('./schemas').EntitySearchFilter[] = [],
+  relationshipFilters: { field: string; selected_target_ids: string[] }[] = [],
 ) => {
   const payload = searchEntitiesRequestSchema.parse({
     blueprint: {
@@ -75,6 +76,9 @@ export const searchEntities = (
     },
     query,
     filters,
+    ...(relationshipFilters.length
+      ? { relationship_filters: relationshipFilters }
+      : {}),
     relationship_tree_facets: relationshipTreeFacets,
     sort,
     ...(includeTotal ? { include_total: true } : {}),

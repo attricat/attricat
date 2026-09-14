@@ -1,19 +1,22 @@
 import {
+  Box,
   Button,
-  CircularProgress,
+  Chip,
   MenuItem,
+  List,
+  ListItem,
   Paper,
   Stack,
   TextField,
   Typography,
 } from '@mui/material';
-import { useQuery } from '@tanstack/react-query';
+import { useInfiniteQuery } from '@tanstack/react-query';
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { Attribute, Blueprint } from '../entities/api';
 import type { AttributeContext } from '../contexts/api';
 import { defaultContextCode } from '../contexts/constants';
-import { getBlueprintByCode } from '../entities/api';
+import { searchEntities } from '../entities/api';
 import { entityQueryKeys } from '../entities/query-keys';
 import { RelationshipSelectorDialog } from '../../components/RelationshipSelectorDialog';
 import {
@@ -23,7 +26,8 @@ import {
 import { RelationshipSelectionPills } from '../entities/components/RelationshipSelectionPills';
 import { useRelationshipSelectionLabels } from '../entities/components/useRelationshipSelectionLabels';
 import { ExplorerAttributeFilters } from './ExplorerAttributeFilters';
-import { RelationshipTreeFacet } from './RelationshipTreeFacet';
+import { LoadMoreButton } from '../../components/LoadMoreButton';
+import { dropdownOptionLabel, displayLabel } from '../entities/entity-display';
 import type { AttributeFilter } from './search';
 
 export type ExplorerRelationshipFacet = {
@@ -39,14 +43,14 @@ type Props = {
   contextCode: string;
   facets: ExplorerRelationshipFacet[];
   attributes: Attribute[];
+  relationshipAttributes: Attribute[];
   pathAttributes?: { code: string; value_type: Attribute['value_type'] }[];
   attributeFilters: AttributeFilter[];
-  query?: string;
-  version?: number;
   fullHeight?: boolean;
   onBlueprintChange?: (blueprint: string) => void;
   onContextChange: (contextCode: string) => void;
   onAddAttributeFilter: (filter: AttributeFilter) => void;
+  onAddRelationshipFilter: (attribute: Attribute) => void;
   onRemoveAttributeFilter: (index: number) => void;
   onUpdateAttributeFilter: (index: number, filter: AttributeFilter) => void;
   onUpdate: (
@@ -55,21 +59,22 @@ type Props = {
       hierarchy?: string;
       context?: string;
       selectedIds?: string[];
+      targetBlueprint?: string;
     },
   ) => void;
 };
 
-type FacetProps = Pick<
-  Props,
-  'blueprint' | 'contextCode' | 'contexts' | 'onUpdate' | 'query' | 'version'
-> & {
+type FacetProps = Pick<Props, 'onUpdate'> & {
   facet: ExplorerRelationshipFacet;
   label: string;
+  onInitialPickerClose?: () => void;
+  openOnMount?: boolean;
 };
 
 export const ExplorerFacetSidebar = ({
   attributeFilters,
   attributes,
+  relationshipAttributes,
   blueprint,
   blueprints = [],
   contexts,
@@ -77,16 +82,16 @@ export const ExplorerFacetSidebar = ({
   facets,
   fullHeight = false,
   onAddAttributeFilter,
+  onAddRelationshipFilter,
   onRemoveAttributeFilter,
   onUpdateAttributeFilter,
   onBlueprintChange,
   pathAttributes,
-  query,
-  version,
   onContextChange,
   onUpdate,
 }: Props) => {
   const { t } = useTranslation();
+  const [relationshipToOpen, setRelationshipToOpen] = useState<string>();
   return (
     <Paper
       component="aside"
@@ -128,7 +133,7 @@ export const ExplorerFacetSidebar = ({
         }}
         variant="overline"
       >
-        {t('explorer.contextAndRelationshipFilters')}
+        {t('explorer.filters')}
       </Typography>
       <Stack spacing={1.5} sx={{ mt: 1 }}>
         <TextField
@@ -149,11 +154,8 @@ export const ExplorerFacetSidebar = ({
         </TextField>
         {facets.map((facet) => (
           <Facet
-            blueprint={blueprint}
-            contextCode={contextCode}
-            contexts={contexts}
             facet={facet}
-            key={facet.sourceRelationship.code}
+            key={`${facet.sourceRelationship.code}-${relationshipToOpen === facet.sourceRelationship.code}`}
             label={
               blueprints.find(
                 (item) =>
@@ -162,101 +164,58 @@ export const ExplorerFacetSidebar = ({
               facet.sourceRelationship.target_blueprint_code ??
               facet.sourceRelationship.code
             }
+            onInitialPickerClose={() => setRelationshipToOpen(undefined)}
             onUpdate={onUpdate}
-            query={query}
-            version={version}
+            openOnMount={relationshipToOpen === facet.sourceRelationship.code}
           />
         ))}
+        <ExplorerAttributeFilters
+          attributes={attributes}
+          blueprintName={
+            blueprints.find((item) => item.code === blueprint)?.name ?? blueprint
+          }
+          filters={attributeFilters}
+          pathAttributes={pathAttributes}
+          relationshipAttributes={relationshipAttributes}
+          onAdd={onAddAttributeFilter}
+          onAddRelationship={(attribute) => {
+            setRelationshipToOpen(attribute.code);
+            onAddRelationshipFilter(attribute);
+          }}
+          onRemove={onRemoveAttributeFilter}
+          onUpdate={onUpdateAttributeFilter}
+        />
       </Stack>
-      <Typography
-        color="text.secondary"
-        component="h2"
-        sx={{ display: 'block', fontWeight: 700, lineHeight: 1.5, mt: 3 }}
-        variant="overline"
-      >
-        {t('explorer.attributeFilters')}
-      </Typography>
-      <ExplorerAttributeFilters
-        attributes={attributes}
-        blueprintName={
-          blueprints.find((item) => item.code === blueprint)?.name ?? blueprint
-        }
-        filters={attributeFilters}
-        pathAttributes={pathAttributes}
-        onAdd={onAddAttributeFilter}
-        onRemove={onRemoveAttributeFilter}
-        onUpdate={onUpdateAttributeFilter}
-      />
     </Paper>
   );
 };
 
 const Facet = ({
-  blueprint,
-  contextCode,
-  contexts,
   facet,
   label,
+  onInitialPickerClose,
   onUpdate,
-  query,
-  version,
+  openOnMount = false,
 }: FacetProps) => {
   const { t } = useTranslation();
-  const [open, setOpen] = useState(false);
-  const [draftIds, setDraftIds] = useState<string[]>([]);
-  const [draftHierarchy, setDraftHierarchy] = useState(
-    facet.hierarchyField ?? '',
-  );
+  const [open, setOpen] = useState(openOnMount);
   const selectionLabels = useRelationshipSelectionLabels(
     facet.sourceRelationship.target_blueprint_code,
     facet.selectedIds,
   );
-  const targetBlueprint = useQuery({
-    queryKey: entityQueryKeys.blueprintByCode(
-      facet.sourceRelationship.target_blueprint_code ?? undefined,
-      undefined,
-    ),
-    queryFn: ({ signal }) =>
-      getBlueprintByCode(
-        facet.sourceRelationship.target_blueprint_code!,
-        undefined,
-        signal,
-      ),
-    enabled: open,
-  });
-  const hierarchyFields = (targetBlueprint.data?.attributes ?? [])
-    .filter(
-      (attribute) =>
-        attribute.value_type === 'relationship' &&
-        attribute.target_blueprint_code ===
-          facet.sourceRelationship.target_blueprint_code,
-    )
-    .map((attribute) => attribute.code);
-  const hierarchyField = hierarchyFields.includes(draftHierarchy)
-    ? draftHierarchy
-    : hierarchyFields[0];
-
-  const singleSelect = facet.sourceRelationship.cardinality === 'one';
+  const singleSelect = false;
   const openSelector = () => {
-    setDraftIds(
-      singleSelect ? facet.selectedIds.slice(0, 1) : facet.selectedIds,
-    );
-    setDraftHierarchy(facet.hierarchyField ?? '');
     setOpen(true);
   };
-
   return (
-    <Stack spacing={0.5}>
-      <Stack spacing={0.5}>
-        <Stack
-          direction="row"
-          spacing={0.5}
-          sx={{
-            alignItems: 'center',
-            color:
-              facet.selectedIds.length > 0 ? 'primary.main' : 'text.secondary',
-          }}
-        >
+    <>
+      {facet.selectedIds.length > 0 && (
+        <Stack spacing={0.5}>
+          <Stack
+            direction="row"
+            spacing={0.5}
+            sx={{ alignItems: 'center', color: 'primary.main' }}
+          >
           <RelationshipIcon sx={{ fontSize: 15 }} />
           <Typography
             color="inherit"
@@ -266,94 +225,168 @@ const Facet = ({
           >
             {label}
           </Typography>
+          </Stack>
+          <RelationshipSelectionPills
+            action={
+              <Button
+                aria-label={label}
+                color="primary"
+                onClick={openSelector}
+                size="small"
+                startIcon={<RelationshipPickerIcon fontSize="small" />}
+                sx={{
+                  borderRadius: 999,
+                  flexShrink: 0,
+                  height: 24,
+                  minHeight: 24,
+                  px: 1,
+                  '& .MuiButton-startIcon': { mr: 0.5 },
+                }}
+                variant="outlined"
+              >
+                {t('entities.openRelationshipSelector')}
+              </Button>
+            }
+            ids={facet.selectedIds}
+            labels={selectionLabels}
+            onRemove={(id) =>
+              onUpdate(facet.sourceRelationship.code, {
+                selectedIds: facet.selectedIds.filter(
+                  (selectedId) => selectedId !== id,
+                ),
+              })
+            }
+          />
         </Stack>
-        <RelationshipSelectionPills
-          action={
-            <Button
-              aria-label={label}
-              color="primary"
-              onClick={openSelector}
-              size="small"
-              startIcon={<RelationshipPickerIcon fontSize="small" />}
-              sx={{
-                borderRadius: 999,
-                flexShrink: 0,
-                height: 24,
-                minHeight: 24,
-                px: 1,
-                '& .MuiButton-startIcon': { mr: 0.5 },
-              }}
-              variant="outlined"
-            >
-              {t('entities.openRelationshipSelector')}
-            </Button>
-          }
-          ids={facet.selectedIds}
-          labels={selectionLabels}
-          onRemove={(id) =>
-            onUpdate(facet.sourceRelationship.code, {
-              selectedIds: facet.selectedIds.filter(
-                (selectedId) => selectedId !== id,
-              ),
-            })
-          }
-        />
-      </Stack>
+      )}
       <RelationshipSelectorDialog
         applyLabel={t('entities.applyRelationshipSelection')}
         cancelLabel={t('entities.cancelRelationshipSelection')}
         clearLabel={t('entities.clearRelationshipSelection')}
+        hideActions
         closeLabel={t('entities.closeRelationshipSelector')}
         onApply={() => {
-          onUpdate(facet.sourceRelationship.code, {
-            ...(hierarchyField ? { hierarchy: hierarchyField } : {}),
-            selectedIds: singleSelect ? draftIds.slice(0, 1) : draftIds,
-          });
           setOpen(false);
+          onInitialPickerClose?.();
         }}
-        onClear={() => setDraftIds([])}
-        onClose={() => setOpen(false)}
+        onClear={() => undefined}
+        onClose={() => {
+          setOpen(false);
+          onInitialPickerClose?.();
+        }}
         open={open}
         selectedLabel={t('entities.relationshipSelected', {
-          count: draftIds.length,
+          count: facet.selectedIds.length,
         })}
-        title={t(
-          singleSelect
-            ? 'entities.selectOneRelationship'
-            : 'entities.selectRelationships',
-          { blueprint: label },
-        )}
+        title={t('entities.selectRelationships', { blueprint: label })}
+        topActionLabel={t('explorer.done')}
       >
-        {targetBlueprint.isPending ? (
-          <CircularProgress
-            aria-label={t('explorer.loadingFacetOptions')}
-            enableTrackSlot
-            size={20}
-          />
-        ) : targetBlueprint.isError ? (
-          <Typography color="error" variant="body2">
-            {targetBlueprint.error.message}
-          </Typography>
-        ) : (
-          <RelationshipTreeFacet
-            blueprint={blueprint}
-            contextCode={contextCode}
-            contexts={contexts}
-            hierarchyField={hierarchyField}
-            hierarchyFields={hierarchyFields}
-            onHierarchyFieldChange={(hierarchy) => {
-              setDraftHierarchy(hierarchy);
-              setDraftIds([]);
-            }}
-            onSelectedIdsChange={setDraftIds}
-            query={query}
-            selectedIds={draftIds}
-            singleSelect={singleSelect}
-            sourceField={facet.sourceRelationship.code}
-            version={version}
-          />
-        )}
+        <RelationshipTargetPicker
+          onSelectedIdsChange={(ids) =>
+            onUpdate(facet.sourceRelationship.code, { selectedIds: ids })
+          }
+          selectedIds={facet.selectedIds}
+          singleSelect={singleSelect}
+          targetBlueprint={facet.sourceRelationship.target_blueprint_code!}
+        />
       </RelationshipSelectorDialog>
+    </>
+  );
+};
+
+const RelationshipTargetPicker = ({
+  onSelectedIdsChange,
+  selectedIds,
+  singleSelect,
+  targetBlueprint,
+}: {
+  onSelectedIdsChange: (ids: string[]) => void;
+  selectedIds: string[];
+  singleSelect: boolean;
+  targetBlueprint: string;
+}) => {
+  const { t } = useTranslation();
+  const [query, setQuery] = useState('');
+  const targets = useInfiniteQuery({
+    queryKey: entityQueryKeys.relationshipTargets(targetBlueprint, query),
+    queryFn: ({ pageParam, signal }) =>
+      searchEntities(targetBlueprint, undefined, query, pageParam, undefined, signal),
+    initialPageParam: null as string | null,
+    getNextPageParam: (page) => page.next_cursor,
+  });
+  const options = targets.data?.pages.flatMap((page) => page.items) ?? [];
+  const selectedLabels = useRelationshipSelectionLabels(
+    targetBlueprint,
+    selectedIds,
+  );
+  const views = targets.data?.pages[0]?.blueprint.blueprint.views ?? {};
+  const toggle = (id: string) =>
+    onSelectedIdsChange(
+      singleSelect
+        ? selectedIds[0] === id
+          ? []
+          : [id]
+        : selectedIds.includes(id)
+          ? selectedIds.filter((selectedId) => selectedId !== id)
+          : [...selectedIds, id],
+    );
+  return (
+    <Stack spacing={1.5}>
+      <TextField
+        fullWidth
+        label={t('entities.searchRelationshipOptions')}
+        onChange={(event) => setQuery(event.target.value)}
+        value={query}
+      />
+      {selectedIds.length > 0 && (
+        <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5 }}>
+          {selectedIds.map((id) => (
+            <Chip
+              color="primary"
+              key={id}
+              label={selectedLabels.get(id) ?? id}
+              onDelete={() => toggle(id)}
+              size="small"
+              variant="outlined"
+            />
+          ))}
+        </Box>
+      )}
+      <List dense disablePadding>
+        {options.map((target) => {
+          const label =
+            dropdownOptionLabel(target.preview, views) ??
+            displayLabel(target.display, target.id);
+          return (
+            <ListItem
+              key={target.id}
+              secondaryAction={
+                <Button onClick={() => toggle(target.id)} size="small">
+                  {selectedIds.includes(target.id)
+                    ? t('entities.removeRelationshipOption')
+                    : t('entities.selectRelationshipOption')}
+                </Button>
+              }
+            >
+              <Typography variant="body2">{label}</Typography>
+            </ListItem>
+          );
+        })}
+      </List>
+      {targets.hasNextPage && (
+        <LoadMoreButton
+          isLoading={targets.isFetchingNextPage}
+          onLoadMore={() => void targets.fetchNextPage()}
+        />
+      )}
+      {targets.isPending && (
+        <Typography variant="body2">{t('entities.loadingOptions')}</Typography>
+      )}
+      {targets.isError && (
+        <Typography color="error" variant="body2">
+          {targets.error.message}
+        </Typography>
+      )}
     </Stack>
   );
 };

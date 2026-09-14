@@ -7,11 +7,13 @@ use crate::{
     constants::{DEFAULT_PAGE_SIZE, DEFAULT_PREVIEW_RELATIONSHIP_ITEMS},
     model::{
         Entity, EntityIdentity, EntityPreviewPage, EntityPreviewResponse, EntitySearchResponse,
-        RelationshipTreeFacetChildrenRequest, RelationshipTreeFacetChildrenResponse,
-        ResolvedEntityPreviewResponse, SearchEntitiesRequest, SearchFilter,
-        SearchResultVersionScope,
+        RelationshipFilter, RelationshipTreeFacetChildrenRequest,
+        RelationshipTreeFacetChildrenResponse, ResolvedEntityPreviewResponse,
+        SearchEntitiesRequest, SearchFilter, SearchResultVersionScope,
     },
-    repository::{EntitySearchFilter, EntitySearchSort, decode_search_cursor},
+    repository::{
+        EntityRelationshipFilter, EntitySearchFilter, EntitySearchSort, decode_search_cursor,
+    },
 };
 use axum::{
     Json,
@@ -223,6 +225,11 @@ pub(super) async fn search_entity_previews(
     for filter in &input.filters {
         filters.push(resolve_search_filter(&repository, &search_blueprint, filter).await?);
     }
+    let mut relationship_filters = Vec::with_capacity(input.relationship_filters.len());
+    for filter in &input.relationship_filters {
+        relationship_filters
+            .push(resolve_relationship_filter(&repository, &search_blueprint, filter).await?);
+    }
     let candidate_started = Instant::now();
     // An unfiltered current-version search is already constrained by the page query.
     // Avoid materializing every entity ID only to pass it back as `id = ANY(...)`.
@@ -255,6 +262,16 @@ pub(super) async fn search_entity_previews(
             .instrument(tracing::info_span!(
                 "sql.operation",
                 label = "attribute-filter"
+            ))
+            .await?;
+        matching = Some(intersect_entity_ids(matching, filtered));
+    }
+    if !relationship_filters.is_empty() {
+        let filtered = repository
+            .filter_relationship_entity_ids(current.blueprint.id, selected, &relationship_filters)
+            .instrument(tracing::info_span!(
+                "sql.operation",
+                label = "relationship-filter"
             ))
             .await?;
         matching = Some(intersect_entity_ids(matching, filtered));
@@ -644,6 +661,59 @@ async fn resolve_search_filter(
         operator: filter.operator.clone(),
         value_type: value_type.to_owned(),
         value,
+    })
+}
+
+async fn resolve_relationship_filter(
+    repository: &crate::repository::CatalogRepository,
+    blueprint: &crate::model::BlueprintWithAttributes,
+    filter: &RelationshipFilter,
+) -> Result<EntityRelationshipFilter, ApiError> {
+    if filter.selected_target_ids.is_empty() {
+        return Err(ApiError::invalid_input(
+            "relationship_filters.selected_target_ids must not be empty".to_owned(),
+        ));
+    }
+    let path: Vec<_> = filter.field.split('.').collect();
+    if path.is_empty() || path.len() > 3 || path.iter().any(|segment| segment.is_empty()) {
+        return Err(ApiError::invalid_input(
+            "relationship_filters.field must contain one to three relationship hops".to_owned(),
+        ));
+    }
+    let mut current = blueprint.clone();
+    let mut relationship_path = Vec::with_capacity(path.len());
+    for relationship_name in path {
+        let relationship = current
+            .attributes
+            .iter()
+            .find(|attribute| {
+                attribute.code == relationship_name && attribute.value_type == "relationship"
+            })
+            .ok_or_else(|| {
+                ApiError::invalid_input(format!(
+                    "relationship_filters.field segment '{}' is not a relationship",
+                    relationship_name
+                ))
+            })?;
+        let target = relationship
+            .target_blueprint_code
+            .as_deref()
+            .ok_or_else(|| {
+                ApiError::invalid_input(format!(
+                    "relationship_filters.field relationship '{}' has no target blueprint",
+                    relationship_name
+                ))
+            })?;
+        relationship_path.push(relationship.code.clone());
+        current = repository
+            .get_blueprint_by_code(target)
+            .await?
+            .ok_or_else(|| ApiError::not_found("target blueprint"))?;
+    }
+    Ok(EntityRelationshipFilter {
+        field: filter.field.clone(),
+        relationship_path,
+        selected_target_ids: filter.selected_target_ids.clone(),
     })
 }
 

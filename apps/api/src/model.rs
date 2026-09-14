@@ -367,6 +367,9 @@ pub struct SearchEntitiesRequest {
     pub query: Option<String>,
     #[serde(default)]
     pub filters: Vec<SearchFilter>,
+    /// Filters source entities by targets reached through one to three relationship hops.
+    #[serde(default)]
+    pub relationship_filters: Vec<RelationshipFilter>,
     /// All requested tags must be present. System tags are outside blueprint data.
     #[serde(default)]
     pub system_tags: Vec<String>,
@@ -454,6 +457,14 @@ pub struct SearchFilter {
     pub field: String,
     pub operator: String,
     pub value: Value,
+}
+
+#[derive(Clone, Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct RelationshipFilter {
+    pub field: String,
+    #[serde(default)]
+    pub selected_target_ids: Vec<Uuid>,
 }
 
 #[derive(Clone, Debug, Deserialize)]

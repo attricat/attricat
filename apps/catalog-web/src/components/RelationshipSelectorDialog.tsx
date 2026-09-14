@@ -23,10 +23,12 @@ type Props = {
   closeLabel: string;
   onApply: () => void;
   onClear: () => void;
+  hideActions?: boolean;
   onClose: () => void;
   open: boolean;
   selectedLabel: string;
   title: string;
+  topActionLabel?: string;
 };
 
 export const RelationshipSelectorDialog = ({
@@ -39,9 +41,11 @@ export const RelationshipSelectorDialog = ({
   onApply,
   onClear,
   onClose,
+  hideActions = false,
   open,
   selectedLabel,
   title,
+  topActionLabel,
 }: Props) => {
   const theme = useTheme();
   const fullScreen = useMediaQuery(theme.breakpoints.down('sm'));
@@ -77,29 +81,36 @@ export const RelationshipSelectorDialog = ({
               {selectedLabel}
             </Typography>
           </Box>
+          {topActionLabel && (
+            <Button onClick={onApply} size="small" variant="contained">
+              {topActionLabel}
+            </Button>
+          )}
           <IconButton aria-label={closeLabel} onClick={onClose}>
             <CloseIcon />
           </IconButton>
         </Stack>
       </DialogTitle>
       <DialogContent dividers>{children}</DialogContent>
-      <DialogActions sx={{ justifyContent: 'space-between' }}>
-        <Button color="inherit" onClick={onClear}>
-          {clearLabel}
-        </Button>
-        <Stack direction="row" spacing={1}>
-          <Button color="inherit" onClick={onClose}>
-            {cancelLabel}
+      {!hideActions && (
+        <DialogActions sx={{ justifyContent: 'space-between' }}>
+          <Button color="inherit" onClick={onClear}>
+            {clearLabel}
           </Button>
-          <Button
-            disabled={applyDisabled}
-            onClick={onApply}
-            variant="contained"
-          >
-            {applyLabel}
-          </Button>
-        </Stack>
-      </DialogActions>
+          <Stack direction="row" spacing={1}>
+            <Button color="inherit" onClick={onClose}>
+              {cancelLabel}
+            </Button>
+            <Button
+              disabled={applyDisabled}
+              onClick={onApply}
+              variant="contained"
+            >
+              {applyLabel}
+            </Button>
+          </Stack>
+        </DialogActions>
+      )}
     </Dialog>
   );
 };

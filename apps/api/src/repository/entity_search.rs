@@ -40,6 +40,13 @@ pub(crate) struct EntitySearchSort {
 }
 
 #[derive(Clone, Debug, serde::Serialize)]
+pub(crate) struct EntityRelationshipFilter {
+    pub field: String,
+    pub relationship_path: Vec<String>,
+    pub selected_target_ids: Vec<Uuid>,
+}
+
+#[derive(Clone, Debug, serde::Serialize)]
 pub(crate) struct EntitySearchFilter {
     pub field: String,
     pub relationship_path: Vec<String>,
@@ -239,6 +246,69 @@ impl CatalogRepository {
                 .collect(),
             next_cursor,
         })
+    }
+
+    /// Resolves roots whose active default-context relationship values reach a selected
+    /// target at the exact requested relationship path depth.
+    pub(crate) async fn filter_relationship_entity_ids(
+        &self,
+        blueprint_id: Uuid,
+        blueprint_version: Option<i64>,
+        filters: &[EntityRelationshipFilter],
+    ) -> Result<Vec<Uuid>, RepositoryError> {
+        let mut matching: Option<HashSet<Uuid>> = None;
+        for filter in filters {
+            if filter.selected_target_ids.is_empty() {
+                continue;
+            }
+            let ids = sqlx::query_scalar::<_, Uuid>(
+                r#"WITH RECURSIVE reached(root_id, current_id, depth) AS (
+                       SELECT e.id, e.id, 0
+                         FROM entities e
+                        WHERE e.blueprint_id = $1
+                          AND ($2::bigint IS NULL OR e.blueprint_version = $2)
+                          AND e.workspace_id = $5 AND e.deleted_at IS NULL
+                       UNION ALL
+                       SELECT reached.root_id, av.relationship_target_entity_id, reached.depth + 1
+                         FROM reached
+                         JOIN entities source ON source.id = reached.current_id
+                          AND source.workspace_id = $5 AND source.deleted_at IS NULL
+                         JOIN attributes relationship ON relationship.blueprint_id = source.blueprint_id
+                          AND relationship.blueprint_version = source.blueprint_version
+                          AND relationship.workspace_id = $5
+                          AND relationship.code = $3[reached.depth + 1]
+                          AND relationship.value_type = 'relationship'
+                         JOIN attribute_values av ON av.entity_id = source.id
+                          AND av.workspace_id = $5
+                          AND av.attribute_id = relationship.id AND av.active
+                          AND av.context_id = (SELECT id FROM attribute_contexts WHERE workspace_id = $5 AND code = 'default')
+                          AND av.relationship_target_entity_id IS NOT NULL
+                         JOIN entities target ON target.id = av.relationship_target_entity_id
+                          AND target.workspace_id = $5 AND target.deleted_at IS NULL
+                         JOIN blueprints target_blueprint ON target_blueprint.id = target.blueprint_id
+                          AND target_blueprint.version = target.blueprint_version
+                          AND target_blueprint.code = relationship.target_blueprint_code
+                        WHERE reached.depth < cardinality($3)
+                   )
+                   SELECT DISTINCT root_id
+                     FROM reached
+                    WHERE depth = cardinality($3) AND current_id = ANY($4)"#,
+            )
+            .bind(blueprint_id)
+            .bind(blueprint_version)
+            .bind(&filter.relationship_path)
+            .bind(&filter.selected_target_ids)
+            .bind(self.workspace_id.unwrap_or(Self::DEFAULT_WORKSPACE_ID))
+            .fetch_all(&self.pool)
+            .await?
+            .into_iter()
+            .collect::<HashSet<_>>();
+            matching = Some(match matching {
+                Some(current) => current.intersection(&ids).copied().collect(),
+                None => ids,
+            });
+        }
+        Ok(matching.unwrap_or_default().into_iter().collect())
     }
 
     /// Resolves entities which satisfy every typed scalar filter in the default context.

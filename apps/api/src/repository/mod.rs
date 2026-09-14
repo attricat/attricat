@@ -64,7 +64,9 @@ pub use agents::{
 };
 pub(crate) use audit_events::{AuditEventFilter, AuditEventPage};
 pub use domain_events::{EventConsumer, EventDelivery, EventPublisher, FailedEventDelivery};
-pub(crate) use entity_search::{EntitySearchFilter, EntitySearchSort, decode_search_cursor};
+pub(crate) use entity_search::{
+    EntityRelationshipFilter, EntitySearchFilter, EntitySearchSort, decode_search_cursor,
+};
 pub use extension_registries::ExtensionRegistrySource;
 pub use extension_scoped_configuration::ExtensionConfigurationScope;
 pub use extension_storage::{

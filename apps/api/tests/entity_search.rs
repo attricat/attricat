@@ -582,5 +582,45 @@ target_blueprint = "facet_category"
     assert_eq!(flat_root["count"], 1);
     assert_eq!(flat_root["has_children"], false);
 
+    let relationship_path_search: Value = client
+        .post(format!("{base_url}/v1/entities/search"))
+        .json(&json!({
+            "blueprint": { "code": "facet_product" },
+            "relationship_filters": [{
+                "field": "categories.parent",
+                "selected_target_ids": [alternate_root["id"]]
+            }]
+        }))
+        .send()
+        .await
+        .unwrap()
+        .error_for_status()
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    assert_eq!(
+        relationship_path_search["items"].as_array().unwrap().len(),
+        1
+    );
+    assert_eq!(relationship_path_search["items"][0]["id"], first["id"]);
+
+    let invalid_relationship_path = client
+        .post(format!("{base_url}/v1/entities/search"))
+        .json(&json!({
+            "blueprint": { "code": "facet_product" },
+            "relationship_filters": [{
+                "field": "categories.name",
+                "selected_target_ids": [root["id"]]
+            }]
+        }))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(
+        invalid_relationship_path.status(),
+        StatusCode::UNPROCESSABLE_ENTITY
+    );
+
     server.abort();
 }

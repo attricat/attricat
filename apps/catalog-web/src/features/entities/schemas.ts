@@ -507,6 +507,14 @@ export const searchEntitiesRequestSchema = z.object({
   }),
   query: z.string(),
   filters: z.array(entitySearchFilterSchema),
+  relationship_filters: z
+    .array(
+      z.object({
+        field: z.string().min(1),
+        selected_target_ids: z.array(uuidSchema).min(1),
+      }),
+    )
+    .optional(),
   system_tags: z.array(z.string()).optional(),
   relationship_tree_facets: z
     .array(

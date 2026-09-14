@@ -3,25 +3,32 @@ import { Box, Chip } from '@mui/material';
 import { useTranslation } from 'react-i18next';
 import type { AttributeFilter } from './search';
 
+export type ActiveExplorerFilter =
+  | {
+      field: string;
+      kind: 'relationship';
+      labels?: string[];
+      selectedCount: number;
+    }
+  | {
+      filter: AttributeFilter;
+      index: number;
+      kind: 'attribute';
+    };
+
 type Props = {
-  attributeFilters: AttributeFilter[];
-  relationshipFilters: {
-    field: string;
-    labels?: string[];
-    selectedCount: number;
-  }[];
+  filters: ActiveExplorerFilter[];
   onRemoveAttribute: (index: number) => void;
   onRemoveRelationship: (field: string) => void;
 };
 
 export const ActiveExplorerFilters = ({
-  attributeFilters,
-  relationshipFilters,
+  filters,
   onRemoveAttribute,
   onRemoveRelationship,
 }: Props) => {
   const { t } = useTranslation();
-  if (!attributeFilters.length && !relationshipFilters.length) return null;
+  if (!filters.length) return null;
 
   return (
     <Box
@@ -34,59 +41,51 @@ export const ActiveExplorerFilters = ({
         minWidth: 0,
       }}
     >
-      {relationshipFilters.map((filter) => {
-        const label = filter.labels
-          ? t('explorer.relationshipFilterLabel', {
-              field: filter.field,
-              value: filter.labels
-                .map((label) => JSON.stringify(label))
-                .join(', '),
-            })
-          : t('explorer.relationshipFilterPill', {
-              field: filter.field,
-              count: filter.selectedCount,
-            });
+      {filters.map((filter) => {
+        const relationship = filter.kind === 'relationship';
+        const value = relationship
+          ? filter.labels
+            ? filter.labels.map((label) => JSON.stringify(label)).join(', ')
+            : undefined
+          : typeof filter.filter.value === 'boolean'
+            ? t(filter.filter.value ? 'explorer.true' : 'explorer.false')
+            : String(filter.filter.value);
+        const label = relationship
+          ? value === undefined
+            ? t('explorer.relationshipFilterPill', {
+                field: filter.field,
+                count: filter.selectedCount,
+              })
+            : t('explorer.relationshipFilterLabel', {
+                field: filter.field,
+                value,
+              })
+          : `${filter.filter.field} ${t(
+              `explorer.filterOperatorSymbols.${filter.filter.operator}`,
+            )} ${JSON.stringify(value)}`;
         return (
           <Chip
             deleteIcon={
               <CancelIcon
-                aria-label={t('explorer.removeRelationshipFilter', {
-                  filter: label,
-                })}
+                aria-label={t(
+                  relationship
+                    ? 'explorer.removeRelationshipFilter'
+                    : 'explorer.removeAttributeFilter',
+                  { filter: label },
+                )}
               />
             }
-            key={filter.field}
-            label={label}
-            onDelete={() => onRemoveRelationship(filter.field)}
-            size="small"
-            sx={{
-              maxWidth: '100%',
-              '& .MuiChip-label': { overflow: 'hidden' },
-            }}
-            title={label}
-          />
-        );
-      })}
-      {attributeFilters.map((filter, index) => {
-        const value =
-          typeof filter.value === 'boolean'
-            ? t(filter.value ? 'explorer.true' : 'explorer.false')
-            : String(filter.value);
-        const label = `${filter.field} ${t(
-          `explorer.filterOperatorSymbols.${filter.operator}`,
-        )} ${JSON.stringify(value)}`;
-        return (
-          <Chip
-            deleteIcon={
-              <CancelIcon
-                aria-label={t('explorer.removeAttributeFilter', {
-                  filter: label,
-                })}
-              />
+            key={
+              relationship
+                ? filter.field
+                : `${filter.filter.field}-${filter.filter.operator}-${String(filter.filter.value)}-${filter.index}`
             }
-            key={`${filter.field}-${filter.operator}-${String(filter.value)}-${index}`}
             label={label}
-            onDelete={() => onRemoveAttribute(index)}
+            onDelete={() =>
+              relationship
+                ? onRemoveRelationship(filter.field)
+                : onRemoveAttribute(filter.index)
+            }
             size="small"
             sx={{
               maxWidth: '100%',

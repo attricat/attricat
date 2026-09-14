@@ -8,9 +8,11 @@ import {
   Typography,
 } from '@mui/material';
 import { useMemo, useState, type KeyboardEvent } from 'react';
+import { useQueries } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
 import { RelationshipSelectorDialog } from '../../components/RelationshipSelectorDialog';
-import type { Attribute } from '../entities/api';
+import { getBlueprintByCode, type Attribute } from '../entities/api';
+import { entityQueryKeys } from '../entities/query-keys';
 import { attributeLabel } from '../entities/entity-display';
 import {
   isFilterableAttribute,
@@ -24,7 +26,9 @@ type Props = {
   attributes: Attribute[];
   blueprintName: string;
   pathAttributes?: { code: string; value_type: Attribute['value_type'] }[];
+  relationshipAttributes?: Attribute[];
   onAdd: (filter: AttributeFilter) => void;
+  onAddRelationship: (attribute: Attribute) => void;
   onRemove: (index: number) => void;
   onUpdate: (index: number, filter: AttributeFilter) => void;
 };
@@ -34,11 +38,52 @@ export const ExplorerAttributeFilters = ({
   attributes,
   blueprintName,
   pathAttributes = [],
+  relationshipAttributes = [],
   onAdd,
+  onAddRelationship,
   onRemove,
   onUpdate,
 }: Props) => {
   const { t } = useTranslation();
+  const directRelationships = relationshipAttributes.filter(
+    (attribute) => attribute.target_blueprint_code,
+  );
+  const firstTargets = useQueries({
+    queries: directRelationships.map((attribute) => ({
+      queryKey: entityQueryKeys.blueprintByCode(
+        attribute.target_blueprint_code,
+        undefined,
+      ),
+      queryFn: ({ signal }: { signal: AbortSignal }) =>
+        getBlueprintByCode(attribute.target_blueprint_code!, undefined, signal),
+    })),
+  });
+  const secondRelationships = firstTargets.flatMap((result, index) =>
+    (result.data?.attributes ?? [])
+      .filter((attribute) => attribute.value_type === 'relationship' && attribute.target_blueprint_code)
+      .map((attribute) => ({
+        ...attribute,
+        code: `${directRelationships[index].code}.${attribute.code}`,
+      })),
+  );
+  const secondTargets = useQueries({
+    queries: secondRelationships.map((attribute) => ({
+      queryKey: entityQueryKeys.blueprintByCode(
+        attribute.target_blueprint_code,
+        undefined,
+      ),
+      queryFn: ({ signal }: { signal: AbortSignal }) =>
+        getBlueprintByCode(attribute.target_blueprint_code!, undefined, signal),
+    })),
+  });
+  const thirdRelationships = secondTargets.flatMap((result, index) =>
+    (result.data?.attributes ?? [])
+      .filter((attribute) => attribute.value_type === 'relationship' && attribute.target_blueprint_code)
+      .map((attribute) => ({
+        ...attribute,
+        code: `${secondRelationships[index].code}.${attribute.code}`,
+      })),
+  );
   const filterableAttributes = useMemo(
     () => [
       ...attributes.filter(isFilterableAttribute),
@@ -49,8 +94,17 @@ export const ExplorerAttributeFilters = ({
             value_type: attribute.value_type,
           }) as Attribute,
       ),
+      ...directRelationships,
+      ...secondRelationships,
+      ...thirdRelationships,
     ],
-    [attributes, pathAttributes],
+    [
+      attributes,
+      directRelationships,
+      pathAttributes,
+      secondRelationships,
+      thirdRelationships,
+    ],
   );
   const [open, setOpen] = useState(false);
   const [editingIndex, setEditingIndex] = useState<number | null>(null);
@@ -64,6 +118,7 @@ export const ExplorerAttributeFilters = ({
   const effectiveOperator = availableOperators.includes(operator)
     ? operator
     : 'eq';
+  const relationship = attribute?.value_type === 'relationship';
   const maximumReached = filters.length >= maximumAttributeFilters;
 
   if (!filterableAttributes.length) {
@@ -136,12 +191,13 @@ export const ExplorerAttributeFilters = ({
     setOpen(true);
   };
   const apply = () => {
-    if (
-      !attribute ||
-      !valueIsValid ||
-      (maximumReached && editingIndex === null)
-    )
+    if (!attribute) return;
+    if (relationship) {
+      onAddRelationship(attribute);
+      close();
       return;
+    }
+    if (!valueIsValid || (maximumReached && editingIndex === null)) return;
     const filter = {
       field: attribute.code,
       operator: effectiveOperator,
@@ -186,7 +242,6 @@ export const ExplorerAttributeFilters = ({
         ))}
         <Button
           color="primary"
-          disabled={maximumReached}
           onClick={openNewFilter}
           size="small"
           startIcon={<AddIcon fontSize="small" />}
@@ -213,8 +268,8 @@ export const ExplorerAttributeFilters = ({
       <RelationshipSelectorDialog
         applyDisabled={
           !attribute ||
-          !valueIsValid ||
-          (maximumReached && editingIndex === null)
+          (!relationship &&
+            (!valueIsValid || (maximumReached && editingIndex === null)))
         }
         applyLabel={t(
           editingIndex === null
@@ -238,9 +293,18 @@ export const ExplorerAttributeFilters = ({
         <Stack spacing={1.5}>
           <TextField
             fullWidth
-            label={t('explorer.attribute')}
+            label={t('explorer.filterField')}
             onChange={(event) => {
-              setField(event.target.value);
+              const nextField = event.target.value;
+              const nextAttribute = filterableAttributes.find(
+                (item) => item.code === nextField,
+              );
+              if (nextAttribute?.value_type === 'relationship') {
+                onAddRelationship(nextAttribute);
+                close();
+                return;
+              }
+              setField(nextField);
               setOperator('eq');
               setValue('');
             }}
@@ -255,12 +319,15 @@ export const ExplorerAttributeFilters = ({
                   sx={{ alignItems: 'center' }}
                 >
                   <Chip label={blueprintName} size="small" />
+                  {item.value_type === 'relationship' && (
+                    <Chip label={t('explorer.relationship')} size="small" />
+                  )}
                   <Typography>{attributeLabel(item)}</Typography>
                 </Stack>
               </MenuItem>
             ))}
           </TextField>
-          {attribute && (
+          {attribute && !relationship && (
             <>
               <TextField
                 fullWidth
