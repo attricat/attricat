@@ -1,6 +1,7 @@
 /target
 .env
 .catalog-worktree
+.acli-session
 .catalog-generator/
 /node_modules
 /apps/catalog-web/node_modules
