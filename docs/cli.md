@@ -38,8 +38,8 @@ successful transfer they print JSON `null`.
 
 ```sh
 acli health
-acli auth discover <login-identifier>
-acli auth login <login-identifier> --email <email> --password-stdin
+acli auth discover <workspace-login-identifier>
+acli auth login <workspace-login-identifier> --email <email> --password-stdin
 acli auth password-reset --email <email>
 acli auth password-reset-confirm --token-stdin --password-stdin
 acli --session-file session.json auth session|logout|renew
@@ -384,7 +384,7 @@ contexts, and blueprints that exercise the supported blueprint features. Start
 the API, then run:
 
 ```sh
-cargo run -p cli -- --session-file .acli-session auth login <login-identifier> --email <email> --password-stdin
+cargo run -p cli -- --session-file .acli-session auth login <workspace-login-identifier> --email <email> --password-stdin
 export CATALOG_TOKEN="$(cargo run -p cli -- --session-file .acli-session token create --generator | jq -r .secret)"
 just generate
 ```

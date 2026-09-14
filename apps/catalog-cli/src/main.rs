@@ -120,9 +120,13 @@ enum Command {
 #[derive(Subcommand)]
 enum AuthCommand {
     Discover {
+        /// Workspace login identifier, not a user ID, workspace UUID, or slug.
+        #[arg(value_name = "WORKSPACE_LOGIN_IDENTIFIER")]
         login_identifier: String,
     },
     Login {
+        /// Workspace login identifier, not a user ID, workspace UUID, or slug.
+        #[arg(value_name = "WORKSPACE_LOGIN_IDENTIFIER")]
         login_identifier: String,
         #[arg(long)]
         email: String,
