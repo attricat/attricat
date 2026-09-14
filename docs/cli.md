@@ -11,10 +11,15 @@ docker compose -f apps/api/compose.yml up -d
 DATABASE_URL=postgres://postgres:postgres@localhost:5432/catalog cargo run -p api
 ```
 
-The client targets `http://127.0.0.1:3000` by default. Override it with:
+By default, `acli` loads `.env` from the current directory without replacing
+variables already exported by the shell. In a worktree, its `CATALOG_API_URL`
+therefore supplies the API URL. The precedence is `--server`, `CATALOG_SERVER`,
+`CATALOG_API_URL`, then `http://127.0.0.1:3000`. Pass `--no-env` to skip loading
+that file.
 
 ```sh
-acli --server http://127.0.0.1:3000 health
+acli health
+acli --no-env --server http://127.0.0.1:3000 health
 CATALOG_SERVER=http://127.0.0.1:3000 acli health
 ```
 

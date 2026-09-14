@@ -30,6 +30,9 @@ struct Cli {
     /// Persist browser session and CSRF cookies for the auth commands.
     #[arg(long, env = "CATALOG_SESSION_FILE", value_name = "PATH")]
     session_file: Option<PathBuf>,
+    /// Do not load environment variables from a .env file in the current directory.
+    #[arg(long, global = true)]
+    no_env: bool,
     #[command(subcommand)]
     command: Command,
 }
@@ -977,6 +980,10 @@ struct RelationshipInput {
 
 #[tokio::main]
 async fn main() -> ExitCode {
+    if let Err(error) = load_dotenv() {
+        eprintln!("{}", error.json());
+        return ExitCode::from(error.exit_code());
+    }
     match run(Cli::parse()).await {
         Ok(body) => {
             println!("{body}");
@@ -989,10 +996,27 @@ async fn main() -> ExitCode {
     }
 }
 
+fn load_dotenv() -> Result<(), CliError> {
+    if std::env::args_os().any(|argument| argument == "--no-env") {
+        return Ok(());
+    }
+    match dotenvy::from_filename(".env") {
+        Ok(_) => Ok(()),
+        Err(dotenvy::Error::Io(error)) if error.kind() == io::ErrorKind::NotFound => Ok(()),
+        Err(error) => Err(CliError::Input(format!("cannot load .env: {error}"))),
+    }
+}
+
 async fn run(cli: Cli) -> Result<String, CliError> {
-    let server = cli
-        .server
-        .unwrap_or_else(|| Url::parse("http://127.0.0.1:3000").expect("valid default URL"));
+    let server = match cli.server {
+        Some(server) => server,
+        None => match std::env::var("CATALOG_API_URL") {
+            Ok(value) => Url::parse(&value).map_err(|error| {
+                CliError::Input(format!("CATALOG_API_URL is not a valid URL: {error}"))
+            })?,
+            Err(_) => Url::parse("http://127.0.0.1:3000").expect("valid default URL"),
+        },
+    };
     let session_file = cli.session_file;
     let session = SessionFile::load(session_file.as_ref())?;
     let mut client = Client::builder().connect_timeout(CONNECT_TIMEOUT);
@@ -3157,6 +3181,7 @@ value = "Blue shirt"
             Err(error) if error.kind() == clap::error::ErrorKind::DisplayHelp
         ));
         assert!(Cli::try_parse_from(["acli", "workflow", "validate", "--stdin"]).is_ok());
+        assert!(Cli::try_parse_from(["acli", "--no-env", "health"]).is_ok());
         assert!(
             Cli::try_parse_from([
                 "acli",
@@ -3318,6 +3343,7 @@ value = "Blue shirt"
             server: Some(Url::parse(&format!("http://{address}")).unwrap()),
             token: None,
             session_file: None,
+            no_env: false,
             command: Command::Health,
         })
         .await
