@@ -27,6 +27,23 @@ and `just down` to stop the worktree database.
 
 Use SQLx for all migration operations.
 
+## Catalog inspection
+
+When an agent needs to inspect catalog state, it must query the API through the
+CLI first:
+
+```sh
+cargo run -p cli -- <command>
+# or, after building/installing it:
+acli <command>
+```
+
+`acli` loads the worktree `.env` by default and uses its `CATALOG_API_URL`.
+Supply `--token` or `CATALOG_TOKEN` when the requested endpoint needs a personal
+API token. Use `just sql` only after the CLI cannot provide the required read or
+when diagnosing the database implementation; do not bypass the API with SQL for
+ordinary catalog inspection.
+
 ## Extension integration verification
 
 When changing extension installation, runtime, artifact storage, event dispatch,
