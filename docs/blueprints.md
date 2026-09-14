@@ -25,10 +25,16 @@ types are `string`, `number`, `integer`, `boolean`, `date`, `datetime`, `time`,
 ```toml
 [[attributes]]
 code = "stock"
+label = "Stock on hand"
 value_type = "integer"
 context_fallback = "default"
 context_editable = "default"
 ```
+
+`label` optionally supplies the human-readable attribute name used in forms,
+detail views, and filters. Without it, the app uses the attribute `code`.
+Included attributes retain the label from their source mixin. View-specific
+label overrides are not yet supported.
 
 `context_fallback` controls missing values in a non-default context:
 

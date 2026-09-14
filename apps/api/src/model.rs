@@ -41,6 +41,7 @@ pub struct Attribute {
     pub blueprint_id: Uuid,
     pub blueprint_version: i64,
     pub code: String,
+    pub label: Option<String>,
     pub value_type: String,
     pub value_schema: Option<Value>,
     pub default_value: Option<Value>,

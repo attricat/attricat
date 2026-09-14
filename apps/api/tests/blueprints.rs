@@ -9,7 +9,7 @@ async fn blueprint_catalogue_lists_all_kinds_and_revision_history(pool: PgPool) 
     let first: Value = client
         .post(format!("{base_url}/blueprints"))
         .json(&json!({
-            "definition": "format_version = 1\ncode = \"catalogued_entity\"\nname = \"Catalogued entity revision two\"\nkind = \"entity\"\n\n[views.dropdown_option]\ntype = \"dropdown_option\"\nfields = [\"title\"]\n\n[[attributes]]\ncode = \"title\"\nvalue_type = \"string\""
+            "definition": "format_version = 1\ncode = \"catalogued_entity\"\nname = \"Catalogued entity revision two\"\nkind = \"entity\"\n\n[views.dropdown_option]\ntype = \"dropdown_option\"\nfields = [\"title\"]\n\n[[attributes]]\ncode = \"title\"\nlabel = \"Product title\"\nvalue_type = \"string\""
         }))
         .send()
         .await
@@ -20,6 +20,7 @@ async fn blueprint_catalogue_lists_all_kinds_and_revision_history(pool: PgPool) 
         .await
         .unwrap();
     let blueprint_id = first["blueprint"]["id"].as_str().unwrap();
+    assert_eq!(first["attributes"][0]["label"], "Product title");
     client
         .post(format!("{base_url}/blueprints/{blueprint_id}/versions"))
         .json(&json!({

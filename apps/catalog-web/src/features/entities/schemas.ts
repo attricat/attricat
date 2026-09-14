@@ -222,6 +222,7 @@ const valueTypeSchema = z.enum(attributeValueTypes);
 export const attributeSchema = z
   .object({
     code: z.string(),
+    label: z.string().nullable().optional(),
     value_type: valueTypeSchema,
     target_blueprint_code: z.string().nullable().optional(),
     cardinality: z.enum(['one', 'many']).nullable().optional(),

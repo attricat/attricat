@@ -1,10 +1,10 @@
 export const attributeLabel = (attribute: {
   code: string;
-  name?: unknown;
+  label?: unknown;
 }): string => {
-  if (typeof attribute.name === 'string' && attribute.name.trim())
-    return attribute.name;
-  return attribute.code.replaceAll('_', ' ');
+  if (typeof attribute.label === 'string' && attribute.label.trim())
+    return attribute.label;
+  return attribute.code;
 };
 
 export const displayLabel = (

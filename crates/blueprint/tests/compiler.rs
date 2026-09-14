@@ -22,6 +22,7 @@ version = 2
 
 [[attributes]]
 code = "title"
+label = "Product title"
 value_type = "string"
 tags = ["display"]
 
@@ -39,6 +40,7 @@ from = "seo.meta_title"
             attributes: vec![
                 EffectiveAttribute {
                     code: "meta_title".to_owned(),
+                    label: Some("Meta title".to_owned()),
                     value_type: "string".to_owned(),
                     value_schema: None,
                     default_value: None,
@@ -54,6 +56,7 @@ from = "seo.meta_title"
                 },
                 EffectiveAttribute {
                     code: "meta_description".to_owned(),
+                    label: None,
                     value_type: "string".to_owned(),
                     value_schema: None,
                     default_value: None,
@@ -75,10 +78,15 @@ from = "seo.meta_title"
 
     assert_eq!(compiled.attributes.len(), 2);
     assert_eq!(compiled.attributes[0].code, "title");
+    assert_eq!(
+        compiled.attributes[0].label.as_deref(),
+        Some("Product title")
+    );
     assert_eq!(compiled.attributes[0].context_fallback, "default");
     assert_eq!(compiled.attributes[0].context_editable, "all");
     assert_eq!(compiled.attributes[0].position, 0);
     assert_eq!(compiled.attributes[1].code, "meta_title");
+    assert_eq!(compiled.attributes[1].label.as_deref(), Some("Meta title"));
     assert_eq!(compiled.attributes[1].position, 1);
     assert_eq!(compiled.raw_definition_hash, raw_hash(source));
 }

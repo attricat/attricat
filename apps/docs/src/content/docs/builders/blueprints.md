@@ -17,8 +17,13 @@ kind = "entity"
 
 [[attributes]]
 code = "name"
+label = "Product name"
 value_type = "string"
 ```
+
+Use the optional attribute `label` to set the human-readable name shown in
+forms, detail views, and filters. Without a label, the app uses the attribute
+code.
 
 An entity blueprint can create entities. A mixin contributes reusable attributes to other blueprints.
 

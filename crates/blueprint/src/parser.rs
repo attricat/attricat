@@ -33,6 +33,7 @@ struct RawBlueprintDefinition {
 #[serde(deny_unknown_fields)]
 struct RawAttributeDeclaration {
     code: String,
+    label: Option<String>,
     value_type: Option<String>,
     value_schema: Option<String>,
     default_value: Option<serde_json::Value>,
@@ -119,6 +120,9 @@ pub fn parse(source: &str) -> Result<BlueprintDefinition, BlueprintError> {
             match (attribute.value_type.clone(), attribute.from.clone()) {
                 (Some(value_type), None) => {
                     validate_non_empty(&value_type, "attribute value_type")?;
+                    if let Some(label) = &attribute.label {
+                        validate_non_empty(label, "attribute label")?;
+                    }
                     if !matches!(
                         value_type.as_str(),
                         "string"
@@ -237,6 +241,7 @@ pub fn parse(source: &str) -> Result<BlueprintDefinition, BlueprintError> {
                     }
                     AttributeDeclaration::Local(Box::new(LocalAttributeDeclaration {
                         code: attribute.code,
+                        label: attribute.label,
                         value_type,
                         value_schema,
                         default_value: attribute.default_value,
@@ -250,7 +255,9 @@ pub fn parse(source: &str) -> Result<BlueprintDefinition, BlueprintError> {
                         readonly: attribute.readonly,
                     }))
                 }
-                (None, Some(source)) if attribute.target_blueprint.is_none() => {
+                (None, Some(source))
+                    if attribute.target_blueprint.is_none() && attribute.label.is_none() =>
+                {
                     let (include_alias, attribute_code) =
                         parse_selection(&attribute.code, &source)?;
                     AttributeDeclaration::Selection {

@@ -210,6 +210,7 @@ pub struct FilePolicy {
 #[derive(Clone, Debug, PartialEq)]
 pub struct LocalAttributeDeclaration {
     pub code: String,
+    pub label: Option<String>,
     pub value_type: String,
     pub value_schema: Option<serde_json::Value>,
     pub default_value: Option<serde_json::Value>,
@@ -244,6 +245,7 @@ pub struct ResolvedInclude {
 #[derive(Clone, Debug, PartialEq, Serialize)]
 pub struct EffectiveAttribute {
     pub code: String,
+    pub label: Option<String>,
     pub value_type: String,
     pub value_schema: Option<serde_json::Value>,
     pub default_value: Option<serde_json::Value>,
