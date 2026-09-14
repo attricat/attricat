@@ -58,7 +58,9 @@ const mobileSectionForPathname = (
 type SideNavigationProps = {
   compact?: boolean;
   compactManageOpen?: boolean;
+  compactExploreOpen?: boolean;
   onCompactManageOpenChange?: (open: boolean) => void;
+  onCompactExploreOpenChange?: (open: boolean) => void;
   onNavigate?: () => void;
   onSignOut?: () => void;
 };
@@ -66,7 +68,9 @@ type SideNavigationProps = {
 export const SideNavigation = ({
   compact = false,
   compactManageOpen,
+  compactExploreOpen,
   onCompactManageOpenChange,
+  onCompactExploreOpenChange,
   onNavigate,
   onSignOut,
 }: SideNavigationProps) => {
@@ -83,16 +87,18 @@ export const SideNavigation = ({
   const [localCompactManageOpen, setLocalCompactManageOpen] = useState(
     pathname.startsWith(`${navigationRoutes.manage}/`),
   );
-  const [compactExploreOpen, setCompactExploreOpen] = useState(
+  const [localCompactExploreOpen, setLocalCompactExploreOpen] = useState(
     pathname === navigationRoutes.explore,
   );
   const isCompactManageOpen = compactManageOpen ?? localCompactManageOpen;
+  const isCompactExploreOpen = compactExploreOpen ?? localCompactExploreOpen;
   const setCompactManageOpen = (open: boolean) => {
     setLocalCompactManageOpen(open);
     onCompactManageOpenChange?.(open);
   };
   const setCompactExplore = (open: boolean) => {
-    setCompactExploreOpen(open);
+    setLocalCompactExploreOpen(open);
+    onCompactExploreOpenChange?.(open);
     if (open) setCompactManageOpen(false);
   };
   const session = useQuery({
@@ -228,12 +234,12 @@ export const SideNavigation = ({
                   component={Link}
                   onClick={() => {
                     if (compact && item.to === navigationRoutes.explore) {
-                      setCompactExplore(!compactExploreOpen);
+                      setCompactExplore(!isCompactExploreOpen);
                       return;
                     }
                     if (compact) {
                       setCompactManageOpen(false);
-                      setCompactExploreOpen(false);
+                      setCompactExplore(false);
                     }
                     onNavigate?.();
                   }}
@@ -330,7 +336,7 @@ export const SideNavigation = ({
               aria-label={t('navigation.manage')}
               component={Link}
               onClick={() => {
-                setCompactExploreOpen(false);
+                setCompactExplore(false);
                 setCompactManageOpen(true);
               }}
               selected={
@@ -452,7 +458,7 @@ export const SideNavigation = ({
           </List>
         </Box>
       )}
-      {compact && compactExploreOpen && (
+      {compact && isCompactExploreOpen && (
         <Box
           aria-label={t('navigation.entityExplorer')}
           component="nav"
@@ -538,7 +544,7 @@ export const SideNavigation = ({
                   onClick={() => {
                     if (compact) {
                       setCompactManageOpen(false);
-                      setCompactExploreOpen(false);
+                      setCompactExplore(false);
                     }
                     onNavigate?.();
                   }}

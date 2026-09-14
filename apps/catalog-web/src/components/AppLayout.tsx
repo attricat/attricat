@@ -108,6 +108,9 @@ export const AppLayout = () => {
     pathname === navigationRoutes.manage ||
       pathname.startsWith(`${navigationRoutes.manage}/`),
   );
+  const [desktopExploreOpen, setDesktopExploreOpen] = useState(
+    pathname === navigationRoutes.explore,
+  );
   const [signOutError, setSignOutError] = useState(false);
   const closeMobileNavigation = () => setMobileOpen(false);
   const completeSignOut = async () => {
@@ -197,7 +200,9 @@ export const AppLayout = () => {
               flexShrink: 0,
               width:
                 compactNavigationWidth +
-                (desktopManageOpen ? managementSidebarWidth : 0),
+                (desktopManageOpen || desktopExploreOpen
+                  ? managementSidebarWidth
+                  : 0),
             }}
             slotProps={{
               paper: {
@@ -205,7 +210,9 @@ export const AppLayout = () => {
                   overflow: 'hidden',
                   width:
                     compactNavigationWidth +
-                    (desktopManageOpen ? managementSidebarWidth : 0),
+                    (desktopManageOpen || desktopExploreOpen
+                      ? managementSidebarWidth
+                      : 0),
                 },
               },
             }}
@@ -213,7 +220,9 @@ export const AppLayout = () => {
           >
             <SideNavigation
               compact
+              compactExploreOpen={desktopExploreOpen}
               compactManageOpen={desktopManageOpen}
+              onCompactExploreOpenChange={setDesktopExploreOpen}
               onCompactManageOpenChange={setDesktopManageOpen}
               onSignOut={signOut}
             />

@@ -41,8 +41,19 @@ vi.mock('./SideNavigation', () => ({
   compactNavigationWidth: 88,
   expandedNavigationWidth: 264,
   managementSidebarWidth: 248,
-  SideNavigation: ({ onSignOut }: { onSignOut?: () => void }) => (
-    <button onClick={onSignOut}>Sign out</button>
+  SideNavigation: ({
+    onCompactExploreOpenChange,
+    onSignOut,
+  }: {
+    onCompactExploreOpenChange?: (open: boolean) => void;
+    onSignOut?: () => void;
+  }) => (
+    <>
+      <button onClick={() => onCompactExploreOpenChange?.(true)}>
+        Open Explore
+      </button>
+      <button onClick={onSignOut}>Sign out</button>
+    </>
   ),
 }));
 
@@ -97,6 +108,22 @@ describe('AppLayout navigation', () => {
     expect(drawerPaper).not.toBeNull();
     expect(window.getComputedStyle(drawerPaper as Element).width).toBe('264px');
     isDesktop = true;
+  });
+
+  it('expands the desktop drawer when the Explore panel opens', async () => {
+    currentSessionMock.mockResolvedValue(session);
+    renderAppLayout();
+    const user = userEvent.setup();
+    const navigation = await screen.findByRole('button', { name: 'Sign out' });
+    const drawerPaper = navigation.closest('.MuiDrawer-paper');
+
+    await user.click(screen.getByRole('button', { name: 'Open Explore' }));
+
+    await waitFor(() =>
+      expect(window.getComputedStyle(drawerPaper as Element).width).toBe(
+        '336px',
+      ),
+    );
   });
 });
 
