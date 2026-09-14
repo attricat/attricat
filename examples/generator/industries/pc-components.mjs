@@ -323,7 +323,7 @@ export const skuFor = (family, familyIndex, variantIndex, seed) => {
 };
 
 const pixel =
-  "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVQIHWP4z8DwHwAFgAI/ScL9NwAAAABJRU5ErkJggg==";
+  "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAIAAACQd1PeAAAADElEQVR4nGP4z8AAAAMBAQDJ/pLvAAAAAElFTkSuQmCC";
 const note = (title) =>
   `ByteForge Components\n${title}\nAll product names and specifications in this demonstration catalog are fictional.\n`;
 const datasheet = (title) =>

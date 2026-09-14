@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
+  assets,
   blueprints,
   categoryFor,
   classificationValues,
@@ -56,6 +57,40 @@ test("technical classifications are modeled as family relationships", () => {
   assert.doesNotMatch(definitions.sku, /code = "interface"/);
   assert.doesNotMatch(definitions.sku, /code = "form_factor"/);
 });
+
+test("generated PC catalog image assets are valid PNGs", () => {
+  for (const asset of assets.filter((asset) => asset.type === "image/png")) {
+    const bytes = Buffer.from(asset.body, "base64");
+    assert.deepEqual(
+      bytes.subarray(0, 8),
+      Buffer.from("89504e470d0a1a0a", "hex"),
+      `${asset.name} has a PNG signature`,
+    );
+    let offset = 8;
+    while (offset < bytes.length) {
+      const length = bytes.readUInt32BE(offset);
+      const type = bytes.subarray(offset + 4, offset + 8);
+      const dataEnd = offset + 8 + length;
+      assert.equal(
+        crc32(bytes.subarray(offset + 4, dataEnd)),
+        bytes.readUInt32BE(dataEnd),
+        `${asset.name} has a valid ${type} chunk CRC`,
+      );
+      offset = dataEnd + 4;
+    }
+    assert.equal(offset, bytes.length, `${asset.name} has complete PNG chunks`);
+  }
+});
+
+const crc32 = (bytes) => {
+  let crc = 0xffffffff;
+  for (const byte of bytes) {
+    crc ^= byte;
+    for (let bit = 0; bit < 8; bit += 1)
+      crc = (crc >>> 1) ^ (0xedb88320 & -(crc & 1));
+  }
+  return (crc ^ 0xffffffff) >>> 0;
+};
 
 test("generated PC catalog records are deterministic and plausible", () => {
   const family = familyFor(42, 214);
