@@ -13,7 +13,7 @@ Pass the returned token as `CATALOG_TOKEN`. The generator refuses non-local targ
 ```sh
 just setup
 just dev
-export CATALOG_TOKEN="$(acli token create --generator | jq -r .secret)"
+export CATALOG_TOKEN="$(cargo run -p cli -- token create --generator | jq -r .secret)"
 just generate
 ```
 

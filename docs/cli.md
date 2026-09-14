@@ -384,7 +384,7 @@ contexts, and blueprints that exercise the supported blueprint features. Start
 the API, then run:
 
 ```sh
-export CATALOG_TOKEN="$(acli token create --generator | jq -r .secret)"
+export CATALOG_TOKEN="$(cargo run -p cli -- token create --generator | jq -r .secret)"
 just generate
 ```
 
