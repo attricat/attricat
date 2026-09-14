@@ -254,6 +254,11 @@ const createClient = (server, token, progress) => {
       request(`/v1/entities/${id}/publications/publish-all`, {
         method: "POST",
       }),
+    enablePublicationChannel: (contextId) =>
+      request(`/publication-channels/${contextId}`, {
+        method: "PUT",
+        body: JSON.stringify({ enabled: true }),
+      }),
   };
 };
 
@@ -414,6 +419,8 @@ const run = async () => {
     throw new Error(
       "Checkpoint does not match the selected industry, schema version, size, and seed.",
     );
+  const defaultContext = await client.request("/contexts/default");
+  await client.enablePublicationChannel(defaultContext.id);
   progress.completedEntities = checkpoint.counts.entities;
   progress.lastSample.entities = checkpoint.counts.entities;
   const persist = async () => atomicJson(checkpointPath, checkpoint);

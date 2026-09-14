@@ -130,7 +130,10 @@ export const SideNavigation = ({
         display: 'flex',
         flexDirection: 'column',
         height: '100%',
-        overflow: 'hidden',
+        // Desktop compact navigation renders its Explore/Manage panes beside
+        // the icon rail. Let those absolutely positioned panes use the extra
+        // width allocated by AppLayout instead of clipping them at the rail.
+        overflow: compact ? 'visible' : 'hidden',
         position: 'relative',
         width: compact ? compactNavigationWidth : expandedNavigationWidth,
       }}
