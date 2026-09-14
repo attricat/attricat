@@ -136,6 +136,7 @@ acli workspace user create --email <email> [--display-name <name>] [--invite-rol
 acli workspace user set-password --onboarding-secret-stdin --invitation-secret-stdin --password-stdin
 
 acli token list
+acli token create --generator [--expires-at <rfc3339>]
 acli token create --label <label> --permissions <json-or-file> [--expires-at <rfc3339>]
 acli token revoke <token-id>
 
@@ -383,6 +384,7 @@ contexts, and blueprints that exercise the supported blueprint features. Start
 the API, then run:
 
 ```sh
+export CATALOG_TOKEN="$(acli token create --generator | jq -r .secret)"
 just generate
 ```
 

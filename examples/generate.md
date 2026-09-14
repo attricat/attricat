@@ -4,20 +4,17 @@
 
 ## Prerequisites
 
-Start the local stack and create a personal access token in the profile section. The token needs:
-
-- `blueprints.read`, `blueprints.write`, and `blueprints.publish`;
-- `contexts.read` and `contexts.write`;
-- `entities.read`, `entities.write`, and `entities.publish`.
+Start the local stack and create a generator-scoped personal access token with an authenticated CLI session. `--generator` grants the least-privilege set required for blueprint, context, and entity creation and publication.
 
 File upload, metadata, and download authorization uses the existing entity permissions; there is intentionally no separate `files.read` personal-token permission.
 
-Pass the token as `CATALOG_TOKEN`. The generator refuses non-local targets unless `ALLOW_NON_LOCAL_GENERATOR_TARGET=1` is explicitly set.
+Pass the returned token as `CATALOG_TOKEN`. The generator refuses non-local targets unless `ALLOW_NON_LOCAL_GENERATOR_TARGET=1` is explicitly set.
 
 ```sh
 just setup
 just dev
-CATALOG_TOKEN=cat_pat_... just generate
+export CATALOG_TOKEN="$(acli token create --generator | jq -r .secret)"
+just generate
 ```
 
 ## Profiles

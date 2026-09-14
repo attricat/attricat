@@ -18,6 +18,17 @@ use uuid::Uuid;
 const CONNECT_TIMEOUT: Duration = Duration::from_secs(5);
 const REQUEST_TIMEOUT: Duration = Duration::from_secs(30);
 const MAX_RESPONSE_BYTES: usize = 1024 * 1024;
+const GENERATOR_TOKEN_LABEL: &str = "catalog-generator";
+const GENERATOR_TOKEN_PERMISSIONS: &[&str] = &[
+    "blueprints.read",
+    "blueprints.write",
+    "blueprints.publish",
+    "contexts.read",
+    "contexts.write",
+    "entities.read",
+    "entities.write",
+    "entities.publish",
+];
 
 #[derive(Parser)]
 #[command(name = "acli", about = "JSON-first client for the Catalog API")]
@@ -603,10 +614,21 @@ enum UserCommand {
 enum TokenCommand {
     List,
     Create {
-        #[arg(long)]
-        label: String,
-        #[arg(long)]
-        permissions: String,
+        /// Create a least-privilege token for the demo catalog generator.
+        #[arg(long, conflicts_with_all = ["label", "permissions"])]
+        generator: bool,
+        #[arg(
+            long,
+            required_unless_present = "generator",
+            conflicts_with = "generator"
+        )]
+        label: Option<String>,
+        #[arg(
+            long,
+            required_unless_present = "generator",
+            conflicts_with = "generator"
+        )]
+        permissions: Option<String>,
         #[arg(long)]
         expires_at: Option<String>,
     },
@@ -1771,9 +1793,52 @@ async fn token_command(
     command: TokenCommand,
 ) -> Result<String, CliError> {
     match command {
-        TokenCommand::List => request(client, server, Method::GET, "/personal-access-tokens", None).await,
-        TokenCommand::Create { label, permissions, expires_at } => request(client, server, Method::POST, "/personal-access-tokens", Some(json!({ "label": label, "permissions": permissions_input(&permissions)?, "expires_at": expires_at }))).await,
-        TokenCommand::Revoke { token_id } => request(client, server, Method::DELETE, &format!("/personal-access-tokens/{}", segment(token_id)), None).await,
+        TokenCommand::List => {
+            request(client, server, Method::GET, "/personal-access-tokens", None).await
+        }
+        TokenCommand::Create {
+            generator,
+            label,
+            permissions,
+            expires_at,
+        } => {
+            let (label, permissions) = if generator {
+                (
+                    GENERATOR_TOKEN_LABEL.to_owned(),
+                    json!(GENERATOR_TOKEN_PERMISSIONS),
+                )
+            } else {
+                let label = label.ok_or_else(|| {
+                    CliError::Input("--label is required unless --generator is used".to_owned())
+                })?;
+                let permissions = permissions.ok_or_else(|| {
+                    CliError::Input(
+                        "--permissions is required unless --generator is used".to_owned(),
+                    )
+                })?;
+                (label, permissions_input(&permissions)?)
+            };
+            request(
+                client,
+                server,
+                Method::POST,
+                "/personal-access-tokens",
+                Some(
+                    json!({ "label": label, "permissions": permissions, "expires_at": expires_at }),
+                ),
+            )
+            .await
+        }
+        TokenCommand::Revoke { token_id } => {
+            request(
+                client,
+                server,
+                Method::DELETE,
+                &format!("/personal-access-tokens/{}", segment(token_id)),
+                None,
+            )
+            .await
+        }
     }
 }
 
@@ -3129,6 +3194,70 @@ value = "Blue shirt"
         assert!(permissions_input("not-json").is_err());
         assert!(permissions_input("{\"permission\": \"entities.read\"}").is_err());
         assert!(permissions_input("[\"entities.read\", 1]").is_err());
+    }
+
+    #[test]
+    fn generator_token_preset_requires_no_manual_fields_and_uses_least_privilege_permissions() {
+        assert!(Cli::try_parse_from(["acli", "token", "create", "--generator"]).is_ok());
+        assert!(
+            Cli::try_parse_from([
+                "acli",
+                "token",
+                "create",
+                "--label",
+                "manual",
+                "--permissions",
+                "[\"entities.read\"]"
+            ])
+            .is_ok()
+        );
+        assert!(Cli::try_parse_from(["acli", "token", "create", "--label", "manual"]).is_err());
+        assert!(
+            Cli::try_parse_from([
+                "acli",
+                "token",
+                "create",
+                "--permissions",
+                "[\"entities.read\"]"
+            ])
+            .is_err()
+        );
+        assert!(
+            Cli::try_parse_from([
+                "acli",
+                "token",
+                "create",
+                "--generator",
+                "--label",
+                "manual"
+            ])
+            .is_err()
+        );
+        assert!(
+            Cli::try_parse_from([
+                "acli",
+                "token",
+                "create",
+                "--generator",
+                "--permissions",
+                "[\"entities.read\"]"
+            ])
+            .is_err()
+        );
+        assert_eq!(GENERATOR_TOKEN_LABEL, "catalog-generator");
+        assert_eq!(
+            GENERATOR_TOKEN_PERMISSIONS,
+            [
+                "blueprints.read",
+                "blueprints.write",
+                "blueprints.publish",
+                "contexts.read",
+                "contexts.write",
+                "entities.read",
+                "entities.write",
+                "entities.publish",
+            ]
+        );
     }
 
     #[test]
