@@ -16,10 +16,10 @@ just dev
 
 Run `just setup` once before any other `just` recipe. It assigns persistent,
 worktree-specific ports, writes them and ready-to-open `WEB_URL`, `DOCS_URL`,
-`MAILPIT_UI_URL`, `JAEGER_UI_URL`, and `RUSTFS_UI_URL` values to the ignored
+`LANDING_URL`, `MAILPIT_UI_URL`, `JAEGER_UI_URL`, and `RUSTFS_UI_URL` values to the ignored
 `.catalog-worktree` file, and creates `.env` from `.env.example`. `just dev`
 starts PostgreSQL, Mailpit, Jaeger, and RustFS (the local S3-compatible object store)
-before starting the API, file worker, web app, and public documentation site.
+before starting the API, file worker, web app, public documentation site, and landing page.
 Stop `just dev` with `Ctrl-C`; its exit trap also runs `just down`, stopping
 and removing the local containers.
 
@@ -27,8 +27,9 @@ For database debugging, `just sql` opens an interactive `psql` session inside
 this worktree's PostgreSQL container.
 
 See [Getting Started](docs/index.md#getting-started) for database, migration,
-and test instructions. The public docs site is available at `$DOCS_URL`; source
-`.catalog-worktree` and open it after starting `just dev`. Mailpit also starts
+and test instructions. The public docs site is available at `$DOCS_URL` and the
+landing page at `$LANDING_URL`; source `.catalog-worktree` and open either after
+starting `just dev`. Mailpit also starts
 with the local stack; open `$MAILPIT_UI_URL` to inspect local email. Jaeger receives
 API and file-worker traces; open `$JAEGER_UI_URL` to inspect them.
 
@@ -59,6 +60,7 @@ change summary, use a least-privileged provider account, and only grant
 
 ## Documentation
 
+- Customer landing page: `landing` (run with `pnpm --dir landing dev`)
 - Public documentation site: `apps/docs` (run with `pnpm --dir apps/docs dev`)
 - [Documentation index](docs/index.md)
 - [Blueprint authoring](docs/blueprints.md)

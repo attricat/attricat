@@ -1,0 +1,47 @@
+---
+interface Props {
+  compact?: boolean;
+}
+
+const { compact = false } = Astro.props;
+---
+
+<span class="brand" aria-label="Attricat">
+  <svg class="mark" viewBox="0 0 40 40" aria-hidden="true">
+    <path d="M10 15.5 13.5 7l6.5 5 6.5-5 3.5 8.5a13 13 0 1 1-20 0Z" />
+    <circle cx="16" cy="21" r="1.6" />
+    <circle cx="24" cy="21" r="1.6" />
+    <path class="smile" d="M16.5 27c2.2 1.6 4.8 1.6 7 0" />
+  </svg>
+  {!compact && <span>attricat</span>}
+</span>
+
+<style>
+  .brand {
+    align-items: center;
+    color: var(--ink);
+    display: inline-flex;
+    font-size: 1.34rem;
+    font-weight: 780;
+    gap: 0.62rem;
+    letter-spacing: -0.045em;
+  }
+
+  .mark {
+    fill: var(--accent);
+    height: 2rem;
+    width: 2rem;
+  }
+
+  .mark circle,
+  .mark .smile {
+    fill: var(--paper);
+  }
+
+  .mark .smile {
+    fill: none;
+    stroke: var(--paper);
+    stroke-linecap: round;
+    stroke-width: 1.6;
+  }
+</style>
