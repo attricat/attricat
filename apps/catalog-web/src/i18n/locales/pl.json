@@ -323,6 +323,7 @@
     "viewDefinition": "Definicja widoku",
     "entitySchema": "Schemat encji",
     "includes": "Dołączenia",
+    "publicationPolicy": "Zasady publikacji",
     "code": "Kod",
     "type": "Typ",
     "target": "Cel",

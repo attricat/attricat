@@ -5,6 +5,7 @@ use crate::domain_events::{
     BlueprintRevisionV1, EventSource, EventSourceKind, NewDomainEvent,
 };
 use crate::model::TablePathAttribute;
+use catalog_blueprint::parse;
 use catalog_validation::validate_json_schema;
 use serde_json::json;
 use uuid::Uuid;
@@ -379,6 +380,8 @@ impl CatalogRepository {
                 &blueprint.definition,
             )
             .await?;
+            self.validate_publication_roles(&mut transaction, &blueprint.definition)
+                .await?;
             let includes_published = sqlx::query_scalar::<_, bool>(
                 r#"SELECT NOT EXISTS (
                        SELECT 1
@@ -421,6 +424,33 @@ impl CatalogRepository {
         self.get_blueprint_revision(blueprint_id, version)
             .await?
             .ok_or(RepositoryError::NotFound("blueprint version"))
+    }
+
+    async fn validate_publication_roles(
+        &self,
+        transaction: &mut Transaction<'_, Postgres>,
+        definition: &str,
+    ) -> Result<(), RepositoryError> {
+        let publication = parse(definition)
+            .map_err(RepositoryError::invalid_blueprint_definition)?
+            .publication;
+        if publication.retain_on_edit_roles.is_empty() {
+            return Ok(());
+        }
+        let workspace_id = self.workspace_id.unwrap_or(Self::DEFAULT_WORKSPACE_ID);
+        let known_roles: i64 = sqlx::query_scalar(
+            "SELECT count(*) FROM roles WHERE code = ANY($1) AND (is_system OR workspace_id = $2)",
+        )
+        .bind(&publication.retain_on_edit_roles)
+        .bind(workspace_id)
+        .fetch_one(&mut **transaction)
+        .await?;
+        if known_roles != publication.retain_on_edit_roles.len() as i64 {
+            return Err(RepositoryError::InvalidBlueprintDefinition(
+                "publication retain_on_edit_roles contains an unknown workspace role".to_owned(),
+            ));
+        }
+        Ok(())
     }
 
     pub async fn list_attributes(

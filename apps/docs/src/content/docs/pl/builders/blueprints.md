@@ -28,6 +28,17 @@ Publikacja udostępnia rewizję blueprintu dla nowych encji. Istniejące encje p
 
 Gdy publikujesz nowszą rewizję, przejrzyj kandydatów do migracji przed aktualizacją istniejących encji. Nie używaj ponownie kodów dla niezgodnego znaczenia.
 
+## Ponowna akceptacja publikacji
+
+Domyślnie każda edycja opublikowanej encji cofa jej publikację w kanałach i wymaga ponownej akceptacji. Rewizja blueprintu może wskazać zaufane role obszaru roboczego, których edycje zachowują istniejącą publikację encji:
+
+```toml
+[publication]
+retain_on_edit_roles = ["catalog_manager", "product_owner"]
+```
+
+Są to kody ról obszaru roboczego. Role muszą istnieć podczas publikowania rewizji blueprintu. To ustawienie nie nadaje uprawnień do edycji ani publikacji; użytkownicy nadal potrzebują zwykłych uprawnień obszaru roboczego. Dotyczy zmian wartości, relacji, metadanych, plików i aktualizacji encji. Zmiany kontekstu zawsze cofają publikację kanału, ponieważ mogą zmienić wynikowe dane wielu encji.
+
 ## Zachowanie atrybutów
 
 Atrybuty mogą być wartościami skalarnymi, relacjami lub plikami. Konfiguracja blueprintu steruje także walidacją, wartościami domyślnymi, dziedziczeniem kontekstowym oraz możliwością edycji pola w przeglądarce.

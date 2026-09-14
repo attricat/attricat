@@ -12,6 +12,19 @@ pub struct FilePolicy {
     pub image_only: bool,
 }
 
+fn publication_disposition_metadata(retained_role: Option<String>) -> serde_json::Value {
+    match retained_role {
+        Some(role_code) => serde_json::json!({
+            "disposition": "retained",
+            "role_code": role_code,
+        }),
+        None => serde_json::json!({
+            "disposition": "withdrawn",
+            "reason": "entity_changed",
+        }),
+    }
+}
+
 #[derive(Clone, Debug)]
 pub struct NewUploadedFile {
     pub original_filename: String,
@@ -205,9 +218,14 @@ impl CatalogRepository {
                 status,
             });
         }
-        self.clear_entity_publications(&mut transaction, entity_id, "entity_changed")
+        let retained_role = self
+            .reconcile_entity_publication(&mut transaction, entity_id, "entity_changed")
             .await?;
-        self.write_audit_event(&mut transaction).await?;
+        self.write_audit_event_with_publication_metadata(
+            &mut transaction,
+            Some(publication_disposition_metadata(retained_role)),
+        )
+        .await?;
         transaction.commit().await?;
         Ok(FileUploadResult {
             attribute_code: attribute_code.to_owned(),
@@ -312,9 +330,14 @@ impl CatalogRepository {
             .bind(position)
             .execute(&mut *transaction)
             .await?;
-        self.clear_entity_publications(&mut transaction, entity_id, "entity_changed")
+        let retained_role = self
+            .reconcile_entity_publication(&mut transaction, entity_id, "entity_changed")
             .await?;
-        self.write_audit_event(&mut transaction).await?;
+        self.write_audit_event_with_publication_metadata(
+            &mut transaction,
+            Some(publication_disposition_metadata(retained_role)),
+        )
+        .await?;
         transaction.commit().await?;
         self.file_metadata(file_id).await
     }

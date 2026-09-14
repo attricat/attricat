@@ -548,11 +548,27 @@ impl CatalogRepository {
         &self,
         transaction: &mut Transaction<'_, Postgres>,
     ) -> Result<Option<Uuid>, RepositoryError> {
+        self.write_audit_event_with_publication_metadata(transaction, None)
+            .await
+    }
+
+    pub(in crate::repository) async fn write_audit_event_with_publication_metadata(
+        &self,
+        transaction: &mut Transaction<'_, Postgres>,
+        publication_metadata: Option<Value>,
+    ) -> Result<Option<Uuid>, RepositoryError> {
         let Some(audit) = &self.audit_context else {
             return Ok(None);
         };
         let event_id = Uuid::new_v4();
         let agent = audit.agent.as_ref();
+        let mut metadata = audit.metadata.clone();
+        if let Some(publication_metadata) = publication_metadata {
+            let metadata = metadata
+                .as_object_mut()
+                .expect("audit metadata is an object");
+            metadata.insert("publication".to_owned(), publication_metadata);
+        }
         sqlx::query(
             "INSERT INTO audit_events (id, workspace_id, actor_user_id, actor_token_id, request_id, correlation_id, action, authorization_scope, target, outcome, metadata, executor_type, agent_run_id, agent_conversation_id, agent_tool_call_id, agent_tool_name, approval_decision, approved_by_user_id) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, 'success', $10, $11, $12, $13, $14, $15, $16, $17)",
         )
@@ -565,7 +581,7 @@ impl CatalogRepository {
         .bind(&audit.action)
         .bind(&audit.authorization_scope)
         .bind(&audit.target)
-        .bind(&audit.metadata)
+        .bind(metadata)
         .bind(if agent.is_some() { "agent" } else { "human" })
         .bind(agent.map(|agent| agent.run_id))
         .bind(agent.map(|agent| agent.conversation_id))
@@ -722,13 +738,40 @@ impl CatalogRepository {
         &self,
         mut transaction: Transaction<'_, Postgres>,
         changes: Vec<AuditEventChange>,
-        event: NewDomainEvent,
+        mut event: NewDomainEvent,
     ) -> Result<(), RepositoryError> {
-        // Publication is an approval marker. Any entity mutation withdraws that
-        // approval before its accompanying event becomes externally visible.
-        self.clear_entity_publications(&mut transaction, event.aggregate_id, "entity_changed")
+        let retained_role = self
+            .reconcile_entity_publication(&mut transaction, event.aggregate_id, "entity_changed")
             .await?;
-        if let Some(audit_event_id) = self.write_audit_event(&mut transaction).await? {
+        let publication_metadata = match retained_role {
+            Some(role_code) => {
+                event.metadata["publication"] = serde_json::json!({
+                    "disposition": "retained",
+                    "role_code": role_code,
+                });
+                serde_json::json!({
+                    "disposition": "retained",
+                    "role_code": event.metadata["publication"]["role_code"],
+                })
+            }
+            None => {
+                event.metadata["publication"] = serde_json::json!({
+                    "disposition": "withdrawn",
+                    "reason": "entity_changed",
+                });
+                serde_json::json!({
+                    "disposition": "withdrawn",
+                    "reason": "entity_changed",
+                })
+            }
+        };
+        if let Some(audit_event_id) = self
+            .write_audit_event_with_publication_metadata(
+                &mut transaction,
+                Some(publication_metadata),
+            )
+            .await?
+        {
             for change in changes {
                 sqlx::query("INSERT INTO audit_event_changes (id, audit_event_id, workspace_id, entity_id, attribute_id, attribute_code, context_id, context_code, change_kind, before_value, after_value) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)")
                     .bind(Uuid::new_v4())

@@ -11,7 +11,15 @@ pub struct BlueprintDefinition {
     pub includes: Vec<IncludeRef>,
     pub views: HashMap<String, ViewDefinition>,
     pub entity_schema: Option<serde_json::Value>,
+    pub publication: PublicationPolicy,
     pub attributes: Vec<AttributeDeclaration>,
+}
+
+#[derive(Clone, Debug, Default, Deserialize, PartialEq, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct PublicationPolicy {
+    #[serde(default)]
+    pub retain_on_edit_roles: Vec<String>,
 }
 
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]

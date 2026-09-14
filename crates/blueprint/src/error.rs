@@ -14,6 +14,8 @@ pub enum BlueprintError {
     DuplicateIncludeAlias(String),
     #[error("attribute code '{0}' is duplicated")]
     DuplicateAttributeCode(String),
+    #[error("publication retain_on_edit_roles contains duplicate role '{0}'")]
+    DuplicatePublicationRole(String),
     #[error("{field} must contain only ASCII letters, numbers, hyphens, and underscores")]
     InvalidCode { field: &'static str },
     #[error("attribute '{0}' must define exactly one of value_type or from")]

@@ -122,8 +122,11 @@ entity/context pair with nullable `published_at` and `published_by_user_id` fiel
 A populated pair is published; a null pair is not published.
 
 Publishing records the current actor and timestamp. Entity-content changes withdraw
-approval in every channel by clearing those fields, and a context change withdraws
-approval for its channel. Publication has no effect on internal catalog reads or
+approval in every channel by clearing those fields, unless the entity's pinned
+blueprint revision names one of the actor's workspace role codes in
+`[publication].retain_on_edit_roles`. The exemption retains approval only; it does
+not grant mutation or publication authority. Context changes always withdraw
+approval for their channel. Publication has no effect on internal catalog reads or
 relationships. A channel exporter can select only rows with a populated
 `published_at` and resolve the entity's current values at export time; the database
 does not retain publication snapshots or relationship dependencies.

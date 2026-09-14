@@ -48,12 +48,23 @@ export const BlueprintVersionMetadata = ({
         <Tab label={t('blueprints.viewDefinition')} />
         <Tab label={t('blueprints.entitySchema')} />
         <Tab label={t('blueprints.includes')} />
+        <Tab label={t('blueprints.publicationPolicy')} />
       </Tabs>
       <Box sx={{ mt: 2 }}>
         {tab === 4 && (
           <JsonMetadata
             label={t('blueprints.includes')}
             value={blueprint.blueprint.includes}
+          />
+        )}
+        {tab === 5 && (
+          <JsonMetadata
+            label={t('blueprints.publicationPolicy')}
+            value={{
+              retain_on_edit_roles: publicationRoles(
+                blueprint.blueprint.definition,
+              ),
+            }}
           />
         )}
         {tab === 1 && (
@@ -112,4 +123,14 @@ export const BlueprintVersionMetadata = ({
       </Box>
     </Paper>
   );
+};
+
+const publicationRoles = (definition: string) => {
+  const section = definition
+    .split(/^\[publication\]\s*$/m)[1]
+    ?.split(/^\[[^\]]+\]\s*$/m)[0];
+  const roles = section?.match(/retain_on_edit_roles\s*=\s*\[([^\]]*)\]/)?.[1];
+  return roles
+    ? [...roles.matchAll(/["']([^"']+)["']/g)].map((match) => match[1])
+    : [];
 };

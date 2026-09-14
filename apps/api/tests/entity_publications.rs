@@ -144,6 +144,74 @@ async fn channel_publication_is_authorized_and_entity_changes_withdraw_approval(
 }
 
 #[sqlx::test]
+async fn trusted_blueprint_role_retains_publication_after_an_entity_edit(pool: PgPool) {
+    let (base_url, server) = start_server(pool).await;
+    let client = authenticated_client();
+    let context = client
+        .post(format!("{base_url}/contexts"))
+        .json(&json!({ "code": "trusted-publication", "data": {} }))
+        .send()
+        .await
+        .unwrap()
+        .error_for_status()
+        .unwrap()
+        .json::<Value>()
+        .await
+        .unwrap();
+    let context_id = context["id"].as_str().unwrap();
+    client
+        .put(format!("{base_url}/publication-channels/{context_id}"))
+        .json(&json!({ "enabled": true }))
+        .send()
+        .await
+        .unwrap()
+        .error_for_status()
+        .unwrap();
+    let definition =
+        format!("{PUBLICATION_BLUEPRINT}\n[publication]\nretain_on_edit_roles = [\"owner\"]\n");
+    let blueprint = create_blueprint(&client, &base_url, &definition).await;
+    let entity = create_entity(&client, &base_url, &blueprint).await;
+    let entity_id = entity["id"].as_str().unwrap();
+    client
+        .post(format!("{base_url}/v1/entities/{entity_id}/publications"))
+        .json(&json!({ "context_id": context_id }))
+        .send()
+        .await
+        .unwrap()
+        .error_for_status()
+        .unwrap();
+    client
+        .put(format!("{base_url}/v1/entities/{entity_id}"))
+        .json(&json!({
+            "values": [{
+                "kind": "scalar",
+                "attribute_code": "title",
+                "context_id": context_id,
+                "value": "Retained",
+            }],
+            "relationships": [],
+            "remove_values": [],
+        }))
+        .send()
+        .await
+        .unwrap()
+        .error_for_status()
+        .unwrap();
+    let statuses = client
+        .get(format!("{base_url}/v1/entities/{entity_id}/publications"))
+        .send()
+        .await
+        .unwrap()
+        .error_for_status()
+        .unwrap()
+        .json::<Vec<Value>>()
+        .await
+        .unwrap();
+    assert_eq!(statuses[0]["status"], "published");
+    server.abort();
+}
+
+#[sqlx::test]
 async fn blueprint_revision_can_publish_its_entities_by_channel(pool: PgPool) {
     let (base_url, server) = start_server(pool).await;
     let client = authenticated_client();

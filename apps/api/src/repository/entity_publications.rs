@@ -255,6 +255,56 @@ impl CatalogRepository {
         .await
     }
 
+    pub(in crate::repository) async fn reconcile_entity_publication(
+        &self,
+        tx: &mut Transaction<'_, Postgres>,
+        entity_id: Uuid,
+        reason: &str,
+    ) -> Result<Option<String>, RepositoryError> {
+        let Some(actor_id) = self
+            .audit_context
+            .as_ref()
+            .and_then(|audit| audit.actor_user_id)
+        else {
+            self.clear_entity_publications(tx, entity_id, reason)
+                .await?;
+            return Ok(None);
+        };
+        let workspace_id = self.workspace_id.unwrap_or(Self::DEFAULT_WORKSPACE_ID);
+        let definition: Option<String> = sqlx::query_scalar(
+            "SELECT b.definition FROM entities e JOIN blueprints b ON b.workspace_id = e.workspace_id AND b.id = e.blueprint_id AND b.version = e.blueprint_version WHERE e.workspace_id = $1 AND e.id = $2 AND e.deleted_at IS NULL",
+        )
+        .bind(workspace_id)
+        .bind(entity_id)
+        .fetch_optional(&mut **tx)
+        .await?;
+        let Some(definition) = definition else {
+            return Ok(None);
+        };
+        let roles = catalog_blueprint::parse(&definition)
+            .map_err(RepositoryError::invalid_blueprint_definition)?
+            .publication
+            .retain_on_edit_roles;
+        if roles.is_empty() {
+            self.clear_entity_publications(tx, entity_id, reason)
+                .await?;
+            return Ok(None);
+        }
+        let retained_role: Option<String> = sqlx::query_scalar(
+            "SELECT r.code FROM workspace_memberships m JOIN role_grants g ON g.membership_id = m.id AND g.workspace_id = m.workspace_id JOIN roles r ON r.id = g.role_id WHERE m.workspace_id = $1 AND m.user_id = $2 AND m.state = 'active' AND g.scope_type = 'workspace' AND g.scope_target_id = $1 AND r.code = ANY($3) AND (r.is_system OR r.workspace_id = $1) ORDER BY r.code LIMIT 1",
+        )
+        .bind(workspace_id)
+        .bind(actor_id)
+        .bind(&roles)
+        .fetch_optional(&mut **tx)
+        .await?;
+        if retained_role.is_none() {
+            self.clear_entity_publications(tx, entity_id, reason)
+                .await?;
+        }
+        Ok(retained_role)
+    }
+
     pub(in crate::repository) async fn clear_entity_publications(
         &self,
         tx: &mut Transaction<'_, Postgres>,

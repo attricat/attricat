@@ -5,7 +5,7 @@ use serde::Deserialize;
 
 use crate::{
     AttributeDeclaration, BlueprintDefinition, BlueprintError, BlueprintKind, FilePolicy,
-    IncludeRef, LocalAttributeDeclaration, ViewDefinition,
+    IncludeRef, LocalAttributeDeclaration, PublicationPolicy, ViewDefinition,
 };
 
 #[derive(Deserialize)]
@@ -20,6 +20,8 @@ struct RawBlueprintDefinition {
     #[serde(default)]
     views: HashMap<String, ViewDefinition>,
     entity_schema: Option<String>,
+    #[serde(default)]
+    publication: PublicationPolicy,
     /// Namespaced extension metadata is preserved in the immutable source
     /// definition and intentionally ignored by the core blueprint compiler.
     #[serde(default)]
@@ -94,6 +96,14 @@ pub fn parse(source: &str) -> Result<BlueprintDefinition, BlueprintError> {
         }
         if !aliases.insert(include.alias.clone()) {
             return Err(BlueprintError::DuplicateIncludeAlias(include.alias.clone()));
+        }
+    }
+
+    let mut publication_roles = HashSet::new();
+    for role in &raw.publication.retain_on_edit_roles {
+        validate_code(role, "publication retain_on_edit_roles")?;
+        if !publication_roles.insert(role) {
+            return Err(BlueprintError::DuplicatePublicationRole(role.clone()));
         }
     }
 
@@ -262,6 +272,7 @@ pub fn parse(source: &str) -> Result<BlueprintDefinition, BlueprintError> {
         includes: raw.includes,
         views: raw.views,
         entity_schema,
+        publication: raw.publication,
         attributes,
     })
 }

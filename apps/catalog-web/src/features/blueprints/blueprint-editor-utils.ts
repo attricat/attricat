@@ -7,6 +7,10 @@ code = "new_blueprint"
 name = "New blueprint"
 kind = "entity"
 
+# Optional: edits by these workspace roles retain channel publication.
+# [publication]
+# retain_on_edit_roles = ["catalog_manager"]
+
 [views.dropdown_option]
 type = "dropdown_option"
 fields = ["name"]
