@@ -191,8 +191,10 @@ authenticated command. The CLI stores only the server-issued session and CSRF
 cookies in that file, sets mode `0600` on Unix, sends the CSRF synchronizer
 header for unsafe requests, replaces the file on renewal, and removes it after
 a successful logout. Do not commit or share this file. Without `--session-file`,
-a login remains valid only for that invocation's HTTP client; bearer-token
-commands remain available through `--token`/`CATALOG_TOKEN`.
+a login remains valid only for that invocation's HTTP client. A bearer token
+provided with `--token` or `CATALOG_TOKEN` always takes precedence over a
+session file; the CLI does not read or send saved browser cookies in that case.
+When no token is supplied, the saved login session is used.
 
 Search `--filters` is the API array of field/operator/value objects;
 `--relationship-tree-facets` is the array of objects with

@@ -1018,10 +1018,18 @@ async fn run(cli: Cli) -> Result<String, CliError> {
         },
     };
     let session_file = cli.session_file;
-    let session = SessionFile::load(session_file.as_ref())?;
+    // A personal token is the explicit automation credential. Do not even
+    // read a saved browser session when one is supplied: it takes precedence
+    // and avoids accidentally combining two identities on a request.
+    let token = cli.token;
+    let session = if token.is_some() {
+        None
+    } else {
+        SessionFile::load(session_file.as_ref())?
+    };
     let mut client = Client::builder().connect_timeout(CONNECT_TIMEOUT);
     let mut headers = reqwest::header::HeaderMap::new();
-    if let Some(token) = cli.token {
+    if let Some(token) = token {
         let value =
             reqwest::header::HeaderValue::from_str(&format!("Bearer {token}")).map_err(|_| {
                 CliError::Input("CATALOG_TOKEN contains invalid header characters".to_owned())
@@ -3320,6 +3328,37 @@ value = "Blue shirt"
             1
         );
         assert_eq!(migrations.load(Ordering::SeqCst), 0);
+        server.abort();
+    }
+
+    #[tokio::test]
+    async fn bearer_token_skips_a_saved_browser_session() {
+        let session_file = tempfile::NamedTempFile::new().unwrap();
+        fs::write(session_file.path(), "not JSON").unwrap();
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let address = listener.local_addr().unwrap();
+        let server = tokio::spawn(async move {
+            axum::serve(
+                listener,
+                axum::Router::new().route(
+                    "/health",
+                    axum::routing::get(|| async { axum::Json(json!({ "status": "ok" })) }),
+                ),
+            )
+            .await
+            .unwrap()
+        });
+
+        let body = run(Cli {
+            server: Some(Url::parse(&format!("http://{address}")).unwrap()),
+            token: Some("personal-token".to_owned()),
+            session_file: Some(session_file.path().to_path_buf()),
+            no_env: false,
+            command: Command::Health,
+        })
+        .await
+        .unwrap();
+        assert_eq!(body, r#"{"status":"ok"}"#);
         server.abort();
     }
 
