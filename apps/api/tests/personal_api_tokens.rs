@@ -121,6 +121,89 @@ async fn personal_api_tokens_are_one_time_secrets_and_enforce_permission_subsets
 }
 
 #[sqlx::test]
+async fn token_issuance_rejects_permissions_the_owner_cannot_delegate(pool: PgPool) {
+    let (base_url, server) = start_server(pool.clone()).await;
+    let workspace_id = BOOTSTRAP_WORKSPACE_ID.parse::<Uuid>().unwrap();
+    let user_id = Uuid::new_v4();
+    let membership_id = Uuid::new_v4();
+    let role_id = Uuid::new_v4();
+    sqlx::query("INSERT INTO users (id, email) VALUES ($1, 'token-issuer@example.test')")
+        .bind(user_id)
+        .execute(&pool)
+        .await
+        .unwrap();
+    sqlx::query(
+        "INSERT INTO workspace_memberships (id, workspace_id, user_id) VALUES ($1, $2, $3)",
+    )
+    .bind(membership_id)
+    .bind(workspace_id)
+    .bind(user_id)
+    .execute(&pool)
+    .await
+    .unwrap();
+    sqlx::query("INSERT INTO roles (id, code, workspace_id, is_system) VALUES ($1, 'token_issuer', $2, false)")
+        .bind(role_id)
+        .bind(workspace_id)
+        .execute(&pool)
+        .await
+        .unwrap();
+    sqlx::query(
+        "INSERT INTO role_permissions (role_id, permission_code) VALUES ($1, 'tokens.manage')",
+    )
+    .bind(role_id)
+    .execute(&pool)
+    .await
+    .unwrap();
+    sqlx::query("INSERT INTO role_grants (id, workspace_id, membership_id, role_id, scope_type, scope_target_id) VALUES ($1, $2, $3, $4, 'workspace', $2)")
+        .bind(Uuid::new_v4())
+        .bind(workspace_id)
+        .bind(membership_id)
+        .bind(role_id)
+        .execute(&pool)
+        .await
+        .unwrap();
+    let secret = "cat_pat_token_issuer";
+    let token_id = Uuid::new_v4();
+    insert_personal_api_token(
+        &pool,
+        token_id,
+        user_id,
+        workspace_id,
+        "issuer",
+        secret,
+        None,
+    )
+    .await;
+    sqlx::query("INSERT INTO personal_api_token_permissions (token_id, permission_code) VALUES ($1, 'tokens.manage')")
+        .bind(token_id)
+        .execute(&pool)
+        .await
+        .unwrap();
+    let token = Client::builder()
+        .default_headers({
+            let mut headers = reqwest::header::HeaderMap::new();
+            headers.insert(
+                "authorization",
+                reqwest::header::HeaderValue::from_static("Bearer cat_pat_token_issuer"),
+            );
+            headers
+        })
+        .build()
+        .unwrap();
+    assert_eq!(
+        token
+            .post(format!("{base_url}/personal-access-tokens"))
+            .json(&json!({"label":"escalation", "permissions":["blueprints.read"]}))
+            .send()
+            .await
+            .unwrap()
+            .status(),
+        StatusCode::FORBIDDEN
+    );
+    server.abort();
+}
+
+#[sqlx::test]
 async fn expired_tokens_fail_and_token_auth_still_obeys_scoped_grants(pool: PgPool) {
     let (base_url, server) = start_server(pool.clone()).await;
     let workspace_id = BOOTSTRAP_WORKSPACE_ID.parse::<Uuid>().unwrap();

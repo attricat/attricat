@@ -269,6 +269,8 @@ pub enum RepositoryError {
     PublicationChannelDisabled,
     #[error("an authenticated user is required to publish an entity")]
     PublicationActorRequired,
+    #[error("requested token permissions are not available to the current user")]
+    TokenPermissionsUnavailable,
     #[error("an approval decision has already been recorded")]
     ApprovalAlreadyDecided,
     #[error(transparent)]

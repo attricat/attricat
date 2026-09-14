@@ -36,6 +36,7 @@ const tokenPermissionPresets = [
       'contexts.write',
       'entities.read',
       'entities.write',
+      'entities.publish',
     ],
   },
   {

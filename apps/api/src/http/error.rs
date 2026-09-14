@@ -281,6 +281,7 @@ impl From<RepositoryError> for ApiError {
             RepositoryError::PublicationActorRequired => {
                 Self::internal("an authenticated user is required to publish an entity")
             }
+            RepositoryError::TokenPermissionsUnavailable => Self::forbidden(),
             RepositoryError::InvalidPreview
             | RepositoryError::InvalidHierarchyRelationship
             | RepositoryError::InvalidAgentState(_)

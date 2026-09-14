@@ -42,13 +42,19 @@ impl CatalogRepository {
         if !permitted {
             return Err(RepositoryError::NotFound("token authority"));
         }
-        let known: i64 =
-            sqlx::query_scalar("SELECT count(*) FROM permissions WHERE code = ANY($1)")
-                .bind(permissions)
-                .fetch_one(&mut *tx)
-                .await?;
-        if known != permissions.len() as i64 {
-            return Err(RepositoryError::NotFound("known permissions"));
+        // Keep issuance aligned with the token-permissions UI: a personal token
+        // may only contain permissions currently granted to its owner. Route
+        // authorization still rechecks live scoped grants when the token is used.
+        let available: i64 = sqlx::query_scalar(
+            "SELECT count(DISTINCT rp.permission_code) FROM workspace_memberships m JOIN role_grants g ON g.membership_id = m.id AND g.workspace_id = m.workspace_id JOIN role_permissions rp ON rp.role_id = g.role_id WHERE m.user_id = $1 AND m.workspace_id = $2 AND m.state = 'active' AND rp.permission_code = ANY($3)",
+        )
+        .bind(user_id)
+        .bind(workspace_id)
+        .bind(permissions)
+        .fetch_one(&mut *tx)
+        .await?;
+        if available != permissions.len() as i64 {
+            return Err(RepositoryError::TokenPermissionsUnavailable);
         }
         sqlx::query("INSERT INTO personal_api_tokens (id, user_id, workspace_id, label, token_digest, expires_at) VALUES ($1, $2, $3, $4, $5, $6)").bind(token_id).bind(user_id).bind(workspace_id).bind(label).bind(digest).bind(expires_at).execute(&mut *tx).await?;
         for permission in permissions {
