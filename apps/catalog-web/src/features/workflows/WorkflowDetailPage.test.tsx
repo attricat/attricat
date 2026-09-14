@@ -19,11 +19,14 @@ vi.mock('@tanstack/react-router', () => ({
   Link: forwardRef<
     HTMLAnchorElement,
     ComponentPropsWithoutRef<'a'> & { params?: object; to: string }
-  >(({ children, params: _params, to, ...props }, ref) => (
-    <a {...props} href={to} ref={ref}>
-      {children}
-    </a>
-  )),
+  >(({ children, params, to, ...props }, ref) => {
+    void params;
+    return (
+      <a {...props} href={to} ref={ref}>
+        {children}
+      </a>
+    );
+  }),
 }));
 vi.mock('../auth/api', () => ({ currentSession: vi.fn() }));
 vi.mock('./api', () => ({
@@ -43,6 +46,7 @@ const workflow = {
   definition_hash: 'a'.repeat(64),
   enabled_version: null,
   id: '223e4567-e89b-12d3-a456-426614174000',
+  manual_enabled: false,
   name: 'Example workflow',
   published_at: null,
   status: 'draft' as const,
@@ -59,6 +63,7 @@ const run = {
   id: '123e4567-e89b-12d3-a456-426614174000',
   last_error: 'A safe error',
   root_trigger_event_id: '423e4567-e89b-12d3-a456-426614174000',
+  source: 'event' as const,
   status: 'dead_letter' as const,
   trigger_event_id: '323e4567-e89b-12d3-a456-426614174000',
   trigger_sequence: 4,

@@ -88,14 +88,18 @@ export const runWorkflowNow = (
   entityId: string,
   idempotencyKey: string,
 ): Promise<{ id: string }> =>
-  request(`/api/workflows/${workflowPath(id)}/run-now`, z.object({ id: z.uuid() }), {
-    body: JSON.stringify({
-      entity_id: z.uuid().parse(entityId),
-      idempotency_key: z.string().min(1).max(128).parse(idempotencyKey),
-    }),
-    headers: { 'Content-Type': 'application/json' },
-    method: 'POST',
-  });
+  request(
+    `/api/workflows/${workflowPath(id)}/run-now`,
+    z.object({ id: z.uuid() }),
+    {
+      body: JSON.stringify({
+        entity_id: z.uuid().parse(entityId),
+        idempotency_key: z.string().min(1).max(128).parse(idempotencyKey),
+      }),
+      headers: { 'Content-Type': 'application/json' },
+      method: 'POST',
+    },
+  );
 
 export const disableWorkflow = (id: string): Promise<Workflow> =>
   request(`/api/workflows/${workflowPath(id)}/disable`, workflowSchema, {

@@ -70,7 +70,7 @@ export const ExportsPage = () => {
         <Alert severity="error" sx={{ mt: 3 }}>
           {contexts.error?.message ??
             channels.error?.message ??
-            updateChannel.error.message}
+            updateChannel.error?.message}
         </Alert>
       )}
       {(contexts.isPending || channels.isPending) && (

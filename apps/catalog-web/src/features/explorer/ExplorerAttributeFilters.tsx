@@ -249,7 +249,11 @@ export const ExplorerAttributeFilters = ({
           >
             {filterableAttributes.map((item) => (
               <MenuItem key={item.code} value={item.code}>
-                <Stack alignItems="center" direction="row" spacing={1}>
+                <Stack
+                  direction="row"
+                  spacing={1}
+                  sx={{ alignItems: 'center' }}
+                >
                   <Chip label={blueprintName} size="small" />
                   <Typography>{attributeLabel(item)}</Typography>
                 </Stack>
