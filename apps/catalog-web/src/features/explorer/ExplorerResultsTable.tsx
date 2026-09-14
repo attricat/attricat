@@ -61,22 +61,110 @@ import { entityQueryKeys } from '../entities/query-keys';
 
 const maximumExplorerCellFrames = 32;
 
-const EntityActionsButton = ({
-  entityId,
-  onOpen,
+const EntityActionsMenu = ({
+  blueprintId,
+  canPublish,
+  entity,
+  onSearchInfo,
+  publication,
+  publicationContextId,
+  publish,
+  publishing,
+  unpublish,
+  unpublishing,
 }: {
-  entityId: string;
-  onOpen: (anchor: HTMLElement) => void;
+  blueprintId: string;
+  canPublish: boolean;
+  entity: EntityItem;
+  onSearchInfo: (entity: EntityItem) => void;
+  publication: EntityPublicationStatus | undefined;
+  publicationContextId: string | undefined;
+  publish: () => void;
+  publishing: boolean;
+  unpublish: () => void;
+  unpublishing: boolean;
 }) => {
   const { t } = useTranslation();
+  const [position, setPosition] = useState<{
+    left: number;
+    top: number;
+  } | null>(null);
+
   return (
-    <IconButton
-      aria-label={t('explorer.entityActionsFor', { entityId })}
-      onClick={(event) => onOpen(event.currentTarget)}
-      size="small"
-    >
-      <MoreVertIcon fontSize="inherit" />
-    </IconButton>
+    <>
+      <IconButton
+        aria-label={t('explorer.entityActionsFor', { entityId: entity.id })}
+        onClick={(event) => {
+          const { left, top } = event.currentTarget.getBoundingClientRect();
+          setPosition({ left, top });
+        }}
+        size="small"
+      >
+        <MoreVertIcon fontSize="inherit" />
+      </IconButton>
+      <Menu
+        anchorPosition={position ?? undefined}
+        anchorReference="anchorPosition"
+        onClose={() => setPosition(null)}
+        open={Boolean(position)}
+        transformOrigin={{ horizontal: 'right', vertical: 'top' }}
+      >
+        <MenuItem
+          onClick={() => {
+            setPosition(null);
+            onSearchInfo(entity);
+          }}
+        >
+          {t('explorer.searchInfo')}
+        </MenuItem>
+        {canPublish && publicationContextId && publication && (
+          <>
+            {publication.status === 'not_published' ? (
+              <MenuItem
+                disabled={publishing}
+                onClick={() => {
+                  setPosition(null);
+                  publish();
+                }}
+              >
+                {t('entities.publish')}
+              </MenuItem>
+            ) : (
+              <>
+                <MenuItem
+                  disabled={publishing}
+                  onClick={() => {
+                    setPosition(null);
+                    publish();
+                  }}
+                >
+                  {t('entities.publish')}
+                </MenuItem>
+                <MenuItem
+                  disabled={unpublishing}
+                  onClick={() => {
+                    setPosition(null);
+                    unpublish();
+                  }}
+                >
+                  {t('entities.unpublish')}
+                </MenuItem>
+              </>
+            )}
+          </>
+        )}
+        <ExtensionPopoverOutlet
+          context={{
+            context_version: 1,
+            blueprint_id: blueprintId,
+            blueprint_version: entity.blueprint_version,
+            entity_id: entity.id,
+          }}
+          label={t('explorer.extensionActions')}
+          outlet="explorer_row_action"
+        />
+      </Menu>
+    </>
   );
 };
 
@@ -112,9 +200,9 @@ export const ExplorerResultsTable = ({
   totalCountCapped: boolean;
 }) => {
   const { t } = useTranslation();
-  const [actionAnchor, setActionAnchor] = useState<HTMLElement | null>(null);
-  const [actionEntity, setActionEntity] = useState<EntityItem | null>(null);
-  const [searchInfoOpen, setSearchInfoOpen] = useState(false);
+  const [searchInfoEntity, setSearchInfoEntity] = useState<EntityItem | null>(
+    null,
+  );
   const queryClient = useQueryClient();
   const publicationQueries = useQueries({
     queries: items.map((entity) => ({
@@ -398,15 +486,23 @@ export const ExplorerResultsTable = ({
     columnHelper.display({
       id: 'actions',
       header: '',
-      cell: (info) => (
-        <EntityActionsButton
-          entityId={info.row.original.id}
-          onOpen={(anchor) => {
-            setActionEntity(info.row.original);
-            setActionAnchor(anchor);
-          }}
-        />
-      ),
+      cell: (info) => {
+        const entity = info.row.original;
+        return (
+          <EntityActionsMenu
+            blueprintId={String(blueprint.blueprint.id)}
+            canPublish={canPublish}
+            entity={entity}
+            onSearchInfo={setSearchInfoEntity}
+            publication={publicationsByEntityId.get(entity.id)}
+            publicationContextId={publicationContextId}
+            publish={() => publish.mutate(entity.id)}
+            publishing={publish.isPending}
+            unpublish={() => unpublish.mutate(entity.id)}
+            unpublishing={unpublish.isPending}
+          />
+        );
+      },
     }) as LegacyColumnDef<EntityItem, string>,
   ];
   const table = useLegacyTable({
@@ -472,11 +568,19 @@ export const ExplorerResultsTable = ({
                   <TableCell
                     key={header.id}
                     sx={
-                      header.column.id === 'display'
-                        ? { minWidth: 280 }
-                        : header.column.id === 'id'
-                          ? { textAlign: 'center', width: 48 }
-                          : {}
+                      header.column.id === 'actions'
+                        ? {
+                            bgcolor: 'background.paper',
+                            boxShadow: 1,
+                            position: 'sticky',
+                            right: 0,
+                            zIndex: 3,
+                          }
+                        : header.column.id === 'display'
+                          ? { minWidth: 280 }
+                          : header.column.id === 'id'
+                            ? { textAlign: 'center', width: 48 }
+                            : {}
                     }
                   >
                     {header.isPlaceholder
@@ -526,11 +630,19 @@ export const ExplorerResultsTable = ({
                     <TableCell
                       key={cell.id}
                       sx={
-                        cell.column.id === 'display'
-                          ? { minWidth: 280 }
-                          : cell.column.id === 'id'
-                            ? { textAlign: 'center', width: 48 }
-                            : {}
+                        cell.column.id === 'actions'
+                          ? {
+                              bgcolor: 'background.paper',
+                              boxShadow: 1,
+                              position: 'sticky',
+                              right: 0,
+                              zIndex: 1,
+                            }
+                          : cell.column.id === 'display'
+                            ? { minWidth: 280 }
+                            : cell.column.id === 'id'
+                              ? { textAlign: 'center', width: 48 }
+                              : {}
                       }
                     >
                       {flexRender(
@@ -558,77 +670,14 @@ export const ExplorerResultsTable = ({
           {t('explorer.noMatchingEntities')}
         </Typography>
       )}
-      <Menu
-        anchorEl={actionAnchor}
-        onClose={() => setActionAnchor(null)}
-        open={Boolean(actionAnchor)}
+      <Dialog
+        onClose={() => setSearchInfoEntity(null)}
+        open={Boolean(searchInfoEntity)}
       >
-        <MenuItem
-          onClick={() => {
-            setActionAnchor(null);
-            setSearchInfoOpen(true);
-          }}
-        >
-          {t('explorer.searchInfo')}
-        </MenuItem>
-        {canPublish &&
-          actionEntity &&
-          publicationContextId &&
-          publicationsByEntityId.get(actionEntity.id) && (
-            <>
-              {publicationsByEntityId.get(actionEntity.id)?.status ===
-              'not_published' ? (
-                <MenuItem
-                  disabled={publish.isPending}
-                  onClick={() => {
-                    publish.mutate(actionEntity.id);
-                    setActionAnchor(null);
-                  }}
-                >
-                  {t('entities.publish')}
-                </MenuItem>
-              ) : (
-                <>
-                  <MenuItem
-                    disabled={publish.isPending}
-                    onClick={() => {
-                      publish.mutate(actionEntity.id);
-                      setActionAnchor(null);
-                    }}
-                  >
-                    {t('entities.publish')}
-                  </MenuItem>
-                  <MenuItem
-                    disabled={unpublish.isPending}
-                    onClick={() => {
-                      unpublish.mutate(actionEntity.id);
-                      setActionAnchor(null);
-                    }}
-                  >
-                    {t('entities.unpublish')}
-                  </MenuItem>
-                </>
-              )}
-            </>
-          )}
-        {actionEntity && (
-          <ExtensionPopoverOutlet
-            context={{
-              context_version: 1,
-              blueprint_id: String(blueprint.blueprint.id),
-              blueprint_version: actionEntity.blueprint_version,
-              entity_id: actionEntity.id,
-            }}
-            label={t('explorer.extensionActions')}
-            outlet="explorer_row_action"
-          />
-        )}
-      </Menu>
-      <Dialog onClose={() => setSearchInfoOpen(false)} open={searchInfoOpen}>
         <DialogTitle>{t('explorer.searchInfo')}</DialogTitle>
         <DialogContent>
           <Typography>
-            {actionEntity?.match_explanations
+            {searchInfoEntity?.match_explanations
               .map((explanation) =>
                 explanation.traversal_depth
                   ? t('explorer.matchViaRelationship', {
