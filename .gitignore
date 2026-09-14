@@ -8,9 +8,6 @@
 /apps/docs/node_modules
 /apps/docs/.astro
 /apps/docs/dist
-/landing/node_modules
-/landing/.astro
-/landing/dist
 apps/catalog-web/test-results/
 apps/catalog-web/playwright-report/
 

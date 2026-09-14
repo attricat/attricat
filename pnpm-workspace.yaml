@@ -1,7 +1,6 @@
 packages:
   - apps/catalog-web
   - apps/docs
-  - landing
 
 allowBuilds:
   cpu-features: true

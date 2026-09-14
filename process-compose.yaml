@@ -9,5 +9,3 @@ processes:
     command: watchexec --restart --watch apps/catalog-web --exts ts,tsx,css,html,json -- pnpm --dir apps/catalog-web exec vite --host --port $WEB_PORT
   docs:
     command: pnpm --dir apps/docs dev --host 0.0.0.0 --port $DOCS_PORT
-  landing:
-    command: pnpm --dir landing dev --host 0.0.0.0 --port $LANDING_PORT
