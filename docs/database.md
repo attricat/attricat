@@ -248,7 +248,7 @@ the entity feature, `api.ts` owns HTTP request and response contracts,
 Components render those feature helpers rather than constructing catalog
 payloads or interpreting EAV values directly.
 
-The JSON-first `catalog` client is documented in [cli.md](cli.md). HTTP routes,
+The JSON-first `acli` client is documented in [cli.md](cli.md). HTTP routes,
 configuration, and operational limits are documented in [API Reference](api.md)
 and [Configuration Reference](configuration.md).
 

@@ -9,7 +9,7 @@ use std::{
 use clap::{Args, Parser, Subcommand};
 use futures_util::StreamExt;
 use reqwest::{Client, Method};
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 use thiserror::Error;
 use url::Url;
@@ -20,13 +20,19 @@ const REQUEST_TIMEOUT: Duration = Duration::from_secs(30);
 const MAX_RESPONSE_BYTES: usize = 1024 * 1024;
 
 #[derive(Parser)]
-#[command(name = "catalog", about = "JSON-first client for the Catalog API")]
+#[command(name = "acli", about = "JSON-first client for the Catalog API")]
 struct Cli {
     #[arg(long, env = "CATALOG_SERVER")]
     server: Option<Url>,
     /// Personal API token. It is sent only as an HTTP Bearer credential.
     #[arg(long, env = "CATALOG_TOKEN", hide_env_values = true)]
     token: Option<String>,
+    /// Persist browser session and CSRF cookies for the auth commands.
+    #[arg(long, env = "CATALOG_SESSION_FILE", value_name = "PATH")]
+    session_file: Option<PathBuf>,
+    /// Do not load environment variables from a .env file in the current directory.
+    #[arg(long, global = true)]
+    no_env: bool,
     #[command(subcommand)]
     command: Command,
 }
@@ -34,6 +40,11 @@ struct Cli {
 #[derive(Subcommand)]
 enum Command {
     Health,
+    /// Browser-session authentication. Use --session-file to reuse a login across commands.
+    Auth {
+        #[command(subcommand)]
+        command: AuthCommand,
+    },
     Event {
         #[command(subcommand)]
         command: EventCommand,
@@ -54,6 +65,35 @@ enum Command {
         #[command(subcommand)]
         command: ValueCommand,
     },
+    Audit {
+        #[command(subcommand)]
+        command: AuditCommand,
+    },
+    DataHealth {
+        #[command(subcommand)]
+        command: DataHealthCommand,
+    },
+    Workflow {
+        #[command(subcommand)]
+        command: WorkflowCommand,
+    },
+    ExtensionRegistry {
+        #[command(subcommand)]
+        command: ExtensionRegistryCommand,
+    },
+    Extension {
+        #[command(subcommand)]
+        command: ExtensionCommand,
+    },
+    File {
+        #[command(subcommand)]
+        command: FileCommand,
+    },
+    /// Download Prometheus metrics to a file; metrics are intentionally not JSON.
+    Metrics {
+        #[command(subcommand)]
+        command: MetricsCommand,
+    },
     /// Administration for the workspace selected by the bearer credential.
     Workspace {
         #[command(subcommand)]
@@ -64,6 +104,33 @@ enum Command {
         #[command(subcommand)]
         command: TokenCommand,
     },
+}
+
+#[derive(Subcommand)]
+enum AuthCommand {
+    Discover {
+        login_identifier: String,
+    },
+    Login {
+        login_identifier: String,
+        #[arg(long)]
+        email: String,
+        #[arg(long)]
+        password_stdin: bool,
+    },
+    PasswordReset {
+        #[arg(long)]
+        email: String,
+    },
+    PasswordResetConfirm {
+        #[arg(long)]
+        token_stdin: bool,
+        #[arg(long)]
+        password_stdin: bool,
+    },
+    Session,
+    Logout,
+    Renew,
 }
 
 #[derive(Subcommand)]
@@ -92,6 +159,24 @@ enum BlueprintCommand {
         blueprint_id: Uuid,
     },
     GetVersion {
+        blueprint_id: Uuid,
+        version: i64,
+    },
+    Catalogue,
+    RevisionList {
+        blueprint_id: Uuid,
+    },
+    PublishEntities {
+        blueprint_id: Uuid,
+        version: i64,
+        #[arg(long)]
+        context_id: Uuid,
+    },
+    PublishEntitiesAll {
+        blueprint_id: Uuid,
+        version: i64,
+    },
+    SafeMigrationBatch {
         blueprint_id: Uuid,
         version: i64,
     },
@@ -202,6 +287,20 @@ enum EntityCommand {
         /// JSON array; return entities containing every requested system tag.
         #[arg(long)]
         system_tags: Option<String>,
+        /// JSON array of structured search filters, or a file containing it.
+        #[arg(long)]
+        filters: Option<String>,
+        #[arg(long)]
+        outdated: bool,
+        #[arg(long)]
+        include_total: bool,
+        /// JSON array of relationship-tree facet requests, or a file containing it.
+        #[arg(long)]
+        relationship_tree_facets: Option<String>,
+        #[arg(long)]
+        sort_field: Option<String>,
+        #[arg(long, requires = "sort_field", value_parser = ["asc", "desc"])]
+        sort_direction: Option<String>,
     },
     Form {
         entity_id: Uuid,
@@ -225,6 +324,65 @@ enum EntityCommand {
     },
     Migrate {
         entity_id: Uuid,
+        /// JSON array or file of scalar migration values.
+        #[arg(long)]
+        values: Option<String>,
+        /// JSON array or file of relationship migration sets.
+        #[arg(long)]
+        relationships: Option<String>,
+        /// JSON array or file of attribute codes to discard.
+        #[arg(long)]
+        discard_attributes: Option<String>,
+    },
+    Hierarchy {
+        entity_id: Uuid,
+        #[arg(long)]
+        context_id: Uuid,
+        #[arg(long)]
+        field: String,
+    },
+    IncomingRelationships {
+        entity_id: Uuid,
+        #[arg(long)]
+        relationships: String,
+        #[arg(long)]
+        size: Option<u32>,
+        #[arg(long)]
+        cursor: Option<String>,
+    },
+    FacetChildren {
+        #[arg(long)]
+        blueprint: String,
+        #[arg(long)]
+        version: Option<i64>,
+        #[arg(long)]
+        query: Option<String>,
+        #[arg(long)]
+        source_relationship_field: String,
+        #[arg(long)]
+        hierarchy_field: Option<String>,
+        #[arg(long)]
+        context_id: Uuid,
+        #[arg(long)]
+        parent_id: Option<Uuid>,
+        #[arg(long)]
+        cursor: Option<Uuid>,
+        #[arg(long)]
+        selected_target_ids: Option<String>,
+    },
+    Publication {
+        #[command(subcommand)]
+        command: EntityPublicationCommand,
+    },
+    Changes {
+        entity_id: Uuid,
+    },
+    ValueHistory {
+        entity_id: Uuid,
+    },
+    RestoreValue {
+        entity_id: Uuid,
+        history_id: Uuid,
     },
     MigrateBulk {
         #[arg(long)]
@@ -240,6 +398,22 @@ enum EntityCommand {
 
 #[derive(Subcommand)]
 enum WorkspaceCommand {
+    Navigation {
+        #[command(subcommand)]
+        command: NavigationCommand,
+    },
+    TokenPermission {
+        #[command(subcommand)]
+        command: TokenPermissionCommand,
+    },
+    GrantTarget {
+        #[command(subcommand)]
+        command: GrantTargetCommand,
+    },
+    PublicationChannel {
+        #[command(subcommand)]
+        command: PublicationChannelCommand,
+    },
     Member {
         #[command(subcommand)]
         command: MemberCommand,
@@ -255,6 +429,52 @@ enum WorkspaceCommand {
     User {
         #[command(subcommand)]
         command: UserCommand,
+    },
+}
+
+#[derive(Subcommand)]
+enum NavigationCommand {
+    Get,
+    Set {
+        #[arg(long)]
+        entries: String,
+    },
+    Sidebar,
+}
+#[derive(Subcommand)]
+enum TokenPermissionCommand {
+    List,
+}
+#[derive(Subcommand)]
+enum GrantTargetCommand {
+    List { scope_type: String },
+}
+#[derive(Subcommand)]
+enum PublicationChannelCommand {
+    List,
+    Set {
+        context_id: Uuid,
+        #[arg(long, action = clap::ArgAction::Set)]
+        enabled: bool,
+    },
+}
+#[derive(Subcommand)]
+enum EntityPublicationCommand {
+    List {
+        entity_id: Uuid,
+    },
+    Publish {
+        entity_id: Uuid,
+        #[arg(long)]
+        context_id: Uuid,
+    },
+    Unpublish {
+        entity_id: Uuid,
+        #[arg(long)]
+        context_id: Uuid,
+    },
+    PublishAll {
+        entity_id: Uuid,
     },
 }
 
@@ -396,6 +616,237 @@ enum TokenCommand {
 }
 
 #[derive(Subcommand)]
+enum AuditCommand {
+    List {
+        #[arg(long)]
+        limit: Option<i64>,
+        #[arg(long)]
+        offset: Option<i64>,
+        #[arg(long)]
+        occurred_after: Option<String>,
+        #[arg(long)]
+        occurred_before: Option<String>,
+        #[arg(long)]
+        actor_user_id: Option<Uuid>,
+        #[arg(long)]
+        action_category: Option<String>,
+        #[arg(long)]
+        target_type: Option<String>,
+        #[arg(long, value_parser = ["human", "agent"])]
+        executor_type: Option<String>,
+        #[arg(long)]
+        agent_run_id: Option<Uuid>,
+        #[arg(long)]
+        agent_tool_call_id: Option<Uuid>,
+    },
+}
+
+#[derive(Subcommand)]
+enum DataHealthCommand {
+    Summary {
+        #[arg(long)]
+        stale_after_days: Option<u16>,
+    },
+    Blueprints {
+        #[arg(long)]
+        stale_after_days: Option<u16>,
+    },
+    Freshness,
+    Completeness,
+    Contexts,
+    Relationships,
+    Storage,
+    Refresh,
+}
+
+#[derive(Subcommand)]
+enum WorkflowCommand {
+    List,
+    Validate(SourceInput),
+    Create(SourceInput),
+    Get {
+        workflow_id: Uuid,
+    },
+    RevisionList {
+        workflow_id: Uuid,
+    },
+    VersionGet {
+        workflow_id: Uuid,
+        version: i64,
+    },
+    Revision {
+        workflow_id: Uuid,
+        #[command(flatten)]
+        source: SourceInput,
+    },
+    Publish {
+        workflow_id: Uuid,
+        version: i64,
+    },
+    Enable {
+        workflow_id: Uuid,
+        version: i64,
+    },
+    Disable {
+        workflow_id: Uuid,
+    },
+    RunNow {
+        workflow_id: Uuid,
+        #[arg(long)]
+        entity_id: Uuid,
+        #[arg(long)]
+        idempotency_key: String,
+    },
+    RunList,
+    RunReplay {
+        run_id: Uuid,
+    },
+}
+
+#[derive(Subcommand)]
+enum ExtensionRegistryCommand {
+    List,
+    Add {
+        #[arg(long)]
+        source: String,
+    },
+    Remove {
+        registry_id: Uuid,
+    },
+    Discover,
+    Details {
+        owner: String,
+        repository: String,
+    },
+}
+
+#[derive(Subcommand)]
+enum ExtensionCommand {
+    List,
+    Detail {
+        extension_id: String,
+    },
+    Remove {
+        extension_id: String,
+    },
+    Runtime,
+    WorkspaceMode {
+        #[arg(long, action = clap::ArgAction::Set)]
+        enabled: bool,
+    },
+    Install {
+        #[arg(long)]
+        owner: String,
+        #[arg(long)]
+        repository: String,
+        #[arg(long)]
+        release_id: u64,
+    },
+    Sideload {
+        #[arg(long)]
+        file: PathBuf,
+    },
+    Upgrade {
+        extension_id: String,
+        #[arg(long)]
+        owner: String,
+        #[arg(long)]
+        repository: String,
+        #[arg(long)]
+        release_id: u64,
+    },
+    Configure {
+        extension_id: String,
+        #[arg(long)]
+        configuration: String,
+    },
+    Grant {
+        extension_id: String,
+        #[arg(long)]
+        grant_kind: String,
+        #[arg(long)]
+        grant_id: String,
+    },
+    Revoke {
+        extension_id: String,
+        grant_kind: String,
+        grant_id: String,
+    },
+    Enable {
+        extension_id: String,
+    },
+    Disable {
+        extension_id: String,
+    },
+    Quarantine {
+        extension_id: String,
+        #[arg(long)]
+        diagnostic_code: String,
+    },
+    Artifact {
+        extension_id: String,
+        contribution_id: String,
+        #[arg(long)]
+        output: PathBuf,
+    },
+    Storage {
+        extension_id: String,
+        contribution_id: String,
+        release_id: Uuid,
+        #[arg(long)]
+        body: String,
+    },
+    Command {
+        extension_id: String,
+        contribution_id: String,
+        #[arg(long)]
+        release_id: Uuid,
+        #[arg(long)]
+        command_id: String,
+        #[arg(long)]
+        payload: String,
+    },
+}
+
+#[derive(Subcommand)]
+enum FileCommand {
+    Upload {
+        entity_id: Uuid,
+        attribute_code: String,
+        #[arg(long = "file", required = true)]
+        files: Vec<PathBuf>,
+        #[arg(long)]
+        context_id: Option<Uuid>,
+    },
+    Metadata {
+        file_id: Uuid,
+    },
+    DownloadOriginal {
+        file_id: Uuid,
+        #[arg(long)]
+        output: PathBuf,
+        #[arg(long)]
+        range: Option<String>,
+    },
+    DownloadVariant {
+        file_id: Uuid,
+        kind: String,
+        #[arg(long)]
+        output: PathBuf,
+        #[arg(long)]
+        range: Option<String>,
+    },
+}
+
+#[derive(Subcommand)]
+enum MetricsCommand {
+    Get {
+        #[arg(long)]
+        output: PathBuf,
+    },
+}
+
+#[derive(Subcommand)]
 enum ValueCommand {
     Append {
         entity_id: Uuid,
@@ -529,6 +980,10 @@ struct RelationshipInput {
 
 #[tokio::main]
 async fn main() -> ExitCode {
+    if let Err(error) = load_dotenv() {
+        eprintln!("{}", error.json());
+        return ExitCode::from(error.exit_code());
+    }
     match run(Cli::parse()).await {
         Ok(body) => {
             println!("{body}");
@@ -541,20 +996,65 @@ async fn main() -> ExitCode {
     }
 }
 
+fn load_dotenv() -> Result<(), CliError> {
+    if std::env::args_os().any(|argument| argument == "--no-env") {
+        return Ok(());
+    }
+    match dotenvy::from_filename(".env") {
+        Ok(_) => Ok(()),
+        Err(dotenvy::Error::Io(error)) if error.kind() == io::ErrorKind::NotFound => Ok(()),
+        Err(error) => Err(CliError::Input(format!("cannot load .env: {error}"))),
+    }
+}
+
 async fn run(cli: Cli) -> Result<String, CliError> {
-    let server = cli
-        .server
-        .unwrap_or_else(|| Url::parse("http://127.0.0.1:3000").expect("valid default URL"));
-    let mut client = Client::builder()
-        .connect_timeout(CONNECT_TIMEOUT)
-        .timeout(REQUEST_TIMEOUT);
-    if let Some(token) = cli.token {
-        let mut headers = reqwest::header::HeaderMap::new();
+    let server = match cli.server {
+        Some(server) => server,
+        None => match std::env::var("CATALOG_API_URL") {
+            Ok(value) => Url::parse(&value).map_err(|error| {
+                CliError::Input(format!("CATALOG_API_URL is not a valid URL: {error}"))
+            })?,
+            Err(_) => Url::parse("http://127.0.0.1:3000").expect("valid default URL"),
+        },
+    };
+    let session_file = cli.session_file;
+    // A personal token is the explicit automation credential. Do not even
+    // read a saved browser session when one is supplied: it takes precedence
+    // and avoids accidentally combining two identities on a request.
+    let token = cli.token;
+    let session = if token.is_some() {
+        None
+    } else {
+        SessionFile::load(session_file.as_ref())?
+    };
+    let mut client = Client::builder().connect_timeout(CONNECT_TIMEOUT);
+    let mut headers = reqwest::header::HeaderMap::new();
+    if let Some(token) = token {
         let value =
             reqwest::header::HeaderValue::from_str(&format!("Bearer {token}")).map_err(|_| {
                 CliError::Input("CATALOG_TOKEN contains invalid header characters".to_owned())
             })?;
         headers.insert(reqwest::header::AUTHORIZATION, value);
+    }
+    if let Some(session) = &session {
+        headers.insert(
+            reqwest::header::COOKIE,
+            reqwest::header::HeaderValue::from_str(&format!(
+                "catalog_session={}; catalog_csrf={}",
+                session.session, session.csrf
+            ))
+            .map_err(|_| {
+                CliError::Input("session file contains invalid cookie characters".to_owned())
+            })?,
+        );
+        headers.insert(
+            reqwest::header::HeaderName::from_static("x-catalog-csrf"),
+            reqwest::header::HeaderValue::from_str(&session.csrf).map_err(|_| {
+                CliError::Input("session file contains invalid CSRF characters".to_owned())
+            })?,
+        );
+    }
+    if !headers.is_empty() {
         client = client.default_headers(headers);
     }
     let client = client
@@ -563,6 +1063,7 @@ async fn run(cli: Cli) -> Result<String, CliError> {
 
     match cli.command {
         Command::Health => request(&client, &server, Method::GET, "/health", None).await,
+        Command::Auth { command } => auth_command(&client, &server, command, session_file.as_ref()).await,
         Command::Event { command } => match command {
             EventCommand::DeadLetters => {
                 request(
@@ -671,6 +1172,11 @@ async fn run(cli: Cli) -> Result<String, CliError> {
                 )
                 .await
             }
+            BlueprintCommand::Catalogue => request(&client, &server, Method::GET, "/blueprints/catalogue", None).await,
+            BlueprintCommand::RevisionList { blueprint_id } => request(&client, &server, Method::GET, &format!("/blueprints/{}/versions", segment(blueprint_id)), None).await,
+            BlueprintCommand::PublishEntities { blueprint_id, version, context_id } => request(&client, &server, Method::POST, &format!("/blueprints/{}/versions/{version}/entity-publications", segment(blueprint_id)), Some(json!({"context_id": context_id}))).await,
+            BlueprintCommand::PublishEntitiesAll { blueprint_id, version } => request(&client, &server, Method::POST, &format!("/blueprints/{}/versions/{version}/entity-publications/publish-all", segment(blueprint_id)), None).await,
+            BlueprintCommand::SafeMigrationBatch { blueprint_id, version } => request(&client, &server, Method::POST, &format!("/blueprints/{}/versions/{version}/safe-migration-batches", segment(blueprint_id)), None).await,
             BlueprintCommand::Resolve {
                 code,
                 version,
@@ -869,13 +1375,25 @@ async fn run(cli: Cli) -> Result<String, CliError> {
                 size,
                 cursor,
                 system_tags,
+                filters,
+                outdated,
+                include_total,
+                relationship_tree_facets,
+                sort_field,
+                sort_direction,
             } => {
                 let mut body = json!({
                     "blueprint": { "code": blueprint, "version": version },
                     "query": query,
-                    "filters": [],
+                    "filters": json_array_argument(filters.as_deref(), "--filters")?,
+                    "outdated": outdated,
+                    "include_total": include_total,
+                    "relationship_tree_facets": json_array_argument(relationship_tree_facets.as_deref(), "--relationship-tree-facets")?,
                     "page": { "size": size, "cursor": cursor },
                 });
+                if let Some(field) = sort_field {
+                    body["sort"] = json!({ "field": field, "direction": sort_direction.unwrap_or_else(|| "asc".to_owned()) });
+                }
                 if let Some(tags) = system_tags {
                     body["system_tags"] = json_tags_argument(&tags)?;
                 }
@@ -928,8 +1446,15 @@ async fn run(cli: Cli) -> Result<String, CliError> {
                 )
                 .await
             }
-            EntityCommand::Migrate { entity_id } => {
-                let result = migrate_entity(&client, &server, entity_id, false).await?;
+            EntityCommand::Hierarchy { entity_id, context_id, field } => request(&client, &server, Method::GET, &format!("/entities/{}/hierarchy?context_id={}&field={}", segment(entity_id), segment(context_id), segment(&field)), None).await,
+            EntityCommand::IncomingRelationships { entity_id, relationships, size, cursor } => request(&client, &server, Method::POST, &format!("/v1/entities/{}/incoming-relationships", segment(entity_id)), Some(json!({"relationships": json_array_input(&relationships, "--relationships")?, "page": {"size": size, "cursor": cursor}}))).await,
+            EntityCommand::FacetChildren { blueprint, version, query, source_relationship_field, hierarchy_field, context_id, parent_id, cursor, selected_target_ids } => request(&client, &server, Method::POST, "/v1/entities/facets/relationship-tree/children", Some(json!({"blueprint":{"code": blueprint, "version":version}, "query":query, "source_relationship_field":source_relationship_field, "hierarchy_field":hierarchy_field, "context_id":context_id, "parent_id":parent_id, "cursor":cursor, "selected_target_ids":json_array_argument(selected_target_ids.as_deref(), "--selected-target-ids")?}))).await,
+            EntityCommand::Publication { command } => entity_publication_command(&client, &server, command).await,
+            EntityCommand::Changes { entity_id } => request(&client, &server, Method::GET, &format!("/entities/{}/changes", segment(entity_id)), None).await,
+            EntityCommand::ValueHistory { entity_id } => request(&client, &server, Method::GET, &format!("/entities/{}/values/history", segment(entity_id)), None).await,
+            EntityCommand::RestoreValue { entity_id, history_id } => request(&client, &server, Method::POST, &format!("/entities/{}/values/history/{}/restore", segment(entity_id), segment(history_id)), None).await,
+            EntityCommand::Migrate { entity_id, values, relationships, discard_attributes } => {
+                let result = migrate_entity(&client, &server, entity_id, false, values.as_deref(), relationships.as_deref(), discard_attributes.as_deref()).await?;
                 serde_json::to_string(&result).map_err(|_| CliError::InvalidResponse)
             }
             EntityCommand::MigrateBulk {
@@ -941,6 +1466,13 @@ async fn run(cli: Cli) -> Result<String, CliError> {
         },
         Command::Workspace { command } => workspace_command(&client, &server, command).await,
         Command::Token { command } => token_command(&client, &server, command).await,
+        Command::Audit { command } => audit_command(&client, &server, command).await,
+        Command::DataHealth { command } => data_health_command(&client, &server, command).await,
+        Command::Workflow { command } => workflow_command(&client, &server, command).await,
+        Command::ExtensionRegistry { command } => extension_registry_command(&client, &server, command).await,
+        Command::Extension { command } => extension_command(&client, &server, command).await,
+        Command::File { command } => file_command(&client, &server, command).await,
+        Command::Metrics { command: MetricsCommand::Get { output } } => raw_download(&client, &server, "/metrics", &output, None).await,
         Command::Value { command } => match command {
             ValueCommand::Append {
                 entity_id,
@@ -998,12 +1530,205 @@ async fn run(cli: Cli) -> Result<String, CliError> {
     }
 }
 
+#[derive(Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+struct SessionFile {
+    session: String,
+    csrf: String,
+}
+
+impl SessionFile {
+    fn load(path: Option<&PathBuf>) -> Result<Option<Self>, CliError> {
+        path.map(|path| match fs::read_to_string(path) {
+            Ok(source) => serde_json::from_str(&source).map_err(|error| {
+                CliError::Input(format!("invalid session file {}: {error}", path.display()))
+            }),
+            // Login creates this opt-in file after receiving the cookies. Let a
+            // first login name a not-yet-existing path rather than requiring a
+            // caller to create an empty file first.
+            Err(error) if error.kind() == io::ErrorKind::NotFound => Ok(None),
+            Err(error) => Err(CliError::Input(format!(
+                "cannot read session file {}: {error}",
+                path.display()
+            ))),
+        })
+        .transpose()
+        .map(|session| session.flatten())
+    }
+
+    fn save(path: &PathBuf, session: String, csrf: String) -> Result<(), CliError> {
+        let contents =
+            serde_json::to_vec(&Self { session, csrf }).map_err(|_| CliError::InvalidResponse)?;
+        fs::write(path, contents).map_err(|error| {
+            CliError::Input(format!(
+                "cannot write session file {}: {error}",
+                path.display()
+            ))
+        })?;
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            fs::set_permissions(path, fs::Permissions::from_mode(0o600)).map_err(|error| {
+                CliError::Input(format!(
+                    "cannot secure session file {}: {error}",
+                    path.display()
+                ))
+            })?;
+        }
+        Ok(())
+    }
+}
+
+async fn auth_command(
+    client: &Client,
+    server: &Url,
+    command: AuthCommand,
+    session_file: Option<&PathBuf>,
+) -> Result<String, CliError> {
+    match command {
+        AuthCommand::Discover { login_identifier } => {
+            request(
+                client,
+                server,
+                Method::POST,
+                "/auth/discover",
+                Some(json!({ "login_identifier": login_identifier })),
+            )
+            .await
+        }
+        AuthCommand::Login {
+            login_identifier,
+            email,
+            password_stdin,
+        } => {
+            if !password_stdin {
+                return Err(CliError::Input(
+                    "login requires --password-stdin".to_owned(),
+                ));
+            }
+            let response = client
+                .post(endpoint(server, "/auth/login")?)
+                .timeout(REQUEST_TIMEOUT)
+                .json(&json!({
+                    "login_identifier": login_identifier,
+                    "email": email,
+                    "password": read_secret_stdin("password")?,
+                }))
+                .send()
+                .await
+                .map_err(|error| CliError::Transport(error.to_string()))?;
+            save_session_response(response, session_file).await
+        }
+        AuthCommand::PasswordReset { email } => {
+            request(
+                client,
+                server,
+                Method::POST,
+                "/auth/password-reset",
+                Some(json!({ "email": email })),
+            )
+            .await
+        }
+        AuthCommand::PasswordResetConfirm {
+            token_stdin,
+            password_stdin,
+        } => {
+            if !token_stdin || !password_stdin {
+                return Err(CliError::Input(
+                    "password reset confirmation requires --token-stdin and --password-stdin"
+                        .to_owned(),
+                ));
+            }
+            let (token, password) = read_two_secrets_stdin("reset token", "password")?;
+            request(
+                client,
+                server,
+                Method::POST,
+                "/auth/password-reset/confirm",
+                Some(json!({
+                    "token": token, "password": password,
+                })),
+            )
+            .await
+        }
+        AuthCommand::Session => request(client, server, Method::GET, "/auth/session", None).await,
+        AuthCommand::Logout => {
+            let response = client
+                .post(endpoint(server, "/auth/logout")?)
+                .timeout(REQUEST_TIMEOUT)
+                .send()
+                .await
+                .map_err(|error| CliError::Transport(error.to_string()))?;
+            let output = raw_response(response).await?;
+            if let Some(path) = session_file {
+                match fs::remove_file(path) {
+                    Ok(()) => {}
+                    Err(error) if error.kind() == io::ErrorKind::NotFound => {}
+                    Err(error) => {
+                        return Err(CliError::Input(format!(
+                            "cannot remove session file {}: {error}",
+                            path.display()
+                        )));
+                    }
+                }
+            }
+            Ok(output)
+        }
+        AuthCommand::Renew => {
+            let response = client
+                .post(endpoint(server, "/auth/renew")?)
+                .timeout(REQUEST_TIMEOUT)
+                .send()
+                .await
+                .map_err(|error| CliError::Transport(error.to_string()))?;
+            save_session_response(response, session_file).await
+        }
+    }
+}
+
+async fn save_session_response(
+    response: reqwest::Response,
+    session_file: Option<&PathBuf>,
+) -> Result<String, CliError> {
+    let cookies = response
+        .headers()
+        .get_all(reqwest::header::SET_COOKIE)
+        .iter()
+        .filter_map(|header| header.to_str().ok())
+        .filter_map(|header| header.split_once(';').map(|(cookie, _)| cookie))
+        .filter_map(|cookie| cookie.split_once('='))
+        .fold((None, None), |(session, csrf), (name, value)| match name {
+            "catalog_session" => (Some(value.to_owned()), csrf),
+            "catalog_csrf" => (session, Some(value.to_owned())),
+            _ => (session, csrf),
+        });
+    let output = raw_response(response).await?;
+    if let Some(path) = session_file {
+        let (Some(session), Some(csrf)) = cookies else {
+            return Err(CliError::InvalidResponse);
+        };
+        SessionFile::save(path, session, csrf)?;
+    }
+    Ok(output)
+}
+
 async fn workspace_command(
     client: &Client,
     server: &Url,
     command: WorkspaceCommand,
 ) -> Result<String, CliError> {
     match command {
+        WorkspaceCommand::Navigation { command } => match command {
+            NavigationCommand::Get => request(client, server, Method::GET, "/workspace/navigation", None).await,
+            NavigationCommand::Set { entries } => request(client, server, Method::PUT, "/workspace/navigation", Some(json!({"explore_navigation": json_array_input(&entries, "--entries")?}))).await,
+            NavigationCommand::Sidebar => request(client, server, Method::GET, "/workspace/navigation/sidebar", None).await,
+        },
+        WorkspaceCommand::TokenPermission { command: TokenPermissionCommand::List } => request(client, server, Method::GET, "/workspace/token-permissions", None).await,
+        WorkspaceCommand::GrantTarget { command: GrantTargetCommand::List { scope_type } } => request(client, server, Method::GET, &format!("/workspace/grant-targets/{}", segment(&scope_type)), None).await,
+        WorkspaceCommand::PublicationChannel { command } => match command {
+            PublicationChannelCommand::List => request(client, server, Method::GET, "/publication-channels", None).await,
+            PublicationChannelCommand::Set { context_id, enabled } => request(client, server, Method::PUT, &format!("/publication-channels/{}", segment(context_id)), Some(json!({"enabled":enabled}))).await,
+        },
         WorkspaceCommand::Member { command } => match command {
             MemberCommand::List => request(client, server, Method::GET, "/workspace/members", None).await,
             MemberCommand::SetState { member_id, state } => request(client, server, Method::PUT, &format!("/workspace/members/{}", segment(member_id)), Some(json!({ "state": state }))).await,
@@ -1050,6 +1775,633 @@ async fn token_command(
         TokenCommand::Create { label, permissions, expires_at } => request(client, server, Method::POST, "/personal-access-tokens", Some(json!({ "label": label, "permissions": permissions_input(&permissions)?, "expires_at": expires_at }))).await,
         TokenCommand::Revoke { token_id } => request(client, server, Method::DELETE, &format!("/personal-access-tokens/{}", segment(token_id)), None).await,
     }
+}
+
+async fn audit_command(
+    client: &Client,
+    server: &Url,
+    command: AuditCommand,
+) -> Result<String, CliError> {
+    match command {
+        AuditCommand::List {
+            limit,
+            offset,
+            occurred_after,
+            occurred_before,
+            actor_user_id,
+            action_category,
+            target_type,
+            executor_type,
+            agent_run_id,
+            agent_tool_call_id,
+        } => {
+            let mut query = url::form_urlencoded::Serializer::new(String::new());
+            for (key, value) in [
+                ("limit", limit.map(|v| v.to_string())),
+                ("offset", offset.map(|v| v.to_string())),
+                ("occurred_after", occurred_after),
+                ("occurred_before", occurred_before),
+                ("actor_user_id", actor_user_id.map(|v| v.to_string())),
+                ("action_category", action_category),
+                ("target_type", target_type),
+                ("executor_type", executor_type),
+                ("agent_run_id", agent_run_id.map(|v| v.to_string())),
+                (
+                    "agent_tool_call_id",
+                    agent_tool_call_id.map(|v| v.to_string()),
+                ),
+            ] {
+                if let Some(value) = value {
+                    query.append_pair(key, &value);
+                }
+            }
+            let query = query.finish();
+            request(
+                client,
+                server,
+                Method::GET,
+                &format!(
+                    "/audit-events{}",
+                    if query.is_empty() {
+                        String::new()
+                    } else {
+                        format!("?{query}")
+                    }
+                ),
+                None,
+            )
+            .await
+        }
+    }
+}
+
+async fn data_health_command(
+    client: &Client,
+    server: &Url,
+    command: DataHealthCommand,
+) -> Result<String, CliError> {
+    let path = match command {
+        DataHealthCommand::Summary { stale_after_days } => {
+            data_health_path("summary", stale_after_days)
+        }
+        DataHealthCommand::Blueprints { stale_after_days } => {
+            data_health_path("blueprints", stale_after_days)
+        }
+        DataHealthCommand::Freshness => "/data-health/freshness".to_owned(),
+        DataHealthCommand::Completeness => "/data-health/completeness".to_owned(),
+        DataHealthCommand::Contexts => "/data-health/contexts".to_owned(),
+        DataHealthCommand::Relationships => "/data-health/relationships".to_owned(),
+        DataHealthCommand::Storage => "/data-health/storage".to_owned(),
+        DataHealthCommand::Refresh => {
+            return request(client, server, Method::POST, "/data-health/refresh", None).await;
+        }
+    };
+    request(client, server, Method::GET, &path, None).await
+}
+fn data_health_path(name: &str, days: Option<u16>) -> String {
+    match days {
+        Some(days) => format!("/data-health/{name}?stale_after_days={days}"),
+        None => format!("/data-health/{name}"),
+    }
+}
+
+async fn workflow_command(
+    client: &Client,
+    server: &Url,
+    command: WorkflowCommand,
+) -> Result<String, CliError> {
+    match command {
+        WorkflowCommand::List => request(client, server, Method::GET, "/workflows", None).await,
+        WorkflowCommand::Validate(source) => {
+            request(
+                client,
+                server,
+                Method::POST,
+                "/workflows/validate",
+                Some(json!({"definition":read_source(source)?})),
+            )
+            .await
+        }
+        WorkflowCommand::Create(source) => {
+            request(
+                client,
+                server,
+                Method::POST,
+                "/workflows",
+                Some(json!({"definition":read_source(source)?})),
+            )
+            .await
+        }
+        WorkflowCommand::Get { workflow_id } => {
+            request(
+                client,
+                server,
+                Method::GET,
+                &format!("/workflows/{}", segment(workflow_id)),
+                None,
+            )
+            .await
+        }
+        WorkflowCommand::RevisionList { workflow_id } => {
+            request(
+                client,
+                server,
+                Method::GET,
+                &format!("/workflows/{}/versions", segment(workflow_id)),
+                None,
+            )
+            .await
+        }
+        WorkflowCommand::VersionGet {
+            workflow_id,
+            version,
+        } => {
+            request(
+                client,
+                server,
+                Method::GET,
+                &format!("/workflows/{}/versions/{version}", segment(workflow_id)),
+                None,
+            )
+            .await
+        }
+        WorkflowCommand::Revision {
+            workflow_id,
+            source,
+        } => {
+            request(
+                client,
+                server,
+                Method::POST,
+                &format!("/workflows/{}/versions", segment(workflow_id)),
+                Some(json!({"definition":read_source(source)?})),
+            )
+            .await
+        }
+        WorkflowCommand::Publish {
+            workflow_id,
+            version,
+        } => {
+            request(
+                client,
+                server,
+                Method::POST,
+                &format!(
+                    "/workflows/{}/versions/{version}/publish",
+                    segment(workflow_id)
+                ),
+                None,
+            )
+            .await
+        }
+        WorkflowCommand::Enable {
+            workflow_id,
+            version,
+        } => {
+            request(
+                client,
+                server,
+                Method::POST,
+                &format!(
+                    "/workflows/{}/versions/{version}/enable",
+                    segment(workflow_id)
+                ),
+                None,
+            )
+            .await
+        }
+        WorkflowCommand::Disable { workflow_id } => {
+            request(
+                client,
+                server,
+                Method::POST,
+                &format!("/workflows/{}/disable", segment(workflow_id)),
+                None,
+            )
+            .await
+        }
+        WorkflowCommand::RunNow {
+            workflow_id,
+            entity_id,
+            idempotency_key,
+        } => {
+            request(
+                client,
+                server,
+                Method::POST,
+                &format!("/workflows/{}/run-now", segment(workflow_id)),
+                Some(json!({"entity_id":entity_id,"idempotency_key":idempotency_key})),
+            )
+            .await
+        }
+        WorkflowCommand::RunList => {
+            request(client, server, Method::GET, "/workflow-runs", None).await
+        }
+        WorkflowCommand::RunReplay { run_id } => {
+            request(
+                client,
+                server,
+                Method::POST,
+                &format!("/workflow-runs/{}/replay", segment(run_id)),
+                None,
+            )
+            .await
+        }
+    }
+}
+
+async fn extension_registry_command(
+    client: &Client,
+    server: &Url,
+    command: ExtensionRegistryCommand,
+) -> Result<String, CliError> {
+    match command {
+        ExtensionRegistryCommand::List => {
+            request(client, server, Method::GET, "/extension-registries", None).await
+        }
+        ExtensionRegistryCommand::Add { source } => {
+            request(
+                client,
+                server,
+                Method::POST,
+                "/extension-registries",
+                Some(json!({"source":source})),
+            )
+            .await
+        }
+        ExtensionRegistryCommand::Remove { registry_id } => {
+            request(
+                client,
+                server,
+                Method::DELETE,
+                &format!("/extension-registries/{}", segment(registry_id)),
+                None,
+            )
+            .await
+        }
+        ExtensionRegistryCommand::Discover => {
+            request(
+                client,
+                server,
+                Method::GET,
+                "/extension-registries/discover",
+                None,
+            )
+            .await
+        }
+        ExtensionRegistryCommand::Details { owner, repository } => {
+            request(
+                client,
+                server,
+                Method::GET,
+                &format!(
+                    "/extension-registries/extensions/{}/{}",
+                    segment(&owner),
+                    segment(&repository)
+                ),
+                None,
+            )
+            .await
+        }
+    }
+}
+
+async fn extension_command(
+    client: &Client,
+    server: &Url,
+    command: ExtensionCommand,
+) -> Result<String, CliError> {
+    match command {
+    ExtensionCommand::List => request(client,server,Method::GET,"/extensions",None).await,
+    ExtensionCommand::Detail { extension_id } => request(client,server,Method::GET,&format!("/extensions/{}",segment(&extension_id)),None).await,
+    ExtensionCommand::Remove { extension_id } => request(client,server,Method::DELETE,&format!("/extensions/{}",segment(&extension_id)),None).await,
+    ExtensionCommand::Runtime => request(client,server,Method::GET,"/extensions/runtime",None).await,
+    ExtensionCommand::WorkspaceMode { enabled } => request(client,server,Method::PUT,"/workspace/extensions-mode",Some(json!({"enabled":enabled}))).await,
+    ExtensionCommand::Install { owner, repository, release_id } => request(client,server,Method::POST,"/extensions",Some(json!({"owner":owner,"repository":repository,"release_id":release_id}))).await,
+    ExtensionCommand::Sideload { file } => raw_upload(client,server,"/extensions/sideload",&file,"application/zstd").await,
+    ExtensionCommand::Upgrade { extension_id, owner, repository, release_id } => request(client,server,Method::POST,&format!("/extensions/{}/upgrade",segment(&extension_id)),Some(json!({"owner":owner,"repository":repository,"release_id":release_id}))).await,
+    ExtensionCommand::Configure { extension_id, configuration } => request(client,server,Method::PUT,&format!("/extensions/{}/configure",segment(&extension_id)),Some(json!({"configuration":json_input(&configuration,"--configuration")?}))).await,
+    ExtensionCommand::Grant { extension_id, grant_kind, grant_id } => request(client,server,Method::POST,&format!("/extensions/{}/grants",segment(&extension_id)),Some(json!({"grant_kind":grant_kind,"grant_id":grant_id}))).await,
+    ExtensionCommand::Revoke { extension_id, grant_kind, grant_id } => request(client,server,Method::DELETE,&format!("/extensions/{}/grants/{}/{}",segment(&extension_id),segment(&grant_kind),segment(&grant_id)),None).await,
+    ExtensionCommand::Enable { extension_id } => request(client,server,Method::POST,&format!("/extensions/{}/enable",segment(&extension_id)),None).await,
+    ExtensionCommand::Disable { extension_id } => request(client,server,Method::POST,&format!("/extensions/{}/disable",segment(&extension_id)),None).await,
+    ExtensionCommand::Quarantine { extension_id, diagnostic_code } => request(client,server,Method::POST,&format!("/extensions/{}/quarantine",segment(&extension_id)),Some(json!({"diagnostic_code":diagnostic_code}))).await,
+    ExtensionCommand::Artifact { extension_id, contribution_id, output } => raw_download(client,server,&format!("/extensions/{}/{}/artifact",segment(&extension_id),segment(&contribution_id)),&output,None).await,
+    ExtensionCommand::Storage { extension_id, contribution_id, release_id, body } => request(client,server,Method::POST,&format!("/extensions/{}/{}/storage/{}",segment(&extension_id),segment(&contribution_id),segment(release_id)),Some(json_input(&body,"--body")?)).await,
+    ExtensionCommand::Command { extension_id, contribution_id, release_id, command_id, payload } => request(client,server,Method::POST,&format!("/extensions/{}/{}/command",segment(&extension_id),segment(&contribution_id)),Some(json!({"release_id":release_id,"command_id":command_id,"payload":json_input(&payload,"--payload")?}))).await,
+}
+}
+
+async fn entity_publication_command(
+    client: &Client,
+    server: &Url,
+    command: EntityPublicationCommand,
+) -> Result<String, CliError> {
+    match command {
+        EntityPublicationCommand::List { entity_id } => {
+            request(
+                client,
+                server,
+                Method::GET,
+                &format!("/v1/entities/{}/publications", segment(entity_id)),
+                None,
+            )
+            .await
+        }
+        EntityPublicationCommand::Publish {
+            entity_id,
+            context_id,
+        } => {
+            request(
+                client,
+                server,
+                Method::POST,
+                &format!("/v1/entities/{}/publications", segment(entity_id)),
+                Some(json!({"context_id":context_id})),
+            )
+            .await
+        }
+        EntityPublicationCommand::Unpublish {
+            entity_id,
+            context_id,
+        } => {
+            request(
+                client,
+                server,
+                Method::POST,
+                &format!("/v1/entities/{}/publications/unpublish", segment(entity_id)),
+                Some(json!({"context_id":context_id})),
+            )
+            .await
+        }
+        EntityPublicationCommand::PublishAll { entity_id } => {
+            request(
+                client,
+                server,
+                Method::POST,
+                &format!(
+                    "/v1/entities/{}/publications/publish-all",
+                    segment(entity_id)
+                ),
+                None,
+            )
+            .await
+        }
+    }
+}
+
+async fn file_command(
+    client: &Client,
+    server: &Url,
+    command: FileCommand,
+) -> Result<String, CliError> {
+    match command {
+        FileCommand::Upload {
+            entity_id,
+            attribute_code,
+            files,
+            context_id,
+        } => {
+            multipart_upload(
+                client,
+                server,
+                &format!(
+                    "/entities/{}/file-attributes/{}/uploads",
+                    segment(entity_id),
+                    segment(&attribute_code)
+                ),
+                files,
+                context_id,
+            )
+            .await
+        }
+        FileCommand::Metadata { file_id } => {
+            request(
+                client,
+                server,
+                Method::GET,
+                &format!("/files/{}", segment(file_id)),
+                None,
+            )
+            .await
+        }
+        FileCommand::DownloadOriginal {
+            file_id,
+            output,
+            range,
+        } => {
+            raw_download(
+                client,
+                server,
+                &format!("/files/{}/download", segment(file_id)),
+                &output,
+                range.as_deref(),
+            )
+            .await
+        }
+        FileCommand::DownloadVariant {
+            file_id,
+            kind,
+            output,
+            range,
+        } => {
+            raw_download(
+                client,
+                server,
+                &format!(
+                    "/files/{}/variants/{}/download",
+                    segment(file_id),
+                    segment(&kind)
+                ),
+                &output,
+                range.as_deref(),
+            )
+            .await
+        }
+    }
+}
+
+fn json_input(input: &str, label: &str) -> Result<Value, CliError> {
+    let source = match fs::read_to_string(input) {
+        Ok(value) => value,
+        Err(error) if error.kind() == io::ErrorKind::NotFound => input.to_owned(),
+        Err(error) => {
+            return Err(CliError::Input(format!(
+                "cannot read {label} file: {error}"
+            )));
+        }
+    };
+    serde_json::from_str(&source).map_err(|error| {
+        CliError::Input(format!(
+            "{label} must be JSON or a readable JSON file: {error}"
+        ))
+    })
+}
+fn json_array_input(input: &str, label: &str) -> Result<Value, CliError> {
+    let value = json_input(input, label)?;
+    if value.is_array() {
+        Ok(value)
+    } else {
+        Err(CliError::Input(format!("{label} must be a JSON array")))
+    }
+}
+fn json_array_argument(input: Option<&str>, label: &str) -> Result<Value, CliError> {
+    input
+        .map(|value| json_array_input(value, label))
+        .transpose()
+        .map(|value| value.unwrap_or_else(|| json!([])))
+}
+
+async fn raw_upload(
+    client: &Client,
+    server: &Url,
+    path: &str,
+    file: &PathBuf,
+    content_type: &str,
+) -> Result<String, CliError> {
+    let stream =
+        tokio_util::io::ReaderStream::new(tokio::fs::File::open(file).await.map_err(|error| {
+            CliError::Input(format!("cannot read {}: {error}", file.display()))
+        })?);
+    raw_response(
+        client
+            .request(Method::POST, endpoint(server, path)?)
+            .header(reqwest::header::CONTENT_TYPE, content_type)
+            .body(reqwest::Body::wrap_stream(stream))
+            .send()
+            .await
+            .map_err(|error| CliError::Transport(error.to_string()))?,
+    )
+    .await
+}
+async fn multipart_upload(
+    client: &Client,
+    server: &Url,
+    path: &str,
+    files: Vec<PathBuf>,
+    context_id: Option<Uuid>,
+) -> Result<String, CliError> {
+    let mut form = reqwest::multipart::Form::new();
+    if let Some(context_id) = context_id {
+        form = form.text("context_id", context_id.to_string());
+    }
+    for path in files {
+        let length = fs::metadata(&path)
+            .map_err(|error| CliError::Input(format!("cannot read {}: {error}", path.display())))?
+            .len();
+        let filename = path
+            .file_name()
+            .and_then(|v| v.to_str())
+            .ok_or_else(|| CliError::Input("file name must be UTF-8".to_owned()))?
+            .to_owned();
+        let stream =
+            tokio_util::io::ReaderStream::new(tokio::fs::File::open(&path).await.map_err(
+                |error| CliError::Input(format!("cannot read {}: {error}", path.display())),
+            )?);
+        let part = reqwest::multipart::Part::stream_with_length(
+            reqwest::Body::wrap_stream(stream),
+            length,
+        )
+        .file_name(filename)
+        .mime_str(
+            mime_guess::from_path(&path)
+                .first_or_octet_stream()
+                .as_ref(),
+        )
+        .map_err(|error| CliError::Input(format!("invalid file MIME type: {error}")))?;
+        form = form.part("files", part);
+    }
+    raw_response(
+        client
+            .post(endpoint(server, path)?)
+            .multipart(form)
+            .send()
+            .await
+            .map_err(|error| CliError::Transport(error.to_string()))?,
+    )
+    .await
+}
+async fn raw_download(
+    client: &Client,
+    server: &Url,
+    path: &str,
+    output: &PathBuf,
+    range: Option<&str>,
+) -> Result<String, CliError> {
+    let mut request = client.get(endpoint(server, path)?);
+    if let Some(range) = range {
+        request = request.header(reqwest::header::RANGE, range);
+    }
+    let response = request
+        .send()
+        .await
+        .map_err(|error| CliError::Transport(error.to_string()))?;
+    if !response.status().is_success() {
+        return raw_response(response).await;
+    }
+    let mut file = fs::File::create(output)
+        .map_err(|error| CliError::Input(format!("cannot create {}: {error}", output.display())))?;
+    let mut stream = response.bytes_stream();
+    while let Some(chunk) = stream.next().await {
+        let chunk = chunk.map_err(|error| CliError::Transport(error.to_string()))?;
+        std::io::Write::write_all(&mut file, &chunk).map_err(|error| {
+            CliError::Input(format!("cannot write {}: {error}", output.display()))
+        })?;
+    }
+    Ok("null".to_owned())
+}
+async fn buffered_response_body(
+    response: reqwest::Response,
+) -> Result<(reqwest::StatusCode, String), CliError> {
+    let status = response.status();
+    if response
+        .content_length()
+        .is_some_and(|length| length > MAX_RESPONSE_BYTES as u64)
+    {
+        return Err(CliError::ResponseTooLarge);
+    }
+    let mut stream = response.bytes_stream();
+    let mut bytes = Vec::new();
+    while let Some(chunk) = stream.next().await {
+        let chunk = chunk.map_err(|error| CliError::Transport(error.to_string()))?;
+        if bytes.len() + chunk.len() > MAX_RESPONSE_BYTES {
+            return Err(CliError::ResponseTooLarge);
+        }
+        bytes.extend_from_slice(&chunk);
+    }
+    Ok((
+        status,
+        String::from_utf8(bytes).map_err(|_| CliError::InvalidResponse)?,
+    ))
+}
+
+async fn raw_response(response: reqwest::Response) -> Result<String, CliError> {
+    let (status, body) = buffered_response_body(response).await?;
+    if status.is_success() {
+        if status == reqwest::StatusCode::NO_CONTENT {
+            return Ok("null".to_owned());
+        }
+        serde_json::from_str::<Value>(&body).map_err(|_| CliError::InvalidResponse)?;
+        Ok(body)
+    } else {
+        api_error(status, &body)
+    }
+}
+fn api_error(status: reqwest::StatusCode, body: &str) -> Result<String, CliError> {
+    let error = serde_json::from_str::<Value>(body).ok();
+    Err(CliError::Api {
+        status: status.as_u16(),
+        code: error
+            .as_ref()
+            .and_then(|body| body["error"]["code"].as_str())
+            .unwrap_or("api_error")
+            .to_owned(),
+        message: error
+            .as_ref()
+            .and_then(|body| body["error"]["message"].as_str())
+            .unwrap_or(body)
+            .to_owned(),
+    })
 }
 
 fn permissions_input(input: &str) -> Result<Value, CliError> {
@@ -1104,6 +2456,31 @@ fn read_three_secrets_stdin() -> Result<(String, String, String), CliError> {
     ))
 }
 
+fn read_two_secrets_stdin(
+    first_label: &str,
+    second_label: &str,
+) -> Result<(String, String), CliError> {
+    let mut values = String::new();
+    io::stdin()
+        .read_to_string(&mut values)
+        .map_err(|error| CliError::Input(error.to_string()))?;
+    let mut lines = values.lines();
+    let first = lines
+        .next()
+        .filter(|value| !value.is_empty())
+        .ok_or_else(|| CliError::Input(format!("{first_label} must be the first stdin line")))?;
+    let second = lines
+        .next()
+        .filter(|value| !value.is_empty())
+        .ok_or_else(|| CliError::Input(format!("{second_label} must be the second stdin line")))?;
+    if lines.next().is_some() {
+        return Err(CliError::Input(
+            "stdin must contain exactly two lines".to_owned(),
+        ));
+    }
+    Ok((first.to_owned(), second.to_owned()))
+}
+
 fn read_secret_stdin(label: &str) -> Result<String, CliError> {
     let mut secret = String::new();
     io::stdin()
@@ -1121,6 +2498,9 @@ async fn migrate_entity(
     server: &Url,
     entity_id: Uuid,
     dry_run: bool,
+    values: Option<&str>,
+    relationships: Option<&str>,
+    discard_attributes: Option<&str>,
 ) -> Result<Value, CliError> {
     let preview = request_value(
         client,
@@ -1136,7 +2516,16 @@ async fn migrate_entity(
     let status = preview["status"]
         .as_str()
         .ok_or(CliError::InvalidResponse)?;
-    if status != "ready" || dry_run {
+    // Bulk migration supplies no remediation input, so a needs-input preview is
+    // a classification result, not a migration request. Manual migration may
+    // submit the caller's explicit remediation arrays.
+    if status == "blocked"
+        || dry_run
+        || (status == "needs_input"
+            && values.is_none()
+            && relationships.is_none()
+            && discard_attributes.is_none())
+    {
         return Ok(json!({
             "entity_id": entity_id,
             "status": status,
@@ -1157,8 +2546,9 @@ async fn migrate_entity(
         Some(json!({
             "migration_id": migration_id,
             "expected_target_version": target_version,
-            "values": [],
-            "relationships": [],
+            "values": json_array_argument(values, "--values")?,
+            "relationships": json_array_argument(relationships, "--relationships")?,
+            "discard_attributes": json_array_argument(discard_attributes, "--discard-attributes")?,
         })),
     )
     .await
@@ -1207,7 +2597,7 @@ async fn migrate_entities(
                 .ok_or(CliError::InvalidResponse)?
                 .parse::<Uuid>()
                 .map_err(|_| CliError::InvalidResponse)?;
-            match migrate_entity(client, server, entity_id, dry_run).await {
+            match migrate_entity(client, server, entity_id, dry_run, None, None, None).await {
                 Ok(result) => match result["status"].as_str() {
                     Some("ready") => ready += 1,
                     Some("needs_input") => needs_input.push(result),
@@ -1477,7 +2867,7 @@ async fn request(
     body: Option<Value>,
 ) -> Result<String, CliError> {
     let url = endpoint(server, path)?;
-    let mut request = client.request(method, url);
+    let mut request = client.request(method, url).timeout(REQUEST_TIMEOUT);
     if let Some(body) = body {
         request = request.json(&body);
     }
@@ -1745,13 +3135,13 @@ value = "Blue shirt"
     fn context_creation_defaults_the_parent_and_role_duplication_requires_a_code() {
         assert!(
             Cli::try_parse_from([
-                "catalog", "context", "create", "--code", "en-GB", "--data", "{}",
+                "acli", "context", "create", "--code", "en-GB", "--data", "{}",
             ])
             .is_ok()
         );
         assert!(
             Cli::try_parse_from([
-                "catalog",
+                "acli",
                 "workspace",
                 "role",
                 "duplicate",
@@ -1780,6 +3170,198 @@ value = "Blue shirt"
         assert_eq!(error.json()["error"]["status"], 422);
     }
 
+    #[test]
+    fn json_or_file_inputs_and_generated_help_cover_new_commands() {
+        assert_eq!(
+            json_array_input("[\"one\"]", "--filters").unwrap(),
+            json!(["one"])
+        );
+        assert!(json_array_input("{\"field\":\"title\"}", "--filters").is_err());
+        let file = tempfile::NamedTempFile::new().unwrap();
+        fs::write(file.path(), "{\"operation\":\"get\",\"key\":\"sync\"}").unwrap();
+        assert_eq!(
+            json_input(file.path().to_str().unwrap(), "--body").unwrap()["operation"],
+            "get"
+        );
+        let help = Cli::try_parse_from(["acli", "--help"]);
+        assert!(matches!(
+            help,
+            Err(error) if error.kind() == clap::error::ErrorKind::DisplayHelp
+        ));
+        assert!(Cli::try_parse_from(["acli", "workflow", "validate", "--stdin"]).is_ok());
+        assert!(Cli::try_parse_from(["acli", "--no-env", "health"]).is_ok());
+        assert!(
+            Cli::try_parse_from([
+                "acli",
+                "file",
+                "download-original",
+                "00000000-0000-0000-0000-000000000001",
+                "--output",
+                "x.bin"
+            ])
+            .is_ok()
+        );
+    }
+
+    #[test]
+    fn data_health_and_audit_query_paths_are_encoded() {
+        assert_eq!(
+            data_health_path("summary", Some(7)),
+            "/data-health/summary?stale_after_days=7"
+        );
+        assert_eq!(data_health_path("storage", None), "/data-health/storage");
+        assert_eq!(segment("owner/repository"), "owner%2Frepository");
+    }
+
+    #[test]
+    fn auth_commands_require_stdin_secrets_and_support_a_session_file() {
+        assert!(
+            Cli::try_parse_from([
+                "acli",
+                "--session-file",
+                "session.json",
+                "auth",
+                "login",
+                "workspace",
+                "--email",
+                "user@example.test",
+                "--password-stdin",
+            ])
+            .is_ok()
+        );
+        assert!(
+            Cli::try_parse_from([
+                "acli",
+                "auth",
+                "password-reset-confirm",
+                "--token-stdin",
+                "--password-stdin",
+            ])
+            .is_ok()
+        );
+
+        let file = tempfile::NamedTempFile::new().unwrap();
+        let path = file.path().to_path_buf();
+        SessionFile::save(&path, "session-secret".to_owned(), "csrf-secret".to_owned()).unwrap();
+        let loaded = SessionFile::load(Some(&path)).unwrap().unwrap();
+        assert_eq!(loaded.session, "session-secret");
+        assert_eq!(loaded.csrf, "csrf-secret");
+    }
+
+    #[tokio::test]
+    async fn raw_responses_are_bounded_before_buffering() {
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let address = listener.local_addr().unwrap();
+        let server = tokio::spawn(async move {
+            let app = axum::Router::new().route(
+                "/large",
+                axum::routing::get(|| async {
+                    (
+                        axum::http::StatusCode::BAD_REQUEST,
+                        "x".repeat(MAX_RESPONSE_BYTES + 1),
+                    )
+                }),
+            );
+            axum::serve(listener, app).await.unwrap();
+        });
+        let response = Client::new()
+            .get(format!("http://{address}/large"))
+            .send()
+            .await
+            .unwrap();
+        assert!(matches!(
+            raw_response(response).await,
+            Err(CliError::ResponseTooLarge)
+        ));
+        server.abort();
+    }
+
+    #[tokio::test]
+    async fn migrate_bulk_classifies_needs_input_without_submitting_a_migration() {
+        use std::sync::{
+            Arc,
+            atomic::{AtomicUsize, Ordering},
+        };
+
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let address = listener.local_addr().unwrap();
+        let migrations = Arc::new(AtomicUsize::new(0));
+        let server = tokio::spawn({
+            let migrations = migrations.clone();
+            async move {
+                let app = axum::Router::new()
+                    .route("/v1/entities/search", axum::routing::post(|| async {
+                        axum::Json(json!({
+                            "items": [{ "id": "00000000-0000-0000-0000-000000000001" }],
+                            "next_cursor": null,
+                        }))
+                    }))
+                    .route("/v1/entities/{entity_id}/blueprint-migration/preview", axum::routing::post(|| async {
+                        axum::Json(json!({ "status": "needs_input", "issues": [{ "code": "required" }] }))
+                    }))
+                    .route("/v1/entities/{entity_id}/blueprint-migration", axum::routing::post(move || {
+                        let migrations = migrations.clone();
+                        async move {
+                            migrations.fetch_add(1, Ordering::SeqCst);
+                            axum::Json(json!({ "status": "migrated" }))
+                        }
+                    }));
+                axum::serve(listener, app).await.unwrap();
+            }
+        });
+        let client = Client::builder().build().unwrap();
+        let body = migrate_entities(
+            &client,
+            &Url::parse(&format!("http://{address}")).unwrap(),
+            "product",
+            1,
+            25,
+            false,
+        )
+        .await
+        .unwrap();
+        assert_eq!(
+            serde_json::from_str::<Value>(&body).unwrap()["needs_input"]
+                .as_array()
+                .unwrap()
+                .len(),
+            1
+        );
+        assert_eq!(migrations.load(Ordering::SeqCst), 0);
+        server.abort();
+    }
+
+    #[tokio::test]
+    async fn bearer_token_skips_a_saved_browser_session() {
+        let session_file = tempfile::NamedTempFile::new().unwrap();
+        fs::write(session_file.path(), "not JSON").unwrap();
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let address = listener.local_addr().unwrap();
+        let server = tokio::spawn(async move {
+            axum::serve(
+                listener,
+                axum::Router::new().route(
+                    "/health",
+                    axum::routing::get(|| async { axum::Json(json!({ "status": "ok" })) }),
+                ),
+            )
+            .await
+            .unwrap()
+        });
+
+        let body = run(Cli {
+            server: Some(Url::parse(&format!("http://{address}")).unwrap()),
+            token: Some("personal-token".to_owned()),
+            session_file: Some(session_file.path().to_path_buf()),
+            no_env: false,
+            command: Command::Health,
+        })
+        .await
+        .unwrap();
+        assert_eq!(body, r#"{"status":"ok"}"#);
+        server.abort();
+    }
+
     #[tokio::test]
     async fn forwards_http_json_without_reformatting() {
         let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
@@ -1799,6 +3381,8 @@ value = "Blue shirt"
         let body = run(Cli {
             server: Some(Url::parse(&format!("http://{address}")).unwrap()),
             token: None,
+            session_file: None,
+            no_env: false,
             command: Command::Health,
         })
         .await

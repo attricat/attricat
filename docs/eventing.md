@@ -178,7 +178,7 @@ for a definitive operator list.
 2. Inspect terminal failures with a bearer token that has `data_health.read`:
 
    ```sh
-   catalog --token "$CATALOG_TOKEN" event dead-letters
+   acli --token "$CATALOG_TOKEN" event dead-letters
    # Equivalent HTTP: GET /event-deliveries/dead-letters
    ```
 
@@ -189,7 +189,7 @@ for a definitive operator list.
 4. Replay one terminal delivery with a token authorized for `roles.manage`:
 
    ```sh
-   catalog --token "$CATALOG_TOKEN" event replay <consumer-id> <event-id>
+   acli --token "$CATALOG_TOKEN" event replay <consumer-id> <event-id>
    # Equivalent HTTP: POST /event-deliveries/{consumer_id}/{event_id}/replay
    ```
 
