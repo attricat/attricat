@@ -19,6 +19,11 @@ const pollingStatuses = new Set(['uploading', 'queued', 'processing']);
 const thumbnailPollInterval = 1_000;
 const maxThumbnailRetries = 3;
 
+// Explorer virtualizes rows, mounting and unmounting thumbnails as its virtual
+// range changes. Remember completed sources so a remounted thumbnail does not
+// show its loading treatment again.
+const loadedThumbnailSources = new Set<string>();
+
 const ThumbnailPreviewContent = ({
   filename,
   size,
@@ -26,7 +31,9 @@ const ThumbnailPreviewContent = ({
   unavailable,
 }: ThumbnailPreviewProps) => {
   const { t } = useTranslation();
-  const [loaded, setLoaded] = useState(false);
+  const [loaded, setLoaded] = useState(() =>
+    source ? loadedThumbnailSources.has(source) : false,
+  );
   const [attempt, setAttempt] = useState(0);
   const [retryExhausted, setRetryExhausted] = useState(false);
   const retryTimer = useRef<number | undefined>(undefined);
@@ -75,7 +82,10 @@ const ThumbnailPreviewContent = ({
           alt=""
           component="img"
           onError={retry}
-          onLoad={() => setLoaded(true)}
+          onLoad={() => {
+            loadedThumbnailSources.add(source);
+            setLoaded(true);
+          }}
           src={`${source}${attempt ? `?retry=${attempt}` : ''}`}
           sx={{
             height: '100%',

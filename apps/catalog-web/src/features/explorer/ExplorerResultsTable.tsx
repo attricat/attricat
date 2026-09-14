@@ -16,6 +16,7 @@ import {
 import MoreVertIcon from '@mui/icons-material/MoreVert';
 import {
   Alert,
+  Box,
   ButtonBase,
   Chip,
   Dialog,
@@ -607,14 +608,20 @@ export const ExplorerResultsTable = ({
               if (virtualRow.index === rows.length) {
                 return (
                   <TableRow data-index={virtualRow.index} key="load-more">
-                    <TableCell
-                      colSpan={columns.length}
-                      sx={{ py: 2, textAlign: 'center' }}
-                    >
-                      <LoadMoreButton
-                        isLoading={isFetchingNextPage}
-                        onLoadMore={onLoadMore}
-                      />
+                    <TableCell colSpan={columns.length} sx={{ py: 2 }}>
+                      <Box
+                        sx={{
+                          left: '50%',
+                          position: 'sticky',
+                          transform: 'translateX(-50%)',
+                          width: 'fit-content',
+                        }}
+                      >
+                        <LoadMoreButton
+                          isLoading={isFetchingNextPage}
+                          onLoadMore={onLoadMore}
+                        />
+                      </Box>
                     </TableCell>
                   </TableRow>
                 );
