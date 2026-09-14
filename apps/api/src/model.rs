@@ -267,7 +267,8 @@ pub struct EntityPreview {
     pub created_at: DateTime<Utc>,
     pub preview: Value,
     pub display: Value,
-    /// Scalar table values keyed by their configured local or relationship path.
+    /// Table values keyed by their configured local or relationship path. Direct file
+    /// columns contain client-safe file metadata rather than projection values.
     #[serde(default)]
     pub table_values: HashMap<String, Vec<Value>>,
     /// Direct relationship targets required by the current table columns, keyed by relationship

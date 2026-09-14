@@ -50,6 +50,10 @@ test("technical classifications are modeled as family relationships", () => {
     definitions.sku,
     /code = "main_photo"\nvalue_type = "file"\nallowed_mime_groups = \["image"\]/,
   );
+  assert.match(
+    definitions.sku,
+    /field = "main_photo", label = "Image", renderer = \{ id = "catalog\.table_image", version = 1 \}/,
+  );
   assert.match(definitions.sku, /field = "family\.product_type\.name"/);
   assert.match(definitions.sku, /field = "family\.interface_standard\.name"/);
   assert.match(definitions.sku, /code = "family"[\s\S]*cardinality = "one"/);

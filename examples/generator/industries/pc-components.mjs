@@ -1,5 +1,5 @@
 export const id = "pc-components";
-export const schemaVersion = 3;
+export const schemaVersion = 4;
 
 export const profiles = {
   micro: { families: 199, skus: 796, categories: 4, manufacturers: 1 },
@@ -211,6 +211,7 @@ allowed_mime_groups = ["image", "text", "application"]
 allowed_extensions = ["png", "pdf", "txt"]
 max_bytes = 1048576`,
     `[
+  { field = "main_photo", label = "Image", renderer = { id = "catalog.table_image", version = 1 } },
   { field = "name", label = "Product" },
   { field = "sku", label = "SKU" },
   { field = "family.name", label = "Family" },

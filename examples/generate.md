@@ -37,7 +37,7 @@ CATALOG_TOKEN=cat_pat_... just generate medium
 CATALOG_TOKEN=cat_pat_... just generate large
 ```
 
-The current industry pack is `pc-components`. It creates fictional manufacturers, hierarchical categories, product families, sellable SKUs, and reference-data entities for product types, interface standards, and form factors. Families relate to those controlled classifications as well as category and manufacturer; sellable SKUs relate to their family and bounded compatibility links, reaching category, manufacturer, and technical classifications through that family. Each generated product image is assigned as a SKU's `main_photo`; a fixed, small set of documentation files is assigned to `product_files`. This does not grow with the selected profile.
+The current industry pack is `pc-components`. It creates fictional manufacturers, hierarchical categories, product families, sellable SKUs, and reference-data entities for product types, interface standards, and form factors. Families relate to those controlled classifications as well as category and manufacturer; sellable SKUs relate to their family and bounded compatibility links, reaching category, manufacturer, and technical classifications through that family. Each generated product image is assigned as a SKU's `main_photo`; the SKU Explorer table uses `catalog.table_image@1` to render it as a thumbnail when files are enabled. A fixed, small set of documentation files is assigned to `product_files`. This does not grow with the selected profile.
 
 ## Long-running runs
 

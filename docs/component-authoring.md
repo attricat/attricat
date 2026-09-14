@@ -81,6 +81,11 @@ type ValueRenderer = ComponentType<{
 }>;
 ```
 
+Table components are dispatched by Explorer. A built-in table renderer that
+needs specialized search data should have a focused Explorer cell component;
+for example, `catalog.table_image@1` renders the hydrated metadata for a direct
+image-only single-file attribute.
+
 `headingRenderer` is reserved for a stack component that renders the entity
 page heading. It receives attributes, resolved values, the entity ID, and the
 detail view.
