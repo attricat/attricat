@@ -1,19 +1,14 @@
+import { Editor } from '@monaco-editor/react';
 import { useForm } from '@tanstack/react-form';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from '@tanstack/react-router';
-import {
-  Alert,
-  Button,
-  Paper,
-  Stack,
-  TextField,
-  Typography,
-} from '@mui/material';
+import { Alert, Box, Button, Paper, Stack, Typography } from '@mui/material';
 import { useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 import { PageContainer } from '../../components/PageContainer';
 import { PageHeader } from '../../components/PageHeader';
 import { currentSession } from '../auth/api';
+import { configureToml } from '../blueprints/blueprint-editor-utils';
 import { authQueryKeys } from '../auth/query-keys';
 import {
   createWorkflow,
@@ -123,19 +118,35 @@ export const WorkflowEditorPage = ({
           </Typography>
           <form.Field name="definition">
             {(field) => (
-              <TextField
-                aria-label={t('workflows.tomlDefinition')}
-                disabled={source.isError}
-                label={t('workflows.tomlDefinition')}
-                minRows={20}
-                multiline
-                onChange={(event) => {
-                  validate.reset();
-                  field.handleChange(event.target.value);
+              <Box
+                sx={{
+                  border: 1,
+                  borderColor: 'divider',
+                  height: 'calc(100vh - 380px)',
+                  minHeight: 480,
                 }}
-                spellCheck={false}
-                value={field.state.value}
-              />
+              >
+                <Editor
+                  beforeMount={configureToml}
+                  defaultLanguage="toml"
+                  height="100%"
+                  language="toml"
+                  onChange={(value) => {
+                    validate.reset();
+                    field.handleChange(value ?? '');
+                  }}
+                  options={{
+                    ariaLabel: t('workflows.tomlDefinition'),
+                    automaticLayout: true,
+                    minimap: { enabled: false },
+                    readOnly: source.isError,
+                    scrollBeyondLastLine: false,
+                    tabSize: 2,
+                    wordWrap: 'on',
+                  }}
+                  value={field.state.value}
+                />
+              </Box>
             )}
           </form.Field>
           {(validate.error || save.error) && (

@@ -521,7 +521,7 @@
     "saveDraft": "Zapisz szkic",
     "saving": "Zapisywanie…",
     "validate": "Sprawdź TOML",
-    "validationHelp": "Walidację wykonuje kompilator serwera. Zapis także sprawdza definicję.",
+    "validationHelp": "Przepływ zostanie sprawdzony po stronie serwera.",
     "validationSucceeded": "Poprawnie: {{name}} ma {{triggers}} wyzwalaczy i {{actions}} akcji.",
     "tomlDefinition": "Definicja przepływu pracy TOML",
     "loading": "Wczytywanie przepływów pracy…",

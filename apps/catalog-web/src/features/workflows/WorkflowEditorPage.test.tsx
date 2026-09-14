@@ -8,6 +8,23 @@ import { currentSession } from '../auth/api';
 import { validateWorkflow } from './api';
 import { WorkflowEditorPage } from './WorkflowEditorPage';
 
+vi.mock('@monaco-editor/react', () => ({
+  Editor: ({
+    onChange,
+    options,
+    value,
+  }: {
+    onChange: (value: string) => void;
+    options: { ariaLabel: string };
+    value: string;
+  }) => (
+    <textarea
+      aria-label={options.ariaLabel}
+      onChange={(event) => onChange(event.target.value)}
+      value={value}
+    />
+  ),
+}));
 vi.mock('@tanstack/react-router', () => ({
   useNavigate: () => vi.fn(),
 }));
