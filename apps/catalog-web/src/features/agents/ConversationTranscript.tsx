@@ -124,7 +124,7 @@ export const ConversationTranscript = ({
       })}
       {isLoadingMessages && (
         <Stack direction="row" spacing={1} sx={{ alignItems: 'center' }}>
-          <CircularProgress size={18} />
+          <CircularProgress enableTrackSlot size={18} />
           <Typography color="text.secondary">
             {t('agents.loadingConversation')}
           </Typography>

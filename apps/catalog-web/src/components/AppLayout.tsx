@@ -150,7 +150,7 @@ export const AppLayout = () => {
           justifyContent: 'center',
         }}
       >
-        <CircularProgress />
+        <CircularProgress enableTrackSlot />
       </Box>
     );
   if (isLoginRoute)

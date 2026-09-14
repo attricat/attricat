@@ -1,4 +1,4 @@
-import { Button } from '@mui/material';
+import { Button, CircularProgress } from '@mui/material';
 import i18n from '../i18n';
 
 export const LoadMoreButton = ({
@@ -12,12 +12,17 @@ export const LoadMoreButton = ({
 }) => (
   <Button
     aria-busy={isLoading || undefined}
+    aria-label={isLoading ? i18n.t('common.loading') : undefined}
     disabled={disabled || isLoading}
     fullWidth
     onClick={onLoadMore}
     size="medium"
     variant="contained"
   >
-    {isLoading ? i18n.t('common.loading') : i18n.t('common.loadMore')}
+    {isLoading ? (
+      <CircularProgress enableTrackSlot size={20} />
+    ) : (
+      i18n.t('common.loadMore')
+    )}
   </Button>
 );

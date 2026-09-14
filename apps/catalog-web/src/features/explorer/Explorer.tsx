@@ -9,6 +9,7 @@ import {
   Alert,
   Box,
   Button,
+  CircularProgress,
   Stack,
   Typography,
   useMediaQuery,
@@ -427,8 +428,21 @@ export const Explorer = ({ search: urlSearch }: { search: ExplorerSearch }) => {
           {!search.blueprint && (
             <Typography sx={{ py: 3 }}>{t('explorer.start')}</Typography>
           )}
-          {search.blueprint && results.isPending && (
-            <Typography sx={{ py: 3 }}>{t('explorer.loading')}</Typography>
+          {search.blueprint && results.isPending && !results.data && (
+            <Box
+              sx={{
+                alignItems: 'center',
+                display: 'flex',
+                justifyContent: 'center',
+                minHeight: '50vh',
+              }}
+            >
+              <CircularProgress
+                aria-label={t('explorer.loading')}
+                enableTrackSlot
+                size={80}
+              />
+            </Box>
           )}
           {results.isError && (
             <Alert severity="error" sx={{ mt: 3 }}>
@@ -509,6 +523,7 @@ export const Explorer = ({ search: urlSearch }: { search: ExplorerSearch }) => {
                     session.data?.capabilities?.entities_publish === true
                   }
                   hasNextPage={results.hasNextPage}
+                  isFetching={results.isFetching}
                   isFetchingNextPage={results.isFetchingNextPage}
                   items={resultItems}
                   publicationContextCode={facetContextCode}

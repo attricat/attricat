@@ -169,7 +169,7 @@ export const ConversationComposer = ({
                 type="submit"
               >
                 {send.isPending ? (
-                  <CircularProgress size={20} />
+                  <CircularProgress enableTrackSlot size={20} />
                 ) : (
                   <ArrowUpwardIcon />
                 )}

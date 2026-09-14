@@ -327,6 +327,7 @@ const Facet = ({
         {targetBlueprint.isPending ? (
           <CircularProgress
             aria-label={t('explorer.loadingFacetOptions')}
+            enableTrackSlot
             size={20}
           />
         ) : targetBlueprint.isError ? (

@@ -168,7 +168,7 @@ export const NewConversationPage = () => {
                   type="submit"
                 >
                   {start.isPending ? (
-                    <CircularProgress size={20} />
+                    <CircularProgress enableTrackSlot size={20} />
                   ) : (
                     <ArrowUpwardIcon />
                   )}

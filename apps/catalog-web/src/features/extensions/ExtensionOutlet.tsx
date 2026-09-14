@@ -94,6 +94,7 @@ export const ExtensionOutlet = ({ outlet, context }: Props) => {
       >
         <CircularProgress
           aria-label={t('extensions.loadingContent')}
+          enableTrackSlot
           size={20}
         />
       </Box>
@@ -218,7 +219,10 @@ export const ExtensionRoutePage = ({
         role="status"
         sx={{ display: 'flex', justifyContent: 'center', py: 2 }}
       >
-        <CircularProgress aria-label={t('extensions.loadingPage')} />
+        <CircularProgress
+          aria-label={t('extensions.loadingPage')}
+          enableTrackSlot
+        />
       </Box>
     );
   if (runtime.isError)

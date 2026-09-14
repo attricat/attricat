@@ -105,6 +105,7 @@ const ThumbnailPreviewContent = ({
           ) : (
             <CircularProgress
               aria-label={t('files.thumbnailProcessing')}
+              enableTrackSlot
               size={20}
             />
           )}

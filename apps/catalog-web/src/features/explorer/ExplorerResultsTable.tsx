@@ -22,6 +22,7 @@ import {
   DialogContent,
   DialogTitle,
   IconButton,
+  LinearProgress,
   Menu,
   MenuItem,
   Paper,
@@ -81,6 +82,7 @@ const EntityActionsButton = ({
 export const ExplorerResultsTable = ({
   blueprint,
   hasNextPage,
+  isFetching,
   isFetchingNextPage,
   items,
   onLoadMore,
@@ -95,6 +97,7 @@ export const ExplorerResultsTable = ({
 }: {
   blueprint: BlueprintWithAttributes;
   hasNextPage: boolean;
+  isFetching: boolean;
   isFetchingNextPage: boolean;
   items: EntityItem[];
   onLoadMore: () => void;
@@ -452,6 +455,12 @@ export const ExplorerResultsTable = ({
           overflowY: 'auto',
         }}
       >
+        {isFetching && items.length > 0 && (
+          <LinearProgress
+            aria-label={t('explorer.loading')}
+            sx={{ position: 'sticky', top: 0, zIndex: 3 }}
+          />
+        )}
         <Table size="small" stickyHeader>
           <TableHead>
             {table.getHeaderGroups().map((group) => (

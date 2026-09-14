@@ -1,7 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link } from '@tanstack/react-router';
 import { BlueprintIcon } from '../../components/system-icons';
-import { Alert, Box, Paper, Tooltip, Typography } from '@mui/material';
+import { Alert, Box, CircularProgress, Paper, Tooltip } from '@mui/material';
 import { createElement, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { PageContainer } from '../../components/PageContainer';
@@ -199,7 +199,12 @@ export const EntityPreviewPage = ({
         name={blueprint.data?.blueprint.name}
       />
       {contexts.isPending && (
-        <Typography sx={{ py: 3 }}>{t('entities.loadingContexts')}</Typography>
+        <Box sx={{ display: 'flex', justifyContent: 'center', py: 3 }}>
+          <CircularProgress
+            aria-label={t('entities.loadingContexts')}
+            enableTrackSlot
+          />
+        </Box>
       )}
       <QueryErrorNotice
         error={contexts.error}
@@ -209,9 +214,12 @@ export const EntityPreviewPage = ({
       {contexts.data && (
         <>
           {resolved.isPending && (
-            <Typography sx={{ mt: 3 }}>
-              {t('entities.resolvingValues')}
-            </Typography>
+            <Box sx={{ display: 'flex', justifyContent: 'center', mt: 3 }}>
+              <CircularProgress
+                aria-label={t('entities.resolvingValues')}
+                enableTrackSlot
+              />
+            </Box>
           )}
           {resolved.isError && (
             <Alert severity="error" sx={{ mt: 3 }}>
