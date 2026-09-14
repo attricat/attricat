@@ -20,7 +20,7 @@ const REQUEST_TIMEOUT: Duration = Duration::from_secs(30);
 const MAX_RESPONSE_BYTES: usize = 1024 * 1024;
 
 #[derive(Parser)]
-#[command(name = "catalog", about = "JSON-first client for the Catalog API")]
+#[command(name = "acli", about = "JSON-first client for the Catalog API")]
 struct Cli {
     #[arg(long, env = "CATALOG_SERVER")]
     server: Option<Url>,
@@ -3103,13 +3103,13 @@ value = "Blue shirt"
     fn context_creation_defaults_the_parent_and_role_duplication_requires_a_code() {
         assert!(
             Cli::try_parse_from([
-                "catalog", "context", "create", "--code", "en-GB", "--data", "{}",
+                "acli", "context", "create", "--code", "en-GB", "--data", "{}",
             ])
             .is_ok()
         );
         assert!(
             Cli::try_parse_from([
-                "catalog",
+                "acli",
                 "workspace",
                 "role",
                 "duplicate",
@@ -3151,15 +3151,15 @@ value = "Blue shirt"
             json_input(file.path().to_str().unwrap(), "--body").unwrap()["operation"],
             "get"
         );
-        let help = Cli::try_parse_from(["catalog", "--help"]);
+        let help = Cli::try_parse_from(["acli", "--help"]);
         assert!(matches!(
             help,
             Err(error) if error.kind() == clap::error::ErrorKind::DisplayHelp
         ));
-        assert!(Cli::try_parse_from(["catalog", "workflow", "validate", "--stdin"]).is_ok());
+        assert!(Cli::try_parse_from(["acli", "workflow", "validate", "--stdin"]).is_ok());
         assert!(
             Cli::try_parse_from([
-                "catalog",
+                "acli",
                 "file",
                 "download-original",
                 "00000000-0000-0000-0000-000000000001",
@@ -3184,7 +3184,7 @@ value = "Blue shirt"
     fn auth_commands_require_stdin_secrets_and_support_a_session_file() {
         assert!(
             Cli::try_parse_from([
-                "catalog",
+                "acli",
                 "--session-file",
                 "session.json",
                 "auth",
@@ -3198,7 +3198,7 @@ value = "Blue shirt"
         );
         assert!(
             Cli::try_parse_from([
-                "catalog",
+                "acli",
                 "auth",
                 "password-reset-confirm",
                 "--token-stdin",
