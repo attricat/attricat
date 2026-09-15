@@ -180,18 +180,11 @@ export const Explorer = ({ search: urlSearch }: { search: ExplorerSearch }) => {
         ? [{ field: facet.field, selected_target_ids: facet.selectedIds }]
         : [],
   );
-  const relationshipTreeFacets: {
-    source_relationship_field: string;
-    hierarchy_field?: string;
-    context_id: string;
-    selected_target_ids: string[];
-  }[] = [];
   const results = useInfiniteQuery({
     queryKey: entityQueryKeys.search(
       search.blueprint,
       effectiveVersion,
       search.query,
-      relationshipTreeFacets,
       search.sort,
       search.attributeFilters,
       Boolean(search.allVersions),
@@ -203,7 +196,6 @@ export const Explorer = ({ search: urlSearch }: { search: ExplorerSearch }) => {
         effectiveVersion,
         search.query ?? '',
         pageParam,
-        relationshipTreeFacets,
         signal,
         search.sort,
         pageParam === null,
@@ -236,32 +228,11 @@ export const Explorer = ({ search: urlSearch }: { search: ExplorerSearch }) => {
   const resultItems = resultPages.flatMap((page) => page.items);
   const resultBlueprint = resultPages[0]?.blueprint;
   const updateFacetContext = (context: string) => {
-    const current = search.relationshipFacets ?? [];
-    void navigate({
-      to: '/',
-      search: {
-        ...search,
-        context,
-        relationshipFacets: relationshipFields.map((field) => {
-          const existing = current.find((facet) => facet.field === field.code);
-          return {
-            field: field.code,
-            ...existing,
-            context,
-            selectedIds: [],
-          };
-        }),
-      },
-    });
+    void navigate({ to: '/', search: { ...search, context } });
   };
   const updateFacet = (
     field: string,
-    updates: {
-      hierarchy?: string;
-      context?: string;
-      selectedIds?: string[];
-      targetBlueprint?: string;
-    },
+    updates: { selectedIds?: string[]; targetBlueprint?: string },
   ) => {
     const current = search.relationshipFacets ?? [];
     const existing = current.find((facet) => facet.field === field);
@@ -440,7 +411,6 @@ export const Explorer = ({ search: urlSearch }: { search: ExplorerSearch }) => {
                     ? undefined
                     : (nextSearch.version ?? currentBlueprint?.version),
                   nextSearch.query,
-                  keepsBlueprint && !scopeChanged ? relationshipTreeFacets : [],
                   nextSearch.sort,
                   nextSearch.attributeFilters,
                   Boolean(nextSearch.allVersions),
@@ -558,7 +528,6 @@ export const Explorer = ({ search: urlSearch }: { search: ExplorerSearch }) => {
                     effectiveVersion,
                     search.allVersions,
                     search.query,
-                    relationshipTreeFacets,
                     search.sort,
                     search.attributeFilters,
                   ])}

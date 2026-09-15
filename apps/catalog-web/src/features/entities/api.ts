@@ -14,7 +14,6 @@ import {
   getBlueprintRequestSchema,
   getBlueprintRevisionRequestSchema,
   incomingRelationshipsPageSchema,
-  relationshipTreeFacetChildrenResponseSchema,
   resolvedEntityPreviewSchema,
   searchEntitiesRequestSchema,
   migrateEntityRequestSchema,
@@ -44,7 +43,6 @@ export type {
   JsonSchema,
   NewAttributeValue,
   RelationshipTargets,
-  RelationshipTreeFacetChildrenResponse,
   ResolvedEntityPreview,
   ViewDefinition,
   ViewNode,
@@ -57,12 +55,6 @@ export const searchEntities = (
   version: number | undefined,
   query: string,
   cursor: string | null = null,
-  relationshipTreeFacets?: {
-    source_relationship_field: string;
-    hierarchy_field?: string;
-    context_id: string;
-    selected_target_ids: string[];
-  }[],
   signal?: AbortSignal,
   sort?: { field: string; direction: 'asc' | 'desc' },
   includeTotal = false,
@@ -79,7 +71,6 @@ export const searchEntities = (
     ...(relationshipFilters.length
       ? { relationship_filters: relationshipFilters }
       : {}),
-    relationship_tree_facets: relationshipTreeFacets,
     sort,
     ...(includeTotal ? { include_total: true } : {}),
     page: { size: 25, cursor },
@@ -91,30 +82,6 @@ export const searchEntities = (
     ...(signal === undefined ? {} : { signal }),
   });
 };
-
-export const getRelationshipTreeFacetChildren = (
-  input: {
-    blueprint: { code: string; version?: number };
-    query?: string;
-    source_relationship_field: string;
-    hierarchy_field?: string;
-    context_id: string;
-    parent_id?: string;
-    cursor?: string | null;
-    selected_target_ids?: string[];
-  },
-  signal?: AbortSignal,
-) =>
-  request(
-    '/api/v1/entities/facets/relationship-tree/children',
-    relationshipTreeFacetChildrenResponseSchema,
-    {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(input),
-      ...(signal === undefined ? {} : { signal }),
-    },
-  );
 
 export const listEntityBlueprints = (signal?: AbortSignal) =>
   request(

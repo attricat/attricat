@@ -7,7 +7,6 @@ import {
   getEntityForm,
   getEntityHierarchy,
   getIncomingRelationships,
-  getRelationshipTreeFacetChildren,
   getEntityPublications,
   listEntityBlueprints,
   listPublicationChannels,
@@ -263,7 +262,6 @@ describe('entity API client', () => {
       undefined,
       '',
       null,
-      undefined,
       controller.signal,
     );
     expect(fetchMock).toHaveBeenLastCalledWith('/api/v1/entities/search', {
@@ -278,28 +276,6 @@ describe('entity API client', () => {
       signal: controller.signal,
     });
 
-    respond({ items: [], next_cursor: null });
-    await getRelationshipTreeFacetChildren(
-      {
-        blueprint: { code: 'product' },
-        source_relationship_field: 'categories',
-        context_id: entityId,
-      },
-      controller.signal,
-    );
-    expect(fetchMock).toHaveBeenLastCalledWith(
-      '/api/v1/entities/facets/relationship-tree/children',
-      {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          blueprint: { code: 'product' },
-          source_relationship_field: 'categories',
-          context_id: entityId,
-        }),
-        signal: controller.signal,
-      },
-    );
   });
 
   it('uses the backend default ordering', async () => {
@@ -392,7 +368,6 @@ describe('entity API client', () => {
       null,
       undefined,
       undefined,
-      undefined,
       true,
     );
 
@@ -441,7 +416,7 @@ describe('entity API client', () => {
       next_cursor: null,
     });
 
-    await searchEntities('product', undefined, '', null, undefined, undefined, {
+    await searchEntities('product', undefined, '', null, undefined, {
       field: 'category.name',
       direction: 'desc',
     });
@@ -471,7 +446,6 @@ describe('entity API client', () => {
       undefined,
       '',
       null,
-      undefined,
       undefined,
       undefined,
       false,
@@ -504,7 +478,6 @@ describe('entity API client', () => {
       null,
       undefined,
       undefined,
-      undefined,
       false,
       [],
       [{ field: 'brand.owner', selected_target_ids: [entityId] }],
@@ -523,76 +496,6 @@ describe('entity API client', () => {
         page: { size: 25, cursor: null },
       }),
     });
-  });
-
-  it('posts relationship-tree facet selections', async () => {
-    respond({
-      blueprint: blueprintWithAttributes,
-      items: [],
-      next_cursor: null,
-    });
-
-    await searchEntities('product', undefined, '', null, [
-      {
-        source_relationship_field: 'categories',
-        hierarchy_field: 'parent',
-        context_id: entityId,
-        selected_target_ids: [entityId],
-      },
-    ]);
-
-    expect(fetchMock).toHaveBeenLastCalledWith('/api/v1/entities/search', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        blueprint: { code: 'product' },
-        query: '',
-        filters: [],
-        relationship_tree_facets: [
-          {
-            source_relationship_field: 'categories',
-            hierarchy_field: 'parent',
-            context_id: entityId,
-            selected_target_ids: [entityId],
-          },
-        ],
-        page: { size: 25, cursor: null },
-      }),
-    });
-  });
-
-  it('loads a paginated relationship-tree child page', async () => {
-    respond({
-      items: [
-        { id: entityId, display: 'Clothing', count: 4, has_children: true },
-      ],
-      next_cursor: null,
-    });
-
-    await getRelationshipTreeFacetChildren({
-      blueprint: { code: 'product' },
-      source_relationship_field: 'categories',
-      hierarchy_field: 'parent',
-      context_id: entityId,
-      parent_id: entityId,
-      cursor: null,
-    });
-
-    expect(fetchMock).toHaveBeenLastCalledWith(
-      '/api/v1/entities/facets/relationship-tree/children',
-      {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          blueprint: { code: 'product' },
-          source_relationship_field: 'categories',
-          hierarchy_field: 'parent',
-          context_id: entityId,
-          parent_id: entityId,
-          cursor: null,
-        }),
-      },
-    );
   });
 
   it('loads incoming relationship pages with the configured selectors', async () => {

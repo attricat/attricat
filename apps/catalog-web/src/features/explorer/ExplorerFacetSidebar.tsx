@@ -31,7 +31,6 @@ import { dropdownOptionLabel, displayLabel } from '../entities/entity-display';
 import type { AttributeFilter } from './search';
 
 export type ExplorerRelationshipFacet = {
-  hierarchyField?: string;
   selectedIds: string[];
   sourceRelationship: Attribute;
 };
@@ -55,12 +54,7 @@ type Props = {
   onUpdateAttributeFilter: (index: number, filter: AttributeFilter) => void;
   onUpdate: (
     field: string,
-    updates: {
-      hierarchy?: string;
-      context?: string;
-      selectedIds?: string[];
-      targetBlueprint?: string;
-    },
+    updates: { selectedIds?: string[]; targetBlueprint?: string },
   ) => void;
 };
 
@@ -203,7 +197,6 @@ const Facet = ({
     facet.sourceRelationship.target_blueprint_code,
     facet.selectedIds,
   );
-  const singleSelect = false;
   const openSelector = () => {
     setOpen(true);
   };
@@ -286,7 +279,6 @@ const Facet = ({
             onUpdate(facet.sourceRelationship.code, { selectedIds: ids })
           }
           selectedIds={facet.selectedIds}
-          singleSelect={singleSelect}
           targetBlueprint={facet.sourceRelationship.target_blueprint_code!}
         />
       </RelationshipSelectorDialog>
@@ -297,12 +289,10 @@ const Facet = ({
 const RelationshipTargetPicker = ({
   onSelectedIdsChange,
   selectedIds,
-  singleSelect,
   targetBlueprint,
 }: {
   onSelectedIdsChange: (ids: string[]) => void;
   selectedIds: string[];
-  singleSelect: boolean;
   targetBlueprint: string;
 }) => {
   const { t } = useTranslation();
@@ -310,7 +300,7 @@ const RelationshipTargetPicker = ({
   const targets = useInfiniteQuery({
     queryKey: entityQueryKeys.relationshipTargets(targetBlueprint, query),
     queryFn: ({ pageParam, signal }) =>
-      searchEntities(targetBlueprint, undefined, query, pageParam, undefined, signal),
+      searchEntities(targetBlueprint, undefined, query, pageParam, signal),
     initialPageParam: null as string | null,
     getNextPageParam: (page) => page.next_cursor,
   });
@@ -322,13 +312,9 @@ const RelationshipTargetPicker = ({
   const views = targets.data?.pages[0]?.blueprint.blueprint.views ?? {};
   const toggle = (id: string) =>
     onSelectedIdsChange(
-      singleSelect
-        ? selectedIds[0] === id
-          ? []
-          : [id]
-        : selectedIds.includes(id)
-          ? selectedIds.filter((selectedId) => selectedId !== id)
-          : [...selectedIds, id],
+      selectedIds.includes(id)
+        ? selectedIds.filter((selectedId) => selectedId !== id)
+        : [...selectedIds, id],
     );
   return (
     <Stack spacing={1.5}>

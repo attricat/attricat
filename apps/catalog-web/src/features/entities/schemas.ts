@@ -413,20 +413,6 @@ const entitySearchResponseSchema = z.object({
     .default(null),
   hidden_outdated_count_capped: z.boolean().default(false),
 });
-export const relationshipTreeFacetChildrenResponseSchema = z.object({
-  items: z.array(
-    z.object({
-      id: uuidSchema,
-      display: z.string(),
-      count: z.number().int().nonnegative(),
-      has_children: z.boolean(),
-    }),
-  ),
-  selected_items: z
-    .array(z.object({ id: uuidSchema, display: z.string() }))
-    .default([]),
-  next_cursor: uuidSchema.nullable(),
-});
 const incomingRelationshipItemSchema = z.object({
   id: uuidSchema,
   blueprint_code: z.string(),
@@ -516,16 +502,6 @@ export const searchEntitiesRequestSchema = z.object({
     )
     .optional(),
   system_tags: z.array(z.string()).optional(),
-  relationship_tree_facets: z
-    .array(
-      z.object({
-        source_relationship_field: z.string().min(1),
-        hierarchy_field: z.string().min(1).optional(),
-        context_id: uuidSchema,
-        selected_target_ids: z.array(uuidSchema),
-      }),
-    )
-    .optional(),
   sort: z
     .object({
       field: z.string().min(1),
@@ -588,9 +564,6 @@ export type EntityAuditChange = z.infer<typeof entityAuditChangeSchema>;
 export type EntityItem = z.infer<typeof entityItemSchema>;
 export type EntitySearchFilter = z.infer<typeof entitySearchFilterSchema>;
 export type EntitySearchResponse = z.infer<typeof entitySearchResponseSchema>;
-export type RelationshipTreeFacetChildrenResponse = z.infer<
-  typeof relationshipTreeFacetChildrenResponseSchema
->;
 export type IncomingRelationshipsPage = z.infer<
   typeof incomingRelationshipsPageSchema
 >;

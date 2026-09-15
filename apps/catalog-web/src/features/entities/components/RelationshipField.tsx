@@ -76,7 +76,6 @@ export const RelationshipField = ({
         undefined,
         query,
         pageParam,
-        undefined,
         signal,
       ),
     initialPageParam: null as string | null,

@@ -20,8 +20,6 @@ const attributeFilterSearchSchema = z.object({
 
 const relationshipFacetSearchSchema = z.object({
   field: z.string().trim().min(1),
-  hierarchy: z.string().trim().min(1).optional(),
-  context: z.string().trim().min(1).optional(),
   selectedIds: z.array(z.string().uuid()).optional(),
   targetBlueprint: z.string().trim().min(1).optional(),
 });
