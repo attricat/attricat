@@ -1,21 +1,10 @@
 import { z } from 'zod';
+import { entitySearchFilterSchema } from '../entities/schemas';
 
 export const maximumAttributeFilters = 20;
 
-const attributeFilterOperatorSchema = z.enum([
-  'eq',
-  'contains',
-  'starts_with',
-  'gt',
-  'gte',
-  'lt',
-  'lte',
-]);
-
-const attributeFilterSearchSchema = z.object({
+const attributeFilterSearchSchema = entitySearchFilterSchema.extend({
   field: z.string().trim().min(1),
-  operator: attributeFilterOperatorSchema,
-  value: z.union([z.string(), z.number().finite(), z.boolean()]),
 });
 
 const relationshipFacetSearchSchema = z.object({

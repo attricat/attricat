@@ -14,38 +14,38 @@ import {
 } from '@mui/material';
 import type { ReactNode } from 'react';
 
-type Props = {
+type DialogActionsConfig = {
   applyDisabled?: boolean;
   applyLabel: string;
   cancelLabel: string;
-  children: ReactNode;
   clearLabel: string;
-  closeLabel: string;
   onApply: () => void;
   onClear: () => void;
-  hideActions?: boolean;
+};
+
+type Props = {
+  actions?: DialogActionsConfig;
+  children: ReactNode;
+  closeLabel: string;
   onClose: () => void;
   open: boolean;
   selectedLabel: string;
   title: string;
-  topActionLabel?: string;
+  topAction?: {
+    label: string;
+    onClick: () => void;
+  };
 };
 
 export const RelationshipSelectorDialog = ({
-  applyDisabled = false,
-  applyLabel,
-  cancelLabel,
+  actions,
   children,
-  clearLabel,
   closeLabel,
-  onApply,
-  onClear,
   onClose,
-  hideActions = false,
   open,
   selectedLabel,
   title,
-  topActionLabel,
+  topAction,
 }: Props) => {
   const theme = useTheme();
   const fullScreen = useMediaQuery(theme.breakpoints.down('sm'));
@@ -81,9 +81,9 @@ export const RelationshipSelectorDialog = ({
               {selectedLabel}
             </Typography>
           </Box>
-          {topActionLabel && (
-            <Button onClick={onApply} size="small" variant="contained">
-              {topActionLabel}
+          {topAction && (
+            <Button onClick={topAction.onClick} size="small" variant="contained">
+              {topAction.label}
             </Button>
           )}
           <IconButton aria-label={closeLabel} onClick={onClose}>
@@ -92,21 +92,21 @@ export const RelationshipSelectorDialog = ({
         </Stack>
       </DialogTitle>
       <DialogContent dividers>{children}</DialogContent>
-      {!hideActions && (
+      {actions && (
         <DialogActions sx={{ justifyContent: 'space-between' }}>
-          <Button color="inherit" onClick={onClear}>
-            {clearLabel}
+          <Button color="inherit" onClick={actions.onClear}>
+            {actions.clearLabel}
           </Button>
           <Stack direction="row" spacing={1}>
             <Button color="inherit" onClick={onClose}>
-              {cancelLabel}
+              {actions.cancelLabel}
             </Button>
             <Button
-              disabled={applyDisabled}
-              onClick={onApply}
+              disabled={actions.applyDisabled}
+              onClick={actions.onApply}
               variant="contained"
             >
-              {applyLabel}
+              {actions.applyLabel}
             </Button>
           </Stack>
         </DialogActions>

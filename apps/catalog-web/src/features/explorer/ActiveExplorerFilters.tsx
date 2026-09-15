@@ -7,7 +7,6 @@ export type ActiveExplorerFilter =
   | {
       field: string;
       kind: 'relationship';
-      labels?: string[];
       selectedCount: number;
     }
   | {
@@ -43,23 +42,17 @@ export const ActiveExplorerFilters = ({
     >
       {filters.map((filter) => {
         const relationship = filter.kind === 'relationship';
-        const value = relationship
-          ? filter.labels
-            ? filter.labels.map((label) => JSON.stringify(label)).join(', ')
-            : undefined
-          : typeof filter.filter.value === 'boolean'
+        const value =
+          !relationship && typeof filter.filter.value === 'boolean'
             ? t(filter.filter.value ? 'explorer.true' : 'explorer.false')
-            : String(filter.filter.value);
+            : !relationship
+              ? String(filter.filter.value)
+              : undefined;
         const label = relationship
-          ? value === undefined
-            ? t('explorer.relationshipFilterPill', {
-                field: filter.field,
-                count: filter.selectedCount,
-              })
-            : t('explorer.relationshipFilterLabel', {
-                field: filter.field,
-                value,
-              })
+          ? t('explorer.relationshipFilterPill', {
+              field: filter.field,
+              count: filter.selectedCount,
+            })
           : `${filter.filter.field} ${t(
               `explorer.filterOperatorSymbols.${filter.filter.operator}`,
             )} ${JSON.stringify(value)}`;

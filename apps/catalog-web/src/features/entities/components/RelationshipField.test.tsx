@@ -119,7 +119,7 @@ describe('RelationshipField', () => {
   });
 
   it('keeps multi-selection draft changes in a closeable modal until applied', async () => {
-    vi.mocked(searchEntities).mockImplementation((_, __, query, cursor) =>
+    vi.mocked(searchEntities).mockImplementation(({ query, cursor }) =>
       Promise.resolve(
         cursor === 'second-page'
           ? page([{ id: laterId, label: 'Later product' }], null)
@@ -167,13 +167,12 @@ describe('RelationshipField', () => {
     await user.click(screen.getByRole('button', { name: 'Apply' }));
 
     expect(onChange).toHaveBeenLastCalledWith(laterId);
-    expect(searchEntities).toHaveBeenCalledWith(
-      'product',
-      undefined,
-      'later',
-      'second-page',
-      expect.any(AbortSignal),
-    );
+    expect(searchEntities).toHaveBeenCalledWith({
+      blueprint: 'product',
+      cursor: 'second-page',
+      query: 'later',
+      signal: expect.any(AbortSignal),
+    });
   });
 
   it('discards draft changes when the modal is closed', async () => {

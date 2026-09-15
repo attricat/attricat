@@ -1,3 +1,15 @@
+import type { EntitySearchFilter } from './schemas';
+
+type EntitySearchKeyOptions = {
+  allVersions?: boolean;
+  blueprint?: string;
+  filters?: EntitySearchFilter[];
+  query?: string;
+  relationshipFilters?: { field: string; selected_target_ids: string[] }[];
+  sort?: { field: string; direction: 'asc' | 'desc' };
+  version?: number;
+};
+
 export const entityQueryKeys = {
   searches: () => ['entities'] as const,
   blueprints: () => ['entity-blueprints'] as const,
@@ -27,27 +39,25 @@ export const entityQueryKeys = {
     relationships: { source_blueprint: string; field: string }[],
     pageSize: number,
   ) => ['incoming-relationships', entityId, relationships, pageSize] as const,
-  search: (
-    blueprint: string | undefined,
-    version: number | undefined,
-    query: string | undefined,
-    sort?: { field: string; direction: 'asc' | 'desc' },
-    filters?: {
-      field: string;
-      operator: string;
-      value: string | number | boolean;
-    }[],
+  search: ({
     allVersions = false,
-    relationshipFilters?: { field: string; selected_target_ids: string[] }[],
-  ) =>
+    blueprint,
+    filters,
+    query,
+    relationshipFilters,
+    sort,
+    version,
+  }: EntitySearchKeyOptions) =>
     [
       ...entityQueryKeys.searches(),
-      blueprint,
-      version,
-      query,
-      sort,
-      filters,
-      allVersions,
-      relationshipFilters,
+      {
+        allVersions,
+        blueprint,
+        filters,
+        query,
+        relationshipFilters,
+        sort,
+        version,
+      },
     ] as const,
 } as const;

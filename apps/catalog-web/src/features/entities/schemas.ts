@@ -246,11 +246,11 @@ export const attributeSchema = z
   .passthrough();
 export const blueprintSchema = z
   .object({
-    id: uuidSchema.optional(),
+    id: uuidSchema,
     code: z.string(),
     name: z.string(),
     version: z.number().int().positive(),
-    status: z.enum(['draft', 'published']).optional(),
+    status: z.enum(['draft', 'published']),
     views: viewsSchema.default({}),
     entity_schema: jsonSchemaSchema.nullish(),
   })
@@ -313,16 +313,13 @@ export const entityPublicationStatusSchema = z.object({
   published_at: z.string().datetime().nullable(),
   published_by_user_id: uuidSchema.nullable(),
 });
-export const publicationChannelSchema = z.object({
-  context_id: uuidSchema,
-  context_code: z.string(),
-  enabled: z.boolean(),
+export const entityIdentitySchema = z.object({
+  id: uuidSchema,
+  blueprint_id: uuidSchema,
+  blueprint_version: z.number().int().positive(),
 });
-export const entitySchema = z
-  .object({
-    id: uuidSchema,
-    blueprint_id: uuidSchema.optional(),
-    blueprint_version: z.number().int().positive().optional(),
+export const entitySchema = entityIdentitySchema
+  .extend({
     system_tags: z.array(z.string()).optional(),
     system_metadata: jsonObjectSchema.optional(),
   })
@@ -370,11 +367,7 @@ const entityItemSchema = z.object({
 });
 const entityContextSchema = z.record(z.string(), jsonObjectSchema);
 export const entityPreviewResponseSchema = z.object({
-  entity: z.object({
-    id: uuidSchema,
-    blueprint_id: uuidSchema,
-    blueprint_version: z.number().int().positive(),
-  }),
+  entity: entityIdentitySchema,
   context: entityContextSchema,
 });
 const resolvedPreviewValueSchema = z.union([
@@ -383,7 +376,7 @@ const resolvedPreviewValueSchema = z.union([
   z.array(fileMetadataSchema),
 ]);
 const resolvedEntityPreviewSchema = z.object({
-  entity: entitySchema,
+  entity: entityIdentitySchema,
   requested_context: attributeContextSchema,
   values: z.record(
     z.string(),
@@ -481,9 +474,18 @@ export const entityMigrationPreviewSchema = z.object({
   status: z.enum(['ready', 'needs_input', 'blocked']),
   issues: z.array(migrationIssueSchema),
 });
+export const attributeFilterOperatorSchema = z.enum([
+  'eq',
+  'contains',
+  'starts_with',
+  'gt',
+  'gte',
+  'lt',
+  'lte',
+]);
 export const entitySearchFilterSchema = z.object({
   field: z.string().min(1),
-  operator: z.enum(['eq', 'contains', 'starts_with', 'gt', 'gte', 'lt', 'lte']),
+  operator: attributeFilterOperatorSchema,
   value: z.union([z.string(), z.number().finite(), z.boolean()]),
 });
 export const searchEntitiesRequestSchema = z.object({
@@ -559,14 +561,10 @@ export type Entity = z.infer<typeof entitySchema>;
 export type EntityPublicationStatus = z.infer<
   typeof entityPublicationStatusSchema
 >;
-export type PublicationChannel = z.infer<typeof publicationChannelSchema>;
 export type EntityAuditChange = z.infer<typeof entityAuditChangeSchema>;
 export type EntityItem = z.infer<typeof entityItemSchema>;
 export type EntitySearchFilter = z.infer<typeof entitySearchFilterSchema>;
 export type EntitySearchResponse = z.infer<typeof entitySearchResponseSchema>;
-export type IncomingRelationshipsPage = z.infer<
-  typeof incomingRelationshipsPageSchema
->;
 export type EntityFormResponse = z.infer<typeof entityFormResponseSchema>;
 export type ResolvedEntityPreview = z.infer<typeof resolvedEntityPreviewSchema>;
 export type EntityMigrationPreview = z.infer<

@@ -19,7 +19,6 @@ import {
   migrateEntityRequestSchema,
   updateEntityRequestSchema,
   entityPublicationStatusSchema,
-  publicationChannelSchema,
   uuidSchema,
 } from './schemas';
 
@@ -34,12 +33,10 @@ export type {
   EntityFormResponse,
   EntityMigrationPreview,
   EntityPublicationStatus,
-  PublicationChannel,
   FormAttributeValue,
   EntityItem,
   EntitySearchFilter,
   EntitySearchResponse,
-  IncomingRelationshipsPage,
   JsonSchema,
   NewAttributeValue,
   RelationshipTargets,
@@ -50,17 +47,32 @@ export type {
 
 export { ApiRequestError } from '../../api/request';
 
-export const searchEntities = (
-  blueprint: string,
-  version: number | undefined,
-  query: string,
-  cursor: string | null = null,
-  signal?: AbortSignal,
-  sort?: { field: string; direction: 'asc' | 'desc' },
+export type SearchEntitiesOptions = {
+  blueprint: string;
+  cursor?: string | null;
+  filters?: import('./schemas').EntitySearchFilter[];
+  includeTotal?: boolean;
+  query?: string;
+  relationshipFilters?: {
+    field: string;
+    selected_target_ids: string[];
+  }[];
+  signal?: AbortSignal;
+  sort?: { field: string; direction: 'asc' | 'desc' };
+  version?: number;
+};
+
+export const searchEntities = ({
+  blueprint,
+  cursor = null,
+  filters = [],
   includeTotal = false,
-  filters: import('./schemas').EntitySearchFilter[] = [],
-  relationshipFilters: { field: string; selected_target_ids: string[] }[] = [],
-) => {
+  query = '',
+  relationshipFilters = [],
+  signal,
+  sort,
+  version,
+}: SearchEntitiesOptions) => {
   const payload = searchEntitiesRequestSchema.parse({
     blueprint: {
       code: blueprint,
@@ -191,8 +203,6 @@ export const updateEntity = (
   );
 };
 
-export const listPublicationChannels = () =>
-  request('/api/publication-channels', z.array(publicationChannelSchema));
 export const getEntityPublications = (id: string) =>
   request(
     `/api/v1/entities/${encodeURIComponent(uuidSchema.parse(id))}/publications`,

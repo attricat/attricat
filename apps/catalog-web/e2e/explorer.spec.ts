@@ -1,4 +1,4 @@
-import { expect, test } from '@playwright/test';
+import { expect, test, type Page } from '@playwright/test';
 import {
   createEntity,
   createEntityBlueprint,
@@ -8,6 +8,22 @@ import {
   scalar,
   suffix,
 } from './helpers';
+
+const addRelationshipFilter = async (
+  page: Page,
+  field: string,
+  option: string,
+) => {
+  await page.getByRole('button', { name: 'Add filter' }).click();
+  const fieldDialog = page.getByRole('dialog', { name: /^Add filter/ });
+  await fieldDialog.getByRole('combobox', { name: 'Field' }).click();
+  await page.locator(`[role="option"][data-value="${field}"]`).click();
+  const relationshipDialog = page.getByRole('dialog', { name: /^Select / });
+  await relationshipDialog
+    .getByRole('button', { name: `Select ${option}` })
+    .click();
+  await relationshipDialog.getByRole('button', { name: 'Done' }).click();
+};
 
 test('shows explorer empty states and configured table fields', async ({
   page,
@@ -33,13 +49,13 @@ test('shows explorer empty states and configured table fields', async ({
     .getByRole('option', { name: `Explorer products (${code})` })
     .click();
   await page.getByLabel('Query').fill('missing');
-  await page.getByRole('button', { name: 'Search' }).click();
+  await page.getByRole('button', { name: 'Search', exact: true }).click();
   await expect(
     page.getByText('No entities matched this search.'),
   ).toBeVisible();
 
   await page.getByLabel('Query').fill('table');
-  await page.getByRole('button', { name: 'Search' }).click();
+  await page.getByRole('button', { name: 'Search', exact: true }).click();
   await expect(page.getByRole('columnheader', { name: 'title' })).toBeVisible();
   await expect(page.getByRole('columnheader', { name: 'stock' })).toBeVisible();
   await expect(
@@ -52,7 +68,7 @@ test('shows explorer empty states and configured table fields', async ({
       response.url().endsWith('/api/v1/entities/search') &&
       response.request().method() === 'POST',
   );
-  await page.getByRole('button', { name: 'Search' }).click();
+  await page.getByRole('button', { name: 'Search', exact: true }).click();
   await repeatedButtonSearch;
 
   const repeatedKeyboardSearch = page.waitForResponse(
@@ -95,13 +111,13 @@ value_type = "integer"`,
     page.getByRole('combobox', { name: /select a blueprint/i }),
   ).toHaveCount(1);
   const mobileFilters = page.locator('.MuiDrawer-paper aside');
-  await expect(mobileFilters.getByText('Attribute filters')).toBeVisible();
+  await expect(mobileFilters.getByRole('heading', { name: 'Filters' })).toBeVisible();
   await mobileFilters.getByRole('button', { name: 'Add filter' }).click();
   const filterDialog = page.getByRole('dialog', {
-    name: /^Add attribute filter/,
+    name: /^Add filter/,
   });
   await filterDialog
-    .getByRole('combobox', { name: 'Attribute', exact: true })
+    .getByRole('combobox', { name: 'Field', exact: true })
     .click();
   await page.getByRole('option', { name: 'stock' }).click();
   await filterDialog.getByLabel('Operator').click();
@@ -126,7 +142,7 @@ value_type = "integer"`,
   await expect(mobileFilters).toBeVisible();
   await mobileFilters.getByText('stock > "5"').click();
   const editDialog = page.getByRole('dialog', {
-    name: /^Edit attribute filter/,
+    name: /^Edit filter/,
   });
   await expect(editDialog.getByLabel('Value')).toHaveValue('5');
   await editDialog.getByLabel('Value').fill('10');
@@ -191,38 +207,19 @@ target_blueprint = "${categoryCode}"`,
 
   await page.goto(`/?blueprint=${productCode}`);
   await expect(page.getByText('2 results')).toBeVisible();
-  await page.getByRole('button', { name: 'Facet categories' }).click();
-  await expect(
-    page.getByRole('button', { name: 'Select Departments' }),
-  ).toBeVisible();
-  const departmentsItem = page
-    .getByRole('listitem')
-    .filter({ has: page.getByRole('link', { name: 'Departments' }) });
-  await departmentsItem.evaluate((item) => item.click());
-  const previewPagePromise = page.waitForEvent('popup');
-  await page
-    .getByRole('button', { name: 'Preview Shoes in a new tab' })
-    .click();
-  const previewPage = await previewPagePromise;
-  await previewPage
-    .getByRole('button', { name: 'Select this entity and close' })
-    .click();
-  await expect.poll(() => previewPage.isClosed()).toBe(true);
-  await expect(
-    page.getByRole('heading', { name: 'Selected', exact: true }),
-  ).toBeVisible();
-  expect(new URL(page.url()).searchParams.get('relationshipFacets')).toBeNull();
-  await page.getByRole('button', { name: 'Apply' }).click();
+  await addRelationshipFilter(page, 'category', 'Shoes');
 
   await expect
     .poll(() => new URL(page.url()).searchParams.get('relationshipFacets'))
     .toContain(child.id);
-  await expect(page.getByText('category: "Shoes"')).toBeVisible();
+  await expect(page.getByText('category: 1 selected')).toBeVisible();
   await expect(page.getByText('1 result')).toBeVisible();
   await expect(page.getByRole('cell', { name: 'Running shoe' })).toBeVisible();
   await expect(page.getByRole('cell', { name: 'Canvas bag' })).toBeHidden();
 
-  await page.getByLabel('Remove relationship filter category: "Shoes"').click();
+  await page
+    .getByLabel('Remove relationship filter category: 1 selected')
+    .click();
   await expect(page.getByText('2 results')).toBeVisible();
 });
 
@@ -264,13 +261,7 @@ cardinality = "one"`,
   ]);
 
   await page.goto(`/?blueprint=${productCode}`);
-  await page.getByRole('button', { name: 'Facet colors' }).click();
-  await expect(page.getByRole('button', { name: 'Select Red' })).toBeVisible();
-  await expect(page.getByRole('button', { name: 'Select Blue' })).toBeVisible();
-  await expect(page.getByRole('radio')).toHaveCount(0);
-  await expect(page.getByLabel('Context').first()).toBeVisible();
-  await page.getByRole('button', { name: 'Select Red' }).click();
-  await page.getByRole('button', { name: 'Apply' }).click();
+  await addRelationshipFilter(page, 'color', 'Red');
 
   await expect
     .poll(() => new URL(page.url()).searchParams.get('relationshipFacets'))
@@ -335,16 +326,8 @@ target_blueprint = "${sizeCode}"`,
   ]);
 
   await page.goto(`/?blueprint=${productCode}`);
-  await page.getByRole('button', { name: 'Colors' }).click();
-  await expect(page.getByRole('button', { name: 'Select Red' })).toBeVisible();
-  await page.getByRole('button', { name: 'Select Red' }).click();
-  await page.getByRole('button', { name: 'Apply' }).click();
-  await page.getByRole('button', { name: 'Sizes' }).click();
-  await expect(
-    page.getByRole('button', { name: 'Select Large' }),
-  ).toBeVisible();
-  await page.getByRole('button', { name: 'Select Large' }).click();
-  await page.getByRole('button', { name: 'Apply' }).click();
+  await addRelationshipFilter(page, 'color', 'Red');
+  await addRelationshipFilter(page, 'size', 'Large');
 
   await expect(page.getByText('1 result')).toBeVisible();
   await expect(
@@ -387,7 +370,7 @@ test('loads additional explorer search pages', async ({ page }) => {
   await page.goto(`/?blueprint=${code}&query=Pagination`);
 
   await expect(page.getByText('52 results', { exact: true })).toBeVisible();
-  const resultsContainer = page.getByLabel('Explorer results');
+  const resultsContainer = page.locator('.MuiTableContainer-root');
   await resultsContainer.evaluate((element) => {
     element.scrollTop = element.scrollHeight;
   });
@@ -458,7 +441,7 @@ value_type = "string"`,
 
   await page.getByLabel('Version scope').click();
   await page.getByRole('option', { name: 'Version 1' }).click();
-  await page.getByRole('button', { name: 'Search' }).click();
+  await page.getByRole('button', { name: 'Search', exact: true }).click();
   await expect(page).toHaveURL(new RegExp(`blueprint=${code}.*version=1`));
   await expect(page.getByRole('cell', { name: 'v1 · Outdated' })).toBeVisible();
 });

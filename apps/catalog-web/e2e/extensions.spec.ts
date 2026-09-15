@@ -117,7 +117,7 @@ price_gross = "price_net * (1 + 0.23)"`,
   await page.goto('/');
   await page.getByLabel('Select a Blueprint').click();
   await page.getByRole('option', { name: `Formula product (${code})` }).click();
-  await page.getByRole('button', { name: 'Search' }).click();
+  await page.getByRole('button', { name: 'Search', exact: true }).click();
   const cellFrame = page.frameLocator(
     'iframe[title="attricat-extension-example.table-cell"]',
   );

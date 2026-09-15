@@ -7,7 +7,7 @@ import {
   TextField,
   Typography,
 } from '@mui/material';
-import { useMemo, useState, type KeyboardEvent } from 'react';
+import { useState, type KeyboardEvent } from 'react';
 import { useQueries } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
 import { RelationshipSelectorDialog } from '../../components/RelationshipSelectorDialog';
@@ -19,6 +19,10 @@ import {
   operatorsForValueType,
   type AttributeFilterOperator,
 } from './attribute-filters';
+import {
+  isRelationshipFilterAttribute,
+  type RelationshipFilterAttribute,
+} from './relationship-filter-types';
 import { maximumAttributeFilters, type AttributeFilter } from './search';
 
 type Props = {
@@ -26,14 +30,14 @@ type Props = {
   attributes: Attribute[];
   blueprintName: string;
   pathAttributes?: { code: string; value_type: Attribute['value_type'] }[];
-  relationshipAttributes?: Attribute[];
+  relationshipAttributes?: RelationshipFilterAttribute[];
   onAdd: (filter: AttributeFilter) => void;
-  onAddRelationship: (attribute: Attribute) => void;
+  onAddRelationship: (attribute: RelationshipFilterAttribute) => void;
   onRemove: (index: number) => void;
   onUpdate: (index: number, filter: AttributeFilter) => void;
 };
 
-export const ExplorerAttributeFilters = ({
+export const ExplorerFilterPicker = ({
   filters,
   attributes,
   blueprintName,
@@ -45,9 +49,13 @@ export const ExplorerAttributeFilters = ({
   onUpdate,
 }: Props) => {
   const { t } = useTranslation();
-  const directRelationships = relationshipAttributes.filter(
-    (attribute) => attribute.target_blueprint_code,
-  );
+  const [open, setOpen] = useState(false);
+  const [editingIndex, setEditingIndex] = useState<number | null>(null);
+  const [field, setField] = useState('');
+  const [operator, setOperator] = useState<AttributeFilterOperator>('eq');
+  const [value, setValue] = useState('');
+  const discoverRelationshipPaths = open && editingIndex === null;
+  const directRelationships = relationshipAttributes;
   const firstTargets = useQueries({
     queries: directRelationships.map((attribute) => ({
       queryKey: entityQueryKeys.blueprintByCode(
@@ -55,12 +63,13 @@ export const ExplorerAttributeFilters = ({
         undefined,
       ),
       queryFn: ({ signal }: { signal: AbortSignal }) =>
-        getBlueprintByCode(attribute.target_blueprint_code!, undefined, signal),
+        getBlueprintByCode(attribute.target_blueprint_code, undefined, signal),
+      enabled: discoverRelationshipPaths,
     })),
   });
   const secondRelationships = firstTargets.flatMap((result, index) =>
     (result.data?.attributes ?? [])
-      .filter((attribute) => attribute.value_type === 'relationship' && attribute.target_blueprint_code)
+      .filter(isRelationshipFilterAttribute)
       .map((attribute) => ({
         ...attribute,
         code: `${directRelationships[index].code}.${attribute.code}`,
@@ -73,44 +82,38 @@ export const ExplorerAttributeFilters = ({
         undefined,
       ),
       queryFn: ({ signal }: { signal: AbortSignal }) =>
-        getBlueprintByCode(attribute.target_blueprint_code!, undefined, signal),
+        getBlueprintByCode(attribute.target_blueprint_code, undefined, signal),
+      enabled: discoverRelationshipPaths,
     })),
   });
   const thirdRelationships = secondTargets.flatMap((result, index) =>
     (result.data?.attributes ?? [])
-      .filter((attribute) => attribute.value_type === 'relationship' && attribute.target_blueprint_code)
+      .filter(isRelationshipFilterAttribute)
       .map((attribute) => ({
         ...attribute,
         code: `${secondRelationships[index].code}.${attribute.code}`,
       })),
   );
-  const filterableAttributes = useMemo(
-    () => [
-      ...attributes.filter(isFilterableAttribute),
-      ...pathAttributes.map(
-        (attribute) =>
-          ({
-            code: attribute.code,
-            value_type: attribute.value_type,
-          }) as Attribute,
-      ),
-      ...directRelationships,
-      ...secondRelationships,
-      ...thirdRelationships,
-    ],
-    [
-      attributes,
-      directRelationships,
-      pathAttributes,
-      secondRelationships,
-      thirdRelationships,
-    ],
-  );
-  const [open, setOpen] = useState(false);
-  const [editingIndex, setEditingIndex] = useState<number | null>(null);
-  const [field, setField] = useState('');
-  const [operator, setOperator] = useState<AttributeFilterOperator>('eq');
-  const [value, setValue] = useState('');
+  const relationshipPathsLoading =
+    discoverRelationshipPaths &&
+    [...firstTargets, ...secondTargets].some((result) => result.isFetching);
+  const filterableAttributes = [
+    ...new Map(
+      [
+        ...attributes.filter(isFilterableAttribute),
+        ...pathAttributes.map(({ code, value_type }) => ({ code, value_type })),
+        ...directRelationships,
+        ...secondRelationships,
+        ...thirdRelationships,
+      ].map((attribute) => [attribute.code, attribute]),
+    ).values(),
+  ];
+  const selectableAttributes =
+    editingIndex === null
+      ? filterableAttributes
+      : filterableAttributes.filter(
+          (item) => !isRelationshipFilterAttribute(item),
+        );
   const attribute = filterableAttributes.find((item) => item.code === field);
   const availableOperators = operatorsForValueType(
     attribute?.value_type ?? 'string',
@@ -118,7 +121,7 @@ export const ExplorerAttributeFilters = ({
   const effectiveOperator = availableOperators.includes(operator)
     ? operator
     : 'eq';
-  const relationship = attribute?.value_type === 'relationship';
+  const relationship = attribute && isRelationshipFilterAttribute(attribute);
   const maximumReached = filters.length >= maximumAttributeFilters;
 
   if (!filterableAttributes.length) {
@@ -266,21 +269,22 @@ export const ExplorerAttributeFilters = ({
         </Typography>
       )}
       <RelationshipSelectorDialog
-        applyDisabled={
-          !attribute ||
-          (!relationship &&
-            (!valueIsValid || (maximumReached && editingIndex === null)))
-        }
-        applyLabel={t(
-          editingIndex === null
-            ? 'explorer.applyAttributeFilter'
-            : 'explorer.updateAttributeFilter',
-        )}
-        cancelLabel={t('explorer.cancelAttributeFilter')}
-        clearLabel={t('explorer.clearAttributeFilter')}
+        actions={{
+          applyDisabled:
+            !attribute ||
+            (!relationship &&
+              (!valueIsValid || (maximumReached && editingIndex === null))),
+          applyLabel: t(
+            editingIndex === null
+              ? 'explorer.applyAttributeFilter'
+              : 'explorer.updateAttributeFilter',
+          ),
+          cancelLabel: t('explorer.cancelAttributeFilter'),
+          clearLabel: t('explorer.clearAttributeFilter'),
+          onApply: apply,
+          onClear: () => setValue(''),
+        }}
         closeLabel={t('explorer.closeAttributeFilter')}
-        onApply={apply}
-        onClear={() => setValue('')}
         onClose={close}
         open={open}
         selectedLabel={t('explorer.attributeFilterDescription')}
@@ -299,7 +303,10 @@ export const ExplorerAttributeFilters = ({
               const nextAttribute = filterableAttributes.find(
                 (item) => item.code === nextField,
               );
-              if (nextAttribute?.value_type === 'relationship') {
+              if (
+                nextAttribute &&
+                isRelationshipFilterAttribute(nextAttribute)
+              ) {
                 onAddRelationship(nextAttribute);
                 close();
                 return;
@@ -311,7 +318,7 @@ export const ExplorerAttributeFilters = ({
             select
             value={field}
           >
-            {filterableAttributes.map((item) => (
+            {selectableAttributes.map((item) => (
               <MenuItem key={item.code} value={item.code}>
                 <Stack
                   direction="row"
@@ -327,14 +334,23 @@ export const ExplorerAttributeFilters = ({
               </MenuItem>
             ))}
           </TextField>
+          {relationshipPathsLoading && (
+            <Typography color="text.secondary" variant="caption">
+              {t('explorer.loadingRelationshipFields')}
+            </Typography>
+          )}
           {attribute && !relationship && (
             <>
               <TextField
                 fullWidth
                 label={t('explorer.operator')}
-                onChange={(event) =>
-                  setOperator(event.target.value as AttributeFilterOperator)
-                }
+                onChange={(event) => {
+                  const nextOperator = event.target.value;
+                  const validOperator = availableOperators.find(
+                    (item) => item === nextOperator,
+                  );
+                  if (validOperator) setOperator(validOperator);
+                }}
                 select
                 value={effectiveOperator}
               >

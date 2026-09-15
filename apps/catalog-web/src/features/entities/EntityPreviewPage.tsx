@@ -85,7 +85,11 @@ export const EntityPreviewPage = ({
   );
   const resolved = useQuery({
     queryKey: entityQueryKeys.resolvedPreview(entityId, selectedContextId),
-    queryFn: () => getResolvedEntityPreview(entityId, selectedContextId!),
+    queryFn: () => {
+      if (!selectedContextId)
+        throw new Error('Preview context is unavailable');
+      return getResolvedEntityPreview(entityId, selectedContextId);
+    },
     enabled: Boolean(selectedContextId),
   });
   const blueprint = useQuery({
@@ -93,11 +97,13 @@ export const EntityPreviewPage = ({
       resolved.data?.entity.blueprint_id,
       resolved.data?.entity.blueprint_version,
     ),
-    queryFn: () =>
-      getBlueprintRevision(
-        resolved.data!.entity.blueprint_id!,
-        resolved.data!.entity.blueprint_version!,
-      ),
+    queryFn: () => {
+      if (!resolved.data) throw new Error('Entity preview is unavailable');
+      return getBlueprintRevision(
+        resolved.data.entity.blueprint_id,
+        resolved.data.entity.blueprint_version,
+      );
+    },
     enabled: Boolean(
       resolved.data?.entity.blueprint_id &&
       resolved.data.entity.blueprint_version,
@@ -107,7 +113,10 @@ export const EntityPreviewPage = ({
     queryKey: entityQueryKeys.currentBlueprint(
       resolved.data?.entity.blueprint_id ?? '',
     ),
-    queryFn: () => getCurrentBlueprint(resolved.data!.entity.blueprint_id!),
+    queryFn: () => {
+      if (!resolved.data) throw new Error('Entity preview is unavailable');
+      return getCurrentBlueprint(resolved.data.entity.blueprint_id);
+    },
     enabled: Boolean(resolved.data?.entity.blueprint_id),
   });
   const detailView = blueprint.data?.blueprint.views.detail;
@@ -117,7 +126,7 @@ export const EntityPreviewPage = ({
   const schemaOutdated =
     currentBlueprint.data && resolved.data
       ? currentBlueprint.data.blueprint.version >
-        (resolved.data.entity.blueprint_version ?? Infinity)
+        resolved.data.entity.blueprint_version
       : undefined;
   return (
     <PageContainer>
@@ -126,7 +135,7 @@ export const EntityPreviewPage = ({
           blueprint.data && (
             <Tooltip title={blueprint.data.blueprint.name}>
               <RouterButton
-                params={{ blueprintId: String(blueprint.data.blueprint.id) }}
+                params={{ blueprintId: blueprint.data.blueprint.id }}
                 size="small"
                 startIcon={<BlueprintIcon />}
                 to="/manage/blueprints/$blueprintId"

@@ -21,6 +21,7 @@ import { useTranslation } from 'react-i18next';
 import { useMobileExplorePanelTarget } from '../../components/mobile-navigation-panel-context';
 import { PageContainer } from '../../components/PageContainer';
 import { PageHeader } from '../../components/PageHeader';
+import { QueryErrorNotice } from '../../components/QueryErrorNotice';
 import { RouterButton } from '../../components/RouterLink';
 import { listContexts } from '../contexts/api';
 import { contextQueryKeys } from '../contexts/query-keys';
@@ -36,11 +37,14 @@ import {
   ExplorerFacetSidebar,
   type ExplorerRelationshipFacet,
 } from './ExplorerFacetSidebar';
+import {
+  isRelationshipFilterAttribute,
+  type RelationshipFilterAttribute,
+} from './relationship-filter-types';
 import { ActiveExplorerFilters } from './ActiveExplorerFilters';
 import { ExplorerResultsTable } from './ExplorerResultsTable';
 import { ExplorerSearchForm } from './ExplorerSearchForm';
 import type { AttributeFilter, ExplorerSearch } from './search';
-import { useActiveRelationshipFilters } from './useActiveRelationshipFilters';
 import { getLastBlueprint, setLastBlueprint } from './last-blueprint';
 import { currentSession } from '../auth/api';
 import { authQueryKeys } from '../auth/query-keys';
@@ -75,6 +79,14 @@ export const Explorer = ({ search: urlSearch }: { search: ExplorerSearch }) => {
   const effectiveVersion = search.allVersions
     ? undefined
     : (search.version ?? currentBlueprint?.version);
+  const blueprintMissing = Boolean(
+    search.blueprint && blueprints.isSuccess && !currentBlueprint,
+  );
+  const canSearch = Boolean(
+    search.blueprint &&
+    !blueprintMissing &&
+    (search.allVersions || effectiveVersion !== undefined),
+  );
   const contexts = useQuery({
     queryKey: contextQueryKeys.all(),
     queryFn: ({ signal }) => listContexts(signal),
@@ -85,7 +97,7 @@ export const Explorer = ({ search: urlSearch }: { search: ExplorerSearch }) => {
       effectiveVersion,
     ),
     queryFn: ({ signal }) =>
-      getBlueprintByCode(search.blueprint!, effectiveVersion, signal),
+      getBlueprintByCode(search.blueprint ?? '', effectiveVersion, signal),
     enabled: Boolean(
       search.blueprint &&
       (search.allVersions || effectiveVersion !== undefined),
@@ -94,7 +106,7 @@ export const Explorer = ({ search: urlSearch }: { search: ExplorerSearch }) => {
   const revisions = useQuery({
     queryKey: entityQueryKeys.blueprintRevisions(currentBlueprint?.id),
     queryFn: async ({ signal }) =>
-      (await listBlueprintRevisions(currentBlueprint!.id!, signal)).filter(
+      (await listBlueprintRevisions(currentBlueprint?.id ?? '', signal)).filter(
         (revision) => revision.status === 'published',
       ),
     enabled: Boolean(currentBlueprint?.id),
@@ -125,36 +137,28 @@ export const Explorer = ({ search: urlSearch }: { search: ExplorerSearch }) => {
   }, [navigate, revisions.data, search]);
 
   const relationshipFields = (selectedBlueprint.data?.attributes ?? []).filter(
-    (
-      attribute,
-    ): attribute is typeof attribute & { target_blueprint_code: string } =>
-      attribute.value_type === 'relationship' &&
-      typeof attribute.target_blueprint_code === 'string',
+    isRelationshipFilterAttribute,
   );
-  const facetContextCode =
-    search.context ??
-    search.relationshipFacets?.[0]?.context ??
-    defaultContextCode;
+  const facetContextCode = search.context ?? defaultContextCode;
   const facetContextId = contexts.data?.find(
     (context) => context.code === facetContextCode,
   )?.id;
   const relationshipPathFields = [
     ...relationshipFields,
-    ...(search.relationshipFacets ?? [])
-      .filter(
-        (facet) =>
-          facet.targetBlueprint &&
-          !relationshipFields.some((field) => field.code === facet.field),
-      )
-      .map(
-        (facet) =>
-          ({
-            cardinality: 'many',
-            code: facet.field,
-            target_blueprint_code: facet.targetBlueprint,
-            value_type: 'relationship',
-          }) as (typeof relationshipFields)[number],
-      ),
+    ...(search.relationshipFacets ?? []).flatMap(
+      (facet): RelationshipFilterAttribute[] =>
+        facet.targetBlueprint &&
+        !relationshipFields.some((field) => field.code === facet.field)
+          ? [
+              {
+                cardinality: 'many',
+                code: facet.field,
+                target_blueprint_code: facet.targetBlueprint,
+                value_type: 'relationship',
+              },
+            ]
+          : [],
+    ),
   ];
   const explorerFacets: ExplorerRelationshipFacet[] = relationshipPathFields.map(
     (sourceRelationship) => {
@@ -168,11 +172,7 @@ export const Explorer = ({ search: urlSearch }: { search: ExplorerSearch }) => {
     },
   );
   const visibleExplorerFacets = explorerFacets.filter(
-    (facet) =>
-      facet.selectedIds.length > 0 ||
-      search.relationshipFacets?.some(
-        (saved) => saved.field === facet.sourceRelationship.code,
-      ),
+    (facet) => facet.selectedIds.length > 0,
   );
   const relationshipFilters = (search.relationshipFacets ?? []).flatMap(
     (facet) =>
@@ -181,33 +181,30 @@ export const Explorer = ({ search: urlSearch }: { search: ExplorerSearch }) => {
         : [],
   );
   const results = useInfiniteQuery({
-    queryKey: entityQueryKeys.search(
-      search.blueprint,
-      effectiveVersion,
-      search.query,
-      search.sort,
-      search.attributeFilters,
-      Boolean(search.allVersions),
+    queryKey: entityQueryKeys.search({
+      allVersions: Boolean(search.allVersions),
+      blueprint: search.blueprint,
+      filters: search.attributeFilters,
+      query: search.query,
       relationshipFilters,
-    ),
+      sort: search.sort,
+      version: effectiveVersion,
+    }),
     queryFn: ({ pageParam, signal }) =>
-      searchEntities(
-        search.blueprint!,
-        effectiveVersion,
-        search.query ?? '',
-        pageParam,
-        signal,
-        search.sort,
-        pageParam === null,
-        search.attributeFilters,
+      searchEntities({
+        blueprint: search.blueprint ?? '',
+        cursor: pageParam,
+        filters: search.attributeFilters,
+        includeTotal: pageParam === null,
+        query: search.query,
         relationshipFilters,
-      ),
+        signal,
+        sort: search.sort,
+        version: effectiveVersion,
+      }),
     initialPageParam: null as string | null,
     getNextPageParam: (page) => page.next_cursor,
-    enabled: Boolean(
-      search.blueprint &&
-      (search.allVersions || effectiveVersion !== undefined),
-    ),
+    enabled: canSearch,
     placeholderData: keepPreviousData,
   });
   useEffect(() => {
@@ -235,23 +232,32 @@ export const Explorer = ({ search: urlSearch }: { search: ExplorerSearch }) => {
     updates: { selectedIds?: string[]; targetBlueprint?: string },
   ) => {
     const current = search.relationshipFacets ?? [];
-    const existing = current.find((facet) => facet.field === field);
-    const nextFacet = { field, ...existing, ...updates };
+    const remaining = current.filter((facet) => facet.field !== field);
+    const nextFacet = {
+      field,
+      ...current.find((facet) => facet.field === field),
+      ...updates,
+    };
+    const relationshipFacets = updates.selectedIds?.length === 0
+      ? remaining
+      : [...remaining, nextFacet];
     void navigate({
       to: '/',
       search: {
         ...search,
-        relationshipFacets: [
-          ...current.filter((facet) => facet.field !== field),
-          nextFacet,
-        ],
+        relationshipFacets: relationshipFacets.length
+          ? relationshipFacets
+          : undefined,
       },
     });
   };
 
-  const activeRelationshipFilters = useActiveRelationshipFilters({
-    facets: explorerFacets,
-  });
+  const activeRelationshipFilters = explorerFacets
+    .filter((facet) => facet.selectedIds.length > 0)
+    .map((facet) => ({
+      field: facet.sourceRelationship.code,
+      selectedCount: facet.selectedIds.length,
+    }));
   const addAttributeFilter = (filter: AttributeFilter) => {
     void navigate({
       to: '/',
@@ -306,11 +312,6 @@ export const Explorer = ({ search: urlSearch }: { search: ExplorerSearch }) => {
     contexts: contexts.data ?? [],
     facets: visibleExplorerFacets,
     onAddAttributeFilter: addAttributeFilter,
-    onAddRelationshipFilter: (attribute) =>
-      updateFacet(attribute.code, {
-        selectedIds: [],
-        targetBlueprint: attribute.target_blueprint_code,
-      }),
     relationshipAttributes: relationshipFields,
     onBlueprintChange: search.locked ? undefined : selectBlueprint,
     onContextChange: updateFacetContext,
@@ -318,8 +319,6 @@ export const Explorer = ({ search: urlSearch }: { search: ExplorerSearch }) => {
     onUpdate: updateFacet,
     onUpdateAttributeFilter: updateAttributeFilter,
     pathAttributes: selectedBlueprint.data?.table_path_attributes,
-    query: search.query,
-    version: effectiveVersion,
   };
 
   return (
@@ -368,6 +367,25 @@ export const Explorer = ({ search: urlSearch }: { search: ExplorerSearch }) => {
                 : t('explorer.title')
             }
           />
+          {(blueprints.error || selectedBlueprint.error || blueprintMissing) && (
+            <Stack spacing={2} sx={{ mb: 2 }}>
+              <QueryErrorNotice
+                error={blueprints.error}
+                isRetrying={blueprints.isFetching}
+                onRetry={() => void blueprints.refetch()}
+              />
+              <QueryErrorNotice
+                error={selectedBlueprint.error}
+                isRetrying={selectedBlueprint.isFetching}
+                onRetry={() => void selectedBlueprint.refetch()}
+              />
+              {blueprintMissing && (
+                <Alert severity="error">
+                  {t('explorer.blueprintNotFound')}
+                </Alert>
+              )}
+            </Stack>
+          )}
           <ExplorerSearchForm
             blueprints={blueprints.data ?? []}
             currentVersion={currentBlueprint?.version}
@@ -405,17 +423,18 @@ export const Explorer = ({ search: urlSearch }: { search: ExplorerSearch }) => {
               };
               void queryClient.invalidateQueries({
                 exact: true,
-                queryKey: entityQueryKeys.search(
-                  nextSearch.blueprint,
-                  nextSearch.allVersions
+                queryKey: entityQueryKeys.search({
+                  allVersions: Boolean(nextSearch.allVersions),
+                  blueprint: nextSearch.blueprint,
+                  filters: nextSearch.attributeFilters,
+                  query: nextSearch.query,
+                  relationshipFilters:
+                    keepsBlueprint && !scopeChanged ? relationshipFilters : [],
+                  sort: nextSearch.sort,
+                  version: nextSearch.allVersions
                     ? undefined
                     : (nextSearch.version ?? currentBlueprint?.version),
-                  nextSearch.query,
-                  nextSearch.sort,
-                  nextSearch.attributeFilters,
-                  Boolean(nextSearch.allVersions),
-                  keepsBlueprint && !scopeChanged ? relationshipFilters : [],
-                ),
+                }),
               });
               void navigate({ to: '/', search: nextSearch });
             }}
@@ -441,7 +460,11 @@ export const Explorer = ({ search: urlSearch }: { search: ExplorerSearch }) => {
           {!search.blueprint && (
             <Typography sx={{ py: 3 }}>{t('explorer.start')}</Typography>
           )}
-          {search.blueprint && results.isPending && !results.data && (
+          {search.blueprint &&
+            !blueprintMissing &&
+            (blueprints.isFetching ||
+              selectedBlueprint.isFetching ||
+              (canSearch && results.isPending && !results.data)) && (
             <Box
               sx={{
                 alignItems: 'center',
@@ -530,6 +553,7 @@ export const Explorer = ({ search: urlSearch }: { search: ExplorerSearch }) => {
                     search.query,
                     search.sort,
                     search.attributeFilters,
+                    relationshipFilters,
                   ])}
                   canPublish={
                     session.data?.capabilities?.entities_publish === true

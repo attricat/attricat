@@ -2,10 +2,16 @@ import { describe, expect, it } from 'vitest';
 import { validatesJsonSchema } from './json-schema';
 import { attributeSchema, blueprintSchema } from './schemas';
 
+const blueprintIdentity = {
+  id: '123e4567-e89b-12d3-a456-426614174000',
+  status: 'published' as const,
+};
+
 describe('JSON Schema validation', () => {
   it('accepts optional and nullable blueprint and attribute schemas', () => {
     expect(
       blueprintSchema.parse({
+        ...blueprintIdentity,
         code: 'product',
         name: 'Product',
         version: 1,
@@ -31,6 +37,7 @@ describe('JSON Schema validation', () => {
     expect(scalarAttribute.target_cardinality).toBeNull();
     expect(
       blueprintSchema.parse({
+        ...blueprintIdentity,
         code: 'product',
         name: 'Product',
         version: 1,
@@ -43,6 +50,7 @@ describe('JSON Schema validation', () => {
   it('accepts API table views with null legacy columns', () => {
     expect(
       blueprintSchema.parse({
+        ...blueprintIdentity,
         code: 'product',
         name: 'Product',
         version: 1,

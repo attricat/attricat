@@ -21,7 +21,7 @@ test('searches an entity and opens its preview', async ({ page }) => {
   await page.getByLabel('Select a Blueprint').click();
   await page.getByRole('option', { name: `Search products (${code})` }).click();
   await page.getByLabel('Query').fill('red');
-  await page.getByRole('button', { name: 'Search' }).click();
+  await page.getByRole('button', { name: 'Search', exact: true }).click();
 
   await expect(page).toHaveURL(new RegExp(`blueprint=${code}.*query=red`));
   await expect(page.getByText('1 result')).toBeVisible();

@@ -68,7 +68,10 @@ export const EditEntityPage = ({ entityId }: { entityId: string }) => {
     null;
   const resolvedPreview = useQuery({
     queryKey: entityQueryKeys.resolvedPreview(entityId, contextId ?? undefined),
-    queryFn: () => getResolvedEntityPreview(entityId, contextId!),
+    queryFn: () => {
+      if (!contextId) throw new Error('Preview context is unavailable');
+      return getResolvedEntityPreview(entityId, contextId);
+    },
     enabled: contextId !== null,
   });
   const detailView = entityForm.data?.blueprint.blueprint.views?.detail;
@@ -81,7 +84,7 @@ export const EditEntityPage = ({ entityId }: { entityId: string }) => {
           entityForm.data && (
             <Tooltip title={entityForm.data.blueprint.blueprint.name}>
               <RouterButton
-                params={{ blueprintId: entityForm.data.entity.blueprint_id! }}
+                params={{ blueprintId: entityForm.data.entity.blueprint_id }}
                 size="small"
                 startIcon={<BlueprintIcon />}
                 to="/manage/blueprints/$blueprintId"

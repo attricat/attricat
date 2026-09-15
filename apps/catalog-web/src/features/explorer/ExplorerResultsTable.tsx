@@ -66,7 +66,9 @@ const EntityActionsMenu = ({
   blueprintId,
   canPublish,
   entity,
+  onClose,
   onSearchInfo,
+  position,
   publication,
   publicationContextId,
   publish,
@@ -77,7 +79,9 @@ const EntityActionsMenu = ({
   blueprintId: string;
   canPublish: boolean;
   entity: EntityItem;
+  onClose: () => void;
   onSearchInfo: (entity: EntityItem) => void;
+  position: { left: number; top: number } | null;
   publication: EntityPublicationStatus | undefined;
   publicationContextId: string | undefined;
   publish: () => void;
@@ -86,33 +90,18 @@ const EntityActionsMenu = ({
   unpublishing: boolean;
 }) => {
   const { t } = useTranslation();
-  const [position, setPosition] = useState<{
-    left: number;
-    top: number;
-  } | null>(null);
 
   return (
-    <>
-      <IconButton
-        aria-label={t('explorer.entityActionsFor', { entityId: entity.id })}
-        onClick={(event) => {
-          const { left, top } = event.currentTarget.getBoundingClientRect();
-          setPosition({ left, top });
-        }}
-        size="small"
-      >
-        <MoreVertIcon fontSize="inherit" />
-      </IconButton>
-      <Menu
+    <Menu
         anchorPosition={position ?? undefined}
         anchorReference="anchorPosition"
-        onClose={() => setPosition(null)}
+        onClose={onClose}
         open={Boolean(position)}
         transformOrigin={{ horizontal: 'right', vertical: 'top' }}
       >
         <MenuItem
           onClick={() => {
-            setPosition(null);
+            onClose();
             onSearchInfo(entity);
           }}
         >
@@ -124,7 +113,7 @@ const EntityActionsMenu = ({
               <MenuItem
                 disabled={publishing}
                 onClick={() => {
-                  setPosition(null);
+                  onClose();
                   publish();
                 }}
               >
@@ -135,7 +124,7 @@ const EntityActionsMenu = ({
                 <MenuItem
                   disabled={publishing}
                   onClick={() => {
-                    setPosition(null);
+                    onClose();
                     publish();
                   }}
                 >
@@ -144,7 +133,7 @@ const EntityActionsMenu = ({
                 <MenuItem
                   disabled={unpublishing}
                   onClick={() => {
-                    setPosition(null);
+                    onClose();
                     unpublish();
                   }}
                 >
@@ -164,8 +153,7 @@ const EntityActionsMenu = ({
           label={t('explorer.extensionActions')}
           outlet="explorer_row_action"
         />
-      </Menu>
-    </>
+    </Menu>
   );
 };
 
@@ -204,6 +192,10 @@ export const ExplorerResultsTable = ({
   const [searchInfoEntity, setSearchInfoEntity] = useState<EntityItem | null>(
     null,
   );
+  const [actionMenu, setActionMenu] = useState<{
+    entityId: string;
+    position: { left: number; top: number };
+  } | null>(null);
   const queryClient = useQueryClient();
   const publicationQueries = useQueries({
     queries: items.map((entity) => ({
@@ -238,16 +230,22 @@ export const ExplorerResultsTable = ({
       queryKey: entityQueryKeys.publications(entityId),
     });
   const publish = useMutation({
-    mutationFn: (entityId: string) =>
-      publishEntity(entityId, publicationContextId!),
+    mutationFn: (entityId: string) => {
+      if (!publicationContextId)
+        throw new Error('Publication context is unavailable');
+      return publishEntity(entityId, publicationContextId);
+    },
     onSuccess: (publication, entityId) => {
       updatePublication(entityId, publication);
       void invalidatePublication(entityId);
     },
   });
   const unpublish = useMutation({
-    mutationFn: (entityId: string) =>
-      unpublishEntity(entityId, publicationContextId!),
+    mutationFn: (entityId: string) => {
+      if (!publicationContextId)
+        throw new Error('Publication context is unavailable');
+      return unpublishEntity(entityId, publicationContextId);
+    },
     onSuccess: (_, entityId) => void invalidatePublication(entityId),
   });
   const columnHelper = legacyCreateColumnHelper<EntityItem>();
@@ -300,7 +298,7 @@ export const ExplorerResultsTable = ({
   // of opaque-origin frames.
   let cellFrames = 0;
   const takeCellFrame = () => cellFrames++ < maximumExplorerCellFrames;
-  const columns: LegacyColumnDef<EntityItem, string>[] = [
+  const columns: LegacyColumnDef<EntityItem, unknown>[] = [
     columnHelper.accessor('id', {
       header: t('explorer.id'),
       cell: (info) => <EntityIdPopover entityId={info.getValue()} />,
@@ -316,7 +314,7 @@ export const ExplorerResultsTable = ({
           {displayLabel(info.row.original.display, info.row.original.id)}
         </Link>
       ),
-    }) as LegacyColumnDef<EntityItem, string>,
+    }) as LegacyColumnDef<EntityItem, unknown>,
     columnHelper.display({
       id: 'publication',
       header: t('explorer.publicationForContext', {
@@ -333,7 +331,7 @@ export const ExplorerResultsTable = ({
           />
         );
       },
-    }) as LegacyColumnDef<EntityItem, string>,
+    }) as LegacyColumnDef<EntityItem, unknown>,
     columnHelper.display({
       id: 'schema',
       header: t('explorer.schema'),
@@ -351,7 +349,7 @@ export const ExplorerResultsTable = ({
           />
         );
       },
-    }) as LegacyColumnDef<EntityItem, string>,
+    }) as LegacyColumnDef<EntityItem, unknown>,
     ...tableColumns.flatMap((column) => {
       const [relationship] = column.field.split('.');
       const relatedPath = column.field.includes('.');
@@ -481,7 +479,7 @@ export const ExplorerResultsTable = ({
               />
             );
           },
-        }) as LegacyColumnDef<EntityItem, string>,
+        }) as LegacyColumnDef<EntityItem, unknown>,
       ];
     }),
     columnHelper.display({
@@ -490,25 +488,23 @@ export const ExplorerResultsTable = ({
       cell: (info) => {
         const entity = info.row.original;
         return (
-          <EntityActionsMenu
-            blueprintId={String(blueprint.blueprint.id)}
-            canPublish={canPublish}
-            entity={entity}
-            onSearchInfo={setSearchInfoEntity}
-            publication={publicationsByEntityId.get(entity.id)}
-            publicationContextId={publicationContextId}
-            publish={() => publish.mutate(entity.id)}
-            publishing={publish.isPending}
-            unpublish={() => unpublish.mutate(entity.id)}
-            unpublishing={unpublish.isPending}
-          />
+          <IconButton
+            aria-label={t('explorer.entityActionsFor', { entityId: entity.id })}
+            onClick={(event) => {
+              const { left, top } = event.currentTarget.getBoundingClientRect();
+              setActionMenu({ entityId: entity.id, position: { left, top } });
+            }}
+            size="small"
+          >
+            <MoreVertIcon fontSize="inherit" />
+          </IconButton>
         );
       },
-    }) as LegacyColumnDef<EntityItem, string>,
+    }) as LegacyColumnDef<EntityItem, unknown>,
   ];
   const table = useLegacyTable({
     data: items,
-    columns: columns as never,
+    columns,
     getCoreRowModel: getCoreRowModel(),
   });
   const rows = table.getRowModel().rows;
@@ -527,6 +523,9 @@ export const ExplorerResultsTable = ({
   const paddingTop = virtualRows[0]?.start ?? 0;
   const paddingBottom =
     rowVirtualizer.getTotalSize() - (virtualRows.at(-1)?.end ?? 0);
+  const activeActionEntity = actionMenu
+    ? items.find((item) => item.id === actionMenu.entityId)
+    : undefined;
 
   return (
     <Paper component="section">
@@ -543,7 +542,6 @@ export const ExplorerResultsTable = ({
             : t('explorer.resultCount', { count: totalCount })}
       </Typography>
       <TableContainer
-        aria-label={t('explorer.results')}
         ref={tableContainerRef}
         sx={{
           // On desktop this leaves room for the sticky search form and result
@@ -561,7 +559,7 @@ export const ExplorerResultsTable = ({
             sx={{ position: 'sticky', top: 0, zIndex: 3 }}
           />
         )}
-        <Table size="small" stickyHeader>
+        <Table aria-label={t('explorer.results')} size="small" stickyHeader>
           <TableHead>
             {table.getHeaderGroups().map((group) => (
               <TableRow key={group.id}>
@@ -676,6 +674,22 @@ export const ExplorerResultsTable = ({
         <Typography sx={{ p: 2 }}>
           {t('explorer.noMatchingEntities')}
         </Typography>
+      )}
+      {actionMenu && activeActionEntity && (
+        <EntityActionsMenu
+          blueprintId={blueprint.blueprint.id}
+          canPublish={canPublish}
+          entity={activeActionEntity}
+          onClose={() => setActionMenu(null)}
+          onSearchInfo={setSearchInfoEntity}
+          position={actionMenu.position}
+          publication={publicationsByEntityId.get(activeActionEntity.id)}
+          publicationContextId={publicationContextId}
+          publish={() => publish.mutate(activeActionEntity.id)}
+          publishing={publish.isPending}
+          unpublish={() => unpublish.mutate(activeActionEntity.id)}
+          unpublishing={unpublish.isPending}
+        />
       )}
       <Dialog
         onClose={() => setSearchInfoEntity(null)}

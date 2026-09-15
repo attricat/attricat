@@ -9,7 +9,6 @@ import {
   getIncomingRelationships,
   getEntityPublications,
   listEntityBlueprints,
-  listPublicationChannels,
   publishEntity,
   publishEntityAllChannels,
   previewEntityMigration,
@@ -20,9 +19,12 @@ import {
 } from './api';
 
 const entityId = '123e4567-e89b-12d3-a456-426614174000';
+const blueprintId = '223e4567-e89b-12d3-a456-426614174000';
 const blueprint = {
   code: 'product',
+  id: blueprintId,
   name: 'Product',
+  status: 'published',
   version: 2,
   display: {},
 };
@@ -56,7 +58,11 @@ describe('entity API client', () => {
     );
 
     respond({
-      entity: { id: entityId },
+      entity: {
+        blueprint_id: blueprintId,
+        blueprint_version: 2,
+        id: entityId,
+      },
       blueprint: blueprintWithAttributes,
       values: [],
       context: { default: {} },
@@ -66,10 +72,6 @@ describe('entity API client', () => {
   });
 
   it('uses the publication endpoint contracts', async () => {
-    respond([{ context_id: entityId, context_code: 'web', enabled: true }]);
-    await listPublicationChannels();
-    expect(fetchMock).toHaveBeenLastCalledWith('/api/publication-channels');
-
     const publication = {
       context_id: entityId,
       context_code: 'web',
@@ -209,7 +211,12 @@ describe('entity API client', () => {
   });
 
   it('posts and puts the entity payload contract', async () => {
-    respond({ id: entityId });
+    const entity = {
+      blueprint_id: blueprintId,
+      blueprint_version: 2,
+      id: entityId,
+    };
+    respond(entity);
     await createEntity({
       blueprint: { code: 'product', version: 2 },
       values: [],
@@ -223,7 +230,7 @@ describe('entity API client', () => {
       }),
     });
 
-    respond({ id: entityId });
+    respond(entity);
     await updateEntity(entityId, { values: [], relationships: [] });
     expect(fetchMock).toHaveBeenLastCalledWith(`/api/v1/entities/${entityId}`, {
       method: 'PUT',
@@ -257,13 +264,10 @@ describe('entity API client', () => {
       items: [],
       next_cursor: null,
     });
-    await searchEntities(
-      'product',
-      undefined,
-      '',
-      null,
-      controller.signal,
-    );
+    await searchEntities({
+      blueprint: 'product',
+      signal: controller.signal,
+    });
     expect(fetchMock).toHaveBeenLastCalledWith('/api/v1/entities/search', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -292,7 +296,7 @@ describe('entity API client', () => {
       ],
       next_cursor: null,
     });
-    const result = await searchEntities('product', undefined, '', null);
+    const result = await searchEntities({ blueprint: 'product' });
     expect(result.items[0]).toMatchObject({
       blueprint_version: 1,
       schema_outdated: true,
@@ -338,7 +342,10 @@ describe('entity API client', () => {
       ],
       next_cursor: null,
     });
-    const result = await searchEntities('product', undefined, 'color.name:red');
+    const result = await searchEntities({
+      blueprint: 'product',
+      query: 'color.name:red',
+    });
     expect(result.items[0].match_explanations[0]?.term).toBe('color.name:red');
     expect(fetchMock).toHaveBeenLastCalledWith('/api/v1/entities/search', {
       method: 'POST',
@@ -361,15 +368,10 @@ describe('entity API client', () => {
       total_count_capped: true,
     });
 
-    const result = await searchEntities(
-      'product',
-      undefined,
-      '',
-      null,
-      undefined,
-      undefined,
-      true,
-    );
+    const result = await searchEntities({
+      blueprint: 'product',
+      includeTotal: true,
+    });
 
     expect(result).toMatchObject({
       total_count: 500,
@@ -395,7 +397,10 @@ describe('entity API client', () => {
       next_cursor: null,
     });
 
-    await searchEntities('product', undefined, '', 'opaque-next-cursor');
+    await searchEntities({
+      blueprint: 'product',
+      cursor: 'opaque-next-cursor',
+    });
 
     expect(fetchMock).toHaveBeenLastCalledWith('/api/v1/entities/search', {
       method: 'POST',
@@ -416,9 +421,9 @@ describe('entity API client', () => {
       next_cursor: null,
     });
 
-    await searchEntities('product', undefined, '', null, undefined, {
-      field: 'category.name',
-      direction: 'desc',
+    await searchEntities({
+      blueprint: 'product',
+      sort: { field: 'category.name', direction: 'desc' },
     });
 
     expect(fetchMock).toHaveBeenLastCalledWith('/api/v1/entities/search', {
@@ -441,16 +446,10 @@ describe('entity API client', () => {
       next_cursor: null,
     });
 
-    await searchEntities(
-      'product',
-      undefined,
-      '',
-      null,
-      undefined,
-      undefined,
-      false,
-      [{ field: 'price', operator: 'gte', value: 100 }],
-    );
+    await searchEntities({
+      blueprint: 'product',
+      filters: [{ field: 'price', operator: 'gte', value: 100 }],
+    });
 
     expect(fetchMock).toHaveBeenLastCalledWith('/api/v1/entities/search', {
       method: 'POST',
@@ -471,17 +470,12 @@ describe('entity API client', () => {
       next_cursor: null,
     });
 
-    await searchEntities(
-      'product',
-      undefined,
-      '',
-      null,
-      undefined,
-      undefined,
-      false,
-      [],
-      [{ field: 'brand.owner', selected_target_ids: [entityId] }],
-    );
+    await searchEntities({
+      blueprint: 'product',
+      relationshipFilters: [
+        { field: 'brand.owner', selected_target_ids: [entityId] },
+      ],
+    });
 
     expect(fetchMock).toHaveBeenLastCalledWith('/api/v1/entities/search', {
       method: 'POST',

@@ -71,13 +71,12 @@ export const RelationshipField = ({
   const targets = useInfiniteQuery({
     queryKey: entityQueryKeys.relationshipTargets(targetBlueprint, query),
     queryFn: ({ pageParam, signal }) =>
-      searchEntities(
-        targetBlueprint!,
-        undefined,
+      searchEntities({
+        blueprint: targetBlueprint!,
+        cursor: pageParam,
         query,
-        pageParam,
         signal,
-      ),
+      }),
     initialPageParam: null as string | null,
     getNextPageParam: (page) => page.next_cursor,
     enabled: Boolean(targetBlueprint && open),
@@ -177,15 +176,17 @@ export const RelationshipField = ({
         )}
       </FormControl>
       <RelationshipSelectorDialog
-        applyLabel={t('entities.applyRelationshipSelection')}
-        cancelLabel={t('entities.cancelRelationshipSelection')}
-        clearLabel={t('entities.clearRelationshipSelection')}
-        closeLabel={t('entities.closeRelationshipSelector')}
-        onApply={() => {
-          onChange(draftIds.join(', '));
-          setOpen(false);
+        actions={{
+          applyLabel: t('entities.applyRelationshipSelection'),
+          cancelLabel: t('entities.cancelRelationshipSelection'),
+          clearLabel: t('entities.clearRelationshipSelection'),
+          onApply: () => {
+            onChange(draftIds.join(', '));
+            setOpen(false);
+          },
+          onClear: () => setDraftIds([]),
         }}
-        onClear={() => setDraftIds([])}
+        closeLabel={t('entities.closeRelationshipSelector')}
         onClose={() => setOpen(false)}
         open={open}
         selectedLabel={t('entities.relationshipSelected', {
