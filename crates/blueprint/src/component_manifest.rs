@@ -12,7 +12,7 @@ struct ComponentManifest {
 #[derive(Deserialize)]
 struct ComponentManifestEntry {
     id: String,
-    version: i64,
+    version: u32,
     capabilities: Vec<String>,
     placements: Vec<String>,
     value_types: Vec<String>,
@@ -43,7 +43,7 @@ pub(crate) fn validate_component(
     if !is_valid_component_id(&component.id) {
         return Err(BlueprintError::InvalidComponentId(component.id.clone()));
     }
-    if component.version <= 0 {
+    if component.version == 0 {
         return Err(BlueprintError::InvalidComponentVersion {
             id: component.id.clone(),
             version: component.version,

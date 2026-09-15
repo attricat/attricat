@@ -1,8 +1,6 @@
 use super::*;
 use crate::model::{CreateWorkflow, Workflow};
 use chrono::Utc;
-use cron::Schedule;
-use std::str::FromStr;
 use uuid::Uuid;
 
 const WORKFLOW_FIELDS: &str = "w.id, w.code, w.name, w.version, w.status, w.definition, w.definition_hash, w.compiled_plan, w.published_at, w.created_at, l.enabled_version, (w.compiled_plan @> '{\"triggers\":[{\"type\":\"manual\"}]}'::jsonb) AS manual_enabled";
@@ -184,7 +182,7 @@ impl CatalogRepository {
             let catalog_workflow::Trigger::Schedule { cron, .. } = trigger else {
                 continue;
             };
-            let schedule = Schedule::from_str(cron).map_err(|_| {
+            let schedule = catalog_workflow::parse_six_field_cron(cron).map_err(|_| {
                 RepositoryError::InvalidWorkflowDefinition("stored schedule cron is invalid".into())
             })?;
             let next = schedule.after(&Utc::now()).next().ok_or_else(|| {

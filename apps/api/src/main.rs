@@ -5,6 +5,7 @@ use api::{
     account::{Password, hash_password},
     agent_worker,
     agents::AgentProviderConfig,
+    blueprint_migration_worker,
     constants::{
         DEFAULT_DATA_HEALTH_CACHE_TTL_SECONDS, DEFAULT_ENTITY_PAGE_SIZE,
         DEFAULT_FILE_UPLOAD_MAX_BYTES, DEFAULT_FILE_UPLOAD_MAX_FILES,
@@ -218,9 +219,13 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         None => None,
     };
 
+    let (shutdown_sender, shutdown_receiver) = tokio::sync::watch::channel(());
+    let (migration_batch_dispatcher, migration_worker) = blueprint_migration_worker::start(
+        CatalogRepository::with_workspace_pool_factory(pool.clone(), connect_options.clone()),
+        shutdown_receiver.clone(),
+    );
     let dispatcher_config = DispatcherConfig::from_env()
         .map_err(|error| format!("invalid event dispatcher configuration: {error}"))?;
-    let (shutdown_sender, shutdown_receiver) = tokio::sync::watch::channel(());
     let extension_runtime =
         ExtensionRuntime::new(object_store.clone(), ExtensionRuntimeConfig::default())
             .map_err(|error| format!("invalid extension runtime configuration: {error}"))?;
@@ -244,6 +249,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
             repository: CatalogRepository::with_workspace_pool_factory(pool, connect_options),
             agent_provider,
             agent_dispatcher,
+            migration_batch_dispatcher,
             registry,
             official_registry,
             object_store,
@@ -300,6 +306,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         handle.await?;
     }
     workflow_worker.await?;
+    migration_worker.await?;
 
     Ok(())
 }

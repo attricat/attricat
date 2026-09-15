@@ -220,7 +220,7 @@ async fn validate_renderer(
         .flat_map(|manifest| manifest.cell_renderers)
         .any(|candidate| {
             candidate.id == renderer.id
-                && candidate.version == renderer.version as u32
+                && candidate.version == renderer.version
                 && candidate.value_types.iter().any(|item| item == value_type)
                 && (renderer.props.is_null()
                     || renderer.props.as_object().is_some_and(|props| {

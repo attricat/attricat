@@ -26,7 +26,8 @@ pub struct PublicationPolicy {
 #[serde(deny_unknown_fields)]
 pub struct ComponentReference {
     pub id: String,
-    pub version: i64,
+    /// Component manifest versions are non-negative 32-bit protocol values.
+    pub version: u32,
     #[serde(default)]
     pub props: serde_json::Value,
 }

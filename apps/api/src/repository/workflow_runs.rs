@@ -246,8 +246,6 @@ impl CatalogRepository {
     /// skipped; a workflow with an active run does not overlap and skips that occurrence.
     pub async fn schedule_workflow_runs(&self) -> Result<u64, RepositoryError> {
         use chrono::Duration as ChronoDuration;
-        use cron::Schedule;
-        use std::str::FromStr;
         let ws = self.workspace_id.unwrap_or(Self::DEFAULT_WORKSPACE_ID);
         let now = Utc::now();
         let mut tx = self.pool.begin().await?;
@@ -265,7 +263,7 @@ impl CatalogRepository {
                 else {
                     continue;
                 };
-                let schedule = Schedule::from_str(cron).map_err(|_| {
+                let schedule = catalog_workflow::parse_six_field_cron(cron).map_err(|_| {
                     RepositoryError::InvalidWorkflowDefinition(
                         "stored schedule cron is invalid".into(),
                     )

@@ -43,13 +43,9 @@ pub async fn start(
 ) -> AgentDispatcher {
     let (sender, mut receiver) = mpsc::channel(config.dispatch_queue_capacity);
     let dispatcher = AgentDispatcher { sender };
-    if let Err(error) = repository.recover_interrupted_agent_runs().await {
-        tracing::error!(%error, "could not recover interrupted agent runs");
-    }
-    for job in repository.queued_agent_runs().await.unwrap_or_default() {
-        let _ = dispatcher.enqueue(job.0, job.1).await;
-    }
-
+    // Start consuming before replaying durable work. Replaying into a bounded
+    // channel first can fill it and wait forever for a receiver that has not
+    // been spawned yet.
     let worker_repository = repository.clone();
     let worker_config = config.clone();
     let worker_object_store = object_store.clone();
@@ -128,5 +124,15 @@ pub async fn start(
             }
         }
     });
+
+    if let Err(error) = repository.recover_interrupted_agent_runs().await {
+        tracing::error!(%error, "could not recover interrupted agent runs");
+    }
+    for job in repository.queued_agent_runs().await.unwrap_or_default() {
+        if let Err(error) = dispatcher.enqueue(job.0, job.1).await {
+            tracing::error!(workspace_id = %job.0, run_id = %job.1, %error, "could not enqueue recovered agent run");
+            break;
+        }
+    }
     dispatcher
 }

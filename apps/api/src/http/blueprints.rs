@@ -100,13 +100,9 @@ pub(super) async fn start_safe_blueprint_migration_batch(
     let batch = repository
         .start_safe_blueprint_migration_batch(blueprint_id, version)
         .await?;
-    let worker = repository.clone();
-    let batch_id = batch.id;
-    tokio::spawn(async move {
-        if let Err(error) = worker.run_safe_blueprint_migration_batch(batch_id).await {
-            tracing::error!(%batch_id, %error, "safe blueprint migration batch failed");
-        }
-    });
+    state
+        .migration_batch_dispatcher
+        .enqueue(repository.clone(), batch.id);
     invalidate_data_health(&state).await;
     Ok((StatusCode::ACCEPTED, Json(batch)))
 }

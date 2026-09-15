@@ -34,7 +34,7 @@ columns = [{ field = "image", renderer = { id = "catalog.table_image", version =
 [[attributes]]
 code = "image"
 value_type = "file"
-cardinality = "many"
+cardinality = "one"
 allowed_mime_groups = ["image"]
 allowed_extensions = ["png"]
 max_bytes = 1024

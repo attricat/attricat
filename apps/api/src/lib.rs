@@ -4,6 +4,7 @@ pub mod agent_runner;
 pub mod agent_tools;
 pub mod agent_worker;
 pub mod agents;
+pub mod blueprint_migration_worker;
 mod blueprint_resolver;
 pub mod catalog_read_service;
 pub mod catalog_service;

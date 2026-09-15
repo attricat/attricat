@@ -257,11 +257,7 @@ fn trigger(raw: RawTrigger, version: u32) -> Result<Trigger, WorkflowError> {
                             "schedule timezone must be UTC".into(),
                         ));
                     }
-                    Schedule::from_str(&cron).map_err(|_| {
-                        WorkflowError::Invalid(
-                            "schedule cron must be a valid six-field UTC cron expression".into(),
-                        )
-                    })?;
+                    parse_six_field_cron(&cron)?;
                     if uuid::Uuid::parse_str(&target_entity_id).is_err() {
                         return Err(WorkflowError::Invalid(
                             "schedule target_entity_id must be a UUID".into(),
@@ -316,6 +312,21 @@ fn trigger(raw: RawTrigger, version: u32) -> Result<Trigger, WorkflowError> {
         }
     }
 }
+/// Parses the only schedule syntax accepted by the workflow contract.
+///
+/// The cron crate also accepts alternative field counts, so validate the
+/// whitespace-delimited contract before delegating expression parsing.
+pub fn parse_six_field_cron(value: &str) -> Result<Schedule, WorkflowError> {
+    if value.split_whitespace().count() != 6 {
+        return Err(WorkflowError::Invalid(
+            "schedule cron must be a valid six-field UTC cron expression".into(),
+        ));
+    }
+    Schedule::from_str(value).map_err(|_| {
+        WorkflowError::Invalid("schedule cron must be a valid six-field UTC cron expression".into())
+    })
+}
+
 fn required(value: Option<String>, name: &str) -> Result<String, WorkflowError> {
     let v = value.ok_or_else(|| WorkflowError::Invalid(format!("{name} is required")))?;
     non_empty(&v, name)?;
@@ -510,7 +521,10 @@ mod tests {
     fn v2_manual_and_utc_schedule_are_strict() {
         assert!(parse("format_version=2\ncode='x'\nname='x'\n[[triggers]]\ntype='manual'\n[[actions]]\ntype='system_tags_add'\ntags=['x']").is_ok());
         assert!(parse("format_version=2\ncode='x'\nname='x'\n[[triggers]]\ntype='schedule'\ncron='0 */5 * * * *'\ntimezone='UTC'\ntarget_entity_id='00000000-0000-0000-0000-000000000001'\n[[actions]]\ntype='system_tags_add'\ntags=['x']").is_ok());
-        assert!(parse("format_version=2\ncode='x'\nname='x'\n[[triggers]]\ntype='schedule'\ncron='0 */5 * * * *'\ntimezone='America/New_York'\ntarget_entity_id='00000000-0000-0000-0000-000000000001'\n[[actions]]\ntype='system_tags_add'\ntags=['x']").is_err())
+        assert!(parse("format_version=2\ncode='x'\nname='x'\n[[triggers]]\ntype='schedule'\ncron='0 */5 * * * *'\ntimezone='America/New_York'\ntarget_entity_id='00000000-0000-0000-0000-000000000001'\n[[actions]]\ntype='system_tags_add'\ntags=['x']").is_err());
+        for cron in ["*/5 * * * *", "0 0 */5 * * * *"] {
+            assert!(parse(&format!("format_version=2\ncode='x'\nname='x'\n[[triggers]]\ntype='schedule'\ncron='{cron}'\ntimezone='UTC'\ntarget_entity_id='00000000-0000-0000-0000-000000000001'\n[[actions]]\ntype='system_tags_add'\ntags=['x']")).is_err());
+        }
     }
     #[test]
     fn extension_contract_is_explicit_but_not_generic() {

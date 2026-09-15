@@ -18,6 +18,23 @@ down: _assert-env
 migrate: _assert-env
     sqlx migrate run --source apps/api/migrations --database-url "$DATABASE_URL"
 
+fmt-check:
+    cargo fmt --all -- --check
+
+check:
+    cargo check --locked --workspace --all-targets
+
+clippy:
+    cargo clippy --locked --workspace --all-targets -- -D warnings
+
+test-rust:
+    cargo test --locked --workspace
+
+deny:
+    cargo deny check
+
+ci: fmt-check check clippy test-rust deny
+
 sql: _assert-env
     docker compose --env-file .env --project-name catalog-$POSTGRES_PORT -f apps/api/compose.yml exec postgres psql --username=postgres --dbname=catalog
 

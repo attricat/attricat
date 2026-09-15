@@ -145,18 +145,25 @@ impl FileWorker {
     }
 
     async fn process_file(&self, job: &ClaimedJob) -> Result<(), WorkerError> {
+        // `FOR UPDATE` only protects this state transition while it is held in
+        // an explicit transaction. Without one PostgreSQL releases the lock at
+        // the end of the SELECT statement, allowing reconciliation to delete
+        // the file between the read and the processing-state update.
+        let mut transaction = self.pool.begin().await?;
         let row = sqlx::query("SELECT original_key, mime_type FROM files WHERE id = $1 AND workspace_id = $2 AND deleted_at IS NULL FOR UPDATE")
-            .bind(job.file_id).bind(job.workspace_id).fetch_optional(&self.pool).await?;
+            .bind(job.file_id).bind(job.workspace_id).fetch_optional(&mut *transaction).await?;
         let Some(row) = row else {
+            transaction.commit().await?;
             return Ok(());
         };
-        sqlx::query("UPDATE files SET status = 'processing', processing_error = NULL, updated_at = now() WHERE id = $1")
-            .bind(job.file_id).execute(&self.pool).await?;
+        sqlx::query("UPDATE files SET status = 'processing', processing_error = NULL, updated_at = now() WHERE id = $1 AND workspace_id = $2 AND deleted_at IS NULL")
+            .bind(job.file_id).bind(job.workspace_id).execute(&mut *transaction).await?;
         let key: String = row.try_get("original_key")?;
         let mime: String = row.try_get("mime_type")?;
+        transaction.commit().await?;
         if !mime.starts_with("image/") {
-            sqlx::query("UPDATE files SET status = 'ready', processing_error = NULL, updated_at = now() WHERE id = $1")
-                .bind(job.file_id).execute(&self.pool).await?;
+            sqlx::query("UPDATE files SET status = 'ready', processing_error = NULL, updated_at = now() WHERE id = $1 AND workspace_id = $2 AND deleted_at IS NULL")
+                .bind(job.file_id).bind(job.workspace_id).execute(&self.pool).await?;
             return Ok(());
         }
         let object = self.store.get(&key).await.map_err(WorkerError::Storage)?;
@@ -178,8 +185,8 @@ impl FileWorker {
             ),
         )
         .await?;
-        sqlx::query("UPDATE files SET status = 'ready', width = $2, height = $3, processing_error = NULL, updated_at = now() WHERE id = $1")
-            .bind(job.file_id).bind(width as i32).bind(height as i32).execute(&self.pool).await?;
+        sqlx::query("UPDATE files SET status = 'ready', width = $2, height = $3, processing_error = NULL, updated_at = now() WHERE id = $1 AND workspace_id = $4 AND deleted_at IS NULL")
+            .bind(job.file_id).bind(width as i32).bind(height as i32).bind(job.workspace_id).execute(&self.pool).await?;
         Ok(())
     }
 

@@ -92,7 +92,9 @@ const jsonObjectSchema = z.record(z.string(), z.unknown());
 const jsonSchemaSchema = z.union([jsonObjectSchema, z.boolean()]);
 const componentReferenceSchema = z.object({
   id: z.string().regex(/^[a-z][a-z0-9_-]*(\.[a-z][a-z0-9_-]*)*$/),
-  version: z.number().int().positive(),
+  // Rust stores component protocol versions as u32; reject values that would
+  // otherwise overflow the API contract.
+  version: z.number().int().positive().max(4_294_967_295),
   props: jsonObjectSchema.nullish().transform((props) => props ?? {}),
 });
 const viewNodeSchema: z.ZodType<ViewNode> = z.lazy(() =>

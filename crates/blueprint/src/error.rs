@@ -70,9 +70,9 @@ pub enum BlueprintError {
     )]
     InvalidComponentId(String),
     #[error("component '{id}' has invalid version '{version}'")]
-    InvalidComponentVersion { id: String, version: i64 },
+    InvalidComponentVersion { id: String, version: u32 },
     #[error("component '{id}' version '{version}' is not in the manifest")]
-    UnknownComponent { id: String, version: i64 },
+    UnknownComponent { id: String, version: u32 },
     #[error("component '{id}' cannot be used in {placement}")]
     InvalidComponentPlacement { id: String, placement: &'static str },
     #[error("component '{id}' does not support attribute value type '{value_type}'")]

@@ -13,6 +13,18 @@ impl CatalogRepository {
         blueprint_id: Uuid,
         target_version: i64,
     ) -> Result<BlueprintMigrationBatch, RepositoryError> {
+        let workspace_id = self.workspace_id.unwrap_or(Self::DEFAULT_WORKSPACE_ID);
+        if let Some(existing) = sqlx::query_as::<_, BlueprintMigrationBatch>(
+            "SELECT id, blueprint_id, target_version, status, created_at, started_at, completed_at FROM blueprint_migration_batches WHERE workspace_id = $1 AND blueprint_id = $2 AND target_version = $3 AND status IN ('queued', 'running')",
+        )
+        .bind(workspace_id)
+        .bind(blueprint_id)
+        .bind(target_version)
+        .fetch_optional(&self.pool)
+        .await?
+        {
+            return Ok(existing);
+        }
         let target = self
             .get_current_blueprint(blueprint_id)
             .await?
@@ -35,9 +47,11 @@ impl CatalogRepository {
         }
 
         let id = Uuid::new_v4();
-        let workspace_id = self.workspace_id.unwrap_or(Self::DEFAULT_WORKSPACE_ID);
+        // The partial unique index makes an active batch a durable singleton,
+        // even when two API processes receive the same request concurrently.
+        // Returning the existing row also makes callers safely retryable.
         let batch = sqlx::query_as::<_, BlueprintMigrationBatch>(
-            "INSERT INTO blueprint_migration_batches (id, workspace_id, blueprint_id, target_version, status, started_at) VALUES ($1, $2, $3, $4, 'running', now()) RETURNING id, blueprint_id, target_version, status, created_at, started_at, completed_at",
+            "INSERT INTO blueprint_migration_batches (id, workspace_id, blueprint_id, target_version, status) VALUES ($1, $2, $3, $4, 'queued') ON CONFLICT (workspace_id, blueprint_id, target_version) WHERE status IN ('queued', 'running') DO UPDATE SET workspace_id = EXCLUDED.workspace_id RETURNING id, blueprint_id, target_version, status, created_at, started_at, completed_at",
         )
         .bind(id)
         .bind(workspace_id)
@@ -54,18 +68,30 @@ impl CatalogRepository {
         &self,
         batch_id: Uuid,
     ) -> Result<(), RepositoryError> {
+        self.run_safe_blueprint_migration_batch_with_lease(batch_id, Uuid::new_v4())
+            .await
+    }
+
+    pub(crate) async fn run_safe_blueprint_migration_batch_with_lease(
+        &self,
+        batch_id: Uuid,
+        lease_owner: Uuid,
+    ) -> Result<(), RepositoryError> {
         let workspace_id = self.workspace_id.unwrap_or(Self::DEFAULT_WORKSPACE_ID);
+        // Only one task may claim a queued or abandoned batch. The lease keeps
+        // startup recovery from resetting work still owned by another API
+        // process, while allowing a crashed process to be recovered.
         let batch = sqlx::query_as::<_, BlueprintMigrationBatch>(
-            "SELECT id, blueprint_id, target_version, status, created_at, started_at, completed_at FROM blueprint_migration_batches WHERE id = $1 AND workspace_id = $2",
+            "UPDATE blueprint_migration_batches SET status = 'running', started_at = COALESCE(started_at, now()), lease_owner = $3, lease_until = now() + interval '15 minutes' WHERE id = $1 AND workspace_id = $2 AND (status = 'queued' OR (status = 'running' AND (lease_until IS NULL OR lease_until <= now()))) RETURNING id, blueprint_id, target_version, status, created_at, started_at, completed_at",
         )
         .bind(batch_id)
         .bind(workspace_id)
+        .bind(lease_owner)
         .fetch_optional(&self.pool)
-        .await?
-        .ok_or(RepositoryError::NotFound("migration batch"))?;
-        if batch.status != "running" {
+        .await?;
+        let Some(batch) = batch else {
             return Ok(());
-        }
+        };
         let entity_ids = sqlx::query_scalar::<_, Uuid>(
             "SELECT id FROM entities WHERE blueprint_id = $1 AND blueprint_version = $2 AND workspace_id = $3 AND deleted_at IS NULL ORDER BY id",
         )
@@ -76,6 +102,8 @@ impl CatalogRepository {
         .await?;
 
         for entity_id in entity_ids {
+            self.renew_batch_lease(batch_id, workspace_id, lease_owner)
+                .await?;
             match self.preview_entity_migration(entity_id).await {
                 Ok(preview) => {
                     sqlx::query("UPDATE entity_blueprint_migrations SET batch_id = $2 WHERE id = $1 AND workspace_id = $3")
@@ -122,12 +150,79 @@ impl CatalogRepository {
                 }
             }
         }
-        sqlx::query("UPDATE blueprint_migration_batches SET status = 'completed', completed_at = now() WHERE id = $1 AND workspace_id = $2")
+        self.renew_batch_lease(batch_id, workspace_id, lease_owner)
+            .await?;
+        let result = sqlx::query("UPDATE blueprint_migration_batches SET status = 'completed', completed_at = now(), lease_owner = NULL, lease_until = NULL WHERE id = $1 AND workspace_id = $2 AND status = 'running' AND lease_owner = $3")
             .bind(batch_id)
             .bind(workspace_id)
+            .bind(lease_owner)
+            .execute(&self.pool)
+            .await?;
+        if result.rows_affected() == 1 {
+            Ok(())
+        } else {
+            Err(RepositoryError::InvalidBlueprintDefinition(
+                "safe blueprint migration batch lease was lost".into(),
+            ))
+        }
+    }
+
+    /// Returns a claimed batch to the durable queue during graceful shutdown.
+    /// The lease owner predicate prevents a stale task from releasing another
+    /// process's work.
+    pub(crate) async fn release_safe_blueprint_migration_batch_lease(
+        &self,
+        batch_id: Uuid,
+        lease_owner: Uuid,
+    ) -> Result<(), RepositoryError> {
+        let workspace_id = self.workspace_id.unwrap_or(Self::DEFAULT_WORKSPACE_ID);
+        sqlx::query("UPDATE blueprint_migration_batches SET status = 'queued', started_at = NULL, lease_owner = NULL, lease_until = NULL WHERE id = $1 AND workspace_id = $2 AND status = 'running' AND lease_owner = $3")
+            .bind(batch_id)
+            .bind(workspace_id)
+            .bind(lease_owner)
             .execute(&self.pool)
             .await?;
         Ok(())
+    }
+
+    /// Requeue batches interrupted by a previous API process and return all
+    /// queued work. Claiming in `run_safe_blueprint_migration_batch` keeps this
+    /// safe when multiple processes recover at once.
+    pub async fn recover_safe_blueprint_migration_batches(
+        &self,
+    ) -> Result<Vec<(Uuid, Uuid)>, RepositoryError> {
+        let mut transaction = self.pool.begin().await?;
+        sqlx::query("UPDATE blueprint_migration_batches SET status = 'queued', started_at = NULL, lease_owner = NULL, lease_until = NULL WHERE status = 'running' AND (lease_until IS NULL OR lease_until <= now())")
+            .execute(&mut *transaction)
+            .await?;
+        let batches = sqlx::query_as::<_, (Uuid, Uuid)>(
+            "SELECT workspace_id, id FROM blueprint_migration_batches WHERE status = 'queued' ORDER BY created_at, id",
+        )
+        .fetch_all(&mut *transaction)
+        .await?;
+        transaction.commit().await?;
+        Ok(batches)
+    }
+
+    async fn renew_batch_lease(
+        &self,
+        batch_id: Uuid,
+        workspace_id: Uuid,
+        lease_owner: Uuid,
+    ) -> Result<(), RepositoryError> {
+        let result = sqlx::query("UPDATE blueprint_migration_batches SET lease_until = now() + interval '15 minutes' WHERE id = $1 AND workspace_id = $2 AND status = 'running' AND lease_owner = $3")
+            .bind(batch_id)
+            .bind(workspace_id)
+            .bind(lease_owner)
+            .execute(&self.pool)
+            .await?;
+        if result.rows_affected() == 1 {
+            Ok(())
+        } else {
+            Err(RepositoryError::InvalidBlueprintDefinition(
+                "safe blueprint migration batch lease was lost".into(),
+            ))
+        }
     }
 
     async fn record_batch_failure(

@@ -3,6 +3,15 @@ use crate::domain_events::{ENTITY_PUBLISHED_V1, ENTITY_UNPUBLISHED_V1, EntityPub
 use sqlx::{Postgres, Transaction};
 use uuid::Uuid;
 
+struct PublicationMutation<'a> {
+    event_type: &'a str,
+    entity_id: Uuid,
+    context_id: Uuid,
+    published_at: Option<chrono::DateTime<chrono::Utc>>,
+    published_by_user_id: Option<Uuid>,
+    reason: Option<&'a str>,
+}
+
 impl CatalogRepository {
     /// Installs publication permissions in application code, preserving the
     /// declarative-only migration contract. Owners and administrators receive
@@ -92,12 +101,14 @@ impl CatalogRepository {
             .await?;
         self.commit_publication_mutation(
             tx,
-            ENTITY_PUBLISHED_V1,
-            entity_id,
-            context_id,
-            status.published_at,
-            status.published_by_user_id,
-            None,
+            PublicationMutation {
+                event_type: ENTITY_PUBLISHED_V1,
+                entity_id,
+                context_id,
+                published_at: status.published_at,
+                published_by_user_id: status.published_by_user_id,
+                reason: None,
+            },
         )
         .await?;
         Ok(status)
@@ -245,12 +256,14 @@ impl CatalogRepository {
         }
         self.commit_publication_mutation(
             tx,
-            ENTITY_UNPUBLISHED_V1,
-            entity_id,
-            context_id,
-            None,
-            None,
-            Some("manual"),
+            PublicationMutation {
+                event_type: ENTITY_UNPUBLISHED_V1,
+                entity_id,
+                context_id,
+                published_at: None,
+                published_by_user_id: None,
+                reason: Some("manual"),
+            },
         )
         .await
     }
@@ -402,23 +415,18 @@ impl CatalogRepository {
     async fn commit_publication_mutation(
         &self,
         mut tx: Transaction<'_, Postgres>,
-        event_type: &str,
-        entity_id: Uuid,
-        context_id: Uuid,
-        published_at: Option<chrono::DateTime<chrono::Utc>>,
-        published_by_user_id: Option<Uuid>,
-        reason: Option<&str>,
+        mutation: PublicationMutation<'_>,
     ) -> Result<(), RepositoryError> {
         self.write_audit_event(&mut tx).await?;
         self.enqueue_event(
             &mut tx,
             self.publication_event(
-                event_type,
-                entity_id,
-                context_id,
-                published_at,
-                published_by_user_id,
-                reason,
+                mutation.event_type,
+                mutation.entity_id,
+                mutation.context_id,
+                mutation.published_at,
+                mutation.published_by_user_id,
+                mutation.reason,
             ),
         )
         .await?;

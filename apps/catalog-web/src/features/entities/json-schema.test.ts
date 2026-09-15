@@ -59,6 +59,24 @@ describe('JSON Schema validation', () => {
     ).toMatchObject({ type: 'table', fields: ['sku'], columns: undefined });
   });
 
+  it('rejects component versions outside the API u32 contract', () => {
+    expect(() =>
+      blueprintSchema.parse({
+        ...blueprintIdentity,
+        code: 'product',
+        name: 'Product',
+        version: 1,
+        views: {
+          table: {
+            type: 'table',
+            fields: ['sku'],
+            component: { id: 'catalog.table_display', version: 4_294_967_296 },
+          },
+        },
+      }),
+    ).toThrow();
+  });
+
   it('validates values against schema constraints', () => {
     const schema = { type: 'string', minLength: 3 };
 

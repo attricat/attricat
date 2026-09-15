@@ -2,6 +2,8 @@
 name = "catalog-workflow"
 version = "0.1.0"
 edition = "2024"
+rust-version.workspace = true
+publish.workspace = true
 
 [dependencies]
 catalog-validation = { path = "../validation" }
@@ -10,5 +12,5 @@ serde_json = "1"
 sha2 = "0.10"
 toml = "0.8"
 thiserror = "2"
-cron = "0.15"
+cron.workspace = true
 uuid = "1"

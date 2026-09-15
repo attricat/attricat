@@ -33,7 +33,15 @@ pub(crate) fn validate_view(
                 if columns.is_none() {
                     return Err(BlueprintError::EmptyTableColumns);
                 }
-                validate_table_columns(columns.as_deref().unwrap_or_default(), attributes)?;
+                // Table components are still part of the view contract when
+                // modern `columns` are used. Validate their identity,
+                // placement, and capability before resolving column paths.
+                validate_component(component.as_ref(), view, "table", None)?;
+                validate_table_columns(
+                    columns.as_deref().unwrap_or_default(),
+                    attributes,
+                    component.as_ref(),
+                )?;
                 return Ok(());
             };
             if columns.is_some() {
@@ -206,6 +214,7 @@ fn validate_view_nodes(
 fn validate_table_columns(
     columns: &[TableColumn],
     attributes: &[EffectiveAttribute],
+    table_component: Option<&ComponentReference>,
 ) -> Result<(), BlueprintError> {
     if columns.is_empty() {
         return Err(BlueprintError::EmptyTableColumns);
@@ -238,7 +247,7 @@ fn validate_table_columns(
                     .id
                     .bytes()
                     .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'.' | b'_' | b'-'))
-                || renderer.version <= 0
+                || renderer.version == 0
             {
                 return Err(BlueprintError::InvalidTableColumnPath {
                     field: column.field.clone(),
@@ -255,7 +264,14 @@ fn validate_table_columns(
             validate_code(part, "table column path segment")?;
         }
         if parts.len() == 1 {
-            validate_view_field("table", parts[0], attributes, false)?;
+            let attribute = validate_view_field("table", parts[0], attributes, false)?;
+            // This matches legacy `fields` behavior for local scalar columns.
+            validate_component(
+                table_component,
+                "table",
+                "table",
+                Some(&attribute.value_type),
+            )?;
         } else {
             let relationship = parts[0];
             let attribute = attributes

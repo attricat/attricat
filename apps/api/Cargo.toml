@@ -2,14 +2,16 @@
 name = "api"
 version = "0.1.0"
 edition = "2024"
+rust-version.workspace = true
+publish.workspace = true
 
 [dependencies]
 async-recursion = "1"
 async-trait = "0.1"
 async-stream = "0.3"
-aws-config = "1"
+aws-config = { version = "1", default-features = false, features = ["default-https-client", "rt-tokio"] }
 aws-credential-types = "1"
-aws-sdk-s3 = "1"
+aws-sdk-s3 = { version = "1", default-features = false, features = ["default-https-client", "http-1x", "rt-tokio"] }
 axum = { version = "0.8", features = ["multipart"] }
 argon2 = "0.5"
 base64 = "0.22"
@@ -21,7 +23,6 @@ chrono = { version = "0.4", default-features = false, features = ["clock", "serd
 chrono-tz = "0.10"
 rand = "0.8"
 reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls", "stream"] }
-cron = "0.12"
 rust_decimal = { version = "1", features = ["serde"] }
 metrics = "0.23"
 metrics-exporter-prometheus = "0.15"

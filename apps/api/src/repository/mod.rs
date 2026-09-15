@@ -467,6 +467,16 @@ impl CatalogRepository {
                 agent: None,
             });
         }
+        // A handler already has worker audit provenance, but extension identity
+        // is still required to attribute that handler's catalog mutations.
+        if let Some(audit) = repository.audit_context.as_mut()
+            && let Some(metadata) = audit.metadata.as_object_mut()
+        {
+            metadata.insert(
+                "extension_id".to_owned(),
+                Value::String(extension_id.to_owned()),
+            );
+        }
         repository
     }
 }
@@ -945,7 +955,7 @@ mod tests {
         assert_eq!(audit.correlation_id, trigger.correlation_id);
         assert_eq!(audit.actor_user_id, Some(initiating_actor_user_id));
         assert_eq!(audit.actor_token_id, Some(initiating_actor_token_id));
-        assert_eq!(audit.action, "catalog.extensions.attribute_values.write");
+        assert_eq!(audit.action, "catalog.extensions.wasm.execute");
         assert_eq!(audit.metadata["extension_id"], "acme.computed");
 
         let command_event = repository.for_extension("acme.computed").core_event(

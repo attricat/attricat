@@ -1,7 +1,7 @@
 use std::{
     fs,
     io::{self, Read},
-    path::PathBuf,
+    path::{Path, PathBuf},
     process::ExitCode,
     time::Duration,
 };
@@ -17,6 +17,8 @@ use uuid::Uuid;
 
 const CONNECT_TIMEOUT: Duration = Duration::from_secs(5);
 const REQUEST_TIMEOUT: Duration = Duration::from_secs(30);
+/// Large artifacts and file uploads are bounded independently from JSON API calls.
+const TRANSFER_TIMEOUT: Duration = Duration::from_secs(10 * 60);
 const MAX_RESPONSE_BYTES: usize = 1024 * 1024;
 const GENERATOR_TOKEN_LABEL: &str = "catalog-generator";
 const GENERATOR_TOKEN_PERMISSIONS: &[&str] = &[
@@ -1582,10 +1584,11 @@ impl SessionFile {
         .map(|session| session.flatten())
     }
 
-    fn save(path: &PathBuf, session: String, csrf: String) -> Result<(), CliError> {
+    fn save(path: &Path, session: String, csrf: String) -> Result<(), CliError> {
         let contents =
             serde_json::to_vec(&Self { session, csrf }).map_err(|_| CliError::InvalidResponse)?;
-        fs::write(path, contents).map_err(|error| {
+        let mut temporary = temporary_file(path, "session file")?;
+        std::io::Write::write_all(temporary.as_file_mut(), &contents).map_err(|error| {
             CliError::Input(format!(
                 "cannot write session file {}: {error}",
                 path.display()
@@ -1594,14 +1597,22 @@ impl SessionFile {
         #[cfg(unix)]
         {
             use std::os::unix::fs::PermissionsExt;
-            fs::set_permissions(path, fs::Permissions::from_mode(0o600)).map_err(|error| {
-                CliError::Input(format!(
-                    "cannot secure session file {}: {error}",
-                    path.display()
-                ))
-            })?;
+            fs::set_permissions(temporary.path(), fs::Permissions::from_mode(0o600)).map_err(
+                |error| {
+                    CliError::Input(format!(
+                        "cannot secure session file {}: {error}",
+                        path.display()
+                    ))
+                },
+            )?;
         }
-        Ok(())
+        temporary.as_file_mut().sync_all().map_err(|error| {
+            CliError::Input(format!(
+                "cannot sync session file {}: {error}",
+                path.display()
+            ))
+        })?;
+        persist_temporary_file(temporary, path, "session file")
     }
 }
 
@@ -2337,6 +2348,7 @@ async fn raw_upload(
             .request(Method::POST, endpoint(server, path)?)
             .header(reqwest::header::CONTENT_TYPE, content_type)
             .body(reqwest::Body::wrap_stream(stream))
+            .timeout(TRANSFER_TIMEOUT)
             .send()
             .await
             .map_err(|error| CliError::Transport(error.to_string()))?,
@@ -2384,17 +2396,47 @@ async fn multipart_upload(
         client
             .post(endpoint(server, path)?)
             .multipart(form)
+            .timeout(TRANSFER_TIMEOUT)
             .send()
             .await
             .map_err(|error| CliError::Transport(error.to_string()))?,
     )
     .await
 }
+
+fn temporary_file(path: &Path, label: &str) -> Result<tempfile::NamedTempFile, CliError> {
+    let parent = path
+        .parent()
+        .filter(|parent| !parent.as_os_str().is_empty())
+        .unwrap_or_else(|| std::path::Path::new("."));
+    tempfile::NamedTempFile::new_in(parent).map_err(|error| {
+        CliError::Input(format!(
+            "cannot create temporary {label} for {}: {error}",
+            path.display()
+        ))
+    })
+}
+
+fn persist_temporary_file(
+    temporary: tempfile::NamedTempFile,
+    path: &Path,
+    label: &str,
+) -> Result<(), CliError> {
+    temporary.persist(path).map_err(|error| {
+        CliError::Input(format!(
+            "cannot replace {label} {}: {}",
+            path.display(),
+            error.error
+        ))
+    })?;
+    Ok(())
+}
+
 async fn raw_download(
     client: &Client,
     server: &Url,
     path: &str,
-    output: &PathBuf,
+    output: &Path,
     range: Option<&str>,
 ) -> Result<String, CliError> {
     let mut request = client.get(endpoint(server, path)?);
@@ -2402,21 +2444,26 @@ async fn raw_download(
         request = request.header(reqwest::header::RANGE, range);
     }
     let response = request
+        .timeout(TRANSFER_TIMEOUT)
         .send()
         .await
         .map_err(|error| CliError::Transport(error.to_string()))?;
     if !response.status().is_success() {
         return raw_response(response).await;
     }
-    let mut file = fs::File::create(output)
-        .map_err(|error| CliError::Input(format!("cannot create {}: {error}", output.display())))?;
+    let mut temporary = temporary_file(output, "download")?;
     let mut stream = response.bytes_stream();
     while let Some(chunk) = stream.next().await {
         let chunk = chunk.map_err(|error| CliError::Transport(error.to_string()))?;
-        std::io::Write::write_all(&mut file, &chunk).map_err(|error| {
+        std::io::Write::write_all(temporary.as_file_mut(), &chunk).map_err(|error| {
             CliError::Input(format!("cannot write {}: {error}", output.display()))
         })?;
     }
+    temporary
+        .as_file_mut()
+        .sync_all()
+        .map_err(|error| CliError::Input(format!("cannot sync {}: {error}", output.display())))?;
+    persist_temporary_file(temporary, output, "download")?;
     Ok("null".to_owned())
 }
 async fn buffered_response_body(
@@ -2679,7 +2726,11 @@ async fn migrate_entities(
                 })),
             }
         }
-        cursor = page["next_cursor"].as_str().map(ToOwned::to_owned);
+        cursor = match page.get("next_cursor") {
+            Some(Value::Null) => None,
+            Some(Value::String(cursor)) if !cursor.is_empty() => Some(cursor.clone()),
+            _ => return Err(CliError::InvalidResponse),
+        };
         if cursor.is_none() {
             break;
         }
@@ -3379,6 +3430,14 @@ value = "Blue shirt"
         let loaded = SessionFile::load(Some(&path)).unwrap().unwrap();
         assert_eq!(loaded.session, "session-secret");
         assert_eq!(loaded.csrf, "csrf-secret");
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            assert_eq!(
+                fs::metadata(&path).unwrap().permissions().mode() & 0o777,
+                0o600
+            );
+        }
     }
 
     #[tokio::test]
@@ -3406,6 +3465,40 @@ value = "Blue shirt"
             raw_response(response).await,
             Err(CliError::ResponseTooLarge)
         ));
+        server.abort();
+    }
+
+    #[tokio::test]
+    async fn failed_download_leaves_the_existing_output_unchanged() {
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let address = listener.local_addr().unwrap();
+        let server = tokio::spawn(async move {
+            let app = axum::Router::new().route(
+                "/download",
+                axum::routing::get(|| async {
+                    axum::response::Response::new(axum::body::Body::from_stream(
+                        futures_util::stream::iter(vec![
+                            Ok::<_, std::io::Error>(axum::body::Bytes::from_static(b"partial")),
+                            Err(std::io::Error::other("interrupted transfer")),
+                        ]),
+                    ))
+                }),
+            );
+            axum::serve(listener, app).await.unwrap();
+        });
+        let directory = tempfile::tempdir().unwrap();
+        let output = directory.path().join("artifact.bin");
+        fs::write(&output, "previous").unwrap();
+        let result = raw_download(
+            &Client::new(),
+            &Url::parse(&format!("http://{address}")).unwrap(),
+            "/download",
+            &output,
+            None,
+        )
+        .await;
+        assert!(matches!(result, Err(CliError::Transport(_))));
+        assert_eq!(fs::read_to_string(output).unwrap(), "previous");
         server.abort();
     }
 
@@ -3461,6 +3554,33 @@ value = "Blue shirt"
             1
         );
         assert_eq!(migrations.load(Ordering::SeqCst), 0);
+        server.abort();
+    }
+
+    #[tokio::test]
+    async fn migrate_bulk_rejects_a_malformed_next_cursor() {
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let address = listener.local_addr().unwrap();
+        let server = tokio::spawn(async move {
+            let app = axum::Router::new().route(
+                "/v1/entities/search",
+                axum::routing::post(|| async {
+                    axum::Json(json!({ "items": [], "next_cursor": true }))
+                }),
+            );
+            axum::serve(listener, app).await.unwrap();
+        });
+        let client = Client::new();
+        let result = migrate_entities(
+            &client,
+            &Url::parse(&format!("http://{address}")).unwrap(),
+            "product",
+            1,
+            25,
+            false,
+        )
+        .await;
+        assert!(matches!(result, Err(CliError::InvalidResponse)));
         server.abort();
     }
 

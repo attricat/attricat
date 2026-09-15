@@ -5,6 +5,7 @@ use std::{net::SocketAddr, sync::Arc};
 use tokio::sync::Mutex;
 
 use api::{
+    blueprint_migration_worker,
     extension_registry::{GitHubRegistry, GitHubRepository},
     extension_runtime::{ExtensionRuntime, ExtensionRuntimeConfig},
     file_access::{AllowFileAccess, FileAccessPolicy},
@@ -233,6 +234,14 @@ async fn start_server_with_auth_mode_and_store_with_devtools(
         .unwrap();
     let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
     let address: SocketAddr = listener.local_addr().unwrap();
+    let (migration_shutdown_sender, migration_shutdown_receiver) = tokio::sync::watch::channel(());
+    let (migration_batch_dispatcher, migration_worker) = blueprint_migration_worker::start(
+        CatalogRepository::with_workspace_pool_factory(
+            pool.clone(),
+            (*pool.connect_options()).clone(),
+        ),
+        migration_shutdown_receiver,
+    );
     let router = router(AppState {
         repository: CatalogRepository::with_workspace_pool_factory(
             pool.clone(),
@@ -240,6 +249,7 @@ async fn start_server_with_auth_mode_and_store_with_devtools(
         ),
         agent_provider: None,
         agent_dispatcher: None,
+        migration_batch_dispatcher,
         registry: Arc::new(GitHubRegistry::new().unwrap()),
         official_registry: "attricat/attricat-extensions"
             .parse::<GitHubRepository>()
@@ -272,7 +282,11 @@ async fn start_server_with_auth_mode_and_store_with_devtools(
         default_body_limit: 2 * 1024 * 1024,
         devtools_enabled,
     });
-    let server = tokio::spawn(async move { axum::serve(listener, router).await.unwrap() });
+    let server = tokio::spawn(async move {
+        axum::serve(listener, router).await.unwrap();
+        let _ = migration_shutdown_sender.send(());
+        migration_worker.await.unwrap();
+    });
 
     (format!("http://{address}"), server)
 }

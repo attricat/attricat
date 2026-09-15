@@ -852,4 +852,18 @@ cardinality = "one"
         .is_err()
     );
     assert!(parse(&source.replace("cardinality = \"one\"", "cardinality = \"invalid\"")).is_err());
+    // Modern column tables must validate their table-level component too.
+    let invalid_table_component = source.replace(
+        "columns = [",
+        "component = { id = \"catalog.table_edit\", version = 1 }\ncolumns = [",
+    );
+    assert!(
+        compile(
+            parse(&invalid_table_component).unwrap(),
+            &[],
+            &invalid_table_component
+        )
+        .is_err()
+    );
+    assert!(parse(&source.replace("version = 1", "version = -1")).is_err());
 }
