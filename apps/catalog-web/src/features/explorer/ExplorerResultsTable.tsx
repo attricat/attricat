@@ -93,23 +93,34 @@ const EntityActionsMenu = ({
 
   return (
     <Menu
-        anchorPosition={position ?? undefined}
-        anchorReference="anchorPosition"
-        onClose={onClose}
-        open={Boolean(position)}
-        transformOrigin={{ horizontal: 'right', vertical: 'top' }}
+      anchorPosition={position ?? undefined}
+      anchorReference="anchorPosition"
+      onClose={onClose}
+      open={Boolean(position)}
+      transformOrigin={{ horizontal: 'right', vertical: 'top' }}
+    >
+      <MenuItem
+        onClick={() => {
+          onClose();
+          onSearchInfo(entity);
+        }}
       >
-        <MenuItem
-          onClick={() => {
-            onClose();
-            onSearchInfo(entity);
-          }}
-        >
-          {t('explorer.searchInfo')}
-        </MenuItem>
-        {canPublish && publicationContextId && publication && (
-          <>
-            {publication.status === 'not_published' ? (
+        {t('explorer.searchInfo')}
+      </MenuItem>
+      {canPublish && publicationContextId && publication && (
+        <>
+          {publication.status === 'not_published' ? (
+            <MenuItem
+              disabled={publishing}
+              onClick={() => {
+                onClose();
+                publish();
+              }}
+            >
+              {t('entities.publish')}
+            </MenuItem>
+          ) : (
+            <>
               <MenuItem
                 disabled={publishing}
                 onClick={() => {
@@ -119,40 +130,29 @@ const EntityActionsMenu = ({
               >
                 {t('entities.publish')}
               </MenuItem>
-            ) : (
-              <>
-                <MenuItem
-                  disabled={publishing}
-                  onClick={() => {
-                    onClose();
-                    publish();
-                  }}
-                >
-                  {t('entities.publish')}
-                </MenuItem>
-                <MenuItem
-                  disabled={unpublishing}
-                  onClick={() => {
-                    onClose();
-                    unpublish();
-                  }}
-                >
-                  {t('entities.unpublish')}
-                </MenuItem>
-              </>
-            )}
-          </>
-        )}
-        <ExtensionPopoverOutlet
-          context={{
-            context_version: 1,
-            blueprint_id: blueprintId,
-            blueprint_version: entity.blueprint_version,
-            entity_id: entity.id,
-          }}
-          label={t('explorer.extensionActions')}
-          outlet="explorer_row_action"
-        />
+              <MenuItem
+                disabled={unpublishing}
+                onClick={() => {
+                  onClose();
+                  unpublish();
+                }}
+              >
+                {t('entities.unpublish')}
+              </MenuItem>
+            </>
+          )}
+        </>
+      )}
+      <ExtensionPopoverOutlet
+        context={{
+          context_version: 1,
+          blueprint_id: blueprintId,
+          blueprint_version: entity.blueprint_version,
+          entity_id: entity.id,
+        }}
+        label={t('explorer.extensionActions')}
+        outlet="explorer_row_action"
+      />
     </Menu>
   );
 };
@@ -299,10 +299,13 @@ export const ExplorerResultsTable = ({
   let cellFrames = 0;
   const takeCellFrame = () => cellFrames++ < maximumExplorerCellFrames;
   const columns: LegacyColumnDef<EntityItem, unknown>[] = [
+    // TanStack's column definitions are intentionally invariant in their
+    // value type. The table only consumes the shared row shape, so normalize
+    // heterogeneous column values at this boundary.
     columnHelper.accessor('id', {
       header: t('explorer.id'),
       cell: (info) => <EntityIdPopover entityId={info.getValue()} />,
-    }),
+    }) as LegacyColumnDef<EntityItem, unknown>,
     columnHelper.display({
       id: 'display',
       header: t('explorer.display'),

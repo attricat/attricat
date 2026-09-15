@@ -29,9 +29,7 @@ const image = (status: 'ready' | 'failed') => [
 
 describe('ImageTableCell', () => {
   it('uses the thumbnail download URL for a ready image', () => {
-    const { container } = render(
-      <ImageTableCell value={image('ready')[0]} />,
-    );
+    const { container } = render(<ImageTableCell value={image('ready')[0]} />);
 
     expect(container.querySelector('img')?.getAttribute('src')).toBe(
       `/api/files/${fileId}/variants/thumbnail/download`,

@@ -86,8 +86,7 @@ export const EntityPreviewPage = ({
   const resolved = useQuery({
     queryKey: entityQueryKeys.resolvedPreview(entityId, selectedContextId),
     queryFn: () => {
-      if (!selectedContextId)
-        throw new Error('Preview context is unavailable');
+      if (!selectedContextId) throw new Error('Preview context is unavailable');
       return getResolvedEntityPreview(entityId, selectedContextId);
     },
     enabled: Boolean(selectedContextId),

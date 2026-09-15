@@ -111,7 +111,9 @@ value_type = "integer"`,
     page.getByRole('combobox', { name: /select a blueprint/i }),
   ).toHaveCount(1);
   const mobileFilters = page.locator('.MuiDrawer-paper aside');
-  await expect(mobileFilters.getByRole('heading', { name: 'Filters' })).toBeVisible();
+  await expect(
+    mobileFilters.getByRole('heading', { name: 'Filters' }),
+  ).toBeVisible();
   await mobileFilters.getByRole('button', { name: 'Add filter' }).click();
   const filterDialog = page.getByRole('dialog', {
     name: /^Add filter/,

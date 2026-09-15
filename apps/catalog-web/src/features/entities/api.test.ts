@@ -279,7 +279,6 @@ describe('entity API client', () => {
       }),
       signal: controller.signal,
     });
-
   });
 
   it('uses the backend default ordering', async () => {

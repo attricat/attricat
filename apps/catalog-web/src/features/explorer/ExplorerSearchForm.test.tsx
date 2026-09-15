@@ -3,24 +3,27 @@ import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
 import '../../i18n';
+import type { Blueprint } from '../entities/api';
 import { ExplorerSearchForm } from './ExplorerSearchForm';
 
 const revisions = [
   {
     code: 'product',
+    id: '123e4567-e89b-12d3-a456-426614174000',
     name: 'Product',
+    status: 'published',
     version: 3,
-    status: 'published' as const,
     views: {},
   },
   {
     code: 'product',
+    id: '123e4567-e89b-12d3-a456-426614174000',
     name: 'Product',
+    status: 'published',
     version: 2,
-    status: 'published' as const,
     views: {},
   },
-];
+] satisfies Blueprint[];
 
 describe('ExplorerSearchForm version scope', () => {
   it('shows the blueprint selector when the route is not locked', () => {

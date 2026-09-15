@@ -82,7 +82,11 @@ export const RelationshipSelectorDialog = ({
             </Typography>
           </Box>
           {topAction && (
-            <Button onClick={topAction.onClick} size="small" variant="contained">
+            <Button
+              onClick={topAction.onClick}
+              size="small"
+              variant="contained"
+            >
               {topAction.label}
             </Button>
           )}

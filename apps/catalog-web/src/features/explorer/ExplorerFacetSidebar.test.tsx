@@ -26,7 +26,9 @@ vi.mock('../entities/components/useRelationshipSelectionLabels', () => ({
   useRelationshipSelectionLabels: () => new Map([[targetId, 'Acme']]),
 }));
 
-const targetId = '123e4567-e89b-12d3-a456-426614174000';
+const brandBlueprintId = '123e4567-e89b-12d3-a456-426614174000';
+const productBlueprintId = '123e4567-e89b-12d3-a456-426614174001';
+const targetId = '123e4567-e89b-12d3-a456-426614174002';
 const relationship: RelationshipFilterAttribute = {
   cardinality: 'many',
   code: 'brand',
@@ -36,7 +38,14 @@ const relationship: RelationshipFilterAttribute = {
 
 const targetPage: EntitySearchResponse = {
   blueprint: {
-    blueprint: { code: 'brand', name: 'Brand', version: 1, views: {} },
+    blueprint: {
+      code: 'brand',
+      id: brandBlueprintId,
+      name: 'Brand',
+      status: 'published',
+      version: 1,
+      views: {},
+    },
     attributes: [],
     table_path_attributes: [],
   },
@@ -67,18 +76,30 @@ const Harness = () => {
       attributes={[relationship]}
       blueprint="product"
       blueprints={[
-        { code: 'product', name: 'Product', version: 1, views: {} },
-        { code: 'brand', name: 'Brand', version: 1, views: {} },
+        {
+          code: 'product',
+          id: productBlueprintId,
+          name: 'Product',
+          status: 'published',
+          version: 1,
+          views: {},
+        },
+        {
+          code: 'brand',
+          id: brandBlueprintId,
+          name: 'Brand',
+          status: 'published',
+          version: 1,
+          views: {},
+        },
       ]}
       contextCode="default"
       contexts={[
         {
           code: 'default',
-          created_at: '2026-01-01T00:00:00Z',
+          data: {},
           id: targetId,
-          name: 'Default',
           parent_id: null,
-          updated_at: '2026-01-01T00:00:00Z',
         },
       ]}
       facets={facets}
@@ -118,7 +139,14 @@ describe('ExplorerFacetSidebar', () => {
   it('opens a relationship picker immediately and applies selections live', async () => {
     vi.mocked(getBlueprintByCode).mockResolvedValue({
       attributes: [],
-      blueprint: { code: 'brand', name: 'Brand', version: 1, views: {} },
+      blueprint: {
+        code: 'brand',
+        id: brandBlueprintId,
+        name: 'Brand',
+        status: 'published',
+        version: 1,
+        views: {},
+      },
       table_path_attributes: [],
     });
     vi.mocked(searchEntities).mockResolvedValue(targetPage);

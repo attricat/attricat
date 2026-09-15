@@ -160,8 +160,8 @@ export const Explorer = ({ search: urlSearch }: { search: ExplorerSearch }) => {
           : [],
     ),
   ];
-  const explorerFacets: ExplorerRelationshipFacet[] = relationshipPathFields.map(
-    (sourceRelationship) => {
+  const explorerFacets: ExplorerRelationshipFacet[] =
+    relationshipPathFields.map((sourceRelationship) => {
       const saved = search.relationshipFacets?.find(
         (facet) => facet.field === sourceRelationship.code,
       );
@@ -169,8 +169,7 @@ export const Explorer = ({ search: urlSearch }: { search: ExplorerSearch }) => {
         selectedIds: saved?.selectedIds ?? [],
         sourceRelationship,
       };
-    },
-  );
+    });
   const visibleExplorerFacets = explorerFacets.filter(
     (facet) => facet.selectedIds.length > 0,
   );
@@ -238,9 +237,8 @@ export const Explorer = ({ search: urlSearch }: { search: ExplorerSearch }) => {
       ...current.find((facet) => facet.field === field),
       ...updates,
     };
-    const relationshipFacets = updates.selectedIds?.length === 0
-      ? remaining
-      : [...remaining, nextFacet];
+    const relationshipFacets =
+      updates.selectedIds?.length === 0 ? remaining : [...remaining, nextFacet];
     void navigate({
       to: '/',
       search: {
@@ -367,7 +365,9 @@ export const Explorer = ({ search: urlSearch }: { search: ExplorerSearch }) => {
                 : t('explorer.title')
             }
           />
-          {(blueprints.error || selectedBlueprint.error || blueprintMissing) && (
+          {(blueprints.error ||
+            selectedBlueprint.error ||
+            blueprintMissing) && (
             <Stack spacing={2} sx={{ mb: 2 }}>
               <QueryErrorNotice
                 error={blueprints.error}
@@ -465,21 +465,21 @@ export const Explorer = ({ search: urlSearch }: { search: ExplorerSearch }) => {
             (blueprints.isFetching ||
               selectedBlueprint.isFetching ||
               (canSearch && results.isPending && !results.data)) && (
-            <Box
-              sx={{
-                alignItems: 'center',
-                display: 'flex',
-                justifyContent: 'center',
-                minHeight: '50vh',
-              }}
-            >
-              <CircularProgress
-                aria-label={t('explorer.loading')}
-                enableTrackSlot
-                size={80}
-              />
-            </Box>
-          )}
+              <Box
+                sx={{
+                  alignItems: 'center',
+                  display: 'flex',
+                  justifyContent: 'center',
+                  minHeight: '50vh',
+                }}
+              >
+                <CircularProgress
+                  aria-label={t('explorer.loading')}
+                  enableTrackSlot
+                  size={80}
+                />
+              </Box>
+            )}
           {results.isError && (
             <Alert severity="error" sx={{ mt: 3 }}>
               {results.error.message}

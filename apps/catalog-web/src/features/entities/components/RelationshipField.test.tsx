@@ -19,8 +19,9 @@ vi.mock('../api', () => ({
   searchEntities: vi.fn(),
 }));
 
-const firstId = '123e4567-e89b-12d3-a456-426614174000';
-const laterId = '123e4567-e89b-12d3-a456-426614174001';
+const blueprintId = '123e4567-e89b-12d3-a456-426614174000';
+const firstId = '123e4567-e89b-12d3-a456-426614174001';
+const laterId = '123e4567-e89b-12d3-a456-426614174002';
 const attribute = {
   code: 'related_products',
   value_type: 'relationship' as const,
@@ -32,7 +33,14 @@ const page = (
   nextCursor: string | null,
 ): EntitySearchResponse => ({
   blueprint: {
-    blueprint: { code: 'product', name: 'Product', version: 1, views: {} },
+    blueprint: {
+      code: 'product',
+      id: blueprintId,
+      name: 'Product',
+      status: 'published',
+      version: 1,
+      views: {},
+    },
     attributes: [],
     table_path_attributes: [],
   },
@@ -86,7 +94,9 @@ describe('RelationshipField', () => {
     vi.mocked(getBlueprintByCode).mockResolvedValue({
       blueprint: {
         code: 'product',
+        id: blueprintId,
         name: 'Product',
+        status: 'published',
         version: 1,
         views: {
           dropdown_option: { type: 'dropdown_option', fields: ['name'] },
@@ -99,7 +109,7 @@ describe('RelationshipField', () => {
       Promise.resolve({
         entity: {
           id,
-          blueprint_id: firstId,
+          blueprint_id: blueprintId,
           blueprint_version: 1,
         },
         context: { default: { name: `Product ${id.slice(-2)}` } },

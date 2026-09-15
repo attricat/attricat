@@ -173,10 +173,12 @@ export const ExplorerFacetSidebar = ({
           <Facet
             facet={facet}
             key={facet.sourceRelationship.code}
-            label={`${attributeLabel(facet.sourceRelationship)} (${blueprints.find(
-              (item) =>
-                item.code === facet.sourceRelationship.target_blueprint_code,
-            )?.name ?? facet.sourceRelationship.target_blueprint_code})`}
+            label={`${attributeLabel(facet.sourceRelationship)} (${
+              blueprints.find(
+                (item) =>
+                  item.code === facet.sourceRelationship.target_blueprint_code,
+              )?.name ?? facet.sourceRelationship.target_blueprint_code
+            })`}
             onClose={() => setRelationshipToOpen(undefined)}
             onOpen={() => setRelationshipToOpen(facet.sourceRelationship)}
             onUpdate={onUpdate}
@@ -186,7 +188,8 @@ export const ExplorerFacetSidebar = ({
         <ExplorerFilterPicker
           attributes={attributes}
           blueprintName={
-            blueprints.find((item) => item.code === blueprint)?.name ?? blueprint
+            blueprints.find((item) => item.code === blueprint)?.name ??
+            blueprint
           }
           filters={attributeFilters}
           pathAttributes={pathAttributes}
@@ -201,7 +204,14 @@ export const ExplorerFacetSidebar = ({
   );
 };
 
-const Facet = ({ facet, label, onClose, onOpen, onUpdate, open }: FacetProps) => {
+const Facet = ({
+  facet,
+  label,
+  onClose,
+  onOpen,
+  onUpdate,
+  open,
+}: FacetProps) => {
   const { t } = useTranslation();
   const selectionLabels = useRelationshipSelectionLabels(
     facet.sourceRelationship.target_blueprint_code,
@@ -216,15 +226,15 @@ const Facet = ({ facet, label, onClose, onOpen, onUpdate, open }: FacetProps) =>
             spacing={0.5}
             sx={{ alignItems: 'center', color: 'primary.main' }}
           >
-          <RelationshipIcon sx={{ fontSize: 15 }} />
-          <Typography
-            color="inherit"
-            component="h3"
-            sx={{ fontWeight: 700, letterSpacing: '0.01em', lineHeight: 1.4 }}
-            variant="subtitle2"
-          >
-            {label}
-          </Typography>
+            <RelationshipIcon sx={{ fontSize: 15 }} />
+            <Typography
+              color="inherit"
+              component="h3"
+              sx={{ fontWeight: 700, letterSpacing: '0.01em', lineHeight: 1.4 }}
+              variant="subtitle2"
+            >
+              {label}
+            </Typography>
           </Stack>
           <RelationshipSelectionPills
             action={
@@ -273,8 +283,7 @@ const Facet = ({ facet, label, onClose, onOpen, onUpdate, open }: FacetProps) =>
           onSelectedIdsChange={(ids) =>
             onUpdate(facet.sourceRelationship.code, {
               selectedIds: ids,
-              targetBlueprint:
-                facet.sourceRelationship.target_blueprint_code,
+              targetBlueprint: facet.sourceRelationship.target_blueprint_code,
             })
           }
           selectedIds={facet.selectedIds}
@@ -299,8 +308,7 @@ const RelationshipTargetPicker = ({
   const pickerContentRoot = useRef<HTMLDivElement>(null);
   const { isPreviewed, markPreviewed, openPreview, previewHref } =
     useRecentlyPreviewedEntities((id) => {
-      if (!selectedIds.includes(id))
-        onSelectedIdsChange([...selectedIds, id]);
+      if (!selectedIds.includes(id)) onSelectedIdsChange([...selectedIds, id]);
       scrollRelationshipPickerToTop(pickerContentRoot.current);
     });
   const targets = useInfiniteQuery({

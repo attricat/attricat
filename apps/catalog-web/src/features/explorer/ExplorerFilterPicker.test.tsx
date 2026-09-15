@@ -4,7 +4,10 @@ import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
 import '../../i18n';
-import { getBlueprintByCode } from '../entities/api';
+import {
+  getBlueprintByCode,
+  type BlueprintWithAttributes,
+} from '../entities/api';
 import { ExplorerFilterPicker } from './ExplorerFilterPicker';
 import type { RelationshipFilterAttribute } from './relationship-filter-types';
 
@@ -23,9 +26,19 @@ const relationship = (
   value_type: 'relationship',
 });
 
-const blueprint = (code: string, attributes: RelationshipFilterAttribute[]) => ({
+const blueprint = (
+  code: string,
+  attributes: RelationshipFilterAttribute[],
+): BlueprintWithAttributes => ({
   attributes,
-  blueprint: { code, name: code, version: 1, views: {} },
+  blueprint: {
+    code,
+    id: '123e4567-e89b-12d3-a456-426614174000',
+    name: code,
+    status: 'published',
+    version: 1,
+    views: {},
+  },
   table_path_attributes: [],
 });
 
@@ -33,7 +46,9 @@ describe('ExplorerFilterPicker', () => {
   it('discovers relationship paths up to three hops and returns the terminal target', async () => {
     vi.mocked(getBlueprintByCode).mockImplementation((code) => {
       if (code === 'family')
-        return Promise.resolve(blueprint(code, [relationship('class', 'class')]));
+        return Promise.resolve(
+          blueprint(code, [relationship('class', 'class')]),
+        );
       if (code === 'class')
         return Promise.resolve(blueprint(code, [relationship('kind', 'kind')]));
       return Promise.resolve(blueprint(code, []));
