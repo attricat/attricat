@@ -2,6 +2,7 @@ import {
   Box,
   Button,
   Chip,
+  Link,
   MenuItem,
   List,
   ListItem,
@@ -11,7 +12,7 @@ import {
   Typography,
 } from '@mui/material';
 import { useInfiniteQuery } from '@tanstack/react-query';
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { Attribute, Blueprint } from '../entities/api';
 import type { AttributeContext } from '../contexts/api';
@@ -25,6 +26,10 @@ import {
 } from '../../components/system-icons';
 import { RelationshipSelectionPills } from '../entities/components/RelationshipSelectionPills';
 import { useRelationshipSelectionLabels } from '../entities/components/useRelationshipSelectionLabels';
+import {
+  scrollRelationshipPickerToTop,
+  useRecentlyPreviewedEntities,
+} from '../entities/components/useRecentlyPreviewedEntities';
 import { ExplorerFilterPicker } from './ExplorerFilterPicker';
 import { LoadMoreButton } from '../../components/LoadMoreButton';
 import {
@@ -291,6 +296,13 @@ const RelationshipTargetPicker = ({
 }) => {
   const { t } = useTranslation();
   const [query, setQuery] = useState('');
+  const pickerContentRoot = useRef<HTMLDivElement>(null);
+  const { isPreviewed, markPreviewed, openPreview, previewHref } =
+    useRecentlyPreviewedEntities((id) => {
+      if (!selectedIds.includes(id))
+        onSelectedIdsChange([...selectedIds, id]);
+      scrollRelationshipPickerToTop(pickerContentRoot.current);
+    });
   const targets = useInfiniteQuery({
     queryKey: entityQueryKeys.relationshipTargets(targetBlueprint, query),
     queryFn: ({ pageParam, signal }) =>
@@ -316,7 +328,7 @@ const RelationshipTargetPicker = ({
         : [...selectedIds, id],
     );
   return (
-    <Stack spacing={1.5}>
+    <Stack ref={pickerContentRoot} spacing={1.5}>
       <TextField
         fullWidth
         label={t('entities.searchRelationshipOptions')}
@@ -345,7 +357,33 @@ const RelationshipTargetPicker = ({
           return (
             <ListItem
               key={target.id}
-              secondaryAction={
+              sx={{
+                alignItems: 'center',
+                bgcolor: isPreviewed(target.id) ? 'action.selected' : undefined,
+                borderRadius: 1,
+                '&:hover': { bgcolor: 'action.hover' },
+              }}
+            >
+              <Link
+                href={previewHref(target.id)}
+                onClick={() => markPreviewed(target.id)}
+                rel="opener"
+                sx={{ flexGrow: 1, minWidth: 0, mr: 1 }}
+                target="_blank"
+              >
+                {label}
+              </Link>
+              <Stack direction="row" spacing={0.5}>
+                <Button
+                  aria-label={t('entities.previewRelationshipOptionLabel', {
+                    option: label,
+                  })}
+                  color={isPreviewed(target.id) ? 'secondary' : 'inherit'}
+                  onClick={() => openPreview(target.id)}
+                  size="small"
+                >
+                  {t('entities.previewRelationshipOption')}
+                </Button>
                 <Button
                   aria-label={t(
                     selectedIds.includes(target.id)
@@ -360,9 +398,7 @@ const RelationshipTargetPicker = ({
                     ? t('entities.removeRelationshipOption')
                     : t('entities.selectRelationshipOption')}
                 </Button>
-              }
-            >
-              <Typography variant="body2">{label}</Typography>
+              </Stack>
             </ListItem>
           );
         })}

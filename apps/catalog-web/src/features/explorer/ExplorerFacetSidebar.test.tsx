@@ -14,6 +14,7 @@ import {
   ExplorerFacetSidebar,
   type ExplorerRelationshipFacet,
 } from './ExplorerFacetSidebar';
+import { relationshipPickerMessageType } from '../entities/components/useRecentlyPreviewedEntities';
 import type { RelationshipFilterAttribute } from './relationship-filter-types';
 
 vi.mock('../entities/api', async (importOriginal) => {
@@ -121,6 +122,10 @@ describe('ExplorerFacetSidebar', () => {
       table_path_attributes: [],
     });
     vi.mocked(searchEntities).mockResolvedValue(targetPage);
+    Object.defineProperty(HTMLElement.prototype, 'scrollTo', {
+      configurable: true,
+      value: vi.fn(),
+    });
     const user = userEvent.setup();
     renderSidebar();
 
@@ -131,12 +136,30 @@ describe('ExplorerFacetSidebar', () => {
 
     const dialog = await screen.findByRole('dialog', { name: /^Select brand/ });
     expect(screen.queryByRole('heading', { name: 'Brand' })).toBeNull();
-    await user.click(
-      await screen.findByRole('button', { name: 'Select Acme' }),
+
+    const entityLink = await screen.findByRole('link', { name: 'Acme' });
+    expect(entityLink.getAttribute('target')).toBe('_blank');
+    const href = entityLink.getAttribute('href');
+    if (!href) throw new Error('Entity link is missing its href');
+    const pickerToken = new URL(href, location.href).searchParams.get(
+      'relationshipPicker',
+    );
+    expect(pickerToken).toBeTruthy();
+    window.dispatchEvent(
+      new MessageEvent('message', {
+        data: {
+          entityId: targetId,
+          token: pickerToken,
+          type: relationshipPickerMessageType,
+        },
+        origin: window.location.origin,
+      }),
     );
 
     await waitFor(() => expect(dialog.textContent).toContain('1 selected'));
     expect(dialog.textContent).toContain('Acme');
+    await user.click(screen.getByRole('button', { name: 'Remove Acme' }));
+    await user.click(screen.getByRole('button', { name: 'Select Acme' }));
     await user.click(screen.getByRole('button', { name: 'Done' }));
     expect(await screen.findByRole('heading', { name: /brand/i })).toBeTruthy();
   });
