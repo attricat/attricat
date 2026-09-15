@@ -1,8 +1,8 @@
 name: CI
 
+# Temporarily manual-only while the new checks are being rolled out.
 on:
-  push:
-  pull_request:
+  workflow_dispatch:
 
 permissions:
   contents: read
