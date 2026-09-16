@@ -15,8 +15,7 @@ These conventions apply to `apps/catalog-web`.
 - Route browser API calls through `src/api/request.ts`: use `request` for Zod-validated JSON, `requestNoContent` for successful empty responses, and `requestText` only for deliberately non-JSON or bounded extension responses. Do not call `fetch` or `apiFetch` from feature API clients.
 - Preserve endpoint-specific semantics by handling `ApiRequestError` at the feature boundary (for example, an unauthenticated session may map HTTP 401 to `null`); all other API failures must retain the shared structured error.
 - Define TanStack Query key factories in a feature-local `query-keys.ts` file.
-- Use those factories for every `queryKey` so equivalent requests share the same
-  cache entry and invalidation can reuse the same key definitions.
+- Use those factories for every `queryKey` and invalidation so equivalent requests share the same cache entry and invalidation can reuse the same key definitions. Define a root key when a feature needs to invalidate all variants of a resource.
 
 ## Components
 
@@ -25,8 +24,11 @@ These conventions apply to `apps/catalog-web`.
 - Keep one route-level page component per feature module. Extract independent
   pages and substantial page sections into descriptive sibling modules rather
   than growing a multi-route page file.
-- Use TanStack Form for form state and Material UI for interface components.
+- Use TanStack Form for submitted field values, validation, reset behavior, and submission handling; reserve React state for non-form UI state such as dialogs, notices, and upload progress. Use Material UI for interface components.
 - Validate API payloads with Zod before using them in the UI.
+- For imperative integrations that retain a callback (for example Monaco commands or browser event listeners), do not capture render-time values that can change. Re-register and dispose the callback when dependencies change, or read current values through refs.
+- A disabled or readonly field must disable every mutation path, including inline chip removal, keyboard shortcuts, and auxiliary actions.
+- Follow the WAI-ARIA tabs pattern: each `Tab` needs a stable `id` and matching `aria-controls`; the active content needs `role="tabpanel"`, a matching `id`, and `aria-labelledby`. Generate IDs from stable indices or `useId`, never user-provided labels.
 - Blueprint responses can include JSON Schema contracts. Use the feature-local
   Ajv helper for immediate form feedback, but treat server-side `422` schema
   validation as authoritative.
