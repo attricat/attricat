@@ -1,13 +1,7 @@
-import {
-  Alert,
-  Box,
-  Button,
-  Stack,
-  TextField,
-  Typography,
-} from '@mui/material';
+import { Alert, Button, Stack, TextField, Typography } from '@mui/material';
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
+import { NarrowPage } from '../../components/CenteredPage';
 import { acceptInvitation } from './api';
 
 type Notice = { severity: 'error' | 'success'; text: string };
@@ -39,7 +33,7 @@ export const AcceptInvitationPage = ({
     }
   };
   return (
-    <Box sx={{ maxWidth: 500, mx: 'auto', p: 3 }}>
+    <NarrowPage>
       <Typography variant="h4">{t('workspace.acceptTitle')}</Typography>
       <Stack spacing={2} sx={{ mt: 3 }}>
         <TextField
@@ -54,6 +48,6 @@ export const AcceptInvitationPage = ({
           {t('workspace.acceptInvitation')}
         </Button>
       </Stack>
-    </Box>
+    </NarrowPage>
   );
 };

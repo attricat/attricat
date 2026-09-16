@@ -8,7 +8,10 @@ import { useTranslation } from 'react-i18next';
 import { PageContainer } from '../../components/PageContainer';
 import { PageHeader } from '../../components/PageHeader';
 import { currentSession } from '../auth/api';
-import { configureToml } from '../blueprints/blueprint-editor-utils';
+import {
+  configureToml,
+  minimumTomlEditorHeight,
+} from '../blueprints/blueprint-editor-utils';
 import { authQueryKeys } from '../auth/query-keys';
 import {
   createWorkflow,
@@ -123,7 +126,7 @@ export const WorkflowEditorPage = ({
                   border: 1,
                   borderColor: 'divider',
                   height: 'calc(100vh - 380px)',
-                  minHeight: 480,
+                  minHeight: minimumTomlEditorHeight,
                 }}
               >
                 <Editor

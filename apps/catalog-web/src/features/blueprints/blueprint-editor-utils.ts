@@ -81,6 +81,8 @@ value_type = "string"
   },
 ] as const;
 
+export const minimumTomlEditorHeight = 480;
+
 export const configureToml = (monaco: Monaco) => {
   if (
     monaco.languages

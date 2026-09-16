@@ -28,7 +28,11 @@ import {
   getBlueprintRevision,
 } from './api';
 import { blueprintQueryKeys } from './query-keys';
-import { blueprintTemplates, configureToml } from './blueprint-editor-utils';
+import {
+  blueprintTemplates,
+  configureToml,
+  minimumTomlEditorHeight,
+} from './blueprint-editor-utils';
 
 type PendingUnsavedAction =
   { templateIndex: number; type: 'replace' } | { type: 'discard' };
@@ -297,7 +301,7 @@ export const BlueprintEditorPage = ({
           border: 1,
           borderColor: 'divider',
           height: 'calc(100vh - 260px)',
-          minHeight: 480,
+          minHeight: minimumTomlEditorHeight,
           mt: 3,
         }}
       >

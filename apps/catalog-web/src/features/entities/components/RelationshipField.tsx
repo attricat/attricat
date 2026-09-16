@@ -13,6 +13,7 @@ import {
   TextField,
   Typography,
 } from '@mui/material';
+import { compactOutlinedActionButtonSx } from '../../../components/CompactOutlinedActionButton';
 import { LoadMoreButton } from '../../../components/LoadMoreButton';
 import { RelationshipSelectorDialog } from '../../../components/RelationshipSelectorDialog';
 import { RelationshipPickerIcon } from '../../../components/system-icons';
@@ -140,14 +141,7 @@ export const RelationshipField = ({
                 onClick={openSelector}
                 size="small"
                 startIcon={<RelationshipPickerIcon fontSize="small" />}
-                sx={{
-                  borderRadius: 999,
-                  flexShrink: 0,
-                  height: 24,
-                  minHeight: 24,
-                  px: 1,
-                  '& .MuiButton-startIcon': { mr: 0.5 },
-                }}
+                sx={compactOutlinedActionButtonSx}
                 variant="outlined"
               >
                 {t('entities.openRelationshipSelector')}

@@ -1,17 +1,13 @@
-import {
-  Alert,
-  Box,
-  Button,
-  Stack,
-  TextField,
-  Typography,
-} from '@mui/material';
+import { Alert, Button, Stack, TextField, Typography } from '@mui/material';
 import { useNavigate } from '@tanstack/react-router';
 import { useState } from 'react';
+import { NarrowPage } from '../../components/CenteredPage';
 import { useTranslation } from 'react-i18next';
 import { completeOnboarding } from './api';
 
 type Notice = { severity: 'error' | 'success'; text: string };
+
+const minimumPasswordLength = 5;
 
 export const PasswordSetupPage = ({
   initialInvitationSecret = '',
@@ -33,7 +29,7 @@ export const PasswordSetupPage = ({
   const [notice, setNotice] = useState<Notice>();
   const submit = async () => {
     try {
-      if (password.length < 12)
+      if (password.length < minimumPasswordLength)
         throw new Error(t('workspace.passwordTooShort'));
       if (password !== confirmPassword)
         throw new Error(t('workspace.passwordMismatch'));
@@ -54,7 +50,7 @@ export const PasswordSetupPage = ({
     }
   };
   return (
-    <Box sx={{ maxWidth: 500, mx: 'auto', p: 3 }}>
+    <NarrowPage>
       <Typography variant="h4">{t('workspace.setupTitle')}</Typography>
       <Stack spacing={2} sx={{ mt: 3 }}>
         <TextField
@@ -90,6 +86,6 @@ export const PasswordSetupPage = ({
           {t('workspace.setPassword')}
         </Button>
       </Stack>
-    </Box>
+    </NarrowPage>
   );
 };

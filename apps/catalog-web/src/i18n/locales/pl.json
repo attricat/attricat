@@ -763,7 +763,7 @@
     "inviteExisting": "Zaproś istniejącego użytkownika",
     "createInvitation": "Utwórz zaproszenie",
     "revokeInvitation": "Cofnij",
-    "passwordTooShort": "Hasło musi mieć co najmniej 12 znaków.",
+    "passwordTooShort": "Hasło musi mieć co najmniej 5 znaków.",
     "passwordMismatch": "Hasła nie są zgodne.",
     "onboardingFailed": "Nie udało się ukończyć konfiguracji",
     "setupTitle": "Skonfiguruj konto obszaru roboczego",

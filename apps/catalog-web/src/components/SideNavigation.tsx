@@ -41,6 +41,12 @@ export const compactNavigationWidth = 88;
 export const expandedNavigationWidth = 264;
 export const managementSidebarWidth = 248;
 
+const compactNavigationLabelSx = {
+  fontSize: '0.65rem',
+  lineHeight: 1.1,
+  textAlign: 'center',
+};
+
 type MobileNavigationSection = 'primary' | 'explore' | 'manage';
 
 const mobileSectionForPathname = (
@@ -255,14 +261,7 @@ export const SideNavigation = ({
                     {createElement(item.icon)}
                   </ListItemIcon>
                   {compact ? (
-                    <Typography
-                      sx={{
-                        fontSize: '0.65rem',
-                        lineHeight: 1.1,
-                        textAlign: 'center',
-                      }}
-                      variant="caption"
-                    >
+                    <Typography sx={compactNavigationLabelSx} variant="caption">
                       {t(item.labelKey)}
                     </Typography>
                   ) : (
@@ -349,14 +348,7 @@ export const SideNavigation = ({
               <ListItemIcon sx={{ minWidth: 0 }}>
                 <ManagementIcon />
               </ListItemIcon>
-              <Typography
-                sx={{
-                  fontSize: '0.65rem',
-                  lineHeight: 1.1,
-                  textAlign: 'center',
-                }}
-                variant="caption"
-              >
+              <Typography sx={compactNavigationLabelSx} variant="caption">
                 {t('navigation.manage')}
               </Typography>
             </ListItemButton>
@@ -556,14 +548,7 @@ export const SideNavigation = ({
                     {createElement(item.icon)}
                   </ListItemIcon>
                   {compact ? (
-                    <Typography
-                      sx={{
-                        fontSize: '0.65rem',
-                        lineHeight: 1.1,
-                        textAlign: 'center',
-                      }}
-                      variant="caption"
-                    >
+                    <Typography sx={compactNavigationLabelSx} variant="caption">
                       {t(item.labelKey)}
                     </Typography>
                   ) : (
@@ -585,14 +570,7 @@ export const SideNavigation = ({
                   <LogoutOutlinedIcon />
                 </ListItemIcon>
                 {compact ? (
-                  <Typography
-                    sx={{
-                      fontSize: '0.65rem',
-                      lineHeight: 1.1,
-                      textAlign: 'center',
-                    }}
-                    variant="caption"
-                  >
+                  <Typography sx={compactNavigationLabelSx} variant="caption">
                     {t('navigation.signOut')}
                   </Typography>
                 ) : (

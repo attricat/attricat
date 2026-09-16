@@ -747,7 +747,7 @@
     "inviteExisting": "Invite existing user",
     "createInvitation": "Create invitation",
     "revokeInvitation": "Revoke",
-    "passwordTooShort": "Password must be at least 12 characters.",
+    "passwordTooShort": "Password must be at least 5 characters.",
     "passwordMismatch": "Passwords do not match.",
     "onboardingFailed": "Could not complete onboarding",
     "setupTitle": "Set up your workspace account",

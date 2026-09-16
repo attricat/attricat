@@ -19,6 +19,7 @@ import type { AttributeContext } from '../contexts/api';
 import { defaultContextCode } from '../contexts/constants';
 import { searchEntities } from '../entities/api';
 import { entityQueryKeys } from '../entities/query-keys';
+import { compactOutlinedActionButtonSx } from '../../components/CompactOutlinedActionButton';
 import { RelationshipSelectorDialog } from '../../components/RelationshipSelectorDialog';
 import {
   RelationshipIcon,
@@ -244,14 +245,7 @@ const Facet = ({
                 onClick={onOpen}
                 size="small"
                 startIcon={<RelationshipPickerIcon fontSize="small" />}
-                sx={{
-                  borderRadius: 999,
-                  flexShrink: 0,
-                  height: 24,
-                  minHeight: 24,
-                  px: 1,
-                  '& .MuiButton-startIcon': { mr: 0.5 },
-                }}
+                sx={compactOutlinedActionButtonSx}
                 variant="outlined"
               >
                 {t('entities.openRelationshipSelector')}

@@ -36,6 +36,8 @@ import {
   TableSortLabel,
   Tooltip,
   Typography,
+  type SxProps,
+  type Theme,
 } from '@mui/material';
 import { LoadMoreButton } from '../../components/LoadMoreButton';
 import { useRef, useState } from 'react';
@@ -61,6 +63,13 @@ import { explorerTableCellContextSchema } from './schemas';
 import { entityQueryKeys } from '../entities/query-keys';
 
 const maximumExplorerCellFrames = 32;
+
+const resultColumnCellSx = (columnId: string): SxProps<Theme> =>
+  columnId === 'display'
+    ? { minWidth: 280 }
+    : columnId === 'id'
+      ? { textAlign: 'center', width: 48 }
+      : {};
 
 const EntityActionsMenu = ({
   blueprintId,
@@ -578,11 +587,7 @@ export const ExplorerResultsTable = ({
                             right: 0,
                             zIndex: 3,
                           }
-                        : header.column.id === 'display'
-                          ? { minWidth: 280 }
-                          : header.column.id === 'id'
-                            ? { textAlign: 'center', width: 48 }
-                            : {}
+                        : resultColumnCellSx(header.column.id)
                     }
                   >
                     {header.isPlaceholder
@@ -646,11 +651,7 @@ export const ExplorerResultsTable = ({
                               right: 0,
                               zIndex: 1,
                             }
-                          : cell.column.id === 'display'
-                            ? { minWidth: 280 }
-                            : cell.column.id === 'id'
-                              ? { textAlign: 'center', width: 48 }
-                              : {}
+                          : resultColumnCellSx(cell.column.id)
                       }
                     >
                       {flexRender(

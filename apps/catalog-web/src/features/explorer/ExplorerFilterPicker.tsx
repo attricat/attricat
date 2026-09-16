@@ -10,6 +10,7 @@ import {
 import { useState, type KeyboardEvent } from 'react';
 import { useQueries } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
+import { compactOutlinedActionButtonSx } from '../../components/CompactOutlinedActionButton';
 import { RelationshipSelectorDialog } from '../../components/RelationshipSelectorDialog';
 import { getBlueprintByCode, type Attribute } from '../entities/api';
 import { entityQueryKeys } from '../entities/query-keys';
@@ -248,14 +249,7 @@ export const ExplorerFilterPicker = ({
           onClick={openNewFilter}
           size="small"
           startIcon={<AddIcon fontSize="small" />}
-          sx={{
-            borderRadius: 999,
-            flexShrink: 0,
-            height: 24,
-            minHeight: 24,
-            px: 1,
-            '& .MuiButton-startIcon': { mr: 0.5 },
-          }}
+          sx={compactOutlinedActionButtonSx}
           variant="outlined"
         >
           {t('explorer.addAttributeFilter')}

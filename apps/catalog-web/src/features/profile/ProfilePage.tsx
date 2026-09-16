@@ -4,6 +4,7 @@ import { Link } from '@tanstack/react-router';
 import { useTranslation } from 'react-i18next';
 import { currentSession } from '../auth/api';
 import { authQueryKeys } from '../auth/query-keys';
+import { SettingsPage } from '../../components/CenteredPage';
 import { LanguageSwitcher } from '../../components/LanguageSwitcher';
 import { PersonalTokens } from './PersonalTokens';
 
@@ -15,7 +16,7 @@ export const ProfilePage = () => {
   });
   const account = session.data;
   return (
-    <Box sx={{ maxWidth: 1000, mx: 'auto', p: 3 }}>
+    <SettingsPage>
       <Typography variant="h4">{t('profile.title')}</Typography>
       {session.isError && (
         <Alert severity="error">{session.error.message}</Alert>
@@ -75,6 +76,6 @@ export const ProfilePage = () => {
           />
         </Box>
       </Stack>
-    </Box>
+    </SettingsPage>
   );
 };

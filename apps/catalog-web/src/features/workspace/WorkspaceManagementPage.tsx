@@ -1,6 +1,7 @@
 import { useQuery } from '@tanstack/react-query';
 import { Link } from '@tanstack/react-router';
 import { Alert, Box, Button, Typography } from '@mui/material';
+import { SettingsPage } from '../../components/CenteredPage';
 import { useTranslation } from 'react-i18next';
 import { currentSession } from '../auth/api';
 import { authQueryKeys } from '../auth/query-keys';
@@ -52,7 +53,7 @@ export const WorkspaceManagementPage = ({
   const capabilities = session.data?.capabilities;
 
   return (
-    <Box sx={{ maxWidth: 1000, mx: 'auto', p: 3 }}>
+    <SettingsPage>
       <Typography variant="h4">{t('workspace.title')}</Typography>
       <Typography color="text.secondary" sx={{ mt: 1 }}>
         {t('workspace.active', {
@@ -106,6 +107,6 @@ export const WorkspaceManagementPage = ({
           workspaceId={session.data?.workspace_id}
         />
       )}
-    </Box>
+    </SettingsPage>
   );
 };

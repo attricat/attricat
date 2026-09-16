@@ -18,6 +18,7 @@ import {
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { copyToClipboard } from '../../components/clipboard';
+import { SettingsPage } from '../../components/CenteredPage';
 import { useToast } from '../../components/useToast';
 import { currentSession } from '../auth/api';
 import { authQueryKeys } from '../auth/query-keys';
@@ -136,17 +137,17 @@ export const PersonalTokensPage = () => {
 
   if (!canManage) {
     return (
-      <Box sx={{ maxWidth: 1000, mx: 'auto', p: 3 }}>
+      <SettingsPage>
         <Typography variant="h4">{t('profile.createToken')}</Typography>
         <Alert severity="info" sx={{ mt: 3 }}>
           {t('profile.tokenUnavailable')}
         </Alert>
-      </Box>
+      </SettingsPage>
     );
   }
 
   return (
-    <Box sx={{ maxWidth: 1000, mx: 'auto', p: 3 }}>
+    <SettingsPage>
       <Typography variant="h4">{t('profile.createToken')}</Typography>
       <SecretDialog
         onClose={() =>
@@ -258,6 +259,6 @@ export const PersonalTokensPage = () => {
           </Button>
         </Stack>
       </Paper>
-    </Box>
+    </SettingsPage>
   );
 };

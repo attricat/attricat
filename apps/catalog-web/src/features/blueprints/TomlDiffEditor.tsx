@@ -1,27 +1,6 @@
-import { DiffEditor, type Monaco } from '@monaco-editor/react';
+import { DiffEditor } from '@monaco-editor/react';
 import { Box, Typography } from '@mui/material';
-
-const configureToml = (monaco: Monaco) => {
-  if (
-    monaco.languages
-      .getLanguages()
-      .some((language: { id: string }) => language.id === 'toml')
-  )
-    return;
-  monaco.languages.register({ id: 'toml' });
-  monaco.languages.setMonarchTokensProvider('toml', {
-    tokenizer: {
-      root: [
-        [/^\s*#.*$/, 'comment'],
-        [/\[[^\]]+\]/, 'keyword'],
-        [/[A-Za-z0-9_-]+(?=\s*=)/, 'type.identifier'],
-        [/"([^"\\]|\\.)*"|'([^'\\]|\\.)*'/, 'string'],
-        [/\b(true|false)\b/, 'keyword'],
-        [/-?\d+(\.\d+)?/, 'number'],
-      ],
-    },
-  });
-};
+import { configureToml } from './blueprint-editor-utils';
 
 export const TomlDiffEditor = ({
   original,

@@ -1,10 +1,11 @@
-import { Button, Paper, Stack, TextField, Typography } from '@mui/material';
+import { Button, Stack, TextField, Typography } from '@mui/material';
 import { useForm } from '@tanstack/react-form';
 import { useQueryClient } from '@tanstack/react-query';
 import { Link, useNavigate } from '@tanstack/react-router';
 import { type ReactNode, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { LanguageSwitcher } from '../../components/LanguageSwitcher';
+import { AuthFormShell, authFormWidth } from './AuthFormShell';
 import { discoverWorkspace, login } from './api';
 import { authQueryKeys } from './query-keys';
 
@@ -139,21 +140,14 @@ const LoginShell = ({
   children: ReactNode;
   onSubmit: () => void;
 }) => (
-  <Stack
-    sx={{ alignItems: 'center', justifyContent: 'center', minHeight: '100dvh' }}
+  <AuthFormShell
+    header={
+      <Stack sx={{ alignItems: 'flex-end', mb: 2, width: authFormWidth }}>
+        <LanguageSwitcher />
+      </Stack>
+    }
+    onSubmit={onSubmit}
   >
-    <Stack sx={{ alignItems: 'flex-end', mb: 2, width: 360 }}>
-      <LanguageSwitcher />
-    </Stack>
-    <Paper
-      component="form"
-      onSubmit={(event) => {
-        event.preventDefault();
-        onSubmit();
-      }}
-      sx={{ p: 4, width: 360 }}
-    >
-      <Stack spacing={2}>{children}</Stack>
-    </Paper>
-  </Stack>
+    {children}
+  </AuthFormShell>
 );
