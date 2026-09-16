@@ -13,6 +13,8 @@ import {
   type LegacyColumnDef,
   useLegacyTable,
 } from '@tanstack/react-table/legacy';
+import ArrowDownwardIcon from '@mui/icons-material/ArrowDownward';
+import ArrowUpwardIcon from '@mui/icons-material/ArrowUpward';
 import MoreVertIcon from '@mui/icons-material/MoreVert';
 import SettingsIcon from '@mui/icons-material/Settings';
 import {
@@ -76,6 +78,7 @@ import {
 } from './column-preferences';
 
 const maximumExplorerCellFrames = 32;
+const columnPreferencesListMaxHeight = 480;
 
 const resultColumnCellSx = (columnId: string): SxProps<Theme> =>
   columnId === 'display'
@@ -209,52 +212,66 @@ const ExplorerColumnPreferencesDialog = ({
     <Dialog fullWidth maxWidth="sm" onClose={onClose} open={open}>
       <DialogTitle>{t('explorer.columnPreferences')}</DialogTitle>
       <DialogContent>
-        <List aria-label={t('explorer.columns')}>
-          {preferences.order.map((id, index) => (
-            <ListItem
-              key={id}
-              secondaryAction={
-                <>
-                  <Button
-                    disabled={index === 0}
-                    onClick={() => move(id, -1)}
-                    size="small"
-                  >
-                    {t('explorer.moveColumnUp')}
-                  </Button>
-                  <Button
-                    disabled={index === preferences.order.length - 1}
-                    onClick={() => move(id, 1)}
-                    size="small"
-                  >
-                    {t('explorer.moveColumnDown')}
-                  </Button>
-                </>
-              }
-            >
-              <Checkbox
-                checked={!preferences.hidden.includes(id)}
-                edge="start"
-                slotProps={{
-                  input: {
-                    'aria-label': t('explorer.showColumn', {
-                      column: labels.get(id),
-                    }),
-                  },
-                }}
-                onChange={() =>
-                  onChange({
-                    ...preferences,
-                    hidden: preferences.hidden.includes(id)
-                      ? preferences.hidden.filter((hidden) => hidden !== id)
-                      : [...preferences.hidden, id],
-                  })
+        <Box
+          sx={{ maxHeight: columnPreferencesListMaxHeight, overflowY: 'auto' }}
+        >
+          <List aria-label={t('explorer.columns')}>
+            {preferences.order.map((id, index) => (
+              <ListItem
+                key={id}
+                secondaryAction={
+                  <>
+                    <Tooltip title={t('explorer.moveColumnUp')}>
+                      <span>
+                        <IconButton
+                          aria-label={t('explorer.moveColumnUp')}
+                          disabled={index === 0}
+                          onClick={() => move(id, -1)}
+                          size="small"
+                        >
+                          <ArrowUpwardIcon />
+                        </IconButton>
+                      </span>
+                    </Tooltip>
+                    <Tooltip title={t('explorer.moveColumnDown')}>
+                      <span>
+                        <IconButton
+                          aria-label={t('explorer.moveColumnDown')}
+                          disabled={index === preferences.order.length - 1}
+                          onClick={() => move(id, 1)}
+                          size="small"
+                        >
+                          <ArrowDownwardIcon />
+                        </IconButton>
+                      </span>
+                    </Tooltip>
+                  </>
                 }
-              />
-              <ListItemText primary={labels.get(id) ?? id} />
-            </ListItem>
-          ))}
-        </List>
+              >
+                <Checkbox
+                  checked={!preferences.hidden.includes(id)}
+                  edge="start"
+                  slotProps={{
+                    input: {
+                      'aria-label': t('explorer.showColumn', {
+                        column: labels.get(id),
+                      }),
+                    },
+                  }}
+                  onChange={() =>
+                    onChange({
+                      ...preferences,
+                      hidden: preferences.hidden.includes(id)
+                        ? preferences.hidden.filter((hidden) => hidden !== id)
+                        : [...preferences.hidden, id],
+                    })
+                  }
+                />
+                <ListItemText primary={labels.get(id) ?? id} />
+              </ListItem>
+            ))}
+          </List>
+        </Box>
       </DialogContent>
       <DialogActions>
         <Button color="inherit" onClick={onClear}>
