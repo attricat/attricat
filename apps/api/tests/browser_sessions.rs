@@ -130,6 +130,43 @@ async fn login_rotates_sessions_and_csrf_protects_mutations(pool: PgPool) {
 }
 
 #[sqlx::test]
+async fn password_reset_requests_are_rate_limited_without_disclosing_or_issuing_more_tokens(
+    pool: PgPool,
+) {
+    let (base_url, server) = start_session_server(pool.clone()).await;
+    let hash = hash_password(&Password::new("correct horse battery staple")).unwrap();
+    sqlx::query("INSERT INTO local_password_credentials (user_id, password_hash) VALUES ($1, $2)")
+        .bind(OWNER_ID.parse::<Uuid>().unwrap())
+        .bind(hash.as_phc())
+        .execute(&pool)
+        .await
+        .unwrap();
+    sqlx::query("UPDATE users SET email_verified_at = clock_timestamp() WHERE id = $1")
+        .bind(OWNER_ID.parse::<Uuid>().unwrap())
+        .execute(&pool)
+        .await
+        .unwrap();
+    let client = Client::new();
+    for _ in 0..6 {
+        let response = client
+            .post(format!("{base_url}/auth/password-reset"))
+            .json(&json!({ "email": "api-test-owner@example.test" }))
+            .send()
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::NO_CONTENT);
+    }
+    let issued: i64 = sqlx::query_scalar(
+        "SELECT count(*) FROM user_lifecycle_action_tokens WHERE purpose = 'password_reset'",
+    )
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert_eq!(issued, 5);
+    server.abort();
+}
+
+#[sqlx::test]
 async fn session_workspace_selects_the_rls_catalog_pool(pool: PgPool) {
     let (base_url, server) = start_session_server(pool.clone()).await;
     let owner_id = OWNER_ID.parse::<Uuid>().unwrap();

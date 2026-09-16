@@ -86,6 +86,14 @@ pub(super) async fn request_password_reset(
     Json(request): Json<PasswordResetRequest>,
 ) -> Result<axum::http::StatusCode, ApiError> {
     let email = request.email.trim().to_lowercase();
+    let rate_key = digest_login_key(&email);
+    if !state
+        .repository
+        .reserve_password_reset_attempt(&rate_key)
+        .await?
+    {
+        return Ok(axum::http::StatusCode::NO_CONTENT);
+    }
     let credential = state.repository.local_login_credential(&email).await?;
     let Some(credential) =
         credential.filter(|credential| credential.active && credential.email_verified)

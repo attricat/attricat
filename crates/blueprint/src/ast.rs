@@ -100,7 +100,7 @@ pub enum ViewDefinition {
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct TableColumn {
-    /// A local scalar field or exactly one `relationship.scalar_field` hop.
+    /// A local scalar field or up to three relationship hops ending in a scalar field.
     pub field: String,
     #[serde(default)]
     pub label: Option<String>,

@@ -69,6 +69,21 @@ impl CatalogRepository {
         Ok(allowed)
     }
 
+    pub async fn reserve_password_reset_attempt(
+        &self,
+        key: &SessionDigest,
+    ) -> Result<bool, RepositoryError> {
+        let mut tx = self.pool.begin().await?;
+        let allowed = sqlx::query_scalar::<_, bool>(
+            "INSERT INTO password_reset_rate_limits (key_digest, window_started_at, attempts) VALUES ($1, clock_timestamp(), 1) ON CONFLICT (key_digest) DO UPDATE SET attempts = CASE WHEN password_reset_rate_limits.window_started_at <= clock_timestamp() - interval '15 minutes' THEN 1 ELSE password_reset_rate_limits.attempts + 1 END, window_started_at = CASE WHEN password_reset_rate_limits.window_started_at <= clock_timestamp() - interval '15 minutes' THEN clock_timestamp() ELSE password_reset_rate_limits.window_started_at END RETURNING attempts <= 5",
+        )
+        .bind(key.as_ref())
+        .fetch_one(&mut *tx)
+        .await?;
+        self.commit_mutation(tx).await?;
+        Ok(allowed)
+    }
+
     pub async fn local_login_credential(
         &self,
         email: &str,

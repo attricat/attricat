@@ -13,6 +13,8 @@ use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 use std::time::Duration;
 
+const MAX_DATA_HEALTH_CACHE_ENTRIES: usize = 256;
+
 pub(super) async fn health() -> Json<Value> {
     Json(json!({ "status": "ok" }))
 }
@@ -39,14 +41,14 @@ where
     T: Serialize,
 {
     let (value, cache_status) = if state.data_health_cache_ttl_seconds > 0 {
-        if let Some((created_at, value)) = state.data_health_cache.lock().await.get(&key).cloned() {
-            if created_at.elapsed() < Duration::from_secs(state.data_health_cache_ttl_seconds) {
-                (value, "HIT")
-            } else {
-                let value =
-                    serde_json::to_value(load.await?).expect("data health response serializes");
-                (value, "MISS")
-            }
+        let ttl = Duration::from_secs(state.data_health_cache_ttl_seconds);
+        let cached = {
+            let mut cache = state.data_health_cache.lock().await;
+            cache.retain(|_, (created_at, _)| created_at.elapsed() < ttl);
+            cache.get(&key).cloned()
+        };
+        if let Some((_, value)) = cached {
+            (value, "HIT")
         } else {
             let value = serde_json::to_value(load.await?).expect("data health response serializes");
             (value, "MISS")
@@ -56,11 +58,16 @@ where
         (value, "BYPASS")
     };
     if state.data_health_cache_ttl_seconds > 0 && cache_status == "MISS" {
-        state
-            .data_health_cache
-            .lock()
-            .await
-            .insert(key, (std::time::Instant::now(), value.clone()));
+        let mut cache = state.data_health_cache.lock().await;
+        if cache.len() >= MAX_DATA_HEALTH_CACHE_ENTRIES
+            && let Some(oldest_key) = cache
+                .iter()
+                .min_by_key(|(_, (created_at, _))| *created_at)
+                .map(|(key, _)| key.clone())
+        {
+            cache.remove(&oldest_key);
+        }
+        cache.insert(key, (std::time::Instant::now(), value.clone()));
     }
     metrics::counter!("catalog_data_health_cache_total", "status" => cache_status).increment(1);
     let mut response = Json(value).into_response();

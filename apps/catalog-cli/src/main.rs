@@ -2715,13 +2715,19 @@ async fn migrate_entities(
     if size == 0 {
         return Err(CliError::Input("--size must be positive".to_owned()));
     }
-    let mut cursor = None;
+    let mut cursor: Option<String> = None;
+    let mut seen_cursors = std::collections::HashSet::new();
     let mut migrated = 0;
     let mut ready = 0;
     let mut needs_input = Vec::new();
     let mut blocked = Vec::new();
     let mut failed = Vec::new();
     loop {
+        if let Some(current_cursor) = cursor.as_ref()
+            && !seen_cursors.insert(current_cursor.clone())
+        {
+            return Err(CliError::InvalidResponse);
+        }
         let page = request_value(
             client,
             server,
@@ -3613,6 +3619,46 @@ value = "Blue shirt"
             1
         );
         assert_eq!(migrations.load(Ordering::SeqCst), 0);
+        server.abort();
+    }
+
+    #[tokio::test]
+    async fn migrate_bulk_rejects_a_repeated_next_cursor() {
+        use std::sync::{
+            Arc,
+            atomic::{AtomicUsize, Ordering},
+        };
+
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let address = listener.local_addr().unwrap();
+        let requests = Arc::new(AtomicUsize::new(0));
+        let server = tokio::spawn({
+            let requests = requests.clone();
+            async move {
+                let app = axum::Router::new().route(
+                    "/v1/entities/search",
+                    axum::routing::post(move || {
+                        let requests = requests.clone();
+                        async move {
+                            requests.fetch_add(1, Ordering::SeqCst);
+                            axum::Json(json!({ "items": [], "next_cursor": "repeated" }))
+                        }
+                    }),
+                );
+                axum::serve(listener, app).await.unwrap();
+            }
+        });
+        let result = migrate_entities(
+            &Client::new(),
+            &Url::parse(&format!("http://{address}")).unwrap(),
+            "product",
+            1,
+            25,
+            false,
+        )
+        .await;
+        assert!(matches!(result, Err(CliError::InvalidResponse)));
+        assert_eq!(requests.load(Ordering::SeqCst), 2);
         server.abort();
     }
 
