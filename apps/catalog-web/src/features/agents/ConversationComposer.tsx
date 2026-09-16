@@ -1,5 +1,6 @@
 import AttachFileOutlinedIcon from '@mui/icons-material/AttachFileOutlined';
 import ArrowUpwardIcon from '@mui/icons-material/ArrowUpward';
+import { useForm } from '@tanstack/react-form';
 import { useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useMutation } from '@tanstack/react-query';
@@ -30,7 +31,7 @@ export const ConversationComposer = ({
   onSent,
 }: ConversationComposerProps) => {
   const { t } = useTranslation();
-  const [content, setContent] = useState('');
+  const form = useForm({ defaultValues: { content: '' } });
   const [attachments, setAttachments] = useState<File[]>([]);
   const [uploadedAttachmentIds, setUploadedAttachmentIds] = useState<string[]>(
     [],
@@ -48,11 +49,15 @@ export const ConversationComposer = ({
         attachmentIds = uploaded.files.map((file) => file.id);
         setUploadedAttachmentIds(attachmentIds);
       }
-      return sendMessage(conversationId, content, attachmentIds);
+      return sendMessage(
+        conversationId,
+        form.state.values.content,
+        attachmentIds,
+      );
     },
     onMutate: () => onSendingChange(true),
     onSuccess: () => {
-      setContent('');
+      form.reset();
       setAttachments([]);
       setUploadedAttachmentIds([]);
       onSent();
@@ -61,7 +66,10 @@ export const ConversationComposer = ({
   });
 
   const submitMessage = () => {
-    if ((content.trim() || attachments.length) && !send.isPending) {
+    if (
+      (form.state.values.content.trim() || attachments.length) &&
+      !send.isPending
+    ) {
       send.mutate();
     }
   };
@@ -92,28 +100,32 @@ export const ConversationComposer = ({
           p: 0.75,
         }}
       >
-        <TextField
-          fullWidth
-          hiddenLabel
-          slotProps={{ htmlInput: { 'aria-label': t('agents.message') } }}
-          maxRows={8}
-          minRows={1}
-          multiline
-          onChange={(event) => setContent(event.target.value)}
-          onKeyDown={(event) => {
-            if (
-              event.key === 'Enter' &&
-              !event.shiftKey &&
-              !event.nativeEvent.isComposing
-            ) {
-              event.preventDefault();
-              submitMessage();
-            }
-          }}
-          placeholder={t('agents.messagePlaceholder')}
-          sx={{ '& .MuiOutlinedInput-notchedOutline': { border: 0 } }}
-          value={content}
-        />
+        <form.Field name="content">
+          {(field) => (
+            <TextField
+              fullWidth
+              hiddenLabel
+              slotProps={{ htmlInput: { 'aria-label': t('agents.message') } }}
+              maxRows={8}
+              minRows={1}
+              multiline
+              onChange={(event) => field.handleChange(event.target.value)}
+              onKeyDown={(event) => {
+                if (
+                  event.key === 'Enter' &&
+                  !event.shiftKey &&
+                  !event.nativeEvent.isComposing
+                ) {
+                  event.preventDefault();
+                  submitMessage();
+                }
+              }}
+              placeholder={t('agents.messagePlaceholder')}
+              sx={{ '& .MuiOutlinedInput-notchedOutline': { border: 0 } }}
+              value={field.state.value}
+            />
+          )}
+        </form.Field>
         <input
           hidden
           multiple
@@ -164,7 +176,8 @@ export const ConversationComposer = ({
                 aria-label={t('agents.send')}
                 color="primary"
                 disabled={
-                  (!content.trim() && !attachments.length) || send.isPending
+                  (!form.state.values.content.trim() && !attachments.length) ||
+                  send.isPending
                 }
                 type="submit"
               >

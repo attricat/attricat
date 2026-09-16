@@ -1,86 +1,19 @@
 import { z } from 'zod';
 import { request, requestNoContent } from '../../api/request';
+import {
+  detailSchema,
+  discoveredSchema,
+  installationSchema,
+  registryDetailsSchema,
+} from './schemas';
 
-const jsonValue: z.ZodType<unknown> = z.lazy(() =>
-  z.union([
-    z.string(),
-    z.number(),
-    z.boolean(),
-    z.null(),
-    z.array(jsonValue),
-    z.record(z.string(), jsonValue),
-  ]),
-);
-const grantSchema = z.object({
-  grant_kind: z.enum([
-    'capability',
-    'host_permission',
-    'event_publish',
-    'event_subscribe',
-  ]),
-  grant_id: z.string(),
-  granted_at: z.string(),
-});
-const lifecycleSchema = z.object({
-  id: z.uuid(),
-  operation: z.string(),
-  prior_state: z.string().nullable(),
-  new_state: z.string().nullable(),
-  outcome: z.string(),
-  actor_user_id: z.uuid().nullable(),
-  actor_token_id: z.uuid().nullable(),
-  source: z.string().nullable(),
-  diagnostics: jsonValue,
-  created_at: z.string(),
-});
-export const installationSchema = z.object({
-  id: z.uuid(),
-  extension_id: z.string(),
-  installed_release_id: z.uuid(),
-  state: z.enum(['disabled', 'enabled', 'quarantined']),
-  configuration: jsonValue,
-  configuration_version: z.number().int().nullable(),
-  created_at: z.string(),
-  updated_at: z.string(),
-  version: z.string(),
-  manifest: jsonValue,
-  manifest_sha256: z.string(),
-  source: z.string(),
-});
-const detailSchema = z.object({
-  installation: installationSchema,
-  grants: z.array(grantSchema),
-  lifecycle: z.array(lifecycleSchema),
-});
-const discoveredSchema = z.object({
-  registry_source: z.string(),
-  id: z.string(),
-  repository: z.string(),
-  name: z.string(),
-  description: z.string(),
-  icon: z.string().nullable(),
-});
-const releaseSchema = z.object({
-  source: z.string(),
-  release_id: z.number().int(),
-  tag_name: z.string(),
-  name: z.string(),
-  published_at: z.string().nullable(),
-  asset: z.object({
-    id: z.number().int(),
-    name: z.string(),
-    download_url: z.string(),
-  }),
-});
-const registryDetailsSchema = z.object({
-  extension: discoveredSchema,
-  readme: z.string(),
-  releases: z.array(releaseSchema),
-});
-export type ExtensionInstallation = z.infer<typeof installationSchema>;
-export type ExtensionDetail = z.infer<typeof detailSchema>;
-export type DiscoveredExtension = z.infer<typeof discoveredSchema>;
-export type RegistryDetails = z.infer<typeof registryDetailsSchema>;
+export {
+  installationSchema,
+  type DiscoveredExtension,
+  type ExtensionDetail,
+  type ExtensionInstallation,
+  type RegistryDetails,
+} from './schemas';
 
 const body = (value: unknown, method = 'POST'): RequestInit => ({
   method,

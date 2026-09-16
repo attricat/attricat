@@ -149,12 +149,15 @@ export const RelationshipField = ({
             }
             ids={selectedIds}
             labels={selectionLabels}
-            onRemove={(id) =>
-              onChange(
-                selectedIds
-                  .filter((selectedId) => selectedId !== id)
-                  .join(', '),
-              )
+            onRemove={
+              disabled
+                ? undefined
+                : (id) =>
+                    onChange(
+                      selectedIds
+                        .filter((selectedId) => selectedId !== id)
+                        .join(', '),
+                    )
             }
           />
         </Stack>

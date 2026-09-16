@@ -37,6 +37,7 @@ import { BlueprintVersionMetadata } from './BlueprintVersionMetadata';
 import { ExtensionOutlet } from '../extensions/ExtensionOutlet';
 import { listPublicationChannels } from '../exports/api';
 import { exportQueryKeys } from '../exports/query-keys';
+import { entityQueryKeys } from '../entities/query-keys';
 
 const TomlDiffEditor = lazy(() =>
   import('./TomlDiffEditor').then(({ TomlDiffEditor }) => ({
@@ -100,7 +101,7 @@ export const BlueprintDetailPage = ({
     onSuccess: async () => {
       setEntityPublicationOpen(false);
       await queryClient.invalidateQueries({
-        queryKey: ['entity-publications'],
+        queryKey: entityQueryKeys.publications(),
       });
     },
   });
@@ -258,36 +259,62 @@ export const BlueprintDetailPage = ({
             variant="scrollable"
           >
             <Tab
+              aria-controls="blueprint-detail-tabpanel-0"
+              id="blueprint-detail-tab-0"
               label={t('blueprints.versionMetadata', {
                 version: leftVersion,
               })}
             />
-            <Tab label={t('blueprints.revisionHistory')} />
-            <Tab label={t('blueprints.compareDefinitions')} />
-          </Tabs>
-          {pageTab === 1 && (
-            <RevisionHistory
-              blueprintId={blueprintId}
-              revisions={revisionItems}
+            <Tab
+              aria-controls="blueprint-detail-tabpanel-1"
+              id="blueprint-detail-tab-1"
+              label={t('blueprints.revisionHistory')}
             />
-          )}
+            <Tab
+              aria-controls="blueprint-detail-tabpanel-2"
+              id="blueprint-detail-tab-2"
+              label={t('blueprints.compareDefinitions')}
+            />
+          </Tabs>
           {pageTab === 0 && left.data && (
-            <BlueprintVersionMetadata blueprint={left.data} />
+            <Box
+              aria-labelledby="blueprint-detail-tab-0"
+              id="blueprint-detail-tabpanel-0"
+              role="tabpanel"
+            >
+              <BlueprintVersionMetadata blueprint={left.data} />
+              <Box component="aside" sx={{ mt: 3 }}>
+                <ExtensionOutlet
+                  context={{
+                    context_version: 1,
+                    blueprint_id: left.data.blueprint.id,
+                    blueprint_version: left.data.blueprint.version,
+                  }}
+                  outlet="blueprint_detail_panel"
+                />
+              </Box>
+            </Box>
           )}
-          {pageTab === 0 && left.data && (
-            <Box component="aside" sx={{ mt: 3 }}>
-              <ExtensionOutlet
-                context={{
-                  context_version: 1,
-                  blueprint_id: left.data.blueprint.id,
-                  blueprint_version: left.data.blueprint.version,
-                }}
-                outlet="blueprint_detail_panel"
+          {pageTab === 1 && (
+            <Box
+              aria-labelledby="blueprint-detail-tab-1"
+              id="blueprint-detail-tabpanel-1"
+              role="tabpanel"
+            >
+              <RevisionHistory
+                blueprintId={blueprintId}
+                revisions={revisionItems}
               />
             </Box>
           )}
           {pageTab === 2 && (
-            <Paper component="section" sx={{ mt: 3, p: 2.5 }}>
+            <Paper
+              aria-labelledby="blueprint-detail-tab-2"
+              component="section"
+              id="blueprint-detail-tabpanel-2"
+              role="tabpanel"
+              sx={{ mt: 3, p: 2.5 }}
+            >
               <Typography component="h2" variant="h6">
                 {t('blueprints.compareDefinitions')}
               </Typography>

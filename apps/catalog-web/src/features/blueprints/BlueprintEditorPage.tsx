@@ -17,7 +17,7 @@ import {
   Stack,
   Typography,
 } from '@mui/material';
-import { useEffect, useState } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { PageContainer } from '../../components/PageContainer';
 import { PageHeader } from '../../components/PageHeader';
@@ -65,6 +65,13 @@ export const BlueprintEditorPage = ({
   const [editedDefinition, setEditedDefinition] = useState<string | null>(null);
   const definition = editedDefinition ?? initialDefinition;
   const isDirty = definition !== initialDefinition;
+  const definitionRef = useRef(definition);
+  const isDirtyRef = useRef(isDirty);
+  const savePendingRef = useRef(false);
+  useLayoutEffect(() => {
+    definitionRef.current = definition;
+    isDirtyRef.current = isDirty;
+  }, [definition, isDirty]);
   useEffect(() => {
     const warnBeforeUnload = (event: BeforeUnloadEvent) => {
       if (!isDirty) return;
@@ -76,7 +83,7 @@ export const BlueprintEditorPage = ({
   }, [isDirty]);
 
   const save = useMutation({
-    mutationFn: () =>
+    mutationFn: ({ definition }: { definition: string }) =>
       blueprintId
         ? createBlueprintRevision(blueprintId, definition)
         : createBlueprint(definition),
@@ -95,6 +102,10 @@ export const BlueprintEditorPage = ({
       });
     },
   });
+
+  useLayoutEffect(() => {
+    savePendingRef.current = save.isPending;
+  }, [save.isPending]);
 
   const applyTemplate = (index: number) => {
     setTemplateIndex(index);
@@ -182,7 +193,7 @@ export const BlueprintEditorPage = ({
               source.isError ||
               Boolean(blueprintId && !isDirty)
             }
-            onClick={() => save.mutate()}
+            onClick={() => save.mutate({ definition })}
             variant="contained"
           >
             {save.isPending
@@ -315,7 +326,12 @@ export const BlueprintEditorPage = ({
             editor.addCommand(
               monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyS,
               () => {
-                if (!save.isPending && (!blueprintId || isDirty)) save.mutate();
+                if (
+                  !savePendingRef.current &&
+                  (!blueprintId || isDirtyRef.current)
+                ) {
+                  save.mutate({ definition: definitionRef.current });
+                }
               },
             );
           }}

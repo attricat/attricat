@@ -26,8 +26,9 @@ export const entityQueryKeys = {
   form: (entityId: string) => ['entity-form', entityId] as const,
   preview: (entityId: string) => ['entity-preview', entityId] as const,
   changes: (entityId: string) => ['entity-changes', entityId] as const,
-  publications: (entityId: string) =>
-    ['entity-publications', entityId] as const,
+  publications: () => ['entity-publications'] as const,
+  publication: (entityId: string) =>
+    [...entityQueryKeys.publications(), entityId] as const,
   migrationPreview: (entityId: string) =>
     ['entity-migration-preview', entityId] as const,
   resolvedPreview: (entityId: string, contextId: string | undefined) =>

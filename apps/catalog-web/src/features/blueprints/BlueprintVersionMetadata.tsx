@@ -40,17 +40,44 @@ export const BlueprintVersionMetadata = ({
         variant="scrollable"
       >
         <Tab
+          aria-controls="blueprint-metadata-tabpanel-0"
+          id="blueprint-metadata-tab-0"
           label={t('blueprints.attributes', {
             count: blueprint.attributes.length,
           })}
         />
-        <Tab label={t('blueprints.views')} />
-        <Tab label={t('blueprints.viewDefinition')} />
-        <Tab label={t('blueprints.entitySchema')} />
-        <Tab label={t('blueprints.includes')} />
-        <Tab label={t('blueprints.publicationPolicy')} />
+        <Tab
+          aria-controls="blueprint-metadata-tabpanel-1"
+          id="blueprint-metadata-tab-1"
+          label={t('blueprints.views')}
+        />
+        <Tab
+          aria-controls="blueprint-metadata-tabpanel-2"
+          id="blueprint-metadata-tab-2"
+          label={t('blueprints.viewDefinition')}
+        />
+        <Tab
+          aria-controls="blueprint-metadata-tabpanel-3"
+          id="blueprint-metadata-tab-3"
+          label={t('blueprints.entitySchema')}
+        />
+        <Tab
+          aria-controls="blueprint-metadata-tabpanel-4"
+          id="blueprint-metadata-tab-4"
+          label={t('blueprints.includes')}
+        />
+        <Tab
+          aria-controls="blueprint-metadata-tabpanel-5"
+          id="blueprint-metadata-tab-5"
+          label={t('blueprints.publicationPolicy')}
+        />
       </Tabs>
-      <Box sx={{ mt: 2 }}>
+      <Box
+        aria-labelledby={`blueprint-metadata-tab-${tab}`}
+        id={`blueprint-metadata-tabpanel-${tab}`}
+        role="tabpanel"
+        sx={{ mt: 2 }}
+      >
         {tab === 4 && (
           <JsonMetadata
             label={t('blueprints.includes')}

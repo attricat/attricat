@@ -11,7 +11,7 @@ import {
   Typography,
 } from '@mui/material';
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
-import { createElement, useState, type ReactNode } from 'react';
+import { createElement, useId, useState, type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
   viewBlockTypes,
@@ -118,6 +118,7 @@ const ViewTabs = ({
   render: (nodes: ViewNode[]) => ReactNode;
 }) => {
   const [value, setValue] = useState(0);
+  const tabId = useId();
   return (
     <>
       <Tabs
@@ -125,11 +126,25 @@ const ViewTabs = ({
         value={value}
         variant="scrollable"
       >
-        {tabs.map((tab) => (
-          <Tab key={tab.label} label={tab.label} />
+        {tabs.map((tab, index) => (
+          <Tab
+            aria-controls={`${tabId}-tabpanel-${index}`}
+            id={`${tabId}-tab-${index}`}
+            key={tab.label}
+            label={tab.label}
+          />
         ))}
       </Tabs>
-      {tabs[value] && <Box sx={{ pt: 2 }}>{render(tabs[value].children)}</Box>}
+      {tabs[value] && (
+        <Box
+          aria-labelledby={`${tabId}-tab-${value}`}
+          id={`${tabId}-tabpanel-${value}`}
+          role="tabpanel"
+          sx={{ pt: 2 }}
+        >
+          {render(tabs[value].children)}
+        </Box>
+      )}
     </>
   );
 };

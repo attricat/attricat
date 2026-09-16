@@ -58,6 +58,10 @@ export const toolCallSchema = z.object({
   created_at: dateTime,
   completed_at: dateTime.nullable(),
 });
+export const conversationCreateResponseSchema = z.object({
+  id,
+  title: z.string(),
+});
 export const runResponseSchema = z.object({ id, status: z.string() });
 
 export type Conversation = z.infer<typeof conversationSchema>;

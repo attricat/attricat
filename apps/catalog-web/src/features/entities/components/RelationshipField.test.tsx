@@ -65,13 +65,19 @@ const renderField = (
   onChange = vi.fn(),
   field: Attribute = attribute,
   value = '',
+  disabled = false,
 ) => {
   const queryClient = new QueryClient({
     defaultOptions: { queries: { retry: false } },
   });
   render(
     <QueryClientProvider client={queryClient}>
-      <RelationshipField attribute={field} onChange={onChange} value={value} />
+      <RelationshipField
+        attribute={field}
+        disabled={disabled}
+        onChange={onChange}
+        value={value}
+      />
     </QueryClientProvider>,
   );
   return onChange;
@@ -126,6 +132,30 @@ describe('RelationshipField', () => {
     const firstPill = screen.getByRole('button', { name: 'Product 00' });
     await user.click(firstPill.querySelector('.MuiChip-deleteIcon')!);
     expect(onChange).toHaveBeenLastCalledWith(selectedIds.slice(1).join(', '));
+  });
+
+  it('does not allow selected relationships to be removed when disabled', async () => {
+    vi.mocked(getBlueprintByCode).mockResolvedValue({
+      blueprint: {
+        code: 'product',
+        id: blueprintId,
+        name: 'Product',
+        status: 'published',
+        version: 1,
+        views: {},
+      },
+      attributes: [],
+      table_path_attributes: [],
+    });
+    vi.mocked(getEntityPreview).mockResolvedValue({
+      entity: { id: firstId, blueprint_id: blueprintId, blueprint_version: 1 },
+      context: {},
+    });
+    const onChange = renderField(vi.fn(), attribute, firstId, true);
+
+    const pill = await screen.findByText(firstId);
+    expect(pill.parentElement?.querySelector('.MuiChip-deleteIcon')).toBeNull();
+    expect(onChange).not.toHaveBeenCalled();
   });
 
   it('keeps multi-selection draft changes in a closeable modal until applied', async () => {

@@ -1,5 +1,6 @@
 import AttachFileOutlinedIcon from '@mui/icons-material/AttachFileOutlined';
 import ArrowUpwardIcon from '@mui/icons-material/ArrowUpward';
+import { useForm } from '@tanstack/react-form';
 import { useRef, useState } from 'react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
@@ -27,7 +28,7 @@ export const NewConversationPage = () => {
   const { t } = useTranslation();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
-  const [content, setContent] = useState('');
+  const form = useForm({ defaultValues: { content: '' } });
   const [attachments, setAttachments] = useState<File[]>([]);
   const [uploadedAttachmentIds, setUploadedAttachmentIds] = useState<string[]>(
     [],
@@ -40,7 +41,7 @@ export const NewConversationPage = () => {
       let id = conversationId;
       if (!id) {
         const conversation = await createConversation(
-          conversationTitleFromFirstMessage(content),
+          conversationTitleFromFirstMessage(form.state.values.content),
         );
         id = conversation.id;
         setConversationId(id);
@@ -51,7 +52,7 @@ export const NewConversationPage = () => {
         attachmentIds = uploaded.files.map((file) => file.id);
         setUploadedAttachmentIds(attachmentIds);
       }
-      await sendMessage(id, content, attachmentIds);
+      await sendMessage(id, form.state.values.content, attachmentIds);
       return id;
     },
     onSuccess: async (id) => {
@@ -63,7 +64,10 @@ export const NewConversationPage = () => {
     },
   });
   const submit = () => {
-    if ((content.trim() || attachments.length) && !start.isPending) {
+    if (
+      (form.state.values.content.trim() || attachments.length) &&
+      !start.isPending
+    ) {
       start.mutate();
     }
   };
@@ -91,28 +95,32 @@ export const NewConversationPage = () => {
             p: 0.75,
           }}
         >
-          <TextField
-            fullWidth
-            hiddenLabel
-            maxRows={8}
-            minRows={3}
-            multiline
-            onChange={(event) => setContent(event.target.value)}
-            onKeyDown={(event) => {
-              if (
-                event.key === 'Enter' &&
-                !event.shiftKey &&
-                !event.nativeEvent.isComposing
-              ) {
-                event.preventDefault();
-                submit();
-              }
-            }}
-            placeholder={t('agents.messagePlaceholder')}
-            slotProps={{ htmlInput: { 'aria-label': t('agents.message') } }}
-            sx={{ '& .MuiOutlinedInput-notchedOutline': { border: 0 } }}
-            value={content}
-          />
+          <form.Field name="content">
+            {(field) => (
+              <TextField
+                fullWidth
+                hiddenLabel
+                maxRows={8}
+                minRows={3}
+                multiline
+                onChange={(event) => field.handleChange(event.target.value)}
+                onKeyDown={(event) => {
+                  if (
+                    event.key === 'Enter' &&
+                    !event.shiftKey &&
+                    !event.nativeEvent.isComposing
+                  ) {
+                    event.preventDefault();
+                    submit();
+                  }
+                }}
+                placeholder={t('agents.messagePlaceholder')}
+                slotProps={{ htmlInput: { 'aria-label': t('agents.message') } }}
+                sx={{ '& .MuiOutlinedInput-notchedOutline': { border: 0 } }}
+                value={field.state.value}
+              />
+            )}
+          </form.Field>
           <input
             hidden
             multiple
@@ -163,7 +171,9 @@ export const NewConversationPage = () => {
                   aria-label={t('agents.send')}
                   color="primary"
                   disabled={
-                    (!content.trim() && !attachments.length) || start.isPending
+                    (!form.state.values.content.trim() &&
+                      !attachments.length) ||
+                    start.isPending
                   }
                   type="submit"
                 >

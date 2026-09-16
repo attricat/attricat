@@ -1,4 +1,4 @@
-import { createElement, useState } from 'react';
+import { createElement, useId, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
   Box,
@@ -133,7 +133,12 @@ export const BlueprintViewsPreview = ({
     ? [editEntry, ...previewEntries]
     : [['edit', undefined], ...previewEntries];
   const [selectedView, setSelectedView] = useState(tabs[0][0]);
-  const activeView = tabs.find(([name]) => name === selectedView) ?? tabs[0];
+  const activeViewIndex = Math.max(
+    0,
+    tabs.findIndex(([name]) => name === selectedView),
+  );
+  const activeView = tabs[activeViewIndex];
+  const tabsId = useId();
   const values = sandboxValuesForFields(attributes, fields);
 
   return (
@@ -149,11 +154,23 @@ export const BlueprintViewsPreview = ({
         value={activeView?.[0] ?? false}
         variant="scrollable"
       >
-        {tabs.map(([name]) => (
-          <Tab key={name} label={name} value={name} />
+        {tabs.map(([name], index) => (
+          <Tab
+            aria-controls={`${tabsId}-tabpanel-${index}`}
+            id={`${tabsId}-tab-${index}`}
+            key={name}
+            label={name}
+            value={name}
+          />
         ))}
       </Tabs>
-      <Paper variant="outlined" sx={{ mt: 2, p: 2.5 }}>
+      <Paper
+        aria-labelledby={`${tabsId}-tab-${activeViewIndex}`}
+        id={`${tabsId}-tabpanel-${activeViewIndex}`}
+        role="tabpanel"
+        sx={{ mt: 2, p: 2.5 }}
+        variant="outlined"
+      >
         {activeView?.[0] === 'edit' ? (
           <EntityView
             attributes={attributes}

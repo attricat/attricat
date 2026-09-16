@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import { request } from '../../api/request';
 import {
+  conversationCreateResponseSchema,
   conversationSchema,
   messageSchema,
   runResponseSchema,
@@ -23,7 +24,7 @@ export const getConversation = (id: string) =>
 export const createConversation = (title = '') =>
   request(
     '/api/agent/conversations',
-    z.object({ id: z.string().uuid(), title: z.string() }),
+    conversationCreateResponseSchema,
     json('POST', { title }),
   );
 export const listMessages = (id: string) =>

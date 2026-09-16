@@ -208,7 +208,7 @@ export const ExplorerResultsTable = ({
   const queryClient = useQueryClient();
   const publicationQueries = useQueries({
     queries: items.map((entity) => ({
-      queryKey: entityQueryKeys.publications(entity.id),
+      queryKey: entityQueryKeys.publication(entity.id),
       queryFn: () => getEntityPublications(entity.id),
       enabled: Boolean(publicationContextId),
     })),
@@ -226,7 +226,7 @@ export const ExplorerResultsTable = ({
     publication: EntityPublicationStatus,
   ) =>
     queryClient.setQueryData<EntityPublicationStatus[]>(
-      entityQueryKeys.publications(entityId),
+      entityQueryKeys.publication(entityId),
       (current) => [
         ...(current ?? []).filter(
           (item) => item.context_id !== publication.context_id,
@@ -236,7 +236,7 @@ export const ExplorerResultsTable = ({
     );
   const invalidatePublication = (entityId: string) =>
     queryClient.invalidateQueries({
-      queryKey: entityQueryKeys.publications(entityId),
+      queryKey: entityQueryKeys.publication(entityId),
     });
   const publish = useMutation({
     mutationFn: (entityId: string) => {

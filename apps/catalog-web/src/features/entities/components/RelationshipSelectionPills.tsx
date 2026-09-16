@@ -10,7 +10,7 @@ export const RelationshipSelectionPills = ({
   action?: ReactNode;
   ids: string[];
   labels: Map<string, string>;
-  onRemove: (id: string) => void;
+  onRemove?: (id: string) => void;
 }) => {
   if (ids.length === 0 && !action) return null;
   return (
@@ -26,7 +26,7 @@ export const RelationshipSelectionPills = ({
         <Chip
           key={id}
           label={labels.get(id) ?? id}
-          onDelete={() => onRemove(id)}
+          onDelete={onRemove ? () => onRemove(id) : undefined}
           size="small"
           sx={{ maxWidth: '100%' }}
         />

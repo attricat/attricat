@@ -61,12 +61,12 @@ export const EntityPreviewPage = ({
     queryFn: currentSession,
   });
   const publications = useQuery({
-    queryKey: entityQueryKeys.publications(entityId),
+    queryKey: entityQueryKeys.publication(entityId),
     queryFn: () => getEntityPublications(entityId),
   });
   const invalidatePublications = () =>
     client.invalidateQueries({
-      queryKey: entityQueryKeys.publications(entityId),
+      queryKey: entityQueryKeys.publication(entityId),
     });
   const publish = useMutation({
     mutationFn: (contextId: string) => publishEntity(entityId, contextId),
