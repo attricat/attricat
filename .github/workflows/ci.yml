@@ -1,7 +1,10 @@
 name: CI
 
-# Temporarily manual-only while the new checks are being rolled out.
 on:
+  pull_request:
+  push:
+    branches:
+      - main
   workflow_dispatch:
 
 permissions:

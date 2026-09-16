@@ -59,4 +59,16 @@ ordered = true"#,
         ordered_single,
         Err(BlueprintError::InvalidFilePolicy(_))
     ));
+
+    for extension in [".", "..."] {
+        let invalid_extension = parse(&source(&format!(
+            r#"code = "asset"
+value_type = "file"
+allowed_extensions = ["{extension}"]"#
+        )));
+        assert!(matches!(
+            invalid_extension,
+            Err(BlueprintError::InvalidFilePolicy(_))
+        ));
+    }
 }

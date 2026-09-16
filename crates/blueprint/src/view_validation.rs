@@ -47,6 +47,9 @@ pub(crate) fn validate_view(
             if columns.is_some() {
                 return Err(BlueprintError::TableFieldsAndColumns);
             }
+            if fields.is_empty() {
+                return Err(BlueprintError::EmptyTableColumns);
+            }
             for field in fields {
                 let attribute = validate_view_field(view, field, attributes, false)?;
                 validate_component(
@@ -166,7 +169,7 @@ fn validate_view_nodes(
                             .props
                             .get("parent_field")
                             .and_then(serde_json::Value::as_str)
-                            .is_none()
+                            .is_none_or(|parent_field| parent_field.trim().is_empty())
                 }) && attribute.target_blueprint.as_deref() != Some(blueprint_code)
                 {
                     return Err(BlueprintError::HierarchyFieldMustTargetOwnBlueprint {

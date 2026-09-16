@@ -193,8 +193,10 @@ cookies in that file, sets mode `0600` on Unix, sends the CSRF synchronizer
 header for unsafe requests, replaces the file on renewal, and removes it after
 a successful logout. Do not commit or share this file. Without `--session-file`,
 a login remains valid only for that invocation's HTTP client. A bearer token
-provided with `--token` or `CATALOG_TOKEN` always takes precedence over a
+provided with `--token`, `--token-stdin`, or `CATALOG_TOKEN` always takes precedence over a
 session file; the CLI does not read or send saved browser cookies in that case.
+Prefer `CATALOG_TOKEN` or `--token-stdin` to avoid placing a secret in argv.
+Credentials are sent only over HTTPS, except to a loopback server for local development.
 When no token is supplied, the saved login session is used.
 
 Search `--filters` is the API array of field/operator/value objects;
@@ -241,8 +243,8 @@ for the retry lifecycle and safe replay procedure.
 
 ## Workspace administration
 
-Pass a personal API token with `--token` or `CATALOG_TOKEN`. Workspace commands
-always operate on the workspace selected by that bearer credential; they never
+Pass a personal API token with `CATALOG_TOKEN`, `--token-stdin`, or (for backwards compatibility)
+`--token`. Workspace commands always operate on the workspace selected by that bearer credential; they never
 accept a workspace ID or tenant header. `--permissions` accepts either a JSON
 array (for example, `'["entities.read"]'`) or a path to a JSON file. Personal
 API-token secrets are emitted only in their successful JSON response. Workspace
@@ -252,7 +254,7 @@ only when consuming the secret from the delivered link without placing it in she
 history or argv:
 
 ```sh
-printf '%s' "$CATALOG_INVITATION_SECRET" | acli --token "$CATALOG_TOKEN" workspace invitation accept --secret-stdin
+printf '%s' "$CATALOG_INVITATION_SECRET" | CATALOG_TOKEN="$CATALOG_TOKEN" acli workspace invitation accept --secret-stdin
 # Password setup reads onboarding secret, invitation secret, then password from separate stdin lines.
 printf '%s\n%s\n%s\n' "$ONBOARDING_SECRET" "$INVITATION_SECRET" "$PASSWORD" | acli workspace user set-password --onboarding-secret-stdin --invitation-secret-stdin --password-stdin
 ```

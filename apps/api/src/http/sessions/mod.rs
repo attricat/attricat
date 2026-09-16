@@ -12,7 +12,7 @@ use super::{
 use crate::{
     account::{
         ActionTokenSecret, IssuedLifecycleAction, LifecycleActionPurpose, Password, SessionDigest,
-        SessionSecret, hash_password,
+        SessionSecret, hash_password, validate_password,
     },
     constants::SESSION_LIFETIME_HOURS,
 };
@@ -130,6 +130,8 @@ pub(super) async fn confirm_password_reset(
     let secret = ActionTokenSecret::from_delivery_value(request.token).map_err(|_| {
         ApiError::invalid_input("password reset link is invalid or expired".to_owned())
     })?;
+    validate_password(&request.password)
+        .map_err(|error| ApiError::invalid_input(error.to_string()))?;
     let password_hash = hash_password(&Password::new(request.password))
         .map_err(|_| ApiError::invalid_input("password could not be set".to_owned()))?;
     state

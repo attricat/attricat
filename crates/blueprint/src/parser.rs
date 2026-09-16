@@ -303,10 +303,11 @@ fn parse_file_policy(
         || !validate_unique_non_empty(&attribute.purposes)
         || attribute.max_bytes == Some(0)
         || attribute.allowed_extensions.iter().any(|extension| {
-            !extension
-                .trim_start_matches('.')
-                .chars()
-                .all(|character| character.is_ascii_alphanumeric())
+            let normalized = extension.trim_start_matches('.');
+            normalized.is_empty()
+                || !normalized
+                    .chars()
+                    .all(|character| character.is_ascii_alphanumeric())
         })
         || attribute
             .purposes

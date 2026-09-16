@@ -8,6 +8,8 @@ use rand::rngs::OsRng;
 use secrecy::{ExposeSecret, SecretString};
 use thiserror::Error;
 
+pub const MINIMUM_PASSWORD_LENGTH: usize = 5;
+
 /// A plaintext password that cannot be formatted or serialized accidentally.
 pub struct Password(SecretString);
 
@@ -46,6 +48,38 @@ impl PasswordHash {
     }
 }
 
+/// Validates the password policy shared by every password-setting flow.
+pub fn validate_password(value: &str) -> Result<(), PasswordPolicyError> {
+    if value.chars().count() < MINIMUM_PASSWORD_LENGTH {
+        return Err(PasswordPolicyError::TooShort);
+    }
+    if !value.chars().any(char::is_alphabetic) {
+        return Err(PasswordPolicyError::MissingLetter);
+    }
+    if !value.chars().any(char::is_numeric) {
+        return Err(PasswordPolicyError::MissingNumber);
+    }
+    if !value
+        .chars()
+        .any(|character| !character.is_alphanumeric() && !character.is_whitespace())
+    {
+        return Err(PasswordPolicyError::MissingSymbol);
+    }
+    Ok(())
+}
+
+#[derive(Debug, Error, Eq, PartialEq)]
+pub enum PasswordPolicyError {
+    #[error("password must be at least {MINIMUM_PASSWORD_LENGTH} characters")]
+    TooShort,
+    #[error("password must include at least one letter")]
+    MissingLetter,
+    #[error("password must include at least one number")]
+    MissingNumber,
+    #[error("password must include at least one symbol")]
+    MissingSymbol,
+}
+
 /// Errors are intentionally generic so neither passwords nor malformed stored
 /// values are included in logs.
 #[derive(Debug, Error, Eq, PartialEq)]
@@ -73,4 +107,27 @@ fn validate_argon2id_phc(value: &str) -> Result<ParsedPasswordHash<'_>, Password
         return Err(PasswordHashError::InvalidPhc);
     }
     Ok(parsed)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn password_policy_requires_length_and_character_classes() {
+        assert_eq!(validate_password("a1!"), Err(PasswordPolicyError::TooShort));
+        assert_eq!(
+            validate_password("1234!"),
+            Err(PasswordPolicyError::MissingLetter)
+        );
+        assert_eq!(
+            validate_password("abcde!"),
+            Err(PasswordPolicyError::MissingNumber)
+        );
+        assert_eq!(
+            validate_password("abcde1"),
+            Err(PasswordPolicyError::MissingSymbol)
+        );
+        assert!(validate_password("a1!bc").is_ok());
+    }
 }

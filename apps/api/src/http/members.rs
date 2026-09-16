@@ -14,7 +14,7 @@ use super::{
     extractors::{ApiJson, ApiPath},
 };
 use crate::{
-    account::{Password, hash_password},
+    account::{Password, hash_password, validate_password},
     repository::{WorkspaceInvitation, WorkspaceMember},
 };
 
@@ -192,11 +192,8 @@ pub(super) async fn complete_onboarding(
     State(state): State<AppState>,
     ApiJson(input): ApiJson<CompleteOnboardingRequest>,
 ) -> Result<Response, ApiError> {
-    if input.password.len() < 12 {
-        return Err(ApiError::invalid_input(
-            "password must be at least 12 characters".to_owned(),
-        ));
-    }
+    validate_password(&input.password)
+        .map_err(|error| ApiError::invalid_input(error.to_string()))?;
     let password_hash = hash_password(&Password::new(input.password))
         .map_err(|_| ApiError::internal("could not set password"))?;
     let onboarding = state

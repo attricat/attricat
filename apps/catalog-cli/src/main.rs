@@ -37,9 +37,17 @@ const GENERATOR_TOKEN_PERMISSIONS: &[&str] = &[
 struct Cli {
     #[arg(long, env = "CATALOG_SERVER")]
     server: Option<Url>,
-    /// Personal API token. It is sent only as an HTTP Bearer credential.
-    #[arg(long, env = "CATALOG_TOKEN", hide_env_values = true)]
+    /// Personal API token. Prefer CATALOG_TOKEN or --token-stdin to avoid exposing it in process arguments.
+    #[arg(
+        long,
+        env = "CATALOG_TOKEN",
+        hide_env_values = true,
+        conflicts_with = "token_stdin"
+    )]
     token: Option<String>,
+    /// Read the personal API token from standard input.
+    #[arg(long, conflicts_with = "token")]
+    token_stdin: bool,
     /// Persist browser session and CSRF cookies for the auth commands.
     #[arg(long, env = "CATALOG_SESSION_FILE", value_name = "PATH")]
     session_file: Option<PathBuf>,
@@ -1012,7 +1020,19 @@ async fn main() -> ExitCode {
         eprintln!("{}", error.json());
         return ExitCode::from(error.exit_code());
     }
-    match run(Cli::parse()).await {
+    let cli = match Cli::try_parse() {
+        Ok(cli) => cli,
+        Err(error) if error.use_stderr() => {
+            let error = CliError::Input(error.to_string());
+            eprintln!("{}", error.json());
+            return ExitCode::from(error.exit_code());
+        }
+        Err(error) => {
+            print!("{error}");
+            return ExitCode::SUCCESS;
+        }
+    };
+    match run(cli).await {
         Ok(body) => {
             println!("{body}");
             ExitCode::SUCCESS
@@ -1049,12 +1069,21 @@ async fn run(cli: Cli) -> Result<String, CliError> {
     // A personal token is the explicit automation credential. Do not even
     // read a saved browser session when one is supplied: it takes precedence
     // and avoids accidentally combining two identities on a request.
-    let token = cli.token;
+    let token = if cli.token_stdin {
+        Some(read_secret_stdin("personal API token")?)
+    } else {
+        cli.token
+    };
     let session = if token.is_some() {
         None
     } else {
         SessionFile::load(session_file.as_ref())?
     };
+    if (token.is_some() || session.is_some()) && !is_secure_credential_transport(&server) {
+        return Err(CliError::Input(
+            "refusing to send credentials over insecure HTTP to a non-loopback host".to_owned(),
+        ));
+    }
     let mut client = Client::builder().connect_timeout(CONNECT_TIMEOUT);
     let mut headers = reqwest::header::HeaderMap::new();
     if let Some(token) = token {
@@ -3050,6 +3079,18 @@ async fn request_value(
     serde_json::from_str(&response).map_err(|_| CliError::InvalidResponse)
 }
 
+fn is_secure_credential_transport(server: &Url) -> bool {
+    if server.scheme() == "https" {
+        return true;
+    }
+    match server.host() {
+        Some(url::Host::Domain(host)) => host.eq_ignore_ascii_case("localhost"),
+        Some(url::Host::Ipv4(address)) => address.is_loopback(),
+        Some(url::Host::Ipv6(address)) => address.is_loopback(),
+        None => false,
+    }
+}
+
 fn endpoint(server: &Url, path: &str) -> Result<Url, CliError> {
     let mut base = server.clone();
     let mut base_path = base.path().to_owned();
@@ -3068,6 +3109,24 @@ fn segment(value: impl std::fmt::Display) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn only_allows_plaintext_credential_transport_to_loopback() {
+        for url in [
+            "https://catalog.example.test",
+            "http://localhost:3000",
+            "http://127.0.0.1:3000",
+            "http://[::1]:3000",
+        ] {
+            assert!(
+                is_secure_credential_transport(&Url::parse(url).unwrap()),
+                "{url}"
+            );
+        }
+        assert!(!is_secure_credential_transport(
+            &Url::parse("http://catalog.example.test").unwrap()
+        ));
+    }
 
     #[test]
     fn converts_value_file_to_api_shape() {
@@ -3605,6 +3664,7 @@ value = "Blue shirt"
         let body = run(Cli {
             server: Some(Url::parse(&format!("http://{address}")).unwrap()),
             token: Some("personal-token".to_owned()),
+            token_stdin: false,
             session_file: Some(session_file.path().to_path_buf()),
             no_env: false,
             command: Command::Health,
@@ -3634,6 +3694,7 @@ value = "Blue shirt"
         let body = run(Cli {
             server: Some(Url::parse(&format!("http://{address}")).unwrap()),
             token: None,
+            token_stdin: false,
             session_file: None,
             no_env: false,
             command: Command::Health,

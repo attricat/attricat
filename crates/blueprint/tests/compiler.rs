@@ -786,6 +786,45 @@ target_blueprint = "category"
         "target_blueprint = \"product\"",
     );
     assert!(compile(parse(&invalid).unwrap(), &[], &invalid).is_err());
+
+    let blank_parent_field = invalid.replace(
+        "version = 1 }",
+        "version = 1, props = { parent_field = \"\" } }",
+    );
+    assert!(
+        compile(
+            parse(&blank_parent_field).unwrap(),
+            &[],
+            &blank_parent_field
+        )
+        .is_err()
+    );
+}
+
+#[test]
+fn rejects_empty_legacy_table_fields() {
+    let source = r#"
+format_version = 1
+code = "product"
+name = "Product"
+kind = "entity"
+
+[views.dropdown_option]
+type = "dropdown_option"
+fields = ["title"]
+
+[views.table]
+type = "table"
+fields = []
+
+[[attributes]]
+code = "title"
+value_type = "string"
+"#;
+    assert!(matches!(
+        compile(parse(source).unwrap(), &[], source),
+        Err(BlueprintError::EmptyTableColumns)
+    ));
 }
 
 #[test]
