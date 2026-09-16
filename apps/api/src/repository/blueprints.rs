@@ -442,7 +442,7 @@ impl CatalogRepository {
         else {
             return Ok(());
         };
-        let contributions = self.client_extension_contributions().await?;
+        let contributions = self.enabled_client_extension_contributions().await?;
         for (outlet, layout) in outlets {
             for key in layout.order.iter().chain(&layout.hidden) {
                 if let Some(contribution) = contributions

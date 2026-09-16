@@ -1,3 +1,4 @@
+import { useForm } from '@tanstack/react-form';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link } from '@tanstack/react-router';
 import {
@@ -10,7 +11,7 @@ import {
   TextField,
   Typography,
 } from '@mui/material';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
 import { PageContainer } from '../../components/PageContainer';
 import { PageHeader } from '../../components/PageHeader';
@@ -24,13 +25,12 @@ import {
 } from './management-api';
 import { extensionManagementQueryKeys } from './management-query-keys';
 import { ErrorNotice } from './ExtensionErrorNotice';
-import { repositoryParts } from './extension-page-utils';
+import { invalidateExtensions, repositoryParts } from './extension-page-utils';
 import { workspaceExtensionLayoutSchema } from './schemas';
 
 export const ExtensionsPage = () => {
   const { t } = useTranslation();
   const queryClient = useQueryClient();
-  const [layoutDraft, setLayoutDraft] = useState('');
   const session = useQuery({
     queryKey: authQueryKeys.session(),
     queryFn: currentSession,
@@ -50,19 +50,41 @@ export const ExtensionsPage = () => {
     queryFn: workspaceExtensionLayout,
     enabled: session.data?.capabilities?.extensions_manage === true,
   });
-  useEffect(() => {
-    if (layout.data) setLayoutDraft(JSON.stringify(layout.data, null, 2));
-  }, [layout.data]);
   const saveLayout = useMutation({
-    mutationFn: (draft: string) =>
-      updateWorkspaceExtensionLayout(
-        workspaceExtensionLayoutSchema.parse(JSON.parse(draft)),
-      ),
-    onSuccess: () =>
-      queryClient.invalidateQueries({
+    mutationFn: updateWorkspaceExtensionLayout,
+    onSuccess: () => {
+      void queryClient.invalidateQueries({
         queryKey: extensionManagementQueryKeys.layout(),
-      }),
+      });
+      invalidateExtensions(queryClient);
+    },
   });
+  const parseLayout = (draft: string) => {
+    try {
+      return workspaceExtensionLayoutSchema.safeParse(JSON.parse(draft));
+    } catch {
+      return undefined;
+    }
+  };
+  const validateLayout = (draft: string) =>
+    parseLayout(draft)?.success ? undefined : t('extensions.layoutInvalid');
+  const form = useForm({
+    defaultValues: { layout: '' },
+    onSubmit: ({ value }) => {
+      const parsed = parseLayout(value.layout);
+      if (parsed?.success) saveLayout.mutate(parsed.data);
+    },
+  });
+  const hydratedLayout = useRef<string | undefined>(undefined);
+  useEffect(() => {
+    if (layout.data) {
+      const serialized = JSON.stringify(layout.data, null, 2);
+      if (hydratedLayout.current !== serialized) {
+        form.setFieldValue('layout', serialized);
+        hydratedLayout.current = serialized;
+      }
+    }
+  }, [form, layout.data]);
   if (session.data && !session.data.capabilities?.extensions_read)
     return (
       <PageContainer>
@@ -86,26 +108,53 @@ export const ExtensionsPage = () => {
       <ErrorNotice error={installed.error} />
       <ErrorNotice error={layout.error ?? saveLayout.error} />
       {session.data?.capabilities?.extensions_manage && (
-        <Paper sx={{ mb: 4, p: 2 }}>
+        <Paper
+          component="form"
+          onSubmit={(event) => {
+            event.preventDefault();
+            form.handleSubmit();
+          }}
+          sx={{ mb: 4, p: 2 }}
+        >
           <Typography variant="h5">{t('extensions.layout')}</Typography>
           <Typography color="text.secondary" sx={{ mb: 2 }}>
             {t('extensions.layoutDescription')}
           </Typography>
-          <TextField
-            fullWidth
-            label={t('extensions.layout')}
-            minRows={8}
-            multiline
-            onChange={(event) => setLayoutDraft(event.target.value)}
-            value={layoutDraft}
-          />
-          <Button
-            disabled={!layoutDraft || saveLayout.isPending}
-            onClick={() => saveLayout.mutate(layoutDraft)}
-            sx={{ mt: 2 }}
+          <form.Field
+            name="layout"
+            validators={{
+              onBlur: ({ value }) => validateLayout(value),
+              onChange: ({ value }) => validateLayout(value),
+              onSubmit: ({ value }) => validateLayout(value),
+            }}
           >
-            {t('extensions.saveLayout')}
-          </Button>
+            {(field) => (
+              <TextField
+                error={field.state.meta.errors.length > 0}
+                fullWidth
+                helperText={field.state.meta.errors[0]}
+                label={t('extensions.layout')}
+                minRows={8}
+                multiline
+                onBlur={field.handleBlur}
+                onChange={(event) => field.handleChange(event.target.value)}
+                value={field.state.value}
+              />
+            )}
+          </form.Field>
+          <form.Subscribe
+            selector={(state) => [state.canSubmit, state.values.layout]}
+          >
+            {([canSubmit, draft]) => (
+              <Button
+                disabled={!canSubmit || !draft || saveLayout.isPending}
+                sx={{ mt: 2 }}
+                type="submit"
+              >
+                {t('extensions.saveLayout')}
+              </Button>
+            )}
+          </form.Subscribe>
         </Paper>
       )}
       <Typography sx={{ mb: 1 }} variant="h5">

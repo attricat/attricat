@@ -35,8 +35,9 @@ export const installedExtensions = () =>
   request('/api/extensions', z.array(installationSchema));
 export const workspaceExtensionLayout = () =>
   request('/api/workspace/extension-layout', workspaceExtensionLayoutSchema);
-export const updateWorkspaceExtensionLayout = (layout: WorkspaceExtensionLayout) =>
-  requestNoContent('/api/workspace/extension-layout', body(layout, 'PUT'));
+export const updateWorkspaceExtensionLayout = (
+  layout: WorkspaceExtensionLayout,
+) => requestNoContent('/api/workspace/extension-layout', body(layout, 'PUT'));
 export const extensionDetail = (id: string) =>
   request(`/api/extensions/${encodeURIComponent(id)}`, detailSchema);
 export const installExtension = (input: {

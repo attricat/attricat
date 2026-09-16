@@ -1,8 +1,8 @@
 use std::collections::HashSet;
 
 use crate::{
-    BlueprintError, ComponentReference, EffectiveAttribute, TableColumn, ViewDefinition, ViewNode,
-    component_manifest::validate_component, parser::validate_code,
+    BlueprintError, BlueprintKind, ComponentReference, EffectiveAttribute, TableColumn,
+    ViewDefinition, ViewNode, component_manifest::validate_component, parser::validate_code,
 };
 
 pub(crate) fn validate_view(
@@ -10,6 +10,7 @@ pub(crate) fn validate_view(
     definition: &ViewDefinition,
     attributes: &[EffectiveAttribute],
     blueprint_code: &str,
+    blueprint_kind: &BlueprintKind,
 ) -> Result<(), BlueprintError> {
     match definition {
         ViewDefinition::DropdownOption { fields, .. } => {
@@ -94,19 +95,33 @@ pub(crate) fn validate_view(
             }
         }
         ViewDefinition::ExtensionLayout { version, outlets } => {
-            if view != "extension_layout" || *version != 1 {
+            if view != "extension_layout"
+                || *version != 1
+                || *blueprint_kind != BlueprintKind::Entity
+            {
                 return Err(BlueprintError::InvalidExtensionLayout);
             }
+            let mut seen = HashSet::new();
             for (outlet, layout) in outlets {
                 if !matches!(
                     outlet.as_str(),
                     "entity_preview_panel" | "entity_attribute_decoration" | "entity_action"
-                ) || layout
-                    .order
-                    .iter()
-                    .chain(&layout.hidden)
-                    .any(|key| key.is_empty() || key.len() > 256 || !key.contains(':'))
-                {
+                ) || layout.order.iter().chain(&layout.hidden).any(|key| {
+                    let Some((extension_id, contribution_id)) = key.split_once(':') else {
+                        return true;
+                    };
+                    key.len() > 256
+                        || extension_id.is_empty()
+                        || contribution_id.is_empty()
+                        || contribution_id.contains(':')
+                        || !key
+                            .chars()
+                            .filter(|character| *character != ':')
+                            .all(|character| {
+                                character.is_ascii_alphanumeric() || "._-".contains(character)
+                            })
+                        || !seen.insert(key.as_str())
+                }) {
                     return Err(BlueprintError::InvalidExtensionLayout);
                 }
             }

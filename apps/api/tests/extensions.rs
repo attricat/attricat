@@ -4,6 +4,7 @@ use std::{io::Cursor, sync::Arc};
 
 use api::{
     extension_installer::{ExtensionInstaller, installed_artifact_key},
+    model::CreateBlueprint,
     repository::CatalogRepository,
     storage::{FakeObjectStore, ObjectStore},
 };
@@ -72,7 +73,11 @@ fn storage_client_release_archive(version: &str) -> Vec<u8> {
     zstd::stream::encode_all(Cursor::new(tar_bytes), 0).unwrap()
 }
 
-fn client_release_archive(extension_id: &str) -> Vec<u8> {
+fn client_release_archive_for_outlet(
+    extension_id: &str,
+    contribution_id: &str,
+    outlet: &str,
+) -> Vec<u8> {
     let manifest = serde_json::to_vec(&json!({
         "manifest_version": 1,
         "name": "Client extension",
@@ -88,11 +93,11 @@ fn client_release_archive(extension_id: &str) -> Vec<u8> {
             "path": "client.js"
         }],
         "ui": [{
-            "id": "panel",
+            "id": contribution_id,
             "version": 1,
             "kind": "embedded",
             "artifact": "client",
-            "outlet": "entity_preview_panel"
+            "outlet": outlet
         }]
     }))
     .unwrap();
@@ -104,6 +109,10 @@ fn client_release_archive(extension_id: &str) -> Vec<u8> {
         tar.finish().unwrap();
     }
     zstd::stream::encode_all(Cursor::new(tar_bytes), 0).unwrap()
+}
+
+fn client_release_archive(extension_id: &str) -> Vec<u8> {
+    client_release_archive_for_outlet(extension_id, "panel", "entity_preview_panel")
 }
 
 fn append_file(tar: &mut tar::Builder<&mut Vec<u8>>, path: &str, bytes: &[u8]) {
@@ -224,6 +233,11 @@ async fn enabled_client_contributions_are_hidden_after_state_changes(pool: sqlx:
             .unwrap()
             .is_empty()
     );
+    repository.enable_extension("acme.client").await.unwrap();
+    assert_eq!(
+        repository.client_extension_contributions().await.unwrap()[0].contribution_key,
+        "acme.client:panel"
+    );
     repository
         .quarantine_extension("acme.client", "test")
         .await
@@ -240,7 +254,7 @@ async fn enabled_client_contributions_are_hidden_after_state_changes(pool: sqlx:
 #[sqlx::test(migrations = "./migrations")]
 async fn extension_layout_order_is_stable_and_host_owned(pool: sqlx::PgPool) {
     let workspace = Uuid::from_u128(0x00000000000040008000000000000002);
-    let repository = CatalogRepository::new(pool)
+    let repository = CatalogRepository::new(pool.clone())
         .for_workspace(workspace)
         .await
         .unwrap();
@@ -280,6 +294,270 @@ async fn extension_layout_order_is_stable_and_host_owned(pool: sqlx::PgPool) {
         .await
         .unwrap();
     assert_eq!(keys().await, ["acme.zebra:panel", "acme.alpha:panel"]);
+    let audited: i64 = sqlx::query_scalar(
+        "SELECT count(*) FROM audit_events WHERE workspace_id = $1 AND action = 'workspace.extension_layout.set' AND metadata ? 'extension_layout'",
+    )
+    .bind(workspace)
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert_eq!(audited, 1);
+    for invalid in [
+        json!({
+            "version": 1,
+            "outlets": {
+                "entity_preview_panel": {
+                    "order": ["acme.alpha:panel"],
+                    "hidden": ["acme.alpha:panel"]
+                }
+            }
+        }),
+        json!({
+            "version": 1,
+            "outlets": {
+                "navigation": {"order": [], "hidden": []}
+            }
+        }),
+        json!({
+            "version": 1,
+            "outlets": {
+                "entity_action": {"order": ["malformed"], "hidden": []}
+            }
+        }),
+        json!({
+            "version": 1,
+            "outlets": {
+                "entity_action": {"order": ["acme.shared:item"], "hidden": []},
+                "entity_preview_panel": {"order": ["acme.shared:item"], "hidden": []}
+            }
+        }),
+    ] {
+        assert!(
+            repository
+                .update_workspace_extension_layout(invalid)
+                .await
+                .is_err()
+        );
+    }
+}
+
+#[sqlx::test(migrations = "./migrations")]
+async fn blueprint_layout_overlays_owned_outlets_and_preserves_global_workspace_rules(
+    pool: sqlx::PgPool,
+) {
+    let workspace = Uuid::from_u128(0x00000000000040008000000000000002);
+    let repository = CatalogRepository::new(pool)
+        .for_workspace(workspace)
+        .await
+        .unwrap();
+    let installer =
+        ExtensionInstaller::new(repository.clone(), Arc::new(FakeObjectStore::available()));
+    for extension_id in ["acme.alpha", "acme.zebra"] {
+        installer
+            .install("test", &client_release_archive(extension_id))
+            .await
+            .unwrap();
+        repository
+            .grant_extension(extension_id, "capability", "configuration.read")
+            .await
+            .unwrap();
+        repository.enable_extension(extension_id).await.unwrap();
+    }
+    installer
+        .install(
+            "test",
+            &client_release_archive_for_outlet("acme.navigation", "entry", "navigation"),
+        )
+        .await
+        .unwrap();
+    repository
+        .grant_extension("acme.navigation", "capability", "configuration.read")
+        .await
+        .unwrap();
+    repository
+        .enable_extension("acme.navigation")
+        .await
+        .unwrap();
+    repository
+        .update_workspace_extension_layout(json!({
+            "version": 1,
+            "outlets": {
+                "navigation": {
+                    "order": ["acme.navigation:entry"],
+                    "hidden": [],
+                    "promoted": ["acme.navigation:entry"]
+                }
+            }
+        }))
+        .await
+        .unwrap();
+    assert_eq!(
+        repository
+            .client_extension_contributions()
+            .await
+            .unwrap()
+            .into_iter()
+            .find(|item| item.contribution_key == "acme.navigation:entry")
+            .unwrap()
+            .navigation_group
+            .as_deref(),
+        Some("promoted")
+    );
+    repository
+        .update_workspace_extension_layout(json!({
+            "version": 1,
+            "outlets": {
+                "entity_preview_panel": {
+                    "order": ["acme.alpha:panel", "acme.zebra:panel"],
+                    "hidden": []
+                },
+                "navigation": {
+                    "order": [],
+                    "hidden": ["acme.navigation:entry"],
+                    "promoted": []
+                }
+            }
+        }))
+        .await
+        .unwrap();
+    let definition = r#"
+format_version = 1
+code = "extension_layout_product"
+name = "Extension layout product"
+kind = "entity"
+
+[views.dropdown_option]
+type = "dropdown_option"
+fields = ["title"]
+
+[views.extension_layout]
+type = "extension_layout"
+version = 1
+
+[views.extension_layout.outlets.entity_preview_panel]
+order = ["acme.zebra:panel"]
+hidden = ["acme.alpha:panel"]
+
+[[attributes]]
+code = "title"
+value_type = "string"
+"#;
+    let blueprint = repository
+        .create_blueprint(CreateBlueprint {
+            definition: definition.to_owned(),
+        })
+        .await
+        .unwrap();
+    repository
+        .publish_blueprint_revision(blueprint.blueprint.id, 1)
+        .await
+        .unwrap();
+
+    let scoped = repository
+        .client_extension_contributions_for_blueprint(Some((blueprint.blueprint.id, 1)))
+        .await
+        .unwrap();
+    assert_eq!(
+        scoped
+            .iter()
+            .map(|item| item.contribution_key.as_str())
+            .collect::<Vec<_>>(),
+        ["acme.zebra:panel"]
+    );
+    assert!(
+        scoped
+            .iter()
+            .all(|item| item.contribution_key != "acme.navigation:entry")
+    );
+    assert_eq!(
+        repository
+            .client_extension_contributions()
+            .await
+            .unwrap()
+            .into_iter()
+            .map(|item| item.contribution_key)
+            .collect::<Vec<_>>(),
+        ["acme.alpha:panel", "acme.zebra:panel"]
+    );
+}
+
+#[sqlx::test(migrations = "./migrations")]
+async fn hidden_contributions_remain_authorized_and_are_validated_on_publish(pool: sqlx::PgPool) {
+    let workspace = Uuid::from_u128(0x00000000000040008000000000000002);
+    let repository = CatalogRepository::new(pool)
+        .for_workspace(workspace)
+        .await
+        .unwrap();
+    let installer =
+        ExtensionInstaller::new(repository.clone(), Arc::new(FakeObjectStore::available()));
+    installer
+        .install("test", &client_release_archive("acme.client"))
+        .await
+        .unwrap();
+    repository
+        .grant_extension("acme.client", "capability", "configuration.read")
+        .await
+        .unwrap();
+    repository.enable_extension("acme.client").await.unwrap();
+    repository
+        .update_workspace_extension_layout(json!({
+            "version": 1,
+            "outlets": {
+                "entity_preview_panel": {
+                    "order": [],
+                    "hidden": ["acme.client:panel"]
+                }
+            }
+        }))
+        .await
+        .unwrap();
+    assert!(
+        repository
+            .client_extension_contributions()
+            .await
+            .unwrap()
+            .is_empty()
+    );
+    let contribution = repository
+        .client_extension_contribution("acme.client", "panel")
+        .await
+        .unwrap();
+    assert!(contribution.artifact_key.ends_with("/client"));
+
+    let incompatible = r#"
+format_version = 1
+code = "invalid_extension_layout"
+name = "Invalid extension layout"
+kind = "entity"
+
+[views.dropdown_option]
+type = "dropdown_option"
+fields = ["title"]
+
+[views.extension_layout]
+type = "extension_layout"
+version = 1
+
+[views.extension_layout.outlets.entity_action]
+order = ["acme.client:panel"]
+hidden = []
+
+[[attributes]]
+code = "title"
+value_type = "string"
+"#;
+    let blueprint = repository
+        .create_blueprint(CreateBlueprint {
+            definition: incompatible.to_owned(),
+        })
+        .await
+        .unwrap();
+    assert!(
+        repository
+            .publish_blueprint_revision(blueprint.blueprint.id, 1)
+            .await
+            .is_err()
+    );
 }
 
 #[sqlx::test(migrations = "./migrations")]

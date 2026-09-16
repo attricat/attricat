@@ -64,7 +64,9 @@ describe('extension management API', () => {
     });
     await expect(workspaceExtensionLayout()).resolves.toEqual(layout);
     fetchMock.mockResolvedValueOnce({ ok: true, status: 204 });
-    await expect(updateWorkspaceExtensionLayout(layout)).resolves.toBeUndefined();
+    await expect(
+      updateWorkspaceExtensionLayout(layout),
+    ).resolves.toBeUndefined();
     expect(fetchMock).toHaveBeenLastCalledWith(
       '/api/workspace/extension-layout',
       expect.objectContaining({ method: 'PUT', body: JSON.stringify(layout) }),

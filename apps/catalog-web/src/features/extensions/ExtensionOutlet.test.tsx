@@ -2,7 +2,7 @@
 import { render, screen, waitFor } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import userEvent from '@testing-library/user-event';
-import { describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { ExtensionContribution } from './api';
 
 const { frameMounts } = vi.hoisted(() => ({ frameMounts: vi.fn() }));
@@ -39,6 +39,7 @@ import { ExtensionOutlet, ExtensionPopoverOutlet } from './ExtensionOutlet';
 const contribution: ExtensionContribution = {
   contribution_key: 'example.extension:row-action',
   display_order: 0,
+  navigation_group: null,
   capabilities: [],
   configuration: null,
   extension_id: 'example.extension',
@@ -70,7 +71,76 @@ const renderOutlet = () => {
   );
 };
 
+beforeEach(() => vi.clearAllMocks());
+
 describe('ExtensionOutlet', () => {
+  it.each([
+    'entity_preview_panel',
+    'entity_action',
+    'entity_attribute_decoration',
+  ] as const)('requests an explicit blueprint scope for %s', async (outlet) => {
+    vi.mocked(getExtensionRuntime).mockResolvedValue([]);
+    const queryClient = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    });
+    const props = {
+      context: { entity_id: '33333333-3333-4333-8333-333333333333' },
+      outlet,
+      runtimeScope: {
+        blueprintId: '22222222-2222-4222-8222-222222222222',
+        blueprintVersion: 4,
+      },
+    };
+    render(
+      <QueryClientProvider client={queryClient}>
+        {outlet === 'entity_attribute_decoration' ? (
+          <ExtensionPopoverOutlet {...props} label="Decorations" />
+        ) : (
+          <ExtensionOutlet {...props} />
+        )}
+      </QueryClientProvider>,
+    );
+    await waitFor(() =>
+      expect(getExtensionRuntime).toHaveBeenCalledWith(props.runtimeScope),
+    );
+  });
+
+  it('keeps navigation grouped unless the host descriptor promotes it', async () => {
+    vi.mocked(getExtensionRuntime).mockResolvedValue([
+      {
+        ...contribution,
+        contribution_key: 'example.extension:promoted',
+        id: 'promoted',
+        kind: 'embedded',
+        navigation_group: 'promoted',
+        outlet: 'navigation',
+      },
+      {
+        ...contribution,
+        contribution_key: 'example.extension:grouped',
+        id: 'grouped',
+        kind: 'embedded',
+        navigation_group: 'grouped',
+        outlet: 'navigation',
+      },
+    ]);
+    const queryClient = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    });
+    const user = userEvent.setup();
+    render(
+      <QueryClientProvider client={queryClient}>
+        <ExtensionOutlet outlet="navigation" />
+      </QueryClientProvider>,
+    );
+    expect(await screen.findByText('promoted')).toBeTruthy();
+    expect(screen.queryByText('grouped')).toBeNull();
+    await user.click(
+      screen.getByRole('button', { name: 'extensions.groupedNavigation' }),
+    );
+    expect(await screen.findByText('grouped')).toBeTruthy();
+  });
+
   it('keeps one primary and three secondary entity actions before overflow', async () => {
     const actions = Array.from({ length: 5 }, (_, index) => ({
       ...contribution,
@@ -92,7 +162,9 @@ describe('ExtensionOutlet', () => {
     );
     await screen.findByText('action-3');
     expect(screen.queryByText('action-4')).toBeNull();
-    await user.click(screen.getByRole('button', { name: 'extensions.moreActions' }));
+    await user.click(
+      screen.getByRole('button', { name: 'extensions.moreActions' }),
+    );
     expect(await screen.findByText('action-4')).toBeTruthy();
   });
 });
@@ -107,6 +179,7 @@ describe('ExtensionPopoverOutlet', () => {
     const button = await screen.findByRole('button', {
       name: 'Extension actions',
     });
+    expect(getExtensionRuntime).toHaveBeenCalledWith(undefined);
     await waitFor(() => expect(frameMounts).toHaveBeenCalledOnce());
 
     await user.click(button);

@@ -45,6 +45,7 @@ const context = explorerTableCellContextSchema.parse({
 const contribution: ExtensionContribution = {
   contribution_key: 'example.extension:example.currency',
   display_order: 0,
+  navigation_group: null,
   capabilities: ['client.explorer_table_cell'],
   configuration: null,
   extension_id: 'example.extension',

@@ -36,7 +36,10 @@ order = ["acme.inventory:summary"]
 hidden = ["acme.legacy:panel"]
 ```
 
-Global outlets, including navigation and explorer surfaces, are workspace-only.
+Each declared entity-owned outlet replaces only that outlet's workspace default;
+unspecified entity outlets and all global outlets continue to use the workspace
+layout. Global outlets, including navigation and explorer surfaces, are
+workspace-only.
 
 ```toml
 [views.table]

@@ -1,9 +1,36 @@
 import { z } from 'zod';
 
+export const extensionOutletSchema = z.enum([
+  'navigation',
+  'entity_preview_panel',
+  'blueprint_attribute_configuration',
+  'entity_attribute_decoration',
+  'entity_action',
+  'explorer_row_action',
+  'explorer_table_cell',
+  'blueprint_detail_panel',
+  'explorer_action',
+  'explorer_bulk_action',
+  'entity_header_action',
+  'entity_attribute_panel',
+  'blueprint_panel',
+  'blueprint_publish_check',
+  'file_panel',
+  'audit_event_panel',
+  'data_health_card',
+]);
+
+const contributionKeySchema = z
+  .string()
+  .min(3)
+  .max(256)
+  .regex(/^[A-Za-z0-9._-]+:[A-Za-z0-9._-]+$/);
+
 const contributionSchema = z
   .object({
-    contribution_key: z.string().min(3),
+    contribution_key: contributionKeySchema,
     display_order: z.number().int().nonnegative(),
+    navigation_group: z.enum(['promoted', 'grouped']).nullable(),
     extension_id: z.string().min(1),
     release_id: z.uuid(),
     configuration: z.unknown(),
@@ -11,27 +38,7 @@ const contributionSchema = z
     id: z.string().min(1),
     version: z.number().int().positive(),
     kind: z.enum(['route', 'embedded', 'action', 'panel']),
-    outlet: z
-      .enum([
-        'navigation',
-        'entity_preview_panel',
-        'blueprint_attribute_configuration',
-        'entity_attribute_decoration',
-        'entity_action',
-        'explorer_row_action',
-        'explorer_table_cell',
-        'blueprint_detail_panel',
-        'explorer_action',
-        'explorer_bulk_action',
-        'entity_header_action',
-        'entity_attribute_panel',
-        'blueprint_panel',
-        'blueprint_publish_check',
-        'file_panel',
-        'audit_event_panel',
-        'data_health_card',
-      ])
-      .nullable(),
+    outlet: extensionOutletSchema.nullable(),
     title: z.string().nullable(),
   })
   .strict();
@@ -39,15 +46,102 @@ const contributionSchema = z
 export const runtimeSchema = z.array(contributionSchema);
 export type ExtensionContribution = z.infer<typeof contributionSchema>;
 
+const baseOutletLayoutSchema = z
+  .object({
+    order: z.array(contributionKeySchema),
+    hidden: z.array(contributionKeySchema),
+  })
+  .strict()
+  .superRefine((layout, context) => {
+    const order = new Set(layout.order);
+    const hidden = new Set(layout.hidden);
+    if (
+      order.size !== layout.order.length ||
+      hidden.size !== layout.hidden.length
+    )
+      context.addIssue({
+        code: 'custom',
+        message: 'Contribution keys must be unique',
+      });
+    if (layout.hidden.some((key) => order.has(key)))
+      context.addIssue({
+        code: 'custom',
+        message: 'A contribution cannot be ordered and hidden',
+      });
+  });
+
+const navigationLayoutSchema = z
+  .object({
+    order: z.array(contributionKeySchema),
+    hidden: z.array(contributionKeySchema),
+    promoted: z.array(contributionKeySchema),
+  })
+  .strict()
+  .superRefine((layout, context) => {
+    for (const keys of [layout.order, layout.hidden, layout.promoted])
+      if (new Set(keys).size !== keys.length)
+        context.addIssue({
+          code: 'custom',
+          message: 'Contribution keys must be unique',
+        });
+    if (layout.hidden.some((key) => layout.order.includes(key)))
+      context.addIssue({
+        code: 'custom',
+        message: 'A contribution cannot be ordered and hidden',
+      });
+    if (layout.hidden.some((key) => layout.promoted.includes(key)))
+      context.addIssue({
+        code: 'custom',
+        message: 'A contribution cannot be hidden and promoted',
+      });
+  });
+
 export const workspaceExtensionLayoutSchema = z
   .object({
     version: z.literal(1),
-    outlets: z.record(
-      z.string(),
-      z.object({ order: z.array(z.string()), hidden: z.array(z.string()) }),
-    ),
+    outlets: z
+      .partialRecord(extensionOutletSchema, z.unknown())
+      .transform((outlets, context) => {
+        const parsed: Record<
+          string,
+          | z.infer<typeof baseOutletLayoutSchema>
+          | z.infer<typeof navigationLayoutSchema>
+        > = {};
+        for (const [outlet, value] of Object.entries(outlets)) {
+          const result =
+            outlet === 'navigation'
+              ? navigationLayoutSchema.safeParse(value)
+              : baseOutletLayoutSchema.safeParse(value);
+          if (!result.success) {
+            context.addIssue({
+              code: 'custom',
+              message:
+                result.error.issues[0]?.message ?? 'Invalid outlet layout',
+              path: [outlet],
+            });
+            return z.NEVER;
+          }
+          parsed[outlet] = result.data;
+        }
+        return parsed;
+      }),
   })
-  .strict();
+  .strict()
+  .superRefine((layout, context) => {
+    const assigned = new Set<string>();
+    for (const [outlet, item] of Object.entries(layout.outlets)) {
+      for (const key of [...item.order, ...item.hidden]) {
+        if (assigned.has(key)) {
+          context.addIssue({
+            code: 'custom',
+            message: 'A contribution can be configured in only one outlet',
+            path: ['outlets', outlet],
+          });
+        }
+        assigned.add(key);
+      }
+    }
+  });
 export type WorkspaceExtensionLayout = z.infer<
   typeof workspaceExtensionLayoutSchema
 >;

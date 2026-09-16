@@ -46,6 +46,7 @@ pub(super) struct RuntimeQuery {
 pub(super) struct RuntimeContribution {
     contribution_key: String,
     display_order: u32,
+    navigation_group: Option<String>,
     extension_id: String,
     release_id: Uuid,
     configuration: Value,
@@ -506,6 +507,7 @@ pub(super) async fn runtime(
             .map(|item| RuntimeContribution {
                 contribution_key: item.contribution_key,
                 display_order: item.display_order,
+                navigation_group: item.navigation_group,
                 extension_id: item.extension_id,
                 release_id: item.installed_release_id,
                 configuration: item.configuration,

@@ -428,6 +428,14 @@ mod tests {
                 .permission,
             "extensions.manage"
         );
+        for method in [Method::GET, Method::PUT] {
+            assert_eq!(
+                policy(&method, "/workspace/extension-layout")
+                    .unwrap()
+                    .permission,
+                "extensions.manage"
+            );
+        }
         assert_eq!(
             policy(&Method::POST, "/extensions/{extension_id}/enable")
                 .unwrap()

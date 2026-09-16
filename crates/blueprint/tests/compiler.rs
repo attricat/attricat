@@ -828,6 +828,56 @@ value_type = "string"
 }
 
 #[test]
+fn extension_layout_is_entity_only_and_rejects_ambiguous_keys() {
+    let source = r#"
+format_version = 1
+code = "product"
+name = "Product"
+kind = "entity"
+
+[views.dropdown_option]
+type = "dropdown_option"
+fields = ["title"]
+
+[views.extension_layout]
+type = "extension_layout"
+version = 1
+
+[views.extension_layout.outlets.entity_preview_panel]
+order = ["acme.inventory:summary"]
+hidden = ["acme.legacy:panel"]
+
+[[attributes]]
+code = "title"
+value_type = "string"
+"#;
+    let compiled = compile(parse(source).unwrap(), &[], source).unwrap();
+    assert!(matches!(
+        compiled.views.get("extension_layout"),
+        Some(ViewDefinition::ExtensionLayout { version: 1, .. })
+    ));
+
+    for invalid in [
+        source.replace("kind = \"entity\"", "kind = \"mixin\""),
+        source.replace(
+            "version = 1\n\n[views.extension_layout.outlets",
+            "version = 2\n\n[views.extension_layout.outlets",
+        ),
+        source.replace("entity_preview_panel", "navigation"),
+        source.replace("acme.inventory:summary", "malformed"),
+        source.replace(
+            "hidden = [\"acme.legacy:panel\"]",
+            "hidden = [\"acme.inventory:summary\"]",
+        ),
+        format!(
+            "{source}\n[views.extension_layout.outlets.entity_action]\norder = [\"acme.inventory:summary\"]\nhidden = []\n"
+        ),
+    ] {
+        assert!(compile(parse(&invalid).unwrap(), &[], &invalid).is_err());
+    }
+}
+
+#[test]
 fn table_columns_preserve_legacy_fields_and_reject_invalid_paths() {
     let source = r#"
 format_version = 1

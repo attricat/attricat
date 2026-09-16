@@ -299,14 +299,17 @@ contribution/artifact IDs remain stable across releases. Multiple enabled
 extensions may contribute to a surface. The host orders them deterministically
 by `extension_id`, then contribution `id`, unless a workspace administrator
 sets an outlet layout through `PUT /workspace/extension-layout`. Layouts use
-`{"version":1,"outlets":{"entity_preview_panel":{"order":["acme.panel:summary"],"hidden":[]}}}`.
+`{"version":1,"outlets":{"entity_preview_panel":{"order":["acme.panel:summary"],"hidden":[]},"navigation":{"order":["acme.app:entry"],"hidden":[],"promoted":["acme.app:entry"]}}}`.
 Keys are stable `<extension-id>:<contribution-id>` values; unavailable keys are
-retained for restoration. The runtime descriptor contains the host-computed
-`display_order`, so clients never implement precedence themselves. Entity action
-bars render one host-selected primary action and up to three secondary actions;
-remaining extension actions are placed in a host-owned overflow popover.
-Other embedded outlets show at most three contributions before the host-owned
-content overflow popover; extension frames never determine that capacity.
+retained for restoration. Navigation contributions are kept in a host-owned
+extension group unless an administrator lists their key in `promoted`; built-in
+navigation is never addressable by the layout. The runtime descriptor contains
+the host-computed `display_order` and navigation grouping, so clients never
+implement precedence themselves. Entity action bars render one host-selected
+primary action and up to three secondary actions; remaining extension actions
+are placed in a host-owned overflow popover. Each mounted panel surface has an
+explicit host policy and shows at most three contributions before the host-owned
+content overflow popover; extension frames never determine capacity.
 
 ### Route contributions as extension applications
 

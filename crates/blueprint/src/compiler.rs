@@ -121,7 +121,13 @@ pub fn compile(
         return Err(BlueprintError::MissingDropdownOptionView);
     }
     for (name, view) in &definition.views {
-        crate::view_validation::validate_view(name, view, &attributes, &definition.code)?;
+        crate::view_validation::validate_view(
+            name,
+            view,
+            &attributes,
+            &definition.code,
+            &definition.kind,
+        )?;
     }
 
     Ok(CompiledBlueprint {

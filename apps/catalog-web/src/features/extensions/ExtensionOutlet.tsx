@@ -15,7 +15,11 @@ import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { z } from 'zod';
 import { ExtensionFrame } from './ExtensionFrame';
-import { getExtensionRuntime, type ExtensionContribution } from './api';
+import {
+  getExtensionRuntime,
+  type ExtensionContribution,
+  type ExtensionRuntimeScope,
+} from './api';
 import { extensionQueryKeys } from './query-keys';
 import { extensionRuntimeRefetchInterval } from './constants';
 
@@ -31,11 +35,21 @@ type Outlet =
 const contributionKey = (contribution: ExtensionContribution) =>
   `${contribution.extension_id}:${contribution.id}:${contribution.release_id}`;
 
-// The host, rather than an extension manifest, owns action-bar capacity.
-const primaryActionCapacity = 1;
-const secondaryActionCapacity = 3;
-const visibleActionCapacity = primaryActionCapacity + secondaryActionCapacity;
-const visibleEmbeddedCapacity = 3;
+// Every mounted surface has an explicit host policy. Extension manifests never
+// select capacity, grouping, or overflow behavior.
+const outletPolicies = {
+  navigation: { kind: 'navigation', promotedCapacity: 3 },
+  entity_preview_panel: { kind: 'panel', visibleCapacity: 3 },
+  blueprint_attribute_configuration: { kind: 'panel', visibleCapacity: 3 },
+  entity_attribute_decoration: { kind: 'popover' },
+  entity_action: {
+    kind: 'actionBar',
+    primaryCapacity: 1,
+    secondaryCapacity: 3,
+  },
+  explorer_row_action: { kind: 'popover' },
+  blueprint_detail_panel: { kind: 'panel', visibleCapacity: 3 },
+} as const;
 
 const supportsOutlet = (contribution: ExtensionContribution, outlet: Outlet) =>
   contribution.outlet === outlet &&
@@ -72,33 +86,22 @@ const hasValidContext = (
   return !schema || schema.safeParse(context).success;
 };
 
-const runtimeScope = (context: Record<string, unknown> | undefined) => {
-  const blueprintId = context?.blueprint_id;
-  const blueprintVersion = context?.blueprint_version;
-  return typeof blueprintId === 'string' &&
-    typeof blueprintVersion === 'number' &&
-    Number.isInteger(blueprintVersion) &&
-    blueprintVersion > 0
-    ? { blueprintId, blueprintVersion }
-    : undefined;
-};
-
 type Props = {
   outlet: Outlet;
   context?: Record<string, unknown>;
+  runtimeScope?: ExtensionRuntimeScope;
 };
 
 /**
  * A fixed host-owned insertion point; extensions never choose a DOM selector.
- * Contributions from enabled extensions are independent; their relative order is
- * intentionally not a contract.
+ * Contributions arrive in the host-computed display order; this component only
+ * applies the fixed capacity, grouping, and overflow policy for the outlet.
  */
-export const ExtensionOutlet = ({ outlet, context }: Props) => {
+export const ExtensionOutlet = ({ outlet, context, runtimeScope }: Props) => {
   const { t } = useTranslation();
-  const scope = runtimeScope(context);
   const runtime = useQuery({
-    queryKey: extensionQueryKeys.runtime(scope),
-    queryFn: () => getExtensionRuntime(scope),
+    queryKey: extensionQueryKeys.runtime(runtimeScope),
+    queryFn: () => getExtensionRuntime(runtimeScope),
     // Runtime state can change outside this browser (safe mode, quarantine, or
     // grant revocation). Polling makes mounted frames unmount promptly; every
     // broker call remains server-gated between refreshes.
@@ -130,13 +133,15 @@ export const ExtensionOutlet = ({ outlet, context }: Props) => {
       (item) =>
         supportsOutlet(item, outlet) && hasValidContext(outlet, context),
     ) ?? [];
-  if (outlet === 'entity_action') {
-    const primary = contributions.slice(0, primaryActionCapacity);
+  const policy = outletPolicies[outlet];
+  if (policy.kind === 'actionBar') {
+    const visibleCapacity = policy.primaryCapacity + policy.secondaryCapacity;
+    const primary = contributions.slice(0, policy.primaryCapacity);
     const secondary = contributions.slice(
-      primaryActionCapacity,
-      visibleActionCapacity,
+      policy.primaryCapacity,
+      visibleCapacity,
     );
-    const overflow = contributions.slice(visibleActionCapacity);
+    const overflow = contributions.slice(visibleCapacity);
     return (
       <Stack direction="row" spacing={1} sx={{ alignItems: 'center' }}>
         {primary.map((item) => (
@@ -166,8 +171,37 @@ export const ExtensionOutlet = ({ outlet, context }: Props) => {
       </Stack>
     );
   }
-  const visible = contributions.slice(0, visibleEmbeddedCapacity);
-  const overflow = contributions.slice(visibleEmbeddedCapacity);
+  if (policy.kind === 'navigation') {
+    const promoted = contributions.filter(
+      (item) => item.navigation_group === 'promoted',
+    );
+    const visible = promoted.slice(0, policy.promotedCapacity);
+    const visibleKeys = new Set(visible.map((item) => item.contribution_key));
+    const grouped = contributions.filter(
+      (item) => !visibleKeys.has(item.contribution_key),
+    );
+    return (
+      <Stack spacing={1}>
+        {visible.map((item) => (
+          <ExtensionFrame
+            contribution={item}
+            context={context}
+            key={contributionKey(item)}
+          />
+        ))}
+        {grouped.length > 0 && (
+          <ExtensionActionOverflow
+            context={context}
+            contributions={grouped}
+            label={t('extensions.groupedNavigation')}
+          />
+        )}
+      </Stack>
+    );
+  }
+  if (policy.kind !== 'panel') return null;
+  const visible = contributions.slice(0, policy.visibleCapacity);
+  const overflow = contributions.slice(policy.visibleCapacity);
   return (
     <Stack spacing={1}>
       {visible.map((item) => (
@@ -233,20 +267,21 @@ export const ExtensionPopoverOutlet = ({
   context,
   label,
   outlet,
+  runtimeScope,
 }: {
   context?: Record<string, unknown>;
   label: string;
   outlet: Outlet;
+  runtimeScope?: ExtensionRuntimeScope;
 }) => {
   const [anchor, setAnchor] = useState<HTMLElement | null>(null);
   const [contentHeights, setContentHeights] = useState<Record<string, number>>(
     {},
   );
   const contextKey = JSON.stringify(context);
-  const scope = runtimeScope(context);
   const runtime = useQuery({
-    queryKey: extensionQueryKeys.runtime(scope),
-    queryFn: () => getExtensionRuntime(scope),
+    queryKey: extensionQueryKeys.runtime(runtimeScope),
+    queryFn: () => getExtensionRuntime(runtimeScope),
     refetchInterval: extensionRuntimeRefetchInterval,
     retry: false,
   });
