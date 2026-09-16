@@ -14,16 +14,23 @@ import {
   useLegacyTable,
 } from '@tanstack/react-table/legacy';
 import MoreVertIcon from '@mui/icons-material/MoreVert';
+import SettingsIcon from '@mui/icons-material/Settings';
 import {
   Alert,
   Box,
+  Button,
   ButtonBase,
+  Checkbox,
   Chip,
   Dialog,
+  DialogActions,
   DialogContent,
   DialogTitle,
   IconButton,
   LinearProgress,
+  List,
+  ListItem,
+  ListItemText,
   Menu,
   MenuItem,
   Paper,
@@ -61,6 +68,12 @@ import { ExtensionTableCell } from './ExtensionTableCell';
 import { ImageTableCell } from './ImageTableCell';
 import { explorerTableCellContextSchema } from './schemas';
 import { entityQueryKeys } from '../entities/query-keys';
+import {
+  clearExplorerColumnPreferences,
+  getExplorerColumnPreferences,
+  setExplorerColumnPreferences,
+  type ExplorerColumnPreferences,
+} from './column-preferences';
 
 const maximumExplorerCellFrames = 32;
 
@@ -163,6 +176,95 @@ const EntityActionsMenu = ({
         outlet="explorer_row_action"
       />
     </Menu>
+  );
+};
+
+const ExplorerColumnPreferencesDialog = ({
+  columns,
+  onChange,
+  onClear,
+  onClose,
+  open,
+  preferences,
+}: {
+  columns: { id: string; label: string }[];
+  onChange: (preferences: ExplorerColumnPreferences) => void;
+  onClear: () => void;
+  onClose: () => void;
+  open: boolean;
+  preferences: ExplorerColumnPreferences;
+}) => {
+  const { t } = useTranslation();
+  const labels = new Map(columns.map((column) => [column.id, column.label]));
+  const move = (id: string, direction: -1 | 1) => {
+    const index = preferences.order.indexOf(id);
+    const target = index + direction;
+    if (target < 0 || target >= preferences.order.length) return;
+    const order = [...preferences.order];
+    [order[index], order[target]] = [order[target], order[index]];
+    onChange({ ...preferences, order });
+  };
+
+  return (
+    <Dialog fullWidth maxWidth="sm" onClose={onClose} open={open}>
+      <DialogTitle>{t('explorer.columnPreferences')}</DialogTitle>
+      <DialogContent>
+        <List aria-label={t('explorer.columns')}>
+          {preferences.order.map((id, index) => (
+            <ListItem
+              key={id}
+              secondaryAction={
+                <>
+                  <Button
+                    disabled={index === 0}
+                    onClick={() => move(id, -1)}
+                    size="small"
+                  >
+                    {t('explorer.moveColumnUp')}
+                  </Button>
+                  <Button
+                    disabled={index === preferences.order.length - 1}
+                    onClick={() => move(id, 1)}
+                    size="small"
+                  >
+                    {t('explorer.moveColumnDown')}
+                  </Button>
+                </>
+              }
+            >
+              <Checkbox
+                checked={!preferences.hidden.includes(id)}
+                edge="start"
+                slotProps={{
+                  input: {
+                    'aria-label': t('explorer.showColumn', {
+                      column: labels.get(id),
+                    }),
+                  },
+                }}
+                onChange={() =>
+                  onChange({
+                    ...preferences,
+                    hidden: preferences.hidden.includes(id)
+                      ? preferences.hidden.filter((hidden) => hidden !== id)
+                      : [...preferences.hidden, id],
+                  })
+                }
+              />
+              <ListItemText primary={labels.get(id) ?? id} />
+            </ListItem>
+          ))}
+        </List>
+      </DialogContent>
+      <DialogActions>
+        <Button color="inherit" onClick={onClear}>
+          {t('explorer.clearColumnPreferences')}
+        </Button>
+        <Button onClick={onClose} variant="contained">
+          {t('explorer.done')}
+        </Button>
+      </DialogActions>
+    </Dialog>
   );
 };
 
@@ -293,6 +395,25 @@ export const ExplorerResultsTable = ({
         relationshipSortBlocked: false,
         sortable: false,
       }));
+  const configurableColumnIds = [
+    'id',
+    'display',
+    'publication',
+    'schema',
+    ...tableColumns.map((column) => column.field),
+  ];
+  const [columnPreferences, setColumnPreferences] =
+    useState<ExplorerColumnPreferences>(() =>
+      getExplorerColumnPreferences(
+        blueprint.blueprint.id,
+        configurableColumnIds,
+      ),
+    );
+  const [columnPreferencesOpen, setColumnPreferencesOpen] = useState(false);
+  const updateColumnPreferences = (preferences: ExplorerColumnPreferences) => {
+    setColumnPreferences(preferences);
+    setExplorerColumnPreferences(blueprint.blueprint.id, preferences);
+  };
   const runtime = useQuery({
     queryKey: extensionQueryKeys.runtime(),
     queryFn: getExtensionRuntime,
@@ -307,11 +428,12 @@ export const ExplorerResultsTable = ({
   // of opaque-origin frames.
   let cellFrames = 0;
   const takeCellFrame = () => cellFrames++ < maximumExplorerCellFrames;
-  const columns: LegacyColumnDef<EntityItem, unknown>[] = [
+  const columnDefinitions: LegacyColumnDef<EntityItem, unknown>[] = [
     // TanStack's column definitions are intentionally invariant in their
     // value type. The table only consumes the shared row shape, so normalize
     // heterogeneous column values at this boundary.
     columnHelper.accessor('id', {
+      id: 'id',
       header: t('explorer.id'),
       cell: (info) => <EntityIdPopover entityId={info.getValue()} />,
     }) as LegacyColumnDef<EntityItem, unknown>,
@@ -514,6 +636,32 @@ export const ExplorerResultsTable = ({
       },
     }) as LegacyColumnDef<EntityItem, unknown>,
   ];
+  const actionColumn = columnDefinitions.pop();
+  const columns = [
+    ...columnPreferences.order.flatMap((id) => {
+      const column = columnDefinitions.find(
+        (definition) => definition.id === id,
+      );
+      return column && !columnPreferences.hidden.includes(id) ? [column] : [];
+    }),
+    ...(actionColumn ? [actionColumn] : []),
+  ];
+  const preferenceColumns = configurableColumnIds.map((id) => ({
+    id,
+    label:
+      id === 'id'
+        ? t('explorer.id')
+        : id === 'display'
+          ? t('explorer.display')
+          : id === 'publication'
+            ? t('explorer.publicationForContext', {
+                context: publicationContextCode,
+              })
+            : id === 'schema'
+              ? t('explorer.schema')
+              : (tableColumns.find((column) => column.field === id)?.label ??
+                id.replaceAll('_', ' ')),
+  }));
   const table = useLegacyTable({
     data: items,
     columns,
@@ -546,13 +694,33 @@ export const ExplorerResultsTable = ({
           {publish.error?.message ?? unpublish.error?.message}
         </Alert>
       )}
-      <Typography sx={{ borderBottom: 1, borderColor: 'divider', p: 2 }}>
-        {totalCount === null
-          ? t('explorer.resultCount', { count: items.length })
-          : totalCountCapped
-            ? t('explorer.resultCountCapped', { count: totalCount })
-            : t('explorer.resultCount', { count: totalCount })}
-      </Typography>
+      <Box
+        sx={{
+          alignItems: 'center',
+          borderBottom: 1,
+          borderColor: 'divider',
+          display: 'flex',
+          justifyContent: 'space-between',
+          p: 1,
+          pl: 2,
+        }}
+      >
+        <Typography>
+          {totalCount === null
+            ? t('explorer.resultCount', { count: items.length })
+            : totalCountCapped
+              ? t('explorer.resultCountCapped', { count: totalCount })
+              : t('explorer.resultCount', { count: totalCount })}
+        </Typography>
+        <Tooltip title={t('explorer.columnPreferences')}>
+          <IconButton
+            aria-label={t('explorer.columnPreferences')}
+            onClick={() => setColumnPreferencesOpen(true)}
+          >
+            <SettingsIcon />
+          </IconButton>
+        </Tooltip>
+      </Box>
       <TableContainer
         ref={tableContainerRef}
         sx={{
@@ -695,6 +863,20 @@ export const ExplorerResultsTable = ({
           unpublishing={unpublish.isPending}
         />
       )}
+      <ExplorerColumnPreferencesDialog
+        columns={preferenceColumns}
+        onChange={updateColumnPreferences}
+        onClear={() => {
+          clearExplorerColumnPreferences(blueprint.blueprint.id);
+          setColumnPreferences({
+            hidden: [],
+            order: configurableColumnIds,
+          });
+        }}
+        onClose={() => setColumnPreferencesOpen(false)}
+        open={columnPreferencesOpen}
+        preferences={columnPreferences}
+      />
       <Dialog
         onClose={() => setSearchInfoEntity(null)}
         open={Boolean(searchInfoEntity)}
