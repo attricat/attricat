@@ -3,7 +3,7 @@ use std::str::FromStr;
 use axum::{
     Json,
     body::Body,
-    extract::{Path, State},
+    extract::{Path, Query, State},
     http::{HeaderMap, HeaderValue, StatusCode, header},
     response::Response,
 };
@@ -36,8 +36,16 @@ pub(super) struct CommandRequest {
     payload: Value,
 }
 
+#[derive(Deserialize)]
+pub(super) struct RuntimeQuery {
+    blueprint_id: Option<Uuid>,
+    blueprint_version: Option<i64>,
+}
+
 #[derive(Serialize)]
 pub(super) struct RuntimeContribution {
+    contribution_key: String,
+    display_order: u32,
     extension_id: String,
     release_id: Uuid,
     configuration: Value,
@@ -461,17 +469,43 @@ pub(super) async fn remove(
 }
 
 /// Returns only contributions from currently enabled installations.
+pub(super) async fn workspace_extension_layout(
+    ScopedRepository(repository): ScopedRepository,
+) -> Result<Json<Value>, ApiError> {
+    Ok(Json(repository.workspace_extension_layout().await?))
+}
+
+pub(super) async fn update_workspace_extension_layout(
+    ScopedRepository(repository): ScopedRepository,
+    ApiJson(layout): ApiJson<Value>,
+) -> Result<StatusCode, ApiError> {
+    repository.update_workspace_extension_layout(layout).await?;
+    Ok(StatusCode::NO_CONTENT)
+}
+
 pub(super) async fn runtime(
+    Query(query): Query<RuntimeQuery>,
     ScopedRepository(repository): ScopedRepository,
 ) -> Result<Json<Vec<RuntimeContribution>>, ApiError> {
+    let blueprint = match (query.blueprint_id, query.blueprint_version) {
+        (Some(id), Some(version)) if version > 0 => Some((id, version)),
+        (None, None) => None,
+        _ => {
+            return Err(ApiError::invalid_input(
+                "invalid extension runtime scope".into(),
+            ));
+        }
+    };
     let contributions = repository
-        .client_extension_contributions()
+        .client_extension_contributions_for_blueprint(blueprint)
         .await
         .map_err(ApiError::from)?;
     Ok(Json(
         contributions
             .into_iter()
             .map(|item| RuntimeContribution {
+                contribution_key: item.contribution_key,
+                display_order: item.display_order,
                 extension_id: item.extension_id,
                 release_id: item.installed_release_id,
                 configuration: item.configuration,

@@ -5,6 +5,8 @@ import {
   discoveredSchema,
   installationSchema,
   registryDetailsSchema,
+  workspaceExtensionLayoutSchema,
+  type WorkspaceExtensionLayout,
 } from './schemas';
 
 export {
@@ -13,6 +15,7 @@ export {
   type ExtensionDetail,
   type ExtensionInstallation,
   type RegistryDetails,
+  type WorkspaceExtensionLayout,
 } from './schemas';
 
 const body = (value: unknown, method = 'POST'): RequestInit => ({
@@ -30,6 +33,10 @@ export const registryDetails = (owner: string, repository: string) =>
   );
 export const installedExtensions = () =>
   request('/api/extensions', z.array(installationSchema));
+export const workspaceExtensionLayout = () =>
+  request('/api/workspace/extension-layout', workspaceExtensionLayoutSchema);
+export const updateWorkspaceExtensionLayout = (layout: WorkspaceExtensionLayout) =>
+  requestNoContent('/api/workspace/extension-layout', body(layout, 'PUT'));
 export const extensionDetail = (id: string) =>
   request(`/api/extensions/${encodeURIComponent(id)}`, detailSchema);
 export const installExtension = (input: {

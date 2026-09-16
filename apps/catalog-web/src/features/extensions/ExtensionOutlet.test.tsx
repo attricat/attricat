@@ -16,8 +16,10 @@ vi.mock('./ExtensionFrame', async () => {
   const React = await import('react');
   return {
     ExtensionFrame: ({
+      contribution,
       onContentHeight,
     }: {
+      contribution: { id: string };
       onContentHeight?: (height: number) => void;
     }) => {
       React.useEffect(() => {
@@ -26,15 +28,17 @@ vi.mock('./ExtensionFrame', async () => {
         // The frame reports its initial size once after mounting.
         // eslint-disable-next-line react-hooks/exhaustive-deps
       }, []);
-      return <div>Extension content</div>;
+      return <div>{contribution.id}</div>;
     },
   };
 });
 
 import { getExtensionRuntime } from './api';
-import { ExtensionPopoverOutlet } from './ExtensionOutlet';
+import { ExtensionOutlet, ExtensionPopoverOutlet } from './ExtensionOutlet';
 
 const contribution: ExtensionContribution = {
+  contribution_key: 'example.extension:row-action',
+  display_order: 0,
   capabilities: [],
   configuration: null,
   extension_id: 'example.extension',
@@ -65,6 +69,33 @@ const renderOutlet = () => {
     </QueryClientProvider>,
   );
 };
+
+describe('ExtensionOutlet', () => {
+  it('keeps one primary and three secondary entity actions before overflow', async () => {
+    const actions = Array.from({ length: 5 }, (_, index) => ({
+      ...contribution,
+      contribution_key: `example.extension:action-${index}`,
+      display_order: index,
+      id: `action-${index}`,
+      outlet: 'entity_action' as const,
+      kind: 'embedded' as const,
+    }));
+    vi.mocked(getExtensionRuntime).mockResolvedValue(actions);
+    const queryClient = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    });
+    const user = userEvent.setup();
+    render(
+      <QueryClientProvider client={queryClient}>
+        <ExtensionOutlet outlet="entity_action" />
+      </QueryClientProvider>,
+    );
+    await screen.findByText('action-3');
+    expect(screen.queryByText('action-4')).toBeNull();
+    await user.click(screen.getByRole('button', { name: 'extensions.moreActions' }));
+    expect(await screen.findByText('action-4')).toBeTruthy();
+  });
+});
 
 describe('ExtensionPopoverOutlet', () => {
   it('keeps one mounted frame while measuring and opening the popover', async () => {

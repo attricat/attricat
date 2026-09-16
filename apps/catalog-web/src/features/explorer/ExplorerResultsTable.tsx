@@ -433,7 +433,7 @@ export const ExplorerResultsTable = ({
   };
   const runtime = useQuery({
     queryKey: extensionQueryKeys.runtime(),
-    queryFn: getExtensionRuntime,
+    queryFn: () => getExtensionRuntime(),
     refetchInterval: extensionRuntimeRefetchInterval,
     retry: false,
   });

@@ -93,6 +93,24 @@ pub(crate) fn validate_view(
                 validate_view_nodes(view, &section.children, attributes, blueprint_code)?;
             }
         }
+        ViewDefinition::ExtensionLayout { version, outlets } => {
+            if view != "extension_layout" || *version != 1 {
+                return Err(BlueprintError::InvalidExtensionLayout);
+            }
+            for (outlet, layout) in outlets {
+                if !matches!(
+                    outlet.as_str(),
+                    "entity_preview_panel" | "entity_attribute_decoration" | "entity_action"
+                ) || layout
+                    .order
+                    .iter()
+                    .chain(&layout.hidden)
+                    .any(|key| key.is_empty() || key.len() > 256 || !key.contains(':'))
+                {
+                    return Err(BlueprintError::InvalidExtensionLayout);
+                }
+            }
+        }
     }
     Ok(())
 }

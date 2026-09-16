@@ -72,14 +72,14 @@ fn storage_client_release_archive(version: &str) -> Vec<u8> {
     zstd::stream::encode_all(Cursor::new(tar_bytes), 0).unwrap()
 }
 
-fn client_release_archive() -> Vec<u8> {
+fn client_release_archive(extension_id: &str) -> Vec<u8> {
     let manifest = serde_json::to_vec(&json!({
         "manifest_version": 1,
         "name": "Client extension",
         "version": "1.0.0",
         "description": "client runtime integration test",
         "icons": {"48": "icon.png"},
-        "catalog": {"id": "acme.client", "host_api": "^1.0"},
+        "catalog": {"id": extension_id, "host_api": "^1.0"},
         "permissions": ["configuration.read"],
         "configuration": {"version": 1, "schema": {"type": "object", "additionalProperties": false}},
         "artifacts": [{
@@ -145,7 +145,10 @@ async fn enabled_client_contributions_are_hidden_after_state_changes(pool: sqlx:
         ExtensionInstaller::new(repository.clone(), Arc::new(FakeObjectStore::available()));
 
     installer
-        .install("github:acme/client@v1.0.0", &client_release_archive())
+        .install(
+            "github:acme/client@v1.0.0",
+            &client_release_archive("acme.client"),
+        )
         .await
         .unwrap();
     assert!(
@@ -171,6 +174,47 @@ async fn enabled_client_contributions_are_hidden_after_state_changes(pool: sqlx:
             contributions[0].installed_release_id
         )
     );
+    assert_eq!(contributions[0].contribution_key, "acme.client:panel");
+
+    // Layout hides are evaluated after the enabled/grant runtime gate. The
+    // stored key survives removal so toggling visibility restores the same
+    // contribution without an installation-time ordering contract.
+    repository
+        .update_workspace_extension_layout(json!({
+            "version": 1,
+            "outlets": {
+                "entity_preview_panel": {
+                    "order": [],
+                    "hidden": ["acme.client:panel"]
+                }
+            }
+        }))
+        .await
+        .unwrap();
+    assert!(
+        repository
+            .client_extension_contributions()
+            .await
+            .unwrap()
+            .is_empty()
+    );
+    repository
+        .update_workspace_extension_layout(json!({
+            "version": 1,
+            "outlets": {
+                "entity_preview_panel": { "order": [], "hidden": [] }
+            }
+        }))
+        .await
+        .unwrap();
+    assert_eq!(
+        repository
+            .client_extension_contributions()
+            .await
+            .unwrap()
+            .len(),
+        1
+    );
 
     repository.disable_extension("acme.client").await.unwrap();
     assert!(
@@ -191,6 +235,51 @@ async fn enabled_client_contributions_are_hidden_after_state_changes(pool: sqlx:
             .unwrap()
             .is_empty()
     );
+}
+
+#[sqlx::test(migrations = "./migrations")]
+async fn extension_layout_order_is_stable_and_host_owned(pool: sqlx::PgPool) {
+    let workspace = Uuid::from_u128(0x00000000000040008000000000000002);
+    let repository = CatalogRepository::new(pool)
+        .for_workspace(workspace)
+        .await
+        .unwrap();
+    let installer =
+        ExtensionInstaller::new(repository.clone(), Arc::new(FakeObjectStore::available()));
+    for extension_id in ["acme.zebra", "acme.alpha"] {
+        installer
+            .install("test", &client_release_archive(extension_id))
+            .await
+            .unwrap();
+        repository
+            .grant_extension(extension_id, "capability", "configuration.read")
+            .await
+            .unwrap();
+        repository.enable_extension(extension_id).await.unwrap();
+    }
+    let keys = || async {
+        repository
+            .client_extension_contributions()
+            .await
+            .unwrap()
+            .into_iter()
+            .map(|item| item.contribution_key)
+            .collect::<Vec<_>>()
+    };
+    assert_eq!(keys().await, ["acme.alpha:panel", "acme.zebra:panel"]);
+    repository
+        .update_workspace_extension_layout(json!({
+            "version": 1,
+            "outlets": {
+                "entity_preview_panel": {
+                    "order": ["acme.zebra:panel"],
+                    "hidden": []
+                }
+            }
+        }))
+        .await
+        .unwrap();
+    assert_eq!(keys().await, ["acme.zebra:panel", "acme.alpha:panel"]);
 }
 
 #[sqlx::test(migrations = "./migrations")]

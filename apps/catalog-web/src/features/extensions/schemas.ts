@@ -2,6 +2,8 @@ import { z } from 'zod';
 
 const contributionSchema = z
   .object({
+    contribution_key: z.string().min(3),
+    display_order: z.number().int().nonnegative(),
     extension_id: z.string().min(1),
     release_id: z.uuid(),
     configuration: z.unknown(),
@@ -36,6 +38,19 @@ const contributionSchema = z
 
 export const runtimeSchema = z.array(contributionSchema);
 export type ExtensionContribution = z.infer<typeof contributionSchema>;
+
+export const workspaceExtensionLayoutSchema = z
+  .object({
+    version: z.literal(1),
+    outlets: z.record(
+      z.string(),
+      z.object({ order: z.array(z.string()), hidden: z.array(z.string()) }),
+    ),
+  })
+  .strict();
+export type WorkspaceExtensionLayout = z.infer<
+  typeof workspaceExtensionLayoutSchema
+>;
 
 export const extensionCommandRequestSchema = z
   .object({

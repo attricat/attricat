@@ -1,4 +1,4 @@
-import { useQuery } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link } from '@tanstack/react-router';
 import {
   Alert,
@@ -7,20 +7,30 @@ import {
   Chip,
   Paper,
   Stack,
+  TextField,
   Typography,
 } from '@mui/material';
+import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { PageContainer } from '../../components/PageContainer';
 import { PageHeader } from '../../components/PageHeader';
 import { currentSession } from '../auth/api';
 import { authQueryKeys } from '../auth/query-keys';
-import { discoverExtensions, installedExtensions } from './management-api';
+import {
+  discoverExtensions,
+  installedExtensions,
+  updateWorkspaceExtensionLayout,
+  workspaceExtensionLayout,
+} from './management-api';
 import { extensionManagementQueryKeys } from './management-query-keys';
 import { ErrorNotice } from './ExtensionErrorNotice';
 import { repositoryParts } from './extension-page-utils';
+import { workspaceExtensionLayoutSchema } from './schemas';
 
 export const ExtensionsPage = () => {
   const { t } = useTranslation();
+  const queryClient = useQueryClient();
+  const [layoutDraft, setLayoutDraft] = useState('');
   const session = useQuery({
     queryKey: authQueryKeys.session(),
     queryFn: currentSession,
@@ -34,6 +44,24 @@ export const ExtensionsPage = () => {
     queryKey: extensionManagementQueryKeys.installed(),
     queryFn: installedExtensions,
     enabled: session.data?.capabilities?.extensions_read === true,
+  });
+  const layout = useQuery({
+    queryKey: extensionManagementQueryKeys.layout(),
+    queryFn: workspaceExtensionLayout,
+    enabled: session.data?.capabilities?.extensions_manage === true,
+  });
+  useEffect(() => {
+    if (layout.data) setLayoutDraft(JSON.stringify(layout.data, null, 2));
+  }, [layout.data]);
+  const saveLayout = useMutation({
+    mutationFn: (draft: string) =>
+      updateWorkspaceExtensionLayout(
+        workspaceExtensionLayoutSchema.parse(JSON.parse(draft)),
+      ),
+    onSuccess: () =>
+      queryClient.invalidateQueries({
+        queryKey: extensionManagementQueryKeys.layout(),
+      }),
   });
   if (session.data && !session.data.capabilities?.extensions_read)
     return (
@@ -56,6 +84,30 @@ export const ExtensionsPage = () => {
       />
       <ErrorNotice error={marketplace.error} />
       <ErrorNotice error={installed.error} />
+      <ErrorNotice error={layout.error ?? saveLayout.error} />
+      {session.data?.capabilities?.extensions_manage && (
+        <Paper sx={{ mb: 4, p: 2 }}>
+          <Typography variant="h5">{t('extensions.layout')}</Typography>
+          <Typography color="text.secondary" sx={{ mb: 2 }}>
+            {t('extensions.layoutDescription')}
+          </Typography>
+          <TextField
+            fullWidth
+            label={t('extensions.layout')}
+            minRows={8}
+            multiline
+            onChange={(event) => setLayoutDraft(event.target.value)}
+            value={layoutDraft}
+          />
+          <Button
+            disabled={!layoutDraft || saveLayout.isPending}
+            onClick={() => saveLayout.mutate(layoutDraft)}
+            sx={{ mt: 2 }}
+          >
+            {t('extensions.saveLayout')}
+          </Button>
+        </Paper>
+      )}
       <Typography sx={{ mb: 1 }} variant="h5">
         {t('extensions.marketplace')}
       </Typography>

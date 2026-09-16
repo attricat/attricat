@@ -53,7 +53,8 @@ password, cookie, CSRF, expiry, and revocation contract is documented in
 | `GET` | `/extensions/{extension_id}/{contribution_id}/artifact` | Fetch a validated client artifact for an enabled release. |
 | `POST` | `/extensions/{extension_id}/{contribution_id}/storage/{release_id}` | Perform a bounded client-mediated extension storage operation. |
 | `PUT` | `/workspace/extensions-mode` | Enable or disable extensions for the current workspace (`extensions.manage`). |
-| `GET` | `/extensions/runtime` | Return enabled, client-safe extension contributions and their fixed host outlets (`entities.read`). |
+| `GET`, `PUT` | `/workspace/extension-layout` | Read or replace the versioned, host-owned extension outlet layout (`extensions.manage`). |
+| `GET` | `/extensions/runtime` | Return enabled, client-safe extension contributions, their stable keys, and host-computed display order (`entities.read`). Pass a published entity `blueprint_id` and `blueprint_version` together to apply that revision's extension-layout override. |
 | `POST` | `/extensions/{extension_id}/{contribution_id}/command` | Validate a bounded, manifest-declared client-mediated extension command against the enabled exact release and grants (`entities.write`). |
 | `POST` | `/auth/discover` | Resolve a normalized workspace identifier and return its sign-in methods; rate-limited and intentionally minimal. |
 | `POST` | `/auth/login` | Sign in with a previously resolved workspace identifier, email, and password. |

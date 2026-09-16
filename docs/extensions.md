@@ -296,8 +296,17 @@ host-owned action or panel layouts. Routes are always namespaced at
 `/extensions/:extensionId/:contributionId`; manifests cannot provide a path,
 selector, or host component. Each extension can use an outlet once and all
 contribution/artifact IDs remain stable across releases. Multiple enabled
-extensions may contribute to a surface, but their display order is intentionally
-unspecified.
+extensions may contribute to a surface. The host orders them deterministically
+by `extension_id`, then contribution `id`, unless a workspace administrator
+sets an outlet layout through `PUT /workspace/extension-layout`. Layouts use
+`{"version":1,"outlets":{"entity_preview_panel":{"order":["acme.panel:summary"],"hidden":[]}}}`.
+Keys are stable `<extension-id>:<contribution-id>` values; unavailable keys are
+retained for restoration. The runtime descriptor contains the host-computed
+`display_order`, so clients never implement precedence themselves. Entity action
+bars render one host-selected primary action and up to three secondary actions;
+remaining extension actions are placed in a host-owned overflow popover.
+Other embedded outlets show at most three contributions before the host-owned
+content overflow popover; extension frames never determine that capacity.
 
 ### Route contributions as extension applications
 

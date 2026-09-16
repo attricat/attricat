@@ -13,6 +13,8 @@ vi.stubGlobal('document', { cookie: '' });
 afterEach(() => fetchMock.mockReset());
 
 const contribution = {
+  contribution_key: 'acme.test:panel',
+  display_order: 0,
   extension_id: 'acme.test',
   release_id: '123e4567-e89b-12d3-a456-426614174000',
   configuration: {},

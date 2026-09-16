@@ -1,8 +1,10 @@
+import MoreHorizIcon from '@mui/icons-material/MoreHoriz';
 import { ExtensionIcon } from '../../components/system-icons';
 import {
   Alert,
   Box,
   CircularProgress,
+  Divider,
   IconButton,
   Popover,
   Stack,
@@ -28,6 +30,12 @@ type Outlet =
 
 const contributionKey = (contribution: ExtensionContribution) =>
   `${contribution.extension_id}:${contribution.id}:${contribution.release_id}`;
+
+// The host, rather than an extension manifest, owns action-bar capacity.
+const primaryActionCapacity = 1;
+const secondaryActionCapacity = 3;
+const visibleActionCapacity = primaryActionCapacity + secondaryActionCapacity;
+const visibleEmbeddedCapacity = 3;
 
 const supportsOutlet = (contribution: ExtensionContribution, outlet: Outlet) =>
   contribution.outlet === outlet &&
@@ -64,6 +72,17 @@ const hasValidContext = (
   return !schema || schema.safeParse(context).success;
 };
 
+const runtimeScope = (context: Record<string, unknown> | undefined) => {
+  const blueprintId = context?.blueprint_id;
+  const blueprintVersion = context?.blueprint_version;
+  return typeof blueprintId === 'string' &&
+    typeof blueprintVersion === 'number' &&
+    Number.isInteger(blueprintVersion) &&
+    blueprintVersion > 0
+    ? { blueprintId, blueprintVersion }
+    : undefined;
+};
+
 type Props = {
   outlet: Outlet;
   context?: Record<string, unknown>;
@@ -76,9 +95,10 @@ type Props = {
  */
 export const ExtensionOutlet = ({ outlet, context }: Props) => {
   const { t } = useTranslation();
+  const scope = runtimeScope(context);
   const runtime = useQuery({
-    queryKey: extensionQueryKeys.runtime(),
-    queryFn: getExtensionRuntime,
+    queryKey: extensionQueryKeys.runtime(scope),
+    queryFn: () => getExtensionRuntime(scope),
     // Runtime state can change outside this browser (safe mode, quarantine, or
     // grant revocation). Polling makes mounted frames unmount promptly; every
     // broker call remains server-gated between refreshes.
@@ -105,22 +125,106 @@ export const ExtensionOutlet = ({ outlet, context }: Props) => {
         {t('extensions.contentLoadFailed')}
       </Alert>
     );
+  const contributions =
+    runtime.data?.filter(
+      (item) =>
+        supportsOutlet(item, outlet) && hasValidContext(outlet, context),
+    ) ?? [];
+  if (outlet === 'entity_action') {
+    const primary = contributions.slice(0, primaryActionCapacity);
+    const secondary = contributions.slice(
+      primaryActionCapacity,
+      visibleActionCapacity,
+    );
+    const overflow = contributions.slice(visibleActionCapacity);
+    return (
+      <Stack direction="row" spacing={1} sx={{ alignItems: 'center' }}>
+        {primary.map((item) => (
+          <ExtensionFrame
+            contribution={item}
+            context={context}
+            key={contributionKey(item)}
+          />
+        ))}
+        {secondary.length > 0 && primary.length > 0 && (
+          <Divider flexItem orientation="vertical" />
+        )}
+        {secondary.map((item) => (
+          <ExtensionFrame
+            contribution={item}
+            context={context}
+            key={contributionKey(item)}
+          />
+        ))}
+        {overflow.length > 0 && (
+          <ExtensionActionOverflow
+            context={context}
+            contributions={overflow}
+            label={t('extensions.moreActions')}
+          />
+        )}
+      </Stack>
+    );
+  }
+  const visible = contributions.slice(0, visibleEmbeddedCapacity);
+  const overflow = contributions.slice(visibleEmbeddedCapacity);
+  return (
+    <Stack spacing={1}>
+      {visible.map((item) => (
+        <ExtensionFrame
+          contribution={item}
+          context={context}
+          key={contributionKey(item)}
+        />
+      ))}
+      {overflow.length > 0 && (
+        <ExtensionActionOverflow
+          context={context}
+          contributions={overflow}
+          label={t('extensions.moreContent')}
+        />
+      )}
+    </Stack>
+  );
+};
+
+const ExtensionActionOverflow = ({
+  context,
+  contributions,
+  label,
+}: {
+  context?: Record<string, unknown>;
+  contributions: ExtensionContribution[];
+  label: string;
+}) => {
+  const [anchor, setAnchor] = useState<HTMLElement | null>(null);
   return (
     <>
-      <Stack spacing={1}>
-        {runtime.data
-          ?.filter(
-            (item) =>
-              supportsOutlet(item, outlet) && hasValidContext(outlet, context),
-          )
-          .map((item) => (
+      <Tooltip title={label}>
+        <IconButton
+          aria-label={label}
+          onClick={(event) => setAnchor(event.currentTarget)}
+          size="small"
+        >
+          <MoreHorizIcon fontSize="inherit" />
+        </IconButton>
+      </Tooltip>
+      <Popover
+        anchorEl={anchor}
+        anchorOrigin={{ horizontal: 'right', vertical: 'bottom' }}
+        onClose={() => setAnchor(null)}
+        open={Boolean(anchor)}
+      >
+        <Stack spacing={1} sx={{ p: 1 }}>
+          {contributions.map((contribution) => (
             <ExtensionFrame
-              contribution={item}
               context={context}
-              key={`${item.extension_id}:${item.id}:${item.release_id}`}
+              contribution={contribution}
+              key={contributionKey(contribution)}
             />
           ))}
-      </Stack>
+        </Stack>
+      </Popover>
     </>
   );
 };
@@ -139,9 +243,10 @@ export const ExtensionPopoverOutlet = ({
     {},
   );
   const contextKey = JSON.stringify(context);
+  const scope = runtimeScope(context);
   const runtime = useQuery({
-    queryKey: extensionQueryKeys.runtime(),
-    queryFn: getExtensionRuntime,
+    queryKey: extensionQueryKeys.runtime(scope),
+    queryFn: () => getExtensionRuntime(scope),
     refetchInterval: extensionRuntimeRefetchInterval,
     retry: false,
   });
@@ -208,7 +313,7 @@ export const ExtensionRoutePage = ({
   const { t } = useTranslation();
   const runtime = useQuery({
     queryKey: extensionQueryKeys.runtime(),
-    queryFn: getExtensionRuntime,
+    queryFn: () => getExtensionRuntime(),
     refetchInterval: extensionRuntimeRefetchInterval,
     retry: false,
   });

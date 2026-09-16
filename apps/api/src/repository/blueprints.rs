@@ -5,7 +5,7 @@ use crate::domain_events::{
     BlueprintRevisionV1, EventSource, EventSourceKind, NewDomainEvent,
 };
 use crate::model::TablePathAttribute;
-use catalog_blueprint::parse;
+use catalog_blueprint::{ViewDefinition, parse};
 use catalog_validation::validate_json_schema;
 use serde_json::json;
 use uuid::Uuid;
@@ -382,6 +382,8 @@ impl CatalogRepository {
             .await?;
             self.validate_publication_roles(&mut transaction, &blueprint.definition)
                 .await?;
+            self.validate_publication_extension_layout(&blueprint.definition)
+                .await?;
             let includes_published = sqlx::query_scalar::<_, bool>(
                 r#"SELECT NOT EXISTS (
                        SELECT 1
@@ -424,6 +426,47 @@ impl CatalogRepository {
         self.get_blueprint_revision(blueprint_id, version)
             .await?
             .ok_or(RepositoryError::NotFound("blueprint version"))
+    }
+
+    /// A layout may retain unknown keys for a removed extension, but a key that
+    /// currently resolves must stay in the outlet declared by that enabled
+    /// contribution. This prevents a blueprint from moving an extension into
+    /// an incompatible host surface at publication time.
+    async fn validate_publication_extension_layout(
+        &self,
+        definition: &str,
+    ) -> Result<(), RepositoryError> {
+        let blueprint = parse(definition).map_err(RepositoryError::invalid_blueprint_definition)?;
+        let Some(ViewDefinition::ExtensionLayout { outlets, .. }) =
+            blueprint.views.get("extension_layout")
+        else {
+            return Ok(());
+        };
+        let contributions = self.client_extension_contributions().await?;
+        for (outlet, layout) in outlets {
+            for key in layout.order.iter().chain(&layout.hidden) {
+                if let Some(contribution) = contributions
+                    .iter()
+                    .find(|item| item.contribution_key == *key)
+                {
+                    let contribution_outlet = contribution
+                        .outlet
+                        .as_ref()
+                        .map(serde_json::to_value)
+                        .transpose()
+                        .map_err(|error| {
+                            RepositoryError::InvalidBlueprintDefinition(error.to_string())
+                        })?
+                        .and_then(|value| value.as_str().map(str::to_owned));
+                    if contribution_outlet.as_deref() != Some(outlet.as_str()) {
+                        return Err(RepositoryError::InvalidBlueprintDefinition(
+                            "extension layout contribution is incompatible with its outlet".into(),
+                        ));
+                    }
+                }
+            }
+        }
+        Ok(())
     }
 
     async fn validate_publication_roles(

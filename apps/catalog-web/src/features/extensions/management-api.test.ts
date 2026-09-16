@@ -1,5 +1,10 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { installExtension, installedExtensions } from './management-api';
+import {
+  installExtension,
+  installedExtensions,
+  updateWorkspaceExtensionLayout,
+  workspaceExtensionLayout,
+} from './management-api';
 
 const fetchMock = vi.fn();
 vi.stubGlobal('fetch', fetchMock);
@@ -40,6 +45,29 @@ describe('extension management API', () => {
           release_id: 42,
         }),
       }),
+    );
+  });
+
+  it('loads and saves the versioned host-owned workspace layout', async () => {
+    const layout = {
+      version: 1 as const,
+      outlets: {
+        entity_preview_panel: {
+          order: ['acme.test:panel'],
+          hidden: ['acme.legacy:panel'],
+        },
+      },
+    };
+    fetchMock.mockResolvedValueOnce({
+      ok: true,
+      json: () => Promise.resolve(layout),
+    });
+    await expect(workspaceExtensionLayout()).resolves.toEqual(layout);
+    fetchMock.mockResolvedValueOnce({ ok: true, status: 204 });
+    await expect(updateWorkspaceExtensionLayout(layout)).resolves.toBeUndefined();
+    expect(fetchMock).toHaveBeenLastCalledWith(
+      '/api/workspace/extension-layout',
+      expect.objectContaining({ method: 'PUT', body: JSON.stringify(layout) }),
     );
   });
 
