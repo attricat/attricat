@@ -79,6 +79,23 @@ pub(super) fn policy(method: &Method, path: &str) -> Option<Policy> {
             target: TargetKind::None,
         });
     }
+    if path == "/rules"
+        || path == "/rules/validate"
+        || path.starts_with("/rules/")
+        || path == "/rule-runs"
+        || path.starts_with("/rule-runs/")
+        || path == "/rule-findings"
+        || path.starts_with("/rule-findings/")
+    {
+        return Some(Policy {
+            permission: if method == Method::GET {
+                "rules.read"
+            } else {
+                "rules.manage"
+            },
+            target: TargetKind::None,
+        });
+    }
     if path == "/workflows"
         || path == "/workflows/validate"
         || path.starts_with("/workflows/")

@@ -311,13 +311,20 @@ impl From<RepositoryError> for ApiError {
                 code: "invalid_workflow_definition",
                 message: error.to_string(),
             },
+            RepositoryError::InvalidRuleDefinition(_) => Self {
+                status: StatusCode::UNPROCESSABLE_ENTITY,
+                code: "invalid_rule_definition",
+                message: error.to_string(),
+            },
             RepositoryError::ExtensionAlreadyInstalled
             | RepositoryError::ApprovalAlreadyDecided => Self {
                 status: StatusCode::CONFLICT,
                 code: "approval_already_decided",
                 message: error.to_string(),
             },
-            RepositoryError::BlueprintCodeTaken | RepositoryError::WorkflowCodeTaken => Self {
+            RepositoryError::BlueprintCodeTaken
+            | RepositoryError::WorkflowCodeTaken
+            | RepositoryError::RuleCodeTaken => Self {
                 status: StatusCode::CONFLICT,
                 code: "conflict",
                 message: error.to_string(),
@@ -330,6 +337,11 @@ impl From<RepositoryError> for ApiError {
             RepositoryError::WorkflowNotPublished => Self {
                 status: StatusCode::UNPROCESSABLE_ENTITY,
                 code: "workflow_not_published",
+                message: error.to_string(),
+            },
+            RepositoryError::RuleNotPublished => Self {
+                status: StatusCode::UNPROCESSABLE_ENTITY,
+                code: "rule_not_published",
                 message: error.to_string(),
             },
             RepositoryError::Database(sqlx::Error::Database(database_error))

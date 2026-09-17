@@ -21,6 +21,7 @@ use api::{
     http::{AppState, router},
     mail::SmtpMailDelivery,
     repository::CatalogRepository,
+    rule_runtime,
     storage::{ObjectStore, S3ObjectStore, StorageConfig},
     telemetry::{init_metrics, init_tracing},
     workflow_runtime,
@@ -112,6 +113,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         .await?;
     CatalogRepository::new(maintenance_pool.clone())
         .ensure_workflow_permissions()
+        .await?;
+    CatalogRepository::new(maintenance_pool.clone())
+        .ensure_rule_permissions()
         .await?;
     // The identity/membership migration consumes this durable bootstrap owner
     // record to create the initial owner grant. It is set only by deployment
@@ -233,13 +237,15 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         CatalogRepository::with_workspace_pool_factory(pool.clone(), connect_options.clone());
     let dispatcher_handles = event_dispatcher::start(
         workflow_repository.clone(),
-        workflow_runtime::add_to_registry(extension_runtime::registry_with_wasm(
-            extension_runtime.clone(),
+        rule_runtime::add_to_registry(workflow_runtime::add_to_registry(
+            extension_runtime::registry_with_wasm(extension_runtime.clone()),
         )),
         dispatcher_config,
         shutdown_receiver.clone(),
     );
-    let workflow_worker = workflow_runtime::start(workflow_repository, shutdown_receiver);
+    let workflow_worker =
+        workflow_runtime::start(workflow_repository.clone(), shutdown_receiver.clone());
+    let rule_worker = rule_runtime::start(workflow_repository, shutdown_receiver);
 
     let listener = tokio::net::TcpListener::bind(bind_addr).await?;
     tracing::info!(address = %listener.local_addr()?, "API listening");
@@ -306,6 +312,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         handle.await?;
     }
     workflow_worker.await?;
+    rule_worker.await?;
     migration_worker.await?;
 
     Ok(())

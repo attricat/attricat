@@ -55,6 +55,10 @@ password, cookie, CSRF, expiry, and revocation contract is documented in
 | `PUT` | `/workspace/extensions-mode` | Enable or disable extensions for the current workspace (`extensions.manage`). |
 | `GET`, `PUT` | `/workspace/extension-layout` | Read or replace the versioned, host-owned extension outlet layout (`extensions.manage`). Navigation layouts also contain a `promoted` stable-key list; built-ins cannot be referenced. |
 | `GET` | `/extensions/runtime` | Return enabled, client-safe extension contributions, their stable keys, host-computed display order, and navigation group (`entities.read`). Pass a published entity `blueprint_id` and `blueprint_version` together to overlay that revision's entity-owned extension outlets while retaining global workspace rules. |
+| `GET`, `POST` | `/rules` | List or create versioned blueprint-owned declarative rules (`rules.read` / `rules.manage`). |
+| `POST` | `/rules/validate` | Structurally validate a strict rule TOML definition (`rules.manage`). |
+| `POST` | `/rules/{rule_id}/run-now` | Enqueue an idempotent bounded manual or dry run (`rules.manage`). |
+| `GET` | `/rule-runs`, `/rule-findings` | Read run diagnostics and active/resolved findings (`rules.read`). |
 | `POST` | `/extensions/{extension_id}/{contribution_id}/command` | Validate a bounded, manifest-declared client-mediated extension command against the enabled exact release and grants (`entities.write`). |
 | `POST` | `/auth/discover` | Resolve a normalized workspace identifier and return its sign-in methods; rate-limited and intentionally minimal. |
 | `POST` | `/auth/login` | Sign in with a previously resolved workspace identifier, email, and password. |

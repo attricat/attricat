@@ -52,6 +52,7 @@ mod files;
 mod health;
 mod members;
 mod roles;
+mod rules;
 mod sessions;
 mod tokens;
 mod values;
@@ -242,6 +243,12 @@ pub enum RepositoryError {
     WorkflowCodeTaken,
     #[error("invalid workflow definition: {0}")]
     InvalidWorkflowDefinition(String),
+    #[error("rule code is already in use")]
+    RuleCodeTaken,
+    #[error("invalid rule definition: {0}")]
+    InvalidRuleDefinition(String),
+    #[error("rule revision must be published before it can be enabled")]
+    RuleNotPublished,
     #[error("workflow revision must be published before it can be enabled")]
     WorkflowNotPublished,
     #[error("blueprint revision is not published")]
@@ -286,6 +293,14 @@ impl RepositoryError {
 
 impl CatalogRepository {
     const DEFAULT_WORKSPACE_ID: Uuid = Uuid::from_u128(0x00000000000040008000000000000002);
+
+    pub(crate) fn pool_for_runtime(&self) -> PgPool {
+        self.pool.clone()
+    }
+
+    pub(crate) fn workspace_id_for_runtime(&self) -> Uuid {
+        self.workspace_id.unwrap_or(Self::DEFAULT_WORKSPACE_ID)
+    }
 
     pub fn new(pool: PgPool) -> Self {
         Self {
