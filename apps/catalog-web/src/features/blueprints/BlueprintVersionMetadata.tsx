@@ -15,6 +15,7 @@ import { useTranslation } from 'react-i18next';
 import type { BlueprintWithAttributes } from './api';
 import { BlueprintViewsPreview } from './BlueprintViewsPreview';
 import { JsonMetadata } from './BlueprintMetadata';
+import { isHiddenByDefault } from '../entities/attribute-visibility';
 
 export const BlueprintVersionMetadata = ({
   blueprint,
@@ -23,6 +24,9 @@ export const BlueprintVersionMetadata = ({
 }) => {
   const { t } = useTranslation();
   const [tab, setTab] = useState(0);
+  const metadataAttributes = blueprint.attributes.filter(
+    (attribute) => !isHiddenByDefault(attribute, 'metadata'),
+  );
 
   return (
     <Paper component="section" sx={{ mt: 3, p: 2.5 }}>
@@ -43,7 +47,7 @@ export const BlueprintVersionMetadata = ({
           aria-controls="blueprint-metadata-tabpanel-0"
           id="blueprint-metadata-tab-0"
           label={t('blueprints.attributes', {
-            count: blueprint.attributes.length,
+            count: metadataAttributes.length,
           })}
         />
         <Tab
@@ -126,7 +130,7 @@ export const BlueprintVersionMetadata = ({
                 </TableRow>
               </TableHead>
               <TableBody>
-                {blueprint.attributes.map((attribute) => (
+                {metadataAttributes.map((attribute) => (
                   <TableRow key={String(attribute.id)}>
                     <TableCell>{attribute.code}</TableCell>
                     <TableCell>{attribute.value_type}</TableCell>

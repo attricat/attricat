@@ -258,6 +258,7 @@ export const EntityPreviewPage = ({
                   />
                   <EntityView
                     attributes={blueprint.data.attributes}
+                    fallbackVisibilityScope="detail"
                     contextId={selectedContextId}
                     entityId={entityId}
                     renderAttributeDecoration={(attribute) => (
