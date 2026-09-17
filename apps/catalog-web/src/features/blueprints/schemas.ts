@@ -76,3 +76,16 @@ export const blueprintMigrationBatchSchema = z.object({
 export type BlueprintMigrationBatch = z.infer<
   typeof blueprintMigrationBatchSchema
 >;
+
+export const blueprintMigrationBatchStatusSchema =
+  blueprintMigrationBatchSchema.extend({
+    total_entities: z.number().int().nonnegative(),
+    processed_entities: z.number().int().nonnegative(),
+    migrated_entities: z.number().int().nonnegative(),
+    needs_input_entities: z.number().int().nonnegative(),
+    failed_entities: z.number().int().nonnegative(),
+  });
+
+export type BlueprintMigrationBatchStatus = z.infer<
+  typeof blueprintMigrationBatchStatusSchema
+>;

@@ -4,6 +4,7 @@ import {
   createBlueprint,
   createBlueprintRevision,
   getBlueprintRevision,
+  listBlueprintMigrationBatches,
   listBlueprintRevisions,
   publishBlueprintEntities,
   publishBlueprintEntitiesAllChannels,
@@ -102,7 +103,7 @@ describe('blueprint API client', () => {
       { method: 'POST' },
     );
 
-    respond({
+    const migrationBatch = {
       id: blueprintId,
       blueprint_id: blueprintId,
       target_version: 2,
@@ -110,7 +111,27 @@ describe('blueprint API client', () => {
       created_at: '2026-10-05T12:00:00Z',
       started_at: null,
       completed_at: null,
-    });
+    };
+    respond([
+      {
+        ...migrationBatch,
+        total_entities: 10_000,
+        processed_entities: 42,
+        migrated_entities: 40,
+        needs_input_entities: 1,
+        failed_entities: 1,
+      },
+    ]);
+    await expect(
+      listBlueprintMigrationBatches(blueprintId),
+    ).resolves.toMatchObject([
+      { status: 'queued', total_entities: 10_000, processed_entities: 42 },
+    ]);
+    expect(fetchMock).toHaveBeenLastCalledWith(
+      `/api/blueprints/${blueprintId}/migration-batches`,
+    );
+
+    respond(migrationBatch);
     await expect(
       startSafeBlueprintMigrationBatch(blueprintId, 2),
     ).resolves.toMatchObject({ status: 'queued' });

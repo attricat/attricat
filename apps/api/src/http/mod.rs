@@ -576,6 +576,10 @@ pub fn router(state: AppState) -> Router {
             post(blueprints::publish_blueprint_entities_all_channels),
         )
         .route(
+            "/blueprints/{blueprint_id}/migration-batches",
+            get(blueprints::list_blueprint_migration_batches),
+        )
+        .route(
             "/blueprints/{blueprint_id}/versions/{version}/safe-migration-batches",
             post(blueprints::start_safe_blueprint_migration_batch),
         )

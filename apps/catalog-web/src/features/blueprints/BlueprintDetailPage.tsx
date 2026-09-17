@@ -34,6 +34,7 @@ import { formatBlueprintDateTime } from './date-time';
 import { blueprintQueryKeys } from './query-keys';
 import { RevisionHistory } from './RevisionHistory';
 import { BlueprintVersionMetadata } from './BlueprintVersionMetadata';
+import { MigrationBatchStatus } from './MigrationBatchStatus';
 import { ExtensionOutlet } from '../extensions/ExtensionOutlet';
 import { listPublicationChannels } from '../exports/api';
 import { exportQueryKeys } from '../exports/query-keys';
@@ -81,7 +82,13 @@ export const BlueprintDetailPage = ({
   const safeMigration = useMutation({
     mutationFn: (version: number) =>
       startSafeBlueprintMigrationBatch(blueprintId, version),
-    onSuccess: () => setSafeMigrationConfirmationOpen(false),
+    onSuccess: async () => {
+      setSafeMigrationConfirmationOpen(false);
+      setPageTab(3);
+      await queryClient.invalidateQueries({
+        queryKey: blueprintQueryKeys.migrationBatches(blueprintId),
+      });
+    },
   });
   const publicationChannels = useQuery({
     queryKey: exportQueryKeys.channels(),
@@ -275,6 +282,11 @@ export const BlueprintDetailPage = ({
               id="blueprint-detail-tab-2"
               label={t('blueprints.compareDefinitions')}
             />
+            <Tab
+              aria-controls="blueprint-detail-tabpanel-3"
+              id="blueprint-detail-tab-3"
+              label={t('blueprints.migrations')}
+            />
           </Tabs>
           {pageTab === 0 && left.data && (
             <Box
@@ -383,6 +395,15 @@ export const BlueprintDetailPage = ({
                 </Suspense>
               </Box>
             </Paper>
+          )}
+          {pageTab === 3 && (
+            <Box
+              aria-labelledby="blueprint-detail-tab-3"
+              id="blueprint-detail-tabpanel-3"
+              role="tabpanel"
+            >
+              <MigrationBatchStatus blueprintId={blueprintId} />
+            </Box>
           )}
           {(safeMigration.isError || publishEntities.isError) && (
             <Alert severity="error" sx={{ mt: 2 }}>

@@ -696,6 +696,22 @@ pub struct BlueprintMigrationBatch {
 }
 
 #[derive(Clone, Debug, FromRow, Serialize)]
+pub struct BlueprintMigrationBatchStatus {
+    pub id: Uuid,
+    pub blueprint_id: Uuid,
+    pub target_version: i64,
+    pub status: String,
+    pub created_at: DateTime<Utc>,
+    pub started_at: Option<DateTime<Utc>>,
+    pub completed_at: Option<DateTime<Utc>>,
+    pub total_entities: i64,
+    pub processed_entities: i64,
+    pub migrated_entities: i64,
+    pub needs_input_entities: i64,
+    pub failed_entities: i64,
+}
+
+#[derive(Clone, Debug, FromRow, Serialize)]
 pub struct DataHealthSummary {
     pub active_entities: i64,
     pub entity_blueprints: i64,
