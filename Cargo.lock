@@ -155,6 +155,7 @@ dependencies = [
  "thiserror 2.0.20",
  "tokio",
  "tokio-stream",
+ "toml",
  "tracing",
  "tracing-opentelemetry",
  "tracing-subscriber",
@@ -894,6 +895,7 @@ dependencies = [
 name = "catalog-blueprint"
 version = "0.1.0"
 dependencies = [
+ "catalog-rules",
  "catalog-validation",
  "serde",
  "serde_json",

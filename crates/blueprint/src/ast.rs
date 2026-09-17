@@ -12,6 +12,7 @@ pub struct BlueprintDefinition {
     pub views: HashMap<String, ViewDefinition>,
     pub entity_schema: Option<serde_json::Value>,
     pub publication: PublicationPolicy,
+    pub rules: Vec<catalog_rules::CompiledRule>,
     pub attributes: Vec<AttributeDeclaration>,
 }
 
@@ -284,5 +285,6 @@ pub struct CompiledBlueprint {
     pub includes: Vec<IncludeRef>,
     pub views: HashMap<String, ViewDefinition>,
     pub entity_schema: Option<serde_json::Value>,
+    pub rules: Vec<catalog_rules::CompiledRule>,
     pub attributes: Vec<EffectiveAttribute>,
 }

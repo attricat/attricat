@@ -26,6 +26,8 @@ struct RawBlueprintDefinition {
     /// definition and intentionally ignored by the core blueprint compiler.
     #[serde(default)]
     extensions: HashMap<String, toml::Value>,
+    #[serde(default)]
+    rules: Vec<toml::Value>,
     attributes: Vec<RawAttributeDeclaration>,
 }
 
@@ -264,6 +266,35 @@ pub fn parse(source: &str) -> Result<BlueprintDefinition, BlueprintError> {
         );
     }
 
+    let rules = raw
+        .rules
+        .into_iter()
+        .map(catalog_rules::compile_embedded)
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(|error| BlueprintError::InvalidRule(error.to_string()))?;
+    let mut rule_codes = HashSet::new();
+    for rule in &rules {
+        if !rule_codes.insert(rule.code.clone()) {
+            return Err(BlueprintError::InvalidRule(format!(
+                "duplicate rule code '{}'",
+                rule.code
+            )));
+        }
+        let attribute = match &rule.predicate {
+            catalog_rules::Predicate::Required { attribute_code }
+            | catalog_rules::Predicate::Stale { attribute_code, .. } => Some(attribute_code),
+            _ => None,
+        };
+        if let Some(attribute) = attribute
+            && !codes.contains(attribute)
+        {
+            return Err(BlueprintError::RuleUnknownAttribute {
+                rule: rule.code.clone(),
+                attribute: attribute.clone(),
+            });
+        }
+    }
+
     Ok(BlueprintDefinition {
         format_version: raw.format_version,
         code: raw.code,
@@ -273,6 +304,7 @@ pub fn parse(source: &str) -> Result<BlueprintDefinition, BlueprintError> {
         views: raw.views,
         entity_schema,
         publication: raw.publication,
+        rules,
         attributes,
     })
 }

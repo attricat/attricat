@@ -188,6 +188,26 @@ pub fn parse(source: &str) -> Result<RuleDefinition, RuleError> {
         predicate,
     })
 }
+/// Compiles an inline `[[rules]]` blueprint table. Blueprint ownership supplies
+/// the format version, so embedding cannot relax the standalone rule contract.
+pub fn compile_embedded(value: toml::Value) -> Result<CompiledRule, RuleError> {
+    let mut table = value
+        .as_table()
+        .cloned()
+        .ok_or_else(|| RuleError::Invalid("embedded rule must be a TOML table".into()))?;
+    if table
+        .insert("format_version".into(), toml::Value::Integer(1))
+        .is_some()
+    {
+        return Err(RuleError::Invalid(
+            "embedded rule cannot set format_version".into(),
+        ));
+    }
+    compile(
+        &toml::to_string(&toml::Value::Table(table))
+            .map_err(|error| RuleError::Invalid(error.to_string()))?,
+    )
+}
 pub fn compile(source: &str) -> Result<CompiledRule, RuleError> {
     let rule = parse(source)?;
     Ok(CompiledRule {

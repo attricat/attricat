@@ -4,23 +4,23 @@ Rules are Catalog-owned, versioned blueprint checks. They are deliberately separ
 
 ## Definition contract
 
-Rules use strict TOML (`format_version = 1`), have a severity, one to eight triggers, and exactly one predicate. Unknown fields and arbitrary code/selectors are rejected.
+Rules are declared as `[[rules]]` tables inside a strict blueprint TOML document. Blueprint ownership supplies rule format version 1; rules have a severity, one to eight triggers, and exactly one predicate. Unknown fields and arbitrary code/selectors are rejected.
 
 ```toml
-format_version = 1
+[[rules]]
 code = "product-title-required"
 name = "Published products have a title"
 severity = "error"
 
-[[triggers]]
+[[rules.triggers]]
 type = "schedule"
 cron = "0 0 * * * *"
 timezone = "UTC"
 
-[[triggers]]
+[[rules.triggers]]
 type = "manual"
 
-[predicate]
+[rules.predicate]
 type = "required"
 attribute_code = "title"
 ```

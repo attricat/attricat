@@ -14,6 +14,10 @@ pub enum BlueprintError {
     DuplicateIncludeAlias(String),
     #[error("attribute code '{0}' is duplicated")]
     DuplicateAttributeCode(String),
+    #[error("invalid embedded rule: {0}")]
+    InvalidRule(String),
+    #[error("rule '{rule}' references unknown attribute '{attribute}'")]
+    RuleUnknownAttribute { rule: String, attribute: String },
     #[error("publication retain_on_edit_roles contains duplicate role '{0}'")]
     DuplicatePublicationRole(String),
     #[error("{field} must contain only ASCII letters, numbers, hyphens, and underscores")]
