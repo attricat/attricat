@@ -14,6 +14,7 @@ mod extensions;
 mod extractors;
 mod files;
 mod members;
+mod reusable_attributes;
 mod roles;
 mod sessions;
 mod tokens;
@@ -527,6 +528,30 @@ pub fn router(state: AppState) -> Router {
         .route(
             "/workflow-runs/{run_id}/replay",
             post(workflows::replay_run),
+        )
+        .route(
+            "/reusable-attributes",
+            get(reusable_attributes::list).post(reusable_attributes::create),
+        )
+        .route(
+            "/reusable-attributes/{definition_id}/versions",
+            post(reusable_attributes::create_revision),
+        )
+        .route(
+            "/reusable-attribute-revisions/{revision_id}/publish",
+            post(reusable_attributes::publish_revision),
+        )
+        .route(
+            "/reusable-attribute-groups",
+            get(reusable_attributes::list_groups).post(reusable_attributes::create_group),
+        )
+        .route(
+            "/v1/entities/{entity_id}/reusable-attributes",
+            post(reusable_attributes::attach),
+        )
+        .route(
+            "/v1/entities/{entity_id}/reusable-attribute-groups/{group_id}",
+            post(reusable_attributes::attach_group),
         )
         .route("/blueprints/catalogue", get(blueprints::list_blueprints))
         .route(

@@ -6,15 +6,27 @@ import UpgradeOutlinedIcon from '@mui/icons-material/UpgradeOutlined';
 import ViewListOutlinedIcon from '@mui/icons-material/ViewListOutlined';
 import VisibilityOutlinedIcon from '@mui/icons-material/VisibilityOutlined';
 import WarningAmberOutlinedIcon from '@mui/icons-material/WarningAmberOutlined';
-import { Alert, Tooltip, Typography } from '@mui/material';
+import {
+  Alert,
+  Button,
+  MenuItem,
+  Stack,
+  TextField,
+  Tooltip,
+  Typography,
+} from '@mui/material';
 import { createElement, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { listContexts } from '../contexts/api';
 import { contextQueryKeys } from '../contexts/query-keys';
 import { defaultContextCode } from '../contexts/constants';
 import {
+  attachReusableAttribute,
+  attachReusableAttributeGroup,
   getEntityForm,
   getCurrentBlueprint,
+  listReusableAttributeGroups,
+  listReusableAttributes,
   getResolvedEntityPreview,
   updateEntity,
 } from './api';
@@ -30,10 +42,16 @@ import { entityQueryKeys } from './query-keys';
 import { findEntityHeading } from '../views/components/blocks/EntityHeadingDefinition';
 import { resolveHeadingRenderer } from '../views/components/registry';
 
+const reusableAttributeQueryKey = ['reusable-attributes'] as const;
+const reusableAttributeGroupQueryKey = ['reusable-attribute-groups'] as const;
+
 export const EditEntityPage = ({ entityId }: { entityId: string }) => {
   const { t } = useTranslation();
   const navigate = useNavigate({ from: '/entities/$entityId/edit' });
   const [selectedContext, setSelectedContext] = useState('');
+  const [selectedReusableAttribute, setSelectedReusableAttribute] =
+    useState('');
+  const [selectedReusableGroup, setSelectedReusableGroup] = useState('');
   const entityForm = useQuery({
     queryKey: entityQueryKeys.form(entityId),
     queryFn: () => getEntityForm(entityId),
@@ -47,6 +65,24 @@ export const EditEntityPage = ({ entityId }: { entityId: string }) => {
         params: { entityId: entity.id },
       });
     },
+  });
+  const reusableAttributes = useQuery({
+    queryKey: reusableAttributeQueryKey,
+    queryFn: ({ signal }) => listReusableAttributes(signal),
+  });
+  const reusableGroups = useQuery({
+    queryKey: reusableAttributeGroupQueryKey,
+    queryFn: ({ signal }) => listReusableAttributeGroups(signal),
+  });
+  const attach = useMutation({
+    mutationFn: (revisionId: string) =>
+      attachReusableAttribute(entityId, revisionId),
+    onSuccess: () => void entityForm.refetch(),
+  });
+  const attachGroup = useMutation({
+    mutationFn: (groupId: string) =>
+      attachReusableAttributeGroup(entityId, groupId),
+    onSuccess: () => void entityForm.refetch(),
   });
   const blueprintId = entityForm.data?.entity.blueprint_id;
   const currentBlueprint = useQuery({
@@ -178,9 +214,19 @@ export const EditEntityPage = ({ entityId }: { entityId: string }) => {
       {entityForm.isPending && (
         <Typography sx={{ mt: 4 }}>{t('entities.loadingEntity')}</Typography>
       )}
-      {(entityForm.error || update.error) && (
+      {(entityForm.error ||
+        update.error ||
+        attach.error ||
+        attachGroup.error) && (
         <Alert severity="error" sx={{ mt: 4 }}>
-          {(entityForm.error ?? update.error)?.message}
+          {
+            (
+              entityForm.error ??
+              update.error ??
+              attach.error ??
+              attachGroup.error
+            )?.message
+          }
         </Alert>
       )}
       {resolvedPreview.isError && (
@@ -189,32 +235,90 @@ export const EditEntityPage = ({ entityId }: { entityId: string }) => {
         </Alert>
       )}
       {entityForm.data && (
-        <EntityForm
-          key={`${entityForm.data.entity.id}:${contextId ?? ''}`}
-          blueprint={entityForm.data.blueprint}
-          contextId={contextId}
-          contextPicker={
-            <EntityContextPicker
-              contexts={contexts.data ?? []}
-              disabled={contexts.isPending}
-              onChange={setSelectedContext}
-              value={contextId ?? ''}
-            />
-          }
-          entityId={entityId}
-          defaultContextId={defaultContextId}
-          existingValues={entityForm.data.values}
-          resolvedValues={resolvedPreview.data?.values}
-          showBlueprintMetadata={false}
-          initialValues={valuesForForm(
-            entityForm.data.blueprint.attributes,
-            entityForm.data.values,
-            contextId,
-          )}
-          isLoadingBlueprint={update.isPending}
-          onSubmit={(input) => update.mutate(input)}
-          submitLabel={t('entities.saveChanges')}
-        />
+        <>
+          <Stack direction={{ sm: 'row' }} spacing={2} sx={{ mt: 3 }}>
+            <TextField
+              label={t('entities.additionalAttributes')}
+              onChange={(event) =>
+                setSelectedReusableAttribute(event.target.value)
+              }
+              select
+              size="small"
+              value={selectedReusableAttribute}
+            >
+              <MenuItem value="">
+                {t('entities.selectAdditionalAttribute')}
+              </MenuItem>
+              {(reusableAttributes.data ?? []).map((attribute) => (
+                <MenuItem key={attribute.id} value={attribute.id}>
+                  {attribute.namespace}:{attribute.code} · {attribute.name} v
+                  {attribute.version}
+                </MenuItem>
+              ))}
+            </TextField>
+            <Button
+              disabled={!selectedReusableAttribute || attach.isPending}
+              onClick={() => attach.mutate(selectedReusableAttribute)}
+              variant="outlined"
+            >
+              {t('entities.addAttribute')}
+            </Button>
+            <TextField
+              label={t('entities.attributeGroup')}
+              onChange={(event) => setSelectedReusableGroup(event.target.value)}
+              select
+              size="small"
+              value={selectedReusableGroup}
+            >
+              <MenuItem value="">{t('entities.selectAttributeGroup')}</MenuItem>
+              {(reusableGroups.data ?? []).map((group) => (
+                <MenuItem key={group.id} value={group.id}>
+                  {group.name}
+                </MenuItem>
+              ))}
+            </TextField>
+            <Button
+              disabled={!selectedReusableGroup || attachGroup.isPending}
+              onClick={() => attachGroup.mutate(selectedReusableGroup)}
+              variant="outlined"
+            >
+              {t('entities.addAttributeGroup')}
+            </Button>
+          </Stack>
+          <EntityForm
+            key={`${entityForm.data.entity.id}:${contextId ?? ''}`}
+            blueprint={entityForm.data.blueprint}
+            contextId={contextId}
+            contextPicker={
+              <EntityContextPicker
+                contexts={contexts.data ?? []}
+                disabled={contexts.isPending}
+                onChange={setSelectedContext}
+                value={contextId ?? ''}
+              />
+            }
+            entityId={entityId}
+            defaultContextId={defaultContextId}
+            existingValues={[
+              ...entityForm.data.values,
+              ...entityForm.data.reusable_values,
+            ]}
+            reusableAttributes={entityForm.data.reusable_attributes}
+            resolvedValues={resolvedPreview.data?.values}
+            showBlueprintMetadata={false}
+            initialValues={valuesForForm(
+              [
+                ...entityForm.data.blueprint.attributes,
+                ...entityForm.data.reusable_attributes,
+              ],
+              [...entityForm.data.values, ...entityForm.data.reusable_values],
+              contextId,
+            )}
+            isLoadingBlueprint={update.isPending}
+            onSubmit={(input) => update.mutate(input)}
+            submitLabel={t('entities.saveChanges')}
+          />
+        </>
       )}
     </PageContainer>
   );

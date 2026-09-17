@@ -187,6 +187,25 @@ pub(super) fn policy(method: &Method, path: &str) -> Option<Policy> {
             target: TargetKind::None,
         });
     }
+    if path == "/reusable-attributes"
+        || path.starts_with("/reusable-attributes/")
+        || path.starts_with("/reusable-attribute-revisions/")
+        || path == "/reusable-attribute-groups"
+    {
+        return Some(Policy {
+            permission: if method == Method::GET {
+                "blueprints.read"
+            } else {
+                "blueprints.write"
+            },
+            target: TargetKind::None,
+        });
+    }
+    if path == "/v1/entities/{entity_id}/reusable-attributes"
+        || path == "/v1/entities/{entity_id}/reusable-attribute-groups/{group_id}"
+    {
+        return Some(write(TargetKind::EntityId));
+    }
     if path == "/blueprints/{blueprint_id}/versions/{version}/entity-publications"
         || path == "/blueprints/{blueprint_id}/versions/{version}/entity-publications/publish-all"
     {

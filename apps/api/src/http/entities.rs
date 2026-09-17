@@ -52,6 +52,8 @@ pub(super) async fn get_entity_form(
         .get_blueprint_revision(entity.blueprint_id, entity.blueprint_version)
         .await?
         .ok_or_else(|| ApiError::not_found("blueprint version"))?;
+    let reusable_attributes = repository.entity_reusable_attributes(entity_id).await?;
+    let reusable_values = repository.reusable_form_values(entity_id).await?;
     Ok(Json(EntityFormResponse {
         context: entity
             .projections
@@ -63,6 +65,8 @@ pub(super) async fn get_entity_form(
         entity,
         blueprint,
         values,
+        reusable_attributes,
+        reusable_values,
     }))
 }
 pub(super) async fn update_entity_form(

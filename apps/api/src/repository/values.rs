@@ -363,6 +363,8 @@ impl CatalogRepository {
                WHERE av.entity_id = $1
                  AND av.workspace_id = $2
                  AND a.value_type = 'file'
+                 AND a.blueprint_id = (SELECT blueprint_id FROM entities WHERE id = $1)
+                 AND a.blueprint_version = (SELECT blueprint_version FROM entities WHERE id = $1)
                ORDER BY a.position, av.context_id, r.position"#,
         )
         .bind(entity_id)
@@ -379,6 +381,56 @@ impl CatalogRepository {
                     files,
                 }) if *attribute_code == row.attribute_code && *context_id == row.context_id => {
                     files.push(metadata);
+                }
+                _ => values.push(FormAttributeValue::File {
+                    attribute_code: row.attribute_code,
+                    context_id: row.context_id,
+                    files: vec![metadata],
+                }),
+            }
+        }
+        Ok(values)
+    }
+
+    pub async fn reusable_form_values(
+        &self,
+        entity_id: Uuid,
+    ) -> Result<Vec<FormAttributeValue>, RepositoryError> {
+        let rows = sqlx::query_as::<_, FormNativeValueRow>(
+            r#"SELECT a.code AS attribute_code, av.context_id, av.relationship_target_entity_id,
+                  a.value_type, av.value_text, av.value_number, av.value_integer,
+                  av.value_boolean, av.value_date, av.value_datetime, av.value_time,
+                  av.value_time_zone
+           FROM attribute_values av
+           JOIN attributes a ON a.id = av.attribute_id
+           WHERE av.entity_id = $1 AND a.entity_id = $1 AND a.value_type <> 'file'
+             AND (av.relationship_target_entity_id IS NULL OR av.active)
+           ORDER BY a.position, av.relationship_target_entity_id"#,
+        )
+        .bind(entity_id)
+        .fetch_all(&self.pool)
+        .await?;
+        let mut values = form_attribute_values(rows)?;
+        let file_rows = sqlx::query_as::<_, FileFormValueRow>(
+            r#"SELECT a.code AS attribute_code, av.context_id, r.file_id
+               FROM attribute_file_references r
+               JOIN attribute_values av ON av.id = r.attribute_value_id
+               JOIN attributes a ON a.id = av.attribute_id
+               WHERE av.entity_id = $1 AND a.entity_id = $1 AND a.value_type = 'file'
+               ORDER BY a.position, av.context_id, r.position"#,
+        )
+        .bind(entity_id)
+        .fetch_all(&self.pool)
+        .await?;
+        for row in file_rows {
+            let metadata = self.file_metadata(row.file_id).await?;
+            match values.last_mut() {
+                Some(FormAttributeValue::File {
+                    attribute_code,
+                    context_id,
+                    files,
+                }) if *attribute_code == row.attribute_code && *context_id == row.context_id => {
+                    files.push(metadata)
                 }
                 _ => values.push(FormAttributeValue::File {
                     attribute_code: row.attribute_code,

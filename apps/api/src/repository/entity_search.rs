@@ -49,6 +49,7 @@ pub(crate) struct EntityRelationshipFilter {
 #[derive(Clone, Debug, serde::Serialize)]
 pub(crate) struct EntitySearchFilter {
     pub field: String,
+    pub reusable: bool,
     pub relationship_path: Vec<String>,
     pub leaf_field: String,
     pub operator: String,
@@ -322,6 +323,16 @@ impl CatalogRepository {
     ) -> Result<Vec<Uuid>, RepositoryError> {
         let mut matching: Option<HashSet<Uuid>> = None;
         for filter in filters {
+            if filter.reusable {
+                let ids = self
+                    .filter_reusable_attribute_ids(blueprint_id, blueprint_version, filter)
+                    .await?;
+                matching = Some(match matching {
+                    Some(current) => current.intersection(&ids).copied().collect(),
+                    None => ids,
+                });
+                continue;
+            }
             let ids = sqlx::query_scalar::<_, Uuid>(
                 r#"WITH RECURSIVE reached(root_id, current_id, depth) AS (
                        SELECT e.id, e.id, 0
@@ -417,6 +428,62 @@ impl CatalogRepository {
         Ok(matching.unwrap_or_default().into_iter().collect())
     }
 
+    async fn filter_reusable_attribute_ids(
+        &self,
+        blueprint_id: Uuid,
+        blueprint_version: Option<i64>,
+        filter: &EntitySearchFilter,
+    ) -> Result<HashSet<Uuid>, RepositoryError> {
+        Ok(sqlx::query_scalar::<_, Uuid>(
+            r#"SELECT DISTINCT e.id
+                 FROM entities e
+                 JOIN attributes a ON a.entity_id = e.id AND a.code = $3 AND a.value_type = $4
+                 JOIN reusable_attribute_revisions r ON r.id = a.reusable_attribute_revision_id
+                 JOIN attribute_values av ON av.entity_id = e.id AND av.attribute_id = a.id
+                WHERE e.blueprint_id = $1
+                  AND ($2::bigint IS NULL OR e.blueprint_version = $2)
+                  AND e.workspace_id = $7 AND e.deleted_at IS NULL
+                  AND a.workspace_id = $7 AND a.deleted_at IS NULL AND r.searchable
+                  AND av.workspace_id = $7 AND av.active AND av.relationship_target_entity_id IS NULL
+                  AND av.context_id = (SELECT id FROM attribute_contexts WHERE workspace_id = $7 AND code = 'default')
+                  AND CASE
+                    WHEN $4 = 'string' AND $5 = 'eq' THEN av.value_text = $6
+                    WHEN $4 = 'string' AND $5 = 'contains' THEN strpos(lower(av.value_text), lower($6)) > 0
+                    WHEN $4 = 'string' AND $5 = 'starts_with' THEN left(lower(av.value_text), char_length($6)) = lower($6)
+                    WHEN $4 = 'number' AND $5 = 'eq' THEN av.value_number = $6::numeric
+                    WHEN $4 = 'number' AND $5 = 'gt' THEN av.value_number > $6::numeric
+                    WHEN $4 = 'number' AND $5 = 'gte' THEN av.value_number >= $6::numeric
+                    WHEN $4 = 'number' AND $5 = 'lt' THEN av.value_number < $6::numeric
+                    WHEN $4 = 'number' AND $5 = 'lte' THEN av.value_number <= $6::numeric
+                    WHEN $4 = 'integer' AND $5 = 'eq' THEN av.value_integer = $6::bigint
+                    WHEN $4 = 'integer' AND $5 = 'gt' THEN av.value_integer > $6::bigint
+                    WHEN $4 = 'integer' AND $5 = 'gte' THEN av.value_integer >= $6::bigint
+                    WHEN $4 = 'integer' AND $5 = 'lt' THEN av.value_integer < $6::bigint
+                    WHEN $4 = 'integer' AND $5 = 'lte' THEN av.value_integer <= $6::bigint
+                    WHEN $4 = 'boolean' AND $5 = 'eq' THEN av.value_boolean = $6::boolean
+                    WHEN $4 = 'date' AND $5 = 'eq' THEN av.value_date = $6::date
+                    WHEN $4 = 'date' AND $5 = 'gt' THEN av.value_date > $6::date
+                    WHEN $4 = 'date' AND $5 = 'gte' THEN av.value_date >= $6::date
+                    WHEN $4 = 'date' AND $5 = 'lt' THEN av.value_date < $6::date
+                    WHEN $4 = 'date' AND $5 = 'lte' THEN av.value_date <= $6::date
+                    WHEN $4 = 'datetime' AND $5 = 'eq' THEN av.value_datetime = $6::timestamptz
+                    WHEN $4 = 'datetime' AND $5 = 'gt' THEN av.value_datetime > $6::timestamptz
+                    WHEN $4 = 'datetime' AND $5 = 'gte' THEN av.value_datetime >= $6::timestamptz
+                    WHEN $4 = 'datetime' AND $5 = 'lt' THEN av.value_datetime < $6::timestamptz
+                    WHEN $4 = 'datetime' AND $5 = 'lte' THEN av.value_datetime <= $6::timestamptz
+                    WHEN $4 = 'time' AND $5 = 'eq' THEN av.value_time = $6::time
+                    WHEN $4 = 'time' AND $5 = 'gt' THEN av.value_time > $6::time
+                    WHEN $4 = 'time' AND $5 = 'gte' THEN av.value_time >= $6::time
+                    WHEN $4 = 'time' AND $5 = 'lt' THEN av.value_time < $6::time
+                    WHEN $4 = 'time' AND $5 = 'lte' THEN av.value_time <= $6::time
+                    ELSE FALSE END"#,
+        )
+        .bind(blueprint_id).bind(blueprint_version).bind(&filter.leaf_field)
+        .bind(&filter.value_type).bind(&filter.operator).bind(&filter.value)
+        .bind(self.workspace_id.unwrap_or(Self::DEFAULT_WORKSPACE_ID))
+        .fetch_all(&self.pool).await?.into_iter().collect())
+    }
+
     #[allow(clippy::too_many_arguments)]
     pub async fn search_entity_previews(
         &self,
@@ -448,8 +515,11 @@ impl CatalogRepository {
                      OR EXISTS (
                         SELECT 1
                         FROM attribute_values av
+                        JOIN attributes search_attribute ON search_attribute.id = av.attribute_id
+                        LEFT JOIN reusable_attribute_revisions reusable_revision ON reusable_revision.id = search_attribute.reusable_attribute_revision_id
                         WHERE av.entity_id = e.id
                           AND av.relationship_target_entity_id IS NULL
+                          AND (search_attribute.entity_id IS NULL OR reusable_revision.searchable)
                             AND COALESCE(
                              av.value_text,
                              av.value_number::text,

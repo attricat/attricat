@@ -59,6 +59,116 @@ pub struct Attribute {
 }
 
 #[derive(Clone, Debug, Deserialize, FromRow, PartialEq, Serialize)]
+pub struct ReusableAttribute {
+    pub id: Uuid,
+    pub definition_id: Uuid,
+    pub namespace: String,
+    pub code: String,
+    pub name: String,
+    pub version: i64,
+    pub value_type: String,
+    pub value_schema: Option<Value>,
+    pub default_value: Option<Value>,
+    pub file_policy: Option<Value>,
+    pub target_blueprint_code: Option<String>,
+    pub cardinality: Option<String>,
+    pub target_cardinality: Option<String>,
+    pub tags: Value,
+    pub context_fallback: String,
+    pub context_editable: String,
+    pub readonly: bool,
+    pub searchable: bool,
+    pub facetable: bool,
+    pub status: String,
+    pub published_at: Option<DateTime<Utc>>,
+}
+
+#[derive(Clone, Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct CreateReusableAttribute {
+    pub namespace: String,
+    pub code: String,
+    pub name: String,
+    pub value_type: String,
+    #[serde(default)]
+    pub value_schema: Option<Value>,
+    #[serde(default)]
+    pub default_value: Option<Value>,
+    #[serde(default)]
+    pub file_policy: Option<Value>,
+    #[serde(default)]
+    pub target_blueprint_code: Option<String>,
+    #[serde(default)]
+    pub cardinality: Option<String>,
+    #[serde(default)]
+    pub target_cardinality: Option<String>,
+    #[serde(default = "empty_json_array")]
+    pub tags: Value,
+    #[serde(default = "default_context_fallback")]
+    pub context_fallback: String,
+    #[serde(default = "default_context_editable")]
+    pub context_editable: String,
+    #[serde(default)]
+    pub readonly: bool,
+    #[serde(default)]
+    pub searchable: bool,
+    #[serde(default)]
+    pub facetable: bool,
+}
+
+#[derive(Clone, Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct CreateReusableAttributeGroup {
+    pub code: String,
+    pub name: String,
+    #[serde(default)]
+    pub position: i64,
+    pub reusable_attribute_revision_ids: Vec<Uuid>,
+}
+
+#[derive(Clone, Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct AttachReusableAttribute {
+    pub reusable_attribute_revision_id: Uuid,
+}
+
+#[derive(Clone, Debug, FromRow, Serialize)]
+pub struct ReusableAttributeGroup {
+    pub id: Uuid,
+    pub code: String,
+    pub name: String,
+    pub position: i64,
+    #[serde(default)]
+    pub reusable_attribute_revision_ids: Vec<Uuid>,
+}
+
+#[derive(Clone, Debug, FromRow, Serialize)]
+pub struct EntityReusableAttribute {
+    pub attachment_id: Uuid,
+    pub attribute_id: Uuid,
+    pub definition_id: Uuid,
+    pub revision_id: Uuid,
+    pub namespace: String,
+    pub code: String,
+    pub name: String,
+    pub version: i64,
+    pub value_type: String,
+    pub value_schema: Option<Value>,
+    pub default_value: Option<Value>,
+    pub file_policy: Option<Value>,
+    pub target_blueprint_code: Option<String>,
+    pub cardinality: Option<String>,
+    pub target_cardinality: Option<String>,
+    pub tags: Value,
+    pub context_fallback: String,
+    pub context_editable: String,
+    pub readonly: bool,
+    pub searchable: bool,
+    pub facetable: bool,
+    pub position: i64,
+}
+
+#[derive(Clone, Debug, Deserialize, FromRow, PartialEq, Serialize)]
 pub struct Entity {
     pub id: Uuid,
     pub blueprint_id: Uuid,
@@ -335,6 +445,10 @@ pub struct ResolvedEntityPreviewResponse {
     pub entity: EntityIdentity,
     pub requested_context: AttributeContext,
     pub values: Value,
+    /// Attached definitions are deliberately a second namespace rather than
+    /// fields injected into blueprint-controlled layouts.
+    pub reusable_attributes: Vec<EntityReusableAttribute>,
+    pub reusable_values: Value,
 }
 
 #[derive(Clone, Debug, Serialize)]
@@ -531,6 +645,18 @@ fn empty_json_object() -> Value {
     Value::Object(Default::default())
 }
 
+fn empty_json_array() -> Value {
+    Value::Array(Vec::new())
+}
+
+fn default_context_fallback() -> String {
+    "default".to_owned()
+}
+
+fn default_context_editable() -> String {
+    "all".to_owned()
+}
+
 #[derive(Clone, Debug, Serialize)]
 #[serde(tag = "kind", rename_all = "snake_case")]
 pub enum FormAttributeValue {
@@ -556,6 +682,11 @@ pub struct EntityFormResponse {
     pub entity: Entity,
     pub blueprint: BlueprintWithAttributes,
     pub values: Vec<FormAttributeValue>,
+    /// Entity-owned, namespace-qualified definitions and their values are kept
+    /// separate from blueprint fields so callers cannot accidentally merge the
+    /// two namespaces.
+    pub reusable_attributes: Vec<EntityReusableAttribute>,
+    pub reusable_values: Vec<FormAttributeValue>,
     pub context: Value,
 }
 
