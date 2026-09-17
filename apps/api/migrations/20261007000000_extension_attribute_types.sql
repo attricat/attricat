@@ -19,6 +19,9 @@ ALTER TABLE attribute_values
             + (value_integer IS NOT NULL)::INT + (value_boolean IS NOT NULL)::INT
             + (value_date IS NOT NULL)::INT + (value_datetime IS NOT NULL)::INT
             + (value_time IS NOT NULL)::INT + (value_json IS NOT NULL)::INT = 1
+            OR (value_text IS NULL AND value_number IS NULL AND value_integer IS NULL
+                AND value_boolean IS NULL AND value_date IS NULL AND value_datetime IS NULL
+                AND value_time IS NULL AND value_time_zone IS NULL AND value_json IS NULL)
         ) AND ((value_time IS NULL AND value_time_zone IS NULL)
             OR (value_time IS NOT NULL AND value_time_zone IS NOT NULL AND value_time_zone <> '')))
     );
