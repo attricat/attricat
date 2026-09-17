@@ -31,7 +31,7 @@ struct CurrentNativeValueRow {
 const FORM_VALUES_SQL: &str = r#"SELECT a.code AS attribute_code, av.context_id, av.relationship_target_entity_id,
                   a.value_type, av.value_text, av.value_number, av.value_integer,
                   av.value_boolean, av.value_date, av.value_datetime, av.value_time,
-                  av.value_time_zone
+                  av.value_time_zone, av.value_json
            FROM attribute_values av
            JOIN attributes a ON a.id = av.attribute_id
            JOIN entities e ON e.id = av.entity_id
@@ -79,6 +79,7 @@ pub(super) enum NativeValue {
     Date(NaiveDate),
     Datetime(DateTime<Utc>),
     Time(NaiveTime, String),
+    Json(Value),
 }
 
 #[derive(Clone, Copy)]
@@ -90,6 +91,7 @@ pub(super) enum ValueType {
     Date,
     Datetime,
     Time,
+    Json,
     /// File metadata is stored in attribute_file_references, not a native
     /// attribute_values value column.
     File,
@@ -106,6 +108,7 @@ pub(crate) struct NativeValueRow {
     pub(crate) value_datetime: Option<DateTime<Utc>>,
     pub(crate) value_time: Option<NaiveTime>,
     pub(crate) value_time_zone: Option<String>,
+    pub(crate) value_json: Option<Value>,
 }
 
 impl ValueType {
@@ -118,6 +121,7 @@ impl ValueType {
             "date" => Ok(Self::Date),
             "datetime" => Ok(Self::Datetime),
             "time" => Ok(Self::Time),
+            "json" => Ok(Self::Json),
             "file" => Ok(Self::File),
             _ => Err(RepositoryError::AttributeValueTypeMismatch),
         }
@@ -162,6 +166,7 @@ impl NativeValue {
                     .ok_or_else(invalid)?;
                 Ok(Self::Time(time, time_zone.to_owned()))
             }
+            ValueType::Json => Ok(Self::Json(value)),
             ValueType::File => Err(invalid()),
         }
     }
@@ -179,6 +184,7 @@ impl NativeValue {
             Self::Time(time, time_zone) => {
                 serde_json::json!({ "time": time.to_string(), "time_zone": time_zone })
             }
+            Self::Json(value) => value.clone(),
         }
     }
 
@@ -198,7 +204,8 @@ impl NativeValue {
                 .bind(Option::<NaiveDate>::None)
                 .bind(Option::<DateTime<Utc>>::None)
                 .bind(Option::<NaiveTime>::None)
-                .bind(Option::<String>::None),
+                .bind(Option::<String>::None)
+                .bind(Option::<Value>::None),
             Self::Number(value) => query
                 .bind(Option::<String>::None)
                 .bind(Some(value))
@@ -207,7 +214,8 @@ impl NativeValue {
                 .bind(Option::<NaiveDate>::None)
                 .bind(Option::<DateTime<Utc>>::None)
                 .bind(Option::<NaiveTime>::None)
-                .bind(Option::<String>::None),
+                .bind(Option::<String>::None)
+                .bind(Option::<Value>::None),
             Self::Integer(value) => query
                 .bind(Option::<String>::None)
                 .bind(Option::<Decimal>::None)
@@ -216,7 +224,8 @@ impl NativeValue {
                 .bind(Option::<NaiveDate>::None)
                 .bind(Option::<DateTime<Utc>>::None)
                 .bind(Option::<NaiveTime>::None)
-                .bind(Option::<String>::None),
+                .bind(Option::<String>::None)
+                .bind(Option::<Value>::None),
             Self::Boolean(value) => query
                 .bind(Option::<String>::None)
                 .bind(Option::<Decimal>::None)
@@ -225,7 +234,8 @@ impl NativeValue {
                 .bind(Option::<NaiveDate>::None)
                 .bind(Option::<DateTime<Utc>>::None)
                 .bind(Option::<NaiveTime>::None)
-                .bind(Option::<String>::None),
+                .bind(Option::<String>::None)
+                .bind(Option::<Value>::None),
             Self::Date(value) => query
                 .bind(Option::<String>::None)
                 .bind(Option::<Decimal>::None)
@@ -234,7 +244,8 @@ impl NativeValue {
                 .bind(Some(value))
                 .bind(Option::<DateTime<Utc>>::None)
                 .bind(Option::<NaiveTime>::None)
-                .bind(Option::<String>::None),
+                .bind(Option::<String>::None)
+                .bind(Option::<Value>::None),
             Self::Datetime(value) => query
                 .bind(Option::<String>::None)
                 .bind(Option::<Decimal>::None)
@@ -243,7 +254,8 @@ impl NativeValue {
                 .bind(Option::<NaiveDate>::None)
                 .bind(Some(value))
                 .bind(Option::<NaiveTime>::None)
-                .bind(Option::<String>::None),
+                .bind(Option::<String>::None)
+                .bind(Option::<Value>::None),
             Self::Time(time, time_zone) => query
                 .bind(Option::<String>::None)
                 .bind(Option::<Decimal>::None)
@@ -252,7 +264,18 @@ impl NativeValue {
                 .bind(Option::<NaiveDate>::None)
                 .bind(Option::<DateTime<Utc>>::None)
                 .bind(Some(time))
-                .bind(Some(time_zone)),
+                .bind(Some(time_zone))
+                .bind(Option::<Value>::None),
+            Self::Json(value) => query
+                .bind(Option::<String>::None)
+                .bind(Option::<Decimal>::None)
+                .bind(Option::<i64>::None)
+                .bind(Option::<bool>::None)
+                .bind(Option::<NaiveDate>::None)
+                .bind(Option::<DateTime<Utc>>::None)
+                .bind(Option::<NaiveTime>::None)
+                .bind(Option::<String>::None)
+                .bind(Some(value)),
         }
     }
 }
@@ -271,6 +294,7 @@ pub(crate) fn native_value_json(row: NativeValueRow) -> Result<Value, Repository
         row.value_date.is_some(),
         row.value_datetime.is_some(),
         row.value_time.is_some(),
+        row.value_json.is_some(),
     ]
     .into_iter()
     .filter(|value| *value)
@@ -287,6 +311,7 @@ pub(crate) fn native_value_json(row: NativeValueRow) -> Result<Value, Repository
             .zip(row.value_time_zone)
             .filter(|(_, zone)| zone.parse::<Tz>().is_ok())
             .map(|(time, zone)| NativeValue::Time(time, zone)),
+        ValueType::Json => row.value_json.map(NativeValue::Json),
         ValueType::File => unreachable!("file values return before native decoding"),
     }
     .ok_or(RepositoryError::InvalidStoredAttributeValue)?;
@@ -409,7 +434,7 @@ impl CatalogRepository {
         blueprint_version: i64,
     ) -> Result<Vec<Attribute>, RepositoryError> {
         Ok(sqlx::query_as::<_, Attribute>(
-            r#"SELECT id, blueprint_id, blueprint_version, code, value_type, value_schema, default_value, file_policy,
+            r#"SELECT id, blueprint_id, blueprint_version, code, value_type, value_schema, extension_type, default_value, file_policy,
                       target_blueprint_code, cardinality, target_cardinality, tags, context_fallback, context_editable, readonly,
                       position, created_at, updated_at, deleted_at
                FROM attributes
@@ -430,7 +455,7 @@ impl CatalogRepository {
             r#"SELECT av.id, av.entity_id, av.attribute_id, av.relationship_target_entity_id,
                       av.context_id, av.active, av.created_at, a.value_type, av.value_text,
                       av.value_number, av.value_integer, av.value_boolean, av.value_date,
-                      av.value_datetime, av.value_time, av.value_time_zone
+                      av.value_datetime, av.value_time, av.value_time_zone, av.value_json
                 FROM attribute_values av
                 JOIN attributes a ON a.id = av.attribute_id
                 WHERE av.entity_id = $1
@@ -469,7 +494,7 @@ impl CatalogRepository {
             r#"SELECT h.id, h.entity_id, h.attribute_id, h.relationship_target_entity_id,
                       h.active, h.context_id, h.created_at, h.archived_at, a.value_type,
                       h.value_text, h.value_number, h.value_integer, h.value_boolean,
-                      h.value_date, h.value_datetime, h.value_time, h.value_time_zone
+                      h.value_date, h.value_datetime, h.value_time, h.value_time_zone, h.value_json
                FROM attribute_value_history h
                JOIN attributes a ON a.id = h.attribute_id
                WHERE h.entity_id = $1
@@ -497,7 +522,7 @@ impl CatalogRepository {
             r#"SELECT h.id, h.entity_id, h.attribute_id, h.relationship_target_entity_id,
                       h.active, h.context_id, h.created_at, h.archived_at, a.value_type,
                       h.value_text, h.value_number, h.value_integer, h.value_boolean,
-                      h.value_date, h.value_datetime, h.value_time, h.value_time_zone
+                      h.value_date, h.value_datetime, h.value_time, h.value_time_zone, h.value_json
                FROM attribute_value_history h
                JOIN attributes a ON a.id = h.attribute_id
                WHERE h.id = $1 AND h.entity_id = $2

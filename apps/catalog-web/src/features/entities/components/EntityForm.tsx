@@ -87,6 +87,7 @@ export const EntityForm = ({
   const editableAttributes = (blueprint?.attributes ?? []).filter(
     (attribute) =>
       !attribute.readonly &&
+      attribute.extension_type?.available !== false &&
       (contextId === defaultContextId ||
         attribute.context_editable !== 'default') &&
       (!usesDefaultEditView || !isHiddenByDefault(attribute, 'form')),
