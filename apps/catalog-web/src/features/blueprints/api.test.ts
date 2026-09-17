@@ -8,6 +8,7 @@ import {
   publishBlueprintEntities,
   publishBlueprintEntitiesAllChannels,
   publishBlueprintRevision,
+  startSafeBlueprintMigrationBatch,
   listBlueprints,
 } from './api';
 
@@ -98,6 +99,23 @@ describe('blueprint API client', () => {
     await publishBlueprintEntitiesAllChannels(blueprintId, 2);
     expect(fetchMock).toHaveBeenLastCalledWith(
       `/api/blueprints/${blueprintId}/versions/2/entity-publications/publish-all`,
+      { method: 'POST' },
+    );
+
+    respond({
+      id: blueprintId,
+      blueprint_id: blueprintId,
+      target_version: 2,
+      status: 'queued',
+      created_at: '2026-10-05T12:00:00Z',
+      started_at: null,
+      completed_at: null,
+    });
+    await expect(
+      startSafeBlueprintMigrationBatch(blueprintId, 2),
+    ).resolves.toMatchObject({ status: 'queued' });
+    expect(fetchMock).toHaveBeenLastCalledWith(
+      `/api/blueprints/${blueprintId}/versions/2/safe-migration-batches`,
       { method: 'POST' },
     );
 

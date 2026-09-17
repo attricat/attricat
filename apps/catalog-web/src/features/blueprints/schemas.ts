@@ -67,7 +67,7 @@ export const blueprintMigrationBatchSchema = z.object({
   id: z.uuid(),
   blueprint_id: z.uuid(),
   target_version: z.number().int().positive(),
-  status: z.enum(['draft', 'running', 'completed', 'superseded']),
+  status: z.enum(['draft', 'queued', 'running', 'completed', 'superseded']),
   created_at: z.string(),
   started_at: z.string().nullable(),
   completed_at: z.string().nullable(),
