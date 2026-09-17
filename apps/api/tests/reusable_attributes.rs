@@ -15,6 +15,24 @@ fields = ["title"]
 code = "title"
 value_type = "string""#;
 
+fn reusable_definition(input: &Value) -> String {
+    let mut definition = format!(
+        "code = \"{}\"\nname = \"{}\"\nvalue_type = \"{}\"\n",
+        input["code"].as_str().unwrap(),
+        input["name"].as_str().unwrap(),
+        input["value_type"].as_str().unwrap(),
+    );
+    for key in ["searchable", "facetable"] {
+        if let Some(value) = input[key].as_bool() {
+            definition.push_str(&format!("{key} = {value}\n"));
+        }
+    }
+    if let Some(value) = input.get("default_value") {
+        definition.push_str(&format!("default_value = {value}\n"));
+    }
+    definition
+}
+
 async fn create_published_reusable(
     client: &reqwest::Client,
     base_url: &str,
@@ -22,7 +40,7 @@ async fn create_published_reusable(
 ) -> Value {
     let draft: Value = client
         .post(format!("{base_url}/reusable-attributes"))
-        .json(&definition)
+        .json(&json!({ "definition": reusable_definition(&definition) }))
         .send()
         .await
         .unwrap()
@@ -75,7 +93,7 @@ async fn attaches_published_reusable_attributes_as_distinct_typed_values(pool: P
         .json()
         .await
         .unwrap();
-    assert_eq!(attached["code"], "acme:weight");
+    assert_eq!(attached["code"], "default:weight");
     let form: Value = client
         .get(format!("{base_url}/v1/entities/{entity_id}"))
         .send()
@@ -87,13 +105,13 @@ async fn attaches_published_reusable_attributes_as_distinct_typed_values(pool: P
         .await
         .unwrap();
     assert_eq!(form["values"].as_array().unwrap().len(), 0);
-    assert_eq!(form["reusable_attributes"][0]["code"], "acme:weight");
+    assert_eq!(form["reusable_attributes"][0]["code"], "default:weight");
     assert_eq!(form["reusable_values"][0]["value"], 1.5);
     // The registry can advance to a non-searchable revision without changing
     // the searchable revision that this entity already pinned.
     let newer_draft: Value = client
         .post(format!("{base_url}/reusable-attributes/{}/versions", published["definition_id"].as_str().unwrap()))
-        .json(&json!({ "namespace": "acme", "code": "weight", "name": "Weight", "value_type": "number", "searchable": false }))
+        .json(&json!({ "definition": "code = \"weight\"\nname = \"Weight\"\nvalue_type = \"number\"\nsearchable = false" }))
         .send().await.unwrap().error_for_status().unwrap().json().await.unwrap();
     client
         .post(format!(
@@ -106,7 +124,7 @@ async fn attaches_published_reusable_attributes_as_distinct_typed_values(pool: P
         .error_for_status()
         .unwrap();
     let filtered: Value = client.post(format!("{base_url}/v1/entities/search"))
-        .json(&json!({ "blueprint": { "code": "reusable_product" }, "filters": [{ "field": "acme:weight", "operator": "gte", "value": 1 }], "page": { "size": 25 } }))
+        .json(&json!({ "blueprint": { "code": "reusable_product" }, "filters": [{ "field": "default:weight", "operator": "gte", "value": 1 }], "page": { "size": 25 } }))
         .send().await.unwrap().error_for_status().unwrap().json().await.unwrap();
     assert_eq!(filtered["items"].as_array().unwrap().len(), 1);
     let duplicate = client
@@ -157,7 +175,7 @@ async fn reusable_relationships_and_group_attachments_use_entity_owned_attribute
         .error_for_status()
         .unwrap();
     client.put(format!("{base_url}/v1/entities/{entity_id}"))
-        .json(&json!({ "relationships": [{ "attribute_code": "acme:related", "target_entity_ids": [target_id] }] }))
+        .json(&json!({ "relationships": [{ "attribute_code": "default:related", "target_entity_ids": [target_id] }] }))
         .send().await.unwrap().error_for_status().unwrap();
     let values: Vec<Value> = client
         .get(format!("{base_url}/entities/{entity_id}/values/current"))
@@ -177,7 +195,7 @@ async fn reusable_relationships_and_group_attachments_use_entity_owned_attribute
 
     let relationship_v2: Value = client
         .post(format!("{base_url}/reusable-attributes/{}/versions", relationship["definition_id"].as_str().unwrap()))
-        .json(&json!({ "namespace": "acme", "code": "related", "name": "Related", "value_type": "relationship" }))
+        .json(&json!({ "definition": "code = \"related\"\nname = \"Related\"\nvalue_type = \"relationship\"" }))
         .send().await.unwrap().error_for_status().unwrap().json().await.unwrap();
     let relationship_v2: Value = client
         .post(format!(

@@ -1,5 +1,6 @@
 use super::*;
 use catalog_validation::is_valid_code;
+use serde::Deserialize;
 use sqlx::{Postgres, Transaction};
 use std::collections::HashSet;
 use uuid::Uuid;
@@ -10,13 +11,69 @@ fn workspace(repository: &CatalogRepository) -> Uuid {
         .unwrap_or(CatalogRepository::DEFAULT_WORKSPACE_ID)
 }
 
-fn validate_definition(input: &CreateReusableAttribute) -> Result<(), RepositoryError> {
-    if !is_valid_code(&input.namespace) || !is_valid_code(&input.code) {
+fn default_context_fallback() -> String {
+    "default".to_owned()
+}
+
+fn default_context_editable() -> String {
+    "all".to_owned()
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct ReusableAttributeDefinition {
+    code: String,
+    name: String,
+    value_type: String,
+    #[serde(default)]
+    value_schema: Option<toml::Value>,
+    #[serde(default)]
+    default_value: Option<toml::Value>,
+    #[serde(default)]
+    file_policy: Option<toml::Value>,
+    #[serde(default)]
+    target_blueprint_code: Option<String>,
+    #[serde(default)]
+    cardinality: Option<String>,
+    #[serde(default)]
+    target_cardinality: Option<String>,
+    #[serde(default)]
+    tags: Vec<String>,
+    #[serde(default = "default_context_fallback")]
+    context_fallback: String,
+    #[serde(default = "default_context_editable")]
+    context_editable: String,
+    #[serde(default)]
+    readonly: bool,
+    #[serde(default)]
+    searchable: bool,
+    #[serde(default)]
+    facetable: bool,
+}
+
+fn toml_value_to_json(
+    value: Option<toml::Value>,
+) -> Result<Option<serde_json::Value>, RepositoryError> {
+    value
+        .map(|value| {
+            serde_json::to_value(value).map_err(|error| {
+                RepositoryError::InvalidReusableAttributeDefinition(error.to_string())
+            })
+        })
+        .transpose()
+}
+
+fn parse_definition(
+    input: &CreateReusableAttribute,
+) -> Result<ReusableAttributeDefinition, RepositoryError> {
+    let definition = toml::from_str::<ReusableAttributeDefinition>(&input.definition)
+        .map_err(|error| RepositoryError::InvalidReusableAttributeDefinition(error.to_string()))?;
+    if !is_valid_code(&definition.code) {
         return Err(RepositoryError::InvalidReusableAttributeCode);
     }
-    if input.name.trim().is_empty()
+    if definition.name.trim().is_empty()
         || !matches!(
-            input.value_type.as_str(),
+            definition.value_type.as_str(),
             "string"
                 | "number"
                 | "integer"
@@ -27,16 +84,16 @@ fn validate_definition(input: &CreateReusableAttribute) -> Result<(), Repository
                 | "relationship"
                 | "file"
         )
-        || input.default_value.is_some()
-            && matches!(input.value_type.as_str(), "relationship" | "file")
-        || !matches!(input.context_fallback.as_str(), "default" | "none")
-        || !matches!(input.context_editable.as_str(), "all" | "default")
+        || definition.default_value.is_some()
+            && matches!(definition.value_type.as_str(), "relationship" | "file")
+        || !matches!(definition.context_fallback.as_str(), "default" | "none")
+        || !matches!(definition.context_editable.as_str(), "all" | "default")
     {
         return Err(RepositoryError::InvalidReusableAttributeDefinition(
             "invalid context policy or blank name".to_owned(),
         ));
     }
-    Ok(())
+    Ok(definition)
 }
 
 impl CatalogRepository {
@@ -44,16 +101,28 @@ impl CatalogRepository {
         &self,
         input: CreateReusableAttribute,
     ) -> Result<ReusableAttribute, RepositoryError> {
-        validate_definition(&input)?;
+        let definition = parse_definition(&input)?;
         let mut transaction = self.pool.begin().await?;
         let definition_id = Uuid::new_v4();
         let revision_id = Uuid::new_v4();
         let ws = workspace(self);
+        let namespace: String =
+            sqlx::query_scalar("SELECT slug FROM workspaces WHERE id = $1 AND deleted_at IS NULL")
+                .bind(ws)
+                .fetch_one(&mut *transaction)
+                .await?;
         sqlx::query("INSERT INTO reusable_attribute_definitions (id, workspace_id, namespace, code, name) VALUES ($1, $2, $3, $4, $5)")
-            .bind(definition_id).bind(ws).bind(&input.namespace).bind(&input.code).bind(&input.name)
+            .bind(definition_id).bind(ws).bind(&namespace).bind(&definition.code).bind(&definition.name)
             .execute(&mut *transaction).await?;
-        self.insert_reusable_revision(&mut transaction, revision_id, definition_id, 1, input)
-            .await?;
+        self.insert_reusable_revision(
+            &mut transaction,
+            revision_id,
+            definition_id,
+            1,
+            &input,
+            definition,
+        )
+        .await?;
         transaction.commit().await?;
         self.reusable_attribute_revision(revision_id)
             .await?
@@ -65,24 +134,31 @@ impl CatalogRepository {
         definition_id: Uuid,
         input: CreateReusableAttribute,
     ) -> Result<ReusableAttribute, RepositoryError> {
-        validate_definition(&input)?;
+        let definition = parse_definition(&input)?;
         let mut transaction = self.pool.begin().await?;
         let ws = workspace(self);
         let existing: Option<(String, String)> = sqlx::query_as("SELECT namespace, code FROM reusable_attribute_definitions WHERE id = $1 AND workspace_id = $2 AND deleted_at IS NULL FOR UPDATE")
             .bind(definition_id).bind(ws).fetch_optional(&mut *transaction).await?;
-        let Some((namespace, code)) = existing else {
+        let Some((_namespace, code)) = existing else {
             return Err(RepositoryError::NotFound("reusable attribute"));
         };
-        if namespace != input.namespace || code != input.code {
+        if code != definition.code {
             return Err(RepositoryError::InvalidReusableAttributeDefinition(
-                "namespace and code are immutable".to_owned(),
+                "code is immutable".to_owned(),
             ));
         }
         let version: i64 = sqlx::query_scalar("SELECT COALESCE(MAX(version), 0) + 1 FROM reusable_attribute_revisions WHERE definition_id = $1 AND workspace_id = $2")
             .bind(definition_id).bind(ws).fetch_one(&mut *transaction).await?;
         let revision_id = Uuid::new_v4();
-        self.insert_reusable_revision(&mut transaction, revision_id, definition_id, version, input)
-            .await?;
+        self.insert_reusable_revision(
+            &mut transaction,
+            revision_id,
+            definition_id,
+            version,
+            &input,
+            definition,
+        )
+        .await?;
         transaction.commit().await?;
         self.reusable_attribute_revision(revision_id)
             .await?
@@ -95,15 +171,16 @@ impl CatalogRepository {
         revision_id: Uuid,
         definition_id: Uuid,
         version: i64,
-        input: CreateReusableAttribute,
+        input: &CreateReusableAttribute,
+        definition: ReusableAttributeDefinition,
     ) -> Result<(), RepositoryError> {
-        sqlx::query(r#"INSERT INTO reusable_attribute_revisions (id, workspace_id, definition_id, version, value_type, value_schema, default_value, file_policy, target_blueprint_code, cardinality, target_cardinality, tags, context_fallback, context_editable, readonly, searchable, facetable, status)
-             VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,'draft')"#)
+        sqlx::query(r#"INSERT INTO reusable_attribute_revisions (id, workspace_id, definition_id, version, value_type, value_schema, default_value, file_policy, target_blueprint_code, cardinality, target_cardinality, tags, context_fallback, context_editable, readonly, searchable, facetable, status, definition)
+             VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,'draft',$18)"#)
             .bind(revision_id).bind(workspace(self)).bind(definition_id).bind(version)
-            .bind(input.value_type).bind(input.value_schema).bind(input.default_value).bind(input.file_policy)
-            .bind(input.target_blueprint_code).bind(input.cardinality).bind(input.target_cardinality)
-            .bind(input.tags).bind(input.context_fallback).bind(input.context_editable).bind(input.readonly)
-            .bind(input.searchable).bind(input.facetable).execute(&mut **transaction).await?;
+            .bind(definition.value_type).bind(toml_value_to_json(definition.value_schema)?).bind(toml_value_to_json(definition.default_value)?).bind(toml_value_to_json(definition.file_policy)?)
+            .bind(definition.target_blueprint_code).bind(definition.cardinality).bind(definition.target_cardinality)
+            .bind(serde_json::json!(definition.tags)).bind(definition.context_fallback).bind(definition.context_editable).bind(definition.readonly)
+            .bind(definition.searchable).bind(definition.facetable).bind(&input.definition).execute(&mut **transaction).await?;
         Ok(())
     }
 
@@ -132,7 +209,7 @@ impl CatalogRepository {
         } else {
             Some("published")
         };
-        Ok(sqlx::query_as::<_, ReusableAttribute>(r#"SELECT r.id, r.definition_id, d.namespace, d.code, d.name, r.version, r.value_type, r.value_schema, r.default_value, r.file_policy, r.target_blueprint_code, r.cardinality, r.target_cardinality, r.tags, r.context_fallback, r.context_editable, r.readonly, r.searchable, r.facetable, r.status, r.published_at
+        Ok(sqlx::query_as::<_, ReusableAttribute>(r#"SELECT r.id, r.definition_id, d.namespace, d.code, d.name, r.version, r.value_type, r.value_schema, r.default_value, r.file_policy, r.target_blueprint_code, r.cardinality, r.target_cardinality, r.tags, r.context_fallback, r.context_editable, r.readonly, r.searchable, r.facetable, r.status, r.published_at, r.definition
             FROM reusable_attribute_revisions r JOIN reusable_attribute_definitions d ON d.id = r.definition_id
             WHERE r.workspace_id = $1 AND d.deleted_at IS NULL AND ($2::text IS NULL OR r.status = $2)
             ORDER BY d.namespace, d.code, r.version DESC"#)
@@ -147,7 +224,7 @@ impl CatalogRepository {
         blueprint_version: i64,
         qualified_code: &str,
     ) -> Result<Option<ReusableAttribute>, RepositoryError> {
-        Ok(sqlx::query_as::<_, ReusableAttribute>(r#"SELECT r.id, r.definition_id, d.namespace, d.code, d.name, r.version, r.value_type, r.value_schema, r.default_value, r.file_policy, r.target_blueprint_code, r.cardinality, r.target_cardinality, r.tags, r.context_fallback, r.context_editable, r.readonly, r.searchable, r.facetable, r.status, r.published_at
+        Ok(sqlx::query_as::<_, ReusableAttribute>(r#"SELECT r.id, r.definition_id, d.namespace, d.code, d.name, r.version, r.value_type, r.value_schema, r.default_value, r.file_policy, r.target_blueprint_code, r.cardinality, r.target_cardinality, r.tags, r.context_fallback, r.context_editable, r.readonly, r.searchable, r.facetable, r.status, r.published_at, r.definition
             FROM entities e
             JOIN attributes a ON a.entity_id = e.id AND a.deleted_at IS NULL
             JOIN reusable_attribute_revisions r ON r.id = a.reusable_attribute_revision_id
@@ -166,7 +243,7 @@ impl CatalogRepository {
         let Some((namespace, code)) = qualified_code.split_once(':') else {
             return Ok(None);
         };
-        Ok(sqlx::query_as::<_, ReusableAttribute>(r#"SELECT r.id, r.definition_id, d.namespace, d.code, d.name, r.version, r.value_type, r.value_schema, r.default_value, r.file_policy, r.target_blueprint_code, r.cardinality, r.target_cardinality, r.tags, r.context_fallback, r.context_editable, r.readonly, r.searchable, r.facetable, r.status, r.published_at
+        Ok(sqlx::query_as::<_, ReusableAttribute>(r#"SELECT r.id, r.definition_id, d.namespace, d.code, d.name, r.version, r.value_type, r.value_schema, r.default_value, r.file_policy, r.target_blueprint_code, r.cardinality, r.target_cardinality, r.tags, r.context_fallback, r.context_editable, r.readonly, r.searchable, r.facetable, r.status, r.published_at, r.definition
             FROM reusable_attribute_revisions r JOIN reusable_attribute_definitions d ON d.id = r.definition_id
             WHERE r.workspace_id = $1 AND d.namespace = $2 AND d.code = $3 AND r.status = 'published'
             ORDER BY r.version DESC LIMIT 1"#)
@@ -177,7 +254,7 @@ impl CatalogRepository {
         &self,
         revision_id: Uuid,
     ) -> Result<Option<ReusableAttribute>, RepositoryError> {
-        Ok(sqlx::query_as::<_, ReusableAttribute>(r#"SELECT r.id, r.definition_id, d.namespace, d.code, d.name, r.version, r.value_type, r.value_schema, r.default_value, r.file_policy, r.target_blueprint_code, r.cardinality, r.target_cardinality, r.tags, r.context_fallback, r.context_editable, r.readonly, r.searchable, r.facetable, r.status, r.published_at
+        Ok(sqlx::query_as::<_, ReusableAttribute>(r#"SELECT r.id, r.definition_id, d.namespace, d.code, d.name, r.version, r.value_type, r.value_schema, r.default_value, r.file_policy, r.target_blueprint_code, r.cardinality, r.target_cardinality, r.tags, r.context_fallback, r.context_editable, r.readonly, r.searchable, r.facetable, r.status, r.published_at, r.definition
             FROM reusable_attribute_revisions r JOIN reusable_attribute_definitions d ON d.id = r.definition_id
             WHERE r.id = $1 AND r.workspace_id = $2 AND d.deleted_at IS NULL"#)
             .bind(revision_id).bind(workspace(self)).fetch_optional(&self.pool).await?)
@@ -378,7 +455,7 @@ impl CatalogRepository {
         transaction: &mut Transaction<'_, Postgres>,
         revision_id: Uuid,
     ) -> Result<Option<ReusableAttribute>, RepositoryError> {
-        Ok(sqlx::query_as::<_, ReusableAttribute>(r#"SELECT r.id, r.definition_id, d.namespace, d.code, d.name, r.version, r.value_type, r.value_schema, r.default_value, r.file_policy, r.target_blueprint_code, r.cardinality, r.target_cardinality, r.tags, r.context_fallback, r.context_editable, r.readonly, r.searchable, r.facetable, r.status, r.published_at FROM reusable_attribute_revisions r JOIN reusable_attribute_definitions d ON d.id = r.definition_id WHERE r.id = $1 AND r.workspace_id = $2 FOR UPDATE"#)
+        Ok(sqlx::query_as::<_, ReusableAttribute>(r#"SELECT r.id, r.definition_id, d.namespace, d.code, d.name, r.version, r.value_type, r.value_schema, r.default_value, r.file_policy, r.target_blueprint_code, r.cardinality, r.target_cardinality, r.tags, r.context_fallback, r.context_editable, r.readonly, r.searchable, r.facetable, r.status, r.published_at, r.definition FROM reusable_attribute_revisions r JOIN reusable_attribute_definitions d ON d.id = r.definition_id WHERE r.id = $1 AND r.workspace_id = $2 FOR UPDATE"#)
             .bind(revision_id).bind(workspace(self)).fetch_optional(&mut **transaction).await?)
     }
 }

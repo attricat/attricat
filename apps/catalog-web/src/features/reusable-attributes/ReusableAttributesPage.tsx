@@ -1,3 +1,4 @@
+import { Editor } from '@monaco-editor/react';
 import { useForm } from '@tanstack/react-form';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import AddIcon from '@mui/icons-material/Add';
@@ -7,13 +8,11 @@ import {
   Alert,
   Box,
   Button,
-  Checkbox,
   Chip,
   Dialog,
   DialogActions,
   DialogContent,
   DialogTitle,
-  FormControlLabel,
   MenuItem,
   Paper,
   Stack,
@@ -37,61 +36,8 @@ import {
   publishReusableAttributeRevision,
   type ReusableAttribute,
 } from './api';
+import { configureToml, minimumTomlEditorHeight } from '../blueprints/blueprint-editor-utils';
 import { reusableAttributeQueryKeys } from './query-keys';
-import { reusableAttributeValueTypeSchema } from './schemas';
-
-type AttributeFormValues = {
-  namespace: string;
-  code: string;
-  name: string;
-  value_type: (typeof reusableAttributeValueTypeSchema.options)[number];
-  target_blueprint_code: string;
-  cardinality: 'one' | 'many';
-  context_fallback: 'default' | 'none';
-  context_editable: 'all' | 'default';
-  tags: string;
-  readonly: boolean;
-  searchable: boolean;
-  facetable: boolean;
-};
-
-const defaultAttribute: AttributeFormValues = {
-  namespace: '',
-  code: '',
-  name: '',
-  value_type: 'string',
-  target_blueprint_code: '',
-  cardinality: 'one',
-  context_fallback: 'default',
-  context_editable: 'all',
-  tags: '',
-  readonly: false,
-  searchable: false,
-  facetable: false,
-};
-
-const toRequest = (value: AttributeFormValues) => ({
-  namespace: value.namespace.trim(),
-  code: value.code.trim(),
-  name: value.name.trim(),
-  value_type: value.value_type,
-  target_blueprint_code:
-    value.value_type === 'relationship' && value.target_blueprint_code.trim()
-      ? value.target_blueprint_code.trim()
-      : null,
-  cardinality: value.value_type === 'relationship' ? value.cardinality : null,
-  target_cardinality: null,
-  tags: value.tags
-    .split(',')
-    .map((tag) => tag.trim())
-    .filter(Boolean),
-  context_fallback: value.context_fallback,
-  context_editable: value.context_editable,
-  readonly: value.readonly,
-  searchable: value.searchable,
-  facetable: value.facetable,
-});
-
 const AttributeDialog = ({
   attribute,
   onClose,
@@ -99,6 +45,61 @@ const AttributeDialog = ({
   attribute?: ReusableAttribute;
   onClose: () => void;
 }) => {
+  const queryClient = useQueryClient();
+  const [definition, setDefinition] = useState(
+    attribute?.definition ?? `code = "new_attribute"
+name = "New attribute"
+value_type = "string"
+`,
+  );
+  const saveDefinition = useMutation({
+    mutationFn: () =>
+      attribute
+        ? createReusableAttributeRevision(attribute.definition_id, { definition })
+        : createReusableAttribute({ definition }),
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({
+        queryKey: reusableAttributeQueryKeys.root(),
+      });
+      onClose();
+    },
+  });
+  return (
+    <Dialog fullWidth maxWidth="lg" onClose={onClose} open>
+      <DialogTitle>
+        {attribute ? `New revision for ${attribute.name}` : 'New reusable attribute'}
+      </DialogTitle>
+      <DialogContent>
+        <Typography color="text.secondary" sx={{ mb: 2 }}>
+          Namespace is derived from the active workspace and cannot be set here.
+        </Typography>
+        <Box sx={{ border: 1, borderColor: 'divider', height: '60vh', minHeight: minimumTomlEditorHeight }}>
+          <Editor
+            beforeMount={configureToml}
+            defaultLanguage="toml"
+            height="100%"
+            language="toml"
+            onChange={(value) => setDefinition(value ?? '')}
+            options={{ automaticLayout: true, minimap: { enabled: false }, scrollBeyondLastLine: false, tabSize: 2, wordWrap: 'on' }}
+            value={definition}
+          />
+        </Box>
+        {saveDefinition.error && (
+          <Alert severity="error" sx={{ mt: 2 }}>
+            {saveDefinition.error.message}
+          </Alert>
+        )}
+      </DialogContent>
+      <DialogActions>
+        <Button onClick={onClose}>Cancel</Button>
+        <Button disabled={saveDefinition.isPending} onClick={() => saveDefinition.mutate()} variant="contained">
+          {attribute ? 'Create revision' : 'Create attribute'}
+        </Button>
+      </DialogActions>
+    </Dialog>
+  );
+
+  /* Legacy form implementation retained in history; reusable attributes now use TOML.
   const queryClient = useQueryClient();
   const [validationError, setValidationError] = useState<string>();
   const save = useMutation({
@@ -386,6 +387,9 @@ const AttributeDialog = ({
       </Box>
     </Dialog>
   );
+};
+
+*/
 };
 
 const GroupDialog = ({

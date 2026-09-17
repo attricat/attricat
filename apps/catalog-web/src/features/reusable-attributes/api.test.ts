@@ -32,18 +32,10 @@ const attribute = {
   facetable: false,
   status: 'draft',
   published_at: null,
+  definition: 'code = "material"\nname = "Material"\nvalue_type = "string"',
 };
 const input = {
-  namespace: 'catalog',
-  code: 'material',
-  name: 'Material',
-  value_type: 'string' as const,
-  tags: [],
-  context_fallback: 'default' as const,
-  context_editable: 'all' as const,
-  readonly: false,
-  searchable: false,
-  facetable: false,
+  definition: 'code = "material"\nname = "Material"\nvalue_type = "string"',
 };
 const fetchMock = vi.fn();
 vi.stubGlobal('fetch', fetchMock);

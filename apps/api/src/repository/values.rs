@@ -425,7 +425,7 @@ impl CatalogRepository {
             r#"SELECT a.code AS attribute_code, av.context_id, av.relationship_target_entity_id,
                   a.value_type, av.value_text, av.value_number, av.value_integer,
                   av.value_boolean, av.value_date, av.value_datetime, av.value_time,
-                  av.value_time_zone
+                  av.value_time_zone, av.value_json
            FROM attribute_values av
            JOIN attributes a ON a.id = av.attribute_id
            WHERE av.entity_id = $1 AND a.entity_id = $1 AND a.value_type <> 'file'

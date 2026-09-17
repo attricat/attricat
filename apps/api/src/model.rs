@@ -83,39 +83,13 @@ pub struct ReusableAttribute {
     pub facetable: bool,
     pub status: String,
     pub published_at: Option<DateTime<Utc>>,
+    pub definition: String,
 }
 
 #[derive(Clone, Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct CreateReusableAttribute {
-    pub namespace: String,
-    pub code: String,
-    pub name: String,
-    pub value_type: String,
-    #[serde(default)]
-    pub value_schema: Option<Value>,
-    #[serde(default)]
-    pub default_value: Option<Value>,
-    #[serde(default)]
-    pub file_policy: Option<Value>,
-    #[serde(default)]
-    pub target_blueprint_code: Option<String>,
-    #[serde(default)]
-    pub cardinality: Option<String>,
-    #[serde(default)]
-    pub target_cardinality: Option<String>,
-    #[serde(default = "empty_json_array")]
-    pub tags: Value,
-    #[serde(default = "default_context_fallback")]
-    pub context_fallback: String,
-    #[serde(default = "default_context_editable")]
-    pub context_editable: String,
-    #[serde(default)]
-    pub readonly: bool,
-    #[serde(default)]
-    pub searchable: bool,
-    #[serde(default)]
-    pub facetable: bool,
+    pub definition: String,
 }
 
 #[derive(Clone, Debug, Deserialize)]
@@ -645,18 +619,6 @@ pub struct UpdateEntityFormRequest {
 
 fn empty_json_object() -> Value {
     Value::Object(Default::default())
-}
-
-fn empty_json_array() -> Value {
-    Value::Array(Vec::new())
-}
-
-fn default_context_fallback() -> String {
-    "default".to_owned()
-}
-
-fn default_context_editable() -> String {
-    "all".to_owned()
 }
 
 #[derive(Clone, Debug, Serialize)]

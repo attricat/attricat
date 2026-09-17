@@ -36,6 +36,7 @@ export const reusableAttributeSchema = z.object({
   facetable: z.boolean(),
   status: z.enum(['draft', 'published']),
   published_at: z.string().datetime().nullable(),
+  definition: z.string(),
 });
 
 export const reusableAttributeGroupSchema = z.object({
@@ -47,25 +48,7 @@ export const reusableAttributeGroupSchema = z.object({
 });
 
 export const createReusableAttributeSchema = z.object({
-  namespace: z.string().trim().min(1),
-  code: z.string().trim().min(1),
-  name: z.string().trim().min(1),
-  value_type: reusableAttributeValueTypeSchema,
-  value_schema: z
-    .union([z.record(z.string(), z.unknown()), z.boolean()])
-    .nullable()
-    .optional(),
-  default_value: z.json().nullable().optional(),
-  file_policy: z.unknown().nullable().optional(),
-  target_blueprint_code: z.string().trim().min(1).nullable().optional(),
-  cardinality: z.enum(['one', 'many']).nullable().optional(),
-  target_cardinality: z.enum(['one', 'many']).nullable().optional(),
-  tags: z.array(z.string()),
-  context_fallback: z.enum(['default', 'none']),
-  context_editable: z.enum(['all', 'default']),
-  readonly: z.boolean(),
-  searchable: z.boolean(),
-  facetable: z.boolean(),
+  definition: z.string().trim().min(1),
 });
 
 export const createReusableAttributeGroupSchema = z.object({
