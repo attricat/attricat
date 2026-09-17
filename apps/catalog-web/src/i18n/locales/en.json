@@ -690,6 +690,7 @@
     "groupedNavigation": "Extension navigation",
     "notAuthorizedView": "You are not authorized to view extensions.",
     "notAuthorizedInstall": "You are not authorized to install extensions.",
+    "notAuthorizedManage": "You are not authorized to manage extensions.",
     "uploadTitle": "Upload extension archive",
     "uploadDescription": "Install a local .tar.zst extension archive. It is validated and installed disabled.",
     "back": "Back to extensions",

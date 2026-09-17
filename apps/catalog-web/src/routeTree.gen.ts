@@ -46,6 +46,8 @@ import { Route as ManageReusableAttributesIndexRouteImport } from './routes/mana
 import { Route as ManageReusableAttributesDefinitionIdRouteImport } from './routes/manage/reusable-attributes/$definitionId'
 import { Route as ManageReusableAttributesNewRouteImport } from './routes/manage/reusable-attributes/new'
 import { Route as ManageRulesIndexRouteImport } from './routes/manage/rules/index'
+import { Route as ManageRulesFindingsRouteImport } from './routes/manage/rules/findings'
+import { Route as ManageRulesRunsRouteImport } from './routes/manage/rules/runs'
 import { Route as ManageWorkflowsIndexRouteImport } from './routes/manage/workflows/index'
 import { Route as ManageWorkflowsWorkflowIdRouteImport } from './routes/manage/workflows/$workflowId'
 import { Route as ManageWorkflowsNewRouteImport } from './routes/manage/workflows/new'
@@ -253,6 +255,16 @@ const ManageRulesIndexRoute = ManageRulesIndexRouteImport.update({
   path: '/manage/rules/',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ManageRulesFindingsRoute = ManageRulesFindingsRouteImport.update({
+  id: '/manage/rules/findings',
+  path: '/manage/rules/findings',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ManageRulesRunsRoute = ManageRulesRunsRouteImport.update({
+  id: '/manage/rules/runs',
+  path: '/manage/rules/runs',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ManageWorkflowsIndexRoute = ManageWorkflowsIndexRouteImport.update({
   id: '/manage/workflows/',
   path: '/manage/workflows/',
@@ -359,6 +371,8 @@ export interface FileRoutesByFullPath {
   '/manage/extensions/sideload': typeof ManageExtensionsSideloadRoute
   '/manage/reusable-attributes/$definitionId': typeof ManageReusableAttributesDefinitionIdRoute
   '/manage/reusable-attributes/new': typeof ManageReusableAttributesNewRoute
+  '/manage/rules/findings': typeof ManageRulesFindingsRoute
+  '/manage/rules/runs': typeof ManageRulesRunsRoute
   '/manage/workflows/$workflowId': typeof ManageWorkflowsWorkflowIdRouteWithChildren
   '/manage/workflows/new': typeof ManageWorkflowsNewRoute
   '/manage/workspace/invitations': typeof ManageWorkspaceInvitationsRoute
@@ -407,6 +421,8 @@ export interface FileRoutesByTo {
   '/manage/extensions/sideload': typeof ManageExtensionsSideloadRoute
   '/manage/reusable-attributes/$definitionId': typeof ManageReusableAttributesDefinitionIdRoute
   '/manage/reusable-attributes/new': typeof ManageReusableAttributesNewRoute
+  '/manage/rules/findings': typeof ManageRulesFindingsRoute
+  '/manage/rules/runs': typeof ManageRulesRunsRoute
   '/manage/workflows/new': typeof ManageWorkflowsNewRoute
   '/manage/workspace/invitations': typeof ManageWorkspaceInvitationsRoute
   '/manage/workspace/members': typeof ManageWorkspaceMembersRoute
@@ -459,6 +475,8 @@ export interface FileRoutesById {
   '/manage/extensions/sideload': typeof ManageExtensionsSideloadRoute
   '/manage/reusable-attributes/$definitionId': typeof ManageReusableAttributesDefinitionIdRoute
   '/manage/reusable-attributes/new': typeof ManageReusableAttributesNewRoute
+  '/manage/rules/findings': typeof ManageRulesFindingsRoute
+  '/manage/rules/runs': typeof ManageRulesRunsRoute
   '/manage/workflows/$workflowId': typeof ManageWorkflowsWorkflowIdRouteWithChildren
   '/manage/workflows/new': typeof ManageWorkflowsNewRoute
   '/manage/workspace/invitations': typeof ManageWorkspaceInvitationsRoute
@@ -513,6 +531,8 @@ export interface FileRouteTypes {
     | '/manage/extensions/sideload'
     | '/manage/reusable-attributes/$definitionId'
     | '/manage/reusable-attributes/new'
+    | '/manage/rules/findings'
+    | '/manage/rules/runs'
     | '/manage/workflows/$workflowId'
     | '/manage/workflows/new'
     | '/manage/workspace/invitations'
@@ -561,6 +581,8 @@ export interface FileRouteTypes {
     | '/manage/extensions/sideload'
     | '/manage/reusable-attributes/$definitionId'
     | '/manage/reusable-attributes/new'
+    | '/manage/rules/findings'
+    | '/manage/rules/runs'
     | '/manage/workflows/new'
     | '/manage/workspace/invitations'
     | '/manage/workspace/members'
@@ -612,6 +634,8 @@ export interface FileRouteTypes {
     | '/manage/extensions/sideload'
     | '/manage/reusable-attributes/$definitionId'
     | '/manage/reusable-attributes/new'
+    | '/manage/rules/findings'
+    | '/manage/rules/runs'
     | '/manage/workflows/$workflowId'
     | '/manage/workflows/new'
     | '/manage/workspace/invitations'
@@ -658,6 +682,8 @@ export interface RootRouteChildren {
   ManageExtensionsSideloadRoute: typeof ManageExtensionsSideloadRoute
   ManageReusableAttributesDefinitionIdRoute: typeof ManageReusableAttributesDefinitionIdRoute
   ManageReusableAttributesNewRoute: typeof ManageReusableAttributesNewRoute
+  ManageRulesFindingsRoute: typeof ManageRulesFindingsRoute
+  ManageRulesRunsRoute: typeof ManageRulesRunsRoute
   ManageWorkflowsWorkflowIdRoute: typeof ManageWorkflowsWorkflowIdRouteWithChildren
   ManageWorkflowsNewRoute: typeof ManageWorkflowsNewRoute
   ManageWorkspaceInvitationsRoute: typeof ManageWorkspaceInvitationsRoute
@@ -935,6 +961,20 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ManageRulesIndexRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/manage/rules/findings': {
+      id: '/manage/rules/findings'
+      path: '/manage/rules/findings'
+      fullPath: '/manage/rules/findings'
+      preLoaderRoute: typeof ManageRulesFindingsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/manage/rules/runs': {
+      id: '/manage/rules/runs'
+      path: '/manage/rules/runs'
+      fullPath: '/manage/rules/runs'
+      preLoaderRoute: typeof ManageRulesRunsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/manage/workflows/': {
       id: '/manage/workflows/'
       path: '/manage/workflows'
@@ -1134,6 +1174,8 @@ const rootRouteChildren: RootRouteChildren = {
   ManageReusableAttributesDefinitionIdRoute:
     ManageReusableAttributesDefinitionIdRoute,
   ManageReusableAttributesNewRoute: ManageReusableAttributesNewRoute,
+  ManageRulesFindingsRoute: ManageRulesFindingsRoute,
+  ManageRulesRunsRoute: ManageRulesRunsRoute,
   ManageWorkflowsWorkflowIdRoute: ManageWorkflowsWorkflowIdRouteWithChildren,
   ManageWorkflowsNewRoute: ManageWorkflowsNewRoute,
   ManageWorkspaceInvitationsRoute: ManageWorkspaceInvitationsRoute,

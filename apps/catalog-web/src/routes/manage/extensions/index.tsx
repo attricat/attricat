@@ -1,6 +1,7 @@
-import { createFileRoute } from '@tanstack/react-router';
-import { ExtensionsPage } from '../../../features/extensions/ExtensionsPage';
+import { createFileRoute, redirect } from '@tanstack/react-router';
 
 export const Route = createFileRoute('/manage/extensions/')({
-  component: ExtensionsPage,
+  beforeLoad: () => {
+    throw redirect({ to: '/manage/extensions/marketplace' });
+  },
 });

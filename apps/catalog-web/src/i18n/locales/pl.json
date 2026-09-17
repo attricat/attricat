@@ -706,6 +706,7 @@
     "groupedNavigation": "Nawigacja rozszerzeń",
     "notAuthorizedView": "Nie masz uprawnień do wyświetlania rozszerzeń.",
     "notAuthorizedInstall": "Nie masz uprawnień do instalowania rozszerzeń.",
+    "notAuthorizedManage": "Nie masz uprawnień do zarządzania rozszerzeniami.",
     "uploadTitle": "Prześlij archiwum rozszerzenia",
     "uploadDescription": "Zainstaluj lokalne archiwum rozszerzenia .tar.zst. Zostanie zweryfikowane i zainstalowane jako wyłączone.",
     "back": "Powrót do rozszerzeń",
