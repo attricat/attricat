@@ -243,3 +243,97 @@ async fn reusable_relationships_and_group_attachments_use_entity_owned_attribute
     );
     server.abort();
 }
+
+#[sqlx::test]
+async fn migration_preserves_reusable_attribute_values(pool: PgPool) {
+    let (base_url, server) = start_server(pool).await;
+    let client = authenticated_client();
+    let blueprint = create_blueprint(&client, &base_url, PRODUCT).await;
+    let reusable = create_published_reusable(
+        &client,
+        &base_url,
+        json!({
+            "namespace": "acme", "code": "weight", "name": "Weight", "value_type": "number",
+            "default_value": 1.5
+        }),
+    )
+    .await;
+    let entity = create_entity(&client, &base_url, &blueprint).await;
+    let entity_id = entity["id"].as_str().unwrap();
+    client
+        .post(format!(
+            "{base_url}/v1/entities/{entity_id}/reusable-attributes"
+        ))
+        .json(&json!({ "reusable_attribute_revision_id": reusable["id"] }))
+        .send()
+        .await
+        .unwrap()
+        .error_for_status()
+        .unwrap();
+    let revision: Value = client
+        .post(format!(
+            "{base_url}/blueprints/{}/versions",
+            blueprint["blueprint"]["id"].as_str().unwrap()
+        ))
+        .json(&json!({ "definition": PRODUCT.replace("name = \"Reusable product\"", "name = \"Reusable product v2\"") }))
+        .send()
+        .await
+        .unwrap()
+        .error_for_status()
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    client
+        .post(format!(
+            "{base_url}/blueprints/{}/versions/{}/publish",
+            blueprint["blueprint"]["id"].as_str().unwrap(),
+            revision["blueprint"]["version"].as_i64().unwrap()
+        ))
+        .send()
+        .await
+        .unwrap()
+        .error_for_status()
+        .unwrap();
+    let preview: Value = client
+        .post(format!(
+            "{base_url}/v1/entities/{entity_id}/blueprint-migration/preview"
+        ))
+        .send()
+        .await
+        .unwrap()
+        .error_for_status()
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    client
+        .post(format!(
+            "{base_url}/v1/entities/{entity_id}/blueprint-migration"
+        ))
+        .json(&json!({
+            "migration_id": preview["migration_id"],
+            "expected_target_version": preview["target"]["blueprint"]["version"],
+            "values": [],
+            "relationships": [],
+            "discard_attributes": []
+        }))
+        .send()
+        .await
+        .unwrap()
+        .error_for_status()
+        .unwrap();
+    let entity: Value = client
+        .get(format!("{base_url}/v1/entities/{entity_id}"))
+        .send()
+        .await
+        .unwrap()
+        .error_for_status()
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    assert_eq!(entity["reusable_attributes"].as_array().unwrap().len(), 1);
+    assert_eq!(entity["reusable_values"][0]["value"], 1.5);
+    server.abort();
+}

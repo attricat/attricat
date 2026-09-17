@@ -479,6 +479,28 @@ impl CatalogRepository {
         form_attribute_values(rows)
     }
 
+    pub(super) async fn reusable_form_values_in_transaction(
+        &self,
+        transaction: &mut Transaction<'_, Postgres>,
+        entity_id: Uuid,
+    ) -> Result<Vec<FormAttributeValue>, RepositoryError> {
+        let rows = sqlx::query_as::<_, FormNativeValueRow>(
+            r#"SELECT a.code AS attribute_code, av.context_id, av.relationship_target_entity_id,
+                      a.value_type, av.value_text, av.value_number, av.value_integer,
+                      av.value_boolean, av.value_date, av.value_datetime, av.value_time,
+                      av.value_time_zone, av.value_json
+               FROM attribute_values av
+               JOIN attributes a ON a.id = av.attribute_id
+               WHERE av.entity_id = $1 AND a.entity_id = $1 AND a.value_type <> 'file'
+                 AND (av.relationship_target_entity_id IS NULL OR av.active)
+               ORDER BY a.position, av.relationship_target_entity_id"#,
+        )
+        .bind(entity_id)
+        .fetch_all(&mut **transaction)
+        .await?;
+        form_attribute_values(rows)
+    }
+
     pub(super) async fn list_attributes_in_transaction(
         &self,
         transaction: &mut Transaction<'_, Postgres>,

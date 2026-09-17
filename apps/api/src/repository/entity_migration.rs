@@ -9,6 +9,7 @@ use uuid::Uuid;
 
 type FileReferenceKey = (String, Option<Uuid>);
 type FileReferencesByAttribute = HashMap<FileReferenceKey, Vec<(Uuid, i32)>>;
+type ReusableFileReferencesByAttribute = HashMap<(Uuid, Option<Uuid>), Vec<(Uuid, i32)>>;
 
 impl CatalogRepository {
     pub async fn preview_entity_migration(
@@ -242,10 +243,29 @@ impl CatalogRepository {
                FROM attribute_file_references r
                JOIN attribute_values av ON av.id = r.attribute_value_id
                JOIN attributes a ON a.id = av.attribute_id
+               JOIN entities e ON e.id = av.entity_id
                WHERE av.entity_id = $1
                  AND av.workspace_id = $2
                  AND a.value_type = 'file'
+                 AND a.blueprint_id = e.blueprint_id
+                 AND a.blueprint_version = e.blueprint_version
                ORDER BY a.code, av.context_id, r.position"#,
+        )
+        .bind(entity.id)
+        .bind(self.workspace_id.unwrap_or(Self::DEFAULT_WORKSPACE_ID))
+        .fetch_all(&mut *transaction)
+        .await?;
+        let reusable_values = self
+            .reusable_form_values_in_transaction(&mut transaction, entity.id)
+            .await?;
+        let reusable_file_references = sqlx::query_as::<_, (Uuid, Option<Uuid>, Uuid, i32)>(
+            r#"SELECT a.id, av.context_id, r.file_id, r.position
+               FROM attribute_file_references r
+               JOIN attribute_values av ON av.id = r.attribute_value_id
+               JOIN attributes a ON a.id = av.attribute_id
+               WHERE av.entity_id = $1 AND av.workspace_id = $2
+                 AND a.entity_id = $1 AND a.value_type = 'file'
+               ORDER BY a.id, av.context_id, r.position"#,
         )
         .bind(entity.id)
         .bind(self.workspace_id.unwrap_or(Self::DEFAULT_WORKSPACE_ID))
@@ -293,7 +313,38 @@ impl CatalogRepository {
         let mut carried_values = Vec::new();
         let mut carried_relationships: HashMap<(String, Option<Uuid>), Vec<Uuid>> = HashMap::new();
         let mut carried_file_references: FileReferencesByAttribute = HashMap::new();
+        let mut carried_reusable_file_references: ReusableFileReferencesByAttribute =
+            HashMap::new();
         let mut unresolved = HashSet::new();
+        for value in reusable_values {
+            match value {
+                FormAttributeValue::Scalar {
+                    attribute_code,
+                    context_id,
+                    value,
+                } => carried_values.push(NewAttributeValue::Scalar {
+                    attribute_id: None,
+                    attribute_code: Some(attribute_code),
+                    context_id,
+                    value,
+                }),
+                FormAttributeValue::Relationship {
+                    attribute_code,
+                    context_id,
+                    target_entity_id,
+                } => carried_relationships
+                    .entry((attribute_code, context_id))
+                    .or_default()
+                    .push(target_entity_id),
+                FormAttributeValue::File { .. } => {}
+            }
+        }
+        for (attribute_id, context_id, file_id, position) in reusable_file_references {
+            carried_reusable_file_references
+                .entry((attribute_id, context_id))
+                .or_default()
+                .push((file_id, position));
+        }
         for value in source_values {
             match value {
                 FormAttributeValue::Scalar {
@@ -416,6 +467,29 @@ impl CatalogRepository {
                 .get(attribute_code.as_str())
                 .expect("compatible file attribute belongs to the target blueprint")
                 .id;
+            let value_id = sqlx::query_scalar::<_, Uuid>(
+                "INSERT INTO attribute_values (id, workspace_id, entity_id, attribute_id, context_id, active) VALUES ($1, $2, $3, $4, $5, true) RETURNING id",
+            )
+            .bind(Uuid::new_v4())
+            .bind(self.workspace_id.unwrap_or(Self::DEFAULT_WORKSPACE_ID))
+            .bind(target_entity.id)
+            .bind(attribute_id)
+            .bind(context_id)
+            .fetch_one(&mut *transaction)
+            .await?;
+            for (file_id, position) in files {
+                sqlx::query(
+                    "INSERT INTO attribute_file_references (attribute_value_id, workspace_id, file_id, position) VALUES ($1, $2, $3, $4)",
+                )
+                .bind(value_id)
+                .bind(self.workspace_id.unwrap_or(Self::DEFAULT_WORKSPACE_ID))
+                .bind(file_id)
+                .bind(position)
+                .execute(&mut *transaction)
+                .await?;
+            }
+        }
+        for ((attribute_id, context_id), files) in carried_reusable_file_references {
             let value_id = sqlx::query_scalar::<_, Uuid>(
                 "INSERT INTO attribute_values (id, workspace_id, entity_id, attribute_id, context_id, active) VALUES ($1, $2, $3, $4, $5, true) RETURNING id",
             )
