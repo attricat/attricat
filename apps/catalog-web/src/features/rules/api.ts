@@ -4,9 +4,6 @@ import {
   findingSchema,
   ruleRunSchema,
   ruleSchema,
-  type Finding,
-  type Rule,
-  type RuleRun,
 } from './schemas';
 export type { Finding, Rule, RuleRun } from './schemas';
 const id = (value: string) => encodeURIComponent(z.uuid().parse(value));
