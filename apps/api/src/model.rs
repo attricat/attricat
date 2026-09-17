@@ -43,6 +43,8 @@ pub struct Attribute {
     pub code: String,
     pub value_type: String,
     pub value_schema: Option<Value>,
+    /// Immutable provider/type/release metadata for extension-defined types.
+    pub extension_type: Option<Value>,
     pub default_value: Option<Value>,
     pub file_policy: Option<Value>,
     pub target_blueprint_code: Option<String>,
@@ -56,6 +58,90 @@ pub struct Attribute {
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
     pub deleted_at: Option<DateTime<Utc>>,
+}
+
+#[derive(Clone, Debug, Deserialize, FromRow, PartialEq, Serialize)]
+pub struct ReusableAttribute {
+    pub id: Uuid,
+    pub definition_id: Uuid,
+    pub namespace: String,
+    pub code: String,
+    pub name: String,
+    pub version: i64,
+    pub value_type: String,
+    pub value_schema: Option<Value>,
+    pub default_value: Option<Value>,
+    pub file_policy: Option<Value>,
+    pub target_blueprint_code: Option<String>,
+    pub cardinality: Option<String>,
+    pub target_cardinality: Option<String>,
+    pub tags: Value,
+    pub context_fallback: String,
+    pub context_editable: String,
+    pub readonly: bool,
+    pub searchable: bool,
+    pub facetable: bool,
+    pub status: String,
+    pub published_at: Option<DateTime<Utc>>,
+    pub definition: String,
+}
+
+#[derive(Clone, Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct CreateReusableAttribute {
+    pub definition: String,
+}
+
+#[derive(Clone, Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct CreateReusableAttributeGroup {
+    pub code: String,
+    pub name: String,
+    #[serde(default)]
+    pub position: i64,
+    pub reusable_attribute_revision_ids: Vec<Uuid>,
+}
+
+#[derive(Clone, Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct AttachReusableAttribute {
+    pub reusable_attribute_revision_id: Uuid,
+}
+
+#[derive(Clone, Debug, FromRow, Serialize)]
+pub struct ReusableAttributeGroup {
+    pub id: Uuid,
+    pub code: String,
+    pub name: String,
+    pub position: i64,
+    #[serde(default)]
+    pub reusable_attribute_revision_ids: Vec<Uuid>,
+}
+
+#[derive(Clone, Debug, FromRow, Serialize)]
+pub struct EntityReusableAttribute {
+    pub attachment_id: Uuid,
+    pub attribute_id: Uuid,
+    pub definition_id: Uuid,
+    pub revision_id: Uuid,
+    pub namespace: String,
+    pub code: String,
+    pub name: String,
+    pub version: i64,
+    pub value_type: String,
+    pub value_schema: Option<Value>,
+    pub default_value: Option<Value>,
+    pub file_policy: Option<Value>,
+    pub target_blueprint_code: Option<String>,
+    pub cardinality: Option<String>,
+    pub target_cardinality: Option<String>,
+    pub tags: Value,
+    pub context_fallback: String,
+    pub context_editable: String,
+    pub readonly: bool,
+    pub searchable: bool,
+    pub facetable: bool,
+    pub position: i64,
 }
 
 #[derive(Clone, Debug, Deserialize, FromRow, PartialEq, Serialize)]
@@ -335,6 +421,10 @@ pub struct ResolvedEntityPreviewResponse {
     pub entity: EntityIdentity,
     pub requested_context: AttributeContext,
     pub values: Value,
+    /// Attached definitions are deliberately a second namespace rather than
+    /// fields injected into blueprint-controlled layouts.
+    pub reusable_attributes: Vec<EntityReusableAttribute>,
+    pub reusable_values: Value,
 }
 
 #[derive(Clone, Debug, Serialize)]
@@ -556,6 +646,11 @@ pub struct EntityFormResponse {
     pub entity: Entity,
     pub blueprint: BlueprintWithAttributes,
     pub values: Vec<FormAttributeValue>,
+    /// Entity-owned, namespace-qualified definitions and their values are kept
+    /// separate from blueprint fields so callers cannot accidentally merge the
+    /// two namespaces.
+    pub reusable_attributes: Vec<EntityReusableAttribute>,
+    pub reusable_values: Vec<FormAttributeValue>,
     pub context: Value,
 }
 
@@ -598,6 +693,22 @@ pub struct BlueprintMigrationBatch {
     pub created_at: DateTime<Utc>,
     pub started_at: Option<DateTime<Utc>>,
     pub completed_at: Option<DateTime<Utc>>,
+}
+
+#[derive(Clone, Debug, FromRow, Serialize)]
+pub struct BlueprintMigrationBatchStatus {
+    pub id: Uuid,
+    pub blueprint_id: Uuid,
+    pub target_version: i64,
+    pub status: String,
+    pub created_at: DateTime<Utc>,
+    pub started_at: Option<DateTime<Utc>>,
+    pub completed_at: Option<DateTime<Utc>>,
+    pub total_entities: i64,
+    pub processed_entities: i64,
+    pub migrated_entities: i64,
+    pub needs_input_entities: i64,
+    pub failed_entities: i64,
 }
 
 #[derive(Clone, Debug, FromRow, Serialize)]

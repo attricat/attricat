@@ -6,6 +6,9 @@ use catalog_blueprint::{
     BlueprintKind, CompiledBlueprint, ResolvedInclude, ViewDefinition, compile, parse,
     validate_table_renderer,
 };
+use catalog_validation::validate_json_schema;
+use semver::VersionReq;
+use serde_json::{Value, json};
 use sqlx::{Postgres, Transaction};
 use uuid::Uuid;
 
@@ -89,10 +92,138 @@ async fn compile_source(
         });
     }
 
-    let compiled = compile(definition, &resolved_includes, source)
+    let mut compiled = compile(definition, &resolved_includes, source)
         .map_err(RepositoryError::invalid_blueprint_definition)?;
+    resolve_extension_attribute_types(transaction, workspace_id, &mut compiled).await?;
     validate_table_columns(transaction, workspace_id, &compiled).await?;
     Ok(compiled)
+}
+
+/// Resolve only while authoring/publishing. Persisted attributes contain the
+/// complete declaration, so all ordinary reads remain independent of extension
+/// lifecycle state.
+async fn resolve_extension_attribute_types(
+    transaction: &mut Transaction<'_, Postgres>,
+    workspace_id: Uuid,
+    compiled: &mut CompiledBlueprint,
+) -> Result<(), RepositoryError> {
+    let installations = sqlx::query_as::<_, (String, Uuid, String, Value)>(
+        "SELECT i.extension_id, i.installed_release_id, r.version, r.manifest FROM extension_installations i JOIN installed_extension_releases r ON r.id = i.installed_release_id WHERE i.workspace_id = $1 AND i.state = 'enabled'",
+    )
+    .bind(workspace_id)
+    .fetch_all(&mut **transaction)
+    .await?;
+
+    for attribute in &mut compiled.attributes {
+        let Some(reference) = attribute.extension_type.as_ref() else {
+            continue;
+        };
+        // Include attributes already compiled from a pinned revision carry the
+        // final object rather than a source reference.
+        let Some(reference) = reference.get("reference").and_then(Value::as_str) else {
+            continue;
+        };
+        let (provider, type_id, requirement) = parse_extension_type_reference(reference)?;
+        let Some((_, installed_release_id, release_version, manifest)) = installations
+            .iter()
+            .find(|(extension_id, _, _, _)| extension_id == provider)
+        else {
+            return Err(RepositoryError::InvalidBlueprintDefinition(format!(
+                "extension attribute type '{reference}' has no enabled provider"
+            )));
+        };
+        let manifest: Manifest = serde_json::from_value(manifest.clone()).map_err(|_| {
+            RepositoryError::InvalidBlueprintDefinition(format!(
+                "extension attribute type '{reference}' provider manifest is invalid"
+            ))
+        })?;
+        let declaration = manifest
+            .attribute_types
+            .iter()
+            .filter(|item| {
+                item.id == type_id
+                    && requirement.matches(
+                        &semver::Version::parse(&item.version)
+                            .expect("manifest validated at install"),
+                    )
+            })
+            .max_by_key(|item| {
+                semver::Version::parse(&item.version).expect("manifest validated at install")
+            })
+            .ok_or_else(|| {
+                RepositoryError::InvalidBlueprintDefinition(format!(
+                    "extension attribute type '{reference}' has no compatible declaration"
+                ))
+            })?;
+        let configuration = attribute
+            .extension_type
+            .as_ref()
+            .and_then(|value| value.get("configuration"))
+            .cloned()
+            .unwrap_or(Value::Null);
+        match &declaration.configuration_schema {
+            Some(schema) => {
+                if let Some(error) = validate_json_schema(schema, &configuration)
+                    .map_err(|message| RepositoryError::InvalidBlueprintDefinition(format!(
+                        "extension attribute type '{reference}' has invalid configuration schema: {message}"
+                    )))?
+                    .into_iter()
+                    .next()
+                {
+                    return Err(RepositoryError::InvalidBlueprintDefinition(format!(
+                        "extension attribute type '{reference}' configuration {}: {}",
+                        error.instance_path, error.message
+                    )));
+                }
+            }
+            None if !configuration.is_null() => {
+                return Err(RepositoryError::InvalidBlueprintDefinition(format!(
+                    "extension attribute type '{reference}' does not accept configuration"
+                )));
+            }
+            None => {}
+        }
+        attribute.value_type = declaration.primitive.clone();
+        attribute.value_schema = declaration.value_schema.clone();
+        attribute.extension_type = Some(json!({
+            "provider": provider,
+            "type": type_id,
+            "version": declaration.version,
+            "primitive": declaration.primitive,
+            "value_schema": declaration.value_schema,
+            "configuration_schema": declaration.configuration_schema,
+            "configuration": configuration,
+            "installed_release_id": installed_release_id,
+            "release_version": release_version,
+        }));
+    }
+    Ok(())
+}
+
+fn parse_extension_type_reference(
+    reference: &str,
+) -> Result<(&str, &str, VersionReq), RepositoryError> {
+    let Some((provider, type_and_requirement)) = reference.split_once(':') else {
+        return Err(RepositoryError::InvalidBlueprintDefinition(format!(
+            "extension_type '{reference}' must use provider:type@semver-range"
+        )));
+    };
+    let Some((type_id, requirement)) = type_and_requirement.rsplit_once('@') else {
+        return Err(RepositoryError::InvalidBlueprintDefinition(format!(
+            "extension_type '{reference}' must use provider:type@semver-range"
+        )));
+    };
+    if provider.is_empty() || type_id.is_empty() || requirement.is_empty() {
+        return Err(RepositoryError::InvalidBlueprintDefinition(format!(
+            "extension_type '{reference}' must use provider:type@semver-range"
+        )));
+    }
+    let requirement = VersionReq::parse(requirement).map_err(|_| {
+        RepositoryError::InvalidBlueprintDefinition(format!(
+            "extension_type '{reference}' has an invalid SemVer range"
+        ))
+    })?;
+    Ok((provider, type_id, requirement))
 }
 
 async fn validate_table_columns(

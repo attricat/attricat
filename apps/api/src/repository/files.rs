@@ -453,9 +453,9 @@ impl CatalogRepository {
         attribute_code: &str,
     ) -> Result<(Uuid, FilePolicy, String), RepositoryError> {
         let row = sqlx::query_as::<_, (Uuid, String, Option<Value>, String)>(
-            "SELECT id, value_type, file_policy, context_editable FROM attributes WHERE code = $1 AND blueprint_id = $2 AND blueprint_version = $3 AND deleted_at IS NULL",
+            "SELECT id, value_type, file_policy, context_editable FROM attributes WHERE code = $1 AND ((blueprint_id = $2 AND blueprint_version = $3) OR entity_id = $4) AND deleted_at IS NULL",
         )
-        .bind(attribute_code).bind(entity.blueprint_id).bind(entity.blueprint_version)
+        .bind(attribute_code).bind(entity.blueprint_id).bind(entity.blueprint_version).bind(entity.id)
         .fetch_optional(&mut **transaction).await?
         .ok_or(RepositoryError::AttributeNotApplicable)?;
         if row.1 != "file" {

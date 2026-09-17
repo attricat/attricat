@@ -8,7 +8,8 @@ use crate::{
     catalog_service::CatalogMutationService,
     model::{
         Blueprint, BlueprintEntityPublicationSummary, BlueprintMigrationBatch,
-        BlueprintWithAttributes, CreateBlueprint, PublicationContextRequest,
+        BlueprintMigrationBatchStatus, BlueprintWithAttributes, CreateBlueprint,
+        PublicationContextRequest,
     },
 };
 use axum::{Json, extract::State, http::StatusCode};
@@ -92,6 +93,18 @@ pub(super) async fn get_blueprint_revision(
         .map(Json)
         .ok_or_else(|| ApiError::not_found("blueprint version"))
 }
+pub(super) async fn list_blueprint_migration_batches(
+    State(_state): State<AppState>,
+    super::auth::ScopedRepository(repository): super::auth::ScopedRepository,
+    ApiPath(blueprint_id): ApiPath<Uuid>,
+) -> Result<Json<Vec<BlueprintMigrationBatchStatus>>, ApiError> {
+    Ok(Json(
+        repository
+            .list_blueprint_migration_batches(blueprint_id)
+            .await?,
+    ))
+}
+
 pub(super) async fn start_safe_blueprint_migration_batch(
     State(state): State<AppState>,
     super::auth::ScopedRepository(repository): super::auth::ScopedRepository,

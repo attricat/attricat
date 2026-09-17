@@ -797,29 +797,29 @@ impl CatalogRepository {
                         r#"SELECT id, code, value_type, value_schema, target_blueprint_code, cardinality, target_cardinality, context_editable
                    FROM attributes
                    WHERE id = $1
-                     AND blueprint_id = $2
-                     AND blueprint_version = $3
+                     AND ((blueprint_id = $2 AND blueprint_version = $3) OR entity_id = $4)
                      AND deleted_at IS NULL"#,
                     )
                     .bind(attribute_id)
                     .bind(entity.blueprint_id)
                     .bind(entity.blueprint_version)
+                    .bind(entity.id)
                     .fetch_optional(&mut **transaction)
                     .await?
                 }
                 (None, Some(attribute_code)) => {
-                    validate_code(attribute_code)?;
+                    validate_attribute_selector_code(attribute_code)?;
                     sqlx::query_as::<_, (Uuid, String, String, Option<Value>, Option<String>, Option<String>, Option<String>, String)>(
                         r#"SELECT id, code, value_type, value_schema, target_blueprint_code, cardinality, target_cardinality, context_editable
                    FROM attributes
                    WHERE code = $1
-                     AND blueprint_id = $2
-                     AND blueprint_version = $3
+                     AND ((blueprint_id = $2 AND blueprint_version = $3) OR entity_id = $4)
                      AND deleted_at IS NULL"#,
                     )
                     .bind(attribute_code)
                     .bind(entity.blueprint_id)
                     .bind(entity.blueprint_version)
+                    .bind(entity.id)
                     .fetch_optional(&mut **transaction)
                     .await?
                 }
@@ -893,8 +893,8 @@ impl CatalogRepository {
             r#"INSERT INTO attribute_values (
                     id, workspace_id, entity_id, attribute_id, context_id, relationship_target_entity_id, active,
                     value_text, value_number, value_integer, value_boolean, value_date, value_datetime,
-                    value_time, value_time_zone
-                ) VALUES ($1, $2, $3, $4, $5, $6, true, $7, $8, $9, $10, $11, $12, $13, $14)
+                    value_time, value_time_zone, value_json
+                ) VALUES ($1, $2, $3, $4, $5, $6, true, $7, $8, $9, $10, $11, $12, $13, $14, $15)
                 RETURNING id, entity_id, attribute_id,
                     'null'::jsonb AS value,
                     relationship_target_entity_id, context_id, active, created_at"#,
@@ -915,7 +915,8 @@ impl CatalogRepository {
                 .bind(Option::<NaiveDate>::None)
                 .bind(Option::<DateTime<Utc>>::None)
                 .bind(Option::<NaiveTime>::None)
-                .bind(Option::<String>::None),
+                .bind(Option::<String>::None)
+                .bind(Option::<Value>::None),
         };
         Ok(query.fetch_one(&mut **transaction).await?)
     }
@@ -926,16 +927,17 @@ impl CatalogRepository {
         entity: &Entity,
         selector: AttributeValueSelector,
     ) -> Result<(), RepositoryError> {
-        validate_code(&selector.attribute_code)?;
+        validate_attribute_selector_code(&selector.attribute_code)?;
         let context_id = self
             .resolve_context_id(transaction, selector.context_id)
             .await?;
         let attribute = sqlx::query_as::<_, (Uuid, String, String)>(
-            "SELECT id, value_type, context_editable FROM attributes WHERE code = $1 AND blueprint_id = $2 AND blueprint_version = $3 AND deleted_at IS NULL",
+            "SELECT id, value_type, context_editable FROM attributes WHERE code = $1 AND ((blueprint_id = $2 AND blueprint_version = $3) OR entity_id = $4) AND deleted_at IS NULL",
         )
         .bind(selector.attribute_code)
         .bind(entity.blueprint_id)
         .bind(entity.blueprint_version)
+        .bind(entity.id)
         .fetch_optional(&mut **transaction)
         .await?
         .ok_or(RepositoryError::AttributeNotApplicable)?;
@@ -949,7 +951,7 @@ impl CatalogRepository {
         Ok(())
     }
 
-    async fn resolve_context_id(
+    pub(super) async fn resolve_context_id(
         &self,
         transaction: &mut Transaction<'_, Postgres>,
         context_id: Option<Uuid>,
@@ -1158,16 +1160,17 @@ impl CatalogRepository {
     ) -> Result<(Uuid, Option<String>, String), RepositoryError> {
         let attribute = match (relationship.attribute_id, relationship.attribute_code.as_deref()) {
             (Some(id), None) => sqlx::query_as::<_, (Uuid, String, Option<String>, String)>(
-                "SELECT id, value_type, target_blueprint_code, context_editable FROM attributes WHERE id = $1 AND blueprint_id = $2 AND blueprint_version = $3 AND deleted_at IS NULL",
-            ).bind(id).bind(entity.blueprint_id).bind(entity.blueprint_version).fetch_optional(&mut **transaction).await?,
+                "SELECT id, value_type, target_blueprint_code, context_editable FROM attributes WHERE id = $1 AND ((blueprint_id = $2 AND blueprint_version = $3) OR entity_id = $4) AND deleted_at IS NULL",
+            ).bind(id).bind(entity.blueprint_id).bind(entity.blueprint_version).bind(entity.id).fetch_optional(&mut **transaction).await?,
             (None, Some(code)) => {
-                validate_code(code)?;
+                validate_attribute_selector_code(code)?;
                 sqlx::query_as::<_, (Uuid, String, Option<String>, String)>(
-                    "SELECT id, value_type, target_blueprint_code, context_editable FROM attributes WHERE code = $1 AND blueprint_id = $2 AND blueprint_version = $3 AND deleted_at IS NULL",
+                    "SELECT id, value_type, target_blueprint_code, context_editable FROM attributes WHERE code = $1 AND ((blueprint_id = $2 AND blueprint_version = $3) OR entity_id = $4) AND deleted_at IS NULL",
                 )
                 .bind(code)
                 .bind(entity.blueprint_id)
                 .bind(entity.blueprint_version)
+                .bind(entity.id)
                 .fetch_optional(&mut **transaction)
                 .await?
             }
@@ -1311,7 +1314,8 @@ impl CatalogRepository {
                 r#"SELECT av.entity_id
                FROM attribute_values av
                JOIN attributes a ON a.id = av.attribute_id
-               WHERE a.blueprint_id = $1 AND a.code = $2
+               WHERE ((a.blueprint_id = $1 AND a.code = $2)
+                    OR (a.reusable_attribute_revision_id = (SELECT reusable_attribute_revision_id FROM attributes WHERE id = $7) AND a.code = $2))
                  AND a.workspace_id = $6 AND av.workspace_id = $6
                  AND av.context_id IS NOT DISTINCT FROM $3
                  AND av.relationship_target_entity_id = $4 AND av.active
@@ -1324,6 +1328,7 @@ impl CatalogRepository {
             .bind(target_entity_id)
             .bind(entity.id)
             .bind(self.workspace_id.unwrap_or(Self::DEFAULT_WORKSPACE_ID))
+            .bind(attribute_id)
             .fetch_optional(&mut **transaction)
             .await?
         } else {
@@ -1353,11 +1358,12 @@ impl CatalogRepository {
         if active {
             let entity = self.lock_entity(transaction, entity_id).await?;
             let (attribute_code, cardinality, target_cardinality) = sqlx::query_as::<_, (String, Option<String>, Option<String>)>(
-                "SELECT code, cardinality, target_cardinality FROM attributes WHERE id = $1 AND blueprint_id = $2 AND blueprint_version = $3 AND value_type = 'relationship'",
+                "SELECT code, cardinality, target_cardinality FROM attributes WHERE id = $1 AND ((blueprint_id = $2 AND blueprint_version = $3) OR entity_id = $4) AND value_type = 'relationship'",
             )
             .bind(attribute_id)
             .bind(entity.blueprint_id)
             .bind(entity.blueprint_version)
+            .bind(entity.id)
             .fetch_optional(&mut **transaction)
             .await?
             .ok_or(RepositoryError::AttributeNotApplicable)?;
@@ -1428,6 +1434,7 @@ impl CatalogRepository {
                         WHEN 'date' THEN to_jsonb(av.value_date)
                         WHEN 'datetime' THEN to_jsonb(av.value_datetime)
                         WHEN 'time' THEN jsonb_build_object('time', av.value_time::text, 'time_zone', av.value_time_zone)
+                        WHEN 'json' THEN av.value_json
                         WHEN 'relationship' THEN to_jsonb(av.relationship_target_entity_id::text)
                       END AS value
                FROM attribute_values av

@@ -87,6 +87,11 @@ fn client_release_archive_for_outlet(
         "catalog": {"id": extension_id, "host_api": "^1.0"},
         "permissions": ["configuration.read"],
         "configuration": {"version": 1, "schema": {"type": "object", "additionalProperties": false}},
+        "attribute_types": [{
+            "id": "money", "version": "1.0.0", "primitive": "number",
+            "value_schema": {"minimum": 0},
+            "configuration_schema": {"type": "object", "properties": {"currency": {"type": "string"}}, "required": ["currency"]}
+        }],
         "artifacts": [{
             "id": "client",
             "kind": "client_component",
@@ -479,6 +484,83 @@ value_type = "string"
             .collect::<Vec<_>>(),
         ["acme.alpha:panel", "acme.zebra:panel"]
     );
+}
+
+#[sqlx::test(migrations = "./migrations")]
+async fn extension_attribute_types_are_pinned_and_survive_provider_disable(pool: sqlx::PgPool) {
+    let workspace = Uuid::from_u128(0x00000000000040008000000000000002);
+    let repository = CatalogRepository::new(pool)
+        .for_workspace(workspace)
+        .await
+        .unwrap();
+    let installer =
+        ExtensionInstaller::new(repository.clone(), Arc::new(FakeObjectStore::available()));
+    installer
+        .install("test", &client_release_archive("acme.client"))
+        .await
+        .unwrap();
+    repository
+        .grant_extension("acme.client", "capability", "configuration.read")
+        .await
+        .unwrap();
+    repository.enable_extension("acme.client").await.unwrap();
+    let definition = r#"
+format_version = 1
+code = "extension_type_product"
+name = "Extension type product"
+kind = "entity"
+
+[views.dropdown_option]
+type = "dropdown_option"
+fields = ["price"]
+
+[[attributes]]
+code = "price"
+extension_type = "acme.client:money@^1"
+extension_configuration = '{"currency":"USD"}'
+"#;
+    let blueprint = repository
+        .create_blueprint(CreateBlueprint {
+            definition: definition.to_owned(),
+        })
+        .await
+        .unwrap();
+    let attribute = &blueprint.attributes[0];
+    assert_eq!(attribute.value_type, "number");
+    assert_eq!(attribute.value_schema.as_ref().unwrap()["minimum"], 0);
+    assert_eq!(
+        attribute.extension_type.as_ref().unwrap()["provider"],
+        "acme.client"
+    );
+    assert_eq!(
+        attribute.extension_type.as_ref().unwrap()["primitive"],
+        "number"
+    );
+    repository
+        .publish_blueprint_revision(blueprint.blueprint.id, 1)
+        .await
+        .unwrap();
+    repository.disable_extension("acme.client").await.unwrap();
+    let stored = repository
+        .get_blueprint_revision(blueprint.blueprint.id, 1)
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(stored.attributes[0].value_type, "number");
+    assert_eq!(
+        stored.attributes[0].extension_type.as_ref().unwrap()["type"],
+        "money"
+    );
+    assert_eq!(
+        stored.attributes[0].extension_type.as_ref().unwrap()["available"],
+        false
+    );
+    let unavailable = repository
+        .create_blueprint(CreateBlueprint {
+            definition: definition.replace("extension_type_product", "unavailable_extension_type"),
+        })
+        .await;
+    assert!(unavailable.is_err());
 }
 
 #[sqlx::test(migrations = "./migrations")]

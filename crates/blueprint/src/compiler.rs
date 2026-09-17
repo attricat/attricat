@@ -39,6 +39,7 @@ pub fn compile(
             code,
             value_type,
             value_schema,
+            extension_type,
             default_value,
             file_policy,
             target_blueprint,
@@ -53,6 +54,12 @@ pub fn compile(
                 local.code.clone(),
                 local.value_type.clone(),
                 local.value_schema.clone(),
+                local.extension_type.as_ref().map(|reference| {
+                    serde_json::json!({
+                        "reference": reference,
+                        "configuration": local.extension_configuration,
+                    })
+                }),
                 local.default_value.clone(),
                 local.file_policy.clone(),
                 local.target_blueprint.clone(),
@@ -83,6 +90,7 @@ pub fn compile(
                     code.clone(),
                     attribute.value_type.clone(),
                     attribute.value_schema.clone(),
+                    attribute.extension_type.clone(),
                     attribute.default_value.clone(),
                     attribute.file_policy.clone(),
                     attribute.target_blueprint.clone(),
@@ -99,6 +107,7 @@ pub fn compile(
             code,
             value_type,
             value_schema,
+            extension_type,
             default_value,
             file_policy,
             target_blueprint,

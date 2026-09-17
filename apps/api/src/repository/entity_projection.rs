@@ -137,6 +137,66 @@ impl CatalogRepository {
             })
             .collect::<Map<_, _>>();
         values.extend(relationships);
+        let reusable_attributes = self.entity_reusable_attributes(entity.id).await?;
+        let reusable_form_values = self.reusable_form_values(entity.id).await?;
+        let reusable_values = reusable_attributes
+            .iter()
+            .filter_map(|attribute| {
+                path.iter().enumerate().find_map(|(index, context)| {
+                    if index > 0 && attribute.context_fallback == "none" {
+                        return None;
+                    }
+                    reusable_form_values.iter().find_map(|value| match value {
+                        FormAttributeValue::Scalar {
+                            attribute_code,
+                            context_id,
+                            value,
+                        } if attribute_code == &attribute.code
+                            && *context_id == Some(context.id) =>
+                        {
+                            Some((
+                                attribute.code.clone(),
+                                serde_json::json!({
+                                    "value": value,
+                                    "source_context": { "id": context.id, "code": context.code },
+                                }),
+                            ))
+                        }
+                        FormAttributeValue::Relationship {
+                            attribute_code,
+                            context_id,
+                            target_entity_id,
+                        } if attribute_code == &attribute.code
+                            && *context_id == Some(context.id) =>
+                        {
+                            Some((
+                                attribute.code.clone(),
+                                serde_json::json!({
+                                    "value": { "items": [{ "id": target_entity_id }] },
+                                    "source_context": { "id": context.id, "code": context.code },
+                                }),
+                            ))
+                        }
+                        FormAttributeValue::File {
+                            attribute_code,
+                            context_id,
+                            files,
+                        } if attribute_code == &attribute.code
+                            && *context_id == Some(context.id) =>
+                        {
+                            Some((
+                                attribute.code.clone(),
+                                serde_json::json!({
+                                    "value": files,
+                                    "source_context": { "id": context.id, "code": context.code },
+                                }),
+                            ))
+                        }
+                        _ => None,
+                    })
+                })
+            })
+            .collect::<Map<_, _>>();
         Ok(Some(ResolvedEntityPreviewResponse {
             entity: EntityIdentity {
                 id: entity.id,
@@ -145,6 +205,8 @@ impl CatalogRepository {
             },
             requested_context,
             values: Value::Object(values),
+            reusable_attributes,
+            reusable_values: Value::Object(reusable_values),
         }))
     }
 
@@ -382,7 +444,7 @@ impl CatalogRepository {
             r#"SELECT a.code AS attribute_code, c.code AS context_code,
                       a.value_type, av.value_text, av.value_number, av.value_integer,
                       av.value_boolean, av.value_date, av.value_datetime, av.value_time,
-                      av.value_time_zone
+                      av.value_time_zone, av.value_json
                 FROM attribute_values av
                 JOIN entities e ON e.id = av.entity_id
                 JOIN attributes a ON a.id = av.attribute_id

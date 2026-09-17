@@ -3,6 +3,7 @@ import { request } from '../../api/request';
 import {
   blueprintEntityPublicationSummarySchema,
   blueprintMigrationBatchSchema,
+  blueprintMigrationBatchStatusSchema,
   blueprintSchema,
   blueprintWithAttributesSchema,
   type Blueprint,
@@ -54,6 +55,12 @@ export const createBlueprintRevision = (
       headers: { 'Content-Type': 'application/json' },
       method: 'POST',
     },
+  );
+
+export const listBlueprintMigrationBatches = (id: string) =>
+  request(
+    `/api/blueprints/${encodeURIComponent(z.uuid().parse(id))}/migration-batches`,
+    z.array(blueprintMigrationBatchStatusSchema),
   );
 
 export const startSafeBlueprintMigrationBatch = (id: string, version: number) =>

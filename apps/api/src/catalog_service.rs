@@ -8,9 +8,11 @@ use uuid::Uuid;
 
 use crate::{
     model::{
-        AppendAttributeValues, AttributeContext, AttributeValue, BlueprintEntityPublicationSummary,
-        BlueprintWithAttributes, CreateAttributeContext, CreateBlueprint, CreateEntityFormRequest,
-        Entity, EntityPublicationStatus, MigrateEntityRequest, RelationshipMutation,
+        AppendAttributeValues, AttachReusableAttribute, AttributeContext, AttributeValue,
+        BlueprintEntityPublicationSummary, BlueprintWithAttributes, CreateAttributeContext,
+        CreateBlueprint, CreateEntityFormRequest, CreateReusableAttribute,
+        CreateReusableAttributeGroup, Entity, EntityPublicationStatus, EntityReusableAttribute,
+        MigrateEntityRequest, RelationshipMutation, ReusableAttribute, ReusableAttributeGroup,
         SearchBlueprint, UpdateAttributeContext, UpdateEntityFormRequest,
     },
     repository::{CatalogRepository, FileMetadata, RepositoryError},
@@ -49,6 +51,59 @@ impl<'a> CatalogMutationService<'a> {
     ) -> Result<BlueprintWithAttributes, RepositoryError> {
         self.repository
             .publish_blueprint_revision(blueprint_id, version)
+            .await
+    }
+
+    pub async fn create_reusable_attribute(
+        &self,
+        input: CreateReusableAttribute,
+    ) -> Result<ReusableAttribute, RepositoryError> {
+        self.repository.create_reusable_attribute(input).await
+    }
+
+    pub async fn create_reusable_attribute_revision(
+        &self,
+        definition_id: Uuid,
+        input: CreateReusableAttribute,
+    ) -> Result<ReusableAttribute, RepositoryError> {
+        self.repository
+            .create_reusable_attribute_revision(definition_id, input)
+            .await
+    }
+
+    pub async fn publish_reusable_attribute_revision(
+        &self,
+        revision_id: Uuid,
+    ) -> Result<ReusableAttribute, RepositoryError> {
+        self.repository
+            .publish_reusable_attribute_revision(revision_id)
+            .await
+    }
+
+    pub async fn create_reusable_attribute_group(
+        &self,
+        input: CreateReusableAttributeGroup,
+    ) -> Result<ReusableAttributeGroup, RepositoryError> {
+        self.repository.create_reusable_attribute_group(input).await
+    }
+
+    pub async fn attach_reusable_attribute(
+        &self,
+        entity_id: Uuid,
+        input: AttachReusableAttribute,
+    ) -> Result<EntityReusableAttribute, RepositoryError> {
+        self.repository
+            .attach_reusable_attribute(entity_id, input)
+            .await
+    }
+
+    pub async fn attach_reusable_attribute_group(
+        &self,
+        entity_id: Uuid,
+        group_id: Uuid,
+    ) -> Result<Vec<EntityReusableAttribute>, RepositoryError> {
+        self.repository
+            .attach_reusable_attribute_group(entity_id, group_id)
             .await
     }
 

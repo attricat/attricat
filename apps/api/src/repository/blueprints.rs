@@ -225,9 +225,9 @@ impl CatalogRepository {
             validate_attribute_default_value(&attribute)?;
             attributes.push(
                 sqlx::query_as::<_, Attribute>(
-                    r#"INSERT INTO attributes (id, workspace_id, blueprint_id, blueprint_version, code, value_type, value_schema, default_value, file_policy, target_blueprint_code, cardinality, target_cardinality, tags, context_fallback, context_editable, readonly, position)
-                       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17)
-                       RETURNING id, blueprint_id, blueprint_version, code, value_type, value_schema, default_value, file_policy, target_blueprint_code, cardinality, target_cardinality, tags, context_fallback, context_editable, readonly, position, created_at, updated_at, deleted_at"#,
+                    r#"INSERT INTO attributes (id, workspace_id, blueprint_id, blueprint_version, code, value_type, value_schema, extension_type, default_value, file_policy, target_blueprint_code, cardinality, target_cardinality, tags, context_fallback, context_editable, readonly, position)
+                       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18)
+                       RETURNING id, blueprint_id, blueprint_version, code, value_type, value_schema, extension_type, default_value, file_policy, target_blueprint_code, cardinality, target_cardinality, tags, context_fallback, context_editable, readonly, position, created_at, updated_at, deleted_at"#,
                 )
                 .bind(Uuid::new_v4())
                 .bind(self.workspace_id.unwrap_or(Self::DEFAULT_WORKSPACE_ID))
@@ -236,6 +236,7 @@ impl CatalogRepository {
                 .bind(attribute.code)
                 .bind(attribute.value_type)
                 .bind(attribute.value_schema)
+                .bind(attribute.extension_type)
                 .bind(attribute.default_value)
                 .bind(attribute.file_policy.map(|policy| serde_json::to_value(policy).expect("file policy serializes")))
                 .bind(attribute.target_blueprint)
@@ -395,12 +396,34 @@ impl CatalogRepository {
         if blueprint.status == "draft" {
             // Installed renderers and target revisions can change after a draft
             // is saved, so repeat resolution at the publication boundary.
-            crate::blueprint_resolver::compile_definition(
+            let compiled = crate::blueprint_resolver::compile_definition(
                 &mut transaction,
                 self.workspace_id.unwrap_or(Self::DEFAULT_WORKSPACE_ID),
                 &blueprint.definition,
             )
             .await?;
+            // A draft may sit while its provider is upgraded. Publication is
+            // the pinning boundary, so persist the freshly resolved immutable
+            // declaration rather than relying on the earlier draft snapshot.
+            for attribute in compiled
+                .attributes
+                .iter()
+                .filter(|attribute| attribute.extension_type.is_some())
+            {
+                validate_attribute_default_value(attribute)?;
+                sqlx::query(
+                    "UPDATE attributes SET value_type = $1, value_schema = $2, extension_type = $3, updated_at = now() WHERE blueprint_id = $4 AND blueprint_version = $5 AND code = $6 AND workspace_id = $7",
+                )
+                .bind(&attribute.value_type)
+                .bind(&attribute.value_schema)
+                .bind(&attribute.extension_type)
+                .bind(blueprint_id)
+                .bind(version)
+                .bind(&attribute.code)
+                .bind(self.workspace_id.unwrap_or(Self::DEFAULT_WORKSPACE_ID))
+                .execute(&mut *transaction)
+                .await?;
+            }
             self.validate_publication_roles(&mut transaction, &blueprint.definition)
                 .await?;
             self.validate_publication_extension_layout(&blueprint.definition)
@@ -525,7 +548,7 @@ impl CatalogRepository {
         blueprint_version: i64,
     ) -> Result<Vec<Attribute>, RepositoryError> {
         Ok(sqlx::query_as::<_, Attribute>(
-            r#"SELECT id, blueprint_id, blueprint_version, code, value_type, value_schema, default_value, file_policy, target_blueprint_code, cardinality, target_cardinality, tags, context_fallback, context_editable, readonly, position, created_at, updated_at, deleted_at
+            r#"SELECT id, blueprint_id, blueprint_version, code, value_type, value_schema, extension_type, default_value, file_policy, target_blueprint_code, cardinality, target_cardinality, tags, context_fallback, context_editable, readonly, position, created_at, updated_at, deleted_at
                FROM attributes
                WHERE blueprint_id = $1 AND blueprint_version = $2 AND workspace_id = $3 AND deleted_at IS NULL
                ORDER BY position"#,
@@ -567,7 +590,7 @@ impl CatalogRepository {
                     resolved.push(TablePathAttribute {
                         code: path.to_owned(),
                         value_type: first.value_type.clone(),
-                        sortable: first.value_type != "file",
+                        sortable: !matches!(first.value_type.as_str(), "file" | "json"),
                     });
                 }
                 continue;
@@ -584,7 +607,7 @@ impl CatalogRepository {
                 };
                 let Some(next) = sqlx::query_as::<_, Attribute>(
                     r#"SELECT a.id, a.blueprint_id, a.blueprint_version, a.code, a.value_type,
-                              a.value_schema, a.default_value, a.file_policy, a.target_blueprint_code,
+                              a.value_schema, a.extension_type, a.default_value, a.file_policy, a.target_blueprint_code,
                               a.cardinality, a.target_cardinality, a.tags, a.context_fallback,
                               a.context_editable, a.readonly, a.position, a.created_at, a.updated_at,
                               a.deleted_at
@@ -610,8 +633,8 @@ impl CatalogRepository {
             {
                 resolved.push(TablePathAttribute {
                     code: path.to_owned(),
-                    value_type: attribute.value_type,
-                    sortable,
+                    value_type: attribute.value_type.clone(),
+                    sortable: sortable && attribute.value_type != "json",
                 });
             }
         }
@@ -624,9 +647,55 @@ impl CatalogRepository {
     ) -> Result<Option<BlueprintWithAttributes>, RepositoryError> {
         match blueprint {
             Some(blueprint) => {
-                let attributes = self
+                let mut attributes = self
                     .list_attributes(blueprint.id, blueprint.version)
                     .await?;
+                // Availability is presentation-only metadata. The pinned
+                // declaration remains in the revision even when its provider
+                // is disabled, so ordinary blueprint/entity reads cannot fail
+                // and clients can choose the host-owned read-only fallback.
+                let enabled_manifests = sqlx::query_as::<_, (String, Value)>(
+                    "SELECT i.extension_id, r.manifest FROM extension_installations i JOIN installed_extension_releases r ON r.id = i.installed_release_id JOIN workspaces w ON w.id = i.workspace_id WHERE i.workspace_id = $1 AND i.state = 'enabled' AND w.extensions_enabled",
+                )
+                .bind(self.workspace_id.unwrap_or(Self::DEFAULT_WORKSPACE_ID))
+                .fetch_all(&self.pool)
+                .await?;
+                for attribute in &mut attributes {
+                    if let Some(metadata) = attribute.extension_type.as_mut()
+                        && let Some(object) = metadata.as_object_mut()
+                    {
+                        let available = object
+                            .get("provider")
+                            .and_then(Value::as_str)
+                            .zip(object.get("type").and_then(Value::as_str))
+                            .zip(object.get("version").and_then(Value::as_str))
+                            .zip(object.get("primitive").and_then(Value::as_str))
+                            .is_some_and(|(((provider, type_id), version), primitive)| {
+                                enabled_manifests
+                                    .iter()
+                                    .any(|(extension_id, raw_manifest)| {
+                                        extension_id == provider
+                                                && serde_json::from_value::<
+                                                    crate::extensions::Manifest,
+                                                >(
+                                                    raw_manifest.clone()
+                                                )
+                                                .ok()
+                                                .is_some_and(|manifest| {
+                                                    manifest.attribute_types.iter().any(
+                                                        |declaration| {
+                                                            declaration.id == type_id
+                                                                && declaration.version == version
+                                                                && declaration.primitive
+                                                                    == primitive
+                                                        },
+                                                    )
+                                                })
+                                    })
+                            });
+                        object.insert("available".to_owned(), Value::Bool(available));
+                    }
+                }
                 let table_path_attributes = self
                     .resolve_table_path_attributes(&blueprint, &attributes)
                     .await?;

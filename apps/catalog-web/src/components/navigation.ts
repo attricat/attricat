@@ -8,6 +8,7 @@ import {
   ExtensionIcon,
   ExportIcon,
   ProfileIcon,
+  ReusableAttributeIcon,
   RuleIcon,
   WorkflowIcon,
   WorkspaceIcon,
@@ -35,6 +36,7 @@ export const navigationRoutes = {
   manage: '/manage',
   profile: '/profile',
   rules: '/manage/rules',
+  reusableAttributes: '/manage/reusable-attributes',
   workflows: '/manage/workflows',
   workspace: '/manage/workspace/members',
 } as const;
@@ -64,6 +66,12 @@ export const managementNavigationItems = [
     icon: ContextIcon,
     labelKey: 'navigation.contexts',
     to: navigationRoutes.contexts,
+  },
+  {
+    descriptionKey: 'management.reusableAttributesDescription',
+    icon: ReusableAttributeIcon,
+    labelKey: 'navigation.reusableAttributes',
+    to: navigationRoutes.reusableAttributes,
   },
   {
     descriptionKey: 'management.exportsDescription',

@@ -1,13 +1,61 @@
 use super::*;
-use crate::model::{BlueprintMigrationBatch, MigrateEntityRequest};
+use crate::model::{BlueprintMigrationBatch, BlueprintMigrationBatchStatus, MigrateEntityRequest};
 use serde_json::json;
 use std::collections::HashMap;
 use uuid::Uuid;
 
 impl CatalogRepository {
-    /// Starts the deliberately narrow bulk path: the immediately preceding
-    /// published revision must preserve every existing attribute's storage
-    /// semantics and entity schema. New optional attributes are allowed.
+    pub async fn list_blueprint_migration_batches(
+        &self,
+        blueprint_id: Uuid,
+    ) -> Result<Vec<BlueprintMigrationBatchStatus>, RepositoryError> {
+        let workspace_id = self.workspace_id.unwrap_or(Self::DEFAULT_WORKSPACE_ID);
+        Ok(sqlx::query_as::<_, BlueprintMigrationBatchStatus>(
+            r#"WITH stats AS (
+                   SELECT m.batch_id,
+                          COUNT(DISTINCT m.entity_id) AS processed_entities,
+                          COUNT(DISTINCT m.entity_id) FILTER (WHERE m.status = 'migrated') AS migrated_entities,
+                          COUNT(DISTINCT m.entity_id) FILTER (WHERE m.status IN ('needs_input', 'blocked')) AS needs_input_entities,
+                          COUNT(DISTINCT m.entity_id) FILTER (WHERE m.status = 'failed') AS failed_entities
+                   FROM entity_blueprint_migrations m
+                   JOIN blueprint_migration_batches scoped ON scoped.id = m.batch_id
+                   WHERE m.workspace_id = $1
+                     AND scoped.workspace_id = $1
+                     AND scoped.blueprint_id = $2
+                   GROUP BY m.batch_id
+               )
+               SELECT b.id, b.blueprint_id, b.target_version, b.status,
+                      b.created_at, b.started_at, b.completed_at,
+                      COALESCE(s.processed_entities, 0) + (
+                          SELECT COUNT(*) FROM entities e
+                          WHERE e.workspace_id = b.workspace_id
+                            AND e.blueprint_id = b.blueprint_id
+                            AND e.blueprint_version < b.target_version
+                            AND e.deleted_at IS NULL
+                            AND NOT EXISTS (
+                                SELECT 1 FROM entity_blueprint_migrations m
+                                WHERE m.batch_id = b.id AND m.entity_id = e.id
+                            )
+                      ) AS total_entities,
+                      COALESCE(s.processed_entities, 0) AS processed_entities,
+                      COALESCE(s.migrated_entities, 0) AS migrated_entities,
+                      COALESCE(s.needs_input_entities, 0) AS needs_input_entities,
+                      COALESCE(s.failed_entities, 0) AS failed_entities
+               FROM blueprint_migration_batches b
+               LEFT JOIN stats s ON s.batch_id = b.id
+               WHERE b.workspace_id = $1 AND b.blueprint_id = $2
+               ORDER BY b.created_at DESC, b.id DESC"#,
+        )
+        .bind(workspace_id)
+        .bind(blueprint_id)
+        .fetch_all(&self.pool)
+        .await?)
+    }
+
+    /// Starts the safe bulk path. The immediately preceding published revision
+    /// must preserve every existing attribute's storage semantics and entity
+    /// schema. Once admitted, the batch previews every older entity revision
+    /// and automatically migrates only entities that need no input.
     pub async fn start_safe_blueprint_migration_batch(
         &self,
         blueprint_id: Uuid,
@@ -93,10 +141,10 @@ impl CatalogRepository {
             return Ok(());
         };
         let entity_ids = sqlx::query_scalar::<_, Uuid>(
-            "SELECT id FROM entities WHERE blueprint_id = $1 AND blueprint_version = $2 AND workspace_id = $3 AND deleted_at IS NULL ORDER BY id",
+            "SELECT id FROM entities WHERE blueprint_id = $1 AND blueprint_version < $2 AND workspace_id = $3 AND deleted_at IS NULL ORDER BY id",
         )
         .bind(batch.blueprint_id)
-        .bind(batch.target_version - 1)
+        .bind(batch.target_version)
         .bind(workspace_id)
         .fetch_all(&self.pool)
         .await?;

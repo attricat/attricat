@@ -15,5 +15,6 @@ export { default as ProfileIcon } from '@mui/icons-material/PersonOutlined';
 export { default as RuleIcon } from '@mui/icons-material/RuleOutlined';
 export { default as RelationshipIcon } from '@mui/icons-material/HubOutlined';
 export { default as RelationshipPickerIcon } from '@mui/icons-material/ChecklistOutlined';
+export { default as ReusableAttributeIcon } from '@mui/icons-material/WidgetsOutlined';
 export { default as WorkflowIcon } from '@mui/icons-material/AccountTreeOutlined';
 export { default as WorkspaceIcon } from '@mui/icons-material/ManageAccountsOutlined';

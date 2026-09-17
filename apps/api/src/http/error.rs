@@ -282,7 +282,10 @@ impl From<RepositoryError> for ApiError {
                 Self::internal("an authenticated user is required to publish an entity")
             }
             RepositoryError::TokenPermissionsUnavailable => Self::forbidden(),
-            RepositoryError::InvalidPreview
+            RepositoryError::InvalidReusableAttributeCode
+            | RepositoryError::InvalidReusableAttributeDefinition(_)
+            | RepositoryError::ReusableAttributeNotPublished
+            | RepositoryError::InvalidPreview
             | RepositoryError::InvalidHierarchyRelationship
             | RepositoryError::InvalidAgentState(_)
             | RepositoryError::InvalidExtension(_)
@@ -311,18 +314,14 @@ impl From<RepositoryError> for ApiError {
                 code: "invalid_workflow_definition",
                 message: error.to_string(),
             },
-            RepositoryError::InvalidRuleDefinition(_) => Self {
-                status: StatusCode::UNPROCESSABLE_ENTITY,
-                code: "invalid_rule_definition",
-                message: error.to_string(),
-            },
             RepositoryError::ExtensionAlreadyInstalled
             | RepositoryError::ApprovalAlreadyDecided => Self {
                 status: StatusCode::CONFLICT,
                 code: "approval_already_decided",
                 message: error.to_string(),
             },
-            RepositoryError::BlueprintCodeTaken
+            RepositoryError::ReusableAttributeAlreadyAttached
+            | RepositoryError::BlueprintCodeTaken
             | RepositoryError::WorkflowCodeTaken
             | RepositoryError::RuleCodeTaken => Self {
                 status: StatusCode::CONFLICT,
@@ -337,11 +336,6 @@ impl From<RepositoryError> for ApiError {
             RepositoryError::WorkflowNotPublished => Self {
                 status: StatusCode::UNPROCESSABLE_ENTITY,
                 code: "workflow_not_published",
-                message: error.to_string(),
-            },
-            RepositoryError::RuleNotPublished => Self {
-                status: StatusCode::UNPROCESSABLE_ENTITY,
-                code: "rule_not_published",
                 message: error.to_string(),
             },
             RepositoryError::Database(sqlx::Error::Database(database_error))

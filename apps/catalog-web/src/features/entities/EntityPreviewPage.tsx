@@ -8,6 +8,7 @@ import {
   CircularProgress,
   Paper,
   Tooltip,
+  Typography,
 } from '@mui/material';
 import { createElement, useState } from 'react';
 import { useTranslation } from 'react-i18next';
@@ -26,6 +27,7 @@ import {
 import { listContexts } from '../contexts/api';
 import { contextQueryKeys } from '../contexts/query-keys';
 import { defaultContextCode } from '../contexts/constants';
+import { listFindings } from '../rules/api';
 import {
   getBlueprintRevision,
   getCurrentBlueprint,
@@ -39,7 +41,6 @@ import { attributeLabel } from './entity-display';
 import { entityQueryKeys } from './query-keys';
 import { EntityView } from '../views/components/EntityView';
 import { RelationshipPickerActionBar } from './components/RelationshipPickerActionBar';
-import { listFindings } from '../rules/api';
 import {
   entityHeadingComponentId,
   findEntityHeading,
@@ -152,17 +153,17 @@ export const EntityPreviewPage = ({
               />
             )}
             {blueprint.data && (
-              <Tooltip title={blueprint.data.blueprint.name}>
-                <RouterButton
-                  params={{ blueprintId: blueprint.data.blueprint.id }}
-                  size="small"
-                  startIcon={<BlueprintIcon />}
-                  to="/manage/blueprints/$blueprintId"
-                  variant="text"
-                >
-                  {t('entities.blueprint')}: {blueprint.data.blueprint.name}
-                </RouterButton>
-              </Tooltip>
+            <Tooltip title={blueprint.data.blueprint.name}>
+              <RouterButton
+                params={{ blueprintId: blueprint.data.blueprint.id }}
+                size="small"
+                startIcon={<BlueprintIcon />}
+                to="/manage/blueprints/$blueprintId"
+                variant="text"
+              >
+                {t('entities.blueprint')}: {blueprint.data.blueprint.name}
+              </RouterButton>
+            </Tooltip>
             )}
           </>
         }
@@ -279,6 +280,7 @@ export const EntityPreviewPage = ({
                   />
                   <EntityView
                     attributes={blueprint.data.attributes}
+                    fallbackVisibilityScope="detail"
                     contextId={selectedContextId}
                     entityId={entityId}
                     renderAttributeDecoration={(attribute) => (
@@ -305,6 +307,19 @@ export const EntityPreviewPage = ({
                     view={detailView}
                     skipComponentId={entityHeadingComponentId}
                   />
+                  {(resolved.data.reusable_attributes?.length ?? 0) > 0 && (
+                    <Box component="section" sx={{ mt: 4 }}>
+                      <Typography component="h2" variant="h6">
+                        {t('entities.additionalAttributes')}
+                      </Typography>
+                      <EntityView
+                        attributes={resolved.data.reusable_attributes}
+                        contextId={selectedContextId}
+                        entityId={entityId}
+                        values={resolved.data.reusable_values ?? {}}
+                      />
+                    </Box>
+                  )}
                 </Paper>
                 <ExtensionOutlet
                   context={{

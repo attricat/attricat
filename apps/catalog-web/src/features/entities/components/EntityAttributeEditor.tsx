@@ -34,6 +34,8 @@ export const EntityAttributeEditor = ({
   value: string;
 }) => {
   const { t } = useTranslation();
+  const providerUnavailable = attribute.extension_type?.available === false;
+  const effectiveDisabled = disabled || providerUnavailable;
   const migrationBadge = showMigrationBadge ? (
     <MigrationBadge message={migrationReviewMessage} />
   ) : null;
@@ -43,7 +45,7 @@ export const EntityAttributeEditor = ({
         {migrationBadge}
         <RelationshipField
           attribute={attribute}
-          disabled={disabled}
+          disabled={effectiveDisabled}
           error={error}
           helperText={helperText}
           onChange={onChange}
@@ -58,7 +60,7 @@ export const EntityAttributeEditor = ({
         <FileAttributeEditor
           attribute={attribute}
           contextId={contextId}
-          disabled={disabled}
+          disabled={effectiveDisabled}
           entityId={entityId}
           files={files}
         />
@@ -70,7 +72,7 @@ export const EntityAttributeEditor = ({
         {migrationBadge}
         <TextField
           fullWidth
-          disabled={disabled}
+          disabled={effectiveDisabled}
           error={Boolean(error)}
           helperText={error ?? helperText}
           select
@@ -89,15 +91,19 @@ export const EntityAttributeEditor = ({
       {migrationBadge}
       <TextField
         fullWidth
-        disabled={disabled}
+        disabled={effectiveDisabled}
         error={Boolean(error)}
         helperText={error ?? helperText}
         label={attributeLabel(attribute)}
         onChange={(event) => onChange(event.target.value)}
+        multiline={attribute.value_type === attributeValueTypes.json}
+        minRows={attribute.value_type === attributeValueTypes.json ? 4 : undefined}
         placeholder={
           attribute.value_type === attributeValueTypes.time
             ? '09:30:00 America/New_York'
-            : undefined
+            : attribute.value_type === attributeValueTypes.json
+              ? '{\n  "key": "value"\n}'
+              : undefined
         }
         slotProps={{
           htmlInput: {

@@ -5,6 +5,7 @@ export const formatAttributeValue = (attribute: Attribute, value: unknown) => {
   if (value === null || value === undefined) return i18n.t('views.notSet');
   if (attribute.value_type === 'boolean')
     return value ? i18n.t('views.yes') : i18n.t('views.no');
+  if (attribute.value_type === 'json') return JSON.stringify(value);
   if (attribute.value_type === 'date' && typeof value === 'string') {
     return new Intl.DateTimeFormat(undefined, {
       dateStyle: 'medium',
