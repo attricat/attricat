@@ -9,6 +9,10 @@ import WarningAmberOutlinedIcon from '@mui/icons-material/WarningAmberOutlined';
 import {
   Alert,
   Button,
+  Dialog,
+  DialogActions,
+  DialogContent,
+  DialogTitle,
   MenuItem,
   Stack,
   TextField,
@@ -33,6 +37,7 @@ import {
   listReusableAttributes,
 } from '../reusable-attributes/api';
 import { reusableAttributeQueryKeys } from '../reusable-attributes/query-keys';
+import type { ReusableAttribute } from '../reusable-attributes/schemas';
 import { RouterButton, RouterIconButton } from '../../components/RouterLink';
 import { EntityContextPicker } from './components/EntityContextPicker';
 import { EntityForm } from './components/EntityForm';
@@ -45,13 +50,41 @@ import { entityQueryKeys } from './query-keys';
 import { findEntityHeading } from '../views/components/blocks/EntityHeadingDefinition';
 import { resolveHeadingRenderer } from '../views/components/registry';
 
+const editEntityFormId = 'edit-entity-form';
+
+const mostRecentReusableAttributes = (attributes: ReusableAttribute[]) => {
+  const latestByDefinition = new Map<string, ReusableAttribute>();
+  for (const attribute of attributes) {
+    const current = latestByDefinition.get(attribute.definition_id);
+    if (!current || attribute.version > current.version) {
+      latestByDefinition.set(attribute.definition_id, attribute);
+    }
+  }
+  return [...latestByDefinition.values()].sort(
+    (first, second) =>
+      first.namespace.localeCompare(second.namespace) ||
+      first.code.localeCompare(second.code),
+  );
+};
+
 export const EditEntityPage = ({ entityId }: { entityId: string }) => {
   const { t } = useTranslation();
   const navigate = useNavigate({ from: '/entities/$entityId/edit' });
   const [selectedContext, setSelectedContext] = useState('');
+  const [isReusableAttributeDialogOpen, setReusableAttributeDialogOpen] =
+    useState(false);
+  const [reusableSelectionType, setReusableSelectionType] = useState<
+    'attribute' | 'group' | null
+  >(null);
   const [selectedReusableAttribute, setSelectedReusableAttribute] =
     useState('');
   const [selectedReusableGroup, setSelectedReusableGroup] = useState('');
+  const closeReusableAttributeDialog = () => {
+    setReusableAttributeDialogOpen(false);
+    setReusableSelectionType(null);
+    setSelectedReusableAttribute('');
+    setSelectedReusableGroup('');
+  };
   const entityForm = useQuery({
     queryKey: entityQueryKeys.form(entityId),
     queryFn: () => getEntityForm(entityId),
@@ -74,11 +107,14 @@ export const EditEntityPage = ({ entityId }: { entityId: string }) => {
     queryKey: reusableAttributeQueryKeys.groups(),
     queryFn: ({ signal }) => listReusableAttributeGroups(signal),
   });
+  const latestReusableAttributes = mostRecentReusableAttributes(
+    reusableAttributes.data ?? [],
+  );
   const attach = useMutation({
     mutationFn: (revisionId: string) =>
       attachReusableAttribute(entityId, revisionId),
     onSuccess: () => {
-      setSelectedReusableAttribute('');
+      closeReusableAttributeDialog();
       void entityForm.refetch();
     },
   });
@@ -86,7 +122,7 @@ export const EditEntityPage = ({ entityId }: { entityId: string }) => {
     mutationFn: (groupId: string) =>
       attachReusableAttributeGroup(entityId, groupId),
     onSuccess: () => {
-      setSelectedReusableGroup('');
+      closeReusableAttributeDialog();
       void entityForm.refetch();
     },
   });
@@ -212,6 +248,17 @@ export const EditEntityPage = ({ entityId }: { entityId: string }) => {
               <CheckCircleOutlinedIcon color="success" fontSize="small" />
             </Tooltip>
           ))}
+        {entityForm.data && (
+          <Button
+            disabled={update.isPending}
+            form={editEntityFormId}
+            sx={{ ml: 'auto' }}
+            type="submit"
+            variant="contained"
+          >
+            {t('entities.saveChanges')}
+          </Button>
+        )}
       </EntityToolbar>
       <EntitySchemaSubheader
         entityId={entityId}
@@ -246,65 +293,112 @@ export const EditEntityPage = ({ entityId }: { entityId: string }) => {
       )}
       {entityForm.data && (
         <>
-          <Stack direction={{ sm: 'row' }} spacing={2} sx={{ mt: 3 }}>
-            <TextField
-              label={t('entities.additionalAttributes')}
-              onChange={(event) =>
-                setSelectedReusableAttribute(event.target.value)
-              }
-              select
-              size="small"
-              value={selectedReusableAttribute}
-            >
-              <MenuItem value="">
-                {t('entities.selectAdditionalAttribute')}
-              </MenuItem>
-              {(reusableAttributes.data ?? []).map((attribute) => (
-                <MenuItem key={attribute.id} value={attribute.id}>
-                  {attribute.namespace}:{attribute.code} · {attribute.name} v
-                  {attribute.version}
-                </MenuItem>
-              ))}
-            </TextField>
-            <Button
-              disabled={
-                !selectedReusableAttribute ||
-                attach.isPending ||
-                reusableAttributes.isPending ||
-                reusableAttributes.isError
-              }
-              onClick={() => attach.mutate(selectedReusableAttribute)}
-              variant="outlined"
-            >
-              {t('entities.addAttribute')}
-            </Button>
-            <TextField
-              label={t('entities.attributeGroup')}
-              onChange={(event) => setSelectedReusableGroup(event.target.value)}
-              select
-              size="small"
-              value={selectedReusableGroup}
-            >
-              <MenuItem value="">{t('entities.selectAttributeGroup')}</MenuItem>
-              {(reusableGroups.data ?? []).map((group) => (
-                <MenuItem key={group.id} value={group.id}>
-                  {group.name}
-                </MenuItem>
-              ))}
-            </TextField>
-            <Button
-              disabled={
-                !selectedReusableGroup ||
-                attachGroup.isPending ||
-                reusableGroups.isPending ||
-                reusableGroups.isError
-              }
-              onClick={() => attachGroup.mutate(selectedReusableGroup)}
-              variant="outlined"
-            >
-              {t('entities.addAttributeGroup')}
-            </Button>
-          </Stack>
+          <Dialog
+            fullWidth
+            maxWidth="sm"
+            onClose={closeReusableAttributeDialog}
+            open={isReusableAttributeDialogOpen}
+          >
+            <DialogTitle>{t('entities.addReusableAttributeOrGroup')}</DialogTitle>
+            <DialogContent>
+              {reusableSelectionType === null && (
+                <Stack spacing={2} sx={{ pt: 1 }}>
+                  <Typography>{t('entities.chooseReusableAttributeOrGroup')}</Typography>
+                  <Stack direction={{ sm: 'row' }} spacing={1}>
+                    <Button
+                      onClick={() => setReusableSelectionType('attribute')}
+                      variant="outlined"
+                    >
+                      {t('entities.additionalAttributes')}
+                    </Button>
+                    <Button
+                      onClick={() => setReusableSelectionType('group')}
+                      variant="outlined"
+                    >
+                      {t('entities.attributeGroup')}
+                    </Button>
+                  </Stack>
+                </Stack>
+              )}
+              {reusableSelectionType === 'attribute' && (
+                <TextField
+                  fullWidth
+                  label={t('entities.additionalAttributes')}
+                  onChange={(event) =>
+                    setSelectedReusableAttribute(event.target.value)
+                  }
+                  select
+                  sx={{ mt: 1 }}
+                  value={selectedReusableAttribute}
+                >
+                  <MenuItem value="">
+                    {t('entities.selectAdditionalAttribute')}
+                  </MenuItem>
+                  {latestReusableAttributes.map((attribute) => (
+                    <MenuItem key={attribute.id} value={attribute.id}>
+                      {attribute.namespace}:{attribute.code} · {attribute.name} v
+                      {attribute.version}
+                    </MenuItem>
+                  ))}
+                </TextField>
+              )}
+              {reusableSelectionType === 'group' && (
+                <TextField
+                  fullWidth
+                  label={t('entities.attributeGroup')}
+                  onChange={(event) => setSelectedReusableGroup(event.target.value)}
+                  select
+                  sx={{ mt: 1 }}
+                  value={selectedReusableGroup}
+                >
+                  <MenuItem value="">{t('entities.selectAttributeGroup')}</MenuItem>
+                  {(reusableGroups.data ?? []).map((group) => (
+                    <MenuItem key={group.id} value={group.id}>
+                      {group.name}
+                    </MenuItem>
+                  ))}
+                </TextField>
+              )}
+            </DialogContent>
+            <DialogActions>
+              {reusableSelectionType !== null && (
+                <Button onClick={() => setReusableSelectionType(null)}>
+                  {t('entities.back')}
+                </Button>
+              )}
+              <Button onClick={closeReusableAttributeDialog}>
+                {t('common.cancel')}
+              </Button>
+              {reusableSelectionType === 'attribute' && (
+                <Button
+                  disabled={
+                    !selectedReusableAttribute ||
+                    attach.isPending ||
+                    reusableAttributes.isPending ||
+                    reusableAttributes.isError
+                  }
+                  onClick={() => attach.mutate(selectedReusableAttribute)}
+                  variant="contained"
+                >
+                  {t('entities.addAttribute')}
+                </Button>
+              )}
+              {reusableSelectionType === 'group' && (
+                <Button
+                  disabled={
+                    !selectedReusableGroup ||
+                    attachGroup.isPending ||
+                    reusableGroups.isPending ||
+                    reusableGroups.isError
+                  }
+                  onClick={() => attachGroup.mutate(selectedReusableGroup)}
+                  variant="contained"
+                >
+                  {t('entities.addAttributeGroup')}
+                </Button>
+              )}
+            </DialogActions>
+          </Dialog>
           <EntityForm
             key={`${entityForm.data.entity.id}:${contextId ?? ''}`}
             blueprint={entityForm.data.blueprint}
@@ -319,6 +413,15 @@ export const EditEntityPage = ({ entityId }: { entityId: string }) => {
             }
             entityId={entityId}
             defaultContextId={defaultContextId}
+            formId={editEntityFormId}
+            footerActions={
+              <Button
+                onClick={() => setReusableAttributeDialogOpen(true)}
+                variant="outlined"
+              >
+                {t('entities.addReusableAttributeOrGroup')}
+              </Button>
+            }
             existingValues={[
               ...entityForm.data.values,
               ...entityForm.data.reusable_values,
@@ -326,6 +429,7 @@ export const EditEntityPage = ({ entityId }: { entityId: string }) => {
             reusableAttributes={entityForm.data.reusable_attributes}
             resolvedValues={resolvedPreview.data?.values}
             showBlueprintMetadata={false}
+            showSubmitButton={false}
             initialValues={valuesForForm(
               [
                 ...entityForm.data.blueprint.attributes,

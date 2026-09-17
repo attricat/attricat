@@ -34,14 +34,17 @@ type EntityFormProps = {
   contextId?: string | null;
   contextPicker?: ReactNode;
   defaultContextId?: string | null;
+  footerActions?: ReactNode;
   existingValues?: FormAttributeValue[];
   reusableAttributes?: Attribute[];
   resolvedValues?: Record<
     string,
     { value: unknown; source_context: { id: string; code: string } }
   >;
+  formId?: string;
   isLoadingBlueprint?: boolean;
   showBlueprintMetadata?: boolean;
+  showSubmitButton?: boolean;
   showAllAttributes?: boolean;
   highlightedAttributes?: readonly string[];
   migrationReviewMessages?: Readonly<Record<string, string>>;
@@ -64,11 +67,14 @@ export const EntityForm = ({
   contextId = null,
   contextPicker,
   defaultContextId = null,
+  footerActions,
   existingValues = [],
   reusableAttributes = [],
   resolvedValues = {},
+  formId,
   isLoadingBlueprint = false,
   showBlueprintMetadata = true,
+  showSubmitButton = true,
   showAllAttributes = false,
   highlightedAttributes = [],
   migrationReviewMessages = {},
@@ -184,6 +190,7 @@ export const EntityForm = ({
   return (
     <Paper
       component="form"
+      id={formId}
       onSubmit={(event) => {
         event.preventDefault();
         void form.handleSubmit();
@@ -395,9 +402,12 @@ export const EntityForm = ({
         {(error || formError) && (
           <Alert severity="error">{error?.message ?? formError}</Alert>
         )}
-        <Button disabled={isLoadingBlueprint} type="submit" variant="contained">
-          {isLoadingBlueprint ? t('entities.loadingBlueprint') : submitLabel}
-        </Button>
+        {footerActions}
+        {showSubmitButton && (
+          <Button disabled={isLoadingBlueprint} type="submit" variant="contained">
+            {isLoadingBlueprint ? t('entities.loadingBlueprint') : submitLabel}
+          </Button>
+        )}
       </Stack>
     </Paper>
   );
