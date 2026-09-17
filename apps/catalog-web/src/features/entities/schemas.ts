@@ -248,6 +248,17 @@ export const attributeSchema = z
     readonly: z.boolean().optional(),
     tags: z.array(z.string()).optional(),
     value_schema: jsonSchemaSchema.nullish(),
+    extension_type: z
+      .object({
+        provider: z.string(),
+        type: z.string(),
+        version: z.string(),
+        primitive: z.string(),
+        available: z.boolean().optional(),
+      })
+      .passthrough()
+      .nullable()
+      .optional(),
     file_policy: z
       .object({
         cardinality: z.enum(['one', 'many']),
@@ -286,12 +297,7 @@ export const blueprintWithAttributesSchema = z.object({
     )
     .default([]),
 });
-const scalarValueSchema = z.union([
-  z.string(),
-  z.number().finite(),
-  z.boolean(),
-  z.object({ time: z.string(), time_zone: z.string() }),
-]);
+const scalarValueSchema = z.json();
 export const newAttributeValueSchema = z.discriminatedUnion('kind', [
   z.object({
     kind: z.literal(attributeValueKinds.scalar),

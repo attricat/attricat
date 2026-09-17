@@ -893,8 +893,8 @@ impl CatalogRepository {
             r#"INSERT INTO attribute_values (
                     id, workspace_id, entity_id, attribute_id, context_id, relationship_target_entity_id, active,
                     value_text, value_number, value_integer, value_boolean, value_date, value_datetime,
-                    value_time, value_time_zone
-                ) VALUES ($1, $2, $3, $4, $5, $6, true, $7, $8, $9, $10, $11, $12, $13, $14)
+                    value_time, value_time_zone, value_json
+                ) VALUES ($1, $2, $3, $4, $5, $6, true, $7, $8, $9, $10, $11, $12, $13, $14, $15)
                 RETURNING id, entity_id, attribute_id,
                     'null'::jsonb AS value,
                     relationship_target_entity_id, context_id, active, created_at"#,
@@ -915,7 +915,8 @@ impl CatalogRepository {
                 .bind(Option::<NaiveDate>::None)
                 .bind(Option::<DateTime<Utc>>::None)
                 .bind(Option::<NaiveTime>::None)
-                .bind(Option::<String>::None),
+                .bind(Option::<String>::None)
+                .bind(Option::<Value>::None),
         };
         Ok(query.fetch_one(&mut **transaction).await?)
     }
@@ -1433,6 +1434,7 @@ impl CatalogRepository {
                         WHEN 'date' THEN to_jsonb(av.value_date)
                         WHEN 'datetime' THEN to_jsonb(av.value_datetime)
                         WHEN 'time' THEN jsonb_build_object('time', av.value_time::text, 'time_zone', av.value_time_zone)
+                        WHEN 'json' THEN av.value_json
                         WHEN 'relationship' THEN to_jsonb(av.relationship_target_entity_id::text)
                       END AS value
                FROM attribute_values av

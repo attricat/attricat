@@ -111,6 +111,10 @@ pub struct Manifest {
     /// renderer is paired with a sandboxed `explorer_table_cell` contribution.
     #[serde(default)]
     pub cell_renderers: Vec<CellRenderer>,
+    /// Versioned logical attribute types. These select host-owned storage and
+    /// validation primitives; they never execute code while validating values.
+    #[serde(default)]
+    pub attribute_types: Vec<ExtensionAttributeType>,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -293,6 +297,18 @@ pub struct CellRenderer {
     pub value_types: Vec<String>,
     #[serde(default)]
     pub allowed_props: Vec<String>,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct ExtensionAttributeType {
+    pub id: String,
+    pub version: String,
+    pub primitive: String,
+    #[serde(default)]
+    pub value_schema: Option<Value>,
+    #[serde(default)]
+    pub configuration_schema: Option<Value>,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -557,6 +573,16 @@ impl Manifest {
                 ));
             }
         }
+        let mut attribute_type_versions = HashSet::new();
+        for attribute_type in &self.attribute_types {
+            attribute_type.validate()?;
+            if !attribute_type_versions.insert((&attribute_type.id, &attribute_type.version)) {
+                return Err(ManifestError::Invalid(format!(
+                    "duplicate attribute type '{}@{}'",
+                    attribute_type.id, attribute_type.version
+                )));
+            }
+        }
         unique(
             self.ui.iter().map(|contribution| &contribution.id),
             "UI contribution",
@@ -744,6 +770,41 @@ impl Manifest {
             };
         };
         validate_schema(&configuration.schema, value)
+    }
+}
+
+impl ExtensionAttributeType {
+    fn validate(&self) -> Result<(), ManifestError> {
+        valid_id(&self.id, "attribute type id")?;
+        Version::parse(&self.version).map_err(|_| {
+            ManifestError::Invalid(format!(
+                "attribute type '{}' version must be SemVer",
+                self.id
+            ))
+        })?;
+        if !matches!(
+            self.primitive.as_str(),
+            "string" | "number" | "integer" | "boolean" | "date" | "datetime" | "time" | "json"
+        ) {
+            return Err(ManifestError::Invalid(format!(
+                "attribute type '{}' has unsupported primitive '{}'",
+                self.id, self.primitive
+            )));
+        }
+        for (label, schema) in [
+            ("value_schema", self.value_schema.as_ref()),
+            ("configuration_schema", self.configuration_schema.as_ref()),
+        ] {
+            if let Some(schema) = schema {
+                catalog_validation::validate_json_schema_definition(schema).map_err(|message| {
+                    ManifestError::Invalid(format!(
+                        "attribute type '{}'.{label} is not valid JSON Schema: {message}",
+                        self.id
+                    ))
+                })?;
+            }
+        }
+        Ok(())
     }
 }
 
@@ -1328,6 +1389,39 @@ mod tests {
         value
             .permissions
             .retain(|permission| permission != "events.emit");
+        assert!(value.validate(SUPPORTED_HOST_API).is_err());
+    }
+
+    #[test]
+    fn validates_versioned_attribute_type_contracts() {
+        let mut value = manifest();
+        value.attribute_types = vec![ExtensionAttributeType {
+            id: "money".into(),
+            version: "1.0.0".into(),
+            primitive: "number".into(),
+            value_schema: Some(serde_json::json!({ "minimum": 0 })),
+            configuration_schema: Some(serde_json::json!({
+                "type": "object",
+                "properties": { "currency": { "type": "string" } },
+                "required": ["currency"]
+            })),
+        }];
+        assert!(value.validate(SUPPORTED_HOST_API).is_ok());
+        value.attribute_types.push(ExtensionAttributeType {
+            id: "money".into(),
+            version: "2.0.0".into(),
+            primitive: "number".into(),
+            value_schema: None,
+            configuration_schema: None,
+        });
+        assert!(value.validate(SUPPORTED_HOST_API).is_ok());
+        value.attribute_types[1].version = "1.0.0".into();
+        assert!(value.validate(SUPPORTED_HOST_API).is_err());
+        value.attribute_types.pop();
+        value.attribute_types[0].primitive = "relationship".into();
+        assert!(value.validate(SUPPORTED_HOST_API).is_err());
+        value.attribute_types[0].primitive = "json".into();
+        value.attribute_types[0].version = "not-semver".into();
         assert!(value.validate(SUPPORTED_HOST_API).is_err());
     }
 

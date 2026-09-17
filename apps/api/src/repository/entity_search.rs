@@ -1790,7 +1790,7 @@ impl CatalogRepository {
             .iter()
             .find(|a| {
                 a.code.eq_ignore_ascii_case(leaf)
-                    && !matches!(a.value_type.as_str(), "relationship" | "file")
+                    && !matches!(a.value_type.as_str(), "relationship" | "file" | "json")
             })
             .map(|attribute| attribute.code.clone())
             .ok_or_else(|| {

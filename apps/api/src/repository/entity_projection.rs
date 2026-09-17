@@ -444,7 +444,7 @@ impl CatalogRepository {
             r#"SELECT a.code AS attribute_code, c.code AS context_code,
                       a.value_type, av.value_text, av.value_number, av.value_integer,
                       av.value_boolean, av.value_date, av.value_datetime, av.value_time,
-                      av.value_time_zone
+                      av.value_time_zone, av.value_json
                 FROM attribute_values av
                 JOIN entities e ON e.id = av.entity_id
                 JOIN attributes a ON a.id = av.attribute_id

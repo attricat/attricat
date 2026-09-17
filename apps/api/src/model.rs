@@ -43,6 +43,8 @@ pub struct Attribute {
     pub code: String,
     pub value_type: String,
     pub value_schema: Option<Value>,
+    /// Immutable provider/type/release metadata for extension-defined types.
+    pub extension_type: Option<Value>,
     pub default_value: Option<Value>,
     pub file_policy: Option<Value>,
     pub target_blueprint_code: Option<String>,
