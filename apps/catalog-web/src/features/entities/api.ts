@@ -19,8 +19,6 @@ import {
   migrateEntityRequestSchema,
   updateEntityRequestSchema,
   entityPublicationStatusSchema,
-  reusableAttributeGroupSchema,
-  reusableAttributeSchema,
   uuidSchema,
 } from './schemas';
 
@@ -42,8 +40,6 @@ export type {
   JsonSchema,
   NewAttributeValue,
   RelationshipTargets,
-  ReusableAttribute,
-  ReusableAttributeGroup,
   ResolvedEntityPreview,
   ViewDefinition,
   ViewNode,
@@ -155,43 +151,6 @@ export const getEntityChanges = (id: string) =>
     `/api/entities/${encodeURIComponent(uuidSchema.parse(id))}/changes`,
     z.array(entityAuditChangeSchema),
   );
-export const listReusableAttributes = (signal?: AbortSignal) =>
-  request(
-    '/api/reusable-attributes',
-    z.array(reusableAttributeSchema),
-    signal === undefined ? undefined : { signal },
-  );
-
-export const listReusableAttributeGroups = (signal?: AbortSignal) =>
-  request(
-    '/api/reusable-attribute-groups',
-    z.array(reusableAttributeGroupSchema),
-    signal === undefined ? undefined : { signal },
-  );
-
-export const attachReusableAttribute = (entityId: string, revisionId: string) =>
-  request(
-    `/api/v1/entities/${encodeURIComponent(uuidSchema.parse(entityId))}/reusable-attributes`,
-    z.unknown(),
-    {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        reusable_attribute_revision_id: uuidSchema.parse(revisionId),
-      }),
-    },
-  );
-
-export const attachReusableAttributeGroup = (
-  entityId: string,
-  groupId: string,
-) =>
-  request(
-    `/api/v1/entities/${encodeURIComponent(uuidSchema.parse(entityId))}/reusable-attribute-groups/${encodeURIComponent(uuidSchema.parse(groupId))}`,
-    z.array(z.unknown()),
-    { method: 'POST' },
-  );
-
 export const getEntityForm = (id: string) => {
   const entityId = uuidSchema.parse(id);
   return request(

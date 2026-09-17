@@ -21,15 +21,18 @@ import { listContexts } from '../contexts/api';
 import { contextQueryKeys } from '../contexts/query-keys';
 import { defaultContextCode } from '../contexts/constants';
 import {
-  attachReusableAttribute,
-  attachReusableAttributeGroup,
   getEntityForm,
   getCurrentBlueprint,
-  listReusableAttributeGroups,
-  listReusableAttributes,
   getResolvedEntityPreview,
   updateEntity,
 } from './api';
+import {
+  attachReusableAttribute,
+  attachReusableAttributeGroup,
+  listReusableAttributeGroups,
+  listReusableAttributes,
+} from '../reusable-attributes/api';
+import { reusableAttributeQueryKeys } from '../reusable-attributes/query-keys';
 import { RouterButton, RouterIconButton } from '../../components/RouterLink';
 import { EntityContextPicker } from './components/EntityContextPicker';
 import { EntityForm } from './components/EntityForm';
@@ -41,9 +44,6 @@ import { valuesForForm } from './entity-form';
 import { entityQueryKeys } from './query-keys';
 import { findEntityHeading } from '../views/components/blocks/EntityHeadingDefinition';
 import { resolveHeadingRenderer } from '../views/components/registry';
-
-const reusableAttributeQueryKey = ['reusable-attributes'] as const;
-const reusableAttributeGroupQueryKey = ['reusable-attribute-groups'] as const;
 
 export const EditEntityPage = ({ entityId }: { entityId: string }) => {
   const { t } = useTranslation();
@@ -67,22 +67,28 @@ export const EditEntityPage = ({ entityId }: { entityId: string }) => {
     },
   });
   const reusableAttributes = useQuery({
-    queryKey: reusableAttributeQueryKey,
-    queryFn: ({ signal }) => listReusableAttributes(signal),
+    queryKey: reusableAttributeQueryKeys.definitions(),
+    queryFn: ({ signal }) => listReusableAttributes(false, signal),
   });
   const reusableGroups = useQuery({
-    queryKey: reusableAttributeGroupQueryKey,
+    queryKey: reusableAttributeQueryKeys.groups(),
     queryFn: ({ signal }) => listReusableAttributeGroups(signal),
   });
   const attach = useMutation({
     mutationFn: (revisionId: string) =>
       attachReusableAttribute(entityId, revisionId),
-    onSuccess: () => void entityForm.refetch(),
+    onSuccess: () => {
+      setSelectedReusableAttribute('');
+      void entityForm.refetch();
+    },
   });
   const attachGroup = useMutation({
     mutationFn: (groupId: string) =>
       attachReusableAttributeGroup(entityId, groupId),
-    onSuccess: () => void entityForm.refetch(),
+    onSuccess: () => {
+      setSelectedReusableGroup('');
+      void entityForm.refetch();
+    },
   });
   const blueprintId = entityForm.data?.entity.blueprint_id;
   const currentBlueprint = useQuery({
@@ -217,14 +223,18 @@ export const EditEntityPage = ({ entityId }: { entityId: string }) => {
       {(entityForm.error ||
         update.error ||
         attach.error ||
-        attachGroup.error) && (
+        attachGroup.error ||
+        reusableAttributes.error ||
+        reusableGroups.error) && (
         <Alert severity="error" sx={{ mt: 4 }}>
           {
             (
               entityForm.error ??
               update.error ??
               attach.error ??
-              attachGroup.error
+              attachGroup.error ??
+              reusableAttributes.error ??
+              reusableGroups.error
             )?.message
           }
         </Alert>
@@ -257,7 +267,12 @@ export const EditEntityPage = ({ entityId }: { entityId: string }) => {
               ))}
             </TextField>
             <Button
-              disabled={!selectedReusableAttribute || attach.isPending}
+              disabled={
+                !selectedReusableAttribute ||
+                attach.isPending ||
+                reusableAttributes.isPending ||
+                reusableAttributes.isError
+              }
               onClick={() => attach.mutate(selectedReusableAttribute)}
               variant="outlined"
             >
@@ -278,7 +293,12 @@ export const EditEntityPage = ({ entityId }: { entityId: string }) => {
               ))}
             </TextField>
             <Button
-              disabled={!selectedReusableGroup || attachGroup.isPending}
+              disabled={
+                !selectedReusableGroup ||
+                attachGroup.isPending ||
+                reusableGroups.isPending ||
+                reusableGroups.isError
+              }
               onClick={() => attachGroup.mutate(selectedReusableGroup)}
               variant="outlined"
             >
