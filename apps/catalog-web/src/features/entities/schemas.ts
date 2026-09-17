@@ -483,24 +483,6 @@ export const entityAuditChangeSchema = z.object({
   before_value: z.unknown().nullable(),
   after_value: z.unknown().nullable(),
 });
-export const reusableAttributeSchema = attributeSchema.extend({
-  id: uuidSchema,
-  definition_id: uuidSchema,
-  namespace: z.string(),
-  name: z.string(),
-  version: z.number().int().positive(),
-  searchable: z.boolean(),
-  facetable: z.boolean(),
-  status: z.enum(['draft', 'published']),
-  published_at: z.string().datetime().nullable(),
-});
-export const reusableAttributeGroupSchema = z.object({
-  id: uuidSchema,
-  code: z.string(),
-  name: z.string(),
-  position: z.number().int(),
-  reusable_attribute_revision_ids: z.array(uuidSchema),
-});
 const reusableEntityAttributeSchema = attributeSchema.extend({
   attachment_id: uuidSchema,
   attribute_id: uuidSchema,
@@ -626,10 +608,6 @@ export type RelationshipTargets = z.infer<typeof relationshipTargetsSchema>;
 export type Entity = z.infer<typeof entitySchema>;
 export type EntityPublicationStatus = z.infer<
   typeof entityPublicationStatusSchema
->;
-export type ReusableAttribute = z.infer<typeof reusableAttributeSchema>;
-export type ReusableAttributeGroup = z.infer<
-  typeof reusableAttributeGroupSchema
 >;
 export type EntityAuditChange = z.infer<typeof entityAuditChangeSchema>;
 export type EntityItem = z.infer<typeof entityItemSchema>;

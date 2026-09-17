@@ -42,6 +42,7 @@ import { Route as ManageContextsNewRouteImport } from './routes/manage/contexts/
 import { Route as ManageExtensionsIndexRouteImport } from './routes/manage/extensions/index'
 import { Route as ManageExtensionsExtensionIdRouteImport } from './routes/manage/extensions/$extensionId'
 import { Route as ManageExtensionsSideloadRouteImport } from './routes/manage/extensions/sideload'
+import { Route as ManageReusableAttributesIndexRouteImport } from './routes/manage/reusable-attributes/index'
 import { Route as ManageWorkflowsIndexRouteImport } from './routes/manage/workflows/index'
 import { Route as ManageWorkflowsWorkflowIdRouteImport } from './routes/manage/workflows/$workflowId'
 import { Route as ManageWorkflowsNewRouteImport } from './routes/manage/workflows/new'
@@ -226,6 +227,12 @@ const ManageExtensionsSideloadRoute =
     path: '/manage/extensions/sideload',
     getParentRoute: () => rootRouteImport,
   } as any)
+const ManageReusableAttributesIndexRoute =
+  ManageReusableAttributesIndexRouteImport.update({
+    id: '/manage/reusable-attributes/',
+    path: '/manage/reusable-attributes/',
+    getParentRoute: () => rootRouteImport,
+  } as any)
 const ManageWorkflowsIndexRoute = ManageWorkflowsIndexRouteImport.update({
   id: '/manage/workflows/',
   path: '/manage/workflows/',
@@ -340,6 +347,7 @@ export interface FileRoutesByFullPath {
   '/manage/blueprints/': typeof ManageBlueprintsIndexRoute
   '/manage/contexts/': typeof ManageContextsIndexRoute
   '/manage/extensions/': typeof ManageExtensionsIndexRoute
+  '/manage/reusable-attributes/': typeof ManageReusableAttributesIndexRoute
   '/manage/workflows/': typeof ManageWorkflowsIndexRoute
   '/manage/workspace/': typeof ManageWorkspaceIndexRoute
   '/manage/extensions/$owner/$repository': typeof ManageExtensionsOwnerRepositoryRoute
@@ -383,6 +391,7 @@ export interface FileRoutesByTo {
   '/manage/blueprints': typeof ManageBlueprintsIndexRoute
   '/manage/contexts': typeof ManageContextsIndexRoute
   '/manage/extensions': typeof ManageExtensionsIndexRoute
+  '/manage/reusable-attributes': typeof ManageReusableAttributesIndexRoute
   '/manage/workflows': typeof ManageWorkflowsIndexRoute
   '/manage/workspace': typeof ManageWorkspaceIndexRoute
   '/manage/extensions/$owner/$repository': typeof ManageExtensionsOwnerRepositoryRoute
@@ -432,6 +441,7 @@ export interface FileRoutesById {
   '/manage/blueprints/': typeof ManageBlueprintsIndexRoute
   '/manage/contexts/': typeof ManageContextsIndexRoute
   '/manage/extensions/': typeof ManageExtensionsIndexRoute
+  '/manage/reusable-attributes/': typeof ManageReusableAttributesIndexRoute
   '/manage/workflows/': typeof ManageWorkflowsIndexRoute
   '/manage/workspace/': typeof ManageWorkspaceIndexRoute
   '/manage/extensions/$owner/$repository': typeof ManageExtensionsOwnerRepositoryRoute
@@ -482,6 +492,7 @@ export interface FileRouteTypes {
     | '/manage/blueprints/'
     | '/manage/contexts/'
     | '/manage/extensions/'
+    | '/manage/reusable-attributes/'
     | '/manage/workflows/'
     | '/manage/workspace/'
     | '/manage/extensions/$owner/$repository'
@@ -525,6 +536,7 @@ export interface FileRouteTypes {
     | '/manage/blueprints'
     | '/manage/contexts'
     | '/manage/extensions'
+    | '/manage/reusable-attributes'
     | '/manage/workflows'
     | '/manage/workspace'
     | '/manage/extensions/$owner/$repository'
@@ -573,6 +585,7 @@ export interface FileRouteTypes {
     | '/manage/blueprints/'
     | '/manage/contexts/'
     | '/manage/extensions/'
+    | '/manage/reusable-attributes/'
     | '/manage/workflows/'
     | '/manage/workspace/'
     | '/manage/extensions/$owner/$repository'
@@ -614,6 +627,7 @@ export interface RootRouteChildren {
   ManageBlueprintsIndexRoute: typeof ManageBlueprintsIndexRoute
   ManageContextsIndexRoute: typeof ManageContextsIndexRoute
   ManageExtensionsIndexRoute: typeof ManageExtensionsIndexRoute
+  ManageReusableAttributesIndexRoute: typeof ManageReusableAttributesIndexRoute
   ManageWorkflowsIndexRoute: typeof ManageWorkflowsIndexRoute
   ManageWorkspaceIndexRoute: typeof ManageWorkspaceIndexRoute
   ManageExtensionsOwnerRepositoryRoute: typeof ManageExtensionsOwnerRepositoryRoute
@@ -852,6 +866,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ManageExtensionsSideloadRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/manage/reusable-attributes/': {
+      id: '/manage/reusable-attributes/'
+      path: '/manage/reusable-attributes'
+      fullPath: '/manage/reusable-attributes/'
+      preLoaderRoute: typeof ManageReusableAttributesIndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/manage/workflows/': {
       id: '/manage/workflows/'
       path: '/manage/workflows'
@@ -1057,6 +1078,7 @@ const rootRouteChildren: RootRouteChildren = {
   ManageBlueprintsIndexRoute: ManageBlueprintsIndexRoute,
   ManageContextsIndexRoute: ManageContextsIndexRoute,
   ManageExtensionsIndexRoute: ManageExtensionsIndexRoute,
+  ManageReusableAttributesIndexRoute: ManageReusableAttributesIndexRoute,
   ManageWorkflowsIndexRoute: ManageWorkflowsIndexRoute,
   ManageWorkspaceIndexRoute: ManageWorkspaceIndexRoute,
   ManageExtensionsOwnerRepositoryRoute: ManageExtensionsOwnerRepositoryRoute,

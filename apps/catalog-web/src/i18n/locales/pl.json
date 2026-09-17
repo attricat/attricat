@@ -38,7 +38,8 @@
     "workspaceManagement": "Zarządzanie obszarem roboczym",
     "dashboard": "Panel",
     "manage": "Zarządzanie",
-    "signOut": "Wyloguj się"
+    "signOut": "Wyloguj się",
+    "reusableAttributes": "Atrybuty wielokrotnego użytku"
   },
   "auth": {
     "signIn": "Zaloguj się",
@@ -600,7 +601,8 @@
     "governanceDescription": "Przeglądaj aktywność i historię audytu.",
     "extensionsTitle": "Rozszerzenia",
     "extensionsDescription": "Zarządzaj zainstalowanymi integracjami i ich uprawnieniami.",
-    "workflowsDescription": "Twórz i bezpiecznie obsługuj wersjonowane definicje przepływów pracy."
+    "workflowsDescription": "Twórz i bezpiecznie obsługuj wersjonowane definicje przepływów pracy.",
+    "reusableAttributesDescription": "Twórz definicje, wersje i grupy atrybutów wielokrotnego użytku."
   },
   "profile": {
     "never": "Nigdy",

@@ -38,7 +38,8 @@
     "workspaceManagement": "Workspace management",
     "dashboard": "Dashboard",
     "manage": "Manage",
-    "signOut": "Sign out"
+    "signOut": "Sign out",
+    "reusableAttributes": "Reusable attributes"
   },
   "auth": {
     "signIn": "Sign in",
@@ -586,7 +587,8 @@
     "governanceDescription": "Review activity and audit history.",
     "extensionsTitle": "Extensions",
     "extensionsDescription": "Manage installed integrations and their permissions.",
-    "workflowsDescription": "Create and safely operate versioned workflow definitions."
+    "workflowsDescription": "Create and safely operate versioned workflow definitions.",
+    "reusableAttributesDescription": "Create reusable attribute definitions, revisions, and groups."
   },
   "profile": {
     "never": "Never",
