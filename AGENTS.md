@@ -25,7 +25,9 @@ Do not assume the default Vite or API ports; parallel worktrees receive unique
 ports. Use `just sql` to open `psql` inside the worktree's PostgreSQL container,
 and `just down` to stop the worktree database.
 
-Use SQLx for all migration operations.
+Use SQLx for all migration operations. Create new migrations with
+`sqlx migrate add --source apps/api/migrations <description>` instead of adding
+migration files manually.
 
 ## Catalog inspection
 
