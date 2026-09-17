@@ -71,11 +71,8 @@ export const ExplorerFilterPicker = ({
   });
   const secondRelationships = firstTargets.flatMap((result, index) =>
     (result.data?.attributes ?? [])
-      .filter(
-        (attribute) =>
-          isRelationshipFilterAttribute(attribute) &&
-          !isHiddenByDefault(attribute, 'explorer'),
-      )
+      .filter(isRelationshipFilterAttribute)
+      .filter((attribute) => !isHiddenByDefault(attribute, 'explorer'))
       .map((attribute) => ({
         ...attribute,
         code: `${directRelationships[index].code}.${attribute.code}`,
@@ -94,11 +91,8 @@ export const ExplorerFilterPicker = ({
   });
   const thirdRelationships = secondTargets.flatMap((result, index) =>
     (result.data?.attributes ?? [])
-      .filter(
-        (attribute) =>
-          isRelationshipFilterAttribute(attribute) &&
-          !isHiddenByDefault(attribute, 'explorer'),
-      )
+      .filter(isRelationshipFilterAttribute)
+      .filter((attribute) => !isHiddenByDefault(attribute, 'explorer'))
       .map((attribute) => ({
         ...attribute,
         code: `${secondRelationships[index].code}.${attribute.code}`,

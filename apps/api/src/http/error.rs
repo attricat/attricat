@@ -282,7 +282,10 @@ impl From<RepositoryError> for ApiError {
                 Self::internal("an authenticated user is required to publish an entity")
             }
             RepositoryError::TokenPermissionsUnavailable => Self::forbidden(),
-            RepositoryError::InvalidPreview
+            RepositoryError::InvalidReusableAttributeCode
+            | RepositoryError::InvalidReusableAttributeDefinition(_)
+            | RepositoryError::ReusableAttributeNotPublished
+            | RepositoryError::InvalidPreview
             | RepositoryError::InvalidHierarchyRelationship
             | RepositoryError::InvalidAgentState(_)
             | RepositoryError::InvalidExtension(_)
@@ -317,7 +320,9 @@ impl From<RepositoryError> for ApiError {
                 code: "approval_already_decided",
                 message: error.to_string(),
             },
-            RepositoryError::BlueprintCodeTaken | RepositoryError::WorkflowCodeTaken => Self {
+            RepositoryError::ReusableAttributeAlreadyAttached
+            | RepositoryError::BlueprintCodeTaken
+            | RepositoryError::WorkflowCodeTaken => Self {
                 status: StatusCode::CONFLICT,
                 code: "conflict",
                 message: error.to_string(),

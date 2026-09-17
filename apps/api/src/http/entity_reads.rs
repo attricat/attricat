@@ -600,17 +600,45 @@ async fn resolve_search_filter(
             .ok_or_else(|| ApiError::not_found("target blueprint"))?;
     }
     let leaf_field = parts[parts.len() - 1];
-    let attribute = current
+    let (attribute_code, value_type, reusable) = match current
         .attributes
         .iter()
         .find(|attribute| attribute.code == leaf_field)
-        .ok_or_else(|| {
-            ApiError::invalid_input(format!(
+    {
+        Some(attribute) => (
+            attribute.code.clone(),
+            attribute.value_type.as_str().to_owned(),
+            false,
+        ),
+        None if relationship_path.is_empty() => {
+            let reusable = repository
+                .attached_reusable_attribute_for_blueprint(
+                    blueprint.blueprint.id,
+                    blueprint.blueprint.version,
+                    leaf_field,
+                )
+                .await?
+                .filter(|attribute| attribute.searchable)
+                .ok_or_else(|| {
+                    ApiError::invalid_input(format!(
+                        "filters.field leaf '{}' is not a searchable attribute",
+                        leaf_field
+                    ))
+                })?;
+            (
+                format!("{}:{}", reusable.namespace, reusable.code),
+                reusable.value_type,
+                true,
+            )
+        }
+        None => {
+            return Err(ApiError::invalid_input(format!(
                 "filters.field leaf '{}' is not an attribute",
                 leaf_field
-            ))
-        })?;
-    let value_type = attribute.value_type.as_str();
+            )));
+        }
+    };
+    let value_type = value_type.as_str();
     let valid_operator = match value_type {
         "string" => matches!(filter.operator.as_str(), "eq" | "contains" | "starts_with"),
         "number" | "integer" | "date" | "datetime" | "time" => {
@@ -657,7 +685,8 @@ async fn resolve_search_filter(
     Ok(EntitySearchFilter {
         field: filter.field.clone(),
         relationship_path,
-        leaf_field: attribute.code.clone(),
+        leaf_field: attribute_code,
+        reusable,
         operator: filter.operator.clone(),
         value_type: value_type.to_owned(),
         value,

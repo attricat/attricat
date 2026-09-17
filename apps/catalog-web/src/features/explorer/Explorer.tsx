@@ -137,11 +137,9 @@ export const Explorer = ({ search: urlSearch }: { search: ExplorerSearch }) => {
     }
   }, [navigate, revisions.data, search]);
 
-  const relationshipFields = (selectedBlueprint.data?.attributes ?? []).filter(
-    (attribute) =>
-      isRelationshipFilterAttribute(attribute) &&
-      !isHiddenByDefault(attribute, 'explorer'),
-  );
+  const relationshipFields = (selectedBlueprint.data?.attributes ?? [])
+    .filter(isRelationshipFilterAttribute)
+    .filter((attribute) => !isHiddenByDefault(attribute, 'explorer'));
   const facetContextCode = search.context ?? defaultContextCode;
   const facetContextId = contexts.data?.find(
     (context) => context.code === facetContextCode,

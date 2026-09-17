@@ -1,7 +1,14 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link } from '@tanstack/react-router';
 import { BlueprintIcon } from '../../components/system-icons';
-import { Alert, Box, CircularProgress, Paper, Tooltip } from '@mui/material';
+import {
+  Alert,
+  Box,
+  CircularProgress,
+  Paper,
+  Tooltip,
+  Typography,
+} from '@mui/material';
 import { createElement, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { PageContainer } from '../../components/PageContainer';
@@ -285,6 +292,19 @@ export const EntityPreviewPage = ({
                     view={detailView}
                     skipComponentId={entityHeadingComponentId}
                   />
+                  {(resolved.data.reusable_attributes?.length ?? 0) > 0 && (
+                    <Box component="section" sx={{ mt: 4 }}>
+                      <Typography component="h2" variant="h6">
+                        {t('entities.additionalAttributes')}
+                      </Typography>
+                      <EntityView
+                        attributes={resolved.data.reusable_attributes}
+                        contextId={selectedContextId}
+                        entityId={entityId}
+                        values={resolved.data.reusable_values ?? {}}
+                      />
+                    </Box>
+                  )}
                 </Paper>
                 <ExtensionOutlet
                   context={{

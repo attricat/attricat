@@ -20,16 +20,19 @@ use crate::{
     constants::REQUEST_POOL_CONNECTIONS,
     domain_events::{AffectedFactV1, EventSource, EventSourceKind, NewDomainEvent},
     model::{
-        AppendAttributeValues, Attribute, AttributeContext, AttributeValue, AttributeValueHistory,
-        AttributeValueSelector, Blueprint, BlueprintEntityPublicationSummary,
-        BlueprintWithAttributes, CreateBlueprint, Entity, EntityAuditChange, EntityHierarchyItem,
-        EntityHierarchyResponse, EntityIdentity, EntityMigrationPreview, EntityPreview,
-        EntityPreviewPage, EntityPublicationStatus, FormAttributeValue, IncomingRelationshipItem,
-        IncomingRelationshipSelector, IncomingRelationshipsPage, MatchExplanation, MatchPathEdge,
-        MigrateEntityRequest, MigrationIssue, NewAttributeValue, PublicationChannel,
-        RelatedEntityPreview, RelationshipMutation, RelationshipTargets,
-        RelationshipTreeFacetChildItem, RelationshipTreeFacetChildrenResponse,
-        RelationshipTreeFacetItem, RelationshipTreeFacetResponse, ResolvedEntityPreviewResponse,
+        AppendAttributeValues, AttachReusableAttribute, Attribute, AttributeContext,
+        AttributeValue, AttributeValueHistory, AttributeValueSelector, Blueprint,
+        BlueprintEntityPublicationSummary, BlueprintWithAttributes, CreateBlueprint,
+        CreateReusableAttribute, CreateReusableAttributeGroup, Entity, EntityAuditChange,
+        EntityHierarchyItem, EntityHierarchyResponse, EntityIdentity, EntityMigrationPreview,
+        EntityPreview, EntityPreviewPage, EntityPublicationStatus, EntityReusableAttribute,
+        FormAttributeValue, IncomingRelationshipItem, IncomingRelationshipSelector,
+        IncomingRelationshipsPage, MatchExplanation, MatchPathEdge, MigrateEntityRequest,
+        MigrationIssue, NewAttributeValue, PublicationChannel, RelatedEntityPreview,
+        RelationshipMutation, RelationshipTargets, RelationshipTreeFacetChildItem,
+        RelationshipTreeFacetChildrenResponse, RelationshipTreeFacetItem,
+        RelationshipTreeFacetResponse, ResolvedEntityPreviewResponse, ReusableAttribute,
+        ReusableAttributeGroup,
     },
 };
 
@@ -51,6 +54,7 @@ mod extensions;
 mod files;
 mod health;
 mod members;
+mod reusable_attributes;
 mod roles;
 mod sessions;
 mod tokens;
@@ -192,6 +196,18 @@ pub enum RepositoryError {
     DefaultContextOnly,
     #[error("attribute does not belong to the entity blueprint version")]
     AttributeNotApplicable,
+    #[error(
+        "reusable attribute namespace and code must each contain only ASCII letters, numbers, hyphens, and underscores"
+    )]
+    InvalidReusableAttributeCode,
+    #[error("invalid reusable attribute definition: {0}")]
+    InvalidReusableAttributeDefinition(String),
+    #[error(
+        "reusable attribute revisions must be published before they can be attached or added to a group"
+    )]
+    ReusableAttributeNotPublished,
+    #[error("the entity already has an attachment for this reusable attribute definition")]
+    ReusableAttributeAlreadyAttached,
     #[error("file attribute policy is invalid")]
     InvalidFilePolicy,
     #[error("file count is incompatible with the attribute cardinality")]
@@ -873,6 +889,21 @@ pub(crate) fn validate_code(value: &str) -> Result<(), RepositoryError> {
     }
 }
 
+/// Reusable attributes are the only attribute selectors containing a colon;
+/// both parts retain the catalog code grammar so local and reusable names
+/// cannot collide accidentally.
+pub(crate) fn validate_attribute_selector_code(value: &str) -> Result<(), RepositoryError> {
+    if is_valid_code(value)
+        || value
+            .split_once(':')
+            .is_some_and(|(namespace, code)| is_valid_code(namespace) && is_valid_code(code))
+    {
+        Ok(())
+    } else {
+        Err(RepositoryError::InvalidCode)
+    }
+}
+
 pub(crate) fn missing_required_fields(message: &str, target_codes: &HashSet<&str>) -> Vec<String> {
     let mut fields = HashSet::new();
     for delimiter in ['"', '\''] {
@@ -890,6 +921,14 @@ mod tests {
     use sqlx::postgres::PgPoolOptions;
 
     use super::*;
+
+    #[test]
+    fn reusable_attribute_selectors_require_a_qualified_code() {
+        assert!(validate_attribute_selector_code("weight").is_ok());
+        assert!(validate_attribute_selector_code("acme:weight").is_ok());
+        assert!(validate_attribute_selector_code("acme:weight:metric").is_err());
+        assert!(validate_attribute_selector_code("acme weight").is_err());
+    }
 
     #[tokio::test]
     async fn handler_commands_preserve_event_lineage() {

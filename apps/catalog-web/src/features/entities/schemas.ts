@@ -246,7 +246,7 @@ export const attributeSchema = z
     context_fallback: z.enum(['default', 'none']).optional(),
     context_editable: z.enum(['all', 'default']).optional(),
     readonly: z.boolean().optional(),
-    tags: z.array(z.string()).default([]),
+    tags: z.array(z.string()).optional(),
     value_schema: jsonSchemaSchema.nullish(),
     extension_type: z
       .object({
@@ -409,6 +409,16 @@ const resolvedEntityPreviewSchema = z.object({
       source_context: z.object({ id: uuidSchema, code: z.string() }),
     }),
   ),
+  reusable_attributes: z.array(attributeSchema).default([]),
+  reusable_values: z
+    .record(
+      z.string(),
+      z.object({
+        value: resolvedPreviewValueSchema,
+        source_context: z.object({ id: uuidSchema, code: z.string() }),
+      }),
+    )
+    .default({}),
 });
 const resultVersionScopeSchema = z.discriminatedUnion('kind', [
   z.object({ kind: z.literal('empty') }),
@@ -473,10 +483,42 @@ export const entityAuditChangeSchema = z.object({
   before_value: z.unknown().nullable(),
   after_value: z.unknown().nullable(),
 });
+export const reusableAttributeSchema = attributeSchema.extend({
+  id: uuidSchema,
+  definition_id: uuidSchema,
+  namespace: z.string(),
+  name: z.string(),
+  version: z.number().int().positive(),
+  searchable: z.boolean(),
+  facetable: z.boolean(),
+  status: z.enum(['draft', 'published']),
+  published_at: z.string().datetime().nullable(),
+});
+export const reusableAttributeGroupSchema = z.object({
+  id: uuidSchema,
+  code: z.string(),
+  name: z.string(),
+  position: z.number().int(),
+  reusable_attribute_revision_ids: z.array(uuidSchema),
+});
+const reusableEntityAttributeSchema = attributeSchema.extend({
+  attachment_id: uuidSchema,
+  attribute_id: uuidSchema,
+  definition_id: uuidSchema,
+  revision_id: uuidSchema,
+  namespace: z.string(),
+  name: z.string(),
+  version: z.number().int().positive(),
+  searchable: z.boolean(),
+  facetable: z.boolean(),
+  position: z.number().int(),
+});
 const entityFormResponseSchema = z.object({
   entity: entitySchema,
   blueprint: blueprintWithAttributesSchema,
   values: z.array(formAttributeValueSchema),
+  reusable_attributes: z.array(reusableEntityAttributeSchema).default([]),
+  reusable_values: z.array(formAttributeValueSchema).default([]),
   context: entityContextSchema,
 });
 const migrationIssueSchema = z.object({
@@ -584,6 +626,10 @@ export type RelationshipTargets = z.infer<typeof relationshipTargetsSchema>;
 export type Entity = z.infer<typeof entitySchema>;
 export type EntityPublicationStatus = z.infer<
   typeof entityPublicationStatusSchema
+>;
+export type ReusableAttribute = z.infer<typeof reusableAttributeSchema>;
+export type ReusableAttributeGroup = z.infer<
+  typeof reusableAttributeGroupSchema
 >;
 export type EntityAuditChange = z.infer<typeof entityAuditChangeSchema>;
 export type EntityItem = z.infer<typeof entityItemSchema>;
