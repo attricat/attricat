@@ -43,6 +43,8 @@ import { Route as ManageExtensionsIndexRouteImport } from './routes/manage/exten
 import { Route as ManageExtensionsExtensionIdRouteImport } from './routes/manage/extensions/$extensionId'
 import { Route as ManageExtensionsSideloadRouteImport } from './routes/manage/extensions/sideload'
 import { Route as ManageReusableAttributesIndexRouteImport } from './routes/manage/reusable-attributes/index'
+import { Route as ManageReusableAttributesDefinitionIdRouteImport } from './routes/manage/reusable-attributes/$definitionId'
+import { Route as ManageReusableAttributesNewRouteImport } from './routes/manage/reusable-attributes/new'
 import { Route as ManageWorkflowsIndexRouteImport } from './routes/manage/workflows/index'
 import { Route as ManageWorkflowsWorkflowIdRouteImport } from './routes/manage/workflows/$workflowId'
 import { Route as ManageWorkflowsNewRouteImport } from './routes/manage/workflows/new'
@@ -233,6 +235,18 @@ const ManageReusableAttributesIndexRoute =
     path: '/manage/reusable-attributes/',
     getParentRoute: () => rootRouteImport,
   } as any)
+const ManageReusableAttributesDefinitionIdRoute =
+  ManageReusableAttributesDefinitionIdRouteImport.update({
+    id: '/manage/reusable-attributes/$definitionId',
+    path: '/manage/reusable-attributes/$definitionId',
+    getParentRoute: () => rootRouteImport,
+  } as any)
+const ManageReusableAttributesNewRoute =
+  ManageReusableAttributesNewRouteImport.update({
+    id: '/manage/reusable-attributes/new',
+    path: '/manage/reusable-attributes/new',
+    getParentRoute: () => rootRouteImport,
+  } as any)
 const ManageWorkflowsIndexRoute = ManageWorkflowsIndexRouteImport.update({
   id: '/manage/workflows/',
   path: '/manage/workflows/',
@@ -337,6 +351,8 @@ export interface FileRoutesByFullPath {
   '/manage/contexts/new': typeof ManageContextsNewRoute
   '/manage/extensions/$extensionId': typeof ManageExtensionsExtensionIdRoute
   '/manage/extensions/sideload': typeof ManageExtensionsSideloadRoute
+  '/manage/reusable-attributes/$definitionId': typeof ManageReusableAttributesDefinitionIdRoute
+  '/manage/reusable-attributes/new': typeof ManageReusableAttributesNewRoute
   '/manage/workflows/$workflowId': typeof ManageWorkflowsWorkflowIdRouteWithChildren
   '/manage/workflows/new': typeof ManageWorkflowsNewRoute
   '/manage/workspace/invitations': typeof ManageWorkspaceInvitationsRoute
@@ -382,6 +398,8 @@ export interface FileRoutesByTo {
   '/manage/contexts/new': typeof ManageContextsNewRoute
   '/manage/extensions/$extensionId': typeof ManageExtensionsExtensionIdRoute
   '/manage/extensions/sideload': typeof ManageExtensionsSideloadRoute
+  '/manage/reusable-attributes/$definitionId': typeof ManageReusableAttributesDefinitionIdRoute
+  '/manage/reusable-attributes/new': typeof ManageReusableAttributesNewRoute
   '/manage/workflows/new': typeof ManageWorkflowsNewRoute
   '/manage/workspace/invitations': typeof ManageWorkspaceInvitationsRoute
   '/manage/workspace/members': typeof ManageWorkspaceMembersRoute
@@ -431,6 +449,8 @@ export interface FileRoutesById {
   '/manage/contexts/new': typeof ManageContextsNewRoute
   '/manage/extensions/$extensionId': typeof ManageExtensionsExtensionIdRoute
   '/manage/extensions/sideload': typeof ManageExtensionsSideloadRoute
+  '/manage/reusable-attributes/$definitionId': typeof ManageReusableAttributesDefinitionIdRoute
+  '/manage/reusable-attributes/new': typeof ManageReusableAttributesNewRoute
   '/manage/workflows/$workflowId': typeof ManageWorkflowsWorkflowIdRouteWithChildren
   '/manage/workflows/new': typeof ManageWorkflowsNewRoute
   '/manage/workspace/invitations': typeof ManageWorkspaceInvitationsRoute
@@ -482,6 +502,8 @@ export interface FileRouteTypes {
     | '/manage/contexts/new'
     | '/manage/extensions/$extensionId'
     | '/manage/extensions/sideload'
+    | '/manage/reusable-attributes/$definitionId'
+    | '/manage/reusable-attributes/new'
     | '/manage/workflows/$workflowId'
     | '/manage/workflows/new'
     | '/manage/workspace/invitations'
@@ -527,6 +549,8 @@ export interface FileRouteTypes {
     | '/manage/contexts/new'
     | '/manage/extensions/$extensionId'
     | '/manage/extensions/sideload'
+    | '/manage/reusable-attributes/$definitionId'
+    | '/manage/reusable-attributes/new'
     | '/manage/workflows/new'
     | '/manage/workspace/invitations'
     | '/manage/workspace/members'
@@ -575,6 +599,8 @@ export interface FileRouteTypes {
     | '/manage/contexts/new'
     | '/manage/extensions/$extensionId'
     | '/manage/extensions/sideload'
+    | '/manage/reusable-attributes/$definitionId'
+    | '/manage/reusable-attributes/new'
     | '/manage/workflows/$workflowId'
     | '/manage/workflows/new'
     | '/manage/workspace/invitations'
@@ -618,6 +644,8 @@ export interface RootRouteChildren {
   ManageContextsNewRoute: typeof ManageContextsNewRoute
   ManageExtensionsExtensionIdRoute: typeof ManageExtensionsExtensionIdRoute
   ManageExtensionsSideloadRoute: typeof ManageExtensionsSideloadRoute
+  ManageReusableAttributesDefinitionIdRoute: typeof ManageReusableAttributesDefinitionIdRoute
+  ManageReusableAttributesNewRoute: typeof ManageReusableAttributesNewRoute
   ManageWorkflowsWorkflowIdRoute: typeof ManageWorkflowsWorkflowIdRouteWithChildren
   ManageWorkflowsNewRoute: typeof ManageWorkflowsNewRoute
   ManageWorkspaceInvitationsRoute: typeof ManageWorkspaceInvitationsRoute
@@ -873,6 +901,20 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ManageReusableAttributesIndexRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/manage/reusable-attributes/$definitionId': {
+      id: '/manage/reusable-attributes/$definitionId'
+      path: '/manage/reusable-attributes/$definitionId'
+      fullPath: '/manage/reusable-attributes/$definitionId'
+      preLoaderRoute: typeof ManageReusableAttributesDefinitionIdRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/manage/reusable-attributes/new': {
+      id: '/manage/reusable-attributes/new'
+      path: '/manage/reusable-attributes/new'
+      fullPath: '/manage/reusable-attributes/new'
+      preLoaderRoute: typeof ManageReusableAttributesNewRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/manage/workflows/': {
       id: '/manage/workflows/'
       path: '/manage/workflows'
@@ -1069,6 +1111,9 @@ const rootRouteChildren: RootRouteChildren = {
   ManageContextsNewRoute: ManageContextsNewRoute,
   ManageExtensionsExtensionIdRoute: ManageExtensionsExtensionIdRoute,
   ManageExtensionsSideloadRoute: ManageExtensionsSideloadRoute,
+  ManageReusableAttributesDefinitionIdRoute:
+    ManageReusableAttributesDefinitionIdRoute,
+  ManageReusableAttributesNewRoute: ManageReusableAttributesNewRoute,
   ManageWorkflowsWorkflowIdRoute: ManageWorkflowsWorkflowIdRouteWithChildren,
   ManageWorkflowsNewRoute: ManageWorkflowsNewRoute,
   ManageWorkspaceInvitationsRoute: ManageWorkspaceInvitationsRoute,
