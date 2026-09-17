@@ -19,6 +19,101 @@ fn event_contract_grant_id(provider: &str, contract: &str) -> String {
     format!("{provider}:{contract}")
 }
 
+fn valid_contribution_key(value: &str) -> bool {
+    let Some((extension_id, contribution_id)) = value.split_once(':') else {
+        return false;
+    };
+    value.len() <= 256
+        && !extension_id.is_empty()
+        && !contribution_id.is_empty()
+        && !contribution_id.contains(':')
+        && value
+            .chars()
+            .filter(|character| *character != ':')
+            .all(|character| character.is_ascii_alphanumeric() || "._-".contains(character))
+}
+
+/// Configuration is data only: outlet names and stable contribution keys. It
+/// deliberately cannot contain selectors, component names, or placement rules.
+fn validate_workspace_extension_layout(layout: &Value) -> Result<(), RepositoryError> {
+    let object = layout.as_object().ok_or(RepositoryError::InvalidCode)?;
+    if object.len() != 2
+        || object.get("version").and_then(Value::as_u64) != Some(1)
+        || !object.get("outlets").is_some_and(Value::is_object)
+    {
+        return Err(RepositoryError::InvalidCode);
+    }
+    let mut assigned_keys = HashSet::new();
+    for (outlet, value) in object["outlets"].as_object().expect("validated object") {
+        if serde_json::from_value::<UiOutlet>(Value::String(outlet.clone())).is_err() {
+            return Err(RepositoryError::InvalidCode);
+        }
+        let item = value.as_object().ok_or(RepositoryError::InvalidCode)?;
+        let navigation = outlet == "navigation";
+        if item
+            .keys()
+            .any(|key| key != "order" && key != "hidden" && (key != "promoted" || !navigation))
+        {
+            return Err(RepositoryError::InvalidCode);
+        }
+        let expected = if navigation {
+            ["order", "hidden", "promoted"].as_slice()
+        } else {
+            ["order", "hidden"].as_slice()
+        };
+        let ordered: HashSet<_> = item["order"]
+            .as_array()
+            .ok_or(RepositoryError::InvalidCode)?
+            .iter()
+            .filter_map(Value::as_str)
+            .collect();
+        let hidden: HashSet<_> = item["hidden"]
+            .as_array()
+            .ok_or(RepositoryError::InvalidCode)?
+            .iter()
+            .filter_map(Value::as_str)
+            .collect();
+        if !ordered.is_disjoint(&hidden)
+            || ordered
+                .iter()
+                .chain(&hidden)
+                .any(|entry| !assigned_keys.insert(*entry))
+        {
+            return Err(RepositoryError::InvalidCode);
+        }
+        let mut classified = HashSet::new();
+        for key in expected {
+            let entries = item
+                .get(*key)
+                .and_then(Value::as_array)
+                .ok_or(RepositoryError::InvalidCode)?;
+            let mut seen = HashSet::new();
+            if entries.iter().any(|entry| {
+                let Some(entry) = entry.as_str() else {
+                    return true;
+                };
+                !valid_contribution_key(entry) || !seen.insert(entry)
+            }) {
+                return Err(RepositoryError::InvalidCode);
+            }
+            if *key != "order"
+                && entries.iter().filter_map(Value::as_str).any(|entry| {
+                    !classified.insert(entry)
+                        || (*key == "promoted"
+                            && item["hidden"].as_array().is_some_and(|hidden| {
+                                hidden
+                                    .iter()
+                                    .any(|candidate| candidate.as_str() == Some(entry))
+                            }))
+                })
+            {
+                return Err(RepositoryError::InvalidCode);
+            }
+        }
+    }
+    Ok(())
+}
+
 /// Core Catalog events retain existing subscription semantics. Extension-owned
 /// events additionally require a matching declared provider contract.
 fn event_contract_subscription_allowed(
@@ -130,6 +225,14 @@ pub struct ExtensionRuntimeInstallation {
 /// source identity, grants, server components, and secrets.
 #[derive(Clone, Debug)]
 pub struct ClientExtensionContribution {
+    /// Stable identity used by host-owned layout configuration. Release IDs are
+    /// intentionally excluded so a configured placement survives upgrades.
+    pub contribution_key: String,
+    /// The host-computed position after workspace layout and stable tie-breaking.
+    pub display_order: u32,
+    /// Navigation placement is host-owned; extensions are grouped unless an
+    /// administrator explicitly promotes their stable contribution key.
+    pub navigation_group: Option<String>,
     pub extension_id: String,
     pub installed_release_id: Uuid,
     pub configuration: Value,
@@ -211,6 +314,27 @@ impl CatalogRepository {
     pub async fn client_extension_contributions(
         &self,
     ) -> Result<Vec<ClientExtensionContribution>, RepositoryError> {
+        self.client_extension_contributions_for_blueprint(None)
+            .await
+    }
+
+    /// Resolves the layout for one immutable published blueprint revision.
+    /// Callers cannot provide a view definition directly.
+    pub async fn client_extension_contributions_for_blueprint(
+        &self,
+        blueprint: Option<(Uuid, i64)>,
+    ) -> Result<Vec<ClientExtensionContribution>, RepositoryError> {
+        let contributions = self.enabled_client_extension_contributions().await?;
+        self.apply_workspace_extension_layout(contributions, blueprint)
+            .await
+    }
+
+    /// Resolves enabled, policy-compatible manifest contributions without
+    /// applying presentation visibility. Artifact and broker authorization and
+    /// publication validation must not depend on a layout hiding a contribution.
+    pub(crate) async fn enabled_client_extension_contributions(
+        &self,
+    ) -> Result<Vec<ClientExtensionContribution>, RepositoryError> {
         let rows: Vec<(Uuid, String, Uuid, Value, Value)> = sqlx::query_as(
             "SELECT i.id, i.extension_id, i.installed_release_id, i.configuration, r.manifest FROM extension_installations i JOIN installed_extension_releases r ON r.id = i.installed_release_id JOIN workspaces w ON w.id = i.workspace_id WHERE i.workspace_id = $1 AND i.state = 'enabled' AND w.extensions_enabled ORDER BY i.extension_id",
         )
@@ -243,6 +367,9 @@ impl CatalogRepository {
             })?;
             for contribution in manifest.ui {
                 contributions.push(ClientExtensionContribution {
+                    contribution_key: format!("{}:{}", extension_id, contribution.id),
+                    display_order: 0,
+                    navigation_group: None,
                     artifact_key: installed_artifact_key(
                         installed_release_id,
                         &contribution.artifact,
@@ -262,6 +389,163 @@ impl CatalogRepository {
         Ok(contributions)
     }
 
+    /// Applies the workspace-owned layout after all runtime safety gates. Layout
+    /// entries are deliberately allowed to outlive an installation, so removing
+    /// or disabling an extension cannot destroy an administrator's placement.
+    async fn apply_workspace_extension_layout(
+        &self,
+        mut contributions: Vec<ClientExtensionContribution>,
+        blueprint: Option<(Uuid, i64)>,
+    ) -> Result<Vec<ClientExtensionContribution>, RepositoryError> {
+        let layout: Value = sqlx::query_scalar(
+            "SELECT COALESCE(settings->'extension_layout', '{}'::jsonb) FROM workspaces WHERE id = $1",
+        )
+        .bind(self.extension_workspace())
+        .fetch_optional(&self.pool)
+        .await?
+        .unwrap_or_else(|| json!({}));
+        // A published entity revision overlays only its explicitly declared,
+        // entity-owned outlets. Global and unspecified workspace defaults remain
+        // authoritative.
+        let mut layout = if layout.get("outlets").is_some_and(Value::is_object) {
+            layout
+        } else {
+            json!({"version": 1, "outlets": {}})
+        };
+        if let Some((blueprint_id, blueprint_version)) = blueprint {
+            let override_layout = sqlx::query_scalar::<_, Option<Value>>(
+                "SELECT views->'extension_layout' FROM blueprints WHERE id = $1 AND version = $2 AND workspace_id = $3 AND kind = 'entity' AND status = 'published' AND deleted_at IS NULL",
+            )
+            .bind(blueprint_id)
+            .bind(blueprint_version)
+            .bind(self.extension_workspace())
+            .fetch_optional(&self.pool)
+            .await?
+            .flatten();
+            if let Some(override_outlets) = override_layout
+                .as_ref()
+                .and_then(|value| value.get("outlets"))
+                .and_then(Value::as_object)
+            {
+                let workspace_outlets = layout["outlets"]
+                    .as_object_mut()
+                    .expect("normalized extension layout");
+                for outlet in [
+                    "entity_preview_panel",
+                    "entity_attribute_decoration",
+                    "entity_action",
+                ] {
+                    if let Some(value) = override_outlets.get(outlet) {
+                        workspace_outlets.insert(outlet.to_owned(), value.clone());
+                    }
+                }
+            }
+        }
+        let outlets = layout.get("outlets").and_then(Value::as_object);
+        contributions.retain(|contribution| {
+            let Some(outlet) = contribution.outlet.as_ref() else {
+                return true;
+            };
+            let hidden = outlets
+                .and_then(|items| {
+                    items.get(
+                        &serde_json::to_string(outlet)
+                            .unwrap()
+                            .trim_matches('"')
+                            .to_owned(),
+                    )
+                })
+                .and_then(|item| item.get("hidden"))
+                .and_then(Value::as_array);
+            !hidden.is_some_and(|keys| {
+                keys.iter()
+                    .any(|key| key.as_str() == Some(&contribution.contribution_key))
+            })
+        });
+        contributions.sort_by(|left, right| {
+            let position = |contribution: &ClientExtensionContribution| {
+                contribution.outlet.as_ref().and_then(|outlet| {
+                    outlets
+                        .and_then(|items| {
+                            items.get(serde_json::to_string(outlet).ok()?.trim_matches('"'))
+                        })
+                        .and_then(|item| item.get("order"))
+                        .and_then(Value::as_array)
+                        .and_then(|keys| {
+                            keys.iter().position(|key| {
+                                key.as_str() == Some(&contribution.contribution_key)
+                            })
+                        })
+                })
+            };
+            position(left)
+                .is_none()
+                .cmp(&position(right).is_none())
+                .then_with(|| position(left).cmp(&position(right)))
+                .then_with(|| left.extension_id.cmp(&right.extension_id))
+                .then_with(|| left.id.cmp(&right.id))
+        });
+        for (display_order, contribution) in contributions.iter_mut().enumerate() {
+            contribution.display_order = display_order as u32;
+            if contribution.outlet == Some(UiOutlet::Navigation) {
+                let promoted = outlets
+                    .and_then(|items| items.get("navigation"))
+                    .and_then(|item| item.get("promoted"))
+                    .and_then(Value::as_array)
+                    .is_some_and(|keys| {
+                        keys.iter()
+                            .any(|key| key.as_str() == Some(&contribution.contribution_key))
+                    });
+                contribution.navigation_group =
+                    Some(if promoted { "promoted" } else { "grouped" }.to_owned());
+            }
+        }
+        Ok(contributions)
+    }
+
+    pub async fn workspace_extension_layout(&self) -> Result<Value, RepositoryError> {
+        Ok(sqlx::query_scalar(
+            "SELECT COALESCE(settings->'extension_layout', '{\"version\":1,\"outlets\":{}}'::jsonb) FROM workspaces WHERE id = $1",
+        )
+        .bind(self.extension_workspace())
+        .fetch_optional(&self.pool)
+        .await?
+        .unwrap_or_else(|| json!({"version": 1, "outlets": {}})))
+    }
+
+    pub async fn update_workspace_extension_layout(
+        &self,
+        layout: Value,
+    ) -> Result<(), RepositoryError> {
+        validate_workspace_extension_layout(&layout)?;
+        let mut transaction = self.pool.begin().await?;
+        sqlx::query("UPDATE workspaces SET settings = jsonb_set(settings, '{extension_layout}', $1::jsonb, true), updated_at = clock_timestamp() WHERE id = $2")
+            .bind(&layout)
+            .bind(self.extension_workspace())
+            .execute(&mut *transaction)
+            .await?;
+        let mut audit_repository = self.clone();
+        let mut audit = audit_repository
+            .audit_context
+            .clone()
+            .unwrap_or_else(|| AuditContext {
+                actor_user_id: None,
+                actor_token_id: None,
+                request_id: Uuid::new_v4(),
+                correlation_id: Uuid::new_v4(),
+                action: "workspace.extension_layout.set".into(),
+                authorization_scope: json!({"type":"workspace"}),
+                target: json!({"type":"workspace", "id": self.extension_workspace()}),
+                metadata: json!({}),
+                agent: None,
+            });
+        audit.action = "workspace.extension_layout.set".into();
+        audit.metadata["extension_layout"] = layout;
+        audit_repository.audit_context = Some(audit);
+        audit_repository.write_audit_event(&mut transaction).await?;
+        self.commit_mutation(transaction).await
+    }
+
     /// Resolves an artifact only through an enabled declared client UI
     /// contribution. Callers never receive the storage key directly.
     pub async fn client_extension_contribution(
@@ -269,7 +553,7 @@ impl CatalogRepository {
         extension_id: &str,
         contribution_id: &str,
     ) -> Result<ClientExtensionContribution, RepositoryError> {
-        self.client_extension_contributions()
+        self.enabled_client_extension_contributions()
             .await?
             .into_iter()
             .find(|contribution| {

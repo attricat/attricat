@@ -17,6 +17,7 @@ export const viewBlockTypes = {
   relationshipList: 'relationship_list',
   incomingRelationshipList: 'incoming_relationship_list',
   table: 'table',
+  extensionLayout: 'extension_layout',
 } as const;
 
 export type ComponentReference = {
@@ -74,6 +75,11 @@ export type ViewDefinition =
       }[];
       component?: ComponentReference | null;
     }
+  | {
+      type: 'extension_layout';
+      version: 1;
+      outlets: Record<string, { order: string[]; hidden: string[] }>;
+    }
   | Exclude<
       ViewNode,
       {
@@ -83,7 +89,8 @@ export type ViewDefinition =
           | 'divider'
           | 'field'
           | 'relationship_list'
-          | 'incoming_relationship_list';
+          | 'incoming_relationship_list'
+          | 'extension_layout';
       }
     >;
 
@@ -187,6 +194,14 @@ const viewDefinitionSchema: z.ZodType<ViewDefinition> = z.lazy(() =>
         .nullish()
         .transform((columns) => columns ?? undefined),
       component: componentReferenceSchema.nullish(),
+    }),
+    z.object({
+      type: z.literal(viewBlockTypes.extensionLayout),
+      version: z.literal(1),
+      outlets: z.record(
+        z.string(),
+        z.object({ order: z.array(z.string()), hidden: z.array(z.string()) }),
+      ),
     }),
     z.object({
       type: z.literal(viewBlockTypes.stack),

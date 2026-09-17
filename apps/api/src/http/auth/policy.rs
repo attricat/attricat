@@ -119,6 +119,12 @@ pub(super) fn policy(method: &Method, path: &str) -> Option<Policy> {
             target: TargetKind::None,
         });
     }
+    if path == "/workspace/extension-layout" {
+        return Some(Policy {
+            permission: "extensions.manage",
+            target: TargetKind::None,
+        });
+    }
     if path == "/workspace/extensions-mode" {
         return Some(Policy {
             permission: "extensions.manage",
@@ -422,6 +428,14 @@ mod tests {
                 .permission,
             "extensions.manage"
         );
+        for method in [Method::GET, Method::PUT] {
+            assert_eq!(
+                policy(&method, "/workspace/extension-layout")
+                    .unwrap()
+                    .permission,
+                "extensions.manage"
+            );
+        }
         assert_eq!(
             policy(&Method::POST, "/extensions/{extension_id}/enable")
                 .unwrap()

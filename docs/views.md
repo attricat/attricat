@@ -14,6 +14,33 @@ that do not define them.
 `detail` and `edit` use recursive layout roots. A table column may reference a
 local scalar field or a scalar leaf through at most three relationship hops.
 
+## Extension layout
+
+Entity blueprint revisions may override workspace extension placement for their
+owned surfaces (`entity_preview_panel`, `entity_attribute_decoration`, and
+`entity_action`). This is versioned declarative data, published with the normal
+blueprint revision flow; it neither grants permissions nor runs extension code.
+Use stable contribution keys (`<extension-id>:<contribution-id>`). Missing or
+disabled contributions are ignored at runtime while their entries remain in the
+published layout for restoration. Publication rejects a currently enabled
+contribution if its key is assigned to a different outlet; unknown keys remain
+valid so removed or disabled contributions can later be restored:
+
+```toml
+[views.extension_layout]
+type = "extension_layout"
+version = 1
+
+[views.extension_layout.outlets.entity_preview_panel]
+order = ["acme.inventory:summary"]
+hidden = ["acme.legacy:panel"]
+```
+
+Each declared entity-owned outlet replaces only that outlet's workspace default;
+unspecified entity outlets and all global outlets continue to use the workspace
+layout. Global outlets, including navigation and explorer surfaces, are
+workspace-only.
+
 ```toml
 [views.table]
 type = "table"

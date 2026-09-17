@@ -274,6 +274,10 @@ export const EntityPreviewPage = ({
                           attribute: attributeLabel(attribute),
                         })}
                         outlet="entity_attribute_decoration"
+                        runtimeScope={{
+                          blueprintId: blueprint.data.blueprint.id,
+                          blueprintVersion: blueprint.data.blueprint.version,
+                        }}
                       />
                     )}
                     values={resolved.data.values}
@@ -287,6 +291,10 @@ export const EntityPreviewPage = ({
                     context_id: selectedContextId,
                   }}
                   outlet="entity_action"
+                  runtimeScope={{
+                    blueprintId: blueprint.data.blueprint.id,
+                    blueprintVersion: blueprint.data.blueprint.version,
+                  }}
                 />
               </Box>
             </Box>
@@ -294,6 +302,8 @@ export const EntityPreviewPage = ({
         </>
       )}
       <EntityExtensionDrawer
+        blueprintId={resolved.data?.entity.blueprint_id ?? ''}
+        blueprintVersion={resolved.data?.entity.blueprint_version ?? 1}
         contextId={selectedContextId}
         entityId={entityId}
         onClose={() => setExtensionPanelOpen(false)}

@@ -4,5 +4,6 @@ export const extensionManagementQueryKeys = {
   registry: (owner: string, repository: string) =>
     ['extension-management', 'registry', owner, repository] as const,
   installed: () => ['extension-management', 'installed'] as const,
+  layout: () => ['extension-management', 'layout'] as const,
   detail: (id: string) => ['extension-management', 'detail', id] as const,
 };

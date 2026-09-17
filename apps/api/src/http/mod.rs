@@ -432,6 +432,11 @@ pub fn router(state: AppState) -> Router {
             get(workspace_navigation::configured).put(workspace_navigation::update),
         )
         .route(
+            "/workspace/extension-layout",
+            get(extensions::workspace_extension_layout)
+                .put(extensions::update_workspace_extension_layout),
+        )
+        .route(
             "/workspace/navigation/sidebar",
             get(workspace_navigation::sidebar),
         )

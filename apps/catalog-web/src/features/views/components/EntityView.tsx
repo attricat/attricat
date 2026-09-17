@@ -284,7 +284,8 @@ export const EntityView = ({
   if (
     !view ||
     view.type === viewBlockTypes.table ||
-    view.type === viewBlockTypes.dropdownOption
+    view.type === viewBlockTypes.dropdownOption ||
+    view.type === viewBlockTypes.extensionLayout
   )
     return <>{renderNodes(fallback)}</>;
 

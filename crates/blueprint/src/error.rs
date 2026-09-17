@@ -32,6 +32,8 @@ pub enum BlueprintError {
     MissingDropdownOptionView,
     #[error("views.dropdown_option must define at least one field")]
     EmptyDropdownOptionFields,
+    #[error("invalid extension layout view")]
+    InvalidExtensionLayout,
     #[error("views.dropdown_option contains duplicate field '{0}'")]
     DuplicateDropdownOptionField(String),
     #[error("attribute '{0}' has an invalid tag")]

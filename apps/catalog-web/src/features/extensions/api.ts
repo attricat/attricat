@@ -15,8 +15,17 @@ export {
   runtimeSchema,
 } from './schemas';
 
-export const getExtensionRuntime = () =>
-  request('/api/extensions/runtime', runtimeSchema);
+export type ExtensionRuntimeScope = {
+  blueprintId: string;
+  blueprintVersion: number;
+};
+
+export const getExtensionRuntime = (scope?: ExtensionRuntimeScope) => {
+  const query = scope
+    ? `?blueprint_id=${encodeURIComponent(scope.blueprintId)}&blueprint_version=${scope.blueprintVersion}`
+    : '';
+  return request(`/api/extensions/runtime${query}`, runtimeSchema);
+};
 
 export const getExtensionArtifact = async (
   extensionId: string,

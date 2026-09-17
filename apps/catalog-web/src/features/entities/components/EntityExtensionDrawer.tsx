@@ -4,12 +4,16 @@ import { useTranslation } from 'react-i18next';
 import { ExtensionOutlet } from '../../extensions/ExtensionOutlet';
 
 export const EntityExtensionDrawer = ({
+  blueprintId,
+  blueprintVersion,
   contextId,
   entityId,
   onClose,
   open,
   showContent,
 }: {
+  blueprintId: string;
+  blueprintVersion: number;
   contextId?: string;
   entityId: string;
   onClose: () => void;
@@ -39,6 +43,7 @@ export const EntityExtensionDrawer = ({
             <ExtensionOutlet
               context={{ entity_id: entityId, context_id: contextId }}
               outlet="entity_preview_panel"
+              runtimeScope={{ blueprintId, blueprintVersion }}
             />
           </Box>
         )}

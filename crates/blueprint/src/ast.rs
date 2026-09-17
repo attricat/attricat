@@ -46,6 +46,17 @@ pub struct ViewSection {
     pub children: Vec<ViewNode>,
 }
 
+/// Host-owned per-blueprint extension layout. It is declarative data only;
+/// contribution keys cannot select DOM nodes or invoke extension code.
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct ExtensionOutletLayout {
+    #[serde(default)]
+    pub order: Vec<String>,
+    #[serde(default)]
+    pub hidden: Vec<String>,
+}
+
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct IncomingRelationship {
@@ -94,6 +105,11 @@ pub enum ViewDefinition {
         sections: Vec<ViewSection>,
         #[serde(default)]
         component: Option<ComponentReference>,
+    },
+    /// A versioned layout override for entity-owned extension surfaces.
+    ExtensionLayout {
+        version: u32,
+        outlets: HashMap<String, ExtensionOutletLayout>,
     },
 }
 

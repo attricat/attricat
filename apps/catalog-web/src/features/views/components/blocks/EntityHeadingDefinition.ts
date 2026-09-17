@@ -12,7 +12,8 @@ export const findEntityHeading = (
   if (
     !view ||
     view.type === viewBlockTypes.table ||
-    view.type === viewBlockTypes.dropdownOption
+    view.type === viewBlockTypes.dropdownOption ||
+    view.type === viewBlockTypes.extensionLayout
   )
     return undefined;
   const visit = (node: ViewNode): ViewNode | undefined => {
