@@ -301,6 +301,7 @@
     "publicationChannel": "Kanał eksportu",
     "allEnabledChannels": "Wszystkie włączone kanały",
     "migrateCompatibleEntities": "Migruj zgodne encje",
+    "migrationInProgress": "Migracja w toku",
     "migrateCompatibleEntitiesDescription": "Uruchom migrację w tle z wersji {{source}} do wersji {{target}}. Każda encja zostanie ponownie zwalidowana przed migracją.",
     "startMigration": "Rozpocznij migrację",
     "startingMigration": "Rozpoczynanie migracji…",

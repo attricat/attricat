@@ -331,7 +331,9 @@ an older version of that blueprint, not only entities on the immediately
 preceding version. Each entity is migrated when its individual preview is
 `ready`; incompatible entities remain available for review. Open the blueprint
 in **Manage → Blueprints** and select the **Migrations** tab to inspect every
-batch for that blueprint.
+batch for that blueprint. While a batch for the current target version is
+`queued` or `running`, the migration action is disabled so another batch cannot
+be started for that version.
 
 The table shows the target version, current status, processed/total progress,
 migrated, needs-review and failed counts, creation/start/completion timestamps,

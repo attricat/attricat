@@ -24,6 +24,7 @@ import { PageContainer } from '../../components/PageContainer';
 import { PageHeader } from '../../components/PageHeader';
 import {
   getBlueprintRevision,
+  listBlueprintMigrationBatches,
   listBlueprintRevisions,
   publishBlueprintEntities,
   publishBlueprintEntitiesAllChannels,
@@ -31,6 +32,11 @@ import {
   startSafeBlueprintMigrationBatch,
 } from './api';
 import { formatBlueprintDateTime } from './date-time';
+import {
+  ACTIVE_MIGRATION_POLL_INTERVAL_MS,
+  hasActiveMigrationForVersion,
+  isMigrationBatchActive,
+} from './migration-batches';
 import { blueprintQueryKeys } from './query-keys';
 import { RevisionHistory } from './RevisionHistory';
 import { BlueprintVersionMetadata } from './BlueprintVersionMetadata';
@@ -135,6 +141,18 @@ export const BlueprintDetailPage = ({
   const latestPublished = revisionItems.find(
     (revision) => revision.status === 'published',
   );
+  const migrationBatches = useQuery({
+    queryKey: blueprintQueryKeys.migrationBatches(blueprintId),
+    queryFn: () => listBlueprintMigrationBatches(blueprintId),
+    refetchInterval: (query) =>
+      query.state.data?.some(isMigrationBatchActive)
+        ? ACTIVE_MIGRATION_POLL_INTERVAL_MS
+        : false,
+  });
+  const currentVersionMigrationActive = hasActiveMigrationForVersion(
+    migrationBatches.data,
+    latestPublished?.version,
+  );
   const safeMigrationSourceVersion = latestPublished
     ? latestPublished.version - 1
     : undefined;
@@ -211,10 +229,16 @@ export const BlueprintDetailPage = ({
                 )}
                 {canStartSafeMigration && (
                   <Button
+                    disabled={
+                      !migrationBatches.isSuccess ||
+                      currentVersionMigrationActive
+                    }
                     onClick={() => setSafeMigrationConfirmationOpen(true)}
                     variant="contained"
                   >
-                    {t('blueprints.migrateCompatibleEntities')}
+                    {currentVersionMigrationActive
+                      ? t('blueprints.migrationInProgress')
+                      : t('blueprints.migrateCompatibleEntities')}
                   </Button>
                 )}
               </Stack>
@@ -402,7 +426,7 @@ export const BlueprintDetailPage = ({
               id="blueprint-detail-tabpanel-3"
               role="tabpanel"
             >
-              <MigrationBatchStatus blueprintId={blueprintId} />
+              <MigrationBatchStatus batches={migrationBatches} />
             </Box>
           )}
           {(safeMigration.isError || publishEntities.isError) && (

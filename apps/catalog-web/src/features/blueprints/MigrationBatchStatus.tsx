@@ -1,5 +1,5 @@
 import RefreshIcon from '@mui/icons-material/Refresh';
-import { useQuery } from '@tanstack/react-query';
+import type { UseQueryResult } from '@tanstack/react-query';
 import {
   Alert,
   Button,
@@ -16,12 +16,8 @@ import {
   Typography,
 } from '@mui/material';
 import { useTranslation } from 'react-i18next';
-import { listBlueprintMigrationBatches } from './api';
 import { formatBlueprintDateTime } from './date-time';
-import { blueprintQueryKeys } from './query-keys';
 import type { BlueprintMigrationBatchStatus as MigrationBatch } from './schemas';
-
-const ACTIVE_MIGRATION_POLL_INTERVAL_MS = 2_000;
 
 const statusColor = (status: MigrationBatch['status']) => {
   if (status === 'completed') return 'success';
@@ -31,21 +27,11 @@ const statusColor = (status: MigrationBatch['status']) => {
 };
 
 export const MigrationBatchStatus = ({
-  blueprintId,
+  batches,
 }: {
-  blueprintId: string;
+  batches: UseQueryResult<MigrationBatch[], Error>;
 }) => {
   const { t } = useTranslation();
-  const batches = useQuery({
-    queryKey: blueprintQueryKeys.migrationBatches(blueprintId),
-    queryFn: () => listBlueprintMigrationBatches(blueprintId),
-    refetchInterval: (query) =>
-      query.state.data?.some((batch) =>
-        ['queued', 'running'].includes(batch.status),
-      )
-        ? ACTIVE_MIGRATION_POLL_INTERVAL_MS
-        : false,
-  });
   const emptyDate = t('blueprints.migrationNotStarted');
 
   return (

@@ -1,5 +1,9 @@
 // @vitest-environment jsdom
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import {
+  QueryClient,
+  QueryClientProvider,
+  useQuery,
+} from '@tanstack/react-query';
 import { render, screen } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import i18n from '../../i18n';
@@ -9,6 +13,14 @@ import { MigrationBatchStatus } from './MigrationBatchStatus';
 vi.mock('./api', () => ({ listBlueprintMigrationBatches: vi.fn() }));
 
 const blueprintId = '123e4567-e89b-12d3-a456-426614174000';
+
+const TestMigrationBatchStatus = () => {
+  const batches = useQuery({
+    queryKey: ['migration-batches'],
+    queryFn: () => listBlueprintMigrationBatches(blueprintId),
+  });
+  return <MigrationBatchStatus batches={batches} />;
+};
 
 describe('MigrationBatchStatus', () => {
   afterEach(async () => {
@@ -39,7 +51,7 @@ describe('MigrationBatchStatus', () => {
 
     render(
       <QueryClientProvider client={client}>
-        <MigrationBatchStatus blueprintId={blueprintId} />
+        <TestMigrationBatchStatus />
       </QueryClientProvider>,
     );
 

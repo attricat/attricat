@@ -297,6 +297,7 @@
     "publicationChannel": "Export channel",
     "allEnabledChannels": "All enabled channels",
     "migrateCompatibleEntities": "Migrate compatible entities",
+    "migrationInProgress": "Migration in progress",
     "migrateCompatibleEntitiesDescription": "Start a background migration from version {{source}} to version {{target}}. Each entity is validated again before it is migrated.",
     "startMigration": "Start migration",
     "startingMigration": "Starting migration…",
