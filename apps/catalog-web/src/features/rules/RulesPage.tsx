@@ -46,7 +46,7 @@ export const RulesPage = () => {
   });
   const findings = useQuery({
     queryKey: [...RULES_KEY, 'findings'],
-    queryFn: listFindings,
+    queryFn: () => listFindings(),
     enabled: canRead,
   });
   const refresh = () => queryClient.invalidateQueries({ queryKey: RULES_KEY });

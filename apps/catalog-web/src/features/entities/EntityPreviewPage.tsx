@@ -1,7 +1,14 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link } from '@tanstack/react-router';
 import { BlueprintIcon } from '../../components/system-icons';
-import { Alert, Box, CircularProgress, Paper, Tooltip } from '@mui/material';
+import {
+  Alert,
+  Box,
+  Chip,
+  CircularProgress,
+  Paper,
+  Tooltip,
+} from '@mui/material';
 import { createElement, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { PageContainer } from '../../components/PageContainer';
@@ -32,6 +39,7 @@ import { attributeLabel } from './entity-display';
 import { entityQueryKeys } from './query-keys';
 import { EntityView } from '../views/components/EntityView';
 import { RelationshipPickerActionBar } from './components/RelationshipPickerActionBar';
+import { listFindings } from '../rules/api';
 import {
   entityHeadingComponentId,
   findEntityHeading,
@@ -118,6 +126,10 @@ export const EntityPreviewPage = ({
     },
     enabled: Boolean(resolved.data?.entity.blueprint_id),
   });
+  const findings = useQuery({
+    queryKey: ['rules', 'findings', entityId],
+    queryFn: () => listFindings(entityId),
+  });
   const detailView = blueprint.data?.blueprint.views.detail;
   const heading = findEntityHeading(detailView);
   const HeadingRenderer = resolveHeadingRenderer(heading?.component);
@@ -131,19 +143,28 @@ export const EntityPreviewPage = ({
     <PageContainer>
       <PageHeader
         actions={
-          blueprint.data && (
-            <Tooltip title={blueprint.data.blueprint.name}>
-              <RouterButton
-                params={{ blueprintId: blueprint.data.blueprint.id }}
+          <>
+            {findings.data?.some((finding) => finding.state !== 'resolved') && (
+              <Chip
+                color="warning"
+                label={`${findings.data.filter((finding) => finding.state !== 'resolved').length} data quality finding(s)`}
                 size="small"
-                startIcon={<BlueprintIcon />}
-                to="/manage/blueprints/$blueprintId"
-                variant="text"
-              >
-                {t('entities.blueprint')}: {blueprint.data.blueprint.name}
-              </RouterButton>
-            </Tooltip>
-          )
+              />
+            )}
+            {blueprint.data && (
+              <Tooltip title={blueprint.data.blueprint.name}>
+                <RouterButton
+                  params={{ blueprintId: blueprint.data.blueprint.id }}
+                  size="small"
+                  startIcon={<BlueprintIcon />}
+                  to="/manage/blueprints/$blueprintId"
+                  variant="text"
+                >
+                  {t('entities.blueprint')}: {blueprint.data.blueprint.name}
+                </RouterButton>
+              </Tooltip>
+            )}
+          </>
         }
         eyebrow={
           blueprint.data ? (
