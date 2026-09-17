@@ -41,6 +41,9 @@ import { Route as ManageContextsIndexRouteImport } from './routes/manage/context
 import { Route as ManageContextsNewRouteImport } from './routes/manage/contexts/new'
 import { Route as ManageExtensionsIndexRouteImport } from './routes/manage/extensions/index'
 import { Route as ManageExtensionsExtensionIdRouteImport } from './routes/manage/extensions/$extensionId'
+import { Route as ManageExtensionsInstalledRouteImport } from './routes/manage/extensions/installed'
+import { Route as ManageExtensionsLayoutRouteImport } from './routes/manage/extensions/layout'
+import { Route as ManageExtensionsMarketplaceRouteImport } from './routes/manage/extensions/marketplace'
 import { Route as ManageExtensionsSideloadRouteImport } from './routes/manage/extensions/sideload'
 import { Route as ManageReusableAttributesIndexRouteImport } from './routes/manage/reusable-attributes/index'
 import { Route as ManageReusableAttributesDefinitionIdRouteImport } from './routes/manage/reusable-attributes/$definitionId'
@@ -226,6 +229,23 @@ const ManageExtensionsExtensionIdRoute =
     path: '/manage/extensions/$extensionId',
     getParentRoute: () => rootRouteImport,
   } as any)
+const ManageExtensionsInstalledRoute =
+  ManageExtensionsInstalledRouteImport.update({
+    id: '/manage/extensions/installed',
+    path: '/manage/extensions/installed',
+    getParentRoute: () => rootRouteImport,
+  } as any)
+const ManageExtensionsLayoutRoute = ManageExtensionsLayoutRouteImport.update({
+  id: '/manage/extensions/layout',
+  path: '/manage/extensions/layout',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ManageExtensionsMarketplaceRoute =
+  ManageExtensionsMarketplaceRouteImport.update({
+    id: '/manage/extensions/marketplace',
+    path: '/manage/extensions/marketplace',
+    getParentRoute: () => rootRouteImport,
+  } as any)
 const ManageExtensionsSideloadRoute =
   ManageExtensionsSideloadRouteImport.update({
     id: '/manage/extensions/sideload',
@@ -368,6 +388,9 @@ export interface FileRoutesByFullPath {
   '/manage/blueprints/new': typeof ManageBlueprintsNewRoute
   '/manage/contexts/new': typeof ManageContextsNewRoute
   '/manage/extensions/$extensionId': typeof ManageExtensionsExtensionIdRoute
+  '/manage/extensions/installed': typeof ManageExtensionsInstalledRoute
+  '/manage/extensions/layout': typeof ManageExtensionsLayoutRoute
+  '/manage/extensions/marketplace': typeof ManageExtensionsMarketplaceRoute
   '/manage/extensions/sideload': typeof ManageExtensionsSideloadRoute
   '/manage/reusable-attributes/$definitionId': typeof ManageReusableAttributesDefinitionIdRoute
   '/manage/reusable-attributes/new': typeof ManageReusableAttributesNewRoute
@@ -418,6 +441,9 @@ export interface FileRoutesByTo {
   '/manage/blueprints/new': typeof ManageBlueprintsNewRoute
   '/manage/contexts/new': typeof ManageContextsNewRoute
   '/manage/extensions/$extensionId': typeof ManageExtensionsExtensionIdRoute
+  '/manage/extensions/installed': typeof ManageExtensionsInstalledRoute
+  '/manage/extensions/layout': typeof ManageExtensionsLayoutRoute
+  '/manage/extensions/marketplace': typeof ManageExtensionsMarketplaceRoute
   '/manage/extensions/sideload': typeof ManageExtensionsSideloadRoute
   '/manage/reusable-attributes/$definitionId': typeof ManageReusableAttributesDefinitionIdRoute
   '/manage/reusable-attributes/new': typeof ManageReusableAttributesNewRoute
@@ -472,6 +498,9 @@ export interface FileRoutesById {
   '/manage/blueprints/new': typeof ManageBlueprintsNewRoute
   '/manage/contexts/new': typeof ManageContextsNewRoute
   '/manage/extensions/$extensionId': typeof ManageExtensionsExtensionIdRoute
+  '/manage/extensions/installed': typeof ManageExtensionsInstalledRoute
+  '/manage/extensions/layout': typeof ManageExtensionsLayoutRoute
+  '/manage/extensions/marketplace': typeof ManageExtensionsMarketplaceRoute
   '/manage/extensions/sideload': typeof ManageExtensionsSideloadRoute
   '/manage/reusable-attributes/$definitionId': typeof ManageReusableAttributesDefinitionIdRoute
   '/manage/reusable-attributes/new': typeof ManageReusableAttributesNewRoute
@@ -528,6 +557,9 @@ export interface FileRouteTypes {
     | '/manage/blueprints/new'
     | '/manage/contexts/new'
     | '/manage/extensions/$extensionId'
+    | '/manage/extensions/installed'
+    | '/manage/extensions/layout'
+    | '/manage/extensions/marketplace'
     | '/manage/extensions/sideload'
     | '/manage/reusable-attributes/$definitionId'
     | '/manage/reusable-attributes/new'
@@ -578,6 +610,9 @@ export interface FileRouteTypes {
     | '/manage/blueprints/new'
     | '/manage/contexts/new'
     | '/manage/extensions/$extensionId'
+    | '/manage/extensions/installed'
+    | '/manage/extensions/layout'
+    | '/manage/extensions/marketplace'
     | '/manage/extensions/sideload'
     | '/manage/reusable-attributes/$definitionId'
     | '/manage/reusable-attributes/new'
@@ -631,6 +666,9 @@ export interface FileRouteTypes {
     | '/manage/blueprints/new'
     | '/manage/contexts/new'
     | '/manage/extensions/$extensionId'
+    | '/manage/extensions/installed'
+    | '/manage/extensions/layout'
+    | '/manage/extensions/marketplace'
     | '/manage/extensions/sideload'
     | '/manage/reusable-attributes/$definitionId'
     | '/manage/reusable-attributes/new'
@@ -679,6 +717,9 @@ export interface RootRouteChildren {
   ManageBlueprintsNewRoute: typeof ManageBlueprintsNewRoute
   ManageContextsNewRoute: typeof ManageContextsNewRoute
   ManageExtensionsExtensionIdRoute: typeof ManageExtensionsExtensionIdRoute
+  ManageExtensionsInstalledRoute: typeof ManageExtensionsInstalledRoute
+  ManageExtensionsLayoutRoute: typeof ManageExtensionsLayoutRoute
+  ManageExtensionsMarketplaceRoute: typeof ManageExtensionsMarketplaceRoute
   ManageExtensionsSideloadRoute: typeof ManageExtensionsSideloadRoute
   ManageReusableAttributesDefinitionIdRoute: typeof ManageReusableAttributesDefinitionIdRoute
   ManageReusableAttributesNewRoute: typeof ManageReusableAttributesNewRoute
@@ -926,6 +967,27 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ManageExtensionsExtensionIdRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/manage/extensions/installed': {
+      id: '/manage/extensions/installed'
+      path: '/manage/extensions/installed'
+      fullPath: '/manage/extensions/installed'
+      preLoaderRoute: typeof ManageExtensionsInstalledRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/manage/extensions/layout': {
+      id: '/manage/extensions/layout'
+      path: '/manage/extensions/layout'
+      fullPath: '/manage/extensions/layout'
+      preLoaderRoute: typeof ManageExtensionsLayoutRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/manage/extensions/marketplace': {
+      id: '/manage/extensions/marketplace'
+      path: '/manage/extensions/marketplace'
+      fullPath: '/manage/extensions/marketplace'
+      preLoaderRoute: typeof ManageExtensionsMarketplaceRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/manage/extensions/sideload': {
       id: '/manage/extensions/sideload'
       path: '/manage/extensions/sideload'
@@ -1170,6 +1232,9 @@ const rootRouteChildren: RootRouteChildren = {
   ManageBlueprintsNewRoute: ManageBlueprintsNewRoute,
   ManageContextsNewRoute: ManageContextsNewRoute,
   ManageExtensionsExtensionIdRoute: ManageExtensionsExtensionIdRoute,
+  ManageExtensionsInstalledRoute: ManageExtensionsInstalledRoute,
+  ManageExtensionsLayoutRoute: ManageExtensionsLayoutRoute,
+  ManageExtensionsMarketplaceRoute: ManageExtensionsMarketplaceRoute,
   ManageExtensionsSideloadRoute: ManageExtensionsSideloadRoute,
   ManageReusableAttributesDefinitionIdRoute:
     ManageReusableAttributesDefinitionIdRoute,
