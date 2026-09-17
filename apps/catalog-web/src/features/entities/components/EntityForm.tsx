@@ -26,6 +26,7 @@ import { EntityView } from '../../views/components/EntityView';
 import { useState, type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
 import { EntityAttributeEditor } from './EntityAttributeEditor';
+import { isHiddenByDefault } from '../attribute-visibility';
 
 type EntityFormProps = {
   blueprint?: BlueprintWithAttributes;
@@ -82,6 +83,10 @@ export const EntityForm = ({
   const { t } = useTranslation();
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
   const [formError, setFormError] = useState<string>();
+  const editView = blueprint?.blueprint.views.edit;
+  const usesDefaultEditView = Boolean(
+    blueprint && !showAllAttributes && !editView,
+  );
   const blueprints = useQuery({
     queryKey: entityQueryKeys.blueprints(),
     queryFn: ({ signal }) => listEntityBlueprints(signal),
@@ -96,7 +101,10 @@ export const EntityForm = ({
       (attribute) =>
         !attribute.readonly &&
         (contextId === defaultContextId ||
-          attribute.context_editable !== 'default'),
+          attribute.context_editable !== 'default') &&
+        (!usesDefaultEditView ||
+          attribute.code.includes(':') ||
+          !isHiddenByDefault(attribute, 'form')),
     );
     return validateEntityForm(
       editableAttributes,
@@ -128,7 +136,10 @@ export const EntityForm = ({
           (attribute) =>
             !attribute.readonly &&
             (contextId === defaultContextId ||
-              attribute.context_editable !== 'default'),
+              attribute.context_editable !== 'default') &&
+            (!usesDefaultEditView ||
+              attribute.code.includes(':') ||
+              !isHiddenByDefault(attribute, 'form')),
         );
         const validation = validateFields(value.fields);
         setFieldErrors(validation.fieldErrors);
@@ -221,11 +232,10 @@ export const EntityForm = ({
                 <EntityView
                   attributes={blueprint.attributes}
                   values={resolvedValues}
-                  view={
-                    showAllAttributes
-                      ? undefined
-                      : blueprint.blueprint.views.edit
+                  fallbackVisibilityScope={
+                    showAllAttributes ? undefined : 'form'
                   }
+                  view={showAllAttributes ? undefined : editView}
                   renderEditor={(attribute) => {
                     const value = field.state.value[attribute.code] ?? '';
                     const localValueExists = existingValues.some(

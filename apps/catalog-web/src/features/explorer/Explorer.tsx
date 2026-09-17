@@ -49,6 +49,7 @@ import { getLastBlueprint, setLastBlueprint } from './last-blueprint';
 import { currentSession } from '../auth/api';
 import { authQueryKeys } from '../auth/query-keys';
 import { ApiRequestError } from '../../api/request';
+import { isHiddenByDefault } from '../entities/attribute-visibility';
 
 export const Explorer = ({ search: urlSearch }: { search: ExplorerSearch }) => {
   const { t } = useTranslation();
@@ -136,9 +137,9 @@ export const Explorer = ({ search: urlSearch }: { search: ExplorerSearch }) => {
     }
   }, [navigate, revisions.data, search]);
 
-  const relationshipFields = (selectedBlueprint.data?.attributes ?? []).filter(
-    isRelationshipFilterAttribute,
-  );
+  const relationshipFields = (selectedBlueprint.data?.attributes ?? [])
+    .filter(isRelationshipFilterAttribute)
+    .filter((attribute) => !isHiddenByDefault(attribute, 'explorer'));
   const facetContextCode = search.context ?? defaultContextCode;
   const facetContextId = contexts.data?.find(
     (context) => context.code === facetContextCode,
