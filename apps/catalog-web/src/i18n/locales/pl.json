@@ -34,6 +34,7 @@
     "extensions": "Rozszerzenia",
     "exports": "Eksporty",
     "workflows": "Przepływy pracy",
+    "rules": "Reguły jakości danych",
     "profile": "Profil",
     "workspaceManagement": "Zarządzanie obszarem roboczym",
     "dashboard": "Panel",
@@ -594,7 +595,8 @@
     "governanceDescription": "Przeglądaj aktywność i historię audytu.",
     "extensionsTitle": "Rozszerzenia",
     "extensionsDescription": "Zarządzaj zainstalowanymi integracjami i ich uprawnieniami.",
-    "workflowsDescription": "Twórz i bezpiecznie obsługuj wersjonowane definicje przepływów pracy."
+    "workflowsDescription": "Twórz i bezpiecznie obsługuj wersjonowane definicje przepływów pracy.",
+    "rulesDescription": "Twórz i obsługuj katalogowe reguły jakości danych."
   },
   "profile": {
     "never": "Nigdy",
