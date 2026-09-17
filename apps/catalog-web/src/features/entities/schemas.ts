@@ -246,6 +246,7 @@ export const attributeSchema = z
     context_fallback: z.enum(['default', 'none']).optional(),
     context_editable: z.enum(['all', 'default']).optional(),
     readonly: z.boolean().optional(),
+    tags: z.array(z.string()).default([]),
     value_schema: jsonSchemaSchema.nullish(),
     file_policy: z
       .object({

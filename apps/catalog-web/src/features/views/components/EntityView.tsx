@@ -29,6 +29,10 @@ import {
 import { attributeLabel } from '../../entities/entity-display';
 import { AttributeValue } from './values/AttributeValue';
 import { IncomingRelationshipListDisplay } from './IncomingRelationshipListDisplay';
+import {
+  isHiddenByDefault,
+  type AttributeVisibilityScope,
+} from '../../entities/attribute-visibility';
 
 type ResolvedValue = {
   value: unknown;
@@ -43,6 +47,7 @@ type Props = {
   skipComponentId?: string;
   contextId?: string;
   entityId?: string;
+  fallbackVisibilityScope?: AttributeVisibilityScope;
 };
 
 const ValueField = ({
@@ -158,15 +163,22 @@ export const EntityView = ({
   skipComponentId,
   contextId,
   entityId,
+  fallbackVisibilityScope,
 }: Props) => {
   const { t } = useTranslation();
   const byCode = new Map(
     attributes.map((attribute) => [attribute.code, attribute]),
   );
-  const fallback: ViewNode[] = attributes.map((attribute) => ({
-    type: viewBlockTypes.field,
-    field: attribute.code,
-  }));
+  const fallback: ViewNode[] = attributes
+    .filter(
+      (attribute) =>
+        !fallbackVisibilityScope ||
+        !isHiddenByDefault(attribute, fallbackVisibilityScope),
+    )
+    .map((attribute) => ({
+      type: viewBlockTypes.field,
+      field: attribute.code,
+    }));
   const renderNodes = (nodes: ViewNode[]): ReactNode => (
     <Stack spacing={2}>
       {nodes.map((node, index) => renderNode(node, `${node.type}-${index}`))}

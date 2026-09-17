@@ -57,6 +57,34 @@ readonly = true
 Blank contextual string fields remove their override instead of storing an empty
 string. Missing contextual values resolve according to `context_fallback`.
 
+### Attribute tags
+
+Attribute `tags` are free-form metadata for Catalog extensions and domain
+integrations. Catalog reserves the following visibility tags as default UI
+hints:
+
+| Tag | Default omission surface |
+| --- | --- |
+| `hidden` | Every native default surface listed below |
+| `hidden:form` | Fallback create and edit forms |
+| `hidden:detail` | Fallback entity preview/detail views |
+| `hidden:explorer` | Explorer facet and filter candidates |
+| `hidden:metadata` | The blueprint Attributes metadata table |
+
+Tags compose: `hidden` applies to every surface, while a scoped tag applies only
+to its named surface. They affect automatic/fallback discovery only; an
+explicit blueprint view may deliberately render a tagged attribute. Tags are
+not access control: attribute metadata and values remain available through the
+API, CLI, agents, and extensions according to their existing permissions. Raw
+blueprint TOML remains available to blueprint administrators.
+
+```toml
+[[attributes]]
+code = "price_amount"
+value_type = "integer"
+tags = ["hidden:form", "hidden:detail"]
+```
+
 Scalar attributes may set `default_value`. The value is stored in the default
 context when an entity is created, unless the create request supplies a value
 for that attribute in the default context. Defaults support `string`, `number`,
