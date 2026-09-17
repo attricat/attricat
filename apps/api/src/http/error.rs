@@ -322,7 +322,8 @@ impl From<RepositoryError> for ApiError {
             },
             RepositoryError::ReusableAttributeAlreadyAttached
             | RepositoryError::BlueprintCodeTaken
-            | RepositoryError::WorkflowCodeTaken => Self {
+            | RepositoryError::WorkflowCodeTaken
+            | RepositoryError::RuleCodeTaken => Self {
                 status: StatusCode::CONFLICT,
                 code: "conflict",
                 message: error.to_string(),

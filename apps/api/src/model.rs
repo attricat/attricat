@@ -800,3 +800,74 @@ pub struct CreateManualWorkflowRun {
     /// Client-generated opaque key. Reusing it retries the same durable run.
     pub idempotency_key: String,
 }
+
+#[derive(Clone, Debug, Deserialize, FromRow, Serialize)]
+pub struct Rule {
+    pub id: Uuid,
+    pub blueprint_id: Uuid,
+    pub blueprint_version: i64,
+    pub context_id: Option<Uuid>,
+    pub code: String,
+    pub name: String,
+    pub version: i64,
+    pub status: String,
+    pub definition: String,
+    pub definition_hash: String,
+    pub compiled_plan: Value,
+    pub published_at: Option<DateTime<Utc>>,
+    pub created_at: DateTime<Utc>,
+    pub enabled_version: Option<i64>,
+}
+
+#[derive(Clone, Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct CreateRule {
+    pub blueprint_id: Uuid,
+    pub blueprint_version: i64,
+    pub context_id: Option<Uuid>,
+    pub definition: String,
+}
+
+#[derive(Clone, Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct CreateManualRuleRun {
+    pub entity_id: Option<Uuid>,
+    pub dry_run: bool,
+    pub idempotency_key: String,
+}
+
+#[derive(Clone, Debug, Serialize, FromRow)]
+pub struct RuleRun {
+    pub id: Uuid,
+    pub rule_id: Uuid,
+    pub rule_version: i64,
+    pub source: String,
+    pub dry_run: bool,
+    pub scope_entity_id: Option<Uuid>,
+    pub status: String,
+    pub candidate_cursor: Option<Uuid>,
+    pub candidates_evaluated: i64,
+    pub findings_created: i64,
+    pub findings_resolved: i64,
+    pub attempts: i32,
+    pub last_error: Option<String>,
+    pub completed_at: Option<DateTime<Utc>>,
+    pub created_at: DateTime<Utc>,
+}
+
+#[derive(Clone, Debug, Serialize, FromRow)]
+pub struct RuleFinding {
+    pub id: Uuid,
+    pub rule_id: Uuid,
+    pub rule_version: i64,
+    pub entity_id: Uuid,
+    pub context_id: Option<Uuid>,
+    pub severity: String,
+    pub message: String,
+    pub evidence: Value,
+    pub state: String,
+    pub acknowledged_at: Option<DateTime<Utc>>,
+    pub resolved_at: Option<DateTime<Utc>>,
+    pub created_at: DateTime<Utc>,
+    pub updated_at: DateTime<Utc>,
+}

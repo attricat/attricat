@@ -19,6 +19,8 @@ const sessionSchema = z.object({
       extensions_manage: z.boolean(),
       workflows_read: z.boolean().default(false),
       workflows_manage: z.boolean().default(false),
+      rules_read: z.boolean().default(false),
+      rules_manage: z.boolean().default(false),
       entities_publish: z.boolean().default(false),
     })
     .optional(),

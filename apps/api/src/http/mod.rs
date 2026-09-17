@@ -16,6 +16,7 @@ mod files;
 mod members;
 mod reusable_attributes;
 mod roles;
+mod rules;
 mod sessions;
 mod tokens;
 mod workflows;
@@ -502,6 +503,26 @@ pub fn router(state: AppState) -> Router {
         .route(
             "/blueprints",
             get(blueprints::list_entity_blueprints).post(blueprints::create_blueprint),
+        )
+        .route("/rules", get(rules::list).post(rules::create))
+        .route("/rules/validate", post(rules::validate))
+        .route("/rules/{rule_id}", get(rules::get))
+        .route("/rules/{rule_id}/versions", post(rules::create_revision))
+        .route(
+            "/rules/{rule_id}/versions/{version}/publish",
+            post(rules::publish),
+        )
+        .route(
+            "/rules/{rule_id}/versions/{version}/enable",
+            post(rules::enable),
+        )
+        .route("/rules/{rule_id}/disable", post(rules::disable))
+        .route("/rules/{rule_id}/run-now", post(rules::run_now))
+        .route("/rule-runs", get(rules::list_runs))
+        .route("/rule-findings", get(rules::findings))
+        .route(
+            "/rule-findings/{finding_id}/acknowledge",
+            post(rules::acknowledge),
         )
         .route("/workflows", get(workflows::list).post(workflows::create))
         .route("/workflows/validate", post(workflows::validate))

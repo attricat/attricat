@@ -4,6 +4,7 @@ import { BlueprintIcon } from '../../components/system-icons';
 import {
   Alert,
   Box,
+  Chip,
   CircularProgress,
   Paper,
   Tooltip,
@@ -26,6 +27,7 @@ import {
 import { listContexts } from '../contexts/api';
 import { contextQueryKeys } from '../contexts/query-keys';
 import { defaultContextCode } from '../contexts/constants';
+import { listFindings } from '../rules/api';
 import {
   getBlueprintRevision,
   getCurrentBlueprint,
@@ -125,6 +127,10 @@ export const EntityPreviewPage = ({
     },
     enabled: Boolean(resolved.data?.entity.blueprint_id),
   });
+  const findings = useQuery({
+    queryKey: ['rules', 'findings', entityId],
+    queryFn: () => listFindings(entityId),
+  });
   const detailView = blueprint.data?.blueprint.views.detail;
   const heading = findEntityHeading(detailView);
   const HeadingRenderer = resolveHeadingRenderer(heading?.component);
@@ -138,7 +144,15 @@ export const EntityPreviewPage = ({
     <PageContainer>
       <PageHeader
         actions={
-          blueprint.data && (
+          <>
+            {findings.data?.some((finding) => finding.state !== 'resolved') && (
+              <Chip
+                color="warning"
+                label={`${findings.data.filter((finding) => finding.state !== 'resolved').length} data quality finding(s)`}
+                size="small"
+              />
+            )}
+            {blueprint.data && (
             <Tooltip title={blueprint.data.blueprint.name}>
               <RouterButton
                 params={{ blueprintId: blueprint.data.blueprint.id }}
@@ -150,7 +164,8 @@ export const EntityPreviewPage = ({
                 {t('entities.blueprint')}: {blueprint.data.blueprint.name}
               </RouterButton>
             </Tooltip>
-          )
+            )}
+          </>
         }
         eyebrow={
           blueprint.data ? (

@@ -34,6 +34,7 @@
     "extensions": "Extensions",
     "exports": "Exports",
     "workflows": "Workflows",
+    "rules": "Data quality rules",
     "profile": "Profile",
     "workspaceManagement": "Workspace management",
     "dashboard": "Dashboard",
@@ -618,6 +619,7 @@
     "extensionsTitle": "Extensions",
     "extensionsDescription": "Manage installed integrations and their permissions.",
     "workflowsDescription": "Create and safely operate versioned workflow definitions.",
+    "rulesDescription": "Author and operate catalog-owned data quality rules.",
     "reusableAttributesDescription": "Create reusable attribute definitions, revisions, and groups."
   },
   "profile": {

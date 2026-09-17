@@ -126,6 +126,7 @@ dependencies = [
  "base64 0.22.1",
  "bytes",
  "catalog-blueprint",
+ "catalog-rules",
  "catalog-validation",
  "catalog-workflow",
  "chrono",
@@ -894,12 +895,26 @@ dependencies = [
 name = "catalog-blueprint"
 version = "0.1.0"
 dependencies = [
+ "catalog-rules",
  "catalog-validation",
  "serde",
  "serde_json",
  "sha2 0.10.9",
  "thiserror 2.0.20",
  "toml",
+]
+
+[[package]]
+name = "catalog-rules"
+version = "0.1.0"
+dependencies = [
+ "catalog-validation",
+ "cron",
+ "serde",
+ "sha2 0.10.9",
+ "thiserror 2.0.20",
+ "toml",
+ "uuid",
 ]
 
 [[package]]

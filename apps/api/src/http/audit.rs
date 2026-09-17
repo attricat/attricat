@@ -92,6 +92,8 @@ fn audit_permission(method: &Method, route: &str) -> &'static str {
         "extensions.manage"
     } else if route.starts_with("/workflows") {
         "workflows.manage"
+    } else if route.starts_with("/rules") || route.starts_with("/rule-findings") {
+        "rules.manage"
     } else if route.starts_with("/blueprints") {
         if route.ends_with("/publish") {
             "blueprints.publish"

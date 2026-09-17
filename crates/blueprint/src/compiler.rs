@@ -147,6 +147,7 @@ pub fn compile(
         includes: definition.includes,
         views: definition.views,
         entity_schema: definition.entity_schema,
+        rules: definition.rules,
         attributes,
     })
 }

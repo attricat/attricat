@@ -199,6 +199,27 @@ impl CatalogRepository {
         .fetch_one(&mut **transaction)
         .await?;
 
+        // Blueprint TOML owns rule definitions. A rule family is stable by
+        // blueprint/code; each blueprint revision contributes an immutable rule revision.
+        for rule in &compiled.rules {
+            let existing: Option<(Uuid, i64)> = sqlx::query_as("SELECT id, max(version) FROM rules WHERE workspace_id=$1 AND blueprint_id=$2 AND code=$3 GROUP BY id")
+                .bind(self.workspace_id.unwrap_or(Self::DEFAULT_WORKSPACE_ID)).bind(blueprint_id).bind(&rule.code).fetch_optional(&mut **transaction).await?;
+            let (rule_id, rule_version) = existing
+                .map(|(id, version)| (id, version + 1))
+                .unwrap_or_else(|| (Uuid::new_v4(), 1));
+            let plan = serde_json::to_value(rule)
+                .map_err(|error| RepositoryError::InvalidRuleDefinition(error.to_string()))?;
+            sqlx::query("INSERT INTO rules(id,workspace_id,blueprint_id,blueprint_version,code,name,version,definition,definition_hash,compiled_plan) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)")
+                .bind(rule_id).bind(self.workspace_id.unwrap_or(Self::DEFAULT_WORKSPACE_ID)).bind(blueprint_id).bind(version).bind(&rule.code).bind(&rule.name).bind(rule_version).bind(toml::to_string(rule).map_err(|error| RepositoryError::InvalidRuleDefinition(error.to_string()))?).bind(&rule.raw_definition_hash).bind(plan).execute(&mut **transaction).await?;
+            if existing.is_none() {
+                sqlx::query("INSERT INTO rule_lifecycles(rule_id,workspace_id) VALUES($1,$2)")
+                    .bind(rule_id)
+                    .bind(self.workspace_id.unwrap_or(Self::DEFAULT_WORKSPACE_ID))
+                    .execute(&mut **transaction)
+                    .await?;
+            }
+        }
+
         let mut attributes = Vec::with_capacity(compiled.attributes.len());
         for attribute in compiled.attributes {
             validate_attribute_default_value(&attribute)?;
@@ -438,6 +459,8 @@ impl CatalogRepository {
             .bind(self.workspace_id.unwrap_or(Self::DEFAULT_WORKSPACE_ID))
             .execute(&mut *transaction)
             .await?;
+            sqlx::query("UPDATE rules SET status='published',published_at=COALESCE(published_at,now()) WHERE workspace_id=$1 AND blueprint_id=$2 AND blueprint_version=$3")
+                .bind(self.workspace_id.unwrap_or(Self::DEFAULT_WORKSPACE_ID)).bind(blueprint_id).bind(version).execute(&mut *transaction).await?;
             self.commit_mutation_with_event(
                 transaction,
                 blueprint_event(self, BLUEPRINT_PUBLISHED_V1, &blueprint),

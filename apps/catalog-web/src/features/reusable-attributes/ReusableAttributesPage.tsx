@@ -187,7 +187,9 @@ export const ReusableAttributesPage = () => {
                     <TableCell>{attribute.value_type}</TableCell>
                     <TableCell><Chip color={attribute.status === 'published' ? 'success' : 'warning'} label={attribute.status} size="small" /></TableCell>
                     <TableCell align="right">
-                      <Button component={Link} params={{ definitionId: attribute.definition_id }} size="small" to="/manage/reusable-attributes/$definitionId">Edit</Button>
+                      <Button size="small">
+                        <Link params={{ definitionId: attribute.definition_id }} to="/manage/reusable-attributes/$definitionId">Edit</Link>
+                      </Button>
                       {attribute.status === 'draft' && <Button disabled={publish.isPending} onClick={() => publish.mutate(attribute.id)} size="small" startIcon={<PublishIcon />}>Publish</Button>}
                     </TableCell>
                   </TableRow>

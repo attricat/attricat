@@ -9,6 +9,7 @@ import {
   ExportIcon,
   ProfileIcon,
   ReusableAttributeIcon,
+  RuleIcon,
   WorkflowIcon,
   WorkspaceIcon,
 } from './system-icons';
@@ -20,6 +21,7 @@ type NavigationCapabilities = {
   roles_manage?: boolean;
   tokens_manage?: boolean;
   workflows_read?: boolean;
+  rules_read?: boolean;
 };
 
 export const navigationRoutes = {
@@ -33,6 +35,7 @@ export const navigationRoutes = {
   exports: '/manage/exports',
   manage: '/manage',
   profile: '/profile',
+  rules: '/manage/rules',
   reusableAttributes: '/manage/reusable-attributes',
   workflows: '/manage/workflows',
   workspace: '/manage/workspace/members',
@@ -101,6 +104,12 @@ export const managementNavigationItems = [
     to: navigationRoutes.extensions,
   },
   {
+    descriptionKey: 'management.rulesDescription',
+    icon: RuleIcon,
+    labelKey: 'navigation.rules',
+    to: navigationRoutes.rules,
+  },
+  {
     descriptionKey: 'management.workflowsDescription',
     icon: WorkflowIcon,
     labelKey: 'navigation.workflows',
@@ -130,5 +139,6 @@ export const getVisibleManagementNavigationItems = (
       return capabilities?.extensions_read;
     if (item.to === navigationRoutes.workflows)
       return capabilities?.workflows_read;
+    if (item.to === navigationRoutes.rules) return capabilities?.rules_read;
     return true;
   });
