@@ -7,9 +7,7 @@ use serde_json::{Map, Value};
 use std::collections::{HashMap, HashSet};
 use uuid::Uuid;
 
-type FileReferenceKey = (String, Option<Uuid>);
-type FileReferencesByAttribute = HashMap<FileReferenceKey, Vec<(Uuid, i32)>>;
-type ReusableFileReferencesByAttribute = HashMap<(Uuid, Option<Uuid>), Vec<(Uuid, i32)>>;
+type AttributeContextKey = (String, Option<Uuid>);
 
 impl CatalogRepository {
     pub async fn preview_entity_migration(
@@ -41,6 +39,12 @@ impl CatalogRepository {
             .list_attributes(entity.blueprint_id, entity.blueprint_version)
             .await?;
         let values = self.form_values(entity_id).await?;
+        let default_context_id = sqlx::query_scalar::<_, Uuid>(
+            "SELECT id FROM attribute_contexts WHERE workspace_id = $1 AND code = 'default'",
+        )
+        .bind(self.workspace_id.unwrap_or(Self::DEFAULT_WORKSPACE_ID))
+        .fetch_one(&self.pool)
+        .await?;
         let target_attributes: HashMap<_, _> = target
             .attributes
             .iter()
@@ -48,10 +52,22 @@ impl CatalogRepository {
             .collect();
         let mut issues = Vec::new();
         for value in &values {
-            let attribute_code = match value {
-                FormAttributeValue::Scalar { attribute_code, .. }
-                | FormAttributeValue::Relationship { attribute_code, .. }
-                | FormAttributeValue::File { attribute_code, .. } => attribute_code,
+            let (attribute_code, context_id) = match value {
+                FormAttributeValue::Scalar {
+                    attribute_code,
+                    context_id,
+                    ..
+                }
+                | FormAttributeValue::Relationship {
+                    attribute_code,
+                    context_id,
+                    ..
+                }
+                | FormAttributeValue::File {
+                    attribute_code,
+                    context_id,
+                    ..
+                } => (attribute_code, context_id),
             };
             let source = source_attributes
                 .iter()
@@ -79,6 +95,41 @@ impl CatalogRepository {
                         attribute_code: Some(source.code.clone()),
                         kind: "relationship_target_changed".to_owned(),
                         message: "The relationship target blueprint changed in the target revision"
+                            .to_owned(),
+                    });
+                }
+                Some(target)
+                    if source.value_type == "relationship"
+                        && (target.cardinality != source.cardinality
+                            || target.target_cardinality != source.target_cardinality) =>
+                {
+                    issues.push(MigrationIssue {
+                        attribute_code: Some(source.code.clone()),
+                        kind: "relationship_cardinality_changed".to_owned(),
+                        message: "The relationship cardinality changed in the target revision"
+                            .to_owned(),
+                    });
+                }
+                Some(target)
+                    if source.value_type == "file"
+                        && (target.file_policy != source.file_policy
+                            || target.cardinality != source.cardinality) =>
+                {
+                    issues.push(MigrationIssue {
+                        attribute_code: Some(source.code.clone()),
+                        kind: "file_contract_changed".to_owned(),
+                        message: "The file policy or cardinality changed in the target revision"
+                            .to_owned(),
+                    });
+                }
+                Some(target)
+                    if target.context_editable == "default"
+                        && *context_id != Some(default_context_id) =>
+                {
+                    issues.push(MigrationIssue {
+                        attribute_code: Some(source.code.clone()),
+                        kind: "context_not_editable".to_owned(),
+                        message: "The stored value context is not editable in the target revision"
                             .to_owned(),
                     });
                 }
@@ -233,9 +284,40 @@ impl CatalogRepository {
         input: MigrateEntityRequest,
     ) -> Result<Entity, RepositoryError> {
         let migration_input = serde_json::to_value(&input).expect("migration input serializes");
+        let mut input = input;
         let mut transaction = self.pool.begin().await?;
-        self.lock_relationship_cardinality_writes(&mut transaction)
-            .await?;
+        let transaction_started = std::time::Instant::now();
+        let input_has_relationships = !input.relationships.is_empty()
+            || input
+                .values
+                .iter()
+                .any(|value| matches!(value, NewAttributeValue::Relationship { .. }));
+        // Published blueprint definitions are immutable. If no revision of
+        // this entity's blueprint defines relationships and the payload has no
+        // relationship writes, the migration cannot read or mutate protected
+        // relationship rows. Looking across all revisions is intentionally
+        // more conservative than inspecting only the mutable migration row.
+        let blueprint_has_relationships = sqlx::query_scalar::<_, bool>(
+            r#"SELECT EXISTS (
+                   SELECT 1
+                   FROM entities e
+                   JOIN attributes a ON a.blueprint_id = e.blueprint_id
+                   WHERE e.id = $1 AND e.workspace_id = $2
+                     AND a.workspace_id = $2 AND a.deleted_at IS NULL
+                     AND a.value_type = 'relationship'
+               )"#,
+        )
+        .bind(entity_id)
+        .bind(self.workspace_id.unwrap_or(Self::DEFAULT_WORKSPACE_ID))
+        .fetch_one(&mut *transaction)
+        .await?;
+        if input_has_relationships || blueprint_has_relationships {
+            let lock_started = std::time::Instant::now();
+            self.lock_relationship_cardinality_writes(&mut transaction)
+                .await?;
+            metrics::histogram!("catalog_entity_migration_relationship_lock_wait_seconds")
+                .record(lock_started.elapsed().as_secs_f64());
+        }
         let entity = self.lock_entity(&mut transaction, entity_id).await?;
         let migration = sqlx::query_as::<_, (Uuid, i64, i64, String)>(
             "SELECT entity_id, source_version, target_version, status FROM entity_blueprint_migrations WHERE id = $1 AND workspace_id = $2 FOR UPDATE",
@@ -262,47 +344,21 @@ impl CatalogRepository {
                 .execute(&mut *transaction)
                 .await?;
             self.commit_mutation(transaction).await?;
+            metrics::histogram!("catalog_entity_migration_transaction_duration_seconds")
+                .record(transaction_started.elapsed().as_secs_f64());
             return Err(RepositoryError::MigrationTargetChanged);
         }
         if migration.3 == "blocked" {
             return Err(RepositoryError::MigrationNotApplicable);
         }
         let source_values = self
-            .form_values_in_transaction(&mut transaction, entity.id)
+            .current_blueprint_values_in_transaction(
+                &mut transaction,
+                entity.id,
+                entity.blueprint_id,
+                entity.blueprint_version,
+            )
             .await?;
-        let source_file_references = sqlx::query_as::<_, (String, Option<Uuid>, Uuid, i32)>(
-            r#"SELECT a.code, av.context_id, r.file_id, r.position
-               FROM attribute_file_references r
-               JOIN attribute_values av ON av.id = r.attribute_value_id
-               JOIN attributes a ON a.id = av.attribute_id
-               JOIN entities e ON e.id = av.entity_id
-               WHERE av.entity_id = $1
-                 AND av.workspace_id = $2
-                 AND a.value_type = 'file'
-                 AND a.blueprint_id = e.blueprint_id
-                 AND a.blueprint_version = e.blueprint_version
-               ORDER BY a.code, av.context_id, r.position"#,
-        )
-        .bind(entity.id)
-        .bind(self.workspace_id.unwrap_or(Self::DEFAULT_WORKSPACE_ID))
-        .fetch_all(&mut *transaction)
-        .await?;
-        let reusable_values = self
-            .reusable_form_values_in_transaction(&mut transaction, entity.id)
-            .await?;
-        let reusable_file_references = sqlx::query_as::<_, (Uuid, Option<Uuid>, Uuid, i32)>(
-            r#"SELECT a.id, av.context_id, r.file_id, r.position
-               FROM attribute_file_references r
-               JOIN attribute_values av ON av.id = r.attribute_value_id
-               JOIN attributes a ON a.id = av.attribute_id
-               WHERE av.entity_id = $1 AND av.workspace_id = $2
-                 AND a.entity_id = $1 AND a.value_type = 'file'
-               ORDER BY a.id, av.context_id, r.position"#,
-        )
-        .bind(entity.id)
-        .bind(self.workspace_id.unwrap_or(Self::DEFAULT_WORKSPACE_ID))
-        .fetch_all(&mut *transaction)
-        .await?;
         let source_attributes = self
             .list_attributes_in_transaction(
                 &mut transaction,
@@ -313,156 +369,225 @@ impl CatalogRepository {
         let target_attributes = self
             .list_attributes_in_transaction(&mut transaction, entity.blueprint_id, target_version)
             .await?;
-        let source_by_code: HashMap<_, _> = source_attributes
+        let source_by_id: HashMap<_, _> = source_attributes
             .iter()
-            .map(|attribute| (attribute.code.as_str(), attribute))
+            .map(|attribute| (attribute.id, attribute))
             .collect();
         let target_by_code: HashMap<_, _> = target_attributes
             .iter()
             .map(|attribute| (attribute.code.as_str(), attribute))
             .collect();
-        let supplied_scalar_attributes: HashSet<_> = input
-            .values
+        let target_by_id: HashMap<_, _> = target_attributes
             .iter()
-            .filter_map(|value| match value {
+            .map(|attribute| (attribute.id, attribute))
+            .collect();
+        let default_context_id = self.resolve_context_id(&mut transaction, None).await?;
+
+        // The migration form submits all populated target fields. Treat values
+        // and relationship sets that are identical to compatible source rows as
+        // confirmations, not replacements, so the normal HTTP path preserves
+        // their row identity just like an empty automatic-migration payload.
+        let mut effective_values = Vec::with_capacity(input.values.len());
+        for supplied in std::mem::take(&mut input.values) {
+            let (attribute_id, attribute_code, supplied_context_id) = match &supplied {
                 NewAttributeValue::Scalar {
-                    attribute_code: Some(attribute_code),
+                    attribute_id,
+                    attribute_code,
+                    context_id,
                     ..
-                } => Some(attribute_code.as_str()),
-                _ => None,
-            })
-            .collect();
-        let supplied_relationship_attributes: HashSet<_> = input
-            .relationships
-            .iter()
-            .filter_map(|relationship| relationship.attribute_code.as_deref())
-            .collect();
+                }
+                | NewAttributeValue::Relationship {
+                    attribute_id,
+                    attribute_code,
+                    context_id,
+                    ..
+                } => (*attribute_id, attribute_code.as_deref(), *context_id),
+            };
+            let code = attribute_code.or_else(|| {
+                attribute_id.and_then(|id| target_by_id.get(&id).map(|a| a.code.as_str()))
+            });
+            let context_id = self
+                .resolve_context_id(&mut transaction, supplied_context_id)
+                .await?;
+            let unchanged = code.is_some_and(|code| {
+                let target = target_by_code.get(code).copied();
+                source_values.iter().any(|current| {
+                    let Some(source) = source_by_id.get(&current.attribute_id).copied() else {
+                        return false;
+                    };
+                    source.code == code
+                        && current.context_id == context_id
+                        && target.is_some_and(|target| {
+                            migration_value_compatible(source, target, current, default_context_id)
+                        })
+                        && match &supplied {
+                            NewAttributeValue::Scalar { value, .. } => {
+                                current.relationship_target_entity_id.is_none()
+                                    && migration_scalar_values_equal(
+                                        &source.value_type,
+                                        &current.value,
+                                        value,
+                                    )
+                            }
+                            NewAttributeValue::Relationship {
+                                target_entity_id, ..
+                            } => {
+                                current.active
+                                    && current.relationship_target_entity_id
+                                        == Some(*target_entity_id)
+                            }
+                        }
+                })
+            });
+            if !unchanged {
+                effective_values.push(supplied);
+            }
+        }
+        input.values = effective_values;
+
+        let mut effective_relationships = Vec::with_capacity(input.relationships.len());
+        for relationship in std::mem::take(&mut input.relationships) {
+            let code = relationship.attribute_code.as_deref().or_else(|| {
+                relationship
+                    .attribute_id
+                    .and_then(|id| target_by_id.get(&id).map(|a| a.code.as_str()))
+            });
+            let context_id = self
+                .resolve_context_id(&mut transaction, relationship.context_id)
+                .await?;
+            let unchanged = code.is_some_and(|code| {
+                let source = source_attributes.iter().find(|source| source.code == code);
+                let target = target_by_code.get(code).copied();
+                source.is_some_and(|source| {
+                    target.is_some_and(|target| {
+                        migration_contract_compatible(
+                            source,
+                            target,
+                            context_id,
+                            default_context_id,
+                        )
+                    })
+                }) && source_values
+                    .iter()
+                    .filter(|current| {
+                        current.active
+                            && current.context_id == context_id
+                            && source_by_id
+                                .get(&current.attribute_id)
+                                .is_some_and(|source| source.code == code)
+                    })
+                    .filter_map(|current| current.relationship_target_entity_id)
+                    .collect::<HashSet<_>>()
+                    == relationship
+                        .target_entity_ids
+                        .iter()
+                        .copied()
+                        .collect::<HashSet<_>>()
+            });
+            if !unchanged {
+                effective_relationships.push(relationship);
+            }
+        }
+        input.relationships = effective_relationships;
+
+        let mut supplied_codes = HashSet::new();
+        let mut supplied_scalar_keys: HashSet<AttributeContextKey> = HashSet::new();
+        let mut supplied_relationship_sets: HashSet<AttributeContextKey> = HashSet::new();
+        let mut supplied_relationship_values = HashSet::new();
+        for value in &input.values {
+            let (attribute_id, attribute_code, context_id, relationship_target) = match value {
+                NewAttributeValue::Scalar {
+                    attribute_id,
+                    attribute_code,
+                    context_id,
+                    ..
+                } => (*attribute_id, attribute_code.as_deref(), *context_id, None),
+                NewAttributeValue::Relationship {
+                    attribute_id,
+                    attribute_code,
+                    context_id,
+                    target_entity_id,
+                } => (
+                    *attribute_id,
+                    attribute_code.as_deref(),
+                    *context_id,
+                    Some(*target_entity_id),
+                ),
+            };
+            let code = attribute_code.or_else(|| {
+                attribute_id.and_then(|id| target_by_id.get(&id).map(|a| a.code.as_str()))
+            });
+            if let Some(code) = code {
+                let context_id = self
+                    .resolve_context_id(&mut transaction, context_id)
+                    .await?;
+                supplied_codes.insert(code);
+                if let Some(target) = relationship_target {
+                    supplied_relationship_values.insert((code.to_owned(), context_id, target));
+                } else {
+                    supplied_scalar_keys.insert((code.to_owned(), context_id));
+                }
+            }
+        }
+        for relationship in &input.relationships {
+            let code = relationship.attribute_code.as_deref().or_else(|| {
+                relationship
+                    .attribute_id
+                    .and_then(|id| target_by_id.get(&id).map(|a| a.code.as_str()))
+            });
+            if let Some(code) = code {
+                let context_id = self
+                    .resolve_context_id(&mut transaction, relationship.context_id)
+                    .await?;
+                supplied_codes.insert(code);
+                supplied_relationship_sets.insert((code.to_owned(), context_id));
+            }
+        }
         let discarded_attributes: HashSet<_> = input
             .discard_attributes
             .iter()
             .map(String::as_str)
             .collect();
-        let mut carried_values = Vec::new();
-        let mut carried_relationships: HashMap<(String, Option<Uuid>), Vec<Uuid>> = HashMap::new();
-        let mut carried_file_references: FileReferencesByAttribute = HashMap::new();
-        let mut carried_reusable_file_references: ReusableFileReferencesByAttribute =
-            HashMap::new();
+        let mut archive_ids = Vec::new();
+        let mut remap_ids: HashMap<Uuid, Vec<Uuid>> = HashMap::new();
         let mut unresolved = HashSet::new();
-        for value in reusable_values {
-            match value {
-                FormAttributeValue::Scalar {
-                    attribute_code,
-                    context_id,
-                    value,
-                } => carried_values.push(NewAttributeValue::Scalar {
-                    attribute_id: None,
-                    attribute_code: Some(attribute_code),
-                    context_id,
-                    value,
-                }),
-                FormAttributeValue::Relationship {
-                    attribute_code,
-                    context_id,
-                    target_entity_id,
-                } => carried_relationships
-                    .entry((attribute_code, context_id))
-                    .or_default()
-                    .push(target_entity_id),
-                FormAttributeValue::File { .. } => {}
-            }
-        }
-        for (attribute_id, context_id, file_id, position) in reusable_file_references {
-            carried_reusable_file_references
-                .entry((attribute_id, context_id))
-                .or_default()
-                .push((file_id, position));
-        }
-        for value in source_values {
-            match value {
-                FormAttributeValue::Scalar {
-                    attribute_code,
-                    context_id,
-                    value,
-                } => {
-                    let source = source_by_code
-                        .get(attribute_code.as_str())
-                        .expect("form values belong to the source blueprint");
-                    let incompatible = match target_by_code.get(attribute_code.as_str()) {
-                        None => true,
-                        Some(target) if target.value_type != source.value_type => true,
-                        Some(target) => target.value_schema.as_ref().is_some_and(|schema| {
-                            !validate_json_schema(schema, &value)
-                                .expect("compiled blueprint schema is valid")
-                                .is_empty()
-                        }),
-                    };
-                    if discarded_attributes.contains(attribute_code.as_str()) {
-                        continue;
-                    }
-                    if incompatible {
-                        if !supplied_scalar_attributes.contains(attribute_code.as_str()) {
-                            unresolved.insert(attribute_code);
-                        }
-                    } else {
-                        carried_values.push(NewAttributeValue::Scalar {
-                            attribute_id: None,
-                            attribute_code: Some(attribute_code),
-                            context_id,
-                            value,
-                        });
-                    }
-                }
-                FormAttributeValue::Relationship {
-                    attribute_code,
-                    context_id,
-                    target_entity_id,
-                } => {
-                    let source = source_by_code
-                        .get(attribute_code.as_str())
-                        .expect("form values belong to the source blueprint");
-                    let incompatible = match target_by_code.get(attribute_code.as_str()) {
-                        None => true,
-                        Some(target) => {
-                            target.value_type != source.value_type
-                                || target.target_blueprint_code != source.target_blueprint_code
-                        }
-                    };
-                    if discarded_attributes.contains(attribute_code.as_str()) {
-                        continue;
-                    }
-                    if incompatible {
-                        if !supplied_relationship_attributes.contains(attribute_code.as_str()) {
-                            unresolved.insert(attribute_code);
-                        }
-                    } else {
-                        carried_relationships
-                            .entry((attribute_code, context_id))
-                            .or_default()
-                            .push(target_entity_id);
-                    }
-                }
-                // File references are carried below so their IDs and ordering are retained.
-                FormAttributeValue::File { .. } => {}
-            }
-        }
-        for (attribute_code, context_id, file_id, position) in source_file_references {
-            let source = source_by_code
-                .get(attribute_code.as_str())
-                .expect("file references belong to the source blueprint");
-            let incompatible = match target_by_code.get(attribute_code.as_str()) {
-                None => true,
-                Some(target) => target.value_type != source.value_type,
-            };
-            if discarded_attributes.contains(attribute_code.as_str()) {
+
+        for value in source_values
+            .iter()
+            .filter(|value| source_by_id.contains_key(&value.attribute_id))
+        {
+            let source = source_by_id
+                .get(&value.attribute_id)
+                .expect("filtered source attribute exists");
+            let target = target_by_code.get(source.code.as_str()).copied();
+            let compatible = target.is_some_and(|target| {
+                migration_value_compatible(source, target, value, default_context_id)
+            });
+            let discarded = discarded_attributes.contains(source.code.as_str());
+            if !compatible && !discarded && !supplied_codes.contains(source.code.as_str()) {
+                unresolved.insert(source.code.clone());
                 continue;
             }
-            if incompatible {
-                unresolved.insert(attribute_code);
+            let key = (source.code.clone(), value.context_id);
+            let replaced = if source.value_type == "relationship" {
+                supplied_relationship_sets.contains(&key)
+                    || value.relationship_target_entity_id.is_some_and(|target| {
+                        supplied_relationship_values.contains(&(
+                            source.code.clone(),
+                            value.context_id,
+                            target,
+                        ))
+                    })
             } else {
-                carried_file_references
-                    .entry((attribute_code, context_id))
+                supplied_scalar_keys.contains(&key)
+            };
+            if discarded || !compatible || replaced {
+                archive_ids.push(value.id);
+            } else {
+                remap_ids
+                    .entry(target.expect("compatible target exists").id)
                     .or_default()
-                    .push((file_id, position));
+                    .push(value.id);
             }
         }
         if !unresolved.is_empty() {
@@ -476,10 +601,26 @@ impl CatalogRepository {
             .execute(&mut *transaction)
             .await?;
             self.commit_mutation(transaction).await?;
+            metrics::histogram!("catalog_entity_migration_transaction_duration_seconds")
+                .record(transaction_started.elapsed().as_secs_f64());
             return Err(RepositoryError::MigrationNeedsResolution(unresolved));
         }
-        self.archive_all_current_values(&mut transaction, entity.id)
+        let archived_count = self
+            .archive_current_value_ids(&mut transaction, entity.id, &archive_ids)
             .await?;
+        let mut preserved_count = 0_u64;
+        for (target_attribute_id, value_ids) in remap_ids {
+            preserved_count += sqlx::query(
+                "UPDATE attribute_values SET attribute_id = $1 WHERE entity_id = $2 AND workspace_id = $3 AND id = ANY($4)",
+            )
+            .bind(target_attribute_id)
+            .bind(entity.id)
+            .bind(self.workspace_id.unwrap_or(Self::DEFAULT_WORKSPACE_ID))
+            .bind(&value_ids)
+            .execute(&mut *transaction)
+            .await?
+            .rows_affected();
+        }
         let target_entity = sqlx::query_as::<_, Entity>(
             r#"UPDATE entities SET blueprint_version = $2, updated_at = now()
                WHERE id = $1 AND workspace_id = $3
@@ -490,73 +631,24 @@ impl CatalogRepository {
         .bind(self.workspace_id.unwrap_or(Self::DEFAULT_WORKSPACE_ID))
         .fetch_one(&mut *transaction)
         .await?;
-        for value in carried_values.into_iter().chain(input.values) {
+        let replaced_count = input.values.len() as u64
+            + input
+                .relationships
+                .iter()
+                .map(|relationship| {
+                    relationship
+                        .target_entity_ids
+                        .iter()
+                        .copied()
+                        .collect::<HashSet<_>>()
+                        .len() as u64
+                })
+                .sum::<u64>();
+        for value in input.values {
             self.insert_value(&mut transaction, &target_entity, value)
                 .await?;
         }
-        for ((attribute_code, context_id), files) in carried_file_references {
-            let attribute_id = target_by_code
-                .get(attribute_code.as_str())
-                .expect("compatible file attribute belongs to the target blueprint")
-                .id;
-            let value_id = sqlx::query_scalar::<_, Uuid>(
-                "INSERT INTO attribute_values (id, workspace_id, entity_id, attribute_id, context_id, active) VALUES ($1, $2, $3, $4, $5, true) RETURNING id",
-            )
-            .bind(Uuid::new_v4())
-            .bind(self.workspace_id.unwrap_or(Self::DEFAULT_WORKSPACE_ID))
-            .bind(target_entity.id)
-            .bind(attribute_id)
-            .bind(context_id)
-            .fetch_one(&mut *transaction)
-            .await?;
-            for (file_id, position) in files {
-                sqlx::query(
-                    "INSERT INTO attribute_file_references (attribute_value_id, workspace_id, file_id, position) VALUES ($1, $2, $3, $4)",
-                )
-                .bind(value_id)
-                .bind(self.workspace_id.unwrap_or(Self::DEFAULT_WORKSPACE_ID))
-                .bind(file_id)
-                .bind(position)
-                .execute(&mut *transaction)
-                .await?;
-            }
-        }
-        for ((attribute_id, context_id), files) in carried_reusable_file_references {
-            let value_id = sqlx::query_scalar::<_, Uuid>(
-                "INSERT INTO attribute_values (id, workspace_id, entity_id, attribute_id, context_id, active) VALUES ($1, $2, $3, $4, $5, true) RETURNING id",
-            )
-            .bind(Uuid::new_v4())
-            .bind(self.workspace_id.unwrap_or(Self::DEFAULT_WORKSPACE_ID))
-            .bind(target_entity.id)
-            .bind(attribute_id)
-            .bind(context_id)
-            .fetch_one(&mut *transaction)
-            .await?;
-            for (file_id, position) in files {
-                sqlx::query(
-                    "INSERT INTO attribute_file_references (attribute_value_id, workspace_id, file_id, position) VALUES ($1, $2, $3, $4)",
-                )
-                .bind(value_id)
-                .bind(self.workspace_id.unwrap_or(Self::DEFAULT_WORKSPACE_ID))
-                .bind(file_id)
-                .bind(position)
-                .execute(&mut *transaction)
-                .await?;
-            }
-        }
-        let carried_relationships = carried_relationships
-            .into_iter()
-            .map(
-                |((attribute_code, context_id), target_entity_ids)| RelationshipTargets {
-                    attribute_id: None,
-                    attribute_code: Some(attribute_code),
-                    context_id,
-                    target_entity_ids,
-                },
-            )
-            .chain(input.relationships)
-            .collect();
-        self.replace_relationship_sets(&mut transaction, &target_entity, carried_relationships)
+        self.replace_relationship_sets(&mut transaction, &target_entity, input.relationships)
             .await?;
         self.validate_entity_schema(&mut transaction, &target_entity)
             .await?;
@@ -600,6 +692,112 @@ impl CatalogRepository {
             },
         )
         .await?;
+        metrics::counter!("catalog_entity_migration_values_total", "action" => "preserved")
+            .increment(preserved_count);
+        metrics::counter!("catalog_entity_migration_values_total", "action" => "archived")
+            .increment(archived_count);
+        metrics::counter!("catalog_entity_migration_values_total", "action" => "replaced")
+            .increment(replaced_count);
+        metrics::histogram!("catalog_entity_migration_transaction_duration_seconds")
+            .record(transaction_started.elapsed().as_secs_f64());
         Ok(target_entity)
     }
+
+    async fn archive_current_value_ids(
+        &self,
+        transaction: &mut sqlx::Transaction<'_, sqlx::Postgres>,
+        entity_id: Uuid,
+        value_ids: &[Uuid],
+    ) -> Result<u64, RepositoryError> {
+        if value_ids.is_empty() {
+            return Ok(0);
+        }
+        let (archived, _copied_references) = sqlx::query_as::<_, (i64, i64)>(
+            r#"WITH file_references AS MATERIALIZED (
+                    SELECT r.attribute_value_id, r.workspace_id, r.file_id, r.position
+                    FROM attribute_file_references r
+                    JOIN attribute_values av ON av.id = r.attribute_value_id
+                    WHERE av.entity_id = $1 AND av.workspace_id = $2 AND av.id = ANY($3)
+                ), archived AS (
+                    DELETE FROM attribute_values
+                    WHERE entity_id = $1 AND workspace_id = $2 AND id = ANY($3)
+                    RETURNING *
+                ), stored AS (
+                    INSERT INTO attribute_value_history (
+                        id, workspace_id, entity_id, attribute_id, context_id, relationship_target_entity_id, active,
+                        value_text, value_number, value_integer, value_boolean, value_date, value_datetime,
+                        value_time, value_time_zone, value_json, created_at
+                    )
+                    SELECT id, workspace_id, entity_id, attribute_id, context_id, relationship_target_entity_id, active,
+                           value_text, value_number, value_integer, value_boolean, value_date, value_datetime,
+                           value_time, value_time_zone, value_json, created_at
+                    FROM archived
+                    RETURNING id, workspace_id, archived_at
+                ), copied_references AS (
+                    INSERT INTO attribute_file_reference_history (
+                        attribute_value_history_id, attribute_value_history_archived_at, workspace_id, file_id, position
+                    )
+                    SELECT stored.id, stored.archived_at, file_references.workspace_id,
+                           file_references.file_id, file_references.position
+                    FROM file_references JOIN stored
+                      ON stored.id = file_references.attribute_value_id
+                     AND stored.workspace_id = file_references.workspace_id
+                    RETURNING 1
+                )
+                SELECT (SELECT count(*) FROM stored), (SELECT count(*) FROM copied_references)"#,
+        )
+        .bind(entity_id)
+        .bind(self.workspace_id.unwrap_or(Self::DEFAULT_WORKSPACE_ID))
+        .bind(value_ids)
+        .fetch_one(&mut **transaction)
+        .await?;
+        Ok(archived as u64)
+    }
+}
+
+fn migration_contract_compatible(
+    source: &Attribute,
+    target: &Attribute,
+    context_id: Option<Uuid>,
+    default_context_id: Option<Uuid>,
+) -> bool {
+    if target.value_type != source.value_type
+        || target.context_editable == "default" && context_id != default_context_id
+    {
+        return false;
+    }
+    match source.value_type.as_str() {
+        "relationship" => {
+            target.target_blueprint_code == source.target_blueprint_code
+                && target.cardinality == source.cardinality
+                && target.target_cardinality == source.target_cardinality
+        }
+        "file" => {
+            target.file_policy == source.file_policy && target.cardinality == source.cardinality
+        }
+        _ => true,
+    }
+}
+
+fn migration_value_compatible(
+    source: &Attribute,
+    target: &Attribute,
+    value: &AttributeValue,
+    default_context_id: Option<Uuid>,
+) -> bool {
+    migration_contract_compatible(source, target, value.context_id, default_context_id)
+        && (source.value_type == "relationship"
+            || source.value_type == "file"
+            || target.value_schema.as_ref().is_none_or(|schema| {
+                validate_json_schema(schema, &value.value)
+                    .expect("compiled blueprint schema is valid")
+                    .is_empty()
+            }))
+}
+
+fn migration_scalar_values_equal(value_type: &str, current: &Value, supplied: &Value) -> bool {
+    current == supplied
+        || super::values::ValueType::parse(value_type)
+            .and_then(|value_type| super::values::NativeValue::parse(value_type, supplied.clone()))
+            .is_ok_and(|value| value.json() == *current)
 }

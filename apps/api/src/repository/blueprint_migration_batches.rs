@@ -3,6 +3,8 @@ use crate::{
     model::{BlueprintMigrationBatch, BlueprintMigrationBatchStatus, MigrateEntityRequest},
     task_queue::{TaskInsert, TaskKind},
 };
+use chrono::{DateTime, Utc};
+use futures_util::{StreamExt, stream};
 use serde_json::json;
 use std::collections::HashMap;
 use uuid::Uuid;
@@ -11,6 +13,12 @@ use uuid::Uuid;
 struct BatchMigration {
     id: Uuid,
     status: String,
+}
+
+#[derive(Clone, Copy, sqlx::FromRow)]
+struct BatchCandidate {
+    id: Uuid,
+    created_at: DateTime<Utc>,
 }
 
 impl CatalogRepository {
@@ -164,6 +172,8 @@ impl CatalogRepository {
     pub(crate) async fn run_safe_blueprint_migration_batch_task(
         &self,
         batch_id: Uuid,
+        page_size: usize,
+        concurrency: usize,
     ) -> Result<(), RepositoryError> {
         let workspace_id = self.workspace_id.unwrap_or(Self::DEFAULT_WORKSPACE_ID);
         let mut transaction = self.pool.begin().await?;
@@ -191,57 +201,93 @@ impl CatalogRepository {
                 _ => Err(RepositoryError::NotFound("blueprint migration batch")),
             };
         };
-        let entity_ids = sqlx::query_scalar::<_, Uuid>(
-            "SELECT id FROM entities WHERE blueprint_id = $1 AND blueprint_version < $2 AND workspace_id = $3 AND deleted_at IS NULL ORDER BY id",
-        )
-        .bind(batch.blueprint_id)
-        .bind(batch.target_version)
-        .bind(workspace_id)
-        .fetch_all(&self.pool)
-        .await?;
-
-        for entity_id in entity_ids {
-            let migration = self.reserve_batch_migration(&batch, entity_id).await?;
-            match migration.status.as_str() {
-                "migrated" | "needs_input" | "blocked" | "failed" | "skipped" | "superseded" => {
+        let mut cursor: Option<(DateTime<Utc>, Uuid)> = None;
+        loop {
+            let candidates = match cursor {
+                Some((created_at, id)) => {
+                    sqlx::query_as::<_, BatchCandidate>(
+                        r#"SELECT e.id, e.created_at
+                           FROM entities e
+                           WHERE e.blueprint_id = $1
+                             AND e.blueprint_version < $2
+                             AND e.workspace_id = $3
+                             AND e.deleted_at IS NULL
+                             AND (e.created_at, e.id) < ($4, $5)
+                             AND NOT EXISTS (
+                                 SELECT 1 FROM entity_blueprint_migrations m
+                                 WHERE m.batch_id = $6 AND m.entity_id = e.id
+                                   AND m.workspace_id = $3
+                                   AND m.status IN ('migrated', 'needs_input', 'blocked', 'failed', 'skipped', 'superseded')
+                             )
+                           ORDER BY e.created_at DESC, e.id DESC
+                           LIMIT $7"#,
+                    )
+                    .bind(batch.blueprint_id)
+                    .bind(batch.target_version)
+                    .bind(workspace_id)
+                    .bind(created_at)
+                    .bind(id)
+                    .bind(batch.id)
+                    .bind(page_size as i64)
+                    .fetch_all(&self.pool)
+                    .await?
+                }
+                None => {
+                    sqlx::query_as::<_, BatchCandidate>(
+                        r#"SELECT e.id, e.created_at
+                           FROM entities e
+                           WHERE e.blueprint_id = $1
+                             AND e.blueprint_version < $2
+                             AND e.workspace_id = $3
+                             AND e.deleted_at IS NULL
+                             AND NOT EXISTS (
+                                 SELECT 1 FROM entity_blueprint_migrations m
+                                 WHERE m.batch_id = $4 AND m.entity_id = e.id
+                                   AND m.workspace_id = $3
+                                   AND m.status IN ('migrated', 'needs_input', 'blocked', 'failed', 'skipped', 'superseded')
+                             )
+                           ORDER BY e.created_at DESC, e.id DESC
+                           LIMIT $5"#,
+                    )
+                    .bind(batch.blueprint_id)
+                    .bind(batch.target_version)
+                    .bind(workspace_id)
+                    .bind(batch.id)
+                    .bind(page_size as i64)
+                    .fetch_all(&self.pool)
+                    .await?
+                }
+            };
+            if candidates.is_empty() {
+                if cursor.take().is_some() {
+                    // The eligible set shrinks while rows migrate. Rechecking
+                    // from the newest edge also catches candidates inserted
+                    // after the first page was read.
                     continue;
                 }
-                "pending" => match self
-                    .preview_entity_migration_into(entity_id, Some(migration.id))
-                    .await
-                {
-                    Ok(preview) if preview.status == "ready" => {}
-                    Ok(_) => continue,
-                    Err(error) => {
-                        self.record_batch_failure(migration.id, &error.to_string())
-                            .await?;
-                        continue;
-                    }
-                },
-                "ready" | "migrating" => {}
-                status => {
-                    return Err(RepositoryError::InvalidBlueprintDefinition(format!(
-                        "unknown batch migration status '{status}'"
-                    )));
-                }
+                break;
             }
-            self.begin_batch_migration(migration.id).await?;
-            if let Err(error) = self
-                .migrate_entity_to_latest(
-                    entity_id,
-                    MigrateEntityRequest {
-                        migration_id: migration.id,
-                        expected_target_version: batch.target_version,
-                        values: Vec::new(),
-                        relationships: Vec::new(),
-                        discard_attributes: Vec::new(),
-                    },
-                )
-                .await
-            {
-                self.record_batch_failure(migration.id, &error.to_string())
-                    .await?;
+            metrics::counter!("catalog_blueprint_migration_candidates_scanned_total")
+                .increment(candidates.len() as u64);
+            let page_started = std::time::Instant::now();
+            let candidate_ids: Vec<_> = candidates.iter().map(|candidate| candidate.id).collect();
+            let results = stream::iter(candidate_ids)
+                .map(|entity_id| self.process_batch_candidate(&batch, entity_id))
+                .buffer_unordered(concurrency)
+                .collect::<Vec<_>>()
+                .await;
+            for result in results {
+                let outcome = result?;
+                metrics::counter!("catalog_blueprint_migration_entities_total", "outcome" => outcome)
+                    .increment(1);
             }
+            let elapsed = page_started.elapsed().as_secs_f64();
+            if elapsed > 0.0 {
+                metrics::histogram!("catalog_blueprint_migration_entities_per_second")
+                    .record(candidates.len() as f64 / elapsed);
+            }
+            let last = candidates.last().expect("non-empty candidate page");
+            cursor = Some((last.created_at, last.id));
         }
         let mut transaction = self.pool.begin().await?;
         let updated = sqlx::query(
@@ -259,6 +305,58 @@ impl CatalogRepository {
             Err(RepositoryError::InvalidBlueprintDefinition(
                 "safe blueprint migration batch checkpoint was lost".into(),
             ))
+        }
+    }
+
+    async fn process_batch_candidate(
+        &self,
+        batch: &BlueprintMigrationBatch,
+        entity_id: Uuid,
+    ) -> Result<&'static str, RepositoryError> {
+        let migration = self.reserve_batch_migration(batch, entity_id).await?;
+        match migration.status.as_str() {
+            "migrated" | "needs_input" | "blocked" | "failed" | "skipped" | "superseded" => {
+                return Ok("already_terminal");
+            }
+            "pending" => match self
+                .preview_entity_migration_into(entity_id, Some(migration.id))
+                .await
+            {
+                Ok(preview) if preview.status == "ready" => {}
+                Ok(_) => return Ok("needs_input"),
+                Err(error) => {
+                    self.record_batch_failure(migration.id, &error.to_string())
+                        .await?;
+                    return Ok("failed");
+                }
+            },
+            "ready" | "migrating" => {}
+            status => {
+                return Err(RepositoryError::InvalidBlueprintDefinition(format!(
+                    "unknown batch migration status '{status}'"
+                )));
+            }
+        }
+        self.begin_batch_migration(migration.id).await?;
+        match self
+            .migrate_entity_to_latest(
+                entity_id,
+                MigrateEntityRequest {
+                    migration_id: migration.id,
+                    expected_target_version: batch.target_version,
+                    values: Vec::new(),
+                    relationships: Vec::new(),
+                    discard_attributes: Vec::new(),
+                },
+            )
+            .await
+        {
+            Ok(_) => Ok("migrated"),
+            Err(error) => {
+                self.record_batch_failure(migration.id, &error.to_string())
+                    .await?;
+                Ok("failed")
+            }
         }
     }
 

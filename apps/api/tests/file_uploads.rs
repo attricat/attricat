@@ -207,7 +207,7 @@ async fn uploads_files_to_the_fake_store_and_persists_derived_metadata(pool: PgP
 #[sqlx::test]
 async fn migration_retains_files_on_compatible_file_attributes(pool: PgPool) {
     let store = Arc::new(FakeObjectStore::available());
-    let (base_url, server) = start_server_with_object_store(pool, store).await;
+    let (base_url, server) = start_server_with_object_store(pool.clone(), store).await;
     let client = authenticated_client();
     let blueprint = upload_blueprint(&client, &base_url).await;
     let blueprint_id = blueprint["blueprint"]["id"].as_str().unwrap();
@@ -227,6 +227,16 @@ async fn migration_retains_files_on_compatible_file_attributes(pool: PgPool) {
         .await
         .unwrap();
     let file_id = uploaded["files"][0]["id"].as_str().unwrap();
+    let before = sqlx::query_as::<_, (uuid::Uuid, chrono::DateTime<chrono::Utc>, uuid::Uuid, i32)>(
+        r#"SELECT av.id, av.created_at, r.file_id, r.position
+           FROM attribute_values av
+           JOIN attribute_file_references r ON r.attribute_value_id = av.id
+           WHERE av.entity_id = $1"#,
+    )
+    .bind(entity_id.parse::<uuid::Uuid>().unwrap())
+    .fetch_one(&pool)
+    .await
+    .unwrap();
 
     let revision: Value = client
         .post(format!("{base_url}/blueprints/{blueprint_id}/versions"))
@@ -242,7 +252,7 @@ fields = ["image"]
 [[attributes]]
 code = "image"
 value_type = "file"
-cardinality = "many"
+cardinality = "one"
 allowed_mime_groups = ["image"]
 allowed_extensions = ["png"]
 max_bytes = 1024
@@ -307,6 +317,38 @@ image_only = true"# }))
             && value["attribute_code"] == "image"
             && value["files"][0]["id"] == file_id
     }));
+    let after = sqlx::query_as::<_, (uuid::Uuid, chrono::DateTime<chrono::Utc>, uuid::Uuid, i32)>(
+        r#"SELECT av.id, av.created_at, r.file_id, r.position
+           FROM attribute_values av
+           JOIN attribute_file_references r ON r.attribute_value_id = av.id
+           WHERE av.entity_id = $1"#,
+    )
+    .bind(entity_id.parse::<uuid::Uuid>().unwrap())
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert_eq!(
+        after, before,
+        "file parent and ordered reference stay in place"
+    );
+    assert_eq!(
+        sqlx::query_scalar::<_, i64>("SELECT count(*) FROM attribute_value_history WHERE id = $1",)
+            .bind(before.0)
+            .fetch_one(&pool)
+            .await
+            .unwrap(),
+        0
+    );
+    assert_eq!(
+        sqlx::query_scalar::<_, i64>(
+            "SELECT count(*) FROM attribute_file_reference_history WHERE attribute_value_history_id = $1",
+        )
+        .bind(before.0)
+        .fetch_one(&pool)
+        .await
+        .unwrap(),
+        0
+    );
     server.abort();
 }
 

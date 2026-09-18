@@ -236,9 +236,13 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     )));
     task_handlers.push(workflow_runtime::task_handler(task_repository.clone()));
     task_handlers.push(rule_runtime::task_handler(task_repository.clone()));
+    let blueprint_migration_config =
+        blueprint_migration_worker::BlueprintMigrationBatchConfig::from_env()
+            .map_err(|error| format!("invalid blueprint migration configuration: {error}"))?;
     task_handlers.push(Arc::new(
-        blueprint_migration_worker::BlueprintMigrationBatchTaskHandler::new(
+        blueprint_migration_worker::BlueprintMigrationBatchTaskHandler::with_config(
             task_repository.clone(),
+            blueprint_migration_config,
         ),
     ));
     // Reconcile only batches created before this deployment. New batches and

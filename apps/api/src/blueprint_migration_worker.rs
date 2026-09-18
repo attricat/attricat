@@ -9,15 +9,74 @@ use crate::{
     task_worker::{TaskHandler, TaskHandlerError, TaskOutcome},
 };
 use async_trait::async_trait;
+use std::env;
 use uuid::Uuid;
+
+#[derive(Clone, Copy, Debug)]
+pub struct BlueprintMigrationBatchConfig {
+    pub page_size: usize,
+    pub concurrency: usize,
+}
+
+impl Default for BlueprintMigrationBatchConfig {
+    fn default() -> Self {
+        Self {
+            page_size: 100,
+            concurrency: 4,
+        }
+    }
+}
+
+impl BlueprintMigrationBatchConfig {
+    pub fn from_env() -> Result<Self, String> {
+        Ok(Self {
+            page_size: bounded_config_value(
+                "BLUEPRINT_MIGRATION_PAGE_SIZE",
+                env::var("BLUEPRINT_MIGRATION_PAGE_SIZE").ok().as_deref(),
+                100,
+                1000,
+            )?,
+            concurrency: bounded_config_value(
+                "BLUEPRINT_MIGRATION_CONCURRENCY",
+                env::var("BLUEPRINT_MIGRATION_CONCURRENCY").ok().as_deref(),
+                4,
+                64,
+            )?,
+        })
+    }
+}
+
+fn bounded_config_value(
+    name: &str,
+    value: Option<&str>,
+    default: usize,
+    maximum: usize,
+) -> Result<usize, String> {
+    match value {
+        Some(value) => value
+            .parse::<usize>()
+            .ok()
+            .filter(|value| (1..=maximum).contains(value))
+            .ok_or_else(|| format!("{name} must be an integer between 1 and {maximum}")),
+        None => Ok(default),
+    }
+}
 
 pub struct BlueprintMigrationBatchTaskHandler {
     repository: CatalogRepository,
+    config: BlueprintMigrationBatchConfig,
 }
 
 impl BlueprintMigrationBatchTaskHandler {
     pub fn new(repository: CatalogRepository) -> Self {
-        Self { repository }
+        Self::with_config(repository, BlueprintMigrationBatchConfig::default())
+    }
+
+    pub fn with_config(
+        repository: CatalogRepository,
+        config: BlueprintMigrationBatchConfig,
+    ) -> Self {
+        Self { repository, config }
     }
 }
 
@@ -50,7 +109,11 @@ impl TaskHandler for BlueprintMigrationBatchTaskHandler {
             .map_err(task_error)?
             .for_blueprint_migration_task(&task);
         match repository
-            .run_safe_blueprint_migration_batch_task(task.subject_id)
+            .run_safe_blueprint_migration_batch_task(
+                task.subject_id,
+                self.config.page_size,
+                self.config.concurrency,
+            )
             .await
         {
             Ok(()) => Ok(TaskOutcome::Complete),
@@ -74,5 +137,20 @@ fn task_error(error: crate::repository::RepositoryError) -> TaskHandlerError {
     TaskHandlerError {
         code: "blueprint_migration_batch",
         message: error.to_string(),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::bounded_config_value;
+
+    #[test]
+    fn batch_config_values_use_defaults_and_enforce_bounds() {
+        assert_eq!(bounded_config_value("TEST", None, 4, 64), Ok(4));
+        assert_eq!(bounded_config_value("TEST", Some("1"), 4, 64), Ok(1));
+        assert_eq!(bounded_config_value("TEST", Some("64"), 4, 64), Ok(64));
+        assert!(bounded_config_value("TEST", Some("0"), 4, 64).is_err());
+        assert!(bounded_config_value("TEST", Some("65"), 4, 64).is_err());
+        assert!(bounded_config_value("TEST", Some("invalid"), 4, 64).is_err());
     }
 }

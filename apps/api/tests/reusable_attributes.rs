@@ -246,7 +246,7 @@ async fn reusable_relationships_and_group_attachments_use_entity_owned_attribute
 
 #[sqlx::test]
 async fn migration_preserves_reusable_attribute_values(pool: PgPool) {
-    let (base_url, server) = start_server(pool).await;
+    let (base_url, server) = start_server(pool.clone()).await;
     let client = authenticated_client();
     let blueprint = create_blueprint(&client, &base_url, PRODUCT).await;
     let reusable = create_published_reusable(
@@ -270,6 +270,16 @@ async fn migration_preserves_reusable_attribute_values(pool: PgPool) {
         .unwrap()
         .error_for_status()
         .unwrap();
+    let before = sqlx::query_as::<_, (uuid::Uuid, uuid::Uuid, chrono::DateTime<chrono::Utc>)>(
+        r#"SELECT av.id, av.attribute_id, av.created_at
+           FROM attribute_values av
+           JOIN attributes a ON a.id = av.attribute_id
+           WHERE av.entity_id = $1 AND a.entity_id = $1"#,
+    )
+    .bind(entity_id.parse::<uuid::Uuid>().unwrap())
+    .fetch_one(&pool)
+    .await
+    .unwrap();
     let revision: Value = client
         .post(format!(
             "{base_url}/blueprints/{}/versions",
@@ -335,5 +345,27 @@ async fn migration_preserves_reusable_attribute_values(pool: PgPool) {
         .unwrap();
     assert_eq!(entity["reusable_attributes"].as_array().unwrap().len(), 1);
     assert_eq!(entity["reusable_values"][0]["value"], 1.5);
+    let after = sqlx::query_as::<_, (uuid::Uuid, uuid::Uuid, chrono::DateTime<chrono::Utc>)>(
+        r#"SELECT av.id, av.attribute_id, av.created_at
+           FROM attribute_values av
+           JOIN attributes a ON a.id = av.attribute_id
+           WHERE av.entity_id = $1 AND a.entity_id = $1"#,
+    )
+    .bind(entity_id.parse::<uuid::Uuid>().unwrap())
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert_eq!(
+        after, before,
+        "reusable values are not rewritten or remapped"
+    );
+    assert_eq!(
+        sqlx::query_scalar::<_, i64>("SELECT count(*) FROM attribute_value_history WHERE id = $1",)
+            .bind(before.0)
+            .fetch_one(&pool)
+            .await
+            .unwrap(),
+        0
+    );
     server.abort();
 }

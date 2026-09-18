@@ -45,6 +45,8 @@ or inaccessible configured bucket.
 | `TASK_WORKER_CONCURRENCY` | `8` | API | Positive maximum number of registered generic-task handlers running at once. |
 | `TASK_WORKER_POLL_MILLIS` | `250` | API | Positive idle delay for the generic task worker. |
 | `TASK_WORKER_SHUTDOWN_GRACE_SECONDS` | `30` | API | Positive bounded drain period; unfinished generic task leases are allowed to expire. |
+| `BLUEPRINT_MIGRATION_PAGE_SIZE` | `100` | API | Entity migration candidate keyset page size; must be between 1 and 1000. |
+| `BLUEPRINT_MIGRATION_CONCURRENCY` | `4` | API | Maximum concurrent entity attempts within one migration batch; must be between 1 and 64. |
 | `CATALOG_API_URL` | `http://127.0.0.1:3000` | Vite | API target for the web app's `/api` development proxy. |
 | `EXTENSION_OFFICIAL_REGISTRY` | `attricat/attricat-extensions` | API | Canonical public GitHub `owner/repository` used as every workspace's immutable official extension source. |
 | `EXTENSIONS_MODE` | `enabled` | API | Deployment emergency gate. Set exactly `disabled` to block all new extension execution, artifacts, runtime descriptors, commands, storage, host calls, and event delivery without changing installations or grants. Invalid configured values fail closed. |
