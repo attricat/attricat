@@ -214,6 +214,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     let agent_dispatcher = None;
     let task_repository =
         CatalogRepository::with_workspace_pool_factory(pool.clone(), connect_options.clone());
+    // Agent provider calls are not safely resumable. On process restart mark
+    // any previously running run interrupted before its task can be reclaimed.
+    if agent_provider.is_some() {
+        task_repository.recover_interrupted_agent_runs().await?;
+    }
     let task_handlers: Vec<Arc<dyn api::task_worker::TaskHandler>> = agent_provider
         .clone()
         .map(|config| {

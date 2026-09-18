@@ -78,6 +78,9 @@ pub struct TaskHandlerError {
 pub trait TaskHandler: Send + Sync {
     fn kind(&self) -> TaskKind;
     async fn handle(&self, task: ClaimedTask) -> Result<TaskOutcome, TaskHandlerError>;
+    /// Called when heartbeat fencing proves this execution no longer owns its
+    /// task. Non-resumable handlers can record a terminal domain interruption.
+    async fn on_lease_lost(&self, _: ClaimedTask) {}
 }
 
 #[derive(Clone, Default)]
@@ -220,6 +223,7 @@ async fn execute(repository: CatalogRepository, handler: Arc<dyn TaskHandler>, t
                 if let Err(error) = repository.heartbeat_task(task.id, &task.lease_owner, task.lease_token, lease_duration).await {
                     counter!("catalog_tasks_total", "kind" => kind.as_str(), "outcome" => "lease_lost").increment(1);
                     tracing::warn!(task_id = %task.id, kind = %kind, error = %error, "task heartbeat lost its lease");
+                    handler.on_lease_lost(task.clone()).await;
                     return;
                 }
             }

@@ -138,6 +138,23 @@ impl TaskHandler for AgentTaskHandler {
             }
         }
     }
+
+    async fn on_lease_lost(&self, task: ClaimedTask) {
+        let Ok(repository) = self.repository.for_workspace(task.workspace_id).await else {
+            return;
+        };
+        if let Err(error) = repository
+            .transition_agent_run(
+                task.subject_id,
+                "failed",
+                Some("interrupted"),
+                Some("agent task lease was lost during provider execution"),
+            )
+            .await
+        {
+            tracing::error!(run_id = %task.subject_id, %error, "could not record interrupted agent task");
+        }
+    }
 }
 
 impl AgentDispatcher {
