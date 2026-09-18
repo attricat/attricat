@@ -55,6 +55,7 @@ pub(super) struct RuntimeContribution {
     version: u32,
     kind: UiContributionKind,
     outlet: Option<UiOutlet>,
+    route: Option<String>,
     title: Option<String>,
 }
 
@@ -516,6 +517,7 @@ pub(super) async fn runtime(
                 version: item.version,
                 kind: item.kind,
                 outlet: item.outlet,
+                route: item.route,
                 title: item.title,
             })
             .collect(),
@@ -630,18 +632,22 @@ pub(super) async fn artifact(
         .client_extension_contribution(&extension_id, &contribution_id)
         .await
         .map_err(ApiError::from)?;
-    let object = state
-        .object_store
-        .get_stream(&contribution.artifact_key)
-        .await
-        .map_err(|error| match error {
-            ObjectStoreError::Unavailable | ObjectStoreError::TimedOut(_) => {
-                ApiError::service_unavailable("extension artifact storage is unavailable")
-            }
-            ObjectStoreError::Operation(_) => {
-                ApiError::internal("extension artifact could not be loaded")
-            }
-        })?;
+    let artifact_key = contribution
+        .artifact_key
+        .ok_or_else(|| ApiError::not_found("extension artifact"))?;
+    let object =
+        state
+            .object_store
+            .get_stream(&artifact_key)
+            .await
+            .map_err(|error| match error {
+                ObjectStoreError::Unavailable | ObjectStoreError::TimedOut(_) => {
+                    ApiError::service_unavailable("extension artifact storage is unavailable")
+                }
+                ObjectStoreError::Operation(_) => {
+                    ApiError::internal("extension artifact could not be loaded")
+                }
+            })?;
     let mut response = Response::new(Body::from_stream(object.stream));
     let headers = response.headers_mut();
     headers.insert(

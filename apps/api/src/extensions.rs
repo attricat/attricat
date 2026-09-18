@@ -317,9 +317,12 @@ pub struct UiContribution {
     pub id: String,
     pub version: u32,
     pub kind: UiContributionKind,
-    pub artifact: String,
+    #[serde(default)]
+    pub artifact: Option<String>,
     #[serde(default)]
     pub outlet: Option<UiOutlet>,
+    #[serde(default)]
+    pub route: Option<String>,
     #[serde(default)]
     pub title: Option<String>,
 }
@@ -328,6 +331,8 @@ pub struct UiContribution {
 #[serde(rename_all = "snake_case")]
 pub enum UiContributionKind {
     Route,
+    /// A host-owned main navigation entry targeting this extension's route.
+    Navigation,
     /// Generic embedded contribution. New surfaces must use `Action` or
     /// `Panel`, so the host can own their compact/action or read-only layout.
     Embedded,
@@ -626,13 +631,27 @@ impl Manifest {
         }
         for contribution in &self.ui {
             valid_id(&contribution.id, "UI contribution id")?;
-            if contribution.version == 0
-                || !self.artifacts.iter().any(|a| {
-                    a.id == contribution.artifact && a.kind == ArtifactKind::ClientComponent
-                })
+            if !matches!(contribution.kind, UiContributionKind::Navigation)
+                && (contribution.version == 0
+                    || !contribution.artifact.as_ref().is_some_and(|artifact| {
+                        self.artifacts.iter().any(|item| {
+                            item.id == *artifact && item.kind == ArtifactKind::ClientComponent
+                        })
+                    }))
             {
                 return Err(ManifestError::Invalid(format!(
                     "UI contribution '{}' must reference a client_component artifact",
+                    contribution.id
+                )));
+            }
+            if matches!(contribution.kind, UiContributionKind::Navigation)
+                && (contribution.version == 0
+                    || contribution.artifact.is_some()
+                    || contribution.outlet.is_some()
+                    || contribution.route.as_deref().is_none_or(str::is_empty))
+            {
+                return Err(ManifestError::Invalid(format!(
+                    "navigation UI contribution '{}' requires a route and cannot declare an artifact or outlet",
                     contribution.id
                 )));
             }
@@ -674,7 +693,7 @@ impl Manifest {
                 }
             }
             match (&contribution.kind, &contribution.outlet) {
-                (UiContributionKind::Route, None) => {}
+                (UiContributionKind::Route, None) | (UiContributionKind::Navigation, None) => {}
                 (UiContributionKind::Embedded, Some(outlet))
                 | (UiContributionKind::Action, Some(outlet))
                 | (UiContributionKind::Panel, Some(outlet)) => {
@@ -717,9 +736,10 @@ impl Manifest {
                         ));
                     }
                 }
-                (UiContributionKind::Route, Some(_)) => {
+                (UiContributionKind::Route, Some(_))
+                | (UiContributionKind::Navigation, Some(_)) => {
                     return Err(ManifestError::Invalid(
-                        "route UI contributions cannot declare an outlet".into(),
+                        "route and navigation UI contributions cannot declare an outlet".into(),
                     ));
                 }
                 (UiContributionKind::Embedded, None)
@@ -730,15 +750,30 @@ impl Manifest {
                     ));
                 }
             }
-            if matches!(contribution.kind, UiContributionKind::Route)
-                && contribution
-                    .title
-                    .as_deref()
-                    .is_none_or(|title| title.trim().is_empty())
+            if matches!(
+                contribution.kind,
+                UiContributionKind::Route | UiContributionKind::Navigation
+            ) && contribution
+                .title
+                .as_deref()
+                .is_none_or(|title| title.trim().is_empty())
             {
                 return Err(ManifestError::Invalid(
                     "route UI contributions require a non-empty title".into(),
                 ));
+            }
+        }
+        for contribution in &self.ui {
+            if matches!(contribution.kind, UiContributionKind::Navigation)
+                && !self.ui.iter().any(|target| {
+                    target.id == contribution.route.as_deref().expect("validated route")
+                        && matches!(target.kind, UiContributionKind::Route)
+                })
+            {
+                return Err(ManifestError::Invalid(format!(
+                    "navigation UI contribution '{}' must target a route UI contribution in the same extension",
+                    contribution.id
+                )));
             }
         }
         for renderer in &self.cell_renderers {
@@ -1437,12 +1472,49 @@ mod tests {
             id: "panel".into(),
             version: 1,
             kind: UiContributionKind::Embedded,
-            artifact: "client".into(),
+            artifact: Some("client".into()),
             outlet: Some(UiOutlet::EntityPreviewPanel),
+            route: None,
             title: None,
         });
         assert!(value.validate(SUPPORTED_HOST_API).is_ok());
     }
+    #[test]
+    fn validates_navigation_targets() {
+        let mut value = manifest();
+        value.artifacts.push(Artifact {
+            id: "client".into(),
+            kind: ArtifactKind::ClientComponent,
+            path: "client.js".into(),
+        });
+        value.ui = vec![
+            UiContribution {
+                id: "workbench".into(),
+                version: 1,
+                kind: UiContributionKind::Route,
+                artifact: Some("client".into()),
+                outlet: None,
+                route: None,
+                title: Some("Workbench".into()),
+            },
+            UiContribution {
+                id: "workbench-nav".into(),
+                version: 1,
+                kind: UiContributionKind::Navigation,
+                artifact: None,
+                outlet: None,
+                route: Some("workbench".into()),
+                title: Some("Workbench".into()),
+            },
+        ];
+        assert!(value.validate(SUPPORTED_HOST_API).is_ok());
+        value.ui[1].route = Some("missing".into());
+        assert!(value.validate(SUPPORTED_HOST_API).is_err());
+        value.ui[1].route = Some("workbench".into());
+        value.ui[0].kind = UiContributionKind::Embedded;
+        assert!(value.validate(SUPPORTED_HOST_API).is_err());
+    }
+
     #[test]
     fn validates_mediated_capabilities_and_matching_placement() {
         let mut value = manifest();
@@ -1458,8 +1530,9 @@ mod tests {
             id: "explorer-action".into(),
             version: 1,
             kind: UiContributionKind::Action,
-            artifact: "client".into(),
+            artifact: Some("client".into()),
             outlet: Some(UiOutlet::ExplorerAction),
+            route: None,
             title: None,
         });
         assert!(value.validate(SUPPORTED_HOST_API).is_ok());
@@ -1489,8 +1562,9 @@ mod tests {
             id: "example.currency".into(),
             version: 1,
             kind: UiContributionKind::Embedded,
-            artifact: "client".into(),
+            artifact: Some("client".into()),
             outlet: Some(UiOutlet::ExplorerTableCell),
+            route: None,
             title: None,
         });
         assert!(value.validate(SUPPORTED_HOST_API).is_ok());
@@ -1532,8 +1606,9 @@ mod tests {
             id: "action".into(),
             version: 1,
             kind: UiContributionKind::Embedded,
-            artifact: "client".into(),
+            artifact: Some("client".into()),
             outlet: Some(UiOutlet::EntityAction),
+            route: None,
             title: None,
         });
         assert!(value.validate(SUPPORTED_HOST_API).is_ok());
@@ -1564,8 +1639,9 @@ mod tests {
             id: "explorer-action".into(),
             version: 1,
             kind: UiContributionKind::Action,
-            artifact: "client".into(),
+            artifact: Some("client".into()),
             outlet: Some(UiOutlet::ExplorerRowAction),
+            route: None,
             title: None,
         });
         assert!(value.validate(SUPPORTED_HOST_API).is_ok());

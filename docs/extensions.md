@@ -285,7 +285,9 @@ Enabled `client_component` artifacts can expose a strict `ui` contribution:
 ```
 
 A contribution is either `route` (which requires a non-empty `title`),
-`embedded`, explicit `action`, or explicit read-only `panel`. `action` is
+`navigation` (which requires a non-empty `title` and targets one of that
+extension's `route` contribution IDs), `embedded`, explicit `action`, or
+explicit read-only `panel`. `action` is
 required for `explorer_row_action` (and requires `client.explorer_row_action`);
 `panel` is required for `blueprint_detail_panel` (and requires
 `client.blueprint_detail_panel`). `embedded` contributions use `navigation`,
@@ -346,9 +348,26 @@ surrounding layout, or assume a particular ordering relative to other enabled
 extensions. Use them for focused controls, summaries, configuration, and
 contextual actions—not an application-wide navigation tree.
 
-- **`navigation`** (`embedded`) appears in Catalog's side navigation. It is
-  appropriate for a compact entry point, such as a link or button that takes
-  the user to the extension's route contribution.
+- **`navigation`** is a host-owned side-navigation link to one of the same
+  extension's declared `route` contributions. It has no artifact or outlet:
+
+  ```json
+  {
+    "id": "formula-workbench-nav",
+    "version": 1,
+    "kind": "navigation",
+    "route": "formula-workbench",
+    "title": "Formula workbench"
+  }
+  ```
+
+  Catalog validates that `route` identifies a route contribution in the same
+  installed release, then generates `/extensions/:extensionId/:contributionId`.
+  Extensions cannot provide a path, host route, icon, or ordering. Workspace
+  layout still controls hiding, ordering, and promotion of this entry.
+- **`navigation`** (`embedded`) remains available for a sandboxed compact
+  iframe contribution, such as a button or status indicator in Catalog's side
+  navigation.
 - **`entity_preview_panel`** (`embedded`) appears in the entity extension
   drawer. It is appropriate for an entity-specific summary, diagnostics, or a
   focused mini-workflow. Its context supplies `entity_id` and optional

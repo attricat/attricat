@@ -241,8 +241,9 @@ pub struct ClientExtensionContribution {
     pub version: u32,
     pub kind: UiContributionKind,
     pub outlet: Option<UiOutlet>,
+    pub route: Option<String>,
     pub title: Option<String>,
-    pub artifact_key: String,
+    pub artifact_key: Option<String>,
 }
 
 impl CatalogRepository {
@@ -370,18 +371,23 @@ impl CatalogRepository {
                     contribution_key: format!("{}:{}", extension_id, contribution.id),
                     display_order: 0,
                     navigation_group: None,
-                    artifact_key: installed_artifact_key(
-                        installed_release_id,
-                        &contribution.artifact,
-                    ),
+                    artifact_key: contribution
+                        .artifact
+                        .as_ref()
+                        .map(|artifact| installed_artifact_key(installed_release_id, artifact)),
                     extension_id: extension_id.clone(),
                     installed_release_id,
                     configuration: client_configuration.clone(),
                     capabilities: capabilities.clone(),
                     id: contribution.id,
                     version: contribution.version,
-                    kind: contribution.kind,
-                    outlet: contribution.outlet,
+                    kind: contribution.kind.clone(),
+                    outlet: if matches!(contribution.kind, UiContributionKind::Navigation) {
+                        Some(UiOutlet::Navigation)
+                    } else {
+                        contribution.outlet
+                    },
+                    route: contribution.route,
                     title: contribution.title,
                 });
             }

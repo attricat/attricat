@@ -327,7 +327,9 @@ export const SideNavigation = ({
             <Box ref={setMobileExplorePanelTarget} sx={{ mt: 2 }} />
           </Box>
         )}
-        {showPrimaryNavigation && <ExtensionOutlet outlet="navigation" />}
+        {showPrimaryNavigation && (
+          <ExtensionOutlet onNavigate={onNavigate} outlet="navigation" />
+        )}
         {compact && (
           <Tooltip placement="right" title={t('navigation.manage')}>
             <ListItemButton
