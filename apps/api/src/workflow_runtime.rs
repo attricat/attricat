@@ -67,10 +67,20 @@ impl TaskHandler for WorkflowTaskHandler {
             .map_err(task_error)?;
         // A crash after the token-fenced domain completion but before generic
         // acknowledgement is replay-safe: no action is re-executed.
-        if matches!(
-            run.run.status.as_str(),
-            "completed" | "cancelled" | "dead_letter"
-        ) {
+        if run.run.status == "dead_letter" {
+            // Repair an older split terminal transition by terminalizing the
+            // reclaimed envelope, never by incorrectly acknowledging it.
+            scoped
+                .dead_letter_task(
+                    &task,
+                    "workflow_run",
+                    "workflow run is already dead-lettered",
+                )
+                .await
+                .map_err(|error| task_error(error.into()))?;
+            return Ok(TaskOutcome::DeadLettered);
+        }
+        if matches!(run.run.status.as_str(), "completed" | "cancelled") {
             return Ok(TaskOutcome::Complete);
         }
         match execute(&scoped, &run, &task).await {
@@ -84,9 +94,13 @@ impl TaskHandler for WorkflowTaskHandler {
             Err(error) => {
                 if task.failures + 1 >= task.max_failures {
                     scoped
-                        .dead_letter_workflow_run_task(&task, &error.to_string())
+                        .dead_letter_workflow_run_task(
+                            &task,
+                            &bounded_error_message(&error.to_string()),
+                        )
                         .await
                         .map_err(task_error)?;
+                    return Ok(TaskOutcome::DeadLettered);
                 }
                 Err(TaskHandlerError {
                     code: "workflow_run",
@@ -95,6 +109,14 @@ impl TaskHandler for WorkflowTaskHandler {
             }
         }
     }
+}
+
+fn bounded_error_message(message: &str) -> String {
+    let mut end = message.len().min(1024);
+    while !message.is_char_boundary(end) {
+        end -= 1;
+    }
+    message[..end].to_owned()
 }
 
 fn task_error(error: crate::repository::RepositoryError) -> TaskHandlerError {

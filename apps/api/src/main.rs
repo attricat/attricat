@@ -209,8 +209,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     let workspace_onboarding_url = std::env::var("WORKSPACE_ONBOARDING_URL")
         .unwrap_or_else(|_| "http://127.0.0.1:5173/onboarding".to_owned());
 
-    // Agent delivery is owned by the shared task worker. The legacy process
-    // local dispatcher is intentionally not started after this cutover.
+    // Agent delivery is owned exclusively by the shared task worker.
     let agent_dispatcher = None;
     let task_repository =
         CatalogRepository::with_workspace_pool_factory(pool.clone(), connect_options.clone());

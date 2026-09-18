@@ -455,6 +455,26 @@ impl CatalogRepository {
         }))
     }
 
+    pub(crate) async fn rule_run_is_dead_letter_for_task(
+        &self,
+        task: &super::ClaimedTask,
+    ) -> Result<bool, RepositoryError> {
+        let ws = self.workspace_id.unwrap_or(Self::DEFAULT_WORKSPACE_ID);
+        if task.kind != TaskKind::RuleRunV1 || task.workspace_id != ws {
+            return Err(RepositoryError::InvalidRuleDefinition(
+                "rule task workspace or kind mismatch".into(),
+            ));
+        }
+        Ok(sqlx::query_scalar(
+            "SELECT status='dead_letter' FROM rule_runs WHERE id=$1 AND workspace_id=$2",
+        )
+        .bind(task.subject_id)
+        .bind(ws)
+        .fetch_optional(&self.pool)
+        .await?
+        .unwrap_or(false))
+    }
+
     /// Inserts or resolves the whole candidate page and advances its cursor in
     /// the same token-fenced transaction. A lost task lease therefore rolls
     /// back both findings and the page checkpoint.
@@ -515,15 +535,23 @@ impl CatalogRepository {
         &self,
         task: &super::ClaimedTask,
         error: &str,
-    ) -> Result<(), RepositoryError> {
+    ) -> Result<bool, RepositoryError> {
         let ws = self.workspace_id.unwrap_or(Self::DEFAULT_WORKSPACE_ID);
+        let terminal = task.failures + 1 >= task.max_failures;
         let mut tx = self.pool.begin().await?;
         let fenced = self.for_rule_task(task);
         fenced.ensure_task_fence(&mut tx).await?;
-        sqlx::query("UPDATE rule_runs SET status=CASE WHEN $3 + 1 >= $4 THEN 'dead_letter' ELSE 'pending' END,last_error=$5,lease_owner=NULL,lease_until=NULL,updated_at=clock_timestamp() WHERE id=$1 AND workspace_id=$2 AND status='leased'")
-            .bind(task.subject_id).bind(ws).bind(task.failures).bind(task.max_failures).bind(error).execute(&mut *tx).await?;
+        sqlx::query("UPDATE rule_runs SET status=CASE WHEN $3 THEN 'dead_letter' ELSE 'pending' END,last_error=$4,lease_owner=NULL,lease_until=NULL,updated_at=clock_timestamp() WHERE id=$1 AND workspace_id=$2 AND status='leased'")
+            .bind(task.subject_id).bind(ws).bind(terminal).bind(error).execute(&mut *tx).await?;
+        if terminal {
+            let changed = sqlx::query("UPDATE tasks SET status='dead_letter',failures=max_failures,lease_owner=NULL,lease_token=NULL,lease_until=NULL,last_error_code='rule_run',last_error_message=$4,failed_at=clock_timestamp(),updated_at=clock_timestamp() WHERE id=$1 AND status='leased' AND lease_owner=$2 AND lease_token=$3 AND lease_until>clock_timestamp()")
+                .bind(task.id).bind(&task.lease_owner).bind(task.lease_token).bind(error).execute(&mut *tx).await?.rows_affected();
+            if changed != 1 {
+                return Err(RepositoryError::Task(super::TaskError::LeaseLost));
+            }
+        }
         tx.commit().await?;
-        Ok(())
+        Ok(terminal)
     }
 
     /// Backfills envelopes for rows created before the task cutover. No legacy

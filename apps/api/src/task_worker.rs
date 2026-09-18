@@ -66,6 +66,8 @@ pub enum TaskOutcome {
     Reschedule {
         at: chrono::DateTime<Utc>,
     },
+    /// The handler atomically dead-lettered its domain row and envelope.
+    DeadLettered,
 }
 
 #[derive(Debug)]
@@ -206,6 +208,21 @@ async fn run(
     Ok(())
 }
 
+fn truncate_error(value: &str, max_bytes: usize) -> String {
+    if value.len() <= max_bytes {
+        return value.to_owned();
+    }
+    let mut end = max_bytes;
+    while !value.is_char_boundary(end) {
+        end -= 1;
+    }
+    value[..end].to_owned()
+}
+
+fn bounded_error(code: &str, message: &str) -> (String, String) {
+    (truncate_error(code, 128), truncate_error(message, 1024))
+}
+
 async fn execute(repository: CatalogRepository, handler: Arc<dyn TaskHandler>, task: ClaimedTask) {
     let kind = task.kind;
     let lease_duration = kind.policy().lease_duration;
@@ -255,23 +272,27 @@ async fn execute(repository: CatalogRepository, handler: Arc<dyn TaskHandler>, t
             .reschedule_task_at(task.id, &task.lease_owner, task.lease_token, at)
             .await
             .map(|_| "rescheduled"),
-        Err(error) => repository
-            .retry_task_at(
-                task.id,
-                &task.lease_owner,
-                task.lease_token,
-                Utc::now() + chrono::Duration::seconds(1),
-                error.code,
-                &error.message,
-            )
-            .await
-            .map(|status| {
-                if status.as_str() == "dead_letter" {
-                    "dead_letter"
-                } else {
-                    "retry"
-                }
-            }),
+        Ok(TaskOutcome::DeadLettered) => Ok("dead_letter"),
+        Err(error) => {
+            let (code, message) = bounded_error(error.code, &error.message);
+            repository
+                .retry_task_at(
+                    task.id,
+                    &task.lease_owner,
+                    task.lease_token,
+                    Utc::now() + chrono::Duration::seconds(1),
+                    &code,
+                    &message,
+                )
+                .await
+                .map(|status| {
+                    if status.as_str() == "dead_letter" {
+                        "dead_letter"
+                    } else {
+                        "retry"
+                    }
+                })
+        }
     };
     match result {
         Ok(outcome) => {
@@ -304,5 +325,18 @@ mod tests {
     #[test]
     fn registry_rejects_duplicate_kinds() {
         assert!(TaskHandlerRegistry::new(vec![Arc::new(Duplicate), Arc::new(Duplicate)]).is_err());
+    }
+}
+
+#[cfg(test)]
+mod error_tests {
+    use super::*;
+
+    #[test]
+    fn handler_errors_are_utf8_safe_and_bounded_before_retry() {
+        let (code, message) = bounded_error("x", &"é".repeat(600));
+        assert_eq!(code, "x");
+        assert!(message.len() <= 1024);
+        assert!(std::str::from_utf8(message.as_bytes()).is_ok());
     }
 }

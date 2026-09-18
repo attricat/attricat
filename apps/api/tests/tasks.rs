@@ -396,3 +396,49 @@ async fn continuation_preserves_failure_budget_and_fairness_rotates_workspaces(p
         1
     );
 }
+
+#[sqlx::test]
+async fn oversized_retry_error_is_truncated_and_consumes_failure_budget(pool: PgPool) {
+    let repository = CatalogRepository::new(pool.clone());
+    let workspace_id = workspace(&pool, "tasks-oversized-error").await;
+    let mut transaction = pool.begin().await.unwrap();
+    repository
+        .enqueue_task(&mut transaction, insert(workspace_id, Uuid::new_v4()))
+        .await
+        .unwrap();
+    transaction.commit().await.unwrap();
+
+    let task = repository
+        .claim_task("worker", Duration::from_secs(30))
+        .await
+        .unwrap()
+        .unwrap();
+    // The worker bounds this before calling the repository; keep the repository
+    // validation strict while proving the bounded transition consumes a retry.
+    let message = "é".repeat(600);
+    let mut end = 1024;
+    while !message.is_char_boundary(end) {
+        end -= 1;
+    }
+    let status = repository
+        .retry_task_at(
+            task.id,
+            "worker",
+            task.lease_token,
+            Utc::now(),
+            "handler",
+            &message[..end],
+        )
+        .await
+        .unwrap();
+    assert_eq!(status, TaskStatus::Queued);
+    assert_eq!(
+        repository
+            .task_summary(task.id)
+            .await
+            .unwrap()
+            .unwrap()
+            .failures,
+        1
+    );
+}

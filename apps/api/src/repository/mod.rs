@@ -471,6 +471,19 @@ impl CatalogRepository {
         repository
     }
 
+    /// Attaches an agent task lease to all run lifecycle and durable runner
+    /// writes. A provider response from a reclaimed execution cannot be
+    /// persisted after this token is lost.
+    pub(crate) fn for_agent_task(&self, task: &ClaimedTask) -> Self {
+        let mut repository = self.clone();
+        repository.task_fence = Some(TaskFence {
+            task_id: task.id,
+            lease_owner: task.lease_owner.clone(),
+            lease_token: task.lease_token,
+        });
+        repository
+    }
+
     /// Attaches a workflow task lease to all action writes. The action marker,
     /// catalog effect, outbox event, and audit row are committed only while this
     /// exact task token remains current.

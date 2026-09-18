@@ -73,8 +73,19 @@ impl TaskHandler for RuleTaskHandler {
             .await
             .map_err(task_error)?
         else {
-            // Cancellation and a completion committed before the generic task
-            // acknowledgement are both replay-safe terminal states.
+            // A legacy split terminal transition is repaired by dead-lettering
+            // the reclaimed generic envelope, never by acknowledging it.
+            if scoped
+                .rule_run_is_dead_letter_for_task(&task)
+                .await
+                .map_err(task_error)?
+            {
+                scoped
+                    .dead_letter_task(&task, "rule_run", "rule run is already dead-lettered")
+                    .await
+                    .map_err(|error| task_error(error.into()))?;
+                return Ok(TaskOutcome::DeadLettered);
+            }
             return Ok(TaskOutcome::Complete);
         };
         match evaluate_page(&scoped, &run).await {
@@ -92,17 +103,29 @@ impl TaskHandler for RuleTaskHandler {
                 }
             }
             Err(error) => {
-                scoped
-                    .fail_rule_run_task(&task, &error.to_string())
+                let message = bounded_error_message(&error.to_string());
+                if scoped
+                    .fail_rule_run_task(&task, &message)
                     .await
-                    .map_err(task_error)?;
+                    .map_err(task_error)?
+                {
+                    return Ok(TaskOutcome::DeadLettered);
+                }
                 Err(TaskHandlerError {
                     code: "rule_run",
-                    message: error.to_string(),
+                    message,
                 })
             }
         }
     }
+}
+
+fn bounded_error_message(message: &str) -> String {
+    let mut end = message.len().min(1024);
+    while !message.is_char_boundary(end) {
+        end -= 1;
+    }
+    message[..end].to_owned()
 }
 
 fn task_error(error: RepositoryError) -> TaskHandlerError {

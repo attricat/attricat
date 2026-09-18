@@ -221,6 +221,13 @@ impl CatalogRepository {
         fenced.ensure_task_fence(&mut tx).await?;
         sqlx::query("UPDATE workflow_runs SET status='dead_letter',failed_at=clock_timestamp(),last_error=$3,updated_at=clock_timestamp() WHERE id=$1 AND workspace_id=$2 AND status='pending'")
             .bind(task.subject_id).bind(ws).bind(error).execute(&mut *tx).await?;
+        let changed = sqlx::query("UPDATE tasks SET status='dead_letter',failures=max_failures,lease_owner=NULL,lease_token=NULL,lease_until=NULL,last_error_code='workflow_run',last_error_message=$4,failed_at=clock_timestamp(),updated_at=clock_timestamp() WHERE id=$1 AND status='leased' AND lease_owner=$2 AND lease_token=$3 AND lease_until>clock_timestamp()")
+            .bind(task.id).bind(&task.lease_owner).bind(task.lease_token).bind(error).execute(&mut *tx).await?.rows_affected();
+        if changed != 1 {
+            return Err(crate::repository::RepositoryError::Task(
+                crate::repository::TaskError::LeaseLost,
+            ));
+        }
         tx.commit().await?;
         Ok(())
     }

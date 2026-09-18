@@ -291,6 +291,28 @@ impl CatalogRepository {
         }
     }
 
+    /// Marks a currently owned envelope terminally failed. Domain handlers use
+    /// this only when their domain terminal transition has already committed
+    /// in the same transaction, or when repairing an older split transition.
+    pub(crate) async fn dead_letter_task(
+        &self,
+        task: &ClaimedTask,
+        error_code: &str,
+        error_message: &str,
+    ) -> Result<(), TaskError> {
+        if error_code.len() > MAX_ERROR_CODE_BYTES || error_message.len() > MAX_ERROR_MESSAGE_BYTES
+        {
+            return Err(TaskError::ValueTooLong);
+        }
+        let changed = sqlx::query("UPDATE tasks SET status='dead_letter',failures=max_failures,lease_owner=NULL,lease_token=NULL,lease_until=NULL,last_error_code=$4,last_error_message=$5,failed_at=clock_timestamp(),updated_at=clock_timestamp() WHERE id=$1 AND status='leased' AND lease_owner=$2 AND lease_token=$3 AND lease_until>clock_timestamp()")
+            .bind(task.id).bind(&task.lease_owner).bind(task.lease_token).bind(error_code).bind(error_message).execute(&self.pool).await?.rows_affected();
+        if changed == 1 {
+            Ok(())
+        } else {
+            Err(TaskError::LeaseLost)
+        }
+    }
+
     /// Cancels queued work in the same transaction as its domain record.
     /// Leased work must be cancelled through a token-fenced handler boundary.
     pub async fn cancel_queued_task(
