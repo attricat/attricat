@@ -9,6 +9,21 @@ use uuid::Uuid;
 
 const RULE_FIELDS: &str = "r.id,r.blueprint_id,r.blueprint_version,r.context_id,r.code,r.name,r.version,r.status,r.definition,r.definition_hash,r.compiled_plan,r.published_at,r.created_at,l.enabled_version";
 
+type RuleRunTaskRow = (
+    String,
+    Uuid,
+    Uuid,
+    i64,
+    bool,
+    Option<Uuid>,
+    Option<Uuid>,
+    i64,
+    Uuid,
+    i64,
+    Option<Uuid>,
+    serde_json::Value,
+);
+
 /// Immutable rule execution input loaded only for the task subject named by a
 /// currently leased rule envelope.
 pub(crate) struct ClaimedRuleRun {
@@ -411,7 +426,7 @@ impl CatalogRepository {
         let mut tx = self.pool.begin().await?;
         let fenced = self.for_rule_task(task);
         fenced.ensure_task_fence(&mut tx).await?;
-        let row: Option<(String, Uuid, Uuid, i64, bool, Option<Uuid>, Option<Uuid>, i64, Uuid, i64, Option<Uuid>, serde_json::Value)> = sqlx::query_as(
+        let row: Option<RuleRunTaskRow> = sqlx::query_as(
             "SELECT rr.status,rr.id,rr.rule_id,rr.rule_version,rr.dry_run,rr.scope_entity_id,rr.candidate_cursor,rr.candidates_evaluated,r.blueprint_id,r.blueprint_version,r.context_id,r.compiled_plan FROM rule_runs rr JOIN rules r ON r.id=rr.rule_id AND r.version=rr.rule_version AND r.workspace_id=rr.workspace_id WHERE rr.id=$1 AND rr.workspace_id=$2 FOR UPDATE OF rr",
         ).bind(task.subject_id).bind(ws).fetch_optional(&mut *tx).await?;
         let Some((
