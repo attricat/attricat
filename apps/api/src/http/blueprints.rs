@@ -113,9 +113,6 @@ pub(super) async fn start_safe_blueprint_migration_batch(
     let batch = repository
         .start_safe_blueprint_migration_batch(blueprint_id, version)
         .await?;
-    state
-        .migration_batch_dispatcher
-        .enqueue(repository.clone(), batch.id);
     invalidate_data_health(&state).await;
     Ok((StatusCode::ACCEPTED, Json(batch)))
 }

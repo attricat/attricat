@@ -217,9 +217,12 @@ impl CatalogRepository {
         if n.rows_affected() == 0 {
             return Err(RepositoryError::NotFound("workflow"));
         };
-        // A disabled definition may not start (or continue) a previously queued
-        // revision. Claimed workers recheck this durable state per action.
-        sqlx::query("UPDATE workflow_runs SET status='cancelled',cancelled_at=clock_timestamp(),lease_owner=NULL,lease_until=NULL,updated_at=clock_timestamp() WHERE workspace_id=$1 AND workflow_id=$2 AND status IN ('pending','leased')")
+        // Cancel queued envelopes in this same lifecycle transaction. Leased
+        // tasks remain token-owned until their next action boundary observes
+        // the cancelled domain row, so disable never races a stale worker.
+        sqlx::query("UPDATE tasks t SET status='cancelled',cancelled_at=clock_timestamp(),updated_at=clock_timestamp() FROM workflow_runs r WHERE t.workspace_id=$1 AND t.kind='workflow_run.v1' AND t.subject_id=r.id AND r.workspace_id=$1 AND r.workflow_id=$2 AND t.status='queued'")
+            .bind(ws).bind(id).execute(&mut *tx).await?;
+        sqlx::query("UPDATE workflow_runs SET status='cancelled',cancelled_at=clock_timestamp(),updated_at=clock_timestamp() WHERE workspace_id=$1 AND workflow_id=$2 AND status='pending'")
             .bind(ws).bind(id).execute(&mut *tx).await?;
         self.commit_mutation(tx).await?;
         self.get_workflow(id)

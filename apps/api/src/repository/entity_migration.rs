@@ -16,6 +16,16 @@ impl CatalogRepository {
         &self,
         entity_id: Uuid,
     ) -> Result<EntityMigrationPreview, RepositoryError> {
+        self.preview_entity_migration_into(entity_id, None).await
+    }
+
+    /// Populates a batch-reserved migration row. Reserving the row before this
+    /// preview makes retries reuse one stable migration identity per entity.
+    pub(crate) async fn preview_entity_migration_into(
+        &self,
+        entity_id: Uuid,
+        migration_id: Option<Uuid>,
+    ) -> Result<EntityMigrationPreview, RepositoryError> {
         let entity = self
             .get_entity(entity_id)
             .await?
@@ -167,23 +177,45 @@ impl CatalogRepository {
         } else {
             "needs_input"
         };
-        let migration_id = Uuid::new_v4();
+        let (migration_id, reserved_for_batch) = match migration_id {
+            Some(migration_id) => (migration_id, true),
+            None => (Uuid::new_v4(), false),
+        };
+        let workspace_id = self.workspace_id.unwrap_or(Self::DEFAULT_WORKSPACE_ID);
         let mut transaction = self.pool.begin().await?;
-        sqlx::query(
-            r#"INSERT INTO entity_blueprint_migrations
-                   (id, workspace_id, entity_id, blueprint_id, source_version, target_version, status, issues)
-               VALUES ($1, $2, $3, $4, $5, $6, $7, $8)"#,
-        )
-        .bind(migration_id)
-        .bind(self.workspace_id.unwrap_or(Self::DEFAULT_WORKSPACE_ID))
-        .bind(entity.id)
-        .bind(entity.blueprint_id)
-        .bind(entity.blueprint_version)
-        .bind(target.blueprint.version)
-        .bind(status)
-        .bind(serde_json::to_value(&issues).expect("migration issues serialize"))
-        .execute(&mut *transaction)
-        .await?;
+        if reserved_for_batch {
+            let updated = sqlx::query(
+                "UPDATE entity_blueprint_migrations SET source_version = $2, target_version = $3, status = $4, issues = $5 WHERE id = $1 AND workspace_id = $6 AND status = 'pending'",
+            )
+            .bind(migration_id)
+            .bind(entity.blueprint_version)
+            .bind(target.blueprint.version)
+            .bind(status)
+            .bind(serde_json::to_value(&issues).expect("migration issues serialize"))
+            .bind(workspace_id)
+            .execute(&mut *transaction)
+            .await?
+            .rows_affected();
+            if updated != 1 {
+                return Err(RepositoryError::MigrationNotApplicable);
+            }
+        } else {
+            sqlx::query(
+                r#"INSERT INTO entity_blueprint_migrations
+                       (id, workspace_id, entity_id, blueprint_id, source_version, target_version, status, issues)
+                   VALUES ($1, $2, $3, $4, $5, $6, $7, $8)"#,
+            )
+            .bind(migration_id)
+            .bind(workspace_id)
+            .bind(entity.id)
+            .bind(entity.blueprint_id)
+            .bind(entity.blueprint_version)
+            .bind(target.blueprint.version)
+            .bind(status)
+            .bind(serde_json::to_value(&issues).expect("migration issues serialize"))
+            .execute(&mut *transaction)
+            .await?;
+        }
         self.commit_mutation(transaction).await?;
         Ok(EntityMigrationPreview {
             migration_id,

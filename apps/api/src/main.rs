@@ -23,6 +23,7 @@ use api::{
     repository::CatalogRepository,
     rule_runtime,
     storage::{ObjectStore, S3ObjectStore, StorageConfig},
+    task_worker::{self, TaskHandlerRegistry, TaskWorkerConfig},
     telemetry::{init_metrics, init_tracing},
     workflow_runtime,
 };
@@ -208,44 +209,79 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     let workspace_onboarding_url = std::env::var("WORKSPACE_ONBOARDING_URL")
         .unwrap_or_else(|_| "http://127.0.0.1:5173/onboarding".to_owned());
 
-    let agent_dispatcher = match agent_provider.clone() {
-        Some(config) => Some(
-            agent_worker::start(
-                CatalogRepository::with_workspace_pool_factory(
-                    pool.clone(),
-                    connect_options.clone(),
-                ),
+    // Agent delivery is owned exclusively by the shared task worker.
+    let agent_dispatcher = None;
+    let task_repository =
+        CatalogRepository::with_workspace_pool_factory(pool.clone(), connect_options.clone());
+    // Agent provider calls are not safely resumable. On process restart mark
+    // any previously running run interrupted before its task can be reclaimed.
+    if agent_provider.is_some() {
+        task_repository.recover_interrupted_agent_runs().await?;
+    }
+    let extension_runtime =
+        ExtensionRuntime::new(object_store.clone(), ExtensionRuntimeConfig::default())
+            .map_err(|error| format!("invalid extension runtime configuration: {error}"))?;
+    let mut task_handlers: Vec<Arc<dyn api::task_worker::TaskHandler>> = agent_provider
+        .clone()
+        .map(|config| {
+            Arc::new(agent_worker::AgentTaskHandler::new(
+                task_repository.clone(),
                 config,
                 object_store.clone(),
-            )
-            .await,
+            )) as Arc<dyn api::task_worker::TaskHandler>
+        })
+        .into_iter()
+        .collect();
+    task_handlers.push(Arc::new(extension_runtime::WasmExtensionTaskHandler::new(
+        task_repository.clone(),
+        extension_runtime.clone(),
+    )));
+    task_handlers.push(workflow_runtime::task_handler(task_repository.clone()));
+    task_handlers.push(rule_runtime::task_handler(task_repository.clone()));
+    task_handlers.push(Arc::new(
+        blueprint_migration_worker::BlueprintMigrationBatchTaskHandler::new(
+            task_repository.clone(),
         ),
-        None => None,
-    };
+    ));
+    // Reconcile only batches created before this deployment. New batches and
+    // their task envelopes commit atomically in the repository.
+    task_repository
+        .backfill_safe_blueprint_migration_tasks()
+        .await?;
 
     let (shutdown_sender, shutdown_receiver) = tokio::sync::watch::channel(());
-    let (migration_batch_dispatcher, migration_worker) = blueprint_migration_worker::start(
-        CatalogRepository::with_workspace_pool_factory(pool.clone(), connect_options.clone()),
+    let task_worker_config = TaskWorkerConfig::from_env()
+        .map_err(|error| format!("invalid task worker configuration: {error}"))?;
+    // Registered kinds have atomically-enqueued producers and token-fenced
+    // handlers. Unmigrated kinds remain unregistered and cannot be leased.
+    let task_worker = task_worker::start(
+        task_repository.clone(),
+        TaskHandlerRegistry::new(task_handlers).expect("task handler kinds are unique"),
+        task_worker_config,
         shutdown_receiver.clone(),
     );
     let dispatcher_config = DispatcherConfig::from_env()
         .map_err(|error| format!("invalid event dispatcher configuration: {error}"))?;
-    let extension_runtime =
-        ExtensionRuntime::new(object_store.clone(), ExtensionRuntimeConfig::default())
-            .map_err(|error| format!("invalid extension runtime configuration: {error}"))?;
+    let extension_event_delivery_coordinator = extension_runtime::start_event_delivery_coordinator(
+        task_repository.clone(),
+        shutdown_receiver.clone(),
+    );
     let workflow_repository =
         CatalogRepository::with_workspace_pool_factory(pool.clone(), connect_options.clone());
     let dispatcher_handles = event_dispatcher::start(
         workflow_repository.clone(),
         rule_runtime::add_to_registry(workflow_runtime::add_to_registry(
-            extension_runtime::registry_with_wasm(extension_runtime.clone()),
+            api::event_dispatcher::EventHandlerRegistry::default_handlers(),
         )),
         dispatcher_config,
         shutdown_receiver.clone(),
     );
-    let workflow_worker =
-        workflow_runtime::start(workflow_repository.clone(), shutdown_receiver.clone());
-    let rule_worker = rule_runtime::start(workflow_repository, shutdown_receiver);
+    let workflow_worker = workflow_runtime::start_schedule_coordinator(
+        workflow_repository.clone(),
+        shutdown_receiver.clone(),
+    );
+    let rule_worker =
+        rule_runtime::start_schedule_coordinator(workflow_repository, shutdown_receiver);
 
     let listener = tokio::net::TcpListener::bind(bind_addr).await?;
     tracing::info!(address = %listener.local_addr()?, "API listening");
@@ -255,7 +291,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
             repository: CatalogRepository::with_workspace_pool_factory(pool, connect_options),
             agent_provider,
             agent_dispatcher,
-            migration_batch_dispatcher,
             registry,
             official_registry,
             object_store,
@@ -313,7 +348,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     }
     workflow_worker.await?;
     rule_worker.await?;
-    migration_worker.await?;
+    extension_event_delivery_coordinator.await?;
+    task_worker.await??;
 
     Ok(())
 }

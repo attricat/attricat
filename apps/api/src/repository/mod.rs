@@ -58,6 +58,7 @@ mod reusable_attributes;
 mod roles;
 mod rules;
 mod sessions;
+mod tasks;
 mod tokens;
 mod values;
 mod workflow_runs;
@@ -85,6 +86,8 @@ pub use extensions::{
 pub(crate) use files::{FileMetadata, FileObject, FilePolicy, FileUploadResult, NewUploadedFile};
 pub(crate) use members::{WorkspaceInvitation, WorkspaceMember};
 pub(crate) use roles::{Permission, WorkspaceGrantTarget, WorkspaceRole};
+pub(crate) use rules::{ClaimedRuleRun, RuleCandidateResult};
+pub use tasks::{ClaimedTask, TaskError, TaskSummary};
 pub(crate) use tokens::PersonalApiToken;
 pub use workflow_runs::WorkflowRun;
 pub(crate) use workflow_runs::{ClaimedWorkflowRun, WorkflowActionResult};
@@ -105,7 +108,15 @@ pub struct CatalogRepository {
     workspace_pools: Option<Arc<WorkspacePoolCache>>,
     audit_context: Option<AuditContext>,
     event_context: Option<EventCommandContext>,
+    task_fence: Option<TaskFence>,
     extension_id: Option<String>,
+}
+
+#[derive(Clone)]
+pub(crate) struct TaskFence {
+    pub task_id: Uuid,
+    pub lease_owner: String,
+    pub lease_token: Uuid,
 }
 
 #[derive(Clone)]
@@ -299,6 +310,8 @@ pub enum RepositoryError {
     ApprovalAlreadyDecided,
     #[error(transparent)]
     Database(#[from] sqlx::Error),
+    #[error(transparent)]
+    Task(#[from] tasks::TaskError),
 }
 
 impl RepositoryError {
@@ -325,6 +338,7 @@ impl CatalogRepository {
             workspace_pools: None,
             audit_context: None,
             event_context: None,
+            task_fence: None,
             extension_id: None,
         }
     }
@@ -335,6 +349,7 @@ impl CatalogRepository {
             workspace_id: None,
             audit_context: None,
             event_context: None,
+            task_fence: None,
             extension_id: None,
             workspace_pools: Some(Arc::new(WorkspacePoolCache {
                 connect_options,
@@ -354,6 +369,7 @@ impl CatalogRepository {
                 workspace_pools: None,
                 audit_context: self.audit_context.clone(),
                 event_context: self.event_context.clone(),
+                task_fence: self.task_fence.clone(),
                 extension_id: self.extension_id.clone(),
             });
         };
@@ -365,6 +381,7 @@ impl CatalogRepository {
                 workspace_pools: self.workspace_pools.clone(),
                 audit_context: self.audit_context.clone(),
                 event_context: self.event_context.clone(),
+                task_fence: self.task_fence.clone(),
                 extension_id: self.extension_id.clone(),
             });
         }
@@ -387,6 +404,7 @@ impl CatalogRepository {
             workspace_pools: self.workspace_pools.clone(),
             audit_context: self.audit_context.clone(),
             event_context: self.event_context.clone(),
+            task_fence: self.task_fence.clone(),
             extension_id: self.extension_id.clone(),
         })
     }
@@ -432,6 +450,74 @@ impl CatalogRepository {
                 agent: None,
             });
         }
+        repository
+    }
+
+    /// Attaches the shared task lease to all extension-triggered mutations.
+    /// Every commit re-checks this token in its own transaction, so a stale
+    /// delivery cannot write catalog facts after a reclaim.
+    pub(crate) fn for_event_delivery_task(
+        &self,
+        event: &crate::domain_events::DomainEvent,
+        handler_name: &str,
+        task: &ClaimedTask,
+    ) -> Self {
+        let mut repository = self.for_event_handler(event, handler_name);
+        repository.task_fence = Some(TaskFence {
+            task_id: task.id,
+            lease_owner: task.lease_owner.clone(),
+            lease_token: task.lease_token,
+        });
+        repository
+    }
+
+    /// Attaches an agent task lease to all run lifecycle and durable runner
+    /// writes. A provider response from a reclaimed execution cannot be
+    /// persisted after this token is lost.
+    pub(crate) fn for_agent_task(&self, task: &ClaimedTask) -> Self {
+        let mut repository = self.clone();
+        repository.task_fence = Some(TaskFence {
+            task_id: task.id,
+            lease_owner: task.lease_owner.clone(),
+            lease_token: task.lease_token,
+        });
+        repository
+    }
+
+    /// Attaches a workflow task lease to all action writes. The action marker,
+    /// catalog effect, outbox event, and audit row are committed only while this
+    /// exact task token remains current.
+    pub(crate) fn for_workflow_task(&self, task: &ClaimedTask) -> Self {
+        let mut repository = self.clone();
+        repository.task_fence = Some(TaskFence {
+            task_id: task.id,
+            lease_owner: task.lease_owner.clone(),
+            lease_token: task.lease_token,
+        });
+        repository
+    }
+
+    /// Attaches a rule task lease to a run checkpoint. Rule findings and cursor
+    /// updates use this exact fence rather than the legacy rule-run lease.
+    pub(crate) fn for_rule_task(&self, task: &ClaimedTask) -> Self {
+        let mut repository = self.clone();
+        repository.task_fence = Some(TaskFence {
+            task_id: task.id,
+            lease_owner: task.lease_owner.clone(),
+            lease_token: task.lease_token,
+        });
+        repository
+    }
+
+    /// Attaches a blueprint migration task lease to batch and per-entity
+    /// checkpoints. A reclaimed task cannot advance an old batch execution.
+    pub(crate) fn for_blueprint_migration_task(&self, task: &ClaimedTask) -> Self {
+        let mut repository = self.clone();
+        repository.task_fence = Some(TaskFence {
+            task_id: task.id,
+            lease_owner: task.lease_owner.clone(),
+            lease_token: task.lease_token,
+        });
         repository
     }
 
@@ -638,10 +724,31 @@ impl CatalogRepository {
         Ok(Some(event_id))
     }
 
+    pub(in crate::repository) async fn ensure_task_fence(
+        &self,
+        transaction: &mut Transaction<'_, Postgres>,
+    ) -> Result<(), RepositoryError> {
+        let Some(fence) = &self.task_fence else {
+            return Ok(());
+        };
+        // Locking the current envelope makes this check a fence for every
+        // subsequent domain write in this transaction. A reclaimer cannot
+        // replace the token until this transaction commits or rolls back.
+        let valid: bool = sqlx::query_scalar("SELECT EXISTS (SELECT 1 FROM tasks t WHERE t.id = $1 AND t.status = 'leased' AND t.lease_owner = $2 AND t.lease_token = $3 AND t.lease_until > now() FOR KEY SHARE OF t)")
+            .bind(fence.task_id).bind(&fence.lease_owner).bind(fence.lease_token)
+            .fetch_one(&mut **transaction).await?;
+        if valid {
+            Ok(())
+        } else {
+            Err(RepositoryError::Task(TaskError::LeaseLost))
+        }
+    }
+
     pub(in crate::repository) async fn commit_mutation(
         &self,
         mut transaction: Transaction<'_, Postgres>,
     ) -> Result<(), RepositoryError> {
+        self.ensure_task_fence(&mut transaction).await?;
         self.write_audit_event(&mut transaction).await?;
         transaction.commit().await?;
         Ok(())
@@ -654,6 +761,7 @@ impl CatalogRepository {
         mut transaction: Transaction<'_, Postgres>,
         event: crate::domain_events::NewDomainEvent,
     ) -> Result<(), RepositoryError> {
+        self.ensure_task_fence(&mut transaction).await?;
         self.write_audit_event(&mut transaction).await?;
         self.enqueue_event(&mut transaction, event).await?;
         transaction.commit().await?;
@@ -702,6 +810,7 @@ impl CatalogRepository {
             .map_err(|error| RepositoryError::InvalidExtension(error.to_string()))?;
         let repository = self.for_extension(extension_id);
         let mut transaction = repository.pool.begin().await?;
+        repository.ensure_task_fence(&mut transaction).await?;
         let mut event =
             repository.core_event(&contract.event_type, aggregate_kind, aggregate_id, payload);
         event.metadata = serde_json::json!({"event_contract": contract_id, "event_contract_version": contract.version});
@@ -784,6 +893,7 @@ impl CatalogRepository {
         changes: Vec<AuditEventChange>,
         mut event: NewDomainEvent,
     ) -> Result<(), RepositoryError> {
+        self.ensure_task_fence(&mut transaction).await?;
         let retained_role = self
             .reconcile_entity_publication(&mut transaction, event.aggregate_id, "entity_changed")
             .await?;

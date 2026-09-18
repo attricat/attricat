@@ -634,3 +634,68 @@ async fn agent_message_requires_a_configured_dispatcher(pool: PgPool) {
     assert_eq!(response["error"]["code"], "service_unavailable");
     server.abort();
 }
+
+#[sqlx::test]
+async fn startup_recovery_only_interrupts_expired_agent_tasks(pool: PgPool) {
+    use api::task_queue::{TaskInsert, TaskKind};
+
+    let repository = CatalogRepository::new(pool.clone());
+    let workspace_id = BOOTSTRAP_WORKSPACE_ID.parse::<Uuid>().unwrap();
+    let conversation_id = Uuid::new_v4();
+    sqlx::query("INSERT INTO conversations (id, workspace_id, title) VALUES ($1, $2, 'recovery')")
+        .bind(conversation_id)
+        .bind(workspace_id)
+        .execute(&pool)
+        .await
+        .unwrap();
+    for expired in [false, true] {
+        let run_id = Uuid::new_v4();
+        sqlx::query("INSERT INTO agent_runs (id,workspace_id,conversation_id,origin,status,provider_base_url,model,started_at) VALUES ($1,$2,$3,'interactive','running','https://provider.test','test',now())")
+            .bind(run_id).bind(workspace_id).bind(conversation_id).execute(&pool).await.unwrap();
+        let mut tx = pool.begin().await.unwrap();
+        repository
+            .enqueue_task(
+                &mut tx,
+                TaskInsert {
+                    workspace_id,
+                    kind: TaskKind::AgentRunV1,
+                    subject_id: run_id,
+                    generation: 0,
+                    payload: json!({"agent_run_id": run_id.to_string()}),
+                    correlation_id: None,
+                    causation_id: None,
+                },
+            )
+            .await
+            .unwrap();
+        tx.commit().await.unwrap();
+        let task = repository
+            .claim_task("agent-worker", Duration::from_secs(60))
+            .await
+            .unwrap()
+            .unwrap();
+        if expired {
+            sqlx::query("UPDATE tasks SET lease_until=now()-interval '1 second' WHERE id=$1")
+                .bind(task.id)
+                .execute(&pool)
+                .await
+                .unwrap();
+        }
+    }
+
+    repository.recover_interrupted_agent_runs().await.unwrap();
+    let statuses: Vec<String> =
+        sqlx::query_scalar("SELECT status FROM agent_runs ORDER BY created_at")
+            .fetch_all(&pool)
+            .await
+            .unwrap();
+    assert!(statuses.contains(&"running".to_owned()));
+    assert!(statuses.contains(&"failed".to_owned()));
+    let recovered: i64 = sqlx::query_scalar(
+        "SELECT count(*) FROM tasks WHERE kind='agent_run.v1' AND status='succeeded'",
+    )
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert_eq!(recovered, 1);
+}

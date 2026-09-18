@@ -369,6 +369,7 @@ impl From<RepositoryError> for ApiError {
             {
                 Self::invalid_input(database_error.message().to_owned())
             }
+            RepositoryError::Task(_) => Self::internal("task queue operation failed"),
             RepositoryError::Database(_) => Self::internal("database operation failed"),
         }
     }

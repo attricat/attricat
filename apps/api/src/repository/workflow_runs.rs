@@ -1,8 +1,10 @@
 use super::*;
-use crate::domain_events::DomainEvent;
+use crate::{
+    domain_events::DomainEvent,
+    task_queue::{TaskInsert, TaskKind},
+};
 use chrono::{DateTime, Utc};
 use serde_json::Value;
-use std::time::Duration;
 use uuid::Uuid;
 
 #[derive(Debug, Clone, serde::Serialize, sqlx::FromRow)]
@@ -31,8 +33,14 @@ pub(crate) enum WorkflowActionResult {
     Cancelled,
 }
 
+pub(crate) struct ClaimedWorkflowRun {
+    pub run: WorkflowRun,
+    pub trigger_event: Value,
+    pub compiled_plan: Value,
+}
+
 #[derive(sqlx::FromRow)]
-struct ClaimedWorkflowRunRow {
+struct WorkflowRunRow {
     id: Uuid,
     workflow_id: Uuid,
     workflow_version: i64,
@@ -52,16 +60,59 @@ struct ClaimedWorkflowRunRow {
     compiled_plan: Value,
 }
 
-pub(crate) struct ClaimedWorkflowRun {
-    pub run: WorkflowRun,
-    pub trigger_event: Value,
-    pub compiled_plan: Value,
-    pub(crate) lease_owner: String,
+impl From<WorkflowRunRow> for ClaimedWorkflowRun {
+    fn from(row: WorkflowRunRow) -> Self {
+        Self {
+            run: WorkflowRun {
+                id: row.id,
+                workflow_id: row.workflow_id,
+                workflow_version: row.workflow_version,
+                trigger_event_id: row.trigger_event_id,
+                trigger_sequence: row.trigger_sequence,
+                source: row.source,
+                status: row.status,
+                attempts: row.attempts,
+                failed_at: row.failed_at,
+                completed_at: row.completed_at,
+                last_error: row.last_error,
+                created_at: row.created_at,
+                cancelled_at: row.cancelled_at,
+                root_trigger_event_id: row.root_trigger_event_id,
+                causal_depth: row.causal_depth,
+            },
+            trigger_event: row.trigger_event,
+            compiled_plan: row.compiled_plan,
+        }
+    }
 }
 
 impl CatalogRepository {
-    /// Fan-out is deliberately limited to durable intake. No action is executed
-    /// on the shared domain-event dispatcher lease.
+    async fn enqueue_workflow_task(
+        &self,
+        tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
+        workspace_id: Uuid,
+        run_id: Uuid,
+        correlation_id: Option<Uuid>,
+        causation_id: Option<Uuid>,
+    ) -> Result<(), RepositoryError> {
+        self.enqueue_task(
+            tx,
+            TaskInsert {
+                workspace_id,
+                kind: TaskKind::WorkflowRunV1,
+                subject_id: run_id,
+                generation: 0,
+                payload: serde_json::json!({}),
+                correlation_id,
+                causation_id,
+            },
+        )
+        .await?;
+        Ok(())
+    }
+
+    /// Fan-out creates the immutable run and its delivery envelope in one
+    /// transaction. The outbox handler is therefore only a producer.
     pub async fn fan_out_workflow_runs(&self, event: &DomainEvent) -> Result<u64, RepositoryError> {
         if event.aggregate_kind != "entity"
             || event.source_name.starts_with("workflow:")
@@ -75,12 +126,8 @@ impl CatalogRepository {
         }
         let ws = self.workspace_id.unwrap_or(Self::DEFAULT_WORKSPACE_ID);
         let mut tx = self.pool.begin().await?;
-        let rows: Vec<(Uuid, i64, Value)> = sqlx::query_as(
-            // Hold a shared lifecycle lock through insertion. disable/enable
-            // acquire the conflicting row lock, so a run selected before a
-            // disable cannot be committed after that disable.
-            "SELECT w.id, w.version, w.compiled_plan FROM workflows w JOIN workflow_lifecycles l ON l.workflow_id=w.id AND l.workspace_id=w.workspace_id WHERE w.workspace_id=$1 AND w.status='published' AND l.enabled_version=w.version AND $2 > COALESCE(l.activation_sequence, 0) FOR SHARE OF l"
-        ).bind(ws).bind(event.sequence).fetch_all(&mut *tx).await?;
+        let rows: Vec<(Uuid, i64, Value)> = sqlx::query_as("SELECT w.id, w.version, w.compiled_plan FROM workflows w JOIN workflow_lifecycles l ON l.workflow_id=w.id AND l.workspace_id=w.workspace_id WHERE w.workspace_id=$1 AND w.status='published' AND l.enabled_version=w.version AND $2 > COALESCE(l.activation_sequence, 0) FOR SHARE OF l")
+            .bind(ws).bind(event.sequence).fetch_all(&mut *tx).await?;
         let snapshot = serde_json::to_value(event).expect("domain event serializes");
         let mut inserted = 0;
         for (workflow_id, version, plan) in rows {
@@ -109,87 +156,92 @@ impl CatalogRepository {
                 .and_then(Value::as_i64)
                 .filter(|depth| (0..=8).contains(depth))
                 .unwrap_or(0) as i32;
-            let result = sqlx::query("INSERT INTO workflow_runs (id, workspace_id, workflow_id, workflow_version, trigger_event_id, trigger_sequence, trigger_event, compiled_plan, root_trigger_event_id, causal_depth) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) ON CONFLICT (workspace_id,workflow_id,workflow_version,trigger_event_id) DO NOTHING")
-                .bind(Uuid::new_v4()).bind(ws).bind(workflow_id).bind(version).bind(event.id).bind(event.sequence).bind(&snapshot).bind(plan).bind(root_trigger_event_id).bind(causal_depth).execute(&mut *tx).await?;
-            inserted += result.rows_affected();
+            let id = Uuid::new_v4();
+            let run_id: Option<Uuid> = sqlx::query_scalar("INSERT INTO workflow_runs (id, workspace_id, workflow_id, workflow_version, trigger_event_id, trigger_sequence, trigger_event, compiled_plan, root_trigger_event_id, causal_depth) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) ON CONFLICT (workspace_id,workflow_id,workflow_version,trigger_event_id) DO NOTHING RETURNING id")
+                .bind(id).bind(ws).bind(workflow_id).bind(version).bind(event.id).bind(event.sequence).bind(&snapshot).bind(plan).bind(root_trigger_event_id).bind(causal_depth).fetch_optional(&mut *tx).await?;
+            if let Some(run_id) = run_id {
+                self.enqueue_workflow_task(
+                    &mut tx,
+                    ws,
+                    run_id,
+                    Some(event.correlation_id),
+                    Some(event.id),
+                )
+                .await?;
+                inserted += 1;
+            }
         }
         tx.commit().await?;
         Ok(inserted)
     }
 
-    pub(crate) async fn claim_workflow_run(
+    /// Loads only the domain row named by the current workflow task. A task is
+    /// never allowed to execute a cross-workspace or mismatched subject.
+    pub(crate) async fn workflow_run_for_task(
         &self,
-        owner: &str,
-        lease: Duration,
-    ) -> Result<Option<ClaimedWorkflowRun>, RepositoryError> {
+        task: &ClaimedTask,
+    ) -> Result<ClaimedWorkflowRun, RepositoryError> {
         let ws = self.workspace_id.unwrap_or(Self::DEFAULT_WORKSPACE_ID);
-        let row = sqlx::query_as::<_, ClaimedWorkflowRunRow>(
-            "WITH candidate AS (SELECT id FROM workflow_runs WHERE workspace_id=$1 AND ((status='pending' AND next_attempt_at<=clock_timestamp()) OR (status='leased' AND lease_until<=clock_timestamp())) ORDER BY next_attempt_at,id FOR UPDATE SKIP LOCKED LIMIT 1), leased AS (UPDATE workflow_runs r SET status='leased', attempts=attempts+1, lease_owner=$2, lease_until=clock_timestamp()+($3 * interval '1 millisecond'), last_error=NULL, updated_at=clock_timestamp() FROM candidate c WHERE r.id=c.id RETURNING r.*) SELECT id,workflow_id,workflow_version,trigger_event_id,trigger_sequence,source,status,attempts,failed_at,completed_at,last_error,created_at,cancelled_at,root_trigger_event_id,causal_depth,trigger_event,compiled_plan FROM leased"
-        ).bind(ws).bind(owner).bind(lease.as_millis() as i64).fetch_optional(&self.pool).await?;
-        Ok(row.map(|r| ClaimedWorkflowRun {
-            run: WorkflowRun {
-                id: r.id,
-                workflow_id: r.workflow_id,
-                workflow_version: r.workflow_version,
-                trigger_event_id: r.trigger_event_id,
-                trigger_sequence: r.trigger_sequence,
-                source: r.source,
-                status: r.status,
-                attempts: r.attempts,
-                failed_at: r.failed_at,
-                completed_at: r.completed_at,
-                last_error: r.last_error,
-                created_at: r.created_at,
-                cancelled_at: r.cancelled_at,
-                root_trigger_event_id: r.root_trigger_event_id,
-                causal_depth: r.causal_depth,
-            },
-            trigger_event: r.trigger_event,
-            compiled_plan: r.compiled_plan,
-            lease_owner: owner.to_owned(),
-        }))
-    }
-    pub(crate) async fn complete_workflow_run(
-        &self,
-        run: &ClaimedWorkflowRun,
-    ) -> Result<(), RepositoryError> {
-        let result = sqlx::query("UPDATE workflow_runs SET status='completed',completed_at=clock_timestamp(),lease_owner=NULL,lease_until=NULL,updated_at=clock_timestamp() WHERE id=$1 AND status='leased' AND lease_owner=$2").bind(run.run.id).bind(&run.lease_owner).execute(&self.pool).await?;
-        if result.rows_affected() != 1 {
-            let cancelled: bool = sqlx::query_scalar(
-                "SELECT EXISTS(SELECT 1 FROM workflow_runs WHERE id=$1 AND status='cancelled')",
-            )
-            .bind(run.run.id)
-            .fetch_one(&self.pool)
-            .await?;
-            if !cancelled {
-                return Err(RepositoryError::InvalidWorkflowDefinition(
-                    "workflow run lease was lost".into(),
-                ));
-            }
-        }
-        Ok(())
-    }
-    pub(crate) async fn retry_workflow_run(
-        &self,
-        run: &ClaimedWorkflowRun,
-        error: &str,
-        delay: Duration,
-        max_attempts: i32,
-    ) -> Result<(), RepositoryError> {
-        let result = sqlx::query("UPDATE workflow_runs SET status=CASE WHEN attempts >= $4 THEN 'dead_letter' ELSE 'pending' END,next_attempt_at=CASE WHEN attempts >= $4 THEN next_attempt_at ELSE clock_timestamp()+($3 * interval '1 millisecond') END,failed_at=clock_timestamp(),last_error=$2,lease_owner=NULL,lease_until=NULL,updated_at=clock_timestamp() WHERE id=$1 AND status='leased' AND lease_owner=$5").bind(run.run.id).bind(error).bind(delay.as_millis() as i64).bind(max_attempts).bind(&run.lease_owner).execute(&self.pool).await?;
-        if result.rows_affected() != 1 {
+        if task.kind != TaskKind::WorkflowRunV1 || task.workspace_id != ws {
             return Err(RepositoryError::InvalidWorkflowDefinition(
-                "workflow run lease was lost or cancelled".into(),
+                "workflow task workspace or kind mismatch".into(),
             ));
         }
+        let row = sqlx::query_as::<_, WorkflowRunRow>("SELECT id,workflow_id,workflow_version,trigger_event_id,trigger_sequence,source,status,attempts,failed_at,completed_at,last_error,created_at,cancelled_at,root_trigger_event_id,causal_depth,trigger_event,compiled_plan FROM workflow_runs WHERE id=$1 AND workspace_id=$2")
+            .bind(task.subject_id).bind(ws).fetch_optional(&self.pool).await?;
+        row.map(Into::into).ok_or_else(|| {
+            RepositoryError::InvalidWorkflowDefinition("workflow task subject is missing".into())
+        })
+    }
+
+    /// The run completion is a domain write, so it validates and locks the
+    /// current task token in the same transaction before acknowledging it.
+    pub(crate) async fn complete_workflow_run_task(
+        &self,
+        task: &ClaimedTask,
+    ) -> Result<(), RepositoryError> {
+        let ws = self.workspace_id.unwrap_or(Self::DEFAULT_WORKSPACE_ID);
+        let mut tx = self.pool.begin().await?;
+        let fenced = self.for_workflow_task(task);
+        fenced.ensure_task_fence(&mut tx).await?;
+        sqlx::query("UPDATE workflow_runs SET status='completed',completed_at=clock_timestamp(),updated_at=clock_timestamp() WHERE id=$1 AND workspace_id=$2 AND status='pending'")
+            .bind(task.subject_id).bind(ws).execute(&mut *tx).await?;
+        tx.commit().await?;
         Ok(())
     }
+
+    pub(crate) async fn dead_letter_workflow_run_task(
+        &self,
+        task: &ClaimedTask,
+        error: &str,
+    ) -> Result<(), RepositoryError> {
+        let ws = self.workspace_id.unwrap_or(Self::DEFAULT_WORKSPACE_ID);
+        let mut tx = self.pool.begin().await?;
+        let fenced = self.for_workflow_task(task);
+        fenced.ensure_task_fence(&mut tx).await?;
+        let run_changed = sqlx::query("UPDATE workflow_runs SET status='dead_letter',failed_at=clock_timestamp(),last_error=$3,updated_at=clock_timestamp() WHERE id=$1 AND workspace_id=$2 AND status='pending'")
+            .bind(task.subject_id).bind(ws).bind(error).execute(&mut *tx).await?.rows_affected();
+        if run_changed != 1 {
+            return Err(RepositoryError::InvalidWorkflowDefinition(
+                "workflow run is not available for its task".into(),
+            ));
+        }
+        let changed = sqlx::query("UPDATE tasks SET status='dead_letter',failures=max_failures,lease_owner=NULL,lease_token=NULL,lease_until=NULL,last_error_code='workflow_run',last_error_message=$4,failed_at=clock_timestamp(),updated_at=clock_timestamp() WHERE id=$1 AND status='leased' AND lease_owner=$2 AND lease_token=$3 AND lease_until>clock_timestamp()")
+            .bind(task.id).bind(&task.lease_owner).bind(task.lease_token).bind(error).execute(&mut *tx).await?.rows_affected();
+        if changed != 1 {
+            return Err(crate::repository::RepositoryError::Task(
+                crate::repository::TaskError::LeaseLost,
+            ));
+        }
+        tx.commit().await?;
+        Ok(())
+    }
+
     pub async fn list_workflow_runs(&self) -> Result<Vec<WorkflowRun>, RepositoryError> {
         let ws = self.workspace_id.unwrap_or(Self::DEFAULT_WORKSPACE_ID);
         Ok(sqlx::query_as("SELECT id,workflow_id,workflow_version,trigger_event_id,trigger_sequence,source,status,attempts,failed_at,completed_at,last_error,created_at,cancelled_at,root_trigger_event_id,causal_depth FROM workflow_runs WHERE workspace_id=$1 ORDER BY created_at DESC").bind(ws).fetch_all(&self.pool).await?)
     }
-    /// Create a durable manual run only for the exact currently enabled revision.
-    /// The management route cannot select a draft or historical revision.
+
     pub async fn create_manual_workflow_run(
         &self,
         workflow_id: Uuid,
@@ -204,9 +256,7 @@ impl CatalogRepository {
         }
         let ws = self.workspace_id.unwrap_or(Self::DEFAULT_WORKSPACE_ID);
         let mut tx = self.pool.begin().await?;
-        let row: Option<(i64, Value)> = sqlx::query_as(
-            "SELECT w.version,w.compiled_plan FROM workflows w JOIN workflow_lifecycles l ON l.workflow_id=w.id AND l.workspace_id=w.workspace_id WHERE w.workspace_id=$1 AND w.id=$2 AND w.status='published' AND l.enabled_version=w.version FOR SHARE OF l",
-        ).bind(ws).bind(workflow_id).fetch_optional(&mut *tx).await?;
+        let row: Option<(i64, Value)> = sqlx::query_as("SELECT w.version,w.compiled_plan FROM workflows w JOIN workflow_lifecycles l ON l.workflow_id=w.id AND l.workspace_id=w.workspace_id WHERE w.workspace_id=$1 AND w.id=$2 AND w.status='published' AND l.enabled_version=w.version FOR SHARE OF l").bind(ws).bind(workflow_id).fetch_optional(&mut *tx).await?;
         let Some((version, plan)) = row else {
             return Err(RepositoryError::WorkflowNotPublished);
         };
@@ -227,23 +277,24 @@ impl CatalogRepository {
         }
         let id = Uuid::new_v4();
         let event = synthetic_trigger(id, ws, entity_id, "manual", self.audit_context.as_ref());
-        let snapshot = serde_json::to_value(event).expect("domain event serializes");
+        let snapshot = serde_json::to_value(&event).expect("domain event serializes");
         let inserted: Option<Uuid> = sqlx::query_scalar("INSERT INTO workflow_runs(id,workspace_id,workflow_id,workflow_version,trigger_event,compiled_plan,source,idempotency_key,causal_depth) VALUES($1,$2,$3,$4,$5,$6,'manual',$7,0) ON CONFLICT (workspace_id,workflow_id,workflow_version,source,idempotency_key) WHERE idempotency_key IS NOT NULL DO NOTHING RETURNING id")
             .bind(id).bind(ws).bind(workflow_id).bind(version).bind(snapshot).bind(plan).bind(idempotency_key).fetch_optional(&mut *tx).await?;
         if let Some(run_id) = inserted {
+            self.enqueue_workflow_task(&mut tx, ws, run_id, Some(event.correlation_id), None)
+                .await?;
             self.commit_mutation(tx).await?;
             Ok(run_id)
         } else {
-            // The unique key is the durable retry boundary; do not audit or enqueue a second run.
-            let run_id: Uuid = sqlx::query_scalar("SELECT id FROM workflow_runs WHERE workspace_id=$1 AND workflow_id=$2 AND workflow_version=$3 AND source='manual' AND idempotency_key=$4")
-                .bind(ws).bind(workflow_id).bind(version).bind(idempotency_key).fetch_one(&mut *tx).await?;
+            let run_id: Uuid = sqlx::query_scalar("SELECT id FROM workflow_runs WHERE workspace_id=$1 AND workflow_id=$2 AND workflow_version=$3 AND source='manual' AND idempotency_key=$4").bind(ws).bind(workflow_id).bind(version).bind(idempotency_key).fetch_one(&mut *tx).await?;
             tx.commit().await?;
             Ok(run_id)
         }
     }
 
-    /// Advances durable UTC schedule cursors. Misfires older than five minutes are recorded and
-    /// skipped; a workflow with an active run does not overlap and skips that occurrence.
+    /// Advances schedule cursors; it is a producer only. Each created run and
+    /// task envelope is committed together, while active task/run state keeps
+    /// the existing no-overlap semantics.
     pub async fn schedule_workflow_runs(&self) -> Result<u64, RepositoryError> {
         use chrono::Duration as ChronoDuration;
         let ws = self.workspace_id.unwrap_or(Self::DEFAULT_WORKSPACE_ID);
@@ -285,11 +336,7 @@ impl CatalogRepository {
                 };
                 if due > now {
                     continue;
-                };
-                // Advance occurrence-by-occurrence, rather than jumping from an old
-                // cursor to now. This makes every overlap/misfire observable. The
-                // compiler's six-field cron admits a one-second cadence, so cap a
-                // single transaction at five minutes' worth plus a small margin.
+                }
                 let mut occurrence_due = due;
                 let mut skipped = 0_i64;
                 for _ in 0..512 {
@@ -302,32 +349,65 @@ impl CatalogRepository {
                         )
                     })?;
                     let missed = occurrence_due < now - ChronoDuration::minutes(5);
-                    let active: bool = sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM workflow_runs WHERE workspace_id=$1 AND workflow_id=$2 AND status IN ('pending','leased'))")
-                        .bind(ws).bind(workflow_id).fetch_one(&mut *tx).await?;
+                    let active: bool = sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM workflow_runs WHERE workspace_id=$1 AND workflow_id=$2 AND status='pending')").bind(ws).bind(workflow_id).fetch_one(&mut *tx).await?;
                     if missed || active {
                         skipped += 1;
                     } else {
                         let id = Uuid::new_v4();
                         let event = synthetic_trigger(id, ws, target, "schedule", None);
                         let snapshot =
-                            serde_json::to_value(event).expect("domain event serializes");
-                        let result = sqlx::query("INSERT INTO workflow_runs(id,workspace_id,workflow_id,workflow_version,trigger_event,compiled_plan,source,idempotency_key,causal_depth) VALUES($1,$2,$3,$4,$5,$6,'schedule',$7,0) ON CONFLICT (workspace_id,workflow_id,workflow_version,source,idempotency_key) WHERE idempotency_key IS NOT NULL DO NOTHING")
-                            .bind(id).bind(ws).bind(workflow_id).bind(version).bind(snapshot).bind(plan.clone()).bind(format!("{index}:{}", occurrence_due.to_rfc3339())).execute(&mut *tx).await?;
-                        created += result.rows_affected();
+                            serde_json::to_value(&event).expect("domain event serializes");
+                        let run_id: Option<Uuid> = sqlx::query_scalar("INSERT INTO workflow_runs(id,workspace_id,workflow_id,workflow_version,trigger_event,compiled_plan,source,idempotency_key,causal_depth) VALUES($1,$2,$3,$4,$5,$6,'schedule',$7,0) ON CONFLICT (workspace_id,workflow_id,workflow_version,source,idempotency_key) WHERE idempotency_key IS NOT NULL DO NOTHING RETURNING id").bind(id).bind(ws).bind(workflow_id).bind(version).bind(snapshot).bind(plan.clone()).bind(format!("{index}:{}", occurrence_due.to_rfc3339())).fetch_optional(&mut *tx).await?;
+                        if let Some(run_id) = run_id {
+                            self.enqueue_workflow_task(
+                                &mut tx,
+                                ws,
+                                run_id,
+                                Some(event.correlation_id),
+                                None,
+                            )
+                            .await?;
+                            created += 1;
+                        }
                     }
                     occurrence_due = next;
                 }
-                sqlx::query("UPDATE workflow_schedule_states SET next_run_at=$5,misfires=misfires+$6,updated_at=clock_timestamp() WHERE workspace_id=$1 AND workflow_id=$2 AND workflow_version=$3 AND trigger_index=$4")
-                    .bind(ws).bind(workflow_id).bind(version).bind(index as i32).bind(occurrence_due).bind(skipped).execute(&mut *tx).await?;
+                sqlx::query("UPDATE workflow_schedule_states SET next_run_at=$5,misfires=misfires+$6,updated_at=clock_timestamp() WHERE workspace_id=$1 AND workflow_id=$2 AND workflow_version=$3 AND trigger_index=$4").bind(ws).bind(workflow_id).bind(version).bind(index as i32).bind(occurrence_due).bind(skipped).execute(&mut *tx).await?;
             }
         }
         tx.commit().await?;
         Ok(created)
     }
 
+    /// Backfills envelopes for pre-cutover pending rows. No legacy claimer is
+    /// started in this binary, so normalizing stale leases is safe and keeps a
+    /// restart from stranding work created before the cutover.
+    pub async fn backfill_workflow_tasks(&self) -> Result<u64, RepositoryError> {
+        let ws = self.workspace_id.unwrap_or(Self::DEFAULT_WORKSPACE_ID);
+        let mut tx = self.pool.begin().await?;
+        sqlx::query("UPDATE workflow_runs SET status='pending',lease_owner=NULL,lease_until=NULL,updated_at=clock_timestamp() WHERE workspace_id=$1 AND status='leased'").bind(ws).execute(&mut *tx).await?;
+        let rows: Vec<(Uuid, Option<Uuid>, Option<Uuid>)> = sqlx::query_as("SELECT id,trigger_event_id,trigger_event_id FROM workflow_runs WHERE workspace_id=$1 AND status='pending' FOR UPDATE").bind(ws).fetch_all(&mut *tx).await?;
+        let count = rows.len() as u64;
+        for (run_id, correlation, causation) in rows {
+            self.enqueue_workflow_task(&mut tx, ws, run_id, correlation, causation)
+                .await?;
+        }
+        tx.commit().await?;
+        Ok(count)
+    }
+
     pub async fn replay_workflow_run(&self, id: Uuid) -> Result<bool, RepositoryError> {
         let ws = self.workspace_id.unwrap_or(Self::DEFAULT_WORKSPACE_ID);
-        Ok(sqlx::query("UPDATE workflow_runs SET status='pending',attempts=0,next_attempt_at=clock_timestamp(),lease_owner=NULL,lease_until=NULL,failed_at=NULL,last_error=NULL,replayed_at=clock_timestamp(),updated_at=clock_timestamp() WHERE id=$1 AND workspace_id=$2 AND status='dead_letter'").bind(id).bind(ws).execute(&self.pool).await?.rows_affected()==1)
+        let mut tx = self.pool.begin().await?;
+        let updated = sqlx::query("UPDATE workflow_runs SET status='pending',attempts=0,failed_at=NULL,last_error=NULL,replayed_at=clock_timestamp(),updated_at=clock_timestamp() WHERE id=$1 AND workspace_id=$2 AND status='dead_letter'").bind(id).bind(ws).execute(&mut *tx).await?.rows_affected();
+        if updated == 0 {
+            tx.commit().await?;
+            return Ok(false);
+        }
+        let task_id: Uuid = sqlx::query_scalar("SELECT id FROM tasks WHERE workspace_id=$1 AND kind='workflow_run.v1' AND subject_id=$2 AND status='dead_letter' ORDER BY generation DESC LIMIT 1 FOR UPDATE").bind(ws).bind(id).fetch_one(&mut *tx).await?;
+        self.replay_task(&mut tx, task_id).await?;
+        tx.commit().await?;
+        Ok(true)
     }
 }
 

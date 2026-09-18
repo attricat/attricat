@@ -57,19 +57,11 @@ pub(super) struct RunResponse {
     status: String,
 }
 
-fn configured(
-    state: &AppState,
-) -> Result<
-    (
-        &crate::agents::AgentProviderConfig,
-        &crate::agent_worker::AgentDispatcher,
-    ),
-    ApiError,
-> {
-    match (&state.agent_provider, &state.agent_dispatcher) {
-        (Some(config), Some(dispatcher)) => Ok((config, dispatcher)),
-        _ => Err(ApiError::service_unavailable("agents are not configured")),
-    }
+fn configured(state: &AppState) -> Result<&crate::agents::AgentProviderConfig, ApiError> {
+    state
+        .agent_provider
+        .as_ref()
+        .ok_or_else(|| ApiError::service_unavailable("agents are not configured"))
 }
 
 pub(super) async fn create_conversation(
@@ -157,7 +149,7 @@ pub(super) async fn list_runs(
 pub(super) async fn send_message(
     State(state): State<AppState>,
     AuthenticatedPrincipal(user, _): AuthenticatedPrincipal,
-    ActiveWorkspace(workspace_id): ActiveWorkspace,
+    ActiveWorkspace(_workspace_id): ActiveWorkspace,
     ScopedRepository(repository): ScopedRepository,
     ApiPath(conversation_id): ApiPath<Uuid>,
     ApiJson(input): ApiJson<SendMessage>,
@@ -185,7 +177,7 @@ pub(super) async fn send_message(
             "attachment_ids must not contain duplicates".into(),
         ));
     }
-    let (config, dispatcher) = configured(&state)?;
+    let config = configured(&state)?;
     repository
         .append_conversation_message_with_attachments(
             conversation_id,
@@ -203,10 +195,6 @@ pub(super) async fn send_message(
             &config.model,
         )
         .await?;
-    dispatcher
-        .enqueue(workspace_id, run.id)
-        .await
-        .map_err(|_| ApiError::service_unavailable("agent worker is unavailable"))?;
     Ok((
         StatusCode::ACCEPTED,
         Json(RunResponse {
@@ -269,14 +257,11 @@ async fn decide_and_enqueue(
     workspace_id: Uuid,
     decision: ApprovalDecision,
 ) -> Result<Json<Value>, ApiError> {
-    let (_, dispatcher) = configured(state)?;
+    let _ = configured(state)?;
     let call = repository
         .decide_tool_call(tool_call_id, user, decision)
         .await?;
-    dispatcher
-        .enqueue(workspace_id, call.run_id)
-        .await
-        .map_err(|_| ApiError::service_unavailable("agent worker is unavailable"))?;
+    let _ = workspace_id;
     Ok(Json(
         json!({"tool_call_id": call.id, "state": call.state, "run_id": call.run_id}),
     ))

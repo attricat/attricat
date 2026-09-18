@@ -219,6 +219,7 @@ impl CatalogRepository {
             return Err(RepositoryError::InvalidAgentState("invalid message role"));
         }
         let mut tx = self.pool.begin().await?;
+        self.ensure_task_fence(&mut tx).await?;
         let found = sqlx::query_scalar::<_, Uuid>(
             "SELECT id FROM conversations WHERE id = $1 AND workspace_id = $2 FOR UPDATE",
         )
@@ -271,9 +272,24 @@ impl CatalogRepository {
         model: &str,
     ) -> Result<AgentRun, RepositoryError> {
         let workspace_id = self.workspace_id.unwrap_or(Self::DEFAULT_WORKSPACE_ID);
-        let run = sqlx::query_as("INSERT INTO agent_runs (id, workspace_id, conversation_id, origin, status, provider_base_url, model, initiated_by_user_id) SELECT $1, $2, $3, 'interactive', 'queued', $4, $5, $6 WHERE EXISTS (SELECT 1 FROM conversations WHERE id = $3 AND workspace_id = $2) RETURNING id, conversation_id, origin, status, provider_base_url, model, started_at, finished_at, error_code, error_message, created_at")
+        let mut tx = self.pool.begin().await?;
+        let run: AgentRun = sqlx::query_as("INSERT INTO agent_runs (id, workspace_id, conversation_id, origin, status, provider_base_url, model, initiated_by_user_id) SELECT $1, $2, $3, 'interactive', 'queued', $4, $5, $6 WHERE EXISTS (SELECT 1 FROM conversations WHERE id = $3 AND workspace_id = $2) RETURNING id, conversation_id, origin, status, provider_base_url, model, started_at, finished_at, error_code, error_message, created_at")
             .bind(Uuid::new_v4()).bind(workspace_id).bind(conversation_id).bind(provider_base_url).bind(model).bind(actor)
-            .fetch_optional(&self.pool).await?.ok_or(RepositoryError::NotFound("conversation"))?;
+            .fetch_optional(&mut *tx).await?.ok_or(RepositoryError::NotFound("conversation"))?;
+        self.enqueue_task(
+            &mut tx,
+            crate::task_queue::TaskInsert {
+                workspace_id,
+                kind: crate::task_queue::TaskKind::AgentRunV1,
+                subject_id: run.id,
+                generation: 0,
+                payload: serde_json::json!({"agent_run_id": run.id.to_string()}),
+                correlation_id: None,
+                causation_id: None,
+            },
+        )
+        .await?;
+        tx.commit().await?;
         Ok(run)
     }
 
@@ -287,6 +303,7 @@ impl CatalogRepository {
         error_message: Option<&str>,
     ) -> Result<AgentRun, RepositoryError> {
         let mut tx = self.pool.begin().await?;
+        self.ensure_task_fence(&mut tx).await?;
         let current: AgentRun = sqlx::query_as("SELECT id, conversation_id, origin, status, provider_base_url, model, started_at, finished_at, error_code, error_message, created_at FROM agent_runs WHERE id = $1 AND workspace_id = $2 FOR UPDATE")
             .bind(run_id).bind(self.workspace_id.unwrap_or(Self::DEFAULT_WORKSPACE_ID)).fetch_optional(&mut *tx).await?.ok_or(RepositoryError::NotFound("agent run"))?;
         let valid = matches!(
@@ -323,48 +340,88 @@ impl CatalogRepository {
         Ok(run)
     }
 
-    /// Atomically claims one queued run before provider work starts. This makes
-    /// duplicate restart deliveries harmless when more than one API process is
-    /// running.
+    /// Claims a queued run while holding the shared task token. A reclaimed
+    /// running run is terminalized rather than resumed because its provider
+    /// request may have produced unobserved effects.
     pub async fn claim_queued_agent_run(
         &self,
         run_id: Uuid,
     ) -> Result<Option<AgentRun>, RepositoryError> {
+        let ws = self.workspace_id.unwrap_or(Self::DEFAULT_WORKSPACE_ID);
         let mut tx = self.pool.begin().await?;
-        let run = sqlx::query_as("UPDATE agent_runs SET status = 'running', started_at = COALESCE(started_at, now()) WHERE id = $1 AND workspace_id = $2 AND status = 'queued' RETURNING id, conversation_id, origin, status, provider_base_url, model, started_at, finished_at, error_code, error_message, created_at")
-            .bind(run_id).bind(self.workspace_id.unwrap_or(Self::DEFAULT_WORKSPACE_ID)).fetch_optional(&mut *tx).await?;
-        if run.is_some() {
+        self.ensure_task_fence(&mut tx).await?;
+        let current: AgentRun = sqlx::query_as("SELECT id, conversation_id, origin, status, provider_base_url, model, started_at, finished_at, error_code, error_message, created_at FROM agent_runs WHERE id = $1 AND workspace_id = $2 FOR UPDATE")
+            .bind(run_id).bind(ws).fetch_optional(&mut *tx).await?.ok_or(RepositoryError::NotFound("agent run"))?;
+        if current.status == "running" {
             let sequence: i64 = sqlx::query_scalar(
                 "SELECT COALESCE(MAX(sequence) + 1, 0) FROM agent_run_events WHERE run_id = $1",
             )
             .bind(run_id)
             .fetch_one(&mut *tx)
             .await?;
-            sqlx::query("INSERT INTO agent_run_events (id, run_id, sequence, event_type, payload) VALUES ($1, $2, $3, 'status', '{\"status\":\"running\"}'::jsonb)")
-                .bind(Uuid::new_v4()).bind(run_id).bind(sequence).execute(&mut *tx).await?;
+            sqlx::query("UPDATE agent_runs SET status='failed',finished_at=now(),error_code='interrupted',error_message='agent task lease expired during provider execution' WHERE id=$1 AND workspace_id=$2 AND status='running'")
+                .bind(run_id).bind(ws).execute(&mut *tx).await?;
+            sqlx::query("INSERT INTO agent_run_events (id,run_id,sequence,event_type,payload) VALUES ($1,$2,$3,'status','{\"status\":\"failed\"}'::jsonb),($4,$2,$3+1,'terminal','{\"status\":\"failed\",\"code\":\"interrupted\"}'::jsonb)")
+                .bind(Uuid::new_v4()).bind(run_id).bind(sequence).bind(Uuid::new_v4()).execute(&mut *tx).await?;
+            tx.commit().await?;
+            return Ok(None);
         }
+        if current.status != "queued" {
+            tx.commit().await?;
+            return Ok(None);
+        }
+        let run = sqlx::query_as("UPDATE agent_runs SET status='running',started_at=COALESCE(started_at,now()) WHERE id=$1 AND workspace_id=$2 AND status='queued' RETURNING id, conversation_id, origin, status, provider_base_url, model, started_at, finished_at, error_code, error_message, created_at")
+            .bind(run_id).bind(ws).fetch_one(&mut *tx).await?;
+        let sequence: i64 = sqlx::query_scalar(
+            "SELECT COALESCE(MAX(sequence) + 1, 0) FROM agent_run_events WHERE run_id = $1",
+        )
+        .bind(run_id)
+        .fetch_one(&mut *tx)
+        .await?;
+        sqlx::query("INSERT INTO agent_run_events (id,run_id,sequence,event_type,payload) VALUES ($1,$2,$3,'status','{\"status\":\"running\"}'::jsonb)")
+            .bind(Uuid::new_v4()).bind(run_id).bind(sequence).execute(&mut *tx).await?;
         tx.commit().await?;
-        Ok(run)
+        Ok(Some(run))
     }
 
-    /// A provider call cannot be safely resumed after process death because it
-    /// may have produced unobserved effects. Mark interrupted work terminally
-    /// so schedules are unblocked and the durable error tells clients to retry.
+    /// Startup recovery only acquires runs whose latest shared task lease has
+    /// expired. The replacement recovery lease fences the lifecycle update and
+    /// acknowledgement, so another API replica's healthy handler is untouched.
     pub async fn recover_interrupted_agent_runs(&self) -> Result<(), RepositoryError> {
-        let rows: Vec<(Uuid, Uuid)> =
-            sqlx::query_as("SELECT workspace_id, id FROM agent_runs WHERE status = 'running'")
-                .fetch_all(&self.pool)
-                .await?;
-        for (workspace_id, run_id) in rows {
-            let scoped = self.for_workspace(workspace_id).await?;
-            let _ = scoped
-                .transition_agent_run(
-                    run_id,
-                    "failed",
-                    Some("interrupted"),
-                    Some("agent process restarted during execution"),
-                )
-                .await?;
+        loop {
+            let mut tx = self.pool.begin().await?;
+            let candidate: Option<(Uuid, Uuid, Uuid)> = sqlx::query_as("SELECT t.id,t.workspace_id,t.subject_id FROM tasks t JOIN agent_runs r ON r.id=t.subject_id AND r.workspace_id=t.workspace_id WHERE t.kind='agent_run.v1' AND t.status='leased' AND t.lease_until<=now() AND r.status='running' AND t.generation=(SELECT max(newer.generation) FROM tasks newer WHERE newer.workspace_id=t.workspace_id AND newer.kind=t.kind AND newer.subject_id=t.subject_id) AND NOT EXISTS (SELECT 1 FROM tasks active WHERE active.workspace_id=t.workspace_id AND active.kind=t.kind AND active.subject_id=t.subject_id AND active.status='leased' AND active.lease_until>now()) FOR UPDATE OF t,r SKIP LOCKED LIMIT 1")
+                .fetch_optional(&mut *tx).await?;
+            let Some((task_id, workspace_id, run_id)) = candidate else {
+                tx.commit().await?;
+                break;
+            };
+            let owner = format!("agent-recovery:{}", Uuid::new_v4());
+            let token = Uuid::new_v4();
+            if sqlx::query("UPDATE tasks SET lease_owner=$2,lease_token=$3,lease_until=now()+interval '60 seconds',updated_at=now() WHERE id=$1 AND status='leased' AND lease_until<=now()")
+                .bind(task_id).bind(&owner).bind(token).execute(&mut *tx).await?.rows_affected() != 1 {
+                tx.rollback().await?;
+                continue;
+            }
+            let fenced: bool = sqlx::query_scalar("SELECT EXISTS (SELECT 1 FROM tasks WHERE id=$1 AND status='leased' AND lease_owner=$2 AND lease_token=$3 AND lease_until>now() FOR KEY SHARE)")
+                .bind(task_id).bind(&owner).bind(token).fetch_one(&mut *tx).await?;
+            if !fenced {
+                tx.rollback().await?;
+                continue;
+            }
+            let sequence: i64 = sqlx::query_scalar(
+                "SELECT COALESCE(MAX(sequence) + 1, 0) FROM agent_run_events WHERE run_id=$1",
+            )
+            .bind(run_id)
+            .fetch_one(&mut *tx)
+            .await?;
+            sqlx::query("UPDATE agent_runs SET status='failed',finished_at=now(),error_code='interrupted',error_message='agent process restarted during execution' WHERE id=$1 AND workspace_id=$2 AND status='running'")
+                .bind(run_id).bind(workspace_id).execute(&mut *tx).await?;
+            sqlx::query("INSERT INTO agent_run_events (id,run_id,sequence,event_type,payload) VALUES ($1,$2,$3,'status','{\"status\":\"failed\"}'::jsonb),($4,$2,$3+1,'terminal','{\"status\":\"failed\",\"code\":\"interrupted\"}'::jsonb)")
+                .bind(Uuid::new_v4()).bind(run_id).bind(sequence).bind(Uuid::new_v4()).execute(&mut *tx).await?;
+            sqlx::query("UPDATE tasks SET status='succeeded',lease_owner=NULL,lease_token=NULL,lease_until=NULL,completed_at=now(),updated_at=now() WHERE id=$1 AND status='leased' AND lease_owner=$2 AND lease_token=$3 AND lease_until>now()")
+                .bind(task_id).bind(&owner).bind(token).execute(&mut *tx).await?;
+            tx.commit().await?;
         }
         Ok(())
     }
@@ -420,6 +477,7 @@ impl CatalogRepository {
             ));
         }
         let mut tx = self.pool.begin().await?;
+        self.ensure_task_fence(&mut tx).await?;
         let exists = sqlx::query_scalar::<_, Uuid>(
             "SELECT id FROM agent_runs WHERE id = $1 AND workspace_id = $2 FOR UPDATE",
         )
@@ -453,8 +511,11 @@ impl CatalogRepository {
             Ok(value) => (Some(value), None, "completed"),
             Err(value) => (None, Some(value), "failed"),
         };
+        let mut tx = self.pool.begin().await?;
+        self.ensure_task_fence(&mut tx).await?;
         let call = sqlx::query_as("UPDATE agent_tool_calls call SET result = $3, error = $4, state = CASE WHEN call.state = 'rejected' THEN 'rejected' ELSE $5 END, completed_at = now() FROM agent_runs run WHERE call.id = $1 AND call.run_id = run.id AND run.workspace_id = $2 AND call.state IN ('approved', 'pending_approval', 'rejected') RETURNING call.id, call.run_id, call.sequence, call.provider_call_id, call.tool_name, call.arguments, call.change_summary, call.result, call.error, call.state, call.decided_by_user_id, call.decided_at, call.created_at, call.completed_at")
-            .bind(tool_call_id).bind(self.workspace_id.unwrap_or(Self::DEFAULT_WORKSPACE_ID)).bind(result).bind(error).bind(state).fetch_optional(&self.pool).await?.ok_or(RepositoryError::InvalidAgentState("tool call cannot be completed"))?;
+            .bind(tool_call_id).bind(self.workspace_id.unwrap_or(Self::DEFAULT_WORKSPACE_ID)).bind(result).bind(error).bind(state).fetch_optional(&mut *tx).await?.ok_or(RepositoryError::InvalidAgentState("tool call cannot be completed"))?;
+        tx.commit().await?;
         Ok(call)
     }
 
@@ -465,6 +526,7 @@ impl CatalogRepository {
         payload: Value,
     ) -> Result<AgentRunEvent, RepositoryError> {
         let mut tx = self.pool.begin().await?;
+        self.ensure_task_fence(&mut tx).await?;
         let exists = sqlx::query_scalar::<_, Uuid>(
             "SELECT id FROM agent_runs WHERE id = $1 AND workspace_id = $2 FOR UPDATE",
         )
@@ -517,6 +579,21 @@ impl CatalogRepository {
         .await?;
         sqlx::query("INSERT INTO agent_run_events (id, run_id, sequence, event_type, payload) VALUES ($1, $2, $3, 'status', $4)")
             .bind(Uuid::new_v4()).bind(call.run_id).bind(sequence).bind(serde_json::json!({"tool_call_id": tool_call_id, "decision": state})).execute(&mut *tx).await?;
+        let generation: i32 = sqlx::query_scalar("SELECT COALESCE(MAX(generation) + 1, 0) FROM tasks WHERE workspace_id = $1 AND kind = 'agent_run.v1' AND subject_id = $2")
+            .bind(self.workspace_id.unwrap_or(Self::DEFAULT_WORKSPACE_ID)).bind(call.run_id).fetch_one(&mut *tx).await?;
+        self.enqueue_task(
+            &mut tx,
+            crate::task_queue::TaskInsert {
+                workspace_id: self.workspace_id.unwrap_or(Self::DEFAULT_WORKSPACE_ID),
+                kind: crate::task_queue::TaskKind::AgentRunV1,
+                subject_id: call.run_id,
+                generation,
+                payload: serde_json::json!({"agent_run_id": call.run_id.to_string()}),
+                correlation_id: None,
+                causation_id: None,
+            },
+        )
+        .await?;
         tx.commit().await?;
         Ok(call)
     }
