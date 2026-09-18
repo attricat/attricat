@@ -48,5 +48,5 @@ The initial predicates are `required`, `stale`, `has_tag`, and `missing_tag`. Sc
 - `POST /rules/{rule_id}/versions/{version}/enable`
 - `POST /rules/{rule_id}/disable`
 - `POST /rules/{rule_id}/run-now` with `{ "entity_id": "optional UUID", "dry_run": false, "idempotency_key": "..." }`
-- `GET /rule-runs`, `GET /rule-findings?entity_id=...`
+- `GET /rule-runs`, `POST /rule-runs/{run_id}/replay`, `GET /rule-findings?entity_id=...`
 - `POST /rule-findings/{finding_id}/acknowledge`

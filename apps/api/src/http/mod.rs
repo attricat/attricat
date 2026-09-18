@@ -519,6 +519,7 @@ pub fn router(state: AppState) -> Router {
         .route("/rules/{rule_id}/disable", post(rules::disable))
         .route("/rules/{rule_id}/run-now", post(rules::run_now))
         .route("/rule-runs", get(rules::list_runs))
+        .route("/rule-runs/{run_id}/replay", post(rules::replay_run))
         .route("/rule-findings", get(rules::findings))
         .route(
             "/rule-findings/{finding_id}/acknowledge",

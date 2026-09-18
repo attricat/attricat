@@ -86,6 +86,7 @@ pub use extensions::{
 pub(crate) use files::{FileMetadata, FileObject, FilePolicy, FileUploadResult, NewUploadedFile};
 pub(crate) use members::{WorkspaceInvitation, WorkspaceMember};
 pub(crate) use roles::{Permission, WorkspaceGrantTarget, WorkspaceRole};
+pub(crate) use rules::{ClaimedRuleRun, RuleCandidateResult};
 pub use tasks::{ClaimedTask, TaskError, TaskSummary};
 pub(crate) use tokens::PersonalApiToken;
 pub use workflow_runs::WorkflowRun;
@@ -474,6 +475,18 @@ impl CatalogRepository {
     /// catalog effect, outbox event, and audit row are committed only while this
     /// exact task token remains current.
     pub(crate) fn for_workflow_task(&self, task: &ClaimedTask) -> Self {
+        let mut repository = self.clone();
+        repository.task_fence = Some(TaskFence {
+            task_id: task.id,
+            lease_owner: task.lease_owner.clone(),
+            lease_token: task.lease_token,
+        });
+        repository
+    }
+
+    /// Attaches a rule task lease to a run checkpoint. Rule findings and cursor
+    /// updates use this exact fence rather than the legacy rule-run lease.
+    pub(crate) fn for_rule_task(&self, task: &ClaimedTask) -> Self {
         let mut repository = self.clone();
         repository.task_fence = Some(TaskFence {
             task_id: task.id,

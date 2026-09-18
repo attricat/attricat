@@ -238,6 +238,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         extension_runtime.clone(),
     )));
     task_handlers.push(workflow_runtime::task_handler(task_repository.clone()));
+    task_handlers.push(rule_runtime::task_handler(task_repository.clone()));
 
     let (shutdown_sender, shutdown_receiver) = tokio::sync::watch::channel(());
     let task_worker_config = TaskWorkerConfig::from_env()
@@ -274,7 +275,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         workflow_repository.clone(),
         shutdown_receiver.clone(),
     );
-    let rule_worker = rule_runtime::start(workflow_repository, shutdown_receiver);
+    let rule_worker =
+        rule_runtime::start_schedule_coordinator(workflow_repository, shutdown_receiver);
 
     let listener = tokio::net::TcpListener::bind(bind_addr).await?;
     tracing::info!(address = %listener.local_addr()?, "API listening");

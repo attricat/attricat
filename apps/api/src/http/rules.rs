@@ -80,6 +80,16 @@ pub(super) async fn list_runs(
 ) -> Result<Json<Vec<RuleRun>>, ApiError> {
     Ok(Json(repo.list_rule_runs().await?))
 }
+pub(super) async fn replay_run(
+    super::auth::ScopedRepository(repo): super::auth::ScopedRepository,
+    ApiPath(id): ApiPath<Uuid>,
+) -> Result<StatusCode, ApiError> {
+    if repo.replay_rule_run(id).await? {
+        Ok(StatusCode::NO_CONTENT)
+    } else {
+        Err(ApiError::not_found("dead-letter rule run"))
+    }
+}
 pub(super) async fn disable(
     super::auth::ScopedRepository(repo): super::auth::ScopedRepository,
     ApiPath(id): ApiPath<Uuid>,
