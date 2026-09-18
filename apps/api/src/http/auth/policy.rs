@@ -37,7 +37,10 @@ pub(super) fn policy(method: &Method, path: &str) -> Option<Policy> {
     } else {
         "blueprints.write"
     };
-    if path == "/solution-packs/inspect" {
+    if path == "/solution-packs/inspect"
+        || (method == Method::POST && path == "/solution-packs/plans")
+        || (method == Method::GET && path == "/solution-packs/plans/{plan_id}")
+    {
         return Some(Policy {
             permission: "solution_packs.manage",
             target: TargetKind::None,
@@ -420,13 +423,18 @@ mod tests {
 
     #[test]
     fn solution_pack_inspection_requires_manage_permission() {
-        assert_eq!(
-            policy(&Method::POST, "/solution-packs/inspect")
-                .unwrap()
-                .permission,
-            "solution_packs.manage"
-        );
+        for (method, path) in [
+            (Method::POST, "/solution-packs/inspect"),
+            (Method::POST, "/solution-packs/plans"),
+            (Method::GET, "/solution-packs/plans/{plan_id}"),
+        ] {
+            assert_eq!(
+                policy(&method, path).unwrap().permission,
+                "solution_packs.manage"
+            );
+        }
         assert!(policy(&Method::POST, "/solution-packs/apply").is_none());
+        assert!(policy(&Method::GET, "/solution-packs/future").is_none());
     }
 
     #[test]

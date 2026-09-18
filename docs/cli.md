@@ -45,6 +45,10 @@ acli auth password-reset-confirm --token-stdin --password-stdin
 acli --session-file session.json auth session|logout|renew
 acli metrics get --output metrics.prom
 
+acli solution-pack inspect --file pack.tar.zst
+acli solution-pack plan --file pack.tar.zst --prefix ecom --blueprint-publication draft|publish
+acli solution-pack plan show <plan-id>
+
 acli audit list [--limit 25 --offset 0] [--occurred-after <rfc3339>] [--occurred-before <rfc3339>] [--actor-user-id <uuid>] [--action-category <category>] [--target-type <type>] [--executor-type human|agent] [--agent-run-id <uuid>] [--agent-tool-call-id <uuid>]
 acli data-health summary [--stale-after-days <days>]
 acli data-health blueprints [--stale-after-days <days>]
@@ -159,6 +163,8 @@ acli extension storage <extension-id> <contribution-id> <release-id> --body <jso
 acli extension command <extension-id> <contribution-id> --release-id <release-uuid> --command-id <id> --payload <json-or-file>
 
 acli solution-pack inspect --file pack.tar.zst
+acli solution-pack plan --file pack.tar.zst --prefix ecom --blueprint-publication draft|publish
+acli solution-pack plan show <plan-id>
 
 acli file upload <entity-id> <attribute-code> --file first.png [--file second.png] [--context-id <context-id>]
 acli file metadata <file-id>
@@ -218,11 +224,11 @@ takes exactly one tagged storage request (`get`, `set`, `delete`, or `list`),
 and `command --payload` is the contribution-defined JSON payload.
 
 `file upload` streams each repeated `--file` as a `files` multipart part and
-sends `context_id` as the optional multipart text field. `extension sideload`
-and `solution-pack inspect` stream archives as `application/zstd`. Solution-pack
-inspection is performed only by the authenticated server; the CLI neither
-unpacks nor validates the archive and prints only the server's safe, bounded
-JSON summary. Uploads and downloads retain the
+sends `context_id` as the optional multipart text field. `extension sideload`,
+`solution-pack inspect`, and solution-pack plan creation stream archives as
+`application/zstd`. Solution-pack inspection and planning are performed only by
+the authenticated server; the CLI neither unpacks nor validates the archive and
+prints only the server's safe, bounded JSON response. Uploads and downloads retain the
 five-second connection timeout but are not subject to the normal 30-second JSON
 request timeout. File downloads, extension artifacts,
 and metrics stream to `--output`; they do not put binary, JavaScript, or

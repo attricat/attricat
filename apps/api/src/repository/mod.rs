@@ -81,6 +81,7 @@ pub use extensions::{
 pub(crate) use files::{FileMetadata, FileObject, FilePolicy, FileUploadResult, NewUploadedFile};
 pub(crate) use members::{WorkspaceInvitation, WorkspaceMember};
 pub(crate) use roles::{Permission, WorkspaceGrantTarget, WorkspaceRole};
+pub(crate) use solution_packs::SolutionPackPlan;
 pub(crate) use tokens::PersonalApiToken;
 pub use workflow_runs::WorkflowRun;
 pub(crate) use workflow_runs::{ClaimedWorkflowRun, WorkflowActionResult};
@@ -237,6 +238,8 @@ pub enum RepositoryError {
     InvalidHierarchyRelationship,
     #[error("invalid blueprint definition: {0}")]
     InvalidBlueprintDefinition(String),
+    #[error("{0}")]
+    InvalidSolutionPackPlan(String),
     #[error("blueprint code is already owned by another blueprint")]
     BlueprintCodeTaken,
     #[error("workflow code is already in use")]

@@ -1,14 +1,22 @@
 use axum::{
     Json,
-    extract::rejection::BytesRejection,
+    extract::{
+        Path, Query,
+        rejection::{BytesRejection, PathRejection, QueryRejection},
+    },
     http::{HeaderMap, StatusCode, header},
 };
 use bytes::Bytes;
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
+use uuid::Uuid;
 
 use super::{auth::ScopedRepository, error::ApiError};
-use crate::solution_packs::{
-    MAX_SOLUTION_PACK_INSPECTION_RESPONSE_BYTES, SolutionPackResource, ValidatedSolutionPack,
+use crate::{
+    repository::SolutionPackPlan,
+    solution_packs::{
+        BlueprintPublication, MAX_SOLUTION_PACK_INSPECTION_RESPONSE_BYTES,
+        MAX_SOLUTION_PACK_PLAN_RESPONSE_BYTES, SolutionPackResource, ValidatedSolutionPack,
+    },
 };
 
 #[derive(Serialize)]
@@ -70,14 +78,7 @@ pub(super) async fn inspect(
     headers: HeaderMap,
     archive: Result<Bytes, BytesRejection>,
 ) -> Result<(StatusCode, Json<InspectionResponse>), ApiError> {
-    let media_type = headers
-        .get(header::CONTENT_TYPE)
-        .and_then(|value| value.to_str().ok())
-        .and_then(|value| value.split(';').next())
-        .map(str::trim);
-    if !media_type.is_some_and(|value| value.eq_ignore_ascii_case("application/zstd")) {
-        return Err(ApiError::unsupported_media_type());
-    }
+    require_zstd(&headers)?;
 
     let archive = archive.map_err(ApiError::from_bytes_rejection)?;
     let pack = ValidatedSolutionPack::from_tar_zst(&archive)
@@ -116,14 +117,82 @@ pub(super) async fn inspect(
     Ok((StatusCode::OK, Json(response)))
 }
 
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+pub(super) struct CreatePlanQuery {
+    prefix: String,
+    blueprint_publication: BlueprintPublication,
+}
+
+/// Validates a local archive again and persists an immutable create-only dry-run.
+pub(super) async fn create_plan(
+    ScopedRepository(repository): ScopedRepository,
+    query: Result<Query<CreatePlanQuery>, QueryRejection>,
+    headers: HeaderMap,
+    archive: Result<Bytes, BytesRejection>,
+) -> Result<(StatusCode, Json<SolutionPackPlan>), ApiError> {
+    require_zstd(&headers)?;
+    let Query(query) = query.map_err(ApiError::from_query_rejection)?;
+    let archive = archive.map_err(ApiError::from_bytes_rejection)?;
+    let pack = ValidatedSolutionPack::from_tar_zst(&archive)
+        .map_err(|error| ApiError::invalid_input(error.to_string()))?;
+    let plan = repository
+        .create_solution_pack_plan(&pack, &query.prefix, query.blueprint_publication)
+        .await?;
+    // The repository validated this exact public representation before commit.
+    Ok((StatusCode::CREATED, Json(plan)))
+}
+
+pub(super) async fn get_plan(
+    ScopedRepository(repository): ScopedRepository,
+    plan_id: Result<Path<Uuid>, PathRejection>,
+) -> Result<Json<SolutionPackPlan>, ApiError> {
+    let Path(plan_id) = plan_id.map_err(ApiError::from_path_rejection)?;
+    let plan = repository
+        .get_solution_pack_plan(plan_id)
+        .await?
+        .ok_or_else(|| ApiError::not_found("solution-pack plan"))?;
+    ensure_plan_response_size(&plan)?;
+    Ok(Json(plan))
+}
+
+fn require_zstd(headers: &HeaderMap) -> Result<(), ApiError> {
+    let media_type = headers
+        .get(header::CONTENT_TYPE)
+        .and_then(|value| value.to_str().ok())
+        .and_then(|value| value.split(';').next())
+        .map(str::trim);
+    if !media_type.is_some_and(|value| value.eq_ignore_ascii_case("application/zstd")) {
+        return Err(ApiError::unsupported_media_type());
+    }
+    Ok(())
+}
+
 fn ensure_response_size(response: &InspectionResponse) -> Result<(), ApiError> {
-    let response_bytes = serde_json::to_vec(response).map_err(|_| {
-        ApiError::internal("solution-pack inspection response could not be encoded")
-    })?;
-    if response_bytes.len() > MAX_SOLUTION_PACK_INSPECTION_RESPONSE_BYTES {
-        return Err(ApiError::invalid_input(
-            "solution-pack inspection summary exceeds the size limit".to_owned(),
-        ));
+    ensure_encoded_response_size(
+        response,
+        MAX_SOLUTION_PACK_INSPECTION_RESPONSE_BYTES,
+        "solution-pack inspection summary exceeds the size limit",
+    )
+}
+
+fn ensure_plan_response_size(response: &SolutionPackPlan) -> Result<(), ApiError> {
+    ensure_encoded_response_size(
+        response,
+        MAX_SOLUTION_PACK_PLAN_RESPONSE_BYTES,
+        "solution-pack plan summary exceeds the size limit",
+    )
+}
+
+fn ensure_encoded_response_size(
+    response: &impl Serialize,
+    limit: usize,
+    message: &'static str,
+) -> Result<(), ApiError> {
+    let response_bytes = serde_json::to_vec(response)
+        .map_err(|_| ApiError::internal("solution-pack response could not be encoded"))?;
+    if response_bytes.len() > limit {
+        return Err(ApiError::invalid_input(message.to_owned()));
     }
     Ok(())
 }

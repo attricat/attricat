@@ -304,6 +304,7 @@ impl From<RepositoryError> for ApiError {
             | RepositoryError::InvalidExtension(_)
             | RepositoryError::InvalidExtensionTransition(_)
             | RepositoryError::InvalidDomainEvent(_)
+            | RepositoryError::InvalidSolutionPackPlan(_)
             | RepositoryError::ReservedContextCode
             | RepositoryError::InvalidCode
             | RepositoryError::InvalidContextData

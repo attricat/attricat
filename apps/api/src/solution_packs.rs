@@ -37,6 +37,9 @@ pub const MAX_SOLUTION_PACK_BLUEPRINT_ATTRIBUTES: usize = 256;
 pub const MAX_SOLUTION_PACK_TOTAL_BLUEPRINT_COMPLEXITY: usize = 4096;
 pub const MAX_SOLUTION_PACK_RESOLVED_INCLUDE_ATTRIBUTES: usize = 1024;
 pub const MAX_SOLUTION_PACK_INSPECTION_RESPONSE_BYTES: usize = 512 * 1024;
+pub const MAX_SOLUTION_PACK_PLAN_RESPONSE_BYTES: usize = 1024 * 1024;
+pub const SOLUTION_PACK_PLAN_EXPIRY_HOURS: i64 = 24;
+pub const MAX_SOLUTION_PACK_PREFIX_BYTES: usize = 32;
 const MAX_ARCHIVE_PATH_BYTES: usize = 512;
 const MAX_IDENTIFIER_BYTES: usize = 128;
 const MAX_NAME_BYTES: usize = 200;
@@ -115,6 +118,8 @@ pub struct SolutionPackBlueprint {
     code: String,
     source: String,
     includes: Vec<SolutionPackBlueprintInclude>,
+    dependencies: BTreeSet<String>,
+    table_path_dependencies: BTreeSet<String>,
 }
 
 #[derive(Debug)]
@@ -138,6 +143,14 @@ impl SolutionPackBlueprint {
 
     pub fn includes(&self) -> &[SolutionPackBlueprintInclude] {
         &self.includes
+    }
+
+    pub fn dependencies(&self) -> &BTreeSet<String> {
+        &self.dependencies
+    }
+
+    pub fn table_path_dependencies(&self) -> &BTreeSet<String> {
+        &self.table_path_dependencies
     }
 }
 
@@ -538,9 +551,13 @@ fn validate_content(
         compile_pack_blueprint(key, &prepared, &mut compiled)?;
     }
     validate_incoming_relationships(&compiled)?;
+    let table_path_dependencies = validate_table_paths(&compiled)?;
     let blueprints = prepared
         .into_iter()
-        .map(|(key, blueprint)| (key, blueprint.portable))
+        .map(|(key, mut blueprint)| {
+            blueprint.portable.table_path_dependencies = table_path_dependencies[&key].clone();
+            (key, blueprint.portable)
+        })
         .collect();
 
     let context_keys = manifest
@@ -619,6 +636,7 @@ fn prepare_blueprint(
 
     let mut portable_includes = Vec::new();
     let mut include_keys = Vec::new();
+    let mut dependencies = BTreeSet::new();
     if let Some(includes) = table.get_mut("includes") {
         let includes = includes.as_array_mut().ok_or_else(|| {
             SolutionPackError::Invalid(format!(
@@ -667,6 +685,7 @@ fn prepare_blueprint(
                 alias,
                 key: dependency.clone(),
             });
+            dependencies.insert(dependency.clone());
             include_keys.push(dependency);
         }
     }
@@ -683,6 +702,7 @@ fn prepare_blueprint(
                     "target_blueprint",
                     "relationship target",
                     blueprint_codes,
+                    Some(&mut dependencies),
                 )?;
             }
         }
@@ -690,7 +710,7 @@ fn prepare_blueprint(
     if let Some(views) = table.get_mut("views").and_then(toml::Value::as_table_mut) {
         for (_, view) in views.iter_mut() {
             if let Some(view) = view.as_table_mut() {
-                rewrite_view_references(key, view, blueprint_codes)?;
+                rewrite_view_references(key, view, blueprint_codes, Some(&mut dependencies))?;
             }
         }
     }
@@ -707,6 +727,7 @@ fn prepare_blueprint(
         };
         SolutionPackError::Invalid(message)
     })?;
+    reject_workspace_dependent_blueprint_constructs(key, &definition)?;
     if definition.includes.len() > MAX_SOLUTION_PACK_BLUEPRINT_INCLUDES {
         return invalid(format!(
             "blueprint '{key}' exceeds the include limit of {MAX_SOLUTION_PACK_BLUEPRINT_INCLUDES}"
@@ -736,11 +757,49 @@ fn prepare_blueprint(
             code: definition.code.clone(),
             source: source.to_owned(),
             includes: portable_includes,
+            dependencies,
+            table_path_dependencies: BTreeSet::new(),
         },
         native_definition: definition,
         native_source,
         include_keys,
     })
+}
+
+fn reject_workspace_dependent_blueprint_constructs(
+    key: &str,
+    definition: &BlueprintDefinition,
+) -> Result<(), SolutionPackError> {
+    if !definition.publication.retain_on_edit_roles.is_empty() {
+        return invalid(format!(
+            "blueprint '{key}' cannot declare workspace roles in solution-pack v1"
+        ));
+    }
+    for view in definition.views.values() {
+        match view {
+            ViewDefinition::ExtensionLayout { .. } => {
+                return invalid(format!(
+                    "blueprint '{key}' cannot declare extension layouts in solution-pack v1"
+                ));
+            }
+            ViewDefinition::Table {
+                columns: Some(columns),
+                ..
+            } if columns.iter().any(|column| {
+                column
+                    .renderer
+                    .as_ref()
+                    .is_some_and(|renderer| !renderer.id.starts_with("catalog."))
+            }) =>
+            {
+                return invalid(format!(
+                    "blueprint '{key}' cannot declare extension table renderers in solution-pack v1"
+                ));
+            }
+            _ => {}
+        }
+    }
+    Ok(())
 }
 
 fn rewrite_blueprint_reference(
@@ -749,6 +808,7 @@ fn rewrite_blueprint_reference(
     field: &str,
     label: &str,
     blueprint_codes: &HashMap<&str, &str>,
+    dependencies: Option<&mut BTreeSet<String>>,
 ) -> Result<(), SolutionPackError> {
     let Some(reference) = table.get_mut(field) else {
         return Ok(());
@@ -763,6 +823,9 @@ fn rewrite_blueprint_reference(
             "blueprint '{owner_key}' references undeclared {label} '{logical_key}'"
         ))
     })?;
+    if let Some(dependencies) = dependencies {
+        dependencies.insert(logical_key.to_owned());
+    }
     *reference = toml::Value::String((*code).to_owned());
     Ok(())
 }
@@ -771,6 +834,7 @@ fn rewrite_view_references(
     owner_key: &str,
     node: &mut toml::map::Map<String, toml::Value>,
     blueprint_codes: &HashMap<&str, &str>,
+    mut dependencies: Option<&mut BTreeSet<String>>,
 ) -> Result<(), SolutionPackError> {
     if node.get("type").and_then(toml::Value::as_str) == Some("incoming_relationship_list")
         && let Some(relationships) = node
@@ -785,6 +849,7 @@ fn rewrite_view_references(
                     "source_blueprint",
                     "view source blueprint",
                     blueprint_codes,
+                    dependencies.as_deref_mut(),
                 )?;
             }
         }
@@ -794,7 +859,12 @@ fn rewrite_view_references(
         if let Some(children) = node.get_mut(collection).and_then(toml::Value::as_array_mut) {
             for child in children {
                 if let Some(child) = child.as_table_mut() {
-                    rewrite_view_references(owner_key, child, blueprint_codes)?;
+                    rewrite_view_references(
+                        owner_key,
+                        child,
+                        blueprint_codes,
+                        dependencies.as_deref_mut(),
+                    )?;
                 }
             }
         }
@@ -857,6 +927,87 @@ fn compile_pack_blueprint(
     })?;
     compiled.insert(key.to_owned(), definition);
     Ok(())
+}
+
+fn validate_table_paths(
+    blueprints: &HashMap<String, CompiledBlueprint>,
+) -> Result<BTreeMap<String, BTreeSet<String>>, SolutionPackError> {
+    let by_code = blueprints
+        .iter()
+        .map(|(key, blueprint)| (blueprint.code.as_str(), key.as_str()))
+        .collect::<HashMap<_, _>>();
+    let mut dependencies = BTreeMap::new();
+
+    for (owner_key, owner) in blueprints {
+        let mut owner_dependencies = BTreeSet::new();
+        for view in owner.views.values() {
+            let ViewDefinition::Table {
+                columns: Some(columns),
+                ..
+            } = view
+            else {
+                continue;
+            };
+            for column in columns {
+                let parts = column.field.split('.').collect::<Vec<_>>();
+                if parts.len() == 1 {
+                    continue;
+                }
+                let mut current = owner;
+                for segment in &parts[..parts.len() - 1] {
+                    let attribute = current
+                        .attributes
+                        .iter()
+                        .find(|attribute| attribute.code == *segment)
+                        .ok_or_else(|| {
+                            SolutionPackError::Invalid(format!(
+                                "blueprint '{owner_key}' table column '{}' path segment '{segment}' was not found",
+                                column.field
+                            ))
+                        })?;
+                    if attribute.value_type != "relationship" {
+                        return invalid(format!(
+                            "blueprint '{owner_key}' table column '{}' segment '{segment}' must be a relationship",
+                            column.field
+                        ));
+                    }
+                    let target_code = attribute.target_blueprint.as_deref().ok_or_else(|| {
+                        SolutionPackError::Invalid(format!(
+                            "blueprint '{owner_key}' table column '{}' segment '{segment}' has no target blueprint",
+                            column.field
+                        ))
+                    })?;
+                    let target_key = by_code.get(target_code).ok_or_else(|| {
+                        SolutionPackError::Invalid(format!(
+                            "blueprint '{owner_key}' table column '{}' target '{target_code}' is not declared by the pack",
+                            column.field
+                        ))
+                    })?;
+                    owner_dependencies.insert((*target_key).to_owned());
+                    current = &blueprints[*target_key];
+                }
+                let leaf = parts.last().expect("multi-part table path has a leaf");
+                let leaf_attribute = current
+                    .attributes
+                    .iter()
+                    .find(|attribute| attribute.code == *leaf)
+                    .ok_or_else(|| {
+                        SolutionPackError::Invalid(format!(
+                            "blueprint '{owner_key}' table column '{}' path segment '{leaf}' was not found",
+                            column.field
+                        ))
+                    })?;
+                if matches!(leaf_attribute.value_type.as_str(), "relationship" | "file") {
+                    return invalid(format!(
+                        "blueprint '{owner_key}' table column '{}' leaf must be scalar",
+                        column.field
+                    ));
+                }
+            }
+        }
+        dependencies.insert(owner_key.clone(), owner_dependencies);
+    }
+    Ok(dependencies)
 }
 
 fn validate_incoming_relationships(
@@ -1141,6 +1292,479 @@ fn sha256_hex(bytes: &[u8]) -> String {
 
 fn invalid<T>(message: impl Into<String>) -> Result<T, SolutionPackError> {
     Err(SolutionPackError::Invalid(message.into()))
+}
+
+#[derive(Clone, Copy, Debug, Deserialize, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum BlueprintPublication {
+    Draft,
+    Publish,
+}
+
+impl BlueprintPublication {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Draft => "draft",
+            Self::Publish => "publish",
+        }
+    }
+}
+
+#[derive(Debug)]
+pub struct PlanningWorkspaceSnapshot {
+    pub workspace_id: uuid::Uuid,
+    pub physical_codes: BTreeSet<String>,
+    pub default_context_id: uuid::Uuid,
+}
+
+#[derive(Clone, Debug)]
+pub struct PlannedMapping {
+    pub resource_kind: &'static str,
+    pub logical_key: String,
+    pub target_id: uuid::Uuid,
+    pub target_code: String,
+    pub target_version: Option<i64>,
+    pub mapping_kind: &'static str,
+    pub snapshot: Value,
+}
+
+#[derive(Clone, Debug)]
+pub struct PlannedAction {
+    pub resource_kind: &'static str,
+    pub logical_key: String,
+    pub action: &'static str,
+    pub reason_code: &'static str,
+    pub summary: Value,
+    pub normalized_payload: Option<Value>,
+    pub preconditions: Value,
+}
+
+#[derive(Debug)]
+pub struct SolutionPackPlanDraft {
+    pub ready: bool,
+    pub mappings: Vec<PlannedMapping>,
+    pub actions: Vec<PlannedAction>,
+}
+
+/// Builds a create-only plan from an already validated local archive. The
+/// workspace snapshot is deliberately supplied by the caller so repository
+/// fetching can later be added without coupling planning to an archive source.
+pub fn build_create_only_plan(
+    pack: &ValidatedSolutionPack,
+    prefix: &str,
+    publication: BlueprintPublication,
+    workspace: &PlanningWorkspaceSnapshot,
+) -> Result<SolutionPackPlanDraft, SolutionPackError> {
+    validate_plan_prefix(prefix)?;
+
+    let manifest = pack.manifest();
+    let resources = manifest
+        .resources
+        .blueprints
+        .iter()
+        .map(|resource| (resource.key.clone(), ("blueprint", resource)))
+        .chain(
+            manifest
+                .resources
+                .contexts
+                .iter()
+                .map(|resource| (resource.key.clone(), ("context", resource))),
+        )
+        .collect::<BTreeMap<_, _>>();
+
+    let mut dependencies = BTreeMap::<String, BTreeSet<String>>::new();
+    for resource in &manifest.resources.blueprints {
+        dependencies.insert(
+            resource.key.clone(),
+            pack.blueprint(&resource.key)
+                .expect("validated blueprint exists")
+                .dependencies()
+                .clone(),
+        );
+    }
+    for resource in &manifest.resources.contexts {
+        let context = pack
+            .context(&resource.key)
+            .expect("validated context exists");
+        dependencies.insert(
+            resource.key.clone(),
+            (context.parent != SYSTEM_DEFAULT_CONTEXT_KEY)
+                .then(|| context.parent.clone())
+                .into_iter()
+                .collect(),
+        );
+    }
+
+    let mut mappings_by_key = BTreeMap::new();
+    mappings_by_key.insert(
+        SYSTEM_DEFAULT_CONTEXT_KEY.to_owned(),
+        PlannedMapping {
+            resource_kind: "context",
+            logical_key: SYSTEM_DEFAULT_CONTEXT_KEY.to_owned(),
+            target_id: workspace.default_context_id,
+            target_code: "default".to_owned(),
+            target_version: None,
+            mapping_kind: "system",
+            snapshot: serde_json::json!({"system": true, "code": "default"}),
+        },
+    );
+    for (logical_key, (kind, _)) in &resources {
+        let code = format!("{prefix}_{}", resource_code(logical_key));
+        if code.len() > MAX_IDENTIFIER_BYTES || !is_valid_stable_code(&code) {
+            return invalid(format!(
+                "prefix produces an invalid physical code for '{logical_key}'"
+            ));
+        }
+        mappings_by_key.insert(
+            logical_key.clone(),
+            PlannedMapping {
+                resource_kind: kind,
+                logical_key: logical_key.clone(),
+                target_id: deterministic_target_id(
+                    workspace.workspace_id,
+                    pack,
+                    prefix,
+                    publication,
+                    logical_key,
+                ),
+                target_code: code.clone(),
+                target_version: (*kind == "blueprint").then_some(1),
+                mapping_kind: "create",
+                snapshot: serde_json::json!({"code": code, "version": (*kind == "blueprint").then_some(1)}),
+            },
+        );
+    }
+
+    // Includes and context parents constrain apply order. A published target is
+    // also required before ordinary validation can resolve a relationship table
+    // path. Other relationship references may legitimately be cyclic.
+    let mut ordering_dependencies = BTreeMap::new();
+    for resource in &manifest.resources.blueprints {
+        let blueprint = pack
+            .blueprint(&resource.key)
+            .expect("validated blueprint exists");
+        let mut resource_dependencies = blueprint
+            .includes()
+            .iter()
+            .map(|include| include.key().to_owned())
+            .collect::<BTreeSet<_>>();
+        if publication == BlueprintPublication::Publish {
+            resource_dependencies.extend(blueprint.table_path_dependencies().iter().cloned());
+        }
+        ordering_dependencies.insert(resource.key.clone(), resource_dependencies);
+    }
+    for resource in &manifest.resources.contexts {
+        let context = pack
+            .context(&resource.key)
+            .expect("validated context exists");
+        ordering_dependencies.insert(
+            resource.key.clone(),
+            (context.parent != SYSTEM_DEFAULT_CONTEXT_KEY)
+                .then(|| context.parent.clone())
+                .into_iter()
+                .collect(),
+        );
+    }
+
+    let mut generated_code_counts = HashMap::<&str, usize>::new();
+    for (logical_key, (_, resource)) in &resources {
+        if resource.required {
+            *generated_code_counts
+                .entry(&mappings_by_key[logical_key].target_code)
+                .or_default() += 1;
+        }
+    }
+    let mut outcomes = HashMap::<String, (&'static str, &'static str)>::new();
+    for (logical_key, (_, resource)) in &resources {
+        let mapping = &mappings_by_key[logical_key];
+        outcomes.insert(
+            logical_key.clone(),
+            if !resource.required {
+                ("skip", "optional_not_selected")
+            } else if generated_code_counts[mapping.target_code.as_str()] > 1 {
+                ("conflict", "duplicate_target_code")
+            } else if workspace.physical_codes.contains(&mapping.target_code) {
+                ("conflict", "target_code_exists")
+            } else if publication == BlueprintPublication::Draft
+                && pack
+                    .blueprint(logical_key)
+                    .is_some_and(|blueprint| !blueprint.table_path_dependencies().is_empty())
+            {
+                ("blocked", "draft_table_path_target_unpublished")
+            } else {
+                ("create", "target_absent")
+            },
+        );
+    }
+    loop {
+        let newly_blocked = outcomes
+            .iter()
+            .filter(|(_, (action, _))| *action == "create")
+            .filter(|(key, _)| {
+                dependencies[*key]
+                    .iter()
+                    .any(|dependency| outcomes[dependency].0 != "create")
+            })
+            .map(|(key, _)| key.clone())
+            .collect::<Vec<_>>();
+        if newly_blocked.is_empty() {
+            break;
+        }
+        for key in newly_blocked {
+            outcomes.insert(key, ("blocked", "dependency_not_creatable"));
+        }
+    }
+
+    let ordered_keys = topological_resource_order(&ordering_dependencies)?;
+    let mut actions = Vec::with_capacity(ordered_keys.len());
+    for logical_key in ordered_keys {
+        let (kind, resource) = resources
+            .get(&logical_key)
+            .expect("dependency graph contains declared resources");
+        let mapping = &mappings_by_key[&logical_key];
+        let (action, reason_code) = outcomes[&logical_key];
+        let normalized_payload = if action == "create" {
+            Some(if *kind == "blueprint" {
+                normalized_blueprint_payload(
+                    pack.blueprint(&logical_key)
+                        .expect("validated blueprint exists"),
+                    &mappings_by_key,
+                    publication,
+                )?
+            } else {
+                normalized_context_payload(
+                    &logical_key,
+                    pack.context(&logical_key)
+                        .expect("validated context exists"),
+                    &mappings_by_key,
+                )
+            })
+        } else {
+            None
+        };
+        let preconditions = if matches!(action, "create" | "conflict") {
+            serde_json::json!([{"kind": "target_absent", "resource_kind": kind, "code": mapping.target_code}])
+        } else {
+            serde_json::json!([])
+        };
+        actions.push(PlannedAction {
+            resource_kind: kind,
+            logical_key: logical_key.clone(),
+            action,
+            reason_code,
+            summary: serde_json::json!({
+                "target_code": mapping.target_code,
+                "target_version": mapping.target_version,
+                "required": resource.required,
+                "dependencies": dependencies[&logical_key],
+            }),
+            normalized_payload,
+            preconditions,
+        });
+    }
+
+    Ok(SolutionPackPlanDraft {
+        ready: actions
+            .iter()
+            .all(|action| matches!(action.action, "create" | "skip")),
+        mappings: mappings_by_key.into_values().collect(),
+        actions,
+    })
+}
+
+fn deterministic_target_id(
+    workspace_id: uuid::Uuid,
+    pack: &ValidatedSolutionPack,
+    prefix: &str,
+    publication: BlueprintPublication,
+    logical_key: &str,
+) -> uuid::Uuid {
+    let mut hasher = Sha256::new();
+    hasher.update(b"attricat.solution-pack.target-id.v1\0");
+    hasher.update(workspace_id.as_bytes());
+    for value in [
+        pack.archive_sha256(),
+        prefix,
+        publication.as_str(),
+        logical_key,
+    ] {
+        hasher.update((value.len() as u64).to_be_bytes());
+        hasher.update(value.as_bytes());
+    }
+    let digest = hasher.finalize();
+    let mut bytes = [0u8; 16];
+    bytes.copy_from_slice(&digest[..16]);
+    bytes[6] = (bytes[6] & 0x0f) | 0x50;
+    bytes[8] = (bytes[8] & 0x3f) | 0x80;
+    uuid::Uuid::from_bytes(bytes)
+}
+
+pub fn validate_plan_prefix(prefix: &str) -> Result<(), SolutionPackError> {
+    if prefix.is_empty()
+        || prefix.len() > MAX_SOLUTION_PACK_PREFIX_BYTES
+        || !prefix
+            .bytes()
+            .next()
+            .is_some_and(|byte| byte.is_ascii_lowercase())
+        || !prefix
+            .bytes()
+            .all(|byte| byte.is_ascii_lowercase() || byte.is_ascii_digit() || byte == b'_')
+        || prefix.ends_with('_')
+    {
+        return invalid(format!(
+            "prefix must be 1-{MAX_SOLUTION_PACK_PREFIX_BYTES} lowercase ASCII letters, digits, or underscores, start with a letter, and not end with an underscore"
+        ));
+    }
+    Ok(())
+}
+
+fn topological_resource_order(
+    dependencies: &BTreeMap<String, BTreeSet<String>>,
+) -> Result<Vec<String>, SolutionPackError> {
+    fn visit(
+        key: &str,
+        dependencies: &BTreeMap<String, BTreeSet<String>>,
+        visiting: &mut BTreeSet<String>,
+        visited: &mut BTreeSet<String>,
+        ordered: &mut Vec<String>,
+    ) -> Result<(), SolutionPackError> {
+        if visited.contains(key) {
+            return Ok(());
+        }
+        if !visiting.insert(key.to_owned()) {
+            return invalid(format!("resource dependencies contain a cycle at '{key}'"));
+        }
+        for dependency in &dependencies[key] {
+            visit(dependency, dependencies, visiting, visited, ordered)?;
+        }
+        visiting.remove(key);
+        visited.insert(key.to_owned());
+        ordered.push(key.to_owned());
+        Ok(())
+    }
+
+    let mut visiting = BTreeSet::new();
+    let mut visited = BTreeSet::new();
+    let mut ordered = Vec::with_capacity(dependencies.len());
+    for key in dependencies.keys() {
+        visit(key, dependencies, &mut visiting, &mut visited, &mut ordered)?;
+    }
+    Ok(ordered)
+}
+
+fn normalized_blueprint_payload(
+    blueprint: &SolutionPackBlueprint,
+    mappings: &BTreeMap<String, PlannedMapping>,
+    publication: BlueprintPublication,
+) -> Result<Value, SolutionPackError> {
+    let mut value: toml::Value = toml::from_str(blueprint.source()).map_err(|_| {
+        SolutionPackError::Invalid(format!("blueprint '{}' is invalid", blueprint.key()))
+    })?;
+    let table = value
+        .as_table_mut()
+        .expect("validated blueprint is a table");
+    table.insert(
+        "code".to_owned(),
+        toml::Value::String(mappings[blueprint.key()].target_code.clone()),
+    );
+    if let Some(includes) = table
+        .get_mut("includes")
+        .and_then(toml::Value::as_array_mut)
+    {
+        for include in includes {
+            let include = include
+                .as_table_mut()
+                .expect("validated include is a table");
+            let key = include
+                .remove("key")
+                .and_then(|value| value.as_str().map(str::to_owned))
+                .expect("validated include has a key");
+            include.insert(
+                "code".to_owned(),
+                toml::Value::String(mappings[&key].target_code.clone()),
+            );
+            include.insert("version".to_owned(), toml::Value::Integer(1));
+        }
+    }
+    if let Some(attributes) = table
+        .get_mut("attributes")
+        .and_then(toml::Value::as_array_mut)
+    {
+        for attribute in attributes {
+            if let Some(attribute) = attribute.as_table_mut() {
+                normalize_reference(attribute, "target_blueprint", mappings);
+            }
+        }
+    }
+    if let Some(views) = table.get_mut("views").and_then(toml::Value::as_table_mut) {
+        for (_, view) in views.iter_mut() {
+            if let Some(view) = view.as_table_mut() {
+                normalize_view_references(view, mappings);
+            }
+        }
+    }
+    let definition = toml::to_string(&value).map_err(|_| {
+        SolutionPackError::Invalid(format!("blueprint '{}' is invalid", blueprint.key()))
+    })?;
+    Ok(serde_json::json!({
+        "definition": definition,
+        "version": 1,
+        "publication": publication.as_str(),
+    }))
+}
+
+fn normalize_reference(
+    table: &mut toml::map::Map<String, toml::Value>,
+    field: &str,
+    mappings: &BTreeMap<String, PlannedMapping>,
+) {
+    if let Some(reference) = table.get_mut(field) {
+        let key = reference
+            .as_str()
+            .expect("validated reference is a string")
+            .to_owned();
+        *reference = toml::Value::String(mappings[&key].target_code.clone());
+    }
+}
+
+fn normalize_view_references(
+    node: &mut toml::map::Map<String, toml::Value>,
+    mappings: &BTreeMap<String, PlannedMapping>,
+) {
+    if node.get("type").and_then(toml::Value::as_str) == Some("incoming_relationship_list")
+        && let Some(relationships) = node
+            .get_mut("relationships")
+            .and_then(toml::Value::as_array_mut)
+    {
+        for relationship in relationships {
+            if let Some(relationship) = relationship.as_table_mut() {
+                normalize_reference(relationship, "source_blueprint", mappings);
+            }
+        }
+    }
+    for collection in ["children", "tabs", "sections"] {
+        if let Some(children) = node.get_mut(collection).and_then(toml::Value::as_array_mut) {
+            for child in children {
+                if let Some(child) = child.as_table_mut() {
+                    normalize_view_references(child, mappings);
+                }
+            }
+        }
+    }
+}
+
+fn normalized_context_payload(
+    logical_key: &str,
+    context: &SolutionPackContext,
+    mappings: &BTreeMap<String, PlannedMapping>,
+) -> Value {
+    let parent = &mappings[&context.parent];
+    serde_json::json!({
+        "code": mappings[logical_key].target_code,
+        "data": context.data,
+        "parent_id": parent.target_id,
+        "parent_code": parent.target_code,
+    })
 }
 
 #[cfg(test)]
@@ -1979,6 +2603,454 @@ value_type = "string"
             "resources":{"blueprints":[],"contexts":[resource("contexts/web", "contexts/web.json", context)]}
         });
         assert_invalid(&archive(&manifest, &files), expected);
+    }
+
+    #[test]
+    fn planner_rewrites_portable_references_and_orders_dependencies() {
+        let pack = ValidatedSolutionPack::from_tar_zst(&archive(&manifest_value(), &valid_files()))
+            .unwrap();
+        let plan = build_create_only_plan(
+            &pack,
+            "ecom",
+            BlueprintPublication::Publish,
+            &PlanningWorkspaceSnapshot {
+                workspace_id: uuid::Uuid::nil(),
+                physical_codes: BTreeSet::from(["default".to_owned()]),
+                default_context_id: uuid::Uuid::nil(),
+            },
+        )
+        .unwrap();
+
+        assert!(plan.ready);
+        assert_eq!(
+            plan.actions
+                .iter()
+                .map(|action| action.logical_key.as_str())
+                .collect::<Vec<_>>(),
+            ["blueprints/category", "blueprints/product", "contexts/web"]
+        );
+        assert!(plan.actions.iter().all(|action| action.action == "create"));
+        let product = plan
+            .actions
+            .iter()
+            .find(|action| action.logical_key == "blueprints/product")
+            .unwrap();
+        let definition = product.normalized_payload.as_ref().unwrap()["definition"]
+            .as_str()
+            .unwrap();
+        assert!(definition.contains("code = \"ecom_product\""));
+        assert!(definition.contains("target_blueprint = \"ecom_category\""));
+        assert_eq!(
+            product.normalized_payload.as_ref().unwrap()["publication"],
+            "publish"
+        );
+        let category_definition = plan
+            .actions
+            .iter()
+            .find(|action| action.logical_key == "blueprints/category")
+            .unwrap()
+            .normalized_payload
+            .as_ref()
+            .unwrap()["definition"]
+            .as_str()
+            .unwrap();
+        assert!(category_definition.contains("source_blueprint = \"ecom_product\""));
+        assert!(category_definition.contains("target_blueprint = \"ecom_product\""));
+        let context = plan
+            .actions
+            .iter()
+            .find(|action| action.logical_key == "contexts/web")
+            .unwrap();
+        assert_eq!(
+            context.normalized_payload.as_ref().unwrap()["parent_code"],
+            "default"
+        );
+    }
+
+    #[test]
+    fn planner_rewrites_portable_includes_to_mapped_revision_one() {
+        let entity = br#"format_version = 1
+code = "product"
+name = "Product"
+kind = "entity"
+includes = [{ alias = "base", key = "blueprints/base" }]
+[views.dropdown_option]
+type = "dropdown_option"
+fields = ["name"]
+[[attributes]]
+code = "name"
+from = "base.name"
+"#;
+        let mixin = br#"format_version = 1
+code = "base"
+name = "Base"
+kind = "mixin"
+[[attributes]]
+code = "name"
+value_type = "string"
+"#;
+        let manifest = json!({
+            "manifest_version": 1,
+            "id": "attricat.includes",
+            "name": "Includes",
+            "version": "1.0.0",
+            "description": "Include rewrite",
+            "catalog": {"host_api": "^1.0"},
+            "resources": {"blueprints": [
+                resource("blueprints/product", "blueprints/product.toml", entity),
+                resource("blueprints/base", "blueprints/base.toml", mixin)
+            ], "contexts": []}
+        });
+        let files = [
+            ("blueprints/product.toml", entity.as_slice()),
+            ("blueprints/base.toml", mixin.as_slice()),
+        ];
+        let pack = ValidatedSolutionPack::from_tar_zst(&archive(&manifest, &files)).unwrap();
+        let plan = build_create_only_plan(
+            &pack,
+            "mapped",
+            BlueprintPublication::Draft,
+            &PlanningWorkspaceSnapshot {
+                workspace_id: uuid::Uuid::nil(),
+                physical_codes: BTreeSet::from(["default".to_owned()]),
+                default_context_id: uuid::Uuid::nil(),
+            },
+        )
+        .unwrap();
+        assert_eq!(plan.actions[0].logical_key, "blueprints/base");
+        let definition = plan.actions[1].normalized_payload.as_ref().unwrap()["definition"]
+            .as_str()
+            .unwrap();
+        assert!(definition.contains("code = \"mapped_base\""));
+        assert!(definition.contains("version = 1"));
+        assert!(!definition.contains("key = \"blueprints/base\""));
+    }
+
+    #[test]
+    fn planner_rejects_unsafe_prefixes_and_reports_collisions() {
+        for prefix in [
+            "",
+            "Bad",
+            "bad-",
+            "bad_",
+            "a23456789012345678901234567890123",
+        ] {
+            assert!(validate_plan_prefix(prefix).is_err(), "accepted {prefix:?}");
+        }
+        let pack = ValidatedSolutionPack::from_tar_zst(&archive(&manifest_value(), &valid_files()))
+            .unwrap();
+        let plan = build_create_only_plan(
+            &pack,
+            "ecom",
+            BlueprintPublication::Draft,
+            &PlanningWorkspaceSnapshot {
+                workspace_id: uuid::Uuid::nil(),
+                physical_codes: BTreeSet::from(["default".to_owned(), "ecom_product".to_owned()]),
+                default_context_id: uuid::Uuid::nil(),
+            },
+        )
+        .unwrap();
+        assert!(!plan.ready);
+        let product = plan
+            .actions
+            .iter()
+            .find(|action| action.logical_key == "blueprints/product")
+            .unwrap();
+        assert_eq!(product.action, "conflict");
+        assert_eq!(product.reason_code, "target_code_exists");
+    }
+
+    #[test]
+    fn planner_blocks_required_resources_when_optional_dependencies_are_skipped() {
+        let mut manifest = manifest_value();
+        manifest["resources"]["blueprints"][1]["required"] = json!(false);
+        let pack =
+            ValidatedSolutionPack::from_tar_zst(&archive(&manifest, &valid_files())).unwrap();
+        let plan = build_create_only_plan(
+            &pack,
+            "ecom",
+            BlueprintPublication::Draft,
+            &PlanningWorkspaceSnapshot {
+                workspace_id: uuid::Uuid::nil(),
+                physical_codes: BTreeSet::from(["default".to_owned()]),
+                default_context_id: uuid::Uuid::nil(),
+            },
+        )
+        .unwrap();
+        let category = plan
+            .actions
+            .iter()
+            .find(|action| action.logical_key == "blueprints/category")
+            .unwrap();
+        let product = plan
+            .actions
+            .iter()
+            .find(|action| action.logical_key == "blueprints/product")
+            .unwrap();
+        assert_eq!(
+            (category.action, category.reason_code),
+            ("skip", "optional_not_selected")
+        );
+        assert_eq!(
+            (product.action, product.reason_code),
+            ("blocked", "dependency_not_creatable")
+        );
+        assert!(!plan.ready);
+    }
+
+    #[test]
+    fn planner_blocks_draft_relationship_paths_and_orders_publish_targets() {
+        let product = br#"format_version = 1
+code = "product"
+name = "Product"
+kind = "entity"
+[views.dropdown_option]
+type = "dropdown_option"
+fields = ["name"]
+[views.table]
+type = "table"
+columns = [{ field = "category.name" }]
+[[attributes]]
+code = "name"
+value_type = "string"
+[[attributes]]
+code = "category"
+value_type = "relationship"
+target_blueprint = "blueprints/category"
+"#;
+        let category = br#"format_version = 1
+code = "category"
+name = "Category"
+kind = "entity"
+[views.dropdown_option]
+type = "dropdown_option"
+fields = ["name"]
+[[attributes]]
+code = "name"
+value_type = "string"
+"#;
+        let manifest = json!({
+            "manifest_version": 1,
+            "id": "attricat.paths",
+            "name": "Paths",
+            "version": "1.0.0",
+            "description": "Relationship table paths",
+            "catalog": {"host_api": "^1.0"},
+            "resources": {"blueprints": [
+                resource("blueprints/product", "blueprints/product.toml", product),
+                resource("blueprints/category", "blueprints/category.toml", category)
+            ], "contexts": []}
+        });
+        let files = [
+            ("blueprints/product.toml", product.as_slice()),
+            ("blueprints/category.toml", category.as_slice()),
+        ];
+        let pack = ValidatedSolutionPack::from_tar_zst(&archive(&manifest, &files)).unwrap();
+        let workspace = PlanningWorkspaceSnapshot {
+            workspace_id: uuid::Uuid::nil(),
+            physical_codes: BTreeSet::from(["default".to_owned()]),
+            default_context_id: uuid::Uuid::nil(),
+        };
+
+        let draft = build_create_only_plan(&pack, "paths", BlueprintPublication::Draft, &workspace)
+            .unwrap();
+        let product_action = draft
+            .actions
+            .iter()
+            .find(|action| action.logical_key == "blueprints/product")
+            .unwrap();
+        assert_eq!(
+            (product_action.action, product_action.reason_code),
+            ("blocked", "draft_table_path_target_unpublished")
+        );
+        assert!(!draft.ready);
+
+        let publish =
+            build_create_only_plan(&pack, "paths", BlueprintPublication::Publish, &workspace)
+                .unwrap();
+        assert!(publish.ready);
+        assert_eq!(
+            publish
+                .actions
+                .iter()
+                .map(|action| action.logical_key.as_str())
+                .collect::<Vec<_>>(),
+            ["blueprints/category", "blueprints/product"]
+        );
+
+        let cyclic_category = br#"format_version = 1
+code = "category"
+name = "Category"
+kind = "entity"
+[views.dropdown_option]
+type = "dropdown_option"
+fields = ["name"]
+[views.table]
+type = "table"
+columns = [{ field = "product.name" }]
+[[attributes]]
+code = "name"
+value_type = "string"
+[[attributes]]
+code = "product"
+value_type = "relationship"
+target_blueprint = "blueprints/product"
+"#;
+        let mut cyclic_manifest = manifest;
+        cyclic_manifest["resources"]["blueprints"][1]["sha256"] = json!(digest(cyclic_category));
+        let cyclic_files = [
+            ("blueprints/product.toml", product.as_slice()),
+            ("blueprints/category.toml", cyclic_category.as_slice()),
+        ];
+        let cyclic_pack =
+            ValidatedSolutionPack::from_tar_zst(&archive(&cyclic_manifest, &cyclic_files)).unwrap();
+        let error = build_create_only_plan(
+            &cyclic_pack,
+            "paths",
+            BlueprintPublication::Publish,
+            &workspace,
+        )
+        .unwrap_err();
+        assert!(error.to_string().contains("dependencies contain a cycle"));
+    }
+
+    #[test]
+    fn planner_uses_workspace_wide_codes_and_deterministic_target_ids() {
+        let pack = ValidatedSolutionPack::from_tar_zst(&archive(&manifest_value(), &valid_files()))
+            .unwrap();
+        let workspace = PlanningWorkspaceSnapshot {
+            workspace_id: uuid::Uuid::from_u128(1),
+            physical_codes: BTreeSet::from(["default".to_owned(), "ecom_product".to_owned()]),
+            default_context_id: uuid::Uuid::from_u128(2),
+        };
+        let first =
+            build_create_only_plan(&pack, "ecom", BlueprintPublication::Publish, &workspace)
+                .unwrap();
+        let second =
+            build_create_only_plan(&pack, "ecom", BlueprintPublication::Publish, &workspace)
+                .unwrap();
+
+        assert_eq!(
+            first
+                .mappings
+                .iter()
+                .map(|mapping| mapping.target_id)
+                .collect::<Vec<_>>(),
+            second
+                .mappings
+                .iter()
+                .map(|mapping| mapping.target_id)
+                .collect::<Vec<_>>()
+        );
+        assert_eq!(
+            first
+                .actions
+                .iter()
+                .map(|action| &action.normalized_payload)
+                .collect::<Vec<_>>(),
+            second
+                .actions
+                .iter()
+                .map(|action| &action.normalized_payload)
+                .collect::<Vec<_>>()
+        );
+        let product = first
+            .actions
+            .iter()
+            .find(|action| action.logical_key == "blueprints/product")
+            .unwrap();
+        assert_eq!(
+            (product.action, product.reason_code),
+            ("conflict", "target_code_exists")
+        );
+
+        let simple_product = br#"format_version = 1
+code = "product"
+name = "Product"
+kind = "entity"
+[views.dropdown_option]
+type = "dropdown_option"
+fields = ["name"]
+[[attributes]]
+code = "name"
+value_type = "string"
+"#;
+        let context =
+            br#"{"format_version":1,"code":"product","data":{},"parent":"system/default"}"#;
+        let duplicate_manifest = json!({
+            "manifest_version": 1,
+            "id": "attricat.duplicates",
+            "name": "Duplicates",
+            "version": "1.0.0",
+            "description": "Duplicate generated codes",
+            "catalog": {"host_api": "^1.0"},
+            "resources": {
+                "blueprints": [resource("blueprints/product", "blueprints/product.toml", simple_product)],
+                "contexts": [resource("contexts/product", "contexts/product.json", context)]
+            }
+        });
+        let duplicate_pack = ValidatedSolutionPack::from_tar_zst(&archive(
+            &duplicate_manifest,
+            &[
+                ("blueprints/product.toml", simple_product.as_slice()),
+                ("contexts/product.json", context),
+            ],
+        ))
+        .unwrap();
+        let duplicate_plan = build_create_only_plan(
+            &duplicate_pack,
+            "new",
+            BlueprintPublication::Publish,
+            &PlanningWorkspaceSnapshot {
+                workspace_id: uuid::Uuid::nil(),
+                physical_codes: BTreeSet::from(["default".to_owned()]),
+                default_context_id: uuid::Uuid::nil(),
+            },
+        )
+        .unwrap();
+        assert!(duplicate_plan.actions.iter().all(|action| {
+            (action.action, action.reason_code) == ("conflict", "duplicate_target_code")
+        }));
+    }
+
+    #[test]
+    fn rejects_workspace_dependent_blueprint_constructs_in_v1() {
+        let role = PRODUCT_BLUEPRINT.replace_ascii(
+            b"kind = \"entity\"",
+            b"kind = \"entity\"\n[publication]\nretain_on_edit_roles = [\"editor\"]",
+        );
+        assert_blueprint_error(&role, "cannot declare workspace roles");
+
+        let renderer = PRODUCT_BLUEPRINT
+            .iter()
+            .copied()
+            .chain(
+                br#"
+[views.table]
+type = "table"
+columns = [{ field = "name", renderer = { id = "acme.custom", version = 1 } }]
+"#
+                .iter()
+                .copied(),
+            )
+            .collect::<Vec<_>>();
+        assert_blueprint_error(&renderer, "cannot declare extension table renderers");
+
+        let layout = PRODUCT_BLUEPRINT
+            .iter()
+            .copied()
+            .chain(
+                br#"
+[views.extension_layout]
+type = "extension_layout"
+version = 1
+outlets = {}
+"#
+                .iter()
+                .copied(),
+            )
+            .collect::<Vec<_>>();
+        assert_blueprint_error(&layout, "cannot declare extension layouts");
     }
 
     trait ReplaceAscii {

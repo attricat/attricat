@@ -1,15 +1,17 @@
 # Solution Packs
 
-> **Status:** v1 archive validation and administrator inspection are implemented;
-> solution-pack planning and application are not implemented yet.
+> **Status:** v1 archive validation, administrator inspection, and immutable
+> create-only dry-run planning are implemented. Application and private-repository
+> fetching are not implemented yet.
 
 A solution pack is a versioned, declarative bundle of catalog structure,
 workspace defaults, extension requirements, assets, and setup guidance. Packs
 let a workspace begin with a reviewed domain foundation—such as Ecommerce or
 Warehouse—without copying another workspace's database state.
 
-Authorized workspace administrators plan and apply packs through the Catalog
-CLI. Solution packs are an administrative bootstrap and authoring mechanism,
+Authorized workspace administrators currently inspect packs and create or review
+dry-run plans through the Catalog CLI. Solution packs are an administrative
+bootstrap and authoring mechanism,
 not an end-user feature. Ordinary workspace users never need to discover,
 select, configure, inspect, or otherwise interact with a pack; they interact
 only with the resulting blueprints, navigation, extensions, and functionality.
@@ -415,7 +417,7 @@ never selected only because a pack author marked them as default.
 
 ## CLI administration
 
-Solution-pack inspection and application are administrator-only CLI workflows.
+Solution-pack inspection and dry-run planning are administrator-only CLI workflows.
 The implemented inspection command sends a local archive to the authoritative
 server for read-only validation and returns only safe metadata and resource
 summaries:
@@ -425,23 +427,28 @@ acli solution-pack inspect --file pack.tar.zst
 ```
 
 Inspection does not persist the archive, apply resources, or expose blueprint
-source and context data in its response. Private-repository release selection
-and the following planning and application commands remain future command
-shapes:
+source and context data in its response. The implemented local-archive planner
+uses an explicit prefix and blueprint publication preference:
 
 ```sh
-acli solution-pack plan attricat/solution-pack-ecommerce --version 1.2.0 --prefix ecom
+acli solution-pack plan --file pack.tar.zst --prefix ecom --blueprint-publication draft
 acli solution-pack plan show <plan-id>
-acli solution-pack apply <plan-id>
-acli solution-pack applications list
-acli solution-pack applications show <application-id>
 ```
 
-The exact flags may evolve with implementation, but planning and applying remain
-separate commands. `apply` accepts an immutable plan ID rather than recomputing
-choices from command-line flags. Interactive prompts may help construct a plan,
-but automation can supply the same typed options non-interactively and receive
-structured JSON output.
+`draft` and `publish` describe what a later apply operation would do; planning
+never creates or publishes a blueprint. Prefixes are 1–32 bytes, begin with a
+lowercase ASCII letter, contain only lowercase letters, digits, and underscores,
+and do not end in an underscore. Optional v1 resources are conservatively
+skipped; a selected required resource whose dependency would be skipped is
+blocked. Existing target codes are conflicts and are never adopted or replaced.
+V1 pack blueprints reject workspace-role publication policies, extension layouts, and
+extension-provided table renderers; planning does not snapshot extension or role
+state yet.
+
+Private-repository release selection and application remain deferred. A future
+apply command will accept an immutable plan ID rather than recomputing choices
+from command-line flags, and future application-history commands will expose
+the resulting records. Planning will remain separate from application.
 
 The CLI authenticates normally and the API requires a dedicated
 `solution_packs.manage` permission, initially granted to workspace owner and
@@ -450,6 +457,9 @@ authority to install it. Local/sideload commands additionally require the
 server-side development or administrator control described above.
 
 ## Planning and application
+
+> **Design target:** Application behavior in this section is not implemented.
+> Current functionality ends after immutable dry-run plan creation and review.
 
 Validation produces no workspace changes. An authorized administrator first
 creates a plan through the CLI against a specific pack release and a consistent
@@ -567,9 +577,9 @@ raw workspace dump. The exporter:
 Export does not imply ownership of third-party assets or permission to
 redistribute extension packages, fonts, logos, or customer content.
 
-## Initial delivery boundary
+## Longer-term delivery boundary
 
-The first implementation should validate the architecture with blueprint and
+The intended delivery sequence validates the architecture with blueprint and
 context starter packs:
 
 1. strict manifest/archive validation;

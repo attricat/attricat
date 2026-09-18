@@ -334,6 +334,16 @@ pub fn router(state: AppState) -> Router {
                 MAX_SOLUTION_PACK_ARCHIVE_BYTES,
             )),
         )
+        .route(
+            "/solution-packs/plans",
+            post(solution_packs::create_plan).layer(axum::extract::DefaultBodyLimit::max(
+                MAX_SOLUTION_PACK_ARCHIVE_BYTES,
+            )),
+        )
+        .route(
+            "/solution-packs/plans/{plan_id}",
+            get(solution_packs::get_plan),
+        )
         .route("/extensions/runtime", get(extensions::runtime))
         .route(
             "/workspace/extensions-mode",

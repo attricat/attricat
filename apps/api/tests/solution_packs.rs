@@ -186,6 +186,23 @@ async fn inspect(client: &Client, base_url: &str, archive: Vec<u8>) -> reqwest::
         .unwrap()
 }
 
+async fn create_plan(
+    client: &Client,
+    base_url: &str,
+    archive: Vec<u8>,
+    prefix: &str,
+) -> reqwest::Response {
+    client
+        .post(format!(
+            "{base_url}/solution-packs/plans?prefix={prefix}&blueprint_publication=draft"
+        ))
+        .header("content-type", "application/zstd")
+        .body(archive)
+        .send()
+        .await
+        .unwrap()
+}
+
 #[sqlx::test(migrations = "./migrations")]
 async fn inspection_requires_authentication_and_solution_pack_permission(pool: PgPool) {
     let (base_url, server) = start_server(pool.clone()).await;
@@ -256,6 +273,28 @@ async fn inspection_enforces_personal_access_token_permission_subset(pool: PgPoo
         .status(),
         StatusCode::OK
     );
+    assert_eq!(
+        create_plan(
+            &bearer_client(&denied_secret),
+            &base_url,
+            valid_archive(),
+            "pat"
+        )
+        .await
+        .status(),
+        StatusCode::FORBIDDEN
+    );
+    assert_eq!(
+        create_plan(
+            &bearer_client(&permitted_secret),
+            &base_url,
+            valid_archive(),
+            "pat"
+        )
+        .await
+        .status(),
+        StatusCode::CREATED
+    );
     server.abort();
 }
 
@@ -302,13 +341,37 @@ async fn inspection_requires_browser_session_csrf(pool: PgPool) {
     let valid_csrf = client
         .post(format!("{base_url}/solution-packs/inspect"))
         .header("content-type", "application/zstd")
-        .header("cookie", cookie)
+        .header("cookie", &cookie)
         .header("x-catalog-csrf", csrf_value)
         .body(valid_archive())
         .send()
         .await
         .unwrap();
     assert_eq!(valid_csrf.status(), StatusCode::OK);
+
+    let missing_plan_csrf = client
+        .post(format!(
+            "{base_url}/solution-packs/plans?prefix=csrf&blueprint_publication=draft"
+        ))
+        .header("content-type", "application/zstd")
+        .header("cookie", &cookie)
+        .body(valid_archive())
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(missing_plan_csrf.status(), StatusCode::FORBIDDEN);
+    let valid_plan_csrf = client
+        .post(format!(
+            "{base_url}/solution-packs/plans?prefix=csrf&blueprint_publication=draft"
+        ))
+        .header("content-type", "application/zstd")
+        .header("cookie", &cookie)
+        .header("x-catalog-csrf", csrf_value)
+        .body(valid_archive())
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(valid_plan_csrf.status(), StatusCode::CREATED);
     server.abort();
 }
 
@@ -461,5 +524,206 @@ async fn inspection_enforces_the_32_mib_compressed_body_limit(pool: PgPool) {
             }
         })
     );
+    server.abort();
+}
+
+#[sqlx::test(migrations = "./migrations")]
+async fn plan_creation_persists_an_audited_immutable_dry_run_without_catalog_mutation(
+    pool: PgPool,
+) {
+    let (base_url, server) = start_server(pool.clone()).await;
+    let archive = valid_archive();
+    let archive_sha256 = digest(&archive);
+    let blueprint_count: i64 = sqlx::query_scalar("SELECT count(*) FROM blueprints")
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+    let context_count: i64 = sqlx::query_scalar("SELECT count(*) FROM attribute_contexts")
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+
+    let response = create_plan(&authenticated_client(), &base_url, archive, "ecom").await;
+    assert_eq!(response.status(), StatusCode::CREATED);
+    let text = response.text().await.unwrap();
+    assert!(!text.contains("BLUEPRINT_SOURCE_SECRET"));
+    assert!(!text.contains("CONTEXT_DATA_SECRET"));
+    let body: Value = serde_json::from_str(&text).unwrap();
+    assert_eq!(body["source_kind"], "local_archive");
+    assert_eq!(body["source_metadata"]["side_loaded"], true);
+    assert_eq!(body["archive_sha256"], archive_sha256);
+    assert_eq!(body["prefix"], "ecom");
+    assert_eq!(body["blueprint_publication"], "draft");
+    assert_eq!(body["ready"], true);
+    assert_eq!(body["conflicts"], json!([]));
+    assert_eq!(body["actions"][0]["logical_key"], "blueprints/product");
+    assert_eq!(body["actions"][0]["action"], "create");
+    assert_eq!(body["actions"][1]["logical_key"], "contexts/web");
+    assert_eq!(body["actions"][1]["action"], "skip");
+    assert_eq!(body["mappings"][0]["logical_key"], "blueprints/product");
+    assert_eq!(body["mappings"][0]["target_code"], "ecom_product");
+    assert_eq!(body["mappings"][1]["logical_key"], "contexts/web");
+    assert_eq!(body["mappings"][2]["logical_key"], "system/default");
+
+    let plan_id = body["id"].as_str().unwrap();
+    let fetched = authenticated_client()
+        .get(format!("{base_url}/solution-packs/plans/{plan_id}"))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(fetched.status(), StatusCode::OK);
+    assert_eq!(fetched.json::<Value>().await.unwrap(), body);
+
+    let normalized: Value = sqlx::query_scalar("SELECT normalized_payload FROM solution_pack_plan_actions WHERE plan_id = $1 AND logical_key = 'blueprints/product'")
+        .bind(plan_id.parse::<Uuid>().unwrap()).fetch_one(&pool).await.unwrap();
+    assert!(
+        normalized["definition"]
+            .as_str()
+            .unwrap()
+            .contains("code = \"ecom_product\"")
+    );
+    let retained_archive_columns: i64 = sqlx::query_scalar(
+        "SELECT count(*) FROM information_schema.columns WHERE table_schema = 'public' AND table_name LIKE 'solution_pack_plan%' AND data_type = 'bytea'",
+    )
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert_eq!(retained_archive_columns, 0);
+    let hours: rust_decimal::Decimal = sqlx::query_scalar("SELECT EXTRACT(EPOCH FROM (expires_at - created_at)) / 3600 FROM solution_pack_plans WHERE id = $1")
+        .bind(plan_id.parse::<Uuid>().unwrap()).fetch_one(&pool).await.unwrap();
+    assert_eq!(hours, rust_decimal::Decimal::from(24));
+    assert_eq!(
+        sqlx::query_scalar::<_, i64>("SELECT count(*) FROM blueprints")
+            .fetch_one(&pool)
+            .await
+            .unwrap(),
+        blueprint_count
+    );
+    assert_eq!(
+        sqlx::query_scalar::<_, i64>("SELECT count(*) FROM attribute_contexts")
+            .fetch_one(&pool)
+            .await
+            .unwrap(),
+        context_count
+    );
+    assert_eq!(sqlx::query_scalar::<_, i64>("SELECT count(*) FROM audit_events WHERE action = 'catalog.solution_packs.plans.create_or_apply'").fetch_one(&pool).await.unwrap(), 1);
+    let audit_target: Value = sqlx::query_scalar(
+        "SELECT target FROM audit_events WHERE action = 'catalog.solution_packs.plans.create_or_apply'",
+    )
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert_eq!(
+        audit_target,
+        json!({"type": "solution_pack_plan", "id": plan_id})
+    );
+    server.abort();
+}
+
+#[sqlx::test(migrations = "./migrations")]
+async fn plan_validates_prefix_and_reports_existing_code_conflicts(pool: PgPool) {
+    let (base_url, server) = start_server(pool).await;
+    let client = authenticated_client();
+    let invalid = create_plan(&client, &base_url, valid_archive(), "Bad-").await;
+    assert_eq!(invalid.status(), StatusCode::UNPROCESSABLE_ENTITY);
+    assert_eq!(
+        invalid.json::<Value>().await.unwrap()["error"]["code"],
+        "invalid_input"
+    );
+
+    let definition = std::str::from_utf8(PRODUCT_BLUEPRINT)
+        .unwrap()
+        .replace("code = \"product\"", "code = \"ecom_product\"");
+    let created = client
+        .post(format!("{base_url}/blueprints"))
+        .json(&json!({"definition": definition}))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(created.status(), StatusCode::CREATED);
+
+    let conflict = create_plan(&client, &base_url, valid_archive(), "ecom").await;
+    assert_eq!(conflict.status(), StatusCode::CREATED);
+    let body = conflict.json::<Value>().await.unwrap();
+    assert_eq!(body["ready"], false);
+    assert_eq!(body["conflicts"][0]["logical_key"], "blueprints/product");
+    assert_eq!(body["conflicts"][0]["action"], "conflict");
+    assert_eq!(body["conflicts"][0]["reason_code"], "target_code_exists");
+
+    let context = client
+        .post(format!("{base_url}/contexts"))
+        .json(&json!({"code": "cross_product", "data": {}}))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(context.status(), StatusCode::CREATED);
+    let cross_kind = create_plan(&client, &base_url, valid_archive(), "cross").await;
+    assert_eq!(cross_kind.status(), StatusCode::CREATED);
+    let body = cross_kind.json::<Value>().await.unwrap();
+    assert_eq!(body["ready"], false);
+    assert_eq!(body["conflicts"][0]["logical_key"], "blueprints/product");
+    assert_eq!(body["conflicts"][0]["reason_code"], "target_code_exists");
+    server.abort();
+}
+
+#[sqlx::test(migrations = "./migrations")]
+async fn plan_routes_require_solution_pack_permission_and_isolate_workspaces(pool: PgPool) {
+    let (base_url, server) = start_server(pool.clone()).await;
+    let viewer_id = create_principal_with_role(
+        &pool,
+        "solution-pack-plan-viewer@example.test",
+        "00000000-0000-4000-8000-000000000104",
+    )
+    .await;
+    let denied = create_plan(
+        &principal_client(viewer_id),
+        &base_url,
+        valid_archive(),
+        "ecom",
+    )
+    .await;
+    assert_eq!(denied.status(), StatusCode::FORBIDDEN);
+    let admin_id = create_principal_with_role(
+        &pool,
+        "solution-pack-plan-admin@example.test",
+        "00000000-0000-4000-8000-000000000102",
+    )
+    .await;
+    assert_eq!(
+        create_plan(
+            &principal_client(admin_id),
+            &base_url,
+            valid_archive(),
+            "admin"
+        )
+        .await
+        .status(),
+        StatusCode::CREATED
+    );
+
+    let other_workspace = Uuid::new_v4();
+    let hidden_plan = Uuid::new_v4();
+    sqlx::query(
+        "INSERT INTO workspaces (id, slug, name, login_identifier) VALUES ($1, $2, 'Other', $3)",
+    )
+    .bind(other_workspace)
+    .bind(format!("other-{other_workspace}"))
+    .bind(format!("other-{other_workspace}.example.test"))
+    .execute(&pool)
+    .await
+    .unwrap();
+    sqlx::query("INSERT INTO solution_pack_plans (id, workspace_id, source_kind, source_metadata, archive_sha256, manifest_version, pack_id, pack_name, pack_version, pack_description, host_api, prefix, blueprint_publication, ready, expires_at) VALUES ($1, $2, 'local_archive', '{\"side_loaded\":true}'::jsonb, $3, 1, 'attricat.hidden', 'Hidden', '1.0.0', 'Hidden', '^1.0', 'hidden', 'draft', true, now() + interval '24 hours')")
+        .bind(hidden_plan)
+        .bind(other_workspace)
+        .bind("0".repeat(64))
+        .execute(&pool)
+        .await
+        .unwrap();
+    let hidden = authenticated_client()
+        .get(format!("{base_url}/solution-packs/plans/{hidden_plan}"))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(hidden.status(), StatusCode::NOT_FOUND);
     server.abort();
 }
