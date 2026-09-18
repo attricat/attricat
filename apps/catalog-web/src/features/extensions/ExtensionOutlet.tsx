@@ -12,6 +12,7 @@ import {
   Popover,
   Stack,
   Tooltip,
+  Typography,
 } from '@mui/material';
 import { useQuery } from '@tanstack/react-query';
 import { Link, useRouterState } from '@tanstack/react-router';
@@ -144,6 +145,7 @@ const hasValidContext = (
 type Props = {
   outlet: Outlet;
   context?: Record<string, unknown>;
+  navigationDisplay?: 'grouped' | 'all';
   onNavigate?: () => void;
   runtimeScope?: ExtensionRuntimeScope;
 };
@@ -156,6 +158,7 @@ type Props = {
 export const ExtensionOutlet = ({
   outlet,
   context,
+  navigationDisplay = 'grouped',
   onNavigate,
   runtimeScope,
 }: Props) => {
@@ -233,6 +236,35 @@ export const ExtensionOutlet = ({
     );
   }
   if (policy.kind === 'navigation') {
+    if (navigationDisplay === 'all') {
+      const appsByExtension = new Map<string, ExtensionContribution[]>();
+      contributions
+        .filter((item) => item.kind === 'navigation')
+        .forEach((item) => {
+          const apps = appsByExtension.get(item.extension_id) ?? [];
+          apps.push(item);
+          appsByExtension.set(item.extension_id, apps);
+        });
+      return (
+        <Stack spacing={2}>
+          {Array.from(appsByExtension.values()).map((apps) => (
+            <Stack key={apps[0].extension_id} spacing={0.5}>
+              <Typography component="h2" variant="overline">
+                {apps[0].extension_name}
+              </Typography>
+              {apps.map((item) => (
+                <OutletContribution
+                  contribution={item}
+                  context={context}
+                  key={contributionKey(item)}
+                  onNavigate={onNavigate}
+                />
+              ))}
+            </Stack>
+          ))}
+        </Stack>
+      );
+    }
     const promoted = contributions.filter(
       (item) => item.navigation_group === 'promoted',
     );

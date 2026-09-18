@@ -50,6 +50,7 @@ const contribution: ExtensionContribution = {
   capabilities: [],
   configuration: null,
   extension_id: 'example.extension',
+  extension_name: 'Example Extension',
   id: 'row-action',
   kind: 'action',
   outlet: 'explorer_row_action',
@@ -165,7 +166,9 @@ describe('ExtensionOutlet', () => {
     const indexRoute = createRoute({
       getParentRoute: () => rootRoute,
       path: '/extensions/$extensionId/$contributionId',
-      component: () => <ExtensionOutlet outlet="navigation" />,
+      component: () => (
+        <ExtensionOutlet navigationDisplay="all" outlet="navigation" />
+      ),
     });
     const router = createRouter({
       history: createMemoryHistory({

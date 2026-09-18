@@ -29,6 +29,7 @@
     "blueprints": "Schematy",
     "contexts": "Konteksty",
     "agents": "Agenci",
+    "apps": "Aplikacje",
     "dataHealth": "Stan danych",
     "auditLog": "Aktywność / dziennik audytu",
     "extensions": "Rozszerzenia",
@@ -690,6 +691,8 @@
     "downloadFile": "Pobierz {{filename}}"
   },
   "extensions": {
+    "appsDescription": "Aplikacje są udostępniane przez zainstalowane rozszerzenia. Wybierz aplikację z nawigacji, aby rozpocząć.",
+    "appsTitle": "Aplikacje",
     "title": "Rozszerzenia",
     "description": "Odkrywaj zaufane rozszerzenia i zarządzaj cyklem życia zainstalowanych rozszerzeń.",
     "uploadArchive": "Prześlij archiwum",

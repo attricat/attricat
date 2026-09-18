@@ -49,6 +49,7 @@ const contribution: ExtensionContribution = {
   capabilities: ['client.explorer_table_cell'],
   configuration: null,
   extension_id: 'example.extension',
+  extension_name: 'Example Extension',
   id: 'example.currency',
   kind: 'embedded',
   outlet: 'explorer_table_cell',

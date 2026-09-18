@@ -234,6 +234,7 @@ pub struct ClientExtensionContribution {
     /// administrator explicitly promotes their stable contribution key.
     pub navigation_group: Option<String>,
     pub extension_id: String,
+    pub extension_name: String,
     pub installed_release_id: Uuid,
     pub configuration: Value,
     pub capabilities: Vec<String>,
@@ -366,6 +367,7 @@ impl CatalogRepository {
             let manifest: Manifest = serde_json::from_value(stored_manifest).map_err(|_| {
                 RepositoryError::InvalidExtension("stored extension manifest is invalid".into())
             })?;
+            let extension_name = manifest.name;
             for contribution in manifest.ui {
                 contributions.push(ClientExtensionContribution {
                     contribution_key: format!("{}:{}", extension_id, contribution.id),
@@ -376,6 +378,7 @@ impl CatalogRepository {
                         .as_ref()
                         .map(|artifact| installed_artifact_key(installed_release_id, artifact)),
                     extension_id: extension_id.clone(),
+                    extension_name: extension_name.clone(),
                     installed_release_id,
                     configuration: client_configuration.clone(),
                     capabilities: capabilities.clone(),

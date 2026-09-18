@@ -82,7 +82,8 @@ vi.mock('../features/workspace/api', () => ({
 }));
 
 vi.mock('../features/extensions/ExtensionOutlet', () => ({
-  ExtensionOutlet: () => null,
+  ExtensionOutlet: ({ navigationDisplay }: { navigationDisplay?: string }) =>
+    navigationDisplay === 'all' ? <span>Extension routes</span> : null,
 }));
 
 const renderNavigation = (
@@ -133,6 +134,15 @@ describe('SideNavigation', () => {
     expect(
       await screen.findByRole('link', { name: 'Blueprints' }),
     ).toBeTruthy();
+
+    fireEvent.click(
+      screen.getByRole('button', { name: 'Back to main navigation' }),
+    );
+    fireEvent.click(screen.getByRole('link', { name: 'Apps' }));
+
+    expect(screen.getByRole('heading', { name: 'Apps' })).toBeTruthy();
+    expect(screen.getByText('Extension routes')).toBeTruthy();
+    expect(screen.queryByRole('link', { name: 'Agents' })).toBeNull();
 
     fireEvent.click(
       screen.getByRole('button', { name: 'Back to main navigation' }),

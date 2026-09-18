@@ -32,6 +32,7 @@ export const navigationRoutes = {
   dataHealth: '/manage/data-health',
   explore: '/',
   extensions: '/manage/extensions',
+  extensionContributions: '/extensions',
   exports: '/manage/exports',
   manage: '/manage',
   profile: '/profile',
