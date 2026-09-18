@@ -22,6 +22,7 @@ pub mod http;
 pub mod mail;
 pub mod model;
 pub mod repository;
+pub mod solution_packs;
 pub mod storage;
 pub mod telemetry;
 pub mod workflow_runtime;

@@ -44,6 +44,7 @@ tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter", "json"] }
 tokio = { version = "1", features = ["fs", "io-util", "macros", "net", "rt-multi-thread", "signal", "sync", "time"] }
 tokio-stream = "0.1"
+toml = "0.8"
 url = "2"
 uuid = { version = "1", features = ["serde", "v4"] }
 zstd = "0.13"

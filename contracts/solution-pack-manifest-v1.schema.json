@@ -1,0 +1,144 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://attricat.com/contracts/solution-pack-manifest-v1.schema.json",
+  "title": "Attricat solution-pack manifest v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "manifest_version",
+    "id",
+    "name",
+    "version",
+    "description",
+    "catalog",
+    "resources"
+  ],
+  "properties": {
+    "manifest_version": {
+      "const": 1
+    },
+    "id": {
+      "type": "string",
+      "maxLength": 128,
+      "pattern": "^[a-z](?:[a-z0-9-]*[a-z0-9])?(?:\\.[a-z](?:[a-z0-9-]*[a-z0-9])?)+$"
+    },
+    "name": {
+      "$ref": "#/$defs/name"
+    },
+    "version": {
+      "type": "string",
+      "pattern": "^(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)(?:-(?:0|[1-9][0-9]*|[0-9]*[A-Za-z-][0-9A-Za-z-]*)(?:\\.(?:0|[1-9][0-9]*|[0-9]*[A-Za-z-][0-9A-Za-z-]*))*)?(?:\\+[0-9A-Za-z-]+(?:\\.[0-9A-Za-z-]+)*)?$"
+    },
+    "description": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 4096
+    },
+    "catalog": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["host_api"],
+      "properties": {
+        "host_api": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "resources": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "blueprints": {
+          "type": "array",
+          "maxItems": 256,
+          "items": {
+            "$ref": "#/$defs/blueprintResource"
+          }
+        },
+        "contexts": {
+          "type": "array",
+          "maxItems": 256,
+          "items": {
+            "$ref": "#/$defs/contextResource"
+          }
+        }
+      },
+      "anyOf": [
+        {
+          "required": ["blueprints"],
+          "properties": {
+            "blueprints": {
+              "minItems": 1
+            }
+          }
+        },
+        {
+          "required": ["contexts"],
+          "properties": {
+            "contexts": {
+              "minItems": 1
+            }
+          }
+        }
+      ]
+    }
+  },
+  "$defs": {
+    "name": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 200
+    },
+    "digest": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "blueprintResource": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["key", "path", "required", "sha256"],
+      "properties": {
+        "key": {
+          "type": "string",
+          "maxLength": 128,
+          "pattern": "^blueprints/[a-z][a-z0-9_-]*$"
+        },
+        "path": {
+          "type": "string",
+          "maxLength": 512,
+          "pattern": "^blueprints/.+\\.toml$"
+        },
+        "required": {
+          "type": "boolean"
+        },
+        "sha256": {
+          "$ref": "#/$defs/digest"
+        }
+      }
+    },
+    "contextResource": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["key", "path", "required", "sha256"],
+      "properties": {
+        "key": {
+          "type": "string",
+          "maxLength": 128,
+          "pattern": "^contexts/[a-z][a-z0-9_-]*$"
+        },
+        "path": {
+          "type": "string",
+          "maxLength": 512,
+          "pattern": "^contexts/.+\\.json$"
+        },
+        "required": {
+          "type": "boolean"
+        },
+        "sha256": {
+          "$ref": "#/$defs/digest"
+        }
+      }
+    }
+  }
+}
