@@ -23,6 +23,7 @@ use api::{
     repository::CatalogRepository,
     rule_runtime,
     storage::{ObjectStore, S3ObjectStore, StorageConfig},
+    task_worker::{self, TaskHandlerRegistry, TaskWorkerConfig},
     telemetry::{init_metrics, init_tracing},
     workflow_runtime,
 };
@@ -224,6 +225,17 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     };
 
     let (shutdown_sender, shutdown_receiver) = tokio::sync::watch::channel(());
+    let task_worker_config = TaskWorkerConfig::from_env()
+        .map_err(|error| format!("invalid task worker configuration: {error}"))?;
+    // No kind is registered until its producer and token-fenced domain handler
+    // cut over together. Starting the supervisor now verifies the shared
+    // lifecycle without risking a lease on legacy work.
+    let task_worker = task_worker::start(
+        CatalogRepository::with_workspace_pool_factory(pool.clone(), connect_options.clone()),
+        TaskHandlerRegistry::default(),
+        task_worker_config,
+        shutdown_receiver.clone(),
+    );
     let (migration_batch_dispatcher, migration_worker) = blueprint_migration_worker::start(
         CatalogRepository::with_workspace_pool_factory(pool.clone(), connect_options.clone()),
         shutdown_receiver.clone(),
@@ -314,6 +326,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     workflow_worker.await?;
     rule_worker.await?;
     migration_worker.await?;
+    task_worker.await??;
 
     Ok(())
 }

@@ -136,6 +136,13 @@ async fn queued_cancellation_and_dead_letter_replay_obey_kind_policy(pool: PgPoo
             .generation,
         2
     );
+    assert!(
+        repository
+            .task_summary_for_workspace(Uuid::new_v4(), replay_id)
+            .await
+            .unwrap()
+            .is_none()
+    );
 }
 
 #[sqlx::test]
@@ -182,6 +189,138 @@ async fn task_lease_is_exclusive_reclaimable_and_token_fenced(pool: PgPool) {
         .complete_task(second.id, "worker-b", second.lease_token)
         .await
         .unwrap();
+}
+
+#[sqlx::test]
+async fn retry_policy_dead_letters_at_the_registered_failure_budget(pool: PgPool) {
+    let repository = CatalogRepository::new(pool.clone());
+    let workspace_id = workspace(&pool, "tasks-retry-budget").await;
+    let mut transaction = pool.begin().await.unwrap();
+    repository
+        .enqueue_task(&mut transaction, insert(workspace_id, Uuid::new_v4()))
+        .await
+        .unwrap();
+    transaction.commit().await.unwrap();
+
+    for failure in 1..=TaskKind::RuleRunV1.policy().max_failures {
+        let task = repository
+            .claim_task("worker", Duration::from_secs(30))
+            .await
+            .unwrap()
+            .unwrap();
+        let status = repository
+            .retry_task_at(
+                task.id,
+                "worker",
+                task.lease_token,
+                Utc::now() - ChronoDuration::seconds(1),
+                "temporary",
+                "temporary error",
+            )
+            .await
+            .unwrap();
+        assert_eq!(
+            status,
+            if failure == TaskKind::RuleRunV1.policy().max_failures {
+                TaskStatus::DeadLetter
+            } else {
+                TaskStatus::Queued
+            }
+        );
+    }
+}
+
+#[sqlx::test]
+async fn expired_lease_rejects_every_holder_transition_and_subseconds_round_up(pool: PgPool) {
+    let repository = CatalogRepository::new(pool.clone());
+    let workspace_id = workspace(&pool, "tasks-expired").await;
+    let mut transaction = pool.begin().await.unwrap();
+    repository
+        .enqueue_task(&mut transaction, insert(workspace_id, Uuid::new_v4()))
+        .await
+        .unwrap();
+    transaction.commit().await.unwrap();
+    // `available_at` is database-clock based; avoid an immediately-following
+    // transaction observing an equal timestamp differently under parallel SQLx tests.
+    tokio::time::sleep(Duration::from_millis(10)).await;
+
+    let task = repository
+        .claim_task("worker", Duration::from_millis(1))
+        .await
+        .unwrap()
+        .unwrap();
+    assert!(task.lease_until > Utc::now() + ChronoDuration::milliseconds(500));
+    repository
+        .heartbeat_task(
+            task.id,
+            "worker",
+            task.lease_token,
+            Duration::from_millis(1),
+        )
+        .await
+        .unwrap();
+    sqlx::query("UPDATE tasks SET lease_until = now() - interval '1 second' WHERE id = $1")
+        .bind(task.id)
+        .execute(&pool)
+        .await
+        .unwrap();
+    assert!(
+        repository
+            .complete_task(task.id, "worker", task.lease_token)
+            .await
+            .is_err()
+    );
+    assert!(
+        repository
+            .reschedule_task_at(task.id, "worker", task.lease_token, Utc::now())
+            .await
+            .is_err()
+    );
+    assert!(
+        repository
+            .retry_task_at(
+                task.id,
+                "worker",
+                task.lease_token,
+                Utc::now(),
+                "temporary",
+                "error"
+            )
+            .await
+            .is_err()
+    );
+    assert!(
+        repository
+            .heartbeat_task(task.id, "worker", task.lease_token, Duration::from_secs(1))
+            .await
+            .is_err()
+    );
+}
+
+#[sqlx::test]
+async fn concurrent_workers_claim_distinct_live_tasks(pool: PgPool) {
+    let repository = CatalogRepository::new(pool.clone());
+    let first_workspace = workspace(&pool, "tasks-concurrent-a").await;
+    let second_workspace = workspace(&pool, "tasks-concurrent-b").await;
+    let mut transaction = pool.begin().await.unwrap();
+    repository
+        .enqueue_task(&mut transaction, insert(first_workspace, Uuid::new_v4()))
+        .await
+        .unwrap();
+    repository
+        .enqueue_task(&mut transaction, insert(second_workspace, Uuid::new_v4()))
+        .await
+        .unwrap();
+    transaction.commit().await.unwrap();
+
+    let (first, second) = tokio::join!(
+        repository.claim_task("worker-a", Duration::from_secs(30)),
+        repository.claim_task("worker-b", Duration::from_secs(30))
+    );
+    let first = first.unwrap().unwrap();
+    let second = second.unwrap().unwrap();
+    assert_ne!(first.id, second.id);
+    assert_ne!(first.lease_token, second.lease_token);
 }
 
 #[sqlx::test]

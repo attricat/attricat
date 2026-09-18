@@ -42,6 +42,10 @@ or inaccessible configured bucket.
 | `EVENT_DISPATCHER_RETRY_MAX_SECONDS` | `60` | API | Positive cap on exponential failed-delivery retry delay. |
 | `EVENT_DISPATCHER_MAX_ATTEMPTS` | `5` | API | Positive number of claims before a failed delivery becomes `dead_letter`. |
 | `EVENT_DISPATCHER_POLL_MILLIS` | `250` | API | Positive delay between dispatcher polls. |
+| `TASK_WORKER_ID` | Random process UUID | API | Stable 1–128-byte identity for the supervised generic task worker. |
+| `TASK_WORKER_CONCURRENCY` | `8` | API | Positive maximum number of registered generic-task handlers running at once. |
+| `TASK_WORKER_POLL_MILLIS` | `250` | API | Positive idle delay for the generic task worker. |
+| `TASK_WORKER_SHUTDOWN_GRACE_SECONDS` | `30` | API | Positive bounded drain period; unfinished generic task leases are allowed to expire. |
 | `CATALOG_API_URL` | `http://127.0.0.1:3000` | Vite | API target for the web app's `/api` development proxy. |
 | `EXTENSION_OFFICIAL_REGISTRY` | `attricat/attricat-extensions` | API | Canonical public GitHub `owner/repository` used as every workspace's immutable official extension source. |
 | `EXTENSIONS_MODE` | `enabled` | API | Deployment emergency gate. Set exactly `disabled` to block all new extension execution, artifacts, runtime descriptors, commands, storage, host calls, and event delivery without changing installations or grants. Invalid configured values fail closed. |
@@ -91,8 +95,11 @@ runs, rule runs, and blueprint migration batches. Task payloads are small refere
 objects only; diagnostics intentionally exclude them. This foundation does not change
 ownership of any existing worker kind yet, so existing `EVENT_DISPATCHER_*`, agent,
 workflow, rule, and migration-worker settings remain authoritative until each kind is
-explicitly cut over. File processing is excluded and continues to use its separate
-file-worker configuration and `file_processing_jobs` table.
+explicitly cut over. The supervised worker starts with an empty registry and will
+not lease an unhandled task. On shutdown it stops claiming, lets registered handlers
+heartbeat through the configured grace period, then allows unfinished leases to expire.
+File processing is excluded and continues to use its separate file-worker configuration
+and `file_processing_jobs` table.
 
 ## Agent provider
 

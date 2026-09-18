@@ -15,6 +15,17 @@ const MAX_LEASE_OWNER_BYTES: usize = 128;
 const MAX_ERROR_CODE_BYTES: usize = 128;
 const MAX_ERROR_MESSAGE_BYTES: usize = 1024;
 
+fn lease_seconds(duration: Duration) -> Result<i64, TaskError> {
+    if duration.is_zero() {
+        return Err(TaskError::ValueTooLong);
+    }
+    let seconds = duration
+        .as_secs()
+        .checked_add(u64::from(duration.subsec_nanos() != 0))
+        .ok_or(TaskError::ValueTooLong)?;
+    seconds.try_into().map_err(|_| TaskError::ValueTooLong)
+}
+
 #[derive(Debug, Error)]
 pub enum TaskError {
     #[error(transparent)]
@@ -158,25 +169,41 @@ impl CatalogRepository {
         worker_id: &str,
         lease_duration: Duration,
     ) -> Result<Option<ClaimedTask>, TaskError> {
-        if worker_id.is_empty()
-            || worker_id.len() > MAX_LEASE_OWNER_BYTES
-            || lease_duration.is_zero()
-        {
+        self.claim_task_for_kinds(worker_id, lease_duration, &TaskKind::ALL)
+            .await
+    }
+
+    /// Claims only registered kinds. A runtime with no active handler must not
+    /// lease work it cannot safely execute during a phased cutover.
+    pub(crate) async fn claim_task_for_kinds(
+        &self,
+        worker_id: &str,
+        lease_duration: Duration,
+        kinds: &[TaskKind],
+    ) -> Result<Option<ClaimedTask>, TaskError> {
+        if kinds.is_empty() {
+            return Ok(None);
+        }
+        if worker_id.is_empty() || worker_id.len() > MAX_LEASE_OWNER_BYTES {
             return Err(TaskError::ValueTooLong);
         }
+        let lease_seconds = lease_seconds(lease_duration)?;
+        let kinds: Vec<String> = kinds.iter().map(|kind| kind.to_string()).collect();
         let mut transaction = self.pool.begin().await?;
         // Materializing service rows is safe to repeat and happens before the
         // fairness lock. It includes expired leases because they are eligible
         // for reclaim in the same claim operation.
-        sqlx::query("INSERT INTO task_workspace_service (workspace_id) SELECT DISTINCT workspace_id FROM tasks WHERE (status = 'queued' AND available_at <= now()) OR (status = 'leased' AND lease_until <= now()) ON CONFLICT (workspace_id) DO NOTHING")
+        sqlx::query("INSERT INTO task_workspace_service (workspace_id) SELECT DISTINCT workspace_id FROM tasks WHERE kind = ANY($1) AND ((status = 'queued' AND available_at <= now()) OR (status = 'leased' AND lease_until <= now())) ON CONFLICT (workspace_id) DO NOTHING")
+            .bind(&kinds)
             .execute(&mut *transaction)
             .await?;
         let row = sqlx::query_as::<_, ClaimedTaskRow>(
-            "WITH candidate AS (SELECT t.id, t.workspace_id FROM tasks t JOIN task_workspace_service s ON s.workspace_id = t.workspace_id WHERE (t.status = 'queued' AND t.available_at <= now()) OR (t.status = 'leased' AND t.lease_until <= now()) ORDER BY s.last_served_at ASC, t.available_at ASC, t.created_at ASC, t.id ASC FOR UPDATE OF t, s SKIP LOCKED LIMIT 1), service AS (UPDATE task_workspace_service s SET last_served_at = now(), updated_at = now() FROM candidate c WHERE s.workspace_id = c.workspace_id RETURNING s.workspace_id) UPDATE tasks t SET status = 'leased', attempts = t.attempts + 1, lease_owner = $1, lease_token = $2, lease_until = now() + ($3 * interval '1 second'), started_at = COALESCE(t.started_at, now()), updated_at = now() FROM candidate c JOIN service s ON s.workspace_id = c.workspace_id WHERE t.id = c.id RETURNING t.id, t.workspace_id, t.kind, t.subject_id, t.generation, t.payload, t.attempts, t.failures, t.max_failures, t.lease_owner, t.lease_token, t.lease_until, t.correlation_id, t.causation_id",
+            "WITH candidate AS (SELECT t.id, t.workspace_id FROM tasks t JOIN task_workspace_service s ON s.workspace_id = t.workspace_id WHERE t.kind = ANY($4) AND ((t.status = 'queued' AND t.available_at <= now()) OR (t.status = 'leased' AND t.lease_until <= now())) ORDER BY s.last_served_at ASC, t.available_at ASC, t.created_at ASC, t.id ASC FOR UPDATE OF t, s SKIP LOCKED LIMIT 1), service AS (UPDATE task_workspace_service s SET last_served_at = now(), updated_at = now() FROM candidate c WHERE s.workspace_id = c.workspace_id RETURNING s.workspace_id) UPDATE tasks t SET status = 'leased', attempts = t.attempts + 1, lease_owner = $1, lease_token = $2, lease_until = now() + ($3 * interval '1 second'), started_at = COALESCE(t.started_at, now()), updated_at = now() FROM candidate c JOIN service s ON s.workspace_id = c.workspace_id WHERE t.id = c.id RETURNING t.id, t.workspace_id, t.kind, t.subject_id, t.generation, t.payload, t.attempts, t.failures, t.max_failures, t.lease_owner, t.lease_token, t.lease_until, t.correlation_id, t.causation_id",
         )
         .bind(worker_id)
         .bind(Uuid::new_v4())
-        .bind(lease_duration.as_secs() as i64)
+        .bind(lease_seconds)
+        .bind(&kinds)
         .fetch_optional(&mut *transaction)
         .await?;
         transaction.commit().await?;
@@ -190,13 +217,14 @@ impl CatalogRepository {
         lease_token: Uuid,
         lease_duration: Duration,
     ) -> Result<(), TaskError> {
+        let lease_seconds = lease_seconds(lease_duration)?;
         let changed = sqlx::query(
-            "UPDATE tasks SET lease_until = now() + ($4 * interval '1 second'), updated_at = now() WHERE id = $1 AND status = 'leased' AND lease_owner = $2 AND lease_token = $3",
+            "UPDATE tasks SET lease_until = now() + ($4 * interval '1 second'), updated_at = now() WHERE id = $1 AND status = 'leased' AND lease_until > now() AND lease_owner = $2 AND lease_token = $3",
         )
         .bind(task_id)
         .bind(lease_owner)
         .bind(lease_token)
-        .bind(lease_duration.as_secs() as i64)
+        .bind(lease_seconds)
         .execute(&self.pool)
         .await?
         .rows_affected();
@@ -213,7 +241,7 @@ impl CatalogRepository {
         lease_owner: &str,
         lease_token: Uuid,
     ) -> Result<(), TaskError> {
-        let changed = sqlx::query("UPDATE tasks SET status = 'succeeded', lease_owner = NULL, lease_token = NULL, lease_until = NULL, completed_at = now(), updated_at = now() WHERE id = $1 AND status = 'leased' AND lease_owner = $2 AND lease_token = $3")
+        let changed = sqlx::query("UPDATE tasks SET status = 'succeeded', lease_owner = NULL, lease_token = NULL, lease_until = NULL, completed_at = now(), updated_at = now() WHERE id = $1 AND status = 'leased' AND lease_until > now() AND lease_owner = $2 AND lease_token = $3")
             .bind(task_id).bind(lease_owner).bind(lease_token).execute(&self.pool).await?.rows_affected();
         if changed == 1 {
             Ok(())
@@ -231,7 +259,7 @@ impl CatalogRepository {
         lease_token: Uuid,
         available_at: DateTime<Utc>,
     ) -> Result<(), TaskError> {
-        let changed = sqlx::query("UPDATE tasks SET status = 'queued', available_at = $4, lease_owner = NULL, lease_token = NULL, lease_until = NULL, updated_at = now() WHERE id = $1 AND status = 'leased' AND lease_owner = $2 AND lease_token = $3")
+        let changed = sqlx::query("UPDATE tasks SET status = 'queued', available_at = $4, lease_owner = NULL, lease_token = NULL, lease_until = NULL, updated_at = now() WHERE id = $1 AND status = 'leased' AND lease_until > now() AND lease_owner = $2 AND lease_token = $3")
             .bind(task_id).bind(lease_owner).bind(lease_token).bind(available_at).execute(&self.pool).await?.rows_affected();
         if changed == 1 {
             Ok(())
@@ -254,7 +282,7 @@ impl CatalogRepository {
         {
             return Err(TaskError::ValueTooLong);
         }
-        let status: Option<String> = sqlx::query_scalar("UPDATE tasks SET status = CASE WHEN failures + 1 >= max_failures THEN 'dead_letter' ELSE 'queued' END, failures = failures + 1, available_at = CASE WHEN failures + 1 >= max_failures THEN available_at ELSE $4 END, lease_owner = NULL, lease_token = NULL, lease_until = NULL, last_error_code = $5, last_error_message = $6, failed_at = CASE WHEN failures + 1 >= max_failures THEN now() ELSE failed_at END, updated_at = now() WHERE id = $1 AND status = 'leased' AND lease_owner = $2 AND lease_token = $3 RETURNING status")
+        let status: Option<String> = sqlx::query_scalar("UPDATE tasks SET status = CASE WHEN failures + 1 >= max_failures THEN 'dead_letter' ELSE 'queued' END, failures = failures + 1, available_at = CASE WHEN failures + 1 >= max_failures THEN available_at ELSE $4 END, lease_owner = NULL, lease_token = NULL, lease_until = NULL, last_error_code = $5, last_error_message = $6, failed_at = CASE WHEN failures + 1 >= max_failures THEN now() ELSE failed_at END, updated_at = now() WHERE id = $1 AND status = 'leased' AND lease_until > now() AND lease_owner = $2 AND lease_token = $3 RETURNING status")
             .bind(task_id).bind(lease_owner).bind(lease_token).bind(available_at).bind(error_code).bind(error_message).fetch_optional(&self.pool).await?;
         match status.as_deref() {
             Some("queued") => Ok(TaskStatus::Queued),
@@ -321,6 +349,20 @@ impl CatalogRepository {
             },
         )
         .await
+    }
+
+    /// Returns payload-free diagnostics scoped to a trusted workspace. Generic
+    /// operator APIs must use this form rather than exposing task envelopes.
+    pub async fn task_summary_for_workspace(
+        &self,
+        workspace_id: Uuid,
+        task_id: Uuid,
+    ) -> Result<Option<TaskSummary>, TaskError> {
+        Ok(sqlx::query_as("SELECT id, workspace_id, kind, subject_id, generation, status, attempts, failures, max_failures, available_at, created_at, completed_at, failed_at, cancelled_at, last_error_code FROM tasks WHERE workspace_id = $1 AND id = $2")
+            .bind(workspace_id)
+            .bind(task_id)
+            .fetch_optional(&self.pool)
+            .await?)
     }
 
     pub async fn task_summary(&self, task_id: Uuid) -> Result<Option<TaskSummary>, TaskError> {

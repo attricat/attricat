@@ -25,6 +25,7 @@ pub mod repository;
 pub mod rule_runtime;
 pub mod storage;
 pub mod task_queue;
+pub mod task_worker;
 pub mod telemetry;
 pub mod workflow_runtime;
 
