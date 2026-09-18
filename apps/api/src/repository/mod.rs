@@ -114,7 +114,6 @@ pub struct CatalogRepository {
 #[derive(Clone)]
 pub(crate) struct TaskFence {
     pub task_id: Uuid,
-    pub delivery_id: Uuid,
     pub lease_owner: String,
     pub lease_token: Uuid,
 }
@@ -465,7 +464,19 @@ impl CatalogRepository {
         let mut repository = self.for_event_handler(event, handler_name);
         repository.task_fence = Some(TaskFence {
             task_id: task.id,
-            delivery_id: task.subject_id,
+            lease_owner: task.lease_owner.clone(),
+            lease_token: task.lease_token,
+        });
+        repository
+    }
+
+    /// Attaches a workflow task lease to all action writes. The action marker,
+    /// catalog effect, outbox event, and audit row are committed only while this
+    /// exact task token remains current.
+    pub(crate) fn for_workflow_task(&self, task: &ClaimedTask) -> Self {
+        let mut repository = self.clone();
+        repository.task_fence = Some(TaskFence {
+            task_id: task.id,
             lease_owner: task.lease_owner.clone(),
             lease_token: task.lease_token,
         });
@@ -675,15 +686,18 @@ impl CatalogRepository {
         Ok(Some(event_id))
     }
 
-    async fn ensure_task_fence(
+    pub(in crate::repository) async fn ensure_task_fence(
         &self,
         transaction: &mut Transaction<'_, Postgres>,
     ) -> Result<(), RepositoryError> {
         let Some(fence) = &self.task_fence else {
             return Ok(());
         };
-        let valid: bool = sqlx::query_scalar("SELECT EXISTS (SELECT 1 FROM tasks t JOIN event_deliveries d ON d.task_id = t.id WHERE t.id = $1 AND d.id = $2 AND t.status = 'leased' AND t.lease_owner = $3 AND t.lease_token = $4 AND t.lease_until > now() FOR KEY SHARE OF t, d)")
-            .bind(fence.task_id).bind(fence.delivery_id).bind(&fence.lease_owner).bind(fence.lease_token)
+        // Locking the current envelope makes this check a fence for every
+        // subsequent domain write in this transaction. A reclaimer cannot
+        // replace the token until this transaction commits or rolls back.
+        let valid: bool = sqlx::query_scalar("SELECT EXISTS (SELECT 1 FROM tasks t WHERE t.id = $1 AND t.status = 'leased' AND t.lease_owner = $2 AND t.lease_token = $3 AND t.lease_until > now() FOR KEY SHARE OF t)")
+            .bind(fence.task_id).bind(&fence.lease_owner).bind(fence.lease_token)
             .fetch_one(&mut **transaction).await?;
         if valid {
             Ok(())

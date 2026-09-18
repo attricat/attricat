@@ -4,6 +4,7 @@ use std::time::Duration;
 use api::{
     event_dispatcher::{self, DispatcherConfig, EventHandlerRegistry},
     repository::CatalogRepository,
+    task_worker::{self, TaskHandlerRegistry, TaskWorkerConfig},
     workflow_runtime,
 };
 use support::*;
@@ -83,8 +84,9 @@ async fn workflow_lifecycle_keeps_immutable_revisions(pool: PgPool) {
 
 async fn wait_for_completed_retry(pool: &PgPool, run_id: Uuid) {
     for _ in 0..100 {
-        let (status, attempts): (String, i32) =
-            sqlx::query_as("SELECT status, attempts FROM workflow_runs WHERE id=$1")
+        let (status, attempts): (String, i32) = sqlx::query_as(
+            "SELECT r.status, t.attempts FROM workflow_runs r JOIN tasks t ON t.subject_id=r.id AND t.kind='workflow_run.v1' WHERE r.id=$1",
+        )
                 .bind(run_id)
                 .fetch_one(pool)
                 .await
@@ -136,7 +138,17 @@ async fn workflow_outbox_dispatcher_and_worker_are_idempotent_and_disable_safe(p
         .unwrap(),
         shutdown_rx.clone(),
     );
-    let worker = workflow_runtime::start(repository, shutdown_rx);
+    let worker = task_worker::start(
+        repository.clone(),
+        TaskHandlerRegistry::new(vec![workflow_runtime::task_handler(repository)]).unwrap(),
+        TaskWorkerConfig {
+            worker_id: "workflow-test-worker".into(),
+            concurrency: 1,
+            poll_interval: Duration::from_millis(10),
+            shutdown_grace: Duration::from_secs(1),
+        },
+        shutdown_rx,
+    );
 
     let blueprint = create_blueprint(
         &client,
@@ -290,9 +302,21 @@ default_value = "untitled"
     // and must only acknowledge, never write a second effect or audit record.
     assert_eq!(
         sqlx::query(
-            "UPDATE workflow_runs SET status='leased', lease_owner='crashed-worker', lease_until=clock_timestamp()-interval '1 millisecond', completed_at=NULL WHERE id=$1 AND status='completed'",
+            "UPDATE workflow_runs SET status='pending', completed_at=NULL WHERE id=$1 AND status='completed'",
         )
         .bind(run_id)
+        .execute(&pool)
+        .await
+        .unwrap()
+        .rows_affected(),
+        1
+    );
+    assert_eq!(
+        sqlx::query(
+            "UPDATE tasks SET status='leased', lease_owner='crashed-worker', lease_token=$2, lease_until=clock_timestamp()-interval '1 millisecond' WHERE kind='workflow_run.v1' AND subject_id=$1 AND status='succeeded'",
+        )
+        .bind(run_id)
+        .bind(Uuid::new_v4())
         .execute(&pool)
         .await
         .unwrap()
@@ -336,10 +360,42 @@ default_value = "untitled"
     // Stop the worker so the next durable run remains pending, then disable it.
     // Disable atomically cancels queued/leased runs and no action marker is written.
     let _ = shutdown_tx.send(());
-    worker.await.unwrap();
+    worker.await.unwrap().unwrap();
     for handle in dispatcher {
         handle.await.unwrap();
     }
+
+    // Workflow replay creates a new task generation, not another domain run.
+    // It is safe to replay after a lease loss because action markers remain the
+    // durable exactly-once boundary.
+    sqlx::query("UPDATE workflow_runs SET status='dead_letter',failed_at=clock_timestamp(),completed_at=NULL WHERE id=$1")
+        .bind(run_id)
+        .execute(&pool)
+        .await
+        .unwrap();
+    sqlx::query("UPDATE tasks SET status='dead_letter',lease_owner=NULL,lease_token=NULL,lease_until=NULL,failed_at=clock_timestamp() WHERE kind='workflow_run.v1' AND subject_id=$1")
+        .bind(run_id)
+        .execute(&pool)
+        .await
+        .unwrap();
+    assert!(
+        CatalogRepository::new(pool.clone())
+            .for_workspace(BOOTSTRAP_WORKSPACE_ID.parse().unwrap())
+            .await
+            .unwrap()
+            .replay_workflow_run(run_id)
+            .await
+            .unwrap()
+    );
+    let (generation, status): (i32, String) = sqlx::query_as(
+        "SELECT generation,status FROM tasks WHERE kind='workflow_run.v1' AND subject_id=$1 ORDER BY generation DESC LIMIT 1",
+    )
+    .bind(run_id)
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert_eq!((generation, status.as_str()), (1, "queued"));
+
     let blocked = create_entity(&client, &base_url, &blueprint).await;
     let blocked_id = Uuid::parse_str(blocked["id"].as_str().unwrap()).unwrap();
     let blocked_event_id: Uuid = sqlx::query_scalar(
@@ -364,15 +420,15 @@ default_value = "untitled"
         )
         .await
         .unwrap();
-    // Hold the pending row in the same durable state produced by a worker
-    // claim. The worker is stopped above so disable, rather than execution,
-    // owns the transition from this claimed state.
+    // Hold the task lease while leaving the run pending. Disable cancels the
+    // domain row, and a leased task checks that fence before another action.
     assert_eq!(
         sqlx::query(
-            "UPDATE workflow_runs SET status='leased', lease_owner='test-claim', lease_until=clock_timestamp()+interval '1 minute' WHERE workflow_id=$1 AND trigger_event_id=$2 AND status='pending'",
+            "UPDATE tasks t SET status='leased', lease_owner='test-claim', lease_token=$3, lease_until=clock_timestamp()+interval '1 minute' FROM workflow_runs r WHERE t.kind='workflow_run.v1' AND t.subject_id=r.id AND r.workflow_id=$1 AND r.trigger_event_id=$2 AND t.status='queued'",
         )
         .bind(workflow_id)
         .bind(blocked_event_id)
+        .bind(Uuid::new_v4())
         .execute(&pool)
         .await
         .unwrap()

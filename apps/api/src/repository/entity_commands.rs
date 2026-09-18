@@ -254,30 +254,23 @@ impl CatalogRepository {
         .await?;
         match status.as_deref() {
             Some("cancelled") => {
+                self.ensure_task_fence(&mut transaction).await?;
                 transaction.commit().await?;
                 return Ok(super::WorkflowActionResult::Cancelled);
             }
-            Some("leased") => {}
+            Some("pending") => {}
             _ => {
                 return Err(RepositoryError::InvalidWorkflowDefinition(
-                    "workflow run is no longer leased".into(),
+                    "workflow run is not executable".into(),
                 ));
             }
         }
-        let owner: Option<String> =
-            sqlx::query_scalar("SELECT lease_owner FROM workflow_runs WHERE id=$1")
-                .bind(run.run.id)
-                .fetch_one(&mut *transaction)
-                .await?;
-        if owner.as_deref() != Some(run.lease_owner.as_str()) {
-            return Err(RepositoryError::InvalidWorkflowDefinition(
-                "workflow run lease was lost".into(),
-            ));
-        }
+        // Fence the marker before it can become visible. The same transaction
+        // later fences the catalog effect and outbox/audit writes as well.
+        self.ensure_task_fence(&mut transaction).await?;
         if enabled_version != Some(run.run.workflow_version) {
-            sqlx::query("UPDATE workflow_runs SET status='cancelled',cancelled_at=clock_timestamp(),lease_owner=NULL,lease_until=NULL,updated_at=clock_timestamp() WHERE id=$1 AND status='leased' AND lease_owner=$2")
+            sqlx::query("UPDATE workflow_runs SET status='cancelled',cancelled_at=clock_timestamp(),updated_at=clock_timestamp() WHERE id=$1 AND status='pending'")
                 .bind(run.run.id)
-                .bind(&run.lease_owner)
                 .execute(&mut *transaction)
                 .await?;
             transaction.commit().await?;
@@ -411,6 +404,9 @@ impl CatalogRepository {
             })
             .expect("entity-updated payload serializes"),
         );
+        // Revalidate immediately before the durable effect's audit/outbox
+        // completion boundary; this also holds the task row against reclaim.
+        self.ensure_task_fence(&mut transaction).await?;
         if let Some(audit_event_id) = self.write_audit_event(&mut transaction).await? {
             for change in changes {
                 sqlx::query("INSERT INTO audit_event_changes (id,audit_event_id,workspace_id,entity_id,attribute_id,attribute_code,context_id,context_code,change_kind,before_value,after_value) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)")

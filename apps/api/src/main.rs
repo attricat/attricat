@@ -237,13 +237,13 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         task_repository.clone(),
         extension_runtime.clone(),
     )));
+    task_handlers.push(workflow_runtime::task_handler(task_repository.clone()));
 
     let (shutdown_sender, shutdown_receiver) = tokio::sync::watch::channel(());
     let task_worker_config = TaskWorkerConfig::from_env()
         .map_err(|error| format!("invalid task worker configuration: {error}"))?;
-    // No kind is registered until its producer and token-fenced domain handler
-    // cut over together. Starting the supervisor now verifies the shared
-    // lifecycle without risking a lease on legacy work.
+    // Registered kinds have atomically-enqueued producers and token-fenced
+    // handlers. Unmigrated kinds remain unregistered and cannot be leased.
     let task_worker = task_worker::start(
         task_repository.clone(),
         TaskHandlerRegistry::new(task_handlers).expect("task handler kinds are unique"),
@@ -270,8 +270,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         dispatcher_config,
         shutdown_receiver.clone(),
     );
-    let workflow_worker =
-        workflow_runtime::start(workflow_repository.clone(), shutdown_receiver.clone());
+    let workflow_worker = workflow_runtime::start_schedule_coordinator(
+        workflow_repository.clone(),
+        shutdown_receiver.clone(),
+    );
     let rule_worker = rule_runtime::start(workflow_repository, shutdown_receiver);
 
     let listener = tokio::net::TcpListener::bind(bind_addr).await?;

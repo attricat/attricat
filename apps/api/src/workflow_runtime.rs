@@ -1,17 +1,18 @@
-//! Workflow intake is an outbox handler; execution is a separate leased queue.
+//! Workflow intake and schedule advancement are producers. Execution is owned
+//! exclusively by the shared task worker after the workflow task cutover.
 use crate::{
     domain_events::{ALL_EVENT_TYPES_V1, DomainEvent},
     event_dispatcher::{EventHandler, EventHandlerCommandContext},
-    repository::CatalogRepository,
+    repository::{CatalogRepository, ClaimedTask},
+    task_queue::TaskKind,
+    task_worker::{TaskHandler, TaskHandlerError, TaskOutcome},
 };
 use async_trait::async_trait;
 use serde_json::Value;
 use std::{sync::Arc, time::Duration};
 use tokio::sync::watch;
-use uuid::Uuid;
 
 const MAX_CAUSAL_DEPTH: usize = 8;
-const MAX_ATTEMPTS: i32 = 5;
 
 pub struct WorkflowIntakeHandler;
 #[async_trait]
@@ -27,7 +28,6 @@ impl EventHandler for WorkflowIntakeHandler {
         event: DomainEvent,
         context: EventHandlerCommandContext,
     ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-        // The handler intentionally only creates durable rows; workers execute later.
         context.repository().fan_out_workflow_runs(&event).await?;
         Ok(())
     }
@@ -41,69 +41,103 @@ pub fn add_to_registry(
         .expect("workflow handler name is unique")
 }
 
-pub fn start(
+pub struct WorkflowTaskHandler {
+    repository: CatalogRepository,
+}
+
+pub fn task_handler(repository: CatalogRepository) -> Arc<dyn TaskHandler> {
+    Arc::new(WorkflowTaskHandler { repository })
+}
+
+#[async_trait]
+impl TaskHandler for WorkflowTaskHandler {
+    fn kind(&self) -> TaskKind {
+        TaskKind::WorkflowRunV1
+    }
+
+    async fn handle(&self, task: ClaimedTask) -> Result<TaskOutcome, TaskHandlerError> {
+        let scoped = self
+            .repository
+            .for_workspace(task.workspace_id)
+            .await
+            .map_err(task_error)?;
+        let run = scoped
+            .workflow_run_for_task(&task)
+            .await
+            .map_err(task_error)?;
+        // A crash after the token-fenced domain completion but before generic
+        // acknowledgement is replay-safe: no action is re-executed.
+        if matches!(
+            run.run.status.as_str(),
+            "completed" | "cancelled" | "dead_letter"
+        ) {
+            return Ok(TaskOutcome::Complete);
+        }
+        match execute(&scoped, &run, &task).await {
+            Ok(()) => {
+                scoped
+                    .complete_workflow_run_task(&task)
+                    .await
+                    .map_err(task_error)?;
+                Ok(TaskOutcome::Complete)
+            }
+            Err(error) => {
+                if task.failures + 1 >= task.max_failures {
+                    scoped
+                        .dead_letter_workflow_run_task(&task, &error.to_string())
+                        .await
+                        .map_err(task_error)?;
+                }
+                Err(TaskHandlerError {
+                    code: "workflow_run",
+                    message: error.to_string(),
+                })
+            }
+        }
+    }
+}
+
+fn task_error(error: crate::repository::RepositoryError) -> TaskHandlerError {
+    TaskHandlerError {
+        code: "workflow_run",
+        message: error.to_string(),
+    }
+}
+
+/// The only workflow schedule coordinator. It never claims workflow runs;
+/// task-worker instances are the sole execution claimers.
+pub fn start_schedule_coordinator(
     repository: CatalogRepository,
     mut shutdown: watch::Receiver<()>,
 ) -> tokio::task::JoinHandle<()> {
     tokio::spawn(async move {
         loop {
-            match run_once(&repository).await {
-                Ok(false) => {}
-                Ok(true) => {}
-                Err(error) => tracing::error!(%error, "workflow run poll failed"),
-            }
-            // This is a process-owned durable scheduler, not SQL behavior. Its cursors and
-            // occurrence keys make duplicate polls/restarts safe.
             for workspace in repository.active_workspace_ids().await.unwrap_or_default() {
-                if let Ok(scoped) = repository.for_workspace(workspace).await
-                    && let Err(error) = scoped.schedule_workflow_runs().await
-                {
-                    tracing::error!(%error, "workflow schedule poll failed");
+                match repository.for_workspace(workspace).await {
+                    Ok(scoped) => {
+                        if let Err(error) = scoped.backfill_workflow_tasks().await {
+                            tracing::error!(%error, "workflow task backfill failed");
+                        }
+                        if let Err(error) = scoped.schedule_workflow_runs().await {
+                            tracing::error!(%error, "workflow schedule poll failed");
+                        }
+                    }
+                    Err(error) => {
+                        tracing::error!(%error, "workflow scheduler workspace scope failed")
+                    }
                 }
             }
             tokio::select! { _ = tokio::time::sleep(Duration::from_millis(250)) => {}, _ = shutdown.changed() => return }
         }
     })
 }
-async fn run_once(
-    repository: &CatalogRepository,
-) -> Result<bool, crate::repository::RepositoryError> {
-    for workspace in repository.active_workspace_ids().await? {
-        let scoped = repository.for_workspace(workspace).await?;
-        let owner = Uuid::new_v4().to_string();
-        let Some(run) = scoped
-            .claim_workflow_run(&owner, Duration::from_secs(30))
-            .await?
-        else {
-            continue;
-        };
-        let result = execute(&scoped, &run).await;
-        match result {
-            Ok(()) => {
-                scoped.complete_workflow_run(&run).await?;
-                metrics::counter!("catalog_workflow_runs_total", "outcome" => "completed")
-                    .increment(1);
-            }
-            Err(error) => {
-                let delay = Duration::from_secs(
-                    (1u64 << (run.run.attempts.saturating_sub(1) as u32).min(6)).min(60),
-                );
-                scoped
-                    .retry_workflow_run(&run, &error.to_string(), delay, MAX_ATTEMPTS)
-                    .await?;
-                metrics::counter!("catalog_workflow_runs_total", "outcome" => if run.run.attempts >= MAX_ATTEMPTS { "dead_letter" } else { "retry" }).increment(1);
-            }
-        }
-        return Ok(true);
-    }
-    Ok(false)
-}
+
 async fn execute(
     repository: &CatalogRepository,
     run: &crate::repository::ClaimedWorkflowRun,
+    task: &ClaimedTask,
 ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     let event: DomainEvent = serde_json::from_value(run.trigger_event.clone())?;
-    // Entity scope and causal chain protection are rechecked at execution, not trusted from intake.
     if event.aggregate_kind != "entity"
         || (run.run.source == "event" && event.source_name.starts_with("workflow:"))
         || (run.run.source == "event" && causal_depth(&event) >= MAX_CAUSAL_DEPTH)
@@ -113,7 +147,9 @@ async fn execute(
     }
     let plan: catalog_workflow::CompiledWorkflow =
         serde_json::from_value(run.compiled_plan.clone())?;
-    let worker = repository.for_event_handler(&event, &format!("workflow:{}", run.run.workflow_id));
+    let worker = repository
+        .for_event_handler(&event, &format!("workflow:{}", run.run.workflow_id))
+        .for_workflow_task(task);
     for (index, action) in plan.actions.iter().enumerate() {
         let action_worker = worker.for_workflow_run(
             run.run.workflow_id,
@@ -127,12 +163,12 @@ async fn execute(
         {
             crate::repository::WorkflowActionResult::Executed
             | crate::repository::WorkflowActionResult::AlreadyCompleted => {}
-            // Disable/cancellation is terminal and intentionally has no further effect.
             crate::repository::WorkflowActionResult::Cancelled => return Ok(()),
         }
     }
     Ok(())
 }
+
 fn causal_depth(event: &DomainEvent) -> usize {
     event
         .metadata
