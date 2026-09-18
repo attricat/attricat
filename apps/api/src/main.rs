@@ -239,6 +239,16 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     )));
     task_handlers.push(workflow_runtime::task_handler(task_repository.clone()));
     task_handlers.push(rule_runtime::task_handler(task_repository.clone()));
+    task_handlers.push(Arc::new(
+        blueprint_migration_worker::BlueprintMigrationBatchTaskHandler::new(
+            task_repository.clone(),
+        ),
+    ));
+    // Reconcile only batches created before this deployment. New batches and
+    // their task envelopes commit atomically in the repository.
+    task_repository
+        .backfill_safe_blueprint_migration_tasks()
+        .await?;
 
     let (shutdown_sender, shutdown_receiver) = tokio::sync::watch::channel(());
     let task_worker_config = TaskWorkerConfig::from_env()
@@ -249,10 +259,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         task_repository.clone(),
         TaskHandlerRegistry::new(task_handlers).expect("task handler kinds are unique"),
         task_worker_config,
-        shutdown_receiver.clone(),
-    );
-    let (migration_batch_dispatcher, migration_worker) = blueprint_migration_worker::start(
-        CatalogRepository::with_workspace_pool_factory(pool.clone(), connect_options.clone()),
         shutdown_receiver.clone(),
     );
     let dispatcher_config = DispatcherConfig::from_env()
@@ -286,7 +292,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
             repository: CatalogRepository::with_workspace_pool_factory(pool, connect_options),
             agent_provider,
             agent_dispatcher,
-            migration_batch_dispatcher,
             registry,
             official_registry,
             object_store,
@@ -344,7 +349,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     }
     workflow_worker.await?;
     rule_worker.await?;
-    migration_worker.await?;
     extension_event_delivery_coordinator.await?;
     task_worker.await??;
 

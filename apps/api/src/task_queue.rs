@@ -49,7 +49,9 @@ impl TaskKind {
             Self::EventDeliveryV1 => TaskPolicy::new(30, 5, true, true),
             Self::WorkflowRunV1 => TaskPolicy::new(30, 5, true, true),
             Self::RuleRunV1 => TaskPolicy::new(30, 5, true, true),
-            Self::BlueprintMigrationBatchV1 => TaskPolicy::new(900, 5, false, false),
+            // Batch checkpoints are token-fenced and retry-safe. A short
+            // lease plus heartbeats makes shutdown/crash recovery prompt.
+            Self::BlueprintMigrationBatchV1 => TaskPolicy::new(30, 5, false, false),
         }
     }
 }

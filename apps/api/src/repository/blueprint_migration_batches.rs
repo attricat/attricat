@@ -1,8 +1,17 @@
 use super::*;
-use crate::model::{BlueprintMigrationBatch, BlueprintMigrationBatchStatus, MigrateEntityRequest};
+use crate::{
+    model::{BlueprintMigrationBatch, BlueprintMigrationBatchStatus, MigrateEntityRequest},
+    task_queue::{TaskInsert, TaskKind},
+};
 use serde_json::json;
 use std::collections::HashMap;
 use uuid::Uuid;
+
+#[derive(sqlx::FromRow)]
+struct BatchMigration {
+    id: Uuid,
+    status: String,
+}
 
 impl CatalogRepository {
     pub async fn list_blueprint_migration_batches(
@@ -52,10 +61,9 @@ impl CatalogRepository {
         .await?)
     }
 
-    /// Starts the safe bulk path. The immediately preceding published revision
-    /// must preserve every existing attribute's storage semantics and entity
-    /// schema. Once admitted, the batch previews every older entity revision
-    /// and automatically migrates only entities that need no input.
+    /// Starts the safe bulk path and atomically adds its durable delivery
+    /// envelope. The active-target index makes retries return the same batch;
+    /// task uniqueness makes the matching delivery idempotent as well.
     pub async fn start_safe_blueprint_migration_batch(
         &self,
         blueprint_id: Uuid,
@@ -94,51 +102,94 @@ impl CatalogRepository {
             return Err(RepositoryError::BlueprintMigrationNotSafe);
         }
 
-        let id = Uuid::new_v4();
-        // The partial unique index makes an active batch a durable singleton,
-        // even when two API processes receive the same request concurrently.
-        // Returning the existing row also makes callers safely retryable.
+        let mut transaction = self.pool.begin().await?;
         let batch = sqlx::query_as::<_, BlueprintMigrationBatch>(
             "INSERT INTO blueprint_migration_batches (id, workspace_id, blueprint_id, target_version, status) VALUES ($1, $2, $3, $4, 'queued') ON CONFLICT (workspace_id, blueprint_id, target_version) WHERE status IN ('queued', 'running') DO UPDATE SET workspace_id = EXCLUDED.workspace_id RETURNING id, blueprint_id, target_version, status, created_at, started_at, completed_at",
         )
-        .bind(id)
+        .bind(Uuid::new_v4())
         .bind(workspace_id)
         .bind(blueprint_id)
         .bind(target_version)
-        .fetch_one(&self.pool)
+        .fetch_one(&mut *transaction)
         .await?;
+        self.enqueue_task(
+            &mut transaction,
+            TaskInsert {
+                workspace_id,
+                kind: TaskKind::BlueprintMigrationBatchV1,
+                subject_id: batch.id,
+                generation: 0,
+                payload: json!({"batch_id": batch.id.to_string()}),
+                correlation_id: None,
+                causation_id: None,
+            },
+        )
+        .await?;
+        transaction.commit().await?;
         Ok(batch)
     }
 
-    /// Runs one safe batch. Each entity still uses the ordinary transactional
-    /// migration path, so an unexpected data problem is isolated and recorded.
-    pub async fn run_safe_blueprint_migration_batch(
-        &self,
-        batch_id: Uuid,
-    ) -> Result<(), RepositoryError> {
-        self.run_safe_blueprint_migration_batch_with_lease(batch_id, Uuid::new_v4())
-            .await
+    /// Transitional reconciliation for batches committed by an API version
+    /// before task delivery owned this kind. It is safe to run repeatedly and
+    /// is deliberately not a process-local execution/recovery loop.
+    pub async fn backfill_safe_blueprint_migration_tasks(&self) -> Result<(), RepositoryError> {
+        let batches = sqlx::query_as::<_, (Uuid, Uuid)>(
+            "SELECT workspace_id, id FROM blueprint_migration_batches WHERE status IN ('queued', 'running')",
+        )
+        .fetch_all(&self.pool)
+        .await?;
+        let mut transaction = self.pool.begin().await?;
+        for (workspace_id, batch_id) in batches {
+            self.enqueue_task(
+                &mut transaction,
+                TaskInsert {
+                    workspace_id,
+                    kind: TaskKind::BlueprintMigrationBatchV1,
+                    subject_id: batch_id,
+                    generation: 0,
+                    payload: json!({"batch_id": batch_id.to_string()}),
+                    correlation_id: None,
+                    causation_id: None,
+                },
+            )
+            .await?;
+        }
+        transaction.commit().await?;
+        Ok(())
     }
 
-    pub(crate) async fn run_safe_blueprint_migration_batch_with_lease(
+    /// Runs a batch under the shared task lease. Each entity is reserved before
+    /// preview/migration, making `(batch_id, entity_id)` its durable retry
+    /// identity. Every progress checkpoint commits through the task fence.
+    pub(crate) async fn run_safe_blueprint_migration_batch_task(
         &self,
         batch_id: Uuid,
-        lease_owner: Uuid,
     ) -> Result<(), RepositoryError> {
         let workspace_id = self.workspace_id.unwrap_or(Self::DEFAULT_WORKSPACE_ID);
-        // Only one task may claim a queued or abandoned batch. The lease keeps
-        // startup recovery from resetting work still owned by another API
-        // process, while allowing a crashed process to be recovered.
+        let mut transaction = self.pool.begin().await?;
         let batch = sqlx::query_as::<_, BlueprintMigrationBatch>(
-            "UPDATE blueprint_migration_batches SET status = 'running', started_at = COALESCE(started_at, now()), lease_owner = $3, lease_until = now() + interval '15 minutes' WHERE id = $1 AND workspace_id = $2 AND (status = 'queued' OR (status = 'running' AND (lease_until IS NULL OR lease_until <= now()))) RETURNING id, blueprint_id, target_version, status, created_at, started_at, completed_at",
+            "UPDATE blueprint_migration_batches SET status = 'running', started_at = COALESCE(started_at, now()) WHERE id = $1 AND workspace_id = $2 AND status IN ('queued', 'running') RETURNING id, blueprint_id, target_version, status, created_at, started_at, completed_at",
         )
         .bind(batch_id)
         .bind(workspace_id)
-        .bind(lease_owner)
-        .fetch_optional(&self.pool)
+        .fetch_optional(&mut *transaction)
         .await?;
+        self.commit_mutation(transaction).await?;
         let Some(batch) = batch else {
-            return Ok(());
+            let status = sqlx::query_scalar::<_, String>(
+                "SELECT status FROM blueprint_migration_batches WHERE id = $1 AND workspace_id = $2",
+            )
+            .bind(batch_id)
+            .bind(workspace_id)
+            .fetch_optional(&self.pool)
+            .await?;
+            return match status.as_deref() {
+                Some("completed") => Ok(()),
+                Some("failed") => Err(RepositoryError::InvalidBlueprintDefinition(
+                    "safe blueprint migration batch is dead-lettered".into(),
+                )),
+                _ => Err(RepositoryError::NotFound("blueprint migration batch")),
+            };
         };
         let entity_ids = sqlx::query_scalar::<_, Uuid>(
             "SELECT id FROM entities WHERE blueprint_id = $1 AND blueprint_version < $2 AND workspace_id = $3 AND deleted_at IS NULL ORDER BY id",
@@ -150,127 +201,127 @@ impl CatalogRepository {
         .await?;
 
         for entity_id in entity_ids {
-            self.renew_batch_lease(batch_id, workspace_id, lease_owner)
-                .await?;
-            match self.preview_entity_migration(entity_id).await {
-                Ok(preview) => {
-                    sqlx::query("UPDATE entity_blueprint_migrations SET batch_id = $2 WHERE id = $1 AND workspace_id = $3")
-                        .bind(preview.migration_id)
-                        .bind(batch_id)
-                        .bind(workspace_id)
-                        .execute(&self.pool)
-                        .await?;
-                    if preview.status != "ready" {
+            let migration = self.reserve_batch_migration(&batch, entity_id).await?;
+            match migration.status.as_str() {
+                "migrated" | "needs_input" | "blocked" | "failed" | "skipped" | "superseded" => {
+                    continue;
+                }
+                "pending" => match self
+                    .preview_entity_migration_into(entity_id, Some(migration.id))
+                    .await
+                {
+                    Ok(preview) if preview.status == "ready" => {}
+                    Ok(_) => continue,
+                    Err(error) => {
+                        self.record_batch_failure(migration.id, &error.to_string())
+                            .await?;
                         continue;
                     }
-                    let result = self
-                        .migrate_entity_to_latest(
-                            entity_id,
-                            MigrateEntityRequest {
-                                migration_id: preview.migration_id,
-                                expected_target_version: batch.target_version,
-                                values: Vec::new(),
-                                relationships: Vec::new(),
-                                discard_attributes: Vec::new(),
-                            },
-                        )
-                        .await;
-                    if let Err(error) = result {
-                        self.record_batch_failure(preview.migration_id, &error.to_string())
-                            .await?;
-                    }
-                }
-                Err(error) => {
-                    let migration_id = Uuid::new_v4();
-                    sqlx::query(
-                        "INSERT INTO entity_blueprint_migrations (id, batch_id, workspace_id, entity_id, blueprint_id, source_version, target_version, status, issues, completed_at) VALUES ($1, $2, $3, $4, $5, $6, $7, 'failed', $8, now())",
-                    )
-                    .bind(migration_id)
-                    .bind(batch_id)
-                    .bind(workspace_id)
-                    .bind(entity_id)
-                    .bind(batch.blueprint_id)
-                    .bind(batch.target_version - 1)
-                    .bind(batch.target_version)
-                    .bind(json!([{"kind": "migration_failed", "message": error.to_string()}]))
-                    .execute(&self.pool)
-                    .await?;
+                },
+                "ready" | "migrating" => {}
+                status => {
+                    return Err(RepositoryError::InvalidBlueprintDefinition(format!(
+                        "unknown batch migration status '{status}'"
+                    )));
                 }
             }
+            self.begin_batch_migration(migration.id).await?;
+            if let Err(error) = self
+                .migrate_entity_to_latest(
+                    entity_id,
+                    MigrateEntityRequest {
+                        migration_id: migration.id,
+                        expected_target_version: batch.target_version,
+                        values: Vec::new(),
+                        relationships: Vec::new(),
+                        discard_attributes: Vec::new(),
+                    },
+                )
+                .await
+            {
+                self.record_batch_failure(migration.id, &error.to_string())
+                    .await?;
+            }
         }
-        self.renew_batch_lease(batch_id, workspace_id, lease_owner)
-            .await?;
-        let result = sqlx::query("UPDATE blueprint_migration_batches SET status = 'completed', completed_at = now(), lease_owner = NULL, lease_until = NULL WHERE id = $1 AND workspace_id = $2 AND status = 'running' AND lease_owner = $3")
-            .bind(batch_id)
-            .bind(workspace_id)
-            .bind(lease_owner)
-            .execute(&self.pool)
-            .await?;
-        if result.rows_affected() == 1 {
+        let mut transaction = self.pool.begin().await?;
+        let updated = sqlx::query(
+            "UPDATE blueprint_migration_batches SET status = 'completed', completed_at = now() WHERE id = $1 AND workspace_id = $2 AND status = 'running'",
+        )
+        .bind(batch_id)
+        .bind(workspace_id)
+        .execute(&mut *transaction)
+        .await?
+        .rows_affected();
+        self.commit_mutation(transaction).await?;
+        if updated == 1 {
             Ok(())
         } else {
             Err(RepositoryError::InvalidBlueprintDefinition(
-                "safe blueprint migration batch lease was lost".into(),
+                "safe blueprint migration batch checkpoint was lost".into(),
             ))
         }
     }
 
-    /// Returns a claimed batch to the durable queue during graceful shutdown.
-    /// The lease owner predicate prevents a stale task from releasing another
-    /// process's work.
-    pub(crate) async fn release_safe_blueprint_migration_batch_lease(
+    pub(crate) async fn dead_letter_safe_blueprint_migration_batch(
         &self,
         batch_id: Uuid,
-        lease_owner: Uuid,
     ) -> Result<(), RepositoryError> {
         let workspace_id = self.workspace_id.unwrap_or(Self::DEFAULT_WORKSPACE_ID);
-        sqlx::query("UPDATE blueprint_migration_batches SET status = 'queued', started_at = NULL, lease_owner = NULL, lease_until = NULL WHERE id = $1 AND workspace_id = $2 AND status = 'running' AND lease_owner = $3")
-            .bind(batch_id)
-            .bind(workspace_id)
-            .bind(lease_owner)
-            .execute(&self.pool)
-            .await?;
-        Ok(())
-    }
-
-    /// Requeue batches interrupted by a previous API process and return all
-    /// queued work. Claiming in `run_safe_blueprint_migration_batch` keeps this
-    /// safe when multiple processes recover at once.
-    pub async fn recover_safe_blueprint_migration_batches(
-        &self,
-    ) -> Result<Vec<(Uuid, Uuid)>, RepositoryError> {
         let mut transaction = self.pool.begin().await?;
-        sqlx::query("UPDATE blueprint_migration_batches SET status = 'queued', started_at = NULL, lease_owner = NULL, lease_until = NULL WHERE status = 'running' AND (lease_until IS NULL OR lease_until <= now())")
-            .execute(&mut *transaction)
-            .await?;
-        let batches = sqlx::query_as::<_, (Uuid, Uuid)>(
-            "SELECT workspace_id, id FROM blueprint_migration_batches WHERE status = 'queued' ORDER BY created_at, id",
+        sqlx::query(
+            "UPDATE blueprint_migration_batches SET status = 'failed', completed_at = now() WHERE id = $1 AND workspace_id = $2 AND status IN ('queued', 'running')",
         )
-        .fetch_all(&mut *transaction)
+        .bind(batch_id)
+        .bind(workspace_id)
+        .execute(&mut *transaction)
         .await?;
-        transaction.commit().await?;
-        Ok(batches)
+        self.commit_mutation(transaction).await
     }
 
-    async fn renew_batch_lease(
+    async fn reserve_batch_migration(
         &self,
-        batch_id: Uuid,
-        workspace_id: Uuid,
-        lease_owner: Uuid,
-    ) -> Result<(), RepositoryError> {
-        let result = sqlx::query("UPDATE blueprint_migration_batches SET lease_until = now() + interval '15 minutes' WHERE id = $1 AND workspace_id = $2 AND status = 'running' AND lease_owner = $3")
-            .bind(batch_id)
+        batch: &BlueprintMigrationBatch,
+        entity_id: Uuid,
+    ) -> Result<BatchMigration, RepositoryError> {
+        let workspace_id = self.workspace_id.unwrap_or(Self::DEFAULT_WORKSPACE_ID);
+        let mut transaction = self.pool.begin().await?;
+        let inserted = sqlx::query_as::<_, BatchMigration>(
+            "INSERT INTO entity_blueprint_migrations (id, batch_id, workspace_id, entity_id, blueprint_id, source_version, target_version, status, issues, task_owned) SELECT $1, $2, $3, e.id, $4, e.blueprint_version, $5, 'pending', '[]'::jsonb, true FROM entities e WHERE e.id = $6 AND e.workspace_id = $3 ON CONFLICT (batch_id, entity_id) WHERE batch_id IS NOT NULL AND task_owned DO NOTHING RETURNING id, status",
+        )
+        .bind(Uuid::new_v4())
+        .bind(batch.id)
+        .bind(workspace_id)
+        .bind(batch.blueprint_id)
+        .bind(batch.target_version)
+        .bind(entity_id)
+        .fetch_optional(&mut *transaction)
+        .await?;
+        let migration = match inserted {
+            Some(migration) => migration,
+            None => sqlx::query_as::<_, BatchMigration>(
+                "SELECT id, status FROM entity_blueprint_migrations WHERE batch_id = $1 AND entity_id = $2 AND workspace_id = $3 AND task_owned FOR UPDATE",
+            )
+            .bind(batch.id)
+            .bind(entity_id)
             .bind(workspace_id)
-            .bind(lease_owner)
-            .execute(&self.pool)
-            .await?;
-        if result.rows_affected() == 1 {
-            Ok(())
-        } else {
-            Err(RepositoryError::InvalidBlueprintDefinition(
-                "safe blueprint migration batch lease was lost".into(),
-            ))
-        }
+            .fetch_one(&mut *transaction)
+            .await?,
+        };
+        self.commit_mutation(transaction).await?;
+        Ok(migration)
+    }
+
+    async fn begin_batch_migration(&self, migration_id: Uuid) -> Result<(), RepositoryError> {
+        let workspace_id = self.workspace_id.unwrap_or(Self::DEFAULT_WORKSPACE_ID);
+        let mut transaction = self.pool.begin().await?;
+        sqlx::query(
+            "UPDATE entity_blueprint_migrations SET status = 'migrating', started_at = COALESCE(started_at, now()) WHERE id = $1 AND workspace_id = $2 AND status IN ('ready', 'migrating')",
+        )
+        .bind(migration_id)
+        .bind(workspace_id)
+        .execute(&mut *transaction)
+        .await?;
+        self.commit_mutation(transaction).await
     }
 
     async fn record_batch_failure(
@@ -278,13 +329,17 @@ impl CatalogRepository {
         migration_id: Uuid,
         message: &str,
     ) -> Result<(), RepositoryError> {
-        sqlx::query("UPDATE entity_blueprint_migrations SET status = 'failed', issues = $2, completed_at = now() WHERE id = $1 AND workspace_id = $3")
-            .bind(migration_id)
-            .bind(json!([{"kind": "migration_failed", "message": message}]))
-            .bind(self.workspace_id.unwrap_or(Self::DEFAULT_WORKSPACE_ID))
-            .execute(&self.pool)
-            .await?;
-        Ok(())
+        let workspace_id = self.workspace_id.unwrap_or(Self::DEFAULT_WORKSPACE_ID);
+        let mut transaction = self.pool.begin().await?;
+        sqlx::query(
+            "UPDATE entity_blueprint_migrations SET status = 'failed', issues = $2, completed_at = now() WHERE id = $1 AND workspace_id = $3 AND status IN ('pending', 'ready', 'migrating')",
+        )
+        .bind(migration_id)
+        .bind(json!([{"kind": "migration_failed", "message": message}]))
+        .bind(workspace_id)
+        .execute(&mut *transaction)
+        .await?;
+        self.commit_mutation(transaction).await
     }
 }
 

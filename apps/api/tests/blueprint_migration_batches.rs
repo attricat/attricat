@@ -1,4 +1,7 @@
-use api::{model::CreateBlueprint, repository::CatalogRepository};
+use api::{
+    blueprint_migration_worker::BlueprintMigrationBatchTaskHandler, model::CreateBlueprint,
+    repository::CatalogRepository, task_worker::TaskHandler,
+};
 use sqlx::PgPool;
 
 const DEFINITION: &str = r#"
@@ -16,9 +19,10 @@ code = "title"
 value_type = "string"
 "#;
 
-#[sqlx::test]
-async fn safe_batches_migrate_entities_from_every_older_version(pool: PgPool) {
-    let repository = CatalogRepository::new(pool.clone());
+async fn batch_with_two_old_entities(
+    repository: &CatalogRepository,
+    pool: &PgPool,
+) -> (uuid::Uuid, uuid::Uuid, uuid::Uuid) {
     let source = repository
         .create_blueprint(CreateBlueprint {
             definition: DEFINITION.to_owned(),
@@ -33,10 +37,9 @@ async fn safe_batches_migrate_entities_from_every_older_version(pool: PgPool) {
     sqlx::query("INSERT INTO entities (id, blueprint_id, blueprint_version) VALUES ($1, $2, 1)")
         .bind(version_one_entity)
         .bind(source.blueprint.id)
-        .execute(&pool)
+        .execute(pool)
         .await
         .unwrap();
-
     repository
         .create_blueprint_revision(
             source.blueprint.id,
@@ -54,10 +57,9 @@ async fn safe_batches_migrate_entities_from_every_older_version(pool: PgPool) {
     sqlx::query("INSERT INTO entities (id, blueprint_id, blueprint_version) VALUES ($1, $2, 2)")
         .bind(version_two_entity)
         .bind(source.blueprint.id)
-        .execute(&pool)
+        .execute(pool)
         .await
         .unwrap();
-
     repository
         .create_blueprint_revision(
             source.blueprint.id,
@@ -71,20 +73,28 @@ async fn safe_batches_migrate_entities_from_every_older_version(pool: PgPool) {
         .publish_blueprint_revision(source.blueprint.id, 3)
         .await
         .unwrap();
-
     let batch = repository
         .start_safe_blueprint_migration_batch(source.blueprint.id, 3)
         .await
         .unwrap();
-    let queued = repository
-        .list_blueprint_migration_batches(source.blueprint.id)
-        .await
-        .unwrap();
-    assert_eq!(queued[0].total_entities, 2);
-    assert_eq!(queued[0].processed_entities, 0);
+    (batch.id, version_one_entity, version_two_entity)
+}
 
+#[sqlx::test]
+async fn safe_batch_task_is_transactional_and_migrates_each_entity_once(pool: PgPool) {
+    let repository = CatalogRepository::new(pool.clone());
+    let (batch_id, version_one_entity, version_two_entity) =
+        batch_with_two_old_entities(&repository, &pool).await;
+    let task = repository
+        .claim_task("worker", std::time::Duration::from_secs(30))
+        .await
+        .unwrap()
+        .expect("batch creation atomically enqueues its task");
+    assert_eq!(task.subject_id, batch_id);
+    let handler = BlueprintMigrationBatchTaskHandler::new(repository.clone());
+    handler.handle(task.clone()).await.unwrap();
     repository
-        .run_safe_blueprint_migration_batch(batch.id)
+        .complete_task(task.id, "worker", task.lease_token)
         .await
         .unwrap();
 
@@ -96,197 +106,78 @@ async fn safe_batches_migrate_entities_from_every_older_version(pool: PgPool) {
             .await
             .unwrap();
     assert_eq!(versions, vec![3, 3]);
-    let completed = repository
-        .list_blueprint_migration_batches(source.blueprint.id)
+    assert_eq!(
+        sqlx::query_scalar::<_, i64>(
+            "SELECT count(*) FROM entity_blueprint_migrations WHERE batch_id = $1",
+        )
+        .bind(batch_id)
+        .fetch_one(&pool)
         .await
-        .unwrap();
-    assert_eq!(completed[0].status, "completed");
-    assert_eq!(completed[0].total_entities, 2);
-    assert_eq!(completed[0].processed_entities, 2);
-    assert_eq!(completed[0].migrated_entities, 2);
-    assert_eq!(completed[0].needs_input_entities, 0);
-    assert_eq!(completed[0].failed_entities, 0);
+        .unwrap(),
+        2
+    );
 }
 
 #[sqlx::test]
-async fn safe_batches_are_singleton_and_recover_expired_leases(pool: PgPool) {
+async fn expired_batch_task_cannot_checkpoint_and_reclaim_reuses_migration_rows(pool: PgPool) {
     let repository = CatalogRepository::new(pool.clone());
-    let source = repository
-        .create_blueprint(CreateBlueprint {
-            definition: DEFINITION.to_owned(),
-        })
-        .await
-        .unwrap();
-    repository
-        .publish_blueprint_revision(source.blueprint.id, 1)
-        .await
-        .unwrap();
-    repository
-        .create_blueprint_revision(
-            source.blueprint.id,
-            CreateBlueprint {
-                // Revisions retain the same compiled schema but must have a
-                // distinct source hash.
-                definition: format!("{DEFINITION}\n# revision two\n"),
-            },
-        )
-        .await
-        .unwrap();
-    repository
-        .publish_blueprint_revision(source.blueprint.id, 2)
-        .await
-        .unwrap();
-
+    let (batch_id, _, _) = batch_with_two_old_entities(&repository, &pool).await;
     let first = repository
-        .start_safe_blueprint_migration_batch(source.blueprint.id, 2)
+        .claim_task("worker-a", std::time::Duration::from_secs(30))
         .await
+        .unwrap()
         .unwrap();
-    let retry = repository
-        .start_safe_blueprint_migration_batch(source.blueprint.id, 2)
-        .await
-        .unwrap();
-    assert_eq!(first.id, retry.id);
-    assert_eq!(first.status, "queued");
-    let batches = repository
-        .list_blueprint_migration_batches(source.blueprint.id)
-        .await
-        .unwrap();
-    assert_eq!(batches.len(), 1);
-    assert_eq!(batches[0].id, first.id);
-    assert_eq!(batches[0].target_version, 2);
+    let handler = BlueprintMigrationBatchTaskHandler::new(repository.clone());
 
-    sqlx::query("UPDATE blueprint_migration_batches SET status = 'running', lease_until = now() - interval '1 second' WHERE id = $1")
+    // Simulate a crash after the domain batch committed but before generic task
+    // acknowledgement. Reclaiming must not create a second batch/entity row.
+    handler.handle(first.clone()).await.unwrap();
+    sqlx::query("UPDATE tasks SET lease_until = now() - interval '1 second' WHERE id = $1")
         .bind(first.id)
         .execute(&pool)
         .await
         .unwrap();
-    let recovered = repository
-        .recover_safe_blueprint_migration_batches()
+    assert!(
+        repository
+            .complete_task(first.id, "worker-a", first.lease_token)
+            .await
+            .is_err()
+    );
+    assert!(
+        handler.handle(first.clone()).await.is_err(),
+        "an expired task must not checkpoint the batch"
+    );
+    let second = repository
+        .claim_task("worker-b", std::time::Duration::from_secs(30))
+        .await
+        .unwrap()
+        .expect("expired task is reclaimable");
+    assert_ne!(first.lease_token, second.lease_token);
+    handler.handle(second.clone()).await.unwrap();
+    repository
+        .complete_task(second.id, "worker-b", second.lease_token)
         .await
         .unwrap();
-    assert!(recovered.iter().any(|(_, batch_id)| *batch_id == first.id));
-    assert_eq!(
-        sqlx::query_scalar::<_, String>(
-            "SELECT status FROM blueprint_migration_batches WHERE id = $1",
-        )
-        .bind(first.id)
-        .fetch_one(&pool)
-        .await
-        .unwrap(),
-        "queued"
-    );
 
-    // Holding the entity table after the first task claims the batch makes
-    // the second task race the lease claim rather than the entity migration.
-    let mut lock = pool.begin().await.unwrap();
-    sqlx::query("LOCK TABLE entities IN ACCESS EXCLUSIVE MODE")
-        .execute(&mut *lock)
-        .await
-        .unwrap();
-    let first_runner = tokio::spawn({
-        let repository = repository.clone();
-        async move {
-            repository
-                .run_safe_blueprint_migration_batch(first.id)
-                .await
-                .unwrap();
-        }
-    });
-    for _ in 0..50 {
-        let status = sqlx::query_scalar::<_, String>(
-            "SELECT status FROM blueprint_migration_batches WHERE id = $1",
-        )
-        .bind(first.id)
-        .fetch_one(&pool)
-        .await
-        .unwrap();
-        if status == "running" {
-            break;
-        }
-        tokio::time::sleep(std::time::Duration::from_millis(10)).await;
-    }
     assert_eq!(
-        sqlx::query_scalar::<_, String>(
-            "SELECT status FROM blueprint_migration_batches WHERE id = $1",
+        sqlx::query_scalar::<_, i64>(
+            "SELECT count(*) FROM entity_blueprint_migrations WHERE batch_id = $1",
         )
-        .bind(first.id)
+        .bind(batch_id)
         .fetch_one(&pool)
         .await
         .unwrap(),
-        "running"
+        2,
+        "the unique batch/entity reservation survives a reclaimed task"
     );
-    tokio::time::timeout(
-        std::time::Duration::from_secs(1),
-        repository.run_safe_blueprint_migration_batch(first.id),
-    )
-    .await
-    .expect("second worker should observe the active lease")
-    .unwrap();
-    lock.commit().await.unwrap();
-    first_runner.await.unwrap();
     assert_eq!(
         sqlx::query_scalar::<_, String>(
             "SELECT status FROM blueprint_migration_batches WHERE id = $1",
         )
-        .bind(first.id)
+        .bind(batch_id)
         .fetch_one(&pool)
         .await
         .unwrap(),
         "completed"
     );
-
-    // A graceful process shutdown releases a claimed batch immediately rather
-    // than making the next process wait for the abandoned-lease timeout.
-    let lifecycle_batch = repository
-        .start_safe_blueprint_migration_batch(source.blueprint.id, 2)
-        .await
-        .unwrap();
-    let mut lifecycle_lock = pool.begin().await.unwrap();
-    sqlx::query("LOCK TABLE entities IN ACCESS EXCLUSIVE MODE")
-        .execute(&mut *lifecycle_lock)
-        .await
-        .unwrap();
-    let (shutdown_sender, shutdown_receiver) = tokio::sync::watch::channel(());
-    let (dispatcher, worker) =
-        api::blueprint_migration_worker::start(repository.clone(), shutdown_receiver);
-    dispatcher.enqueue(repository.clone(), lifecycle_batch.id);
-    for _ in 0..50 {
-        let status = sqlx::query_scalar::<_, String>(
-            "SELECT status FROM blueprint_migration_batches WHERE id = $1",
-        )
-        .bind(lifecycle_batch.id)
-        .fetch_one(&pool)
-        .await
-        .unwrap();
-        if status == "running" {
-            break;
-        }
-        tokio::time::sleep(std::time::Duration::from_millis(10)).await;
-    }
-    assert_eq!(
-        sqlx::query_scalar::<_, String>(
-            "SELECT status FROM blueprint_migration_batches WHERE id = $1",
-        )
-        .bind(lifecycle_batch.id)
-        .fetch_one(&pool)
-        .await
-        .unwrap(),
-        "running"
-    );
-    shutdown_sender.send(()).unwrap();
-    tokio::time::timeout(std::time::Duration::from_secs(1), worker)
-        .await
-        .expect("worker should stop after releasing its lease")
-        .unwrap();
-    assert_eq!(
-        sqlx::query_scalar::<_, String>(
-            "SELECT status FROM blueprint_migration_batches WHERE id = $1",
-        )
-        .bind(lifecycle_batch.id)
-        .fetch_one(&pool)
-        .await
-        .unwrap(),
-        "queued"
-    );
-    lifecycle_lock.commit().await.unwrap();
 }

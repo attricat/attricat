@@ -496,6 +496,18 @@ impl CatalogRepository {
         repository
     }
 
+    /// Attaches a blueprint migration task lease to batch and per-entity
+    /// checkpoints. A reclaimed task cannot advance an old batch execution.
+    pub(crate) fn for_blueprint_migration_task(&self, task: &ClaimedTask) -> Self {
+        let mut repository = self.clone();
+        repository.task_fence = Some(TaskFence {
+            task_id: task.id,
+            lease_owner: task.lease_owner.clone(),
+            lease_token: task.lease_token,
+        });
+        repository
+    }
+
     /// Adds immutable workflow run provenance to the worker audit/event context.
     pub(crate) fn for_workflow_run(
         &self,

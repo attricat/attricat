@@ -32,7 +32,6 @@ use std::{
 use crate::{
     agent_worker::AgentDispatcher,
     agents::AgentProviderConfig,
-    blueprint_migration_worker::MigrationBatchDispatcher,
     extension_registry::{GitHubRegistry, GitHubRepository},
     extension_runtime::ExtensionRuntime,
     extensions::MAX_EXTENSION_ARCHIVE_BYTES,
@@ -60,7 +59,6 @@ pub struct AppState {
     pub repository: CatalogRepository,
     pub agent_provider: Option<AgentProviderConfig>,
     pub agent_dispatcher: Option<AgentDispatcher>,
-    pub migration_batch_dispatcher: MigrationBatchDispatcher,
     pub registry: Arc<GitHubRegistry>,
     pub official_registry: GitHubRepository,
     /// Storage is injected at startup so future file routes never construct a
