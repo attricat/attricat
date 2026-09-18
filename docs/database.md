@@ -52,6 +52,19 @@ An owner grant must be workspace-scoped, and repository transactions preserve at
 
 `audit_events` is append-only evidence for catalog writes and security lifecycle changes. Events retain actor user/token identifiers when available, workspace, request and correlation IDs, action, authorization scope, target, outcome, and JSON metadata. HTTP metadata is derived from server-controlled routes; the redaction boundary removes password, secret, token, authorization, credential, and API-key fields. Agent-executed mutations additionally record a normalized executor discriminator plus the durable agent run, conversation, tool-call, tool name, approval decision, and approving user; the initiating user remains `actor_user_id`. Tool arguments, prompts, provider credentials, and tokens are never copied to agent audit metadata. Repository transactions persist successful mutation audits with identifiers and safe state only, never password hashes or token digests. Audit insertion is part of the mutation transaction, so an audit failure rolls back the mutation. Authorization denials are intentionally not audited because they never enter a mutation transaction. `GET /audit-events` provides permission-gated audit reads; the web app exposes them in its management area.
 
+### `tasks`
+
+`tasks` is the durable delivery envelope for API-owned background work. It stores
+only a closed, versioned kind, workspace-scoped subject reference, small JSON
+reference payload, generation, availability, and operational state. A unique
+`(workspace_id, kind, subject_id, generation)` key makes producer retries
+idempotent. A claim writes both a worker owner and a fresh lease token; task
+state transitions require both values, so a stale worker cannot acknowledge a
+reclaimed task. `task_workspace_service` records the last claimed workspace for
+least-recently-served fairness. Domain rows remain the source of business
+progress and results; task history is retained by default. The table excludes
+file processing, which continues to use `file_processing_jobs`.
+
 ### `blueprints`
 
 Blueprints define entity types and reusable mixins. A blueprint family is

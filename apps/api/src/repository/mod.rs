@@ -58,6 +58,7 @@ mod reusable_attributes;
 mod roles;
 mod rules;
 mod sessions;
+mod tasks;
 mod tokens;
 mod values;
 mod workflow_runs;
@@ -85,6 +86,7 @@ pub use extensions::{
 pub(crate) use files::{FileMetadata, FileObject, FilePolicy, FileUploadResult, NewUploadedFile};
 pub(crate) use members::{WorkspaceInvitation, WorkspaceMember};
 pub(crate) use roles::{Permission, WorkspaceGrantTarget, WorkspaceRole};
+pub use tasks::{ClaimedTask, TaskError, TaskSummary};
 pub(crate) use tokens::PersonalApiToken;
 pub use workflow_runs::WorkflowRun;
 pub(crate) use workflow_runs::{ClaimedWorkflowRun, WorkflowActionResult};

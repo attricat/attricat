@@ -83,6 +83,17 @@ or inaccessible configured bucket.
 | `RUSTFS_PORT` | `9000` | Docker Compose | Worktree-specific host port for the local RustFS S3 API. |
 | `RUSTFS_CONSOLE_PORT` | `9001` | Docker Compose | Worktree-specific host port for the local RustFS console. |
 
+## Durable API task queue
+
+The `tasks` table is the durable delivery envelope for the API-owned task queue. Its
+initial closed registry is reserved for agent runs, domain-event deliveries, workflow
+runs, rule runs, and blueprint migration batches. Task payloads are small reference
+objects only; diagnostics intentionally exclude them. This foundation does not change
+ownership of any existing worker kind yet, so existing `EVENT_DISPATCHER_*`, agent,
+workflow, rule, and migration-worker settings remain authoritative until each kind is
+explicitly cut over. File processing is excluded and continues to use its separate
+file-worker configuration and `file_processing_jobs` table.
+
 ## Agent provider
 
 Agents are disabled when `LLM_API_KEY` is absent or blank; ordinary catalog API
