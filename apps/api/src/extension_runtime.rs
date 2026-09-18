@@ -27,14 +27,16 @@ use crate::{
     catalog_service::CatalogMutationService,
     constants::DEFAULT_LIST_PAGE_SIZE,
     domain_events::DomainEvent,
-    event_dispatcher::{EventHandler, EventHandlerCommandContext},
     extension_installer::installed_artifact_key,
     extensions::{
         ArtifactKind, EventHandler as ManifestEventHandler, MAX_EXTENSION_IDENTIFIER_BYTES,
     },
     model::{AppendAttributeValues, NewAttributeValue},
+    repository::ClaimedTask,
     repository::{CatalogRepository, ExtensionConfigurationScope, ExtensionRuntimeInstallation},
     storage::{ObjectStore, ObjectStoreError},
+    task_queue::TaskKind,
+    task_worker::{TaskHandler, TaskHandlerError, TaskOutcome},
 };
 
 wasmtime::component::bindgen!({
@@ -824,38 +826,28 @@ fn parse_storage_request<T: for<'de> Deserialize<'de>>(request: &str) -> Result<
     serde_json::from_str(request).map_err(|_| "invalid storage request".to_owned())
 }
 
-/// One durable dispatcher consumer runs enabled extension handlers. Individual
-/// handlers must be idempotent because a component can finish before delivery
-/// acknowledgement, and a failure retries the entire event fan-out.
-pub struct WasmExtensionHandler {
+/// Shared-task executor for enabled extension event handlers. A component can
+/// finish before its task acknowledgement, so extensions remain at-least-once
+/// and must stay idempotent.
+pub struct WasmExtensionTaskHandler {
+    repository: CatalogRepository,
     runtime: ExtensionRuntime,
 }
 
-impl WasmExtensionHandler {
-    pub fn new(runtime: ExtensionRuntime) -> Self {
-        Self { runtime }
-    }
-}
-
-#[async_trait]
-impl EventHandler for WasmExtensionHandler {
-    fn name(&self) -> &'static str {
-        "catalog.extensions.wasm"
+impl WasmExtensionTaskHandler {
+    pub fn new(repository: CatalogRepository, runtime: ExtensionRuntime) -> Self {
+        Self {
+            repository,
+            runtime,
+        }
     }
 
-    fn event_types(&self) -> &'static [&'static str] {
-        crate::domain_events::ALL_EVENT_TYPES_V1
-    }
-
-    async fn handle(
+    async fn invoke_event(
         &self,
         event: DomainEvent,
-        context: EventHandlerCommandContext,
+        repository: CatalogRepository,
     ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-        let installations = context
-            .repository()
-            .enabled_extension_handlers(&event)
-            .await?;
+        let installations = repository.enabled_extension_handlers(&event).await?;
         for candidate in installations {
             let handler_ids: Vec<String> = candidate
                 .manifest
@@ -875,8 +867,7 @@ impl EventHandler for WasmExtensionHandler {
                 // The list above is only a dispatch hint. Re-read enabled state,
                 // exact installed release, configuration, and required grants
                 // immediately before every component invocation.
-                let Some(installation) = context
-                    .repository()
+                let Some(installation) = repository
                     .runtime_extension_installation(
                         &candidate.extension_id,
                         candidate.installed_release_id,
@@ -900,9 +891,7 @@ impl EventHandler for WasmExtensionHandler {
                     .runtime
                     .invoke(
                         &installation,
-                        context
-                            .repository()
-                            .for_extension(&installation.extension_id),
+                        repository.for_extension(&installation.extension_id),
                         handler,
                         &event,
                     )
@@ -924,8 +913,7 @@ impl EventHandler for WasmExtensionHandler {
                         error_debug = ?error,
                         "extension handler failed; quarantining extension"
                     );
-                    context
-                        .repository()
+                    repository
                         .quarantine_extension(&installation.extension_id, "runtime_failure")
                         .await?;
                     return Err(Box::new(error));
@@ -936,12 +924,87 @@ impl EventHandler for WasmExtensionHandler {
     }
 }
 
-pub fn registry_with_wasm(
-    runtime: ExtensionRuntime,
-) -> crate::event_dispatcher::EventHandlerRegistry {
-    crate::event_dispatcher::EventHandlerRegistry::default_handlers()
-        .with_handler(Arc::new(WasmExtensionHandler::new(runtime)))
-        .expect("WASM extension handler is valid")
+#[async_trait]
+impl TaskHandler for WasmExtensionTaskHandler {
+    fn kind(&self) -> TaskKind {
+        TaskKind::EventDeliveryV1
+    }
+
+    async fn handle(&self, task: ClaimedTask) -> Result<TaskOutcome, TaskHandlerError> {
+        let repository = self
+            .repository
+            .for_workspace(task.workspace_id)
+            .await
+            .map_err(|error| TaskHandlerError {
+                code: "workspace",
+                message: error.to_string(),
+            })?;
+        let Some(delivery) =
+            repository
+                .begin_task_event_delivery(&task)
+                .await
+                .map_err(|error| TaskHandlerError {
+                    code: "receipt",
+                    message: error.to_string(),
+                })?
+        else {
+            return Ok(TaskOutcome::Complete);
+        };
+        let context =
+            repository.for_event_delivery_task(&delivery.event, "catalog.extensions.wasm", &task);
+        self.invoke_event(delivery.event, context)
+            .await
+            .map_err(|error| TaskHandlerError {
+                code: "extension",
+                message: error.to_string(),
+            })?;
+        repository
+            .complete_task_event_delivery(&task)
+            .await
+            .map_err(|error| TaskHandlerError {
+                code: "receipt",
+                message: error.to_string(),
+            })?;
+        Ok(TaskOutcome::Complete)
+    }
+}
+
+/// Intake is only a producer/coordinator. It registers at the high-water mark
+/// and atomically creates delivery/task pairs for subsequently supported event
+/// versions; execution is exclusively owned by `WasmExtensionTaskHandler`.
+pub fn start_event_delivery_coordinator(
+    repository: CatalogRepository,
+    mut shutdown: watch::Receiver<()>,
+) -> tokio::task::JoinHandle<()> {
+    tokio::spawn(async move {
+        loop {
+            for workspace_id in repository.active_workspace_ids().await.unwrap_or_default() {
+                let result = async {
+                    let scoped = repository.for_workspace(workspace_id).await?;
+                    scoped
+                        .ensure_event_consumer(
+                            "catalog.extensions.wasm",
+                            crate::domain_events::ALL_EVENT_TYPES_V1,
+                        )
+                        .await?;
+                    scoped
+                        .materialize_event_delivery_tasks(
+                            "catalog.extensions.wasm",
+                            crate::domain_events::ALL_EVENT_TYPES_V1,
+                        )
+                        .await
+                }
+                .await;
+                if let Err(error) = result {
+                    tracing::error!(%error, "extension event-delivery intake failed");
+                }
+            }
+            tokio::select! {
+                _ = tokio::time::sleep(Duration::from_millis(250)) => {},
+                _ = shutdown.changed() => return,
+            }
+        }
+    })
 }
 
 #[cfg(test)]

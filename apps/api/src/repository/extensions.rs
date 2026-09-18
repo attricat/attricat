@@ -1115,6 +1115,7 @@ impl CatalogRepository {
         operation: &str,
         extension_id: &str,
     ) -> Result<(), RepositoryError> {
+        self.ensure_task_fence(&mut transaction).await?;
         if self.audit_context.is_some() {
             self.write_audit_event(&mut transaction).await?;
         } else {

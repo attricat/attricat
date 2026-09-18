@@ -219,7 +219,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     if agent_provider.is_some() {
         task_repository.recover_interrupted_agent_runs().await?;
     }
-    let task_handlers: Vec<Arc<dyn api::task_worker::TaskHandler>> = agent_provider
+    let extension_runtime =
+        ExtensionRuntime::new(object_store.clone(), ExtensionRuntimeConfig::default())
+            .map_err(|error| format!("invalid extension runtime configuration: {error}"))?;
+    let mut task_handlers: Vec<Arc<dyn api::task_worker::TaskHandler>> = agent_provider
         .clone()
         .map(|config| {
             Arc::new(agent_worker::AgentTaskHandler::new(
@@ -230,6 +233,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         })
         .into_iter()
         .collect();
+    task_handlers.push(Arc::new(extension_runtime::WasmExtensionTaskHandler::new(
+        task_repository.clone(),
+        extension_runtime.clone(),
+    )));
 
     let (shutdown_sender, shutdown_receiver) = tokio::sync::watch::channel(());
     let task_worker_config = TaskWorkerConfig::from_env()
@@ -249,15 +256,16 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     );
     let dispatcher_config = DispatcherConfig::from_env()
         .map_err(|error| format!("invalid event dispatcher configuration: {error}"))?;
-    let extension_runtime =
-        ExtensionRuntime::new(object_store.clone(), ExtensionRuntimeConfig::default())
-            .map_err(|error| format!("invalid extension runtime configuration: {error}"))?;
+    let extension_event_delivery_coordinator = extension_runtime::start_event_delivery_coordinator(
+        task_repository.clone(),
+        shutdown_receiver.clone(),
+    );
     let workflow_repository =
         CatalogRepository::with_workspace_pool_factory(pool.clone(), connect_options.clone());
     let dispatcher_handles = event_dispatcher::start(
         workflow_repository.clone(),
         rule_runtime::add_to_registry(workflow_runtime::add_to_registry(
-            extension_runtime::registry_with_wasm(extension_runtime.clone()),
+            api::event_dispatcher::EventHandlerRegistry::default_handlers(),
         )),
         dispatcher_config,
         shutdown_receiver.clone(),
@@ -333,6 +341,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     workflow_worker.await?;
     rule_worker.await?;
     migration_worker.await?;
+    extension_event_delivery_coordinator.await?;
     task_worker.await??;
 
     Ok(())
