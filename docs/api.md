@@ -23,7 +23,7 @@ and `blueprints.publish`; workflow reads and management require `workflows.read`
 `entities.write`, `entities.delete`, or `entities.publish`; context operations require
 `contexts.read` or `contexts.write`; data-health, metrics, and event-delivery
 dead-letter inspection require `data_health.read`; event-delivery replay and
-role management require `roles.manage`; extension release discovery requires `extensions.read` and trusted registry source management requires `extensions.manage`. A context-subtree grant applies to its root and descendants,
+role management require `roles.manage`; extension release discovery requires `extensions.read`, trusted registry source management requires `extensions.manage`, and solution-pack archive inspection requires `solution_packs.manage`. The solution-pack permission is bootstrapped for the fixed owner and administrator roles. A context-subtree grant applies to its root and descendants,
 never its ancestors or siblings.
 
 Browser-session request tenancy is selected from the workspace stored in the
@@ -40,6 +40,7 @@ password, cookie, CSRF, expiry, and revocation contract is documented in
 | Method | Path | Purpose |
 | --- | --- | --- |
 | `GET` | `/health` | Confirm the migrated API is ready. |
+| `POST` | `/solution-packs/inspect` | Validate a local solution-pack `.tar.zst` supplied as an `application/zstd` request body and return safe manifest metadata, the whole-archive SHA-256, and blueprint/context logical-key summaries (`solution_packs.manage`). The compressed body limit is 32 MiB; blueprint, context, include, attribute, and compiled-include complexity are bounded, and the JSON summary is limited to 512 KiB. Inspection returns no resource bodies and persists or applies nothing. |
 | `GET`, `POST` | `/extension-registries` | List the built-in official source and workspace custom sources, or add a trusted GitHub source (`extensions.manage`). |
 | `DELETE` | `/extension-registries/{id}` | Remove one workspace custom source (`extensions.manage`). |
 | `GET` | `/extension-registries/discover` | Load extension metadata from configured trusted registry `registry.json` indexes (`extensions.read`). |

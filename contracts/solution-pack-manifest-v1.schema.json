@@ -51,14 +51,14 @@
       "properties": {
         "blueprints": {
           "type": "array",
-          "maxItems": 256,
+          "maxItems": 64,
           "items": {
             "$ref": "#/$defs/blueprintResource"
           }
         },
         "contexts": {
           "type": "array",
-          "maxItems": 256,
+          "maxItems": 128,
           "items": {
             "$ref": "#/$defs/contextResource"
           }

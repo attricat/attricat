@@ -53,6 +53,7 @@ mod health;
 mod members;
 mod roles;
 mod sessions;
+mod solution_packs;
 mod tokens;
 mod values;
 mod workflow_runs;

@@ -106,6 +106,10 @@ enum Command {
         #[command(subcommand)]
         command: ExtensionCommand,
     },
+    SolutionPack {
+        #[command(subcommand)]
+        command: SolutionPackCommand,
+    },
     File {
         #[command(subcommand)]
         command: FileCommand,
@@ -845,6 +849,15 @@ enum ExtensionCommand {
 }
 
 #[derive(Subcommand)]
+enum SolutionPackCommand {
+    /// Validate and summarize a local archive on the authoritative server.
+    Inspect {
+        #[arg(long)]
+        file: PathBuf,
+    },
+}
+
+#[derive(Subcommand)]
 enum FileCommand {
     Upload {
         entity_id: Uuid,
@@ -1528,6 +1541,9 @@ async fn run(cli: Cli) -> Result<String, CliError> {
         Command::Workflow { command } => workflow_command(&client, &server, command).await,
         Command::ExtensionRegistry { command } => extension_registry_command(&client, &server, command).await,
         Command::Extension { command } => extension_command(&client, &server, command).await,
+        Command::SolutionPack { command } => {
+            solution_pack_command(&client, &server, command).await
+        }
         Command::File { command } => file_command(&client, &server, command).await,
         Command::Metrics { command: MetricsCommand::Get { output } } => raw_download(&client, &server, "/metrics", &output, None).await,
         Command::Value { command } => match command {
@@ -2199,6 +2215,25 @@ async fn extension_command(
     ExtensionCommand::Storage { extension_id, contribution_id, release_id, body } => request(client,server,Method::POST,&format!("/extensions/{}/{}/storage/{}",segment(&extension_id),segment(&contribution_id),segment(release_id)),Some(json_input(&body,"--body")?)).await,
     ExtensionCommand::Command { extension_id, contribution_id, release_id, command_id, payload } => request(client,server,Method::POST,&format!("/extensions/{}/{}/command",segment(&extension_id),segment(&contribution_id)),Some(json!({"release_id":release_id,"command_id":command_id,"payload":json_input(&payload,"--payload")?}))).await,
 }
+}
+
+async fn solution_pack_command(
+    client: &Client,
+    server: &Url,
+    command: SolutionPackCommand,
+) -> Result<String, CliError> {
+    match command {
+        SolutionPackCommand::Inspect { file } => {
+            raw_upload(
+                client,
+                server,
+                "/solution-packs/inspect",
+                &file,
+                "application/zstd",
+            )
+            .await
+        }
+    }
 }
 
 async fn entity_publication_command(
@@ -3438,6 +3473,11 @@ value = "Blue shirt"
             Err(error) if error.kind() == clap::error::ErrorKind::DisplayHelp
         ));
         assert!(Cli::try_parse_from(["acli", "workflow", "validate", "--stdin"]).is_ok());
+        assert!(
+            Cli::try_parse_from(["acli", "solution-pack", "inspect", "--file", "pack.tar.zst"])
+                .is_ok()
+        );
+        assert!(Cli::try_parse_from(["acli", "solution-pack", "inspect"]).is_err());
         assert!(Cli::try_parse_from(["acli", "--no-env", "health"]).is_ok());
         assert!(
             Cli::try_parse_from([
@@ -3686,6 +3726,68 @@ value = "Blue shirt"
         )
         .await;
         assert!(matches!(result, Err(CliError::InvalidResponse)));
+        server.abort();
+    }
+
+    #[tokio::test]
+    async fn solution_pack_inspect_streams_the_archive_to_the_server() {
+        use std::sync::{Arc, Mutex};
+
+        let received = Arc::new(Mutex::new(None));
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let address = listener.local_addr().unwrap();
+        let server = tokio::spawn({
+            let received = received.clone();
+            async move {
+                let app = axum::Router::new().route(
+                    "/solution-packs/inspect",
+                    axum::routing::post(
+                        move |headers: axum::http::HeaderMap, body: axum::body::Bytes| {
+                            let received = received.clone();
+                            async move {
+                                *received.lock().unwrap() = Some((
+                                    headers
+                                        .get(axum::http::header::CONTENT_TYPE)
+                                        .unwrap()
+                                        .to_str()
+                                        .unwrap()
+                                        .to_owned(),
+                                    body.to_vec(),
+                                ));
+                                axum::Json(json!({"archive_sha256": "server-validated"}))
+                            }
+                        },
+                    ),
+                );
+                axum::serve(listener, app).await.unwrap();
+            }
+        });
+        let archive = tempfile::NamedTempFile::new().unwrap();
+        fs::write(archive.path(), b"opaque archive bytes").unwrap();
+
+        let body = run(Cli {
+            server: Some(Url::parse(&format!("http://{address}")).unwrap()),
+            token: None,
+            token_stdin: false,
+            session_file: None,
+            no_env: false,
+            command: Command::SolutionPack {
+                command: SolutionPackCommand::Inspect {
+                    file: archive.path().to_path_buf(),
+                },
+            },
+        })
+        .await
+        .unwrap();
+
+        assert_eq!(body, r#"{"archive_sha256":"server-validated"}"#);
+        assert_eq!(
+            received.lock().unwrap().take().unwrap(),
+            (
+                "application/zstd".to_owned(),
+                b"opaque archive bytes".to_vec()
+            )
+        );
         server.abort();
     }
 

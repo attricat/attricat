@@ -10,8 +10,8 @@ use std::{
 };
 
 use catalog_blueprint::{
-    BlueprintDefinition, BlueprintKind, CompiledBlueprint, ResolvedInclude, ViewDefinition,
-    ViewNode,
+    BlueprintDefinition, BlueprintError, BlueprintKind, CompiledBlueprint, ResolvedInclude,
+    ViewDefinition, ViewNode,
 };
 use catalog_validation::is_valid_code;
 use semver::{Version, VersionReq};
@@ -30,6 +30,13 @@ pub const MAX_SOLUTION_PACK_EXPANDED_BYTES: usize = 128 * 1024 * 1024;
 pub const MAX_SOLUTION_PACK_FILE_BYTES: usize = 8 * 1024 * 1024;
 pub const MAX_SOLUTION_PACK_MANIFEST_BYTES: usize = 256 * 1024;
 pub const MAX_SOLUTION_PACK_ARCHIVE_ENTRIES: usize = 256;
+pub const MAX_SOLUTION_PACK_BLUEPRINTS: usize = 64;
+pub const MAX_SOLUTION_PACK_CONTEXTS: usize = 128;
+pub const MAX_SOLUTION_PACK_BLUEPRINT_INCLUDES: usize = 16;
+pub const MAX_SOLUTION_PACK_BLUEPRINT_ATTRIBUTES: usize = 256;
+pub const MAX_SOLUTION_PACK_TOTAL_BLUEPRINT_COMPLEXITY: usize = 4096;
+pub const MAX_SOLUTION_PACK_RESOLVED_INCLUDE_ATTRIBUTES: usize = 1024;
+pub const MAX_SOLUTION_PACK_INSPECTION_RESPONSE_BYTES: usize = 512 * 1024;
 const MAX_ARCHIVE_PATH_BYTES: usize = 512;
 const MAX_IDENTIFIER_BYTES: usize = 128;
 const MAX_NAME_BYTES: usize = 200;
@@ -354,6 +361,12 @@ fn validate_manifest(manifest: &SolutionPackManifest) -> Result<(), SolutionPack
     if manifest.resources.blueprints.is_empty() && manifest.resources.contexts.is_empty() {
         return invalid("at least one blueprint or context is required");
     }
+    if manifest.resources.blueprints.len() > MAX_SOLUTION_PACK_BLUEPRINTS {
+        return invalid("solution-pack manifest declares too many blueprints");
+    }
+    if manifest.resources.contexts.len() > MAX_SOLUTION_PACK_CONTEXTS {
+        return invalid("solution-pack manifest declares too many contexts");
+    }
 
     let mut keys = HashSet::new();
     let mut paths = HashSet::new();
@@ -491,6 +504,18 @@ fn validate_content(
         })?;
         let blueprint = prepare_blueprint(&resource.key, source, &blueprint_codes)?;
         prepared.insert(resource.key.clone(), blueprint);
+    }
+
+    let total_blueprint_complexity = prepared.values().try_fold(0usize, |total, blueprint| {
+        total
+            .checked_add(blueprint.native_definition.attributes.len())
+            .and_then(|total| total.checked_add(blueprint.native_definition.includes.len()))
+            .ok_or_else(|| {
+                SolutionPackError::Invalid("solution-pack blueprint complexity is too large".into())
+            })
+    })?;
+    if total_blueprint_complexity > MAX_SOLUTION_PACK_TOTAL_BLUEPRINT_COMPLEXITY {
+        return invalid("solution-pack blueprint complexity exceeds the total limit");
     }
 
     let blueprint_dependencies = prepared
@@ -676,8 +701,30 @@ fn prepare_blueprint(
         ))
     })?;
     let definition = catalog_blueprint::parse(&native_source).map_err(|error| {
-        SolutionPackError::Invalid(format!("blueprint '{key}' is invalid: {error}"))
+        let message = match error {
+            BlueprintError::Toml(_) => format!("blueprint '{key}' is invalid"),
+            error => format!("blueprint '{key}' is invalid: {error}"),
+        };
+        SolutionPackError::Invalid(message)
     })?;
+    if definition.includes.len() > MAX_SOLUTION_PACK_BLUEPRINT_INCLUDES {
+        return invalid(format!(
+            "blueprint '{key}' exceeds the include limit of {MAX_SOLUTION_PACK_BLUEPRINT_INCLUDES}"
+        ));
+    }
+    if definition.attributes.len() > MAX_SOLUTION_PACK_BLUEPRINT_ATTRIBUTES {
+        return invalid(format!(
+            "blueprint '{key}' exceeds the attribute limit of {MAX_SOLUTION_PACK_BLUEPRINT_ATTRIBUTES}"
+        ));
+    }
+    for include in &definition.includes {
+        if include.alias.len() > MAX_IDENTIFIER_BYTES {
+            return invalid(format!(
+                "blueprint '{key}' include alias '{}' is too long",
+                include.alias
+            ));
+        }
+    }
     let expected_code = resource_code(key);
     if definition.code != expected_code {
         return invalid(format!("blueprint '{key}' code must be '{expected_code}'"));
@@ -765,6 +812,7 @@ fn compile_pack_blueprint(
     }
     let blueprint = &blueprints[key];
     let mut resolved = Vec::with_capacity(blueprint.native_definition.includes.len());
+    let mut resolved_attribute_count = 0usize;
     for (include, dependency_key) in blueprint
         .native_definition
         .includes
@@ -776,6 +824,18 @@ fn compile_pack_blueprint(
         if dependency.kind != BlueprintKind::Mixin {
             return invalid(format!(
                 "blueprint '{key}' include '{dependency_key}' must reference a mixin"
+            ));
+        }
+        resolved_attribute_count = resolved_attribute_count
+            .checked_add(dependency.attributes.len())
+            .ok_or_else(|| {
+                SolutionPackError::Invalid(format!(
+                    "blueprint '{key}' resolved include attributes are too large"
+                ))
+            })?;
+        if resolved_attribute_count > MAX_SOLUTION_PACK_RESOLVED_INCLUDE_ATTRIBUTES {
+            return invalid(format!(
+                "blueprint '{key}' exceeds the resolved include attribute limit of {MAX_SOLUTION_PACK_RESOLVED_INCLUDE_ATTRIBUTES}"
             ));
         }
         resolved.push(ResolvedInclude {
@@ -1581,14 +1641,153 @@ value_type = "string"
     }
 
     #[test]
+    fn rejects_manifests_that_exceed_resource_count_limits() {
+        let mut manifest: SolutionPackManifest = serde_json::from_value(manifest_value()).unwrap();
+        let blueprint = manifest.resources.blueprints[0].clone();
+        manifest.resources.blueprints = vec![blueprint; MAX_SOLUTION_PACK_BLUEPRINTS + 1];
+        assert!(
+            validate_manifest(&manifest)
+                .unwrap_err()
+                .to_string()
+                .contains("too many blueprints")
+        );
+
+        let mut manifest: SolutionPackManifest = serde_json::from_value(manifest_value()).unwrap();
+        let context = manifest.resources.contexts[0].clone();
+        manifest.resources.contexts = vec![context; MAX_SOLUTION_PACK_CONTEXTS + 1];
+        assert!(
+            validate_manifest(&manifest)
+                .unwrap_err()
+                .to_string()
+                .contains("too many contexts")
+        );
+    }
+
+    #[test]
+    fn rejects_blueprints_that_exceed_structural_complexity_limits() {
+        let includes = (0..=MAX_SOLUTION_PACK_BLUEPRINT_INCLUDES)
+            .map(|index| format!("{{ alias = \"m{index}\", key = \"blueprints/category\" }}"))
+            .collect::<Vec<_>>()
+            .join(", ");
+        let excessive_includes = format!(
+            r#"format_version = 1
+code = "product"
+name = "Product"
+kind = "entity"
+includes = [{includes}]
+[views.dropdown_option]
+type = "dropdown_option"
+fields = ["name"]
+[[attributes]]
+code = "name"
+value_type = "string"
+"#
+        )
+        .into_bytes();
+        assert_blueprint_error(&excessive_includes, "exceeds the include limit");
+
+        let mut excessive_attributes = br#"format_version = 1
+code = "product"
+name = "Product"
+kind = "entity"
+[views.dropdown_option]
+type = "dropdown_option"
+fields = ["field_0"]
+"#
+        .to_vec();
+        for index in 0..=MAX_SOLUTION_PACK_BLUEPRINT_ATTRIBUTES {
+            excessive_attributes.extend_from_slice(
+                format!("[[attributes]]\ncode = \"field_{index}\"\nvalue_type = \"string\"\n")
+                    .as_bytes(),
+            );
+        }
+        assert_blueprint_error(&excessive_attributes, "exceeds the attribute limit");
+
+        let includes = (0..5)
+            .map(|index| format!("{{ alias = \"m{index}\", key = \"blueprints/category\" }}"))
+            .collect::<Vec<_>>()
+            .join(", ");
+        let product = format!(
+            r#"format_version = 1
+code = "product"
+name = "Product"
+kind = "entity"
+includes = [{includes}]
+[views.dropdown_option]
+type = "dropdown_option"
+fields = ["name"]
+[[attributes]]
+code = "name"
+value_type = "string"
+"#
+        )
+        .into_bytes();
+        let mut mixin = br#"format_version = 1
+code = "category"
+name = "Category fields"
+kind = "mixin"
+"#
+        .to_vec();
+        for index in 0..MAX_SOLUTION_PACK_BLUEPRINT_ATTRIBUTES {
+            mixin.extend_from_slice(
+                format!("[[attributes]]\ncode = \"field_{index}\"\nvalue_type = \"string\"\n")
+                    .as_bytes(),
+            );
+        }
+        assert_blueprints_error(
+            &product,
+            &mixin,
+            "exceeds the resolved include attribute limit",
+        );
+
+        let mut owned_files = Vec::new();
+        let mut resources = Vec::new();
+        for blueprint_index in 0..17 {
+            let code = format!("mixin_{blueprint_index}");
+            let path = format!("blueprints/{code}.toml");
+            let mut source = format!(
+                "format_version = 1\ncode = \"{code}\"\nname = \"Mixin {blueprint_index}\"\nkind = \"mixin\"\n"
+            )
+            .into_bytes();
+            for attribute_index in 0..MAX_SOLUTION_PACK_BLUEPRINT_ATTRIBUTES {
+                source.extend_from_slice(
+                    format!(
+                        "[[attributes]]\ncode = \"field_{attribute_index}\"\nvalue_type = \"string\"\n"
+                    )
+                    .as_bytes(),
+                );
+            }
+            resources.push(resource(&format!("blueprints/{code}"), &path, &source));
+            owned_files.push((path, source));
+        }
+        let file_refs = owned_files
+            .iter()
+            .map(|(path, source)| (path.as_str(), source.as_slice()))
+            .collect::<Vec<_>>();
+        let manifest = json!({
+            "manifest_version": 1,
+            "id": "attricat.complex",
+            "name": "Complex",
+            "version": "1.0.0",
+            "description": "Complex pack",
+            "catalog": {"host_api": "^1.0"},
+            "resources": {"blueprints": resources, "contexts": []}
+        });
+        assert_invalid(
+            &archive(&manifest, &file_refs),
+            "complexity exceeds the total limit",
+        );
+    }
+
+    #[test]
     fn validates_incoming_relationship_selectors_across_blueprints() {
         let missing =
             CATEGORY_BLUEPRINT.replace_ascii(b"field = \"categories\"", b"field = \"missing\"");
-        assert_incoming_relationship_error(PRODUCT_BLUEPRINT, &missing, "has no field 'missing'");
+        assert_blueprints_error(PRODUCT_BLUEPRINT, &missing, "has no field 'missing'");
 
         let scalar =
             CATEGORY_BLUEPRINT.replace_ascii(b"field = \"categories\"", b"field = \"name\"");
-        assert_incoming_relationship_error(
+        assert_blueprints_error(
             PRODUCT_BLUEPRINT,
             &scalar,
             "field 'name' must be a relationship",
@@ -1598,14 +1797,14 @@ value_type = "string"
             b"target_blueprint = \"blueprints/category\"",
             b"target_blueprint = \"blueprints/product\"",
         );
-        assert_incoming_relationship_error(
+        assert_blueprints_error(
             &wrong_target,
             CATEGORY_BLUEPRINT,
             "field 'categories' must target 'category'",
         );
     }
 
-    fn assert_incoming_relationship_error(product: &[u8], category: &[u8], expected: &str) {
+    fn assert_blueprints_error(product: &[u8], category: &[u8], expected: &str) {
         let files = vec![
             ("blueprints/product.toml", product),
             ("blueprints/category.toml", category),

@@ -158,6 +158,8 @@ acli extension artifact <extension-id> <contribution-id> --output contribution.j
 acli extension storage <extension-id> <contribution-id> <release-id> --body <json-or-file>
 acli extension command <extension-id> <contribution-id> --release-id <release-uuid> --command-id <id> --payload <json-or-file>
 
+acli solution-pack inspect --file pack.tar.zst
+
 acli file upload <entity-id> <attribute-code> --file first.png [--file second.png] [--context-id <context-id>]
 acli file metadata <file-id>
 acli file download-original <file-id> --output original.bin [--range 'bytes=0-1023']
@@ -217,7 +219,10 @@ and `command --payload` is the contribution-defined JSON payload.
 
 `file upload` streams each repeated `--file` as a `files` multipart part and
 sends `context_id` as the optional multipart text field. `extension sideload`
-streams the archive as `application/zstd`. Uploads and downloads retain the
+and `solution-pack inspect` stream archives as `application/zstd`. Solution-pack
+inspection is performed only by the authenticated server; the CLI neither
+unpacks nor validates the archive and prints only the server's safe, bounded
+JSON summary. Uploads and downloads retain the
 five-second connection timeout but are not subject to the normal 30-second JSON
 request timeout. File downloads, extension artifacts,
 and metrics stream to `--output`; they do not put binary, JavaScript, or

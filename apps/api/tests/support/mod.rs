@@ -232,6 +232,10 @@ async fn start_server_with_auth_mode_and_store_with_devtools(
         .ensure_entity_publication_permissions()
         .await
         .unwrap();
+    CatalogRepository::new(pool.clone())
+        .ensure_solution_pack_permissions()
+        .await
+        .unwrap();
     let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
     let address: SocketAddr = listener.local_addr().unwrap();
     let (migration_shutdown_sender, migration_shutdown_receiver) = tokio::sync::watch::channel(());

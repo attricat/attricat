@@ -113,6 +113,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     CatalogRepository::new(maintenance_pool.clone())
         .ensure_workflow_permissions()
         .await?;
+    CatalogRepository::new(maintenance_pool.clone())
+        .ensure_solution_pack_permissions()
+        .await?;
     // The identity/membership migration consumes this durable bootstrap owner
     // record to create the initial owner grant. It is set only by deployment
     // configuration, never by a catalog request.

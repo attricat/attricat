@@ -16,6 +16,7 @@ mod files;
 mod members;
 mod roles;
 mod sessions;
+mod solution_packs;
 mod tokens;
 mod workflows;
 mod workspace_navigation;
@@ -37,6 +38,7 @@ use crate::{
     file_access::FileAccessPolicy,
     mail::MailDelivery,
     repository::CatalogRepository,
+    solution_packs::MAX_SOLUTION_PACK_ARCHIVE_BYTES,
     storage::ObjectStore,
     telemetry::{register_request_timing, unregister_request_timing},
 };
@@ -324,6 +326,12 @@ pub fn router(state: AppState) -> Router {
             "/extensions/sideload",
             post(extensions::sideload).layer(axum::extract::DefaultBodyLimit::max(
                 MAX_EXTENSION_ARCHIVE_BYTES,
+            )),
+        )
+        .route(
+            "/solution-packs/inspect",
+            post(solution_packs::inspect).layer(axum::extract::DefaultBodyLimit::max(
+                MAX_SOLUTION_PACK_ARCHIVE_BYTES,
             )),
         )
         .route("/extensions/runtime", get(extensions::runtime))

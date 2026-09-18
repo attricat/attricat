@@ -1,6 +1,7 @@
 # Solution Packs
 
-> **Status:** design contract; solution-pack application is not implemented yet.
+> **Status:** v1 archive validation and administrator inspection are implemented;
+> solution-pack planning and application are not implemented yet.
 
 A solution pack is a versioned, declarative bundle of catalog structure,
 workspace defaults, extension requirements, assets, and setup guidance. Packs
@@ -91,7 +92,8 @@ side-loaded.
 
 Before planning, Catalog validates at least:
 
-- bounded compressed and expanded sizes, entry counts, and individual files;
+- bounded compressed and expanded sizes, entry counts, individual files, and
+  blueprint/include/attribute complexity;
 - relative UTF-8 file paths without traversal, links, devices, or duplicates;
 - exactly one strict, supported solution-pack manifest;
 - a matching immutable pack ID and SemVer release;
@@ -414,10 +416,20 @@ never selected only because a pack author marked them as default.
 ## CLI administration
 
 Solution-pack inspection and application are administrator-only CLI workflows.
-The intended command shape is:
+The implemented inspection command sends a local archive to the authoritative
+server for read-only validation and returns only safe metadata and resource
+summaries:
 
 ```sh
-acli solution-pack inspect attricat/solution-pack-ecommerce --version 1.2.0
+acli solution-pack inspect --file pack.tar.zst
+```
+
+Inspection does not persist the archive, apply resources, or expose blueprint
+source and context data in its response. Private-repository release selection
+and the following planning and application commands remain future command
+shapes:
+
+```sh
 acli solution-pack plan attricat/solution-pack-ecommerce --version 1.2.0 --prefix ecom
 acli solution-pack plan show <plan-id>
 acli solution-pack apply <plan-id>

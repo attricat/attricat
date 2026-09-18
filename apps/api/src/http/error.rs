@@ -106,6 +106,13 @@ impl ApiError {
             message: "extension storage quota exceeded".to_owned(),
         }
     }
+    pub(super) fn payload_too_large() -> Self {
+        Self {
+            status: StatusCode::PAYLOAD_TOO_LARGE,
+            code: "payload_too_large",
+            message: "request body exceeds the configured size limit".to_owned(),
+        }
+    }
     pub(super) fn file_too_large() -> Self {
         Self {
             status: StatusCode::PAYLOAD_TOO_LARGE,
@@ -172,6 +179,15 @@ impl ApiError {
             | JsonRejection::MissingJsonContentType(_)
             | JsonRejection::BytesRejection(_) => Self::bad_request("request body is malformed"),
             _ => Self::bad_request("request body is malformed"),
+        }
+    }
+    pub(super) fn from_bytes_rejection(
+        rejection: axum::extract::rejection::BytesRejection,
+    ) -> Self {
+        if rejection.status() == StatusCode::PAYLOAD_TOO_LARGE {
+            Self::payload_too_large()
+        } else {
+            Self::bad_request("request body is malformed")
         }
     }
     pub(super) fn from_path_rejection(_: axum::extract::rejection::PathRejection) -> Self {

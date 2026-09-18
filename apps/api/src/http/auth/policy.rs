@@ -37,6 +37,12 @@ pub(super) fn policy(method: &Method, path: &str) -> Option<Policy> {
     } else {
         "blueprints.write"
     };
+    if path == "/solution-packs/inspect" {
+        return Some(Policy {
+            permission: "solution_packs.manage",
+            target: TargetKind::None,
+        });
+    }
     if path == "/extension-registries/discover"
         || path.starts_with("/extension-registries/extensions/")
     {
@@ -410,6 +416,17 @@ mod tests {
             .permission,
             "entities.publish"
         );
+    }
+
+    #[test]
+    fn solution_pack_inspection_requires_manage_permission() {
+        assert_eq!(
+            policy(&Method::POST, "/solution-packs/inspect")
+                .unwrap()
+                .permission,
+            "solution_packs.manage"
+        );
+        assert!(policy(&Method::POST, "/solution-packs/apply").is_none());
     }
 
     #[test]
