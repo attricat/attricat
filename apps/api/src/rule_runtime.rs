@@ -68,11 +68,11 @@ impl TaskHandler for RuleTaskHandler {
             .for_workspace(task.workspace_id)
             .await
             .map_err(task_error)?;
-        let Some(run) = scoped
-            .begin_rule_run_task(&task)
-            .await
-            .map_err(task_error)?
-        else {
+        let run = match scoped.begin_rule_run_task(&task).await {
+            Ok(run) => run,
+            Err(error) => return fail_rule_run(&scoped, &task, error).await,
+        };
+        let Some(run) = run else {
             // A legacy split terminal transition is repaired by dead-lettering
             // the reclaimed generic envelope, never by acknowledging it.
             if scoped
@@ -89,34 +89,42 @@ impl TaskHandler for RuleTaskHandler {
             return Ok(TaskOutcome::Complete);
         };
         match evaluate_page(&scoped, &run).await {
-            Ok((results, next, done)) => {
-                let outcome = scoped
-                    .checkpoint_rule_page_task(&task, &run, results, next, done)
-                    .await
-                    .map_err(task_error)?;
-                if outcome {
-                    Ok(TaskOutcome::Complete)
-                } else {
+            Ok((results, next, done)) => match scoped
+                .checkpoint_rule_page_task(&task, &run, results, next, done)
+                .await
+            {
+                Ok(outcome) if outcome => Ok(TaskOutcome::Complete),
+                Ok(_) => {
                     // Yield after every page. The shared queue keeps this from
                     // monopolising a worker or consuming a failure budget.
                     Ok(TaskOutcome::Reschedule { at: Utc::now() })
                 }
-            }
-            Err(error) => {
-                let message = bounded_error_message(&error.to_string());
-                if scoped
-                    .fail_rule_run_task(&task, &message)
-                    .await
-                    .map_err(task_error)?
-                {
-                    return Ok(TaskOutcome::DeadLettered);
-                }
-                Err(TaskHandlerError {
-                    code: "rule_run",
-                    message,
-                })
-            }
+                Err(error) => fail_rule_run(&scoped, &task, error).await,
+            },
+            Err(error) => fail_rule_run(&scoped, &task, error).await,
         }
+    }
+}
+
+async fn fail_rule_run(
+    scoped: &CatalogRepository,
+    task: &crate::repository::ClaimedTask,
+    error: RepositoryError,
+) -> Result<TaskOutcome, TaskHandlerError> {
+    let message = bounded_error_message(&error.to_string());
+    if scoped
+        .fail_rule_run_task(task, &message)
+        .await
+        .map_err(task_error)?
+    {
+        Ok(TaskOutcome::DeadLettered)
+    } else {
+        // The generic task worker owns retries before the failure budget is
+        // exhausted. The repository has returned the run to pending first.
+        Err(TaskHandlerError {
+            code: "rule_run",
+            message,
+        })
     }
 }
 

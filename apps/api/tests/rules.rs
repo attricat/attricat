@@ -174,6 +174,81 @@ async fn rule_task_lease_loss_and_crash_after_page_are_fenced(pool: PgPool) {
 }
 
 #[sqlx::test]
+async fn checkpoint_failure_on_final_attempt_dead_letters_rule_run_and_replays_generation(
+    pool: PgPool,
+) {
+    let (base_url, server, rule_id, blueprint) = setup_rule(&pool).await;
+    let client = authenticated_client();
+    let entity = create_entity(&client, &base_url, &blueprint).await;
+    let entity_id = entity["id"].as_str().unwrap().parse().unwrap();
+    let run_id = manual_run(
+        &base_url,
+        rule_id,
+        Some(entity_id),
+        "checkpoint-final-failure",
+    )
+    .await;
+    let repository = CatalogRepository::new(pool.clone());
+
+    // This constraint is a test-only database failure injection at the page
+    // checkpoint; the run and task terminal transition must still commit.
+    sqlx::query("ALTER TABLE rule_findings ADD CONSTRAINT checkpoint_failure CHECK (false)")
+        .execute(&pool)
+        .await
+        .unwrap();
+    sqlx::query(
+        "UPDATE tasks SET failures=max_failures-1 WHERE kind='rule_run.v1' AND subject_id=$1",
+    )
+    .bind(run_id)
+    .execute(&pool)
+    .await
+    .unwrap();
+    let task = repository
+        .claim_task("checkpoint-final", Duration::from_secs(30))
+        .await
+        .unwrap()
+        .unwrap();
+
+    assert!(matches!(
+        rule_runtime::task_handler(repository.clone())
+            .handle(task)
+            .await
+            .unwrap(),
+        TaskOutcome::DeadLettered
+    ));
+    let (run_status, task_status): (String, String) = sqlx::query_as(
+        "SELECT r.status,t.status FROM rule_runs r JOIN tasks t ON t.subject_id=r.id AND t.kind='rule_run.v1' WHERE r.id=$1",
+    )
+    .bind(run_id)
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert_eq!(
+        (run_status.as_str(), task_status.as_str()),
+        ("dead_letter", "dead_letter")
+    );
+
+    assert!(
+        repository
+            .for_workspace(BOOTSTRAP_WORKSPACE_ID.parse().unwrap())
+            .await
+            .unwrap()
+            .replay_rule_run(run_id)
+            .await
+            .unwrap()
+    );
+    let (generation, status): (i32, String) = sqlx::query_as(
+        "SELECT generation,status FROM tasks WHERE kind='rule_run.v1' AND subject_id=$1 ORDER BY generation DESC LIMIT 1",
+    )
+    .bind(run_id)
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert_eq!((generation, status.as_str()), (1, "queued"));
+    server.abort();
+}
+
+#[sqlx::test]
 async fn rule_page_continuation_yields_without_failure_budget(pool: PgPool) {
     let (base_url, server, rule_id, blueprint) = setup_rule(&pool).await;
     let client = authenticated_client();

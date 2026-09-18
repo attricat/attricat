@@ -61,10 +61,10 @@ impl TaskHandler for WorkflowTaskHandler {
             .for_workspace(task.workspace_id)
             .await
             .map_err(task_error)?;
-        let run = scoped
-            .workflow_run_for_task(&task)
-            .await
-            .map_err(task_error)?;
+        let run = match scoped.workflow_run_for_task(&task).await {
+            Ok(run) => run,
+            Err(error) => return fail_workflow_run(&scoped, &task, error.to_string()).await,
+        };
         // A crash after the token-fenced domain completion but before generic
         // acknowledgement is replay-safe: no action is re-executed.
         if run.run.status == "dead_letter" {
@@ -84,30 +84,33 @@ impl TaskHandler for WorkflowTaskHandler {
             return Ok(TaskOutcome::Complete);
         }
         match execute(&scoped, &run, &task).await {
-            Ok(()) => {
-                scoped
-                    .complete_workflow_run_task(&task)
-                    .await
-                    .map_err(task_error)?;
-                Ok(TaskOutcome::Complete)
-            }
-            Err(error) => {
-                if task.failures + 1 >= task.max_failures {
-                    scoped
-                        .dead_letter_workflow_run_task(
-                            &task,
-                            &bounded_error_message(&error.to_string()),
-                        )
-                        .await
-                        .map_err(task_error)?;
-                    return Ok(TaskOutcome::DeadLettered);
-                }
-                Err(TaskHandlerError {
-                    code: "workflow_run",
-                    message: error.to_string(),
-                })
-            }
+            Ok(()) => match scoped.complete_workflow_run_task(&task).await {
+                Ok(()) => Ok(TaskOutcome::Complete),
+                Err(error) => fail_workflow_run(&scoped, &task, error.to_string()).await,
+            },
+            Err(error) => fail_workflow_run(&scoped, &task, error.to_string()).await,
         }
+    }
+}
+
+async fn fail_workflow_run(
+    scoped: &CatalogRepository,
+    task: &ClaimedTask,
+    message: String,
+) -> Result<TaskOutcome, TaskHandlerError> {
+    if task.failures + 1 >= task.max_failures {
+        scoped
+            .dead_letter_workflow_run_task(task, &bounded_error_message(&message))
+            .await
+            .map_err(task_error)?;
+        Ok(TaskOutcome::DeadLettered)
+    } else {
+        // The generic task worker owns retries before the failure budget is
+        // exhausted; the workflow run remains pending and replayable.
+        Err(TaskHandlerError {
+            code: "workflow_run",
+            message,
+        })
     }
 }
 

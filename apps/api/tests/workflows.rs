@@ -82,6 +82,139 @@ async fn workflow_lifecycle_keeps_immutable_revisions(pool: PgPool) {
     server.abort();
 }
 
+#[sqlx::test]
+async fn completion_failure_on_final_attempt_dead_letters_workflow_run_and_replays_generation(
+    pool: PgPool,
+) {
+    let (base_url, server) = start_server(pool.clone()).await;
+    let client = authenticated_client();
+    let blueprint = create_blueprint(
+        &client,
+        &base_url,
+        r#"
+format_version = 1
+code = "workflow_completion_failure_product"
+name = "Workflow completion failure product"
+kind = "entity"
+
+[views.dropdown_option]
+type = "dropdown_option"
+fields = ["title"]
+
+[[attributes]]
+code = "title"
+value_type = "string"
+default_value = "untitled"
+"#,
+    )
+    .await;
+    let entity = create_entity(&client, &base_url, &blueprint).await;
+    let entity_id = entity["id"].as_str().unwrap();
+    let definition = "format_version = 2\ncode = \"completion_failure\"\nname = \"Completion failure\"\n[[triggers]]\ntype = \"manual\"\n[[actions]]\ntype = \"system_tags_add\"\ntags = [\"completed\"]";
+    let workflow: Value = client
+        .post(format!("{base_url}/workflows"))
+        .json(&json!({"definition": definition}))
+        .send()
+        .await
+        .unwrap()
+        .error_for_status()
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    let workflow_id = workflow["id"].as_str().unwrap();
+    client
+        .post(format!(
+            "{base_url}/workflows/{workflow_id}/versions/1/publish"
+        ))
+        .send()
+        .await
+        .unwrap()
+        .error_for_status()
+        .unwrap();
+    client
+        .post(format!(
+            "{base_url}/workflows/{workflow_id}/versions/1/enable"
+        ))
+        .send()
+        .await
+        .unwrap()
+        .error_for_status()
+        .unwrap();
+    let run: Value = client
+        .post(format!("{base_url}/workflows/{workflow_id}/run-now"))
+        .json(&json!({"entity_id": entity_id, "idempotency_key": "completion-final-failure"}))
+        .send()
+        .await
+        .unwrap()
+        .error_for_status()
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    let run_id: Uuid = run["id"].as_str().unwrap().parse().unwrap();
+    let repository = CatalogRepository::new(pool.clone());
+
+    // This constraint fails only the post-action completion update. The
+    // terminal fallback must atomically dead-letter its run and envelope.
+    sqlx::query(
+        "ALTER TABLE workflow_runs ADD CONSTRAINT completion_failure CHECK (status <> 'completed')",
+    )
+    .execute(&pool)
+    .await
+    .unwrap();
+    sqlx::query(
+        "UPDATE tasks SET failures=max_failures-1 WHERE kind='workflow_run.v1' AND subject_id=$1",
+    )
+    .bind(run_id)
+    .execute(&pool)
+    .await
+    .unwrap();
+    let task = repository
+        .claim_task("completion-final", Duration::from_secs(30))
+        .await
+        .unwrap()
+        .unwrap();
+
+    assert!(matches!(
+        workflow_runtime::task_handler(repository.clone())
+            .handle(task)
+            .await
+            .unwrap(),
+        task_worker::TaskOutcome::DeadLettered
+    ));
+    let (run_status, task_status): (String, String) = sqlx::query_as(
+        "SELECT r.status,t.status FROM workflow_runs r JOIN tasks t ON t.subject_id=r.id AND t.kind='workflow_run.v1' WHERE r.id=$1",
+    )
+    .bind(run_id)
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert_eq!(
+        (run_status.as_str(), task_status.as_str()),
+        ("dead_letter", "dead_letter")
+    );
+
+    assert!(
+        repository
+            .for_workspace(BOOTSTRAP_WORKSPACE_ID.parse().unwrap())
+            .await
+            .unwrap()
+            .replay_workflow_run(run_id)
+            .await
+            .unwrap()
+    );
+    let (generation, status): (i32, String) = sqlx::query_as(
+        "SELECT generation,status FROM tasks WHERE kind='workflow_run.v1' AND subject_id=$1 ORDER BY generation DESC LIMIT 1",
+    )
+    .bind(run_id)
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert_eq!((generation, status.as_str()), (1, "queued"));
+    server.abort();
+}
+
 async fn wait_for_completed_retry(pool: &PgPool, run_id: Uuid) {
     for _ in 0..100 {
         let (status, attempts): (String, i32) = sqlx::query_as(

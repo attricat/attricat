@@ -541,8 +541,13 @@ impl CatalogRepository {
         let mut tx = self.pool.begin().await?;
         let fenced = self.for_rule_task(task);
         fenced.ensure_task_fence(&mut tx).await?;
-        sqlx::query("UPDATE rule_runs SET status=CASE WHEN $3 THEN 'dead_letter' ELSE 'pending' END,last_error=$4,lease_owner=NULL,lease_until=NULL,updated_at=clock_timestamp() WHERE id=$1 AND workspace_id=$2 AND status='leased'")
-            .bind(task.subject_id).bind(ws).bind(terminal).bind(error).execute(&mut *tx).await?;
+        let changed = sqlx::query("UPDATE rule_runs SET status=CASE WHEN $3 THEN 'dead_letter' ELSE 'pending' END,last_error=$4,lease_owner=NULL,lease_until=NULL,updated_at=clock_timestamp() WHERE id=$1 AND workspace_id=$2 AND status IN ('pending','leased')")
+            .bind(task.subject_id).bind(ws).bind(terminal).bind(error).execute(&mut *tx).await?.rows_affected();
+        if changed != 1 {
+            return Err(RepositoryError::InvalidRuleDefinition(
+                "rule run is not available for its task".into(),
+            ));
+        }
         if terminal {
             let changed = sqlx::query("UPDATE tasks SET status='dead_letter',failures=max_failures,lease_owner=NULL,lease_token=NULL,lease_until=NULL,last_error_code='rule_run',last_error_message=$4,failed_at=clock_timestamp(),updated_at=clock_timestamp() WHERE id=$1 AND status='leased' AND lease_owner=$2 AND lease_token=$3 AND lease_until>clock_timestamp()")
                 .bind(task.id).bind(&task.lease_owner).bind(task.lease_token).bind(error).execute(&mut *tx).await?.rows_affected();
