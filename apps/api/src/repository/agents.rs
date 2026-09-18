@@ -271,9 +271,24 @@ impl CatalogRepository {
         model: &str,
     ) -> Result<AgentRun, RepositoryError> {
         let workspace_id = self.workspace_id.unwrap_or(Self::DEFAULT_WORKSPACE_ID);
-        let run = sqlx::query_as("INSERT INTO agent_runs (id, workspace_id, conversation_id, origin, status, provider_base_url, model, initiated_by_user_id) SELECT $1, $2, $3, 'interactive', 'queued', $4, $5, $6 WHERE EXISTS (SELECT 1 FROM conversations WHERE id = $3 AND workspace_id = $2) RETURNING id, conversation_id, origin, status, provider_base_url, model, started_at, finished_at, error_code, error_message, created_at")
+        let mut tx = self.pool.begin().await?;
+        let run: AgentRun = sqlx::query_as("INSERT INTO agent_runs (id, workspace_id, conversation_id, origin, status, provider_base_url, model, initiated_by_user_id) SELECT $1, $2, $3, 'interactive', 'queued', $4, $5, $6 WHERE EXISTS (SELECT 1 FROM conversations WHERE id = $3 AND workspace_id = $2) RETURNING id, conversation_id, origin, status, provider_base_url, model, started_at, finished_at, error_code, error_message, created_at")
             .bind(Uuid::new_v4()).bind(workspace_id).bind(conversation_id).bind(provider_base_url).bind(model).bind(actor)
-            .fetch_optional(&self.pool).await?.ok_or(RepositoryError::NotFound("conversation"))?;
+            .fetch_optional(&mut *tx).await?.ok_or(RepositoryError::NotFound("conversation"))?;
+        self.enqueue_task(
+            &mut tx,
+            crate::task_queue::TaskInsert {
+                workspace_id,
+                kind: crate::task_queue::TaskKind::AgentRunV1,
+                subject_id: run.id,
+                generation: 0,
+                payload: serde_json::json!({"agent_run_id": run.id.to_string()}),
+                correlation_id: None,
+                causation_id: None,
+            },
+        )
+        .await?;
+        tx.commit().await?;
         Ok(run)
     }
 
@@ -517,6 +532,21 @@ impl CatalogRepository {
         .await?;
         sqlx::query("INSERT INTO agent_run_events (id, run_id, sequence, event_type, payload) VALUES ($1, $2, $3, 'status', $4)")
             .bind(Uuid::new_v4()).bind(call.run_id).bind(sequence).bind(serde_json::json!({"tool_call_id": tool_call_id, "decision": state})).execute(&mut *tx).await?;
+        let generation: i32 = sqlx::query_scalar("SELECT COALESCE(MAX(generation) + 1, 0) FROM tasks WHERE workspace_id = $1 AND kind = 'agent_run.v1' AND subject_id = $2")
+            .bind(self.workspace_id.unwrap_or(Self::DEFAULT_WORKSPACE_ID)).bind(call.run_id).fetch_one(&mut *tx).await?;
+        self.enqueue_task(
+            &mut tx,
+            crate::task_queue::TaskInsert {
+                workspace_id: self.workspace_id.unwrap_or(Self::DEFAULT_WORKSPACE_ID),
+                kind: crate::task_queue::TaskKind::AgentRunV1,
+                subject_id: call.run_id,
+                generation,
+                payload: serde_json::json!({"agent_run_id": call.run_id.to_string()}),
+                correlation_id: None,
+                causation_id: None,
+            },
+        )
+        .await?;
         tx.commit().await?;
         Ok(call)
     }

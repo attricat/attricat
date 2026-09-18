@@ -301,6 +301,8 @@ pub enum RepositoryError {
     ApprovalAlreadyDecided,
     #[error(transparent)]
     Database(#[from] sqlx::Error),
+    #[error(transparent)]
+    Task(#[from] tasks::TaskError),
 }
 
 impl RepositoryError {

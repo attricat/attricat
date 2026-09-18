@@ -209,20 +209,22 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     let workspace_onboarding_url = std::env::var("WORKSPACE_ONBOARDING_URL")
         .unwrap_or_else(|_| "http://127.0.0.1:5173/onboarding".to_owned());
 
-    let agent_dispatcher = match agent_provider.clone() {
-        Some(config) => Some(
-            agent_worker::start(
-                CatalogRepository::with_workspace_pool_factory(
-                    pool.clone(),
-                    connect_options.clone(),
-                ),
+    // Agent delivery is owned by the shared task worker. The legacy process
+    // local dispatcher is intentionally not started after this cutover.
+    let agent_dispatcher = None;
+    let task_repository =
+        CatalogRepository::with_workspace_pool_factory(pool.clone(), connect_options.clone());
+    let task_handlers: Vec<Arc<dyn api::task_worker::TaskHandler>> = agent_provider
+        .clone()
+        .map(|config| {
+            Arc::new(agent_worker::AgentTaskHandler::new(
+                task_repository.clone(),
                 config,
                 object_store.clone(),
-            )
-            .await,
-        ),
-        None => None,
-    };
+            )) as Arc<dyn api::task_worker::TaskHandler>
+        })
+        .into_iter()
+        .collect();
 
     let (shutdown_sender, shutdown_receiver) = tokio::sync::watch::channel(());
     let task_worker_config = TaskWorkerConfig::from_env()
@@ -231,8 +233,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     // cut over together. Starting the supervisor now verifies the shared
     // lifecycle without risking a lease on legacy work.
     let task_worker = task_worker::start(
-        CatalogRepository::with_workspace_pool_factory(pool.clone(), connect_options.clone()),
-        TaskHandlerRegistry::default(),
+        task_repository.clone(),
+        TaskHandlerRegistry::new(task_handlers).expect("task handler kinds are unique"),
         task_worker_config,
         shutdown_receiver.clone(),
     );
