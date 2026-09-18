@@ -120,6 +120,32 @@ fn client_release_archive(extension_id: &str) -> Vec<u8> {
     client_release_archive_for_outlet(extension_id, "panel", "entity_preview_panel")
 }
 
+fn client_release_archive_with_navigation(extension_id: &str) -> Vec<u8> {
+    let manifest = serde_json::to_vec(&json!({
+        "manifest_version": 1,
+        "name": "Navigable client extension",
+        "version": "1.0.0",
+        "description": "client runtime integration test",
+        "icons": {"48": "icon.png"},
+        "catalog": {"id": extension_id, "host_api": "^1.0"},
+        "configuration": {"version": 1, "schema": {"type": "object", "additionalProperties": false}},
+        "artifacts": [{"id": "client", "kind": "client_component", "path": "client.js"}],
+        "ui": [
+            {"id": "workbench", "version": 1, "kind": "route", "artifact": "client", "title": "Workbench"},
+            {"id": "workbench-nav", "version": 1, "kind": "navigation", "route": "workbench", "title": "Workbench"}
+        ]
+    }))
+    .unwrap();
+    let mut tar_bytes = Vec::new();
+    {
+        let mut tar = tar::Builder::new(&mut tar_bytes);
+        append_file(&mut tar, "manifest.json", &manifest);
+        append_file(&mut tar, "client.js", b"export {}");
+        tar.finish().unwrap();
+    }
+    zstd::stream::encode_all(Cursor::new(tar_bytes), 0).unwrap()
+}
+
 fn append_file(tar: &mut tar::Builder<&mut Vec<u8>>, path: &str, bytes: &[u8]) {
     let mut header = tar::Header::new_gnu();
     header.set_size(bytes.len() as u64);
@@ -146,6 +172,41 @@ async fn sideload_installs_a_validated_local_archive(pool: sqlx::PgPool) {
     assert_eq!(installation["state"], "disabled");
     assert_eq!(store.object_count().await, 1);
     server.abort();
+}
+
+#[sqlx::test(migrations = "./migrations")]
+async fn navigation_contributions_target_same_release_routes(pool: sqlx::PgPool) {
+    let workspace = Uuid::from_u128(0x00000000000040008000000000000002);
+    let repository = CatalogRepository::new(pool)
+        .for_workspace(workspace)
+        .await
+        .unwrap();
+    let installer =
+        ExtensionInstaller::new(repository.clone(), Arc::new(FakeObjectStore::available()));
+    installer
+        .install(
+            "test",
+            &client_release_archive_with_navigation("acme.navigation"),
+        )
+        .await
+        .unwrap();
+    repository
+        .enable_extension("acme.navigation")
+        .await
+        .unwrap();
+
+    let contributions = repository.client_extension_contributions().await.unwrap();
+    let navigation = contributions
+        .iter()
+        .find(|item| item.id == "workbench-nav")
+        .unwrap();
+    assert_eq!(navigation.route.as_deref(), Some("workbench"));
+    assert_eq!(
+        navigation.outlet,
+        Some(api::extensions::UiOutlet::Navigation)
+    );
+    assert_eq!(navigation.navigation_group.as_deref(), Some("grouped"));
+    assert_eq!(navigation.artifact_key, None);
 }
 
 #[sqlx::test(migrations = "./migrations")]
@@ -183,10 +244,10 @@ async fn enabled_client_contributions_are_hidden_after_state_changes(pool: sqlx:
     assert_eq!(contributions[0].id, "panel");
     assert_eq!(
         contributions[0].artifact_key,
-        format!(
+        Some(format!(
             "extensions/{}/client",
             contributions[0].installed_release_id
-        )
+        ))
     );
     assert_eq!(contributions[0].contribution_key, "acme.client:panel");
 
@@ -604,7 +665,12 @@ async fn hidden_contributions_remain_authorized_and_are_validated_on_publish(poo
         .client_extension_contribution("acme.client", "panel")
         .await
         .unwrap();
-    assert!(contribution.artifact_key.ends_with("/client"));
+    assert!(
+        contribution
+            .artifact_key
+            .as_deref()
+            .is_some_and(|key| key.ends_with("/client"))
+    );
 
     let incompatible = r#"
 format_version = 1

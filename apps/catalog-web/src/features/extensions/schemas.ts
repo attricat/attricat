@@ -37,8 +37,9 @@ const contributionSchema = z
     capabilities: z.array(z.string()),
     id: z.string().min(1),
     version: z.number().int().positive(),
-    kind: z.enum(['route', 'embedded', 'action', 'panel']),
+    kind: z.enum(['route', 'navigation', 'embedded', 'action', 'panel']),
     outlet: extensionOutletSchema.nullable(),
+    route: z.string().nullable().default(null),
     title: z.string().nullable(),
   })
   .strict();
