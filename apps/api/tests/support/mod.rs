@@ -239,7 +239,6 @@ async fn start_server_with_auth_mode_and_store_with_devtools(
             (*pool.connect_options()).clone(),
         ),
         agent_provider: None,
-        agent_dispatcher: None,
         registry: Arc::new(GitHubRegistry::new().unwrap()),
         official_registry: "attricat/attricat-extensions"
             .parse::<GitHubRepository>()

@@ -1,11 +1,5 @@
-//! Process-owned dispatcher for durable agent runs.
-//!
-//! HTTP only persists a queued run and sends its id here.  Losing a process
-//! message is safe because startup recovery re-enqueues every queued run.
+//! Shared-task handler for durable agent runs.
 use std::sync::Arc;
-use thiserror::Error;
-use tokio::sync::mpsc;
-use uuid::Uuid;
 
 use crate::{
     agent_provider::OpenAiCompatibleClient,
@@ -16,19 +10,6 @@ use crate::{
     task_queue::TaskKind,
     task_worker::{TaskHandler, TaskHandlerError, TaskOutcome},
 };
-
-#[derive(Debug, Error)]
-pub enum AgentDispatchError {
-    #[error("agent dispatcher is stopped")]
-    Stopped,
-}
-
-/// Compatibility signal for older in-process callers. Production does not
-/// start it; when used, it still claims the durable task before execution.
-#[derive(Clone)]
-pub struct AgentDispatcher {
-    sender: mpsc::Sender<(Uuid, Uuid)>,
-}
 
 /// Shared-queue handler. Provider work is deliberately terminal on every
 /// error: an uncertain provider request is never retried by the task runtime.
@@ -146,65 +127,4 @@ impl TaskHandler for AgentTaskHandler {
         // The stale handler must not write lifecycle state after its token is
         // lost. The next fenced claimant terminalizes an uncertain run.
     }
-}
-
-impl AgentDispatcher {
-    pub async fn enqueue(
-        &self,
-        workspace_id: Uuid,
-        run_id: Uuid,
-    ) -> Result<(), AgentDispatchError> {
-        self.sender
-            .send((workspace_id, run_id))
-            .await
-            .map_err(|_| AgentDispatchError::Stopped)
-    }
-}
-
-/// Legacy test/embedding entrypoint. It uses the same durable claim and
-/// token-fenced handler as the shared worker, rather than process-local state.
-pub async fn start(
-    repository: CatalogRepository,
-    config: AgentProviderConfig,
-    object_store: Arc<dyn ObjectStore>,
-) -> AgentDispatcher {
-    let (sender, mut receiver) = mpsc::channel(config.dispatch_queue_capacity);
-    let dispatcher = AgentDispatcher { sender };
-    tokio::spawn(async move {
-        while receiver.recv().await.is_some() {
-            let Ok(Some(task)) = repository
-                .claim_task_for_kinds(
-                    "legacy-agent-dispatcher",
-                    TaskKind::AgentRunV1.policy().lease_duration,
-                    &[TaskKind::AgentRunV1],
-                )
-                .await
-            else {
-                continue;
-            };
-            let handler =
-                AgentTaskHandler::new(repository.clone(), config.clone(), object_store.clone());
-            match handler.handle(task.clone()).await {
-                Ok(TaskOutcome::Complete) => {
-                    let _ = repository
-                        .complete_task(task.id, &task.lease_owner, task.lease_token)
-                        .await;
-                }
-                Ok(TaskOutcome::DeadLettered) => {}
-                Ok(TaskOutcome::Retry { .. } | TaskOutcome::Reschedule { .. }) | Err(_) => {
-                    let _ = repository
-                        .retry_task_at(
-                            task.id,
-                            &task.lease_owner,
-                            task.lease_token,
-                            chrono::Utc::now(),
-                            "legacy_agent",
-                            "legacy agent dispatcher failed",
-                        )
-                        .await;
-                }
-            }
-        }
-    });
-    dispatcher
 }

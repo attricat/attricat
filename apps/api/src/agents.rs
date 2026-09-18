@@ -31,9 +31,6 @@ pub const MAX_ASSISTANT_CONTENT_BYTES: usize = 32 * 1024;
 pub const MAX_TOOL_CALL_ARGUMENT_BYTES: usize = 16 * 1024;
 pub const MAX_TOOL_CALLS: usize = 32;
 
-/// The dispatcher queue is process-local, so operators may size it for their
-/// expected burst volume without changing API safety limits.
-pub const DEFAULT_AGENT_DISPATCH_QUEUE_CAPACITY: usize = 256;
 const DEFAULT_REQUEST_TIMEOUT_SECONDS: u64 = 60;
 const DEFAULT_RUN_TIMEOUT_SECONDS: u64 = 300;
 const MAX_TIMEOUT_SECONDS: u64 = 3_600;
@@ -46,7 +43,6 @@ pub struct AgentProviderConfig {
     pub model: String,
     pub request_timeout: Duration,
     pub run_timeout: Duration,
-    pub dispatch_queue_capacity: usize,
 }
 
 impl AgentProviderConfig {
@@ -92,11 +88,6 @@ impl AgentProviderConfig {
                 "LLM_RUN_TIMEOUT_SECONDS",
                 DEFAULT_RUN_TIMEOUT_SECONDS,
             )?,
-            dispatch_queue_capacity: positive_usize_value(
-                &value,
-                "AGENT_DISPATCH_QUEUE_CAPACITY",
-                DEFAULT_AGENT_DISPATCH_QUEUE_CAPACITY,
-            )?,
         }))
     }
 
@@ -106,23 +97,6 @@ impl AgentProviderConfig {
     pub(crate) fn api_key(&self) -> &str {
         self.api_key.expose_secret()
     }
-}
-
-fn positive_usize_value(
-    value: &impl Fn(&str) -> Option<String>,
-    name: &'static str,
-    default: usize,
-) -> Result<usize, AgentConfigError> {
-    let capacity = match value(name) {
-        Some(raw) => raw
-            .parse::<usize>()
-            .map_err(|_| AgentConfigError::InvalidPositiveInteger(name))?,
-        None => default,
-    };
-    if capacity == 0 {
-        return Err(AgentConfigError::InvalidPositiveInteger(name));
-    }
-    Ok(capacity)
 }
 
 fn duration_value(
@@ -150,16 +124,11 @@ pub enum AgentConfigError {
     InvalidModel,
     #[error("{0} must be an integer between 1 and 3600 seconds")]
     InvalidDuration(&'static str),
-    #[error("{0} must be a positive integer")]
-    InvalidPositiveInteger(&'static str),
 }
 
 #[cfg(test)]
 mod tests {
-    use super::{
-        AgentConfigError, AgentProviderConfig, DEFAULT_AGENT_DISPATCH_QUEUE_CAPACITY,
-        DEFAULT_LLM_MODEL,
-    };
+    use super::{AgentConfigError, AgentProviderConfig, DEFAULT_LLM_MODEL};
 
     #[test]
     fn missing_or_blank_key_disables_agents() {
@@ -187,11 +156,6 @@ mod tests {
         .unwrap();
         assert_eq!(configured.base_url.as_str(), "https://api.openai.com/v1/");
         assert_eq!(configured.model, DEFAULT_LLM_MODEL);
-        assert_eq!(
-            configured.dispatch_queue_capacity,
-            DEFAULT_AGENT_DISPATCH_QUEUE_CAPACITY
-        );
-
         for (name, value, expected) in [
             (
                 "LLM_BASE_URL",
@@ -203,11 +167,6 @@ mod tests {
                 "LLM_REQUEST_TIMEOUT_SECONDS",
                 "0",
                 AgentConfigError::InvalidDuration("LLM_REQUEST_TIMEOUT_SECONDS"),
-            ),
-            (
-                "AGENT_DISPATCH_QUEUE_CAPACITY",
-                "0",
-                AgentConfigError::InvalidPositiveInteger("AGENT_DISPATCH_QUEUE_CAPACITY"),
             ),
         ] {
             let result = AgentProviderConfig::from_values(|key| match key {

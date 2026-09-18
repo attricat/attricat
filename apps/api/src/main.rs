@@ -209,8 +209,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     let workspace_onboarding_url = std::env::var("WORKSPACE_ONBOARDING_URL")
         .unwrap_or_else(|_| "http://127.0.0.1:5173/onboarding".to_owned());
 
-    // Agent delivery is owned exclusively by the shared task worker.
-    let agent_dispatcher = None;
     let task_repository =
         CatalogRepository::with_workspace_pool_factory(pool.clone(), connect_options.clone());
     // Agent provider calls are not safely resumable. On process restart mark
@@ -290,7 +288,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         router(AppState {
             repository: CatalogRepository::with_workspace_pool_factory(pool, connect_options),
             agent_provider,
-            agent_dispatcher,
             registry,
             official_registry,
             object_store,

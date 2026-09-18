@@ -30,7 +30,6 @@ use std::{
 };
 
 use crate::{
-    agent_worker::AgentDispatcher,
     agents::AgentProviderConfig,
     extension_registry::{GitHubRegistry, GitHubRepository},
     extension_runtime::ExtensionRuntime,
@@ -58,7 +57,6 @@ use tracing::{Instrument, field::Empty};
 pub struct AppState {
     pub repository: CatalogRepository,
     pub agent_provider: Option<AgentProviderConfig>,
-    pub agent_dispatcher: Option<AgentDispatcher>,
     pub registry: Arc<GitHubRegistry>,
     pub official_registry: GitHubRepository,
     /// Storage is injected at startup so future file routes never construct a

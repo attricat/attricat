@@ -659,14 +659,6 @@ impl CatalogRepository {
         Ok(sqlx::query_as("SELECT event.id, event.run_id, event.sequence, event.event_type, event.payload, event.created_at FROM agent_run_events event JOIN agent_runs run ON run.id = event.run_id WHERE event.run_id = $1 AND run.workspace_id = $2 AND event.sequence > $3 ORDER BY event.sequence")
             .bind(run_id).bind(self.workspace_id.unwrap_or(Self::DEFAULT_WORKSPACE_ID)).bind(after).fetch_all(&self.pool).await?)
     }
-
-    pub async fn queued_agent_runs(&self) -> Result<Vec<(Uuid, Uuid)>, RepositoryError> {
-        Ok(sqlx::query_as(
-            "SELECT workspace_id, id FROM agent_runs WHERE status = 'queued' ORDER BY created_at",
-        )
-        .fetch_all(&self.pool)
-        .await?)
-    }
 }
 
 impl CatalogRepository {

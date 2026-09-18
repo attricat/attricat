@@ -26,7 +26,6 @@ or inaccessible configured bucket.
 | `LLM_MODEL` | `gpt-4o-mini` | API only | Provider model identifier captured on each run, never a browser-selected setting. |
 | `LLM_REQUEST_TIMEOUT_SECONDS` | `60` | API only | Per-provider-request timeout, 1–3600 seconds. |
 | `LLM_RUN_TIMEOUT_SECONDS` | `300` | API only | Total agent-run timeout, 1–3600 seconds. |
-| `AGENT_DISPATCH_QUEUE_CAPACITY` | `256` | API only | Positive process-local queue capacity for durable agent runs. Increase for expected bursts; queued runs remain durable in PostgreSQL. |
 | `PREVIEW_MAX_RELATIONSHIP_DEPTH` | `3` | API | Maximum recursive relationship preview depth. |
 | `PREVIEW_MAX_RELATIONSHIP_ITEMS` | `10` | API | Maximum inline targets per relationship. |
 | `ENTITY_MAX_PAGE_SIZE` | `100` | API | Maximum page size for relationship browsing. |
@@ -92,11 +91,9 @@ or inaccessible configured bucket.
 The `tasks` table is the durable delivery envelope for the API-owned task queue. Its
 initial closed registry is reserved for agent runs, domain-event deliveries, workflow
 runs, rule runs, and blueprint migration batches. Task payloads are small reference
-objects only; diagnostics intentionally exclude them. This foundation does not change
-ownership of any existing worker kind yet, so existing `EVENT_DISPATCHER_*`, agent,
-workflow, rule, and migration-worker settings remain authoritative until each kind is
-explicitly cut over. The supervised worker starts with an empty registry and will
-not lease an unhandled task. On shutdown it stops claiming, lets registered handlers
+objects only; diagnostics intentionally exclude them. Agent runs, extension-event
+deliveries, workflow runs, rule runs, and blueprint migration batches are all executed
+by the supervised worker. On shutdown it stops claiming, lets registered handlers
 heartbeat through the configured grace period, then allows unfinished leases to expire.
 File processing is excluded and continues to use its separate file-worker configuration
 and `file_processing_jobs` table.
@@ -185,9 +182,7 @@ message, 5 MiB inline image attachment, 64 KiB serialized tool result, eight
 tool-call rounds per run, 64 KiB total provider response and undrained SSE
 frame buffers, 32 KiB assistant text, 16 KiB tool arguments, and 32 provider
 tool calls per response. The maximum provider request/run timeout remains one
-hour. `AGENT_DISPATCH_QUEUE_CAPACITY` is the only queue sizing setting because
-it is process-local operational capacity; it does not limit the durable queue.
-Provider failures, malformed responses, unknown tools, invalid tool arguments,
+hour. Provider failures, malformed responses, unknown tools, invalid tool arguments,
 and tool-round exhaustion are recorded as failed durable runs; provider
 response bodies and credentials are not retained. Schedules use six-field UTC cron expressions.
 An occurrence that overlaps a queued, running, or approval-waiting run is

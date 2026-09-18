@@ -9,6 +9,7 @@ use api::{
     file_worker::{FileWorker, WorkerConfig},
     repository::CatalogRepository,
     storage::FakeObjectStore,
+    task_worker::TaskHandler,
 };
 use axum::{Router, routing::post};
 use reqwest::multipart::{Form, Part};
@@ -198,12 +199,12 @@ async fn agent_run_timeout_is_durably_failed_without_provider_details(pool: PgPo
         .for_workspace(workspace_id)
         .await
         .unwrap();
-    let dispatcher = agent_worker::start(
-        CatalogRepository::new(pool),
+    let task_repository = CatalogRepository::new(pool);
+    let handler = agent_worker::AgentTaskHandler::new(
+        task_repository.clone(),
         config.clone(),
         Arc::new(FakeObjectStore::available()),
-    )
-    .await;
+    );
     let run = repository
         .create_agent_run_for_user(
             conversation["id"].as_str().unwrap().parse().unwrap(),
@@ -213,7 +214,12 @@ async fn agent_run_timeout_is_durably_failed_without_provider_details(pool: PgPo
         )
         .await
         .unwrap();
-    dispatcher.enqueue(workspace_id, run.id).await.unwrap();
+    let task = task_repository
+        .claim_task("agent-timeout-test", Duration::from_secs(30))
+        .await
+        .unwrap()
+        .expect("agent run creation atomically enqueues a task");
+    handler.handle(task).await.unwrap();
 
     let timed_out_run = timeout(Duration::from_secs(5), async {
         loop {
@@ -605,7 +611,7 @@ async fn agent_http_limits_accept_the_boundary_and_reject_the_next_value(pool: P
 }
 
 #[sqlx::test]
-async fn agent_message_requires_a_configured_dispatcher(pool: PgPool) {
+async fn agent_message_requires_a_configured_provider(pool: PgPool) {
     let (base_url, server) = start_server(pool).await;
     let client = authenticated_client();
     let conversation: Value = client
