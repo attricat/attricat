@@ -1,40 +1,48 @@
 # Solution Packs
 
-> **Status:** design contract; solution-pack installation is not implemented yet.
+> **Status:** design contract; solution-pack application is not implemented yet.
 
 A solution pack is a versioned, declarative bundle of catalog structure,
 workspace defaults, extension requirements, assets, and setup guidance. Packs
 let a workspace begin with a reviewed domain foundation—such as Ecommerce or
 Warehouse—without copying another workspace's database state.
 
-Authorized workspace administrators plan and install packs through the Catalog
-CLI. The server remains authoritative for validation, authorization, planning,
-and execution; the CLI does not mutate the database or unpack resources into a
+Authorized workspace administrators plan and apply packs through the Catalog
+CLI. Solution packs are an administrative bootstrap and authoring mechanism,
+not an end-user feature. Ordinary workspace users never need to discover,
+select, configure, inspect, or otherwise interact with a pack; they interact
+only with the resulting blueprints, navigation, extensions, and functionality.
+The server remains authoritative for validation, authorization, planning, and
+execution; the CLI does not mutate the database or unpack resources into a
 workspace directly.
 
-A pack is not a database export, a backup, an executable installer, or a way to
-bypass extension approval. It contains portable intent expressed through stable
-logical identifiers. Catalog resolves that intent to workspace-owned resources
-through a reviewed installation plan.
+A pack is a starting point or template for a set of functionality. It is not a
+database export, backup, executable installer, or a way to bypass extension
+approval. It contains portable intent expressed through stable logical
+identifiers. Catalog resolves that intent to workspace-owned resources through
+a reviewed application plan. Once applied, those resources and settings belong
+to the workspace rather than remaining managed by the pack.
 
 ## Design principles
 
+- **Administrative:** packs are visible and operable only through authorized
+  administration workflows; ordinary users see only the resulting workspace.
 - **Declarative:** a pack describes desired resources and references; it does
   not contain SQL, scripts, WASM, or arbitrary lifecycle hooks.
 - **Portable:** content never depends on workspace UUIDs, database IDs, object
   storage keys, or deployment URLs.
-- **Reviewable:** installation and upgrade always begin with a dry-run plan that
-  shows every create, map, update, skip, permission request, and conflict.
+- **Reviewable:** every application begins with a dry-run plan that shows each
+  create, map, update, skip, permission request, and conflict.
 - **Safe by default:** collisions create choices rather than implicit adoption,
   renaming, or replacement. Destructive and breaking changes require explicit
   approval.
 - **Repeatable:** applying the same release with the same choices is idempotent.
 - **Composable:** a workspace may install multiple packs without implicit
   precedence or last-writer-wins behavior.
-- **Versioned:** pack releases and their resource definitions are immutable.
-  Upgrades are planned migrations between releases.
+- **Versioned:** pack releases and their resource definitions are immutable;
+  applying one does not freeze or subordinate the resulting workspace state.
 - **Traceable:** Catalog records source identity, revision, release, archive
-  digest, selected options, mappings, actions, and lifecycle history.
+  digest, selected options, mappings, actions, and application history.
 - **Trust preserving:** trusting a pack does not trust, enable, configure, or
   grant permissions to an extension named by that pack.
 
@@ -169,14 +177,15 @@ attricat.ecommerce/extensions/shopify
 ```
 
 Keys are immutable after publication. Renaming a key means removing one logical
-resource and adding another and must be treated as such by the upgrade planner.
-Display names are not identifiers.
+resource and adding another and must be treated as such when planning a later
+release. Display names are not identifiers.
 
 ## Logical identifiers and workspace mappings
 
 Pack files reference logical keys, never workspace UUIDs or assumed physical
-codes. During installation, the planner resolves every key to one
-workspace-owned resource and records that mapping in installed-pack state.
+codes. During application, the planner resolves every key to one
+workspace-owned resource and records that mapping in the immutable application
+record.
 
 For a new globally code-addressed resource, an administrator chooses or accepts
 a pack prefix. The planner can then produce codes such as `ecom_product`,
@@ -197,60 +206,54 @@ explicit choices:
 3. select a different prefix or physical code; or
 4. skip an optional component and everything that requires it.
 
-Catalog never silently overwrites, renames, or adopts an existing blueprint,
-context, setting, or asset. Once an installation succeeds, its mappings and
-physical codes are immutable. Upgrades use the recorded mappings instead of
-recalculating names. This allows packs with overlapping local names to coexist.
+Catalog never silently overwrites, renames, or maps an existing blueprint,
+context, setting, or asset. A successful application preserves its mapping as
+provenance. A later application may use that recorded mapping as a planning
+input, but it does not make the resource pack-owned or prevent ordinary
+workspace changes. This allows packs with overlapping local names to coexist.
 
-A mapped existing resource is **adopted**, not pack-created. The installation
-record preserves that ownership distinction so detach and uninstall do not
-remove user-owned resources.
+The plan distinguishes a newly created resource from a compatible existing
+resource selected by the administrator. That distinction is historical
+provenance only. Both become or remain ordinary workspace-owned resources as
+soon as the plan is applied.
 
 ## Multiple packs in one workspace
 
-A workspace may install multiple solution packs. This is a core composition
+A workspace may apply multiple solution packs. This is a core composition
 requirement, not an exceptional migration path: for example, one workspace may
-combine Ecommerce, DAM, SEO, marketplace, and warehouse packs.
+combine Ecommerce, DAM, SEO, marketplace, and warehouse templates.
 
-The initial contract permits one active installation of each immutable pack ID
-per workspace. Installing another release with the same pack ID is an upgrade
-or repair of that installation, not a second instance. A derived pack that must
-coexist with its source pack therefore needs its own pack ID. Changing the
-source repository for an installed pack ID is an explicit source-migration
-operation, not a normal upgrade.
+Each application has its own prefix, options, mapping snapshot, and provenance
+record. Physical codes must be unique across the workspace, but packs may have
+overlapping local key names because references are qualified by pack ID and
+resolved while each plan is created.
 
-Each installed pack retains its own prefix, options, mappings, baseline, and
-lifecycle. Physical codes must remain unique across the workspace, but packs
-may have overlapping local key names because references are qualified by pack
-ID and resolved through each installation's mappings.
-
-Workspace resources and extensions can be shared. Installed-pack state records
-a separate relationship from every pack to every mapped resource, including
-whether that pack created it, adopted it, or merely requires it. A resource
-created by one pack may be adopted by another only through an explicit,
-compatibility-checked plan action. Creation does not give a pack exclusive
-ownership or permission to remove a resource that another pack or user needs.
+Resources and extensions can be shared. A second pack may map to a compatible
+resource produced by an earlier application, but only through an explicit,
+compatibility-checked plan action. The earlier pack gains no continuing
+ownership and the later pack creates no permanent dependency on it; both plans
+ultimately operate on the same workspace-owned resource.
 
 Composition follows these rules:
 
-- plans evaluate all installed packs and their recorded resource requirements;
-- no pack receives implicit precedence because it was installed most recently;
+- plans evaluate the workspace's current resources, settings, extensions, and
+  prior pack-application records;
+- no pack receives implicit precedence because it was applied most recently;
 - workspace-setting fragments and navigation/layout entries merge only through
   their registered item-level keys and merge rules;
 - incompatible setting proposals become conflicts rather than last-writer-wins
   updates;
-- extension version ranges from all installed packs must have a non-empty
-  intersection with an available trusted release;
+- extension version requirements in the plan must be compatible with the
+  extension release currently selected for the workspace;
 - conflicting extension configuration templates require an administrator to
-  choose or provide one workspace configuration;
-- extension grants and enablement remain workspace decisions shared by all
-  packs; and
-- upgrade, detach, and uninstall operations are blocked when they would break
-  another installed pack's required resource or version constraint.
+  choose or provide one workspace configuration; and
+- extension grants and enablement remain ordinary workspace decisions after
+  application.
 
-A future same-pack multi-instance contract would need instance-qualified
-logical keys and separate configuration semantics. It is intentionally outside
-the initial design.
+Applying the same pack release with the same choices is idempotent. Applying a
+different release of the same pack creates a new reviewed application plan; it
+is not a second managed instance and does not establish an upgrade relationship
+with resources produced by the earlier release.
 
 ## Pack contents
 
@@ -263,13 +266,13 @@ and entity-owned extension layout defaults described in
 
 Pack authoring uses logical references for blueprint, include, relationship,
 and attribute targets. During planning, Catalog resolves those references and
-compiles a native blueprint definition using the installation's physical codes.
+compiles a native blueprint definition using the application's mapped codes.
 The resulting definition must pass the ordinary blueprint compiler.
 
-A first installation may create and publish a new blueprint only when the plan
-explicitly says so. An upgrade never edits a published revision in place; it
-creates a draft successor and shows schema and entity-migration consequences
-before publication.
+An application may create and publish a new blueprint only when the plan
+explicitly says so. A later pack release never edits a published revision in
+place; if selected, its plan creates a draft successor and shows schema and
+entity-migration consequences before publication.
 
 ### Context hierarchy
 
@@ -331,9 +334,9 @@ blueprint or role IDs. Runtime authorization still determines whether a user
 can see and use an entry.
 
 A pack cannot replace the entire workspace settings document. Every packable
-setting defines its own merge key, validation, ownership granularity, and
-conflict behavior so unrelated workspace settings survive installation and
-upgrade.
+setting defines its own merge key, validation granularity, and conflict
+behavior so unrelated workspace settings survive application. Afterward, the
+merged settings are ordinary workspace configuration.
 
 ### Branding, themes, and static assets
 
@@ -359,7 +362,7 @@ example, “mapped blueprint has a published revision,” “required extension 
 enabled,” or “required configuration field is present.” They cannot execute
 code, query the database, make network calls, or read secret values. Results
 are informational unless the check contract explicitly marks one as required
-for installation completion.
+for application completion.
 
 ### Optional sample data
 
@@ -371,8 +374,8 @@ validation, and is visibly labelled sample content.
 Sample data cannot contain customer exports, personal data, credentials,
 production endpoints, file object keys, or opaque database IDs. Reapplying a
 release uses recorded sample-entity mappings and must not duplicate entities.
-Removing a pack does not delete sample data that has been modified or adopted
-as user-owned content.
+After application, sample entities are ordinary workspace data and are not
+removed through a pack-level operation.
 
 ## Content that packs must not include
 
@@ -394,14 +397,15 @@ Packs cannot contain or confer authority through:
 Optional components and installer options form a declared dependency graph.
 The manifest states requirements and incompatibilities using logical keys.
 Catalog rejects cycles and an option set that omits a transitive requirement.
-Changing an option after installation is a new plan, not an in-place toggle.
+Changing an option after application requires a new plan, not an in-place toggle.
 
-A pack may also declare a dependency on another pack by immutable pack ID and
-SemVer range. Pack dependencies never resolve by display name, repository name,
-or overlapping resource keys. The planner validates them against installed
-packs and does not silently install a transitive pack. Missing dependencies,
-version conflicts, and dependency cycles block apply until an administrator
-creates and reviews the necessary plans.
+A pack may declare that another pack release is a prerequisite template by
+immutable pack ID and SemVer range. Prerequisites never resolve by display name,
+repository name, or overlapping resource keys. The planner validates them
+against successful application records and does not silently apply a transitive
+pack. Missing prerequisites, version conflicts, and dependency cycles block the
+current plan. This check applies only when the new template is applied; it does
+not create ongoing ownership or lifecycle coupling between the packs.
 
 Defaults must be deterministic and safe. Security-sensitive choices—extension
 installation, grants, enabling, destructive changes, and sample-data import—are
@@ -409,16 +413,16 @@ never selected only because a pack author marked them as default.
 
 ## CLI administration
 
-Solution-pack lifecycle operations are administrator-only CLI workflows. The
-intended command shape is:
+Solution-pack inspection and application are administrator-only CLI workflows.
+The intended command shape is:
 
 ```sh
 acli solution-pack inspect attricat/solution-pack-ecommerce --version 1.2.0
 acli solution-pack plan attricat/solution-pack-ecommerce --version 1.2.0 --prefix ecom
 acli solution-pack plan show <plan-id>
 acli solution-pack apply <plan-id>
-acli solution-pack status attricat.ecommerce
-acli solution-pack upgrade plan attricat.ecommerce --version 1.3.0
+acli solution-pack applications list
+acli solution-pack applications show <application-id>
 ```
 
 The exact flags may evolve with implementation, but planning and applying remain
@@ -433,7 +437,7 @@ administrator roles. Possession of a local archive or CLI access is not
 authority to install it. Local/sideload commands additionally require the
 server-side development or administrator control described above.
 
-## Planning and installation
+## Planning and application
 
 Validation produces no workspace changes. An authorized administrator first
 creates a plan through the CLI against a specific pack release and a consistent
@@ -448,92 +452,91 @@ The plan contains an action for every selected resource:
 - `skip`: omit an optional component;
 - `conflict`: administrator input or remediation is required; or
 - `blocked`: compatibility, authorization, trust, or dependency rules prevent
-  installation.
+  application.
 
-For each action it shows the logical key, resolved workspace target, ownership,
-before/after summary, dependants, validation result, and whether separate
-approval is required. Extension permissions, host access, configuration,
+For each action it shows the logical key, resolved workspace target, whether it
+is new or already exists, the before/after summary, dependants, validation
+result, and whether separate approval is required. Extension permissions, host
+access, configuration,
 enablement, published-blueprint migration, settings conflicts, and destructive
 changes receive dedicated review sections rather than being buried in a generic
 diff.
 
 Plans are immutable, expire when their workspace preconditions become stale,
 and cannot be applied to another workspace or release. Their preconditions
-include the versions and relevant constraints of other installed packs.
-Applying a plan revalidates authorization, source/digest, compatibility,
-mappings, current resource revisions, cross-pack requirements, and outstanding
-approvals.
+include relevant prior application records and the current resources, settings,
+and extension selections. Applying a plan revalidates authorization,
+source/digest, compatibility, mappings, resource revisions, prerequisites, and
+outstanding approvals.
 
-Installation is durable, idempotent, and resumable. It records per-step state
-and uses explicit database transactions for each atomic Catalog mutation. A
+Applying a plan is durable, idempotent, and resumable. Catalog records per-step
+state and uses explicit database transactions for each atomic mutation. A
 failure does not pretend that already completed external or separately approved
-work was rolled back; the installation enters a clear failed or
+work was rolled back; the application enters a clear failed or
 remediation-required state and can resume from verified completed steps.
 Reapplying a successful plan performs no duplicate creates.
 
-Completion produces an installed-pack record containing:
+Completion produces an immutable pack-application record containing:
 
 - pack ID and version, source repository, release tag, source commit,
   provenance, release-asset identity, and archive digest;
 - selected options and non-secret inputs;
-- immutable logical-to-workspace mappings and the pack's relationship to each
-  shared or dedicated resource;
-- installed resource/revision baselines and pack-managed setting fragments;
-- declared pack dependencies and resolved cross-pack constraints;
+- the logical-to-workspace mapping snapshot used by the plan;
+- created and reused resource/revision snapshots and applied setting fragments;
+- declared prerequisites and their application records;
 - extension requirements and the separately approved outcomes;
 - per-step results, checklist state, and validation report; and
-- actor, timestamps, correlation/request identifiers, and append-only lifecycle
+- actor, timestamps, correlation/request identifiers, and append-only audit
   history.
+
+The application record is administrator-facing evidence, not a controller or
+an end-user concept. It does not retain ownership of resources, lock
+configuration, detect drift, or authorize later changes.
 
 Audit records include bounded summaries and diagnostic codes, never archive
 bodies, secret values, credentials, or unredacted sensitive configuration.
 
-## Upgrade and drift
+## Later releases and workspace changes
 
-An upgrade compares the prior installed pack baseline, the workspace's current
-mapped resources, the proposed release, and constraints from every other
-installed pack. This detects pack changes, workspace drift, and cross-pack
-breakage before mutation.
+A successful application is not a continuing desired-state declaration.
+Administrators may freely edit the resulting blueprints, contexts, settings,
+extension configuration, and data through their ordinary workflows. Catalog
+does not label those edits as drift or try to restore the template.
 
-The planner classifies each resource as unchanged, pack-only change,
-workspace-only change, compatible merge, or conflict. It preserves workspace
-overrides when the resource contract has a safe merge rule. Otherwise it
-requires an explicit choice rather than treating the new pack release as
-authoritative.
+A later release of the same pack is another template application. Its planner
+may use a prior application record and surviving mappings to explain likely
+changes, but the current workspace is authoritative. The release has no right
+to overwrite earlier output. The plan classifies each proposed resource as new,
+already satisfied, compatible update, or conflict and requires explicit choices
+where intent is ambiguous.
 
 In particular:
 
 - published blueprints receive new draft revisions, never in-place edits;
-- adopted resources remain user-owned;
-- modified pack-created resources are not silently reset;
-- extension upgrades, grants, configuration, and enabling are reviewed under
-  the extension lifecycle contract;
-- workspace settings merge only the paths owned by the installed pack and
-  preserve unrelated keys and user additions;
-- removed resources are retained by default and reported for detach or manual
-  cleanup; and
-- mapping keys and physical codes remain unchanged across releases.
+- workspace modifications are never silently reset to a pack baseline;
+- extension upgrades, grants, configuration, and enabling use the ordinary
+  extension lifecycle and approvals;
+- workspace settings preserve unrelated keys and user additions; and
+- removal of a resource from a later pack release does not propose deletion of
+  the corresponding workspace resource.
 
-The pack status command should show installed and available versions, source
-and digest, mappings, applied resources, drift, unresolved checklist items,
-validation failures, available upgrades, and remediation actions. It should
-support human-readable and structured JSON output.
+Application-history commands may show which release originally proposed a
+resource and the result recorded at that time. They do not claim that the
+current resource still matches the pack.
 
-## Detach and uninstall
+## No pack-level uninstall
 
-**Detach** stops lifecycle management while retaining all workspace resources.
-It removes active pack management metadata only after recording the final
-mappings and state in lifecycle history. Detach is blocked while another pack
-has an explicit dependency on this installation unless that dependency is
-removed through a separate reviewed plan.
+There is no detach or uninstall operation for a solution pack as a whole. Once
+a plan is applied, its blueprints, contexts, settings, assets, extensions, and
+sample entities are workspace state. The application record remains as audit
+and provenance history.
 
-**Uninstall** is a planned operation, not a blind reverse install. Its preview
-classifies resources as safe to remove, retained because they are adopted,
-shared, or modified, blocked by dependants/data, or requiring an explicit
-destructive approval. A resource linked from another installed pack is not safe
-to remove. Extensions are not removed merely because a pack required them:
-other packs, users, configuration, grants, or runtime dependencies may still
-need them. Entities and customer data are retained by default.
+Administrators may later edit or remove individual resources through their
+normal resource-specific commands, subject to ordinary authorization,
+dependency, publication, data-retention, and destructive-change protections.
+Removing an application record is not a supported way to remove resources.
+Extensions are managed through the existing extension lifecycle, never removed
+merely because a pack originally requested them.
 
 ## Export to draft
 
@@ -558,16 +561,16 @@ The first implementation should validate the architecture with blueprint and
 context starter packs:
 
 1. strict manifest/archive validation;
-2. logical identifiers, prefix selection, and immutable mappings;
-3. multiple pack IDs coexisting with per-pack resource relationships;
+2. logical identifiers, prefix selection, and recorded mapping snapshots;
+3. multiple pack IDs coexisting through independent application records;
 4. blueprint, view, and context planning;
 5. deterministic dry runs with collision and cross-pack conflict choices;
-6. durable, idempotent installation records and audit history;
+6. durable, idempotent application records and audit history;
 7. administrator-only CLI commands for plan review and apply; and
 8. export to an untrusted draft.
 
 Private-repository inspection and release selection through the CLI follow
 next. Extension dependencies, permission review, configuration templates, and
-guided setup come after the core planner. Workspace/layout defaults, upgrade
-and drift management, sample data, and curated Ecommerce and Warehouse packs
+guided setup come after the core planner. Workspace/layout defaults,
+later-release planning, sample data, and curated Ecommerce and Warehouse packs
 build on those contracts.
