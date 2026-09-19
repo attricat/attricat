@@ -276,6 +276,31 @@ impl From<RepositoryError> for ApiError {
                 code: "migration_needs_resolution",
                 message: error.to_string(),
             },
+            RepositoryError::SolutionPackPlanNotReady => Self {
+                status: StatusCode::CONFLICT,
+                code: "solution_pack_plan_not_ready",
+                message: error.to_string(),
+            },
+            RepositoryError::SolutionPackPlanExpired => Self {
+                status: StatusCode::CONFLICT,
+                code: "solution_pack_plan_expired",
+                message: error.to_string(),
+            },
+            RepositoryError::SolutionPackPlanStale => Self {
+                status: StatusCode::CONFLICT,
+                code: "solution_pack_plan_stale",
+                message: error.to_string(),
+            },
+            RepositoryError::SolutionPackApplicationInvalid => Self {
+                status: StatusCode::CONFLICT,
+                code: "solution_pack_application_invalid",
+                message: error.to_string(),
+            },
+            RepositoryError::SolutionPackApplicationFailed(_) => Self {
+                status: StatusCode::CONFLICT,
+                code: "solution_pack_application_failed",
+                message: error.to_string(),
+            },
             RepositoryError::InvalidStoredAttributeValue => {
                 Self::internal("stored attribute value is invalid")
             }
@@ -334,7 +359,9 @@ impl From<RepositoryError> for ApiError {
                 code: "approval_already_decided",
                 message: error.to_string(),
             },
-            RepositoryError::BlueprintCodeTaken | RepositoryError::WorkflowCodeTaken => Self {
+            RepositoryError::BlueprintCodeTaken
+            | RepositoryError::CatalogCodeTaken
+            | RepositoryError::WorkflowCodeTaken => Self {
                 status: StatusCode::CONFLICT,
                 code: "conflict",
                 message: error.to_string(),

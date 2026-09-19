@@ -40,6 +40,9 @@ pub(super) fn policy(method: &Method, path: &str) -> Option<Policy> {
     if path == "/solution-packs/inspect"
         || (method == Method::POST && path == "/solution-packs/plans")
         || (method == Method::GET && path == "/solution-packs/plans/{plan_id}")
+        || (method == Method::POST && path == "/solution-packs/plans/{plan_id}/apply")
+        || (method == Method::GET && path == "/solution-packs/applications")
+        || (method == Method::GET && path == "/solution-packs/applications/{application_id}")
     {
         return Some(Policy {
             permission: "solution_packs.manage",
@@ -427,6 +430,9 @@ mod tests {
             (Method::POST, "/solution-packs/inspect"),
             (Method::POST, "/solution-packs/plans"),
             (Method::GET, "/solution-packs/plans/{plan_id}"),
+            (Method::POST, "/solution-packs/plans/{plan_id}/apply"),
+            (Method::GET, "/solution-packs/applications"),
+            (Method::GET, "/solution-packs/applications/{application_id}"),
         ] {
             assert_eq!(
                 policy(&method, path).unwrap().permission,

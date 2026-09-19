@@ -1,8 +1,15 @@
 # Solution Packs
 
-> **Status:** v1 archive validation, administrator inspection, and immutable
-> create-only dry-run planning are implemented. Application and private-repository
-> fetching are not implemented yet.
+> **Status:** v1 archive validation, administrator inspection, immutable
+> create-only planning, and durable application/history for contexts and
+> blueprints are implemented. Private-repository fetching and broader resource
+> types remain deferred.
+>
+> **Scope of this document:** Sections that describe private repositories,
+> existing-resource adoption, updates, settings, extensions, assets, sample
+> data, prerequisites, export, or richer application evidence are future target
+> design, not implemented v1 behavior. The explicitly marked v1 sections below
+> define the current product contract.
 
 A solution pack is a versioned, declarative bundle of catalog structure,
 workspace defaults, extension requirements, assets, and setup guidance. Packs
@@ -26,7 +33,7 @@ identifiers. Catalog resolves that intent to workspace-owned resources through
 a reviewed application plan. Once applied, those resources and settings belong
 to the workspace rather than remaining managed by the pack.
 
-## Design principles
+## Target design principles (v1 implements the create-only subset)
 
 - **Administrative:** packs are visible and operable only through authorized
   administration workflows; ordinary users see only the resulting workspace.
@@ -49,9 +56,12 @@ to the workspace rather than remaining managed by the pack.
 - **Trust preserving:** trusting a pack does not trust, enable, configure, or
   grant permissions to an extension named by that pack.
 
-## Supported content at a glance
+## Future target content at a glance
 
-| Content | Pack behavior |
+The following table is roadmap design beyond the implemented v1 context and
+blueprint boundary.
+
+| Content | Target pack behavior |
 | --- | --- |
 | Blueprints, attributes, relationships, and views | Declared through logical keys and compiled into ordinary versioned blueprint definitions. |
 | Contexts and publication-channel defaults | Added to the rooted hierarchy through mapped context codes; the system `default` context is never replaced. |
@@ -65,7 +75,7 @@ Not every content type must ship in the first implementation. The
 [initial delivery boundary](#initial-delivery-boundary) intentionally starts
 with blueprints and contexts.
 
-## Package and distribution
+## Package and distribution (future private-repository design)
 
 Solution packs use the same `.tar.zst` container format as extensions, but have
 an independent manifest and validation contract. A pack archive has one
@@ -184,7 +194,7 @@ Keys are immutable after publication. Renaming a key means removing one logical
 resource and adding another and must be treated as such when planning a later
 release. Display names are not identifiers.
 
-## Logical identifiers and workspace mappings
+## Logical identifiers and workspace mappings (future beyond v1 creation)
 
 Pack files reference logical keys, never workspace UUIDs or assumed physical
 codes. During application, the planner resolves every key to one
@@ -221,7 +231,11 @@ resource selected by the administrator. That distinction is historical
 provenance only. Both become or remain ordinary workspace-owned resources as
 soon as the plan is applied.
 
-## Multiple packs in one workspace
+## Multiple packs in one workspace (future composition design)
+
+The implemented v1 can apply multiple create-only plans when their target codes
+do not collide. The compatibility mapping, settings, and extension composition
+rules in this section are future design.
 
 A workspace may apply multiple solution packs. This is a core composition
 requirement, not an exceptional migration path: for example, one workspace may
@@ -259,7 +273,7 @@ different release of the same pack creates a new reviewed application plan; it
 is not a second managed instance and does not establish an upgrade relationship
 with resources produced by the earlier release.
 
-## Pack contents
+## Pack contents (future design except v1 blueprints and contexts)
 
 ### Blueprints and views
 
@@ -396,7 +410,7 @@ Packs cannot contain or confer authority through:
 - undeclared remote downloads; or
 - customer production data in an official or reusable pack.
 
-## Options and dependency rules
+## Options and dependency rules (future design)
 
 Optional components and installer options form a declared dependency graph.
 The manifest states requirements and incompatibilities using logical keys.
@@ -417,7 +431,7 @@ never selected only because a pack author marked them as default.
 
 ## CLI administration
 
-Solution-pack inspection and dry-run planning are administrator-only CLI workflows.
+Solution-pack inspection, dry-run planning, application, and application history are administrator-only CLI workflows.
 The implemented inspection command sends a local archive to the authoritative
 server for read-only validation and returns only safe metadata and resource
 summaries:
@@ -433,6 +447,9 @@ uses an explicit prefix and blueprint publication preference:
 ```sh
 acli solution-pack plan --file pack.tar.zst --prefix ecom --blueprint-publication draft
 acli solution-pack plan show <plan-id>
+acli solution-pack apply <plan-id>
+acli solution-pack applications list
+acli solution-pack applications show <application-id>
 ```
 
 `draft` and `publish` describe what a later apply operation would do; planning
@@ -445,10 +462,11 @@ V1 pack blueprints reject workspace-role publication policies, extension layouts
 extension-provided table renderers; planning does not snapshot extension or role
 state yet.
 
-Private-repository release selection and application remain deferred. A future
-apply command will accept an immutable plan ID rather than recomputing choices
-from command-line flags, and future application-history commands will expose
-the resulting records. Planning will remain separate from application.
+Application accepts only an immutable plan ID and never recomputes choices from
+CLI flags. Each create step commits its ordinary Catalog mutation together with
+durable step evidence; retries verify completed targets and continue pending
+steps without duplicate resources. Private-repository release selection remains
+deferred. Planning remains separate from application.
 
 The CLI authenticates normally and the API requires a dedicated
 `solution_packs.manage` permission, initially granted to workspace owner and
@@ -456,69 +474,54 @@ administrator roles. Possession of a local archive or CLI access is not
 authority to install it. Local/sideload commands additionally require the
 server-side development or administrator control described above.
 
-## Planning and application
+## Planning and application (implemented v1)
 
-> **Design target:** Application behavior in this section is not implemented.
-> Current functionality ends after immutable dry-run plan creation and review.
+Validation produces no workspace changes. An authorized administrator uploads a
+local archive and creates an immutable, workspace-scoped plan with a prefix and
+`draft` or `publish` blueprint choice.
 
-Validation produces no workspace changes. An authorized administrator first
-creates a plan through the CLI against a specific pack release and a consistent
-workspace snapshot.
+V1 actions are exactly:
 
-The plan contains an action for every selected resource:
+- `create`: create a required context or blueprint at its persisted target;
+- `skip`: omit an optional resource;
+- `conflict`: a required target code was present when planning; or
+- `blocked`: a selected dependency cannot be created.
 
-- `create`: create a new mapped resource;
-- `adopt`: map a compatible existing resource;
-- `update`: create or apply a safe successor/default;
-- `keep`: the mapped resource already has the desired state;
-- `skip`: omit an optional component;
-- `conflict`: administrator input or remediation is required; or
-- `blocked`: compatibility, authorization, trust, or dependency rules prevent
-  application.
+V1 does not emit `adopt`, `update`, or `keep`. It does not inspect prior
+applications, settings, or extensions to choose an action. Candidate mappings
+remain visible in the plan, including candidates for skipped resources. The
+application mapping snapshot contains only mappings for executed `create`
+actions.
 
-For each action it shows the logical key, resolved workspace target, whether it
-is new or already exists, the before/after summary, dependants, validation
-result, and whether separate approval is required. Extension permissions, host
-access, configuration,
-enablement, published-blueprint migration, settings conflicts, and destructive
-changes receive dedicated review sections rather than being buried in a generic
-diff.
+A new application may start only while its ready plan is unexpired. Each create
+step revalidates its persisted `target_absent` code precondition. A target that
+appears before or while the ordinary context/blueprint mutation runs makes the
+application invalid with `plan_stale`; Catalog never adopts or overwrites it.
+Once an application has started, plan expiry does not strand it: retries
+revalidate completed and pending targets and resume durable work.
 
-Plans are immutable, expire when their workspace preconditions become stale,
-and cannot be applied to another workspace or release. Their preconditions
-include relevant prior application records and the current resources, settings,
-and extension selections. Applying a plan revalidates authorization,
-source/digest, compatibility, mappings, resource revisions, prerequisites, and
-outstanding approvals.
+One durable application exists per immutable plan. Each resource mutation, step
+result, audit event, and domain event commits atomically. Repeated and concurrent
+apply requests lock the application and converge without duplicate resources.
+If a client observes an ambiguous commit error, failure reconciliation checks
+the exact attempted step; a step already committed as completed is continued,
+not misreported against a later pending step.
 
-Applying a plan is durable, idempotent, and resumable. Catalog records per-step
-state and uses explicit database transactions for each atomic mutation. A
-failure does not pretend that already completed external or separately approved
-work was rolled back; the application enters a clear failed or
-remediation-required state and can resume from verified completed steps.
-Reapplying a successful plan performs no duplicate creates.
+Implemented application evidence contains the local-archive source marker and
+archive digest, pack ID/version, blueprint publication choice, executed mapping
+snapshot, ordered context/blueprint step results, state and bounded diagnostics,
+actor token/user columns, timestamps, and request/correlation identifiers. List
+responses are compact and omit mappings and steps; show responses include both.
+Neither response contains normalized payloads, blueprint definitions, context
+data, archive bytes, or secret values.
 
-Completion produces an immutable pack-application record containing:
+Richer source/release provenance, selected options, reused-resource evidence,
+settings fragments, prerequisites, extension outcomes, checklists, and
+validation reports are future design. Application records are
+administrator-facing evidence, not controllers: they do not retain ownership,
+lock resources, detect drift, authorize later changes, or provide uninstall.
 
-- pack ID and version, source repository, release tag, source commit,
-  provenance, release-asset identity, and archive digest;
-- selected options and non-secret inputs;
-- the logical-to-workspace mapping snapshot used by the plan;
-- created and reused resource/revision snapshots and applied setting fragments;
-- declared prerequisites and their application records;
-- extension requirements and the separately approved outcomes;
-- per-step results, checklist state, and validation report; and
-- actor, timestamps, correlation/request identifiers, and append-only audit
-  history.
-
-The application record is administrator-facing evidence, not a controller or
-an end-user concept. It does not retain ownership of resources, lock
-configuration, detect drift, or authorize later changes.
-
-Audit records include bounded summaries and diagnostic codes, never archive
-bodies, secret values, credentials, or unredacted sensitive configuration.
-
-## Later releases and workspace changes
+## Later releases and workspace changes (future design)
 
 A successful application is not a continuing desired-state declaration.
 Administrators may freely edit the resulting blueprints, contexts, settings,
@@ -560,7 +563,7 @@ Removing an application record is not a supported way to remove resources.
 Extensions are managed through the existing extension lifecycle, never removed
 merely because a pack originally requested them.
 
-## Export to draft
+## Export to draft (future design)
 
 Export creates a draft authoring tree, never an immediately trusted release or
 raw workspace dump. The exporter:

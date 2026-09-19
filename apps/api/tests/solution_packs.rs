@@ -40,6 +40,43 @@ fn valid_archive() -> Vec<u8> {
 }
 
 fn archive_with_blueprint(product_blueprint: &[u8]) -> Vec<u8> {
+    archive_with_options(product_blueprint, false)
+}
+
+fn archive_with_required_context(product_blueprint: &[u8]) -> Vec<u8> {
+    archive_with_options(product_blueprint, true)
+}
+
+fn context_only_archive() -> Vec<u8> {
+    let manifest = serde_json::to_vec(&json!({
+        "manifest_version": 1,
+        "id": "attricat.contexts",
+        "name": "Contexts",
+        "version": "1.0.0",
+        "description": "Context starter",
+        "catalog": {"host_api": "^1.0"},
+        "resources": {
+            "blueprints": [],
+            "contexts": [{
+                "key": "contexts/web",
+                "path": "contexts/web.json",
+                "required": true,
+                "sha256": digest(WEB_CONTEXT)
+            }]
+        }
+    }))
+    .unwrap();
+    let mut tar_bytes = Vec::new();
+    {
+        let mut tar = tar::Builder::new(&mut tar_bytes);
+        append_file(&mut tar, "solution-pack.json", &manifest);
+        append_file(&mut tar, "contexts/web.json", WEB_CONTEXT);
+        tar.finish().unwrap();
+    }
+    zstd::stream::encode_all(Cursor::new(tar_bytes), 0).unwrap()
+}
+
+fn archive_with_options(product_blueprint: &[u8], context_required: bool) -> Vec<u8> {
     let manifest = serde_json::to_vec(&json!({
         "manifest_version": 1,
         "id": "attricat.ecommerce",
@@ -57,7 +94,7 @@ fn archive_with_blueprint(product_blueprint: &[u8]) -> Vec<u8> {
             "contexts": [{
                 "key": "contexts/web",
                 "path": "contexts/web.json",
-                "required": false,
+                "required": context_required,
                 "sha256": digest(WEB_CONTEXT)
             }]
         }
@@ -192,12 +229,30 @@ async fn create_plan(
     archive: Vec<u8>,
     prefix: &str,
 ) -> reqwest::Response {
+    create_plan_with_publication(client, base_url, archive, prefix, "draft").await
+}
+
+async fn create_plan_with_publication(
+    client: &Client,
+    base_url: &str,
+    archive: Vec<u8>,
+    prefix: &str,
+    publication: &str,
+) -> reqwest::Response {
     client
         .post(format!(
-            "{base_url}/solution-packs/plans?prefix={prefix}&blueprint_publication=draft"
+            "{base_url}/solution-packs/plans?prefix={prefix}&blueprint_publication={publication}"
         ))
         .header("content-type", "application/zstd")
         .body(archive)
+        .send()
+        .await
+        .unwrap()
+}
+
+async fn apply_plan(client: &Client, base_url: &str, plan_id: &str) -> reqwest::Response {
+    client
+        .post(format!("{base_url}/solution-packs/plans/{plan_id}/apply"))
         .send()
         .await
         .unwrap()
@@ -284,16 +339,27 @@ async fn inspection_enforces_personal_access_token_permission_subset(pool: PgPoo
         .status(),
         StatusCode::FORBIDDEN
     );
+    let plan = create_plan(
+        &bearer_client(&permitted_secret),
+        &base_url,
+        valid_archive(),
+        "pat",
+    )
+    .await;
+    assert_eq!(plan.status(), StatusCode::CREATED);
+    let plan = plan.json::<Value>().await.unwrap();
+    let plan_id = plan["id"].as_str().unwrap();
     assert_eq!(
-        create_plan(
-            &bearer_client(&permitted_secret),
-            &base_url,
-            valid_archive(),
-            "pat"
-        )
-        .await
-        .status(),
-        StatusCode::CREATED
+        apply_plan(&bearer_client(&denied_secret), &base_url, plan_id)
+            .await
+            .status(),
+        StatusCode::FORBIDDEN
+    );
+    assert_eq!(
+        apply_plan(&bearer_client(&permitted_secret), &base_url, plan_id)
+            .await
+            .status(),
+        StatusCode::OK
     );
     server.abort();
 }
@@ -372,6 +438,30 @@ async fn inspection_requires_browser_session_csrf(pool: PgPool) {
         .await
         .unwrap();
     assert_eq!(valid_plan_csrf.status(), StatusCode::CREATED);
+    let plan = valid_plan_csrf.json::<Value>().await.unwrap();
+    let apply_url = format!(
+        "{base_url}/solution-packs/plans/{}/apply",
+        plan["id"].as_str().unwrap()
+    );
+    let missing_apply_csrf = client
+        .post(&apply_url)
+        .header("cookie", &cookie)
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(missing_apply_csrf.status(), StatusCode::FORBIDDEN);
+    assert_eq!(
+        missing_apply_csrf.json::<Value>().await.unwrap()["error"]["code"],
+        "csrf_failed"
+    );
+    let valid_apply_csrf = client
+        .post(apply_url)
+        .header("cookie", &cookie)
+        .header("x-catalog-csrf", csrf_value)
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(valid_apply_csrf.status(), StatusCode::OK);
     server.abort();
 }
 
@@ -725,5 +815,672 @@ async fn plan_routes_require_solution_pack_permission_and_isolate_workspaces(poo
         .await
         .unwrap();
     assert_eq!(hidden.status(), StatusCode::NOT_FOUND);
+    let hidden_apply =
+        apply_plan(&authenticated_client(), &base_url, &hidden_plan.to_string()).await;
+    assert_eq!(hidden_apply.status(), StatusCode::NOT_FOUND);
+
+    let hidden_application = Uuid::new_v4();
+    sqlx::query("INSERT INTO solution_pack_applications (id,workspace_id,plan_id,request_id,correlation_id,source_kind,source_metadata,archive_sha256,pack_id,pack_version,blueprint_publication,state,mapping_snapshot) VALUES ($1,$2,$3,$4,$4,'local_archive','{\"side_loaded\":true}'::jsonb,$5,'attricat.hidden','1.0.0','draft','running','[]'::jsonb)")
+        .bind(hidden_application)
+        .bind(other_workspace)
+        .bind(hidden_plan)
+        .bind(Uuid::new_v4())
+        .bind("0".repeat(64))
+        .execute(&pool)
+        .await
+        .unwrap();
+    let hidden_show = authenticated_client()
+        .get(format!(
+            "{base_url}/solution-packs/applications/{hidden_application}"
+        ))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(hidden_show.status(), StatusCode::NOT_FOUND);
+    let visible_list = authenticated_client()
+        .get(format!("{base_url}/solution-packs/applications"))
+        .send()
+        .await
+        .unwrap()
+        .json::<Value>()
+        .await
+        .unwrap();
+    assert_eq!(visible_list, json!([]));
+    server.abort();
+}
+
+#[sqlx::test(migrations = "./migrations")]
+async fn apply_creates_context_and_draft_blueprint_once_with_safe_history(pool: PgPool) {
+    let (base_url, server) = start_server(pool.clone()).await;
+    let client = authenticated_client();
+    let plan = create_plan(
+        &client,
+        &base_url,
+        archive_with_required_context(PRODUCT_BLUEPRINT),
+        "starter",
+    )
+    .await;
+    assert_eq!(plan.status(), StatusCode::CREATED);
+    let plan = plan.json::<Value>().await.unwrap();
+    assert_eq!(plan["ready"], true);
+    let plan_id = plan["id"].as_str().unwrap();
+
+    let applied = apply_plan(&client, &base_url, plan_id).await;
+    assert_eq!(applied.status(), StatusCode::OK);
+    let text = applied.text().await.unwrap();
+    assert!(!text.contains("BLUEPRINT_SOURCE_SECRET"));
+    assert!(!text.contains("CONTEXT_DATA_SECRET"));
+    assert!(!text.contains("definition"));
+    assert!(!text.contains("normalized_payload"));
+    let application: Value = serde_json::from_str(&text).unwrap();
+    assert_eq!(application["state"], "completed");
+    assert_eq!(application["mapping_snapshot"].as_array().unwrap().len(), 2);
+    assert!(
+        application["mapping_snapshot"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .all(|mapping| mapping["logical_key"] != "system/default")
+    );
+    assert_eq!(application["steps"].as_array().unwrap().len(), 2);
+    assert_eq!(application["steps"][0]["resource_kind"], "blueprint");
+    assert_eq!(
+        application["steps"][0]["result_snapshot"]["status"],
+        "draft"
+    );
+    assert_eq!(application["steps"][1]["resource_kind"], "context");
+
+    let repeated = apply_plan(&client, &base_url, plan_id).await;
+    assert_eq!(repeated.status(), StatusCode::OK);
+    assert_eq!(
+        repeated.json::<Value>().await.unwrap()["id"],
+        application["id"]
+    );
+    assert_eq!(
+        sqlx::query_scalar::<_, i64>(
+            "SELECT count(*) FROM blueprints WHERE code='starter_product'"
+        )
+        .fetch_one(&pool)
+        .await
+        .unwrap(),
+        1
+    );
+    assert_eq!(
+        sqlx::query_scalar::<_, i64>(
+            "SELECT count(*) FROM attribute_contexts WHERE code='starter_web'"
+        )
+        .fetch_one(&pool)
+        .await
+        .unwrap(),
+        1
+    );
+    assert_eq!(
+        sqlx::query_scalar::<_, i64>(
+            "SELECT count(*) FROM solution_pack_applications WHERE plan_id=$1"
+        )
+        .bind(plan_id.parse::<Uuid>().unwrap())
+        .fetch_one(&pool)
+        .await
+        .unwrap(),
+        1
+    );
+    let application_id = application["id"].as_str().unwrap();
+    assert_eq!(
+        sqlx::query_scalar::<_, i64>(
+            "SELECT count(*) FROM audit_events WHERE target->>'application_id'=$1"
+        )
+        .bind(application_id)
+        .fetch_one(&pool)
+        .await
+        .unwrap(),
+        2
+    );
+    assert_eq!(
+        sqlx::query_scalar::<_, i64>(
+            "SELECT count(*) FROM audit_events WHERE target->>'id'=$1 AND target->>'type'='solution_pack_application'"
+        )
+        .bind(application_id)
+        .fetch_one(&pool)
+        .await
+        .unwrap(),
+        1
+    );
+
+    let listed = client
+        .get(format!("{base_url}/solution-packs/applications"))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(listed.status(), StatusCode::OK);
+    let listed_text = listed.text().await.unwrap();
+    assert!(!listed_text.contains("BLUEPRINT_SOURCE_SECRET"));
+    assert!(!listed_text.contains("CONTEXT_DATA_SECRET"));
+    assert!(!listed_text.contains("normalized_payload"));
+    let listed: Value = serde_json::from_str(&listed_text).unwrap();
+    assert_eq!(listed[0]["id"], application["id"]);
+    assert!(listed[0].get("steps").is_none());
+    assert!(listed[0].get("mapping_snapshot").is_none());
+    let shown = client
+        .get(format!(
+            "{base_url}/solution-packs/applications/{}",
+            application["id"].as_str().unwrap()
+        ))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(shown.status(), StatusCode::OK);
+    let shown_text = shown.text().await.unwrap();
+    assert!(!shown_text.contains("BLUEPRINT_SOURCE_SECRET"));
+    assert!(!shown_text.contains("CONTEXT_DATA_SECRET"));
+    assert!(!shown_text.contains("normalized_payload"));
+    assert_eq!(
+        serde_json::from_str::<Value>(&shown_text).unwrap()["steps"],
+        application["steps"]
+    );
+    server.abort();
+}
+
+#[sqlx::test(migrations = "./migrations")]
+async fn application_read_contract_rejects_bad_inputs_and_keeps_max_pages_compact(pool: PgPool) {
+    let (base_url, server) = start_server(pool.clone()).await;
+    let client = authenticated_client();
+
+    for query in ["limit=0", "limit=101", "offset=-1", "offset=10001"] {
+        let response = client
+            .get(format!("{base_url}/solution-packs/applications?{query}"))
+            .send()
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::UNPROCESSABLE_ENTITY);
+        assert_eq!(
+            response.json::<Value>().await.unwrap()["error"]["code"],
+            "invalid_input"
+        );
+    }
+    for path in [
+        "/solution-packs/plans/not-a-uuid",
+        "/solution-packs/applications/not-a-uuid",
+    ] {
+        let response = client
+            .get(format!("{base_url}{path}"))
+            .send()
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+        assert_eq!(
+            response.json::<Value>().await.unwrap()["error"]["code"],
+            "bad_request"
+        );
+    }
+
+    let mappings = (0..192)
+        .map(|index| {
+            json!({
+                "position": index,
+                "resource_kind": if index < 64 { "blueprint" } else { "context" },
+                "logical_key": format!("resources/{index:03}_{}", "x".repeat(96)),
+                "target_id": Uuid::new_v4(),
+                "target_code": format!("target_{index:03}_{}", "x".repeat(32)),
+                "target_version": if index < 64 { Some(1) } else { None },
+                "mapping_kind": "create"
+            })
+        })
+        .collect::<Vec<_>>();
+    let mapping_snapshot = serde_json::to_value(mappings).unwrap();
+    let workspace_id = BOOTSTRAP_WORKSPACE_ID.parse::<Uuid>().unwrap();
+    for index in 0..100 {
+        let plan_id = Uuid::new_v4();
+        sqlx::query("INSERT INTO solution_pack_plans (id,workspace_id,source_kind,source_metadata,archive_sha256,manifest_version,pack_id,pack_name,pack_version,pack_description,host_api,prefix,blueprint_publication,ready,expires_at) VALUES ($1,$2,'local_archive','{\"side_loaded\":true}'::jsonb,$3,1,$4,'Page fixture','1.0.0','Page fixture','^1.0',$5,'draft',true,clock_timestamp() + interval '24 hours')")
+            .bind(plan_id)
+            .bind(workspace_id)
+            .bind(format!("{index:064x}"))
+            .bind(format!("attricat.page.{index}"))
+            .bind(format!("page_{index}"))
+            .execute(&pool)
+            .await
+            .unwrap();
+        sqlx::query("INSERT INTO solution_pack_applications (id,workspace_id,plan_id,request_id,correlation_id,source_kind,source_metadata,archive_sha256,pack_id,pack_version,blueprint_publication,state,mapping_snapshot) VALUES ($1,$2,$3,$4,$4,'local_archive','{\"side_loaded\":true}'::jsonb,$5,$6,'1.0.0','draft','running',$7)")
+            .bind(Uuid::new_v4())
+            .bind(workspace_id)
+            .bind(plan_id)
+            .bind(Uuid::new_v4())
+            .bind(format!("{index:064x}"))
+            .bind(format!("attricat.page.{index}"))
+            .bind(&mapping_snapshot)
+            .execute(&pool)
+            .await
+            .unwrap();
+    }
+
+    let response = client
+        .get(format!(
+            "{base_url}/solution-packs/applications?limit=100&offset=0"
+        ))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+    let bytes = response.bytes().await.unwrap();
+    assert!(bytes.len() < 1024 * 1024);
+    let body: Value = serde_json::from_slice(&bytes).unwrap();
+    assert_eq!(body.as_array().unwrap().len(), 100);
+    assert!(body.as_array().unwrap().iter().all(|application| {
+        application.get("mapping_snapshot").is_none()
+            && application.get("steps").is_none()
+            && application.get("normalized_payload").is_none()
+    }));
+    server.abort();
+}
+
+#[sqlx::test(migrations = "./migrations")]
+async fn apply_respects_publish_and_rejects_expired_blocked_and_stale_plans(pool: PgPool) {
+    let (base_url, server) = start_server(pool.clone()).await;
+    let client = authenticated_client();
+
+    let published_plan =
+        create_plan_with_publication(&client, &base_url, valid_archive(), "published", "publish")
+            .await
+            .json::<Value>()
+            .await
+            .unwrap();
+    let published_id = published_plan["id"].as_str().unwrap();
+    let published = apply_plan(&client, &base_url, published_id).await;
+    assert_eq!(published.status(), StatusCode::OK);
+    let published = published.json::<Value>().await.unwrap();
+    assert_eq!(
+        published["steps"][0]["result_snapshot"]["status"],
+        "published"
+    );
+    assert_eq!(published["mapping_snapshot"].as_array().unwrap().len(), 1);
+    assert_eq!(
+        published["mapping_snapshot"][0]["logical_key"],
+        "blueprints/product"
+    );
+
+    let expired = create_plan(&client, &base_url, valid_archive(), "expired")
+        .await
+        .json::<Value>()
+        .await
+        .unwrap();
+    let expired_id = expired["id"].as_str().unwrap().parse::<Uuid>().unwrap();
+    sqlx::query("UPDATE solution_pack_plans SET expires_at=created_at + interval '1 millisecond' WHERE id=$1")
+        .bind(expired_id).execute(&pool).await.unwrap();
+    tokio::time::sleep(std::time::Duration::from_millis(2)).await;
+    let response = apply_plan(&client, &base_url, &expired_id.to_string()).await;
+    assert_eq!(response.status(), StatusCode::CONFLICT);
+    assert_eq!(
+        response.json::<Value>().await.unwrap()["error"]["code"],
+        "solution_pack_plan_expired"
+    );
+
+    let blocked = create_plan(&client, &base_url, valid_archive(), "published")
+        .await
+        .json::<Value>()
+        .await
+        .unwrap();
+    assert_eq!(blocked["ready"], false);
+    let response = apply_plan(&client, &base_url, blocked["id"].as_str().unwrap()).await;
+    assert_eq!(response.status(), StatusCode::CONFLICT);
+    assert_eq!(
+        response.json::<Value>().await.unwrap()["error"]["code"],
+        "solution_pack_plan_not_ready"
+    );
+
+    let stale = create_plan(&client, &base_url, valid_archive(), "stale")
+        .await
+        .json::<Value>()
+        .await
+        .unwrap();
+    let created = client.post(format!("{base_url}/blueprints")).json(&json!({"definition": std::str::from_utf8(PRODUCT_BLUEPRINT).unwrap().replace("code = \"product\"", "code = \"stale_product\"")})).send().await.unwrap();
+    assert_eq!(created.status(), StatusCode::CREATED);
+    let response = apply_plan(&client, &base_url, stale["id"].as_str().unwrap()).await;
+    assert_eq!(response.status(), StatusCode::CONFLICT);
+    assert_eq!(
+        response.json::<Value>().await.unwrap()["error"]["code"],
+        "solution_pack_plan_stale"
+    );
+    let invalid = apply_plan(&client, &base_url, stale["id"].as_str().unwrap()).await;
+    assert_eq!(invalid.status(), StatusCode::CONFLICT);
+    assert_eq!(
+        invalid.json::<Value>().await.unwrap()["error"]["code"],
+        "solution_pack_application_invalid"
+    );
+
+    let cross_blueprint = create_plan(&client, &base_url, valid_archive(), "crossblue")
+        .await
+        .json::<Value>()
+        .await
+        .unwrap();
+    let created = client
+        .post(format!("{base_url}/contexts"))
+        .json(&json!({"code": "crossblue_product", "data": {}}))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(created.status(), StatusCode::CREATED);
+    let response = apply_plan(&client, &base_url, cross_blueprint["id"].as_str().unwrap()).await;
+    assert_eq!(response.status(), StatusCode::CONFLICT);
+    assert_eq!(
+        response.json::<Value>().await.unwrap()["error"]["code"],
+        "solution_pack_plan_stale"
+    );
+
+    let cross_context = create_plan(&client, &base_url, context_only_archive(), "crossctx")
+        .await
+        .json::<Value>()
+        .await
+        .unwrap();
+    let definition = std::str::from_utf8(PRODUCT_BLUEPRINT)
+        .unwrap()
+        .replace("code = \"product\"", "code = \"crossctx_web\"");
+    let created = client
+        .post(format!("{base_url}/blueprints"))
+        .json(&json!({"definition": definition}))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(created.status(), StatusCode::CREATED);
+    let response = apply_plan(&client, &base_url, cross_context["id"].as_str().unwrap()).await;
+    assert_eq!(response.status(), StatusCode::CONFLICT);
+    assert_eq!(
+        response.json::<Value>().await.unwrap()["error"]["code"],
+        "solution_pack_plan_stale"
+    );
+    server.abort();
+}
+
+#[sqlx::test(migrations = "./migrations")]
+async fn target_created_while_a_step_is_executing_invalidates_the_application(pool: PgPool) {
+    let (base_url, server) = start_server(pool.clone()).await;
+    let client = authenticated_client();
+    let plan = create_plan(
+        &client,
+        &base_url,
+        archive_with_required_context(PRODUCT_BLUEPRINT),
+        "racing",
+    )
+    .await
+    .json::<Value>()
+    .await
+    .unwrap();
+    let plan_id = plan["id"].as_str().unwrap().parse::<Uuid>().unwrap();
+    let (target_id, target_code): (Uuid, String) = sqlx::query_as(
+        "SELECT target_id,target_code FROM solution_pack_plan_mappings WHERE plan_id=$1 AND logical_key='contexts/web'",
+    )
+    .bind(plan_id)
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    let default_context: Uuid = sqlx::query_scalar(
+        "SELECT id FROM attribute_contexts WHERE workspace_id=$1 AND code='default'",
+    )
+    .bind(BOOTSTRAP_WORKSPACE_ID.parse::<Uuid>().unwrap())
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+
+    let mut blocker = pool.begin().await.unwrap();
+    sqlx::query("LOCK TABLE attribute_contexts IN SHARE ROW EXCLUSIVE MODE")
+        .execute(&mut *blocker)
+        .await
+        .unwrap();
+    let apply_client = client.clone();
+    let apply_url = base_url.clone();
+    let apply =
+        tokio::spawn(
+            async move { apply_plan(&apply_client, &apply_url, &plan_id.to_string()).await },
+        );
+    tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+    sqlx::query("INSERT INTO attribute_contexts (id,workspace_id,code,data,parent_id) VALUES ($1,$2,$3,'{}'::jsonb,$4)")
+        .bind(target_id)
+        .bind(BOOTSTRAP_WORKSPACE_ID.parse::<Uuid>().unwrap())
+        .bind(&target_code)
+        .bind(default_context)
+        .execute(&mut *blocker)
+        .await
+        .unwrap();
+    blocker.commit().await.unwrap();
+
+    let response = apply.await.unwrap();
+    assert_eq!(response.status(), StatusCode::CONFLICT);
+    assert_eq!(
+        response.json::<Value>().await.unwrap()["error"]["code"],
+        "solution_pack_plan_stale"
+    );
+    assert_eq!(
+        sqlx::query_scalar::<_, String>(
+            "SELECT state FROM solution_pack_applications WHERE plan_id=$1"
+        )
+        .bind(plan_id)
+        .fetch_one(&pool)
+        .await
+        .unwrap(),
+        "invalid"
+    );
+    server.abort();
+}
+
+#[sqlx::test(migrations = "./migrations")]
+async fn concurrent_cross_kind_create_invalidates_the_application(pool: PgPool) {
+    let (base_url, server) = start_server(pool.clone()).await;
+    let client = authenticated_client();
+    let plan = create_plan(&client, &base_url, context_only_archive(), "crossrace")
+        .await
+        .json::<Value>()
+        .await
+        .unwrap();
+    let plan_id = plan["id"].as_str().unwrap().to_owned();
+    let target_code = "crossrace_web";
+    let definition = std::str::from_utf8(PRODUCT_BLUEPRINT)
+        .unwrap()
+        .replace("code = \"product\"", &format!("code = \"{target_code}\""));
+
+    let mut blocker = pool.begin().await.unwrap();
+    sqlx::query("LOCK TABLE blueprints IN SHARE ROW EXCLUSIVE MODE")
+        .execute(&mut *blocker)
+        .await
+        .unwrap();
+    let create_client = client.clone();
+    let create_url = base_url.clone();
+    let create = tokio::spawn(async move {
+        create_client
+            .post(format!("{create_url}/blueprints"))
+            .json(&json!({"definition": definition}))
+            .send()
+            .await
+            .unwrap()
+    });
+    tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+
+    let apply_client = client.clone();
+    let apply_url = base_url.clone();
+    let apply = tokio::spawn(async move { apply_plan(&apply_client, &apply_url, &plan_id).await });
+    tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+    blocker.commit().await.unwrap();
+
+    assert_eq!(create.await.unwrap().status(), StatusCode::CREATED);
+    let response = apply.await.unwrap();
+    assert_eq!(response.status(), StatusCode::CONFLICT);
+    assert_eq!(
+        response.json::<Value>().await.unwrap()["error"]["code"],
+        "solution_pack_plan_stale"
+    );
+    assert_eq!(
+        sqlx::query_scalar::<_, i64>(
+            "SELECT count(*) FROM attribute_contexts WHERE code='crossrace_web'"
+        )
+        .fetch_one(&pool)
+        .await
+        .unwrap(),
+        0
+    );
+    server.abort();
+}
+
+#[sqlx::test(migrations = "./migrations")]
+async fn concurrent_apply_requests_converge_without_duplicate_resources(pool: PgPool) {
+    let (base_url, server) = start_server(pool.clone()).await;
+    let client = authenticated_client();
+    let plan = create_plan(&client, &base_url, valid_archive(), "parallel")
+        .await
+        .json::<Value>()
+        .await
+        .unwrap();
+    let plan_id = plan["id"].as_str().unwrap().to_owned();
+    let (first, second) = tokio::join!(
+        apply_plan(&client, &base_url, &plan_id),
+        apply_plan(&client, &base_url, &plan_id)
+    );
+    assert_eq!(first.status(), StatusCode::OK);
+    assert_eq!(second.status(), StatusCode::OK);
+    let first = first.json::<Value>().await.unwrap();
+    let second = second.json::<Value>().await.unwrap();
+    assert_eq!(first["id"], second["id"]);
+    assert_eq!(first["state"], "completed");
+    assert_eq!(second["state"], "completed");
+    assert_eq!(
+        sqlx::query_scalar::<_, i64>(
+            "SELECT count(*) FROM blueprints WHERE code='parallel_product'"
+        )
+        .fetch_one(&pool)
+        .await
+        .unwrap(),
+        1
+    );
+    server.abort();
+}
+
+#[sqlx::test(migrations = "./migrations")]
+async fn failed_step_is_durable_and_retry_resumes_without_duplicate_completed_resources(
+    pool: PgPool,
+) {
+    let (base_url, server) = start_server(pool.clone()).await;
+    let client = authenticated_client();
+    let plan = create_plan(
+        &client,
+        &base_url,
+        archive_with_required_context(PRODUCT_BLUEPRINT),
+        "resume",
+    )
+    .await
+    .json::<Value>()
+    .await
+    .unwrap();
+    let plan_id = plan["id"].as_str().unwrap().parse::<Uuid>().unwrap();
+    let original_payload: Value = sqlx::query_scalar(
+        "SELECT normalized_payload FROM solution_pack_plan_actions WHERE plan_id=$1 AND resource_kind='context'",
+    )
+    .bind(plan_id)
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    sqlx::query("UPDATE solution_pack_plan_actions SET normalized_payload='{}'::jsonb WHERE plan_id=$1 AND resource_kind='context'")
+        .bind(plan_id)
+        .execute(&pool)
+        .await
+        .unwrap();
+
+    let failed = apply_plan(&client, &base_url, &plan_id.to_string()).await;
+    assert_eq!(failed.status(), StatusCode::UNPROCESSABLE_ENTITY);
+    assert_eq!(
+        sqlx::query_scalar::<_, String>(
+            "SELECT state FROM solution_pack_applications WHERE plan_id=$1"
+        )
+        .bind(plan_id)
+        .fetch_one(&pool)
+        .await
+        .unwrap(),
+        "failed"
+    );
+    let failed_step: (String, Option<String>) = sqlx::query_as(
+        "SELECT state, diagnostic_code FROM solution_pack_application_steps WHERE application_id=(SELECT id FROM solution_pack_applications WHERE plan_id=$1) AND logical_key='contexts/web'",
+    )
+    .bind(plan_id)
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert_eq!(
+        failed_step,
+        ("failed".to_owned(), Some("step_failed".to_owned()))
+    );
+    assert_eq!(
+        sqlx::query_scalar::<_, i64>("SELECT count(*) FROM blueprints WHERE code='resume_product'")
+            .fetch_one(&pool)
+            .await
+            .unwrap(),
+        1
+    );
+    sqlx::query("UPDATE solution_pack_plan_actions SET normalized_payload=$2 WHERE plan_id=$1 AND resource_kind='context'")
+        .bind(plan_id)
+        .bind(original_payload)
+        .execute(&pool)
+        .await
+        .unwrap();
+    sqlx::query("UPDATE solution_pack_plans SET created_at=clock_timestamp() - interval '25 hours', expires_at=clock_timestamp() - interval '1 hour' WHERE id=$1")
+        .bind(plan_id)
+        .execute(&pool)
+        .await
+        .unwrap();
+
+    let application_id: Uuid =
+        sqlx::query_scalar("SELECT id FROM solution_pack_applications WHERE plan_id=$1")
+            .bind(plan_id)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+    let history_reads = async {
+        let mut observations = Vec::new();
+        for _ in 0..40 {
+            let response = client
+                .get(format!(
+                    "{base_url}/solution-packs/applications/{application_id}"
+                ))
+                .send()
+                .await
+                .unwrap();
+            assert_eq!(response.status(), StatusCode::OK);
+            observations.push(response.json::<Value>().await.unwrap());
+            tokio::task::yield_now().await;
+        }
+        observations
+    };
+    let plan_id_string = plan_id.to_string();
+    let (resumed, observations) = tokio::join!(
+        apply_plan(&client, &base_url, &plan_id_string),
+        history_reads
+    );
+    for observation in observations {
+        let step_states = observation["steps"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|step| step["state"].as_str().unwrap())
+            .collect::<Vec<_>>();
+        match observation["state"].as_str().unwrap() {
+            "failed" => assert!(step_states.contains(&"failed")),
+            "running" => assert!(!step_states.contains(&"failed")),
+            "completed" => assert!(step_states.iter().all(|state| *state == "completed")),
+            state => panic!("unexpected application state {state}"),
+        }
+    }
+    assert_eq!(resumed.status(), StatusCode::OK);
+    let resumed = resumed.json::<Value>().await.unwrap();
+    assert_eq!(resumed["state"], "completed");
+    assert_eq!(
+        sqlx::query_scalar::<_, i64>("SELECT count(*) FROM blueprints WHERE code='resume_product'")
+            .fetch_one(&pool)
+            .await
+            .unwrap(),
+        1
+    );
+    assert_eq!(
+        sqlx::query_scalar::<_, i64>(
+            "SELECT count(*) FROM attribute_contexts WHERE code='resume_web'"
+        )
+        .fetch_one(&pool)
+        .await
+        .unwrap(),
+        1
+    );
     server.abort();
 }

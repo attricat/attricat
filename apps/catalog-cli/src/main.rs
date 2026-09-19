@@ -870,6 +870,19 @@ enum SolutionPackPlanCommand {
 }
 
 #[derive(Subcommand)]
+enum SolutionPackApplicationsCommand {
+    /// List bounded application history for the active workspace.
+    List {
+        #[arg(long, default_value_t = 25)]
+        limit: u32,
+        #[arg(long, default_value_t = 0)]
+        offset: u32,
+    },
+    /// Show one workspace-scoped application and its ordered steps.
+    Show { application_id: Uuid },
+}
+
+#[derive(Subcommand)]
 enum SolutionPackCommand {
     /// Validate and summarize a local archive on the authoritative server.
     Inspect {
@@ -886,6 +899,13 @@ enum SolutionPackCommand {
         prefix: Option<String>,
         #[arg(long)]
         blueprint_publication: Option<BlueprintPublicationArgument>,
+    },
+    /// Apply exactly the persisted immutable plan; no choices are recomputed.
+    Apply { plan_id: Uuid },
+    /// Read durable application history.
+    Applications {
+        #[command(subcommand)]
+        command: SolutionPackApplicationsCommand,
     },
 }
 
@@ -2296,6 +2316,43 @@ async fn solution_pack_command(
         SolutionPackCommand::Plan { .. } => Err(CliError::Input(
             "solution-pack plan requires --file, --prefix, and --blueprint-publication; plan show accepts only a plan ID".to_owned(),
         )),
+        SolutionPackCommand::Apply { plan_id } => {
+            request(
+                client,
+                server,
+                Method::POST,
+                &format!("/solution-packs/plans/{}/apply", segment(plan_id)),
+                None,
+            )
+            .await
+        }
+        SolutionPackCommand::Applications {
+            command: SolutionPackApplicationsCommand::List { limit, offset },
+        } => {
+            request(
+                client,
+                server,
+                Method::GET,
+                &format!("/solution-packs/applications?limit={limit}&offset={offset}"),
+                None,
+            )
+            .await
+        }
+        SolutionPackCommand::Applications {
+            command: SolutionPackApplicationsCommand::Show { application_id },
+        } => {
+            request(
+                client,
+                server,
+                Method::GET,
+                &format!(
+                    "/solution-packs/applications/{}",
+                    segment(application_id)
+                ),
+                None,
+            )
+            .await
+        }
     }
 }
 
@@ -3876,6 +3933,110 @@ value = "Blue shirt"
             "00000000-0000-4000-8000-000000000001",
         ]);
         assert!(show.is_ok());
+        assert!(
+            Cli::try_parse_from([
+                "acli",
+                "solution-pack",
+                "apply",
+                "00000000-0000-4000-8000-000000000001",
+            ])
+            .is_ok()
+        );
+        assert!(Cli::try_parse_from(["acli", "solution-pack", "apply", "not-a-uuid"]).is_err());
+        assert!(Cli::try_parse_from(["acli", "solution-pack", "applications", "list"]).is_ok());
+        assert!(
+            Cli::try_parse_from([
+                "acli",
+                "solution-pack",
+                "applications",
+                "show",
+                "00000000-0000-4000-8000-000000000002",
+            ])
+            .is_ok()
+        );
+    }
+
+    #[tokio::test]
+    async fn solution_pack_apply_and_history_use_uuid_only_json_routes() {
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let address = listener.local_addr().unwrap();
+        let application_id = Uuid::from_u128(2);
+        let app = axum::Router::new()
+            .route(
+                "/solution-packs/plans/{plan_id}/apply",
+                axum::routing::post(
+                    move |axum::extract::Path(plan_id): axum::extract::Path<Uuid>| async move {
+                        axum::Json(json!({"plan_id": plan_id}))
+                    },
+                ),
+            )
+            .route(
+                "/solution-packs/applications",
+                axum::routing::get(|uri: axum::http::Uri| async move {
+                    axum::Json(json!({"query": uri.query()}))
+                }),
+            )
+            .route(
+                "/solution-packs/applications/{application_id}",
+                axum::routing::get(
+                    move |axum::extract::Path(id): axum::extract::Path<Uuid>| async move {
+                        axum::Json(json!({"id": id}))
+                    },
+                ),
+            );
+        let server = tokio::spawn(async move { axum::serve(listener, app).await.unwrap() });
+        let client = Client::new();
+        let url = Url::parse(&format!("http://{address}")).unwrap();
+        let plan_id = Uuid::from_u128(1);
+        assert_eq!(
+            solution_pack_command(&client, &url, SolutionPackCommand::Apply { plan_id })
+                .await
+                .unwrap(),
+            format!(r#"{{"plan_id":"{plan_id}"}}"#)
+        );
+        assert_eq!(
+            solution_pack_command(
+                &client,
+                &url,
+                SolutionPackCommand::Applications {
+                    command: SolutionPackApplicationsCommand::List {
+                        limit: 25,
+                        offset: 0,
+                    },
+                },
+            )
+            .await
+            .unwrap(),
+            r#"{"query":"limit=25&offset=0"}"#
+        );
+        assert_eq!(
+            solution_pack_command(
+                &client,
+                &url,
+                SolutionPackCommand::Applications {
+                    command: SolutionPackApplicationsCommand::List {
+                        limit: 100,
+                        offset: 10_000,
+                    },
+                },
+            )
+            .await
+            .unwrap(),
+            r#"{"query":"limit=100&offset=10000"}"#
+        );
+        assert_eq!(
+            solution_pack_command(
+                &client,
+                &url,
+                SolutionPackCommand::Applications {
+                    command: SolutionPackApplicationsCommand::Show { application_id },
+                },
+            )
+            .await
+            .unwrap(),
+            format!(r#"{{"id":"{application_id}"}}"#)
+        );
+        server.abort();
     }
 
     #[tokio::test]

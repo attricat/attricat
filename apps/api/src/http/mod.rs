@@ -344,6 +344,18 @@ pub fn router(state: AppState) -> Router {
             "/solution-packs/plans/{plan_id}",
             get(solution_packs::get_plan),
         )
+        .route(
+            "/solution-packs/plans/{plan_id}/apply",
+            post(solution_packs::apply_plan),
+        )
+        .route(
+            "/solution-packs/applications",
+            get(solution_packs::list_applications),
+        )
+        .route(
+            "/solution-packs/applications/{application_id}",
+            get(solution_packs::get_application),
+        )
         .route("/extensions/runtime", get(extensions::runtime))
         .route(
             "/workspace/extensions-mode",

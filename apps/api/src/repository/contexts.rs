@@ -13,46 +13,10 @@ impl CatalogRepository {
         &self,
         input: CreateAttributeContext,
     ) -> Result<AttributeContext, RepositoryError> {
-        if input.code == "default" {
-            return Err(RepositoryError::ReservedContextCode);
-        }
-        validate_code(&input.code)?;
-        if !input.data.is_object() {
-            return Err(RepositoryError::InvalidContextData);
-        }
-        let workspace_id = self.workspace_id.unwrap_or(Self::DEFAULT_WORKSPACE_ID);
-        let parent_id = match input.parent_id {
-            Some(parent_id) => parent_id,
-            None => sqlx::query_scalar::<_, Uuid>(
-                "SELECT id FROM attribute_contexts WHERE workspace_id = $1 AND code = 'default'",
-            )
-            .bind(workspace_id)
-            .fetch_optional(&self.pool)
-            .await?
-            .ok_or(RepositoryError::InvalidContext)?,
-        };
-        let parent_exists = sqlx::query_scalar::<_, bool>(
-            "SELECT EXISTS (SELECT 1 FROM attribute_contexts WHERE id = $1 AND workspace_id = $2)",
-        )
-        .bind(parent_id)
-        .bind(workspace_id)
-        .fetch_one(&self.pool)
-        .await?;
-        if !parent_exists {
-            return Err(RepositoryError::InvalidContext);
-        }
         let mut transaction = self.pool.begin().await?;
-        let context = query_as::<_, AttributeContext>(
-            r#"INSERT INTO attribute_contexts (id, workspace_id, code, data, parent_id)
-            VALUES ($1, $2, $3, $4, $5) RETURNING id, code, data, parent_id"#,
-        )
-        .bind(Uuid::new_v4())
-        .bind(workspace_id)
-        .bind(input.code)
-        .bind(input.data)
-        .bind(parent_id)
-        .fetch_one(&mut *transaction)
-        .await?;
+        let context = self
+            .create_context_in_transaction(&mut transaction, Uuid::new_v4(), input)
+            .await?;
         let payload = serde_json::to_value(ContextCreatedV1 {
             context_id: context.id,
             code: context.code.clone(),
@@ -65,6 +29,62 @@ impl CatalogRepository {
         )
         .await?;
         Ok(context)
+    }
+
+    /// Shared mutation seam for callers that must atomically persist additional
+    /// evidence with an ordinary context creation.
+    pub(super) async fn create_context_in_transaction(
+        &self,
+        transaction: &mut sqlx::Transaction<'_, sqlx::Postgres>,
+        context_id: Uuid,
+        input: CreateAttributeContext,
+    ) -> Result<AttributeContext, RepositoryError> {
+        if input.code == "default" {
+            return Err(RepositoryError::ReservedContextCode);
+        }
+        validate_code(&input.code)?;
+        if !input.data.is_object() {
+            return Err(RepositoryError::InvalidContextData);
+        }
+        let workspace_id = self.workspace_id.unwrap_or(Self::DEFAULT_WORKSPACE_ID);
+        super::lock_workspace_resource_code(transaction, workspace_id, &input.code).await?;
+        if !super::workspace_resource_code_matches(transaction, workspace_id, &input.code)
+            .await?
+            .is_empty()
+        {
+            return Err(RepositoryError::CatalogCodeTaken);
+        }
+        let parent_id = match input.parent_id {
+            Some(parent_id) => parent_id,
+            None => sqlx::query_scalar::<_, Uuid>(
+                "SELECT id FROM attribute_contexts WHERE workspace_id = $1 AND code = 'default'",
+            )
+            .bind(workspace_id)
+            .fetch_optional(&mut **transaction)
+            .await?
+            .ok_or(RepositoryError::InvalidContext)?,
+        };
+        let parent_exists = sqlx::query_scalar::<_, bool>(
+            "SELECT EXISTS (SELECT 1 FROM attribute_contexts WHERE id = $1 AND workspace_id = $2)",
+        )
+        .bind(parent_id)
+        .bind(workspace_id)
+        .fetch_one(&mut **transaction)
+        .await?;
+        if !parent_exists {
+            return Err(RepositoryError::InvalidContext);
+        }
+        Ok(query_as::<_, AttributeContext>(
+            r#"INSERT INTO attribute_contexts (id, workspace_id, code, data, parent_id)
+            VALUES ($1, $2, $3, $4, $5) RETURNING id, code, data, parent_id"#,
+        )
+        .bind(context_id)
+        .bind(workspace_id)
+        .bind(input.code)
+        .bind(input.data)
+        .bind(parent_id)
+        .fetch_one(&mut **transaction)
+        .await?)
     }
 
     pub async fn get_context_by_code(
@@ -242,7 +262,7 @@ impl CatalogRepository {
     }
 }
 
-fn context_event(
+pub(super) fn context_event(
     repository: &CatalogRepository,
     event_type: &str,
     context: &AttributeContext,

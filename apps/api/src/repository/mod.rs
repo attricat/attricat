@@ -81,7 +81,9 @@ pub use extensions::{
 pub(crate) use files::{FileMetadata, FileObject, FilePolicy, FileUploadResult, NewUploadedFile};
 pub(crate) use members::{WorkspaceInvitation, WorkspaceMember};
 pub(crate) use roles::{Permission, WorkspaceGrantTarget, WorkspaceRole};
-pub(crate) use solution_packs::SolutionPackPlan;
+pub(crate) use solution_packs::{
+    SolutionPackApplication, SolutionPackApplicationSummary, SolutionPackPlan,
+};
 pub(crate) use tokens::PersonalApiToken;
 pub use workflow_runs::WorkflowRun;
 pub(crate) use workflow_runs::{ClaimedWorkflowRun, WorkflowActionResult};
@@ -240,8 +242,20 @@ pub enum RepositoryError {
     InvalidBlueprintDefinition(String),
     #[error("{0}")]
     InvalidSolutionPackPlan(String),
+    #[error("solution-pack plan is not ready to apply")]
+    SolutionPackPlanNotReady,
+    #[error("solution-pack plan has expired")]
+    SolutionPackPlanExpired,
+    #[error("solution-pack plan preconditions no longer match the workspace")]
+    SolutionPackPlanStale,
+    #[error("solution-pack application is invalid and cannot be resumed")]
+    SolutionPackApplicationInvalid,
+    #[error("solution-pack application failed: {0}")]
+    SolutionPackApplicationFailed(String),
     #[error("blueprint code is already owned by another blueprint")]
     BlueprintCodeTaken,
+    #[error("catalog code is already in use")]
+    CatalogCodeTaken,
     #[error("workflow code is already in use")]
     WorkflowCodeTaken,
     #[error("invalid workflow definition: {0}")]
@@ -286,6 +300,33 @@ impl RepositoryError {
     pub(crate) fn invalid_blueprint_definition(error: impl std::fmt::Display) -> Self {
         Self::InvalidBlueprintDefinition(error.to_string())
     }
+}
+
+pub(super) async fn lock_workspace_resource_code(
+    transaction: &mut Transaction<'_, Postgres>,
+    workspace_id: Uuid,
+    code: &str,
+) -> Result<(), RepositoryError> {
+    let lock_key = format!("{workspace_id}:{code}");
+    sqlx::query("SELECT pg_advisory_xact_lock(hashtextextended($1, 0))")
+        .bind(lock_key)
+        .execute(&mut **transaction)
+        .await?;
+    Ok(())
+}
+
+pub(super) async fn workspace_resource_code_matches(
+    transaction: &mut Transaction<'_, Postgres>,
+    workspace_id: Uuid,
+    code: &str,
+) -> Result<Vec<(String, Uuid)>, RepositoryError> {
+    Ok(sqlx::query_as::<_, (String, Uuid)>(
+        "SELECT 'blueprint'::text,id FROM blueprints WHERE workspace_id=$1 AND code=$2 UNION ALL SELECT 'context'::text,id FROM attribute_contexts WHERE workspace_id=$1 AND code=$2",
+    )
+    .bind(workspace_id)
+    .bind(code)
+    .fetch_all(&mut **transaction)
+    .await?)
 }
 
 impl CatalogRepository {

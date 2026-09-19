@@ -12,7 +12,7 @@ use uuid::Uuid;
 
 use super::{auth::ScopedRepository, error::ApiError};
 use crate::{
-    repository::SolutionPackPlan,
+    repository::{SolutionPackApplication, SolutionPackApplicationSummary, SolutionPackPlan},
     solution_packs::{
         BlueprintPublication, MAX_SOLUTION_PACK_INSPECTION_RESPONSE_BYTES,
         MAX_SOLUTION_PACK_PLAN_RESPONSE_BYTES, SolutionPackResource, ValidatedSolutionPack,
@@ -143,6 +143,55 @@ pub(super) async fn create_plan(
     Ok((StatusCode::CREATED, Json(plan)))
 }
 
+pub(super) async fn apply_plan(
+    ScopedRepository(repository): ScopedRepository,
+    plan_id: Result<Path<Uuid>, PathRejection>,
+) -> Result<Json<SolutionPackApplication>, ApiError> {
+    let Path(plan_id) = plan_id.map_err(ApiError::from_path_rejection)?;
+    let application = repository.apply_solution_pack_plan(plan_id).await?;
+    ensure_application_response_size(&application)?;
+    Ok(Json(application))
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+pub(super) struct ListApplicationsQuery {
+    limit: Option<i64>,
+    offset: Option<i64>,
+}
+
+pub(super) async fn list_applications(
+    ScopedRepository(repository): ScopedRepository,
+    query: Result<Query<ListApplicationsQuery>, QueryRejection>,
+) -> Result<Json<Vec<SolutionPackApplicationSummary>>, ApiError> {
+    let Query(query) = query.map_err(ApiError::from_query_rejection)?;
+    let limit = query.limit.unwrap_or(25);
+    let offset = query.offset.unwrap_or(0);
+    if !(1..=100).contains(&limit) || !(0..=10_000).contains(&offset) {
+        return Err(ApiError::invalid_input(
+            "limit must be 1-100 and offset must be 0-10000".to_owned(),
+        ));
+    }
+    let applications = repository
+        .list_solution_pack_applications(limit, offset)
+        .await?;
+    ensure_application_response_size(&applications)?;
+    Ok(Json(applications))
+}
+
+pub(super) async fn get_application(
+    ScopedRepository(repository): ScopedRepository,
+    application_id: Result<Path<Uuid>, PathRejection>,
+) -> Result<Json<SolutionPackApplication>, ApiError> {
+    let Path(application_id) = application_id.map_err(ApiError::from_path_rejection)?;
+    let application = repository
+        .get_solution_pack_application(application_id)
+        .await?
+        .ok_or_else(|| ApiError::not_found("solution-pack application"))?;
+    ensure_application_response_size(&application)?;
+    Ok(Json(application))
+}
+
 pub(super) async fn get_plan(
     ScopedRepository(repository): ScopedRepository,
     plan_id: Result<Path<Uuid>, PathRejection>,
@@ -173,6 +222,14 @@ fn ensure_response_size(response: &InspectionResponse) -> Result<(), ApiError> {
         response,
         MAX_SOLUTION_PACK_INSPECTION_RESPONSE_BYTES,
         "solution-pack inspection summary exceeds the size limit",
+    )
+}
+
+fn ensure_application_response_size(response: &impl Serialize) -> Result<(), ApiError> {
+    ensure_encoded_response_size(
+        response,
+        MAX_SOLUTION_PACK_PLAN_RESPONSE_BYTES,
+        "solution-pack application summary exceeds the size limit",
     )
 }
 
