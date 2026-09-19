@@ -2,12 +2,12 @@
 
 > **Status:** v1 archive validation, administrator inspection, immutable
 > create-only planning, and durable application/history for contexts and
-> blueprints are implemented. Administrators install uploaded `.tar.zst`
-> archives; broader resource types remain deferred.
+> blueprints are implemented. Packs may also declare bounded extension
+> requirements and non-secret configuration templates. Administrators upload
+> `.tar.zst` archives; broader resource types remain deferred.
 >
 > **Scope of this document:** Sections that describe existing-resource
-> adoption, updates, settings, extensions, assets, sample
-> data, prerequisites, export, or richer application evidence are future target
+> adoption, updates, settings, assets, sample data, prerequisites, export, or richer application evidence are future target
 > design, not implemented v1 behavior. The explicitly marked v1 sections below
 > define the current product contract.
 
@@ -65,15 +65,15 @@ blueprint boundary.
 | --- | --- |
 | Blueprints, attributes, relationships, and views | Declared through logical keys and compiled into ordinary versioned blueprint definitions. |
 | Contexts and publication-channel defaults | Added to the rooted hierarchy through mapped context codes; the system `default` context is never replaced. |
-| Extension requirements | Declare IDs, version ranges, templates, and layout defaults; extension sourcing, validation, grants, and enablement remain separate approvals. |
+| Extension requirements | **Implemented subset:** declare installed-package ID/version compatibility and an optional bounded non-secret literal JSON configuration template. Installation, upgrade, configuration, grants, and enablement remain separate ordinary approvals; layout defaults are deferred. |
 | Workspace defaults | Merge schema-owned settings such as pinned Explore entries and extension layouts without replacing unrelated settings. |
 | Branding, themes, and static assets | Install only declared, digest-verified files of supported media types for host-defined purposes. |
 | Documentation and setup | Include Markdown guidance, release notes, structured checklist items, and non-executable validation checks. |
 | Sample data | Optional, separately selected, visibly marked, portable, and idempotently mapped; never treated as production configuration. |
 
-Not every content type must ship in the first implementation. The
-[initial delivery boundary](#initial-delivery-boundary) intentionally starts
-with blueprints and contexts.
+Not every content type ships in the current implementation. The
+[initial delivery boundary](#initial-delivery-boundary) implements blueprint and
+context creation plus read-only extension requirement evaluation.
 
 ## Package and distribution
 
@@ -158,7 +158,10 @@ publish a strict JSON Schema before accepting archives:
     "id": "acme.shopify",
     "version": ">=2.1.0 <3.0.0",
     "required": false,
-    "configuration_template": "extensions/shopify.json"
+    "configuration_template": {
+      "path": "extensions/shopify.json",
+      "sha256": "<hex digest>"
+    }
   }],
   "assets": [{
     "key": "assets/logo",
@@ -267,7 +270,7 @@ different release of the same pack creates a new reviewed application plan; it
 is not a second managed instance and does not establish an upgrade relationship
 with resources produced by the earlier release.
 
-## Pack contents (future design except v1 blueprints and contexts)
+## Pack contents (v1 blueprints, contexts, and extension requirements; otherwise future design)
 
 ### Blueprints and views
 
@@ -298,38 +301,36 @@ generic code such as `web` is available.
 
 ### Extension requirements
 
-A pack may name required or optional extension IDs, SemVer ranges,
-configuration templates, contribution layout defaults, and guided setup steps.
-Extension IDs and contribution IDs are global package identifiers and are not
-prefixed or renamed. Layout entries use stable
-`<extension-id>:<contribution-id>` keys.
-
-Each extension remains an independently sourced and validated package. The plan
-must show, separately:
-
-- whether a compatible release is already installed;
-- the trusted extension source and selected release;
-- install or upgrade work;
-- required and optional capabilities and host permissions;
-- proposed configuration, with secret fields redacted; and
-- whether enabling the extension is requested.
+A pack may name at most 64 unique required or optional extension IDs and SemVer
+ranges, each with an optional literal JSON configuration template. Planning
+reports whether the workspace's installed release is compatible and whether the
+declared non-sensitive configuration subset matches. It never proposes an
+extension source, installation, upgrade, grant, configuration write, or
+lifecycle transition. Extension packages remain independently sourced and
+validated through ordinary administrator workflows.
 
 A pack cannot grant permissions, approve host access, bypass extension source
-rules, inject extension artifacts, or silently enable an extension. Required
-operator approvals remain effective even for an official pack.
+rules, inject extension artifacts, or enable an extension. Disabled compatible
+installations can satisfy a requirement; quarantined installations cannot.
+Required operator approvals remain effective even for an official pack.
+Contribution layout defaults and guided setup steps remain future design.
 
 ### Extension configuration templates and inputs
 
-Templates may contain literal non-secret values, typed installer inputs, and
-structured logical references to mapped blueprints, attributes, contexts,
-assets, extensions, and contributions. Resolution is structural; Catalog must
-not perform unbounded string substitution in arbitrary files.
+The implemented template subset is a bounded literal JSON object. Object
+matching is recursive containment; scalar and array values match exactly. There
+is no interpolation, typed input language, logical-reference resolution, or
+mutation behavior. Template files are public pack material, so authors must not
+put sensitive values in them. Catalog rejects a bounded denylist of secret-like
+keys as defense in depth, but this heuristic is not proof that arbitrary values
+are non-sensitive. Template and installed-configuration values are private to
+validation and are never included in inspection, plan, application, or audit
+responses.
 
-Inputs declare a type, label, validation constraints, whether they are
-required, and whether a default is safe. Sensitive inputs are secret
-**references** or post-install setup steps. Secret values, access tokens,
-passwords, private keys, and connection credentials are never stored in the
-archive, installation plan, selected-option record, or audit payload.
+Typed installer inputs, secret references, and post-install setup steps remain
+future design. Secret values, access tokens, passwords, private keys, and
+connection credentials must not be stored in a pack archive or solution-pack
+plan.
 
 ### Workspace defaults
 
@@ -453,8 +454,9 @@ and do not end in an underscore. Optional v1 resources are conservatively
 skipped; a selected required resource whose dependency would be skipped is
 blocked. Existing target codes are conflicts and are never adopted or replaced.
 V1 pack blueprints reject workspace-role publication policies, extension layouts, and
-extension-provided table renderers; planning does not snapshot extension or role
-state yet.
+extension-provided table renderers. Planning snapshots tenant-scoped installed
+extension release, lifecycle state, and configuration only to evaluate declared
+requirements; role and grant state is not part of requirement satisfaction.
 
 Application accepts only an immutable plan ID and never recomputes choices from
 CLI flags. Each create step commits its ordinary Catalog mutation together with
@@ -481,10 +483,41 @@ V1 actions are exactly:
 - `blocked`: a selected dependency cannot be created.
 
 V1 does not emit `adopt`, `update`, or `keep`. It does not inspect prior
-applications, settings, or extensions to choose an action. Candidate mappings
-remain visible in the plan, including candidates for skipped resources. The
-application mapping snapshot contains only mappings for executed `create`
-actions.
+applications or settings to choose a resource action. Candidate mappings remain
+visible in the plan, including candidates for skipped resources. The application
+mapping snapshot contains only mappings for executed `create` actions.
+
+Extension requirements are immutable plan evidence, not application steps. A
+compatible installed release satisfies a requirement when it is enabled or
+disabled and its configuration recursively contains the optional template;
+object extras are ignored, while arrays and scalar values match exactly.
+Quarantined, missing, version-incompatible, or configuration-mismatched releases
+do not satisfy a requirement. An unmet required requirement blocks readiness.
+An unmet optional requirement is shown as `skipped` and does not block the plan.
+Grants, host access, workspace emergency mode, and dependency enablement are not
+inspected for satisfaction.
+
+A manifest may declare at most 64 extension requirements, with unique logical
+keys, extension IDs, and template paths. Configuration templates are literal
+JSON objects at most 64 KiB, depth 16, and 256 total object members/array
+elements; keys are at most 128 bytes and strings at most 4 KiB. They are public
+pack material and must contain no secrets. Keys equal to or ending in
+`password`, `secret`, `token`, `api_key`, `private_key`, `credential`, or
+`authorization` (case-insensitive) are rejected recursively. Template values
+and installed configuration values are never returned by inspection,
+plan, application, or audit responses. Inspection exposes only requirement and
+template path/digest summaries.
+
+Applying a pack never installs, upgrades, grants, configures, enables, disables,
+quarantines, or removes an extension. Administrators remediate requirements with
+the ordinary `acli extension install`, `sideload`, `upgrade`, `configure`,
+`grant`, and `enable` lifecycle commands as appropriate, then upload the archive
+to create a fresh plan. Apply revalidates each required requirement that was
+satisfied when planned. Becoming missing, version-incompatible, quarantined, or
+mismatched against the relevant configuration template makes the immutable plan
+stale; a still-compatible release or enabled/disabled transition remains
+satisfied. Optional skipped requirements remain skipped even if the workspace
+later changes.
 
 A new application may start only while its ready plan is unexpired. Each create
 step revalidates its persisted `target_absent` code precondition. A target that
@@ -509,7 +542,7 @@ Neither response contains normalized payloads, blueprint definitions, context
 data, archive bytes, or secret values.
 
 Richer source/release provenance, selected options, reused-resource evidence,
-settings fragments, prerequisites, extension outcomes, checklists, and
+settings fragments, prerequisites, extension mutation outcomes, checklists, and
 validation reports are future design. Application records are
 administrator-facing evidence, not controllers: they do not retain ownership,
 lock resources, detect drift, authorize later changes, or provide uninstall.

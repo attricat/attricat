@@ -45,6 +45,13 @@
         }
       }
     },
+    "extensions": {
+      "type": "array",
+      "maxItems": 64,
+      "items": {
+        "$ref": "#/$defs/extensionRequirement"
+      }
+    },
     "resources": {
       "type": "object",
       "additionalProperties": false,
@@ -134,6 +141,57 @@
         },
         "required": {
           "type": "boolean"
+        },
+        "sha256": {
+          "$ref": "#/$defs/digest"
+        }
+      }
+    },
+    "extensionRequirement": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["key", "id", "version", "required"],
+      "properties": {
+        "key": {
+          "type": "string",
+          "maxLength": 128,
+          "pattern": "^extensions/[a-z][a-z0-9_-]*$",
+          "not": {
+            "pattern": "^extensions/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+          }
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[A-Za-z0-9._-]+$"
+        },
+        "version": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256,
+          "pattern": "^(?:[0-9*<>=~^])[0-9A-Za-z*<>=~^.,+ -]*$"
+        },
+        "required": {
+          "type": "boolean"
+        },
+        "configuration_template": {
+          "oneOf": [
+            {"type": "null"},
+            {"$ref": "#/$defs/configurationTemplate"}
+          ]
+        }
+      }
+    },
+    "configurationTemplate": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["path", "sha256"],
+      "properties": {
+        "path": {
+          "type": "string",
+          "maxLength": 512,
+          "pattern": "^extensions/[A-Za-z0-9_-][A-Za-z0-9._-]*(?:/[A-Za-z0-9_-][A-Za-z0-9._-]*)*\\.json$"
         },
         "sha256": {
           "$ref": "#/$defs/digest"

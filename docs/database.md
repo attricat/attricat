@@ -26,6 +26,7 @@ For local setup, migrations, and E2E testing, see [Getting Started](index.md#get
 | `AttributeContext` | `attribute_contexts` | A named catalog scope in a rooted fallback tree.            |
 | `AttributeValue`   | `attribute_values`   | The current canonical EAV fact.                             |
 | `SolutionPackPlan` | `solution_pack_plans` | Immutable, expiring workspace dry-run metadata.             |
+| `SolutionPackPlanExtensionRequirement` | `solution_pack_plan_extension_requirements` | Immutable extension compatibility/configuration-match evidence; private templates are never API-serialized. |
 | `SolutionPackApplication` | `solution_pack_applications` | Durable application identity, provenance, and bounded state. |
 | `SolutionPackApplicationStep` | `solution_pack_application_steps` | Ordered, resumable resource mutation evidence. |
 
@@ -64,9 +65,13 @@ and blueprint publication preference, readiness, and a fixed 24-hour expiry.
 codes, and revision 1 where relevant. `solution_pack_plan_actions` stores a
 deterministic dependency-first order, create/skip/conflict/blocked reasons,
 preconditions, and normalized blueprint/context payloads consumed by apply.
-Archive bytes are never retained, and there are no plan update routes. Planning
-writes its audit event in the same explicit transaction and never mutates
-catalog resources.
+`solution_pack_plan_extension_requirements` separately stores deterministic
+required/optional compatibility outcomes and the bounded template needed for
+private apply-time revalidation. Public plan responses expose only safe
+requirement state and template path/digest metadata, never template or installed
+configuration values. Archive bytes are never retained, and there are no plan
+update routes. Planning writes its audit event in the same explicit transaction
+and never mutates catalog resources or extension lifecycle state.
 
 `solution_pack_applications` has one immutable identity per plan and snapshots
 safe source, digest, publication, and logical-to-physical mapping provenance.
@@ -76,9 +81,12 @@ diagnostic fields retain resumable failure evidence. Ordered
 transaction as each ordinary context or blueprint mutation and its audit/domain
 event evidence. A retry verifies completed target IDs and continues pending
 steps. Application records do not own resources and cannot uninstall a pack.
-Extensions, settings, assets, sample data, and export remain deferred. Solution
-packs are installed only from administrator-uploaded `.tar.zst` archives; the
-server does not access source repositories or fetch remote pack releases.
+Extension requirement evaluation is implemented, but extension installation,
+upgrade, configuration, grants, enablement, removal, and pack ownership remain
+outside solution-pack application. Settings, assets, sample data, and export
+remain deferred. Solution packs are installed only from administrator-uploaded
+`.tar.zst` archives; the server does not access source repositories or fetch
+remote pack releases.
 
 ### `blueprints`
 

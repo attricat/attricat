@@ -76,6 +76,46 @@ fn context_only_archive() -> Vec<u8> {
     zstd::stream::encode_all(Cursor::new(tar_bytes), 0).unwrap()
 }
 
+fn archive_with_extension_requirement(required: bool) -> Vec<u8> {
+    const TEMPLATE: &[u8] = br#"{"endpoint":"TEMPLATE_VALUE_SENTINEL"}"#;
+    let manifest = serde_json::to_vec(&json!({
+        "manifest_version": 1,
+        "id": "attricat.extensions",
+        "name": "Extension requirements",
+        "version": "1.0.0",
+        "description": "Extension requirement test",
+        "catalog": {"host_api": "^1.0"},
+        "resources": {
+            "contexts": [{
+                "key": "contexts/web",
+                "path": "contexts/web.json",
+                "required": true,
+                "sha256": digest(WEB_CONTEXT)
+            }]
+        },
+        "extensions": [{
+            "key": "extensions/shopify",
+            "id": "acme.shopify",
+            "version": ">=2.1.0 <3.0.0",
+            "required": required,
+            "configuration_template": {
+                "path": "extensions/shopify.json",
+                "sha256": digest(TEMPLATE)
+            }
+        }]
+    }))
+    .unwrap();
+    let mut tar_bytes = Vec::new();
+    {
+        let mut tar = tar::Builder::new(&mut tar_bytes);
+        append_file(&mut tar, "solution-pack.json", &manifest);
+        append_file(&mut tar, "contexts/web.json", WEB_CONTEXT);
+        append_file(&mut tar, "extensions/shopify.json", TEMPLATE);
+        tar.finish().unwrap();
+    }
+    zstd::stream::encode_all(Cursor::new(tar_bytes), 0).unwrap()
+}
+
 fn archive_with_options(product_blueprint: &[u8], context_required: bool) -> Vec<u8> {
     let manifest = serde_json::to_vec(&json!({
         "manifest_version": 1,
@@ -568,7 +608,7 @@ async fn valid_inspection_returns_only_safe_summaries_without_persisting(pool: P
             .keys()
             .map(String::as_str)
             .collect::<std::collections::BTreeSet<_>>(),
-        std::collections::BTreeSet::from(["archive_sha256", "manifest", "resources"])
+        std::collections::BTreeSet::from(["archive_sha256", "extensions", "manifest", "resources"])
     );
     assert_eq!(body["archive_sha256"], archive_sha256);
     assert_eq!(body["manifest"]["id"], "attricat.ecommerce");
@@ -596,6 +636,209 @@ async fn valid_inspection_returns_only_safe_summaries_without_persisting(pool: P
             .unwrap(),
         contexts_before
     );
+    server.abort();
+}
+
+#[sqlx::test(migrations = "./migrations")]
+async fn extension_requirements_are_safe_visible_plan_evidence(pool: PgPool) {
+    let (base_url, server) = start_server(pool.clone()).await;
+    let client = authenticated_client();
+    let archive = archive_with_extension_requirement(true);
+
+    let inspection = inspect(&client, &base_url, archive.clone()).await;
+    assert_eq!(inspection.status(), StatusCode::OK);
+    let inspection_text = inspection.text().await.unwrap();
+    assert!(!inspection_text.contains("TEMPLATE_VALUE_SENTINEL"));
+    let inspection: Value = serde_json::from_str(&inspection_text).unwrap();
+    assert_eq!(inspection["extensions"][0]["id"], "acme.shopify");
+    assert_eq!(
+        inspection["extensions"][0]["configuration_template"]["path"],
+        "extensions/shopify.json"
+    );
+
+    let response = create_plan(&client, &base_url, archive, "ext").await;
+    assert_eq!(response.status(), StatusCode::CREATED);
+    let plan_text = response.text().await.unwrap();
+    assert!(!plan_text.contains("TEMPLATE_VALUE_SENTINEL"));
+    let plan: Value = serde_json::from_str(&plan_text).unwrap();
+    assert_eq!(plan["ready"], false);
+    assert_eq!(plan["extension_requirements"][0]["status"], "blocked");
+    assert_eq!(plan["extension_requirements"][0]["reason_code"], "missing");
+    assert_eq!(
+        sqlx::query_scalar::<_, String>(
+            "SELECT evaluation_template->>'endpoint' FROM solution_pack_plan_extension_requirements WHERE plan_id=$1"
+        )
+        .bind(Uuid::parse_str(plan["id"].as_str().unwrap()).unwrap())
+        .fetch_one(&pool)
+        .await
+        .unwrap(),
+        "TEMPLATE_VALUE_SENTINEL"
+    );
+
+    let optional = create_plan(
+        &client,
+        &base_url,
+        archive_with_extension_requirement(false),
+        "extoptional",
+    )
+    .await
+    .json::<Value>()
+    .await
+    .unwrap();
+    assert_eq!(optional["ready"], true);
+    assert_eq!(optional["extension_requirements"][0]["status"], "skipped");
+    assert_eq!(
+        optional["extension_requirements"][0]["reason_code"],
+        "missing"
+    );
+
+    server.abort();
+}
+
+#[sqlx::test(migrations = "./migrations")]
+async fn compatible_disabled_extension_satisfies_plan_and_is_revalidated_on_apply(pool: PgPool) {
+    let workspace_id = BOOTSTRAP_WORKSPACE_ID.parse::<Uuid>().unwrap();
+    let release_id = Uuid::new_v4();
+    sqlx::query("INSERT INTO installed_extension_releases (id,workspace_id,extension_id,version,manifest,manifest_sha256,source) VALUES ($1,$2,'acme.shopify','2.2.0','{}'::jsonb,$3,'side_load')")
+        .bind(release_id)
+        .bind(workspace_id)
+        .bind("1".repeat(64))
+        .execute(&pool)
+        .await
+        .unwrap();
+    sqlx::query("INSERT INTO extension_installations (id,workspace_id,extension_id,installed_release_id,state,configuration) VALUES ($1,$2,'acme.shopify',$3,'disabled',$4)")
+        .bind(Uuid::new_v4())
+        .bind(workspace_id)
+        .bind(release_id)
+        .bind(json!({"endpoint":"TEMPLATE_VALUE_SENTINEL","unrelated_secret":"INSTALLED_SECRET_SENTINEL"}))
+        .execute(&pool)
+        .await
+        .unwrap();
+
+    let (base_url, server) = start_server(pool.clone()).await;
+    let client = authenticated_client();
+    let plan_response = create_plan(
+        &client,
+        &base_url,
+        archive_with_extension_requirement(true),
+        "extok",
+    )
+    .await;
+    assert_eq!(plan_response.status(), StatusCode::CREATED);
+    let plan_text = plan_response.text().await.unwrap();
+    assert!(!plan_text.contains("TEMPLATE_VALUE_SENTINEL"));
+    assert!(!plan_text.contains("INSTALLED_SECRET_SENTINEL"));
+    let plan: Value = serde_json::from_str(&plan_text).unwrap();
+    assert_eq!(plan["ready"], true);
+    assert_eq!(plan["extension_requirements"][0]["status"], "satisfied");
+    assert_eq!(
+        plan["extension_requirements"][0]["installed_state"],
+        "disabled"
+    );
+
+    sqlx::query("UPDATE extension_installations SET configuration=$2 WHERE workspace_id=$1 AND extension_id='acme.shopify'")
+        .bind(workspace_id)
+        .bind(json!({"endpoint":"changed"}))
+        .execute(&pool)
+        .await
+        .unwrap();
+    let response = apply_plan(&client, &base_url, plan["id"].as_str().unwrap()).await;
+    assert_eq!(response.status(), StatusCode::CONFLICT);
+    assert_eq!(
+        response.json::<Value>().await.unwrap()["error"]["code"],
+        "solution_pack_plan_stale"
+    );
+    assert_eq!(
+        sqlx::query_scalar::<_, i64>(
+            "SELECT count(*) FROM attribute_contexts WHERE workspace_id=$1 AND code='extok_web'"
+        )
+        .bind(workspace_id)
+        .fetch_one(&pool)
+        .await
+        .unwrap(),
+        0
+    );
+
+    let mismatch = create_plan(
+        &client,
+        &base_url,
+        archive_with_extension_requirement(true),
+        "extmismatch",
+    )
+    .await
+    .json::<Value>()
+    .await
+    .unwrap();
+    assert_eq!(mismatch["ready"], false);
+    assert_eq!(
+        mismatch["extension_requirements"][0]["reason_code"],
+        "configuration_mismatch"
+    );
+
+    let incompatible_release_id = Uuid::new_v4();
+    sqlx::query("INSERT INTO installed_extension_releases (id,workspace_id,extension_id,version,manifest,manifest_sha256,source) VALUES ($1,$2,'acme.shopify','3.0.0','{}'::jsonb,$3,'side_load')")
+        .bind(incompatible_release_id)
+        .bind(workspace_id)
+        .bind("2".repeat(64))
+        .execute(&pool)
+        .await
+        .unwrap();
+    sqlx::query("UPDATE extension_installations SET installed_release_id=$2, configuration=$3 WHERE workspace_id=$1 AND extension_id='acme.shopify'")
+        .bind(workspace_id)
+        .bind(incompatible_release_id)
+        .bind(json!({"endpoint":"TEMPLATE_VALUE_SENTINEL"}))
+        .execute(&pool)
+        .await
+        .unwrap();
+    for (required, expected_status, expected_ready, prefix) in [
+        (true, "blocked", false, "extversionrequired"),
+        (false, "skipped", true, "extversionoptional"),
+    ] {
+        let plan = create_plan(
+            &client,
+            &base_url,
+            archive_with_extension_requirement(required),
+            prefix,
+        )
+        .await
+        .json::<Value>()
+        .await
+        .unwrap();
+        assert_eq!(plan["ready"], expected_ready);
+        assert_eq!(plan["extension_requirements"][0]["status"], expected_status);
+        assert_eq!(
+            plan["extension_requirements"][0]["reason_code"],
+            "incompatible_version"
+        );
+    }
+
+    sqlx::query("UPDATE extension_installations SET installed_release_id=$2, state='quarantined' WHERE workspace_id=$1 AND extension_id='acme.shopify'")
+        .bind(workspace_id)
+        .bind(release_id)
+        .execute(&pool)
+        .await
+        .unwrap();
+    for (required, expected_status, expected_ready, prefix) in [
+        (true, "blocked", false, "extquarantinedrequired"),
+        (false, "skipped", true, "extquarantinedoptional"),
+    ] {
+        let plan = create_plan(
+            &client,
+            &base_url,
+            archive_with_extension_requirement(required),
+            prefix,
+        )
+        .await
+        .json::<Value>()
+        .await
+        .unwrap();
+        assert_eq!(plan["ready"], expected_ready);
+        assert_eq!(plan["extension_requirements"][0]["status"], expected_status);
+        assert_eq!(
+            plan["extension_requirements"][0]["reason_code"],
+            "quarantined"
+        );
+    }
     server.abort();
 }
 

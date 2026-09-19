@@ -968,7 +968,7 @@ fn unique<'a>(values: impl Iterator<Item = &'a String>, label: &str) -> Result<(
     }
     Ok(())
 }
-fn valid_id(value: &str, label: &str) -> Result<(), ManifestError> {
+pub(crate) fn valid_id(value: &str, label: &str) -> Result<(), ManifestError> {
     if value.is_empty()
         || value.len() > MAX_EXTENSION_IDENTIFIER_BYTES
         || !value

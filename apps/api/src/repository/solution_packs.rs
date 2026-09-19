@@ -8,9 +8,10 @@ use crate::{
     domain_events::{BLUEPRINT_CREATED_V1, BLUEPRINT_PUBLISHED_V1, CONTEXT_CREATED_V1},
     model::{CreateAttributeContext, CreateBlueprint},
     solution_packs::{
-        BlueprintPublication, MAX_SOLUTION_PACK_PLAN_RESPONSE_BYTES, PlanningWorkspaceSnapshot,
-        SOLUTION_PACK_PLAN_EXPIRY_HOURS, SolutionPackPlanDraft, ValidatedSolutionPack,
-        build_create_only_plan,
+        BlueprintPublication, InstalledExtensionSnapshot, MAX_SOLUTION_PACK_PLAN_RESPONSE_BYTES,
+        PlanningWorkspaceSnapshot, SOLUTION_PACK_PLAN_EXPIRY_HOURS,
+        SolutionPackExtensionRequirement, SolutionPackPlanDraft, ValidatedSolutionPack,
+        build_create_only_plan, evaluate_extension_requirement,
     },
 };
 
@@ -44,6 +45,8 @@ pub struct SolutionPackPlan {
     pub actions: Vec<SolutionPackPlanAction>,
     #[sqlx(skip)]
     pub conflicts: Vec<SolutionPackPlanConflict>,
+    #[sqlx(skip)]
+    pub extension_requirements: Vec<SolutionPackPlanExtensionRequirement>,
 }
 
 #[derive(Clone, Debug, Serialize, sqlx::FromRow)]
@@ -75,6 +78,44 @@ pub struct SolutionPackPlanConflict {
     pub logical_key: String,
     pub action: String,
     pub reason_code: String,
+}
+
+#[derive(Clone, Debug, Serialize, sqlx::FromRow)]
+pub struct SolutionPackPlanExtensionRequirement {
+    pub position: i64,
+    pub logical_key: String,
+    pub extension_id: String,
+    pub version_requirement: String,
+    pub required: bool,
+    pub configuration_template_path: Option<String>,
+    pub configuration_template_sha256: Option<String>,
+    pub status: String,
+    pub reason_code: String,
+    pub installed_release_id: Option<Uuid>,
+    pub installed_version: Option<String>,
+    pub installed_state: Option<String>,
+    pub configuration_matches: Option<bool>,
+}
+
+#[derive(sqlx::FromRow)]
+struct PrivatePlanExtensionRequirement {
+    logical_key: String,
+    extension_id: String,
+    version_requirement: String,
+    required: bool,
+    configuration_template_path: Option<String>,
+    configuration_template_sha256: Option<String>,
+    status: String,
+    evaluation_template: Value,
+}
+
+#[derive(sqlx::FromRow)]
+struct InstalledExtensionRow {
+    extension_id: String,
+    installed_release_id: Uuid,
+    version: String,
+    state: String,
+    configuration: Value,
 }
 
 impl CatalogRepository {
@@ -123,6 +164,36 @@ impl CatalogRepository {
         .await?
         .into_iter()
         .collect();
+        let extension_ids = pack
+            .manifest()
+            .extensions
+            .iter()
+            .map(|requirement| requirement.id.clone())
+            .collect::<Vec<_>>();
+        let installed_extensions = if extension_ids.is_empty() {
+            Default::default()
+        } else {
+            sqlx::query_as::<_, InstalledExtensionRow>(
+                "SELECT i.extension_id, i.installed_release_id, r.version, i.state, i.configuration FROM extension_installations i JOIN installed_extension_releases r ON r.id = i.installed_release_id AND r.workspace_id = i.workspace_id WHERE i.workspace_id = $1 AND i.extension_id = ANY($2) ORDER BY i.extension_id",
+            )
+            .bind(workspace_id)
+            .bind(&extension_ids)
+            .fetch_all(&mut *tx)
+            .await?
+            .into_iter()
+            .map(|installed| {
+                (
+                    installed.extension_id,
+                    InstalledExtensionSnapshot {
+                        installed_release_id: installed.installed_release_id,
+                        version: installed.version,
+                        state: installed.state,
+                        configuration: installed.configuration,
+                    },
+                )
+            })
+            .collect()
+        };
         let draft = build_create_only_plan(
             pack,
             prefix,
@@ -131,6 +202,7 @@ impl CatalogRepository {
                 workspace_id,
                 physical_codes,
                 default_context_id,
+                installed_extensions,
             },
         )
         .map_err(|error| RepositoryError::InvalidSolutionPackPlan(error.to_string()))?;
@@ -225,6 +297,13 @@ impl CatalogRepository {
         .fetch_all(&self.pool)
         .await?;
         plan.conflicts = conflict_summaries(&plan.actions);
+        plan.extension_requirements = sqlx::query_as::<_, SolutionPackPlanExtensionRequirement>(
+            "SELECT position, logical_key, extension_id, version_requirement, required, configuration_template_path, configuration_template_sha256, status, reason_code, installed_release_id, installed_version, installed_state, configuration_matches FROM solution_pack_plan_extension_requirements WHERE workspace_id = $1 AND plan_id = $2 ORDER BY position",
+        )
+        .bind(workspace_id)
+        .bind(plan_id)
+        .fetch_all(&self.pool)
+        .await?;
         Ok(Some(plan))
     }
 }
@@ -269,6 +348,28 @@ fn materialize_plan(
         })
         .collect::<Vec<_>>();
     let conflicts = conflict_summaries(&actions);
+    let extension_requirements = draft
+        .extension_requirements
+        .iter()
+        .enumerate()
+        .map(
+            |(position, requirement)| SolutionPackPlanExtensionRequirement {
+                position: position as i64,
+                logical_key: requirement.logical_key.clone(),
+                extension_id: requirement.extension_id.clone(),
+                version_requirement: requirement.version_requirement.clone(),
+                required: requirement.required,
+                configuration_template_path: requirement.configuration_template_path.clone(),
+                configuration_template_sha256: requirement.configuration_template_sha256.clone(),
+                status: requirement.status.to_owned(),
+                reason_code: requirement.reason_code.to_owned(),
+                installed_release_id: requirement.installed_release_id,
+                installed_version: requirement.installed_version.clone(),
+                installed_state: requirement.installed_state.clone(),
+                configuration_matches: requirement.configuration_matches,
+            },
+        )
+        .collect();
     SolutionPackPlan {
         id,
         workspace_id,
@@ -289,6 +390,7 @@ fn materialize_plan(
         mappings,
         actions,
         conflicts,
+        extension_requirements,
     }
 }
 
@@ -339,6 +441,27 @@ async fn insert_plan_rows(
             .bind(&action.summary)
             .bind(&action.normalized_payload)
             .bind(&action.preconditions)
+            .execute(&mut **tx)
+            .await?;
+    }
+    for (position, requirement) in draft.extension_requirements.iter().enumerate() {
+        sqlx::query("INSERT INTO solution_pack_plan_extension_requirements (plan_id, workspace_id, position, logical_key, extension_id, version_requirement, required, configuration_template_path, configuration_template_sha256, status, reason_code, installed_release_id, installed_version, installed_state, configuration_matches, evaluation_template) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16)")
+            .bind(plan_id)
+            .bind(workspace_id)
+            .bind(position as i64)
+            .bind(&requirement.logical_key)
+            .bind(&requirement.extension_id)
+            .bind(&requirement.version_requirement)
+            .bind(requirement.required)
+            .bind(&requirement.configuration_template_path)
+            .bind(&requirement.configuration_template_sha256)
+            .bind(requirement.status)
+            .bind(requirement.reason_code)
+            .bind(requirement.installed_release_id)
+            .bind(&requirement.installed_version)
+            .bind(&requirement.installed_state)
+            .bind(requirement.configuration_matches)
+            .bind(&requirement.evaluation_template)
             .execute(&mut **tx)
             .await?;
     }
@@ -534,6 +657,8 @@ impl CatalogRepository {
                 return Err(RepositoryError::SolutionPackPlanExpired);
             }
         }
+        self.revalidate_required_extension_requirements(&mut tx, plan_id)
+            .await?;
         let mappings = sqlx::query_as::<_, SolutionPackPlanMapping>(
             "SELECT m.position, m.resource_kind, m.logical_key, m.target_id, m.target_code, m.target_version, m.mapping_kind FROM solution_pack_plan_mappings m JOIN solution_pack_plan_actions a ON a.plan_id=m.plan_id AND a.logical_key=m.logical_key WHERE m.workspace_id = $1 AND m.plan_id = $2 AND a.action='create' ORDER BY m.position",
         )
@@ -644,6 +769,88 @@ impl CatalogRepository {
         Ok(application_id)
     }
 
+    async fn revalidate_required_extension_requirements(
+        &self,
+        tx: &mut Transaction<'_, Postgres>,
+        plan_id: Uuid,
+    ) -> Result<(), RepositoryError> {
+        let workspace_id = self.workspace_id.unwrap_or(Self::DEFAULT_WORKSPACE_ID);
+        let requirements = sqlx::query_as::<_, PrivatePlanExtensionRequirement>(
+            "SELECT logical_key, extension_id, version_requirement, required, configuration_template_path, configuration_template_sha256, status, evaluation_template FROM solution_pack_plan_extension_requirements WHERE workspace_id=$1 AND plan_id=$2 AND required ORDER BY position",
+        )
+        .bind(workspace_id)
+        .bind(plan_id)
+        .fetch_all(&mut **tx)
+        .await?;
+        if requirements.is_empty() {
+            return Ok(());
+        }
+        let extension_ids = requirements
+            .iter()
+            .map(|requirement| requirement.extension_id.clone())
+            .collect::<Vec<_>>();
+        let installed_extensions = sqlx::query_as::<_, InstalledExtensionRow>(
+            "SELECT i.extension_id, i.installed_release_id, r.version, i.state, i.configuration FROM extension_installations i JOIN installed_extension_releases r ON r.id=i.installed_release_id AND r.workspace_id=i.workspace_id WHERE i.workspace_id=$1 AND i.extension_id = ANY($2) FOR SHARE OF i",
+        )
+        .bind(workspace_id)
+        .bind(extension_ids)
+        .fetch_all(&mut **tx)
+        .await?
+        .into_iter()
+        .map(|installed| {
+            (
+                installed.extension_id,
+                InstalledExtensionSnapshot {
+                    installed_release_id: installed.installed_release_id,
+                    version: installed.version,
+                    state: installed.state,
+                    configuration: installed.configuration,
+                },
+            )
+        })
+        .collect::<std::collections::BTreeMap<_, _>>();
+        for persisted in requirements {
+            if !persisted.required || persisted.status != "satisfied" {
+                return Err(RepositoryError::InvalidSolutionPackPlan(
+                    "invalid persisted required extension requirement".into(),
+                ));
+            }
+            let configuration_template = match (
+                persisted.configuration_template_path,
+                persisted.configuration_template_sha256,
+            ) {
+                (Some(path), Some(sha256)) => Some(
+                    crate::solution_packs::SolutionPackConfigurationTemplateRef { path, sha256 },
+                ),
+                (None, None) => None,
+                _ => {
+                    return Err(RepositoryError::InvalidSolutionPackPlan(
+                        "invalid persisted extension configuration template reference".into(),
+                    ));
+                }
+            };
+            let requirement = SolutionPackExtensionRequirement {
+                key: persisted.logical_key,
+                id: persisted.extension_id,
+                version: persisted.version_requirement,
+                required: true,
+                configuration_template,
+            };
+            let evaluated = evaluate_extension_requirement(
+                &requirement,
+                requirement
+                    .configuration_template
+                    .as_ref()
+                    .map(|_| &persisted.evaluation_template),
+                installed_extensions.get(&requirement.id),
+            );
+            if evaluated.status != "satisfied" {
+                return Err(RepositoryError::SolutionPackPlanStale);
+            }
+        }
+        Ok(())
+    }
+
     async fn revalidate_application_steps(
         &self,
         tx: &mut Transaction<'_, Postgres>,
@@ -712,8 +919,8 @@ impl CatalogRepository {
     ) -> Result<bool, RepositoryError> {
         let workspace_id = self.workspace_id.unwrap_or(Self::DEFAULT_WORKSPACE_ID);
         let mut tx = self.pool.begin().await?;
-        let state = sqlx::query_scalar::<_, String>(
-            "SELECT state FROM solution_pack_applications WHERE workspace_id=$1 AND id=$2 FOR UPDATE",
+        let (state, plan_id) = sqlx::query_as::<_, (String, Uuid)>(
+            "SELECT state,plan_id FROM solution_pack_applications WHERE workspace_id=$1 AND id=$2 FOR UPDATE",
         )
         .bind(workspace_id)
         .bind(application_id)
@@ -745,6 +952,12 @@ impl CatalogRepository {
             tx.commit().await?;
             return Ok(false);
         };
+        // Requirements are evidence, never mutation steps. Recheck them in the
+        // same transaction as every resource mutation and hold a shared lock on
+        // the installation rows so extension lifecycle changes cannot race the
+        // check for that step.
+        self.revalidate_required_extension_requirements(&mut tx, plan_id)
+            .await?;
         *attempted_position = Some(step.position);
         self.ensure_target_absent(&mut tx, &step).await?;
         let (result_snapshot, events) = match step.resource_kind.as_str() {

@@ -32,6 +32,12 @@ pub const MAX_SOLUTION_PACK_MANIFEST_BYTES: usize = 256 * 1024;
 pub const MAX_SOLUTION_PACK_ARCHIVE_ENTRIES: usize = 256;
 pub const MAX_SOLUTION_PACK_BLUEPRINTS: usize = 64;
 pub const MAX_SOLUTION_PACK_CONTEXTS: usize = 128;
+pub const MAX_SOLUTION_PACK_EXTENSION_REQUIREMENTS: usize = 64;
+pub const MAX_SOLUTION_PACK_CONFIGURATION_TEMPLATE_BYTES: usize = 64 * 1024;
+pub const MAX_SOLUTION_PACK_CONFIGURATION_TEMPLATE_DEPTH: usize = 16;
+pub const MAX_SOLUTION_PACK_CONFIGURATION_TEMPLATE_ITEMS: usize = 256;
+pub const MAX_SOLUTION_PACK_CONFIGURATION_TEMPLATE_KEY_BYTES: usize = 128;
+pub const MAX_SOLUTION_PACK_CONFIGURATION_TEMPLATE_STRING_BYTES: usize = 4 * 1024;
 pub const MAX_SOLUTION_PACK_BLUEPRINT_INCLUDES: usize = 16;
 pub const MAX_SOLUTION_PACK_BLUEPRINT_ATTRIBUTES: usize = 256;
 pub const MAX_SOLUTION_PACK_TOTAL_BLUEPRINT_COMPLEXITY: usize = 4096;
@@ -44,6 +50,7 @@ const MAX_ARCHIVE_PATH_BYTES: usize = 512;
 const MAX_IDENTIFIER_BYTES: usize = 128;
 const MAX_NAME_BYTES: usize = 200;
 const MAX_DESCRIPTION_BYTES: usize = 4096;
+const MAX_VERSION_REQUIREMENT_BYTES: usize = 256;
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
@@ -55,6 +62,8 @@ pub struct SolutionPackManifest {
     pub description: String,
     pub catalog: SolutionPackCatalog,
     pub resources: SolutionPackResources,
+    #[serde(default)]
+    pub extensions: Vec<SolutionPackExtensionRequirement>,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -78,6 +87,23 @@ pub struct SolutionPackResource {
     pub key: String,
     pub path: String,
     pub required: bool,
+    pub sha256: String,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct SolutionPackExtensionRequirement {
+    pub key: String,
+    pub id: String,
+    pub version: String,
+    pub required: bool,
+    pub configuration_template: Option<SolutionPackConfigurationTemplateRef>,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct SolutionPackConfigurationTemplateRef {
+    pub path: String,
     pub sha256: String,
 }
 
@@ -107,6 +133,7 @@ pub struct ValidatedSolutionPack {
     files: BTreeMap<String, Vec<u8>>,
     blueprints: BTreeMap<String, SolutionPackBlueprint>,
     contexts: BTreeMap<String, SolutionPackContext>,
+    configuration_templates: BTreeMap<String, Value>,
 }
 
 /// A validated portable blueprint source. References in this source remain
@@ -318,6 +345,7 @@ impl ValidatedSolutionPack {
         validate_manifest(&manifest)?;
         validate_declared_files(&manifest, &files)?;
         let (blueprints, contexts) = validate_content(&manifest, &files)?;
+        let configuration_templates = validate_configuration_templates(&manifest, &files)?;
 
         Ok(Self {
             manifest,
@@ -325,6 +353,7 @@ impl ValidatedSolutionPack {
             files,
             blueprints,
             contexts,
+            configuration_templates,
         })
     }
 
@@ -348,6 +377,10 @@ impl ValidatedSolutionPack {
 
     pub fn context(&self, key: &str) -> Option<&SolutionPackContext> {
         self.contexts.get(key)
+    }
+
+    pub fn configuration_template(&self, key: &str) -> Option<&Value> {
+        self.configuration_templates.get(key)
     }
 }
 
@@ -404,6 +437,82 @@ fn validate_manifest(manifest: &SolutionPackManifest) -> Result<(), SolutionPack
             return invalid(format!("duplicate resource path '{}'", resource.path));
         }
     }
+
+    if manifest.extensions.len() > MAX_SOLUTION_PACK_EXTENSION_REQUIREMENTS {
+        return invalid("solution-pack manifest declares too many extension requirements");
+    }
+    let mut extension_ids = HashSet::new();
+    for requirement in &manifest.extensions {
+        validate_extension_requirement(requirement)?;
+        if !keys.insert(&requirement.key) {
+            return invalid(format!("duplicate resource key '{}'", requirement.key));
+        }
+        if !extension_ids.insert(&requirement.id) {
+            return invalid(format!(
+                "duplicate extension requirement id '{}'",
+                requirement.id
+            ));
+        }
+        if let Some(template) = &requirement.configuration_template
+            && !paths.insert(&template.path)
+        {
+            return invalid(format!("duplicate resource path '{}'", template.path));
+        }
+    }
+    Ok(())
+}
+
+fn validate_extension_requirement(
+    requirement: &SolutionPackExtensionRequirement,
+) -> Result<(), SolutionPackError> {
+    let Some(code) = requirement.key.strip_prefix("extensions/") else {
+        return invalid(format!(
+            "extension requirement key '{}' must be in the extensions/ namespace",
+            requirement.key
+        ));
+    };
+    if requirement.key.len() > MAX_IDENTIFIER_BYTES
+        || !is_valid_stable_code(code)
+        || code.contains('/')
+    {
+        return invalid(format!(
+            "extension requirement key '{}' is invalid",
+            requirement.key
+        ));
+    }
+    crate::extensions::valid_id(&requirement.id, "extension requirement id")
+        .map_err(|error| SolutionPackError::Invalid(error.to_string()))?;
+    if requirement.version.is_empty()
+        || requirement.version.len() > MAX_VERSION_REQUIREMENT_BYTES
+        || requirement.version.trim() != requirement.version
+    {
+        return invalid(format!(
+            "extension requirement '{}' version must be a trimmed SemVer range of at most {MAX_VERSION_REQUIREMENT_BYTES} bytes",
+            requirement.key
+        ));
+    }
+    parse_version_req(&requirement.version).map_err(|_| {
+        SolutionPackError::Invalid(format!(
+            "extension requirement '{}' version must be a SemVer range",
+            requirement.key
+        ))
+    })?;
+    if let Some(template) = &requirement.configuration_template {
+        if !safe_archive_path(&template.path)
+            || !is_safe_configuration_template_path(&template.path)
+        {
+            return invalid(format!(
+                "extension requirement '{}' configuration template path is invalid",
+                requirement.key
+            ));
+        }
+        parse_sha256(&template.sha256).map_err(|()| {
+            SolutionPackError::Invalid(format!(
+                "extension requirement '{}' configuration template sha256 must be 64 lowercase hexadecimal characters",
+                requirement.key
+            ))
+        })?;
+    }
     Ok(())
 }
 
@@ -459,6 +568,13 @@ fn validate_declared_files(
         .iter()
         .chain(&manifest.resources.contexts)
         .map(|resource| resource.path.as_str())
+        .chain(
+            manifest
+                .extensions
+                .iter()
+                .filter_map(|requirement| requirement.configuration_template.as_ref())
+                .map(|template| template.path.as_str()),
+        )
         .collect::<BTreeSet<_>>();
     let actual = files.keys().map(String::as_str).collect::<BTreeSet<_>>();
     if let Some(missing) = declared.difference(&actual).next() {
@@ -468,23 +584,143 @@ fn validate_declared_files(
         return invalid(format!("archive file '{extra}' is not declared"));
     }
 
-    for resource in manifest
+    for (key, path, digest) in manifest
         .resources
         .blueprints
         .iter()
         .chain(&manifest.resources.contexts)
+        .map(|resource| (&resource.key, &resource.path, &resource.sha256))
+        .chain(manifest.extensions.iter().filter_map(|requirement| {
+            requirement
+                .configuration_template
+                .as_ref()
+                .map(|template| (&requirement.key, &template.path, &template.sha256))
+        }))
     {
-        let bytes = &files[&resource.path];
-        let expected = parse_sha256(&resource.sha256).expect("digest validated with manifest");
+        let bytes = &files[path];
+        let expected = parse_sha256(digest).expect("digest validated with manifest");
         let actual: [u8; 32] = Sha256::digest(bytes).into();
         if expected.ct_eq(&actual).unwrap_u8() != 1 {
-            return invalid(format!(
-                "resource '{}' does not match its sha256 digest",
-                resource.key
-            ));
+            return invalid(format!("resource '{key}' does not match its sha256 digest"));
         }
     }
     Ok(())
+}
+
+fn validate_configuration_templates(
+    manifest: &SolutionPackManifest,
+    files: &BTreeMap<String, Vec<u8>>,
+) -> Result<BTreeMap<String, Value>, SolutionPackError> {
+    let mut templates = BTreeMap::new();
+    for requirement in &manifest.extensions {
+        let Some(reference) = &requirement.configuration_template else {
+            continue;
+        };
+        let bytes = &files[&reference.path];
+        if bytes.len() > MAX_SOLUTION_PACK_CONFIGURATION_TEMPLATE_BYTES {
+            return invalid(format!(
+                "extension requirement '{}' configuration template exceeds the size limit",
+                requirement.key
+            ));
+        }
+        let template: Value = serde_json::from_slice(bytes).map_err(|_| {
+            SolutionPackError::Invalid(format!(
+                "extension requirement '{}' configuration template must be valid JSON",
+                requirement.key
+            ))
+        })?;
+        if !template.is_object() {
+            return invalid(format!(
+                "extension requirement '{}' configuration template must be a JSON object",
+                requirement.key
+            ));
+        }
+        let mut items = 0;
+        validate_configuration_template_value(&template, 1, &mut items, &requirement.key)?;
+        templates.insert(requirement.key.clone(), template);
+    }
+    Ok(templates)
+}
+
+fn validate_configuration_template_value(
+    value: &Value,
+    depth: usize,
+    items: &mut usize,
+    requirement_key: &str,
+) -> Result<(), SolutionPackError> {
+    if depth > MAX_SOLUTION_PACK_CONFIGURATION_TEMPLATE_DEPTH {
+        return invalid(format!(
+            "extension requirement '{requirement_key}' configuration template exceeds the depth limit"
+        ));
+    }
+    match value {
+        Value::Object(object) => {
+            *items = items.saturating_add(object.len());
+            if *items > MAX_SOLUTION_PACK_CONFIGURATION_TEMPLATE_ITEMS {
+                return invalid(format!(
+                    "extension requirement '{requirement_key}' configuration template exceeds the item limit"
+                ));
+            }
+            for (key, value) in object {
+                if key.len() > MAX_SOLUTION_PACK_CONFIGURATION_TEMPLATE_KEY_BYTES {
+                    return invalid(format!(
+                        "extension requirement '{requirement_key}' configuration template has an oversized key"
+                    ));
+                }
+                let key = key.to_ascii_lowercase();
+                if [
+                    "password",
+                    "secret",
+                    "token",
+                    "api_key",
+                    "private_key",
+                    "credential",
+                    "authorization",
+                ]
+                .iter()
+                .any(|suffix| key == *suffix || key.ends_with(suffix))
+                {
+                    return invalid(format!(
+                        "extension requirement '{requirement_key}' configuration template contains a secret-like key"
+                    ));
+                }
+                validate_configuration_template_value(value, depth + 1, items, requirement_key)?;
+            }
+        }
+        Value::Array(array) => {
+            *items = items.saturating_add(array.len());
+            if *items > MAX_SOLUTION_PACK_CONFIGURATION_TEMPLATE_ITEMS {
+                return invalid(format!(
+                    "extension requirement '{requirement_key}' configuration template exceeds the item limit"
+                ));
+            }
+            for value in array {
+                validate_configuration_template_value(value, depth + 1, items, requirement_key)?;
+            }
+        }
+        Value::String(string)
+            if string.len() > MAX_SOLUTION_PACK_CONFIGURATION_TEMPLATE_STRING_BYTES =>
+        {
+            return invalid(format!(
+                "extension requirement '{requirement_key}' configuration template has an oversized string"
+            ));
+        }
+        _ => {}
+    }
+    Ok(())
+}
+
+pub fn json_deep_contains(actual: &Value, expected: &Value) -> bool {
+    match (actual, expected) {
+        (Value::Object(actual), Value::Object(expected)) => {
+            expected.iter().all(|(key, expected)| {
+                actual
+                    .get(key)
+                    .is_some_and(|actual| json_deep_contains(actual, expected))
+            })
+        }
+        _ => actual == expected,
+    }
 }
 
 type ValidatedContent = (
@@ -1226,6 +1462,21 @@ fn validate_bounded_text(
     Ok(())
 }
 
+fn is_safe_configuration_template_path(value: &str) -> bool {
+    value.strip_prefix("extensions/").is_some_and(|path| {
+        path.ends_with(".json")
+            && path.split('/').all(|component| {
+                component
+                    .bytes()
+                    .next()
+                    .is_some_and(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'_' | b'-'))
+                    && component.bytes().all(|byte| {
+                        byte.is_ascii_alphanumeric() || matches!(byte, b'.' | b'_' | b'-')
+                    })
+            })
+    })
+}
+
 fn safe_archive_path(value: &str) -> bool {
     if value.is_empty()
         || value.len() > MAX_ARCHIVE_PATH_BYTES
@@ -1310,11 +1561,20 @@ impl BlueprintPublication {
     }
 }
 
+#[derive(Clone, Debug)]
+pub struct InstalledExtensionSnapshot {
+    pub installed_release_id: uuid::Uuid,
+    pub version: String,
+    pub state: String,
+    pub configuration: Value,
+}
+
 #[derive(Debug)]
 pub struct PlanningWorkspaceSnapshot {
     pub workspace_id: uuid::Uuid,
     pub physical_codes: BTreeSet<String>,
     pub default_context_id: uuid::Uuid,
+    pub installed_extensions: BTreeMap<String, InstalledExtensionSnapshot>,
 }
 
 #[derive(Clone, Debug)]
@@ -1339,11 +1599,82 @@ pub struct PlannedAction {
     pub preconditions: Value,
 }
 
+#[derive(Clone, Debug)]
+pub struct PlannedExtensionRequirement {
+    pub logical_key: String,
+    pub extension_id: String,
+    pub version_requirement: String,
+    pub required: bool,
+    pub configuration_template_path: Option<String>,
+    pub configuration_template_sha256: Option<String>,
+    pub status: &'static str,
+    pub reason_code: &'static str,
+    pub installed_release_id: Option<uuid::Uuid>,
+    pub installed_version: Option<String>,
+    pub installed_state: Option<String>,
+    pub configuration_matches: Option<bool>,
+    pub evaluation_template: Value,
+}
+
 #[derive(Debug)]
 pub struct SolutionPackPlanDraft {
     pub ready: bool,
     pub mappings: Vec<PlannedMapping>,
     pub actions: Vec<PlannedAction>,
+    pub extension_requirements: Vec<PlannedExtensionRequirement>,
+}
+
+pub fn evaluate_extension_requirement(
+    requirement: &SolutionPackExtensionRequirement,
+    template: Option<&Value>,
+    installed: Option<&InstalledExtensionSnapshot>,
+) -> PlannedExtensionRequirement {
+    let configuration_matches = installed.map(|installed| {
+        template.is_none_or(|template| json_deep_contains(&installed.configuration, template))
+    });
+    let reason_code = match installed {
+        None => "missing",
+        Some(installed)
+            if Version::parse(&installed.version).map_or(true, |version| {
+                !parse_version_req(&requirement.version)
+                    .expect("requirement version validated")
+                    .matches(&version)
+            }) =>
+        {
+            "incompatible_version"
+        }
+        Some(installed) if installed.state == "quarantined" => "quarantined",
+        Some(_) if configuration_matches != Some(true) => "configuration_mismatch",
+        Some(_) => "satisfied",
+    };
+    let status = if reason_code == "satisfied" {
+        "satisfied"
+    } else if requirement.required {
+        "blocked"
+    } else {
+        "skipped"
+    };
+    PlannedExtensionRequirement {
+        logical_key: requirement.key.clone(),
+        extension_id: requirement.id.clone(),
+        version_requirement: requirement.version.clone(),
+        required: requirement.required,
+        configuration_template_path: requirement
+            .configuration_template
+            .as_ref()
+            .map(|reference| reference.path.clone()),
+        configuration_template_sha256: requirement
+            .configuration_template
+            .as_ref()
+            .map(|reference| reference.sha256.clone()),
+        status,
+        reason_code,
+        installed_release_id: installed.map(|installed| installed.installed_release_id),
+        installed_version: installed.map(|installed| installed.version.clone()),
+        installed_state: installed.map(|installed| installed.state.clone()),
+        configuration_matches,
+        evaluation_template: template.cloned().unwrap_or_else(|| serde_json::json!({})),
+    }
 }
 
 /// Builds a create-only plan from an already validated local archive. The
@@ -1563,12 +1894,29 @@ pub fn build_create_only_plan(
         });
     }
 
-    Ok(SolutionPackPlanDraft {
-        ready: actions
+    let extension_requirements = manifest
+        .extensions
+        .iter()
+        .map(|requirement| {
+            evaluate_extension_requirement(
+                requirement,
+                pack.configuration_template(&requirement.key),
+                workspace.installed_extensions.get(&requirement.id),
+            )
+        })
+        .collect::<Vec<_>>();
+    let ready = actions
+        .iter()
+        .all(|action| matches!(action.action, "create" | "skip"))
+        && extension_requirements
             .iter()
-            .all(|action| matches!(action.action, "create" | "skip")),
+            .all(|requirement| requirement.status != "blocked");
+
+    Ok(SolutionPackPlanDraft {
+        ready,
         mappings: mappings_by_key.into_values().collect(),
         actions,
+        extension_requirements,
     })
 }
 
@@ -1869,6 +2217,23 @@ target_blueprint = "blueprints/product"
         ]
     }
 
+    fn archive_with_configuration_template(template: &[u8]) -> Vec<u8> {
+        let mut manifest = manifest_value();
+        manifest["extensions"] = json!([{
+            "key": "extensions/shopify",
+            "id": "acme.shopify",
+            "version": ">=2.1.0 <3.0.0",
+            "required": true,
+            "configuration_template": {
+                "path": "extensions/shopify.json",
+                "sha256": digest(template)
+            }
+        }]);
+        let mut files = valid_files();
+        files.push(("extensions/shopify.json", template));
+        archive(&manifest, &files)
+    }
+
     fn archive(manifest: &Value, files: &[(&str, &[u8])]) -> Vec<u8> {
         let manifest = serde_json::to_vec(manifest).unwrap();
         let mut tar_bytes = Vec::new();
@@ -1938,6 +2303,173 @@ target_blueprint = "blueprints/product"
     }
 
     #[test]
+    fn validates_bounded_non_secret_extension_configuration_templates() {
+        const TEMPLATE: &[u8] = br#"{"endpoint":"https://example.test","features":{"sync":true}}"#;
+        let pack =
+            ValidatedSolutionPack::from_tar_zst(&archive_with_configuration_template(TEMPLATE))
+                .unwrap();
+        assert_eq!(pack.manifest().extensions.len(), 1);
+        assert_eq!(
+            pack.configuration_template("extensions/shopify"),
+            Some(&json!({"endpoint":"https://example.test","features":{"sync":true}}))
+        );
+
+        for template in [
+            br#"[]"#.as_slice(),
+            br#"{"api_token":"public-looking-but-forbidden"}"#,
+            br#"{"nested":{"PASSWORD":"forbidden"}}"#,
+            br#"{"unterminated":true"#,
+        ] {
+            assert!(
+                ValidatedSolutionPack::from_tar_zst(&archive_with_configuration_template(template))
+                    .is_err()
+            );
+        }
+
+        let exact_size = format!(
+            "{{}}{}",
+            " ".repeat(MAX_SOLUTION_PACK_CONFIGURATION_TEMPLATE_BYTES - 2)
+        );
+        ValidatedSolutionPack::from_tar_zst(&archive_with_configuration_template(
+            exact_size.as_bytes(),
+        ))
+        .unwrap();
+        assert_invalid(
+            &archive_with_configuration_template(format!("{exact_size} ").as_bytes()),
+            "size limit",
+        );
+
+        fn validate_value(value: &Value) -> Result<(), SolutionPackError> {
+            let mut items = 0;
+            validate_configuration_template_value(value, 1, &mut items, "extensions/test")
+        }
+
+        let mut maximum_depth = json!(true);
+        for _ in 0..(MAX_SOLUTION_PACK_CONFIGURATION_TEMPLATE_DEPTH - 1) {
+            maximum_depth = json!({"level": maximum_depth});
+        }
+        validate_value(&maximum_depth).unwrap();
+        assert!(validate_value(&json!({"level": maximum_depth})).is_err());
+
+        let maximum_items = Value::Object(
+            (0..MAX_SOLUTION_PACK_CONFIGURATION_TEMPLATE_ITEMS)
+                .map(|index| (format!("field_{index}"), Value::Null))
+                .collect(),
+        );
+        validate_value(&maximum_items).unwrap();
+        let excessive_items = Value::Object(
+            (0..=MAX_SOLUTION_PACK_CONFIGURATION_TEMPLATE_ITEMS)
+                .map(|index| (format!("field_{index}"), Value::Null))
+                .collect(),
+        );
+        assert!(validate_value(&excessive_items).is_err());
+
+        validate_value(&json!({
+            "k".repeat(MAX_SOLUTION_PACK_CONFIGURATION_TEMPLATE_KEY_BYTES): true
+        }))
+        .unwrap();
+        assert!(
+            validate_value(&json!({
+                "k".repeat(MAX_SOLUTION_PACK_CONFIGURATION_TEMPLATE_KEY_BYTES + 1): true
+            }))
+            .is_err()
+        );
+        validate_value(&json!({
+            "value": "v".repeat(MAX_SOLUTION_PACK_CONFIGURATION_TEMPLATE_STRING_BYTES)
+        }))
+        .unwrap();
+        assert!(
+            validate_value(&json!({
+                "value": "v".repeat(MAX_SOLUTION_PACK_CONFIGURATION_TEMPLATE_STRING_BYTES + 1)
+            }))
+            .is_err()
+        );
+    }
+
+    #[test]
+    fn extension_requirement_evaluation_is_deterministic_and_does_not_require_enablement() {
+        let requirement = SolutionPackExtensionRequirement {
+            key: "extensions/shopify".into(),
+            id: "acme.shopify".into(),
+            version: ">=2.1.0 <3.0.0".into(),
+            required: true,
+            configuration_template: None,
+        };
+        let installed = InstalledExtensionSnapshot {
+            installed_release_id: uuid::Uuid::nil(),
+            version: "2.2.0".into(),
+            state: "disabled".into(),
+            configuration: json!({"endpoint":"https://example.test","unrelated_secret":"not exposed"}),
+        };
+        let template = json!({"endpoint":"https://example.test"});
+        let satisfied =
+            evaluate_extension_requirement(&requirement, Some(&template), Some(&installed));
+        assert_eq!(satisfied.status, "satisfied");
+        assert_eq!(satisfied.reason_code, "satisfied");
+
+        let mismatch = evaluate_extension_requirement(
+            &requirement,
+            Some(&json!({"endpoint":"https://other.test"})),
+            Some(&installed),
+        );
+        assert_eq!(mismatch.status, "blocked");
+        assert_eq!(mismatch.reason_code, "configuration_mismatch");
+
+        let incompatible = InstalledExtensionSnapshot {
+            version: "3.0.0".into(),
+            ..installed.clone()
+        };
+        let blocked = evaluate_extension_requirement(&requirement, None, Some(&incompatible));
+        assert_eq!(blocked.status, "blocked");
+        assert_eq!(blocked.reason_code, "incompatible_version");
+
+        let mut optional = requirement.clone();
+        optional.required = false;
+        let missing = evaluate_extension_requirement(&optional, None, None);
+        assert_eq!(missing.status, "skipped");
+        assert_eq!(missing.reason_code, "missing");
+        let incompatible = evaluate_extension_requirement(&optional, None, Some(&incompatible));
+        assert_eq!(incompatible.status, "skipped");
+        assert_eq!(incompatible.reason_code, "incompatible_version");
+        let optional_mismatch = evaluate_extension_requirement(
+            &optional,
+            Some(&json!({"endpoint":"https://other.test"})),
+            Some(&installed),
+        );
+        assert_eq!(optional_mismatch.status, "skipped");
+        assert_eq!(optional_mismatch.reason_code, "configuration_mismatch");
+        let optional_satisfied =
+            evaluate_extension_requirement(&optional, Some(&template), Some(&installed));
+        assert_eq!(optional_satisfied.status, "satisfied");
+
+        let quarantined = InstalledExtensionSnapshot {
+            state: "quarantined".into(),
+            ..installed
+        };
+        let blocked = evaluate_extension_requirement(&requirement, None, Some(&quarantined));
+        assert_eq!(blocked.reason_code, "quarantined");
+        let skipped = evaluate_extension_requirement(&optional, None, Some(&quarantined));
+        assert_eq!(skipped.status, "skipped");
+        assert_eq!(skipped.reason_code, "quarantined");
+    }
+
+    #[test]
+    fn configuration_matching_uses_recursive_object_containment_and_exact_arrays() {
+        assert!(json_deep_contains(
+            &json!({"nested":{"enabled":true,"extra":1},"list":[1,2],"extra":true}),
+            &json!({"nested":{"enabled":true},"list":[1,2]})
+        ));
+        assert!(!json_deep_contains(
+            &json!({"list":[1,2,3]}),
+            &json!({"list":[1,2]})
+        ));
+        assert!(!json_deep_contains(
+            &json!({"value":"1"}),
+            &json!({"value":1})
+        ));
+    }
+
+    #[test]
     fn accepts_safe_directory_entries() {
         let manifest = serde_json::to_vec(&manifest_value()).unwrap();
         let files = valid_files();
@@ -1975,6 +2507,63 @@ target_blueprint = "blueprints/product"
                 .unwrap()
                 .is_empty()
         );
+
+        let mut with_extension = manifest_value();
+        with_extension["extensions"] = json!([{
+            "key":"extensions/shopify",
+            "id":"acme.shopify",
+            "version":">=2.1.0 <3.0.0",
+            "required":true,
+            "configuration_template": {
+                "path":"extensions/shopify.json",
+                "sha256":"0".repeat(64)
+            }
+        }]);
+        assert!(
+            catalog_validation::validate_json_schema(&schema, &with_extension)
+                .unwrap()
+                .is_empty()
+        );
+        with_extension["extensions"][0]["unknown"] = json!(true);
+        assert!(
+            !catalog_validation::validate_json_schema(&schema, &with_extension)
+                .unwrap()
+                .is_empty()
+        );
+
+        for (pointer, invalid_value, runtime_error) in [
+            ("/extensions/0/version", "not-a-range", "SemVer range"),
+            (
+                "/extensions/0/configuration_template/path",
+                "extensions/../template.json",
+                "configuration template path is invalid",
+            ),
+            (
+                "/extensions/0/key",
+                "extensions/aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+                "extension requirement key",
+            ),
+        ] {
+            let mut invalid = manifest_value();
+            invalid["extensions"] = json!([{
+                "key":"extensions/shopify",
+                "id":"acme.shopify",
+                "version":"^1.0",
+                "required":true,
+                "configuration_template": {
+                    "path":"extensions/shopify.json",
+                    "sha256":"0".repeat(64)
+                }
+            }]);
+            *invalid.pointer_mut(pointer).unwrap() = json!(invalid_value);
+            assert!(
+                !catalog_validation::validate_json_schema(&schema, &invalid)
+                    .unwrap()
+                    .is_empty(),
+                "schema accepted invalid extension value '{invalid_value}'"
+            );
+            assert_invalid(&archive(&invalid, &valid_files()), runtime_error);
+        }
 
         for (field, invalid_value, runtime_error) in [
             ("id", "attricat.foo-", "reverse-DNS-style"),
@@ -2284,6 +2873,22 @@ value_type = "string"
                 .unwrap_err()
                 .to_string()
                 .contains("too many contexts")
+        );
+
+        let mut manifest: SolutionPackManifest = serde_json::from_value(manifest_value()).unwrap();
+        let requirement: SolutionPackExtensionRequirement = serde_json::from_value(json!({
+            "key":"extensions/example",
+            "id":"acme.example",
+            "version":"^1.0",
+            "required":false
+        }))
+        .unwrap();
+        manifest.extensions = vec![requirement; MAX_SOLUTION_PACK_EXTENSION_REQUIREMENTS + 1];
+        assert!(
+            validate_manifest(&manifest)
+                .unwrap_err()
+                .to_string()
+                .contains("too many extension requirements")
         );
     }
 
@@ -2617,6 +3222,7 @@ value_type = "string"
                 workspace_id: uuid::Uuid::nil(),
                 physical_codes: BTreeSet::from(["default".to_owned()]),
                 default_context_id: uuid::Uuid::nil(),
+                installed_extensions: BTreeMap::new(),
             },
         )
         .unwrap();
@@ -2714,6 +3320,7 @@ value_type = "string"
                 workspace_id: uuid::Uuid::nil(),
                 physical_codes: BTreeSet::from(["default".to_owned()]),
                 default_context_id: uuid::Uuid::nil(),
+                installed_extensions: BTreeMap::new(),
             },
         )
         .unwrap();
@@ -2747,6 +3354,7 @@ value_type = "string"
                 workspace_id: uuid::Uuid::nil(),
                 physical_codes: BTreeSet::from(["default".to_owned(), "ecom_product".to_owned()]),
                 default_context_id: uuid::Uuid::nil(),
+                installed_extensions: BTreeMap::new(),
             },
         )
         .unwrap();
@@ -2774,6 +3382,7 @@ value_type = "string"
                 workspace_id: uuid::Uuid::nil(),
                 physical_codes: BTreeSet::from(["default".to_owned()]),
                 default_context_id: uuid::Uuid::nil(),
+                installed_extensions: BTreeMap::new(),
             },
         )
         .unwrap();
@@ -2850,6 +3459,7 @@ value_type = "string"
             workspace_id: uuid::Uuid::nil(),
             physical_codes: BTreeSet::from(["default".to_owned()]),
             default_context_id: uuid::Uuid::nil(),
+            installed_extensions: BTreeMap::new(),
         };
 
         let draft = build_create_only_plan(&pack, "paths", BlueprintPublication::Draft, &workspace)
@@ -2922,6 +3532,7 @@ target_blueprint = "blueprints/product"
             workspace_id: uuid::Uuid::from_u128(1),
             physical_codes: BTreeSet::from(["default".to_owned(), "ecom_product".to_owned()]),
             default_context_id: uuid::Uuid::from_u128(2),
+            installed_extensions: BTreeMap::new(),
         };
         let first =
             build_create_only_plan(&pack, "ecom", BlueprintPublication::Publish, &workspace)
@@ -3005,6 +3616,7 @@ value_type = "string"
                 workspace_id: uuid::Uuid::nil(),
                 physical_codes: BTreeSet::from(["default".to_owned()]),
                 default_context_id: uuid::Uuid::nil(),
+                installed_extensions: BTreeMap::new(),
             },
         )
         .unwrap();

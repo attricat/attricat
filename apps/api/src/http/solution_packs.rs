@@ -15,7 +15,8 @@ use crate::{
     repository::{SolutionPackApplication, SolutionPackApplicationSummary, SolutionPackPlan},
     solution_packs::{
         BlueprintPublication, MAX_SOLUTION_PACK_INSPECTION_RESPONSE_BYTES,
-        MAX_SOLUTION_PACK_PLAN_RESPONSE_BYTES, SolutionPackResource, ValidatedSolutionPack,
+        MAX_SOLUTION_PACK_PLAN_RESPONSE_BYTES, SolutionPackExtensionRequirement,
+        SolutionPackResource, ValidatedSolutionPack,
     },
 };
 
@@ -24,6 +25,7 @@ pub(super) struct InspectionResponse {
     archive_sha256: String,
     manifest: ManifestSummary,
     resources: ResourceSummaries,
+    extensions: Vec<ExtensionRequirementSummary>,
 }
 
 #[derive(Serialize)]
@@ -71,6 +73,21 @@ struct ContextSummary {
     parent: String,
 }
 
+#[derive(Serialize)]
+struct ExtensionRequirementSummary {
+    key: String,
+    id: String,
+    version: String,
+    required: bool,
+    configuration_template: Option<ConfigurationTemplateSummary>,
+}
+
+#[derive(Serialize)]
+struct ConfigurationTemplateSummary {
+    path: String,
+    sha256: String,
+}
+
 /// Validates and summarizes an uploaded solution-pack archive without storing
 /// the archive or applying any resources to the workspace.
 pub(super) async fn inspect(
@@ -112,6 +129,11 @@ pub(super) async fn inspect(
             blueprints,
             contexts,
         },
+        extensions: manifest
+            .extensions
+            .iter()
+            .map(extension_requirement_summary)
+            .collect(),
     };
     ensure_response_size(&response)?;
     Ok((StatusCode::OK, Json(response)))
@@ -124,7 +146,7 @@ pub(super) struct CreatePlanQuery {
     blueprint_publication: BlueprintPublication,
 }
 
-/// Validates a local archive again and persists an immutable create-only dry-run.
+/// Validates an uploaded archive again and persists an immutable create-only dry-run.
 pub(super) async fn create_plan(
     ScopedRepository(repository): ScopedRepository,
     query: Result<Query<CreatePlanQuery>, QueryRejection>,
@@ -277,6 +299,23 @@ fn blueprint_summary(
     }
 }
 
+fn extension_requirement_summary(
+    requirement: &SolutionPackExtensionRequirement,
+) -> ExtensionRequirementSummary {
+    ExtensionRequirementSummary {
+        key: requirement.key.clone(),
+        id: requirement.id.clone(),
+        version: requirement.version.clone(),
+        required: requirement.required,
+        configuration_template: requirement.configuration_template.as_ref().map(|template| {
+            ConfigurationTemplateSummary {
+                path: template.path.clone(),
+                sha256: template.sha256.clone(),
+            }
+        }),
+    }
+}
+
 fn context_summary(
     pack: &ValidatedSolutionPack,
     resource: &SolutionPackResource,
@@ -314,6 +353,7 @@ mod tests {
                 blueprints: Vec::new(),
                 contexts: Vec::new(),
             },
+            extensions: Vec::new(),
         }
     }
 
