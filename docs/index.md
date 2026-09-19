@@ -34,6 +34,8 @@ runs the ignored RustFS compatibility test.
 
 ## Learn The Model
 
+- [Backend crate architecture](backend-architecture.md): compilation boundaries,
+  dependency direction, ownership, and compatibility policy.
 - [Blueprint authoring](blueprints.md): schema definitions, versions, contexts,
   views, and validation.
 - [Database model](database.md): persisted model, value history, projections,

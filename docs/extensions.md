@@ -176,7 +176,7 @@ implemented; mediated network/secrets APIs and webhook delivery remain follow-on
 ## Server WASM runtime (#145)
 
 A `server_wasm` artifact is a WebAssembly **component** using the checked-in
-`catalog:host@1.0.0` WIT package at `apps/api/wit/catalog-extension.wit`.
+`catalog:host@1.0.0` WIT package at `crates/extension-runtime/wit/catalog-extension.wit`.
 Components receive no WASI context, filesystem, environment, clock, socket, or
 pre-opened descriptor. The only imports are `api.call` and `api.log`.
 
@@ -507,7 +507,7 @@ loading state, and failure announcements.
 ## Context-aware catalog APIs (host API 1.1)
 
 `catalog:host@1.0.0` remains a supported immutable ABI. New components may use
-`apps/api/wit-next/catalog-extension.wit` (`catalog:host@1.1.0`); manifests use
+`crates/extension-runtime/wit-next/catalog-extension.wit` (`catalog:host@1.1.0`); manifests use
 `catalog.host_api` SemVer ranges and are never silently downgraded. The v1.1
 WIT interface has typed `read`, `write`, `scoped-configuration-get`, and
 `scoped-configuration-set` functions. Dynamic attribute and configuration

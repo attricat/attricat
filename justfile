@@ -24,6 +24,9 @@ fmt-check:
 check:
     cargo check --locked --workspace --all-targets
 
+benchmark-api-compile mode="all":
+    scripts/benchmark-api-compile.sh {{mode}}
+
 clippy:
     cargo clippy --locked --workspace --all-targets -- -D warnings
 

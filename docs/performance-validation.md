@@ -1,4 +1,22 @@
-# Explorer performance validation
+# Performance validation
+
+## Rust compile-time benchmark
+
+Use the isolated API compile benchmark to compare crate-boundary changes without
+invalidating the normal development target directory:
+
+```sh
+scripts/benchmark-api-compile.sh all
+# Reuse retained artifacts for a warm-only sample:
+scripts/benchmark-api-compile.sh warm
+```
+
+It measures clean and warm `cargo check -p api --all-targets` runs plus
+representative domain, repository, HTTP, and extension-runtime edit/recheck
+samples. Record the Rust version, host hardware, git revision, and emitted real
+timings when comparing results.
+
+## Explorer performance validation
 
 Explorer performance is measured locally against the deterministic ByteForge Components demo catalog. The generator writes all catalog data through the public API; the load test measures API reads only.
 

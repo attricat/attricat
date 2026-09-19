@@ -1,9 +1,7 @@
 use std::{net::SocketAddr, str::FromStr, sync::Arc};
 
 use api::{
-    MIGRATOR,
-    account::{Password, hash_password},
-    agent_worker,
+    MIGRATOR, agent_worker,
     agents::AgentProviderConfig,
     blueprint_migration_worker,
     constants::{
@@ -118,34 +116,33 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     CatalogRepository::new(maintenance_pool.clone())
         .ensure_rule_permissions()
         .await?;
+    let bootstrap_repository = CatalogRepository::new(maintenance_pool.clone());
     // The identity/membership migration consumes this durable bootstrap owner
     // record to create the initial owner grant. It is set only by deployment
     // configuration, never by a catalog request.
-    let bootstrap_workspace = sqlx::query(
-        "UPDATE workspaces SET name = $2, bootstrap_owner_email = $3, updated_at = now() WHERE id = $1 AND deleted_at IS NULL",
-    )
-    .bind(workspace_id)
-    .bind(bootstrap_workspace_name)
-    .bind(&bootstrap_owner_email)
-    .execute(&maintenance_pool)
-    .await?;
-    if bootstrap_workspace.rows_affected() != 1 {
-        return Err("CATALOG_WORKSPACE_ID does not identify an active workspace".into());
-    }
+    bootstrap_repository
+        .configure_bootstrap_workspace(
+            workspace_id,
+            &bootstrap_workspace_name,
+            &bootstrap_owner_email,
+        )
+        .await?;
     // The migration defines the identity/RBAC schema, but configuration is
     // available only after migrations. Bootstrap the configured owner here so
     // a fresh installation receives its initial durable owner grant.
-    bootstrap_workspace_owner(
-        &maintenance_pool,
-        workspace_id,
-        bootstrap_owner_id.unwrap_or_else(Uuid::new_v4),
-        Uuid::new_v4(),
-        Uuid::new_v4(),
-        &bootstrap_owner_email,
-    )
-    .await?;
+    bootstrap_repository
+        .ensure_bootstrap_workspace_owner(
+            workspace_id,
+            bootstrap_owner_id.unwrap_or_else(Uuid::new_v4),
+            Uuid::new_v4(),
+            Uuid::new_v4(),
+            &bootstrap_owner_email,
+        )
+        .await?;
     if let Some(password) = bootstrap_owner_password {
-        create_bootstrap_password(&maintenance_pool, &bootstrap_owner_email, password).await?;
+        bootstrap_repository
+            .ensure_bootstrap_local_password(&bootstrap_owner_email, password)
+            .await?;
     }
     // The browser E2E harness needs an independent principal for server-side
     // fixture setup, because login rotation deliberately invalidates a user's
@@ -153,16 +150,18 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     // are explicitly configured.
     if let Some((email, password)) = e2e_fixture {
         let email = email.trim().to_lowercase();
-        bootstrap_workspace_owner(
-            &maintenance_pool,
-            workspace_id,
-            Uuid::new_v4(),
-            Uuid::new_v4(),
-            Uuid::new_v4(),
-            &email,
-        )
-        .await?;
-        create_bootstrap_password(&maintenance_pool, &email, password).await?;
+        bootstrap_repository
+            .ensure_bootstrap_workspace_owner(
+                workspace_id,
+                Uuid::new_v4(),
+                Uuid::new_v4(),
+                Uuid::new_v4(),
+                &email,
+            )
+            .await?;
+        bootstrap_repository
+            .ensure_bootstrap_local_password(&email, password)
+            .await?;
     }
     let history_retention_days = std::env::var("ATTRIBUTE_VALUE_HISTORY_RETENTION_DAYS")
         .unwrap_or_else(|_| "90".to_owned())
@@ -367,67 +366,4 @@ fn positive_env(
             .ok_or_else(|| format!("{name} must be a positive integer").into()),
         Err(_) => Ok(default),
     }
-}
-
-async fn bootstrap_workspace_owner(
-    pool: &sqlx::PgPool,
-    workspace_id: Uuid,
-    user_id: Uuid,
-    membership_id: Uuid,
-    grant_id: Uuid,
-    email: &str,
-) -> Result<(), sqlx::Error> {
-    let mut tx = pool.begin().await?;
-    let email = email.trim().to_lowercase();
-    sqlx::query("SELECT id FROM workspaces WHERE id = $1 FOR UPDATE")
-        .bind(workspace_id)
-        .execute(&mut *tx)
-        .await?;
-    let owner_exists: bool = sqlx::query_scalar("SELECT EXISTS (SELECT 1 FROM role_grants g JOIN workspace_memberships m ON m.id = g.membership_id WHERE g.workspace_id = $1 AND g.role_id = '00000000-0000-4000-8000-000000000101'::uuid AND m.state = 'active')").bind(workspace_id).fetch_one(&mut *tx).await?;
-    if !owner_exists {
-        sqlx::query("INSERT INTO users (id, email) VALUES ($1, $2) ON CONFLICT (email) DO NOTHING")
-            .bind(user_id)
-            .bind(&email)
-            .execute(&mut *tx)
-            .await?;
-        let persisted_user: Uuid =
-            sqlx::query_scalar("SELECT id FROM users WHERE email = $1 FOR UPDATE")
-                .bind(&email)
-                .fetch_one(&mut *tx)
-                .await?;
-        sqlx::query("INSERT INTO workspace_memberships (id, workspace_id, user_id) VALUES ($1, $2, $3) ON CONFLICT (workspace_id, user_id) DO NOTHING").bind(membership_id).bind(workspace_id).bind(persisted_user).execute(&mut *tx).await?;
-        let membership: Uuid = sqlx::query_scalar(
-            "SELECT id FROM workspace_memberships WHERE workspace_id = $1 AND user_id = $2",
-        )
-        .bind(workspace_id)
-        .bind(persisted_user)
-        .fetch_one(&mut *tx)
-        .await?;
-        sqlx::query("INSERT INTO role_grants (id, workspace_id, membership_id, role_id, scope_type, scope_target_id) VALUES ($1, $2, $3, '00000000-0000-4000-8000-000000000101'::uuid, 'workspace', $2) ON CONFLICT DO NOTHING").bind(grant_id).bind(workspace_id).bind(membership).execute(&mut *tx).await?;
-    }
-    tx.commit().await
-}
-
-async fn create_bootstrap_password(
-    pool: &sqlx::PgPool,
-    email: &str,
-    password: String,
-) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-    let password_hash = hash_password(&Password::new(password))?;
-    sqlx::query(
-        "INSERT INTO local_password_credentials (user_id, password_hash) SELECT id, $2 FROM users WHERE email = $1 ON CONFLICT (user_id) DO NOTHING",
-    )
-    .bind(email)
-    .bind(password_hash.as_phc())
-    .execute(pool)
-    .await?;
-    // Bootstrap passwords are supplied by trusted deployment configuration, so
-    // their configured owner addresses are verified before reset links can issue.
-    sqlx::query(
-        "UPDATE users SET email_verified_at = COALESCE(email_verified_at, now()) WHERE email = $1",
-    )
-    .bind(email)
-    .execute(pool)
-    .await?;
-    Ok(())
 }

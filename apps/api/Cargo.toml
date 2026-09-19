@@ -1,59 +1,38 @@
 [package]
 name = "api"
 version = "0.1.0"
-edition = "2024"
+edition.workspace = true
 rust-version.workspace = true
 publish.workspace = true
 
 [dependencies]
-async-recursion = "1"
-async-trait = "0.1"
-async-stream = "0.3"
-aws-config = { version = "1", default-features = false, features = ["default-https-client", "rt-tokio"] }
-aws-credential-types = "1"
-aws-sdk-s3 = { version = "1", default-features = false, features = ["default-https-client", "http-1x", "rt-tokio"] }
-axum = { version = "0.8", features = ["multipart"] }
-argon2 = "0.5"
-base64 = "0.22"
-bytes = "1"
-catalog-blueprint = { path = "../../crates/blueprint" }
-catalog-validation = { path = "../../crates/validation" }
-catalog-workflow = { path = "../../crates/workflow" }
-catalog-rules = { path = "../../crates/rules" }
-chrono = { version = "0.4", default-features = false, features = ["clock", "serde", "std"] }
-chrono-tz = "0.10"
-rand = "0.8"
-reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls", "stream"] }
-rust_decimal = { version = "1", features = ["serde"] }
-metrics = "0.23"
-metrics-exporter-prometheus = "0.15"
-lettre = { version = "0.11", default-features = false, features = ["builder", "smtp-transport", "tokio1-rustls-tls"] }
-dotenvy = "0.15"
-futures-util = "0.3"
-image = { version = "0.25", default-features = false, features = ["jpeg", "png", "webp"] }
-kamadak-exif = "0.6"
-serde = { version = "1", features = ["derive"] }
-serde_json = "1"
-secrecy = "0.10"
-semver = "1"
-sha2 = "0.10"
-sqlx = { version = "0.8", default-features = false, features = ["chrono", "json", "macros", "migrate", "postgres", "runtime-tokio-rustls", "rust_decimal", "uuid"] }
-subtle = "2.6"
-tar = "0.4"
-thiserror = "2"
-toml = "0.8"
-tracing = "0.1"
-tracing-subscriber = { version = "0.3", features = ["env-filter", "json"] }
-tokio = { version = "1", features = ["fs", "io-util", "macros", "net", "rt-multi-thread", "signal", "sync", "time"] }
-tokio-stream = "0.1"
-url = "2"
-uuid = { version = "1", features = ["serde", "v4"] }
-zstd = "0.13"
-wasmtime = { version = "48", default-features = false, features = ["async", "component-model", "cranelift", "runtime"] }
-opentelemetry = "0.32"
-opentelemetry_sdk = { version = "0.32", features = ["rt-tokio"] }
-opentelemetry-otlp = { version = "0.32", default-features = false, features = ["trace", "grpc-tonic"] }
-tracing-opentelemetry = "0.33"
+axum.workspace = true
+catalog-domain = { path = "../../crates/domain" }
+catalog-events = { path = "../../crates/events" }
+catalog-extension-manifest = { path = "../../crates/extension-manifest" }
+catalog-extension-runtime = { path = "../../crates/extension-runtime" }
+catalog-http = { path = "../../crates/http" }
+catalog-repository = { path = "../../crates/repository" }
+catalog-storage = { path = "../../crates/storage" }
+catalog-workers = { path = "../../crates/workers" }
+dotenvy.workspace = true
+sqlx.workspace = true
+tokio.workspace = true
+tracing.workspace = true
+uuid.workspace = true
 
 [dev-dependencies]
+async-trait.workspace = true
+axum.workspace = true
+chrono.workspace = true
+image.workspace = true
 reqwest = { version = "0.12", default-features = false, features = ["json", "multipart", "rustls-tls"] }
+rust_decimal.workspace = true
+serde_json.workspace = true
+sha2.workspace = true
+sqlx.workspace = true
+tar.workspace = true
+tokio.workspace = true
+url.workspace = true
+uuid.workspace = true
+zstd.workspace = true

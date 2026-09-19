@@ -1,0 +1,24 @@
+[package]
+name = "catalog-extension-runtime"
+version = "0.1.0"
+edition.workspace = true
+rust-version.workspace = true
+publish.workspace = true
+
+[dependencies]
+async-trait.workspace = true
+catalog-domain = { path = "../domain" }
+catalog-events = { path = "../events" }
+catalog-extension-manifest = { path = "../extension-manifest" }
+catalog-repository = { path = "../repository" }
+catalog-storage = { path = "../storage" }
+catalog-workers = { path = "../workers" }
+metrics.workspace = true
+semver.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+tokio.workspace = true
+tracing.workspace = true
+uuid.workspace = true
+wasmtime.workspace = true
