@@ -2,11 +2,11 @@
 
 > **Status:** v1 archive validation, administrator inspection, immutable
 > create-only planning, and durable application/history for contexts and
-> blueprints are implemented. Private-repository fetching and broader resource
-> types remain deferred.
+> blueprints are implemented. Administrators install uploaded `.tar.zst`
+> archives; broader resource types remain deferred.
 >
-> **Scope of this document:** Sections that describe private repositories,
-> existing-resource adoption, updates, settings, extensions, assets, sample
+> **Scope of this document:** Sections that describe existing-resource
+> adoption, updates, settings, extensions, assets, sample
 > data, prerequisites, export, or richer application evidence are future target
 > design, not implemented v1 behavior. The explicitly marked v1 sections below
 > define the current product contract.
@@ -51,8 +51,8 @@ to the workspace rather than remaining managed by the pack.
   precedence or last-writer-wins behavior.
 - **Versioned:** pack releases and their resource definitions are immutable;
   applying one does not freeze or subordinate the resulting workspace state.
-- **Traceable:** Catalog records source identity, revision, release, archive
-  digest, selected options, mappings, actions, and application history.
+- **Traceable:** Catalog records pack identity and version, archive digest,
+  selected options, mappings, actions, and application history.
 - **Trust preserving:** trusting a pack does not trust, enable, configure, or
   grant permissions to an extension named by that pack.
 
@@ -75,32 +75,26 @@ Not every content type must ship in the first implementation. The
 [initial delivery boundary](#initial-delivery-boundary) intentionally starts
 with blueprints and contexts.
 
-## Package and distribution (future private-repository design)
+## Package and distribution
 
 Solution packs use the same `.tar.zst` container format as extensions, but have
 an independent manifest and validation contract. A pack archive has one
 `solution-pack.json` at its root. It must not be interpreted as an extension
 archive, even if it also contains a file named `manifest.json`.
 
-Each solution pack lives in its own private repository. The repository is the
-pack's canonical source, documentation home, and release history; there is no
-separate solution-pack registry or catalog index. A repository contains one
-pack identity and publishes immutable `.tar.zst` assets through versioned
-releases. Release metadata binds the archive to its repository, tag, and source
-commit.
+The `.tar.zst` file is the only installation input. An administrator obtains an
+immutable pack archive through an out-of-band distribution process and uploads
+that file with `acli`. Catalog does not discover packs, access source
+repositories, resolve release tags, fetch URLs, or manage repository
+credentials. A pack's private source repository may remain its authoring,
+documentation, and release home, but it is outside the Catalog protocol and
+trust boundary.
 
-Canonical packs use Attricat-managed private repositories. A customer-specific
-fork or derived pack uses its own private repository and release history. The
-server fetches releases using deployment-managed repository access and accepts
-only repositories allowed by its pack-source policy. Repository credentials
-are never pack content, CLI arguments recorded in a plan, or audit payloads.
-Public repositories and arbitrary archive URLs are not production sources.
-
-Local archive upload is permitted only behind explicit development or
-administrator controls for internal development and testing. A side-loaded
-archive receives the same schema, path, size, media-type, compatibility, and
-content validation as a repository release and is visibly marked as
-side-loaded.
+Every uploaded archive receives the same schema, path, size, media-type,
+compatibility, digest, and content validation. Catalog identifies the input by
+the pack ID and version declared in the manifest plus the server-computed
+whole-archive digest. It never relies on a file name or an unverified repository
+claim for identity or provenance.
 
 Before planning, Catalog validates at least:
 
@@ -110,7 +104,7 @@ Before planning, Catalog validates at least:
 - exactly one strict, supported solution-pack manifest;
 - a matching immutable pack ID and SemVer release;
 - declared files, media types, and cryptographic digests;
-- source identity, release provenance, and whole-archive digest;
+- declared pack identity and version plus the whole-archive digest;
 - host compatibility and supported resource contract versions;
 - uniqueness and referential integrity of logical resource keys; and
 - schemas for blueprints, contexts, settings, templates, checks, and sample
@@ -432,7 +426,7 @@ never selected only because a pack author marked them as default.
 ## CLI administration
 
 Solution-pack inspection, dry-run planning, application, and application history are administrator-only CLI workflows.
-The implemented inspection command sends a local archive to the authoritative
+The implemented inspection command uploads an archive to the authoritative
 server for read-only validation and returns only safe metadata and resource
 summaries:
 
@@ -441,8 +435,8 @@ acli solution-pack inspect --file pack.tar.zst
 ```
 
 Inspection does not persist the archive, apply resources, or expose blueprint
-source and context data in its response. The implemented local-archive planner
-uses an explicit prefix and blueprint publication preference:
+source and context data in its response. The implemented uploaded-archive
+planner uses an explicit prefix and blueprint publication preference:
 
 ```sh
 acli solution-pack plan --file pack.tar.zst --prefix ecom --blueprint-publication draft
@@ -465,19 +459,18 @@ state yet.
 Application accepts only an immutable plan ID and never recomputes choices from
 CLI flags. Each create step commits its ordinary Catalog mutation together with
 durable step evidence; retries verify completed targets and continue pending
-steps without duplicate resources. Private-repository release selection remains
-deferred. Planning remains separate from application.
+steps without duplicate resources. Planning remains separate from application;
+there is no repository-selection or remote-fetch path.
 
 The CLI authenticates normally and the API requires a dedicated
 `solution_packs.manage` permission, initially granted to workspace owner and
-administrator roles. Possession of a local archive or CLI access is not
-authority to install it. Local/sideload commands additionally require the
-server-side development or administrator control described above.
+administrator roles. Possession of an archive or CLI access is not authority to
+inspect, plan, or apply it; every operation is authorized by the server.
 
 ## Planning and application (implemented v1)
 
 Validation produces no workspace changes. An authorized administrator uploads a
-local archive and creates an immutable, workspace-scoped plan with a prefix and
+`.tar.zst` archive and creates an immutable, workspace-scoped plan with a prefix and
 `draft` or `publish` blueprint choice.
 
 V1 actions are exactly:
@@ -507,8 +500,8 @@ If a client observes an ambiguous commit error, failure reconciliation checks
 the exact attempted step; a step already committed as completed is continued,
 not misreported against a later pending step.
 
-Implemented application evidence contains the local-archive source marker and
-archive digest, pack ID/version, blueprint publication choice, executed mapping
+Implemented application evidence contains the uploaded-archive source marker
+and digest, pack ID/version, blueprint publication choice, executed mapping
 snapshot, ordered context/blueprint step results, state and bounded diagnostics,
 actor token/user columns, timestamps, and request/correlation identifiers. List
 responses are compact and omit mappings and steps; show responses include both.
@@ -594,8 +587,8 @@ context starter packs:
 7. administrator-only CLI commands for plan review and apply; and
 8. export to an untrusted draft.
 
-Private-repository inspection and release selection through the CLI follow
-next. Extension dependencies, permission review, configuration templates, and
-guided setup come after the core planner. Workspace/layout defaults,
-later-release planning, sample data, and curated Ecommerce and Warehouse packs
-build on those contracts.
+Extension dependencies, permission review, configuration templates, and guided
+setup follow the core planner. Workspace/layout defaults, later-release
+planning, sample data, and curated Ecommerce and Warehouse packs build on those
+contracts. Pack archives continue to be supplied explicitly as `.tar.zst`
+files; no repository-access path is planned.

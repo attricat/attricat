@@ -76,8 +76,9 @@ diagnostic fields retain resumable failure evidence. Ordered
 transaction as each ordinary context or blueprint mutation and its audit/domain
 event evidence. A retry verifies completed target IDs and continues pending
 steps. Application records do not own resources and cannot uninstall a pack.
-Private-repository source fetching, extensions, settings, assets, sample data,
-and export remain deferred.
+Extensions, settings, assets, sample data, and export remain deferred. Solution
+packs are installed only from administrator-uploaded `.tar.zst` archives; the
+server does not access source repositories or fetch remote pack releases.
 
 ### `blueprints`
 
