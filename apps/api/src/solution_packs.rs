@@ -32,6 +32,9 @@ pub const MAX_SOLUTION_PACK_MANIFEST_BYTES: usize = 256 * 1024;
 pub const MAX_SOLUTION_PACK_ARCHIVE_ENTRIES: usize = 256;
 pub const MAX_SOLUTION_PACK_BLUEPRINTS: usize = 64;
 pub const MAX_SOLUTION_PACK_CONTEXTS: usize = 128;
+pub const MAX_SOLUTION_PACK_WORKSPACE_SETTINGS: usize = 1;
+pub const MAX_SOLUTION_PACK_EXPLORE_NAVIGATION_ENTRIES: usize = 64;
+pub const MAX_SOLUTION_PACK_EXPLORE_NAVIGATION_ROLES: usize = 16;
 pub const MAX_SOLUTION_PACK_EXTENSION_REQUIREMENTS: usize = 64;
 pub const MAX_SOLUTION_PACK_CONFIGURATION_TEMPLATE_BYTES: usize = 64 * 1024;
 pub const MAX_SOLUTION_PACK_CONFIGURATION_TEMPLATE_DEPTH: usize = 16;
@@ -79,6 +82,8 @@ pub struct SolutionPackResources {
     pub blueprints: Vec<SolutionPackResource>,
     #[serde(default)]
     pub contexts: Vec<SolutionPackResource>,
+    #[serde(default)]
+    pub workspace_settings: Vec<SolutionPackResource>,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -116,6 +121,22 @@ pub struct SolutionPackContext {
     pub parent: String,
 }
 
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct SolutionPackExploreNavigation {
+    pub format_version: u32,
+    pub kind: String,
+    pub entries: Vec<SolutionPackExploreNavigationEntry>,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct SolutionPackExploreNavigationEntry {
+    pub blueprint: String,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub visible_to_role_codes: Vec<String>,
+}
+
 #[derive(Debug, Error, PartialEq, Eq)]
 pub enum SolutionPackError {
     #[error("solution-pack manifest_version {0} is unsupported")]
@@ -133,6 +154,7 @@ pub struct ValidatedSolutionPack {
     files: BTreeMap<String, Vec<u8>>,
     blueprints: BTreeMap<String, SolutionPackBlueprint>,
     contexts: BTreeMap<String, SolutionPackContext>,
+    explore_navigation: Option<SolutionPackExploreNavigation>,
     configuration_templates: BTreeMap<String, Value>,
 }
 
@@ -147,6 +169,7 @@ pub struct SolutionPackBlueprint {
     includes: Vec<SolutionPackBlueprintInclude>,
     dependencies: BTreeSet<String>,
     table_path_dependencies: BTreeSet<String>,
+    kind: BlueprintKind,
 }
 
 #[derive(Debug)]
@@ -178,6 +201,10 @@ impl SolutionPackBlueprint {
 
     pub fn table_path_dependencies(&self) -> &BTreeSet<String> {
         &self.table_path_dependencies
+    }
+
+    pub fn kind(&self) -> BlueprintKind {
+        self.kind.clone()
     }
 }
 
@@ -345,6 +372,7 @@ impl ValidatedSolutionPack {
         validate_manifest(&manifest)?;
         validate_declared_files(&manifest, &files)?;
         let (blueprints, contexts) = validate_content(&manifest, &files)?;
+        let explore_navigation = validate_explore_navigation(&manifest, &files, &blueprints)?;
         let configuration_templates = validate_configuration_templates(&manifest, &files)?;
 
         Ok(Self {
@@ -353,6 +381,7 @@ impl ValidatedSolutionPack {
             files,
             blueprints,
             contexts,
+            explore_navigation,
             configuration_templates,
         })
     }
@@ -377,6 +406,10 @@ impl ValidatedSolutionPack {
 
     pub fn context(&self, key: &str) -> Option<&SolutionPackContext> {
         self.contexts.get(key)
+    }
+
+    pub fn explore_navigation(&self) -> Option<&SolutionPackExploreNavigation> {
+        self.explore_navigation.as_ref()
     }
 
     pub fn configuration_template(&self, key: &str) -> Option<&Value> {
@@ -404,14 +437,20 @@ fn validate_manifest(manifest: &SolutionPackManifest) -> Result<(), SolutionPack
         return invalid("catalog.host_api is incompatible with this host");
     }
 
-    if manifest.resources.blueprints.is_empty() && manifest.resources.contexts.is_empty() {
-        return invalid("at least one blueprint or context is required");
+    if manifest.resources.blueprints.is_empty()
+        && manifest.resources.contexts.is_empty()
+        && manifest.resources.workspace_settings.is_empty()
+    {
+        return invalid("at least one blueprint, context, or workspace setting is required");
     }
     if manifest.resources.blueprints.len() > MAX_SOLUTION_PACK_BLUEPRINTS {
         return invalid("solution-pack manifest declares too many blueprints");
     }
     if manifest.resources.contexts.len() > MAX_SOLUTION_PACK_CONTEXTS {
         return invalid("solution-pack manifest declares too many contexts");
+    }
+    if manifest.resources.workspace_settings.len() > MAX_SOLUTION_PACK_WORKSPACE_SETTINGS {
+        return invalid("solution-pack manifest declares too many workspace settings");
     }
 
     let mut keys = HashSet::new();
@@ -427,6 +466,13 @@ fn validate_manifest(manifest: &SolutionPackManifest) -> Result<(), SolutionPack
                 .contexts
                 .iter()
                 .map(|resource| ("contexts", resource)),
+        )
+        .chain(
+            manifest
+                .resources
+                .workspace_settings
+                .iter()
+                .map(|resource| ("workspace_settings", resource)),
         )
     {
         validate_resource(kind, resource)?;
@@ -517,6 +563,22 @@ fn validate_extension_requirement(
 }
 
 fn validate_resource(kind: &str, resource: &SolutionPackResource) -> Result<(), SolutionPackError> {
+    if kind == "workspace_settings" {
+        if resource.key != "workspace/explore-navigation"
+            || resource.path != "workspace/explore-navigation.json"
+        {
+            return invalid(
+                "workspace setting must use key 'workspace/explore-navigation' and path 'workspace/explore-navigation.json'",
+            );
+        }
+        parse_sha256(&resource.sha256).map_err(|()| {
+            SolutionPackError::Invalid(format!(
+                "resource '{}' sha256 must be 64 lowercase hexadecimal characters",
+                resource.key
+            ))
+        })?;
+        return Ok(());
+    }
     if kind == "contexts" && resource.key == SYSTEM_DEFAULT_CONTEXT_KEY {
         return invalid("the system default context cannot be declared by a pack");
     }
@@ -567,6 +629,7 @@ fn validate_declared_files(
         .blueprints
         .iter()
         .chain(&manifest.resources.contexts)
+        .chain(&manifest.resources.workspace_settings)
         .map(|resource| resource.path.as_str())
         .chain(
             manifest
@@ -589,6 +652,7 @@ fn validate_declared_files(
         .blueprints
         .iter()
         .chain(&manifest.resources.contexts)
+        .chain(&manifest.resources.workspace_settings)
         .map(|resource| (&resource.key, &resource.path, &resource.sha256))
         .chain(manifest.extensions.iter().filter_map(|requirement| {
             requirement
@@ -605,6 +669,87 @@ fn validate_declared_files(
         }
     }
     Ok(())
+}
+
+fn validate_explore_navigation(
+    manifest: &SolutionPackManifest,
+    files: &BTreeMap<String, Vec<u8>>,
+    blueprints: &BTreeMap<String, SolutionPackBlueprint>,
+) -> Result<Option<SolutionPackExploreNavigation>, SolutionPackError> {
+    let Some(resource) = manifest.resources.workspace_settings.first() else {
+        return Ok(None);
+    };
+    let mut navigation: SolutionPackExploreNavigation =
+        serde_json::from_slice(&files[&resource.path]).map_err(|_| {
+            SolutionPackError::Invalid(
+                "workspace Explore navigation is not valid strict JSON".into(),
+            )
+        })?;
+    if navigation.format_version != SOLUTION_PACK_RESOURCE_FORMAT_VERSION {
+        return invalid(format!(
+            "workspace Explore navigation has unsupported format_version {}",
+            navigation.format_version
+        ));
+    }
+    if navigation.kind != "explore_navigation" {
+        return invalid("workspace Explore navigation kind must be 'explore_navigation'");
+    }
+    if navigation.entries.is_empty()
+        || navigation.entries.len() > MAX_SOLUTION_PACK_EXPLORE_NAVIGATION_ENTRIES
+    {
+        return invalid(format!(
+            "workspace Explore navigation must contain 1-{MAX_SOLUTION_PACK_EXPLORE_NAVIGATION_ENTRIES} entries"
+        ));
+    }
+    let mut blueprint_keys = HashSet::new();
+    for entry in &mut navigation.entries {
+        if entry.blueprint.len() > MAX_IDENTIFIER_BYTES
+            || !entry.blueprint.starts_with("blueprints/")
+            || !blueprint_keys.insert(entry.blueprint.clone())
+        {
+            return invalid(format!(
+                "workspace Explore navigation blueprint reference '{}' is invalid or duplicated",
+                entry.blueprint
+            ));
+        }
+        let Some(blueprint) = blueprints.get(&entry.blueprint) else {
+            return invalid(format!(
+                "workspace Explore navigation references undeclared blueprint '{}'",
+                entry.blueprint
+            ));
+        };
+        if blueprint.kind() != BlueprintKind::Entity {
+            return invalid(format!(
+                "workspace Explore navigation blueprint '{}' must be an entity blueprint",
+                entry.blueprint
+            ));
+        }
+        if entry.visible_to_role_codes.len() > MAX_SOLUTION_PACK_EXPLORE_NAVIGATION_ROLES {
+            return invalid(format!(
+                "workspace Explore navigation entry '{}' declares too many role codes",
+                entry.blueprint
+            ));
+        }
+        for role_code in &entry.visible_to_role_codes {
+            if !is_valid_stable_code(role_code) {
+                return invalid(format!(
+                    "workspace Explore navigation role code '{role_code}' is invalid"
+                ));
+            }
+        }
+        entry.visible_to_role_codes.sort();
+        if entry
+            .visible_to_role_codes
+            .windows(2)
+            .any(|pair| pair[0] == pair[1])
+        {
+            return invalid(format!(
+                "workspace Explore navigation entry '{}' contains duplicate role codes",
+                entry.blueprint
+            ));
+        }
+    }
+    Ok(Some(navigation))
 }
 
 fn validate_configuration_templates(
@@ -995,6 +1140,7 @@ fn prepare_blueprint(
             includes: portable_includes,
             dependencies,
             table_path_dependencies: BTreeSet::new(),
+            kind: definition.kind.clone(),
         },
         native_definition: definition,
         native_source,
@@ -1569,12 +1715,22 @@ pub struct InstalledExtensionSnapshot {
     pub configuration: Value,
 }
 
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct PlanningExploreNavigationEntry {
+    pub blueprint_code: String,
+    pub visible_to_role_codes: Vec<String>,
+}
+
 #[derive(Debug)]
 pub struct PlanningWorkspaceSnapshot {
     pub workspace_id: uuid::Uuid,
     pub physical_codes: BTreeSet<String>,
     pub default_context_id: uuid::Uuid,
     pub installed_extensions: BTreeMap<String, InstalledExtensionSnapshot>,
+    pub explore_navigation: Vec<PlanningExploreNavigationEntry>,
+    pub explore_navigation_valid: bool,
+    pub role_codes: BTreeSet<String>,
+    pub published_entity_codes: BTreeSet<String>,
 }
 
 #[derive(Clone, Debug)]
@@ -1765,6 +1921,20 @@ pub fn build_create_only_plan(
             },
         );
     }
+    if pack.explore_navigation().is_some() {
+        mappings_by_key.insert(
+            "workspace/explore-navigation".to_owned(),
+            PlannedMapping {
+                resource_kind: "workspace_setting",
+                logical_key: "workspace/explore-navigation".to_owned(),
+                target_id: workspace.workspace_id,
+                target_code: "explore_navigation".to_owned(),
+                target_version: None,
+                mapping_kind: "workspace",
+                snapshot: serde_json::json!({"setting": "explore_navigation"}),
+            },
+        );
+    }
 
     // Includes and context parents constrain apply order. A published target is
     // also required before ordinary validation can resolve a relationship table
@@ -1894,6 +2064,151 @@ pub fn build_create_only_plan(
         });
     }
 
+    if let Some(navigation) = pack.explore_navigation() {
+        let resource = manifest
+            .resources
+            .workspace_settings
+            .first()
+            .expect("validated navigation has a manifest resource");
+        if !workspace.explore_navigation_valid {
+            actions.push(PlannedAction {
+                resource_kind: "workspace_setting",
+                logical_key: resource.key.clone(),
+                action: "conflict",
+                reason_code: "invalid_current_navigation",
+                summary: serde_json::json!({
+                    "setting": "explore_navigation",
+                    "required": resource.required,
+                    "entries": [],
+                }),
+                normalized_payload: None,
+                preconditions: serde_json::json!([]),
+            });
+            let extension_requirements = manifest
+                .extensions
+                .iter()
+                .map(|requirement| {
+                    evaluate_extension_requirement(
+                        requirement,
+                        pack.configuration_template(&requirement.key),
+                        workspace.installed_extensions.get(&requirement.id),
+                    )
+                })
+                .collect::<Vec<_>>();
+            return Ok(SolutionPackPlanDraft {
+                ready: false,
+                mappings: mappings_by_key.into_values().collect(),
+                actions,
+                extension_requirements,
+            });
+        }
+
+        let mut evidence = Vec::with_capacity(navigation.entries.len());
+        let mut payload_entries = Vec::with_capacity(navigation.entries.len());
+        let mut unmet_reason = None;
+        let mut visibility_conflict = false;
+        let current_by_code = workspace
+            .explore_navigation
+            .iter()
+            .map(|entry| {
+                let mut roles = entry.visible_to_role_codes.clone();
+                roles.sort();
+                (entry.blueprint_code.as_str(), roles)
+            })
+            .collect::<HashMap<_, _>>();
+        for entry in &navigation.entries {
+            let mapping = &mappings_by_key[&entry.blueprint];
+            let roles_available = entry
+                .visible_to_role_codes
+                .iter()
+                .all(|role| workspace.role_codes.contains(role));
+            let blueprint_creatable = outcomes
+                .get(&entry.blueprint)
+                .is_some_and(|(action, _)| *action == "create");
+            let (outcome, reason) = if !roles_available {
+                unmet_reason.get_or_insert("unknown_role_code");
+                ("unmet", "unknown_role_code")
+            } else if let Some(current_roles) = current_by_code.get(mapping.target_code.as_str()) {
+                if *current_roles != entry.visible_to_role_codes {
+                    visibility_conflict = true;
+                    ("conflict", "visibility_mismatch")
+                } else if workspace
+                    .published_entity_codes
+                    .contains(&mapping.target_code)
+                {
+                    ("satisfied", "exact_match")
+                } else {
+                    unmet_reason.get_or_insert("blueprint_not_published");
+                    ("unmet", "blueprint_not_published")
+                }
+            } else if publication != BlueprintPublication::Publish {
+                unmet_reason.get_or_insert("blueprint_not_published");
+                ("unmet", "blueprint_not_published")
+            } else if !blueprint_creatable {
+                unmet_reason.get_or_insert("blueprint_not_creatable");
+                ("unmet", "blueprint_not_creatable")
+            } else {
+                ("append", "target_absent")
+            };
+            let evidence_outcome = if !resource.required && matches!(outcome, "unmet" | "conflict")
+            {
+                "skip"
+            } else {
+                outcome
+            };
+            evidence.push(serde_json::json!({
+                "blueprint": entry.blueprint,
+                "blueprint_code": mapping.target_code,
+                "visible_to_role_codes": entry.visible_to_role_codes,
+                "outcome": evidence_outcome,
+                "reason_code": reason,
+            }));
+            if matches!(outcome, "append" | "satisfied") {
+                payload_entries.push(serde_json::json!({
+                    "blueprint_key": entry.blueprint,
+                    "blueprint_code": mapping.target_code,
+                    "visible_to_role_codes": entry.visible_to_role_codes,
+                }));
+            }
+        }
+        let has_append = evidence.iter().any(|entry| entry["outcome"] == "append");
+        let (action, reason_code, normalized_payload) = if resource.required && visibility_conflict
+        {
+            ("conflict", "visibility_mismatch", None)
+        } else if resource.required
+            && let Some(reason) = unmet_reason
+        {
+            ("blocked", reason, None)
+        } else if payload_entries.is_empty() {
+            ("skip", unmet_reason.unwrap_or("visibility_mismatch"), None)
+        } else if has_append {
+            (
+                "append",
+                "target_absent",
+                Some(serde_json::json!({"entries": payload_entries})),
+            )
+        } else {
+            (
+                "satisfied",
+                "exact_match",
+                Some(serde_json::json!({"entries": payload_entries})),
+            )
+        };
+        actions.push(PlannedAction {
+            resource_kind: "workspace_setting",
+            logical_key: resource.key.clone(),
+            action,
+            reason_code,
+            summary: serde_json::json!({
+                "setting": "explore_navigation",
+                "required": resource.required,
+                "entries": evidence,
+            }),
+            normalized_payload,
+            preconditions: serde_json::json!([]),
+        });
+    }
+
     let extension_requirements = manifest
         .extensions
         .iter()
@@ -1907,7 +2222,7 @@ pub fn build_create_only_plan(
         .collect::<Vec<_>>();
     let ready = actions
         .iter()
-        .all(|action| matches!(action.action, "create" | "skip"))
+        .all(|action| matches!(action.action, "create" | "append" | "satisfied" | "skip"))
         && extension_requirements
             .iter()
             .all(|requirement| requirement.status != "blocked");
@@ -2182,6 +2497,7 @@ target_blueprint = "blueprints/product"
 "#;
     const WEB_CONTEXT: &[u8] =
         br#"{"format_version":1,"code":"web","data":{"channel":"web"},"parent":"system/default"}"#;
+    const EXPLORE_NAVIGATION: &[u8] = br#"{"format_version":1,"kind":"explore_navigation","entries":[{"blueprint":"blueprints/product","visible_to_role_codes":["viewer","editor"]}]}"#;
 
     fn digest(bytes: &[u8]) -> String {
         sha256_hex(bytes)
@@ -2215,6 +2531,19 @@ target_blueprint = "blueprints/product"
             ("blueprints/category.toml", CATEGORY_BLUEPRINT),
             ("contexts/web.json", WEB_CONTEXT),
         ]
+    }
+
+    fn archive_with_explore_navigation(required: bool) -> Vec<u8> {
+        let mut manifest = manifest_value();
+        manifest["resources"]["workspace_settings"] = json!([{
+            "key": "workspace/explore-navigation",
+            "path": "workspace/explore-navigation.json",
+            "required": required,
+            "sha256": digest(EXPLORE_NAVIGATION),
+        }]);
+        let mut files = valid_files();
+        files.push(("workspace/explore-navigation.json", EXPLORE_NAVIGATION));
+        archive(&manifest, &files)
     }
 
     fn archive_with_configuration_template(template: &[u8]) -> Vec<u8> {
@@ -2300,6 +2629,200 @@ target_blueprint = "blueprints/product"
         let mut illustrative_range = manifest_value();
         illustrative_range["catalog"]["host_api"] = json!(">=1.0.0 <2.0.0");
         ValidatedSolutionPack::from_tar_zst(&archive(&illustrative_range, &valid_files())).unwrap();
+    }
+
+    #[test]
+    fn validates_strict_explore_navigation_contract() {
+        let pack =
+            ValidatedSolutionPack::from_tar_zst(&archive_with_explore_navigation(true)).unwrap();
+        let navigation = pack.explore_navigation().unwrap();
+        assert_eq!(navigation.entries.len(), 1);
+        assert_eq!(
+            navigation.entries[0].visible_to_role_codes,
+            ["editor", "viewer"]
+        );
+
+        for (invalid, expected) in [
+            (
+                br#"{"format_version":1,"kind":"explore_navigation","entries":[{"blueprint":"blueprints/product","visible_to_role_codes":["editor","editor"]}]}"#.as_slice(),
+                "duplicate role codes",
+            ),
+            (
+                br#"{"format_version":1,"kind":"explore_navigation","entries":[{"blueprint":"blueprints/product","unknown":true}]}"#.as_slice(),
+                "not valid strict JSON",
+            ),
+        ] {
+            let mut manifest = manifest_value();
+            manifest["resources"]["workspace_settings"] = json!([resource(
+                "workspace/explore-navigation",
+                "workspace/explore-navigation.json",
+                invalid,
+            )]);
+            let mut files = valid_files();
+            files.push(("workspace/explore-navigation.json", invalid));
+            assert_invalid(&archive(&manifest, &files), expected);
+        }
+
+        for (navigation, expected) in [
+            (
+                json!({
+                    "format_version": 1,
+                    "kind": "explore_navigation",
+                    "entries": (0..=MAX_SOLUTION_PACK_EXPLORE_NAVIGATION_ENTRIES)
+                        .map(|index| json!({"blueprint": format!("blueprints/product_{index}")}))
+                        .collect::<Vec<_>>(),
+                }),
+                "must contain 1-64 entries",
+            ),
+            (
+                json!({
+                    "format_version": 1,
+                    "kind": "explore_navigation",
+                    "entries": [{
+                        "blueprint": "blueprints/product",
+                        "visible_to_role_codes": (0..=MAX_SOLUTION_PACK_EXPLORE_NAVIGATION_ROLES)
+                            .map(|index| format!("role_{index}"))
+                            .collect::<Vec<_>>(),
+                    }],
+                }),
+                "too many role codes",
+            ),
+        ] {
+            let navigation = serde_json::to_vec(&navigation).unwrap();
+            let mut manifest = manifest_value();
+            manifest["resources"]["workspace_settings"] = json!([resource(
+                "workspace/explore-navigation",
+                "workspace/explore-navigation.json",
+                &navigation,
+            )]);
+            let mut files: Vec<(&str, &[u8])> = valid_files();
+            files.push(("workspace/explore-navigation.json", navigation.as_slice()));
+            assert_invalid(&archive(&manifest, &files), expected);
+        }
+    }
+
+    #[test]
+    fn planner_appends_satisfies_and_conflicts_explore_navigation() {
+        let pack =
+            ValidatedSolutionPack::from_tar_zst(&archive_with_explore_navigation(true)).unwrap();
+        let workspace = |navigation| PlanningWorkspaceSnapshot {
+            workspace_id: uuid::Uuid::nil(),
+            physical_codes: BTreeSet::from(["default".to_owned()]),
+            default_context_id: uuid::Uuid::nil(),
+            installed_extensions: BTreeMap::new(),
+            explore_navigation: navigation,
+            explore_navigation_valid: true,
+            role_codes: BTreeSet::from(["editor".to_owned(), "viewer".to_owned()]),
+            published_entity_codes: BTreeSet::from(["ecom_product".to_owned()]),
+        };
+        let appended = build_create_only_plan(
+            &pack,
+            "ecom",
+            BlueprintPublication::Publish,
+            &workspace(Vec::new()),
+        )
+        .unwrap();
+        let action = appended.actions.last().unwrap();
+        assert_eq!(
+            (action.action, action.reason_code),
+            ("append", "target_absent")
+        );
+        assert!(appended.ready);
+
+        let exact = PlanningExploreNavigationEntry {
+            blueprint_code: "ecom_product".to_owned(),
+            visible_to_role_codes: vec!["viewer".to_owned(), "editor".to_owned()],
+        };
+        let satisfied = build_create_only_plan(
+            &pack,
+            "ecom",
+            BlueprintPublication::Publish,
+            &workspace(vec![exact]),
+        )
+        .unwrap();
+        assert_eq!(satisfied.actions.last().unwrap().action, "satisfied");
+
+        let conflicting = PlanningExploreNavigationEntry {
+            blueprint_code: "ecom_product".to_owned(),
+            visible_to_role_codes: vec!["viewer".to_owned()],
+        };
+        let conflicted = build_create_only_plan(
+            &pack,
+            "ecom",
+            BlueprintPublication::Publish,
+            &workspace(vec![conflicting]),
+        )
+        .unwrap();
+        assert_eq!(conflicted.actions.last().unwrap().action, "conflict");
+        assert!(!conflicted.ready);
+    }
+
+    #[test]
+    fn planner_blocks_required_navigation_and_skips_optional_unmet_navigation() {
+        for (required, expected) in [(true, "blocked"), (false, "skip")] {
+            let pack =
+                ValidatedSolutionPack::from_tar_zst(&archive_with_explore_navigation(required))
+                    .unwrap();
+            let plan = build_create_only_plan(
+                &pack,
+                "ecom",
+                BlueprintPublication::Draft,
+                &PlanningWorkspaceSnapshot {
+                    workspace_id: uuid::Uuid::nil(),
+                    physical_codes: BTreeSet::from(["default".to_owned()]),
+                    default_context_id: uuid::Uuid::nil(),
+                    installed_extensions: BTreeMap::new(),
+                    explore_navigation: Vec::new(),
+                    explore_navigation_valid: true,
+                    role_codes: BTreeSet::from(["editor".to_owned(), "viewer".to_owned()]),
+                    published_entity_codes: BTreeSet::new(),
+                },
+            )
+            .unwrap();
+            assert_eq!(plan.actions.last().unwrap().action, expected);
+        }
+
+        let navigation = br#"{"format_version":1,"kind":"explore_navigation","entries":[{"blueprint":"blueprints/product"},{"blueprint":"blueprints/category","visible_to_role_codes":["missing_role"]}]}"#;
+        let mut manifest = manifest_value();
+        manifest["resources"]["workspace_settings"] = json!([{
+            "key": "workspace/explore-navigation",
+            "path": "workspace/explore-navigation.json",
+            "required": false,
+            "sha256": digest(navigation),
+        }]);
+        let files = [
+            ("blueprints/product.toml", PRODUCT_BLUEPRINT),
+            ("blueprints/category.toml", CATEGORY_BLUEPRINT),
+            ("contexts/web.json", WEB_CONTEXT),
+            ("workspace/explore-navigation.json", navigation.as_slice()),
+        ];
+        let pack = ValidatedSolutionPack::from_tar_zst(&archive(&manifest, &files)).unwrap();
+        let plan = build_create_only_plan(
+            &pack,
+            "ecom",
+            BlueprintPublication::Publish,
+            &PlanningWorkspaceSnapshot {
+                workspace_id: uuid::Uuid::nil(),
+                physical_codes: BTreeSet::from(["default".to_owned()]),
+                default_context_id: uuid::Uuid::nil(),
+                installed_extensions: BTreeMap::new(),
+                explore_navigation: Vec::new(),
+                explore_navigation_valid: true,
+                role_codes: BTreeSet::new(),
+                published_entity_codes: BTreeSet::new(),
+            },
+        )
+        .unwrap();
+        let action = plan.actions.last().unwrap();
+        assert_eq!(action.action, "append");
+        assert_eq!(action.summary["entries"][1]["outcome"], "skip");
+        assert_eq!(
+            action.normalized_payload.as_ref().unwrap()["entries"]
+                .as_array()
+                .unwrap()
+                .len(),
+            1
+        );
     }
 
     #[test]
@@ -2496,6 +3019,36 @@ target_blueprint = "blueprints/product"
         catalog_validation::validate_json_schema_definition(&schema).unwrap();
         assert!(
             catalog_validation::validate_json_schema(&schema, &manifest_value())
+                .unwrap()
+                .is_empty()
+        );
+        let mut with_navigation = manifest_value();
+        with_navigation["resources"]["workspace_settings"] = json!([{
+            "key": "workspace/explore-navigation",
+            "path": "workspace/explore-navigation.json",
+            "required": true,
+            "sha256": "0".repeat(64),
+        }]);
+        assert!(
+            catalog_validation::validate_json_schema(&schema, &with_navigation)
+                .unwrap()
+                .is_empty()
+        );
+        let navigation_schema: Value = serde_json::from_str(include_str!(
+            "../../../contracts/solution-pack-explore-navigation-v1.schema.json"
+        ))
+        .unwrap();
+        catalog_validation::validate_json_schema_definition(&navigation_schema).unwrap();
+        let navigation: Value = serde_json::from_slice(EXPLORE_NAVIGATION).unwrap();
+        assert!(
+            catalog_validation::validate_json_schema(&navigation_schema, &navigation)
+                .unwrap()
+                .is_empty()
+        );
+        let mut unknown_navigation = navigation;
+        unknown_navigation["unknown"] = json!(true);
+        assert!(
+            !catalog_validation::validate_json_schema(&navigation_schema, &unknown_navigation)
                 .unwrap()
                 .is_empty()
         );
@@ -3223,6 +3776,10 @@ value_type = "string"
                 physical_codes: BTreeSet::from(["default".to_owned()]),
                 default_context_id: uuid::Uuid::nil(),
                 installed_extensions: BTreeMap::new(),
+                explore_navigation: Vec::new(),
+                explore_navigation_valid: true,
+                role_codes: BTreeSet::new(),
+                published_entity_codes: BTreeSet::new(),
             },
         )
         .unwrap();
@@ -3321,6 +3878,10 @@ value_type = "string"
                 physical_codes: BTreeSet::from(["default".to_owned()]),
                 default_context_id: uuid::Uuid::nil(),
                 installed_extensions: BTreeMap::new(),
+                explore_navigation: Vec::new(),
+                explore_navigation_valid: true,
+                role_codes: BTreeSet::new(),
+                published_entity_codes: BTreeSet::new(),
             },
         )
         .unwrap();
@@ -3355,6 +3916,10 @@ value_type = "string"
                 physical_codes: BTreeSet::from(["default".to_owned(), "ecom_product".to_owned()]),
                 default_context_id: uuid::Uuid::nil(),
                 installed_extensions: BTreeMap::new(),
+                explore_navigation: Vec::new(),
+                explore_navigation_valid: true,
+                role_codes: BTreeSet::new(),
+                published_entity_codes: BTreeSet::new(),
             },
         )
         .unwrap();
@@ -3383,6 +3948,10 @@ value_type = "string"
                 physical_codes: BTreeSet::from(["default".to_owned()]),
                 default_context_id: uuid::Uuid::nil(),
                 installed_extensions: BTreeMap::new(),
+                explore_navigation: Vec::new(),
+                explore_navigation_valid: true,
+                role_codes: BTreeSet::new(),
+                published_entity_codes: BTreeSet::new(),
             },
         )
         .unwrap();
@@ -3460,6 +4029,10 @@ value_type = "string"
             physical_codes: BTreeSet::from(["default".to_owned()]),
             default_context_id: uuid::Uuid::nil(),
             installed_extensions: BTreeMap::new(),
+            explore_navigation: Vec::new(),
+            explore_navigation_valid: true,
+            role_codes: BTreeSet::new(),
+            published_entity_codes: BTreeSet::new(),
         };
 
         let draft = build_create_only_plan(&pack, "paths", BlueprintPublication::Draft, &workspace)
@@ -3533,6 +4106,10 @@ target_blueprint = "blueprints/product"
             physical_codes: BTreeSet::from(["default".to_owned(), "ecom_product".to_owned()]),
             default_context_id: uuid::Uuid::from_u128(2),
             installed_extensions: BTreeMap::new(),
+            explore_navigation: Vec::new(),
+            explore_navigation_valid: true,
+            role_codes: BTreeSet::new(),
+            published_entity_codes: BTreeSet::new(),
         };
         let first =
             build_create_only_plan(&pack, "ecom", BlueprintPublication::Publish, &workspace)
@@ -3617,6 +4194,10 @@ value_type = "string"
                 physical_codes: BTreeSet::from(["default".to_owned()]),
                 default_context_id: uuid::Uuid::nil(),
                 installed_extensions: BTreeMap::new(),
+                explore_navigation: Vec::new(),
+                explore_navigation_valid: true,
+                role_codes: BTreeSet::new(),
+                published_entity_codes: BTreeSet::new(),
             },
         )
         .unwrap();

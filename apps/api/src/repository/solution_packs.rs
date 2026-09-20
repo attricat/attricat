@@ -9,15 +9,15 @@ use crate::{
     model::{CreateAttributeContext, CreateBlueprint},
     solution_packs::{
         BlueprintPublication, InstalledExtensionSnapshot, MAX_SOLUTION_PACK_PLAN_RESPONSE_BYTES,
-        PlanningWorkspaceSnapshot, SOLUTION_PACK_PLAN_EXPIRY_HOURS,
+        PlanningExploreNavigationEntry, PlanningWorkspaceSnapshot, SOLUTION_PACK_PLAN_EXPIRY_HOURS,
         SolutionPackExtensionRequirement, SolutionPackPlanDraft, ValidatedSolutionPack,
         build_create_only_plan, evaluate_extension_requirement,
     },
 };
 
 use super::{
-    CatalogRepository, EventPublisher, RepositoryError, blueprints::blueprint_event,
-    contexts::context_event,
+    CatalogRepository, EventPublisher, ExploreNavigationEntry, RepositoryError,
+    blueprints::blueprint_event, contexts::context_event,
 };
 
 #[derive(Clone, Debug, Serialize, sqlx::FromRow)]
@@ -164,6 +164,42 @@ impl CatalogRepository {
         .await?
         .into_iter()
         .collect();
+        let navigation_value: Value = sqlx::query_scalar(
+            "SELECT COALESCE(settings->'explore_navigation', '[]'::jsonb) FROM workspaces WHERE id = $1 AND deleted_at IS NULL",
+        )
+        .bind(workspace_id)
+        .fetch_one(&mut *tx)
+        .await?;
+        let (explore_navigation, explore_navigation_valid) =
+            match super::workspace_navigation::parse_stored_explore_navigation(navigation_value) {
+                Ok(entries) => (
+                    entries
+                        .into_iter()
+                        .map(|entry| PlanningExploreNavigationEntry {
+                            blueprint_code: entry.blueprint_code,
+                            visible_to_role_codes: entry.visible_to_role_codes,
+                        })
+                        .collect(),
+                    true,
+                ),
+                Err(()) => (Vec::new(), false),
+            };
+        let role_codes = sqlx::query_scalar::<_, String>(
+            "SELECT code FROM roles WHERE is_system OR workspace_id = $1 ORDER BY code",
+        )
+        .bind(workspace_id)
+        .fetch_all(&mut *tx)
+        .await?
+        .into_iter()
+        .collect();
+        let published_entity_codes = sqlx::query_scalar::<_, String>(
+            "SELECT DISTINCT code FROM blueprints WHERE workspace_id = $1 AND kind = 'entity' AND status = 'published' AND deleted_at IS NULL AND code IS NOT NULL ORDER BY code",
+        )
+        .bind(workspace_id)
+        .fetch_all(&mut *tx)
+        .await?
+        .into_iter()
+        .collect();
         let extension_ids = pack
             .manifest()
             .extensions
@@ -203,6 +239,10 @@ impl CatalogRepository {
                 physical_codes,
                 default_context_id,
                 installed_extensions,
+                explore_navigation,
+                explore_navigation_valid,
+                role_codes,
+                published_entity_codes,
             },
         )
         .map_err(|error| RepositoryError::InvalidSolutionPackPlan(error.to_string()))?;
@@ -536,6 +576,8 @@ struct RevalidationStep {
     target_id: Uuid,
     target_code: String,
     state: String,
+    action: String,
+    normalized_payload: Value,
     preconditions: Value,
 }
 
@@ -555,6 +597,7 @@ struct PendingApplicationStep {
     target_id: Uuid,
     target_code: String,
     target_version: Option<i64>,
+    action: String,
     normalized_payload: Value,
 }
 
@@ -579,6 +622,21 @@ struct BlueprintPayload {
     definition: String,
     version: i64,
     publication: String,
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct ExploreNavigationPayload {
+    entries: Vec<ExploreNavigationPayloadEntry>,
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct ExploreNavigationPayloadEntry {
+    #[allow(dead_code)]
+    blueprint_key: String,
+    blueprint_code: String,
+    visible_to_role_codes: Vec<String>,
 }
 
 impl CatalogRepository {
@@ -660,7 +718,7 @@ impl CatalogRepository {
         self.revalidate_required_extension_requirements(&mut tx, plan_id)
             .await?;
         let mappings = sqlx::query_as::<_, SolutionPackPlanMapping>(
-            "SELECT m.position, m.resource_kind, m.logical_key, m.target_id, m.target_code, m.target_version, m.mapping_kind FROM solution_pack_plan_mappings m JOIN solution_pack_plan_actions a ON a.plan_id=m.plan_id AND a.logical_key=m.logical_key WHERE m.workspace_id = $1 AND m.plan_id = $2 AND a.action='create' ORDER BY m.position",
+            "SELECT m.position, m.resource_kind, m.logical_key, m.target_id, m.target_code, m.target_version, m.mapping_kind FROM solution_pack_plan_mappings m JOIN solution_pack_plan_actions a ON a.plan_id=m.plan_id AND a.logical_key=m.logical_key WHERE m.workspace_id = $1 AND m.plan_id = $2 AND a.action IN ('create','append','satisfied') ORDER BY m.position",
         )
         .bind(workspace_id)
         .bind(plan_id)
@@ -707,7 +765,7 @@ impl CatalogRepository {
         let application_id = match inserted {
             Some(id) => {
                 sqlx::query(
-                    "INSERT INTO solution_pack_application_steps (application_id, workspace_id, position, plan_id, resource_kind, logical_key, target_id, target_code, target_version, state) SELECT $1, a.workspace_id, a.position, a.plan_id, a.resource_kind, a.logical_key, m.target_id, m.target_code, m.target_version, 'pending' FROM solution_pack_plan_actions a JOIN solution_pack_plan_mappings m ON m.plan_id = a.plan_id AND m.logical_key = a.logical_key WHERE a.workspace_id = $2 AND a.plan_id = $3 AND a.action = 'create' ORDER BY a.position",
+                    "INSERT INTO solution_pack_application_steps (application_id, workspace_id, position, plan_id, resource_kind, logical_key, target_id, target_code, target_version, state) SELECT $1, a.workspace_id, a.position, a.plan_id, a.resource_kind, a.logical_key, m.target_id, m.target_code, m.target_version, 'pending' FROM solution_pack_plan_actions a JOIN solution_pack_plan_mappings m ON m.plan_id = a.plan_id AND m.logical_key = a.logical_key WHERE a.workspace_id = $2 AND a.plan_id = $3 AND a.action IN ('create','append','satisfied') ORDER BY a.position",
                 )
                 .bind(id)
                 .bind(workspace_id)
@@ -858,13 +916,44 @@ impl CatalogRepository {
     ) -> Result<(), RepositoryError> {
         let workspace_id = self.workspace_id.unwrap_or(Self::DEFAULT_WORKSPACE_ID);
         let steps = sqlx::query_as::<_, RevalidationStep>(
-            "SELECT s.resource_kind,s.target_id,s.target_code,s.state,a.preconditions FROM solution_pack_application_steps s JOIN solution_pack_plan_actions a ON a.plan_id=s.plan_id AND a.position=s.position WHERE s.workspace_id=$1 AND s.application_id=$2 ORDER BY s.position",
+            "SELECT s.resource_kind,s.target_id,s.target_code,s.state,a.action,a.normalized_payload,a.preconditions FROM solution_pack_application_steps s JOIN solution_pack_plan_actions a ON a.plan_id=s.plan_id AND a.position=s.position WHERE s.workspace_id=$1 AND s.application_id=$2 ORDER BY s.position",
         )
         .bind(workspace_id)
         .bind(application_id)
         .fetch_all(&mut **tx)
         .await?;
         for step in steps {
+            if step.resource_kind == "workspace_setting" {
+                if step.target_id != workspace_id || step.target_code != "explore_navigation" {
+                    return Err(RepositoryError::InvalidSolutionPackPlan(
+                        "persisted workspace setting mapping is invalid".into(),
+                    ));
+                }
+                let payload = parse_explore_navigation_payload(step.normalized_payload)?;
+                let current = self
+                    .lock_explore_navigation_in_transaction(tx, workspace_id)
+                    .await?;
+                if step.state == "completed" || step.action == "satisfied" {
+                    self.validate_explore_navigation_entries_in_transaction(
+                        tx,
+                        workspace_id,
+                        &payload,
+                    )
+                    .await
+                    .map_err(solution_pack_navigation_error)?;
+                }
+                let all_exact = navigation_entries_all_exact(&current, &payload);
+                let appendable = navigation_entries_appendable(&current, &payload);
+                let valid = if step.state == "completed" || step.action == "satisfied" {
+                    all_exact
+                } else {
+                    step.action == "append" && appendable
+                };
+                if !valid {
+                    return Err(RepositoryError::SolutionPackPlanStale);
+                }
+                continue;
+            }
             let preconditions: Vec<TargetAbsentPrecondition> =
                 serde_json::from_value(step.preconditions).map_err(|_| {
                     RepositoryError::InvalidSolutionPackPlan(
@@ -940,7 +1029,7 @@ impl CatalogRepository {
             ));
         }
         let step = sqlx::query_as::<_, PendingApplicationStep>(
-            "SELECT s.position,s.resource_kind,s.logical_key,s.target_id,s.target_code,s.target_version,a.normalized_payload FROM solution_pack_application_steps s JOIN solution_pack_plan_actions a ON a.plan_id=s.plan_id AND a.position=s.position WHERE s.workspace_id=$1 AND s.application_id=$2 AND s.state='pending' ORDER BY s.position LIMIT 1",
+            "SELECT s.position,s.resource_kind,s.logical_key,s.target_id,s.target_code,s.target_version,a.action,a.normalized_payload FROM solution_pack_application_steps s JOIN solution_pack_plan_actions a ON a.plan_id=s.plan_id AND a.position=s.position WHERE s.workspace_id=$1 AND s.application_id=$2 AND s.state='pending' ORDER BY s.position LIMIT 1",
         )
         .bind(workspace_id)
         .bind(application_id)
@@ -959,7 +1048,9 @@ impl CatalogRepository {
         self.revalidate_required_extension_requirements(&mut tx, plan_id)
             .await?;
         *attempted_position = Some(step.position);
-        self.ensure_target_absent(&mut tx, &step).await?;
+        if step.resource_kind != "workspace_setting" {
+            self.ensure_target_absent(&mut tx, &step).await?;
+        }
         let (result_snapshot, events) = match step.resource_kind.as_str() {
             "context" => {
                 let payload: ContextPayload =
@@ -1040,6 +1131,59 @@ impl CatalogRepository {
                 (
                     serde_json::json!({"id":blueprint.id,"code":blueprint.code,"version":blueprint.version,"status":blueprint.status}),
                     events,
+                )
+            }
+            "workspace_setting" => {
+                if step.target_id != workspace_id
+                    || step.target_code != "explore_navigation"
+                    || !matches!(step.action.as_str(), "append" | "satisfied")
+                {
+                    return Err(RepositoryError::InvalidSolutionPackPlan(
+                        "persisted workspace setting step is invalid".into(),
+                    ));
+                }
+                let desired = parse_explore_navigation_payload(step.normalized_payload.clone())?;
+                let current = self
+                    .lock_explore_navigation_in_transaction(&mut tx, workspace_id)
+                    .await?;
+                self.validate_explore_navigation_entries_in_transaction(
+                    &mut tx,
+                    workspace_id,
+                    &desired,
+                )
+                .await
+                .map_err(solution_pack_navigation_error)?;
+                let all_exact = navigation_entries_all_exact(&current, &desired);
+                let outcome = if step.action == "satisfied" {
+                    if !all_exact {
+                        return Err(RepositoryError::SolutionPackPlanStale);
+                    }
+                    "satisfied"
+                } else if !navigation_entries_appendable(&current, &desired) {
+                    return Err(RepositoryError::SolutionPackPlanStale);
+                } else if all_exact {
+                    "satisfied"
+                } else {
+                    let mut merged = current;
+                    for entry in &desired {
+                        if !merged
+                            .iter()
+                            .any(|current| current.blueprint_code == entry.blueprint_code)
+                        {
+                            merged.push(entry.clone());
+                        }
+                    }
+                    self.write_explore_navigation_in_transaction(&mut tx, workspace_id, &merged)
+                        .await?;
+                    "appended"
+                };
+                (
+                    serde_json::json!({
+                        "setting": "explore_navigation",
+                        "entry_count": desired.len(),
+                        "outcome": outcome,
+                    }),
+                    Vec::new(),
                 )
             }
             _ => {
@@ -1184,6 +1328,79 @@ impl CatalogRepository {
     }
 }
 
+fn parse_explore_navigation_payload(
+    value: Value,
+) -> Result<Vec<ExploreNavigationEntry>, RepositoryError> {
+    let payload: ExploreNavigationPayload = serde_json::from_value(value).map_err(|_| {
+        RepositoryError::InvalidSolutionPackPlan(
+            "invalid persisted Explore navigation payload".into(),
+        )
+    })?;
+    if payload.entries.is_empty()
+        || payload.entries.len()
+            > crate::solution_packs::MAX_SOLUTION_PACK_EXPLORE_NAVIGATION_ENTRIES
+    {
+        return Err(RepositoryError::InvalidSolutionPackPlan(
+            "persisted Explore navigation entry count is invalid".into(),
+        ));
+    }
+    Ok(payload
+        .entries
+        .into_iter()
+        .map(|entry| ExploreNavigationEntry {
+            blueprint_code: entry.blueprint_code,
+            visible_to_role_codes: entry.visible_to_role_codes,
+        })
+        .collect())
+}
+
+fn canonical_navigation_entry(entry: &ExploreNavigationEntry) -> ExploreNavigationEntry {
+    let mut entry = entry.clone();
+    entry.visible_to_role_codes.sort();
+    entry
+}
+
+fn navigation_entries_all_exact(
+    current: &[ExploreNavigationEntry],
+    desired: &[ExploreNavigationEntry],
+) -> bool {
+    desired.iter().all(|desired| {
+        let desired = canonical_navigation_entry(desired);
+        let mut matches = current
+            .iter()
+            .filter(|current| current.blueprint_code == desired.blueprint_code);
+        matches
+            .next()
+            .is_some_and(|current| canonical_navigation_entry(current) == desired)
+            && matches.next().is_none()
+    })
+}
+
+fn navigation_entries_appendable(
+    current: &[ExploreNavigationEntry],
+    desired: &[ExploreNavigationEntry],
+) -> bool {
+    desired.iter().all(|desired| {
+        let mut matches = current
+            .iter()
+            .filter(|current| current.blueprint_code == desired.blueprint_code);
+        match matches.next() {
+            None => true,
+            Some(current) => {
+                canonical_navigation_entry(current) == canonical_navigation_entry(desired)
+                    && matches.next().is_none()
+            }
+        }
+    })
+}
+
+fn solution_pack_navigation_error(error: RepositoryError) -> RepositoryError {
+    match error {
+        RepositoryError::Database(_) => error,
+        _ => RepositoryError::SolutionPackPlanStale,
+    }
+}
+
 fn solution_pack_mutation_error(error: RepositoryError) -> RepositoryError {
     match error {
         RepositoryError::BlueprintCodeTaken | RepositoryError::CatalogCodeTaken => {
@@ -1205,6 +1422,76 @@ fn bounded_diagnostic(message: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[sqlx::test(migrations = "./migrations")]
+    async fn failed_navigation_step_revalidates_and_resumes(pool: sqlx::PgPool) {
+        let workspace_id = CatalogRepository::DEFAULT_WORKSPACE_ID;
+        let repository = CatalogRepository::new(pool.clone());
+        let blueprint_id = Uuid::new_v4();
+        let mut blueprint_tx = pool.begin().await.unwrap();
+        repository
+            .create_blueprint_in_transaction(
+                &mut blueprint_tx,
+                blueprint_id,
+                CreateBlueprint {
+                    definition: r#"
+format_version = 1
+code = "retry_product"
+name = "Retry product"
+kind = "entity"
+[views.dropdown_option]
+type = "dropdown_option"
+fields = ["name"]
+[[attributes]]
+code = "name"
+value_type = "string"
+"#
+                    .to_owned(),
+                },
+            )
+            .await
+            .unwrap();
+        repository
+            .publish_blueprint_in_transaction(&mut blueprint_tx, blueprint_id, 1)
+            .await
+            .unwrap();
+        blueprint_tx.commit().await.unwrap();
+
+        let plan_id = Uuid::new_v4();
+        let application_id = Uuid::new_v4();
+        let logical_key = "workspace/explore-navigation";
+        sqlx::query("INSERT INTO solution_pack_plans (id,workspace_id,source_kind,source_metadata,archive_sha256,manifest_version,pack_id,pack_name,pack_version,pack_description,host_api,prefix,blueprint_publication,ready,expires_at) VALUES ($1,$2,'local_archive','{\"side_loaded\":true}'::jsonb,$3,1,'attricat.retry-navigation','Retry navigation','1.0.0','Retry navigation','^1.0','retry','publish',true,clock_timestamp() + interval '24 hours')")
+            .bind(plan_id).bind(workspace_id).bind("0".repeat(64)).execute(&pool).await.unwrap();
+        sqlx::query("INSERT INTO solution_pack_plan_mappings (plan_id,workspace_id,position,resource_kind,logical_key,target_id,target_code,mapping_kind,snapshot) VALUES ($1,$2,0,'workspace_setting',$3,$2,'explore_navigation','workspace','{\"setting\":\"explore_navigation\"}'::jsonb)")
+            .bind(plan_id).bind(workspace_id).bind(logical_key).execute(&pool).await.unwrap();
+        let payload = serde_json::json!({"entries":[{
+            "blueprint_key":"blueprints/product",
+            "blueprint_code":"retry_product",
+            "visible_to_role_codes":[]
+        }]});
+        sqlx::query("INSERT INTO solution_pack_plan_actions (plan_id,workspace_id,position,resource_kind,logical_key,action,reason_code,summary,normalized_payload,preconditions) VALUES ($1,$2,0,'workspace_setting',$3,'append','target_absent','{\"setting\":\"explore_navigation\"}'::jsonb,$4,'[]'::jsonb)")
+            .bind(plan_id).bind(workspace_id).bind(logical_key).bind(&payload).execute(&pool).await.unwrap();
+        let request_id = Uuid::new_v4();
+        sqlx::query("INSERT INTO solution_pack_applications (id,workspace_id,plan_id,request_id,correlation_id,source_kind,source_metadata,archive_sha256,pack_id,pack_version,blueprint_publication,state,diagnostic_code,diagnostic_message,mapping_snapshot) VALUES ($1,$2,$3,$4,$4,'local_archive','{\"side_loaded\":true}'::jsonb,$5,'attricat.retry-navigation','1.0.0','publish','failed','step_failed','synthetic transient failure','[]'::jsonb)")
+            .bind(application_id).bind(workspace_id).bind(plan_id).bind(request_id).bind("0".repeat(64)).execute(&pool).await.unwrap();
+        sqlx::query("INSERT INTO solution_pack_application_steps (application_id,workspace_id,position,plan_id,resource_kind,logical_key,target_id,target_code,state,diagnostic_code,diagnostic_message) VALUES ($1,$2,0,$3,'workspace_setting',$4,$2,'explore_navigation','failed','step_failed','synthetic transient failure')")
+            .bind(application_id).bind(workspace_id).bind(plan_id).bind(logical_key).execute(&pool).await.unwrap();
+
+        let application = repository.apply_solution_pack_plan(plan_id).await.unwrap();
+        assert_eq!(application.state, "completed");
+        assert_eq!(application.steps[0].state, "completed");
+        assert_eq!(
+            application.steps[0].result_snapshot.as_ref().unwrap()["outcome"],
+            "appended"
+        );
+        let navigation: Value =
+            sqlx::query_scalar("SELECT settings->'explore_navigation' FROM workspaces WHERE id=$1")
+                .bind(workspace_id)
+                .fetch_one(&pool)
+                .await
+                .unwrap();
+        assert_eq!(navigation[0]["blueprint_code"], "retry_product");
+    }
 
     #[sqlx::test(migrations = "./migrations")]
     async fn ambiguous_commit_reconciliation_never_fails_a_later_pending_step(pool: sqlx::PgPool) {

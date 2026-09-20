@@ -1,0 +1,40 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://attricat.com/contracts/solution-pack-explore-navigation-v1.schema.json",
+  "title": "Attricat solution-pack Explore navigation v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["format_version", "kind", "entries"],
+  "properties": {
+    "format_version": {"const": 1},
+    "kind": {"const": "explore_navigation"},
+    "entries": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 64,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["blueprint"],
+        "properties": {
+          "blueprint": {
+            "type": "string",
+            "maxLength": 128,
+            "pattern": "^blueprints/[a-z][a-z0-9_-]*$"
+          },
+          "visible_to_role_codes": {
+            "type": "array",
+            "maxItems": 16,
+            "uniqueItems": true,
+            "items": {
+              "type": "string",
+              "maxLength": 128,
+              "pattern": "^[a-z][a-z0-9_-]*$",
+              "not": {"pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"}
+            }
+          }
+        }
+      }
+    }
+  }
+}

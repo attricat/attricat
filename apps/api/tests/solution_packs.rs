@@ -116,6 +116,54 @@ fn archive_with_extension_requirement(required: bool) -> Vec<u8> {
     zstd::stream::encode_all(Cursor::new(tar_bytes), 0).unwrap()
 }
 
+fn archive_with_explore_navigation() -> Vec<u8> {
+    archive_with_explore_navigation_roles(&[])
+}
+
+fn archive_with_explore_navigation_roles(role_codes: &[&str]) -> Vec<u8> {
+    let navigation = serde_json::to_vec(&json!({
+        "format_version": 1,
+        "kind": "explore_navigation",
+        "entries": [{
+            "blueprint": "blueprints/product",
+            "visible_to_role_codes": role_codes,
+        }],
+    }))
+    .unwrap();
+    let manifest = serde_json::to_vec(&json!({
+        "manifest_version": 1,
+        "id": "attricat.navigation",
+        "name": "Navigation",
+        "version": "1.0.0",
+        "description": "Explore navigation defaults",
+        "catalog": {"host_api": "^1.0"},
+        "resources": {
+            "blueprints": [{
+                "key": "blueprints/product",
+                "path": "blueprints/product.toml",
+                "required": true,
+                "sha256": digest(PRODUCT_BLUEPRINT)
+            }],
+            "workspace_settings": [{
+                "key": "workspace/explore-navigation",
+                "path": "workspace/explore-navigation.json",
+                "required": true,
+                "sha256": digest(&navigation)
+            }]
+        }
+    }))
+    .unwrap();
+    let mut tar_bytes = Vec::new();
+    {
+        let mut tar = tar::Builder::new(&mut tar_bytes);
+        append_file(&mut tar, "solution-pack.json", &manifest);
+        append_file(&mut tar, "blueprints/product.toml", PRODUCT_BLUEPRINT);
+        append_file(&mut tar, "workspace/explore-navigation.json", &navigation);
+        tar.finish().unwrap();
+    }
+    zstd::stream::encode_all(Cursor::new(tar_bytes), 0).unwrap()
+}
+
 fn archive_with_options(product_blueprint: &[u8], context_required: bool) -> Vec<u8> {
     let manifest = serde_json::to_vec(&json!({
         "manifest_version": 1,
@@ -1089,6 +1137,328 @@ async fn plan_routes_require_solution_pack_permission_and_isolate_workspaces(poo
         .await
         .unwrap();
     assert_eq!(visible_list, json!([]));
+    server.abort();
+}
+
+#[sqlx::test(migrations = "./migrations")]
+async fn apply_appends_explore_navigation_and_preserves_unrelated_settings(pool: PgPool) {
+    let workspace_id = BOOTSTRAP_WORKSPACE_ID.parse::<Uuid>().unwrap();
+    sqlx::query("UPDATE workspaces SET settings = '{\"theme\":\"dark\",\"explore_navigation\":[]}'::jsonb WHERE id=$1")
+        .bind(workspace_id)
+        .execute(&pool)
+        .await
+        .unwrap();
+    let (base_url, server) = start_server(pool.clone()).await;
+    let client = authenticated_client();
+
+    let inspected = inspect(&client, &base_url, archive_with_explore_navigation()).await;
+    assert_eq!(inspected.status(), StatusCode::OK);
+    let inspected = inspected.json::<Value>().await.unwrap();
+    assert_eq!(
+        inspected["resources"]["workspace_settings"][0]["entry_count"],
+        1
+    );
+
+    let plan = create_plan_with_publication(
+        &client,
+        &base_url,
+        archive_with_explore_navigation(),
+        "nav",
+        "publish",
+    )
+    .await;
+    assert_eq!(plan.status(), StatusCode::CREATED);
+    let plan = plan.json::<Value>().await.unwrap();
+    assert_eq!(plan["ready"], true);
+    assert_eq!(
+        plan["actions"].as_array().unwrap().last().unwrap()["action"],
+        "append"
+    );
+
+    let applied = apply_plan(&client, &base_url, plan["id"].as_str().unwrap()).await;
+    assert_eq!(applied.status(), StatusCode::OK);
+    let application = applied.json::<Value>().await.unwrap();
+    assert_eq!(application["state"], "completed");
+    let navigation_step = application["steps"].as_array().unwrap().last().unwrap();
+    assert_eq!(navigation_step["resource_kind"], "workspace_setting");
+    assert_eq!(navigation_step["result_snapshot"]["outcome"], "appended");
+    let settings: Value = sqlx::query_scalar("SELECT settings FROM workspaces WHERE id=$1")
+        .bind(workspace_id)
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+    assert_eq!(settings["theme"], "dark");
+    assert_eq!(
+        settings["explore_navigation"][0]["blueprint_code"],
+        "nav_product"
+    );
+
+    let repeated = apply_plan(&client, &base_url, plan["id"].as_str().unwrap()).await;
+    assert_eq!(repeated.status(), StatusCode::OK);
+    let entry_count: i32 = sqlx::query_scalar(
+        "SELECT jsonb_array_length(settings->'explore_navigation') FROM workspaces WHERE id=$1",
+    )
+    .bind(workspace_id)
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert_eq!(entry_count, 1);
+    server.abort();
+}
+
+#[sqlx::test(migrations = "./migrations")]
+async fn malformed_or_duplicate_existing_navigation_is_conflict_and_is_preserved(pool: PgPool) {
+    let workspace_id = BOOTSTRAP_WORKSPACE_ID.parse::<Uuid>().unwrap();
+    let (base_url, server) = start_server(pool.clone()).await;
+    let client = authenticated_client();
+
+    for (index, navigation) in [
+        json!({"malformed": true}),
+        json!([
+            {"blueprint_code":"nav_product"},
+            {"blueprint_code":"nav_product","visible_to_role_codes":["viewer"]}
+        ]),
+        json!([{"blueprint_code":"legacy","legacy_label":"preserve me"}]),
+    ]
+    .into_iter()
+    .enumerate()
+    {
+        let settings = json!({"theme":"dark", "explore_navigation":navigation});
+        sqlx::query("UPDATE workspaces SET settings=$1 WHERE id=$2")
+            .bind(&settings)
+            .bind(workspace_id)
+            .execute(&pool)
+            .await
+            .unwrap();
+        let before: String = sqlx::query_scalar(
+            "SELECT (settings->'explore_navigation')::text FROM workspaces WHERE id=$1",
+        )
+        .bind(workspace_id)
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+
+        let plan = create_plan_with_publication(
+            &client,
+            &base_url,
+            archive_with_explore_navigation(),
+            &format!("nav{index}"),
+            "publish",
+        )
+        .await;
+        assert_eq!(plan.status(), StatusCode::CREATED);
+        let plan = plan.json::<Value>().await.unwrap();
+        assert_eq!(plan["ready"], false);
+        let setting_action = plan["actions"].as_array().unwrap().last().unwrap();
+        assert_eq!(setting_action["action"], "conflict");
+        assert_eq!(setting_action["reason_code"], "invalid_current_navigation");
+        let apply = apply_plan(&client, &base_url, plan["id"].as_str().unwrap()).await;
+        assert_eq!(apply.status(), StatusCode::CONFLICT);
+
+        let after: String = sqlx::query_scalar(
+            "SELECT (settings->'explore_navigation')::text FROM workspaces WHERE id=$1",
+        )
+        .bind(workspace_id)
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+        assert_eq!(after, before);
+    }
+    server.abort();
+}
+
+#[sqlx::test(migrations = "./migrations")]
+async fn concurrent_ordinary_navigation_replacement_and_pack_append_do_not_lose_updates(
+    pool: PgPool,
+) {
+    let workspace_id = BOOTSTRAP_WORKSPACE_ID.parse::<Uuid>().unwrap();
+    let (base_url, server) = start_server(pool.clone()).await;
+    let client = authenticated_client();
+    let seed =
+        create_plan_with_publication(&client, &base_url, valid_archive(), "ordinary", "publish")
+            .await
+            .json::<Value>()
+            .await
+            .unwrap();
+    assert_eq!(
+        apply_plan(&client, &base_url, seed["id"].as_str().unwrap())
+            .await
+            .status(),
+        StatusCode::OK
+    );
+    let plan = create_plan_with_publication(
+        &client,
+        &base_url,
+        archive_with_explore_navigation(),
+        "race",
+        "publish",
+    )
+    .await
+    .json::<Value>()
+    .await
+    .unwrap();
+
+    let mut blocker = pool.begin().await.unwrap();
+    sqlx::query("SELECT id FROM workspaces WHERE id=$1 FOR UPDATE")
+        .bind(workspace_id)
+        .fetch_one(&mut *blocker)
+        .await
+        .unwrap();
+    let ordinary_client = client.clone();
+    let ordinary_url = base_url.clone();
+    let ordinary = tokio::spawn(async move {
+        ordinary_client
+            .put(format!("{ordinary_url}/workspace/navigation"))
+            .json(&json!({"explore_navigation":[{"blueprint_code":"ordinary_product"}]}))
+            .send()
+            .await
+            .unwrap()
+    });
+    tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+    let apply_client = client.clone();
+    let apply_url = base_url.clone();
+    let plan_id = plan["id"].as_str().unwrap().to_owned();
+    let apply = tokio::spawn(async move { apply_plan(&apply_client, &apply_url, &plan_id).await });
+    tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+    blocker.commit().await.unwrap();
+
+    assert_eq!(ordinary.await.unwrap().status(), StatusCode::NO_CONTENT);
+    assert_eq!(apply.await.unwrap().status(), StatusCode::OK);
+    let navigation: Value =
+        sqlx::query_scalar("SELECT settings->'explore_navigation' FROM workspaces WHERE id=$1")
+            .bind(workspace_id)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+    assert_eq!(
+        navigation,
+        json!([
+            {"blueprint_code":"ordinary_product"},
+            {"blueprint_code":"race_product"}
+        ])
+    );
+    server.abort();
+}
+
+#[sqlx::test(migrations = "./migrations")]
+async fn satisfied_navigation_step_is_durable_and_visibility_change_is_stale(pool: PgPool) {
+    let workspace_id = BOOTSTRAP_WORKSPACE_ID.parse::<Uuid>().unwrap();
+    let (base_url, server) = start_server(pool.clone()).await;
+    let client = authenticated_client();
+
+    let seed =
+        create_plan_with_publication(&client, &base_url, valid_archive(), "satisfied", "publish")
+            .await
+            .json::<Value>()
+            .await
+            .unwrap();
+    assert_eq!(
+        apply_plan(&client, &base_url, seed["id"].as_str().unwrap())
+            .await
+            .status(),
+        StatusCode::OK
+    );
+    sqlx::query("UPDATE workspaces SET settings=jsonb_set(settings,'{explore_navigation}',$1::jsonb,true) WHERE id=$2")
+        .bind(json!([{"blueprint_code":"satisfied_product"}]))
+        .bind(workspace_id)
+        .execute(&pool)
+        .await
+        .unwrap();
+    let satisfied = create_plan_with_publication(
+        &client,
+        &base_url,
+        archive_with_explore_navigation(),
+        "satisfied",
+        "publish",
+    )
+    .await
+    .json::<Value>()
+    .await
+    .unwrap();
+    assert_eq!(
+        satisfied["actions"].as_array().unwrap().last().unwrap()["action"],
+        "satisfied"
+    );
+    // The blueprint collision correctly makes the ordinary plan not ready. Make
+    // only the persisted satisfied setting step executable to exercise its
+    // application/retry contract without introducing existing-resource adoption.
+    sqlx::query("UPDATE solution_pack_plans SET ready=true WHERE id=$1")
+        .bind(satisfied["id"].as_str().unwrap().parse::<Uuid>().unwrap())
+        .execute(&pool)
+        .await
+        .unwrap();
+    let applied = apply_plan(&client, &base_url, satisfied["id"].as_str().unwrap()).await;
+    assert_eq!(applied.status(), StatusCode::OK);
+    let applied = applied.json::<Value>().await.unwrap();
+    assert_eq!(applied["steps"].as_array().unwrap().len(), 1);
+    assert_eq!(
+        applied["steps"][0]["result_snapshot"]["outcome"],
+        "satisfied"
+    );
+
+    sqlx::query("UPDATE workspaces SET settings=jsonb_set(settings,'{explore_navigation}','[]'::jsonb,true) WHERE id=$1")
+        .bind(workspace_id)
+        .execute(&pool)
+        .await
+        .unwrap();
+    let stale = create_plan_with_publication(
+        &client,
+        &base_url,
+        archive_with_explore_navigation(),
+        "stalevis",
+        "publish",
+    )
+    .await
+    .json::<Value>()
+    .await
+    .unwrap();
+    sqlx::query("UPDATE workspaces SET settings=jsonb_set(settings,'{explore_navigation}',$1::jsonb,true) WHERE id=$2")
+        .bind(json!([{"blueprint_code":"stalevis_product","visible_to_role_codes":["viewer"]}]))
+        .bind(workspace_id)
+        .execute(&pool)
+        .await
+        .unwrap();
+    let response = apply_plan(&client, &base_url, stale["id"].as_str().unwrap()).await;
+    assert_eq!(response.status(), StatusCode::CONFLICT);
+    assert_eq!(
+        response.json::<Value>().await.unwrap()["error"]["code"],
+        "solution_pack_plan_stale"
+    );
+    server.abort();
+}
+
+#[sqlx::test(migrations = "./migrations")]
+async fn duplicate_system_and_workspace_role_codes_remain_valid_for_navigation(pool: PgPool) {
+    let workspace_id = BOOTSTRAP_WORKSPACE_ID.parse::<Uuid>().unwrap();
+    sqlx::query("INSERT INTO roles (id,code,workspace_id,is_system) VALUES ($1,'viewer',$2,false)")
+        .bind(Uuid::new_v4())
+        .bind(workspace_id)
+        .execute(&pool)
+        .await
+        .unwrap();
+    let (base_url, server) = start_server(pool.clone()).await;
+    let client = authenticated_client();
+    let plan = create_plan_with_publication(
+        &client,
+        &base_url,
+        archive_with_explore_navigation_roles(&["viewer"]),
+        "roles",
+        "publish",
+    )
+    .await;
+    assert_eq!(plan.status(), StatusCode::CREATED);
+    let plan = plan.json::<Value>().await.unwrap();
+    assert_eq!(plan["ready"], true);
+    let applied = apply_plan(&client, &base_url, plan["id"].as_str().unwrap()).await;
+    assert_eq!(applied.status(), StatusCode::OK);
+    let roles: Value = sqlx::query_scalar(
+        "SELECT settings->'explore_navigation'->0->'visible_to_role_codes' FROM workspaces WHERE id=$1",
+    )
+    .bind(workspace_id)
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert_eq!(roles, json!(["viewer"]));
     server.abort();
 }
 

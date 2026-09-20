@@ -69,6 +69,13 @@
           "items": {
             "$ref": "#/$defs/contextResource"
           }
+        },
+        "workspace_settings": {
+          "type": "array",
+          "maxItems": 1,
+          "items": {
+            "$ref": "#/$defs/exploreNavigationResource"
+          }
         }
       },
       "anyOf": [
@@ -84,6 +91,14 @@
           "required": ["contexts"],
           "properties": {
             "contexts": {
+              "minItems": 1
+            }
+          }
+        },
+        {
+          "required": ["workspace_settings"],
+          "properties": {
+            "workspace_settings": {
               "minItems": 1
             }
           }
@@ -145,6 +160,17 @@
         "sha256": {
           "$ref": "#/$defs/digest"
         }
+      }
+    },
+    "exploreNavigationResource": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["key", "path", "required", "sha256"],
+      "properties": {
+        "key": {"const": "workspace/explore-navigation"},
+        "path": {"const": "workspace/explore-navigation.json"},
+        "required": {"type": "boolean"},
+        "sha256": {"$ref": "#/$defs/digest"}
       }
     },
     "extensionRequirement": {

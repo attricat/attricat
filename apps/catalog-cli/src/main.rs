@@ -4119,7 +4119,14 @@ value = "Blue shirt"
                                             .to_owned(),
                                         body.to_vec(),
                                     ));
-                                    axum::Json(json!({"id":"created"}))
+                                    axum::Json(json!({
+                                        "id":"created",
+                                        "actions":[{
+                                            "resource_kind":"workspace_setting",
+                                            "logical_key":"workspace/explore-navigation",
+                                            "action":"append"
+                                        }]
+                                    }))
                                 }
                             },
                         ),
@@ -4151,7 +4158,8 @@ value = "Blue shirt"
         )
         .await
         .unwrap();
-        assert_eq!(created, r#"{"id":"created"}"#);
+        assert!(created.contains(r#""resource_kind":"workspace_setting""#));
+        assert!(created.contains(r#""logical_key":"workspace/explore-navigation""#));
         assert_eq!(
             received.lock().unwrap().take().unwrap(),
             (

@@ -63,8 +63,10 @@ actor, local-source metadata, manifest/archive digest metadata, explicit prefix
 and blueprint publication preference, readiness, and a fixed 24-hour expiry.
 `solution_pack_plan_mappings` snapshots logical keys to proposed UUIDs, physical
 codes, and revision 1 where relevant. `solution_pack_plan_actions` stores a
-deterministic dependency-first order, create/skip/conflict/blocked reasons,
-preconditions, and normalized blueprint/context payloads consumed by apply.
+deterministic dependency-first order,
+create/append/satisfied/skip/conflict/blocked reasons, preconditions, and
+normalized blueprint/context or bounded Explore-navigation payloads consumed by
+apply.
 `solution_pack_plan_extension_requirements` separately stores deterministic
 required/optional compatibility outcomes and the bounded template needed for
 private apply-time revalidation. Public plan responses expose only safe
@@ -78,14 +80,15 @@ safe source, digest, publication, and logical-to-physical mapping provenance.
 Its bounded state is `running`, `completed`, `failed`, or `invalid`; bounded
 diagnostic fields retain resumable failure evidence. Ordered
 `solution_pack_application_steps` are completed in the same explicit
-transaction as each ordinary context or blueprint mutation and its audit/domain
-event evidence. A retry verifies completed target IDs and continues pending
-steps. Application records do not own resources and cannot uninstall a pack.
+transaction as each ordinary context or blueprint mutation, or an
+Explore-navigation append/no-op, and its audit/domain-event evidence. A retry
+verifies completed targets and continues pending steps. Application records do
+not own resources and cannot uninstall a pack.
 Extension requirement evaluation is implemented, but extension installation,
 upgrade, configuration, grants, enablement, removal, and pack ownership remain
-outside solution-pack application. Settings, assets, sample data, and export
-remain deferred. Solution packs are installed only from administrator-uploaded
-`.tar.zst` archives; the server does not access source repositories or fetch
+outside solution-pack application. Generic settings beyond bounded Explore
+navigation, assets, sample data, and export remain deferred. Solution packs are
+installed only from administrator-uploaded `.tar.zst` archives; the server does not access source repositories or fetch
 remote pack releases.
 
 ### `blueprints`

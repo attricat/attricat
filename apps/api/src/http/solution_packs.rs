@@ -47,6 +47,7 @@ struct CatalogSummary {
 struct ResourceSummaries {
     blueprints: Vec<BlueprintSummary>,
     contexts: Vec<ContextSummary>,
+    workspace_settings: Vec<WorkspaceSettingSummary>,
 }
 
 #[derive(Serialize)]
@@ -71,6 +72,15 @@ struct ContextSummary {
     required: bool,
     sha256: String,
     parent: String,
+}
+
+#[derive(Serialize)]
+struct WorkspaceSettingSummary {
+    key: String,
+    required: bool,
+    sha256: String,
+    kind: String,
+    entry_count: usize,
 }
 
 #[derive(Serialize)]
@@ -128,6 +138,22 @@ pub(super) async fn inspect(
         resources: ResourceSummaries {
             blueprints,
             contexts,
+            workspace_settings: manifest
+                .resources
+                .workspace_settings
+                .iter()
+                .map(|resource| WorkspaceSettingSummary {
+                    key: resource.key.clone(),
+                    required: resource.required,
+                    sha256: resource.sha256.clone(),
+                    kind: "explore_navigation".to_owned(),
+                    entry_count: pack
+                        .explore_navigation()
+                        .expect("validated workspace setting is available")
+                        .entries
+                        .len(),
+                })
+                .collect(),
         },
         extensions: manifest
             .extensions
@@ -352,6 +378,7 @@ mod tests {
             resources: ResourceSummaries {
                 blueprints: Vec::new(),
                 contexts: Vec::new(),
+                workspace_settings: Vec::new(),
             },
             extensions: Vec::new(),
         }

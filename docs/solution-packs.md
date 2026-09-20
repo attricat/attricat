@@ -3,11 +3,11 @@
 > **Status:** v1 archive validation, administrator inspection, immutable
 > create-only planning, and durable application/history for contexts and
 > blueprints are implemented. Packs may also declare bounded extension
-> requirements and non-secret configuration templates. Administrators upload
-> `.tar.zst` archives; broader resource types remain deferred.
+> requirements, non-secret configuration templates, and Explore navigation
+> defaults. Administrators upload `.tar.zst` archives; broader resource types remain deferred.
 >
 > **Scope of this document:** Sections that describe existing-resource
-> adoption, updates, settings, assets, sample data, prerequisites, export, or richer application evidence are future target
+> adoption, updates, workspace settings other than Explore navigation, assets, sample data, prerequisites, export, or richer application evidence are future target
 > design, not implemented v1 behavior. The explicitly marked v1 sections below
 > define the current product contract.
 
@@ -66,14 +66,15 @@ blueprint boundary.
 | Blueprints, attributes, relationships, and views | Declared through logical keys and compiled into ordinary versioned blueprint definitions. |
 | Contexts and publication-channel defaults | Added to the rooted hierarchy through mapped context codes; the system `default` context is never replaced. |
 | Extension requirements | **Implemented subset:** declare installed-package ID/version compatibility and an optional bounded non-secret literal JSON configuration template. Installation, upgrade, configuration, grants, and enablement remain separate ordinary approvals; layout defaults are deferred. |
-| Workspace defaults | Merge schema-owned settings such as pinned Explore entries and extension layouts without replacing unrelated settings. |
+| Workspace defaults | **Implemented subset:** append pinned Explore entries without replacing unrelated navigation or settings. Extension layouts and other settings are deferred. |
 | Branding, themes, and static assets | Install only declared, digest-verified files of supported media types for host-defined purposes. |
 | Documentation and setup | Include Markdown guidance, release notes, structured checklist items, and non-executable validation checks. |
 | Sample data | Optional, separately selected, visibly marked, portable, and idempotently mapped; never treated as production configuration. |
 
 Not every content type ships in the current implementation. The
 [initial delivery boundary](#initial-delivery-boundary) implements blueprint and
-context creation plus read-only extension requirement evaluation.
+context creation, bounded Explore navigation defaults, and read-only extension
+requirement evaluation.
 
 ## Package and distribution
 
@@ -332,24 +333,29 @@ future design. Secret values, access tokens, passwords, private keys, and
 connection credentials must not be stored in a pack archive or solution-pack
 plan.
 
-### Workspace defaults
+### Workspace defaults (Explore navigation implemented)
 
-A pack may declare mergeable, schema-owned workspace defaults, including:
+V1 accepts at most one `workspace_settings` resource. Its key and path are fixed
+as `workspace/explore-navigation` and `workspace/explore-navigation.json`. The
+strict file has `format_version: 1`, `kind: "explore_navigation"`, and 1–64
+entries. Each entry contains a declared entity-blueprint logical key and at most
+16 unique role **codes**; UUID references and unknown fields are rejected.
 
-- pinned Explore navigation entries;
-- workspace extension layout and promoted navigation contributions;
-- blueprint-view extension layout defaults;
-- branding, logo, and theme selections; and
-- other settings explicitly registered as packable by Catalog.
+The planner maps logical blueprint keys to deterministic physical codes. An
+absent entry is appended, an exact entry (including the canonical role-code set)
+is satisfied without a write, and a different role list for the same blueprint
+is a conflict. Required unavailable blueprints or unknown roles block a plan;
+optional unmet entries are skipped while other valid entries remain actionable.
+Pack-created targets require `publish`.
+Existing order is preserved and new entries are appended in file order. Malformed
+or duplicate existing navigation is a non-ready conflict and is never rewritten.
 
-Pinned Explore entries reference logical blueprints and role **codes**, not
-blueprint or role IDs. Runtime authorization still determines whether a user
-can see and use an entry.
-
-A pack cannot replace the entire workspace settings document. Every packable
-setting defines its own merge key, validation granularity, and conflict
-behavior so unrelated workspace settings survive application. Afterward, the
-merged settings are ordinary workspace configuration.
+Application locks the workspace row shared with ordinary navigation replacement,
+then revalidates entry absence/exactness, published entity blueprints, and role
+codes. This prevents lost updates and makes retries idempotent. Only bounded
+entry summaries and outcomes are retained; unrelated navigation and every other
+workspace setting are preserved. Extension layouts, branding/assets, generic
+settings, adoption, ownership, and uninstall remain out of scope.
 
 ### Branding, themes, and static assets
 
@@ -475,17 +481,18 @@ Validation produces no workspace changes. An authorized administrator uploads a
 `.tar.zst` archive and creates an immutable, workspace-scoped plan with a prefix and
 `draft` or `publish` blueprint choice.
 
-V1 actions are exactly:
+V1 actions are:
 
 - `create`: create a required context or blueprint at its persisted target;
-- `skip`: omit an optional resource;
-- `conflict`: a required target code was present when planning; or
-- `blocked`: a selected dependency cannot be created.
+- `append`: append absent Explore navigation entries;
+- `satisfied`: record exact Explore navigation entries without changing them;
+- `skip`: omit an optional resource or unmet optional navigation setting;
+- `conflict`: a required target code or incompatible navigation entry was present; or
+- `blocked`: a selected dependency or required navigation reference is unavailable.
 
-V1 does not emit `adopt`, `update`, or `keep`. It does not inspect prior
-applications or settings to choose a resource action. Candidate mappings remain
-visible in the plan, including candidates for skipped resources. The application
-mapping snapshot contains only mappings for executed `create` actions.
+V1 does not emit `adopt`, `update`, or `keep`. Candidate mappings remain visible
+in the plan, including skipped resources. The application mapping snapshot
+contains mappings for executed `create`, `append`, and `satisfied` actions.
 
 Extension requirements are immutable plan evidence, not application steps. A
 compatible installed release satisfies a requirement when it is enabled or
@@ -535,14 +542,15 @@ not misreported against a later pending step.
 
 Implemented application evidence contains the uploaded-archive source marker
 and digest, pack ID/version, blueprint publication choice, executed mapping
-snapshot, ordered context/blueprint step results, state and bounded diagnostics,
-actor token/user columns, timestamps, and request/correlation identifiers. List
+snapshot, ordered context/blueprint/workspace-setting step results, state and
+bounded diagnostics, actor token/user columns, timestamps, and
+request/correlation identifiers. List
 responses are compact and omit mappings and steps; show responses include both.
 Neither response contains normalized payloads, blueprint definitions, context
 data, archive bytes, or secret values.
 
 Richer source/release provenance, selected options, reused-resource evidence,
-settings fragments, prerequisites, extension mutation outcomes, checklists, and
+generic settings fragments, prerequisites, extension mutation outcomes, checklists, and
 validation reports are future design. Application records are
 administrator-facing evidence, not controllers: they do not retain ownership,
 lock resources, detect drift, authorize later changes, or provide uninstall.
@@ -620,8 +628,8 @@ context starter packs:
 7. administrator-only CLI commands for plan review and apply; and
 8. export to an untrusted draft.
 
-Extension dependencies, permission review, configuration templates, and guided
-setup follow the core planner. Workspace/layout defaults, later-release
-planning, sample data, and curated Ecommerce and Warehouse packs build on those
-contracts. Pack archives continue to be supplied explicitly as `.tar.zst`
-files; no repository-access path is planned.
+Extension dependencies, permission review, configuration templates, and Explore
+navigation defaults follow the core planner. Other workspace/layout defaults,
+later-release planning, sample data, and curated Ecommerce and Warehouse packs
+build on those contracts. Pack archives continue to be supplied explicitly as
+`.tar.zst` files; no repository-access path is planned.
