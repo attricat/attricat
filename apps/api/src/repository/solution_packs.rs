@@ -1,11 +1,17 @@
 use chrono::{DateTime, Duration, Utc};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
+use sha2::{Digest, Sha256};
 use sqlx::{Postgres, Transaction};
 use uuid::Uuid;
 
 use crate::{
     domain_events::{BLUEPRINT_CREATED_V1, BLUEPRINT_PUBLISHED_V1, CONTEXT_CREATED_V1},
+    extension_policy,
+    extensions::{
+        ExtensionLayoutPlacement, Manifest, classify_extension_layout_placement,
+        valid_contribution_key,
+    },
     model::{CreateAttributeContext, CreateBlueprint},
     solution_packs::{
         BlueprintPublication, InstalledExtensionSnapshot, MAX_SOLUTION_PACK_PLAN_RESPONSE_BYTES,
@@ -106,6 +112,8 @@ struct PrivatePlanExtensionRequirement {
     configuration_template_path: Option<String>,
     configuration_template_sha256: Option<String>,
     status: String,
+    installed_release_id: Option<Uuid>,
+    installed_version: Option<String>,
     evaluation_template: Value,
 }
 
@@ -116,6 +124,46 @@ struct InstalledExtensionRow {
     version: String,
     state: String,
     configuration: Value,
+    manifest: Value,
+}
+
+fn installed_extension_snapshot(
+    installed: InstalledExtensionRow,
+) -> Result<(String, InstalledExtensionSnapshot), RepositoryError> {
+    // Historical/synthetic requirement-only rows may not have a decodable
+    // manifest. They can still satisfy the pre-existing version/configuration
+    // requirement contract, but cannot prove a contribution declaration.
+    let contributions = serde_json::from_value::<Manifest>(installed.manifest)
+        .ok()
+        .into_iter()
+        .flat_map(|manifest| manifest.ui)
+        .filter_map(|contribution| {
+            contribution.outlet.map(|outlet| {
+                let outlet = serde_json::to_value(outlet)
+                    .expect("UI outlet serialization cannot fail")
+                    .as_str()
+                    .expect("UI outlet serializes as a string")
+                    .to_owned();
+                (
+                    format!("{}:{}", installed.extension_id, contribution.id),
+                    outlet,
+                )
+            })
+        })
+        .collect();
+    let policy_compatible =
+        extension_policy::allows(&installed.extension_id, installed.installed_release_id);
+    Ok((
+        installed.extension_id,
+        InstalledExtensionSnapshot {
+            installed_release_id: installed.installed_release_id,
+            version: installed.version,
+            state: installed.state,
+            configuration: installed.configuration,
+            policy_compatible,
+            contributions,
+        },
+    ))
 }
 
 impl CatalogRepository {
@@ -164,26 +212,38 @@ impl CatalogRepository {
         .await?
         .into_iter()
         .collect();
-        let navigation_value: Value = sqlx::query_scalar(
-            "SELECT COALESCE(settings->'explore_navigation', '[]'::jsonb) FROM workspaces WHERE id = $1 AND deleted_at IS NULL",
+        let settings: Value = sqlx::query_scalar(
+            "SELECT settings FROM workspaces WHERE id = $1 AND deleted_at IS NULL",
         )
         .bind(workspace_id)
         .fetch_one(&mut *tx)
         .await?;
-        let (explore_navigation, explore_navigation_valid) =
-            match super::workspace_navigation::parse_stored_explore_navigation(navigation_value) {
-                Ok(entries) => (
-                    entries
-                        .into_iter()
-                        .map(|entry| PlanningExploreNavigationEntry {
-                            blueprint_code: entry.blueprint_code,
-                            visible_to_role_codes: entry.visible_to_role_codes,
-                        })
-                        .collect(),
-                    true,
-                ),
-                Err(()) => (Vec::new(), false),
-            };
+        let settings_object = settings.as_object();
+        let navigation_value = settings_object
+            .and_then(|settings| settings.get("explore_navigation"))
+            .cloned()
+            .unwrap_or_else(|| serde_json::json!([]));
+        let extension_layout = settings_object
+            .and_then(|settings| settings.get("extension_layout"))
+            .cloned()
+            .unwrap_or_else(|| serde_json::json!({"version":1,"outlets":{}}));
+        let extension_layout_valid = settings_object.is_some()
+            && super::extensions::validate_workspace_extension_layout(&extension_layout).is_ok();
+        let (explore_navigation, explore_navigation_valid) = match settings_object.and_then(|_| {
+            super::workspace_navigation::parse_stored_explore_navigation(navigation_value).ok()
+        }) {
+            Some(entries) => (
+                entries
+                    .into_iter()
+                    .map(|entry| PlanningExploreNavigationEntry {
+                        blueprint_code: entry.blueprint_code,
+                        visible_to_role_codes: entry.visible_to_role_codes,
+                    })
+                    .collect(),
+                true,
+            ),
+            None => (Vec::new(), false),
+        };
         let role_codes = sqlx::query_scalar::<_, String>(
             "SELECT code FROM roles WHERE is_system OR workspace_id = $1 ORDER BY code",
         )
@@ -210,25 +270,15 @@ impl CatalogRepository {
             Default::default()
         } else {
             sqlx::query_as::<_, InstalledExtensionRow>(
-                "SELECT i.extension_id, i.installed_release_id, r.version, i.state, i.configuration FROM extension_installations i JOIN installed_extension_releases r ON r.id = i.installed_release_id AND r.workspace_id = i.workspace_id WHERE i.workspace_id = $1 AND i.extension_id = ANY($2) ORDER BY i.extension_id",
+                "SELECT i.extension_id, i.installed_release_id, r.version, i.state, i.configuration, r.manifest FROM extension_installations i JOIN installed_extension_releases r ON r.id = i.installed_release_id AND r.workspace_id = i.workspace_id WHERE i.workspace_id = $1 AND i.extension_id = ANY($2) ORDER BY i.extension_id",
             )
             .bind(workspace_id)
             .bind(&extension_ids)
             .fetch_all(&mut *tx)
             .await?
             .into_iter()
-            .map(|installed| {
-                (
-                    installed.extension_id,
-                    InstalledExtensionSnapshot {
-                        installed_release_id: installed.installed_release_id,
-                        version: installed.version,
-                        state: installed.state,
-                        configuration: installed.configuration,
-                    },
-                )
-            })
-            .collect()
+            .map(installed_extension_snapshot)
+            .collect::<Result<_, _>>()?
         };
         let draft = build_create_only_plan(
             pack,
@@ -241,6 +291,8 @@ impl CatalogRepository {
                 installed_extensions,
                 explore_navigation,
                 explore_navigation_valid,
+                extension_layout,
+                extension_layout_valid,
                 role_codes,
                 published_entity_codes,
             },
@@ -622,6 +674,34 @@ struct BlueprintPayload {
     definition: String,
     version: i64,
     publication: String,
+    #[serde(default)]
+    extension_contributions: Vec<ExtensionContributionSnapshotPayload>,
+}
+
+#[derive(Clone, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct ExtensionContributionSnapshotPayload {
+    contribution: String,
+    outlet: String,
+    installed_release_id: Uuid,
+    installed_version: String,
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct ExtensionLayoutPayload {
+    entries: Vec<ExtensionLayoutPayloadEntry>,
+}
+
+#[derive(Clone, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct ExtensionLayoutPayloadEntry {
+    contribution: String,
+    outlet: String,
+    hidden: bool,
+    promoted: bool,
+    installed_release_id: Uuid,
+    installed_version: String,
 }
 
 #[derive(Deserialize)]
@@ -715,8 +795,22 @@ impl CatalogRepository {
                 return Err(RepositoryError::SolutionPackPlanExpired);
             }
         }
-        self.revalidate_required_extension_requirements(&mut tx, plan_id)
-            .await?;
+        if let Err(error) = self
+            .revalidate_required_extension_requirements(&mut tx, plan_id)
+            .await
+        {
+            if matches!(error, RepositoryError::SolutionPackPlanStale)
+                && let Some((application_id, _)) = existing_application
+            {
+                sqlx::query("UPDATE solution_pack_applications SET state='invalid', diagnostic_code='plan_stale', diagnostic_message='persisted extension requirements no longer match the workspace', updated_at=clock_timestamp() WHERE workspace_id=$1 AND id=$2 AND state <> 'completed'")
+                    .bind(workspace_id)
+                    .bind(application_id)
+                    .execute(&mut *tx)
+                    .await?;
+                tx.commit().await?;
+            }
+            return Err(error);
+        }
         let mappings = sqlx::query_as::<_, SolutionPackPlanMapping>(
             "SELECT m.position, m.resource_kind, m.logical_key, m.target_id, m.target_code, m.target_version, m.mapping_kind FROM solution_pack_plan_mappings m JOIN solution_pack_plan_actions a ON a.plan_id=m.plan_id AND a.logical_key=m.logical_key WHERE m.workspace_id = $1 AND m.plan_id = $2 AND a.action IN ('create','append','satisfied') ORDER BY m.position",
         )
@@ -834,7 +928,7 @@ impl CatalogRepository {
     ) -> Result<(), RepositoryError> {
         let workspace_id = self.workspace_id.unwrap_or(Self::DEFAULT_WORKSPACE_ID);
         let requirements = sqlx::query_as::<_, PrivatePlanExtensionRequirement>(
-            "SELECT logical_key, extension_id, version_requirement, required, configuration_template_path, configuration_template_sha256, status, evaluation_template FROM solution_pack_plan_extension_requirements WHERE workspace_id=$1 AND plan_id=$2 AND required ORDER BY position",
+            "SELECT logical_key, extension_id, version_requirement, required, configuration_template_path, configuration_template_sha256, status, installed_release_id, installed_version, evaluation_template FROM solution_pack_plan_extension_requirements WHERE workspace_id=$1 AND plan_id=$2 AND required ORDER BY position",
         )
         .bind(workspace_id)
         .bind(plan_id)
@@ -848,25 +942,15 @@ impl CatalogRepository {
             .map(|requirement| requirement.extension_id.clone())
             .collect::<Vec<_>>();
         let installed_extensions = sqlx::query_as::<_, InstalledExtensionRow>(
-            "SELECT i.extension_id, i.installed_release_id, r.version, i.state, i.configuration FROM extension_installations i JOIN installed_extension_releases r ON r.id=i.installed_release_id AND r.workspace_id=i.workspace_id WHERE i.workspace_id=$1 AND i.extension_id = ANY($2) FOR SHARE OF i",
+            "SELECT i.extension_id, i.installed_release_id, r.version, i.state, i.configuration, r.manifest FROM extension_installations i JOIN installed_extension_releases r ON r.id=i.installed_release_id AND r.workspace_id=i.workspace_id WHERE i.workspace_id=$1 AND i.extension_id = ANY($2) FOR SHARE OF i, r",
         )
         .bind(workspace_id)
         .bind(extension_ids)
         .fetch_all(&mut **tx)
         .await?
         .into_iter()
-        .map(|installed| {
-            (
-                installed.extension_id,
-                InstalledExtensionSnapshot {
-                    installed_release_id: installed.installed_release_id,
-                    version: installed.version,
-                    state: installed.state,
-                    configuration: installed.configuration,
-                },
-            )
-        })
-        .collect::<std::collections::BTreeMap<_, _>>();
+        .map(installed_extension_snapshot)
+        .collect::<Result<std::collections::BTreeMap<_, _>, _>>()?;
         for persisted in requirements {
             if !persisted.required || persisted.status != "satisfied" {
                 return Err(RepositoryError::InvalidSolutionPackPlan(
@@ -894,15 +978,79 @@ impl CatalogRepository {
                 required: true,
                 configuration_template,
             };
+            let installed = installed_extensions.get(&requirement.id);
             let evaluated = evaluate_extension_requirement(
                 &requirement,
                 requirement
                     .configuration_template
                     .as_ref()
                     .map(|_| &persisted.evaluation_template),
-                installed_extensions.get(&requirement.id),
+                installed,
             );
-            if evaluated.status != "satisfied" {
+            if evaluated.status != "satisfied"
+                || installed.map(|value| value.installed_release_id)
+                    != persisted.installed_release_id
+                || installed.map(|value| value.version.as_str())
+                    != persisted.installed_version.as_deref()
+            {
+                return Err(RepositoryError::SolutionPackPlanStale);
+            }
+        }
+        Ok(())
+    }
+
+    async fn revalidate_extension_contributions(
+        &self,
+        tx: &mut Transaction<'_, Postgres>,
+        contributions: &[ExtensionContributionSnapshotPayload],
+    ) -> Result<(), RepositoryError> {
+        if contributions.is_empty() {
+            return Ok(());
+        }
+        let workspace_id = self.workspace_id.unwrap_or(Self::DEFAULT_WORKSPACE_ID);
+        let extension_ids = contributions
+            .iter()
+            .filter_map(|entry| {
+                entry
+                    .contribution
+                    .split_once(':')
+                    .map(|(id, _)| id.to_owned())
+            })
+            .collect::<Vec<_>>();
+        if extension_ids.len() != contributions.len() {
+            return Err(RepositoryError::InvalidSolutionPackPlan(
+                "invalid persisted extension contribution".into(),
+            ));
+        }
+        let installed = sqlx::query_as::<_, InstalledExtensionRow>(
+            "SELECT i.extension_id, i.installed_release_id, r.version, i.state, i.configuration, r.manifest FROM extension_installations i JOIN installed_extension_releases r ON r.id=i.installed_release_id AND r.workspace_id=i.workspace_id WHERE i.workspace_id=$1 AND i.extension_id=ANY($2) FOR SHARE OF i, r",
+        )
+        .bind(workspace_id)
+        .bind(&extension_ids)
+        .fetch_all(&mut **tx)
+        .await?
+        .into_iter()
+        .map(installed_extension_snapshot)
+        .collect::<Result<std::collections::BTreeMap<_, _>, _>>()?;
+        for entry in contributions {
+            let extension_id = entry
+                .contribution
+                .split_once(':')
+                .map(|(id, _)| id)
+                .expect("checked contribution key");
+            let Some(snapshot) = installed.get(extension_id) else {
+                return Err(RepositoryError::SolutionPackPlanStale);
+            };
+            if snapshot.installed_release_id != entry.installed_release_id
+                || snapshot.version != entry.installed_version
+                || snapshot.state == "quarantined"
+                || !snapshot.policy_compatible
+                || snapshot
+                    .contributions
+                    .get(&entry.contribution)
+                    .map(String::as_str)
+                    != Some(entry.outlet.as_str())
+            {
                 return Err(RepositoryError::SolutionPackPlanStale);
             }
         }
@@ -924,33 +1072,60 @@ impl CatalogRepository {
         .await?;
         for step in steps {
             if step.resource_kind == "workspace_setting" {
-                if step.target_id != workspace_id || step.target_code != "explore_navigation" {
+                if step.target_id != workspace_id {
                     return Err(RepositoryError::InvalidSolutionPackPlan(
                         "persisted workspace setting mapping is invalid".into(),
                     ));
                 }
-                let payload = parse_explore_navigation_payload(step.normalized_payload)?;
-                let current = self
-                    .lock_explore_navigation_in_transaction(tx, workspace_id)
-                    .await?;
-                if step.state == "completed" || step.action == "satisfied" {
-                    self.validate_explore_navigation_entries_in_transaction(
+                if step.target_code == "explore_navigation" {
+                    let payload = parse_explore_navigation_payload(step.normalized_payload)?;
+                    let current = self
+                        .lock_explore_navigation_in_transaction(tx, workspace_id)
+                        .await?;
+                    if step.state == "completed" || step.action == "satisfied" {
+                        self.validate_explore_navigation_entries_in_transaction(
+                            tx,
+                            workspace_id,
+                            &payload,
+                        )
+                        .await
+                        .map_err(solution_pack_navigation_error)?;
+                    }
+                    let all_exact = navigation_entries_all_exact(&current, &payload);
+                    let appendable = navigation_entries_appendable(&current, &payload);
+                    let valid = if step.state == "completed" || step.action == "satisfied" {
+                        all_exact
+                    } else {
+                        step.action == "append" && appendable
+                    };
+                    if !valid {
+                        return Err(RepositoryError::SolutionPackPlanStale);
+                    }
+                } else if step.target_code == "extension_layout" {
+                    let payload = parse_extension_layout_payload(step.normalized_payload)?;
+                    self.revalidate_extension_contributions(
                         tx,
-                        workspace_id,
-                        &payload,
+                        &extension_layout_snapshots(&payload),
                     )
-                    .await
-                    .map_err(solution_pack_navigation_error)?;
-                }
-                let all_exact = navigation_entries_all_exact(&current, &payload);
-                let appendable = navigation_entries_appendable(&current, &payload);
-                let valid = if step.state == "completed" || step.action == "satisfied" {
-                    all_exact
+                    .await?;
+                    let current = self
+                        .lock_workspace_extension_layout_in_transaction(tx, workspace_id)
+                        .await
+                        .map_err(solution_pack_layout_error)?;
+                    let all_exact = extension_layout_entries_all_exact(&current, &payload);
+                    let appendable = extension_layout_entries_appendable(&current, &payload);
+                    let valid = if step.state == "completed" || step.action == "satisfied" {
+                        all_exact
+                    } else {
+                        step.action == "append" && appendable
+                    };
+                    if !valid {
+                        return Err(RepositoryError::SolutionPackPlanStale);
+                    }
                 } else {
-                    step.action == "append" && appendable
-                };
-                if !valid {
-                    return Err(RepositoryError::SolutionPackPlanStale);
+                    return Err(RepositoryError::InvalidSolutionPackPlan(
+                        "persisted workspace setting mapping is invalid".into(),
+                    ));
                 }
                 continue;
             }
@@ -1093,6 +1268,8 @@ impl CatalogRepository {
                         "persisted blueprint version is invalid".into(),
                     ));
                 }
+                self.revalidate_extension_contributions(&mut tx, &payload.extension_contributions)
+                    .await?;
                 let created = self
                     .create_blueprint_in_transaction(
                         &mut tx,
@@ -1135,56 +1312,109 @@ impl CatalogRepository {
             }
             "workspace_setting" => {
                 if step.target_id != workspace_id
-                    || step.target_code != "explore_navigation"
                     || !matches!(step.action.as_str(), "append" | "satisfied")
                 {
                     return Err(RepositoryError::InvalidSolutionPackPlan(
                         "persisted workspace setting step is invalid".into(),
                     ));
                 }
-                let desired = parse_explore_navigation_payload(step.normalized_payload.clone())?;
-                let current = self
-                    .lock_explore_navigation_in_transaction(&mut tx, workspace_id)
-                    .await?;
-                self.validate_explore_navigation_entries_in_transaction(
-                    &mut tx,
-                    workspace_id,
-                    &desired,
-                )
-                .await
-                .map_err(solution_pack_navigation_error)?;
-                let all_exact = navigation_entries_all_exact(&current, &desired);
-                let outcome = if step.action == "satisfied" {
-                    if !all_exact {
-                        return Err(RepositoryError::SolutionPackPlanStale);
-                    }
-                    "satisfied"
-                } else if !navigation_entries_appendable(&current, &desired) {
-                    return Err(RepositoryError::SolutionPackPlanStale);
-                } else if all_exact {
-                    "satisfied"
-                } else {
-                    let mut merged = current;
-                    for entry in &desired {
-                        if !merged
-                            .iter()
-                            .any(|current| current.blueprint_code == entry.blueprint_code)
-                        {
-                            merged.push(entry.clone());
-                        }
-                    }
-                    self.write_explore_navigation_in_transaction(&mut tx, workspace_id, &merged)
+                if step.target_code == "explore_navigation" {
+                    let desired =
+                        parse_explore_navigation_payload(step.normalized_payload.clone())?;
+                    let current = self
+                        .lock_explore_navigation_in_transaction(&mut tx, workspace_id)
                         .await?;
-                    "appended"
-                };
-                (
-                    serde_json::json!({
-                        "setting": "explore_navigation",
-                        "entry_count": desired.len(),
-                        "outcome": outcome,
-                    }),
-                    Vec::new(),
-                )
+                    self.validate_explore_navigation_entries_in_transaction(
+                        &mut tx,
+                        workspace_id,
+                        &desired,
+                    )
+                    .await
+                    .map_err(solution_pack_navigation_error)?;
+                    let all_exact = navigation_entries_all_exact(&current, &desired);
+                    let outcome = if step.action == "satisfied" {
+                        if !all_exact {
+                            return Err(RepositoryError::SolutionPackPlanStale);
+                        }
+                        "satisfied"
+                    } else if !navigation_entries_appendable(&current, &desired) {
+                        return Err(RepositoryError::SolutionPackPlanStale);
+                    } else if all_exact {
+                        "satisfied"
+                    } else {
+                        let mut merged = current;
+                        for entry in &desired {
+                            if !merged
+                                .iter()
+                                .any(|current| current.blueprint_code == entry.blueprint_code)
+                            {
+                                merged.push(entry.clone());
+                            }
+                        }
+                        self.write_explore_navigation_in_transaction(
+                            &mut tx,
+                            workspace_id,
+                            &merged,
+                        )
+                        .await?;
+                        "appended"
+                    };
+                    (
+                        serde_json::json!({
+                            "setting": "explore_navigation",
+                            "entry_count": desired.len(),
+                            "outcome": outcome,
+                        }),
+                        Vec::new(),
+                    )
+                } else if step.target_code == "extension_layout" {
+                    let desired = parse_extension_layout_payload(step.normalized_payload.clone())?;
+                    self.revalidate_extension_contributions(
+                        &mut tx,
+                        &extension_layout_snapshots(&desired),
+                    )
+                    .await?;
+                    let current = self
+                        .lock_workspace_extension_layout_in_transaction(&mut tx, workspace_id)
+                        .await
+                        .map_err(solution_pack_layout_error)?;
+                    let before_sha256 = json_sha256(&current)?;
+                    let all_exact = extension_layout_entries_all_exact(&current, &desired);
+                    let (outcome, merged) = if step.action == "satisfied" {
+                        if !all_exact {
+                            return Err(RepositoryError::SolutionPackPlanStale);
+                        }
+                        ("satisfied", current)
+                    } else if !extension_layout_entries_appendable(&current, &desired) {
+                        return Err(RepositoryError::SolutionPackPlanStale);
+                    } else if all_exact {
+                        ("satisfied", current)
+                    } else {
+                        let merged = merge_extension_layout(current, &desired)?;
+                        self.write_workspace_extension_layout_in_transaction(
+                            &mut tx,
+                            workspace_id,
+                            &merged,
+                        )
+                        .await?;
+                        ("appended", merged)
+                    };
+                    let after_sha256 = json_sha256(&merged)?;
+                    (
+                        serde_json::json!({
+                            "setting": "extension_layout",
+                            "entry_count": desired.len(),
+                            "outcome": outcome,
+                            "before_sha256": before_sha256,
+                            "after_sha256": after_sha256,
+                        }),
+                        Vec::new(),
+                    )
+                } else {
+                    return Err(RepositoryError::InvalidSolutionPackPlan(
+                        "persisted workspace setting step is invalid".into(),
+                    ));
+                }
             }
             _ => {
                 return Err(RepositoryError::InvalidSolutionPackPlan(
@@ -1328,6 +1558,139 @@ impl CatalogRepository {
     }
 }
 
+fn parse_extension_layout_payload(
+    value: Value,
+) -> Result<Vec<ExtensionLayoutPayloadEntry>, RepositoryError> {
+    let payload: ExtensionLayoutPayload = serde_json::from_value(value).map_err(|_| {
+        RepositoryError::InvalidSolutionPackPlan(
+            "invalid persisted extension layout payload".into(),
+        )
+    })?;
+    if payload.entries.is_empty()
+        || payload.entries.len() > crate::solution_packs::MAX_SOLUTION_PACK_EXTENSION_LAYOUT_ENTRIES
+    {
+        return Err(RepositoryError::InvalidSolutionPackPlan(
+            "persisted extension layout entry count is invalid".into(),
+        ));
+    }
+    let mut seen = std::collections::HashSet::new();
+    for entry in &payload.entries {
+        if !valid_contribution_key(&entry.contribution)
+            || !seen.insert(entry.contribution.as_str())
+            || serde_json::from_value::<crate::extensions::UiOutlet>(Value::String(
+                entry.outlet.clone(),
+            ))
+            .is_err()
+            || (entry.promoted && (entry.outlet != "navigation" || entry.hidden))
+        {
+            return Err(RepositoryError::InvalidSolutionPackPlan(
+                "persisted extension layout entry is invalid".into(),
+            ));
+        }
+    }
+    Ok(payload.entries)
+}
+
+fn extension_layout_snapshots(
+    entries: &[ExtensionLayoutPayloadEntry],
+) -> Vec<ExtensionContributionSnapshotPayload> {
+    entries
+        .iter()
+        .map(|entry| ExtensionContributionSnapshotPayload {
+            contribution: entry.contribution.clone(),
+            outlet: entry.outlet.clone(),
+            installed_release_id: entry.installed_release_id,
+            installed_version: entry.installed_version.clone(),
+        })
+        .collect()
+}
+
+fn extension_layout_entries_all_exact(
+    current: &Value,
+    desired: &[ExtensionLayoutPayloadEntry],
+) -> bool {
+    desired.iter().all(|entry| {
+        classify_extension_layout_placement(
+            current,
+            &entry.contribution,
+            &entry.outlet,
+            entry.hidden,
+            entry.promoted,
+        ) == ExtensionLayoutPlacement::Exact
+    })
+}
+
+fn extension_layout_entries_appendable(
+    current: &Value,
+    desired: &[ExtensionLayoutPayloadEntry],
+) -> bool {
+    desired.iter().all(|entry| {
+        matches!(
+            classify_extension_layout_placement(
+                current,
+                &entry.contribution,
+                &entry.outlet,
+                entry.hidden,
+                entry.promoted,
+            ),
+            ExtensionLayoutPlacement::Exact | ExtensionLayoutPlacement::Absent
+        )
+    })
+}
+
+fn merge_extension_layout(
+    mut current: Value,
+    desired: &[ExtensionLayoutPayloadEntry],
+) -> Result<Value, RepositoryError> {
+    for entry in desired {
+        if classify_extension_layout_placement(
+            &current,
+            &entry.contribution,
+            &entry.outlet,
+            entry.hidden,
+            entry.promoted,
+        ) == ExtensionLayoutPlacement::Exact
+        {
+            continue;
+        }
+        let outlets = current
+            .get_mut("outlets")
+            .and_then(Value::as_object_mut)
+            .ok_or_else(|| {
+                RepositoryError::InvalidSolutionPackPlan(
+                    "persisted workspace extension layout is invalid".into(),
+                )
+            })?;
+        let outlet = outlets.entry(entry.outlet.clone()).or_insert_with(|| {
+            if entry.outlet == "navigation" {
+                serde_json::json!({"order": [], "hidden": [], "promoted": []})
+            } else {
+                serde_json::json!({"order": [], "hidden": []})
+            }
+        });
+        let list = if entry.hidden { "hidden" } else { "order" };
+        outlet[list]
+            .as_array_mut()
+            .expect("validated outlet list")
+            .push(Value::String(entry.contribution.clone()));
+        if entry.promoted {
+            outlet["promoted"]
+                .as_array_mut()
+                .expect("navigation promotion list")
+                .push(Value::String(entry.contribution.clone()));
+        }
+    }
+    super::extensions::validate_workspace_extension_layout(&current)?;
+    Ok(current)
+}
+
+fn json_sha256(value: &Value) -> Result<String, RepositoryError> {
+    let bytes = serde_json::to_vec(value)
+        .map_err(|error| RepositoryError::InvalidSolutionPackPlan(error.to_string()))?;
+    let digest = Sha256::digest(bytes);
+    Ok(digest.iter().map(|byte| format!("{byte:02x}")).collect())
+}
+
 fn parse_explore_navigation_payload(
     value: Value,
 ) -> Result<Vec<ExploreNavigationEntry>, RepositoryError> {
@@ -1395,6 +1758,13 @@ fn navigation_entries_appendable(
 }
 
 fn solution_pack_navigation_error(error: RepositoryError) -> RepositoryError {
+    match error {
+        RepositoryError::Database(_) => error,
+        _ => RepositoryError::SolutionPackPlanStale,
+    }
+}
+
+fn solution_pack_layout_error(error: RepositoryError) -> RepositoryError {
     match error {
         RepositoryError::Database(_) => error,
         _ => RepositoryError::SolutionPackPlanStale,

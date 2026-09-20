@@ -3,11 +3,13 @@
 > **Status:** v1 archive validation, administrator inspection, immutable
 > create-only planning, and durable application/history for contexts and
 > blueprints are implemented. Packs may also declare bounded extension
-> requirements, non-secret configuration templates, and Explore navigation
-> defaults. Administrators upload `.tar.zst` archives; broader resource types remain deferred.
+> requirements, non-secret configuration templates, Explore navigation defaults,
+> bounded workspace extension layouts, and entity-blueprint extension layouts.
+> Administrators upload `.tar.zst` archives; broader resource types remain deferred.
 >
 > **Scope of this document:** Sections that describe existing-resource
-> adoption, updates, workspace settings other than Explore navigation, assets, sample data, prerequisites, export, or richer application evidence are future target
+> adoption, updates, workspace settings other than the two bounded defaults,
+> assets, sample data, prerequisites, export, or richer application evidence are future target
 > design, not implemented v1 behavior. The explicitly marked v1 sections below
 > define the current product contract.
 
@@ -65,16 +67,17 @@ blueprint boundary.
 | --- | --- |
 | Blueprints, attributes, relationships, and views | Declared through logical keys and compiled into ordinary versioned blueprint definitions. |
 | Contexts and publication-channel defaults | Added to the rooted hierarchy through mapped context codes; the system `default` context is never replaced. |
-| Extension requirements | **Implemented subset:** declare installed-package ID/version compatibility and an optional bounded non-secret literal JSON configuration template. Installation, upgrade, configuration, grants, and enablement remain separate ordinary approvals; layout defaults are deferred. |
-| Workspace defaults | **Implemented subset:** append pinned Explore entries without replacing unrelated navigation or settings. Extension layouts and other settings are deferred. |
+| Extension requirements | **Implemented subset:** declare installed-package ID/version compatibility and an optional bounded non-secret literal JSON configuration template. Stable manifest contribution references may supply workspace and new entity-blueprint layout defaults. Installation, upgrade, configuration, grants, and enablement remain separate ordinary approvals. |
+| Workspace defaults | **Implemented subset:** append pinned Explore entries and compatible extension contributions without replacing unrelated navigation, layout data, or settings. Other settings remain deferred. |
 | Branding, themes, and static assets | Install only declared, digest-verified files of supported media types for host-defined purposes. |
 | Documentation and setup | Include Markdown guidance, release notes, structured checklist items, and non-executable validation checks. |
 | Sample data | Optional, separately selected, visibly marked, portable, and idempotently mapped; never treated as production configuration. |
 
 Not every content type ships in the current implementation. The
 [initial delivery boundary](#initial-delivery-boundary) implements blueprint and
-context creation, bounded Explore navigation defaults, and read-only extension
-requirement evaluation.
+context creation, bounded Explore navigation and extension-layout defaults,
+entity-blueprint extension layouts, and read-only extension requirement
+evaluation.
 
 ## Package and distribution
 
@@ -229,42 +232,48 @@ resource selected by the administrator. That distinction is historical
 provenance only. Both become or remain ordinary workspace-owned resources as
 soon as the plan is applied.
 
-## Multiple packs in one workspace (future composition design)
+## Multiple packs in one workspace
 
 The implemented v1 can apply multiple create-only plans when their target codes
-do not collide. The compatibility mapping, settings, and extension composition
-rules in this section are future design.
+do not collide. Explore-navigation and extension-layout entries compose through
+their bounded item-level merge rules: absent entries append, exact entries are
+no-ops, and incompatible placements conflict without replacing unrelated data.
+Compatible installed contributions may be shared as declarative availability,
+but packs never mutate their lifecycle. Existing-resource compatibility mapping,
+configuration composition, and generic workspace-setting composition described
+below remain future design.
 
 A workspace may apply multiple solution packs. This is a core composition
 requirement, not an exceptional migration path: for example, one workspace may
 combine Ecommerce, DAM, SEO, marketplace, and warehouse templates.
 
-Each application has its own prefix, options, mapping snapshot, and provenance
-record. Physical codes must be unique across the workspace, but packs may have
+Each application has its own prefix, mapping snapshot, and provenance record.
+Physical codes must be unique across the workspace, but packs may have
 overlapping local key names because references are qualified by pack ID and
 resolved while each plan is created.
 
-Resources and extensions can be shared. A second pack may map to a compatible
-resource produced by an earlier application, but only through an explicit,
-compatibility-checked plan action. The earlier pack gains no continuing
-ownership and the later pack creates no permanent dependency on it; both plans
-ultimately operate on the same workspace-owned resource.
+Installed extension contributions and exact bounded workspace-setting entries
+can be shared by multiple plans through `satisfied` actions. Mapping a second
+pack to a compatible blueprint or context produced by an earlier application is
+future design. No application gives a pack continuing ownership or creates a
+permanent pack dependency; applied resources and settings remain workspace-owned.
 
-Composition follows these rules:
+Implemented composition follows these rules:
 
-- plans evaluate the workspace's current resources, settings, extensions, and
-  prior pack-application records;
+- plans evaluate current target codes, bounded settings, and installed extension
+  release snapshots;
 - no pack receives implicit precedence because it was applied most recently;
-- workspace-setting fragments and navigation/layout entries merge only through
-  their registered item-level keys and merge rules;
-- incompatible setting proposals become conflicts rather than last-writer-wins
-  updates;
-- extension version requirements in the plan must be compatible with the
-  extension release currently selected for the workspace;
-- conflicting extension configuration templates require an administrator to
-  choose or provide one workspace configuration; and
-- extension grants and enablement remain ordinary workspace decisions after
-  application.
+- Explore-navigation and extension-layout entries merge only through their
+  registered item-level keys and merge rules;
+- incompatible bounded setting proposals become conflicts rather than
+  last-writer-wins updates;
+- extension version requirements and contribution declarations must match the
+  exact compatible release selected when the plan was created; and
+- extension grants, configuration, and enablement remain ordinary workspace
+  decisions outside pack application.
+
+Generic settings, existing-resource adoption, configuration composition, and
+prior-application compatibility mapping remain future design.
 
 Applying the same pack release with the same choices is idempotent. Applying a
 different release of the same pack creates a new reviewed application plan; it
@@ -314,7 +323,9 @@ A pack cannot grant permissions, approve host access, bypass extension source
 rules, inject extension artifacts, or enable an extension. Disabled compatible
 installations can satisfy a requirement; quarantined installations cannot.
 Required operator approvals remain effective even for an official pack.
-Contribution layout defaults and guided setup steps remain future design.
+Compatible manifest-declared UI contributions may be referenced by stable
+`<extension-id>:<contribution-id>` keys in the bounded layout defaults described
+below. Guided setup steps remain future design.
 
 ### Extension configuration templates and inputs
 
@@ -333,11 +344,12 @@ future design. Secret values, access tokens, passwords, private keys, and
 connection credentials must not be stored in a pack archive or solution-pack
 plan.
 
-### Workspace defaults (Explore navigation implemented)
+### Workspace defaults (Explore navigation and extension layout)
 
-V1 accepts at most one `workspace_settings` resource. Its key and path are fixed
-as `workspace/explore-navigation` and `workspace/explore-navigation.json`. The
-strict file has `format_version: 1`, `kind: "explore_navigation"`, and 1–64
+V1 accepts at most two `workspace_settings` resources, one of each fixed kind.
+Explore navigation uses key `workspace/explore-navigation` and path
+`workspace/explore-navigation.json`. The strict file has `format_version: 1`,
+`kind: "explore_navigation"`, and 1–64
 entries. Each entry contains a declared entity-blueprint logical key and at most
 16 unique role **codes**; UUID references and unknown fields are rejected.
 
@@ -354,8 +366,32 @@ Application locks the workspace row shared with ordinary navigation replacement,
 then revalidates entry absence/exactness, published entity blueprints, and role
 codes. This prevents lost updates and makes retries idempotent. Only bounded
 entry summaries and outcomes are retained; unrelated navigation and every other
-workspace setting are preserved. Extension layouts, branding/assets, generic
-settings, adoption, ownership, and uninstall remain out of scope.
+workspace setting are preserved.
+Extension layout uses key `workspace/extension-layout` and path
+`workspace/extension-layout.json`. Its strict v1 file contains 1–64 entries with
+a stable contribution key, manifest outlet, required flag, primary placement
+(`hidden` or ordered), and navigation-only `promoted` flag. Contribution keys
+are semantically unique across the file even when two JSON entry objects differ;
+exact duplicate objects are additionally rejected by the published JSON schema.
+A hidden contribution cannot also be promoted. Planning accepts
+only a contribution declared at the exact compatible installed release;
+disabled releases can satisfy availability, while missing, incompatible,
+quarantined, policy-denied, missing-contribution, or wrong-outlet entries are
+unmet. Required unmet entries block and optional unmet entries skip. Exact
+placements are no-ops, absent placements append in file order, and placement or
+promotion mismatches conflict. Application revalidates and locks before merging,
+preserving unrelated entries, outlet order, and every other setting. It never
+installs, upgrades, configures, grants, enables, or otherwise changes an
+extension.
+
+Entity-blueprint `extension_layout` views are also accepted for newly created
+pack blueprints, limited by the ordinary compiler to entity-owned outlets.
+References are checked against the same immutable release snapshot. Optional
+extension requirements remove only unavailable layout keys; required unavailable
+keys block blueprint creation. Existing blueprints are never updated or adopted.
+
+Branding/assets, generic settings, adoption, ownership, and uninstall remain out
+of scope.
 
 ### Branding, themes, and static assets
 
@@ -459,10 +495,12 @@ lowercase ASCII letter, contain only lowercase letters, digits, and underscores,
 and do not end in an underscore. Optional v1 resources are conservatively
 skipped; a selected required resource whose dependency would be skipped is
 blocked. Existing target codes are conflicts and are never adopted or replaced.
-V1 pack blueprints reject workspace-role publication policies, extension layouts, and
-extension-provided table renderers. Planning snapshots tenant-scoped installed
-extension release, lifecycle state, and configuration only to evaluate declared
-requirements; role and grant state is not part of requirement satisfaction.
+V1 pack blueprints reject workspace-role publication policies and
+extension-provided table renderers. Entity-owned extension layouts are validated
+against tenant-scoped immutable installed-release manifests. Planning snapshots
+the exact release, lifecycle state, policy compatibility, declared contributions,
+and configuration needed for requirements; role and grant state is not part of
+requirement satisfaction.
 
 Application accepts only an immutable plan ID and never recomputes choices from
 CLI flags. Each create step commits its ordinary Catalog mutation together with
@@ -484,11 +522,14 @@ Validation produces no workspace changes. An authorized administrator uploads a
 V1 actions are:
 
 - `create`: create a required context or blueprint at its persisted target;
-- `append`: append absent Explore navigation entries;
-- `satisfied`: record exact Explore navigation entries without changing them;
-- `skip`: omit an optional resource or unmet optional navigation setting;
-- `conflict`: a required target code or incompatible navigation entry was present; or
-- `blocked`: a selected dependency or required navigation reference is unavailable.
+- `append`: append absent Explore navigation or extension-layout entries;
+- `satisfied`: record exact workspace-setting entries without changing them;
+- `skip`: omit an optional resource or unmet optional navigation/layout entry;
+- `conflict`: a required target code, navigation entry, or contribution
+  placement/promotion conflicts with current workspace state; or
+- `blocked`: a selected dependency or required navigation/contribution reference
+  is unavailable, incompatible, quarantined, policy-denied, or absent from the
+  exact installed release manifest.
 
 V1 does not emit `adopt`, `update`, or `keep`. Candidate mappings remain visible
 in the plan, including skipped resources. The application mapping snapshot

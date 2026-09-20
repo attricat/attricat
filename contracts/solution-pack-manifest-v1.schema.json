@@ -72,10 +72,25 @@
         },
         "workspace_settings": {
           "type": "array",
-          "maxItems": 1,
+          "maxItems": 2,
           "items": {
-            "$ref": "#/$defs/exploreNavigationResource"
-          }
+            "oneOf": [
+              {"$ref": "#/$defs/exploreNavigationResource"},
+              {"$ref": "#/$defs/extensionLayoutResource"}
+            ]
+          },
+          "allOf": [
+            {
+              "contains": {"$ref": "#/$defs/exploreNavigationResource"},
+              "minContains": 0,
+              "maxContains": 1
+            },
+            {
+              "contains": {"$ref": "#/$defs/extensionLayoutResource"},
+              "minContains": 0,
+              "maxContains": 1
+            }
+          ]
         }
       },
       "anyOf": [
@@ -169,6 +184,17 @@
       "properties": {
         "key": {"const": "workspace/explore-navigation"},
         "path": {"const": "workspace/explore-navigation.json"},
+        "required": {"type": "boolean"},
+        "sha256": {"$ref": "#/$defs/digest"}
+      }
+    },
+    "extensionLayoutResource": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["key", "path", "required", "sha256"],
+      "properties": {
+        "key": {"const": "workspace/extension-layout"},
+        "path": {"const": "workspace/extension-layout.json"},
         "required": {"type": "boolean"},
         "sha256": {"$ref": "#/$defs/digest"}
       }

@@ -21,6 +21,10 @@ use sha2::{Digest, Sha256};
 use subtle::ConstantTimeEq;
 use thiserror::Error;
 
+use crate::extensions::{
+    ExtensionLayoutPlacement, classify_extension_layout_placement, valid_contribution_key,
+};
+
 pub const SOLUTION_PACK_MANIFEST_VERSION: u32 = 1;
 pub const SOLUTION_PACK_RESOURCE_FORMAT_VERSION: u32 = 1;
 pub const SOLUTION_PACK_MANIFEST_PATH: &str = "solution-pack.json";
@@ -32,8 +36,9 @@ pub const MAX_SOLUTION_PACK_MANIFEST_BYTES: usize = 256 * 1024;
 pub const MAX_SOLUTION_PACK_ARCHIVE_ENTRIES: usize = 256;
 pub const MAX_SOLUTION_PACK_BLUEPRINTS: usize = 64;
 pub const MAX_SOLUTION_PACK_CONTEXTS: usize = 128;
-pub const MAX_SOLUTION_PACK_WORKSPACE_SETTINGS: usize = 1;
+pub const MAX_SOLUTION_PACK_WORKSPACE_SETTINGS: usize = 2;
 pub const MAX_SOLUTION_PACK_EXPLORE_NAVIGATION_ENTRIES: usize = 64;
+pub const MAX_SOLUTION_PACK_EXTENSION_LAYOUT_ENTRIES: usize = 64;
 pub const MAX_SOLUTION_PACK_EXPLORE_NAVIGATION_ROLES: usize = 16;
 pub const MAX_SOLUTION_PACK_EXTENSION_REQUIREMENTS: usize = 64;
 pub const MAX_SOLUTION_PACK_CONFIGURATION_TEMPLATE_BYTES: usize = 64 * 1024;
@@ -137,6 +142,26 @@ pub struct SolutionPackExploreNavigationEntry {
     pub visible_to_role_codes: Vec<String>,
 }
 
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct SolutionPackExtensionLayout {
+    pub format_version: u32,
+    pub kind: String,
+    pub entries: Vec<SolutionPackExtensionLayoutEntry>,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct SolutionPackExtensionLayoutEntry {
+    pub contribution: String,
+    pub outlet: String,
+    #[serde(default)]
+    pub hidden: bool,
+    #[serde(default)]
+    pub promoted: bool,
+    pub required: bool,
+}
+
 #[derive(Debug, Error, PartialEq, Eq)]
 pub enum SolutionPackError {
     #[error("solution-pack manifest_version {0} is unsupported")]
@@ -155,6 +180,7 @@ pub struct ValidatedSolutionPack {
     blueprints: BTreeMap<String, SolutionPackBlueprint>,
     contexts: BTreeMap<String, SolutionPackContext>,
     explore_navigation: Option<SolutionPackExploreNavigation>,
+    extension_layout: Option<SolutionPackExtensionLayout>,
     configuration_templates: BTreeMap<String, Value>,
 }
 
@@ -170,6 +196,13 @@ pub struct SolutionPackBlueprint {
     dependencies: BTreeSet<String>,
     table_path_dependencies: BTreeSet<String>,
     kind: BlueprintKind,
+    extension_layout: Vec<BlueprintExtensionLayoutEntry>,
+}
+
+#[derive(Clone, Debug)]
+struct BlueprintExtensionLayoutEntry {
+    contribution: String,
+    outlet: String,
 }
 
 #[derive(Debug)]
@@ -373,6 +406,8 @@ impl ValidatedSolutionPack {
         validate_declared_files(&manifest, &files)?;
         let (blueprints, contexts) = validate_content(&manifest, &files)?;
         let explore_navigation = validate_explore_navigation(&manifest, &files, &blueprints)?;
+        let extension_layout = validate_extension_layout(&manifest, &files)?;
+        validate_blueprint_extension_layouts(&manifest, &blueprints)?;
         let configuration_templates = validate_configuration_templates(&manifest, &files)?;
 
         Ok(Self {
@@ -382,6 +417,7 @@ impl ValidatedSolutionPack {
             blueprints,
             contexts,
             explore_navigation,
+            extension_layout,
             configuration_templates,
         })
     }
@@ -410,6 +446,10 @@ impl ValidatedSolutionPack {
 
     pub fn explore_navigation(&self) -> Option<&SolutionPackExploreNavigation> {
         self.explore_navigation.as_ref()
+    }
+
+    pub fn extension_layout(&self) -> Option<&SolutionPackExtensionLayout> {
+        self.extension_layout.as_ref()
     }
 
     pub fn configuration_template(&self, key: &str) -> Option<&Value> {
@@ -564,12 +604,18 @@ fn validate_extension_requirement(
 
 fn validate_resource(kind: &str, resource: &SolutionPackResource) -> Result<(), SolutionPackError> {
     if kind == "workspace_settings" {
-        if resource.key != "workspace/explore-navigation"
-            || resource.path != "workspace/explore-navigation.json"
-        {
-            return invalid(
-                "workspace setting must use key 'workspace/explore-navigation' and path 'workspace/explore-navigation.json'",
-            );
+        let fixed_pair = matches!(
+            (resource.key.as_str(), resource.path.as_str()),
+            (
+                "workspace/explore-navigation",
+                "workspace/explore-navigation.json"
+            ) | (
+                "workspace/extension-layout",
+                "workspace/extension-layout.json"
+            )
+        );
+        if !fixed_pair {
+            return invalid("workspace setting must use a supported fixed workspace key and path");
         }
         parse_sha256(&resource.sha256).map_err(|()| {
             SolutionPackError::Invalid(format!(
@@ -676,7 +722,12 @@ fn validate_explore_navigation(
     files: &BTreeMap<String, Vec<u8>>,
     blueprints: &BTreeMap<String, SolutionPackBlueprint>,
 ) -> Result<Option<SolutionPackExploreNavigation>, SolutionPackError> {
-    let Some(resource) = manifest.resources.workspace_settings.first() else {
+    let Some(resource) = manifest
+        .resources
+        .workspace_settings
+        .iter()
+        .find(|resource| resource.key == "workspace/explore-navigation")
+    else {
         return Ok(None);
     };
     let mut navigation: SolutionPackExploreNavigation =
@@ -750,6 +801,112 @@ fn validate_explore_navigation(
         }
     }
     Ok(Some(navigation))
+}
+
+fn validate_extension_layout(
+    manifest: &SolutionPackManifest,
+    files: &BTreeMap<String, Vec<u8>>,
+) -> Result<Option<SolutionPackExtensionLayout>, SolutionPackError> {
+    let Some(resource) = manifest
+        .resources
+        .workspace_settings
+        .iter()
+        .find(|resource| resource.key == "workspace/extension-layout")
+    else {
+        return Ok(None);
+    };
+    let layout: SolutionPackExtensionLayout = serde_json::from_slice(&files[&resource.path])
+        .map_err(|_| {
+            SolutionPackError::Invalid("workspace extension layout is not valid strict JSON".into())
+        })?;
+    if layout.format_version != SOLUTION_PACK_RESOURCE_FORMAT_VERSION {
+        return invalid(format!(
+            "workspace extension layout has unsupported format_version {}",
+            layout.format_version
+        ));
+    }
+    if layout.kind != "extension_layout" {
+        return invalid("workspace extension layout kind must be 'extension_layout'");
+    }
+    if layout.entries.is_empty()
+        || layout.entries.len() > MAX_SOLUTION_PACK_EXTENSION_LAYOUT_ENTRIES
+    {
+        return invalid(format!(
+            "workspace extension layout must contain 1-{MAX_SOLUTION_PACK_EXTENSION_LAYOUT_ENTRIES} entries"
+        ));
+    }
+    let requirements = manifest
+        .extensions
+        .iter()
+        .map(|requirement| requirement.id.as_str())
+        .collect::<HashSet<_>>();
+    let mut contributions = HashSet::new();
+    for entry in &layout.entries {
+        let Some((extension_id, _)) = entry.contribution.split_once(':') else {
+            return invalid(format!(
+                "workspace extension layout contribution '{}' is invalid",
+                entry.contribution
+            ));
+        };
+        if !valid_contribution_key(&entry.contribution)
+            || !contributions.insert(entry.contribution.as_str())
+        {
+            return invalid(format!(
+                "workspace extension layout contribution '{}' is invalid or duplicated",
+                entry.contribution
+            ));
+        }
+        if !requirements.contains(extension_id) {
+            return invalid(format!(
+                "workspace extension layout contribution '{}' has no extension requirement",
+                entry.contribution
+            ));
+        }
+        if serde_json::from_value::<crate::extensions::UiOutlet>(Value::String(
+            entry.outlet.clone(),
+        ))
+        .is_err()
+        {
+            return invalid(format!(
+                "workspace extension layout outlet '{}' is invalid",
+                entry.outlet
+            ));
+        }
+        if entry.promoted && (entry.outlet != "navigation" || entry.hidden) {
+            return invalid(format!(
+                "workspace extension layout contribution '{}' may be promoted only as visible navigation",
+                entry.contribution
+            ));
+        }
+    }
+    Ok(Some(layout))
+}
+
+fn validate_blueprint_extension_layouts(
+    manifest: &SolutionPackManifest,
+    blueprints: &BTreeMap<String, SolutionPackBlueprint>,
+) -> Result<(), SolutionPackError> {
+    let requirements = manifest
+        .extensions
+        .iter()
+        .map(|requirement| requirement.id.as_str())
+        .collect::<HashSet<_>>();
+    for blueprint in blueprints.values() {
+        for entry in &blueprint.extension_layout {
+            let extension_id = entry
+                .contribution
+                .split_once(':')
+                .map(|(extension_id, _)| extension_id)
+                .expect("blueprint compiler validated contribution key");
+            if !requirements.contains(extension_id) {
+                return invalid(format!(
+                    "blueprint '{}' extension layout contribution '{}' has no extension requirement",
+                    blueprint.key, entry.contribution
+                ));
+            }
+        }
+    }
+    Ok(())
 }
 
 fn validate_configuration_templates(
@@ -1132,6 +1289,32 @@ fn prepare_blueprint(
         return invalid(format!("blueprint '{key}' code must be '{expected_code}'"));
     }
 
+    let mut extension_layout = definition
+        .views
+        .get("extension_layout")
+        .and_then(|view| match view {
+            ViewDefinition::ExtensionLayout { outlets, .. } => Some(outlets),
+            _ => None,
+        })
+        .into_iter()
+        .flat_map(|outlets| outlets.iter())
+        .flat_map(|(outlet, layout)| {
+            layout
+                .order
+                .iter()
+                .chain(&layout.hidden)
+                .map(move |contribution| BlueprintExtensionLayoutEntry {
+                    contribution: contribution.clone(),
+                    outlet: outlet.clone(),
+                })
+        })
+        .collect::<Vec<_>>();
+    extension_layout.sort_by(|left, right| {
+        left.outlet
+            .cmp(&right.outlet)
+            .then_with(|| left.contribution.cmp(&right.contribution))
+    });
+
     Ok(PreparedBlueprint {
         portable: SolutionPackBlueprint {
             key: key.to_owned(),
@@ -1141,6 +1324,7 @@ fn prepare_blueprint(
             dependencies,
             table_path_dependencies: BTreeSet::new(),
             kind: definition.kind.clone(),
+            extension_layout,
         },
         native_definition: definition,
         native_source,
@@ -1159,11 +1343,6 @@ fn reject_workspace_dependent_blueprint_constructs(
     }
     for view in definition.views.values() {
         match view {
-            ViewDefinition::ExtensionLayout { .. } => {
-                return invalid(format!(
-                    "blueprint '{key}' cannot declare extension layouts in solution-pack v1"
-                ));
-            }
             ViewDefinition::Table {
                 columns: Some(columns),
                 ..
@@ -1713,6 +1892,9 @@ pub struct InstalledExtensionSnapshot {
     pub version: String,
     pub state: String,
     pub configuration: Value,
+    pub policy_compatible: bool,
+    /// Stable contribution key to its manifest-declared outlet.
+    pub contributions: BTreeMap<String, String>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -1729,6 +1911,8 @@ pub struct PlanningWorkspaceSnapshot {
     pub installed_extensions: BTreeMap<String, InstalledExtensionSnapshot>,
     pub explore_navigation: Vec<PlanningExploreNavigationEntry>,
     pub explore_navigation_valid: bool,
+    pub extension_layout: Value,
+    pub extension_layout_valid: bool,
     pub role_codes: BTreeSet<String>,
     pub published_entity_codes: BTreeSet<String>,
 }
@@ -1800,6 +1984,7 @@ pub fn evaluate_extension_requirement(
             "incompatible_version"
         }
         Some(installed) if installed.state == "quarantined" => "quarantined",
+        Some(installed) if !installed.policy_compatible => "policy_incompatible",
         Some(_) if configuration_matches != Some(true) => "configuration_mismatch",
         Some(_) => "satisfied",
     };
@@ -1830,6 +2015,62 @@ pub fn evaluate_extension_requirement(
         installed_state: installed.map(|installed| installed.state.clone()),
         configuration_matches,
         evaluation_template: template.cloned().unwrap_or_else(|| serde_json::json!({})),
+    }
+}
+
+fn extension_requirement_for_contribution<'a>(
+    manifest: &'a SolutionPackManifest,
+    contribution: &str,
+) -> &'a SolutionPackExtensionRequirement {
+    let extension_id = contribution
+        .split_once(':')
+        .map(|(extension_id, _)| extension_id)
+        .expect("validated contribution key");
+    manifest
+        .extensions
+        .iter()
+        .find(|requirement| requirement.id == extension_id)
+        .expect("validated contribution has an extension requirement")
+}
+
+fn contribution_unmet_reason(
+    requirement: &SolutionPackExtensionRequirement,
+    contribution: &str,
+    outlet: &str,
+    installed: Option<&InstalledExtensionSnapshot>,
+) -> Option<&'static str> {
+    let installed = installed?;
+    let version_matches = Version::parse(&installed.version).is_ok_and(|version| {
+        parse_version_req(&requirement.version)
+            .expect("validated extension requirement")
+            .matches(&version)
+    });
+    if !version_matches {
+        return Some("incompatible_version");
+    }
+    if installed.state == "quarantined" {
+        return Some("quarantined");
+    }
+    if !installed.policy_compatible {
+        return Some("policy_incompatible");
+    }
+    match installed.contributions.get(contribution) {
+        None => Some("contribution_missing"),
+        Some(declared_outlet) if declared_outlet != outlet => Some("outlet_mismatch"),
+        Some(_) => None,
+    }
+}
+
+fn contribution_availability_reason(
+    requirement: &SolutionPackExtensionRequirement,
+    contribution: &str,
+    outlet: &str,
+    installed: Option<&InstalledExtensionSnapshot>,
+) -> Option<&'static str> {
+    if installed.is_none() {
+        Some("missing")
+    } else {
+        contribution_unmet_reason(requirement, contribution, outlet, installed)
     }
 }
 
@@ -1935,6 +2176,20 @@ pub fn build_create_only_plan(
             },
         );
     }
+    if pack.extension_layout().is_some() {
+        mappings_by_key.insert(
+            "workspace/extension-layout".to_owned(),
+            PlannedMapping {
+                resource_kind: "workspace_setting",
+                logical_key: "workspace/extension-layout".to_owned(),
+                target_id: workspace.workspace_id,
+                target_code: "extension_layout".to_owned(),
+                target_version: None,
+                mapping_kind: "workspace",
+                snapshot: serde_json::json!({"setting": "extension_layout"}),
+            },
+        );
+    }
 
     // Includes and context parents constrain apply order. A published target is
     // also required before ordinary validation can resolve a relationship table
@@ -1975,6 +2230,48 @@ pub fn build_create_only_plan(
                 .or_default() += 1;
         }
     }
+    let mut blueprint_layout_allowed = HashMap::<String, HashSet<String>>::new();
+    let mut blueprint_layout_evidence = HashMap::<String, Vec<Value>>::new();
+    let mut blueprint_layout_blocked = HashMap::<String, &'static str>::new();
+    for resource in &manifest.resources.blueprints {
+        let blueprint = pack
+            .blueprint(&resource.key)
+            .expect("validated blueprint exists");
+        let mut allowed = HashSet::new();
+        let mut evidence = Vec::new();
+        for entry in &blueprint.extension_layout {
+            let requirement = extension_requirement_for_contribution(manifest, &entry.contribution);
+            let reason = contribution_availability_reason(
+                requirement,
+                &entry.contribution,
+                &entry.outlet,
+                workspace.installed_extensions.get(&requirement.id),
+            );
+            let outcome = match reason {
+                None => {
+                    allowed.insert(entry.contribution.clone());
+                    "satisfied"
+                }
+                Some(_) if requirement.required => {
+                    blueprint_layout_blocked
+                        .entry(resource.key.clone())
+                        .or_insert("extension_contribution_unavailable");
+                    "blocked"
+                }
+                Some(_) => "skip",
+            };
+            evidence.push(serde_json::json!({
+                "contribution": entry.contribution,
+                "outlet": entry.outlet,
+                "required": requirement.required,
+                "outcome": outcome,
+                "reason_code": reason.unwrap_or("satisfied"),
+            }));
+        }
+        blueprint_layout_allowed.insert(resource.key.clone(), allowed);
+        blueprint_layout_evidence.insert(resource.key.clone(), evidence);
+    }
+
     let mut outcomes = HashMap::<String, (&'static str, &'static str)>::new();
     for (logical_key, (_, resource)) in &resources {
         let mapping = &mappings_by_key[logical_key];
@@ -1982,6 +2279,8 @@ pub fn build_create_only_plan(
             logical_key.clone(),
             if !resource.required {
                 ("skip", "optional_not_selected")
+            } else if let Some(reason) = blueprint_layout_blocked.get(logical_key) {
+                ("blocked", *reason)
             } else if generated_code_counts[mapping.target_code.as_str()] > 1 {
                 ("conflict", "duplicate_target_code")
             } else if workspace.physical_codes.contains(&mapping.target_code) {
@@ -2031,6 +2330,9 @@ pub fn build_create_only_plan(
                         .expect("validated blueprint exists"),
                     &mappings_by_key,
                     publication,
+                    &blueprint_layout_allowed[&logical_key],
+                    workspace,
+                    manifest,
                 )?
             } else {
                 normalized_context_payload(
@@ -2058,6 +2360,7 @@ pub fn build_create_only_plan(
                 "target_version": mapping.target_version,
                 "required": resource.required,
                 "dependencies": dependencies[&logical_key],
+                "extension_layout": blueprint_layout_evidence.get(&logical_key).cloned().unwrap_or_default(),
             }),
             normalized_payload,
             preconditions,
@@ -2068,7 +2371,8 @@ pub fn build_create_only_plan(
         let resource = manifest
             .resources
             .workspace_settings
-            .first()
+            .iter()
+            .find(|resource| resource.key == "workspace/explore-navigation")
             .expect("validated navigation has a manifest resource");
         if !workspace.explore_navigation_valid {
             actions.push(PlannedAction {
@@ -2209,6 +2513,129 @@ pub fn build_create_only_plan(
         });
     }
 
+    if let Some(layout) = pack.extension_layout() {
+        let resource = manifest
+            .resources
+            .workspace_settings
+            .iter()
+            .find(|resource| resource.key == "workspace/extension-layout")
+            .expect("validated extension layout has a manifest resource");
+        if !workspace.extension_layout_valid {
+            actions.push(PlannedAction {
+                resource_kind: "workspace_setting",
+                logical_key: resource.key.clone(),
+                action: "conflict",
+                reason_code: "invalid_current_extension_layout",
+                summary: serde_json::json!({
+                    "setting": "extension_layout",
+                    "required": resource.required,
+                    "entries": [],
+                }),
+                normalized_payload: None,
+                preconditions: serde_json::json!([]),
+            });
+        } else {
+            let mut evidence = Vec::with_capacity(layout.entries.len());
+            let mut payload_entries = Vec::new();
+            let mut required_unmet = None;
+            let mut required_conflict = false;
+            let mut has_append = false;
+            for entry in &layout.entries {
+                let requirement =
+                    extension_requirement_for_contribution(manifest, &entry.contribution);
+                let installed = workspace.installed_extensions.get(&requirement.id);
+                let availability = contribution_availability_reason(
+                    requirement,
+                    &entry.contribution,
+                    &entry.outlet,
+                    installed,
+                );
+                let placement = availability.is_none().then(|| {
+                    classify_extension_layout_placement(
+                        &workspace.extension_layout,
+                        &entry.contribution,
+                        &entry.outlet,
+                        entry.hidden,
+                        entry.promoted,
+                    )
+                });
+                let (outcome, reason) = if let Some(reason) = availability {
+                    if entry.required {
+                        required_unmet.get_or_insert(reason);
+                        ("blocked", reason)
+                    } else {
+                        ("skip", reason)
+                    }
+                } else {
+                    match placement.expect("available contribution has placement") {
+                        ExtensionLayoutPlacement::Exact => ("satisfied", "exact_match"),
+                        ExtensionLayoutPlacement::Absent => {
+                            has_append = true;
+                            ("append", "target_absent")
+                        }
+                        ExtensionLayoutPlacement::Conflict if entry.required => {
+                            required_conflict = true;
+                            ("conflict", "placement_mismatch")
+                        }
+                        ExtensionLayoutPlacement::Conflict => ("skip", "placement_mismatch"),
+                    }
+                };
+                evidence.push(serde_json::json!({
+                    "contribution": entry.contribution,
+                    "outlet": entry.outlet,
+                    "hidden": entry.hidden,
+                    "promoted": entry.promoted,
+                    "required": entry.required,
+                    "outcome": outcome,
+                    "reason_code": reason,
+                }));
+                if matches!(outcome, "append" | "satisfied") {
+                    let installed = installed.expect("available contribution is installed");
+                    payload_entries.push(serde_json::json!({
+                        "contribution": entry.contribution,
+                        "outlet": entry.outlet,
+                        "hidden": entry.hidden,
+                        "promoted": entry.promoted,
+                        "installed_release_id": installed.installed_release_id,
+                        "installed_version": installed.version,
+                    }));
+                }
+            }
+            let (action, reason_code, normalized_payload) = if required_conflict {
+                ("conflict", "placement_mismatch", None)
+            } else if let Some(reason) = required_unmet {
+                ("blocked", reason, None)
+            } else if payload_entries.is_empty() {
+                ("skip", "optional_contributions_unmet", None)
+            } else if has_append {
+                (
+                    "append",
+                    "target_absent",
+                    Some(serde_json::json!({"entries": payload_entries})),
+                )
+            } else {
+                (
+                    "satisfied",
+                    "exact_match",
+                    Some(serde_json::json!({"entries": payload_entries})),
+                )
+            };
+            actions.push(PlannedAction {
+                resource_kind: "workspace_setting",
+                logical_key: resource.key.clone(),
+                action,
+                reason_code,
+                summary: serde_json::json!({
+                    "setting": "extension_layout",
+                    "required": resource.required,
+                    "entries": evidence,
+                }),
+                normalized_payload,
+                preconditions: serde_json::json!([]),
+            });
+        }
+    }
+
     let extension_requirements = manifest
         .extensions
         .iter()
@@ -2319,6 +2746,9 @@ fn normalized_blueprint_payload(
     blueprint: &SolutionPackBlueprint,
     mappings: &BTreeMap<String, PlannedMapping>,
     publication: BlueprintPublication,
+    allowed_contributions: &HashSet<String>,
+    workspace: &PlanningWorkspaceSnapshot,
+    manifest: &SolutionPackManifest,
 ) -> Result<Value, SolutionPackError> {
     let mut value: toml::Value = toml::from_str(blueprint.source()).map_err(|_| {
         SolutionPackError::Invalid(format!("blueprint '{}' is invalid", blueprint.key()))
@@ -2360,12 +2790,50 @@ fn normalized_blueprint_payload(
         }
     }
     if let Some(views) = table.get_mut("views").and_then(toml::Value::as_table_mut) {
-        for (_, view) in views.iter_mut() {
+        for (name, view) in views.iter_mut() {
             if let Some(view) = view.as_table_mut() {
                 normalize_view_references(view, mappings);
+                if name == "extension_layout"
+                    && let Some(outlets) =
+                        view.get_mut("outlets").and_then(toml::Value::as_table_mut)
+                {
+                    for (_, outlet) in outlets.iter_mut() {
+                        if let Some(outlet) = outlet.as_table_mut() {
+                            for list in ["order", "hidden"] {
+                                if let Some(entries) =
+                                    outlet.get_mut(list).and_then(toml::Value::as_array_mut)
+                                {
+                                    entries.retain(|entry| {
+                                        entry.as_str().is_some_and(|entry| {
+                                            allowed_contributions.contains(entry)
+                                        })
+                                    });
+                                }
+                            }
+                        }
+                    }
+                }
             }
         }
     }
+    let extension_contributions = blueprint
+        .extension_layout
+        .iter()
+        .filter(|entry| allowed_contributions.contains(&entry.contribution))
+        .map(|entry| {
+            let requirement = extension_requirement_for_contribution(manifest, &entry.contribution);
+            let installed = workspace
+                .installed_extensions
+                .get(&requirement.id)
+                .expect("allowed contribution is installed");
+            serde_json::json!({
+                "contribution": entry.contribution,
+                "outlet": entry.outlet,
+                "installed_release_id": installed.installed_release_id,
+                "installed_version": installed.version,
+            })
+        })
+        .collect::<Vec<_>>();
     let definition = toml::to_string(&value).map_err(|_| {
         SolutionPackError::Invalid(format!("blueprint '{}' is invalid", blueprint.key()))
     })?;
@@ -2373,6 +2841,7 @@ fn normalized_blueprint_payload(
         "definition": definition,
         "version": 1,
         "publication": publication.as_str(),
+        "extension_contributions": extension_contributions,
     }))
 }
 
@@ -2546,6 +3015,25 @@ target_blueprint = "blueprints/product"
         archive(&manifest, &files)
     }
 
+    fn archive_with_extension_layout(layout: &[u8], requirement_required: bool) -> Vec<u8> {
+        let mut manifest = manifest_value();
+        manifest["resources"]["workspace_settings"] = json!([{
+            "key": "workspace/extension-layout",
+            "path": "workspace/extension-layout.json",
+            "required": true,
+            "sha256": digest(layout),
+        }]);
+        manifest["extensions"] = json!([{
+            "key": "extensions/shop",
+            "id": "acme.shop",
+            "version": "^1.0",
+            "required": requirement_required,
+        }]);
+        let mut files = valid_files();
+        files.push(("workspace/extension-layout.json", layout));
+        archive(&manifest, &files)
+    }
+
     fn archive_with_configuration_template(template: &[u8]) -> Vec<u8> {
         let mut manifest = manifest_value();
         manifest["extensions"] = json!([{
@@ -2702,6 +3190,341 @@ target_blueprint = "blueprints/product"
     }
 
     #[test]
+    fn validates_and_plans_extension_layout_item_level_merge() {
+        let layout = br#"{"format_version":1,"kind":"extension_layout","entries":[{"contribution":"acme.shop:nav","outlet":"navigation","promoted":true,"required":true}]}"#;
+        let pack =
+            ValidatedSolutionPack::from_tar_zst(&archive_with_extension_layout(layout, true))
+                .unwrap();
+        assert_eq!(pack.extension_layout().unwrap().entries.len(), 1);
+
+        let installed = InstalledExtensionSnapshot {
+            installed_release_id: uuid::Uuid::from_u128(7),
+            version: "1.2.0".into(),
+            state: "disabled".into(),
+            configuration: json!({}),
+            policy_compatible: true,
+            contributions: BTreeMap::from([("acme.shop:nav".to_owned(), "navigation".to_owned())]),
+        };
+        let workspace = |extension_layout| PlanningWorkspaceSnapshot {
+            workspace_id: uuid::Uuid::nil(),
+            physical_codes: BTreeSet::from(["default".to_owned()]),
+            default_context_id: uuid::Uuid::nil(),
+            installed_extensions: BTreeMap::from([("acme.shop".to_owned(), installed.clone())]),
+            explore_navigation: Vec::new(),
+            explore_navigation_valid: true,
+            extension_layout,
+            extension_layout_valid: true,
+            role_codes: BTreeSet::new(),
+            published_entity_codes: BTreeSet::new(),
+        };
+        let action_for = |current| {
+            build_create_only_plan(
+                &pack,
+                "shop",
+                BlueprintPublication::Draft,
+                &workspace(current),
+            )
+            .unwrap()
+            .actions
+            .into_iter()
+            .find(|action| action.logical_key == "workspace/extension-layout")
+            .unwrap()
+        };
+        assert_eq!(
+            action_for(json!({"version":1,"outlets":{}})).action,
+            "append"
+        );
+        assert_eq!(
+            action_for(json!({"version":1,"outlets":{"navigation":{"order":["acme.shop:nav"],"hidden":[],"promoted":["acme.shop:nav"]}}})).action,
+            "satisfied"
+        );
+        assert_eq!(
+            action_for(json!({"version":1,"outlets":{"navigation":{"order":[],"hidden":["acme.shop:nav"],"promoted":[]}}})).action,
+            "conflict"
+        );
+        assert_eq!(
+            action_for(json!({"version":1,"outlets":{"navigation":{"order":[],"hidden":[],"promoted":["acme.shop:nav"]}}})).action,
+            "conflict"
+        );
+        assert_eq!(
+            action_for(json!({"version":1,"outlets":{
+                "navigation":{"order":[],"hidden":[],"promoted":["acme.shop:nav"]},
+                "entity_action":{"order":["acme.shop:nav"],"hidden":[]}
+            }}))
+            .action,
+            "conflict"
+        );
+
+        let unavailable_action = |installed: Option<InstalledExtensionSnapshot>| {
+            let plan = build_create_only_plan(
+                &pack,
+                "shop",
+                BlueprintPublication::Draft,
+                &PlanningWorkspaceSnapshot {
+                    workspace_id: uuid::Uuid::nil(),
+                    physical_codes: BTreeSet::from(["default".to_owned()]),
+                    default_context_id: uuid::Uuid::nil(),
+                    installed_extensions: installed
+                        .map(|installed| BTreeMap::from([("acme.shop".to_owned(), installed)]))
+                        .unwrap_or_default(),
+                    explore_navigation: Vec::new(),
+                    explore_navigation_valid: true,
+                    extension_layout: json!({"version":1,"outlets":{}}),
+                    extension_layout_valid: true,
+                    role_codes: BTreeSet::new(),
+                    published_entity_codes: BTreeSet::new(),
+                },
+            )
+            .unwrap();
+            let action = plan
+                .actions
+                .iter()
+                .find(|action| action.logical_key == "workspace/extension-layout")
+                .unwrap();
+            (action.action, action.reason_code)
+        };
+        let mut missing_contribution = installed.clone();
+        missing_contribution.contributions.clear();
+        let mut wrong_outlet = installed.clone();
+        wrong_outlet
+            .contributions
+            .insert("acme.shop:nav".to_owned(), "entity_action".to_owned());
+        let mut quarantined = installed.clone();
+        quarantined.state = "quarantined".to_owned();
+        let mut policy_incompatible = installed.clone();
+        policy_incompatible.policy_compatible = false;
+        let mut incompatible_version = installed.clone();
+        incompatible_version.version = "2.0.0".to_owned();
+        for (candidate, reason) in [
+            (None, "missing"),
+            (Some(missing_contribution), "contribution_missing"),
+            (Some(wrong_outlet), "outlet_mismatch"),
+            (Some(quarantined), "quarantined"),
+            (Some(policy_incompatible), "policy_incompatible"),
+            (Some(incompatible_version), "incompatible_version"),
+        ] {
+            assert_eq!(unavailable_action(candidate), ("blocked", reason));
+        }
+
+        let optional_layout = br#"{"format_version":1,"kind":"extension_layout","entries":[{"contribution":"acme.shop:nav","outlet":"navigation","required":false}]}"#;
+        let optional_pack = ValidatedSolutionPack::from_tar_zst(&archive_with_extension_layout(
+            optional_layout,
+            false,
+        ))
+        .unwrap();
+        let optional_plan = build_create_only_plan(
+            &optional_pack,
+            "shop",
+            BlueprintPublication::Draft,
+            &PlanningWorkspaceSnapshot {
+                workspace_id: uuid::Uuid::nil(),
+                physical_codes: BTreeSet::from(["default".to_owned()]),
+                default_context_id: uuid::Uuid::nil(),
+                installed_extensions: BTreeMap::new(),
+                explore_navigation: Vec::new(),
+                explore_navigation_valid: true,
+                extension_layout: json!({"version":1,"outlets":{}}),
+                extension_layout_valid: true,
+                role_codes: BTreeSet::new(),
+                published_entity_codes: BTreeSet::new(),
+            },
+        )
+        .unwrap();
+        assert_eq!(
+            optional_plan
+                .actions
+                .iter()
+                .find(|action| action.logical_key == "workspace/extension-layout")
+                .unwrap()
+                .action,
+            "skip"
+        );
+    }
+
+    #[test]
+    fn blueprint_layout_skips_optional_unavailable_contributions_and_blocks_required() {
+        let blueprint = PRODUCT_BLUEPRINT
+            .iter()
+            .copied()
+            .chain(
+                br#"
+[views.extension_layout]
+type = "extension_layout"
+version = 1
+[views.extension_layout.outlets.entity_action]
+order = ["acme.shop:action"]
+hidden = []
+"#
+                .iter()
+                .copied(),
+            )
+            .collect::<Vec<_>>();
+        for (required, expected_action) in [(false, "create"), (true, "blocked")] {
+            let mut manifest = manifest_value();
+            manifest["resources"]["blueprints"][0]["sha256"] = json!(digest(&blueprint));
+            manifest["extensions"] = json!([{
+                "key": "extensions/shop",
+                "id": "acme.shop",
+                "version": "^1.0",
+                "required": required,
+            }]);
+            let mut files = valid_files();
+            files[0] = (files[0].0, &blueprint);
+            let pack = ValidatedSolutionPack::from_tar_zst(&archive(&manifest, &files)).unwrap();
+            let plan = build_create_only_plan(
+                &pack,
+                "shop",
+                BlueprintPublication::Draft,
+                &PlanningWorkspaceSnapshot {
+                    workspace_id: uuid::Uuid::nil(),
+                    physical_codes: BTreeSet::from(["default".to_owned()]),
+                    default_context_id: uuid::Uuid::nil(),
+                    installed_extensions: BTreeMap::new(),
+                    explore_navigation: Vec::new(),
+                    explore_navigation_valid: true,
+                    extension_layout: json!({"version":1,"outlets":{}}),
+                    extension_layout_valid: true,
+                    role_codes: BTreeSet::new(),
+                    published_entity_codes: BTreeSet::new(),
+                },
+            )
+            .unwrap();
+            let action = plan
+                .actions
+                .iter()
+                .find(|action| action.logical_key == "blueprints/product")
+                .unwrap();
+            assert_eq!(action.action, expected_action);
+            if !required {
+                assert!(
+                    !action.normalized_payload.as_ref().unwrap()["definition"]
+                        .as_str()
+                        .unwrap()
+                        .contains("acme.shop:action")
+                );
+                assert_eq!(action.summary["extension_layout"][0]["outcome"], "skip");
+            }
+        }
+    }
+
+    #[test]
+    fn workspace_layout_accepts_every_manifest_outlet_and_both_primary_lists() {
+        for outlet in [
+            "navigation",
+            "entity_preview_panel",
+            "blueprint_attribute_configuration",
+            "entity_attribute_decoration",
+            "entity_action",
+            "explorer_row_action",
+            "explorer_table_cell",
+            "blueprint_detail_panel",
+            "explorer_action",
+            "explorer_bulk_action",
+            "entity_header_action",
+            "entity_attribute_panel",
+            "blueprint_panel",
+            "blueprint_publish_check",
+            "file_panel",
+            "audit_event_panel",
+            "data_health_card",
+        ] {
+            for hidden in [false, true] {
+                let layout = serde_json::to_vec(&json!({
+                    "format_version": 1,
+                    "kind": "extension_layout",
+                    "entries": [{
+                        "contribution": "acme.shop:item",
+                        "outlet": outlet,
+                        "hidden": hidden,
+                        "required": true,
+                    }],
+                }))
+                .unwrap();
+                ValidatedSolutionPack::from_tar_zst(&archive_with_extension_layout(&layout, true))
+                    .unwrap();
+            }
+        }
+    }
+
+    #[test]
+    fn blueprint_layout_contribution_evidence_order_is_deterministic() {
+        let blueprint = PRODUCT_BLUEPRINT
+            .iter()
+            .copied()
+            .chain(
+                br#"
+[views.extension_layout]
+type = "extension_layout"
+version = 1
+[views.extension_layout.outlets.entity_preview_panel]
+order = ["acme.shop:preview"]
+hidden = []
+[views.extension_layout.outlets.entity_action]
+order = ["acme.shop:z_action"]
+hidden = ["acme.shop:a_action"]
+"#
+                .iter()
+                .copied(),
+            )
+            .collect::<Vec<_>>();
+        let mut manifest = manifest_value();
+        manifest["resources"]["blueprints"][0]["sha256"] = json!(digest(&blueprint));
+        manifest["extensions"] = json!([{
+            "key": "extensions/shop",
+            "id": "acme.shop",
+            "version": "^1.0",
+            "required": true,
+        }]);
+        let mut files = valid_files();
+        files[0] = (files[0].0, &blueprint);
+        let archive = archive(&manifest, &files);
+        let expected = vec![
+            ("entity_action", "acme.shop:a_action"),
+            ("entity_action", "acme.shop:z_action"),
+            ("entity_preview_panel", "acme.shop:preview"),
+        ];
+        for _ in 0..20 {
+            let pack = ValidatedSolutionPack::from_tar_zst(&archive).unwrap();
+            let actual = pack
+                .blueprint("blueprints/product")
+                .unwrap()
+                .extension_layout
+                .iter()
+                .map(|entry| (entry.outlet.as_str(), entry.contribution.as_str()))
+                .collect::<Vec<_>>();
+            assert_eq!(actual, expected);
+        }
+    }
+
+    #[test]
+    fn rejects_invalid_extension_layout_contract() {
+        for invalid in [
+            br#"{"format_version":1,"kind":"extension_layout","entries":[{"contribution":"acme.shop:nav","outlet":"entity_action","promoted":true,"required":true}]}"#.as_slice(),
+            br#"{"format_version":1,"kind":"extension_layout","entries":[{"contribution":"acme.shop:nav","outlet":"navigation","hidden":true,"promoted":true,"required":true}]}"#.as_slice(),
+            br#"{"format_version":1,"kind":"extension_layout","entries":[{"contribution":"acme.shop:nav","outlet":"navigation","required":true,"unknown":true}]}"#.as_slice(),
+            br#"{"format_version":1,"kind":"extension_layout","entries":[{"contribution":"acme.shop:nav","outlet":"navigation","required":true},{"contribution":"acme.shop:nav","outlet":"navigation","required":true}]}"#.as_slice(),
+        ] {
+            assert!(ValidatedSolutionPack::from_tar_zst(&archive_with_extension_layout(invalid, true)).is_err());
+        }
+        let too_many = serde_json::to_vec(&json!({
+            "format_version": 1,
+            "kind": "extension_layout",
+            "entries": (0..=MAX_SOLUTION_PACK_EXTENSION_LAYOUT_ENTRIES)
+                .map(|index| json!({
+                    "contribution": format!("acme.shop:item_{index}"),
+                    "outlet": "entity_action",
+                    "required": true,
+                }))
+                .collect::<Vec<_>>(),
+        }))
+        .unwrap();
+        assert!(
+            ValidatedSolutionPack::from_tar_zst(&archive_with_extension_layout(&too_many, true))
+                .is_err()
+        );
+    }
+
+    #[test]
     fn planner_appends_satisfies_and_conflicts_explore_navigation() {
         let pack =
             ValidatedSolutionPack::from_tar_zst(&archive_with_explore_navigation(true)).unwrap();
@@ -2712,6 +3535,8 @@ target_blueprint = "blueprints/product"
             installed_extensions: BTreeMap::new(),
             explore_navigation: navigation,
             explore_navigation_valid: true,
+            extension_layout: serde_json::json!({"version":1,"outlets":{}}),
+            extension_layout_valid: true,
             role_codes: BTreeSet::from(["editor".to_owned(), "viewer".to_owned()]),
             published_entity_codes: BTreeSet::from(["ecom_product".to_owned()]),
         };
@@ -2774,6 +3599,8 @@ target_blueprint = "blueprints/product"
                     installed_extensions: BTreeMap::new(),
                     explore_navigation: Vec::new(),
                     explore_navigation_valid: true,
+                    extension_layout: serde_json::json!({"version":1,"outlets":{}}),
+                    extension_layout_valid: true,
                     role_codes: BTreeSet::from(["editor".to_owned(), "viewer".to_owned()]),
                     published_entity_codes: BTreeSet::new(),
                 },
@@ -2808,6 +3635,8 @@ target_blueprint = "blueprints/product"
                 installed_extensions: BTreeMap::new(),
                 explore_navigation: Vec::new(),
                 explore_navigation_valid: true,
+                extension_layout: serde_json::json!({"version":1,"outlets":{}}),
+                extension_layout_valid: true,
                 role_codes: BTreeSet::new(),
                 published_entity_codes: BTreeSet::new(),
             },
@@ -2923,6 +3752,8 @@ target_blueprint = "blueprints/product"
             version: "2.2.0".into(),
             state: "disabled".into(),
             configuration: json!({"endpoint":"https://example.test","unrelated_secret":"not exposed"}),
+            policy_compatible: true,
+            contributions: BTreeMap::new(),
         };
         let template = json!({"endpoint":"https://example.test"});
         let satisfied =
@@ -3034,6 +3865,16 @@ target_blueprint = "blueprints/product"
                 .unwrap()
                 .is_empty()
         );
+        let mut duplicate_navigation = with_navigation.clone();
+        duplicate_navigation["resources"]["workspace_settings"] = json!([
+            with_navigation["resources"]["workspace_settings"][0].clone(),
+            with_navigation["resources"]["workspace_settings"][0].clone(),
+        ]);
+        assert!(
+            !catalog_validation::validate_json_schema(&schema, &duplicate_navigation)
+                .unwrap()
+                .is_empty()
+        );
         let navigation_schema: Value = serde_json::from_str(include_str!(
             "../../../contracts/solution-pack-explore-navigation-v1.schema.json"
         ))
@@ -3052,6 +3893,67 @@ target_blueprint = "blueprints/product"
                 .unwrap()
                 .is_empty()
         );
+
+        let layout_schema: Value = serde_json::from_str(include_str!(
+            "../../../contracts/solution-pack-extension-layout-v1.schema.json"
+        ))
+        .unwrap();
+        catalog_validation::validate_json_schema_definition(&layout_schema).unwrap();
+        let layout_entry = json!({
+            "contribution": "acme.shop:nav",
+            "outlet": "navigation",
+            "required": true,
+        });
+        let valid_layout = json!({
+            "format_version": 1,
+            "kind": "extension_layout",
+            "entries": [layout_entry.clone()],
+        });
+        assert!(
+            catalog_validation::validate_json_schema(&layout_schema, &valid_layout)
+                .unwrap()
+                .is_empty()
+        );
+        let promoted_layout = json!({
+            "format_version": 1,
+            "kind": "extension_layout",
+            "entries": [{
+                "contribution": "acme.shop:nav",
+                "outlet": "navigation",
+                "hidden": false,
+                "promoted": true,
+                "required": true,
+            }],
+        });
+        assert!(
+            catalog_validation::validate_json_schema(&layout_schema, &promoted_layout)
+                .unwrap()
+                .is_empty()
+        );
+        for invalid_layout in [
+            json!({
+                "format_version": 1,
+                "kind": "extension_layout",
+                "entries": [layout_entry.clone(), layout_entry.clone()],
+            }),
+            json!({
+                "format_version": 1,
+                "kind": "extension_layout",
+                "entries": [{
+                    "contribution": "acme.shop:nav",
+                    "outlet": "navigation",
+                    "hidden": true,
+                    "promoted": true,
+                    "required": true,
+                }],
+            }),
+        ] {
+            assert!(
+                !catalog_validation::validate_json_schema(&layout_schema, &invalid_layout)
+                    .unwrap()
+                    .is_empty()
+            );
+        }
 
         let mut unknown = manifest_value();
         unknown["unknown"] = json!(true);
@@ -3778,6 +4680,8 @@ value_type = "string"
                 installed_extensions: BTreeMap::new(),
                 explore_navigation: Vec::new(),
                 explore_navigation_valid: true,
+                extension_layout: serde_json::json!({"version":1,"outlets":{}}),
+                extension_layout_valid: true,
                 role_codes: BTreeSet::new(),
                 published_entity_codes: BTreeSet::new(),
             },
@@ -3880,6 +4784,8 @@ value_type = "string"
                 installed_extensions: BTreeMap::new(),
                 explore_navigation: Vec::new(),
                 explore_navigation_valid: true,
+                extension_layout: serde_json::json!({"version":1,"outlets":{}}),
+                extension_layout_valid: true,
                 role_codes: BTreeSet::new(),
                 published_entity_codes: BTreeSet::new(),
             },
@@ -3918,6 +4824,8 @@ value_type = "string"
                 installed_extensions: BTreeMap::new(),
                 explore_navigation: Vec::new(),
                 explore_navigation_valid: true,
+                extension_layout: serde_json::json!({"version":1,"outlets":{}}),
+                extension_layout_valid: true,
                 role_codes: BTreeSet::new(),
                 published_entity_codes: BTreeSet::new(),
             },
@@ -3950,6 +4858,8 @@ value_type = "string"
                 installed_extensions: BTreeMap::new(),
                 explore_navigation: Vec::new(),
                 explore_navigation_valid: true,
+                extension_layout: serde_json::json!({"version":1,"outlets":{}}),
+                extension_layout_valid: true,
                 role_codes: BTreeSet::new(),
                 published_entity_codes: BTreeSet::new(),
             },
@@ -4031,6 +4941,8 @@ value_type = "string"
             installed_extensions: BTreeMap::new(),
             explore_navigation: Vec::new(),
             explore_navigation_valid: true,
+            extension_layout: serde_json::json!({"version":1,"outlets":{}}),
+            extension_layout_valid: true,
             role_codes: BTreeSet::new(),
             published_entity_codes: BTreeSet::new(),
         };
@@ -4108,6 +5020,8 @@ target_blueprint = "blueprints/product"
             installed_extensions: BTreeMap::new(),
             explore_navigation: Vec::new(),
             explore_navigation_valid: true,
+            extension_layout: serde_json::json!({"version":1,"outlets":{}}),
+            extension_layout_valid: true,
             role_codes: BTreeSet::new(),
             published_entity_codes: BTreeSet::new(),
         };
@@ -4196,6 +5110,8 @@ value_type = "string"
                 installed_extensions: BTreeMap::new(),
                 explore_navigation: Vec::new(),
                 explore_navigation_valid: true,
+                extension_layout: serde_json::json!({"version":1,"outlets":{}}),
+                extension_layout_valid: true,
                 role_codes: BTreeSet::new(),
                 published_entity_codes: BTreeSet::new(),
             },
@@ -4207,7 +5123,7 @@ value_type = "string"
     }
 
     #[test]
-    fn rejects_workspace_dependent_blueprint_constructs_in_v1() {
+    fn rejects_unsafe_workspace_dependent_blueprint_constructs_and_allows_layouts() {
         let role = PRODUCT_BLUEPRINT.replace_ascii(
             b"kind = \"entity\"",
             b"kind = \"entity\"\n[publication]\nretain_on_edit_roles = [\"editor\"]",
@@ -4243,7 +5159,11 @@ outlets = {}
                 .copied(),
             )
             .collect::<Vec<_>>();
-        assert_blueprint_error(&layout, "cannot declare extension layouts");
+        let mut files = valid_files();
+        files[0] = (files[0].0, &layout);
+        let mut manifest = manifest_value();
+        manifest["resources"]["blueprints"][0]["sha256"] = json!(digest(&layout));
+        ValidatedSolutionPack::from_tar_zst(&archive(&manifest, &files)).unwrap();
     }
 
     trait ReplaceAscii {

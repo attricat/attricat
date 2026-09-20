@@ -1,9 +1,10 @@
 mod support;
 
-use std::io::Cursor;
+use std::{collections::BTreeSet, io::Cursor};
 
 use api::{
     account::{Password, hash_password},
+    repository::CatalogRepository,
     solution_packs::MAX_SOLUTION_PACK_INSPECTION_RESPONSE_BYTES,
 };
 use reqwest::header::SET_COOKIE;
@@ -116,6 +117,171 @@ fn archive_with_extension_requirement(required: bool) -> Vec<u8> {
     zstd::stream::encode_all(Cursor::new(tar_bytes), 0).unwrap()
 }
 
+fn archive_with_blueprint_extension_layout() -> Vec<u8> {
+    let blueprint = PRODUCT_BLUEPRINT
+        .iter()
+        .copied()
+        .chain(
+            br#"
+[views.extension_layout]
+type = "extension_layout"
+version = 1
+[views.extension_layout.outlets.entity_action]
+order = ["acme.layout:action"]
+hidden = []
+"#
+            .iter()
+            .copied(),
+        )
+        .collect::<Vec<_>>();
+    let manifest = serde_json::to_vec(&json!({
+        "manifest_version": 1,
+        "id": "attricat.blueprint-layout",
+        "name": "Blueprint extension layout",
+        "version": "1.0.0",
+        "description": "Entity blueprint contribution defaults",
+        "catalog": {"host_api": "^1.0"},
+        "resources": {
+            "blueprints": [{
+                "key": "blueprints/product",
+                "path": "blueprints/product.toml",
+                "required": true,
+                "sha256": digest(&blueprint)
+            }]
+        },
+        "extensions": [{
+            "key": "extensions/layout",
+            "id": "acme.layout",
+            "version": "^1.0",
+            "required": true
+        }]
+    }))
+    .unwrap();
+    let mut tar_bytes = Vec::new();
+    {
+        let mut tar = tar::Builder::new(&mut tar_bytes);
+        append_file(&mut tar, "solution-pack.json", &manifest);
+        append_file(&mut tar, "blueprints/product.toml", &blueprint);
+        tar.finish().unwrap();
+    }
+    zstd::stream::encode_all(Cursor::new(tar_bytes), 0).unwrap()
+}
+
+fn archive_with_extension_layout() -> Vec<u8> {
+    let layout = serde_json::to_vec(&json!({
+        "format_version": 1,
+        "kind": "extension_layout",
+        "entries": [{
+            "contribution": "acme.layout:nav",
+            "outlet": "navigation",
+            "promoted": true,
+            "required": true,
+        }],
+    }))
+    .unwrap();
+    let manifest = serde_json::to_vec(&json!({
+        "manifest_version": 1,
+        "id": "attricat.extension-layout",
+        "name": "Extension layout",
+        "version": "1.0.0",
+        "description": "Extension contribution defaults",
+        "catalog": {"host_api": "^1.0"},
+        "resources": {
+            "workspace_settings": [{
+                "key": "workspace/extension-layout",
+                "path": "workspace/extension-layout.json",
+                "required": true,
+                "sha256": digest(&layout)
+            }]
+        },
+        "extensions": [{
+            "key": "extensions/layout",
+            "id": "acme.layout",
+            "version": "^1.0",
+            "required": true
+        }]
+    }))
+    .unwrap();
+    let mut tar_bytes = Vec::new();
+    {
+        let mut tar = tar::Builder::new(&mut tar_bytes);
+        append_file(&mut tar, "solution-pack.json", &manifest);
+        append_file(&mut tar, "workspace/extension-layout.json", &layout);
+        tar.finish().unwrap();
+    }
+    zstd::stream::encode_all(Cursor::new(tar_bytes), 0).unwrap()
+}
+
+fn archive_with_both_workspace_settings(extension_layout_first: bool) -> Vec<u8> {
+    let navigation = serde_json::to_vec(&json!({
+        "format_version": 1,
+        "kind": "explore_navigation",
+        "entries": [{"blueprint": "blueprints/product"}],
+    }))
+    .unwrap();
+    let layout = serde_json::to_vec(&json!({
+        "format_version": 1,
+        "kind": "extension_layout",
+        "entries": [{
+            "contribution": "acme.layout:nav",
+            "outlet": "navigation",
+            "required": true,
+        }],
+    }))
+    .unwrap();
+    let navigation_resource = json!({
+        "key": "workspace/explore-navigation",
+        "path": "workspace/explore-navigation.json",
+        "required": true,
+        "sha256": digest(&navigation),
+    });
+    let layout_resource = json!({
+        "key": "workspace/extension-layout",
+        "path": "workspace/extension-layout.json",
+        "required": true,
+        "sha256": digest(&layout),
+    });
+    let workspace_settings = if extension_layout_first {
+        vec![layout_resource, navigation_resource]
+    } else {
+        vec![navigation_resource, layout_resource]
+    };
+    let manifest = serde_json::to_vec(&json!({
+        "manifest_version": 1,
+        "id": "attricat.both-settings",
+        "name": "Both settings",
+        "version": "1.0.0",
+        "description": "Both bounded workspace settings",
+        "catalog": {"host_api": "^1.0"},
+        "resources": {
+            "blueprints": [{
+                "key": "blueprints/product",
+                "path": "blueprints/product.toml",
+                "required": true,
+                "sha256": digest(PRODUCT_BLUEPRINT)
+            }],
+            "workspace_settings": workspace_settings
+        },
+        "extensions": [{
+            "key": "extensions/layout",
+            "id": "acme.layout",
+            "version": "^1.0",
+            "required": true
+        }]
+    }))
+    .unwrap();
+    let mut tar_bytes = Vec::new();
+    {
+        let mut tar = tar::Builder::new(&mut tar_bytes);
+        append_file(&mut tar, "solution-pack.json", &manifest);
+        append_file(&mut tar, "blueprints/product.toml", PRODUCT_BLUEPRINT);
+        append_file(&mut tar, "workspace/explore-navigation.json", &navigation);
+        append_file(&mut tar, "workspace/extension-layout.json", &layout);
+        tar.finish().unwrap();
+    }
+    zstd::stream::encode_all(Cursor::new(tar_bytes), 0).unwrap()
+}
+
 fn archive_with_explore_navigation() -> Vec<u8> {
     archive_with_explore_navigation_roles(&[])
 }
@@ -197,6 +363,53 @@ fn archive_with_options(product_blueprint: &[u8], context_required: bool) -> Vec
         tar.finish().unwrap();
     }
     zstd::stream::encode_all(Cursor::new(tar_bytes), 0).unwrap()
+}
+
+async fn install_layout_extension(pool: &PgPool) -> Uuid {
+    let workspace_id = BOOTSTRAP_WORKSPACE_ID.parse::<Uuid>().unwrap();
+    let release_id = Uuid::new_v4();
+    let extension_manifest = json!({
+        "manifest_version": 1,
+        "name": "Layout extension",
+        "version": "1.0.0",
+        "description": "Layout extension test",
+        "icons": {"48": "icon.png"},
+        "catalog": {"id": "acme.layout", "host_api": "^1.0"},
+        "permissions": [],
+        "artifacts": [{"id":"client","kind":"client_component","path":"client.js"}],
+        "ui": [
+            {
+                "id": "nav",
+                "version": 1,
+                "kind": "embedded",
+                "artifact": "client",
+                "outlet": "navigation"
+            },
+            {
+                "id": "action",
+                "version": 1,
+                "kind": "action",
+                "artifact": "client",
+                "outlet": "entity_action"
+            }
+        ]
+    });
+    sqlx::query("INSERT INTO installed_extension_releases (id,workspace_id,extension_id,version,manifest,manifest_sha256,source) VALUES ($1,$2,'acme.layout','1.0.0',$3,$4,'side_load')")
+        .bind(release_id)
+        .bind(workspace_id)
+        .bind(extension_manifest)
+        .bind("2".repeat(64))
+        .execute(pool)
+        .await
+        .unwrap();
+    sqlx::query("INSERT INTO extension_installations (id,workspace_id,extension_id,installed_release_id,state,configuration) VALUES ($1,$2,'acme.layout',$3,'disabled','{}'::jsonb)")
+        .bind(Uuid::new_v4())
+        .bind(workspace_id)
+        .bind(release_id)
+        .execute(pool)
+        .await
+        .unwrap();
+    release_id
 }
 
 fn append_file(tar: &mut tar::Builder<&mut Vec<u8>>, path: &str, bytes: &[u8]) {
@@ -784,6 +997,19 @@ async fn compatible_disabled_extension_satisfies_plan_and_is_revalidated_on_appl
         "disabled"
     );
 
+    let plan_id = Uuid::parse_str(plan["id"].as_str().unwrap()).unwrap();
+    let interrupted_application_id = Uuid::new_v4();
+    let request_id = Uuid::new_v4();
+    sqlx::query("INSERT INTO solution_pack_applications (id,workspace_id,plan_id,request_id,correlation_id,source_kind,source_metadata,archive_sha256,pack_id,pack_version,blueprint_publication,state,diagnostic_code,diagnostic_message,mapping_snapshot) VALUES ($1,$2,$3,$4,$4,'local_archive','{\"side_loaded\":true}'::jsonb,$5,'attricat.extensions','1.0.0','draft','failed','step_failed','synthetic interrupted application','[]'::jsonb)")
+        .bind(interrupted_application_id)
+        .bind(workspace_id)
+        .bind(plan_id)
+        .bind(request_id)
+        .bind("3".repeat(64))
+        .execute(&pool)
+        .await
+        .unwrap();
+
     sqlx::query("UPDATE extension_installations SET configuration=$2 WHERE workspace_id=$1 AND extension_id='acme.shopify'")
         .bind(workspace_id)
         .bind(json!({"endpoint":"changed"}))
@@ -795,6 +1021,20 @@ async fn compatible_disabled_extension_satisfies_plan_and_is_revalidated_on_appl
     assert_eq!(
         response.json::<Value>().await.unwrap()["error"]["code"],
         "solution_pack_plan_stale"
+    );
+    let (application_state, diagnostic_code): (String, Option<String>) =
+        sqlx::query_as("SELECT state,diagnostic_code FROM solution_pack_applications WHERE id=$1")
+            .bind(interrupted_application_id)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+    assert_eq!(application_state, "invalid");
+    assert_eq!(diagnostic_code.as_deref(), Some("plan_stale"));
+    let repeated = apply_plan(&client, &base_url, plan["id"].as_str().unwrap()).await;
+    assert_eq!(repeated.status(), StatusCode::CONFLICT);
+    assert_eq!(
+        repeated.json::<Value>().await.unwrap()["error"]["code"],
+        "solution_pack_application_invalid"
     );
     assert_eq!(
         sqlx::query_scalar::<_, i64>(
@@ -1141,6 +1381,399 @@ async fn plan_routes_require_solution_pack_permission_and_isolate_workspaces(poo
 }
 
 #[sqlx::test(migrations = "./migrations")]
+async fn apply_merges_extension_layout_without_enabling_or_replacing_settings(pool: PgPool) {
+    let workspace_id = BOOTSTRAP_WORKSPACE_ID.parse::<Uuid>().unwrap();
+    install_layout_extension(&pool).await;
+    sqlx::query("UPDATE workspaces SET settings=$2 WHERE id=$1")
+        .bind(workspace_id)
+        .bind(json!({
+            "theme":"dark",
+            "extension_layout": {
+                "version":1,
+                "outlets": {
+                    "entity_action": {
+                        "order":["other.extension:action"],
+                        "hidden":[]
+                    }
+                }
+            }
+        }))
+        .execute(&pool)
+        .await
+        .unwrap();
+
+    let (base_url, server) = start_server(pool.clone()).await;
+    let client = authenticated_client();
+    let inspected = inspect(&client, &base_url, archive_with_extension_layout()).await;
+    assert_eq!(inspected.status(), StatusCode::OK);
+    assert_eq!(
+        inspected.json::<Value>().await.unwrap()["resources"]["workspace_settings"][0]["kind"],
+        "extension_layout"
+    );
+    let plan = create_plan(
+        &client,
+        &base_url,
+        archive_with_extension_layout(),
+        "layout",
+    )
+    .await
+    .json::<Value>()
+    .await
+    .unwrap();
+    assert_eq!(plan["ready"], true);
+    let action = plan["actions"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|action| action["logical_key"] == "workspace/extension-layout")
+        .unwrap();
+    assert_eq!(action["action"], "append");
+
+    let plan_id = Uuid::parse_str(plan["id"].as_str().unwrap()).unwrap();
+    let application_id = Uuid::new_v4();
+    let request_id = Uuid::new_v4();
+    sqlx::query("INSERT INTO solution_pack_applications (id,workspace_id,plan_id,request_id,correlation_id,source_kind,source_metadata,archive_sha256,pack_id,pack_version,blueprint_publication,state,diagnostic_code,diagnostic_message,mapping_snapshot) VALUES ($1,$2,$3,$4,$4,'local_archive','{\"side_loaded\":true}'::jsonb,$5,'attricat.extension-layout','1.0.0','draft','failed','step_failed','synthetic layout failure','[]'::jsonb)")
+        .bind(application_id)
+        .bind(workspace_id)
+        .bind(plan_id)
+        .bind(request_id)
+        .bind("5".repeat(64))
+        .execute(&pool)
+        .await
+        .unwrap();
+    sqlx::query("INSERT INTO solution_pack_application_steps (application_id,workspace_id,position,plan_id,resource_kind,logical_key,target_id,target_code,target_version,state,diagnostic_code,diagnostic_message) SELECT $1,a.workspace_id,a.position,a.plan_id,a.resource_kind,a.logical_key,m.target_id,m.target_code,m.target_version,'failed','step_failed','synthetic layout failure' FROM solution_pack_plan_actions a JOIN solution_pack_plan_mappings m ON m.plan_id=a.plan_id AND m.logical_key=a.logical_key WHERE a.plan_id=$2 AND a.logical_key='workspace/extension-layout'")
+        .bind(application_id)
+        .bind(plan_id)
+        .execute(&pool)
+        .await
+        .unwrap();
+
+    let applied = apply_plan(&client, &base_url, plan["id"].as_str().unwrap()).await;
+    assert_eq!(applied.status(), StatusCode::OK);
+    let application = applied.json::<Value>().await.unwrap();
+    assert_eq!(
+        application["steps"][0]["result_snapshot"]["outcome"],
+        "appended"
+    );
+    let settings: Value = sqlx::query_scalar("SELECT settings FROM workspaces WHERE id=$1")
+        .bind(workspace_id)
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+    assert_eq!(settings["theme"], "dark");
+    assert_eq!(
+        settings["extension_layout"]["outlets"]["entity_action"]["order"][0],
+        "other.extension:action"
+    );
+    assert_eq!(
+        settings["extension_layout"]["outlets"]["navigation"]["order"][0],
+        "acme.layout:nav"
+    );
+    assert_eq!(
+        settings["extension_layout"]["outlets"]["navigation"]["promoted"][0],
+        "acme.layout:nav"
+    );
+    let state: String = sqlx::query_scalar(
+        "SELECT state FROM extension_installations WHERE workspace_id=$1 AND extension_id='acme.layout'",
+    )
+    .bind(workspace_id)
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert_eq!(state, "disabled");
+
+    let repeated = apply_plan(&client, &base_url, plan["id"].as_str().unwrap()).await;
+    assert_eq!(repeated.status(), StatusCode::OK);
+    server.abort();
+}
+
+#[sqlx::test(migrations = "./migrations")]
+async fn blueprint_extension_layout_applies_for_draft_and_publish_with_disabled_extension(
+    pool: PgPool,
+) {
+    install_layout_extension(&pool).await;
+    let workspace_id = BOOTSTRAP_WORKSPACE_ID.parse::<Uuid>().unwrap();
+    let (base_url, server) = start_server(pool.clone()).await;
+    let client = authenticated_client();
+
+    for (prefix, publication, expected_status) in [
+        ("layoutdraft", "draft", "draft"),
+        ("layoutpublish", "publish", "published"),
+    ] {
+        let plan = create_plan_with_publication(
+            &client,
+            &base_url,
+            archive_with_blueprint_extension_layout(),
+            prefix,
+            publication,
+        )
+        .await
+        .json::<Value>()
+        .await
+        .unwrap();
+        assert_eq!(plan["ready"], true);
+        let applied = apply_plan(&client, &base_url, plan["id"].as_str().unwrap()).await;
+        assert_eq!(applied.status(), StatusCode::OK);
+        let (status, definition): (String, String) = sqlx::query_as(
+            "SELECT status,definition FROM blueprints WHERE workspace_id=$1 AND code=$2",
+        )
+        .bind(workspace_id)
+        .bind(format!("{prefix}_product"))
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+        assert_eq!(status, expected_status);
+        assert!(definition.contains("acme.layout:action"));
+    }
+    let installation_state: String = sqlx::query_scalar(
+        "SELECT state FROM extension_installations WHERE workspace_id=$1 AND extension_id='acme.layout'",
+    )
+    .bind(workspace_id)
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert_eq!(installation_state, "disabled");
+    server.abort();
+}
+
+#[sqlx::test(migrations = "./migrations")]
+async fn layout_apply_rejects_compatible_release_change_after_planning(pool: PgPool) {
+    let prior_release_id = install_layout_extension(&pool).await;
+    let workspace_id = BOOTSTRAP_WORKSPACE_ID.parse::<Uuid>().unwrap();
+    let (base_url, server) = start_server(pool.clone()).await;
+    let client = authenticated_client();
+    let plan = create_plan(
+        &client,
+        &base_url,
+        archive_with_extension_layout(),
+        "layoutstale",
+    )
+    .await
+    .json::<Value>()
+    .await
+    .unwrap();
+    assert_eq!(plan["ready"], true);
+
+    let replacement_release_id = Uuid::new_v4();
+    sqlx::query("INSERT INTO installed_extension_releases (id,workspace_id,extension_id,version,manifest,manifest_sha256,source) SELECT $1,workspace_id,extension_id,'1.1.0',jsonb_set(manifest,'{version}','\"1.1.0\"'::jsonb),$2,source FROM installed_extension_releases WHERE id=$3")
+        .bind(replacement_release_id)
+        .bind("4".repeat(64))
+        .bind(prior_release_id)
+        .execute(&pool)
+        .await
+        .unwrap();
+    sqlx::query("UPDATE extension_installations SET installed_release_id=$2 WHERE workspace_id=$1 AND extension_id='acme.layout'")
+        .bind(workspace_id)
+        .bind(replacement_release_id)
+        .execute(&pool)
+        .await
+        .unwrap();
+
+    let applied = apply_plan(&client, &base_url, plan["id"].as_str().unwrap()).await;
+    assert_eq!(applied.status(), StatusCode::CONFLICT);
+    assert_eq!(
+        applied.json::<Value>().await.unwrap()["error"]["code"],
+        "solution_pack_plan_stale"
+    );
+    let layout: Option<Value> =
+        sqlx::query_scalar("SELECT settings->'extension_layout' FROM workspaces WHERE id=$1")
+            .bind(workspace_id)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+    assert!(layout.is_none());
+    server.abort();
+}
+
+#[sqlx::test(migrations = "./migrations")]
+async fn layout_apply_rejects_malformed_current_layout_and_preserves_it(pool: PgPool) {
+    install_layout_extension(&pool).await;
+    let workspace_id = BOOTSTRAP_WORKSPACE_ID.parse::<Uuid>().unwrap();
+    let (base_url, server) = start_server(pool.clone()).await;
+    let client = authenticated_client();
+    let plan = create_plan(
+        &client,
+        &base_url,
+        archive_with_extension_layout(),
+        "layoutmalformedapply",
+    )
+    .await
+    .json::<Value>()
+    .await
+    .unwrap();
+    assert_eq!(plan["ready"], true);
+    let plan_id = Uuid::parse_str(plan["id"].as_str().unwrap()).unwrap();
+
+    let malformed = json!({
+        "theme": "dark",
+        "extension_layout": {
+            "version": 1,
+            "outlets": {
+                "navigation": {
+                    "order": [],
+                    "hidden": [],
+                    "promoted": ["acme.layout:nav"]
+                }
+            }
+        }
+    });
+    sqlx::query("UPDATE workspaces SET settings=$2 WHERE id=$1")
+        .bind(workspace_id)
+        .bind(&malformed)
+        .execute(&pool)
+        .await
+        .unwrap();
+
+    let applied = apply_plan(&client, &base_url, plan["id"].as_str().unwrap()).await;
+    assert_eq!(applied.status(), StatusCode::CONFLICT);
+    assert_eq!(
+        applied.json::<Value>().await.unwrap()["error"]["code"],
+        "solution_pack_plan_stale"
+    );
+    let (state, diagnostic_code): (String, Option<String>) = sqlx::query_as(
+        "SELECT state,diagnostic_code FROM solution_pack_applications WHERE plan_id=$1",
+    )
+    .bind(plan_id)
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert_eq!(state, "invalid");
+    assert_eq!(diagnostic_code.as_deref(), Some("plan_stale"));
+    let preserved: Value = sqlx::query_scalar("SELECT settings FROM workspaces WHERE id=$1")
+        .bind(workspace_id)
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+    assert_eq!(preserved, malformed);
+
+    let repeated = apply_plan(&client, &base_url, plan["id"].as_str().unwrap()).await;
+    assert_eq!(repeated.status(), StatusCode::CONFLICT);
+    assert_eq!(
+        repeated.json::<Value>().await.unwrap()["error"]["code"],
+        "solution_pack_application_invalid"
+    );
+    let application_count: i64 =
+        sqlx::query_scalar("SELECT count(*) FROM solution_pack_applications WHERE plan_id=$1")
+            .bind(plan_id)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+    assert_eq!(application_count, 1);
+    let still_preserved: Value = sqlx::query_scalar("SELECT settings FROM workspaces WHERE id=$1")
+        .bind(workspace_id)
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+    assert_eq!(still_preserved, malformed);
+    server.abort();
+}
+
+#[sqlx::test(migrations = "./migrations")]
+async fn both_workspace_settings_plan_and_apply_in_either_manifest_order(pool: PgPool) {
+    install_layout_extension(&pool).await;
+    let (base_url, server) = start_server(pool.clone()).await;
+    let client = authenticated_client();
+
+    for (index, extension_layout_first) in [false, true].into_iter().enumerate() {
+        let plan_response = create_plan_with_publication(
+            &client,
+            &base_url,
+            archive_with_both_workspace_settings(extension_layout_first),
+            &format!("both{index}"),
+            "publish",
+        )
+        .await;
+        assert_eq!(plan_response.status(), StatusCode::CREATED);
+        let plan = plan_response.json::<Value>().await.unwrap();
+        assert_eq!(plan["ready"], true);
+        let setting_keys = plan["actions"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .filter(|action| action["resource_kind"] == "workspace_setting")
+            .map(|action| action["logical_key"].as_str().unwrap())
+            .collect::<BTreeSet<_>>();
+        assert_eq!(
+            setting_keys,
+            BTreeSet::from(["workspace/explore-navigation", "workspace/extension-layout",])
+        );
+        let applied = apply_plan(&client, &base_url, plan["id"].as_str().unwrap()).await;
+        assert_eq!(applied.status(), StatusCode::OK);
+    }
+
+    let workspace_id = BOOTSTRAP_WORKSPACE_ID.parse::<Uuid>().unwrap();
+    let settings: Value = sqlx::query_scalar("SELECT settings FROM workspaces WHERE id=$1")
+        .bind(workspace_id)
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+    assert_eq!(settings["explore_navigation"].as_array().unwrap().len(), 2);
+    assert_eq!(
+        settings["extension_layout"]["outlets"]["navigation"]["order"],
+        json!(["acme.layout:nav"])
+    );
+    server.abort();
+}
+
+#[sqlx::test(migrations = "./migrations")]
+async fn malformed_workspace_settings_root_fails_closed_before_layout_application(pool: PgPool) {
+    install_layout_extension(&pool).await;
+    let workspace_id = BOOTSTRAP_WORKSPACE_ID.parse::<Uuid>().unwrap();
+    let (base_url, server) = start_server(pool.clone()).await;
+    let client = authenticated_client();
+
+    for (index, malformed) in [
+        json!("scalar"),
+        json!([]),
+        json!({
+            "extension_layout": {
+                "version": 1,
+                "outlets": {"navigation": {"order": []}}
+            }
+        }),
+    ]
+    .into_iter()
+    .enumerate()
+    {
+        sqlx::query("UPDATE workspaces SET settings=$2 WHERE id=$1")
+            .bind(workspace_id)
+            .bind(malformed)
+            .execute(&pool)
+            .await
+            .unwrap();
+        let response = create_plan(
+            &client,
+            &base_url,
+            archive_with_extension_layout(),
+            &format!("malformed{index}"),
+        )
+        .await;
+        assert_eq!(response.status(), StatusCode::CREATED);
+        let plan = response.json::<Value>().await.unwrap();
+        assert_eq!(plan["ready"], false);
+        assert_eq!(
+            plan["actions"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .find(|action| action["logical_key"] == "workspace/extension-layout")
+                .unwrap()["reason_code"],
+            "invalid_current_extension_layout"
+        );
+        let apply = apply_plan(&client, &base_url, plan["id"].as_str().unwrap()).await;
+        assert_eq!(apply.status(), StatusCode::CONFLICT);
+    }
+    let applications: i64 =
+        sqlx::query_scalar("SELECT count(*) FROM solution_pack_applications WHERE workspace_id=$1")
+            .bind(workspace_id)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+    assert_eq!(applications, 0);
+    server.abort();
+}
+
+#[sqlx::test(migrations = "./migrations")]
 async fn apply_appends_explore_navigation_and_preserves_unrelated_settings(pool: PgPool) {
     let workspace_id = BOOTSTRAP_WORKSPACE_ID.parse::<Uuid>().unwrap();
     sqlx::query("UPDATE workspaces SET settings = '{\"theme\":\"dark\",\"explore_navigation\":[]}'::jsonb WHERE id=$1")
@@ -1336,6 +1969,71 @@ async fn concurrent_ordinary_navigation_replacement_and_pack_append_do_not_lose_
             {"blueprint_code":"ordinary_product"},
             {"blueprint_code":"race_product"}
         ])
+    );
+    server.abort();
+}
+
+#[sqlx::test(migrations = "./migrations")]
+async fn concurrent_ordinary_layout_replacement_and_pack_append_do_not_lose_updates(pool: PgPool) {
+    let workspace_id = BOOTSTRAP_WORKSPACE_ID.parse::<Uuid>().unwrap();
+    install_layout_extension(&pool).await;
+    let (base_url, server) = start_server(pool.clone()).await;
+    let client = authenticated_client();
+    let plan = create_plan(
+        &client,
+        &base_url,
+        archive_with_extension_layout(),
+        "layoutrace",
+    )
+    .await
+    .json::<Value>()
+    .await
+    .unwrap();
+    assert_eq!(plan["ready"], true);
+
+    let mut blocker = pool.begin().await.unwrap();
+    sqlx::query("SELECT id FROM workspaces WHERE id=$1 FOR UPDATE")
+        .bind(workspace_id)
+        .fetch_one(&mut *blocker)
+        .await
+        .unwrap();
+    let ordinary_repository = CatalogRepository::new(pool.clone());
+    let ordinary = tokio::spawn(async move {
+        ordinary_repository
+            .update_workspace_extension_layout(json!({
+                "version":1,
+                "outlets": {
+                    "entity_action": {
+                        "order":["other.extension:action"],
+                        "hidden":[]
+                    }
+                }
+            }))
+            .await
+    });
+    tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+    let apply_client = client.clone();
+    let apply_url = base_url.clone();
+    let plan_id = plan["id"].as_str().unwrap().to_owned();
+    let apply = tokio::spawn(async move { apply_plan(&apply_client, &apply_url, &plan_id).await });
+    tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+    blocker.commit().await.unwrap();
+
+    ordinary.await.unwrap().unwrap();
+    assert_eq!(apply.await.unwrap().status(), StatusCode::OK);
+    let layout: Value =
+        sqlx::query_scalar("SELECT settings->'extension_layout' FROM workspaces WHERE id=$1")
+            .bind(workspace_id)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+    assert_eq!(
+        layout["outlets"]["entity_action"]["order"],
+        json!(["other.extension:action"])
+    );
+    assert_eq!(
+        layout["outlets"]["navigation"]["order"],
+        json!(["acme.layout:nav"])
     );
     server.abort();
 }

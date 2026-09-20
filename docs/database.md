@@ -65,8 +65,10 @@ and blueprint publication preference, readiness, and a fixed 24-hour expiry.
 codes, and revision 1 where relevant. `solution_pack_plan_actions` stores a
 deterministic dependency-first order,
 create/append/satisfied/skip/conflict/blocked reasons, preconditions, and
-normalized blueprint/context or bounded Explore-navigation payloads consumed by
-apply.
+normalized blueprint/context or bounded Explore-navigation and extension-layout
+payloads consumed by apply. Extension-layout payloads retain only stable
+contribution keys, outlets, placement flags, and exact installed release
+identity needed for private apply-time revalidation.
 `solution_pack_plan_extension_requirements` separately stores deterministic
 required/optional compatibility outcomes and the bounded template needed for
 private apply-time revalidation. Public plan responses expose only safe
@@ -80,14 +82,17 @@ safe source, digest, publication, and logical-to-physical mapping provenance.
 Its bounded state is `running`, `completed`, `failed`, or `invalid`; bounded
 diagnostic fields retain resumable failure evidence. Ordered
 `solution_pack_application_steps` are completed in the same explicit
-transaction as each ordinary context or blueprint mutation, or an
-Explore-navigation append/no-op, and its audit/domain-event evidence. A retry
-verifies completed targets and continues pending steps. Application records do
+transaction as each ordinary context or blueprint mutation, or a bounded
+Explore-navigation/extension-layout append or no-op, and its audit/domain-event
+evidence. Extension-layout steps lock the workspace row shared with ordinary
+full layout replacement, merge item-by-item, and retain only bounded count,
+outcome, and before/after digest evidence. A retry verifies completed targets
+and continues pending steps. Application records do
 not own resources and cannot uninstall a pack.
 Extension requirement evaluation is implemented, but extension installation,
 upgrade, configuration, grants, enablement, removal, and pack ownership remain
 outside solution-pack application. Generic settings beyond bounded Explore
-navigation, assets, sample data, and export remain deferred. Solution packs are
+navigation and extension layout, assets, sample data, and export remain deferred. Solution packs are
 installed only from administrator-uploaded `.tar.zst` archives; the server does not access source repositories or fetch
 remote pack releases.
 

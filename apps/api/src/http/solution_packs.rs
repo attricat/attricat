@@ -142,16 +142,31 @@ pub(super) async fn inspect(
                 .resources
                 .workspace_settings
                 .iter()
-                .map(|resource| WorkspaceSettingSummary {
-                    key: resource.key.clone(),
-                    required: resource.required,
-                    sha256: resource.sha256.clone(),
-                    kind: "explore_navigation".to_owned(),
-                    entry_count: pack
-                        .explore_navigation()
-                        .expect("validated workspace setting is available")
-                        .entries
-                        .len(),
+                .map(|resource| {
+                    let (kind, entry_count) = if resource.key == "workspace/explore-navigation" {
+                        (
+                            "explore_navigation",
+                            pack.explore_navigation()
+                                .expect("validated workspace setting is available")
+                                .entries
+                                .len(),
+                        )
+                    } else {
+                        (
+                            "extension_layout",
+                            pack.extension_layout()
+                                .expect("validated workspace setting is available")
+                                .entries
+                                .len(),
+                        )
+                    };
+                    WorkspaceSettingSummary {
+                        key: resource.key.clone(),
+                        required: resource.required,
+                        sha256: resource.sha256.clone(),
+                        kind: kind.to_owned(),
+                        entry_count,
+                    }
                 })
                 .collect(),
         },
