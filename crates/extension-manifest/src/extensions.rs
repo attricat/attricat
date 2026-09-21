@@ -15,6 +15,7 @@ use semver::{Version, VersionReq};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use thiserror::Error;
+use url::Url;
 
 pub const MANIFEST_VERSION: u32 = 1;
 /// The newest host contract accepted by manifests. Components importing
@@ -892,6 +893,46 @@ impl Artifact {
     }
 }
 impl HostPermission {
+    /// Matches a concrete outbound HTTPS request against this immutable rule.
+    /// Redirects are never followed, so the URL checked here is the only
+    /// network destination.
+    pub fn allows_request(&self, url: &Url, method: &str) -> bool {
+        if url.scheme() != "https"
+            || url.username() != ""
+            || url.password().is_some()
+            || url.query().is_some()
+            || url.fragment().is_some()
+            || !self.methods.iter().any(|allowed| allowed == method)
+        {
+            return false;
+        }
+        let Some(host) = url.host_str() else {
+            return false;
+        };
+        self.matches.iter().any(|pattern| {
+            let Ok(pattern_url) = Url::parse(pattern) else {
+                return false;
+            };
+            let Some(pattern_host) = pattern_url.host_str() else {
+                return false;
+            };
+            let wildcard = pattern_host.strip_prefix("*.");
+            let host_matches = wildcard.map_or_else(
+                || host.eq_ignore_ascii_case(pattern_host),
+                |suffix| {
+                    host.len() > suffix.len()
+                        && host.ends_with(suffix)
+                        && host.as_bytes()[host.len() - suffix.len() - 1] == b'.'
+                },
+            );
+            host_matches
+                && url.port_or_known_default() == pattern_url.port_or_known_default()
+                && url
+                    .path()
+                    .starts_with(pattern_url.path().trim_end_matches('*'))
+        })
+    }
+
     fn validate(&self) -> Result<(), ManifestError> {
         valid_id(&self.id, "host permission id")?;
         if self.matches.is_empty()
@@ -1151,7 +1192,7 @@ fn validate_url_pattern(pattern: &str) -> Result<(), ManifestError> {
     let (scheme, rest) = pattern.split_once("://").ok_or_else(|| {
         ManifestError::Invalid(format!("URL pattern '{pattern}' needs an exact scheme"))
     })?;
-    if !matches!(scheme, "http" | "https") || rest.contains("//") {
+    if scheme != "https" || rest.contains("//") {
         return Err(ManifestError::Invalid(format!(
             "URL pattern '{pattern}' has an unsafe scheme or path"
         )));
@@ -1338,7 +1379,9 @@ fn safe_archive_path(path: &Path) -> bool {
             .all(|component| matches!(component, Component::Normal(_)))
 }
 
-fn is_public_destination(ip: IpAddr) -> bool {
+/// Rejects loopback, private, link-local, multicast, documentation, and other
+/// non-public addresses after DNS resolution as an SSRF boundary.
+pub fn is_public_destination(ip: IpAddr) -> bool {
     match ip {
         IpAddr::V4(ip) => {
             let octets = ip.octets();
@@ -1754,6 +1797,51 @@ mod tests {
             .permissions
             .retain(|permission| permission != "client.explorer_row_action");
         assert!(value.validate(SUPPORTED_HOST_API).is_err());
+    }
+
+    #[test]
+    fn mediated_https_rules_reject_plaintext_and_match_only_granted_paths() {
+        let rule = HostPermission {
+            id: "api".into(),
+            matches: vec!["https://*.example.com/v1/*".into()],
+            methods: vec!["POST".into()],
+            max_request_bytes: 1,
+            max_response_bytes: 1,
+            timeout_ms: 1,
+        };
+        assert!(rule.validate().is_ok());
+        assert!(rule.allows_request(
+            &Url::parse("https://api.example.com/v1/items").unwrap(),
+            "POST"
+        ));
+        assert!(!rule.allows_request(&Url::parse("https://example.com/v1/items").unwrap(), "POST"));
+        assert!(!rule.allows_request(
+            &Url::parse("https://api.example.com/v2/items").unwrap(),
+            "POST"
+        ));
+        assert!(!rule.allows_request(
+            &Url::parse("http://api.example.com/v1/items").unwrap(),
+            "POST"
+        ));
+        let plaintext = HostPermission {
+            matches: vec!["http://api.example.com/v1/*".into()],
+            ..rule
+        };
+        assert!(plaintext.validate().is_err());
+    }
+
+    #[test]
+    fn rejects_private_and_documentation_destinations() {
+        for value in [
+            "127.0.0.1",
+            "10.0.0.1",
+            "169.254.1.1",
+            "192.0.2.1",
+            "::1",
+            "fc00::1",
+        ] {
+            assert!(!is_public_destination(value.parse().unwrap()), "{value}");
+        }
     }
 
     #[test]

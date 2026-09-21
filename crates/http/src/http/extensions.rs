@@ -201,6 +201,18 @@ pub(super) struct WorkspaceExtensionsModeResponse {
 
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
+pub(super) struct WorkspaceSecretRequest {
+    value: String,
+}
+#[derive(Serialize)]
+pub(super) struct WorkspaceSecretResponse {
+    name: String,
+    created_at: chrono::DateTime<chrono::Utc>,
+    updated_at: chrono::DateTime<chrono::Utc>,
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
 pub(super) struct StartOperationRequest {
     operation_id: String,
     input: Value,
@@ -308,6 +320,45 @@ pub(super) async fn set_workspace_mode(
     Ok(Json(WorkspaceExtensionsModeResponse {
         enabled: input.enabled,
     }))
+}
+
+/// Lists only names and timestamps; secret values are write-only management
+/// input and can be supplied to an enabled component only through its host API.
+pub(super) async fn list_workspace_secrets(
+    ScopedRepository(repository): ScopedRepository,
+) -> Result<Json<Vec<WorkspaceSecretResponse>>, ApiError> {
+    Ok(Json(
+        repository
+            .workspace_extension_secrets()
+            .await?
+            .into_iter()
+            .map(|secret| WorkspaceSecretResponse {
+                name: secret.name,
+                created_at: secret.created_at,
+                updated_at: secret.updated_at,
+            })
+            .collect(),
+    ))
+}
+pub(super) async fn put_workspace_secret(
+    ScopedRepository(repository): ScopedRepository,
+    Path(name): Path<String>,
+    ApiJson(input): ApiJson<WorkspaceSecretRequest>,
+) -> Result<StatusCode, ApiError> {
+    repository
+        .put_workspace_extension_secret(&name, &input.value)
+        .await?;
+    Ok(StatusCode::NO_CONTENT)
+}
+pub(super) async fn delete_workspace_secret(
+    ScopedRepository(repository): ScopedRepository,
+    Path(name): Path<String>,
+) -> Result<StatusCode, ApiError> {
+    if repository.delete_workspace_extension_secret(&name).await? {
+        Ok(StatusCode::NO_CONTENT)
+    } else {
+        Err(ApiError::not_found("workspace extension secret"))
+    }
 }
 
 pub(super) async fn list(

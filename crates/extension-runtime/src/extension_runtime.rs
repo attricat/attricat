@@ -10,9 +10,14 @@ use std::{
     fs::{File, OpenOptions},
     io::Write,
     path::PathBuf,
-    sync::{Arc, Mutex},
-    time::Duration,
+    sync::{Arc, LazyLock, Mutex},
+    time::{Duration, Instant},
 };
+
+use base64::{Engine as _, engine::general_purpose::STANDARD as BASE64};
+use futures_util::StreamExt;
+use reqwest::{Client, Method, redirect::Policy};
+use url::Url;
 
 use async_trait::async_trait;
 use semver::{Version, VersionReq};
@@ -77,6 +82,31 @@ const MAX_HOST_JSON_BYTES: usize = 64 * 1024;
 const MAX_CACHED_COMPONENTS: usize = 64;
 const MAX_WRITE_VALUES: usize = 100;
 const EPOCH_TICK_INTERVAL: Duration = Duration::from_millis(10);
+const NETWORK_RATE_WINDOW: Duration = Duration::from_secs(60);
+const NETWORK_RATE_LIMIT: usize = 60;
+static NETWORK_RATE_BUCKETS: LazyLock<Mutex<HashMap<(Uuid, String), VecDeque<Instant>>>> =
+    LazyLock::new(|| Mutex::new(HashMap::new()));
+
+fn allow_network_request(workspace_id: Uuid, extension_id: &str) -> bool {
+    let now = Instant::now();
+    let mut buckets = NETWORK_RATE_BUCKETS
+        .lock()
+        .expect("network rate buckets are not poisoned");
+    let bucket = buckets
+        .entry((workspace_id, extension_id.to_owned()))
+        .or_default();
+    while bucket
+        .front()
+        .is_some_and(|at| now.duration_since(*at) >= NETWORK_RATE_WINDOW)
+    {
+        bucket.pop_front();
+    }
+    if bucket.len() >= NETWORK_RATE_LIMIT {
+        return false;
+    }
+    bucket.push_back(now);
+    true
+}
 
 #[derive(Clone, Debug)]
 pub struct ExtensionRuntimeConfig {
@@ -716,6 +746,22 @@ impl catalog::host::api::Host for HostState {
         if operation == "catalog.command.v1" {
             return self.catalog_command_call(&request).await;
         }
+        if operation == "secrets.get.v1" {
+            let input: SecretGet = parse_host_request(&request, "secret request")?;
+            valid_secret_name(&input.name)?;
+            let value = self
+                .repository
+                .workspace_extension_secret_value(&input.name)
+                .await
+                .map_err(|_| "secret lookup failed")?
+                .ok_or_else(|| "secret reference is unavailable".to_owned())?;
+            // A secret is returned only to the invoking component; it is never
+            // logged, traced, persisted, or included in a management response.
+            return Ok(json!({"value": value}).to_string());
+        }
+        if operation == "network.request.v1" {
+            return self.network_request(&request).await;
+        }
         self.storage_call(&operation, &request).await
     }
 
@@ -968,6 +1014,172 @@ impl HostState {
         bounded_serialize(&outcomes)
     }
 
+    /// Executes a single brokered HTTPS request. There are intentionally no
+    /// redirects or ambient sockets: DNS is resolved and checked before the
+    /// rustls client is pinned to those public addresses.
+    async fn network_request(&self, request: &str) -> Result<String, String> {
+        let input: NetworkRequest = parse_host_request(request, "network request")?;
+        if !allow_network_request(
+            self.installation.installed_release_id,
+            &self.installation.extension_id,
+        ) {
+            return Err("network request rate limit exceeded".into());
+        }
+        let method =
+            Method::from_bytes(input.method.as_bytes()).map_err(|_| "invalid HTTP method")?;
+        let url = Url::parse(&input.url).map_err(|_| "invalid HTTPS URL")?;
+        if url.scheme() != "https"
+            || url.query().is_some()
+            || url.fragment().is_some()
+            || url.username() != ""
+            || url.password().is_some()
+        {
+            return Err("only query-free HTTPS destinations are allowed".into());
+        }
+        let rule = self
+            .installation
+            .manifest
+            .host_permissions
+            .iter()
+            .chain(self.installation.manifest.optional_host_permissions.iter())
+            .find(|rule| {
+                rule.id == input.host_permission_id
+                    && self.installation.host_permission_grants.contains(&rule.id)
+                    && rule.allows_request(&url, method.as_str())
+            })
+            .ok_or_else(|| "destination is not granted by a host permission".to_owned())?;
+        let body = input.body.unwrap_or_default();
+        if body.len() as u64 > rule.max_request_bytes {
+            return Err("request body exceeds host permission limit".into());
+        }
+        let host = url
+            .host_str()
+            .ok_or_else(|| "HTTPS URL needs a host".to_owned())?;
+        let port = url
+            .port_or_known_default()
+            .ok_or_else(|| "HTTPS URL needs a port".to_owned())?;
+        let addresses: Vec<std::net::SocketAddr> = tokio::net::lookup_host((host, port))
+            .await
+            .map_err(|_| "destination DNS lookup failed")?
+            .collect();
+        if addresses.is_empty()
+            || addresses.iter().any(|address| {
+                !catalog_extension_manifest::extensions::is_public_destination(address.ip())
+            })
+        {
+            return Err("destination resolves to an unsafe address".into());
+        }
+        let mut headers = reqwest::header::HeaderMap::new();
+        for (name, value) in input.headers.unwrap_or_default() {
+            let header_name = reqwest::header::HeaderName::from_bytes(name.as_bytes())
+                .map_err(|_| "invalid request header")?;
+            if matches!(
+                header_name.as_str(),
+                "host" | "content-length" | "connection" | "transfer-encoding"
+            ) || value.len() > 8192
+            {
+                return Err("unsafe request header".into());
+            }
+            headers.insert(
+                header_name,
+                reqwest::header::HeaderValue::from_str(&value)
+                    .map_err(|_| "invalid request header")?,
+            );
+        }
+        if let Some(key) = &input.idempotency_key {
+            if key.is_empty() || key.len() > 512 || headers.contains_key("idempotency-key") {
+                return Err("invalid idempotency key".into());
+            }
+            headers.insert(
+                "idempotency-key",
+                reqwest::header::HeaderValue::from_str(key)
+                    .map_err(|_| "invalid idempotency key")?,
+            );
+        }
+        for item in input.secret_headers.unwrap_or_default() {
+            valid_secret_name(&item.secret)?;
+            let name = reqwest::header::HeaderName::from_bytes(item.header.as_bytes())
+                .map_err(|_| "invalid secret header")?;
+            if matches!(
+                name.as_str(),
+                "host" | "content-length" | "connection" | "transfer-encoding"
+            ) || item.prefix.len() > 512
+            {
+                return Err("unsafe secret header".into());
+            }
+            let secret = self
+                .repository
+                .workspace_extension_secret_value(&item.secret)
+                .await
+                .map_err(|_| "secret lookup failed")?
+                .ok_or_else(|| "secret reference is unavailable".to_owned())?;
+            headers.insert(
+                name,
+                reqwest::header::HeaderValue::from_str(&(item.prefix + &secret))
+                    .map_err(|_| "secret cannot be used as a header")?,
+            );
+        }
+        let client = Client::builder()
+            .redirect(Policy::none())
+            .https_only(true)
+            .resolve_to_addrs(host, &addresses)
+            .connect_timeout(Duration::from_millis(rule.timeout_ms))
+            .timeout(Duration::from_millis(rule.timeout_ms))
+            .build()
+            .map_err(|_| "network client unavailable")?;
+        let started = Instant::now();
+        let response = client
+            .request(method, url)
+            .headers(headers)
+            .body(body)
+            .send()
+            .await
+            .map_err(|_| {
+                // No automatic retries: a timeout or transport failure may have
+                // reached the peer. Callers retry only with their own stable
+                // idempotency key understood by the destination.
+                "network request has an uncertain external outcome"
+            })?;
+        if response.status().is_redirection() {
+            return Err("redirect responses are denied".into());
+        }
+        let status = response.status().as_u16();
+        let response_headers = response
+            .headers()
+            .iter()
+            .filter_map(|(name, value)| {
+                matches!(name.as_str(), "content-type" | "etag" | "retry-after")
+                    .then(|| {
+                        value
+                            .to_str()
+                            .ok()
+                            .map(|value| (name.to_string(), value.to_string()))
+                    })
+                    .flatten()
+            })
+            .collect::<HashMap<_, _>>();
+        if response
+            .content_length()
+            .is_some_and(|length| length > rule.max_response_bytes)
+        {
+            return Err("response exceeds host permission limit".into());
+        }
+        let mut bytes = Vec::new();
+        let mut stream = response.bytes_stream();
+        while let Some(chunk) = stream.next().await {
+            let chunk = chunk.map_err(|_| "network response failed")?;
+            if bytes.len().saturating_add(chunk.len()) > rule.max_response_bytes as usize {
+                return Err("response exceeds host permission limit".into());
+            }
+            bytes.extend_from_slice(&chunk);
+        }
+        metrics::histogram!("catalog_extension_network_duration_seconds", "extension" => self.installation.extension_id.clone(), "host_permission" => rule.id.clone()).record(started.elapsed());
+        Ok(
+            json!({"status":status,"headers":response_headers,"body_base64":BASE64.encode(bytes)})
+                .to_string(),
+        )
+    }
+
     async fn storage_call(&self, operation: &str, request: &str) -> Result<String, String> {
         let release_id = self.installation.installed_release_id;
         let extension_id = &self.installation.extension_id;
@@ -1162,6 +1374,56 @@ fn parse_event_emit_request(request: &str) -> Result<EventEmit, String> {
 
 fn parse_storage_request<T: for<'de> Deserialize<'de>>(request: &str) -> Result<T, String> {
     serde_json::from_str(request).map_err(|_| "invalid storage request".to_owned())
+}
+fn parse_host_request<T: for<'de> Deserialize<'de>>(
+    request: &str,
+    label: &str,
+) -> Result<T, String> {
+    if request.len() > MAX_HOST_JSON_BYTES {
+        return Err(format!("{label} exceeds host JSON limit"));
+    }
+    serde_json::from_str(request).map_err(|_| format!("invalid {label}"))
+}
+fn valid_secret_name(name: &str) -> Result<(), String> {
+    if name.is_empty()
+        || name.len() > MAX_EXTENSION_IDENTIFIER_BYTES
+        || !name
+            .bytes()
+            .all(|c| c.is_ascii_alphanumeric() || matches!(c, b'.' | b'_' | b'-'))
+    {
+        Err("invalid secret reference".into())
+    } else {
+        Ok(())
+    }
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct SecretGet {
+    name: String,
+}
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct SecretHeader {
+    secret: String,
+    header: String,
+    #[serde(default)]
+    prefix: String,
+}
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct NetworkRequest {
+    host_permission_id: String,
+    method: String,
+    url: String,
+    #[serde(default)]
+    headers: Option<HashMap<String, String>>,
+    #[serde(default)]
+    secret_headers: Option<Vec<SecretHeader>>,
+    #[serde(default)]
+    body: Option<String>,
+    #[serde(default)]
+    idempotency_key: Option<String>,
 }
 
 /// Shared-task executor for enabled extension event handlers. A component can

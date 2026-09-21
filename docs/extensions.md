@@ -218,9 +218,7 @@ messages (16 KiB). Every operation is capability checked at the point of call.
 `configuration.get.v1` is available to components with
 `configuration.read`. `storage.get.v1`, `storage.set.v1` (also accepted as
 `storage.put.v1`), `storage.delete.v1`, and `storage.list.v1` are available to
-components with `storage.extension`. `secrets.get.v1`, `catalog.read.v1`,
-`catalog.command.v1`, and `network.request.v1` are recognized and
-capability-checked but are not implemented by this deployment. The legacy JSON
+components with `storage.extension`. The legacy JSON
 `catalog.read.v1` surface additionally provides bounded `page`, `changes`, and
 single-attribute `lookup` requests; `page` cursors pin a database-clock snapshot
 and `changes` cursors pin a domain-event sequence high-water mark. Cursors are
@@ -229,10 +227,42 @@ idempotent batch of typed `create`, `update`, `relationships`, or `upsert`
 intents. An upsert serializes its declared blueprint/attribute business key,
 creates only when it is absent, and rejects an ambiguous match. `events.emit.v1`
 is implemented only for a manifest-declared, per-contract event export as
-described in [Inter-extension events](#inter-extension-events). In particular,
-`network.request.v1` never grants ambient sockets. The manifest
-host-permission validation remains the egress policy contract for its future
-mediated implementation.
+described in [Inter-extension events](#inter-extension-events).
+components with `storage.extension`. `events.emit.v1` is implemented only for a
+manifest-declared, per-contract event export as described in
+[Inter-extension events](#inter-extension-events).
+
+### Mediated secrets and HTTPS
+
+Workspace operators manage named extension secrets at
+`/workspace/extension-secrets`; listing returns names only and values are
+write-only. A component with `secrets.read` may call
+`secrets.get.v1` with `{"name":"destination-token"}` and receives
+`{"value":"..."}` only in that component invocation. There is no list API,
+and values are never copied into manifests, configuration, operation snapshots,
+audit records, logs, traces, or errors.
+
+A component with `network.request` calls `network.request.v1` with
+`host_permission_id`, `method`, `url`, optional UTF-8 `body`, optional safe
+`headers`, and optional `secret_headers` entries (`secret`, `header`, optional
+`prefix`). The host rechecks the exact enabled release, configuration,
+capabilities, grants, and matching host-permission rule on every call. It only
+allows query-free HTTPS, validates every DNS answer as public before connecting,
+pins the connection to those checked addresses, verifies TLS, disables
+redirects, streams bounded request/response bodies, applies each rule's timeout
+and byte limits, and limits an extension release to 60 requests per minute.
+Only status and selected safe response headers are returned; response bytes are
+base64 encoded.
+
+The broker never automatically retries. A transport failure or timeout before a
+response is an **uncertain external outcome** because the peer might have
+received the request; callers may retry only when they supply a stable
+idempotency key/header whose semantics the destination documents. A timeout
+after a response has begun is equally uncertain and is never retried. Durable
+operations retain their #253 batch key across a pre-checkpoint replay; a
+destination extension must map that stable key to its destination idempotency
+key when it performs side effects. `network.request.v1` never grants ambient
+sockets.
 Registry source APIs expose `GET/POST /extension-registries`,
 `DELETE /extension-registries/{id}`, `GET /extension-registries/discover`, and
 `GET /extension-registries/extensions/{owner}/{repository}`. The final endpoint

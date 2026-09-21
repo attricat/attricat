@@ -151,7 +151,10 @@ pub(super) fn policy(method: &Method, path: &str) -> Option<Policy> {
             target: TargetKind::None,
         });
     }
-    if path == "/workspace/extensions-mode" {
+    if path == "/workspace/extensions-mode"
+        || path == "/workspace/extension-secrets"
+        || path.starts_with("/workspace/extension-secrets/")
+    {
         return Some(Policy {
             permission: "extensions.manage",
             target: TargetKind::None,

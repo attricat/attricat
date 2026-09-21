@@ -346,6 +346,14 @@ pub fn router(state: AppState) -> Router {
             put(extensions::set_workspace_mode),
         )
         .route(
+            "/workspace/extension-secrets",
+            get(extensions::list_workspace_secrets),
+        )
+        .route(
+            "/workspace/extension-secrets/{name}",
+            put(extensions::put_workspace_secret).delete(extensions::delete_workspace_secret),
+        )
+        .route(
             "/extensions/{extension_id}",
             get(extensions::detail).delete(extensions::remove),
         )
