@@ -71,6 +71,27 @@ browser and WASM runtime paths. Use this workflow when changing extension
 installation, permissions, artifact storage, runtime, or event dispatch; unit
 tests alone do not prove host integration.
 
+For a CLI-driven local verification, authenticate with the workspace **login
+identifier**, not its slug, name, or UUID. Discover it first and retain the
+browser-session file for every subsequent command; the bootstrap workspace is
+normally `default.local`:
+
+```sh
+cargo run -p cli -- --session-file .acli-session auth discover default.local
+printf '%s' "$CATALOG_BOOTSTRAP_OWNER_PASSWORD" | \
+  cargo run -p cli -- --session-file .acli-session auth login default.local \
+    --email "$CATALOG_BOOTSTRAP_OWNER_EMAIL" --password-stdin
+```
+
+When verifying an inter-extension event, use two packaged server components:
+the producer should emit a manifest-declared export while handling a real
+Catalog event, and the enabled consumer should make an observable, idempotent
+host-mediated change (for example an extension-storage write). Confirm the
+producer event and completed consumer delivery through the API/CLI first; use
+`just sql` only if the CLI has no read endpoint for the resulting host state.
+This distinguishes session/workspace routing failures from event
+materialization or runtime failures.
+
 Registry installs validate the selected `.tar.zst` archive with bounded
 decompression and entry-path checks, then read and validate `manifest.json`
 before uploading declared extracted artifacts to Catalog S3 storage. Artifact

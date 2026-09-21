@@ -86,6 +86,102 @@ async fn event_delivery_materialization_is_atomic_filtered_and_deduplicated(pool
 }
 
 #[sqlx::test(migrations = "./migrations")]
+async fn materialization_is_idempotent_across_coordinator_restart(pool: PgPool) {
+    let repository = CatalogRepository::new(pool.clone());
+    repository
+        .ensure_event_consumer("catalog.extensions.wasm", &[CONTEXT_CREATED_V1])
+        .await
+        .unwrap();
+    let event_id = insert_event(&pool, CONTEXT_CREATED_V1, Uuid::new_v4()).await;
+    repository
+        .materialize_event_delivery_tasks("catalog.extensions.wasm", &[CONTEXT_CREATED_V1])
+        .await
+        .unwrap();
+
+    // A replacement coordinator gets a fresh repository handle but must retain
+    // the durable consumer, receipt, and task instead of delivering twice.
+    let restarted = CatalogRepository::new(pool.clone());
+    restarted
+        .ensure_event_consumer("catalog.extensions.wasm", &[CONTEXT_CREATED_V1])
+        .await
+        .unwrap();
+    restarted
+        .materialize_event_delivery_tasks("catalog.extensions.wasm", &[CONTEXT_CREATED_V1])
+        .await
+        .unwrap();
+    assert_eq!(
+        sqlx::query_scalar::<_, i64>("SELECT count(*) FROM event_deliveries")
+            .fetch_one(&pool)
+            .await
+            .unwrap(),
+        1
+    );
+    assert_eq!(
+        sqlx::query_scalar::<_, Uuid>("SELECT event_id FROM event_deliveries")
+            .fetch_one(&pool)
+            .await
+            .unwrap(),
+        event_id
+    );
+    assert_eq!(
+        sqlx::query_scalar::<_, i64>("SELECT count(*) FROM tasks")
+            .fetch_one(&pool)
+            .await
+            .unwrap(),
+        1
+    );
+}
+
+#[sqlx::test(migrations = "./migrations")]
+async fn newly_eligible_plugin_event_is_backfilled_after_watermark_advanced(pool: PgPool) {
+    let repository = CatalogRepository::new(pool.clone());
+    repository
+        .ensure_event_consumer("catalog.extensions.wasm", &[CONTEXT_CREATED_V1])
+        .await
+        .unwrap();
+
+    insert_event(&pool, "context.updated.v1", Uuid::new_v4()).await;
+    repository
+        .materialize_event_delivery_tasks("catalog.extensions.wasm", &[CONTEXT_CREATED_V1])
+        .await
+        .unwrap();
+    let plugin_event = insert_event(
+        &pool,
+        "plugin.acme.producer.inventory_changed.v1",
+        Uuid::new_v4(),
+    )
+    .await;
+    repository
+        .materialize_event_delivery_tasks("catalog.extensions.wasm", &[CONTEXT_CREATED_V1])
+        .await
+        .unwrap();
+    assert_eq!(
+        sqlx::query_scalar::<_, i64>(
+            "SELECT watermark FROM event_consumers WHERE name = 'catalog.extensions.wasm'"
+        )
+        .fetch_one(&pool)
+        .await
+        .unwrap(),
+        2
+    );
+
+    repository
+        .materialize_event_delivery_tasks(
+            "catalog.extensions.wasm",
+            &["plugin.acme.producer.inventory_changed.v1"],
+        )
+        .await
+        .unwrap();
+    assert_eq!(
+        sqlx::query_scalar::<_, Uuid>("SELECT event_id FROM event_deliveries")
+            .fetch_one(&pool)
+            .await
+            .unwrap(),
+        plugin_event
+    );
+}
+
+#[sqlx::test(migrations = "./migrations")]
 async fn expired_event_task_lease_rejects_stale_receipts_and_redelivers(pool: PgPool) {
     let repository = CatalogRepository::system(pool.clone());
     repository

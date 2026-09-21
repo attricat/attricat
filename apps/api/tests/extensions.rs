@@ -49,6 +49,36 @@ fn release_archive(version: &str, dependencies: Value, artifact_bytes: &[u8]) ->
     zstd::stream::encode_all(Cursor::new(tar_bytes), 0).unwrap()
 }
 
+fn event_contract_release_archive(extension_id: &str, producer: bool) -> Vec<u8> {
+    let contracts = if producer {
+        json!({"exports": [{"id": "inventory", "version": "1.0.0", "event_type": "plugin.acme.producer.inventory_changed.v1", "schema": {"type": "object"}, "max_payload_bytes": 1024}], "consumes": []})
+    } else {
+        json!({"exports": [], "consumes": [{"provider": "acme.producer", "contract": "inventory", "version": "^1.0"}]})
+    };
+    let manifest = serde_json::to_vec(&json!({
+        "manifest_version": 1,
+        "name": "Event contract extension",
+        "version": "1.0.0",
+        "description": "extension event contract integration test",
+        "icons": {"48": "icon.png"},
+        "catalog": {"id": extension_id, "host_api": "^1.0"},
+        "permissions": if producer { json!(["events.emit"]) } else { json!(["events.subscribe"]) },
+        "event_contracts": contracts,
+        "configuration": {"version": 1, "schema": {"type": "object", "additionalProperties": false}},
+        "artifacts": [{"id": "server", "kind": "server_wasm", "path": "server.wasm"}],
+        "server": if producer { json!({"event_handlers": []}) } else { json!({"event_handlers": [{"id": "consume-inventory", "event_types": ["plugin.acme.producer.inventory_changed.v1"], "handler": "handle-event"}]})}
+    }))
+    .unwrap();
+    let mut tar_bytes = Vec::new();
+    {
+        let mut tar = tar::Builder::new(&mut tar_bytes);
+        append_file(&mut tar, "manifest.json", &manifest);
+        append_file(&mut tar, "server.wasm", ARTIFACT_BYTES);
+        tar.finish().unwrap();
+    }
+    zstd::stream::encode_all(Cursor::new(tar_bytes), 0).unwrap()
+}
+
 fn storage_client_release_archive(version: &str) -> Vec<u8> {
     let manifest = serde_json::to_vec(&json!({
         "manifest_version": 1,
@@ -172,6 +202,130 @@ async fn sideload_installs_a_validated_local_archive(pool: sqlx::PgPool) {
     assert_eq!(installation["state"], "disabled");
     assert_eq!(store.object_count().await, 1);
     server.abort();
+}
+
+#[sqlx::test(migrations = "./migrations")]
+async fn enabled_event_types_follow_authorized_consumption_contracts(pool: sqlx::PgPool) {
+    let workspace = Uuid::from_u128(0x00000000000040008000000000000002);
+    let repository = CatalogRepository::new(pool.clone())
+        .for_workspace(workspace)
+        .await
+        .unwrap();
+    let installer =
+        ExtensionInstaller::new(repository.clone(), Arc::new(FakeObjectStore::available()));
+    installer
+        .install(
+            "test",
+            &event_contract_release_archive("acme.producer", true),
+        )
+        .await
+        .unwrap();
+    repository
+        .grant_extension("acme.producer", "capability", "events.emit")
+        .await
+        .unwrap();
+    repository
+        .grant_extension("acme.producer", "event_publish", "inventory")
+        .await
+        .unwrap();
+    let producer = repository.enable_extension("acme.producer").await.unwrap();
+
+    installer
+        .install(
+            "test",
+            &event_contract_release_archive("acme.consumer", false),
+        )
+        .await
+        .unwrap();
+    repository
+        .grant_extension("acme.consumer", "capability", "events.subscribe")
+        .await
+        .unwrap();
+    repository
+        .grant_extension(
+            "acme.consumer",
+            "event_subscribe",
+            "acme.producer:inventory",
+        )
+        .await
+        .unwrap();
+    repository.enable_extension("acme.consumer").await.unwrap();
+
+    let event_types = repository.enabled_extension_event_types().await.unwrap();
+    assert_eq!(
+        event_types,
+        vec!["plugin.acme.producer.inventory_changed.v1"]
+    );
+    repository
+        .emit_extension_event(
+            "acme.producer",
+            producer.installed_release_id,
+            "inventory",
+            "inventory_item",
+            Uuid::new_v4(),
+            json!({}),
+        )
+        .await
+        .unwrap();
+    repository
+        .ensure_event_consumer("catalog.extensions.wasm", &[])
+        .await
+        .unwrap();
+    repository
+        .materialize_event_delivery_tasks("catalog.extensions.wasm", &event_types)
+        .await
+        .unwrap();
+    assert_eq!(
+        sqlx::query_scalar::<_, i64>("SELECT count(*) FROM event_deliveries")
+            .fetch_one(&pool)
+            .await
+            .unwrap(),
+        1
+    );
+
+    repository.disable_extension("acme.consumer").await.unwrap();
+    assert!(
+        repository
+            .enabled_extension_event_types()
+            .await
+            .unwrap()
+            .is_empty()
+    );
+    repository
+        .revoke_extension_grant(
+            "acme.consumer",
+            "event_subscribe",
+            "acme.producer:inventory",
+        )
+        .await
+        .unwrap();
+    assert!(
+        repository
+            .enabled_extension_event_types()
+            .await
+            .unwrap()
+            .is_empty()
+    );
+    repository
+        .grant_extension(
+            "acme.consumer",
+            "event_subscribe",
+            "acme.producer:inventory",
+        )
+        .await
+        .unwrap();
+    repository.enable_extension("acme.consumer").await.unwrap();
+    repository
+        .quarantine_extension("acme.consumer", "test")
+        .await
+        .unwrap();
+    assert!(
+        repository
+            .enabled_extension_event_types()
+            .await
+            .unwrap()
+            .is_empty()
+    );
 }
 
 #[sqlx::test(migrations = "./migrations")]

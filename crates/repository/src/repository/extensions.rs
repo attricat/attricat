@@ -1,4 +1,4 @@
-use std::collections::HashSet;
+use std::collections::{BTreeSet, HashMap, HashSet};
 
 use chrono::{DateTime, Utc};
 use semver::{Version, VersionReq};
@@ -652,6 +652,67 @@ impl CatalogRepository {
             }
         }
         Ok(enabled)
+    }
+
+    /// Returns exact event versions that an enabled, authorized server handler
+    /// can receive. Plugin types are derived from the consumer's declared
+    /// contracts and the currently enabled provider release, rather than a
+    /// static core-event catalogue.
+    pub async fn enabled_extension_event_types(&self) -> Result<Vec<String>, RepositoryError> {
+        let rows: Vec<(String, Uuid)> = sqlx::query_as(
+            "SELECT i.extension_id, i.installed_release_id FROM extension_installations i JOIN workspaces w ON w.id = i.workspace_id WHERE i.workspace_id = $1 AND i.state = 'enabled' AND w.extensions_enabled",
+        )
+        .bind(self.extension_workspace())
+        .fetch_all(&self.pool)
+        .await?;
+        let mut installations = HashMap::new();
+        for (extension_id, installed_release_id) in rows {
+            if let Some(installation) = self
+                .runtime_extension_installation(&extension_id, installed_release_id)
+                .await?
+            {
+                installations.insert(extension_id, installation);
+            }
+        }
+
+        let mut event_types = BTreeSet::new();
+        for installation in installations.values() {
+            let Some(server) = &installation.manifest.server else {
+                continue;
+            };
+            for handler in &server.event_handlers {
+                for event_type in &handler.event_types {
+                    if !event_type.starts_with("plugin.") {
+                        event_types.insert(event_type.clone());
+                    }
+                }
+            }
+            for consumed in &installation.manifest.event_contracts.consumes {
+                let Some(provider) = installations.get(&consumed.provider) else {
+                    continue;
+                };
+                let Ok(range) = VersionReq::parse(&consumed.version) else {
+                    continue;
+                };
+                for exported in &provider.manifest.event_contracts.exports {
+                    if exported.id != consumed.contract
+                        || !Version::parse(&exported.version)
+                            .is_ok_and(|version| range.matches(&version))
+                    {
+                        continue;
+                    }
+                    if server.event_handlers.iter().any(|handler| {
+                        handler
+                            .event_types
+                            .iter()
+                            .any(|event_type| event_type == &exported.event_type)
+                    }) {
+                        event_types.insert(exported.event_type.clone());
+                    }
+                }
+            }
+        }
+        Ok(event_types.into_iter().collect())
     }
 
     /// Re-fetches authorization data from the current installation immediately

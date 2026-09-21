@@ -982,16 +982,11 @@ pub fn start_event_delivery_coordinator(
                 let result = async {
                     let scoped = repository.for_workspace(workspace_id).await?;
                     scoped
-                        .ensure_event_consumer(
-                            "catalog.extensions.wasm",
-                            crate::domain_events::ALL_EVENT_TYPES_V1,
-                        )
+                        .ensure_event_consumer("catalog.extensions.wasm", &[])
                         .await?;
+                    let event_types = scoped.enabled_extension_event_types().await?;
                     scoped
-                        .materialize_event_delivery_tasks(
-                            "catalog.extensions.wasm",
-                            crate::domain_events::ALL_EVENT_TYPES_V1,
-                        )
+                        .materialize_event_delivery_tasks("catalog.extensions.wasm", &event_types)
                         .await
                 }
                 .await;

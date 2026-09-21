@@ -1,6 +1,8 @@
 use async_trait::async_trait;
 use std::time::Duration;
 
+const EVENT_DELIVERY_MATERIALIZATION_BATCH_SIZE: i64 = 100;
+
 use chrono::{DateTime, Utc};
 use sqlx::{Postgres, Transaction};
 use uuid::Uuid;
@@ -256,16 +258,19 @@ impl CatalogRepository {
     /// delivery with its task before moving the consumer watermark. The
     /// coordinator is deliberately only a producer; shared-task handlers own
     /// execution and all receipt transitions.
-    pub async fn materialize_event_delivery_tasks(
+    pub async fn materialize_event_delivery_tasks<T: AsRef<str>>(
         &self,
         consumer_name: &str,
-        event_types: &[&str],
+        event_types: &[T],
     ) -> Result<(), RepositoryError> {
         let workspace_id = self.workspace_id.unwrap_or(Self::DEFAULT_WORKSPACE_ID);
         let event_types: Vec<String> = event_types
             .iter()
-            .map(|value| (*value).to_owned())
+            .map(|value| value.as_ref().to_owned())
             .collect();
+        if event_types.is_empty() {
+            return Ok(());
+        }
         let mut transaction = self.pool.begin().await?;
 
         // Migrations intentionally contain no data backfill. Assign every old
@@ -314,36 +319,68 @@ impl CatalogRepository {
             "SELECT id, workspace_id, name, watermark FROM event_consumers WHERE workspace_id = $1 AND name = $2 FOR UPDATE",
         )
         .bind(workspace_id).bind(consumer_name).fetch_one(&mut *transaction).await?;
-        let max_sequence: i64 = sqlx::query_scalar(
-            "SELECT COALESCE(max(sequence), $2) FROM domain_events WHERE workspace_id = $1",
+        // A contract can become eligible after this shared consumer has already
+        // passed its event. Drain that historical gap before advancing again;
+        // otherwise a plugin event would be skipped permanently when a consumer
+        // is enabled or re-granted after publication.
+        let historical: Vec<EventTaskSeed> = sqlx::query_as(
+            "SELECT e.id AS event_id, e.workspace_id, e.correlation_id, e.causation_id FROM domain_events e WHERE e.workspace_id = $1 AND e.sequence <= $2 AND e.event_type = ANY($3) AND NOT EXISTS (SELECT 1 FROM event_deliveries d WHERE d.consumer_id = $4 AND d.event_id = e.id) ORDER BY e.sequence LIMIT $5",
         )
-        .bind(workspace_id)
-        .bind(consumer.watermark)
-        .fetch_one(&mut *transaction)
-        .await?;
+        .bind(workspace_id).bind(consumer.watermark).bind(&event_types).bind(consumer.id).bind(EVENT_DELIVERY_MATERIALIZATION_BATCH_SIZE)
+        .fetch_all(&mut *transaction).await?;
+        if !historical.is_empty() {
+            self.enqueue_event_delivery_tasks(&mut transaction, consumer.id, historical)
+                .await?;
+            transaction.commit().await?;
+            return Ok(());
+        }
+
+        // Bound both the scan and the inserts. Every event in this sequence
+        // window has been considered before its final sequence becomes the
+        // watermark; matching events get a durable receipt and task first.
+        let sequences: Vec<i64> = sqlx::query_scalar(
+            "SELECT sequence FROM domain_events WHERE workspace_id = $1 AND sequence > $2 ORDER BY sequence LIMIT $3",
+        )
+        .bind(workspace_id).bind(consumer.watermark).bind(EVENT_DELIVERY_MATERIALIZATION_BATCH_SIZE)
+        .fetch_all(&mut *transaction).await?;
+        let Some(max_sequence) = sequences.last().copied() else {
+            transaction.commit().await?;
+            return Ok(());
+        };
         let seeds: Vec<EventTaskSeed> = sqlx::query_as(
             "SELECT e.id AS event_id, e.workspace_id, e.correlation_id, e.causation_id FROM domain_events e WHERE e.workspace_id = $1 AND e.sequence > $2 AND e.sequence <= $3 AND e.event_type = ANY($4) AND NOT EXISTS (SELECT 1 FROM event_deliveries d WHERE d.consumer_id = $5 AND d.event_id = e.id) ORDER BY e.sequence",
         )
         .bind(workspace_id).bind(consumer.watermark).bind(max_sequence).bind(&event_types).bind(consumer.id)
         .fetch_all(&mut *transaction).await?;
+        self.enqueue_event_delivery_tasks(&mut transaction, consumer.id, seeds)
+            .await?;
+        sqlx::query("UPDATE event_consumers SET watermark = $2, updated_at = clock_timestamp() WHERE id = $1")
+            .bind(consumer.id).bind(max_sequence).execute(&mut *transaction).await?;
+        transaction.commit().await?;
+        Ok(())
+    }
+
+    async fn enqueue_event_delivery_tasks(
+        &self,
+        transaction: &mut Transaction<'_, Postgres>,
+        consumer_id: Uuid,
+        seeds: Vec<EventTaskSeed>,
+    ) -> Result<(), RepositoryError> {
         for seed in seeds {
             let delivery_id = Uuid::new_v4();
-            let task_id = self.enqueue_task(&mut transaction, TaskInsert {
+            let task_id = self.enqueue_task(transaction, TaskInsert {
                 workspace_id: seed.workspace_id,
                 kind: TaskKind::EventDeliveryV1,
                 subject_id: delivery_id,
                 generation: 0,
-                payload: serde_json::json!({"consumer_id": consumer.id.to_string(), "event_id": seed.event_id.to_string()}),
+                payload: serde_json::json!({"consumer_id": consumer_id.to_string(), "event_id": seed.event_id.to_string()}),
                 correlation_id: Some(seed.correlation_id),
                 causation_id: seed.causation_id,
             }).await?.expect("a new delivery subject has no task conflict");
             sqlx::query("INSERT INTO event_deliveries (consumer_id, event_id, id, task_id) VALUES ($1, $2, $3, $4)")
-                .bind(consumer.id).bind(seed.event_id).bind(delivery_id).bind(task_id)
-                .execute(&mut *transaction).await?;
+                .bind(consumer_id).bind(seed.event_id).bind(delivery_id).bind(task_id)
+                .execute(&mut **transaction).await?;
         }
-        sqlx::query("UPDATE event_consumers SET watermark = $2, updated_at = clock_timestamp() WHERE id = $1")
-            .bind(consumer.id).bind(max_sequence).execute(&mut *transaction).await?;
-        transaction.commit().await?;
         Ok(())
     }
 
