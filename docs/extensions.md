@@ -675,3 +675,28 @@ authorized command broker.
 ## Current implementation limitations
 
 Webhook delivery remains deferred as described above.
+
+## Reference importer/exporter compatibility suite
+
+The maintained sibling checkout at `../../attricat-extension-example` contains
+packaged `attricat.reference-customer-importer` and
+`attricat.reference-customer-exporter` components plus the two-customer NDJSON
+fixture. They use only the released `catalog:host@1.3.0` artifact-operation ABI;
+the fixture is written as a host-managed output artifact, with no ambient I/O or
+host test hooks.
+
+Run the real-host compatibility suite only against a worktree-local stack after
+creating an owner personal API token:
+
+```sh
+just setup
+just dev # separate terminal
+source .catalog-worktree
+export CATALOG_TOKEN=... # owner token for this worktree
+just test-reference-extension-e2e
+```
+
+The suite builds and packages both sibling archives, side-loads them through the
+public CLI, grants/enables them, validates and publishes the customer blueprint,
+and drives public operation, cancellation, revocation, quarantine, duplicate
+idempotency, and audit endpoints. It does not use repository/runtime mocks.
