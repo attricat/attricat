@@ -208,7 +208,7 @@ async fn identity_memberships_seeded_roles_and_scoped_grants(pool: PgPool) {
         .await
         .unwrap();
     assert!(
-        CatalogRepository::new(pool.clone())
+        CatalogRepository::system(pool.clone())
             .set_workspace_membership_state(bootstrap_membership, user, workspace, "inactive")
             .await
             .is_err()

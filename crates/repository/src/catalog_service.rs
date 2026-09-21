@@ -15,7 +15,10 @@ use crate::{
         MigrateEntityRequest, RelationshipMutation, ReusableAttribute, ReusableAttributeGroup,
         SearchBlueprint, UpdateAttributeContext, UpdateEntityFormRequest,
     },
-    repository::{CatalogRepository, FileMetadata, RepositoryError},
+    repository::{
+        CatalogRepository, ExtensionCatalogBatch, ExtensionCatalogIntentOutcome, FileMetadata,
+        RepositoryError,
+    },
 };
 
 pub struct CatalogMutationService<'a> {
@@ -25,6 +28,15 @@ pub struct CatalogMutationService<'a> {
 impl<'a> CatalogMutationService<'a> {
     pub fn new(repository: &'a CatalogRepository) -> Self {
         Self { repository }
+    }
+
+    /// Applies extension batch intents through the same transaction-aware
+    /// mutation path as other catalog writers.
+    pub async fn execute_extension_catalog_batch(
+        &self,
+        batch: ExtensionCatalogBatch,
+    ) -> Result<Vec<ExtensionCatalogIntentOutcome>, RepositoryError> {
+        self.repository.execute_extension_catalog_batch(batch).await
     }
 
     pub async fn create_blueprint(

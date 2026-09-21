@@ -1,4 +1,4 @@
-use std::{net::SocketAddr, str::FromStr, sync::Arc};
+use std::{net::SocketAddr, sync::Arc, time::Instant};
 
 use api::{
     MIGRATOR, agent_worker,
@@ -11,6 +11,7 @@ use api::{
         DEFAULT_HTTP_REQUEST_TIMEOUT_SECONDS, DEFAULT_INCOMING_RELATIONSHIP_PAGE_SIZE,
         DEFAULT_PREVIEW_RELATIONSHIP_DEPTH, DEFAULT_PREVIEW_RELATIONSHIP_ITEMS,
         DEFAULT_RELATIONSHIP_FACET_NODES, MAINTENANCE_POOL_CONNECTIONS, REQUEST_POOL_CONNECTIONS,
+        TASK_POOL_CONNECTIONS,
     },
     event_dispatcher::{self, DispatcherConfig},
     extension_registry::{DEFAULT_OFFICIAL_REGISTRY, GitHubRegistry, GitHubRepository},
@@ -18,14 +19,14 @@ use api::{
     file_access::AllowFileAccess,
     http::{AppState, router},
     mail::SmtpMailDelivery,
-    repository::CatalogRepository,
+    repository::{CatalogRepository, ValueHistoryRetentionDays},
     rule_runtime,
     storage::{ObjectStore, S3ObjectStore, StorageConfig},
     task_worker::{self, TaskHandlerRegistry, TaskWorkerConfig},
     telemetry::{init_metrics, init_tracing},
     workflow_runtime,
 };
-use sqlx::postgres::{PgConnectOptions, PgPoolOptions};
+use sqlx::postgres::PgPoolOptions;
 use tokio::sync::Semaphore;
 use uuid::Uuid;
 
@@ -34,6 +35,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     dotenvy::dotenv().ok();
     init_tracing("attricat-api")?;
     let metrics = init_metrics()?;
+    // Validate before opening a maintenance connection, so destructive cleanup
+    // can never receive a zero or negative retention interval.
+    let history_retention_days = std::env::var("ATTRIBUTE_VALUE_HISTORY_RETENTION_DAYS")
+        .unwrap_or_else(|_| "90".to_owned())
+        .parse::<ValueHistoryRetentionDays>()
+        .map_err(|error| format!("ATTRIBUTE_VALUE_HISTORY_RETENTION_DAYS {error}"))?;
     let agent_provider = AgentProviderConfig::from_env()
         .map_err(|error| format!("invalid agent provider configuration: {error}"))?;
     if agent_provider.is_some() {
@@ -44,6 +51,20 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
 
     let database_url =
         std::env::var("DATABASE_URL").map_err(|_| "DATABASE_URL must be set to start the API")?;
+    let request_pool_connections = pool_connections(
+        "DATABASE_REQUEST_POOL_CONNECTIONS",
+        REQUEST_POOL_CONNECTIONS,
+    )?;
+    let task_pool_connections =
+        pool_connections("DATABASE_TASK_POOL_CONNECTIONS", TASK_POOL_CONNECTIONS)?;
+    tracing::info!(
+        request_pool_connections,
+        task_pool_connections,
+        total_database_connections = u64::from(MAINTENANCE_POOL_CONNECTIONS)
+            + u64::from(request_pool_connections)
+            + u64::from(task_pool_connections),
+        "configured bounded database connection pools"
+    );
     let storage_config = StorageConfig::from_env()
         .map_err(|error| format!("invalid object storage configuration: {error}"))?;
     let object_store = Arc::new(S3ObjectStore::new(storage_config).await);
@@ -98,25 +119,25 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         .await?;
     tracing::info!("running database migrations");
     MIGRATOR.run(&maintenance_pool).await?;
-    CatalogRepository::new(maintenance_pool.clone())
+    CatalogRepository::system(maintenance_pool.clone())
         .ensure_agent_permissions()
         .await?;
-    CatalogRepository::new(maintenance_pool.clone())
+    CatalogRepository::system(maintenance_pool.clone())
         .ensure_audit_permissions()
         .await?;
-    CatalogRepository::new(maintenance_pool.clone())
+    CatalogRepository::system(maintenance_pool.clone())
         .ensure_entity_publication_permissions()
         .await?;
-    CatalogRepository::new(maintenance_pool.clone())
+    CatalogRepository::system(maintenance_pool.clone())
         .ensure_extension_registry_permissions()
         .await?;
-    CatalogRepository::new(maintenance_pool.clone())
+    CatalogRepository::system(maintenance_pool.clone())
         .ensure_workflow_permissions()
         .await?;
-    CatalogRepository::new(maintenance_pool.clone())
+    CatalogRepository::system(maintenance_pool.clone())
         .ensure_rule_permissions()
         .await?;
-    let bootstrap_repository = CatalogRepository::new(maintenance_pool.clone());
+    let bootstrap_repository = CatalogRepository::system(maintenance_pool.clone());
     // The identity/membership migration consumes this durable bootstrap owner
     // record to create the initial owner grant. It is set only by deployment
     // configuration, never by a catalog request.
@@ -163,21 +184,52 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
             .ensure_bootstrap_local_password(&email, password)
             .await?;
     }
-    let history_retention_days = std::env::var("ATTRIBUTE_VALUE_HISTORY_RETENTION_DAYS")
-        .unwrap_or_else(|_| "90".to_owned())
-        .parse()?;
-    CatalogRepository::new(maintenance_pool.clone())
+    let cleanup_started = Instant::now();
+    match CatalogRepository::system(maintenance_pool.clone())
         .purge_value_history(history_retention_days)
-        .await?;
+        .await
+    {
+        Ok(deleted_entries) => {
+            let elapsed_seconds = cleanup_started.elapsed().as_secs_f64();
+            metrics::counter!("catalog_value_history_cleanup_total", "outcome" => "success")
+                .increment(1);
+            metrics::counter!("catalog_value_history_entries_purged_total")
+                .increment(deleted_entries);
+            metrics::histogram!("catalog_value_history_cleanup_duration_seconds")
+                .record(elapsed_seconds);
+            tracing::info!(
+                retention_days = history_retention_days.get(),
+                deleted_entries,
+                elapsed_seconds,
+                "attribute value history cleanup completed"
+            );
+        }
+        Err(error) => {
+            let elapsed_seconds = cleanup_started.elapsed().as_secs_f64();
+            metrics::counter!("catalog_value_history_cleanup_total", "outcome" => "failed")
+                .increment(1);
+            metrics::histogram!("catalog_value_history_cleanup_duration_seconds")
+                .record(elapsed_seconds);
+            tracing::error!(
+                retention_days = history_retention_days.get(),
+                elapsed_seconds,
+                error = %error,
+                "attribute value history cleanup failed; refusing to report successful startup maintenance"
+            );
+            return Err(format!("attribute value history cleanup failed: {error}").into());
+        }
+    }
     maintenance_pool.close().await;
 
-    // Public authentication uses this unscoped pool. Authorization creates a
-    // separate, cached RLS-configured pool only after deriving a trusted
-    // workspace from the credential or browser session.
-    let connect_options = PgConnectOptions::from_str(&database_url)?;
-    let pool = PgPoolOptions::new()
-        .max_connections(REQUEST_POOL_CONNECTIONS)
-        .connect_with(connect_options.clone())
+    // Every workspace shares these bounded pools. Repository scope is carried
+    // in explicit SQL predicates, never in mutable connection state.
+    let request_pool = PgPoolOptions::new()
+        .max_connections(request_pool_connections)
+        .connect(&database_url)
+        .await?;
+    let task_pool = PgPoolOptions::new()
+        .max_connections(task_pool_connections)
+        .connect(&database_url)
         .await?;
 
     let smtp_host = std::env::var("SMTP_HOST").unwrap_or_else(|_| "127.0.0.1".to_owned());
@@ -192,6 +244,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         &mail_from,
         std::env::var("SMTP_USERNAME").ok(),
         std::env::var("SMTP_PASSWORD").ok(),
+        &std::env::var("SMTP_TLS_MODE").unwrap_or_else(|_| "starttls".to_owned()),
     )?);
     let official_registry = std::env::var("EXTENSION_OFFICIAL_REGISTRY")
         .unwrap_or_else(|_| DEFAULT_OFFICIAL_REGISTRY.to_owned())
@@ -208,8 +261,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     let workspace_onboarding_url = std::env::var("WORKSPACE_ONBOARDING_URL")
         .unwrap_or_else(|_| "http://127.0.0.1:5173/onboarding".to_owned());
 
-    let task_repository =
-        CatalogRepository::with_workspace_pool_factory(pool.clone(), connect_options.clone());
+    let task_repository = CatalogRepository::system(task_pool.clone());
     // Agent provider calls are not safely resumable. On process restart mark
     // any previously running run interrupted before its task can be reclaimed.
     if agent_provider.is_some() {
@@ -233,6 +285,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         task_repository.clone(),
         extension_runtime.clone(),
     )));
+    task_handlers.push(Arc::new(
+        extension_runtime::ExtensionOperationTaskHandler::new(
+            task_repository.clone(),
+            extension_runtime.clone(),
+        ),
+    ));
     task_handlers.push(workflow_runtime::task_handler(task_repository.clone()));
     task_handlers.push(rule_runtime::task_handler(task_repository.clone()));
     let blueprint_migration_config =
@@ -267,8 +325,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         task_repository.clone(),
         shutdown_receiver.clone(),
     );
-    let workflow_repository =
-        CatalogRepository::with_workspace_pool_factory(pool.clone(), connect_options.clone());
+    let workflow_repository = CatalogRepository::system(task_pool.clone());
     let dispatcher_handles = event_dispatcher::start(
         workflow_repository.clone(),
         rule_runtime::add_to_registry(workflow_runtime::add_to_registry(
@@ -289,7 +346,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     axum::serve(
         listener,
         router(AppState {
-            repository: CatalogRepository::with_workspace_pool_factory(pool, connect_options),
+            repository: CatalogRepository::system(request_pool.clone()),
             agent_provider,
             registry,
             official_registry,
@@ -350,8 +407,33 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     rule_worker.await?;
     extension_event_delivery_coordinator.await?;
     task_worker.await??;
+    request_pool.close().await;
+    task_pool.close().await;
 
     Ok(())
+}
+
+const MAX_GLOBAL_POOL_CONNECTIONS: u32 = 100;
+
+fn pool_connections(
+    name: &str,
+    default: u32,
+) -> Result<u32, Box<dyn std::error::Error + Send + Sync>> {
+    let value = std::env::var(name).ok();
+    parse_pool_connections(name, value.as_deref(), default).map_err(Into::into)
+}
+
+fn parse_pool_connections(name: &str, value: Option<&str>, default: u32) -> Result<u32, String> {
+    match value {
+        Some(value) => value
+            .parse::<u32>()
+            .ok()
+            .filter(|value| *value > 0 && *value <= MAX_GLOBAL_POOL_CONNECTIONS)
+            .ok_or_else(|| {
+                format!("{name} must be an integer between 1 and {MAX_GLOBAL_POOL_CONNECTIONS}")
+            }),
+        None => Ok(default),
+    }
 }
 
 fn positive_env(
@@ -365,5 +447,22 @@ fn positive_env(
             .filter(|value| *value > 0)
             .ok_or_else(|| format!("{name} must be a positive integer").into()),
         Err(_) => Ok(default),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn pool_connection_configuration_is_positive_and_capped() {
+        assert_eq!(
+            parse_pool_connections("POOL", None, REQUEST_POOL_CONNECTIONS).unwrap(),
+            REQUEST_POOL_CONNECTIONS
+        );
+        assert_eq!(parse_pool_connections("POOL", Some("7"), 1).unwrap(), 7);
+        for invalid in ["0", "-1", "101", "invalid"] {
+            assert!(parse_pool_connections("POOL", Some(invalid), 1).is_err());
+        }
     }
 }

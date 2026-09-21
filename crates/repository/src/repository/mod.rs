@@ -1,23 +1,15 @@
-use std::{
-    collections::{HashMap, HashSet},
-    sync::Arc,
-};
+use std::{collections::HashSet, num::NonZeroI64, str::FromStr};
 
 use catalog_validation::is_valid_code;
 use chrono::{DateTime, NaiveDate, NaiveTime};
 use rust_decimal::Decimal;
 use serde_json::{Map, Value};
-use sqlx::{
-    PgPool, Postgres, Transaction,
-    postgres::{PgConnectOptions, PgPoolOptions},
-};
+use sqlx::{PgPool, Postgres, Transaction};
 use thiserror::Error;
-use tokio::sync::Mutex;
 use uuid::Uuid;
 
 use crate::{
     blueprint_resolver::compile_definition,
-    constants::REQUEST_POOL_CONNECTIONS,
     domain_events::{AffectedFactV1, EventSource, EventSourceKind, NewDomainEvent},
     model::{
         AppendAttributeValues, AttachReusableAttribute, Attribute, AttributeContext,
@@ -48,6 +40,9 @@ mod entity_migration;
 mod entity_projection;
 mod entity_publications;
 mod entity_search;
+mod extension_catalog_data;
+mod extension_operation_artifacts;
+mod extension_operations;
 mod extension_registries;
 mod extension_scoped_configuration;
 mod extension_storage;
@@ -74,6 +69,16 @@ pub use catalog_domain::model::{FileMetadata, FileVariantMetadata};
 pub use domain_events::{EventConsumer, EventDelivery, EventPublisher, FailedEventDelivery};
 pub use entity_search::{
     EntityRelationshipFilter, EntitySearchFilter, EntitySearchSort, decode_search_cursor,
+};
+pub use extension_catalog_data::{
+    ExtensionCatalogBatch, ExtensionCatalogChangePage, ExtensionCatalogIntent,
+    ExtensionCatalogIntentOutcome, ExtensionCatalogIntentStatus, ExtensionCatalogPage,
+    ExtensionCatalogPageRequest, MAX_EXTENSION_BATCH_INTENTS, MAX_EXTENSION_CATALOG_PAGE_SIZE,
+    MAX_EXTENSION_LOOKUP_VALUE_BYTES,
+};
+pub use extension_operation_artifacts::{ExtensionOperationArtifact, MAX_OPERATION_ARTIFACT_BYTES};
+pub use extension_operations::{
+    ClaimedExtensionOperationRun, ExtensionOperationRun, StartExtensionOperation,
 };
 pub use extension_registries::ExtensionRegistrySource;
 pub use extension_scoped_configuration::ExtensionConfigurationScope;
@@ -106,8 +111,11 @@ pub struct UserAccount {
 /// here so HTTP handlers and other callers do not depend on storage internals.
 pub struct CatalogRepository {
     pub(crate) pool: PgPool,
+    // A repository is scoped by explicit SQL predicates, rather than database
+    // connection state. The optional system scope is only for bootstrap,
+    // authentication/session lookup, and task claiming; request and task
+    // handlers must derive a workspace-scoped clone before catalog access.
     workspace_id: Option<Uuid>,
-    workspace_pools: Option<Arc<WorkspacePoolCache>>,
     audit_context: Option<AuditContext>,
     event_context: Option<EventCommandContext>,
     task_fence: Option<TaskFence>,
@@ -173,12 +181,29 @@ pub struct AgentAuditAttribution {
     pub approved_by_user_id: Option<Uuid>,
 }
 
-struct WorkspacePoolCache {
-    connect_options: PgConnectOptions,
-    pools: Mutex<HashMap<Uuid, PgPool>>,
+/// A retention interval that is safe to pass to destructive history cleanup.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct ValueHistoryRetentionDays(NonZeroI64);
+
+impl ValueHistoryRetentionDays {
+    pub const fn get(self) -> i64 {
+        self.0.get()
+    }
 }
 
-const MAX_WORKSPACE_POOLS: usize = 32;
+impl FromStr for ValueHistoryRetentionDays {
+    type Err = &'static str;
+
+    fn from_str(value: &str) -> Result<Self, Self::Err> {
+        value
+            .parse::<i64>()
+            .ok()
+            .and_then(NonZeroI64::new)
+            .filter(|days| days.get() > 0)
+            .map(Self)
+            .ok_or("must be a positive integer")
+    }
+}
 
 #[derive(Debug, Error)]
 pub enum RepositoryError {
@@ -270,6 +295,10 @@ pub enum RepositoryError {
     InvalidHierarchyRelationship,
     #[error("invalid blueprint definition: {0}")]
     InvalidBlueprintDefinition(String),
+    #[error("global relationship search exceeded its {dimension} budget")]
+    RelationshipSearchBudgetExceeded { dimension: &'static str },
+    #[error("global relationship search exceeded its PostgreSQL statement timeout")]
+    RelationshipSearchTimedOut,
     #[error("blueprint code is already owned by another blueprint")]
     BlueprintCodeTaken,
     #[error("workflow code is already in use")]
@@ -333,81 +362,53 @@ impl CatalogRepository {
         self.pool.clone()
     }
 
+    /// Returns the workspace carried by a task/runtime repository.
+    /// Runtime catalog work must never fall back to the bootstrap workspace.
     pub fn workspace_id_for_runtime(&self) -> Uuid {
-        self.workspace_id.unwrap_or(Self::DEFAULT_WORKSPACE_ID)
+        self.workspace_id
+            .expect("runtime catalog work requires an explicit workspace scope")
     }
 
-    pub fn new(pool: PgPool) -> Self {
+    /// Creates a repository that is scoped to a workspace at construction.
+    /// Request handlers and task handlers should use this constructor (or a
+    /// scope derived with [`Self::for_workspace`]).
+    pub fn new(pool: PgPool, workspace_id: Uuid) -> Self {
         Self {
-            pool,
-            workspace_id: None,
-            workspace_pools: None,
-            audit_context: None,
-            event_context: None,
-            task_fence: None,
-            extension_id: None,
-        }
-    }
-
-    pub fn with_workspace_pool_factory(pool: PgPool, connect_options: PgConnectOptions) -> Self {
-        Self {
-            pool,
-            workspace_id: None,
-            audit_context: None,
-            event_context: None,
-            task_fence: None,
-            extension_id: None,
-            workspace_pools: Some(Arc::new(WorkspacePoolCache {
-                connect_options,
-                pools: Mutex::new(HashMap::new()),
-            })),
-        }
-    }
-
-    /// Returns a repository whose pool is permanently restricted to one
-    /// server-derived workspace by the connection's RLS setting.
-    pub async fn for_workspace(&self, workspace_id: Uuid) -> Result<Self, RepositoryError> {
-        let Some(cache) = &self.workspace_pools else {
-            self.ensure_default_context(workspace_id).await?;
-            return Ok(Self {
-                pool: self.pool.clone(),
-                workspace_id: Some(workspace_id),
-                workspace_pools: None,
-                audit_context: self.audit_context.clone(),
-                event_context: self.event_context.clone(),
-                task_fence: self.task_fence.clone(),
-                extension_id: self.extension_id.clone(),
-            });
-        };
-        let mut pools = cache.pools.lock().await;
-        if let Some(pool) = pools.get(&workspace_id) {
-            return Ok(Self {
-                pool: pool.clone(),
-                workspace_id: Some(workspace_id),
-                workspace_pools: self.workspace_pools.clone(),
-                audit_context: self.audit_context.clone(),
-                event_context: self.event_context.clone(),
-                task_fence: self.task_fence.clone(),
-                extension_id: self.extension_id.clone(),
-            });
-        }
-        self.ensure_default_context(workspace_id).await?;
-        if pools.len() >= MAX_WORKSPACE_POOLS
-            && let Some(workspace_id) = pools.keys().next().copied()
-            && let Some(pool) = pools.remove(&workspace_id)
-        {
-            pool.close().await;
-        }
-        let pool = PgPoolOptions::new()
-            .max_connections(REQUEST_POOL_CONNECTIONS)
-            .after_connect(move |_connection, _| Box::pin(async move { Ok(()) }))
-            .connect_with(cache.connect_options.clone())
-            .await?;
-        pools.insert(workspace_id, pool.clone());
-        Ok(Self {
             pool,
             workspace_id: Some(workspace_id),
-            workspace_pools: self.workspace_pools.clone(),
+            audit_context: None,
+            event_context: None,
+            task_fence: None,
+            extension_id: None,
+        }
+    }
+
+    /// Creates the deliberately unscoped session/maintenance repository.
+    ///
+    /// This is reserved for bootstrap, authentication/session lookup, and task
+    /// queue claiming. It must not be placed in a request extension or passed
+    /// to a task handler that accesses workspace-owned data.
+    pub fn system(pool: PgPool) -> Self {
+        Self {
+            pool,
+            workspace_id: None,
+            audit_context: None,
+            event_context: None,
+            task_fence: None,
+            extension_id: None,
+        }
+    }
+
+    /// Derives a catalog repository that is explicitly scoped to `workspace_id`.
+    ///
+    /// All scopes share this repository's already-bounded pool. Workspace
+    /// isolation is implemented by the repository's SQL predicates, not by
+    /// mutable per-connection state or a per-workspace connection pool.
+    pub async fn for_workspace(&self, workspace_id: Uuid) -> Result<Self, RepositoryError> {
+        self.ensure_default_context(workspace_id).await?;
+        Ok(Self {
+            pool: self.pool.clone(),
+            workspace_id: Some(workspace_id),
             audit_context: self.audit_context.clone(),
             event_context: self.event_context.clone(),
             task_fence: self.task_fence.clone(),
@@ -517,6 +518,17 @@ impl CatalogRepository {
 
     /// Attaches a blueprint migration task lease to batch and per-entity
     /// checkpoints. A reclaimed task cannot advance an old batch execution.
+    /// Fences extension operation checkpoints with the shared envelope token.
+    pub fn for_extension_operation_task(&self, task: &ClaimedTask) -> Self {
+        let mut repository = self.clone();
+        repository.task_fence = Some(TaskFence {
+            task_id: task.id,
+            lease_owner: task.lease_owner.clone(),
+            lease_token: task.lease_token,
+        });
+        repository
+    }
+
     pub fn for_blueprint_migration_task(&self, task: &ClaimedTask) -> Self {
         let mut repository = self.clone();
         repository.task_fence = Some(TaskFence {
@@ -662,14 +674,18 @@ impl CatalogRepository {
         Ok(())
     }
 
-    pub async fn purge_value_history(&self, retention_days: i64) -> Result<(), RepositoryError> {
-        sqlx::query(
+    /// Removes only history older than a validated positive retention interval.
+    pub async fn purge_value_history(
+        &self,
+        retention_days: ValueHistoryRetentionDays,
+    ) -> Result<u64, RepositoryError> {
+        Ok(sqlx::query(
             "DELETE FROM attribute_value_history WHERE archived_at < now() - ($1 * interval '1 day')",
         )
-        .bind(retention_days)
+        .bind(retention_days.get())
         .execute(&self.pool)
-        .await?;
-        Ok(())
+        .await?
+        .rows_affected())
     }
 
     pub fn with_audit_context(mut self, audit_context: AuditContext) -> Self {
@@ -1052,6 +1068,17 @@ mod tests {
     use super::*;
 
     #[test]
+    fn value_history_retention_days_rejects_unsafe_values() {
+        assert_eq!("1".parse::<ValueHistoryRetentionDays>().unwrap().get(), 1);
+        for value in ["0", "-1", "not-a-number", "9223372036854775808"] {
+            assert_eq!(
+                value.parse::<ValueHistoryRetentionDays>().unwrap_err(),
+                "must be a positive integer"
+            );
+        }
+    }
+
+    #[test]
     fn reusable_attribute_selectors_require_a_qualified_code() {
         assert!(validate_attribute_selector_code("weight").is_ok());
         assert!(validate_attribute_selector_code("acme:weight").is_ok());
@@ -1061,7 +1088,7 @@ mod tests {
 
     #[tokio::test]
     async fn handler_commands_preserve_event_lineage() {
-        let repository = CatalogRepository::new(
+        let repository = CatalogRepository::system(
             PgPoolOptions::new()
                 .connect_lazy("postgres://postgres:postgres@localhost/catalog")
                 .unwrap(),

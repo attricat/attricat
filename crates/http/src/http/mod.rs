@@ -297,7 +297,12 @@ pub fn router(state: AppState) -> Router {
             "/agent/tool-calls/{tool_call_id}/reject",
             post(agents::reject),
         )
-        .route("/health", get(data_health::health))
+        // `/health` remains the compatibility liveness probe. Readiness is
+        // separate so load balancers withdraw an unhealthy dependency graph
+        // without restarting an otherwise live process.
+        .route("/health", get(data_health::liveness))
+        .route("/health/live", get(data_health::liveness))
+        .route("/health/ready", get(data_health::readiness))
         .route(
             "/extension-registries",
             get(extension_registries::list).post(extension_registries::create),
@@ -326,8 +331,32 @@ pub fn router(state: AppState) -> Router {
         )
         .route("/extensions/runtime", get(extensions::runtime))
         .route(
+            "/extension-operation-runs",
+            get(extensions::list_operation_runs),
+        )
+        .route(
+            "/extension-operation-runs/{run_id}/artifacts/{artifact_id}/download",
+            get(extensions::download_operation_artifact),
+        )
+        .route(
+            "/extension-operation-runs/{id}/cancel",
+            post(extensions::cancel_operation),
+        )
+        .route(
+            "/extension-operation-runs/{id}/replay",
+            post(extensions::replay_operation),
+        )
+        .route(
             "/workspace/extensions-mode",
             put(extensions::set_workspace_mode),
+        )
+        .route(
+            "/workspace/extension-secrets",
+            get(extensions::list_workspace_secrets),
+        )
+        .route(
+            "/workspace/extension-secrets/{name}",
+            put(extensions::put_workspace_secret).delete(extensions::delete_workspace_secret),
         )
         .route(
             "/extensions/{extension_id}",
@@ -357,6 +386,10 @@ pub fn router(state: AppState) -> Router {
         .route(
             "/extensions/{extension_id}/quarantine",
             post(extensions::quarantine),
+        )
+        .route(
+            "/extensions/{extension_id}/operations",
+            post(extensions::start_operation),
         )
         .route(
             "/extensions/{extension_id}/{contribution_id}/command",

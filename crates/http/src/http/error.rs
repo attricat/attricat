@@ -92,6 +92,23 @@ impl ApiError {
             message: "related-value sorting requires results from one blueprint version".to_owned(),
         }
     }
+    pub(super) fn global_relationship_search_budget_exceeded() -> Self {
+        Self {
+            status: StatusCode::UNPROCESSABLE_ENTITY,
+            code: "global_relationship_search_budget_exceeded",
+            message: "global relationship search exceeded its request budget; refine the query"
+                .to_owned(),
+        }
+    }
+    pub(super) fn global_relationship_search_timed_out() -> Self {
+        Self {
+            status: StatusCode::UNPROCESSABLE_ENTITY,
+            code: "global_relationship_search_timed_out",
+            message:
+                "global relationship search exceeded its database time limit; refine the query"
+                    .to_owned(),
+        }
+    }
     pub(super) fn storage_conflict() -> Self {
         Self {
             status: StatusCode::CONFLICT,
@@ -372,6 +389,12 @@ impl From<RepositoryError> for ApiError {
             RepositoryError::BootstrapWorkspaceNotActive
             | RepositoryError::InvalidBootstrapPassword(_) => {
                 Self::internal("bootstrap configuration is invalid")
+            }
+            RepositoryError::RelationshipSearchBudgetExceeded { .. } => {
+                Self::global_relationship_search_budget_exceeded()
+            }
+            RepositoryError::RelationshipSearchTimedOut => {
+                Self::global_relationship_search_timed_out()
             }
             RepositoryError::Task(_) => Self::internal("task queue operation failed"),
             RepositoryError::Database(_) => Self::internal("database operation failed"),

@@ -11,6 +11,8 @@ or inaccessible configured bucket.
 | Setting | Default | Used by | Purpose |
 | --- | --- | --- | --- |
 | `DATABASE_URL` | Required | API and SQLx | PostgreSQL connection string. |
+| `DATABASE_REQUEST_POOL_CONNECTIONS` | `10` | API | Maximum connections in the single global request/session pool shared by all workspaces. Must be an integer from 1 to 100. |
+| `DATABASE_TASK_POOL_CONNECTIONS` | `10` | API | Maximum connections in the single global task/worker pool shared by all workspaces. Must be an integer from 1 to 100. The API logs the request + task + maintenance total at startup. |
 | `BIND_ADDR` | `127.0.0.1:3000` | API | Listener address. |
 | `CATALOG_WORKSPACE_ID` | Bootstrap `default` workspace UUID | API | Workspace initialized with the configured owner during startup; it is not an HTTP tenancy selector. |
 | `CATALOG_BOOTSTRAP_WORKSPACE_NAME` | `Default workspace` | API | Display name recorded while initializing the configured workspace. |
@@ -32,7 +34,7 @@ or inaccessible configured bucket.
 | `DATA_HEALTH_CACHE_TTL_SECONDS` | `300` | API | Data-health response cache lifetime. |
 | `INCOMING_RELATIONSHIP_MAX_PAGE_SIZE` | `50` | API | Maximum page size for incoming-relationship browsing. |
 | `RELATIONSHIP_FACET_MAX_NODES` | `100` | API | Maximum relationship nodes considered while building Explorer facets. |
-| `ATTRIBUTE_VALUE_HISTORY_RETENTION_DAYS` | `90` | API | Number of days of attribute-value history retained during API startup; must be a positive integer. |
+| `ATTRIBUTE_VALUE_HISTORY_RETENTION_DAYS` | `90` | API | Number of days of attribute-value history retained during API startup; must be a positive signed 64-bit integer. Invalid values stop startup before cleanup; a cleanup failure also stops startup rather than being reported as successful maintenance. |
 | `HTTP_REQUEST_TIMEOUT_SECONDS` | `30` | API | Positive wall-clock limit for a request after routing. Timed-out requests return `408`. |
 | `HTTP_MAX_CONCURRENT_REQUESTS` | `256` | API | Positive process-local in-flight request cap. Excess requests return `503` rather than waiting unboundedly. |
 | `HTTP_DEFAULT_BODY_BYTES` | `2097152` | API | Positive default body limit. Streaming upload routes explicitly disable it and enforce their file-specific limits. |
@@ -58,6 +60,7 @@ or inaccessible configured bucket.
 | `WEB_PORT` | `5173` | Vite | Listener port for the development web app. |
 | `SMTP_HOST` | `127.0.0.1` | API local development | Mailpit SMTP host. |
 | `SMTP_PORT` | `1025` | API local development | Mailpit SMTP port; `just setup` sets it to the worktree-specific port. |
+| `SMTP_TLS_MODE` | `starttls` | API | Required SMTP encryption mode: `starttls` or `implicit` in production. `disabled` is only for the trusted local Mailpit relay. Opportunistic TLS is rejected. |
 | `SMTP_USERNAME` | Unset | API | Optional SMTP username. |
 | `SMTP_PASSWORD` | Unset | API | Optional SMTP password; keep it in a secret manager outside local development. |
 | `MAIL_FROM` | `Catalog <no-reply@catalog.local>` | API local development | Sender address for lifecycle email. |
@@ -193,7 +196,9 @@ recorded as skipped rather than executed concurrently.
 Mailpit is a local-development and E2E adapter only; it is not production mail
 configuration. Source `.catalog-worktree` after `just dev`, open
 `$MAILPIT_UI_URL` for manual inspection, and use its REST API
-for E2E mailbox retrieval. Production mail delivery is deliberately deferred.
+for E2E mailbox retrieval. Production SMTP requires `SMTP_TLS_MODE=starttls`
+or `implicit`; `disabled` is restricted to a trusted local relay. See
+[Production operations](operations.md) for rollout, rotation, and recovery.
 
 A failed durable job can be returned to the queue by an operator with
 `cargo run -p api --bin file-worker -- --retry <job-uuid>`. The command resets

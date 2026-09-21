@@ -1,5 +1,6 @@
 mod support;
 
+use reqwest::header::{HeaderMap, HeaderValue};
 use support::*;
 
 #[sqlx::test]
@@ -167,6 +168,194 @@ target_blueprint = "category"
         .unwrap();
     assert_eq!(second["items"].as_array().unwrap().len(), 1);
     assert!(second["next_cursor"].is_null());
+
+    server.abort();
+}
+
+#[sqlx::test]
+async fn related_entity_previews_are_workspace_scoped_across_pages_and_deletions(pool: PgPool) {
+    let (base_url, server) = start_server(pool.clone()).await;
+    let client = authenticated_client();
+    let other_workspace_id = Uuid::new_v4();
+    let membership_id = Uuid::new_v4();
+    sqlx::query(
+        "INSERT INTO workspaces (id, slug, name, login_identifier) VALUES ($1, 'related-preview-other', 'Related preview other', 'related-preview-other.test')",
+    )
+    .bind(other_workspace_id)
+    .execute(&pool)
+    .await
+    .unwrap();
+    sqlx::query(
+        "INSERT INTO workspace_memberships (id, workspace_id, user_id) VALUES ($1, $2, $3)",
+    )
+    .bind(membership_id)
+    .bind(other_workspace_id)
+    .bind(BOOTSTRAP_OWNER_ID.parse::<Uuid>().unwrap())
+    .execute(&pool)
+    .await
+    .unwrap();
+    sqlx::query("INSERT INTO role_grants (id, workspace_id, membership_id, role_id, scope_type, scope_target_id) VALUES ($1, $2, $3, '00000000-0000-4000-8000-000000000101', 'workspace', $2)")
+        .bind(Uuid::new_v4())
+        .bind(other_workspace_id)
+        .bind(membership_id)
+        .execute(&pool)
+        .await
+        .unwrap();
+    let mut other_headers = HeaderMap::new();
+    other_headers.insert(
+        "x-catalog-user-id",
+        HeaderValue::from_static(BOOTSTRAP_OWNER_ID),
+    );
+    other_headers.insert(
+        "x-catalog-workspace-id",
+        HeaderValue::from_str(&other_workspace_id.to_string()).unwrap(),
+    );
+    let other_client = Client::builder()
+        .default_headers(other_headers)
+        .build()
+        .unwrap();
+
+    let category_definition = r#"
+format_version = 1
+code = "previewcategory"
+name = "Preview category"
+kind = "entity"
+
+[views.dropdown_option]
+type = "dropdown_option"
+fields = ["name"]
+
+[[attributes]]
+code = "name"
+value_type = "string"
+"#;
+    let product_definition = r#"
+format_version = 1
+code = "previewproduct"
+name = "Preview product"
+kind = "entity"
+
+[views.dropdown_option]
+type = "dropdown_option"
+fields = ["name"]
+
+[[attributes]]
+code = "name"
+value_type = "string"
+
+[[attributes]]
+code = "categories"
+value_type = "relationship"
+target_blueprint = "previewcategory"
+"#;
+    let category = create_blueprint(&client, &base_url, category_definition).await;
+    let product = create_blueprint(&client, &base_url, product_definition).await;
+    let first = create_entity(&client, &base_url, &category).await;
+    let deleted = create_entity(&client, &base_url, &category).await;
+    let last = create_entity(&client, &base_url, &category).await;
+    let source = create_entity(&client, &base_url, &product).await;
+    let source_id = source["id"].as_str().unwrap();
+    client
+        .post(format!(
+            "{base_url}/entities/{source_id}/relationships/replace"
+        ))
+        .json(&json!({ "relationships": [{
+            "attribute_code": "categories",
+            "target_entity_ids": [first["id"], deleted["id"], last["id"]]
+        }] }))
+        .send()
+        .await
+        .unwrap()
+        .error_for_status()
+        .unwrap();
+    client
+        .delete(format!(
+            "{base_url}/entities/{}",
+            deleted["id"].as_str().unwrap()
+        ))
+        .send()
+        .await
+        .unwrap()
+        .error_for_status()
+        .unwrap();
+
+    let other_category = create_blueprint(&other_client, &base_url, category_definition).await;
+    let other_product = create_blueprint(&other_client, &base_url, product_definition).await;
+    let other_target = create_entity(&other_client, &base_url, &other_category).await;
+    let other_source = create_entity(&other_client, &base_url, &other_product).await;
+    let other_source_id = other_source["id"].as_str().unwrap();
+    other_client
+        .post(format!(
+            "{base_url}/entities/{other_source_id}/relationships/replace"
+        ))
+        .json(&json!({ "relationships": [{
+            "attribute_code": "categories",
+            "target_entity_ids": [other_target["id"]]
+        }] }))
+        .send()
+        .await
+        .unwrap()
+        .error_for_status()
+        .unwrap();
+
+    let first_page: Value = client
+        .get(format!("{base_url}/entities?blueprint=previewcategory&related_from={source_id}&relationship=categories&limit=1"))
+        .send()
+        .await
+        .unwrap()
+        .error_for_status()
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    assert_eq!(first_page["items"].as_array().unwrap().len(), 1);
+    assert_ne!(first_page["items"][0]["id"], deleted["id"]);
+    let cursor = first_page["next_cursor"].as_str().unwrap();
+    let second_page: Value = client
+        .get(format!("{base_url}/entities?blueprint=previewcategory&related_from={source_id}&relationship=categories&limit=1&cursor={cursor}"))
+        .send()
+        .await
+        .unwrap()
+        .error_for_status()
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    assert_eq!(second_page["items"].as_array().unwrap().len(), 1);
+    assert_ne!(second_page["items"][0]["id"], deleted["id"]);
+    assert!(second_page["next_cursor"].is_null());
+
+    let foreign_source: Value = client
+        .get(format!("{base_url}/entities?blueprint=previewcategory&related_from={other_source_id}&relationship=categories"))
+        .send()
+        .await
+        .unwrap()
+        .error_for_status()
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    assert!(foreign_source["items"].as_array().unwrap().is_empty());
+    assert!(foreign_source["next_cursor"].is_null());
+    assert_eq!(
+        client
+            .post(format!(
+                "{base_url}/v1/entities/{}/incoming-relationships",
+                other_target["id"].as_str().unwrap()
+            ))
+            .json(&json!({
+                "relationships": [{
+                    "source_blueprint": "previewproduct",
+                    "field": "categories"
+                }],
+                "page": { "size": 1, "cursor": null }
+            }))
+            .send()
+            .await
+            .unwrap()
+            .status(),
+        StatusCode::NOT_FOUND
+    );
 
     server.abort();
 }

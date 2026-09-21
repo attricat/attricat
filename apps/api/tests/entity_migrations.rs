@@ -25,7 +25,7 @@ value_type = "string"
 
 #[sqlx::test]
 async fn compatible_scalar_migration_preserves_row_identity_without_history(pool: PgPool) {
-    let repository = CatalogRepository::new(pool.clone());
+    let repository = CatalogRepository::system(pool.clone());
     let source = repository
         .create_blueprint(CreateBlueprint {
             definition: SCALAR_DEFINITION.to_owned(),
@@ -135,7 +135,7 @@ async fn compatible_scalar_migration_preserves_row_identity_without_history(pool
 
 #[sqlx::test]
 async fn supplied_scalar_replacement_archives_the_old_row_once(pool: PgPool) {
-    let repository = CatalogRepository::new(pool.clone());
+    let repository = CatalogRepository::system(pool.clone());
     let source = repository
         .create_blueprint(CreateBlueprint {
             definition: SCALAR_DEFINITION.replace(
@@ -234,7 +234,7 @@ async fn supplied_scalar_replacement_archives_the_old_row_once(pool: PgPool) {
 
 #[sqlx::test]
 async fn compatible_relationship_migration_preserves_row_identity(pool: PgPool) {
-    let repository = CatalogRepository::new(pool.clone());
+    let repository = CatalogRepository::system(pool.clone());
     let target_definition = r#"
 format_version = 1
 code = "migration_identity_target"
@@ -384,7 +384,7 @@ cardinality = "one"
 
 #[sqlx::test]
 async fn explicitly_discarded_removed_value_is_the_only_row_archived(pool: PgPool) {
-    let repository = CatalogRepository::new(pool.clone());
+    let repository = CatalogRepository::system(pool.clone());
     let source_definition = format!(
         r#"{SCALAR_DEFINITION}
 [[attributes]]
@@ -501,7 +501,7 @@ value_type = "string"
 
 #[sqlx::test]
 async fn ui_shaped_unchanged_payload_preserves_scalar_and_relationship_rows(pool: PgPool) {
-    let repository = CatalogRepository::new(pool.clone());
+    let repository = CatalogRepository::system(pool.clone());
     let target_blueprint = repository
         .create_blueprint(CreateBlueprint {
             definition: r#"format_version = 1
@@ -664,7 +664,7 @@ cardinality = "one"
 
 #[sqlx::test]
 async fn migration_rejects_non_default_value_when_target_becomes_default_only(pool: PgPool) {
-    let repository = CatalogRepository::new(pool.clone());
+    let repository = CatalogRepository::system(pool.clone());
     let context_id = uuid::Uuid::new_v4();
     sqlx::query(
         "INSERT INTO attribute_contexts (id, code, data, parent_id) VALUES ($1, 'migration-custom', '{}'::jsonb, NULL)",

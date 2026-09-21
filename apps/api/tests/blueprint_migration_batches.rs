@@ -86,7 +86,7 @@ async fn batch_with_two_old_entities(
 
 #[sqlx::test]
 async fn safe_batch_task_is_transactional_and_migrates_each_entity_once(pool: PgPool) {
-    let repository = CatalogRepository::new(pool.clone());
+    let repository = CatalogRepository::system(pool.clone());
     let (batch_id, version_one_entity, version_two_entity) =
         batch_with_two_old_entities(&repository, &pool).await;
     sqlx::query("UPDATE entities SET created_at = '2026-01-01 00:00:00+00' WHERE id IN ($1, $2)")
@@ -154,7 +154,7 @@ async fn safe_batch_task_is_transactional_and_migrates_each_entity_once(pool: Pg
 
 #[sqlx::test]
 async fn safe_batch_processes_multiple_scalar_candidates_in_one_concurrent_page(pool: PgPool) {
-    let repository = CatalogRepository::new(pool.clone());
+    let repository = CatalogRepository::system(pool.clone());
     let (batch_id, version_one_entity, version_two_entity) =
         batch_with_two_old_entities(&repository, &pool).await;
     let task = repository
@@ -196,7 +196,7 @@ async fn safe_batch_processes_multiple_scalar_candidates_in_one_concurrent_page(
 
 #[sqlx::test]
 async fn batch_restart_from_newest_edge_finds_entity_inserted_between_pages(pool: PgPool) {
-    let repository = CatalogRepository::new(pool.clone());
+    let repository = CatalogRepository::system(pool.clone());
     let (batch_id, _, _) = batch_with_two_old_entities(&repository, &pool).await;
     let newest_entity: uuid::Uuid = sqlx::query_scalar(
         "SELECT id FROM entities WHERE blueprint_version < 3 ORDER BY created_at DESC, id DESC LIMIT 1",
@@ -291,7 +291,7 @@ async fn batch_restart_from_newest_edge_finds_entity_inserted_between_pages(pool
 
 #[sqlx::test]
 async fn expired_batch_task_cannot_checkpoint_and_reclaim_reuses_migration_rows(pool: PgPool) {
-    let repository = CatalogRepository::new(pool.clone());
+    let repository = CatalogRepository::system(pool.clone());
     let (batch_id, _, _) = batch_with_two_old_entities(&repository, &pool).await;
     let first = repository
         .claim_task("worker-a", std::time::Duration::from_secs(30))

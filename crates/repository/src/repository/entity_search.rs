@@ -140,20 +140,26 @@ impl CatalogRepository {
                       b.views AS blueprint_views,
                       (SELECT COALESCE(jsonb_object_agg(attribute.code, attribute.context_fallback), '{}'::jsonb)
                          FROM attributes attribute
-                        WHERE attribute.blueprint_id = target.blueprint_id
+                        WHERE attribute.workspace_id = $6
+                          AND attribute.blueprint_id = target.blueprint_id
                           AND attribute.blueprint_version = target.blueprint_version
                           AND attribute.deleted_at IS NULL) AS blueprint_context_fallback
                FROM attribute_values av
-               JOIN attributes a ON a.id = av.attribute_id AND a.deleted_at IS NULL
+               JOIN entities source ON source.id = av.entity_id
+                AND source.workspace_id = $6 AND source.deleted_at IS NULL
+               JOIN attributes a ON a.id = av.attribute_id
+                AND a.workspace_id = $6 AND a.deleted_at IS NULL
                JOIN entities target ON target.id = av.relationship_target_entity_id
                JOIN blueprints b ON b.id = target.blueprint_id AND b.version = target.blueprint_version
                WHERE av.entity_id = $1
+                 AND av.workspace_id = $6
+                 AND a.workspace_id = $6
                  AND a.code = $2
                  AND av.relationship_target_entity_id IS NOT NULL
                   AND av.active
                  AND ($3::uuid IS NULL OR av.relationship_target_entity_id > $3)
-                 AND target.deleted_at IS NULL
-                 AND b.code = $4
+                 AND target.workspace_id = $6 AND target.deleted_at IS NULL
+                 AND b.workspace_id = $6 AND b.code = $4
                ORDER BY target.id
                LIMIT $5"#,
         )
@@ -162,6 +168,7 @@ impl CatalogRepository {
         .bind(cursor)
         .bind(blueprint_code)
         .bind(limit + 1)
+        .bind(self.workspace_id.unwrap_or(Self::DEFAULT_WORKSPACE_ID))
         .fetch_all(&self.pool)
         .await?;
         let mut items: Vec<_> = rows.into_iter().map(entity_preview).collect();
@@ -197,20 +204,24 @@ impl CatalogRepository {
                       b.views AS blueprint_views,
                       (SELECT COALESCE(jsonb_object_agg(attribute.code, attribute.context_fallback), '{}'::jsonb)
                          FROM attributes attribute
-                        WHERE attribute.blueprint_id = source.blueprint_id
+                        WHERE attribute.workspace_id = $6
+                          AND attribute.blueprint_id = source.blueprint_id
                           AND attribute.blueprint_version = source.blueprint_version
                           AND attribute.deleted_at IS NULL) AS blueprint_context_fallback
                FROM entities source
                JOIN blueprints b ON b.id = source.blueprint_id AND b.version = source.blueprint_version
-               WHERE source.deleted_at IS NULL
+               WHERE source.workspace_id = $6 AND source.deleted_at IS NULL
+                 AND b.workspace_id = $6
                  AND EXISTS (
                      SELECT 1
                      FROM attribute_values av
-                     JOIN attributes a ON a.id = av.attribute_id AND a.deleted_at IS NULL
+                     JOIN attributes a ON a.id = av.attribute_id
+                      AND a.workspace_id = $6 AND a.deleted_at IS NULL
                      JOIN LATERAL jsonb_to_recordset($2::jsonb)
                          AS selector(source_blueprint text, field text)
                          ON selector.source_blueprint = b.code AND selector.field = a.code
                      WHERE av.entity_id = source.id
+                       AND av.workspace_id = $6
                        AND av.relationship_target_entity_id = $1
                        AND av.active
                        AND a.value_type = 'relationship'
@@ -224,6 +235,7 @@ impl CatalogRepository {
         .bind(cursor_created_at)
         .bind(cursor_id)
         .bind(limit + 1)
+        .bind(self.workspace_id.unwrap_or(Self::DEFAULT_WORKSPACE_ID))
         .fetch_all(&self.pool)
         .await?;
         let mut items: Vec<_> = rows.into_iter().map(incoming_relationship_item).collect();
@@ -1656,12 +1668,30 @@ impl CatalogRepository {
         };
         let terms = parse_search_terms(query)?;
         let mut per_term = Vec::with_capacity(terms.len());
+        // Global `*:` terms share one request budget. Explicit and bare selectors
+        // retain their established, independently-resolved semantics.
+        let mut global_budget = GlobalSearchBudget::default();
         for term in terms {
             let plan = self.compile_search_term(selected, &term).await?;
-            per_term.push(
-                self.resolve_search_term(selected, selected_version, term, plan)
-                    .await?,
-            );
+            let global = matches!(plan, TermPlan::Reachable);
+            let result = self
+                .resolve_search_term(selected, selected_version, term, plan, &mut global_budget)
+                .await;
+            if global {
+                match &result {
+                    Ok(_) => metrics::counter!("catalog_global_relationship_search_total", "outcome" => "success").increment(1),
+                    Err(RepositoryError::RelationshipSearchBudgetExceeded { dimension }) => {
+                        metrics::counter!("catalog_global_relationship_search_total", "outcome" => "budget_exceeded", "dimension" => *dimension).increment(1);
+                        tracing::warn!(dimension, "global relationship search budget exceeded");
+                    }
+                    Err(RepositoryError::RelationshipSearchTimedOut) => {
+                        metrics::counter!("catalog_global_relationship_search_total", "outcome" => "timed_out").increment(1);
+                        tracing::warn!("global relationship search statement timed out");
+                    }
+                    Err(_) => metrics::counter!("catalog_global_relationship_search_total", "outcome" => "failed").increment(1),
+                }
+            }
+            per_term.push(result?);
         }
         let mut candidates: Option<HashSet<Uuid>> = None;
         let mut explanations: HashMap<Uuid, Vec<MatchExplanation>> = HashMap::new();
@@ -1832,12 +1862,19 @@ impl CatalogRepository {
         selected_version: Option<i64>,
         term: SearchTerm,
         plan: TermPlan,
+        global_budget: &mut GlobalSearchBudget,
     ) -> Result<HashMap<Uuid, MatchExplanation>, RepositoryError> {
+        if matches!(plan, TermPlan::Reachable) {
+            return self
+                .resolve_global_search_term(selected, selected_version, term, global_budget)
+                .await;
+        }
         let (match_blueprint, attribute, direct_field) = match &plan {
             // Bare terms only search scalar values on the selected blueprint.
             TermPlan::Any => (Some(selected.blueprint.id), None, None),
-            // `*:` explicitly opts into global relationship-aware discovery.
-            TermPlan::Reachable => (None, None, None),
+            TermPlan::Reachable => {
+                unreachable!("global terms are resolved in a bounded transaction")
+            }
             TermPlan::SelectedAttribute(attribute) => (
                 Some(selected.blueprint.id),
                 attribute.clone(),
@@ -1927,7 +1964,6 @@ impl CatalogRepository {
         };
         let max_depth = match path_fields {
             Some(fields) => fields.len(),
-            None if matches!(&plan, TermPlan::Reachable) => 3,
             None => 0,
         };
         for depth in 1..=max_depth {
@@ -2003,6 +2039,229 @@ impl CatalogRepository {
             .filter_map(|id| ids.get(&id).cloned().map(|w| (id, w)))
             .collect())
     }
+
+    /// Global traversal is deliberately isolated from qualified selector search:
+    /// it has a request-shared cardinality budget and runs every read under a
+    /// short transaction-local PostgreSQL timeout. A rejected traversal returns
+    /// before any result page or facet is computed.
+    async fn resolve_global_search_term(
+        &self,
+        selected: &BlueprintWithAttributes,
+        selected_version: Option<i64>,
+        term: SearchTerm,
+        budget: &mut GlobalSearchBudget,
+    ) -> Result<HashMap<Uuid, MatchExplanation>, RepositoryError> {
+        let mut transaction = self.pool.begin().await?;
+        sqlx::query("SET LOCAL statement_timeout = '250ms'")
+            .execute(&mut *transaction)
+            .await
+            .map_err(global_search_error)?;
+        let pattern = if term.prefix {
+            format!("{}%", term.value)
+        } else {
+            format!("%{}%", term.value)
+        };
+        let sql = if text_only_search(&term.value) {
+            r#"WITH matching_values AS MATERIALIZED (
+                    SELECT entity_id, attribute_id FROM attribute_values
+                    WHERE workspace_id = $2 AND active AND relationship_target_entity_id IS NULL
+                      AND value_text ILIKE $1
+                )
+                SELECT DISTINCT e.id, a.code FROM matching_values av
+                JOIN attributes a ON a.id = av.attribute_id AND a.deleted_at IS NULL
+                JOIN entities e ON e.id = av.entity_id
+                WHERE e.deleted_at IS NULL AND e.workspace_id = $2 AND a.workspace_id = $2
+                ORDER BY e.id, a.code LIMIT $3"#
+        } else {
+            r#"SELECT DISTINCT e.id, a.code FROM entities e
+                JOIN attribute_values av ON av.entity_id = e.id
+                JOIN attributes a ON a.id = av.attribute_id AND a.deleted_at IS NULL
+                WHERE e.deleted_at IS NULL AND e.workspace_id = $2 AND av.workspace_id = $2
+                  AND a.workspace_id = $2 AND av.active AND av.relationship_target_entity_id IS NULL
+                  AND COALESCE(av.value_text, av.value_number::text, av.value_integer::text,
+                      av.value_boolean::text, av.value_date::text, av.value_datetime::text,
+                      av.value_time::text) ILIKE $1
+                ORDER BY e.id, a.code LIMIT $3"#
+        };
+        let rows = sqlx::query_as::<_, (Uuid, String)>(sql)
+            .bind(pattern)
+            .bind(self.workspace_id.unwrap_or(Self::DEFAULT_WORKSPACE_ID))
+            .bind(budget.remaining_matches_plus_one()? as i64)
+            .fetch_all(&mut *transaction)
+            .await
+            .map_err(global_search_error)?;
+        budget.consume_matches(rows.len())?;
+
+        let mut witnesses = HashMap::new();
+        let mut frontier = VecDeque::new();
+        for (id, attribute) in rows {
+            if let std::collections::hash_map::Entry::Vacant(entry) = witnesses.entry(id) {
+                budget.consume_entities(1)?;
+                entry.insert(MatchExplanation {
+                    term: term.original.clone(),
+                    matching_entity_id: id,
+                    matching_attribute_code: Some(attribute),
+                    traversal_depth: 0,
+                    relationship_path: vec![],
+                });
+                frontier.push_back(id);
+            }
+        }
+
+        // Each level is read as one ordered batch. Ordering makes the first
+        // discovered witness stable even when several incoming paths converge.
+        for depth in 1..=3 {
+            let level: Vec<_> = frontier.drain(..).collect();
+            if level.is_empty() {
+                break;
+            }
+            budget.consume_frontier(level.len())?;
+            let edges = sqlx::query_as::<_, (Uuid, String, Uuid)>(
+                r#"SELECT DISTINCT source.id, a.code, av.relationship_target_entity_id
+                FROM entities source JOIN attribute_values av ON av.entity_id = source.id
+                JOIN attributes a ON a.id = av.attribute_id AND a.deleted_at IS NULL
+                JOIN entities target ON target.id = av.relationship_target_entity_id
+                WHERE source.deleted_at IS NULL AND target.deleted_at IS NULL AND av.active
+                  AND source.workspace_id = $2 AND target.workspace_id = $2
+                  AND av.workspace_id = $2 AND a.workspace_id = $2
+                  AND av.relationship_target_entity_id = ANY($1) AND a.value_type = 'relationship'
+                ORDER BY source.id, a.code, av.relationship_target_entity_id LIMIT $3"#,
+            )
+            .bind(&level)
+            .bind(self.workspace_id.unwrap_or(Self::DEFAULT_WORKSPACE_ID))
+            .bind(budget.remaining_edges_plus_one()? as i64)
+            .fetch_all(&mut *transaction)
+            .await
+            .map_err(global_search_error)?;
+            budget.consume_edges(edges.len())?;
+            // Check the next BFS layer before admitting its nodes to the
+            // visited set. Otherwise the equal-sized visited cap can mask an
+            // oversized frontier and make that independent guard unreachable.
+            let next_frontier: HashSet<_> = edges
+                .iter()
+                .filter_map(|(source, _, _)| (!witnesses.contains_key(source)).then_some(*source))
+                .collect();
+            budget.consume_frontier(next_frontier.len())?;
+            for (source, field, target) in edges {
+                if !witnesses.contains_key(&source) {
+                    budget.consume_entities(1)?;
+                    let parent = witnesses
+                        .get(&target)
+                        .expect("edge target belongs to frontier");
+                    let mut path = Vec::with_capacity(parent.relationship_path.len() + 1);
+                    path.push(MatchPathEdge {
+                        source_entity_id: source,
+                        attribute_code: field,
+                        target_entity_id: target,
+                    });
+                    path.extend(parent.relationship_path.clone());
+                    witnesses.insert(
+                        source,
+                        MatchExplanation {
+                            term: term.original.clone(),
+                            matching_entity_id: parent.matching_entity_id,
+                            matching_attribute_code: parent.matching_attribute_code.clone(),
+                            traversal_depth: depth,
+                            relationship_path: path,
+                        },
+                    );
+                    frontier.push_back(source);
+                }
+            }
+        }
+        let ids: Vec<_> = witnesses.keys().copied().collect();
+        let selected_ids = sqlx::query_scalar::<_, Uuid>(
+            "SELECT id FROM entities WHERE blueprint_id = $1 AND ($2::bigint IS NULL OR blueprint_version = $2) AND deleted_at IS NULL AND id = ANY($3) AND workspace_id = $4",
+        )
+        .bind(selected.blueprint.id).bind(selected_version).bind(ids)
+        .bind(self.workspace_id.unwrap_or(Self::DEFAULT_WORKSPACE_ID))
+        .fetch_all(&mut *transaction).await.map_err(global_search_error)?;
+        transaction.commit().await.map_err(global_search_error)?;
+        metrics::histogram!("catalog_global_relationship_search_matches")
+            .record(budget.matches as f64);
+        metrics::histogram!("catalog_global_relationship_search_entities")
+            .record(budget.entities as f64);
+        metrics::histogram!("catalog_global_relationship_search_edges").record(budget.edges as f64);
+        tracing::info!(
+            matches = budget.matches,
+            entities = budget.entities,
+            edges = budget.edges,
+            "global relationship search resolved"
+        );
+        Ok(selected_ids
+            .into_iter()
+            .filter_map(|id| witnesses.remove(&id).map(|w| (id, w)))
+            .collect())
+    }
+}
+
+const MAX_GLOBAL_SEARCH_MATCHES: usize = 1_000;
+const MAX_GLOBAL_SEARCH_ENTITIES: usize = 5_000;
+const MAX_GLOBAL_SEARCH_EDGES: usize = 10_000;
+const MAX_GLOBAL_SEARCH_FRONTIER: usize = 5_000;
+
+#[derive(Default)]
+struct GlobalSearchBudget {
+    matches: usize,
+    entities: usize,
+    edges: usize,
+}
+
+impl GlobalSearchBudget {
+    fn remaining_matches_plus_one(&self) -> Result<usize, RepositoryError> {
+        Self::remaining(MAX_GLOBAL_SEARCH_MATCHES, self.matches, "matching_values")
+    }
+    fn remaining_edges_plus_one(&self) -> Result<usize, RepositoryError> {
+        Self::remaining(MAX_GLOBAL_SEARCH_EDGES, self.edges, "relationship_edges")
+    }
+    fn remaining(
+        limit: usize,
+        used: usize,
+        dimension: &'static str,
+    ) -> Result<usize, RepositoryError> {
+        limit
+            .checked_sub(used)
+            .and_then(|remaining| remaining.checked_add(1))
+            .ok_or(RepositoryError::RelationshipSearchBudgetExceeded { dimension })
+    }
+    fn consume_matches(&mut self, count: usize) -> Result<(), RepositoryError> {
+        self.matches += count;
+        self.check(self.matches, MAX_GLOBAL_SEARCH_MATCHES, "matching_values")
+    }
+    fn consume_frontier(&mut self, count: usize) -> Result<(), RepositoryError> {
+        self.check(count, MAX_GLOBAL_SEARCH_FRONTIER, "frontier")
+    }
+    fn consume_entities(&mut self, count: usize) -> Result<(), RepositoryError> {
+        self.entities += count;
+        self.check(self.entities, MAX_GLOBAL_SEARCH_ENTITIES, "entities")
+    }
+    fn consume_edges(&mut self, count: usize) -> Result<(), RepositoryError> {
+        self.edges += count;
+        self.check(self.edges, MAX_GLOBAL_SEARCH_EDGES, "relationship_edges")
+    }
+    fn check(
+        &self,
+        actual: usize,
+        limit: usize,
+        dimension: &'static str,
+    ) -> Result<(), RepositoryError> {
+        if actual > limit {
+            Err(RepositoryError::RelationshipSearchBudgetExceeded { dimension })
+        } else {
+            Ok(())
+        }
+    }
+}
+
+fn global_search_error(error: sqlx::Error) -> RepositoryError {
+    if error
+        .as_database_error()
+        .is_some_and(|database| database.code().as_deref() == Some("57014"))
+    {
+        RepositoryError::RelationshipSearchTimedOut
+    } else {
+        RepositoryError::Database(error)
+    }
 }
 
 #[derive(Default)]
@@ -2064,6 +2323,41 @@ fn text_only_search(value: &str) -> bool {
     normalized != "true"
         && normalized != "false"
         && value.chars().any(|character| character.is_alphabetic())
+}
+
+#[cfg(test)]
+mod global_search_budget_tests {
+    use super::*;
+
+    #[test]
+    fn bounds_each_global_search_dimension_without_partial_results() {
+        let mut budget = GlobalSearchBudget::default();
+        budget.consume_matches(MAX_GLOBAL_SEARCH_MATCHES).unwrap();
+        assert!(matches!(
+            budget.consume_matches(1),
+            Err(RepositoryError::RelationshipSearchBudgetExceeded {
+                dimension: "matching_values"
+            })
+        ));
+
+        let mut budget = GlobalSearchBudget::default();
+        budget.consume_entities(MAX_GLOBAL_SEARCH_ENTITIES).unwrap();
+        assert!(matches!(
+            budget.consume_entities(1),
+            Err(RepositoryError::RelationshipSearchBudgetExceeded {
+                dimension: "entities"
+            })
+        ));
+
+        let mut budget = GlobalSearchBudget::default();
+        budget.consume_edges(MAX_GLOBAL_SEARCH_EDGES).unwrap();
+        assert!(matches!(
+            budget.consume_edges(1),
+            Err(RepositoryError::RelationshipSearchBudgetExceeded {
+                dimension: "relationship_edges"
+            })
+        ));
+    }
 }
 
 fn relationship_sort_reverse_joins(depth: usize) -> Result<String, RepositoryError> {

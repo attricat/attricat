@@ -238,7 +238,7 @@ async fn outbox_insert_failure_rolls_back_the_catalog_mutation(pool: sqlx::PgPoo
 
 #[sqlx::test(migrations = "./migrations")]
 async fn consumer_starts_at_the_current_workspace_watermark(pool: sqlx::PgPool) {
-    let repository = api::repository::CatalogRepository::new(pool.clone());
+    let repository = api::repository::CatalogRepository::system(pool.clone());
     sqlx::query(
         "INSERT INTO domain_events (id, workspace_id, event_type, aggregate_kind, aggregate_id, correlation_id, source_kind, source_name, payload) VALUES ($1, '00000000-0000-4000-8000-000000000002', 'context.created.v1', 'context', $2, $3, 'api', 'catalog_api', '{}'::jsonb)",
     )
@@ -259,7 +259,7 @@ async fn consumer_starts_at_the_current_workspace_watermark(pool: sqlx::PgPool) 
 async fn delivery_claims_are_exclusive_and_completion_is_durable(pool: sqlx::PgPool) {
     use std::time::Duration;
 
-    let repository = api::repository::CatalogRepository::new(pool.clone());
+    let repository = api::repository::CatalogRepository::system(pool.clone());
     repository
         .ensure_event_consumer("test.dispatcher", &[CONTEXT_CREATED_V1])
         .await
@@ -310,7 +310,7 @@ async fn delivery_claims_are_exclusive_and_completion_is_durable(pool: sqlx::PgP
 async fn expired_leases_redeliver_the_same_event_and_reject_stale_acknowledgements(
     pool: sqlx::PgPool,
 ) {
-    let repository = CatalogRepository::new(pool.clone());
+    let repository = CatalogRepository::system(pool.clone());
     repository
         .ensure_event_consumer("test.lease_expiry", &[CONTEXT_CREATED_V1])
         .await
@@ -367,7 +367,7 @@ async fn expired_leases_redeliver_the_same_event_and_reject_stale_acknowledgemen
 async fn deliveries_can_complete_out_of_order_without_losing_the_deferred_event(
     pool: sqlx::PgPool,
 ) {
-    let repository = CatalogRepository::new(pool.clone());
+    let repository = CatalogRepository::system(pool.clone());
     repository
         .ensure_event_consumer("test.reordering", &[CONTEXT_CREATED_V1])
         .await
@@ -436,7 +436,7 @@ async fn deliveries_can_complete_out_of_order_without_losing_the_deferred_event(
 async fn dispatcher_preserves_causal_lineage_and_suppresses_its_own_follow_on_event(
     pool: sqlx::PgPool,
 ) {
-    let repository = CatalogRepository::new(pool.clone());
+    let repository = CatalogRepository::system(pool.clone());
     repository
         .ensure_event_consumer("test-follow-on-context", &[CONTEXT_CREATED_V1])
         .await
@@ -498,7 +498,7 @@ async fn dispatcher_preserves_causal_lineage_and_suppresses_its_own_follow_on_ev
 async fn failed_deliveries_wait_until_due_then_dead_letter(pool: sqlx::PgPool) {
     use std::time::Duration;
 
-    let repository = api::repository::CatalogRepository::new(pool.clone());
+    let repository = api::repository::CatalogRepository::system(pool.clone());
     repository
         .ensure_event_consumer("test.retry", &[CONTEXT_CREATED_V1])
         .await
@@ -564,7 +564,7 @@ async fn failed_deliveries_wait_until_due_then_dead_letter(pool: sqlx::PgPool) {
 
 #[sqlx::test(migrations = "./migrations")]
 async fn dead_letter_can_be_replayed_without_changing_event(pool: sqlx::PgPool) {
-    let repository = api::repository::CatalogRepository::new(pool.clone());
+    let repository = api::repository::CatalogRepository::system(pool.clone());
     let consumer = repository
         .create_event_consumer("test.replay")
         .await

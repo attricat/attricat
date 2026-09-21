@@ -15,8 +15,28 @@ use std::time::Duration;
 
 const MAX_DATA_HEALTH_CACHE_ENTRIES: usize = 256;
 
-pub(super) async fn health() -> Json<Value> {
-    Json(json!({ "status": "ok" }))
+/// Liveness only establishes that this process can serve HTTP. It never
+/// probes dependencies, so orchestration does not restart a healthy process
+/// during a database or object-store outage.
+pub(super) async fn liveness() -> Json<Value> {
+    Json(json!({ "status": "live" }))
+}
+
+/// Readiness requires every synchronous request dependency. A failed probe is
+/// deliberately a generic 503 response: dependency topology and credentials
+/// are operational details, not public API data.
+pub(super) async fn readiness(State(state): State<AppState>) -> Response {
+    let database = state.repository.readiness().await;
+    let storage = state.object_store.readiness().await;
+    if database.is_ok() && storage.is_ok() {
+        (StatusCode::OK, Json(json!({ "status": "ready" }))).into_response()
+    } else {
+        (
+            StatusCode::SERVICE_UNAVAILABLE,
+            Json(json!({ "status": "not_ready" })),
+        )
+            .into_response()
+    }
 }
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]

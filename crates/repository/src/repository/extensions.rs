@@ -1,4 +1,4 @@
-use std::collections::HashSet;
+use std::collections::{BTreeSet, HashMap, HashSet};
 
 use chrono::{DateTime, Utc};
 use semver::{Version, VersionReq};
@@ -221,6 +221,15 @@ pub struct ExtensionRuntimeInstallation {
     pub host_permission_grants: HashSet<String>,
 }
 
+/// Management projection; secret values intentionally have no serializable
+/// representation outside the repository/runtime call path.
+#[derive(Clone, Debug, FromRow)]
+pub struct WorkspaceExtensionSecret {
+    pub name: String,
+    pub created_at: DateTime<Utc>,
+    pub updated_at: DateTime<Utc>,
+}
+
 /// Client-safe descriptor for an enabled contribution. It deliberately omits
 /// source identity, grants, server components, and secrets.
 #[derive(Clone, Debug)]
@@ -287,6 +296,95 @@ impl CatalogRepository {
     }
 
     /// Lists installations with their immutable release metadata for management UI.
+    pub async fn workspace_extension_secrets(
+        &self,
+    ) -> Result<Vec<WorkspaceExtensionSecret>, RepositoryError> {
+        Ok(sqlx::query_as("SELECT name, created_at, updated_at FROM workspace_extension_secrets WHERE workspace_id = $1 ORDER BY name")
+            .bind(self.extension_workspace()).fetch_all(&self.pool).await?)
+    }
+
+    /// Creates or rotates a workspace-owned secret. Its value is deliberately
+    /// never copied into an extension's manifest, configuration, task snapshot,
+    /// lifecycle record, or audit metadata.
+    pub async fn put_workspace_extension_secret(
+        &self,
+        name: &str,
+        value: &str,
+    ) -> Result<(), RepositoryError> {
+        if !valid_contribution_key(&format!("x:{name}")) || value.is_empty() || value.len() > 65_536
+        {
+            return Err(RepositoryError::InvalidExtension(
+                "invalid workspace extension secret".into(),
+            ));
+        }
+        let mut transaction = self.pool.begin().await?;
+        sqlx::query("INSERT INTO workspace_extension_secrets (id, workspace_id, name, value) VALUES ($1, $2, $3, $4) ON CONFLICT (workspace_id, name) DO UPDATE SET value = EXCLUDED.value, updated_at = clock_timestamp()")
+            .bind(Uuid::new_v4()).bind(self.extension_workspace()).bind(name).bind(value).execute(&mut *transaction).await?;
+        let mut audit_repository = self.clone();
+        audit_repository.audit_context = Some(AuditContext {
+            actor_user_id: None,
+            actor_token_id: None,
+            request_id: Uuid::new_v4(),
+            correlation_id: Uuid::new_v4(),
+            action: "workspace.extension_secret.put".into(),
+            authorization_scope: json!({"type":"workspace"}),
+            target: json!({"type":"workspace_secret","name":name}),
+            metadata: json!({"name":name}),
+            agent: None,
+        });
+        audit_repository.write_audit_event(&mut transaction).await?;
+        transaction.commit().await?;
+        Ok(())
+    }
+
+    pub async fn delete_workspace_extension_secret(
+        &self,
+        name: &str,
+    ) -> Result<bool, RepositoryError> {
+        let mut transaction = self.pool.begin().await?;
+        let deleted = sqlx::query(
+            "DELETE FROM workspace_extension_secrets WHERE workspace_id = $1 AND name = $2",
+        )
+        .bind(self.extension_workspace())
+        .bind(name)
+        .execute(&mut *transaction)
+        .await?
+        .rows_affected()
+            > 0;
+        if deleted {
+            let mut audit_repository = self.clone();
+            audit_repository.audit_context = Some(AuditContext {
+                actor_user_id: None,
+                actor_token_id: None,
+                request_id: Uuid::new_v4(),
+                correlation_id: Uuid::new_v4(),
+                action: "workspace.extension_secret.delete".into(),
+                authorization_scope: json!({"type":"workspace"}),
+                target: json!({"type":"workspace_secret","name":name}),
+                metadata: json!({"name":name}),
+                agent: None,
+            });
+            audit_repository.write_audit_event(&mut transaction).await?;
+        }
+        transaction.commit().await?;
+        Ok(deleted)
+    }
+
+    /// Internal-only value retrieval for a currently authorized invocation.
+    /// Do not expose this through a management response.
+    pub async fn workspace_extension_secret_value(
+        &self,
+        name: &str,
+    ) -> Result<Option<String>, RepositoryError> {
+        Ok(sqlx::query_scalar(
+            "SELECT value FROM workspace_extension_secrets WHERE workspace_id = $1 AND name = $2",
+        )
+        .bind(self.extension_workspace())
+        .bind(name)
+        .fetch_optional(&self.pool)
+        .await?)
+    }
+
     pub async fn installed_extensions(&self) -> Result<Vec<InstalledExtension>, RepositoryError> {
         Ok(sqlx::query_as("SELECT i.id, i.extension_id, i.installed_release_id, i.state, i.configuration, i.configuration_version, i.created_at, i.updated_at, r.version, r.manifest, r.manifest_sha256, r.source FROM extension_installations i JOIN installed_extension_releases r ON r.id = i.installed_release_id WHERE i.workspace_id = $1 ORDER BY i.extension_id")
             .bind(self.extension_workspace()).fetch_all(&self.pool).await?)
@@ -652,6 +750,67 @@ impl CatalogRepository {
             }
         }
         Ok(enabled)
+    }
+
+    /// Returns exact event versions that an enabled, authorized server handler
+    /// can receive. Plugin types are derived from the consumer's declared
+    /// contracts and the currently enabled provider release, rather than a
+    /// static core-event catalogue.
+    pub async fn enabled_extension_event_types(&self) -> Result<Vec<String>, RepositoryError> {
+        let rows: Vec<(String, Uuid)> = sqlx::query_as(
+            "SELECT i.extension_id, i.installed_release_id FROM extension_installations i JOIN workspaces w ON w.id = i.workspace_id WHERE i.workspace_id = $1 AND i.state = 'enabled' AND w.extensions_enabled",
+        )
+        .bind(self.extension_workspace())
+        .fetch_all(&self.pool)
+        .await?;
+        let mut installations = HashMap::new();
+        for (extension_id, installed_release_id) in rows {
+            if let Some(installation) = self
+                .runtime_extension_installation(&extension_id, installed_release_id)
+                .await?
+            {
+                installations.insert(extension_id, installation);
+            }
+        }
+
+        let mut event_types = BTreeSet::new();
+        for installation in installations.values() {
+            let Some(server) = &installation.manifest.server else {
+                continue;
+            };
+            for handler in &server.event_handlers {
+                for event_type in &handler.event_types {
+                    if !event_type.starts_with("plugin.") {
+                        event_types.insert(event_type.clone());
+                    }
+                }
+            }
+            for consumed in &installation.manifest.event_contracts.consumes {
+                let Some(provider) = installations.get(&consumed.provider) else {
+                    continue;
+                };
+                let Ok(range) = VersionReq::parse(&consumed.version) else {
+                    continue;
+                };
+                for exported in &provider.manifest.event_contracts.exports {
+                    if exported.id != consumed.contract
+                        || !Version::parse(&exported.version)
+                            .is_ok_and(|version| range.matches(&version))
+                    {
+                        continue;
+                    }
+                    if server.event_handlers.iter().any(|handler| {
+                        handler
+                            .event_types
+                            .iter()
+                            .any(|event_type| event_type == &exported.event_type)
+                    }) {
+                        event_types.insert(exported.event_type.clone());
+                    }
+                }
+            }
+        }
+        Ok(event_types.into_iter().collect())
     }
 
     /// Re-fetches authorization data from the current installation immediately

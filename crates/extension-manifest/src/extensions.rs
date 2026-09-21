@@ -15,11 +15,12 @@ use semver::{Version, VersionReq};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use thiserror::Error;
+use url::Url;
 
 pub const MANIFEST_VERSION: u32 = 1;
 /// The newest host contract accepted by manifests. Components importing
 /// `catalog:host@1.0.0` remain supported by the unchanged v1 WIT package.
-pub const SUPPORTED_HOST_API: &str = "1.1.0";
+pub const SUPPORTED_HOST_API: &str = "1.3.0";
 pub const MAX_EXTENSION_ARCHIVE_BYTES: usize = 32 * 1024 * 1024;
 pub const MAX_EXTENSION_UNPACKED_BYTES: usize = 128 * 1024 * 1024;
 pub const MAX_EXTENSION_ARCHIVE_ENTRIES: usize = 256;
@@ -28,6 +29,8 @@ pub const DEFAULT_HOST_RESPONSE_BYTES: u64 = 1024 * 1024;
 pub const DEFAULT_HOST_TIMEOUT_MILLIS: u64 = 10_000;
 pub const MAX_HOST_REQUEST_BYTES: u64 = DEFAULT_HOST_REQUEST_BYTES;
 pub const MAX_HOST_RESPONSE_BYTES: u64 = DEFAULT_HOST_REQUEST_BYTES;
+pub const MAX_NETWORK_RESPONSE_BYTES: u64 = DEFAULT_HOST_RESPONSE_BYTES;
+pub const MAX_HOST_TIMEOUT_MILLIS: u64 = 60_000;
 pub const MAX_EXTENSION_IDENTIFIER_BYTES: usize = 128;
 pub const CAPABILITIES: &[&str] = &[
     "catalog.read",
@@ -35,6 +38,8 @@ pub const CAPABILITIES: &[&str] = &[
     "events.subscribe",
     "events.emit",
     "storage.extension",
+    "artifacts.read",
+    "artifacts.write",
     "configuration.read",
     "configuration.write",
     "client.commands",
@@ -232,6 +237,10 @@ pub struct Server {
     /// browser access; the host resolves and authorizes each invocation.
     #[serde(default)]
     pub commands: Vec<ServerCommand>,
+    /// Long-running, checkpointed component operations. These use the immutable
+    /// catalog:host@1.2.0 operation ABI and are always release-pinned.
+    #[serde(default)]
+    pub operations: Vec<ServerOperation>,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -256,6 +265,19 @@ pub struct EventHandler {
     pub id: String,
     pub event_types: Vec<String>,
     pub handler: String,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct ServerOperation {
+    pub id: String,
+    /// Stable component operation name. It is deliberately not a host route.
+    pub handler: String,
+    pub request_schema: Value,
+    #[serde(default = "default_command_bytes")]
+    pub max_request_bytes: u64,
+    #[serde(default = "default_command_bytes")]
+    pub max_checkpoint_bytes: u64,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -567,7 +589,19 @@ impl Manifest {
             for command in &server.commands {
                 command.validate(&self.permissions)?;
             }
-            if (!server.event_handlers.is_empty() || !server.commands.is_empty())
+            if !server.operations.is_empty() {
+                require_operation_host_api(&range)?;
+            }
+            unique(
+                server.operations.iter().map(|operation| &operation.id),
+                "server operation",
+            )?;
+            for operation in &server.operations {
+                operation.validate()?;
+            }
+            if (!server.event_handlers.is_empty()
+                || !server.commands.is_empty()
+                || !server.operations.is_empty())
                 && !self
                     .artifacts
                     .iter()
@@ -861,6 +895,52 @@ impl Artifact {
     }
 }
 impl HostPermission {
+    /// Matches a concrete outbound HTTPS request against this immutable rule.
+    /// Redirects are never followed, so the URL checked here is the only
+    /// network destination.
+    pub fn allows_request(&self, url: &Url, method: &str) -> bool {
+        if url.scheme() != "https"
+            || url.username() != ""
+            || url.password().is_some()
+            || url.query().is_some()
+            || url.fragment().is_some()
+            || !self.methods.iter().any(|allowed| allowed == method)
+        {
+            return false;
+        }
+        let Some(host) = url.host_str() else {
+            return false;
+        };
+        // Do not allow a server which decodes path escapes differently to turn
+        // an allowlisted prefix into a traversal outside it.
+        let path = url.path().to_ascii_lowercase();
+        if path.contains("%2e") || path.contains("%2f") || path.contains("%5c") {
+            return false;
+        }
+        self.matches.iter().any(|pattern| {
+            let Ok(pattern_url) = Url::parse(pattern) else {
+                return false;
+            };
+            let Some(pattern_host) = pattern_url.host_str() else {
+                return false;
+            };
+            let wildcard = pattern_host.strip_prefix("*.");
+            let host_matches = wildcard.map_or_else(
+                || host.eq_ignore_ascii_case(pattern_host),
+                |suffix| {
+                    host.len() > suffix.len()
+                        && host.ends_with(suffix)
+                        && host.as_bytes()[host.len() - suffix.len() - 1] == b'.'
+                },
+            );
+            host_matches
+                && url.port_or_known_default() == pattern_url.port_or_known_default()
+                && url
+                    .path()
+                    .starts_with(pattern_url.path().trim_end_matches('*'))
+        })
+    }
+
     fn validate(&self) -> Result<(), ManifestError> {
         valid_id(&self.id, "host permission id")?;
         if self.matches.is_empty()
@@ -868,6 +948,9 @@ impl HostPermission {
             || self.max_request_bytes == 0
             || self.max_response_bytes == 0
             || self.timeout_ms == 0
+            || self.max_request_bytes > MAX_HOST_REQUEST_BYTES
+            || self.max_response_bytes > MAX_NETWORK_RESPONSE_BYTES
+            || self.timeout_ms > MAX_HOST_TIMEOUT_MILLIS
         {
             return Err(ManifestError::Invalid(format!(
                 "host permission '{}' has empty or unbounded rules",
@@ -1007,6 +1090,25 @@ impl ServerCommand {
     }
 }
 
+impl ServerOperation {
+    fn validate(&self) -> Result<(), ManifestError> {
+        valid_id(&self.id, "server operation id")?;
+        valid_id(&self.handler, "server operation handler")?;
+        if !self.request_schema.is_object()
+            || self.max_request_bytes == 0
+            || self.max_request_bytes > MAX_HOST_REQUEST_BYTES
+            || self.max_checkpoint_bytes == 0
+            || self.max_checkpoint_bytes > MAX_HOST_REQUEST_BYTES
+        {
+            return Err(ManifestError::Invalid(format!(
+                "server operation '{}' requires bounded object request and checkpoint schemas",
+                self.id
+            )));
+        }
+        Ok(())
+    }
+}
+
 impl Webhook {
     fn validate(&self, permissions: &[String]) -> Result<(), ManifestError> {
         valid_id(&self.id, "webhook id")?;
@@ -1040,6 +1142,19 @@ impl Webhook {
             )));
         }
         Ok(())
+    }
+}
+
+fn require_operation_host_api(range: &VersionReq) -> Result<(), ManifestError> {
+    if (range.matches(&Version::new(1, 2, 0)) || range.matches(&Version::new(1, 3, 0)))
+        && !range.matches(&Version::new(1, 1, 0))
+    {
+        Ok(())
+    } else {
+        Err(ManifestError::Invalid(
+            "server operations require catalog.host_api compatible with 1.2 or 1.3 but not 1.1"
+                .into(),
+        ))
     }
 }
 
@@ -1088,7 +1203,7 @@ fn validate_url_pattern(pattern: &str) -> Result<(), ManifestError> {
     let (scheme, rest) = pattern.split_once("://").ok_or_else(|| {
         ManifestError::Invalid(format!("URL pattern '{pattern}' needs an exact scheme"))
     })?;
-    if !matches!(scheme, "http" | "https") || rest.contains("//") {
+    if scheme != "https" || rest.contains("//") {
         return Err(ManifestError::Invalid(format!(
             "URL pattern '{pattern}' has an unsafe scheme or path"
         )));
@@ -1275,7 +1390,9 @@ fn safe_archive_path(path: &Path) -> bool {
             .all(|component| matches!(component, Component::Normal(_)))
 }
 
-fn is_public_destination(ip: IpAddr) -> bool {
+/// Rejects loopback, private, link-local, multicast, documentation, and other
+/// non-public addresses after DNS resolution as an SSRF boundary.
+pub fn is_public_destination(ip: IpAddr) -> bool {
     match ip {
         IpAddr::V4(ip) => {
             let octets = ip.octets();
@@ -1461,6 +1578,26 @@ mod tests {
     }
 
     #[test]
+    fn operations_require_the_immutable_v12_contract_and_bounded_objects() {
+        let mut value = manifest();
+        value.catalog.host_api = ">=1.2.0, <2.0.0".into();
+        value.server.as_mut().unwrap().operations = vec![ServerOperation {
+            id: "import-records".into(),
+            handler: "import-records".into(),
+            request_schema: serde_json::json!({"type":"object"}),
+            max_request_bytes: 1024,
+            max_checkpoint_bytes: 1024,
+        }];
+        assert!(value.validate(SUPPORTED_HOST_API).is_ok());
+
+        value.catalog.host_api = ">=1.1.0, <2.0.0".into();
+        assert!(value.validate(SUPPORTED_HOST_API).is_err());
+        value.catalog.host_api = ">=1.2.0, <2.0.0".into();
+        value.server.as_mut().unwrap().operations[0].request_schema = serde_json::json!([]);
+        assert!(value.validate(SUPPORTED_HOST_API).is_err());
+    }
+
+    #[test]
     fn validates_client_ui_contributions() {
         let mut value = manifest();
         value.artifacts.push(Artifact {
@@ -1512,6 +1649,25 @@ mod tests {
         assert!(value.validate(SUPPORTED_HOST_API).is_err());
         value.ui[1].route = Some("workbench".into());
         value.ui[0].kind = UiContributionKind::Embedded;
+        assert!(value.validate(SUPPORTED_HOST_API).is_err());
+    }
+
+    #[test]
+    fn recognizes_artifact_stream_capabilities() {
+        let mut value = manifest();
+        value.catalog.host_api = ">=1.3.0, <2.0.0".into();
+        value.permissions = vec![
+            "network.request".into(),
+            "webhooks.receive".into(),
+            "artifacts.read".into(),
+            "artifacts.write".into(),
+        ];
+        assert!(
+            value.validate(SUPPORTED_HOST_API).is_ok(),
+            "{:?}",
+            value.validate(SUPPORTED_HOST_API)
+        );
+        value.permissions[3] = "artifacts.execute".into();
         assert!(value.validate(SUPPORTED_HOST_API).is_err());
     }
 
@@ -1652,6 +1808,60 @@ mod tests {
             .permissions
             .retain(|permission| permission != "client.explorer_row_action");
         assert!(value.validate(SUPPORTED_HOST_API).is_err());
+    }
+
+    #[test]
+    fn mediated_https_rules_reject_plaintext_and_match_only_granted_paths() {
+        let rule = HostPermission {
+            id: "api".into(),
+            matches: vec!["https://*.example.com/v1/*".into()],
+            methods: vec!["POST".into()],
+            max_request_bytes: 1,
+            max_response_bytes: 1,
+            timeout_ms: 1,
+        };
+        assert!(rule.validate().is_ok());
+        assert!(rule.allows_request(
+            &Url::parse("https://api.example.com/v1/items").unwrap(),
+            "POST"
+        ));
+        assert!(!rule.allows_request(&Url::parse("https://example.com/v1/items").unwrap(), "POST"));
+        assert!(!rule.allows_request(
+            &Url::parse("https://api.example.com/v2/items").unwrap(),
+            "POST"
+        ));
+        assert!(!rule.allows_request(
+            &Url::parse("http://api.example.com/v1/items").unwrap(),
+            "POST"
+        ));
+        assert!(!rule.allows_request(
+            &Url::parse("https://api.example.com/v1/%2e%2e/admin").unwrap(),
+            "POST"
+        ));
+        let plaintext = HostPermission {
+            matches: vec!["http://api.example.com/v1/*".into()],
+            ..rule
+        };
+        assert!(plaintext.validate().is_err());
+        let unbounded = HostPermission {
+            max_response_bytes: MAX_NETWORK_RESPONSE_BYTES + 1,
+            ..plaintext
+        };
+        assert!(unbounded.validate().is_err());
+    }
+
+    #[test]
+    fn rejects_private_and_documentation_destinations() {
+        for value in [
+            "127.0.0.1",
+            "10.0.0.1",
+            "169.254.1.1",
+            "192.0.2.1",
+            "::1",
+            "fc00::1",
+        ] {
+            assert!(!is_public_destination(value.parse().unwrap()), "{value}");
+        }
     }
 
     #[test]

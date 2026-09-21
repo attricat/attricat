@@ -22,8 +22,8 @@ use crate::{
         validate_schema,
     },
     repository::{
-        ExtensionGrant, ExtensionInstallation, ExtensionLifecycleRecord, ExtensionStorageError,
-        InstalledExtension,
+        ExtensionGrant, ExtensionInstallation, ExtensionLifecycleRecord, ExtensionOperationRun,
+        ExtensionStorageError, InstalledExtension, StartExtensionOperation,
     },
     storage::ObjectStoreError,
 };
@@ -200,6 +200,67 @@ pub(super) struct WorkspaceExtensionsModeResponse {
 }
 
 #[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+pub(super) struct WorkspaceSecretRequest {
+    value: String,
+}
+#[derive(Serialize)]
+pub(super) struct WorkspaceSecretResponse {
+    name: String,
+    created_at: chrono::DateTime<chrono::Utc>,
+    updated_at: chrono::DateTime<chrono::Utc>,
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+pub(super) struct StartOperationRequest {
+    operation_id: String,
+    input: Value,
+    #[serde(default = "empty_object")]
+    source_reference: Value,
+    #[serde(default = "empty_object")]
+    destination_reference: Value,
+    idempotency_key: String,
+}
+
+fn empty_object() -> Value {
+    json!({})
+}
+
+#[derive(Serialize)]
+pub(super) struct OperationRunResponse {
+    id: Uuid,
+    extension_id: String,
+    installed_release_id: Uuid,
+    abi_version: String,
+    operation_id: String,
+    status: String,
+    progress: Value,
+    attempts: i32,
+    last_error_code: Option<String>,
+    created_at: chrono::DateTime<chrono::Utc>,
+    completed_at: Option<chrono::DateTime<chrono::Utc>>,
+}
+
+impl From<ExtensionOperationRun> for OperationRunResponse {
+    fn from(value: ExtensionOperationRun) -> Self {
+        Self {
+            id: value.id,
+            extension_id: value.extension_id,
+            installed_release_id: value.installed_release_id,
+            abi_version: value.abi_version,
+            operation_id: value.operation_id,
+            status: value.status,
+            progress: value.progress,
+            attempts: value.attempts,
+            last_error_code: value.last_error_code,
+            created_at: value.created_at,
+            completed_at: value.completed_at,
+        }
+    }
+}
+
+#[derive(Deserialize)]
 #[serde(tag = "operation", rename_all = "snake_case", deny_unknown_fields)]
 pub(super) enum StorageRequest {
     Get {
@@ -259,6 +320,45 @@ pub(super) async fn set_workspace_mode(
     Ok(Json(WorkspaceExtensionsModeResponse {
         enabled: input.enabled,
     }))
+}
+
+/// Lists only names and timestamps; secret values are write-only management
+/// input and can be supplied to an enabled component only through its host API.
+pub(super) async fn list_workspace_secrets(
+    ScopedRepository(repository): ScopedRepository,
+) -> Result<Json<Vec<WorkspaceSecretResponse>>, ApiError> {
+    Ok(Json(
+        repository
+            .workspace_extension_secrets()
+            .await?
+            .into_iter()
+            .map(|secret| WorkspaceSecretResponse {
+                name: secret.name,
+                created_at: secret.created_at,
+                updated_at: secret.updated_at,
+            })
+            .collect(),
+    ))
+}
+pub(super) async fn put_workspace_secret(
+    ScopedRepository(repository): ScopedRepository,
+    Path(name): Path<String>,
+    ApiJson(input): ApiJson<WorkspaceSecretRequest>,
+) -> Result<StatusCode, ApiError> {
+    repository
+        .put_workspace_extension_secret(&name, &input.value)
+        .await?;
+    Ok(StatusCode::NO_CONTENT)
+}
+pub(super) async fn delete_workspace_secret(
+    ScopedRepository(repository): ScopedRepository,
+    Path(name): Path<String>,
+) -> Result<StatusCode, ApiError> {
+    if repository.delete_workspace_extension_secret(&name).await? {
+        Ok(StatusCode::NO_CONTENT)
+    } else {
+        Err(ApiError::not_found("workspace extension secret"))
+    }
 }
 
 pub(super) async fn list(
@@ -471,6 +571,90 @@ pub(super) async fn remove(
     Ok(StatusCode::NO_CONTENT)
 }
 
+/// Starts a release-pinned operation. Only bounded object input crosses this
+/// endpoint; operator projections intentionally never return that input.
+pub(super) async fn start_operation(
+    ScopedRepository(repository): ScopedRepository,
+    Path(extension_id): Path<String>,
+    ApiJson(input): ApiJson<StartOperationRequest>,
+) -> Result<(StatusCode, Json<Value>), ApiError> {
+    if input.operation_id.len() > MAX_EXTENSION_IDENTIFIER_BYTES {
+        return Err(ApiError::invalid_input(
+            "invalid extension operation request".into(),
+        ));
+    }
+    let installation = repository
+        .runtime_extension_installation(
+            &extension_id,
+            repository
+                .installed_extension(&extension_id)
+                .await?
+                .installed_release_id,
+        )
+        .await?
+        .ok_or_else(ApiError::forbidden)?;
+    let operation = installation
+        .manifest
+        .server
+        .as_ref()
+        .and_then(|server| {
+            server
+                .operations
+                .iter()
+                .find(|operation| operation.id == input.operation_id)
+        })
+        .ok_or_else(|| ApiError::not_found("extension operation"))?;
+    validate_schema(&operation.request_schema, &input.input)
+        .map_err(|error| ApiError::invalid_input(error.to_string()))?;
+    let id = repository
+        .start_extension_operation(StartExtensionOperation {
+            extension_id,
+            expected_release_id: installation.installed_release_id,
+            operation_id: input.operation_id,
+            input: input.input,
+            source_reference: input.source_reference,
+            destination_reference: input.destination_reference,
+            idempotency_key: input.idempotency_key,
+        })
+        .await?;
+    Ok((StatusCode::ACCEPTED, Json(json!({"id": id}))))
+}
+
+pub(super) async fn list_operation_runs(
+    ScopedRepository(repository): ScopedRepository,
+) -> Result<Json<Vec<OperationRunResponse>>, ApiError> {
+    Ok(Json(
+        repository
+            .list_extension_operation_runs()
+            .await?
+            .into_iter()
+            .map(Into::into)
+            .collect(),
+    ))
+}
+
+pub(super) async fn cancel_operation(
+    ScopedRepository(repository): ScopedRepository,
+    Path(id): Path<Uuid>,
+) -> Result<StatusCode, ApiError> {
+    if repository.cancel_extension_operation(id).await? {
+        Ok(StatusCode::NO_CONTENT)
+    } else {
+        Err(ApiError::not_found("extension operation run"))
+    }
+}
+
+pub(super) async fn replay_operation(
+    ScopedRepository(repository): ScopedRepository,
+    Path(id): Path<Uuid>,
+) -> Result<StatusCode, ApiError> {
+    if repository.replay_extension_operation(id).await? {
+        Ok(StatusCode::ACCEPTED)
+    } else {
+        Err(ApiError::not_found("dead-lettered extension operation run"))
+    }
+}
+
 /// Returns only contributions from currently enabled installations.
 pub(super) async fn workspace_extension_layout(
     ScopedRepository(repository): ScopedRepository,
@@ -589,7 +773,10 @@ pub(super) async fn command(
             command.max_response_bytes,
         )
         .await
-        .map_err(|_| ApiError::service_unavailable("extension command failed"))?;
+        .map_err(|_| {
+            tracing::warn!(extension = %extension_id, command = %command.id, "extension command failed");
+            ApiError::service_unavailable("extension command failed")
+        })?;
     let response: Value = serde_json::from_str(&response)
         .map_err(|_| ApiError::service_unavailable("extension command returned invalid JSON"))?;
     validate_schema(&command.response_schema, &response)
@@ -623,6 +810,63 @@ pub(super) async fn storage(
         }
     };
     Ok(Json(response))
+}
+
+/// Downloads a completed operation artifact through workspace authorization.
+/// The object key is resolved only after the repository scopes the run and
+/// artifact to the signed-in workspace; it is never returned to callers.
+pub(super) async fn download_operation_artifact(
+    State(state): State<AppState>,
+    ScopedRepository(repository): ScopedRepository,
+    Path((run_id, artifact_id)): Path<(Uuid, Uuid)>,
+) -> Result<Response, ApiError> {
+    let artifact = repository
+        .completed_extension_operation_artifact(run_id, artifact_id)
+        .await?;
+    let key = artifact
+        .object_key
+        .ok_or_else(|| ApiError::not_found("completed operation artifact"))?;
+    let object = state
+        .object_store
+        .get_stream(&key)
+        .await
+        .map_err(|error| match error {
+            ObjectStoreError::Unavailable | ObjectStoreError::TimedOut(_) => {
+                ApiError::service_unavailable("operation artifact storage is unavailable")
+            }
+            ObjectStoreError::Operation(_) => {
+                ApiError::internal("operation artifact could not be loaded")
+            }
+        })?;
+    let mut response = Response::new(Body::from_stream(object.stream));
+    let headers = response.headers_mut();
+    headers.insert(
+        header::CONTENT_TYPE,
+        HeaderValue::from_str(&artifact.media_type)
+            .map_err(|_| ApiError::internal("stored operation artifact media type is invalid"))?,
+    );
+    headers.insert(
+        header::CONTENT_LENGTH,
+        HeaderValue::from_str(&artifact.content_length.to_string())
+            .expect("non-negative artifact length"),
+    );
+    headers.insert(
+        header::ETAG,
+        HeaderValue::from_str(&format!(
+            "\"{}\"",
+            artifact.checksum_sha256.unwrap_or_default()
+        ))
+        .expect("checksum is a valid header"),
+    );
+    headers.insert(
+        header::CACHE_CONTROL,
+        HeaderValue::from_static("private, immutable"),
+    );
+    headers.insert(
+        header::X_CONTENT_TYPE_OPTIONS,
+        HeaderValue::from_static("nosniff"),
+    );
+    Ok(response)
 }
 
 pub(super) async fn artifact(

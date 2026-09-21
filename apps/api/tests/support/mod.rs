@@ -211,33 +211,30 @@ async fn start_server_with_auth_mode_and_store_with_devtools(
         .execute(&pool)
         .await
         .unwrap();
-    CatalogRepository::new(pool.clone())
+    CatalogRepository::system(pool.clone())
         .ensure_agent_permissions()
         .await
         .unwrap();
-    CatalogRepository::new(pool.clone())
+    CatalogRepository::system(pool.clone())
         .ensure_audit_permissions()
         .await
         .unwrap();
-    CatalogRepository::new(pool.clone())
+    CatalogRepository::system(pool.clone())
         .ensure_extension_registry_permissions()
         .await
         .unwrap();
-    CatalogRepository::new(pool.clone())
+    CatalogRepository::system(pool.clone())
         .ensure_workflow_permissions()
         .await
         .unwrap();
-    CatalogRepository::new(pool.clone())
+    CatalogRepository::system(pool.clone())
         .ensure_entity_publication_permissions()
         .await
         .unwrap();
     let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
     let address: SocketAddr = listener.local_addr().unwrap();
     let router = router(AppState {
-        repository: CatalogRepository::with_workspace_pool_factory(
-            pool.clone(),
-            (*pool.connect_options()).clone(),
-        ),
+        repository: CatalogRepository::system(pool.clone()),
         agent_provider: None,
         registry: Arc::new(GitHubRegistry::new().unwrap()),
         official_registry: "attricat/attricat-extensions"

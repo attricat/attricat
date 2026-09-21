@@ -2,5 +2,7 @@
 
 pub use catalog_domain::constants::*;
 
-/// Request pools are workspace-scoped, so keep this bounded for the database.
+/// Global request connections, shared by every workspace.
 pub const REQUEST_POOL_CONNECTIONS: u32 = 10;
+/// Global task/worker connections, shared by every workspace.
+pub const TASK_POOL_CONNECTIONS: u32 = 10;

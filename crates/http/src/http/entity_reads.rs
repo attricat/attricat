@@ -12,7 +12,8 @@ use crate::{
         SearchEntitiesRequest, SearchFilter, SearchResultVersionScope,
     },
     repository::{
-        EntityRelationshipFilter, EntitySearchFilter, EntitySearchSort, decode_search_cursor,
+        EntityRelationshipFilter, EntitySearchFilter, EntitySearchSort, RepositoryError,
+        decode_search_cursor,
     },
 };
 use axum::{
@@ -30,6 +31,18 @@ use uuid::Uuid;
 
 const SEARCH_TOTAL_COUNT_CAP: i64 = 500;
 const MAX_SEARCH_FILTERS: usize = 20;
+
+fn map_search_error(error: RepositoryError) -> ApiError {
+    match error {
+        RepositoryError::RelationshipSearchBudgetExceeded { .. } => {
+            ApiError::global_relationship_search_budget_exceeded()
+        }
+        RepositoryError::RelationshipSearchTimedOut => {
+            ApiError::global_relationship_search_timed_out()
+        }
+        error => ApiError::invalid_search_query(error.to_string()),
+    }
+}
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
 pub(super) struct PreviewQuery {
@@ -244,7 +257,7 @@ pub(super) async fn search_entity_previews(
                     label = "search-resolve"
                 ))
                 .await
-                .map_err(|error| ApiError::invalid_search_query(error.to_string()))?,
+                .map_err(map_search_error)?,
         )
     } else {
         None
@@ -980,7 +993,7 @@ pub(super) async fn relationship_tree_facet_children(
             repository
                 .resolve_search(&search_blueprint, version, Some(query))
                 .await
-                .map_err(|error| ApiError::invalid_search_query(error.to_string()))?,
+                .map_err(map_search_error)?,
         ),
         None => None,
     };

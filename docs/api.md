@@ -279,7 +279,11 @@ filename, workspace, or request URL is ever a label. File operation metrics are:
 gauge `catalog_file_worker_jobs_queued`;
 - `catalog_file_reconciliation_total` (`outcome`),
   `catalog_file_reconciliation_files_marked_total`, and
-  `catalog_file_purge_jobs_queued_total`.
+  `catalog_file_purge_jobs_queued_total`;
+- startup history cleanup: `catalog_value_history_cleanup_total` (bounded
+  `outcome` of `success` or `failed`),
+  `catalog_value_history_entries_purged_total`, and
+  `catalog_value_history_cleanup_duration_seconds`.
 
 Data-health cache decisions are exposed as `catalog_data_health_cache_total`
 with a bounded `status` label. Scrape this endpoint from the private monitoring

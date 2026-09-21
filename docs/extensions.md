@@ -71,6 +71,27 @@ browser and WASM runtime paths. Use this workflow when changing extension
 installation, permissions, artifact storage, runtime, or event dispatch; unit
 tests alone do not prove host integration.
 
+For a CLI-driven local verification, authenticate with the workspace **login
+identifier**, not its slug, name, or UUID. Discover it first and retain the
+browser-session file for every subsequent command; the bootstrap workspace is
+normally `default.local`:
+
+```sh
+cargo run -p cli -- --session-file .acli-session auth discover default.local
+printf '%s' "$CATALOG_BOOTSTRAP_OWNER_PASSWORD" | \
+  cargo run -p cli -- --session-file .acli-session auth login default.local \
+    --email "$CATALOG_BOOTSTRAP_OWNER_EMAIL" --password-stdin
+```
+
+When verifying an inter-extension event, use two packaged server components:
+the producer should emit a manifest-declared export while handling a real
+Catalog event, and the enabled consumer should make an observable, idempotent
+host-mediated change (for example an extension-storage write). Confirm the
+producer event and completed consumer delivery through the API/CLI first; use
+`just sql` only if the CLI has no read endpoint for the resulting host state.
+This distinguishes session/workspace routing failures from event
+materialization or runtime failures.
+
 Registry installs validate the selected `.tar.zst` archive with bounded
 decompression and entry-path checks, then read and validate `manifest.json`
 before uploading declared extracted artifacts to Catalog S3 storage. Artifact
@@ -99,7 +120,8 @@ verification is deferred from the trusted-source MVP.
 ## Capabilities and egress
 
 The v1 capability catalogue is: `catalog.read`, `catalog.write`,
-`events.subscribe`, `events.emit`, `storage.extension`, `configuration.read`,
+`events.subscribe`, `events.emit`, `storage.extension`, `artifacts.read`,
+`artifacts.write`, `configuration.read`,
 `configuration.write`, `secrets.read`, `logging.write`, `client.commands`,
 `client.navigation`, `client.notification`, `client.events`, `client.refresh`,
 `client.confirmation`, `client.download`, `client.external_navigation`,
@@ -169,9 +191,9 @@ declarative and contain no behavior.
 
 Catalog provides management APIs and web UI for registry sources, discovery,
 installation, configuration, grants, lifecycle actions, and client runtime
-descriptors. Server WASM execution, client components, storage, commands, and
-host API 1.1 are implemented. Mediated extension-owned event publication is
-implemented; mediated network/secrets APIs and webhook delivery remain follow-on work.
+descriptors. Server WASM execution, client components, storage, commands, mediated
+extension-owned event publication, and mediated network/secrets APIs are
+implemented. Webhook delivery remains follow-on work.
 
 ## Server WASM runtime (#145)
 
@@ -196,14 +218,51 @@ messages (16 KiB). Every operation is capability checked at the point of call.
 `configuration.get.v1` is available to components with
 `configuration.read`. `storage.get.v1`, `storage.set.v1` (also accepted as
 `storage.put.v1`), `storage.delete.v1`, and `storage.list.v1` are available to
-components with `storage.extension`. `secrets.get.v1`, `catalog.read.v1`,
-`catalog.command.v1`, and `network.request.v1` are recognized and
-capability-checked but are not implemented by this deployment. `events.emit.v1`
+components with `storage.extension`. The legacy JSON
+`catalog.read.v1` surface additionally provides bounded `page`, `changes`, and
+single-attribute `lookup` requests; `page` cursors pin a database-clock snapshot
+and `changes` cursors pin a domain-event sequence high-water mark. Cursors are
+opaque and filter/workspace-bound. `catalog.command.v1` accepts a bounded,
+idempotent batch of typed `create`, `update`, `relationships`, or `upsert`
+intents. An upsert serializes its declared blueprint/attribute business key,
+creates only when it is absent, and rejects an ambiguous match. `events.emit.v1`
 is implemented only for a manifest-declared, per-contract event export as
-described in [Inter-extension events](#inter-extension-events). In particular,
-`network.request.v1` never grants ambient sockets. The manifest
-host-permission validation remains the egress policy contract for its future
-mediated implementation.
+described in [Inter-extension events](#inter-extension-events).
+components with `storage.extension`. `events.emit.v1` is implemented only for a
+manifest-declared, per-contract event export as described in
+[Inter-extension events](#inter-extension-events).
+
+### Mediated secrets and HTTPS
+
+Workspace operators manage named extension secrets at
+`/workspace/extension-secrets`; listing returns names only and values are
+write-only. A component with `secrets.read` may call
+`secrets.get.v1` with `{"name":"destination-token"}` and receives
+`{"value":"..."}` only in that component invocation. There is no list API,
+and values are never copied into manifests, configuration, operation snapshots,
+audit records, logs, traces, or errors.
+
+A component with `network.request` calls `network.request.v1` with
+`host_permission_id`, `method`, `url`, optional UTF-8 `body`, optional safe
+`headers`, and optional `secret_headers` entries (`secret`, `header`, optional
+`prefix`). The host rechecks the exact enabled release, configuration,
+capabilities, grants, and matching host-permission rule on every call. It only
+allows query-free HTTPS, validates every DNS answer as public before connecting,
+pins the connection to those checked addresses, verifies TLS, disables
+redirects, streams bounded request/response bodies, applies each rule's timeout
+and byte limits, and limits an extension release to 60 requests per minute.
+Only status and selected safe response headers are returned; response bytes are
+base64 encoded.
+
+The broker never automatically retries. A transport failure or timeout before a
+response is an **uncertain external outcome** because the peer might have
+received the request; callers may retry only when they supply a stable
+idempotency key/header whose semantics the destination documents. A timeout
+after a response has begun is equally uncertain and is never retried. Durable
+operations retain their #253 batch key across a pre-checkpoint replay; a
+destination extension must map that stable key to its destination idempotency
+key when it performs side effects. `network.request.v1` never grants ambient
+sockets.
 Registry source APIs expose `GET/POST /extension-registries`,
 `DELETE /extension-registries/{id}`, `GET /extension-registries/discover`, and
 `GET /extension-registries/extensions/{owner}/{repository}`. The final endpoint
@@ -269,6 +328,51 @@ ignore events whose source is their own extension ID to prevent feedback loops.
 
 Request/response calls, cancellation, and shared state are deliberately out of
 scope for this contract and require a separately versioned design.
+
+## Durable server operations (host API 1.2)
+
+A release compatible with `catalog:host@1.2.0` may declare `server.operations`. Its immutable WIT records (`operation-request` and `batch-result`) are the typed, versioned operation ABI; operation IDs, run IDs, batch keys, checkpoint, progress, and completion state are not overloaded into an unversioned host call.
+Each operation has a stable ID, component handler selector, object request schema,
+and 64 KiB-or-smaller request/checkpoint limits. The immutable v1.2 WIT package is at
+`crates/extension-runtime/wit-operations/catalog-extension.wit`. Artifact
+streams use the additive immutable v1.3 package at
+`crates/extension-runtime/wit-artifacts/catalog-extension.wit`; its request
+contains the run ID, handler selector, configuration snapshot, input, checkpoint,
+and durable batch key. Its operation world calls `prepare`, `start`,
+`process-batch`, `checkpoint`, `finish`, and cooperative `cancel`.
+
+Catalog creates one durable run per workspace, pinned installed release, operation,
+and idempotency key. The task queue leases the run with a fresh token; every
+checkpoint is committed with that same token, so a stale worker cannot advance
+progress after a lease expiry. The batch key changes only after a checkpoint
+commits. Consequently a crash before checkpoint replays the same batch key, and
+a crash after a component's domain commit but before checkpoint is safe only when
+the component treats that key as idempotent. Restarts reclaim the pending run
+from its last committed checkpoint. Runs never switch to upgraded code: disable,
+quarantine, grant loss, and upgrades pause a release-pinned run until that exact
+release is authorized again. Cancelling queued work is terminal immediately;
+cancelling leased work invokes cooperative cancellation at the next batch.
+
+`POST /extensions/{extension_id}/operations` starts a run, while operators can
+list `GET /extension-operation-runs`, cancel a run, or replay only a dead-lettered
+run through its corresponding `cancel` and `replay` endpoints. The v1.3 artifact operation
+WIT imports host-managed `artifacts` resources. Releases need explicit
+`artifacts.read` and/or `artifacts.write` grants. Components open only run-bound
+approved inputs, read or write at most 64 KiB per call, and exchange opaque
+resource handles rather than object keys. An operation caller attaches a ready
+workspace file by sending `source_reference: {"input_file_id":"<uuid>"}` to
+the existing operation creation endpoint; Catalog locks and snapshots its
+metadata/key transactionally with the run. The component opens that attached
+input as `open-input("source")`, never by a file ID or object key. Output content is staged locally under
+the bounded artifact/run/workspace quotas, committed only after its SHA-256
+matches the supplied checksum, and then becomes immutable. Completed output is
+available only to an authorized workspace operator at
+`GET /extension-operation-runs/{run_id}/artifacts/{artifact_id}/download`; failed,
+aborted, and abandoned temporary output is not downloadable and is cleaned up. Configuration,
+input, source/destination references, and checkpoints are never returned by the
+management API or written to audit metadata. Configuration and diagnostics are
+redacted before management-visible persistence; secret-, credential-, password-,
+token-, key-, and authorization-named fields are replaced with `[redacted]`.
 
 ## Client extension runtime (v1)
 
@@ -570,5 +674,29 @@ authorized command broker.
 
 ## Current implementation limitations
 
-Mediated network, secrets, request/response calls, and webhook-delivery
-functionality remain deferred as described above.
+Webhook delivery remains deferred as described above.
+
+## Reference importer/exporter compatibility suite
+
+The maintained sibling checkout at `../../attricat-extension-example` contains
+packaged `attricat.reference-customer-importer` and
+`attricat.reference-customer-exporter` components plus the two-customer NDJSON
+fixture. They use only the released `catalog:host@1.3.0` artifact-operation ABI;
+the fixture is written as a host-managed output artifact, with no ambient I/O or
+host test hooks.
+
+Run the real-host compatibility suite only against a worktree-local stack after
+creating an owner personal API token:
+
+```sh
+just setup
+just dev # separate terminal
+source .catalog-worktree
+export CATALOG_TOKEN=... # owner token for this worktree
+just test-reference-extension-e2e
+```
+
+The suite builds and packages both sibling archives, side-loads them through the
+public CLI, grants/enables them, validates and publishes the customer blueprint,
+and drives public operation, cancellation, revocation, quarantine, duplicate
+idempotency, and audit endpoints. It does not use repository/runtime mocks.

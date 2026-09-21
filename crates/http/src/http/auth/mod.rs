@@ -37,8 +37,8 @@ pub(super) struct ActiveWorkspace(pub Uuid);
 #[derive(Clone)]
 pub(super) struct AuthenticatedSession(pub SessionDigest);
 
-/// Repository whose connections are pinned to the authenticated workspace's
-/// RLS setting. It is inserted only by authorization after workspace selection.
+/// Repository explicitly scoped to the authenticated workspace. It is inserted
+/// only by authorization after workspace selection.
 #[derive(Clone)]
 pub(super) struct ScopedRepository(pub CatalogRepository);
 
@@ -96,7 +96,7 @@ pub(super) async fn authorize(
     next: Next,
 ) -> Result<Response, ApiError> {
     let path = request.uri().path();
-    if path == "/health"
+    if matches!(path, "/health" | "/health/live" | "/health/ready")
         || path == "/auth/login"
         || path == "/auth/discover"
         || path == "/auth/password-reset"

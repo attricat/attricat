@@ -40,16 +40,46 @@ pub struct SmtpMailDelivery {
     from: Mailbox,
 }
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum SmtpTlsMode {
+    Disabled,
+    StartTls,
+    ImplicitTls,
+}
+
+impl SmtpTlsMode {
+    fn parse(value: &str) -> Result<Self, MailError> {
+        match value {
+            "disabled" => Ok(Self::Disabled),
+            "starttls" => Ok(Self::StartTls),
+            "implicit" => Ok(Self::ImplicitTls),
+            _ => Err(MailError::Configuration),
+        }
+    }
+}
+
 impl SmtpMailDelivery {
+    /// Builds a mail transport that requires encrypted SMTP by default.
+    /// Plaintext is an explicit local-relay opt-out, never a production
+    /// fallback, so credentials and lifecycle URLs are not downgraded.
     pub fn new(
         host: &str,
         port: u16,
         from: &str,
         username: Option<String>,
         password: Option<String>,
+        tls_mode: &str,
     ) -> Result<Self, MailError> {
         let from = from.parse().map_err(|_| MailError::Configuration)?;
-        let mut builder = AsyncSmtpTransport::<Tokio1Executor>::builder_dangerous(host).port(port);
+        let mode = SmtpTlsMode::parse(tls_mode)?;
+        let mut builder = match mode {
+            SmtpTlsMode::Disabled => AsyncSmtpTransport::<Tokio1Executor>::builder_dangerous(host),
+            SmtpTlsMode::StartTls => AsyncSmtpTransport::<Tokio1Executor>::starttls_relay(host)
+                .map_err(|_| MailError::Configuration)?,
+            SmtpTlsMode::ImplicitTls => AsyncSmtpTransport::<Tokio1Executor>::relay(host)
+                .map_err(|_| MailError::Configuration)?,
+        }
+        .port(port);
         if let (Some(username), Some(password)) = (username, password) {
             builder = builder.credentials(Credentials::new(username, password));
         }
@@ -57,6 +87,18 @@ impl SmtpMailDelivery {
             transport: builder.build(),
             from,
         })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::SmtpTlsMode;
+
+    #[test]
+    fn tls_mode_rejects_downgrade_prone_values() {
+        assert!(SmtpTlsMode::parse("starttls").is_ok());
+        assert!(SmtpTlsMode::parse("implicit").is_ok());
+        assert!(SmtpTlsMode::parse("opportunistic").is_err());
     }
 }
 

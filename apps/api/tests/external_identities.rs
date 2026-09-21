@@ -18,7 +18,7 @@ async fn create_user(pool: &PgPool, email: &str) -> Uuid {
 async fn external_identity_linking_is_explicit_and_unique(pool: PgPool) {
     let existing = create_user(&pool, "existing@example.test").await;
     let linked = create_user(&pool, "linked@example.test").await;
-    let repository = CatalogRepository::new(pool.clone());
+    let repository = CatalogRepository::system(pool.clone());
     repository
         .link_external_identity(linked, "https://idp.example.test", "subject-1")
         .await
