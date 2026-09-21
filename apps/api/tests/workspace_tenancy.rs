@@ -25,7 +25,7 @@ async fn workspace_scoped_repository_hides_other_workspace_catalog_rows(pool: Pg
     .await
     .unwrap();
 
-    let repository = CatalogRepository::new(pool);
+    let repository = CatalogRepository::system(pool);
     let bootstrap = repository
         .for_workspace(BOOTSTRAP_WORKSPACE_ID.parse().unwrap())
         .await
@@ -81,7 +81,7 @@ async fn workspace_scoped_blueprints_reject_foreign_ids_codes_versions_and_attri
     let other_workspace = Uuid::new_v4();
     sqlx::query("INSERT INTO workspaces (id, slug, name, login_identifier) VALUES ($1, 'tenant-blueprint', 'Tenant blueprint', 'tenant-blueprint.local')")
         .bind(other_workspace).execute(&pool).await.unwrap();
-    let repository = CatalogRepository::new(pool);
+    let repository = CatalogRepository::system(pool);
     let bootstrap = repository.for_workspace(bootstrap_workspace).await.unwrap();
     let other = repository.for_workspace(other_workspace).await.unwrap();
     let definition = "format_version = 1\ncode = 'shared_code'\nname = 'Shared'\nkind = 'entity'\n\n[views.dropdown_option]\ntype = 'dropdown_option'\nfields = ['title']\n\n[[attributes]]\ncode = 'title'\nvalue_type = 'string'";
@@ -171,7 +171,7 @@ async fn workspace_scoped_entity_commands_reject_foreign_entity_ids(pool: PgPool
     sqlx::query("INSERT INTO entities (id, blueprint_id, blueprint_version, workspace_id) VALUES ($1, $2, 1, $3)")
         .bind(entity).bind(blueprint).bind(other_workspace).execute(&pool).await.unwrap();
 
-    let repository = CatalogRepository::new(pool);
+    let repository = CatalogRepository::system(pool);
     let bootstrap = repository.for_workspace(bootstrap_workspace).await.unwrap();
     assert!(bootstrap.get_entity(entity).await.unwrap().is_none());
     assert!(bootstrap.delete_entity(entity).await.is_err());
@@ -192,7 +192,7 @@ async fn current_values_hides_foreign_entity_values(pool: PgPool) {
         .execute(&pool)
         .await
         .unwrap();
-    let repository = CatalogRepository::new(pool);
+    let repository = CatalogRepository::system(pool);
     let bootstrap = repository.for_workspace(bootstrap_workspace).await.unwrap();
     let other = repository.for_workspace(other_workspace).await.unwrap();
     let blueprint = other
@@ -242,7 +242,7 @@ async fn reachable_search_never_traverses_another_workspace(pool: PgPool) {
         .execute(&pool)
         .await
         .unwrap();
-    let repository = CatalogRepository::new(pool);
+    let repository = CatalogRepository::system(pool);
     let bootstrap = repository.for_workspace(bootstrap_workspace).await.unwrap();
     let other = repository.for_workspace(other_workspace).await.unwrap();
     let target_definition = "format_version = 1\ncode = 'shared_search_target'\nname = 'Shared target'\nkind = 'entity'\n\n[views.dropdown_option]\ntype = 'dropdown_option'\nfields = ['name']\n\n[[attributes]]\ncode = 'name'\nvalue_type = 'string'";

@@ -38,7 +38,7 @@ fn insert(workspace_id: Uuid, subject_id: Uuid) -> TaskInsert {
 
 #[sqlx::test]
 async fn task_enqueue_is_transactional_and_deduplicated(pool: PgPool) {
-    let repository = CatalogRepository::new(pool.clone());
+    let repository = CatalogRepository::system(pool.clone());
     let workspace_id = workspace(&pool, "tasks-rollback").await;
     let subject_id = Uuid::new_v4();
     let mut transaction = pool.begin().await.unwrap();
@@ -78,7 +78,7 @@ async fn task_enqueue_is_transactional_and_deduplicated(pool: PgPool) {
 
 #[sqlx::test]
 async fn queued_cancellation_and_dead_letter_replay_obey_kind_policy(pool: PgPool) {
-    let repository = CatalogRepository::new(pool.clone());
+    let repository = CatalogRepository::system(pool.clone());
     let workspace_id = workspace(&pool, "tasks-replay").await;
     let subject_id = Uuid::new_v4();
     let mut transaction = pool.begin().await.unwrap();
@@ -147,7 +147,7 @@ async fn queued_cancellation_and_dead_letter_replay_obey_kind_policy(pool: PgPoo
 
 #[sqlx::test]
 async fn task_lease_is_exclusive_reclaimable_and_token_fenced(pool: PgPool) {
-    let repository = CatalogRepository::new(pool.clone());
+    let repository = CatalogRepository::system(pool.clone());
     let workspace_id = workspace(&pool, "tasks-lease").await;
     let mut transaction = pool.begin().await.unwrap();
     repository
@@ -193,7 +193,7 @@ async fn task_lease_is_exclusive_reclaimable_and_token_fenced(pool: PgPool) {
 
 #[sqlx::test]
 async fn retry_policy_dead_letters_at_the_registered_failure_budget(pool: PgPool) {
-    let repository = CatalogRepository::new(pool.clone());
+    let repository = CatalogRepository::system(pool.clone());
     let workspace_id = workspace(&pool, "tasks-retry-budget").await;
     let mut transaction = pool.begin().await.unwrap();
     repository
@@ -232,7 +232,7 @@ async fn retry_policy_dead_letters_at_the_registered_failure_budget(pool: PgPool
 
 #[sqlx::test]
 async fn expired_lease_rejects_every_holder_transition_and_subseconds_round_up(pool: PgPool) {
-    let repository = CatalogRepository::new(pool.clone());
+    let repository = CatalogRepository::system(pool.clone());
     let workspace_id = workspace(&pool, "tasks-expired").await;
     let mut transaction = pool.begin().await.unwrap();
     repository
@@ -299,7 +299,7 @@ async fn expired_lease_rejects_every_holder_transition_and_subseconds_round_up(p
 
 #[sqlx::test]
 async fn concurrent_workers_claim_distinct_live_tasks(pool: PgPool) {
-    let repository = CatalogRepository::new(pool.clone());
+    let repository = CatalogRepository::system(pool.clone());
     let first_workspace = workspace(&pool, "tasks-concurrent-a").await;
     let second_workspace = workspace(&pool, "tasks-concurrent-b").await;
     let mut transaction = pool.begin().await.unwrap();
@@ -325,7 +325,7 @@ async fn concurrent_workers_claim_distinct_live_tasks(pool: PgPool) {
 
 #[sqlx::test]
 async fn continuation_preserves_failure_budget_and_fairness_rotates_workspaces(pool: PgPool) {
-    let repository = CatalogRepository::new(pool.clone());
+    let repository = CatalogRepository::system(pool.clone());
     let first_workspace = workspace(&pool, "tasks-fair-a").await;
     let second_workspace = workspace(&pool, "tasks-fair-b").await;
     let mut transaction = pool.begin().await.unwrap();
@@ -399,7 +399,7 @@ async fn continuation_preserves_failure_budget_and_fairness_rotates_workspaces(p
 
 #[sqlx::test]
 async fn oversized_retry_error_is_truncated_and_consumes_failure_budget(pool: PgPool) {
-    let repository = CatalogRepository::new(pool.clone());
+    let repository = CatalogRepository::system(pool.clone());
     let workspace_id = workspace(&pool, "tasks-oversized-error").await;
     let mut transaction = pool.begin().await.unwrap();
     repository

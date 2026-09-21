@@ -94,7 +94,7 @@ async fn approved_agent_mutation_has_explicit_redacted_provenance(pool: sqlx::Pg
     .unwrap();
     let workspace = BOOTSTRAP_WORKSPACE_ID.parse::<Uuid>().unwrap();
     let actor = BOOTSTRAP_OWNER_ID.parse::<Uuid>().unwrap();
-    let repository = CatalogRepository::new(pool.clone())
+    let repository = CatalogRepository::system(pool.clone())
         .for_workspace(workspace)
         .await
         .unwrap();

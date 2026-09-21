@@ -11,6 +11,8 @@ or inaccessible configured bucket.
 | Setting | Default | Used by | Purpose |
 | --- | --- | --- | --- |
 | `DATABASE_URL` | Required | API and SQLx | PostgreSQL connection string. |
+| `DATABASE_REQUEST_POOL_CONNECTIONS` | `10` | API | Maximum connections in the single global request/session pool shared by all workspaces. Must be an integer from 1 to 100. |
+| `DATABASE_TASK_POOL_CONNECTIONS` | `10` | API | Maximum connections in the single global task/worker pool shared by all workspaces. Must be an integer from 1 to 100. The API logs the request + task + maintenance total at startup. |
 | `BIND_ADDR` | `127.0.0.1:3000` | API | Listener address. |
 | `CATALOG_WORKSPACE_ID` | Bootstrap `default` workspace UUID | API | Workspace initialized with the configured owner during startup; it is not an HTTP tenancy selector. |
 | `CATALOG_BOOTSTRAP_WORKSPACE_NAME` | `Default workspace` | API | Display name recorded while initializing the configured workspace. |

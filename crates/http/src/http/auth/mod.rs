@@ -37,8 +37,8 @@ pub(super) struct ActiveWorkspace(pub Uuid);
 #[derive(Clone)]
 pub(super) struct AuthenticatedSession(pub SessionDigest);
 
-/// Repository whose connections are pinned to the authenticated workspace's
-/// RLS setting. It is inserted only by authorization after workspace selection.
+/// Repository explicitly scoped to the authenticated workspace. It is inserted
+/// only by authorization after workspace selection.
 #[derive(Clone)]
 pub(super) struct ScopedRepository(pub CatalogRepository);
 

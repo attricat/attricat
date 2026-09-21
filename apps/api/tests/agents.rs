@@ -195,11 +195,11 @@ async fn agent_run_timeout_is_durably_failed_without_provider_details(pool: PgPo
     .unwrap();
     let workspace_id = BOOTSTRAP_WORKSPACE_ID.parse::<Uuid>().unwrap();
     let user_id = BOOTSTRAP_OWNER_ID.parse::<Uuid>().unwrap();
-    let repository = CatalogRepository::new(pool.clone())
+    let repository = CatalogRepository::system(pool.clone())
         .for_workspace(workspace_id)
         .await
         .unwrap();
-    let task_repository = CatalogRepository::new(pool);
+    let task_repository = CatalogRepository::system(pool);
     let handler = agent_worker::AgentTaskHandler::new(
         task_repository.clone(),
         config.clone(),
@@ -300,7 +300,7 @@ async fn agent_read_tools_enforce_initiator_permissions_and_scopes(pool: PgPool)
     .await
     .unwrap();
 
-    let repository = CatalogRepository::new(pool.clone())
+    let repository = CatalogRepository::system(pool.clone())
         .for_workspace(workspace)
         .await
         .unwrap();
@@ -622,7 +622,7 @@ async fn standalone_conversation_upload_survives_reconciliation_until_attached(p
             .unwrap();
     assert!(deleted_at.is_none());
 
-    CatalogRepository::new(pool.clone())
+    CatalogRepository::system(pool.clone())
         .for_workspace(BOOTSTRAP_WORKSPACE_ID.parse().unwrap())
         .await
         .unwrap()
@@ -812,7 +812,7 @@ async fn agent_message_requires_a_configured_provider(pool: PgPool) {
 async fn startup_recovery_only_interrupts_expired_agent_tasks(pool: PgPool) {
     use api::task_queue::{TaskInsert, TaskKind};
 
-    let repository = CatalogRepository::new(pool.clone());
+    let repository = CatalogRepository::system(pool.clone());
     let workspace_id = BOOTSTRAP_WORKSPACE_ID.parse::<Uuid>().unwrap();
     let conversation_id = Uuid::new_v4();
     sqlx::query("INSERT INTO conversations (id, workspace_id, title) VALUES ($1, $2, 'recovery')")

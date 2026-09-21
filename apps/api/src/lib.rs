@@ -14,7 +14,7 @@ pub mod constants {
         DEFAULT_HTTP_DEFAULT_BODY_BYTES, DEFAULT_HTTP_MAX_CONCURRENT_REQUESTS,
         DEFAULT_HTTP_REQUEST_TIMEOUT_SECONDS,
     };
-    pub use catalog_repository::constants::REQUEST_POOL_CONNECTIONS;
+    pub use catalog_repository::constants::{REQUEST_POOL_CONNECTIONS, TASK_POOL_CONNECTIONS};
 
     pub const MAINTENANCE_POOL_CONNECTIONS: u32 = 1;
 }

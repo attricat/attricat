@@ -14,7 +14,7 @@ async fn create_user(pool: &PgPool, email: &str, verified: bool) -> Uuid {
 #[sqlx::test]
 async fn lifecycle_tokens_are_digest_only_and_single_use(pool: PgPool) {
     let user = create_user(&pool, "lifecycle@example.test", false).await;
-    let repository = CatalogRepository::new(pool.clone());
+    let repository = CatalogRepository::system(pool.clone());
     let digest = vec![7; 32];
     repository
         .issue_lifecycle_token(
@@ -54,7 +54,7 @@ async fn lifecycle_tokens_are_digest_only_and_single_use(pool: PgPool) {
 #[sqlx::test]
 async fn lifecycle_token_validation_uses_account_state_and_revocation(pool: PgPool) {
     let user = create_user(&pool, "verified@example.test", true).await;
-    let repository = CatalogRepository::new(pool.clone());
+    let repository = CatalogRepository::system(pool.clone());
     let setup = vec![8; 32];
     repository
         .issue_lifecycle_token(

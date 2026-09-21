@@ -14,7 +14,7 @@ async fn insert_event(pool: &PgPool, event_type: &str, correlation_id: Uuid) -> 
 
 #[sqlx::test(migrations = "./migrations")]
 async fn event_delivery_materialization_is_atomic_filtered_and_deduplicated(pool: PgPool) {
-    let repository = CatalogRepository::new(pool.clone());
+    let repository = CatalogRepository::system(pool.clone());
     repository
         .ensure_event_consumer("catalog.extensions.wasm", &[CONTEXT_CREATED_V1])
         .await
@@ -87,7 +87,7 @@ async fn event_delivery_materialization_is_atomic_filtered_and_deduplicated(pool
 
 #[sqlx::test(migrations = "./migrations")]
 async fn expired_event_task_lease_rejects_stale_receipts_and_redelivers(pool: PgPool) {
-    let repository = CatalogRepository::new(pool.clone());
+    let repository = CatalogRepository::system(pool.clone());
     repository
         .ensure_event_consumer("catalog.extensions.wasm", &[CONTEXT_CREATED_V1])
         .await

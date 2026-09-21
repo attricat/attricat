@@ -177,7 +177,7 @@ async fn sideload_installs_a_validated_local_archive(pool: sqlx::PgPool) {
 #[sqlx::test(migrations = "./migrations")]
 async fn navigation_contributions_target_same_release_routes(pool: sqlx::PgPool) {
     let workspace = Uuid::from_u128(0x00000000000040008000000000000002);
-    let repository = CatalogRepository::new(pool)
+    let repository = CatalogRepository::system(pool)
         .for_workspace(workspace)
         .await
         .unwrap();
@@ -212,7 +212,7 @@ async fn navigation_contributions_target_same_release_routes(pool: sqlx::PgPool)
 #[sqlx::test(migrations = "./migrations")]
 async fn enabled_client_contributions_are_hidden_after_state_changes(pool: sqlx::PgPool) {
     let workspace = Uuid::from_u128(0x00000000000040008000000000000002);
-    let repository = CatalogRepository::new(pool)
+    let repository = CatalogRepository::system(pool)
         .for_workspace(workspace)
         .await
         .unwrap();
@@ -320,7 +320,7 @@ async fn enabled_client_contributions_are_hidden_after_state_changes(pool: sqlx:
 #[sqlx::test(migrations = "./migrations")]
 async fn extension_layout_order_is_stable_and_host_owned(pool: sqlx::PgPool) {
     let workspace = Uuid::from_u128(0x00000000000040008000000000000002);
-    let repository = CatalogRepository::new(pool.clone())
+    let repository = CatalogRepository::system(pool.clone())
         .for_workspace(workspace)
         .await
         .unwrap();
@@ -412,7 +412,7 @@ async fn blueprint_layout_overlays_owned_outlets_and_preserves_global_workspace_
     pool: sqlx::PgPool,
 ) {
     let workspace = Uuid::from_u128(0x00000000000040008000000000000002);
-    let repository = CatalogRepository::new(pool)
+    let repository = CatalogRepository::system(pool)
         .for_workspace(workspace)
         .await
         .unwrap();
@@ -550,7 +550,7 @@ value_type = "string"
 #[sqlx::test(migrations = "./migrations")]
 async fn extension_attribute_types_are_pinned_and_survive_provider_disable(pool: sqlx::PgPool) {
     let workspace = Uuid::from_u128(0x00000000000040008000000000000002);
-    let repository = CatalogRepository::new(pool)
+    let repository = CatalogRepository::system(pool)
         .for_workspace(workspace)
         .await
         .unwrap();
@@ -627,7 +627,7 @@ extension_configuration = '{"currency":"USD"}'
 #[sqlx::test(migrations = "./migrations")]
 async fn hidden_contributions_remain_authorized_and_are_validated_on_publish(pool: sqlx::PgPool) {
     let workspace = Uuid::from_u128(0x00000000000040008000000000000002);
-    let repository = CatalogRepository::new(pool)
+    let repository = CatalogRepository::system(pool)
         .for_workspace(workspace)
         .await
         .unwrap();
@@ -713,7 +713,7 @@ async fn workspace_safe_mode_blocks_runtime_descriptors_and_storage_without_muta
     pool: sqlx::PgPool,
 ) {
     let workspace = Uuid::from_u128(0x00000000000040008000000000000002);
-    let repository = CatalogRepository::new(pool)
+    let repository = CatalogRepository::system(pool)
         .for_workspace(workspace)
         .await
         .unwrap();
@@ -779,7 +779,7 @@ async fn workspace_safe_mode_blocks_runtime_descriptors_and_storage_without_muta
 #[sqlx::test(migrations = "./migrations")]
 async fn extension_storage_enforces_cas_bounds_quota_and_workspace_namespace(pool: sqlx::PgPool) {
     let workspace = Uuid::from_u128(0x00000000000040008000000000000002);
-    let repository = CatalogRepository::new(pool)
+    let repository = CatalogRepository::system(pool)
         .for_workspace(workspace)
         .await
         .unwrap();
@@ -919,7 +919,7 @@ async fn extension_storage_list_treats_like_characters_as_literal_prefixes(pool:
         .execute(&pool)
         .await
         .unwrap();
-    let repository = CatalogRepository::new(pool)
+    let repository = CatalogRepository::system(pool)
         .for_workspace(workspace)
         .await
         .unwrap();
@@ -969,7 +969,7 @@ async fn extension_storage_list_treats_like_characters_as_literal_prefixes(pool:
 #[sqlx::test(migrations = "./migrations")]
 async fn lifecycle_installs_validated_archive_artifacts_and_retains_history(pool: sqlx::PgPool) {
     let workspace = Uuid::from_u128(0x00000000000040008000000000000002);
-    let repository = CatalogRepository::new(pool.clone())
+    let repository = CatalogRepository::system(pool.clone())
         .for_workspace(workspace)
         .await
         .unwrap();
