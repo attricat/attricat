@@ -140,20 +140,26 @@ impl CatalogRepository {
                       b.views AS blueprint_views,
                       (SELECT COALESCE(jsonb_object_agg(attribute.code, attribute.context_fallback), '{}'::jsonb)
                          FROM attributes attribute
-                        WHERE attribute.blueprint_id = target.blueprint_id
+                        WHERE attribute.workspace_id = $6
+                          AND attribute.blueprint_id = target.blueprint_id
                           AND attribute.blueprint_version = target.blueprint_version
                           AND attribute.deleted_at IS NULL) AS blueprint_context_fallback
                FROM attribute_values av
-               JOIN attributes a ON a.id = av.attribute_id AND a.deleted_at IS NULL
+               JOIN entities source ON source.id = av.entity_id
+                AND source.workspace_id = $6 AND source.deleted_at IS NULL
+               JOIN attributes a ON a.id = av.attribute_id
+                AND a.workspace_id = $6 AND a.deleted_at IS NULL
                JOIN entities target ON target.id = av.relationship_target_entity_id
                JOIN blueprints b ON b.id = target.blueprint_id AND b.version = target.blueprint_version
                WHERE av.entity_id = $1
+                 AND av.workspace_id = $6
+                 AND a.workspace_id = $6
                  AND a.code = $2
                  AND av.relationship_target_entity_id IS NOT NULL
                   AND av.active
                  AND ($3::uuid IS NULL OR av.relationship_target_entity_id > $3)
-                 AND target.deleted_at IS NULL
-                 AND b.code = $4
+                 AND target.workspace_id = $6 AND target.deleted_at IS NULL
+                 AND b.workspace_id = $6 AND b.code = $4
                ORDER BY target.id
                LIMIT $5"#,
         )
@@ -162,6 +168,7 @@ impl CatalogRepository {
         .bind(cursor)
         .bind(blueprint_code)
         .bind(limit + 1)
+        .bind(self.workspace_id.unwrap_or(Self::DEFAULT_WORKSPACE_ID))
         .fetch_all(&self.pool)
         .await?;
         let mut items: Vec<_> = rows.into_iter().map(entity_preview).collect();
@@ -197,20 +204,24 @@ impl CatalogRepository {
                       b.views AS blueprint_views,
                       (SELECT COALESCE(jsonb_object_agg(attribute.code, attribute.context_fallback), '{}'::jsonb)
                          FROM attributes attribute
-                        WHERE attribute.blueprint_id = source.blueprint_id
+                        WHERE attribute.workspace_id = $6
+                          AND attribute.blueprint_id = source.blueprint_id
                           AND attribute.blueprint_version = source.blueprint_version
                           AND attribute.deleted_at IS NULL) AS blueprint_context_fallback
                FROM entities source
                JOIN blueprints b ON b.id = source.blueprint_id AND b.version = source.blueprint_version
-               WHERE source.deleted_at IS NULL
+               WHERE source.workspace_id = $6 AND source.deleted_at IS NULL
+                 AND b.workspace_id = $6
                  AND EXISTS (
                      SELECT 1
                      FROM attribute_values av
-                     JOIN attributes a ON a.id = av.attribute_id AND a.deleted_at IS NULL
+                     JOIN attributes a ON a.id = av.attribute_id
+                      AND a.workspace_id = $6 AND a.deleted_at IS NULL
                      JOIN LATERAL jsonb_to_recordset($2::jsonb)
                          AS selector(source_blueprint text, field text)
                          ON selector.source_blueprint = b.code AND selector.field = a.code
                      WHERE av.entity_id = source.id
+                       AND av.workspace_id = $6
                        AND av.relationship_target_entity_id = $1
                        AND av.active
                        AND a.value_type = 'relationship'
@@ -224,6 +235,7 @@ impl CatalogRepository {
         .bind(cursor_created_at)
         .bind(cursor_id)
         .bind(limit + 1)
+        .bind(self.workspace_id.unwrap_or(Self::DEFAULT_WORKSPACE_ID))
         .fetch_all(&self.pool)
         .await?;
         let mut items: Vec<_> = rows.into_iter().map(incoming_relationship_item).collect();
