@@ -12,11 +12,14 @@ use uuid::Uuid;
 
 use super::{auth::ScopedRepository, error::ApiError};
 use crate::{
-    repository::{SolutionPackApplication, SolutionPackApplicationSummary, SolutionPackPlan},
+    repository::{
+        SolutionPackApplication, SolutionPackApplicationSummary, SolutionPackCheckRun,
+        SolutionPackCheckRunSummary, SolutionPackPlan,
+    },
     solution_packs::{
-        BlueprintPublication, MAX_SOLUTION_PACK_INSPECTION_RESPONSE_BYTES,
-        MAX_SOLUTION_PACK_PLAN_RESPONSE_BYTES, SolutionPackExtensionRequirement,
-        SolutionPackResource, ValidatedSolutionPack,
+        BlueprintPublication, MAX_SOLUTION_PACK_CHECK_RUN_RESPONSE_BYTES,
+        MAX_SOLUTION_PACK_INSPECTION_RESPONSE_BYTES, MAX_SOLUTION_PACK_PLAN_RESPONSE_BYTES,
+        SolutionPackExtensionRequirement, SolutionPackResource, ValidatedSolutionPack,
     },
 };
 
@@ -26,6 +29,7 @@ pub(super) struct InspectionResponse {
     manifest: ManifestSummary,
     resources: ResourceSummaries,
     extensions: Vec<ExtensionRequirementSummary>,
+    guidance: GuidanceInspectionSummary,
 }
 
 #[derive(Serialize)]
@@ -96,6 +100,21 @@ struct ExtensionRequirementSummary {
 struct ConfigurationTemplateSummary {
     path: String,
     sha256: String,
+}
+
+#[derive(Serialize)]
+struct GuidanceInspectionSummary {
+    readme_bytes: Option<usize>,
+    release_notes_bytes: Option<usize>,
+    setup_checklist_items: usize,
+    checks: Vec<CheckInspectionSummary>,
+}
+
+#[derive(Serialize)]
+struct CheckInspectionSummary {
+    key: String,
+    title: String,
+    predicate_type: String,
 }
 
 /// Validates and summarizes an uploaded solution-pack archive without storing
@@ -175,6 +194,28 @@ pub(super) async fn inspect(
             .iter()
             .map(extension_requirement_summary)
             .collect(),
+        guidance: GuidanceInspectionSummary {
+            readme_bytes: pack.guidance().readme_markdown.as_ref().map(String::len),
+            release_notes_bytes: pack
+                .guidance()
+                .release_notes_markdown
+                .as_ref()
+                .map(String::len),
+            setup_checklist_items: pack
+                .guidance()
+                .setup_checklist
+                .as_ref()
+                .map_or(0, |checklist| checklist.items.len()),
+            checks: pack
+                .checks()
+                .iter()
+                .map(|check| CheckInspectionSummary {
+                    key: check.key.clone(),
+                    title: check.title.clone(),
+                    predicate_type: check.predicate.predicate_type().to_owned(),
+                })
+                .collect(),
+        },
     };
     ensure_response_size(&response)?;
     Ok((StatusCode::OK, Json(response)))
@@ -255,6 +296,58 @@ pub(super) async fn get_application(
     Ok(Json(application))
 }
 
+pub(super) async fn rerun_checks(
+    ScopedRepository(repository): ScopedRepository,
+    application_id: Result<Path<Uuid>, PathRejection>,
+    body: Result<Bytes, BytesRejection>,
+) -> Result<(StatusCode, Json<SolutionPackCheckRun>), ApiError> {
+    let Path(application_id) = application_id.map_err(ApiError::from_path_rejection)?;
+    if !body.map_err(ApiError::from_bytes_rejection)?.is_empty() {
+        return Err(ApiError::invalid_input(
+            "solution-pack check rerun body must be empty".to_owned(),
+        ));
+    }
+    let run = repository
+        .rerun_solution_pack_checks(application_id)
+        .await?;
+    ensure_check_response_size(&run)?;
+    Ok((StatusCode::CREATED, Json(run)))
+}
+
+pub(super) async fn list_check_runs(
+    ScopedRepository(repository): ScopedRepository,
+    application_id: Result<Path<Uuid>, PathRejection>,
+    query: Result<Query<ListApplicationsQuery>, QueryRejection>,
+) -> Result<Json<Vec<SolutionPackCheckRunSummary>>, ApiError> {
+    let Path(application_id) = application_id.map_err(ApiError::from_path_rejection)?;
+    let Query(query) = query.map_err(ApiError::from_query_rejection)?;
+    let limit = query.limit.unwrap_or(25);
+    let offset = query.offset.unwrap_or(0);
+    if !(1..=100).contains(&limit) || !(0..=10_000).contains(&offset) {
+        return Err(ApiError::invalid_input(
+            "limit must be 1-100 and offset must be 0-10000".to_owned(),
+        ));
+    }
+    let runs = repository
+        .list_solution_pack_check_runs(application_id, limit, offset)
+        .await?;
+    ensure_check_response_size(&runs)?;
+    Ok(Json(runs))
+}
+
+pub(super) async fn get_check_run(
+    ScopedRepository(repository): ScopedRepository,
+    path: Result<Path<(Uuid, Uuid)>, PathRejection>,
+) -> Result<Json<SolutionPackCheckRun>, ApiError> {
+    let Path((application_id, run_id)) = path.map_err(ApiError::from_path_rejection)?;
+    let run = repository
+        .get_solution_pack_check_run(application_id, run_id)
+        .await?
+        .ok_or_else(|| ApiError::not_found("solution-pack check run"))?;
+    ensure_check_response_size(&run)?;
+    Ok(Json(run))
+}
+
 pub(super) async fn get_plan(
     ScopedRepository(repository): ScopedRepository,
     plan_id: Result<Path<Uuid>, PathRejection>,
@@ -293,6 +386,14 @@ fn ensure_application_response_size(response: &impl Serialize) -> Result<(), Api
         response,
         MAX_SOLUTION_PACK_PLAN_RESPONSE_BYTES,
         "solution-pack application summary exceeds the size limit",
+    )
+}
+
+fn ensure_check_response_size(response: &impl Serialize) -> Result<(), ApiError> {
+    ensure_encoded_response_size(
+        response,
+        MAX_SOLUTION_PACK_CHECK_RUN_RESPONSE_BYTES,
+        "solution-pack check response exceeds the size limit",
     )
 }
 
@@ -396,6 +497,12 @@ mod tests {
                 workspace_settings: Vec::new(),
             },
             extensions: Vec::new(),
+            guidance: GuidanceInspectionSummary {
+                readme_bytes: None,
+                release_notes_bytes: None,
+                setup_checklist_items: 0,
+                checks: Vec::new(),
+            },
         }
     }
 
@@ -408,5 +515,40 @@ mod tests {
             ))
             .is_err()
         );
+    }
+
+    #[test]
+    fn check_response_guard_accepts_maximum_bounded_result_evidence() {
+        let now = chrono::Utc::now();
+        let results = (0..64)
+            .map(|position| crate::repository::SolutionPackCheckResult {
+                position,
+                key: format!("checks/check_{position}"),
+                title: "x".repeat(200),
+                predicate_type: "extension_installed".to_owned(),
+                passed: true,
+                reason_code: "installed".to_owned(),
+                summary: "Check passed.".to_owned(),
+                evidence: serde_json::json!({"bounded":"x".repeat(3900)}),
+                evaluated_at: now,
+            })
+            .collect();
+        let run = SolutionPackCheckRun {
+            summary: SolutionPackCheckRunSummary {
+                id: Uuid::nil(),
+                application_id: Uuid::nil(),
+                request_id: Uuid::nil(),
+                correlation_id: Uuid::nil(),
+                trigger: "manual".to_owned(),
+                total_count: 64,
+                passed_count: 64,
+                failed_count: 0,
+                started_at: now,
+                completed_at: now,
+            },
+            results,
+        };
+        assert!(serde_json::to_vec(&run).unwrap().len() > 256 * 1024);
+        assert!(ensure_check_response_size(&run).is_ok());
     }
 }

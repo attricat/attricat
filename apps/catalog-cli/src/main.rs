@@ -883,6 +883,22 @@ enum SolutionPackApplicationsCommand {
 }
 
 #[derive(Subcommand)]
+enum SolutionPackChecksCommand {
+    /// Evaluate the application's informational checks against current state.
+    Rerun { application_id: Uuid },
+    /// List bounded immutable check-run history.
+    List {
+        application_id: Uuid,
+        #[arg(long, default_value_t = 25)]
+        limit: u32,
+        #[arg(long, default_value_t = 0)]
+        offset: u32,
+    },
+    /// Show one immutable check run and its ordered results.
+    Show { application_id: Uuid, run_id: Uuid },
+}
+
+#[derive(Subcommand)]
 enum SolutionPackCommand {
     /// Validate and summarize a local archive on the authoritative server.
     Inspect {
@@ -906,6 +922,11 @@ enum SolutionPackCommand {
     Applications {
         #[command(subcommand)]
         command: SolutionPackApplicationsCommand,
+    },
+    /// Evaluate and read informational setup checks.
+    Checks {
+        #[command(subcommand)]
+        command: SolutionPackChecksCommand,
     },
 }
 
@@ -2352,6 +2373,15 @@ async fn solution_pack_command(
                 None,
             )
             .await
+        }
+        SolutionPackCommand::Checks { command: SolutionPackChecksCommand::Rerun { application_id } } => {
+            request(client, server, Method::POST, &format!("/solution-packs/applications/{}/checks", segment(application_id)), None).await
+        }
+        SolutionPackCommand::Checks { command: SolutionPackChecksCommand::List { application_id, limit, offset } } => {
+            request(client, server, Method::GET, &format!("/solution-packs/applications/{}/checks?limit={limit}&offset={offset}", segment(application_id)), None).await
+        }
+        SolutionPackCommand::Checks { command: SolutionPackChecksCommand::Show { application_id, run_id } } => {
+            request(client, server, Method::GET, &format!("/solution-packs/applications/{}/checks/{}", segment(application_id), segment(run_id)), None).await
         }
     }
 }
@@ -3954,6 +3984,41 @@ value = "Blue shirt"
             ])
             .is_ok()
         );
+        assert!(
+            Cli::try_parse_from([
+                "acli",
+                "solution-pack",
+                "checks",
+                "rerun",
+                "00000000-0000-4000-8000-000000000002"
+            ])
+            .is_ok()
+        );
+        assert!(
+            Cli::try_parse_from([
+                "acli",
+                "solution-pack",
+                "checks",
+                "list",
+                "00000000-0000-4000-8000-000000000002",
+                "--limit",
+                "100",
+                "--offset",
+                "10000"
+            ])
+            .is_ok()
+        );
+        assert!(
+            Cli::try_parse_from([
+                "acli",
+                "solution-pack",
+                "checks",
+                "show",
+                "00000000-0000-4000-8000-000000000002",
+                "00000000-0000-4000-8000-000000000003"
+            ])
+            .is_ok()
+        );
     }
 
     #[tokio::test]
@@ -3961,29 +4026,55 @@ value = "Blue shirt"
         let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
         let address = listener.local_addr().unwrap();
         let application_id = Uuid::from_u128(2);
-        let app = axum::Router::new()
-            .route(
-                "/solution-packs/plans/{plan_id}/apply",
-                axum::routing::post(
-                    move |axum::extract::Path(plan_id): axum::extract::Path<Uuid>| async move {
-                        axum::Json(json!({"plan_id": plan_id}))
-                    },
-                ),
-            )
-            .route(
-                "/solution-packs/applications",
-                axum::routing::get(|uri: axum::http::Uri| async move {
-                    axum::Json(json!({"query": uri.query()}))
-                }),
-            )
-            .route(
-                "/solution-packs/applications/{application_id}",
-                axum::routing::get(
-                    move |axum::extract::Path(id): axum::extract::Path<Uuid>| async move {
-                        axum::Json(json!({"id": id}))
-                    },
-                ),
-            );
+        let app =
+            axum::Router::new()
+                .route(
+                    "/solution-packs/plans/{plan_id}/apply",
+                    axum::routing::post(
+                        move |axum::extract::Path(plan_id): axum::extract::Path<Uuid>| async move {
+                            axum::Json(json!({"plan_id": plan_id}))
+                        },
+                    ),
+                )
+                .route(
+                    "/solution-packs/applications",
+                    axum::routing::get(|uri: axum::http::Uri| async move {
+                        axum::Json(json!({"query": uri.query()}))
+                    }),
+                )
+                .route(
+                    "/solution-packs/applications/{application_id}",
+                    axum::routing::get(
+                        move |axum::extract::Path(id): axum::extract::Path<Uuid>| async move {
+                            axum::Json(json!({"id": id}))
+                        },
+                    ),
+                )
+                .route(
+                    "/solution-packs/applications/{application_id}/checks",
+                    axum::routing::get(
+                        |axum::extract::Path(id): axum::extract::Path<Uuid>,
+                         uri: axum::http::Uri| async move {
+                            axum::Json(json!({"id":id,"query":uri.query()}))
+                        },
+                    )
+                    .post(
+                        |axum::extract::Path(id): axum::extract::Path<Uuid>| async move {
+                            axum::Json(json!({"rerun":id}))
+                        },
+                    ),
+                )
+                .route(
+                    "/solution-packs/applications/{application_id}/checks/{run_id}",
+                    axum::routing::get(
+                        |axum::extract::Path((application_id, run_id)): axum::extract::Path<(
+                            Uuid,
+                            Uuid,
+                        )>| async move {
+                            axum::Json(json!({"application_id":application_id,"run_id":run_id}))
+                        },
+                    ),
+                );
         let server = tokio::spawn(async move { axum::serve(listener, app).await.unwrap() });
         let client = Client::new();
         let url = Url::parse(&format!("http://{address}")).unwrap();
@@ -4035,6 +4126,50 @@ value = "Blue shirt"
             .await
             .unwrap(),
             format!(r#"{{"id":"{application_id}"}}"#)
+        );
+        assert_eq!(
+            solution_pack_command(
+                &client,
+                &url,
+                SolutionPackCommand::Checks {
+                    command: SolutionPackChecksCommand::Rerun { application_id },
+                }
+            )
+            .await
+            .unwrap(),
+            format!(r#"{{"rerun":"{application_id}"}}"#)
+        );
+        assert_eq!(
+            solution_pack_command(
+                &client,
+                &url,
+                SolutionPackCommand::Checks {
+                    command: SolutionPackChecksCommand::List {
+                        application_id,
+                        limit: 25,
+                        offset: 0
+                    },
+                }
+            )
+            .await
+            .unwrap(),
+            format!(r#"{{"id":"{application_id}","query":"limit=25&offset=0"}}"#)
+        );
+        let run_id = Uuid::from_u128(3);
+        assert_eq!(
+            solution_pack_command(
+                &client,
+                &url,
+                SolutionPackCommand::Checks {
+                    command: SolutionPackChecksCommand::Show {
+                        application_id,
+                        run_id
+                    },
+                }
+            )
+            .await
+            .unwrap(),
+            format!(r#"{{"application_id":"{application_id}","run_id":"{run_id}"}}"#)
         );
         server.abort();
     }

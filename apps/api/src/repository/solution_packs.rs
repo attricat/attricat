@@ -14,10 +14,12 @@ use crate::{
     },
     model::{CreateAttributeContext, CreateBlueprint},
     solution_packs::{
-        BlueprintPublication, InstalledExtensionSnapshot, MAX_SOLUTION_PACK_PLAN_RESPONSE_BYTES,
+        BlueprintPublication, InstalledExtensionSnapshot,
+        MAX_SOLUTION_PACK_CHECK_RUN_RESPONSE_BYTES, MAX_SOLUTION_PACK_PLAN_RESPONSE_BYTES,
         PlanningExploreNavigationEntry, PlanningWorkspaceSnapshot, SOLUTION_PACK_PLAN_EXPIRY_HOURS,
-        SolutionPackExtensionRequirement, SolutionPackPlanDraft, ValidatedSolutionPack,
-        build_create_only_plan, evaluate_extension_requirement,
+        SolutionPackCheckDefinition, SolutionPackCheckPredicate, SolutionPackExtensionRequirement,
+        SolutionPackPlanDraft, ValidatedSolutionPack, build_create_only_plan,
+        evaluate_extension_requirement, json_deep_contains, parse_version_req,
     },
 };
 
@@ -43,6 +45,9 @@ pub struct SolutionPackPlan {
     pub prefix: String,
     pub blueprint_publication: String,
     pub ready: bool,
+    pub readme_markdown: Option<String>,
+    pub release_notes_markdown: Option<String>,
+    pub setup_checklist: Option<Value>,
     pub created_at: DateTime<Utc>,
     pub expires_at: DateTime<Utc>,
     #[sqlx(skip)]
@@ -53,6 +58,16 @@ pub struct SolutionPackPlan {
     pub conflicts: Vec<SolutionPackPlanConflict>,
     #[sqlx(skip)]
     pub extension_requirements: Vec<SolutionPackPlanExtensionRequirement>,
+    #[sqlx(skip)]
+    pub checks: Vec<SolutionPackCheckSummary>,
+}
+
+#[derive(Clone, Debug, Serialize, sqlx::FromRow)]
+pub struct SolutionPackCheckSummary {
+    pub position: i64,
+    pub key: String,
+    pub title: String,
+    pub predicate_type: String,
 }
 
 #[derive(Clone, Debug, Serialize, sqlx::FromRow)]
@@ -328,7 +343,7 @@ impl CatalogRepository {
             ));
         }
         sqlx::query(
-            "INSERT INTO solution_pack_plans (id, workspace_id, actor_user_id, actor_token_id, source_kind, source_metadata, archive_sha256, manifest_version, pack_id, pack_name, pack_version, pack_description, host_api, prefix, blueprint_publication, ready, created_at, expires_at) VALUES ($1, $2, $3, $4, 'local_archive', $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17)",
+            "INSERT INTO solution_pack_plans (id, workspace_id, actor_user_id, actor_token_id, source_kind, source_metadata, archive_sha256, manifest_version, pack_id, pack_name, pack_version, pack_description, host_api, prefix, blueprint_publication, ready, created_at, expires_at, readme_markdown, release_notes_markdown, setup_checklist) VALUES ($1, $2, $3, $4, 'local_archive', $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20)",
         )
         .bind(id)
         .bind(workspace_id)
@@ -347,9 +362,20 @@ impl CatalogRepository {
         .bind(draft.ready)
         .bind(created_at)
         .bind(expires_at)
+        .bind(&pack.guidance().readme_markdown)
+        .bind(&pack.guidance().release_notes_markdown)
+        .bind(
+            pack.guidance()
+                .setup_checklist
+                .as_ref()
+                .map(serde_json::to_value)
+                .transpose()
+                .map_err(|error| RepositoryError::InvalidSolutionPackPlan(error.to_string()))?,
+        )
         .execute(&mut *tx)
         .await?;
         insert_plan_rows(&mut tx, workspace_id, id, &draft).await?;
+        insert_plan_checks(&mut tx, workspace_id, id, pack.checks()).await?;
         let mut audit_repository = self.clone();
         if let Some(audit) = audit_repository.audit_context.as_mut() {
             audit.target = serde_json::json!({"type": "solution_pack_plan", "id": id});
@@ -365,7 +391,7 @@ impl CatalogRepository {
     ) -> Result<Option<SolutionPackPlan>, RepositoryError> {
         let workspace_id = self.workspace_id.unwrap_or(Self::DEFAULT_WORKSPACE_ID);
         let Some(mut plan) = sqlx::query_as::<_, SolutionPackPlan>(
-            "SELECT id, workspace_id, source_kind, source_metadata, archive_sha256, manifest_version, pack_id, pack_name, pack_version, pack_description, host_api, prefix, blueprint_publication, ready, created_at, expires_at FROM solution_pack_plans WHERE workspace_id = $1 AND id = $2",
+            "SELECT id, workspace_id, source_kind, source_metadata, archive_sha256, manifest_version, pack_id, pack_name, pack_version, pack_description, host_api, prefix, blueprint_publication, ready, readme_markdown, release_notes_markdown, setup_checklist, created_at, expires_at FROM solution_pack_plans WHERE workspace_id = $1 AND id = $2",
         )
         .bind(workspace_id)
         .bind(plan_id)
@@ -396,6 +422,7 @@ impl CatalogRepository {
         .bind(plan_id)
         .fetch_all(&self.pool)
         .await?;
+        plan.checks = load_plan_check_summaries(&self.pool, workspace_id, plan_id).await?;
         Ok(Some(plan))
     }
 }
@@ -477,12 +504,28 @@ fn materialize_plan(
         prefix: prefix.to_owned(),
         blueprint_publication: publication.as_str().to_owned(),
         ready: draft.ready,
+        readme_markdown: pack.guidance().readme_markdown.clone(),
+        release_notes_markdown: pack.guidance().release_notes_markdown.clone(),
+        setup_checklist: pack.guidance().setup_checklist.as_ref().map(|checklist| {
+            serde_json::to_value(checklist).expect("validated checklist serializes")
+        }),
         created_at,
         expires_at,
         mappings,
         actions,
         conflicts,
         extension_requirements,
+        checks: pack
+            .checks()
+            .iter()
+            .enumerate()
+            .map(|(position, check)| SolutionPackCheckSummary {
+                position: position as i64,
+                key: check.key.clone(),
+                title: check.title.clone(),
+                predicate_type: check.predicate.predicate_type().to_owned(),
+            })
+            .collect(),
     }
 }
 
@@ -560,6 +603,56 @@ async fn insert_plan_rows(
     Ok(())
 }
 
+async fn insert_plan_checks(
+    tx: &mut Transaction<'_, Postgres>,
+    workspace_id: Uuid,
+    plan_id: Uuid,
+    checks: &[SolutionPackCheckDefinition],
+) -> Result<(), RepositoryError> {
+    for (position, check) in checks.iter().enumerate() {
+        sqlx::query("INSERT INTO solution_pack_plan_check_definitions (plan_id,workspace_id,position,check_key,title,predicate) VALUES ($1,$2,$3,$4,$5,$6)")
+            .bind(plan_id)
+            .bind(workspace_id)
+            .bind(position as i64)
+            .bind(&check.key)
+            .bind(&check.title)
+            .bind(serde_json::to_value(&check.predicate).map_err(|error| RepositoryError::InvalidSolutionPackPlan(error.to_string()))?)
+            .execute(&mut **tx)
+            .await?;
+    }
+    Ok(())
+}
+
+async fn load_plan_check_summaries(
+    pool: &sqlx::PgPool,
+    workspace_id: Uuid,
+    plan_id: Uuid,
+) -> Result<Vec<SolutionPackCheckSummary>, RepositoryError> {
+    let rows = sqlx::query_as::<_, (i64, String, String, Value)>(
+        "SELECT position,check_key,title,predicate FROM solution_pack_plan_check_definitions WHERE workspace_id=$1 AND plan_id=$2 ORDER BY position",
+    )
+    .bind(workspace_id)
+    .bind(plan_id)
+    .fetch_all(pool)
+    .await?;
+    rows.into_iter()
+        .map(|(position, key, title, predicate)| {
+            let predicate: SolutionPackCheckPredicate =
+                serde_json::from_value(predicate).map_err(|_| {
+                    RepositoryError::InvalidSolutionPackPlan(
+                        "invalid persisted check predicate".into(),
+                    )
+                })?;
+            Ok(SolutionPackCheckSummary {
+                position,
+                key,
+                title,
+                predicate_type: predicate.predicate_type().to_owned(),
+            })
+        })
+        .collect()
+}
+
 #[derive(Clone, Debug, Serialize, sqlx::FromRow)]
 pub struct SolutionPackApplication {
     pub id: Uuid,
@@ -578,11 +671,54 @@ pub struct SolutionPackApplication {
     pub diagnostic_code: Option<String>,
     pub diagnostic_message: Option<String>,
     pub mapping_snapshot: Value,
+    pub readme_markdown: Option<String>,
+    pub release_notes_markdown: Option<String>,
+    pub setup_checklist: Option<Value>,
     pub started_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
     pub completed_at: Option<DateTime<Utc>>,
     #[sqlx(skip)]
     pub steps: Vec<SolutionPackApplicationStep>,
+    #[sqlx(skip)]
+    pub checks: Vec<SolutionPackCheckSummary>,
+    #[sqlx(skip)]
+    pub latest_check_run: Option<SolutionPackCheckRunSummary>,
+}
+
+#[derive(Clone, Debug, Serialize, sqlx::FromRow)]
+pub struct SolutionPackCheckRunSummary {
+    pub id: Uuid,
+    pub application_id: Uuid,
+    pub request_id: Uuid,
+    pub correlation_id: Uuid,
+    pub trigger: String,
+    pub total_count: i64,
+    pub passed_count: i64,
+    pub failed_count: i64,
+    pub started_at: DateTime<Utc>,
+    pub completed_at: DateTime<Utc>,
+}
+
+#[derive(Clone, Debug, Serialize)]
+pub struct SolutionPackCheckRun {
+    #[serde(flatten)]
+    pub summary: SolutionPackCheckRunSummary,
+    pub results: Vec<SolutionPackCheckResult>,
+}
+
+#[derive(Clone, Debug, Serialize, sqlx::FromRow)]
+pub struct SolutionPackCheckResult {
+    pub position: i64,
+    pub key: String,
+    pub title: String,
+    #[sqlx(rename = "predicate_type")]
+    #[serde(rename = "type")]
+    pub predicate_type: String,
+    pub passed: bool,
+    pub reason_code: String,
+    pub summary: String,
+    pub evidence: Value,
+    pub evaluated_at: DateTime<Utc>,
 }
 
 #[derive(Clone, Debug, Serialize, sqlx::FromRow)]
@@ -751,6 +887,8 @@ impl CatalogRepository {
                 }
             }
         }
+        self.ensure_initial_solution_pack_check_run(application_id)
+            .await?;
         self.get_solution_pack_application(application_id)
             .await?
             .ok_or(RepositoryError::NotFound("solution-pack application"))
@@ -763,7 +901,7 @@ impl CatalogRepository {
         let workspace_id = self.workspace_id.unwrap_or(Self::DEFAULT_WORKSPACE_ID);
         let mut tx = self.pool.begin().await?;
         let plan = sqlx::query_as::<_, SolutionPackPlan>(
-            "SELECT id, workspace_id, source_kind, source_metadata, archive_sha256, manifest_version, pack_id, pack_name, pack_version, pack_description, host_api, prefix, blueprint_publication, ready, created_at, expires_at FROM solution_pack_plans WHERE workspace_id = $1 AND id = $2 FOR UPDATE",
+            "SELECT id, workspace_id, source_kind, source_metadata, archive_sha256, manifest_version, pack_id, pack_name, pack_version, pack_description, host_api, prefix, blueprint_publication, ready, readme_markdown, release_notes_markdown, setup_checklist, created_at, expires_at FROM solution_pack_plans WHERE workspace_id = $1 AND id = $2 FOR UPDATE",
         )
         .bind(workspace_id)
         .bind(plan_id)
@@ -838,7 +976,7 @@ impl CatalogRepository {
             .as_ref()
             .map_or(request_id, |value| value.correlation_id);
         let inserted = sqlx::query_scalar::<_, Uuid>(
-            "INSERT INTO solution_pack_applications (id, workspace_id, plan_id, actor_user_id, actor_token_id, request_id, correlation_id, source_kind, source_metadata, archive_sha256, pack_id, pack_version, blueprint_publication, state, mapping_snapshot) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,'running',$14) ON CONFLICT (plan_id) DO NOTHING RETURNING id",
+            "INSERT INTO solution_pack_applications (id, workspace_id, plan_id, actor_user_id, actor_token_id, request_id, correlation_id, source_kind, source_metadata, archive_sha256, pack_id, pack_version, blueprint_publication, state, mapping_snapshot, readme_markdown, release_notes_markdown, setup_checklist) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,'running',$14,$15,$16,$17) ON CONFLICT (plan_id) DO NOTHING RETURNING id",
         )
         .bind(application_id)
         .bind(workspace_id)
@@ -854,6 +992,9 @@ impl CatalogRepository {
         .bind(&plan.pack_version)
         .bind(&plan.blueprint_publication)
         .bind(mapping_snapshot)
+        .bind(&plan.readme_markdown)
+        .bind(&plan.release_notes_markdown)
+        .bind(&plan.setup_checklist)
         .fetch_optional(&mut *tx)
         .await?;
         let application_id = match inserted {
@@ -866,6 +1007,12 @@ impl CatalogRepository {
                 .bind(plan_id)
                 .execute(&mut *tx)
                 .await?;
+                sqlx::query("INSERT INTO solution_pack_application_check_definitions (application_id,workspace_id,position,check_key,title,predicate) SELECT $1,workspace_id,position,check_key,title,predicate FROM solution_pack_plan_check_definitions WHERE workspace_id=$2 AND plan_id=$3 ORDER BY position")
+                    .bind(id)
+                    .bind(workspace_id)
+                    .bind(plan_id)
+                    .execute(&mut *tx)
+                    .await?;
                 let mut audit_repository = self.clone();
                 if let Some(audit) = audit_repository.audit_context.as_mut() {
                     audit.target = serde_json::json!({"type":"solution_pack_application","id":id,"plan_id":plan_id});
@@ -1533,7 +1680,7 @@ impl CatalogRepository {
             .execute(&mut *tx)
             .await?;
         let Some(mut application) = sqlx::query_as::<_, SolutionPackApplication>(
-            "SELECT id,workspace_id,plan_id,request_id,correlation_id,source_kind,source_metadata,archive_sha256,pack_id,pack_version,blueprint_publication,state,diagnostic_code,diagnostic_message,mapping_snapshot,started_at,updated_at,completed_at FROM solution_pack_applications WHERE workspace_id=$1 AND id=$2",
+            "SELECT id,workspace_id,plan_id,request_id,correlation_id,source_kind,source_metadata,archive_sha256,pack_id,pack_version,blueprint_publication,state,diagnostic_code,diagnostic_message,mapping_snapshot,readme_markdown,release_notes_markdown,setup_checklist,started_at,updated_at,completed_at FROM solution_pack_applications WHERE workspace_id=$1 AND id=$2",
         )
         .bind(workspace_id).bind(application_id).fetch_optional(&mut *tx).await? else {
             tx.commit().await?;
@@ -1542,8 +1689,181 @@ impl CatalogRepository {
         application.steps = sqlx::query_as::<_, SolutionPackApplicationStep>(
             "SELECT position,resource_kind,logical_key,target_id,target_code,target_version,state,diagnostic_code,diagnostic_message,result_snapshot,created_at,updated_at,completed_at FROM solution_pack_application_steps WHERE workspace_id=$1 AND application_id=$2 ORDER BY position",
         ).bind(workspace_id).bind(application_id).fetch_all(&mut *tx).await?;
+        application.checks =
+            load_application_check_summaries(&mut tx, workspace_id, application_id).await?;
+        application.latest_check_run =
+            load_latest_check_run(&mut tx, workspace_id, application_id).await?;
         tx.commit().await?;
         Ok(Some(application))
+    }
+
+    async fn ensure_initial_solution_pack_check_run(
+        &self,
+        application_id: Uuid,
+    ) -> Result<(), RepositoryError> {
+        let workspace_id = self.workspace_id.unwrap_or(Self::DEFAULT_WORKSPACE_ID);
+        let exists: bool = sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM solution_pack_check_runs WHERE workspace_id=$1 AND application_id=$2 AND trigger='post_apply')")
+            .bind(workspace_id)
+            .bind(application_id)
+            .fetch_one(&self.pool)
+            .await?;
+        if !exists {
+            self.create_solution_pack_check_run(application_id, "post_apply")
+                .await?;
+        }
+        Ok(())
+    }
+
+    pub async fn rerun_solution_pack_checks(
+        &self,
+        application_id: Uuid,
+    ) -> Result<SolutionPackCheckRun, RepositoryError> {
+        self.create_solution_pack_check_run(application_id, "manual")
+            .await
+    }
+
+    pub async fn list_solution_pack_check_runs(
+        &self,
+        application_id: Uuid,
+        limit: i64,
+        offset: i64,
+    ) -> Result<Vec<SolutionPackCheckRunSummary>, RepositoryError> {
+        let workspace_id = self.workspace_id.unwrap_or(Self::DEFAULT_WORKSPACE_ID);
+        let application_exists: bool = sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM solution_pack_applications WHERE workspace_id=$1 AND id=$2)")
+            .bind(workspace_id).bind(application_id).fetch_one(&self.pool).await?;
+        if !application_exists {
+            return Err(RepositoryError::NotFound("solution-pack application"));
+        }
+        Ok(sqlx::query_as::<_, SolutionPackCheckRunSummary>("SELECT id,application_id,request_id,correlation_id,trigger,total_count,passed_count,failed_count,started_at,completed_at FROM solution_pack_check_runs WHERE workspace_id=$1 AND application_id=$2 ORDER BY completed_at DESC,id DESC LIMIT $3 OFFSET $4")
+            .bind(workspace_id).bind(application_id).bind(limit).bind(offset).fetch_all(&self.pool).await?)
+    }
+
+    pub async fn get_solution_pack_check_run(
+        &self,
+        application_id: Uuid,
+        run_id: Uuid,
+    ) -> Result<Option<SolutionPackCheckRun>, RepositoryError> {
+        let workspace_id = self.workspace_id.unwrap_or(Self::DEFAULT_WORKSPACE_ID);
+        let Some(summary) = sqlx::query_as::<_, SolutionPackCheckRunSummary>("SELECT id,application_id,request_id,correlation_id,trigger,total_count,passed_count,failed_count,started_at,completed_at FROM solution_pack_check_runs WHERE workspace_id=$1 AND application_id=$2 AND id=$3")
+            .bind(workspace_id).bind(application_id).bind(run_id).fetch_optional(&self.pool).await? else {
+            return Ok(None);
+        };
+        let results = sqlx::query_as::<_, SolutionPackCheckResult>("SELECT position,check_key AS key,title,predicate_type,passed,reason_code,summary,evidence,evaluated_at FROM solution_pack_check_results WHERE workspace_id=$1 AND run_id=$2 ORDER BY position")
+            .bind(workspace_id).bind(run_id).fetch_all(&self.pool).await?;
+        Ok(Some(SolutionPackCheckRun { summary, results }))
+    }
+
+    async fn create_solution_pack_check_run(
+        &self,
+        application_id: Uuid,
+        trigger: &str,
+    ) -> Result<SolutionPackCheckRun, RepositoryError> {
+        let workspace_id = self.workspace_id.unwrap_or(Self::DEFAULT_WORKSPACE_ID);
+        let mut tx = self.pool.begin().await?;
+        let application = sqlx::query_as::<_, (Uuid, String)>("SELECT plan_id,state FROM solution_pack_applications WHERE workspace_id=$1 AND id=$2 FOR UPDATE")
+            .bind(workspace_id).bind(application_id).fetch_optional(&mut *tx).await?
+            .ok_or(RepositoryError::NotFound("solution-pack application"))?;
+        if application.1 != "completed" {
+            return Err(RepositoryError::SolutionPackApplicationInvalid);
+        }
+        if trigger == "post_apply"
+            && let Some(run_id) = sqlx::query_scalar::<_, Uuid>("SELECT id FROM solution_pack_check_runs WHERE workspace_id=$1 AND application_id=$2 AND trigger='post_apply'")
+                .bind(workspace_id).bind(application_id).fetch_optional(&mut *tx).await?
+        {
+            tx.commit().await?;
+            return self.get_solution_pack_check_run(application_id, run_id).await?
+                .ok_or(RepositoryError::NotFound("solution-pack check run"));
+        }
+        let definitions = sqlx::query_as::<_, (i64, String, String, Value)>("SELECT position,check_key,title,predicate FROM solution_pack_application_check_definitions WHERE workspace_id=$1 AND application_id=$2 ORDER BY position")
+            .bind(workspace_id).bind(application_id).fetch_all(&mut *tx).await?;
+        let started_at = Utc::now();
+        let mut results = Vec::with_capacity(definitions.len());
+        for (position, key, title, predicate) in definitions {
+            let predicate: SolutionPackCheckPredicate =
+                serde_json::from_value(predicate).map_err(|_| {
+                    RepositoryError::InvalidSolutionPackPlan(
+                        "invalid persisted check predicate".into(),
+                    )
+                })?;
+            let (passed, reason_code, summary, evidence) = evaluate_solution_pack_check(
+                &mut tx,
+                workspace_id,
+                application_id,
+                application.0,
+                &predicate,
+            )
+            .await?;
+            results.push(SolutionPackCheckResult {
+                position,
+                key,
+                title,
+                predicate_type: predicate.predicate_type().to_owned(),
+                passed,
+                reason_code,
+                summary,
+                evidence,
+                evaluated_at: Utc::now(),
+            });
+        }
+        let completed_at = Utc::now();
+        let passed_count = results.iter().filter(|result| result.passed).count() as i64;
+        let run_id = Uuid::new_v4();
+        let request_id = self
+            .audit_context
+            .as_ref()
+            .map_or_else(Uuid::new_v4, |audit| audit.request_id);
+        let correlation_id = self
+            .audit_context
+            .as_ref()
+            .map_or(request_id, |audit| audit.correlation_id);
+        let actor_user_id = self
+            .audit_context
+            .as_ref()
+            .and_then(|audit| audit.actor_user_id);
+        let actor_token_id = self
+            .audit_context
+            .as_ref()
+            .and_then(|audit| audit.actor_token_id);
+        let run = SolutionPackCheckRun {
+            summary: SolutionPackCheckRunSummary {
+                id: run_id,
+                application_id,
+                request_id,
+                correlation_id,
+                trigger: trigger.to_owned(),
+                total_count: results.len() as i64,
+                passed_count,
+                failed_count: results.len() as i64 - passed_count,
+                started_at,
+                completed_at,
+            },
+            results,
+        };
+        let response_size = serde_json::to_vec(&run)
+            .map_err(|error| RepositoryError::InvalidSolutionPackPlan(error.to_string()))?
+            .len();
+        if response_size > MAX_SOLUTION_PACK_CHECK_RUN_RESPONSE_BYTES {
+            return Err(RepositoryError::InvalidSolutionPackPlan(
+                "solution-pack check response exceeds the size limit".to_owned(),
+            ));
+        }
+        sqlx::query("INSERT INTO solution_pack_check_runs (id,workspace_id,application_id,actor_user_id,actor_token_id,request_id,correlation_id,trigger,total_count,passed_count,failed_count,started_at,completed_at) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)")
+            .bind(run_id).bind(workspace_id).bind(application_id).bind(actor_user_id).bind(actor_token_id)
+            .bind(request_id).bind(correlation_id).bind(trigger).bind(run.summary.total_count).bind(run.summary.passed_count)
+            .bind(run.summary.failed_count).bind(started_at).bind(completed_at).execute(&mut *tx).await?;
+        for result in &run.results {
+            sqlx::query("INSERT INTO solution_pack_check_results (run_id,workspace_id,position,check_key,title,predicate_type,passed,reason_code,summary,evidence,evaluated_at) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)")
+                .bind(run_id).bind(workspace_id).bind(result.position).bind(&result.key).bind(&result.title)
+                .bind(&result.predicate_type).bind(result.passed).bind(&result.reason_code).bind(&result.summary)
+                .bind(&result.evidence).bind(result.evaluated_at).execute(&mut *tx).await?;
+        }
+        let mut audit_repository = self.clone();
+        if let Some(audit) = audit_repository.audit_context.as_mut() {
+            audit.target = serde_json::json!({"type":"solution_pack_check_run","id":run_id,"application_id":application_id,"trigger":trigger});
+        }
+        audit_repository.write_audit_event(&mut tx).await?;
+        tx.commit().await?;
+        Ok(run)
     }
 
     pub async fn list_solution_pack_applications(
@@ -1556,6 +1876,274 @@ impl CatalogRepository {
             "SELECT id,plan_id,request_id,correlation_id,source_kind,source_metadata,archive_sha256,pack_id,pack_version,blueprint_publication,state,diagnostic_code,diagnostic_message,started_at,updated_at,completed_at FROM solution_pack_applications WHERE workspace_id=$1 ORDER BY started_at DESC,id DESC LIMIT $2 OFFSET $3",
         ).bind(workspace_id).bind(limit).bind(offset).fetch_all(&self.pool).await?)
     }
+}
+
+async fn load_application_check_summaries(
+    tx: &mut Transaction<'_, Postgres>,
+    workspace_id: Uuid,
+    application_id: Uuid,
+) -> Result<Vec<SolutionPackCheckSummary>, RepositoryError> {
+    let rows = sqlx::query_as::<_, (i64, String, String, Value)>("SELECT position,check_key,title,predicate FROM solution_pack_application_check_definitions WHERE workspace_id=$1 AND application_id=$2 ORDER BY position")
+        .bind(workspace_id).bind(application_id).fetch_all(&mut **tx).await?;
+    rows.into_iter()
+        .map(|(position, key, title, value)| {
+            let predicate: SolutionPackCheckPredicate =
+                serde_json::from_value(value).map_err(|_| {
+                    RepositoryError::InvalidSolutionPackPlan(
+                        "invalid persisted check predicate".into(),
+                    )
+                })?;
+            Ok(SolutionPackCheckSummary {
+                position,
+                key,
+                title,
+                predicate_type: predicate.predicate_type().to_owned(),
+            })
+        })
+        .collect()
+}
+
+async fn load_latest_check_run(
+    tx: &mut Transaction<'_, Postgres>,
+    workspace_id: Uuid,
+    application_id: Uuid,
+) -> Result<Option<SolutionPackCheckRunSummary>, RepositoryError> {
+    Ok(sqlx::query_as::<_, SolutionPackCheckRunSummary>("SELECT id,application_id,request_id,correlation_id,trigger,total_count,passed_count,failed_count,started_at,completed_at FROM solution_pack_check_runs WHERE workspace_id=$1 AND application_id=$2 ORDER BY completed_at DESC,id DESC LIMIT 1")
+        .bind(workspace_id).bind(application_id).fetch_optional(&mut **tx).await?)
+}
+
+async fn evaluate_solution_pack_check(
+    tx: &mut Transaction<'_, Postgres>,
+    workspace_id: Uuid,
+    application_id: Uuid,
+    plan_id: Uuid,
+    predicate: &SolutionPackCheckPredicate,
+) -> Result<(bool, String, String, Value), RepositoryError> {
+    match predicate {
+        SolutionPackCheckPredicate::BlueprintPublished { blueprint } => {
+            let target_code =
+                check_blueprint_target(tx, workspace_id, application_id, blueprint).await?;
+            let Some(target_code) = target_code else {
+                return Ok(unresolvable());
+            };
+            let published: bool = sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM blueprints WHERE workspace_id=$1 AND code=$2 AND status='published' AND deleted_at IS NULL)")
+                .bind(workspace_id).bind(&target_code).fetch_one(&mut **tx).await?;
+            Ok(check_outcome(
+                published,
+                "published",
+                "not_published",
+                serde_json::json!({"blueprint_code":target_code}),
+            ))
+        }
+        SolutionPackCheckPredicate::ExploreNavigationEntryPresent { blueprint } => {
+            let target_code =
+                check_blueprint_target(tx, workspace_id, application_id, blueprint).await?;
+            let Some(target_code) = target_code else {
+                return Ok(unresolvable());
+            };
+            let settings: Value = sqlx::query_scalar(
+                "SELECT settings FROM workspaces WHERE id=$1 AND deleted_at IS NULL",
+            )
+            .bind(workspace_id)
+            .fetch_one(&mut **tx)
+            .await?;
+            let navigation = settings
+                .get("explore_navigation")
+                .cloned()
+                .unwrap_or_else(|| serde_json::json!([]));
+            let entries =
+                match super::workspace_navigation::parse_stored_explore_navigation(navigation) {
+                    Ok(entries) => entries,
+                    Err(()) => {
+                        return Ok(check_outcome(
+                            false,
+                            "present",
+                            "invalid_workspace_navigation",
+                            serde_json::json!({"blueprint_code":target_code}),
+                        ));
+                    }
+                };
+            let published: bool = sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM blueprints WHERE workspace_id=$1 AND code=$2 AND kind='entity' AND status='published' AND deleted_at IS NULL)")
+                .bind(workspace_id)
+                .bind(&target_code)
+                .fetch_one(&mut **tx)
+                .await?;
+            let present = published
+                && entries
+                    .iter()
+                    .any(|entry| entry.blueprint_code == target_code);
+            Ok(check_outcome(
+                present,
+                "present",
+                if published {
+                    "missing"
+                } else {
+                    "not_published"
+                },
+                serde_json::json!({"blueprint_code":target_code}),
+            ))
+        }
+        SolutionPackCheckPredicate::ExtensionInstalled { extension }
+        | SolutionPackCheckPredicate::ExtensionEnabled { extension }
+        | SolutionPackCheckPredicate::ExtensionConfigurationMatches { extension } => {
+            let requirement = sqlx::query_as::<_, (String, String, Value)>("SELECT extension_id,version_requirement,evaluation_template FROM solution_pack_plan_extension_requirements WHERE workspace_id=$1 AND plan_id=$2 AND logical_key=$3")
+                .bind(workspace_id).bind(plan_id).bind(extension).fetch_optional(&mut **tx).await?;
+            let Some((extension_id, version_requirement, template)) = requirement else {
+                return Ok(unresolvable());
+            };
+            let installed = sqlx::query_as::<_, (Uuid, String, String, Value, bool)>("SELECT i.installed_release_id,r.version,i.state,i.configuration,w.extensions_enabled FROM extension_installations i JOIN installed_extension_releases r ON r.id=i.installed_release_id AND r.workspace_id=i.workspace_id JOIN workspaces w ON w.id=i.workspace_id WHERE i.workspace_id=$1 AND i.extension_id=$2")
+                .bind(workspace_id).bind(&extension_id).fetch_optional(&mut **tx).await?;
+            let Some((release_id, version, state, configuration, workspace_enabled)) = installed
+            else {
+                return Ok(check_outcome(
+                    false,
+                    "satisfied",
+                    "not_installed",
+                    serde_json::json!({"extension_id":extension_id}),
+                ));
+            };
+            let version_matches = parse_version_req(&version_requirement)
+                .ok()
+                .zip(semver::Version::parse(&version).ok())
+                .is_some_and(|(requirement, version)| requirement.matches(&version));
+            let installed_ok = version_matches && state != "quarantined";
+            let evidence =
+                serde_json::json!({"extension_id":extension_id,"version":version,"state":state});
+            match predicate {
+                SolutionPackCheckPredicate::ExtensionInstalled { .. } => Ok(check_outcome(
+                    installed_ok,
+                    "installed",
+                    if !version_matches {
+                        "incompatible_version"
+                    } else if state == "quarantined" {
+                        "quarantined"
+                    } else {
+                        "not_installed"
+                    },
+                    evidence,
+                )),
+                SolutionPackCheckPredicate::ExtensionEnabled { .. } => {
+                    let (enabled, failure_reason) = extension_enabled_evaluation(
+                        installed_ok,
+                        &state,
+                        workspace_enabled,
+                        extension_policy::allows(&extension_id, release_id),
+                    );
+                    Ok(check_outcome(enabled, "enabled", failure_reason, evidence))
+                }
+                SolutionPackCheckPredicate::ExtensionConfigurationMatches { .. } => {
+                    let matches = installed_ok && json_deep_contains(&configuration, &template);
+                    Ok(check_outcome(
+                        matches,
+                        "configuration_matches",
+                        if !installed_ok {
+                            "not_installed"
+                        } else {
+                            "configuration_mismatch"
+                        },
+                        evidence,
+                    ))
+                }
+                _ => unreachable!(),
+            }
+        }
+        SolutionPackCheckPredicate::WorkspaceExtensionLayoutPlacementPresent { contribution } => {
+            let payload: Option<Value> = sqlx::query_scalar("SELECT normalized_payload FROM solution_pack_plan_actions WHERE workspace_id=$1 AND plan_id=$2 AND logical_key='workspace/extension-layout'")
+                .bind(workspace_id).bind(plan_id).fetch_optional(&mut **tx).await?;
+            let Some(payload) = payload else {
+                return Ok(unresolvable());
+            };
+            let entries = parse_extension_layout_payload(payload)?;
+            let Some(desired) = entries
+                .into_iter()
+                .find(|entry| entry.contribution == *contribution)
+            else {
+                return Ok(unresolvable());
+            };
+            let settings: Value = sqlx::query_scalar(
+                "SELECT settings FROM workspaces WHERE id=$1 AND deleted_at IS NULL",
+            )
+            .bind(workspace_id)
+            .fetch_one(&mut **tx)
+            .await?;
+            let layout = settings
+                .get("extension_layout")
+                .cloned()
+                .unwrap_or_else(|| serde_json::json!({"version":1,"outlets":{}}));
+            let placement = classify_extension_layout_placement(
+                &layout,
+                contribution,
+                &desired.outlet,
+                desired.hidden,
+                desired.promoted,
+            );
+            let passed = placement == ExtensionLayoutPlacement::Exact;
+            Ok(check_outcome(
+                passed,
+                "present",
+                "placement_mismatch",
+                serde_json::json!({"contribution":contribution,"outlet":desired.outlet,"hidden":desired.hidden,"promoted":desired.promoted}),
+            ))
+        }
+    }
+}
+
+async fn check_blueprint_target(
+    tx: &mut Transaction<'_, Postgres>,
+    workspace_id: Uuid,
+    application_id: Uuid,
+    logical_key: &str,
+) -> Result<Option<String>, RepositoryError> {
+    Ok(sqlx::query_scalar("SELECT target_code FROM solution_pack_application_steps WHERE workspace_id=$1 AND application_id=$2 AND logical_key=$3 AND state='completed'")
+        .bind(workspace_id).bind(application_id).bind(logical_key).fetch_optional(&mut **tx).await?)
+}
+
+fn extension_enabled_evaluation(
+    installed_ok: bool,
+    state: &str,
+    workspace_enabled: bool,
+    policy_compatible: bool,
+) -> (bool, &'static str) {
+    if !installed_ok {
+        (false, "not_installed")
+    } else if state != "enabled" {
+        (false, "disabled")
+    } else if !workspace_enabled {
+        (false, "workspace_extensions_disabled")
+    } else if !policy_compatible {
+        (false, "policy_incompatible")
+    } else {
+        (true, "enabled")
+    }
+}
+
+fn check_outcome(
+    passed: bool,
+    pass_reason: &str,
+    fail_reason: &str,
+    evidence: Value,
+) -> (bool, String, String, Value) {
+    let reason = if passed { pass_reason } else { fail_reason };
+    (
+        passed,
+        reason.to_owned(),
+        if passed {
+            "Check passed."
+        } else {
+            "Check did not pass."
+        }
+        .to_owned(),
+        evidence,
+    )
+}
+
+fn unresolvable() -> (bool, String, String, Value) {
+    (
+        false,
+        "not_resolvable".into(),
+        "The pack reference cannot be resolved for this application.".into(),
+        serde_json::json!({}),
+    )
 }
 
 fn parse_extension_layout_payload(
@@ -1792,6 +2380,18 @@ fn bounded_diagnostic(message: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn extension_enabled_check_fails_closed_for_host_policy() {
+        assert_eq!(
+            extension_enabled_evaluation(true, "enabled", true, false),
+            (false, "policy_incompatible")
+        );
+        assert_eq!(
+            extension_enabled_evaluation(true, "enabled", true, true),
+            (true, "enabled")
+        );
+    }
 
     #[sqlx::test(migrations = "./migrations")]
     async fn failed_navigation_step_revalidates_and_resumes(pool: sqlx::PgPool) {

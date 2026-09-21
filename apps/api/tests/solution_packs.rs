@@ -40,8 +40,116 @@ fn valid_archive() -> Vec<u8> {
     archive_with_blueprint(PRODUCT_BLUEPRINT)
 }
 
+fn archive_with_guidance_and_checks() -> Vec<u8> {
+    const README: &[u8] = b"# Guided setup\n\nSee [publishing](#publishing).";
+    const CHECKLIST: &[u8] = br#"{"format_version":1,"items":[{"key":"checklist/publish","title":"Publish product","markdown":"Publish the product.","check":"checks/product-published"}]}"#;
+    const CHECKS: &[u8] = br#"{"format_version":1,"checks":[{"key":"checks/product-published","title":"Product is published","predicate":{"type":"blueprint_published","blueprint":"blueprints/product"}}]}"#;
+    let manifest = serde_json::to_vec(&json!({
+        "manifest_version":1,
+        "id":"attricat.guidance",
+        "name":"Guided pack",
+        "version":"1.0.0",
+        "description":"Guidance and informational checks",
+        "catalog":{"host_api":"^1.0"},
+        "resources":{"blueprints":[{"key":"blueprints/product","path":"blueprints/product.toml","required":true,"sha256":digest(PRODUCT_BLUEPRINT)}]},
+        "documentation":{
+            "readme":{"path":"README.md","sha256":digest(README)},
+            "setup_checklist":{"path":"setup/checklist.json","sha256":digest(CHECKLIST)}
+        },
+        "checks":{"path":"checks/checks.json","sha256":digest(CHECKS)}
+    })).unwrap();
+    let mut tar_bytes = Vec::new();
+    {
+        let mut tar = tar::Builder::new(&mut tar_bytes);
+        append_file(&mut tar, "solution-pack.json", &manifest);
+        append_file(&mut tar, "blueprints/product.toml", PRODUCT_BLUEPRINT);
+        append_file(&mut tar, "README.md", README);
+        append_file(&mut tar, "setup/checklist.json", CHECKLIST);
+        append_file(&mut tar, "checks/checks.json", CHECKS);
+        tar.finish().unwrap();
+    }
+    zstd::stream::encode_all(Cursor::new(tar_bytes), 0).unwrap()
+}
+
 fn archive_with_blueprint(product_blueprint: &[u8]) -> Vec<u8> {
     archive_with_options(product_blueprint, false)
+}
+
+fn archive_with_all_checks() -> Vec<u8> {
+    const TEMPLATE: &[u8] = br#"{"nested":{"enabled":true},"list":[1,2]}"#;
+    let navigation = serde_json::to_vec(&json!({
+        "format_version":1,
+        "kind":"explore_navigation",
+        "entries":[{"blueprint":"blueprints/product"}]
+    }))
+    .unwrap();
+    let layout = serde_json::to_vec(&json!({
+        "format_version":1,
+        "kind":"extension_layout",
+        "entries":[{"contribution":"acme.layout:nav","outlet":"navigation","promoted":true,"required":true}]
+    })).unwrap();
+    let checks = serde_json::to_vec(&json!({
+        "format_version":1,
+        "checks":[
+            {"key":"checks/published","title":"Published","predicate":{"type":"blueprint_published","blueprint":"blueprints/product"}},
+            {"key":"checks/installed","title":"Installed","predicate":{"type":"extension_installed","extension":"extensions/layout"}},
+            {"key":"checks/enabled","title":"Enabled","predicate":{"type":"extension_enabled","extension":"extensions/layout"}},
+            {"key":"checks/configured","title":"Configured","predicate":{"type":"extension_configuration_matches","extension":"extensions/layout"}},
+            {"key":"checks/navigation","title":"Navigation","predicate":{"type":"explore_navigation_entry_present","blueprint":"blueprints/product"}},
+            {"key":"checks/layout","title":"Layout","predicate":{"type":"workspace_extension_layout_placement_present","contribution":"acme.layout:nav"}}
+        ]
+    })).unwrap();
+    let manifest = serde_json::to_vec(&json!({
+        "manifest_version":1,
+        "id":"attricat.all-checks",
+        "name":"All checks",
+        "version":"1.0.0",
+        "description":"All informational check predicates",
+        "catalog":{"host_api":"^1.0"},
+        "resources":{
+            "blueprints":[{"key":"blueprints/product","path":"blueprints/product.toml","required":true,"sha256":digest(PRODUCT_BLUEPRINT)}],
+            "workspace_settings":[
+                {"key":"workspace/explore-navigation","path":"workspace/explore-navigation.json","required":true,"sha256":digest(&navigation)},
+                {"key":"workspace/extension-layout","path":"workspace/extension-layout.json","required":true,"sha256":digest(&layout)}
+            ]
+        },
+        "extensions":[{"key":"extensions/layout","id":"acme.layout","version":"^1.0","required":true,"configuration_template":{"path":"extensions/layout.json","sha256":digest(TEMPLATE)}}],
+        "checks":{"path":"checks/checks.json","sha256":digest(&checks)}
+    })).unwrap();
+    let mut tar_bytes = Vec::new();
+    {
+        let mut tar = tar::Builder::new(&mut tar_bytes);
+        append_file(&mut tar, "solution-pack.json", &manifest);
+        append_file(&mut tar, "blueprints/product.toml", PRODUCT_BLUEPRINT);
+        append_file(&mut tar, "workspace/explore-navigation.json", &navigation);
+        append_file(&mut tar, "workspace/extension-layout.json", &layout);
+        append_file(&mut tar, "extensions/layout.json", TEMPLATE);
+        append_file(&mut tar, "checks/checks.json", &checks);
+        tar.finish().unwrap();
+    }
+    zstd::stream::encode_all(Cursor::new(tar_bytes), 0).unwrap()
+}
+
+fn archive_with_checklist(checklist: &[u8]) -> Vec<u8> {
+    let manifest = serde_json::to_vec(&json!({
+        "manifest_version":1,
+        "id":"attricat.checklist",
+        "name":"Checklist",
+        "version":"1.0.0",
+        "description":"Checklist boundary",
+        "catalog":{"host_api":"^1.0"},
+        "resources":{"blueprints":[{"key":"blueprints/product","path":"blueprints/product.toml","required":true,"sha256":digest(PRODUCT_BLUEPRINT)}]},
+        "documentation":{"setup_checklist":{"path":"setup/checklist.json","sha256":digest(checklist)}}
+    })).unwrap();
+    let mut tar_bytes = Vec::new();
+    {
+        let mut tar = tar::Builder::new(&mut tar_bytes);
+        append_file(&mut tar, "solution-pack.json", &manifest);
+        append_file(&mut tar, "blueprints/product.toml", PRODUCT_BLUEPRINT);
+        append_file(&mut tar, "setup/checklist.json", checklist);
+        tar.finish().unwrap();
+    }
+    zstd::stream::encode_all(Cursor::new(tar_bytes), 0).unwrap()
 }
 
 fn archive_with_required_context(product_blueprint: &[u8]) -> Vec<u8> {
@@ -656,11 +764,30 @@ async fn inspection_enforces_personal_access_token_permission_subset(pool: PgPoo
             .status(),
         StatusCode::FORBIDDEN
     );
+    let application = apply_plan(&bearer_client(&permitted_secret), &base_url, plan_id).await;
+    assert_eq!(application.status(), StatusCode::OK);
+    let application = application.json::<Value>().await.unwrap();
+    let checks_url = format!(
+        "{base_url}/solution-packs/applications/{}/checks",
+        application["id"].as_str().unwrap()
+    );
     assert_eq!(
-        apply_plan(&bearer_client(&permitted_secret), &base_url, plan_id)
+        bearer_client(&denied_secret)
+            .post(&checks_url)
+            .send()
             .await
+            .unwrap()
             .status(),
-        StatusCode::OK
+        StatusCode::FORBIDDEN
+    );
+    assert_eq!(
+        bearer_client(&permitted_secret)
+            .post(&checks_url)
+            .send()
+            .await
+            .unwrap()
+            .status(),
+        StatusCode::CREATED
     );
     server.abort();
 }
@@ -763,6 +890,482 @@ async fn inspection_requires_browser_session_csrf(pool: PgPool) {
         .await
         .unwrap();
     assert_eq!(valid_apply_csrf.status(), StatusCode::OK);
+    let application = valid_apply_csrf.json::<Value>().await.unwrap();
+    let checks_url = format!(
+        "{base_url}/solution-packs/applications/{}/checks",
+        application["id"].as_str().unwrap()
+    );
+    let missing_checks_csrf = client
+        .post(&checks_url)
+        .header("cookie", &cookie)
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(missing_checks_csrf.status(), StatusCode::FORBIDDEN);
+    assert_eq!(
+        missing_checks_csrf.json::<Value>().await.unwrap()["error"]["code"],
+        "csrf_failed"
+    );
+    assert_eq!(
+        client
+            .post(checks_url)
+            .header("cookie", &cookie)
+            .header("x-catalog-csrf", csrf_value)
+            .send()
+            .await
+            .unwrap()
+            .status(),
+        StatusCode::CREATED
+    );
+    server.abort();
+}
+
+#[sqlx::test(migrations = "./migrations")]
+async fn guidance_and_checks_persist_and_reruns_are_informational_and_immutable(pool: PgPool) {
+    let (base_url, server) = start_server(pool.clone()).await;
+    let client = authenticated_client();
+    let inspection = inspect(&client, &base_url, archive_with_guidance_and_checks()).await;
+    assert_eq!(inspection.status(), StatusCode::OK);
+    let inspection = inspection.json::<Value>().await.unwrap();
+    assert_eq!(inspection["guidance"]["readme_bytes"], 46);
+    assert_eq!(inspection["guidance"]["setup_checklist_items"], 1);
+    assert_eq!(
+        inspection["guidance"]["checks"][0]["predicate_type"],
+        "blueprint_published"
+    );
+    assert!(inspection.to_string().find("blueprints/product").is_some());
+
+    let plan_response = create_plan_with_publication(
+        &client,
+        &base_url,
+        archive_with_guidance_and_checks(),
+        "guided",
+        "publish",
+    )
+    .await;
+    assert_eq!(plan_response.status(), StatusCode::CREATED);
+    let plan = plan_response.json::<Value>().await.unwrap();
+    assert_eq!(
+        plan["readme_markdown"],
+        "# Guided setup\n\nSee [publishing](#publishing)."
+    );
+    assert_eq!(plan["checks"][0]["predicate_type"], "blueprint_published");
+    assert!(plan.get("predicate").is_none());
+
+    let applied = apply_plan(&client, &base_url, plan["id"].as_str().unwrap()).await;
+    assert_eq!(applied.status(), StatusCode::OK);
+    let application = applied.json::<Value>().await.unwrap();
+    let application_id = application["id"].as_str().unwrap();
+    let first_run_id = application["latest_check_run"]["id"].as_str().unwrap();
+    assert_eq!(application["latest_check_run"]["passed_count"], 1);
+    assert_eq!(application["state"], "completed");
+    let checks_url = format!("{base_url}/solution-packs/applications/{application_id}/checks");
+    assert_eq!(
+        client
+            .post(&checks_url)
+            .body("{}")
+            .send()
+            .await
+            .unwrap()
+            .status(),
+        StatusCode::UNPROCESSABLE_ENTITY
+    );
+    for query in ["limit=0", "limit=101", "offset=10001"] {
+        assert_eq!(
+            client
+                .get(format!("{checks_url}?{query}"))
+                .send()
+                .await
+                .unwrap()
+                .status(),
+            StatusCode::UNPROCESSABLE_ENTITY
+        );
+    }
+    assert_eq!(
+        sqlx::query_scalar::<_, i64>(
+            "SELECT count(*) FROM solution_pack_check_runs WHERE application_id=$1"
+        )
+        .bind(application_id.parse::<Uuid>().unwrap())
+        .fetch_one(&pool)
+        .await
+        .unwrap(),
+        1
+    );
+
+    sqlx::query(
+        "UPDATE blueprints SET status='draft' WHERE workspace_id=$1 AND code='guided_product'",
+    )
+    .bind(Uuid::from_u128(0x00000000000040008000000000000002))
+    .execute(&pool)
+    .await
+    .unwrap();
+    let rerun = client
+        .post(format!(
+            "{base_url}/solution-packs/applications/{application_id}/checks"
+        ))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(rerun.status(), StatusCode::CREATED);
+    let rerun = rerun.json::<Value>().await.unwrap();
+    assert_eq!(rerun["failed_count"], 1);
+    assert_eq!(rerun["results"][0]["passed"], false);
+    assert_eq!(rerun["results"][0]["reason_code"], "not_published");
+    assert_eq!(
+        rerun["results"][0]["evidence"],
+        json!({"blueprint_code":"guided_product"})
+    );
+
+    let original = client
+        .get(format!(
+            "{base_url}/solution-packs/applications/{application_id}/checks/{first_run_id}"
+        ))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(original.status(), StatusCode::OK);
+    assert_eq!(
+        original.json::<Value>().await.unwrap()["results"][0]["passed"],
+        true
+    );
+    let history = client
+        .get(format!(
+            "{base_url}/solution-packs/applications/{application_id}/checks?limit=2&offset=0"
+        ))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(history.status(), StatusCode::OK);
+    assert_eq!(
+        history
+            .json::<Value>()
+            .await
+            .unwrap()
+            .as_array()
+            .unwrap()
+            .len(),
+        2
+    );
+    assert_eq!(
+        sqlx::query_scalar::<_, i64>(
+            "SELECT count(*) FROM solution_pack_check_runs WHERE application_id=$1"
+        )
+        .bind(application_id.parse::<Uuid>().unwrap())
+        .fetch_one(&pool)
+        .await
+        .unwrap(),
+        2
+    );
+    let (concurrent_first, concurrent_second) = tokio::join!(
+        client.post(&checks_url).send(),
+        client.post(&checks_url).send()
+    );
+    let concurrent_first = concurrent_first.unwrap();
+    let concurrent_second = concurrent_second.unwrap();
+    assert_eq!(concurrent_first.status(), StatusCode::CREATED);
+    assert_eq!(concurrent_second.status(), StatusCode::CREATED);
+    let concurrent_first = concurrent_first.json::<Value>().await.unwrap();
+    let concurrent_second = concurrent_second.json::<Value>().await.unwrap();
+    assert_ne!(concurrent_first["id"], concurrent_second["id"]);
+    assert_eq!(
+        sqlx::query_scalar::<_, i64>(
+            "SELECT count(*) FROM solution_pack_check_runs WHERE application_id=$1"
+        )
+        .bind(application_id.parse::<Uuid>().unwrap())
+        .fetch_one(&pool)
+        .await
+        .unwrap(),
+        4
+    );
+
+    server.abort();
+}
+
+#[sqlx::test(migrations = "./migrations")]
+async fn near_limit_checklist_persists_without_null_optional_checks(pool: PgPool) {
+    let items = (0..16)
+        .map(|position| {
+            json!({
+                "key":format!("checklist/item_{position}"),
+                "title":format!("Item {position}"),
+                "markdown":"x".repeat(4000)
+            })
+        })
+        .collect::<Vec<_>>();
+    let checklist = serde_json::to_vec(&json!({"format_version":1,"items":items})).unwrap();
+    assert!(checklist.len() > 64_000 && checklist.len() <= 65_536);
+    let (base_url, server) = start_server(pool).await;
+    let client = authenticated_client();
+    let plan_response = create_plan(
+        &client,
+        &base_url,
+        archive_with_checklist(&checklist),
+        "bounded",
+    )
+    .await;
+    assert_eq!(plan_response.status(), StatusCode::CREATED);
+    let plan = plan_response.json::<Value>().await.unwrap();
+    assert!(plan["setup_checklist"]["items"][0].get("check").is_none());
+    let applied = apply_plan(&client, &base_url, plan["id"].as_str().unwrap()).await;
+    assert_eq!(applied.status(), StatusCode::OK);
+    let application = applied.json::<Value>().await.unwrap();
+    assert!(
+        application["setup_checklist"]["items"][0]
+            .get("check")
+            .is_none()
+    );
+    server.abort();
+}
+
+#[sqlx::test(migrations = "./migrations")]
+async fn all_check_predicates_evaluate_current_state_and_fail_closed_atomically(pool: PgPool) {
+    let workspace_id = BOOTSTRAP_WORKSPACE_ID.parse::<Uuid>().unwrap();
+    let release_id = install_layout_extension(&pool).await;
+    sqlx::query("UPDATE extension_installations SET state='enabled',configuration=$2 WHERE workspace_id=$1 AND extension_id='acme.layout'")
+        .bind(workspace_id)
+        .bind(json!({"nested":{"enabled":true,"extra":"safe"},"list":[1,2],"unrelated":true}))
+        .execute(&pool).await.unwrap();
+    let (base_url, server) = start_server(pool.clone()).await;
+    let client = authenticated_client();
+    let plan = create_plan_with_publication(
+        &client,
+        &base_url,
+        archive_with_all_checks(),
+        "all",
+        "publish",
+    )
+    .await
+    .json::<Value>()
+    .await
+    .unwrap();
+    assert_eq!(plan["ready"], true);
+    let applied = apply_plan(&client, &base_url, plan["id"].as_str().unwrap()).await;
+    assert_eq!(applied.status(), StatusCode::OK);
+    let application = applied.json::<Value>().await.unwrap();
+    let application_id = application["id"].as_str().unwrap();
+    let initial_run_id = application["latest_check_run"]["id"].as_str().unwrap();
+    let initial = client
+        .get(format!(
+            "{base_url}/solution-packs/applications/{application_id}/checks/{initial_run_id}"
+        ))
+        .send()
+        .await
+        .unwrap()
+        .json::<Value>()
+        .await
+        .unwrap();
+    assert_eq!(initial["total_count"], 6);
+    assert_eq!(initial["passed_count"], 6);
+    assert!(!initial.to_string().contains("safe"));
+    assert!(!initial.to_string().contains("unrelated"));
+
+    sqlx::query("UPDATE workspaces SET extensions_enabled=false WHERE id=$1")
+        .bind(workspace_id)
+        .execute(&pool)
+        .await
+        .unwrap();
+    let disabled = client
+        .post(format!(
+            "{base_url}/solution-packs/applications/{application_id}/checks"
+        ))
+        .send()
+        .await
+        .unwrap()
+        .json::<Value>()
+        .await
+        .unwrap();
+    let enabled_result = disabled["results"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|result| result["key"] == "checks/enabled")
+        .unwrap();
+    assert_eq!(enabled_result["passed"], false);
+    assert_eq!(
+        enabled_result["reason_code"],
+        "workspace_extensions_disabled"
+    );
+    assert_eq!(disabled["failed_count"], 1);
+    sqlx::query("UPDATE workspaces SET extensions_enabled=true WHERE id=$1")
+        .bind(workspace_id)
+        .execute(&pool)
+        .await
+        .unwrap();
+
+    let original_navigation: Value =
+        sqlx::query_scalar("SELECT settings->'explore_navigation' FROM workspaces WHERE id=$1")
+            .bind(workspace_id)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+    sqlx::query("UPDATE workspaces SET settings=jsonb_set(settings,'{explore_navigation}','{}'::jsonb,true) WHERE id=$1")
+        .bind(workspace_id).execute(&pool).await.unwrap();
+    let malformed_navigation = client
+        .post(format!(
+            "{base_url}/solution-packs/applications/{application_id}/checks"
+        ))
+        .send()
+        .await
+        .unwrap()
+        .json::<Value>()
+        .await
+        .unwrap();
+    let navigation_result = malformed_navigation["results"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|result| result["key"] == "checks/navigation")
+        .unwrap();
+    assert_eq!(navigation_result["passed"], false);
+    assert_eq!(
+        navigation_result["reason_code"],
+        "invalid_workspace_navigation"
+    );
+    sqlx::query("UPDATE workspaces SET settings=jsonb_set(settings,'{explore_navigation}',$2,true) WHERE id=$1")
+        .bind(workspace_id).bind(original_navigation).execute(&pool).await.unwrap();
+
+    sqlx::query("UPDATE extension_installations SET configuration=$2 WHERE workspace_id=$1 AND extension_id='acme.layout'")
+        .bind(workspace_id)
+        .bind(json!({"nested":{"enabled":false},"list":[1,2]}))
+        .execute(&pool).await.unwrap();
+    let mismatch = client
+        .post(format!(
+            "{base_url}/solution-packs/applications/{application_id}/checks"
+        ))
+        .send()
+        .await
+        .unwrap()
+        .json::<Value>()
+        .await
+        .unwrap();
+    let configuration_result = mismatch["results"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|result| result["key"] == "checks/configured")
+        .unwrap();
+    assert_eq!(configuration_result["passed"], false);
+    assert_eq!(
+        configuration_result["reason_code"],
+        "configuration_mismatch"
+    );
+
+    let original_layout: Value =
+        sqlx::query_scalar("SELECT settings->'extension_layout' FROM workspaces WHERE id=$1")
+            .bind(workspace_id)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+    sqlx::query("UPDATE workspaces SET settings=jsonb_set(settings,'{extension_layout}','[]'::jsonb,true) WHERE id=$1")
+        .bind(workspace_id).execute(&pool).await.unwrap();
+    let malformed_layout = client
+        .post(format!(
+            "{base_url}/solution-packs/applications/{application_id}/checks"
+        ))
+        .send()
+        .await
+        .unwrap()
+        .json::<Value>()
+        .await
+        .unwrap();
+    let layout_result = malformed_layout["results"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|result| result["key"] == "checks/layout")
+        .unwrap();
+    assert_eq!(layout_result["passed"], false);
+    assert_eq!(layout_result["reason_code"], "placement_mismatch");
+    sqlx::query("UPDATE workspaces SET settings=jsonb_set(settings,'{extension_layout}',$2,true) WHERE id=$1")
+        .bind(workspace_id).bind(original_layout).execute(&pool).await.unwrap();
+
+    sqlx::query("UPDATE extension_installations SET state='quarantined' WHERE workspace_id=$1 AND extension_id='acme.layout'")
+        .bind(workspace_id).execute(&pool).await.unwrap();
+    let quarantined = client
+        .post(format!(
+            "{base_url}/solution-packs/applications/{application_id}/checks"
+        ))
+        .send()
+        .await
+        .unwrap()
+        .json::<Value>()
+        .await
+        .unwrap();
+    let installed_result = quarantined["results"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|result| result["key"] == "checks/installed")
+        .unwrap();
+    assert_eq!(installed_result["passed"], false);
+    assert_eq!(installed_result["reason_code"], "quarantined");
+    sqlx::query("UPDATE extension_installations SET state='enabled' WHERE workspace_id=$1 AND extension_id='acme.layout'")
+        .bind(workspace_id).execute(&pool).await.unwrap();
+
+    let incompatible_release_id = Uuid::new_v4();
+    sqlx::query("INSERT INTO installed_extension_releases (id,workspace_id,extension_id,version,manifest,manifest_sha256,source) SELECT $1,workspace_id,extension_id,'2.0.0',jsonb_set(manifest,'{version}','\"2.0.0\"'::jsonb),$2,source FROM installed_extension_releases WHERE id=$3")
+        .bind(incompatible_release_id).bind("9".repeat(64)).bind(release_id)
+        .execute(&pool).await.unwrap();
+    sqlx::query("UPDATE extension_installations SET installed_release_id=$2 WHERE workspace_id=$1 AND extension_id='acme.layout'")
+        .bind(workspace_id).bind(incompatible_release_id).execute(&pool).await.unwrap();
+    let incompatible = client
+        .post(format!(
+            "{base_url}/solution-packs/applications/{application_id}/checks"
+        ))
+        .send()
+        .await
+        .unwrap()
+        .json::<Value>()
+        .await
+        .unwrap();
+    let installed_result = incompatible["results"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|result| result["key"] == "checks/installed")
+        .unwrap();
+    assert_eq!(installed_result["passed"], false);
+    assert_eq!(installed_result["reason_code"], "incompatible_version");
+    sqlx::query("UPDATE extension_installations SET installed_release_id=$2 WHERE workspace_id=$1 AND extension_id='acme.layout'")
+        .bind(workspace_id).bind(release_id).execute(&pool).await.unwrap();
+
+    let runs_before: i64 =
+        sqlx::query_scalar("SELECT count(*) FROM solution_pack_check_runs WHERE application_id=$1")
+            .bind(application_id.parse::<Uuid>().unwrap())
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+    let results_before: i64 = sqlx::query_scalar("SELECT count(*) FROM solution_pack_check_results WHERE run_id IN (SELECT id FROM solution_pack_check_runs WHERE application_id=$1)")
+        .bind(application_id.parse::<Uuid>().unwrap()).fetch_one(&pool).await.unwrap();
+    let audits_before: i64 = sqlx::query_scalar("SELECT count(*) FROM audit_events WHERE target->>'type'='solution_pack_check_run' AND target->>'application_id'=$1")
+        .bind(application_id).fetch_one(&pool).await.unwrap();
+    sqlx::query("UPDATE solution_pack_application_check_definitions SET predicate=$2 WHERE application_id=$1 AND position=0")
+        .bind(application_id.parse::<Uuid>().unwrap())
+        .bind(json!({"type":"unknown"}))
+        .execute(&pool).await.unwrap();
+    let failed = client
+        .post(format!(
+            "{base_url}/solution-packs/applications/{application_id}/checks"
+        ))
+        .send()
+        .await
+        .unwrap();
+    assert!(!failed.status().is_success());
+    assert_eq!(
+        sqlx::query_scalar::<_, i64>(
+            "SELECT count(*) FROM solution_pack_check_runs WHERE application_id=$1"
+        )
+        .bind(application_id.parse::<Uuid>().unwrap())
+        .fetch_one(&pool)
+        .await
+        .unwrap(),
+        runs_before
+    );
+    assert_eq!(sqlx::query_scalar::<_, i64>("SELECT count(*) FROM solution_pack_check_results WHERE run_id IN (SELECT id FROM solution_pack_check_runs WHERE application_id=$1)")
+        .bind(application_id.parse::<Uuid>().unwrap()).fetch_one(&pool).await.unwrap(), results_before);
+    assert_eq!(sqlx::query_scalar::<_, i64>("SELECT count(*) FROM audit_events WHERE target->>'type'='solution_pack_check_run' AND target->>'application_id'=$1")
+        .bind(application_id).fetch_one(&pool).await.unwrap(), audits_before);
+
     server.abort();
 }
 
@@ -869,8 +1472,16 @@ async fn valid_inspection_returns_only_safe_summaries_without_persisting(pool: P
             .keys()
             .map(String::as_str)
             .collect::<std::collections::BTreeSet<_>>(),
-        std::collections::BTreeSet::from(["archive_sha256", "extensions", "manifest", "resources"])
+        std::collections::BTreeSet::from([
+            "archive_sha256",
+            "extensions",
+            "guidance",
+            "manifest",
+            "resources",
+        ])
     );
+    assert_eq!(body["guidance"]["setup_checklist_items"], 0);
+    assert_eq!(body["guidance"]["checks"], json!([]));
     assert_eq!(body["archive_sha256"], archive_sha256);
     assert_eq!(body["manifest"]["id"], "attricat.ecommerce");
     assert_eq!(body["manifest"]["version"], "1.2.0");
@@ -1368,6 +1979,39 @@ async fn plan_routes_require_solution_pack_permission_and_isolate_workspaces(poo
         .await
         .unwrap();
     assert_eq!(hidden_show.status(), StatusCode::NOT_FOUND);
+    let hidden_run = Uuid::new_v4();
+    let hidden_request = Uuid::new_v4();
+    sqlx::query("INSERT INTO solution_pack_check_runs (id,workspace_id,application_id,request_id,correlation_id,trigger,total_count,passed_count,failed_count,started_at,completed_at) VALUES ($1,$2,$3,$4,$4,'manual',0,0,0,now(),now())")
+        .bind(hidden_run).bind(other_workspace).bind(hidden_application).bind(hidden_request)
+        .execute(&pool).await.unwrap();
+    let checks_url = format!("{base_url}/solution-packs/applications/{hidden_application}/checks");
+    assert_eq!(
+        authenticated_client()
+            .get(&checks_url)
+            .send()
+            .await
+            .unwrap()
+            .status(),
+        StatusCode::NOT_FOUND
+    );
+    assert_eq!(
+        authenticated_client()
+            .post(&checks_url)
+            .send()
+            .await
+            .unwrap()
+            .status(),
+        StatusCode::NOT_FOUND
+    );
+    assert_eq!(
+        authenticated_client()
+            .get(format!("{checks_url}/{hidden_run}"))
+            .send()
+            .await
+            .unwrap()
+            .status(),
+        StatusCode::NOT_FOUND
+    );
     let visible_list = authenticated_client()
         .get(format!("{base_url}/solution-packs/applications"))
         .send()
@@ -2244,7 +2888,17 @@ async fn apply_creates_context_and_draft_blueprint_once_with_safe_history(pool: 
         .fetch_one(&pool)
         .await
         .unwrap(),
-        2
+        3
+    );
+    assert_eq!(
+        sqlx::query_scalar::<_, i64>(
+            "SELECT count(*) FROM solution_pack_check_runs WHERE application_id=$1 AND trigger='post_apply'"
+        )
+        .bind(application_id.parse::<Uuid>().unwrap())
+        .fetch_one(&pool)
+        .await
+        .unwrap(),
+        1
     );
     assert_eq!(
         sqlx::query_scalar::<_, i64>(
@@ -2632,11 +3286,16 @@ async fn concurrent_cross_kind_create_invalidates_the_application(pool: PgPool) 
 async fn concurrent_apply_requests_converge_without_duplicate_resources(pool: PgPool) {
     let (base_url, server) = start_server(pool.clone()).await;
     let client = authenticated_client();
-    let plan = create_plan(&client, &base_url, valid_archive(), "parallel")
-        .await
-        .json::<Value>()
-        .await
-        .unwrap();
+    let plan = create_plan(
+        &client,
+        &base_url,
+        archive_with_guidance_and_checks(),
+        "parallel",
+    )
+    .await
+    .json::<Value>()
+    .await
+    .unwrap();
     let plan_id = plan["id"].as_str().unwrap().to_owned();
     let (first, second) = tokio::join!(
         apply_plan(&client, &base_url, &plan_id),
@@ -2649,6 +3308,22 @@ async fn concurrent_apply_requests_converge_without_duplicate_resources(pool: Pg
     assert_eq!(first["id"], second["id"]);
     assert_eq!(first["state"], "completed");
     assert_eq!(second["state"], "completed");
+    assert_eq!(
+        sqlx::query_scalar::<_, i64>("SELECT count(*) FROM solution_pack_check_runs WHERE application_id=$1 AND trigger='post_apply'")
+            .bind(first["id"].as_str().unwrap().parse::<Uuid>().unwrap())
+            .fetch_one(&pool)
+            .await
+            .unwrap(),
+        1
+    );
+    assert_eq!(
+        sqlx::query_scalar::<_, i64>("SELECT count(*) FROM solution_pack_check_results WHERE run_id=(SELECT id FROM solution_pack_check_runs WHERE application_id=$1 AND trigger='post_apply')")
+            .bind(first["id"].as_str().unwrap().parse::<Uuid>().unwrap())
+            .fetch_one(&pool)
+            .await
+            .unwrap(),
+        1
+    );
     assert_eq!(
         sqlx::query_scalar::<_, i64>(
             "SELECT count(*) FROM blueprints WHERE code='parallel_product'"

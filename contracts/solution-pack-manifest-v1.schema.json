@@ -37,7 +37,9 @@
     "catalog": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["host_api"],
+      "required": [
+        "host_api"
+      ],
       "properties": {
         "host_api": {
           "type": "string",
@@ -75,18 +77,26 @@
           "maxItems": 2,
           "items": {
             "oneOf": [
-              {"$ref": "#/$defs/exploreNavigationResource"},
-              {"$ref": "#/$defs/extensionLayoutResource"}
+              {
+                "$ref": "#/$defs/exploreNavigationResource"
+              },
+              {
+                "$ref": "#/$defs/extensionLayoutResource"
+              }
             ]
           },
           "allOf": [
             {
-              "contains": {"$ref": "#/$defs/exploreNavigationResource"},
+              "contains": {
+                "$ref": "#/$defs/exploreNavigationResource"
+              },
               "minContains": 0,
               "maxContains": 1
             },
             {
-              "contains": {"$ref": "#/$defs/extensionLayoutResource"},
+              "contains": {
+                "$ref": "#/$defs/extensionLayoutResource"
+              },
               "minContains": 0,
               "maxContains": 1
             }
@@ -95,7 +105,9 @@
       },
       "anyOf": [
         {
-          "required": ["blueprints"],
+          "required": [
+            "blueprints"
+          ],
           "properties": {
             "blueprints": {
               "minItems": 1
@@ -103,7 +115,9 @@
           }
         },
         {
-          "required": ["contexts"],
+          "required": [
+            "contexts"
+          ],
           "properties": {
             "contexts": {
               "minItems": 1
@@ -111,7 +125,9 @@
           }
         },
         {
-          "required": ["workspace_settings"],
+          "required": [
+            "workspace_settings"
+          ],
           "properties": {
             "workspace_settings": {
               "minItems": 1
@@ -119,6 +135,12 @@
           }
         }
       ]
+    },
+    "documentation": {
+      "$ref": "#/$defs/documentation"
+    },
+    "checks": {
+      "$ref": "#/$defs/fileRefJson"
     }
   },
   "$defs": {
@@ -134,7 +156,12 @@
     "blueprintResource": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["key", "path", "required", "sha256"],
+      "required": [
+        "key",
+        "path",
+        "required",
+        "sha256"
+      ],
       "properties": {
         "key": {
           "type": "string",
@@ -157,7 +184,12 @@
     "contextResource": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["key", "path", "required", "sha256"],
+      "required": [
+        "key",
+        "path",
+        "required",
+        "sha256"
+      ],
       "properties": {
         "key": {
           "type": "string",
@@ -180,29 +212,60 @@
     "exploreNavigationResource": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["key", "path", "required", "sha256"],
+      "required": [
+        "key",
+        "path",
+        "required",
+        "sha256"
+      ],
       "properties": {
-        "key": {"const": "workspace/explore-navigation"},
-        "path": {"const": "workspace/explore-navigation.json"},
-        "required": {"type": "boolean"},
-        "sha256": {"$ref": "#/$defs/digest"}
+        "key": {
+          "const": "workspace/explore-navigation"
+        },
+        "path": {
+          "const": "workspace/explore-navigation.json"
+        },
+        "required": {
+          "type": "boolean"
+        },
+        "sha256": {
+          "$ref": "#/$defs/digest"
+        }
       }
     },
     "extensionLayoutResource": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["key", "path", "required", "sha256"],
+      "required": [
+        "key",
+        "path",
+        "required",
+        "sha256"
+      ],
       "properties": {
-        "key": {"const": "workspace/extension-layout"},
-        "path": {"const": "workspace/extension-layout.json"},
-        "required": {"type": "boolean"},
-        "sha256": {"$ref": "#/$defs/digest"}
+        "key": {
+          "const": "workspace/extension-layout"
+        },
+        "path": {
+          "const": "workspace/extension-layout.json"
+        },
+        "required": {
+          "type": "boolean"
+        },
+        "sha256": {
+          "$ref": "#/$defs/digest"
+        }
       }
     },
     "extensionRequirement": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["key", "id", "version", "required"],
+      "required": [
+        "key",
+        "id",
+        "version",
+        "required"
+      ],
       "properties": {
         "key": {
           "type": "string",
@@ -229,8 +292,12 @@
         },
         "configuration_template": {
           "oneOf": [
-            {"type": "null"},
-            {"$ref": "#/$defs/configurationTemplate"}
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/$defs/configurationTemplate"
+            }
           ]
         }
       }
@@ -238,7 +305,10 @@
     "configurationTemplate": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["path", "sha256"],
+      "required": [
+        "path",
+        "sha256"
+      ],
       "properties": {
         "path": {
           "type": "string",
@@ -249,6 +319,60 @@
           "$ref": "#/$defs/digest"
         }
       }
+    },
+    "fileRefMarkdown": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "path",
+        "sha256"
+      ],
+      "properties": {
+        "path": {
+          "type": "string",
+          "maxLength": 512,
+          "pattern": "^(?!/)(?!.*(?:^|/)\\.{1,2}(?:/|$))(?!.*[\\\\:\\u0000-\\u001F\\u007F-\\u009F])[^/]+(?:/[^/]+)*\\.md$",
+          "$comment": "Runtime also enforces this 512-byte limit in UTF-8; JSON Schema maxLength counts Unicode code points."
+        },
+        "sha256": {
+          "$ref": "#/$defs/digest"
+        }
+      }
+    },
+    "fileRefJson": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "path",
+        "sha256"
+      ],
+      "properties": {
+        "path": {
+          "type": "string",
+          "maxLength": 512,
+          "pattern": "^(?!/)(?!.*(?:^|/)\\.{1,2}(?:/|$))(?!.*[\\\\:\\u0000-\\u001F\\u007F-\\u009F])[^/]+(?:/[^/]+)*\\.json$",
+          "$comment": "Runtime also enforces this 512-byte limit in UTF-8; JSON Schema maxLength counts Unicode code points."
+        },
+        "sha256": {
+          "$ref": "#/$defs/digest"
+        }
+      }
+    },
+    "documentation": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "readme": {
+          "$ref": "#/$defs/fileRefMarkdown"
+        },
+        "release_notes": {
+          "$ref": "#/$defs/fileRefMarkdown"
+        },
+        "setup_checklist": {
+          "$ref": "#/$defs/fileRefJson"
+        }
+      },
+      "minProperties": 1
     }
   }
 }

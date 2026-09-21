@@ -9,7 +9,7 @@
 >
 > **Scope of this document:** Sections that describe existing-resource
 > adoption, updates, workspace settings other than the two bounded defaults,
-> assets, sample data, prerequisites, export, or richer application evidence are future target
+> assets, sample data, prerequisites, export, or ownership are future target
 > design, not implemented v1 behavior. The explicitly marked v1 sections below
 > define the current product contract.
 
@@ -70,14 +70,14 @@ blueprint boundary.
 | Extension requirements | **Implemented subset:** declare installed-package ID/version compatibility and an optional bounded non-secret literal JSON configuration template. Stable manifest contribution references may supply workspace and new entity-blueprint layout defaults. Installation, upgrade, configuration, grants, and enablement remain separate ordinary approvals. |
 | Workspace defaults | **Implemented subset:** append pinned Explore entries and compatible extension contributions without replacing unrelated navigation, layout data, or settings. Other settings remain deferred. |
 | Branding, themes, and static assets | Install only declared, digest-verified files of supported media types for host-defined purposes. |
-| Documentation and setup | Include Markdown guidance, release notes, structured checklist items, and non-executable validation checks. |
+| Documentation and setup | **Implemented subset:** bounded safe Markdown guidance, release notes, a structured checklist, and six host-defined informational checks with immutable run history. |
 | Sample data | Optional, separately selected, visibly marked, portable, and idempotently mapped; never treated as production configuration. |
 
 Not every content type ships in the current implementation. The
 [initial delivery boundary](#initial-delivery-boundary) implements blueprint and
 context creation, bounded Explore navigation and extension-layout defaults,
-entity-blueprint extension layouts, and read-only extension requirement
-evaluation.
+entity-blueprint extension layouts, read-only extension requirement evaluation,
+and bounded guided setup with informational check runs.
 
 ## Package and distribution
 
@@ -136,25 +136,29 @@ publish a strict JSON Schema before accepting archives:
     "host_api": ">=1.0.0 <2.0.0"
   },
   "documentation": {
-    "readme": "README.md",
-    "release_notes": "RELEASE_NOTES.md",
-    "setup_checklist": "setup/checklist.json"
+    "readme": {"path": "README.md", "sha256": "<lowercase-sha256>"},
+    "release_notes": {"path": "RELEASE_NOTES.md", "sha256": "<lowercase-sha256>"},
+    "setup_checklist": {"path": "setup/checklist.json", "sha256": "<lowercase-sha256>"}
   },
+  "checks": {"path": "checks/checks.json", "sha256": "<lowercase-sha256>"},
   "resources": {
     "blueprints": [{
       "key": "blueprints/product",
       "path": "blueprints/product.toml",
-      "required": true
+      "required": true,
+      "sha256": "<lowercase-sha256>"
     }],
     "contexts": [{
       "key": "contexts/web",
       "path": "contexts/web.json",
-      "required": true
+      "required": true,
+      "sha256": "<lowercase-sha256>"
     }],
     "workspace_settings": [{
       "key": "workspace/explore-navigation",
       "path": "workspace/explore-navigation.json",
-      "required": false
+      "required": false,
+      "sha256": "<lowercase-sha256>"
     }]
   },
   "extensions": [{
@@ -166,16 +170,6 @@ publish a strict JSON Schema before accepting archives:
       "path": "extensions/shopify.json",
       "sha256": "<hex digest>"
     }
-  }],
-  "assets": [{
-    "key": "assets/logo",
-    "path": "assets/logo.svg",
-    "media_type": "image/svg+xml",
-    "sha256": "<hex digest>"
-  }],
-  "checks": [{
-    "key": "checks/product-published",
-    "path": "checks/product-published.json"
   }]
 }
 ```
@@ -280,7 +274,7 @@ different release of the same pack creates a new reviewed application plan; it
 is not a second managed instance and does not establish an upgrade relationship
 with resources produced by the earlier release.
 
-## Pack contents (v1 blueprints, contexts, and extension requirements; otherwise future design)
+## Pack contents (v1 blueprints, contexts, settings, extensions, and guidance)
 
 ### Blueprints and views
 
@@ -325,7 +319,8 @@ installations can satisfy a requirement; quarantined installations cannot.
 Required operator approvals remain effective even for an official pack.
 Compatible manifest-declared UI contributions may be referenced by stable
 `<extension-id>:<contribution-id>` keys in the bounded layout defaults described
-below. Guided setup steps remain future design.
+below. Guided setup may refer to these declarations but never mutates extension
+lifecycle state.
 
 ### Extension configuration templates and inputs
 
@@ -407,17 +402,47 @@ not declared by the manifest are not installable pack assets.
 
 ### Documentation, checklist, and validation checks
 
-A pack may include Markdown documentation, release notes, a structured setup
-checklist, and declarative post-install checks. Checklist items can point to a
-Catalog screen, a mapped resource, an extension setup task, or an external
-human procedure. Links must follow the host's URL policy.
+A pack may declare digest-bearing README (64 KiB), release notes (32 KiB), a
+strict JSON setup checklist (64 KiB and 64 items), and a strict JSON checks file
+(128 KiB and 64 checks). Markdown is persisted as normalized UTF-8 source.
+Raw HTML, images, executable/code constructs, autolinks, and links other than
+same-document fragments are rejected. Consumers must render with HTML disabled.
+Checklist keys use `checklist/<key>` and may refer to one declared `checks/<key>`;
+there is no manual completion state or checklist mutation API. The file referenced
+by the manifest's `checks` member has this separate shape:
 
-Checks use a host-defined, versioned catalogue of bounded predicates—for
-example, “mapped blueprint has a published revision,” “required extension is
-enabled,” or “required configuration field is present.” They cannot execute
-code, query the database, make network calls, or read secret values. Results
-are informational unless the check contract explicitly marks one as required
-for application completion.
+```json
+{
+  "format_version": 1,
+  "checks": [{
+    "key": "checks/product-published",
+    "title": "Product is published",
+    "predicate": {
+      "type": "blueprint_published",
+      "blueprint": "blueprints/product"
+    }
+  }]
+}
+```
+
+Checks are strictly one of `blueprint_published`, `extension_installed`,
+`extension_enabled`, `extension_configuration_matches`,
+`explore_navigation_entry_present`, or
+`workspace_extension_layout_placement_present`. Their operands are pack logical
+keys or one declared workspace layout contribution. Unknown fields and
+unresolvable archive references are rejected; skipped optional application
+mappings evaluate false with `not_resolvable` evidence.
+
+All checks are informational. False results are successful evaluations and
+never change plan readiness, application completion, resources, settings, or
+extension lifecycle. A completed application receives one idempotent
+`post_apply` run. Administrators may create later `manual` runs against current
+tenant state. Each run, all ordered results, actor/token identity,
+request/correlation IDs, and its audit event commit atomically; evaluator errors
+leave no partial run. Definitions and configuration templates remain private.
+Public responses expose only bounded guidance, check key/title/type, run counts,
+and safe result evidence—never resource source, extension manifests, installed
+configuration, or template values.
 
 ### Optional sample data
 
@@ -487,6 +512,9 @@ acli solution-pack plan show <plan-id>
 acli solution-pack apply <plan-id>
 acli solution-pack applications list
 acli solution-pack applications show <application-id>
+acli solution-pack checks rerun <application-id>
+acli solution-pack checks list <application-id> --limit 25 --offset 0
+acli solution-pack checks show <application-id> <run-id>
 ```
 
 `draft` and `publish` describe what a later apply operation would do; planning
@@ -591,8 +619,8 @@ Neither response contains normalized payloads, blueprint definitions, context
 data, archive bytes, or secret values.
 
 Richer source/release provenance, selected options, reused-resource evidence,
-generic settings fragments, prerequisites, extension mutation outcomes, checklists, and
-validation reports are future design. Application records are
+generic settings fragments, prerequisites, extension mutation outcomes, and
+manual checklist completion are future design. Application records are
 administrator-facing evidence, not controllers: they do not retain ownership,
 lock resources, detect drift, authorize later changes, or provide uninstall.
 

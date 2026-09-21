@@ -1,0 +1,177 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://attricat.com/contracts/solution-pack-checks-v1.schema.json",
+  "title": "Attricat solution-pack informational checks v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "format_version",
+    "checks"
+  ],
+  "properties": {
+    "format_version": {
+      "const": 1
+    },
+    "checks": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 64,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "key",
+          "title",
+          "predicate"
+        ],
+        "properties": {
+          "key": {
+            "type": "string",
+            "maxLength": 128,
+            "pattern": "^checks/[a-z][a-z0-9_-]*$"
+          },
+          "title": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200
+          },
+          "predicate": {
+            "oneOf": [
+              {
+                "$ref": "#/$defs/blueprintPublished"
+              },
+              {
+                "$ref": "#/$defs/extensionInstalled"
+              },
+              {
+                "$ref": "#/$defs/extensionEnabled"
+              },
+              {
+                "$ref": "#/$defs/extensionConfigurationMatches"
+              },
+              {
+                "$ref": "#/$defs/exploreNavigationEntryPresent"
+              },
+              {
+                "$ref": "#/$defs/workspaceExtensionLayoutPlacementPresent"
+              }
+            ]
+          }
+        }
+      },
+      "uniqueItems": true,
+      "$comment": "Runtime bounds keys and titles in UTF-8 bytes; JSON Schema maxLength counts Unicode code points."
+    }
+  },
+  "$defs": {
+    "blueprintKey": {
+      "type": "string",
+      "maxLength": 128,
+      "pattern": "^blueprints/[a-z][a-z0-9_-]*$"
+    },
+    "extensionKey": {
+      "type": "string",
+      "maxLength": 128,
+      "pattern": "^extensions/[a-z][a-z0-9_-]*$"
+    },
+    "blueprintPublished": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "type",
+        "blueprint"
+      ],
+      "properties": {
+        "type": {
+          "const": "blueprint_published"
+        },
+        "blueprint": {
+          "$ref": "#/$defs/blueprintKey"
+        }
+      }
+    },
+    "extensionInstalled": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "type",
+        "extension"
+      ],
+      "properties": {
+        "type": {
+          "const": "extension_installed"
+        },
+        "extension": {
+          "$ref": "#/$defs/extensionKey"
+        }
+      }
+    },
+    "extensionEnabled": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "type",
+        "extension"
+      ],
+      "properties": {
+        "type": {
+          "const": "extension_enabled"
+        },
+        "extension": {
+          "$ref": "#/$defs/extensionKey"
+        }
+      }
+    },
+    "extensionConfigurationMatches": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "type",
+        "extension"
+      ],
+      "properties": {
+        "type": {
+          "const": "extension_configuration_matches"
+        },
+        "extension": {
+          "$ref": "#/$defs/extensionKey"
+        }
+      }
+    },
+    "exploreNavigationEntryPresent": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "type",
+        "blueprint"
+      ],
+      "properties": {
+        "type": {
+          "const": "explore_navigation_entry_present"
+        },
+        "blueprint": {
+          "$ref": "#/$defs/blueprintKey"
+        }
+      }
+    },
+    "workspaceExtensionLayoutPlacementPresent": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "type",
+        "contribution"
+      ],
+      "properties": {
+        "type": {
+          "const": "workspace_extension_layout_placement_present"
+        },
+        "contribution": {
+          "type": "string",
+          "minLength": 3,
+          "maxLength": 256,
+          "pattern": "^[A-Za-z0-9._-]+:[A-Za-z0-9._-]+$"
+        }
+      }
+    }
+  }
+}

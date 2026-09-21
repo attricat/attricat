@@ -1,0 +1,54 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://attricat.com/contracts/solution-pack-setup-checklist-v1.schema.json",
+  "title": "Attricat solution-pack setup checklist v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "format_version",
+    "items"
+  ],
+  "properties": {
+    "format_version": {
+      "const": 1
+    },
+    "items": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 64,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "key",
+          "title",
+          "markdown"
+        ],
+        "properties": {
+          "key": {
+            "type": "string",
+            "maxLength": 128,
+            "pattern": "^checklist/[a-z][a-z0-9_-]*$"
+          },
+          "title": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200
+          },
+          "markdown": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 4096
+          },
+          "check": {
+            "type": "string",
+            "maxLength": 128,
+            "pattern": "^checks/[a-z][a-z0-9_-]*$"
+          }
+        }
+      },
+      "uniqueItems": true,
+      "$comment": "Runtime bounds keys, titles, and Markdown in UTF-8 bytes; JSON Schema maxLength counts Unicode code points."
+    }
+  }
+}

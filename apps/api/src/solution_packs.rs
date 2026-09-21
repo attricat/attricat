@@ -15,7 +15,7 @@ use catalog_blueprint::{
 };
 use catalog_validation::is_valid_code;
 use semver::{Version, VersionReq};
-use serde::{Deserialize, Serialize};
+use serde::{Deserialize, Deserializer, Serialize};
 use serde_json::Value;
 use sha2::{Digest, Sha256};
 use subtle::ConstantTimeEq;
@@ -41,6 +41,12 @@ pub const MAX_SOLUTION_PACK_EXPLORE_NAVIGATION_ENTRIES: usize = 64;
 pub const MAX_SOLUTION_PACK_EXTENSION_LAYOUT_ENTRIES: usize = 64;
 pub const MAX_SOLUTION_PACK_EXPLORE_NAVIGATION_ROLES: usize = 16;
 pub const MAX_SOLUTION_PACK_EXTENSION_REQUIREMENTS: usize = 64;
+pub const MAX_SOLUTION_PACK_CHECKLIST_ITEMS: usize = 64;
+pub const MAX_SOLUTION_PACK_CHECKS: usize = 64;
+pub const MAX_SOLUTION_PACK_README_BYTES: usize = 64 * 1024;
+pub const MAX_SOLUTION_PACK_RELEASE_NOTES_BYTES: usize = 32 * 1024;
+pub const MAX_SOLUTION_PACK_CHECKLIST_BYTES: usize = 64 * 1024;
+pub const MAX_SOLUTION_PACK_CHECKS_BYTES: usize = 128 * 1024;
 pub const MAX_SOLUTION_PACK_CONFIGURATION_TEMPLATE_BYTES: usize = 64 * 1024;
 pub const MAX_SOLUTION_PACK_CONFIGURATION_TEMPLATE_DEPTH: usize = 16;
 pub const MAX_SOLUTION_PACK_CONFIGURATION_TEMPLATE_ITEMS: usize = 256;
@@ -52,6 +58,7 @@ pub const MAX_SOLUTION_PACK_TOTAL_BLUEPRINT_COMPLEXITY: usize = 4096;
 pub const MAX_SOLUTION_PACK_RESOLVED_INCLUDE_ATTRIBUTES: usize = 1024;
 pub const MAX_SOLUTION_PACK_INSPECTION_RESPONSE_BYTES: usize = 512 * 1024;
 pub const MAX_SOLUTION_PACK_PLAN_RESPONSE_BYTES: usize = 1024 * 1024;
+pub const MAX_SOLUTION_PACK_CHECK_RUN_RESPONSE_BYTES: usize = 512 * 1024;
 pub const SOLUTION_PACK_PLAN_EXPIRY_HOURS: i64 = 24;
 pub const MAX_SOLUTION_PACK_PREFIX_BYTES: usize = 32;
 const MAX_ARCHIVE_PATH_BYTES: usize = 512;
@@ -72,6 +79,98 @@ pub struct SolutionPackManifest {
     pub resources: SolutionPackResources,
     #[serde(default)]
     pub extensions: Vec<SolutionPackExtensionRequirement>,
+    #[serde(default, deserialize_with = "deserialize_optional_non_null")]
+    pub documentation: Option<SolutionPackDocumentation>,
+    #[serde(default, deserialize_with = "deserialize_optional_non_null")]
+    pub checks: Option<SolutionPackFileRef>,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct SolutionPackDocumentation {
+    #[serde(default, deserialize_with = "deserialize_optional_non_null")]
+    pub readme: Option<SolutionPackFileRef>,
+    #[serde(default, deserialize_with = "deserialize_optional_non_null")]
+    pub release_notes: Option<SolutionPackFileRef>,
+    #[serde(default, deserialize_with = "deserialize_optional_non_null")]
+    pub setup_checklist: Option<SolutionPackFileRef>,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct SolutionPackFileRef {
+    pub path: String,
+    pub sha256: String,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct SolutionPackSetupChecklist {
+    pub format_version: u32,
+    pub items: Vec<SolutionPackSetupChecklistItem>,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct SolutionPackSetupChecklistItem {
+    pub key: String,
+    pub title: String,
+    pub markdown: String,
+    #[serde(
+        default,
+        deserialize_with = "deserialize_optional_non_null",
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub check: Option<String>,
+}
+
+fn deserialize_optional_non_null<'de, D, T>(deserializer: D) -> Result<Option<T>, D::Error>
+where
+    D: Deserializer<'de>,
+    T: Deserialize<'de>,
+{
+    T::deserialize(deserializer).map(Some)
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct SolutionPackChecksFile {
+    pub format_version: u32,
+    pub checks: Vec<SolutionPackCheckDefinition>,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct SolutionPackCheckDefinition {
+    pub key: String,
+    pub title: String,
+    pub predicate: SolutionPackCheckPredicate,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(tag = "type", rename_all = "snake_case", deny_unknown_fields)]
+pub enum SolutionPackCheckPredicate {
+    BlueprintPublished { blueprint: String },
+    ExtensionInstalled { extension: String },
+    ExtensionEnabled { extension: String },
+    ExtensionConfigurationMatches { extension: String },
+    ExploreNavigationEntryPresent { blueprint: String },
+    WorkspaceExtensionLayoutPlacementPresent { contribution: String },
+}
+
+impl SolutionPackCheckPredicate {
+    pub fn predicate_type(&self) -> &'static str {
+        match self {
+            Self::BlueprintPublished { .. } => "blueprint_published",
+            Self::ExtensionInstalled { .. } => "extension_installed",
+            Self::ExtensionEnabled { .. } => "extension_enabled",
+            Self::ExtensionConfigurationMatches { .. } => "extension_configuration_matches",
+            Self::ExploreNavigationEntryPresent { .. } => "explore_navigation_entry_present",
+            Self::WorkspaceExtensionLayoutPlacementPresent { .. } => {
+                "workspace_extension_layout_placement_present"
+            }
+        }
+    }
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -182,6 +281,15 @@ pub struct ValidatedSolutionPack {
     explore_navigation: Option<SolutionPackExploreNavigation>,
     extension_layout: Option<SolutionPackExtensionLayout>,
     configuration_templates: BTreeMap<String, Value>,
+    guidance: SolutionPackGuidance,
+    checks: Vec<SolutionPackCheckDefinition>,
+}
+
+#[derive(Clone, Debug, Default, Serialize)]
+pub struct SolutionPackGuidance {
+    pub readme_markdown: Option<String>,
+    pub release_notes_markdown: Option<String>,
+    pub setup_checklist: Option<SolutionPackSetupChecklist>,
 }
 
 /// A validated portable blueprint source. References in this source remain
@@ -409,6 +517,8 @@ impl ValidatedSolutionPack {
         let extension_layout = validate_extension_layout(&manifest, &files)?;
         validate_blueprint_extension_layouts(&manifest, &blueprints)?;
         let configuration_templates = validate_configuration_templates(&manifest, &files)?;
+        let (guidance, checks) =
+            validate_guidance_and_checks(&manifest, &files, &extension_layout)?;
 
         Ok(Self {
             manifest,
@@ -419,6 +529,8 @@ impl ValidatedSolutionPack {
             explore_navigation,
             extension_layout,
             configuration_templates,
+            guidance,
+            checks,
         })
     }
 
@@ -454,6 +566,14 @@ impl ValidatedSolutionPack {
 
     pub fn configuration_template(&self, key: &str) -> Option<&Value> {
         self.configuration_templates.get(key)
+    }
+
+    pub fn guidance(&self) -> &SolutionPackGuidance {
+        &self.guidance
+    }
+
+    pub fn checks(&self) -> &[SolutionPackCheckDefinition] {
+        &self.checks
     }
 }
 
@@ -545,7 +665,52 @@ fn validate_manifest(manifest: &SolutionPackManifest) -> Result<(), SolutionPack
             return invalid(format!("duplicate resource path '{}'", template.path));
         }
     }
+    if manifest
+        .documentation
+        .as_ref()
+        .is_some_and(|documentation| {
+            documentation.readme.is_none()
+                && documentation.release_notes.is_none()
+                && documentation.setup_checklist.is_none()
+        })
+    {
+        return invalid("solution-pack documentation must declare at least one file");
+    }
+    for (label, reference, suffix) in guidance_file_references(manifest) {
+        if !safe_archive_path(&reference.path) || !reference.path.ends_with(suffix) {
+            return invalid(format!("solution-pack {label} path is invalid"));
+        }
+        parse_sha256(&reference.sha256).map_err(|()| {
+            SolutionPackError::Invalid(format!(
+                "solution-pack {label} sha256 must be 64 lowercase hexadecimal characters"
+            ))
+        })?;
+        if !paths.insert(&reference.path) {
+            return invalid(format!("duplicate resource path '{}'", reference.path));
+        }
+    }
     Ok(())
+}
+
+fn guidance_file_references(
+    manifest: &SolutionPackManifest,
+) -> Vec<(&'static str, &SolutionPackFileRef, &'static str)> {
+    let mut references = Vec::new();
+    if let Some(documentation) = &manifest.documentation {
+        if let Some(reference) = &documentation.readme {
+            references.push(("README", reference, ".md"));
+        }
+        if let Some(reference) = &documentation.release_notes {
+            references.push(("release notes", reference, ".md"));
+        }
+        if let Some(reference) = &documentation.setup_checklist {
+            references.push(("setup checklist", reference, ".json"));
+        }
+    }
+    if let Some(reference) = &manifest.checks {
+        references.push(("checks", reference, ".json"));
+    }
+    references
 }
 
 fn validate_extension_requirement(
@@ -684,6 +849,11 @@ fn validate_declared_files(
                 .filter_map(|requirement| requirement.configuration_template.as_ref())
                 .map(|template| template.path.as_str()),
         )
+        .chain(
+            guidance_file_references(manifest)
+                .into_iter()
+                .map(|(_, reference, _)| reference.path.as_str()),
+        )
         .collect::<BTreeSet<_>>();
     let actual = files.keys().map(String::as_str).collect::<BTreeSet<_>>();
     if let Some(missing) = declared.difference(&actual).next() {
@@ -699,13 +869,29 @@ fn validate_declared_files(
         .iter()
         .chain(&manifest.resources.contexts)
         .chain(&manifest.resources.workspace_settings)
-        .map(|resource| (&resource.key, &resource.path, &resource.sha256))
+        .map(|resource| {
+            (
+                resource.key.as_str(),
+                resource.path.as_str(),
+                resource.sha256.as_str(),
+            )
+        })
         .chain(manifest.extensions.iter().filter_map(|requirement| {
-            requirement
-                .configuration_template
-                .as_ref()
-                .map(|template| (&requirement.key, &template.path, &template.sha256))
+            requirement.configuration_template.as_ref().map(|template| {
+                (
+                    requirement.key.as_str(),
+                    template.path.as_str(),
+                    template.sha256.as_str(),
+                )
+            })
         }))
+        .chain(
+            guidance_file_references(manifest)
+                .into_iter()
+                .map(|(label, reference, _)| {
+                    (label, reference.path.as_str(), reference.sha256.as_str())
+                }),
+        )
     {
         let bytes = &files[path];
         let expected = parse_sha256(digest).expect("digest validated with manifest");
@@ -907,6 +1093,277 @@ fn validate_blueprint_extension_layouts(
         }
     }
     Ok(())
+}
+
+fn validate_guidance_and_checks(
+    manifest: &SolutionPackManifest,
+    files: &BTreeMap<String, Vec<u8>>,
+    extension_layout: &Option<SolutionPackExtensionLayout>,
+) -> Result<(SolutionPackGuidance, Vec<SolutionPackCheckDefinition>), SolutionPackError> {
+    let mut guidance = SolutionPackGuidance::default();
+    if let Some(documentation) = &manifest.documentation {
+        if let Some(reference) = &documentation.readme {
+            guidance.readme_markdown = Some(validate_markdown_file(
+                &files[&reference.path],
+                MAX_SOLUTION_PACK_README_BYTES,
+                "README",
+            )?);
+        }
+        if let Some(reference) = &documentation.release_notes {
+            guidance.release_notes_markdown = Some(validate_markdown_file(
+                &files[&reference.path],
+                MAX_SOLUTION_PACK_RELEASE_NOTES_BYTES,
+                "release notes",
+            )?);
+        }
+        if let Some(reference) = &documentation.setup_checklist {
+            let bytes = &files[&reference.path];
+            if bytes.len() > MAX_SOLUTION_PACK_CHECKLIST_BYTES {
+                return invalid("solution-pack setup checklist exceeds the size limit");
+            }
+            let mut checklist: SolutionPackSetupChecklist =
+                serde_json::from_slice(bytes).map_err(|_| {
+                    SolutionPackError::Invalid(
+                        "solution-pack setup checklist is not valid strict JSON".into(),
+                    )
+                })?;
+            if checklist.format_version != SOLUTION_PACK_RESOURCE_FORMAT_VERSION
+                || checklist.items.is_empty()
+                || checklist.items.len() > MAX_SOLUTION_PACK_CHECKLIST_ITEMS
+            {
+                return invalid("solution-pack setup checklist format or item count is invalid");
+            }
+            let mut keys = HashSet::new();
+            for item in &mut checklist.items {
+                validate_guidance_key(&item.key, "checklist/")?;
+                if !keys.insert(item.key.as_str()) {
+                    return invalid(format!("duplicate setup checklist key '{}'", item.key));
+                }
+                validate_bounded_text(&item.title, "setup checklist title", MAX_NAME_BYTES)?;
+                item.markdown =
+                    validate_markdown(&item.markdown, 4096, "setup checklist markdown")?;
+                if let Some(check) = &item.check {
+                    validate_guidance_key(check, "checks/")?;
+                }
+            }
+            if serde_json::to_vec(&checklist)
+                .map_err(|_| {
+                    SolutionPackError::Invalid(
+                        "solution-pack setup checklist could not be normalized".into(),
+                    )
+                })?
+                .len()
+                > MAX_SOLUTION_PACK_CHECKLIST_BYTES
+            {
+                return invalid("normalized solution-pack setup checklist exceeds the size limit");
+            }
+            guidance.setup_checklist = Some(checklist);
+        }
+    }
+
+    let checks = if let Some(reference) = &manifest.checks {
+        let bytes = &files[&reference.path];
+        if bytes.len() > MAX_SOLUTION_PACK_CHECKS_BYTES {
+            return invalid("solution-pack checks file exceeds the size limit");
+        }
+        let checks_file: SolutionPackChecksFile = serde_json::from_slice(bytes).map_err(|_| {
+            SolutionPackError::Invalid("solution-pack checks file is not valid strict JSON".into())
+        })?;
+        if checks_file.format_version != SOLUTION_PACK_RESOURCE_FORMAT_VERSION
+            || checks_file.checks.is_empty()
+            || checks_file.checks.len() > MAX_SOLUTION_PACK_CHECKS
+        {
+            return invalid("solution-pack checks format or check count is invalid");
+        }
+        let blueprint_keys = manifest
+            .resources
+            .blueprints
+            .iter()
+            .map(|resource| resource.key.as_str())
+            .collect::<HashSet<_>>();
+        let extensions = manifest
+            .extensions
+            .iter()
+            .map(|requirement| (requirement.key.as_str(), requirement))
+            .collect::<HashMap<_, _>>();
+        let mut keys = HashSet::new();
+        for check in &checks_file.checks {
+            validate_guidance_key(&check.key, "checks/")?;
+            if !keys.insert(check.key.as_str()) {
+                return invalid(format!("duplicate check key '{}'", check.key));
+            }
+            validate_bounded_text(&check.title, "check title", MAX_NAME_BYTES)?;
+            match &check.predicate {
+                SolutionPackCheckPredicate::BlueprintPublished { blueprint }
+                | SolutionPackCheckPredicate::ExploreNavigationEntryPresent { blueprint } => {
+                    if !blueprint_keys.contains(blueprint.as_str()) {
+                        return invalid(format!(
+                            "check '{}' references undeclared blueprint '{}'",
+                            check.key, blueprint
+                        ));
+                    }
+                }
+                SolutionPackCheckPredicate::ExtensionInstalled { extension }
+                | SolutionPackCheckPredicate::ExtensionEnabled { extension } => {
+                    if !extensions.contains_key(extension.as_str()) {
+                        return invalid(format!(
+                            "check '{}' references undeclared extension '{}'",
+                            check.key, extension
+                        ));
+                    }
+                }
+                SolutionPackCheckPredicate::ExtensionConfigurationMatches { extension } => {
+                    if !extensions
+                        .get(extension.as_str())
+                        .is_some_and(|requirement| requirement.configuration_template.is_some())
+                    {
+                        return invalid(format!(
+                            "check '{}' requires an extension configuration template",
+                            check.key
+                        ));
+                    }
+                }
+                SolutionPackCheckPredicate::WorkspaceExtensionLayoutPlacementPresent {
+                    contribution,
+                } => {
+                    if !valid_contribution_key(contribution)
+                        || extension_layout.as_ref().map_or(0, |layout| {
+                            layout
+                                .entries
+                                .iter()
+                                .filter(|entry| entry.contribution == *contribution)
+                                .count()
+                        }) != 1
+                    {
+                        return invalid(format!(
+                            "check '{}' references no unique workspace extension-layout contribution",
+                            check.key
+                        ));
+                    }
+                }
+            }
+        }
+        checks_file.checks
+    } else {
+        Vec::new()
+    };
+
+    let check_keys = checks
+        .iter()
+        .map(|check| check.key.as_str())
+        .collect::<HashSet<_>>();
+    if let Some(checklist) = &guidance.setup_checklist {
+        for item in &checklist.items {
+            if let Some(check) = &item.check
+                && !check_keys.contains(check.as_str())
+            {
+                return invalid(format!(
+                    "setup checklist item '{}' references undeclared check '{}'",
+                    item.key, check
+                ));
+            }
+        }
+    }
+    Ok((guidance, checks))
+}
+
+fn validate_guidance_key(value: &str, prefix: &str) -> Result<(), SolutionPackError> {
+    let suffix = value.strip_prefix(prefix).unwrap_or_default();
+    if value.len() > MAX_IDENTIFIER_BYTES
+        || suffix.is_empty()
+        || suffix.contains('/')
+        || !is_valid_stable_code(suffix)
+    {
+        return invalid(format!("guidance key '{value}' is invalid"));
+    }
+    Ok(())
+}
+
+fn validate_markdown_file(
+    bytes: &[u8],
+    limit: usize,
+    label: &str,
+) -> Result<String, SolutionPackError> {
+    if bytes.len() > limit {
+        return invalid(format!("solution-pack {label} exceeds the size limit"));
+    }
+    let markdown = std::str::from_utf8(bytes)
+        .map_err(|_| SolutionPackError::Invalid(format!("solution-pack {label} must be UTF-8")))?;
+    validate_markdown(markdown, limit, label)
+}
+
+fn validate_markdown(
+    markdown: &str,
+    limit: usize,
+    label: &str,
+) -> Result<String, SolutionPackError> {
+    let normalized = markdown.replace("\r\n", "\n").replace('\r', "\n");
+    if normalized.is_empty() || normalized.len() > limit || normalized.trim() != normalized {
+        return invalid(format!(
+            "solution-pack {label} must be non-empty, trimmed, bounded Markdown"
+        ));
+    }
+    if normalized.chars().any(|character| {
+        (character.is_control() && !matches!(character, '\n' | '\t'))
+            || ('\u{7f}'..='\u{9f}').contains(&character)
+    }) {
+        return invalid(format!("solution-pack {label} contains control characters"));
+    }
+    // Guidance is deliberately display-only. Reject the Markdown constructs that
+    // can embed active content, fetch resources, or carry executable snippets.
+    let lower = normalized.to_ascii_lowercase();
+    if normalized.contains('<')
+        || normalized.contains('>')
+        || normalized.contains("![")
+        || normalized.contains('`')
+        || lower.contains("javascript:")
+        || lower.contains("data:")
+        || lower.contains("file:")
+        || lower.contains("mailto:")
+    {
+        return invalid(format!("solution-pack {label} contains unsafe Markdown"));
+    }
+    for (_, destination) in markdown_destinations(&normalized) {
+        if !destination.starts_with('#') || destination.len() == 1 {
+            return invalid(format!(
+                "solution-pack {label} links may only target same-document fragments"
+            ));
+        }
+    }
+    for line in normalized.lines() {
+        let trimmed = line.trim_start();
+        if (line.starts_with("    ") || line.starts_with('\t')) && !trimmed.is_empty()
+            || trimmed.starts_with("~~~")
+        {
+            return invalid(format!("solution-pack {label} cannot contain code blocks"));
+        }
+        if let Some((_, destination)) = trimmed.split_once("]:")
+            && !destination.trim().starts_with('#')
+        {
+            return invalid(format!(
+                "solution-pack {label} links may only target same-document fragments"
+            ));
+        }
+    }
+    Ok(normalized)
+}
+
+fn markdown_destinations(markdown: &str) -> Vec<(usize, &str)> {
+    let mut destinations = Vec::new();
+    let bytes = markdown.as_bytes();
+    let mut index = 0;
+    while index + 2 < bytes.len() {
+        if bytes[index] == b']' && bytes[index + 1] == b'(' {
+            let start = index + 2;
+            if let Some(relative_end) = markdown[start..].find(')') {
+                let end = start + relative_end;
+                destinations.push((start, markdown[start..end].trim()));
+                index = end;
+            }
+        }
+        index += 1;
+    }
+    destinations
 }
 
 fn validate_configuration_templates(
@@ -1779,9 +2236,16 @@ fn validate_bounded_text(
     field: &str,
     max_bytes: usize,
 ) -> Result<(), SolutionPackError> {
-    if value.is_empty() || value.trim() != value || value.len() > max_bytes {
+    if value.is_empty()
+        || value.trim() != value
+        || value.len() > max_bytes
+        || value.chars().any(|character| {
+            (character.is_control() && !matches!(character, '\n' | '\t'))
+                || ('\u{7f}'..='\u{9f}').contains(&character)
+        })
+    {
         return invalid(format!(
-            "{field} must be non-empty, trimmed, and at most {max_bytes} bytes"
+            "{field} must be non-empty, trimmed, control-free, and at most {max_bytes} bytes"
         ));
     }
     Ok(())
@@ -1808,6 +2272,9 @@ fn safe_archive_path(value: &str) -> bool {
         || value.starts_with('/')
         || value.ends_with('/')
         || value.contains(['\\', '\0', ':'])
+        || value
+            .chars()
+            .any(|character| character <= '\u{1f}' || ('\u{7f}'..='\u{9f}').contains(&character))
         || value.split('/').any(|part| part.is_empty())
     {
         return false;
@@ -1821,7 +2288,7 @@ fn resource_code(key: &str) -> &str {
     key.rsplit_once('/').expect("resource key validated").1
 }
 
-fn parse_version_req(value: &str) -> Result<VersionReq, semver::Error> {
+pub(crate) fn parse_version_req(value: &str) -> Result<VersionReq, semver::Error> {
     VersionReq::parse(value).or_else(|original_error| {
         let comparators = value.split_ascii_whitespace().collect::<Vec<_>>();
         if comparators.len() < 2 || comparators.iter().any(|item| item.contains(',')) {
@@ -3120,6 +3587,117 @@ target_blueprint = "blueprints/product"
     }
 
     #[test]
+    fn validates_and_normalizes_public_guidance_and_informational_checks() {
+        let readme = b"# Setup\r\n\r\nSee [details](#details).";
+        let checklist = br#"{"format_version":1,"items":[{"key":"checklist/publish","title":"Publish product","markdown":"Publish the product.","check":"checks/product-published"}]}"#;
+        let checks = br#"{"format_version":1,"checks":[{"key":"checks/product-published","title":"Product is published","predicate":{"type":"blueprint_published","blueprint":"blueprints/product"}}]}"#;
+        let mut manifest = manifest_value();
+        manifest["documentation"] = json!({
+            "readme":{"path":"README.md","sha256":digest(readme)},
+            "setup_checklist":{"path":"setup/checklist.json","sha256":digest(checklist)}
+        });
+        manifest["checks"] = json!({"path":"checks/checks.json","sha256":digest(checks)});
+        let mut files = valid_files();
+        files.extend([
+            ("README.md", readme.as_slice()),
+            ("setup/checklist.json", checklist.as_slice()),
+            ("checks/checks.json", checks.as_slice()),
+        ]);
+        let pack = ValidatedSolutionPack::from_tar_zst(&archive(&manifest, &files)).unwrap();
+        assert_eq!(
+            pack.guidance().readme_markdown.as_deref(),
+            Some("# Setup\n\nSee [details](#details).")
+        );
+        assert_eq!(
+            pack.guidance()
+                .setup_checklist
+                .as_ref()
+                .unwrap()
+                .items
+                .len(),
+            1
+        );
+        assert_eq!(
+            pack.checks()[0].predicate.predicate_type(),
+            "blueprint_published"
+        );
+
+        let unsafe_readme = b"![remote](https://example.test/image.png)";
+        manifest["documentation"]["readme"]["sha256"] = json!(digest(unsafe_readme));
+        files[3] = ("README.md", unsafe_readme);
+        assert_invalid(&archive(&manifest, &files), "unsafe Markdown");
+    }
+
+    #[test]
+    fn guidance_text_bounds_count_utf8_bytes() {
+        assert!(validate_bounded_text(&"é".repeat(100), "title", 200).is_ok());
+        assert!(validate_bounded_text(&"é".repeat(101), "title", 200).is_err());
+        assert!(validate_markdown(&"é".repeat(2048), 4096, "markdown").is_ok());
+        assert!(validate_markdown(&"é".repeat(2049), 4096, "markdown").is_err());
+    }
+
+    #[test]
+    fn check_predicates_are_a_closed_host_defined_catalogue() {
+        for (value, expected) in [
+            (
+                json!({"type":"blueprint_published","blueprint":"blueprints/product"}),
+                "blueprint_published",
+            ),
+            (
+                json!({"type":"extension_installed","extension":"extensions/shop"}),
+                "extension_installed",
+            ),
+            (
+                json!({"type":"extension_enabled","extension":"extensions/shop"}),
+                "extension_enabled",
+            ),
+            (
+                json!({"type":"extension_configuration_matches","extension":"extensions/shop"}),
+                "extension_configuration_matches",
+            ),
+            (
+                json!({"type":"explore_navigation_entry_present","blueprint":"blueprints/product"}),
+                "explore_navigation_entry_present",
+            ),
+            (
+                json!({"type":"workspace_extension_layout_placement_present","contribution":"acme.shop:nav"}),
+                "workspace_extension_layout_placement_present",
+            ),
+        ] {
+            let predicate: SolutionPackCheckPredicate = serde_json::from_value(value).unwrap();
+            assert_eq!(predicate.predicate_type(), expected);
+        }
+        assert!(
+            serde_json::from_value::<SolutionPackCheckPredicate>(
+                json!({"type":"query","sql":"select 1"})
+            )
+            .is_err()
+        );
+        assert!(serde_json::from_value::<SolutionPackCheckPredicate>(json!({"type":"blueprint_published","blueprint":"blueprints/product","required":true})).is_err());
+    }
+
+    #[test]
+    fn rejects_unknown_or_unresolvable_guidance_and_check_fields() {
+        let checklist = br#"{"format_version":1,"items":[{"key":"checklist/setup","title":"Setup","markdown":"Do setup.","check":"checks/missing"}]}"#;
+        let checks = br#"{"format_version":1,"checks":[{"key":"checks/missing","title":"Missing","predicate":{"type":"blueprint_published","blueprint":"blueprints/missing"}}]}"#;
+        let mut manifest = manifest_value();
+        manifest["documentation"] =
+            json!({"setup_checklist":{"path":"setup.json","sha256":digest(checklist)}});
+        manifest["checks"] = json!({"path":"checks.json","sha256":digest(checks)});
+        let mut files = valid_files();
+        files.extend([
+            ("setup.json", checklist.as_slice()),
+            ("checks.json", checks.as_slice()),
+        ]);
+        assert_invalid(&archive(&manifest, &files), "undeclared blueprint");
+
+        let unknown = br#"{"format_version":1,"checks":[],"query":"select *"}"#;
+        manifest["checks"]["sha256"] = json!(digest(unknown));
+        files[4] = ("checks.json", unknown);
+        assert_invalid(&archive(&manifest, &files), "not valid strict JSON");
+    }
+
+    #[test]
     fn validates_strict_explore_navigation_contract() {
         let pack =
             ValidatedSolutionPack::from_tar_zst(&archive_with_explore_navigation(true)).unwrap();
@@ -3875,6 +4453,92 @@ hidden = ["acme.shop:a_action"]
                 .unwrap()
                 .is_empty()
         );
+        let checklist_schema: Value = serde_json::from_str(include_str!(
+            "../../../contracts/solution-pack-setup-checklist-v1.schema.json"
+        ))
+        .unwrap();
+        let checks_schema: Value = serde_json::from_str(include_str!(
+            "../../../contracts/solution-pack-checks-v1.schema.json"
+        ))
+        .unwrap();
+        catalog_validation::validate_json_schema_definition(&checklist_schema).unwrap();
+        catalog_validation::validate_json_schema_definition(&checks_schema).unwrap();
+        let checklist = json!({"format_version":1,"items":[{"key":"checklist/publish","title":"Publish","markdown":"Publish it.","check":"checks/published"}]});
+        let checks = json!({"format_version":1,"checks":[{"key":"checks/published","title":"Published","predicate":{"type":"blueprint_published","blueprint":"blueprints/product"}}]});
+        assert!(
+            catalog_validation::validate_json_schema(&checklist_schema, &checklist)
+                .unwrap()
+                .is_empty()
+        );
+        assert!(
+            catalog_validation::validate_json_schema(&checks_schema, &checks)
+                .unwrap()
+                .is_empty()
+        );
+        let duplicate_checks = json!({"format_version":1,"checks":[
+            {"key":"checks/published","title":"Published","predicate":{"type":"blueprint_published","blueprint":"blueprints/product"}},
+            {"key":"checks/published","title":"Published","predicate":{"type":"blueprint_published","blueprint":"blueprints/product"}}
+        ]});
+        assert!(
+            !catalog_validation::validate_json_schema(&checks_schema, &duplicate_checks)
+                .unwrap()
+                .is_empty()
+        );
+        let contribution_256 = format!("a:{}", "b".repeat(254));
+        let contribution_257 = format!("a:{}", "b".repeat(255));
+        for (contribution, valid) in [(contribution_256, true), (contribution_257, false)] {
+            assert_eq!(valid_contribution_key(&contribution), valid);
+            let value = json!({"format_version":1,"checks":[{"key":"checks/layout","title":"Layout","predicate":{"type":"workspace_extension_layout_placement_present","contribution":contribution}}]});
+            assert_eq!(
+                catalog_validation::validate_json_schema(&checks_schema, &value)
+                    .unwrap()
+                    .is_empty(),
+                valid
+            );
+        }
+        let mut unknown_check = checks;
+        unknown_check["checks"][0]["predicate"]["query"] = json!("select 1");
+        assert!(
+            !catalog_validation::validate_json_schema(&checks_schema, &unknown_check)
+                .unwrap()
+                .is_empty()
+        );
+
+        let duplicate_checklist = json!({"format_version":1,"items":[
+            {"key":"checklist/publish","title":"Publish","markdown":"Publish it."},
+            {"key":"checklist/publish","title":"Publish","markdown":"Publish it."}
+        ]});
+        assert!(
+            !catalog_validation::validate_json_schema(&checklist_schema, &duplicate_checklist)
+                .unwrap()
+                .is_empty()
+        );
+        let mut manifest_with_guidance = manifest_value();
+        manifest_with_guidance["documentation"] =
+            json!({"readme":{"path":"README.md","sha256":"0".repeat(64)}});
+        assert!(
+            catalog_validation::validate_json_schema(&schema, &manifest_with_guidance)
+                .unwrap()
+                .is_empty()
+        );
+        for unsafe_path in [
+            "/README.md",
+            "../README.md",
+            "docs/../README.md",
+            "C:README.md",
+            "docs\\README.md",
+            "docs/README\n.md",
+            "docs/README\u{85}.md",
+        ] {
+            manifest_with_guidance["documentation"]["readme"]["path"] = json!(unsafe_path);
+            assert!(
+                !catalog_validation::validate_json_schema(&schema, &manifest_with_guidance)
+                    .unwrap()
+                    .is_empty(),
+                "schema accepted unsafe path {unsafe_path}"
+            );
+        }
+
         let navigation_schema: Value = serde_json::from_str(include_str!(
             "../../../contracts/solution-pack-explore-navigation-v1.schema.json"
         ))
@@ -4078,6 +4742,8 @@ hidden = ["acme.shop:a_action"]
             b"/solution-pack.json",
             b"C:/solution-pack.json",
             b"dir\\solution-pack.json",
+            b"dir/solution-pack\n.json",
+            b"dir/solution-pack\x7f.json",
         ] {
             let archive = custom_archive(&[(path, EntryType::Regular, &manifest)]);
             assert_invalid(&archive, "unsafe entry path");

@@ -81,8 +81,11 @@ pub use extensions::{
 pub(crate) use files::{FileMetadata, FileObject, FilePolicy, FileUploadResult, NewUploadedFile};
 pub(crate) use members::{WorkspaceInvitation, WorkspaceMember};
 pub(crate) use roles::{Permission, WorkspaceGrantTarget, WorkspaceRole};
+#[cfg(test)]
+pub(crate) use solution_packs::SolutionPackCheckResult;
 pub(crate) use solution_packs::{
-    SolutionPackApplication, SolutionPackApplicationSummary, SolutionPackPlan,
+    SolutionPackApplication, SolutionPackApplicationSummary, SolutionPackCheckRun,
+    SolutionPackCheckRunSummary, SolutionPackPlan,
 };
 pub(crate) use tokens::PersonalApiToken;
 pub use workflow_runs::WorkflowRun;
