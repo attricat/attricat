@@ -65,6 +65,13 @@
             "$ref": "#/$defs/blueprintResource"
           }
         },
+        "presentation_assets": {
+          "type": "array",
+          "maxItems": 64,
+          "items": {
+            "$ref": "#/$defs/presentationAssetResource"
+          }
+        },
         "workspace_settings": {
           "type": "array",
           "maxItems": 2,
@@ -116,6 +123,16 @@
               "minItems": 1
             }
           }
+        },
+        {
+          "required": [
+            "presentation_assets"
+          ],
+          "properties": {
+            "presentation_assets": {
+              "minItems": 1
+            }
+          }
         }
       ]
     },
@@ -163,6 +180,48 @@
           "$ref": "#/$defs/digest"
         }
       }
+    },
+    "presentationAssetResource": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "key",
+        "path",
+        "required",
+        "purpose",
+        "media_type",
+        "sha256"
+      ],
+      "properties": {
+        "key": {
+          "type": "string",
+          "maxLength": 128,
+          "pattern": "^assets/[a-z][a-z0-9_-]*$"
+        },
+        "path": {
+          "type": "string",
+          "maxLength": 512,
+          "pattern": "^assets/[A-Za-z0-9_-][A-Za-z0-9._-]*(?:/[A-Za-z0-9_-][A-Za-z0-9._-]*)*$"
+        },
+        "required": {
+          "type": "boolean"
+        },
+        "purpose": {
+          "enum": ["logo", "icon", "illustration"]
+        },
+        "media_type": {
+          "enum": ["image/png", "image/jpeg", "image/webp", "image/svg+xml"]
+        },
+        "sha256": {
+          "$ref": "#/$defs/digest"
+        }
+      },
+      "allOf": [
+        {
+          "if": {"properties": {"media_type": {"const": "image/jpeg"}}},
+          "then": {"properties": {"purpose": {"const": "illustration"}}}
+        }
+      ]
     },
     "exploreNavigationResource": {
       "type": "object",

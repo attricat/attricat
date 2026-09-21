@@ -22,6 +22,7 @@ catalog-workflow = { path = "../../crates/workflow" }
 chrono = { version = "0.4", default-features = false, features = ["clock", "serde", "std"] }
 chrono-tz = "0.10"
 rand = "0.8"
+quick-xml = "0.37"
 reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls", "stream"] }
 rust_decimal = { version = "1", features = ["serde"] }
 metrics = "0.23"
@@ -55,4 +56,6 @@ opentelemetry-otlp = { version = "0.32", default-features = false, features = ["
 tracing-opentelemetry = "0.33"
 
 [dev-dependencies]
+aws-smithy-runtime-api = "1"
+aws-smithy-types = "1"
 reqwest = { version = "0.12", default-features = false, features = ["json", "multipart", "rustls-tls"] }

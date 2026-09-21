@@ -2,7 +2,7 @@ use axum::{
     Json,
     body::to_bytes,
     extract::{
-        FromRequest, Multipart, Path, Query, Request,
+        FromRequest, Multipart, Path, Query, Request, State,
         rejection::{BytesRejection, PathRejection, QueryRejection},
     },
     http::{HeaderMap, StatusCode, header},
@@ -11,16 +11,17 @@ use bytes::Bytes;
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
-use super::{auth::ScopedRepository, error::ApiError};
+use super::{AppState, auth::ScopedRepository, error::ApiError};
 use crate::{
     repository::{
-        SolutionPackApplication, SolutionPackApplicationSummary, SolutionPackCheckRun,
-        SolutionPackCheckRunSummary, SolutionPackPlan,
+        CreateSolutionPackPlanRequest, SolutionPackApplication, SolutionPackApplicationSummary,
+        SolutionPackCheckRun, SolutionPackCheckRunSummary, SolutionPackPlan,
     },
     solution_packs::{
         BlueprintMappingRequest, BlueprintPublication, MAX_SOLUTION_PACK_ARCHIVE_BYTES,
         MAX_SOLUTION_PACK_BLUEPRINTS, MAX_SOLUTION_PACK_CHECK_RUN_RESPONSE_BYTES,
         MAX_SOLUTION_PACK_INSPECTION_RESPONSE_BYTES, MAX_SOLUTION_PACK_PLAN_RESPONSE_BYTES,
+        MAX_SOLUTION_PACK_PRESENTATION_ASSETS, PresentationAssetMappingRequest,
         SolutionPackExtensionRequirement, SolutionPackResource, ValidatedSolutionPack,
     },
 };
@@ -53,6 +54,21 @@ struct CatalogSummary {
 struct ResourceSummaries {
     blueprints: Vec<BlueprintSummary>,
     workspace_settings: Vec<WorkspaceSettingSummary>,
+    presentation_assets: Vec<PresentationAssetSummary>,
+}
+
+#[derive(Serialize)]
+struct PresentationAssetSummary {
+    key: String,
+    purpose: String,
+    media_type: String,
+    required: bool,
+    source_sha256: String,
+    stored_sha256: String,
+    source_byte_size: usize,
+    stored_byte_size: usize,
+    width: Option<u32>,
+    height: Option<u32>,
 }
 
 #[derive(Serialize)]
@@ -142,6 +158,28 @@ pub(super) async fn inspect(
         },
         resources: ResourceSummaries {
             blueprints,
+            presentation_assets: manifest
+                .resources
+                .presentation_assets
+                .iter()
+                .map(|resource| {
+                    let asset = pack
+                        .presentation_asset(&resource.key)
+                        .expect("validated presentation asset is available");
+                    PresentationAssetSummary {
+                        key: resource.key.clone(),
+                        purpose: resource.purpose.clone(),
+                        media_type: resource.media_type.clone(),
+                        required: resource.required,
+                        source_sha256: asset.source_sha256.clone(),
+                        stored_sha256: asset.stored_sha256.clone(),
+                        source_byte_size: asset.source_byte_size,
+                        stored_byte_size: asset.stored_bytes.len(),
+                        width: asset.width,
+                        height: asset.height,
+                    }
+                })
+                .collect(),
             workspace_settings: manifest
                 .resources
                 .workspace_settings
@@ -218,15 +256,16 @@ pub(super) struct CreatePlanQuery {
 /// zstd remains the no-choice protocol; multipart adds only explicit blueprint
 /// selections and still streams the archive into a bounded buffer.
 pub(super) async fn create_plan(
+    State(state): State<AppState>,
     ScopedRepository(repository): ScopedRepository,
     query: Result<Query<CreatePlanQuery>, QueryRejection>,
     request: Request,
 ) -> Result<(StatusCode, Json<SolutionPackPlan>), ApiError> {
     let Query(query) = query.map_err(ApiError::from_query_rejection)?;
-    let (archive, mappings) = parse_plan_request(request).await?;
-    if query.from_application.is_some() && !mappings.is_empty() {
+    let (archive, mappings, asset_mappings) = parse_plan_request(request).await?;
+    if query.from_application.is_some() && (!mappings.is_empty() || !asset_mappings.is_empty()) {
         return Err(ApiError::invalid_input(
-            "from_application and blueprint mappings are mutually exclusive".into(),
+            "from_application and explicit mappings are mutually exclusive".into(),
         ));
     }
     let pack = ValidatedSolutionPack::from_tar_zst(&archive)
@@ -234,10 +273,14 @@ pub(super) async fn create_plan(
     let plan = repository
         .create_solution_pack_plan(
             &pack,
-            &query.prefix,
-            query.blueprint_publication,
-            &mappings,
-            query.from_application,
+            CreateSolutionPackPlanRequest {
+                prefix: &query.prefix,
+                publication: query.blueprint_publication,
+                blueprint_mappings: &mappings,
+                asset_mappings: &asset_mappings,
+                prior_application_id: query.from_application,
+            },
+            state.object_store.as_ref(),
         )
         .await?;
     Ok((StatusCode::CREATED, Json(plan)))
@@ -245,7 +288,14 @@ pub(super) async fn create_plan(
 
 async fn parse_plan_request(
     request: Request,
-) -> Result<(Bytes, Vec<BlueprintMappingRequest>), ApiError> {
+) -> Result<
+    (
+        Bytes,
+        Vec<BlueprintMappingRequest>,
+        Vec<PresentationAssetMappingRequest>,
+    ),
+    ApiError,
+> {
     let media_type = request
         .headers()
         .get(header::CONTENT_TYPE)
@@ -256,7 +306,7 @@ async fn parse_plan_request(
         let bytes = to_bytes(request.into_body(), MAX_SOLUTION_PACK_ARCHIVE_BYTES)
             .await
             .map_err(|_| ApiError::payload_too_large())?;
-        return Ok((bytes, Vec::new()));
+        return Ok((bytes, Vec::new(), Vec::new()));
     }
     if !media_type.is_some_and(|value| value.eq_ignore_ascii_case("multipart/form-data")) {
         return Err(ApiError::unsupported_media_type());
@@ -273,6 +323,7 @@ async fn parse_plan_request(
         })?;
     let mut archive = None;
     let mut mappings = Vec::new();
+    let mut asset_mappings = Vec::new();
     let mut metadata_bytes = 0usize;
     while let Some(mut field) = multipart
         .next_field()
@@ -301,6 +352,37 @@ async fn parse_plan_request(
                     bytes.extend_from_slice(&chunk);
                 }
                 archive = Some(Bytes::from(bytes));
+            }
+            Some("asset_map") => {
+                if asset_mappings.len() >= MAX_SOLUTION_PACK_PRESENTATION_ASSETS {
+                    return Err(ApiError::invalid_input(
+                        "too many presentation asset mappings".into(),
+                    ));
+                }
+                let mut bytes = Vec::new();
+                while let Some(chunk) = field.chunk().await.map_err(|error| {
+                    multipart_error(error, "invalid presentation asset mapping part")
+                })? {
+                    if metadata_bytes
+                        .saturating_add(bytes.len())
+                        .saturating_add(chunk.len())
+                        > 64 * 1024
+                    {
+                        return Err(ApiError::invalid_input(
+                            "mapping metadata exceeds the size limit".into(),
+                        ));
+                    }
+                    bytes.extend_from_slice(&chunk);
+                }
+                metadata_bytes += bytes.len();
+                let text = std::str::from_utf8(&bytes).map_err(|_| {
+                    ApiError::invalid_input("presentation asset mapping must be UTF-8".into())
+                })?;
+                asset_mappings.push(serde_json::from_str(text).map_err(|_| {
+                    ApiError::invalid_input(
+                        "presentation asset mapping must be a {key,id} JSON object".into(),
+                    )
+                })?);
             }
             Some("blueprint_map") => {
                 if mappings.len() >= MAX_SOLUTION_PACK_BLUEPRINTS {
@@ -345,7 +427,7 @@ async fn parse_plan_request(
     let archive = archive.ok_or_else(|| {
         ApiError::invalid_input("multipart request is missing the archive part".into())
     })?;
-    Ok((archive, mappings))
+    Ok((archive, mappings, asset_mappings))
 }
 
 fn multipart_error(
@@ -360,11 +442,14 @@ fn multipart_error(
 }
 
 pub(super) async fn apply_plan(
+    State(state): State<AppState>,
     ScopedRepository(repository): ScopedRepository,
     plan_id: Result<Path<Uuid>, PathRejection>,
 ) -> Result<Json<SolutionPackApplication>, ApiError> {
     let Path(plan_id) = plan_id.map_err(ApiError::from_path_rejection)?;
-    let application = repository.apply_solution_pack_plan(plan_id).await?;
+    let application = repository
+        .apply_solution_pack_plan(plan_id, state.object_store.as_ref())
+        .await?;
     ensure_application_response_size(&application)?;
     Ok(Json(application))
 }
@@ -590,6 +675,7 @@ mod tests {
             resources: ResourceSummaries {
                 blueprints: Vec::new(),
                 workspace_settings: Vec::new(),
+                presentation_assets: Vec::new(),
             },
             extensions: Vec::new(),
             guidance: GuidanceInspectionSummary {

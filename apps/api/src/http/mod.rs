@@ -14,6 +14,7 @@ mod extensions;
 mod extractors;
 mod files;
 mod members;
+mod presentation_assets;
 mod roles;
 mod sessions;
 mod solution_packs;
@@ -327,6 +328,15 @@ pub fn router(state: AppState) -> Router {
             post(extensions::sideload).layer(axum::extract::DefaultBodyLimit::max(
                 MAX_EXTENSION_ARCHIVE_BYTES,
             )),
+        )
+        .route("/presentation-assets", get(presentation_assets::list))
+        .route(
+            "/presentation-assets/{asset_id}",
+            get(presentation_assets::get),
+        )
+        .route(
+            "/presentation-assets/{asset_id}/content",
+            get(presentation_assets::content),
         )
         .route(
             "/solution-packs/inspect",

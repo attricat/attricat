@@ -110,6 +110,11 @@ enum Command {
         #[command(subcommand)]
         command: SolutionPackCommand,
     },
+    /// Discover and download immutable private presentation assets.
+    PresentationAsset {
+        #[command(subcommand)]
+        command: PresentationAssetCommand,
+    },
     File {
         #[command(subcommand)]
         command: FileCommand,
@@ -922,8 +927,15 @@ enum SolutionPackCommand {
             conflicts_with = "from_application"
         )]
         blueprint_maps: Vec<String>,
-        /// Reuse unchanged published blueprints from one completed application.
-        #[arg(long, conflicts_with = "blueprint_maps")]
+        /// Explicitly reuse an immutable presentation asset (`logical_key=asset_uuid`).
+        #[arg(
+            long = "map-asset",
+            value_name = "LOGICAL_KEY=ASSET_UUID",
+            conflicts_with = "from_application"
+        )]
+        asset_maps: Vec<String>,
+        /// Reuse unchanged resources from one completed application.
+        #[arg(long, conflicts_with_all = ["blueprint_maps", "asset_maps"])]
         from_application: Option<Uuid>,
     },
     /// Apply exactly the persisted immutable plan; no choices are recomputed.
@@ -937,6 +949,24 @@ enum SolutionPackCommand {
     Checks {
         #[command(subcommand)]
         command: SolutionPackChecksCommand,
+    },
+}
+
+#[derive(Subcommand)]
+enum PresentationAssetCommand {
+    List {
+        #[arg(long, default_value_t = 25, value_parser = clap::value_parser!(u16).range(1..=100))]
+        limit: u16,
+        #[arg(long, default_value_t = 0, value_parser = clap::value_parser!(u16).range(0..=10000))]
+        offset: u16,
+    },
+    Show {
+        asset_id: Uuid,
+    },
+    Download {
+        asset_id: Uuid,
+        #[arg(long)]
+        output: PathBuf,
     },
 }
 
@@ -1626,6 +1656,9 @@ async fn run(cli: Cli) -> Result<String, CliError> {
         Command::Extension { command } => extension_command(&client, &server, command).await,
         Command::SolutionPack { command } => {
             solution_pack_command(&client, &server, command).await
+        }
+        Command::PresentationAsset { command } => {
+            presentation_asset_command(&client, &server, command).await
         }
         Command::File { command } => file_command(&client, &server, command).await,
         Command::Metrics { command: MetricsCommand::Get { output } } => raw_download(&client, &server, "/metrics", &output, None).await,
@@ -2322,8 +2355,9 @@ async fn solution_pack_command(
             prefix: None,
             blueprint_publication: None,
             blueprint_maps,
+            asset_maps,
             from_application: None,
-        } if blueprint_maps.is_empty() => {
+        } if blueprint_maps.is_empty() && asset_maps.is_empty() => {
             request(
                 client,
                 server,
@@ -2339,6 +2373,7 @@ async fn solution_pack_command(
             prefix: Some(prefix),
             blueprint_publication: Some(publication),
             blueprint_maps,
+            asset_maps,
             from_application,
         } => {
             let mut path = format!(
@@ -2350,10 +2385,18 @@ async fn solution_pack_command(
                 path.push_str("&from_application=");
                 path.push_str(&segment(application_id));
             }
-            if blueprint_maps.is_empty() {
+            if blueprint_maps.is_empty() && asset_maps.is_empty() {
                 raw_upload(client, server, &path, &file, "application/zstd").await
             } else {
-                solution_pack_plan_upload(client, server, &path, &file, &blueprint_maps).await
+                solution_pack_plan_upload(
+                    client,
+                    server,
+                    &path,
+                    &file,
+                    &blueprint_maps,
+                    &asset_maps,
+                )
+                .await
             }
         }
         SolutionPackCommand::Plan { .. } => Err(CliError::Input(
@@ -2459,6 +2502,45 @@ async fn entity_publication_command(
                     "/v1/entities/{}/publications/publish-all",
                     segment(entity_id)
                 ),
+                None,
+            )
+            .await
+        }
+    }
+}
+
+async fn presentation_asset_command(
+    client: &Client,
+    server: &Url,
+    command: PresentationAssetCommand,
+) -> Result<String, CliError> {
+    match command {
+        PresentationAssetCommand::List { limit, offset } => {
+            request(
+                client,
+                server,
+                Method::GET,
+                &format!("/presentation-assets?limit={limit}&offset={offset}"),
+                None,
+            )
+            .await
+        }
+        PresentationAssetCommand::Show { asset_id } => {
+            request(
+                client,
+                server,
+                Method::GET,
+                &format!("/presentation-assets/{}", segment(asset_id)),
+                None,
+            )
+            .await
+        }
+        PresentationAssetCommand::Download { asset_id, output } => {
+            raw_download(
+                client,
+                server,
+                &format!("/presentation-assets/{}/content", segment(asset_id)),
+                &output,
                 None,
             )
             .await
@@ -2597,6 +2679,7 @@ async fn solution_pack_plan_upload(
     path: &str,
     archive: &Path,
     requested_maps: &[String],
+    requested_asset_maps: &[String],
 ) -> Result<String, CliError> {
     let mut seen = std::collections::BTreeSet::new();
     let mut parsed = Vec::with_capacity(requested_maps.len());
@@ -2622,6 +2705,27 @@ async fn solution_pack_plan_upload(
         parsed.push(serde_json::json!({"key": key, "code": code}).to_string());
     }
 
+    let mut seen_assets = std::collections::BTreeSet::new();
+    let mut parsed_assets = Vec::with_capacity(requested_asset_maps.len());
+    for requested in requested_asset_maps {
+        let (key, id) = requested.split_once('=').ok_or_else(|| {
+            CliError::Input("--map-asset must be LOGICAL_KEY=ASSET_UUID".to_owned())
+        })?;
+        let id = Uuid::parse_str(id)
+            .map_err(|_| CliError::Input(format!("invalid --map-asset value '{requested}'")))?;
+        if !key.starts_with("assets/") || key.len() > 128 {
+            return Err(CliError::Input(format!(
+                "invalid --map-asset value '{requested}'"
+            )));
+        }
+        if !seen_assets.insert(key.to_owned()) {
+            return Err(CliError::Input(format!(
+                "duplicate --map-asset key '{key}'"
+            )));
+        }
+        parsed_assets.push(serde_json::json!({"key": key, "id": id}).to_string());
+    }
+
     let length = fs::metadata(archive)
         .map_err(|error| CliError::Input(format!("cannot read {}: {error}", archive.display())))?
         .len();
@@ -2637,6 +2741,9 @@ async fn solution_pack_plan_upload(
     let mut form = reqwest::multipart::Form::new().part("archive", archive_part);
     for mapping in parsed {
         form = form.text("blueprint_map", mapping);
+    }
+    for mapping in parsed_assets {
+        form = form.text("asset_map", mapping);
     }
     raw_response(
         client
@@ -4023,6 +4130,45 @@ value = "Blue shirt"
     }
 
     #[test]
+    fn presentation_asset_parser_supports_bounded_discovery_and_download() {
+        assert!(
+            Cli::try_parse_from([
+                "acli",
+                "presentation-asset",
+                "list",
+                "--limit",
+                "100",
+                "--offset",
+                "10000"
+            ])
+            .is_ok()
+        );
+        assert!(
+            Cli::try_parse_from(["acli", "presentation-asset", "list", "--limit", "101"]).is_err()
+        );
+        assert!(
+            Cli::try_parse_from([
+                "acli",
+                "presentation-asset",
+                "show",
+                "00000000-0000-4000-8000-000000000001",
+            ])
+            .is_ok()
+        );
+        assert!(
+            Cli::try_parse_from([
+                "acli",
+                "presentation-asset",
+                "download",
+                "00000000-0000-4000-8000-000000000001",
+                "--output",
+                "asset.svg",
+            ])
+            .is_ok()
+        );
+    }
+
+    #[test]
     fn solution_pack_plan_parser_supports_create_and_show_shapes() {
         let create = Cli::try_parse_from([
             "acli",
@@ -4319,6 +4465,7 @@ value = "Blue shirt"
                 prefix: Some("ecom".to_owned()),
                 blueprint_publication: None,
                 blueprint_maps: Vec::new(),
+                asset_maps: Vec::new(),
                 from_application: None,
             },
         )
@@ -4336,6 +4483,7 @@ value = "Blue shirt"
                 prefix: Some("ecom".to_owned()),
                 blueprint_publication: Some(BlueprintPublicationArgument::Draft),
                 blueprint_maps: Vec::new(),
+                asset_maps: Vec::new(),
                 from_application: None,
             },
         )
@@ -4367,6 +4515,7 @@ value = "Blue shirt"
                     prefix: Some("ecom".to_owned()),
                     blueprint_publication: Some(BlueprintPublicationArgument::Draft),
                     blueprint_maps: vec![mapping.to_owned()],
+                    asset_maps: Vec::new(),
                     from_application: None,
                 },
             )
@@ -4441,6 +4590,7 @@ value = "Blue shirt"
                 prefix: Some("shop prefix".to_owned()),
                 blueprint_publication: Some(BlueprintPublicationArgument::Publish),
                 blueprint_maps: Vec::new(),
+                asset_maps: Vec::new(),
                 from_application: None,
             },
         )
@@ -4467,6 +4617,7 @@ value = "Blue shirt"
                 prefix: Some("shop".to_owned()),
                 blueprint_publication: Some(BlueprintPublicationArgument::Publish),
                 blueprint_maps: Vec::new(),
+                asset_maps: Vec::new(),
                 from_application: Some(prior_application_id),
             },
         )
@@ -4495,6 +4646,9 @@ value = "Blue shirt"
                     "blueprints/product=shared_product".to_owned(),
                     "blueprints/category=shared_category".to_owned(),
                 ],
+                asset_maps: vec![
+                    "assets/brand-logo=00000000-0000-4000-8000-000000000999".to_owned(),
+                ],
                 from_application: None,
             },
         )
@@ -4508,6 +4662,9 @@ value = "Blue shirt"
         assert!(body.contains("application/zstd"));
         assert!(body.contains("opaque archive bytes"));
         assert_eq!(body.matches("name=\"blueprint_map\"").count(), 2);
+        assert_eq!(body.matches("name=\"asset_map\"").count(), 1);
+        assert!(body.contains("assets/brand-logo"));
+        assert!(body.contains("00000000-0000-4000-8000-000000000999"));
         assert!(body.contains("blueprints/product"));
         assert!(body.contains("shared_product"));
 
@@ -4523,6 +4680,7 @@ value = "Blue shirt"
                     "blueprints/product=shared_product".to_owned(),
                     "blueprints/product=other_product".to_owned(),
                 ],
+                asset_maps: Vec::new(),
                 from_application: None,
             },
         )
@@ -4538,6 +4696,7 @@ value = "Blue shirt"
                 prefix: None,
                 blueprint_publication: None,
                 blueprint_maps: Vec::new(),
+                asset_maps: Vec::new(),
                 from_application: None,
             },
         )

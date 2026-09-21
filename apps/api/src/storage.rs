@@ -15,9 +15,12 @@ use std::{
 use async_trait::async_trait;
 use aws_config::{BehaviorVersion, Region};
 use aws_credential_types::Credentials;
-use aws_sdk_s3::{Client, config::Builder as S3ConfigBuilder, primitives::ByteStream};
+use aws_sdk_s3::{
+    Client, config::Builder as S3ConfigBuilder, error::SdkError,
+    operation::get_object::GetObjectError, primitives::ByteStream,
+};
 use bytes::Bytes;
-use futures_util::Stream;
+use futures_util::{Stream, StreamExt};
 use secrecy::{ExposeSecret, SecretString};
 use thiserror::Error;
 use tokio::{sync::Mutex, time::timeout};
@@ -138,6 +141,8 @@ pub struct StoredObjectStream {
 
 #[derive(Debug, Error)]
 pub enum ObjectStoreError {
+    #[error("object was not found in storage")]
+    NotFound,
     #[error("object storage is unavailable")]
     Unavailable,
     #[error("object storage {0} timed out")]
@@ -228,6 +233,57 @@ impl S3ObjectStore {
     }
 }
 
+fn classify_download_failure(modeled_no_such_key: bool, status: Option<u16>) -> ObjectStoreError {
+    if modeled_no_such_key || status == Some(404) {
+        ObjectStoreError::NotFound
+    } else {
+        ObjectStoreError::Operation(DOWNLOAD_OPERATION)
+    }
+}
+
+fn classify_download_error(error: SdkError<GetObjectError>) -> ObjectStoreError {
+    classify_download_failure(
+        error
+            .as_service_error()
+            .is_some_and(GetObjectError::is_no_such_key),
+        error
+            .raw_response()
+            .map(|response| response.status().as_u16()),
+    )
+}
+
+/// Read at most `expected_size + 1` bytes. Callers compare the returned exact size and
+/// digest; the extra byte makes oversized replacement objects observable without an
+/// unbounded provider body collection.
+pub async fn get_object_for_integrity(
+    store: &dyn ObjectStore,
+    key: &str,
+    expected_size: usize,
+) -> Result<StoredObject, ObjectStoreError> {
+    let local_limit = expected_size
+        .checked_add(1)
+        .ok_or(ObjectStoreError::Operation(DOWNLOAD_OPERATION))?;
+    let range = format!("bytes=0-{expected_size}");
+    let StoredObjectStream {
+        mut stream,
+        content_type,
+    } = store.get_range_stream(key, Some(&range)).await?;
+    let mut bytes = Vec::with_capacity(local_limit);
+    while let Some(chunk) = stream.next().await {
+        let chunk = chunk?;
+        let remaining = local_limit - bytes.len();
+        if chunk.len() >= remaining {
+            bytes.extend_from_slice(&chunk[..remaining]);
+            break;
+        }
+        bytes.extend_from_slice(&chunk);
+    }
+    Ok(StoredObject {
+        bytes: Bytes::from(bytes),
+        content_type,
+    })
+}
+
 #[async_trait]
 impl ObjectStore for S3ObjectStore {
     async fn put(&self, key: &str, object: StoredObject) -> Result<(), ObjectStoreError> {
@@ -287,7 +343,7 @@ impl ObjectStore for S3ObjectStore {
         )
         .await
         .map_err(|_| ObjectStoreError::TimedOut(DOWNLOAD_OPERATION))
-        .and_then(|result| result.map_err(|_| ObjectStoreError::Operation(DOWNLOAD_OPERATION)));
+        .and_then(|result| result.map_err(classify_download_error));
         if result.is_err() {
             record_operation(DOWNLOAD_OPERATION, "failure");
         }
@@ -324,7 +380,7 @@ impl ObjectStore for S3ObjectStore {
         let result = timeout(self.download_timeout, request.send())
             .await
             .map_err(|_| ObjectStoreError::TimedOut(DOWNLOAD_OPERATION))
-            .and_then(|result| result.map_err(|_| ObjectStoreError::Operation(DOWNLOAD_OPERATION)));
+            .and_then(|result| result.map_err(classify_download_error));
         if result.is_err() {
             record_operation(DOWNLOAD_OPERATION, "failure");
         }
@@ -357,7 +413,7 @@ impl ObjectStore for S3ObjectStore {
         let result = timeout(self.download_timeout, request.send())
             .await
             .map_err(|_| ObjectStoreError::TimedOut(DOWNLOAD_OPERATION))
-            .and_then(|result| result.map_err(|_| ObjectStoreError::Operation(DOWNLOAD_OPERATION)));
+            .and_then(|result| result.map_err(classify_download_error));
         if result.is_err() {
             record_operation(DOWNLOAD_OPERATION, "failure");
         }
@@ -512,7 +568,7 @@ impl ObjectStore for FakeObjectStore {
             .await
             .get(key)
             .cloned()
-            .ok_or(ObjectStoreError::Operation(DOWNLOAD_OPERATION));
+            .ok_or(ObjectStoreError::NotFound);
         if result.is_err() {
             record_operation(DOWNLOAD_OPERATION, "failure");
         } else {
@@ -590,6 +646,8 @@ impl ObjectStore for FakeObjectStore {
 
 #[cfg(test)]
 mod tests {
+    use aws_smithy_runtime_api::{client::orchestrator::HttpResponse, http::StatusCode};
+    use aws_smithy_types::body::SdkBody;
     use futures_util::TryStreamExt;
 
     use super::*;
@@ -646,6 +704,65 @@ mod tests {
             Err(StorageConfigError::InvalidTimeout(
                 "S3_UPLOAD_TIMEOUT_SECONDS"
             ))
+        ));
+    }
+
+    fn sdk_response(status: u16) -> HttpResponse {
+        HttpResponse::new(
+            StatusCode::try_from(status).expect("valid test status"),
+            SdkBody::empty(),
+        )
+    }
+
+    #[test]
+    fn production_sdk_download_errors_classify_modeled_status_and_transport_failures() {
+        let modeled_no_such_key = SdkError::service_error(
+            GetObjectError::NoSuchKey(
+                aws_sdk_s3::types::error::NoSuchKey::builder()
+                    .message("missing")
+                    .build(),
+            ),
+            sdk_response(500),
+        );
+        assert!(matches!(
+            classify_download_error(modeled_no_such_key),
+            ObjectStoreError::NotFound
+        ));
+
+        let raw_404_without_modeled_error = SdkError::service_error(
+            GetObjectError::generic(
+                aws_sdk_s3::error::ErrorMetadata::builder()
+                    .code("UnknownNotFound")
+                    .message("unmodeled 404 response")
+                    .build(),
+            ),
+            sdk_response(404),
+        );
+        assert!(matches!(
+            classify_download_error(raw_404_without_modeled_error),
+            ObjectStoreError::NotFound
+        ));
+
+        let raw_500 = SdkError::service_error(
+            GetObjectError::generic(
+                aws_sdk_s3::error::ErrorMetadata::builder()
+                    .code("InternalError")
+                    .message("provider failure")
+                    .build(),
+            ),
+            sdk_response(500),
+        );
+        assert!(matches!(
+            classify_download_error(raw_500),
+            ObjectStoreError::Operation(DOWNLOAD_OPERATION)
+        ));
+
+        let transport_failure = SdkError::<GetObjectError>::construction_failure(
+            std::io::Error::other("request construction failed"),
+        );
+        assert!(matches!(
+            classify_download_error(transport_failure),
+            ObjectStoreError::Operation(DOWNLOAD_OPERATION)
         ));
     }
 

@@ -276,6 +276,7 @@ impl From<RepositoryError> for ApiError {
                 code: "migration_needs_resolution",
                 message: error.to_string(),
             },
+            RepositoryError::SolutionPackAssetStorageUnavailable => Self::storage_unavailable(),
             RepositoryError::SolutionPackPlanNotReady => Self {
                 status: StatusCode::CONFLICT,
                 code: "solution_pack_plan_not_ready",
@@ -289,6 +290,11 @@ impl From<RepositoryError> for ApiError {
             RepositoryError::SolutionPackPlanStale => Self {
                 status: StatusCode::CONFLICT,
                 code: "solution_pack_plan_stale",
+                message: error.to_string(),
+            },
+            RepositoryError::SolutionPackAssetObjectIntegrityFailed => Self {
+                status: StatusCode::UNPROCESSABLE_ENTITY,
+                code: "asset_object_integrity_failed",
                 message: error.to_string(),
             },
             RepositoryError::SolutionPackApplicationInvalid => Self {

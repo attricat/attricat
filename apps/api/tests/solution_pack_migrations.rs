@@ -8,6 +8,7 @@ const EXISTING_BLUEPRINT_MIGRATION: &str =
     "20261014000000_solution_pack_existing_blueprint_mappings.sql";
 const PLAN_EVIDENCE_MIGRATION: &str = "20261015000000_solution_pack_plan_evidence_hash.sql";
 const LATER_RELEASE_MIGRATION: &str = "20261016000000_solution_pack_later_releases.sql";
+const PRESENTATION_ASSET_MIGRATION: &str = "20261017000000_presentation_assets.sql";
 
 async fn apply_migration(pool: &PgPool, path: &PathBuf) {
     let sql = fs::read_to_string(path).unwrap();
@@ -229,4 +230,24 @@ async fn context_constraint_upgrade_preserves_history_and_rejects_new_rows(pool:
             .await
             .is_err()
     );
+
+    apply_migration(&pool, &migrations.join(PRESENTATION_ASSET_MIGRATION)).await;
+    assert_eq!(
+        sqlx::query_scalar::<_, i64>(
+            "SELECT count(*) FROM solution_pack_plan_mappings WHERE plan_id=$1 AND resource_kind='context'"
+        )
+        .bind(plan_id)
+        .fetch_one(&pool)
+        .await
+        .unwrap(),
+        2
+    );
+    sqlx::query("INSERT INTO presentation_assets (id,workspace_id,purpose,media_type,byte_size,sha256,object_key) VALUES ($1,$2,'logo','image/svg+xml',10,$3,$4)")
+        .bind(Uuid::new_v4())
+        .bind(workspace_id)
+        .bind("c".repeat(64))
+        .bind("presentation-assets/upgrade")
+        .execute(&pool)
+        .await
+        .unwrap();
 }

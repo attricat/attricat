@@ -38,6 +38,9 @@ pub(super) fn policy(method: &Method, path: &str) -> Option<Policy> {
         "blueprints.write"
     };
     if path == "/solution-packs/inspect"
+        || (method == Method::GET && path == "/presentation-assets")
+        || (method == Method::GET && path == "/presentation-assets/{asset_id}")
+        || (method == Method::GET && path == "/presentation-assets/{asset_id}/content")
         || (method == Method::POST && path == "/solution-packs/plans")
         || (method == Method::GET && path == "/solution-packs/plans/{plan_id}")
         || (method == Method::POST && path == "/solution-packs/plans/{plan_id}/apply")
@@ -431,6 +434,9 @@ mod tests {
     fn solution_pack_inspection_requires_manage_permission() {
         for (method, path) in [
             (Method::POST, "/solution-packs/inspect"),
+            (Method::GET, "/presentation-assets"),
+            (Method::GET, "/presentation-assets/{asset_id}"),
+            (Method::GET, "/presentation-assets/{asset_id}/content"),
             (Method::POST, "/solution-packs/plans"),
             (Method::GET, "/solution-packs/plans/{plan_id}"),
             (Method::POST, "/solution-packs/plans/{plan_id}/apply"),

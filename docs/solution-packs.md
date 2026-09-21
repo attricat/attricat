@@ -2,14 +2,16 @@
 
 > **Status:** v1 archive validation, administrator inspection, immutable
 > create planning, explicit exact reuse of existing published blueprints, and
-> durable application/history for blueprints are implemented. Packs may also declare bounded extension
+> durable application/history for blueprints are implemented. Packs may also declare and inspect
+> bounded, digest-verified presentation assets with durable private staging and immutable create or
+> exact-map application. Packs may also declare bounded extension
 > requirements, non-secret configuration templates, Explore navigation defaults,
 > bounded workspace extension layouts, and entity-blueprint extension layouts.
 > Administrators upload `.tar.zst` archives; broader resource types remain deferred.
 >
 > **Scope of this document:** Sections that describe automatic or non-blueprint
 > existing-resource adoption, updates, workspace settings other than the two bounded defaults,
-> assets, sample data, prerequisites, export, or ownership are future target
+> presentation-asset update/delete/ownership, sample data, prerequisites, or export are future target
 > design, not implemented v1 behavior. The explicitly marked v1 sections below
 > define the current product contract.
 
@@ -69,7 +71,7 @@ bounded workspace-setting boundary.
 | Contexts and publication-channel defaults | Not pack content. Contexts are administrator-managed workspace operating structure and are never created, mapped, updated, or referenced by packs. |
 | Extension requirements | **Implemented subset:** declare installed-package ID/version compatibility and an optional bounded non-secret literal JSON configuration template. Stable manifest contribution references may supply workspace and new entity-blueprint layout defaults. Installation, upgrade, configuration, grants, and enablement remain separate ordinary approvals. |
 | Workspace defaults | **Implemented subset:** append pinned Explore entries and compatible extension contributions without replacing unrelated navigation, layout data, or settings. Other settings remain deferred. |
-| Branding, themes, and static assets | Install only declared, digest-verified files of supported media types for host-defined purposes. |
+| Branding, themes, and static assets | **Implemented bounded subset:** declarations are digest/signature checked, SVG is normalized through a fail-closed static allowlist, normalized bytes are durably staged into immutable plans, and apply creates or explicitly maps ordinary private assets. Changed later-release assets block; removed assets are information only. |
 | Documentation and setup | **Implemented subset:** bounded safe Markdown guidance, release notes, a structured checklist, and six host-defined informational checks with immutable run history. |
 | Sample data | Optional, separately selected, visibly marked, portable, and idempotently mapped; never treated as production configuration. |
 
@@ -151,6 +153,14 @@ publish a strict JSON Schema before accepting archives:
       "key": "workspace/explore-navigation",
       "path": "workspace/explore-navigation.json",
       "required": false,
+      "sha256": "<lowercase-sha256>"
+    }],
+    "presentation_assets": [{
+      "key": "assets/brand-logo",
+      "path": "assets/brand-logo.svg",
+      "required": true,
+      "purpose": "logo",
+      "media_type": "image/svg+xml",
       "sha256": "<lowercase-sha256>"
     }]
   },
@@ -397,20 +407,43 @@ keys block blueprint creation. Existing blueprints are never updated or
 automatically adopted; explicit reuse is limited to the exact blueprint mapping
 contract above.
 
-Branding/assets, generic settings, adoption, ownership, and uninstall remain out
-of scope.
+Generic settings, automatic adoption, ownership, and uninstall remain out of
+scope.
 
 ### Branding, themes, and static assets
 
-A pack may contain declared presentation assets with a logical key, file path,
-media type, digest, purpose, and bounded size. Catalog accepts only supported
-media types, verifies file signatures where applicable, sanitizes formats such
-as SVG, and stores assets through normal private object storage. Archive paths
-and object-store keys are never runtime resource identifiers.
+A pack may declare 1–64 presentation assets under `resources.presentation_assets`.
+Each declaration has a logical `assets/<key>`, safe `assets/...` archive path,
+`required`, purpose (`logo`, `icon`, or `illustration`), fixed media type, and
+lowercase SHA-256. Each source is limited to 2 MiB, all asset sources to 16 MiB,
+and SVG source/output to 256 KiB. PNG, WebP, and SVG are accepted for every
+purpose; JPEG is illustration-only. Raster images must decode completely, must
+be static, and are limited to 4096×4096 and 16 megapixels.
 
-Assets are presentation content only. HTML, JavaScript, executable files,
-remote asset URLs, active embeds, fonts with unverified licensing, and files
-not declared by the manifest are not installable pack assets.
+SVG uses a parsed, fail-closed static element/attribute allowlist and deterministic
+serialization. Scripts, event attributes, foreign objects, animation, style and
+font content, unknown namespaces, declarations/entities, and non-local or active
+references are rejected. Inspection returns logical metadata and source/stored
+digests, never source bytes or archive/object paths.
+
+The ordinary administrator-only presentation-asset API exposes opaque UUID
+metadata and authenticated, bounded, integrity-verified content for assets created by
+successful pack application. `acli presentation-asset list`, `show`, and `download`
+provide the discovery workflow needed before an explicit `--map-asset`. Direct asset
+creation is intentionally unavailable so every private object has durable plan staging
+and reconciliation evidence. Assets are immutable in this slice; there is no create,
+update, or delete endpoint.
+
+Planning preallocates opaque asset UUIDs and durably stages only normalized bytes
+to deterministic private keys. Staging identity and source/stored digests are
+covered by immutable plan evidence; raw archives are never retained. Apply
+revalidates object digest/size and atomically inserts the ordinary workspace asset,
+claims the staging row, records step/audit evidence, and supports retry after
+storage or ambiguous commit failures. Explicit maps require an exact same-workspace
+asset and object; there is no digest search or automatic adoption. With
+`--from-application`, added assets create, unchanged assets map to the exact prior
+target, changed assets block as `update_not_supported`, and removed assets are
+history only. Pack history never owns, updates, deletes, or uninstalls an asset.
 
 ### Documentation, checklist, and validation checks
 
@@ -521,7 +554,8 @@ planner uses an explicit prefix and blueprint publication preference:
 ```sh
 acli solution-pack plan --file pack.tar.zst --prefix ecom --blueprint-publication draft
 acli solution-pack plan --file pack.tar.zst --prefix ecom --blueprint-publication publish \
-  --map blueprints/product=shared_product --map blueprints/category=shared_category
+  --map blueprints/product=shared_product --map blueprints/category=shared_category \
+  --map-asset assets/brand-logo=<existing-asset-uuid>
 acli solution-pack plan --file pack-v2.tar.zst --prefix ecom --blueprint-publication publish \
   --from-application <completed-application-id>
 acli solution-pack plan show <plan-id>
@@ -546,7 +580,10 @@ matches exactly, including kind, references, and effective include revisions.
 Formatting, comments, and source table ordering do not affect compatibility;
 the separately persisted raw stored-source hash remains an apply-time stale
 precondition. Catalog never searches for or suggests mappings and never mutates a
-mapped blueprint. `--map` and `--from-application` are mutually exclusive. The latter
+mapped blueprint. Presentation assets similarly require `--map-asset logical_key=uuid`
+for exact reuse; otherwise a distinct ordinary asset is created, even when another asset
+has the same digest. `--map`, `--map-asset`, and `--from-application` are mutually
+exclusive as a group. The latter
 UUID is a query choice while the archive remains a raw `application/zstd` request.
 The plan and application history retain the selected prior application plus ordered
 added/unchanged/changed/removed evidence and canonical definition hashes. Pack

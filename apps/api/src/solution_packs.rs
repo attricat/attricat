@@ -14,6 +14,8 @@ use catalog_blueprint::{
     ViewDefinition, ViewNode,
 };
 use catalog_validation::is_valid_code;
+use image::{GenericImageView, ImageFormat, ImageReader, Limits};
+use quick_xml::{Reader as XmlReader, Writer as XmlWriter, events::Event};
 use semver::{Version, VersionReq};
 use serde::{Deserialize, Deserializer, Serialize};
 use serde_json::Value;
@@ -34,6 +36,12 @@ pub const MAX_SOLUTION_PACK_FILE_BYTES: usize = 8 * 1024 * 1024;
 pub const MAX_SOLUTION_PACK_MANIFEST_BYTES: usize = 256 * 1024;
 pub const MAX_SOLUTION_PACK_ARCHIVE_ENTRIES: usize = 256;
 pub const MAX_SOLUTION_PACK_BLUEPRINTS: usize = 64;
+pub const MAX_SOLUTION_PACK_PRESENTATION_ASSETS: usize = 64;
+pub const MAX_SOLUTION_PACK_PRESENTATION_ASSET_BYTES: usize = 2 * 1024 * 1024;
+pub const MAX_SOLUTION_PACK_PRESENTATION_ASSET_TOTAL_BYTES: usize = 16 * 1024 * 1024;
+pub const MAX_SOLUTION_PACK_SVG_BYTES: usize = 256 * 1024;
+pub const MAX_SOLUTION_PACK_ASSET_DIMENSION: u32 = 4096;
+pub const MAX_SOLUTION_PACK_ASSET_PIXELS: u64 = 16_000_000;
 pub const MAX_SOLUTION_PACK_WORKSPACE_SETTINGS: usize = 2;
 pub const MAX_SOLUTION_PACK_EXPLORE_NAVIGATION_ENTRIES: usize = 64;
 pub const MAX_SOLUTION_PACK_EXTENSION_LAYOUT_ENTRIES: usize = 64;
@@ -184,6 +192,39 @@ pub struct SolutionPackResources {
     pub blueprints: Vec<SolutionPackResource>,
     #[serde(default)]
     pub workspace_settings: Vec<SolutionPackResource>,
+    #[serde(default)]
+    pub presentation_assets: Vec<SolutionPackPresentationAssetResource>,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct SolutionPackPresentationAssetResource {
+    pub key: String,
+    pub path: String,
+    pub required: bool,
+    pub purpose: String,
+    pub media_type: String,
+    pub sha256: String,
+}
+
+#[derive(Clone, Debug)]
+pub struct NormalizedPresentationAsset {
+    pub bytes: Vec<u8>,
+    pub width: Option<u32>,
+    pub height: Option<u32>,
+}
+
+#[derive(Clone, Debug)]
+pub struct ValidatedPresentationAsset {
+    pub key: String,
+    pub purpose: String,
+    pub media_type: String,
+    pub source_sha256: String,
+    pub source_byte_size: usize,
+    pub stored_sha256: String,
+    pub stored_bytes: Vec<u8>,
+    pub width: Option<u32>,
+    pub height: Option<u32>,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -267,6 +308,7 @@ pub struct ValidatedSolutionPack {
     explore_navigation: Option<SolutionPackExploreNavigation>,
     extension_layout: Option<SolutionPackExtensionLayout>,
     configuration_templates: BTreeMap<String, Value>,
+    presentation_assets: BTreeMap<String, ValidatedPresentationAsset>,
     guidance: SolutionPackGuidance,
     checks: Vec<SolutionPackCheckDefinition>,
 }
@@ -503,6 +545,7 @@ impl ValidatedSolutionPack {
         let extension_layout = validate_extension_layout(&manifest, &files)?;
         validate_blueprint_extension_layouts(&manifest, &blueprints)?;
         let configuration_templates = validate_configuration_templates(&manifest, &files)?;
+        let presentation_assets = validate_presentation_assets(&manifest, &files)?;
         let (guidance, checks) =
             validate_guidance_and_checks(&manifest, &files, &extension_layout)?;
 
@@ -514,6 +557,7 @@ impl ValidatedSolutionPack {
             explore_navigation,
             extension_layout,
             configuration_templates,
+            presentation_assets,
             guidance,
             checks,
         })
@@ -549,6 +593,14 @@ impl ValidatedSolutionPack {
         self.configuration_templates.get(key)
     }
 
+    pub fn presentation_asset(&self, key: &str) -> Option<&ValidatedPresentationAsset> {
+        self.presentation_assets.get(key)
+    }
+
+    pub fn presentation_assets(&self) -> impl Iterator<Item = &ValidatedPresentationAsset> {
+        self.presentation_assets.values()
+    }
+
     pub fn guidance(&self) -> &SolutionPackGuidance {
         &self.guidance
     }
@@ -578,12 +630,19 @@ fn validate_manifest(manifest: &SolutionPackManifest) -> Result<(), SolutionPack
         return invalid("catalog.host_api is incompatible with this host");
     }
 
-    if manifest.resources.blueprints.is_empty() && manifest.resources.workspace_settings.is_empty()
+    if manifest.resources.blueprints.is_empty()
+        && manifest.resources.workspace_settings.is_empty()
+        && manifest.resources.presentation_assets.is_empty()
     {
-        return invalid("at least one blueprint or workspace setting is required");
+        return invalid(
+            "at least one blueprint, workspace setting, or presentation asset is required",
+        );
     }
     if manifest.resources.blueprints.len() > MAX_SOLUTION_PACK_BLUEPRINTS {
         return invalid("solution-pack manifest declares too many blueprints");
+    }
+    if manifest.resources.presentation_assets.len() > MAX_SOLUTION_PACK_PRESENTATION_ASSETS {
+        return invalid("solution-pack manifest declares too many presentation assets");
     }
     if manifest.resources.workspace_settings.len() > MAX_SOLUTION_PACK_WORKSPACE_SETTINGS {
         return invalid("solution-pack manifest declares too many workspace settings");
@@ -605,6 +664,15 @@ fn validate_manifest(manifest: &SolutionPackManifest) -> Result<(), SolutionPack
         )
     {
         validate_resource(kind, resource)?;
+        if !keys.insert(&resource.key) {
+            return invalid(format!("duplicate resource key '{}'", resource.key));
+        }
+        if !paths.insert(&resource.path) {
+            return invalid(format!("duplicate resource path '{}'", resource.path));
+        }
+    }
+    for resource in &manifest.resources.presentation_assets {
+        validate_presentation_asset_resource(resource)?;
         if !keys.insert(&resource.key) {
             return invalid(format!("duplicate resource key '{}'", resource.key));
         }
@@ -793,6 +861,73 @@ fn validate_resource(kind: &str, resource: &SolutionPackResource) -> Result<(), 
     Ok(())
 }
 
+fn valid_presentation_asset_path(path: &str) -> bool {
+    path.len() <= 512
+        && safe_archive_path(path)
+        && path.strip_prefix("assets/").is_some_and(|suffix| {
+            !suffix.is_empty()
+                && suffix.split('/').all(|component| {
+                    let mut bytes = component.bytes();
+                    bytes.next().is_some_and(|byte| {
+                        byte.is_ascii_alphanumeric() || matches!(byte, b'_' | b'-')
+                    }) && bytes.all(|byte| {
+                        byte.is_ascii_alphanumeric() || matches!(byte, b'.' | b'_' | b'-')
+                    })
+                })
+        })
+}
+
+fn validate_presentation_asset_resource(
+    resource: &SolutionPackPresentationAssetResource,
+) -> Result<(), SolutionPackError> {
+    let Some(code) = resource.key.strip_prefix("assets/") else {
+        return invalid(format!(
+            "presentation asset key '{}' must be in the assets/ namespace",
+            resource.key
+        ));
+    };
+    if resource.key.len() > MAX_IDENTIFIER_BYTES
+        || code.contains('/')
+        || !is_valid_stable_code(code)
+    {
+        return invalid(format!(
+            "presentation asset key '{}' is invalid",
+            resource.key
+        ));
+    }
+    if !valid_presentation_asset_path(&resource.path) {
+        return invalid(format!(
+            "presentation asset path '{}' is invalid",
+            resource.path
+        ));
+    }
+    if !matches!(resource.purpose.as_str(), "logo" | "icon" | "illustration") {
+        return invalid(format!(
+            "presentation asset '{}' purpose is unsupported",
+            resource.key
+        ));
+    }
+    let supported_media = matches!(
+        resource.media_type.as_str(),
+        "image/png" | "image/jpeg" | "image/webp" | "image/svg+xml"
+    );
+    if !supported_media
+        || (resource.media_type == "image/jpeg" && resource.purpose != "illustration")
+    {
+        return invalid(format!(
+            "presentation asset '{}' media type is not allowed for its purpose",
+            resource.key
+        ));
+    }
+    parse_sha256(&resource.sha256).map_err(|()| {
+        SolutionPackError::Invalid(format!(
+            "presentation asset '{}' sha256 must be 64 lowercase hexadecimal characters",
+            resource.key
+        ))
+    })?;
+    Ok(())
+}
+
 fn validate_declared_files(
     manifest: &SolutionPackManifest,
     files: &BTreeMap<String, Vec<u8>>,
@@ -803,6 +938,13 @@ fn validate_declared_files(
         .iter()
         .chain(&manifest.resources.workspace_settings)
         .map(|resource| resource.path.as_str())
+        .chain(
+            manifest
+                .resources
+                .presentation_assets
+                .iter()
+                .map(|resource| resource.path.as_str()),
+        )
         .chain(
             manifest
                 .extensions
@@ -836,6 +978,19 @@ fn validate_declared_files(
                 resource.sha256.as_str(),
             )
         })
+        .chain(
+            manifest
+                .resources
+                .presentation_assets
+                .iter()
+                .map(|resource| {
+                    (
+                        resource.key.as_str(),
+                        resource.path.as_str(),
+                        resource.sha256.as_str(),
+                    )
+                }),
+        )
         .chain(manifest.extensions.iter().filter_map(|requirement| {
             requirement.configuration_template.as_ref().map(|template| {
                 (
@@ -861,6 +1016,487 @@ fn validate_declared_files(
         }
     }
     Ok(())
+}
+
+fn validate_presentation_assets(
+    manifest: &SolutionPackManifest,
+    files: &BTreeMap<String, Vec<u8>>,
+) -> Result<BTreeMap<String, ValidatedPresentationAsset>, SolutionPackError> {
+    let total_bytes =
+        manifest
+            .resources
+            .presentation_assets
+            .iter()
+            .try_fold(0usize, |total, resource| {
+                let size = files[&resource.path].len();
+                if size == 0 || size > MAX_SOLUTION_PACK_PRESENTATION_ASSET_BYTES {
+                    return invalid(format!(
+                        "presentation asset '{}' exceeds the per-file size limit",
+                        resource.key
+                    ));
+                }
+                total.checked_add(size).ok_or_else(|| {
+                    SolutionPackError::Invalid(
+                        "presentation asset declared bytes exceed the aggregate size limit".into(),
+                    )
+                })
+            })?;
+    if total_bytes > MAX_SOLUTION_PACK_PRESENTATION_ASSET_TOTAL_BYTES {
+        return invalid("presentation asset declared bytes exceed the aggregate size limit");
+    }
+
+    let mut validated = BTreeMap::new();
+    for resource in &manifest.resources.presentation_assets {
+        let source = &files[&resource.path];
+        let normalized = validate_presentation_asset_bytes(
+            &resource.purpose,
+            &resource.media_type,
+            source,
+            &resource.key,
+        )?;
+        if normalized.bytes.is_empty()
+            || normalized.bytes.len() > MAX_SOLUTION_PACK_PRESENTATION_ASSET_BYTES
+        {
+            return invalid(format!(
+                "presentation asset '{}' sanitized bytes exceed the size limit",
+                resource.key
+            ));
+        }
+        let asset = ValidatedPresentationAsset {
+            key: resource.key.clone(),
+            purpose: resource.purpose.clone(),
+            media_type: resource.media_type.clone(),
+            source_sha256: resource.sha256.clone(),
+            source_byte_size: source.len(),
+            stored_sha256: sha256_hex(&normalized.bytes),
+            stored_bytes: normalized.bytes,
+            width: normalized.width,
+            height: normalized.height,
+        };
+        validated.insert(resource.key.clone(), asset);
+    }
+    Ok(validated)
+}
+
+pub fn validate_presentation_asset_bytes(
+    purpose: &str,
+    media_type: &str,
+    source: &[u8],
+    label: &str,
+) -> Result<NormalizedPresentationAsset, SolutionPackError> {
+    if source.is_empty() || source.len() > MAX_SOLUTION_PACK_PRESENTATION_ASSET_BYTES {
+        return invalid(format!(
+            "presentation asset '{label}' exceeds the per-file size limit"
+        ));
+    }
+    if !matches!(purpose, "logo" | "icon" | "illustration")
+        || !matches!(
+            media_type,
+            "image/png" | "image/jpeg" | "image/webp" | "image/svg+xml"
+        )
+        || (media_type == "image/jpeg" && purpose != "illustration")
+    {
+        return invalid(format!(
+            "presentation asset '{label}' media type is not allowed for its purpose"
+        ));
+    }
+    if media_type == "image/svg+xml" {
+        if source.len() > MAX_SOLUTION_PACK_SVG_BYTES {
+            return invalid(format!(
+                "presentation asset '{label}' SVG exceeds the size limit"
+            ));
+        }
+        return Ok(NormalizedPresentationAsset {
+            bytes: sanitize_svg(source, label)?,
+            width: None,
+            height: None,
+        });
+    }
+    let (format, magic_valid) = match media_type {
+        "image/png" => (
+            ImageFormat::Png,
+            source.starts_with(b"\x89PNG\r\n\x1a\n") && !png_has_animation(source),
+        ),
+        "image/jpeg" => (
+            ImageFormat::Jpeg,
+            source.starts_with(&[0xff, 0xd8]) && source.ends_with(&[0xff, 0xd9]),
+        ),
+        "image/webp" => (ImageFormat::WebP, valid_static_webp(source)),
+        _ => unreachable!("media type allowlisted above"),
+    };
+    if !magic_valid {
+        return invalid(format!(
+            "presentation asset '{label}' has invalid or animated media content"
+        ));
+    }
+    // Read dimensions from format metadata and reject unsafe output geometry before any
+    // decoder is allowed to allocate the fully decompressed pixel buffer.
+    let (width, height) = ImageReader::with_format(Cursor::new(source), format)
+        .into_dimensions()
+        .map_err(|_| {
+            SolutionPackError::Invalid(format!(
+                "presentation asset '{label}' dimensions cannot be inspected"
+            ))
+        })?;
+    if width == 0
+        || height == 0
+        || width > MAX_SOLUTION_PACK_ASSET_DIMENSION
+        || height > MAX_SOLUTION_PACK_ASSET_DIMENSION
+        || u64::from(width) * u64::from(height) > MAX_SOLUTION_PACK_ASSET_PIXELS
+    {
+        return invalid(format!(
+            "presentation asset '{label}' dimensions exceed the limit"
+        ));
+    }
+    let mut reader = ImageReader::with_format(Cursor::new(source), format);
+    let mut decode_limits = Limits::default();
+    decode_limits.max_image_width = Some(MAX_SOLUTION_PACK_ASSET_DIMENSION);
+    decode_limits.max_image_height = Some(MAX_SOLUTION_PACK_ASSET_DIMENSION);
+    // The output is bounded to 64 MiB; retain bounded headroom for decoder scratch space.
+    decode_limits.max_alloc = Some(96 * 1024 * 1024);
+    reader.limits(decode_limits);
+    let image = reader.decode().map_err(|_| {
+        SolutionPackError::Invalid(format!(
+            "presentation asset '{label}' cannot be completely decoded as its declared media type"
+        ))
+    })?;
+    if image.dimensions() != (width, height) {
+        return invalid(format!(
+            "presentation asset '{label}' decoded dimensions are inconsistent"
+        ));
+    }
+    Ok(NormalizedPresentationAsset {
+        bytes: source.to_vec(),
+        width: Some(width),
+        height: Some(height),
+    })
+}
+
+fn png_has_animation(bytes: &[u8]) -> bool {
+    let mut offset = 8usize;
+    while offset.checked_add(12).is_some_and(|end| end <= bytes.len()) {
+        let length =
+            u32::from_be_bytes(bytes[offset..offset + 4].try_into().expect("four bytes")) as usize;
+        let Some(end) = offset
+            .checked_add(12)
+            .and_then(|value| value.checked_add(length))
+        else {
+            return true;
+        };
+        if end > bytes.len() {
+            return true;
+        }
+        if &bytes[offset + 4..offset + 8] == b"acTL" {
+            return true;
+        }
+        offset = end;
+    }
+    false
+}
+
+fn valid_static_webp(bytes: &[u8]) -> bool {
+    if bytes.len() < 12 || &bytes[..4] != b"RIFF" || &bytes[8..12] != b"WEBP" {
+        return false;
+    }
+    let declared = u32::from_le_bytes(bytes[4..8].try_into().expect("four bytes")) as usize;
+    declared.checked_add(8) == Some(bytes.len())
+        && !bytes
+            .windows(4)
+            .any(|chunk| chunk == b"ANIM" || chunk == b"ANMF")
+}
+
+fn valid_svg_fragment_id(value: &str) -> bool {
+    !value.is_empty()
+        && value
+            .bytes()
+            .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'-' | b'_' | b'.' | b':'))
+}
+
+fn local_svg_fragment(value: &str) -> bool {
+    value.strip_prefix('#').is_some_and(valid_svg_fragment_id)
+}
+
+fn local_svg_url(value: &str) -> bool {
+    value
+        .strip_prefix("url(#")
+        .and_then(|value| value.strip_suffix(')'))
+        .is_some_and(valid_svg_fragment_id)
+}
+
+fn primitive_svg_paint(value: &str) -> bool {
+    let value = value.trim();
+    if value.is_empty() || value.contains('\\') || !value.is_ascii() {
+        return false;
+    }
+    if matches!(
+        value,
+        "none" | "currentColor" | "transparent" | "context-fill" | "context-stroke"
+    ) || local_svg_url(value)
+    {
+        return true;
+    }
+    if let Some(hex) = value.strip_prefix('#') {
+        return matches!(hex.len(), 3 | 4 | 6 | 8)
+            && hex.bytes().all(|byte| byte.is_ascii_hexdigit());
+    }
+    if value
+        .bytes()
+        .all(|byte| byte.is_ascii_alphabetic() || byte == b'-')
+    {
+        return true;
+    }
+    for function in ["rgb(", "rgba(", "hsl(", "hsla("] {
+        if let Some(arguments) = value
+            .strip_prefix(function)
+            .and_then(|arguments| arguments.strip_suffix(')'))
+        {
+            return !arguments.is_empty()
+                && arguments.bytes().all(|byte| {
+                    byte.is_ascii_digit()
+                        || matches!(byte, b' ' | b',' | b'.' | b'%' | b'/' | b'+' | b'-')
+                });
+        }
+    }
+    false
+}
+
+fn safe_svg_attribute_value(name: &str, value: &str) -> bool {
+    match name {
+        "href" | "xlink:href" => !value.contains('\\') && local_svg_fragment(value),
+        "clip-path" | "mask" => {
+            !value.contains('\\') && (value.trim() == "none" || local_svg_url(value.trim()))
+        }
+        "fill" | "stroke" | "stop-color" => primitive_svg_paint(value),
+        _ => true,
+    }
+}
+
+fn sanitize_svg(source: &[u8], key: &str) -> Result<Vec<u8>, SolutionPackError> {
+    let text = std::str::from_utf8(source).map_err(|_| {
+        SolutionPackError::Invalid(format!("presentation asset '{key}' SVG must be UTF-8"))
+    })?;
+    if text.contains("<!DOCTYPE") || text.contains("<!ENTITY") {
+        return invalid(format!(
+            "presentation asset '{key}' SVG contains forbidden declarations"
+        ));
+    }
+
+    const ELEMENTS: &[&str] = &[
+        "svg",
+        "g",
+        "path",
+        "rect",
+        "circle",
+        "ellipse",
+        "line",
+        "polyline",
+        "polygon",
+        "defs",
+        "linearGradient",
+        "radialGradient",
+        "stop",
+        "clipPath",
+        "mask",
+        "title",
+        "desc",
+        "use",
+        "symbol",
+    ];
+    const ATTRIBUTES: &[&str] = &[
+        "xmlns",
+        "xmlns:xlink",
+        "viewBox",
+        "width",
+        "height",
+        "x",
+        "y",
+        "x1",
+        "y1",
+        "x2",
+        "y2",
+        "cx",
+        "cy",
+        "r",
+        "rx",
+        "ry",
+        "d",
+        "points",
+        "fill",
+        "fill-rule",
+        "fill-opacity",
+        "stroke",
+        "stroke-width",
+        "stroke-linecap",
+        "stroke-linejoin",
+        "stroke-miterlimit",
+        "stroke-dasharray",
+        "stroke-dashoffset",
+        "stroke-opacity",
+        "opacity",
+        "transform",
+        "gradientUnits",
+        "gradientTransform",
+        "offset",
+        "stop-color",
+        "stop-opacity",
+        "clip-path",
+        "clip-rule",
+        "mask",
+        "id",
+        "preserveAspectRatio",
+        "href",
+        "xlink:href",
+    ];
+
+    let mut reader = XmlReader::from_str(text);
+    reader.config_mut().trim_text(false);
+    let mut writer = XmlWriter::new(Vec::with_capacity(source.len()));
+    let mut depth = 0usize;
+    let mut elements = 0usize;
+    loop {
+        let event = reader.read_event().map_err(|_| {
+            SolutionPackError::Invalid(format!("presentation asset '{key}' SVG is malformed"))
+        })?;
+        let empty = matches!(&event, Event::Empty(_));
+        match event {
+            Event::Start(start) | Event::Empty(start) => {
+                let name = std::str::from_utf8(start.name().as_ref())
+                    .map_err(|_| {
+                        SolutionPackError::Invalid(format!(
+                            "presentation asset '{key}' SVG has an invalid element"
+                        ))
+                    })?
+                    .to_owned();
+                if name.contains(':')
+                    || !ELEMENTS.contains(&name.as_str())
+                    || (depth == 0 && (name != "svg" || elements != 0))
+                {
+                    return invalid(format!(
+                        "presentation asset '{key}' SVG contains forbidden elements"
+                    ));
+                }
+                elements += 1;
+                if elements > 4096 || depth > 64 {
+                    return invalid(format!("presentation asset '{key}' SVG is too complex"));
+                }
+                let mut attrs = Vec::new();
+                for attribute in start.attributes() {
+                    let attribute = attribute.map_err(|_| {
+                        SolutionPackError::Invalid(format!(
+                            "presentation asset '{key}' SVG has malformed attributes"
+                        ))
+                    })?;
+                    let attr_name = std::str::from_utf8(attribute.key.as_ref()).map_err(|_| {
+                        SolutionPackError::Invalid(format!(
+                            "presentation asset '{key}' SVG has an invalid attribute"
+                        ))
+                    })?;
+                    if attr_name.starts_with("on") || !ATTRIBUTES.contains(&attr_name) {
+                        return invalid(format!(
+                            "presentation asset '{key}' SVG contains forbidden attributes"
+                        ));
+                    }
+                    let value = attribute
+                        .unescape_value()
+                        .map_err(|_| {
+                            SolutionPackError::Invalid(format!(
+                                "presentation asset '{key}' SVG has malformed attribute values"
+                            ))
+                        })?
+                        .into_owned();
+                    let namespace = matches!(attr_name, "xmlns" | "xmlns:xlink");
+                    if attr_name == "xmlns" && value != "http://www.w3.org/2000/svg"
+                        || attr_name == "xmlns:xlink" && value != "http://www.w3.org/1999/xlink"
+                    {
+                        return invalid(format!(
+                            "presentation asset '{key}' SVG contains an unknown namespace"
+                        ));
+                    }
+                    if !namespace && !safe_svg_attribute_value(attr_name, &value) {
+                        return invalid(format!(
+                            "presentation asset '{key}' SVG contains active, remote, or invalid attribute content"
+                        ));
+                    }
+                    attrs.push((attr_name.to_owned(), value));
+                }
+                if depth == 0
+                    && !attrs.iter().any(|(name, value)| {
+                        name == "xmlns" && value == "http://www.w3.org/2000/svg"
+                    })
+                {
+                    return invalid(format!(
+                        "presentation asset '{key}' SVG root namespace is invalid"
+                    ));
+                }
+                attrs.sort();
+                let mut normalized = quick_xml::events::BytesStart::new(&name);
+                for (name, value) in &attrs {
+                    normalized.push_attribute((name.as_str(), value.as_str()));
+                }
+                if empty {
+                    writer.write_event(Event::Empty(normalized))
+                } else {
+                    writer.write_event(Event::Start(normalized))
+                }
+                .map_err(|_| {
+                    SolutionPackError::Invalid(format!(
+                        "presentation asset '{key}' SVG cannot be normalized"
+                    ))
+                })?;
+                if !empty {
+                    depth += 1;
+                }
+            }
+            Event::End(end) => {
+                if depth == 0 {
+                    return invalid(format!("presentation asset '{key}' SVG is malformed"));
+                }
+                depth -= 1;
+                writer
+                    .write_event(Event::End(end.into_owned()))
+                    .map_err(|_| {
+                        SolutionPackError::Invalid(format!(
+                            "presentation asset '{key}' SVG cannot be normalized"
+                        ))
+                    })?;
+            }
+            Event::Text(text) => {
+                let text_bytes: &[u8] = text.as_ref();
+                if depth == 0 && !text_bytes.iter().all(|byte| byte.is_ascii_whitespace()) {
+                    return invalid(format!(
+                        "presentation asset '{key}' SVG has text outside its root"
+                    ));
+                }
+                writer
+                    .write_event(Event::Text(text.into_owned()))
+                    .map_err(|_| {
+                        SolutionPackError::Invalid(format!(
+                            "presentation asset '{key}' SVG cannot be normalized"
+                        ))
+                    })?
+            }
+            Event::Eof => break,
+            Event::Decl(_)
+            | Event::DocType(_)
+            | Event::PI(_)
+            | Event::CData(_)
+            | Event::Comment(_) => {
+                return invalid(format!(
+                    "presentation asset '{key}' SVG contains forbidden XML content"
+                ));
+            }
+        }
+    }
+    if depth != 0 || elements == 0 {
+        return invalid(format!("presentation asset '{key}' SVG is malformed"));
+    }
+    let output = writer.into_inner();
+    if output.len() > MAX_SOLUTION_PACK_SVG_BYTES {
+        return invalid(format!(
+            "presentation asset '{key}' sanitized SVG exceeds the size limit"
+        ));
+    }
+    Ok(output)
 }
 
 fn validate_explore_navigation(
@@ -2284,6 +2920,22 @@ pub struct BlueprintMappingRequest {
     pub code: String,
 }
 
+#[derive(Clone, Debug, Deserialize, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
+pub struct PresentationAssetMappingRequest {
+    pub key: String,
+    pub id: uuid::Uuid,
+}
+
+#[derive(Clone, Debug)]
+pub struct ExistingPresentationAssetSnapshot {
+    pub id: uuid::Uuid,
+    pub purpose: String,
+    pub media_type: String,
+    pub byte_size: i64,
+    pub sha256: String,
+}
+
 #[derive(Clone, Debug)]
 pub struct ExistingBlueprintSnapshot {
     pub id: uuid::Uuid,
@@ -2304,6 +2956,7 @@ pub struct PlanningWorkspaceSnapshot {
     /// Explicit selections keyed by pack-local blueprint key. Missing targets
     /// are rejected before the planner is called; the planner never searches.
     pub existing_blueprints: BTreeMap<String, ExistingBlueprintSnapshot>,
+    pub existing_presentation_assets: BTreeMap<String, ExistingPresentationAssetSnapshot>,
     pub installed_extensions: BTreeMap<String, InstalledExtensionSnapshot>,
     pub explore_navigation: Vec<PlanningExploreNavigationEntry>,
     pub explore_navigation_valid: bool,
@@ -2474,6 +3127,38 @@ fn contribution_availability_reason(
     }
 }
 
+pub fn validate_presentation_asset_mapping_requests(
+    pack: &ValidatedSolutionPack,
+    mappings: &[PresentationAssetMappingRequest],
+) -> Result<(), SolutionPackError> {
+    if mappings.len() > MAX_SOLUTION_PACK_PRESENTATION_ASSETS {
+        return invalid("too many presentation asset mappings");
+    }
+    let declared = pack
+        .manifest()
+        .resources
+        .presentation_assets
+        .iter()
+        .map(|resource| resource.key.as_str())
+        .collect::<HashSet<_>>();
+    let mut seen = HashSet::new();
+    for mapping in mappings {
+        if !declared.contains(mapping.key.as_str()) {
+            return invalid(format!(
+                "unknown presentation asset mapping key '{}'",
+                mapping.key
+            ));
+        }
+        if !seen.insert(mapping.key.as_str()) {
+            return invalid(format!(
+                "duplicate presentation asset mapping key '{}'",
+                mapping.key
+            ));
+        }
+    }
+    Ok(())
+}
+
 pub fn validate_blueprint_mapping_requests(
     pack: &ValidatedSolutionPack,
     mappings: &[BlueprintMappingRequest],
@@ -2582,6 +3267,47 @@ pub fn build_solution_pack_plan(
             }
         };
         mappings_by_key.insert(logical_key.clone(), mapping);
+    }
+    for resource in &manifest.resources.presentation_assets {
+        let validated_asset = pack
+            .presentation_asset(&resource.key)
+            .expect("validated presentation asset exists");
+        let mapping =
+            if let Some(existing) = workspace.existing_presentation_assets.get(&resource.key) {
+                PlannedMapping {
+                    resource_kind: "presentation_asset",
+                    logical_key: resource.key.clone(),
+                    target_id: existing.id,
+                    target_code: "presentation_asset".to_owned(),
+                    target_version: None,
+                    mapping_kind: "existing",
+                    snapshot: serde_json::json!({
+                        "id": existing.id,
+                        "purpose": existing.purpose,
+                        "media_type": existing.media_type,
+                        "byte_size": existing.byte_size,
+                        "sha256": existing.sha256,
+                        "source_sha256": validated_asset.source_sha256,
+                    }),
+                }
+            } else {
+                PlannedMapping {
+                    resource_kind: "presentation_asset",
+                    logical_key: resource.key.clone(),
+                    target_id: deterministic_target_id(
+                        workspace.workspace_id,
+                        pack,
+                        prefix,
+                        publication,
+                        &resource.key,
+                    ),
+                    target_code: "presentation_asset".to_owned(),
+                    target_version: None,
+                    mapping_kind: "create",
+                    snapshot: serde_json::json!({}),
+                }
+            };
+        mappings_by_key.insert(resource.key.clone(), mapping);
     }
     if pack.explore_navigation().is_some() {
         mappings_by_key.insert(
@@ -2829,6 +3555,81 @@ pub fn build_solution_pack_plan(
                 "required": resource.required,
                 "dependencies": dependencies[&logical_key],
                 "extension_layout": blueprint_layout_evidence.get(&logical_key).cloned().unwrap_or_default(),
+            }),
+            normalized_payload,
+            preconditions,
+        });
+    }
+
+    for resource in &manifest.resources.presentation_assets {
+        let asset = pack
+            .presentation_asset(&resource.key)
+            .expect("validated presentation asset exists");
+        let mapping = &mappings_by_key[&resource.key];
+        let existing = workspace.existing_presentation_assets.get(&resource.key);
+        let compatible = existing.is_some_and(|existing| {
+            existing.purpose == asset.purpose
+                && existing.media_type == asset.media_type
+                && existing.byte_size == asset.stored_bytes.len() as i64
+                && existing.sha256 == asset.stored_sha256
+        });
+        let (action, reason_code) = if existing.is_some() && compatible {
+            ("map", "exact_asset_match")
+        } else if existing.is_some() {
+            ("conflict", "existing_asset_incompatible")
+        } else if resource.required {
+            ("create", "target_absent")
+        } else {
+            ("skip", "optional_not_selected")
+        };
+        let normalized_payload = (action == "create").then(|| {
+            serde_json::json!({
+                "purpose": asset.purpose,
+                "media_type": asset.media_type,
+                "byte_size": asset.stored_bytes.len(),
+                "source_byte_size": asset.source_byte_size,
+                "source_sha256": asset.source_sha256,
+                "stored_sha256": asset.stored_sha256,
+                "width": asset.width,
+                "height": asset.height,
+            })
+        });
+        let preconditions = if action == "map" {
+            let existing = existing.expect("map has existing asset");
+            serde_json::json!([{
+                "kind": "existing_presentation_asset",
+                "id": existing.id,
+                "purpose": existing.purpose,
+                "media_type": existing.media_type,
+                "byte_size": existing.byte_size,
+                "sha256": existing.sha256,
+                "source_sha256": asset.source_sha256,
+            }])
+        } else if matches!(action, "create" | "conflict") {
+            serde_json::json!([{
+                "kind": "target_absent",
+                "resource_kind": "presentation_asset",
+                "code": "presentation_asset",
+            }])
+        } else {
+            serde_json::json!([])
+        };
+        actions.push(PlannedAction {
+            resource_kind: "presentation_asset",
+            logical_key: resource.key.clone(),
+            action,
+            reason_code,
+            summary: serde_json::json!({
+                "target_id": mapping.target_id,
+                "required": resource.required,
+                "purpose": asset.purpose,
+                "media_type": asset.media_type,
+                "byte_size": asset.stored_bytes.len(),
+                "source_byte_size": asset.source_byte_size,
+                "source_sha256": asset.source_sha256,
+                "stored_sha256": asset.stored_sha256,
+                "width": asset.width,
+                "height": asset.height,
             }),
             normalized_payload,
             preconditions,
@@ -3570,6 +4371,185 @@ target_blueprint = "blueprints/product"
         );
     }
 
+    fn asset_manifest(bytes: &[u8], purpose: &str, media_type: &str) -> Value {
+        json!({
+            "manifest_version": 1,
+            "id": "attricat.brand",
+            "name": "Brand",
+            "version": "1.0.0",
+            "description": "Brand assets",
+            "catalog": {"host_api": ">=1.0.0, <2.0.0"},
+            "resources": {"presentation_assets": [{
+                "key": "assets/brand-logo",
+                "path": "assets/brand-logo.svg",
+                "required": true,
+                "purpose": purpose,
+                "media_type": media_type,
+                "sha256": digest(bytes)
+            }]}
+        })
+    }
+
+    #[test]
+    fn validates_and_deterministically_normalizes_static_svg_assets() {
+        let svg = br##"<svg height="10" xmlns="http://www.w3.org/2000/svg" width="20"><defs><linearGradient id="paint"><stop offset="0" stop-color="#fff"/></linearGradient></defs><rect height="10" fill="#fff" width="20"/></svg>"##;
+        let manifest = asset_manifest(svg, "logo", "image/svg+xml");
+        let pack = ValidatedSolutionPack::from_tar_zst(&archive(
+            &manifest,
+            &[("assets/brand-logo.svg", svg)],
+        ))
+        .unwrap();
+        let asset = pack.presentation_asset("assets/brand-logo").unwrap();
+        assert_eq!(asset.source_sha256, digest(svg));
+        assert_eq!(asset.stored_sha256, digest(&asset.stored_bytes));
+        assert_eq!(asset.width, None);
+        assert_eq!(
+            std::str::from_utf8(&asset.stored_bytes).unwrap(),
+            r##"<svg height="10" width="20" xmlns="http://www.w3.org/2000/svg"><defs><linearGradient id="paint"><stop offset="0" stop-color="#fff"/></linearGradient></defs><rect fill="#fff" height="10" width="20"/></svg>"##
+        );
+        assert_eq!(
+            sanitize_svg(&asset.stored_bytes, "assets/brand-logo").unwrap(),
+            asset.stored_bytes
+        );
+    }
+
+    #[test]
+    fn svg_assets_reject_active_remote_and_scriptable_content() {
+        for svg in [
+            br#"<svg xmlns="http://www.w3.org/2000/svg"><script>alert(1)</script></svg>"#.as_slice(),
+            br#"<svg xmlns="http://www.w3.org/2000/svg" onload="alert(1)"/>"#,
+            br#"<svg xmlns="http://www.w3.org/2000/svg"><foreignObject/></svg>"#,
+            br#"<svg xmlns="http://www.w3.org/2000/svg"><use href="https://example.test/a.svg#x"/></svg>"#,
+            br#"<svg xmlns="http://www.w3.org/2000/svg"><rect fill="url(https://example.test/x)"/></svg>"#,
+            br#"<svg xmlns="http://www.w3.org/2000/svg"><animate attributeName="x"/></svg>"#,
+            br#"<!DOCTYPE svg [<!ENTITY xxe SYSTEM "file:///etc/passwd">]><svg xmlns="http://www.w3.org/2000/svg"/>"#,
+        ] {
+            let manifest = asset_manifest(svg, "logo", "image/svg+xml");
+            assert_invalid(
+                &archive(&manifest, &[("assets/brand-logo.svg", svg)]),
+                "SVG",
+            );
+        }
+    }
+
+    #[test]
+    fn svg_url_capable_attributes_reject_css_escapes() {
+        let attributes = [
+            "fill",
+            "stroke",
+            "stop-color",
+            "clip-path",
+            "mask",
+            "href",
+            "xlink:href",
+        ];
+        let escaped_values = [
+            r"\75\72\6c(\68\74\74\70\73\3a\2f\2f example.test/x)",
+            r"\68\74\74\70\73\3a\2f\2f example.test/x",
+            r"\64\61\74\61\3a image/svg+xml,x",
+        ];
+        for attribute in attributes {
+            for value in escaped_values {
+                let svg = format!(
+                    r#"<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink"><use {attribute}="{value}"/></svg>"#
+                );
+                let manifest = asset_manifest(svg.as_bytes(), "logo", "image/svg+xml");
+                assert_invalid(
+                    &archive(&manifest, &[("assets/brand-logo.svg", svg.as_bytes())]),
+                    "SVG",
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn raster_presentation_assets_reject_oversized_dimensions_before_decode() {
+        let image = image::DynamicImage::new_luma8(MAX_SOLUTION_PACK_ASSET_DIMENSION + 1, 1);
+        let mut encoded = Cursor::new(Vec::new());
+        image.write_to(&mut encoded, ImageFormat::Png).unwrap();
+        assert!(encoded.get_ref().len() < MAX_SOLUTION_PACK_PRESENTATION_ASSET_BYTES);
+        let error =
+            validate_presentation_asset_bytes("logo", "image/png", encoded.get_ref(), "oversized")
+                .unwrap_err();
+        assert!(error.to_string().contains("dimensions exceed"));
+    }
+
+    #[test]
+    fn raster_presentation_assets_require_exact_magic_decode_and_dimensions() {
+        for (media_type, format) in [
+            ("image/png", ImageFormat::Png),
+            ("image/jpeg", ImageFormat::Jpeg),
+            ("image/webp", ImageFormat::WebP),
+        ] {
+            let image = image::DynamicImage::new_rgb8(2, 3);
+            let mut encoded = Cursor::new(Vec::new());
+            image.write_to(&mut encoded, format).unwrap();
+            let purpose = if media_type == "image/jpeg" {
+                "illustration"
+            } else {
+                "logo"
+            };
+            let normalized =
+                validate_presentation_asset_bytes(purpose, media_type, encoded.get_ref(), "test")
+                    .unwrap();
+            assert_eq!((normalized.width, normalized.height), (Some(2), Some(3)));
+            assert_eq!(normalized.bytes, encoded.into_inner());
+        }
+        assert!(
+            validate_presentation_asset_bytes("logo", "image/png", b"not a png", "test").is_err()
+        );
+        assert!(
+            validate_presentation_asset_bytes(
+                "logo",
+                "image/jpeg",
+                &[0xff, 0xd8, 0xff, 0xd9],
+                "test"
+            )
+            .is_err()
+        );
+    }
+
+    #[test]
+    fn presentation_asset_manifest_enforces_media_purpose_and_digest() {
+        let svg = br#"<svg xmlns="http://www.w3.org/2000/svg"/>"#;
+        let manifest = asset_manifest(svg, "logo", "image/jpeg");
+        assert_invalid(
+            &archive(&manifest, &[("assets/brand-logo.svg", svg)]),
+            "media type is not allowed",
+        );
+
+        let mut manifest = asset_manifest(svg, "logo", "image/svg+xml");
+        manifest["resources"]["presentation_assets"][0]["sha256"] = json!("A".repeat(64));
+        assert_invalid(
+            &archive(&manifest, &[("assets/brand-logo.svg", svg)]),
+            "lowercase hexadecimal",
+        );
+    }
+
+    #[test]
+    fn presentation_asset_path_runtime_and_schema_share_strict_ascii_grammar() {
+        let schema: Value = serde_json::from_str(include_str!(
+            "../../../contracts/solution-pack-manifest-v1.schema.json"
+        ))
+        .unwrap();
+        let svg = br#"<svg xmlns="http://www.w3.org/2000/svg"/>"#;
+        for path in [
+            "assets/.logo.svg",
+            "assets/brand logo.svg",
+            "assets/bränd-logo.svg",
+        ] {
+            let mut manifest = asset_manifest(svg, "logo", "image/svg+xml");
+            manifest["resources"]["presentation_assets"][0]["path"] = json!(path);
+            assert!(
+                !catalog_validation::validate_json_schema(&schema, &manifest)
+                    .unwrap()
+                    .is_empty(),
+                "schema accepted {path}"
+            );
+            assert_invalid(&archive(&manifest, &[(path, svg)]), "path");
+        }
+    }
+
     #[test]
     fn validates_a_complete_archive_and_exposes_validated_content() {
         let archive_bytes = archive(&manifest_value(), &valid_files());
@@ -3798,6 +4778,7 @@ target_blueprint = "blueprints/product"
             workspace_id: uuid::Uuid::nil(),
             physical_codes: BTreeSet::from(["default".to_owned()]),
             existing_blueprints: BTreeMap::new(),
+            existing_presentation_assets: BTreeMap::new(),
             installed_extensions: BTreeMap::from([("acme.shop".to_owned(), installed.clone())]),
             explore_navigation: Vec::new(),
             explore_navigation_valid: true,
@@ -3853,6 +4834,7 @@ target_blueprint = "blueprints/product"
                     workspace_id: uuid::Uuid::nil(),
                     physical_codes: BTreeSet::from(["default".to_owned()]),
                     existing_blueprints: BTreeMap::new(),
+                    existing_presentation_assets: BTreeMap::new(),
                     installed_extensions: installed
                         .map(|installed| BTreeMap::from([("acme.shop".to_owned(), installed)]))
                         .unwrap_or_default(),
@@ -3909,6 +4891,7 @@ target_blueprint = "blueprints/product"
                 workspace_id: uuid::Uuid::nil(),
                 physical_codes: BTreeSet::from(["default".to_owned()]),
                 existing_blueprints: BTreeMap::new(),
+                existing_presentation_assets: BTreeMap::new(),
                 installed_extensions: BTreeMap::new(),
                 explore_navigation: Vec::new(),
                 explore_navigation_valid: true,
@@ -3968,6 +4951,7 @@ hidden = []
                     workspace_id: uuid::Uuid::nil(),
                     physical_codes: BTreeSet::from(["default".to_owned()]),
                     existing_blueprints: BTreeMap::new(),
+                    existing_presentation_assets: BTreeMap::new(),
                     installed_extensions: BTreeMap::new(),
                     explore_navigation: Vec::new(),
                     explore_navigation_valid: true,
@@ -4007,6 +4991,7 @@ hidden = []
                         &PlanningWorkspaceSnapshot {
                             workspace_id: uuid::Uuid::nil(),
                             physical_codes: BTreeSet::from(["shop_product".to_owned()]),
+                            existing_presentation_assets: BTreeMap::new(),
                             existing_blueprints: BTreeMap::from([(
                                 "blueprints/product".to_owned(),
                                 ExistingBlueprintSnapshot {
@@ -4179,6 +5164,7 @@ hidden = ["acme.shop:a_action"]
             workspace_id: uuid::Uuid::nil(),
             physical_codes: BTreeSet::from(["default".to_owned()]),
             existing_blueprints: BTreeMap::new(),
+            existing_presentation_assets: BTreeMap::new(),
             installed_extensions: BTreeMap::new(),
             explore_navigation: navigation,
             explore_navigation_valid: true,
@@ -4243,6 +5229,7 @@ hidden = ["acme.shop:a_action"]
                     workspace_id: uuid::Uuid::nil(),
                     physical_codes: BTreeSet::from(["default".to_owned()]),
                     existing_blueprints: BTreeMap::new(),
+                    existing_presentation_assets: BTreeMap::new(),
                     installed_extensions: BTreeMap::new(),
                     explore_navigation: Vec::new(),
                     explore_navigation_valid: true,
@@ -4278,6 +5265,7 @@ hidden = ["acme.shop:a_action"]
                 workspace_id: uuid::Uuid::nil(),
                 physical_codes: BTreeSet::from(["default".to_owned()]),
                 existing_blueprints: BTreeMap::new(),
+                existing_presentation_assets: BTreeMap::new(),
                 installed_extensions: BTreeMap::new(),
                 explore_navigation: Vec::new(),
                 explore_navigation_valid: true,
@@ -4517,6 +5505,26 @@ hidden = ["acme.shop:a_action"]
         }]);
         assert!(
             catalog_validation::validate_json_schema(&schema, &with_navigation)
+                .unwrap()
+                .is_empty()
+        );
+        let mut with_asset = manifest_value();
+        with_asset["resources"]["presentation_assets"] = json!([{
+            "key": "assets/brand-logo",
+            "path": "assets/brand-logo.svg",
+            "required": true,
+            "purpose": "logo",
+            "media_type": "image/svg+xml",
+            "sha256": "0".repeat(64),
+        }]);
+        assert!(
+            catalog_validation::validate_json_schema(&schema, &with_asset)
+                .unwrap()
+                .is_empty()
+        );
+        with_asset["resources"]["presentation_assets"][0]["media_type"] = json!("image/jpeg");
+        assert!(
+            !catalog_validation::validate_json_schema(&schema, &with_asset)
                 .unwrap()
                 .is_empty()
         );
@@ -5363,6 +6371,7 @@ value_type = "string"
                 workspace_id: uuid::Uuid::nil(),
                 physical_codes: BTreeSet::from(["default".to_owned()]),
                 existing_blueprints: BTreeMap::new(),
+                existing_presentation_assets: BTreeMap::new(),
                 installed_extensions: BTreeMap::new(),
                 explore_navigation: Vec::new(),
                 explore_navigation_valid: true,
@@ -5458,6 +6467,7 @@ value_type = "string"
                 workspace_id: uuid::Uuid::nil(),
                 physical_codes: BTreeSet::from(["default".to_owned()]),
                 existing_blueprints: BTreeMap::new(),
+                existing_presentation_assets: BTreeMap::new(),
                 installed_extensions: BTreeMap::new(),
                 explore_navigation: Vec::new(),
                 explore_navigation_valid: true,
@@ -5487,6 +6497,7 @@ value_type = "string"
             &PlanningWorkspaceSnapshot {
                 workspace_id: uuid::Uuid::nil(),
                 physical_codes: BTreeSet::from(["default".to_owned(), "mapped_base".to_owned()]),
+                existing_presentation_assets: BTreeMap::new(),
                 existing_blueprints: BTreeMap::from([(
                     "blueprints/base".to_owned(),
                     ExistingBlueprintSnapshot {
@@ -5527,6 +6538,7 @@ value_type = "string"
             &PlanningWorkspaceSnapshot {
                 workspace_id: uuid::Uuid::nil(),
                 physical_codes: BTreeSet::from(["mapped_base".to_owned()]),
+                existing_presentation_assets: BTreeMap::new(),
                 existing_blueprints: BTreeMap::from([(
                     "blueprints/base".to_owned(),
                     ExistingBlueprintSnapshot {
@@ -5654,6 +6666,7 @@ value_type = "string"
             &PlanningWorkspaceSnapshot {
                 workspace_id: uuid::Uuid::nil(),
                 physical_codes: BTreeSet::from(["shared".to_owned()]),
+                existing_presentation_assets: BTreeMap::new(),
                 existing_blueprints: BTreeMap::from([(
                     key.clone(),
                     ExistingBlueprintSnapshot {
@@ -5700,6 +6713,7 @@ value_type = "string"
                 workspace_id: uuid::Uuid::nil(),
                 physical_codes: BTreeSet::from(["default".to_owned(), "ecom_product".to_owned()]),
                 existing_blueprints: BTreeMap::new(),
+                existing_presentation_assets: BTreeMap::new(),
                 installed_extensions: BTreeMap::new(),
                 explore_navigation: Vec::new(),
                 explore_navigation_valid: true,
@@ -5734,6 +6748,7 @@ value_type = "string"
                 workspace_id: uuid::Uuid::nil(),
                 physical_codes: BTreeSet::from(["default".to_owned()]),
                 existing_blueprints: BTreeMap::new(),
+                existing_presentation_assets: BTreeMap::new(),
                 installed_extensions: BTreeMap::new(),
                 explore_navigation: Vec::new(),
                 explore_navigation_valid: true,
@@ -5775,6 +6790,7 @@ value_type = "string"
                 workspace_id: uuid::Uuid::nil(),
                 physical_codes: BTreeSet::new(),
                 existing_blueprints: BTreeMap::new(),
+                existing_presentation_assets: BTreeMap::new(),
                 installed_extensions: BTreeMap::new(),
                 explore_navigation: Vec::new(),
                 explore_navigation_valid: true,
@@ -5802,6 +6818,7 @@ value_type = "string"
             &PlanningWorkspaceSnapshot {
                 workspace_id: uuid::Uuid::nil(),
                 physical_codes: BTreeSet::from(["ecom_product".to_owned()]),
+                existing_presentation_assets: BTreeMap::new(),
                 existing_blueprints: BTreeMap::from([(
                     "blueprints/product".to_owned(),
                     ExistingBlueprintSnapshot {
@@ -5964,6 +6981,7 @@ target_blueprint = "blueprints/main"
                 workspace_id: uuid::Uuid::nil(),
                 physical_codes: BTreeSet::new(),
                 existing_blueprints: BTreeMap::new(),
+                existing_presentation_assets: BTreeMap::new(),
                 installed_extensions: BTreeMap::new(),
                 explore_navigation: Vec::new(),
                 explore_navigation_valid: true,
@@ -5999,6 +7017,7 @@ target_blueprint = "blueprints/main"
                 &PlanningWorkspaceSnapshot {
                     workspace_id: uuid::Uuid::nil(),
                     physical_codes: BTreeSet::from(["deps_main".to_owned()]),
+                    existing_presentation_assets: BTreeMap::new(),
                     existing_blueprints: BTreeMap::from([(
                         "blueprints/main".to_owned(),
                         ExistingBlueprintSnapshot {
@@ -6086,6 +7105,7 @@ value_type = "string"
             workspace_id: uuid::Uuid::nil(),
             physical_codes: BTreeSet::from(["default".to_owned()]),
             existing_blueprints: BTreeMap::new(),
+            existing_presentation_assets: BTreeMap::new(),
             installed_extensions: BTreeMap::new(),
             explore_navigation: Vec::new(),
             explore_navigation_valid: true,
@@ -6182,6 +7202,7 @@ target_blueprint = "blueprints/product"
                 "existing_product".to_owned(),
             ]),
             existing_blueprints: BTreeMap::new(),
+            existing_presentation_assets: BTreeMap::new(),
             installed_extensions: BTreeMap::new(),
             explore_navigation: Vec::new(),
             explore_navigation_valid: true,
@@ -6241,6 +7262,7 @@ target_blueprint = "blueprints/product"
             workspace_id: uuid::Uuid::from_u128(1),
             physical_codes: BTreeSet::from(["default".to_owned(), "ecom_product".to_owned()]),
             existing_blueprints: BTreeMap::new(),
+            existing_presentation_assets: BTreeMap::new(),
             installed_extensions: BTreeMap::new(),
             explore_navigation: Vec::new(),
             explore_navigation_valid: true,

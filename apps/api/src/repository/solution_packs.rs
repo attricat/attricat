@@ -15,19 +15,30 @@ use crate::{
     model::CreateBlueprint,
     solution_packs::{
         BlueprintMappingRequest, BlueprintPublication, ExistingBlueprintSnapshot,
-        InstalledExtensionSnapshot, MAX_SOLUTION_PACK_CHECK_RUN_RESPONSE_BYTES,
-        MAX_SOLUTION_PACK_PLAN_RESPONSE_BYTES, PlanningExploreNavigationEntry,
-        PlanningWorkspaceSnapshot, SOLUTION_PACK_PLAN_EXPIRY_HOURS, SolutionPackCheckDefinition,
-        SolutionPackCheckPredicate, SolutionPackExtensionRequirement, SolutionPackPlanDraft,
-        ValidatedSolutionPack, build_solution_pack_plan, evaluate_extension_requirement,
-        json_deep_contains, parse_version_req, validate_blueprint_mapping_requests,
+        ExistingPresentationAssetSnapshot, InstalledExtensionSnapshot,
+        MAX_SOLUTION_PACK_CHECK_RUN_RESPONSE_BYTES, MAX_SOLUTION_PACK_PLAN_RESPONSE_BYTES,
+        PlanningExploreNavigationEntry, PlanningWorkspaceSnapshot, PresentationAssetMappingRequest,
+        SOLUTION_PACK_PLAN_EXPIRY_HOURS, SolutionPackCheckDefinition, SolutionPackCheckPredicate,
+        SolutionPackExtensionRequirement, SolutionPackPlanDraft, ValidatedSolutionPack,
+        build_solution_pack_plan, evaluate_extension_requirement, json_deep_contains,
+        parse_version_req, validate_blueprint_mapping_requests,
+        validate_presentation_asset_mapping_requests,
     },
+    storage::{ObjectStore, ObjectStoreError, StoredObject, get_object_for_integrity},
 };
 
 use super::{
     CatalogRepository, EventPublisher, ExploreNavigationEntry, RepositoryError,
     blueprints::blueprint_event,
 };
+
+pub struct CreateSolutionPackPlanRequest<'a> {
+    pub prefix: &'a str,
+    pub publication: BlueprintPublication,
+    pub blueprint_mappings: &'a [BlueprintMappingRequest],
+    pub asset_mappings: &'a [PresentationAssetMappingRequest],
+    pub prior_application_id: Option<Uuid>,
+}
 
 #[derive(Clone, Debug, Serialize, sqlx::FromRow)]
 pub struct SolutionPackPlan {
@@ -78,6 +89,18 @@ pub struct SolutionPackReleaseChange {
     pub current_canonical_definition_sha256: Option<String>,
     pub reason_code: String,
     pub evidence: Value,
+}
+
+#[derive(Clone, Debug)]
+struct PriorAsset {
+    position: i64,
+    logical_key: String,
+    target_id: Uuid,
+    purpose: String,
+    media_type: String,
+    byte_size: i64,
+    source_sha256: String,
+    stored_sha256: String,
 }
 
 #[derive(Clone, Debug)]
@@ -140,6 +163,18 @@ pub struct SolutionPackPlanAction {
     pub preconditions: Value,
 }
 
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct ExistingAssetEvidence {
+    kind: Option<String>,
+    id: Uuid,
+    purpose: String,
+    media_type: String,
+    byte_size: i64,
+    sha256: String,
+    source_sha256: String,
+}
+
 #[derive(sqlx::FromRow)]
 struct PersistedSolutionPackPlanAction {
     resource_kind: String,
@@ -172,6 +207,16 @@ struct PlanEvidenceAction {
     summary: Value,
     normalized_payload: Option<Value>,
     preconditions: Value,
+}
+
+#[derive(Serialize, sqlx::FromRow)]
+struct PlanEvidenceAssetObject {
+    logical_key: String,
+    target_id: Uuid,
+    object_key: String,
+    media_type: String,
+    byte_size: i64,
+    sha256: String,
 }
 
 #[derive(Serialize, sqlx::FromRow)]
@@ -463,6 +508,107 @@ async fn load_prior_application(
     Ok((pack_version, prior))
 }
 
+async fn load_prior_assets(
+    tx: &mut Transaction<'_, Postgres>,
+    workspace_id: Uuid,
+    application_id: Uuid,
+) -> Result<Vec<PriorAsset>, RepositoryError> {
+    let rows = sqlx::query_as::<_, (i64, String, Uuid, String, Value, String, Value, Option<Value>, String, Option<Value>)>(
+        "SELECT m.position,m.logical_key,m.target_id,m.mapping_kind,m.snapshot,a.action,a.summary,a.normalized_payload,s.state,s.result_snapshot FROM solution_pack_plan_mappings m JOIN solution_pack_plan_actions a ON a.plan_id=m.plan_id AND a.logical_key=m.logical_key JOIN solution_pack_application_steps s ON s.application_id=$2 AND s.plan_id=m.plan_id AND s.logical_key=m.logical_key WHERE m.workspace_id=$1 AND m.plan_id=(SELECT plan_id FROM solution_pack_applications WHERE workspace_id=$1 AND id=$2) AND m.resource_kind='presentation_asset' ORDER BY m.position",
+    )
+    .bind(workspace_id)
+    .bind(application_id)
+    .fetch_all(&mut **tx)
+    .await?;
+    let mut prior = Vec::with_capacity(rows.len());
+    for (
+        position,
+        logical_key,
+        target_id,
+        mapping_kind,
+        snapshot,
+        action,
+        summary,
+        payload,
+        state,
+        result,
+    ) in rows
+    {
+        if state != "completed" || !matches!(action.as_str(), "create" | "map") || result.is_none()
+        {
+            return Err(RepositoryError::InvalidSolutionPackPlan(
+                "prior solution-pack application has incomplete presentation asset evidence".into(),
+            ));
+        }
+        let evidence = if mapping_kind == "existing" {
+            snapshot
+        } else {
+            payload.ok_or_else(|| {
+                RepositoryError::InvalidSolutionPackPlan(
+                    "prior presentation asset payload is missing".into(),
+                )
+            })?
+        };
+        let purpose = evidence
+            .get("purpose")
+            .and_then(Value::as_str)
+            .ok_or_else(|| {
+                RepositoryError::InvalidSolutionPackPlan(
+                    "prior presentation asset purpose is missing".into(),
+                )
+            })?
+            .to_owned();
+        let media_type = evidence
+            .get("media_type")
+            .and_then(Value::as_str)
+            .ok_or_else(|| {
+                RepositoryError::InvalidSolutionPackPlan(
+                    "prior presentation asset media type is missing".into(),
+                )
+            })?
+            .to_owned();
+        let byte_size = evidence
+            .get("byte_size")
+            .and_then(Value::as_i64)
+            .ok_or_else(|| {
+                RepositoryError::InvalidSolutionPackPlan(
+                    "prior presentation asset size is missing".into(),
+                )
+            })?;
+        let stored_sha256 = evidence
+            .get("stored_sha256")
+            .or_else(|| evidence.get("sha256"))
+            .and_then(Value::as_str)
+            .ok_or_else(|| {
+                RepositoryError::InvalidSolutionPackPlan(
+                    "prior presentation asset digest is missing".into(),
+                )
+            })?
+            .to_owned();
+        let source_sha256 = summary
+            .get("source_sha256")
+            .or_else(|| evidence.get("source_sha256"))
+            .and_then(Value::as_str)
+            .ok_or_else(|| {
+                RepositoryError::InvalidSolutionPackPlan(
+                    "prior presentation asset source digest is missing".into(),
+                )
+            })?
+            .to_owned();
+        prior.push(PriorAsset {
+            position,
+            logical_key,
+            target_id,
+            purpose,
+            media_type,
+            byte_size,
+            source_sha256,
+            stored_sha256,
+        });
+    }
+    Ok(prior)
+}
+
 impl CatalogRepository {
     /// Solution-pack permissions are bootstrapped in application code so the
     /// database migration history remains declarative.
@@ -484,34 +630,124 @@ impl CatalogRepository {
         Ok(())
     }
 
+    async fn reconcile_solution_pack_asset_cleanup(
+        &self,
+        object_store: &dyn ObjectStore,
+    ) -> Result<(), RepositoryError> {
+        let workspace_id = self.workspace_id.unwrap_or(Self::DEFAULT_WORKSPACE_ID);
+        let reconciliation_started_at = Utc::now();
+        for _ in 0..64 {
+            let mut tx = self.pool.begin().await?;
+            // Lock the plan and staging row in the same order as application preparation.
+            // A plan with any durable application is never cleanup-eligible: applications
+            // intentionally remain resumable after plan expiry.
+            let row = sqlx::query_as::<_, (Uuid, String, String)>(
+                "SELECT o.plan_id,o.logical_key,o.object_key FROM solution_pack_plan_asset_objects o JOIN solution_pack_plans p ON p.id=o.plan_id AND p.workspace_id=o.workspace_id WHERE o.workspace_id=$1 AND o.updated_at < $2 AND o.state IN ('uploading','staged','cleanup_pending') AND (o.state='cleanup_pending' OR p.expires_at <= now()) AND NOT EXISTS (SELECT 1 FROM solution_pack_applications a WHERE a.workspace_id=o.workspace_id AND a.plan_id=o.plan_id) ORDER BY o.updated_at FOR UPDATE OF p,o SKIP LOCKED LIMIT 1",
+            )
+            .bind(workspace_id)
+            .bind(reconciliation_started_at)
+            .fetch_optional(&mut *tx)
+            .await?;
+            let Some((plan_id, logical_key, object_key)) = row else {
+                tx.commit().await?;
+                break;
+            };
+            // Recheck in a new READ COMMITTED statement after acquiring the plan lock.
+            // This closes the case where application insertion committed while this
+            // cleanup SELECT was waiting on the same plan row.
+            let has_application: bool = sqlx::query_scalar(
+                "SELECT EXISTS(SELECT 1 FROM solution_pack_applications WHERE workspace_id=$1 AND plan_id=$2)",
+            )
+            .bind(workspace_id)
+            .bind(plan_id)
+            .fetch_one(&mut *tx)
+            .await?;
+            if has_application {
+                tx.commit().await?;
+                continue;
+            }
+            let claimed: bool = sqlx::query_scalar(
+                "SELECT EXISTS(SELECT 1 FROM presentation_assets WHERE workspace_id=$1 AND object_key=$2)",
+            )
+            .bind(workspace_id)
+            .bind(&object_key)
+            .fetch_one(&mut *tx)
+            .await?;
+            if claimed {
+                sqlx::query("UPDATE solution_pack_plan_asset_objects SET state='claimed',updated_at=now() WHERE workspace_id=$1 AND plan_id=$2 AND logical_key=$3 AND state <> 'claimed'")
+                    .bind(workspace_id)
+                    .bind(plan_id)
+                    .bind(&logical_key)
+                    .execute(&mut *tx)
+                    .await?;
+                tx.commit().await?;
+                continue;
+            }
+            let cleanup_claim = sqlx::query("UPDATE solution_pack_plan_asset_objects SET state='cleanup_pending',updated_at=now() WHERE workspace_id=$1 AND plan_id=$2 AND logical_key=$3 AND state <> 'claimed'")
+                .bind(workspace_id)
+                .bind(plan_id)
+                .bind(&logical_key)
+                .execute(&mut *tx)
+                .await?;
+            if cleanup_claim.rows_affected() != 1 {
+                tx.rollback().await?;
+                continue;
+            }
+            tx.commit().await?;
+            // Deletion occurs only after the cleanup claim commits. Application creation
+            // cannot race this point because it must lock the plan and rejects this state.
+            if object_store.delete(&object_key).await.is_ok() {
+                sqlx::query("UPDATE solution_pack_plan_asset_objects SET state='cleaned',updated_at=now() WHERE workspace_id=$1 AND plan_id=$2 AND logical_key=$3 AND state='cleanup_pending'")
+                    .bind(workspace_id)
+                    .bind(plan_id)
+                    .bind(&logical_key)
+                    .execute(&self.pool)
+                    .await?;
+            }
+        }
+        Ok(())
+    }
+
     pub async fn create_solution_pack_plan(
         &self,
         pack: &ValidatedSolutionPack,
-        prefix: &str,
-        publication: BlueprintPublication,
-        requested_mappings: &[BlueprintMappingRequest],
-        prior_application_id: Option<Uuid>,
+        request: CreateSolutionPackPlanRequest<'_>,
+        object_store: &dyn ObjectStore,
     ) -> Result<SolutionPackPlan, RepositoryError> {
-        if prior_application_id.is_some() && !requested_mappings.is_empty() {
+        let CreateSolutionPackPlanRequest {
+            prefix,
+            publication,
+            blueprint_mappings: requested_mappings,
+            asset_mappings: requested_asset_mappings,
+            prior_application_id,
+        } = request;
+        self.reconcile_solution_pack_asset_cleanup(object_store)
+            .await?;
+        if prior_application_id.is_some()
+            && (!requested_mappings.is_empty() || !requested_asset_mappings.is_empty())
+        {
             return Err(RepositoryError::InvalidSolutionPackPlan(
-                "from_application and explicit blueprint mappings are mutually exclusive".into(),
+                "from_application and explicit mappings are mutually exclusive".into(),
             ));
         }
         validate_blueprint_mapping_requests(pack, requested_mappings)
+            .map_err(|error| RepositoryError::InvalidSolutionPackPlan(error.to_string()))?;
+        validate_presentation_asset_mapping_requests(pack, requested_asset_mappings)
             .map_err(|error| RepositoryError::InvalidSolutionPackPlan(error.to_string()))?;
         let workspace_id = self.workspace_id.unwrap_or(Self::DEFAULT_WORKSPACE_ID);
         let mut tx = self.pool.begin().await?;
         sqlx::query("SET TRANSACTION ISOLATION LEVEL REPEATABLE READ")
             .execute(&mut *tx)
             .await?;
-        let (prior_pack_version, prior_blueprints) = if let Some(application_id) =
+        let (prior_pack_version, prior_blueprints, prior_assets) = if let Some(application_id) =
             prior_application_id
         {
             let (version, blueprints) =
                 load_prior_application(self, &mut tx, workspace_id, application_id, pack).await?;
-            (Some(version), blueprints)
+            let assets = load_prior_assets(&mut tx, workspace_id, application_id).await?;
+            (Some(version), blueprints, assets)
         } else {
-            (None, Vec::new())
+            (None, Vec::new(), Vec::new())
         };
         let physical_codes = sqlx::query_scalar::<_, String>(
             "SELECT code FROM blueprints WHERE workspace_id = $1 AND code IS NOT NULL UNION SELECT code FROM attribute_contexts WHERE workspace_id = $1",
@@ -623,6 +859,120 @@ impl CatalogRepository {
                     kind: existing.3,
                     canonical_definition_hash: catalog_blueprint::raw_hash(&canonical_definition),
                     definition_hash: existing.4,
+                },
+            );
+        }
+        let mut existing_presentation_assets = std::collections::BTreeMap::new();
+        for requested in requested_asset_mappings {
+            let existing = sqlx::query_as::<_, (Uuid, String, String, i64, String, String)>(
+                "SELECT id,purpose,media_type,byte_size,sha256,object_key FROM presentation_assets WHERE workspace_id=$1 AND id=$2",
+            )
+            .bind(workspace_id)
+            .bind(requested.id)
+            .fetch_optional(&mut *tx)
+            .await?
+            .ok_or_else(|| {
+                RepositoryError::InvalidSolutionPackPlan(format!(
+                    "existing presentation asset '{}' was not found",
+                    requested.id
+                ))
+            })?;
+            let expected_size = usize::try_from(existing.3).map_err(|_| {
+                RepositoryError::InvalidSolutionPackPlan(
+                    "existing presentation asset size is invalid".into(),
+                )
+            })?;
+            let object = get_object_for_integrity(object_store, &existing.5, expected_size)
+                .await
+                .map_err(|error| match error {
+                    ObjectStoreError::Unavailable
+                    | ObjectStoreError::TimedOut(_)
+                    | ObjectStoreError::Operation(_) => {
+                        RepositoryError::SolutionPackAssetStorageUnavailable
+                    }
+                    ObjectStoreError::NotFound => {
+                        RepositoryError::InvalidSolutionPackPlan(format!(
+                            "existing presentation asset '{}' object is missing",
+                            requested.id
+                        ))
+                    }
+                })?;
+            let actual_sha256 = format!("{:x}", Sha256::digest(&object.bytes));
+            if object.bytes.len() as i64 != existing.3 || actual_sha256 != existing.4 {
+                return Err(RepositoryError::InvalidSolutionPackPlan(format!(
+                    "existing presentation asset '{}' object integrity failed",
+                    requested.id
+                )));
+            }
+            existing_presentation_assets.insert(
+                requested.key.clone(),
+                ExistingPresentationAssetSnapshot {
+                    id: existing.0,
+                    purpose: existing.1,
+                    media_type: existing.2,
+                    byte_size: existing.3,
+                    sha256: existing.4,
+                },
+            );
+        }
+        let current_asset_keys = pack
+            .manifest()
+            .resources
+            .presentation_assets
+            .iter()
+            .map(|resource| resource.key.as_str())
+            .collect::<std::collections::BTreeSet<_>>();
+        let mut prior_asset_conflicts = std::collections::BTreeMap::new();
+        for prior in &prior_assets {
+            if !current_asset_keys.contains(prior.logical_key.as_str()) {
+                continue;
+            }
+            let actual = sqlx::query_as::<_, (String, String, i64, String, String)>(
+                "SELECT purpose,media_type,byte_size,sha256,object_key FROM presentation_assets WHERE workspace_id=$1 AND id=$2",
+            )
+            .bind(workspace_id)
+            .bind(prior.target_id)
+            .fetch_optional(&mut *tx)
+            .await?;
+            let Some(actual) = actual else {
+                prior_asset_conflicts.insert(prior.logical_key.clone(), "prior_target_missing");
+                continue;
+            };
+            let expected_size = usize::try_from(actual.2).map_err(|_| {
+                RepositoryError::InvalidSolutionPackPlan(
+                    "prior presentation asset size is invalid".into(),
+                )
+            })?;
+            let object_valid =
+                match get_object_for_integrity(object_store, &actual.4, expected_size).await {
+                    Ok(stored) => {
+                        stored.bytes.len() as i64 == actual.2
+                            && format!("{:x}", Sha256::digest(&stored.bytes)) == actual.3
+                    }
+                    Err(
+                        ObjectStoreError::Unavailable
+                        | ObjectStoreError::TimedOut(_)
+                        | ObjectStoreError::Operation(_),
+                    ) => return Err(RepositoryError::SolutionPackAssetStorageUnavailable),
+                    Err(ObjectStoreError::NotFound) => false,
+                };
+            if actual.0 != prior.purpose
+                || actual.1 != prior.media_type
+                || actual.2 != prior.byte_size
+                || actual.3 != prior.stored_sha256
+                || !object_valid
+            {
+                prior_asset_conflicts.insert(prior.logical_key.clone(), "prior_target_drifted");
+                continue;
+            }
+            existing_presentation_assets.insert(
+                prior.logical_key.clone(),
+                ExistingPresentationAssetSnapshot {
+                    id: prior.target_id,
+                    purpose: actual.0,
+                    media_type: actual.1,
+                    byte_size: actual.2,
+                    sha256: actual.3,
                 },
             );
         }
@@ -762,6 +1112,7 @@ impl CatalogRepository {
                 workspace_id,
                 physical_codes,
                 existing_blueprints,
+                existing_presentation_assets,
                 installed_extensions,
                 explore_navigation,
                 explore_navigation_valid,
@@ -839,6 +1190,79 @@ impl CatalogRepository {
                     evidence: serde_json::json!({"prior_pack_version":prior_pack_version}),
                 });
             }
+            let prior_assets_by_key = prior_assets
+                .iter()
+                .map(|prior| (prior.logical_key.as_str(), prior))
+                .collect::<std::collections::BTreeMap<_, _>>();
+            for resource in &pack.manifest().resources.presentation_assets {
+                let current = pack
+                    .presentation_asset(&resource.key)
+                    .expect("validated presentation asset exists");
+                let (change_kind, reason_code, prior) =
+                    match prior_assets_by_key.get(resource.key.as_str()) {
+                        None => ("added", "new_presentation_asset", None),
+                        Some(prior)
+                            if prior.purpose != current.purpose
+                                || prior.media_type != current.media_type
+                                || prior.source_sha256 != current.source_sha256
+                                || prior.stored_sha256 != current.stored_sha256
+                                || prior.byte_size != current.stored_bytes.len() as i64 =>
+                        {
+                            ("changed", "update_not_supported", Some(*prior))
+                        }
+                        Some(prior) => (
+                            "unchanged",
+                            "unchanged_from_prior_application",
+                            Some(*prior),
+                        ),
+                    };
+                let action = draft
+                    .actions
+                    .iter_mut()
+                    .find(|action| {
+                        action.resource_kind == "presentation_asset"
+                            && action.logical_key == resource.key
+                    })
+                    .expect("planner emits every presentation asset action");
+                if let Some(target_reason) = prior_asset_conflicts.get(&resource.key) {
+                    action.action = "conflict";
+                    action.reason_code = target_reason;
+                    action.normalized_payload = None;
+                    draft.ready = false;
+                } else if change_kind == "changed" {
+                    action.action = "conflict";
+                    action.reason_code = "update_not_supported";
+                    action.normalized_payload = None;
+                    draft.ready = false;
+                } else if change_kind == "unchanged" && action.action == "map" {
+                    action.reason_code = "unchanged_from_prior_application";
+                }
+                release_changes.push(SolutionPackReleaseChange {
+                    position: release_changes.len() as i64,
+                    logical_key: resource.key.clone(),
+                    change_kind: change_kind.to_owned(),
+                    prior_target_id: prior.map(|prior| prior.target_id),
+                    prior_target_code: prior.map(|_| "presentation_asset".to_owned()),
+                    prior_target_version: None,
+                    prior_canonical_definition_sha256: prior
+                        .map(|prior| prior.stored_sha256.clone()),
+                    current_canonical_definition_sha256: Some(current.stored_sha256.clone()),
+                    reason_code: prior_asset_conflicts
+                        .get(&resource.key)
+                        .copied()
+                        .unwrap_or(reason_code)
+                        .to_owned(),
+                    evidence: serde_json::json!({
+                        "prior_pack_version": prior_pack_version,
+                        "purpose": current.purpose,
+                        "media_type": current.media_type,
+                        "byte_size": current.stored_bytes.len(),
+                        "source_byte_size": current.source_byte_size,
+                        "source_sha256": current.source_sha256,
+                        "stored_sha256": current.stored_sha256,
+                    }),
+                });
+            }
             for prior in &prior_blueprints {
                 if !current_blueprint_keys.contains(prior.logical_key.as_str()) {
                     release_changes.push(SolutionPackReleaseChange {
@@ -852,6 +1276,30 @@ impl CatalogRepository {
                         current_canonical_definition_sha256: None,
                         reason_code: "removed_from_release".into(),
                         evidence: serde_json::json!({"prior_position":prior.position,"prior_pack_version":prior_pack_version}),
+                    });
+                }
+            }
+            for prior in &prior_assets {
+                if !current_asset_keys.contains(prior.logical_key.as_str()) {
+                    release_changes.push(SolutionPackReleaseChange {
+                        position: release_changes.len() as i64,
+                        logical_key: prior.logical_key.clone(),
+                        change_kind: "removed".into(),
+                        prior_target_id: Some(prior.target_id),
+                        prior_target_code: Some("presentation_asset".into()),
+                        prior_target_version: None,
+                        prior_canonical_definition_sha256: Some(prior.stored_sha256.clone()),
+                        current_canonical_definition_sha256: None,
+                        reason_code: "removed_from_release".into(),
+                        evidence: serde_json::json!({
+                            "prior_position": prior.position,
+                            "prior_pack_version": prior_pack_version,
+                            "purpose": prior.purpose,
+                            "media_type": prior.media_type,
+                            "byte_size": prior.byte_size,
+                            "source_sha256": prior.source_sha256,
+                            "stored_sha256": prior.stored_sha256,
+                        }),
                     });
                 }
             }
@@ -869,6 +1317,18 @@ impl CatalogRepository {
             .as_ref()
             .and_then(|context| context.actor_token_id);
         let manifest = pack.manifest();
+        let asset_creates = draft
+            .mappings
+            .iter()
+            .filter(|mapping| {
+                mapping.resource_kind == "presentation_asset"
+                    && mapping.mapping_kind == "create"
+                    && draft.actions.iter().any(|action| {
+                        action.logical_key == mapping.logical_key && action.action == "create"
+                    })
+            })
+            .collect::<Vec<_>>();
+        let initial_ready = draft.ready && asset_creates.is_empty();
         let plan = materialize_plan(
             (id, workspace_id),
             pack,
@@ -904,7 +1364,7 @@ impl CatalogRepository {
         .bind(prefix)
         .bind(publication.as_str())
         .bind(prior_application_id)
-        .bind(draft.ready)
+        .bind(initial_ready)
         .bind(created_at)
         .bind(expires_at)
         .bind(&pack.guidance().readme_markdown)
@@ -920,12 +1380,38 @@ impl CatalogRepository {
         .execute(&mut *tx)
         .await?;
         insert_plan_rows(&mut tx, workspace_id, id, &draft).await?;
+        for mapping in &asset_creates {
+            let asset = pack
+                .presentation_asset(&mapping.logical_key)
+                .expect("create asset was validated");
+            sqlx::query("INSERT INTO solution_pack_plan_asset_objects (plan_id,workspace_id,logical_key,target_id,object_key,media_type,byte_size,sha256,state) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,'uploading')")
+                .bind(id)
+                .bind(workspace_id)
+                .bind(&mapping.logical_key)
+                .bind(mapping.target_id)
+                .bind(presentation_asset_object_key(workspace_id, id, mapping.target_id))
+                .bind(&asset.media_type)
+                .bind(asset.stored_bytes.len() as i64)
+                .bind(&asset.stored_sha256)
+                .execute(&mut *tx)
+                .await?;
+        }
         insert_release_changes(&mut tx, workspace_id, id, &release_changes).await?;
-        let evidence_sha256 = plan_resource_evidence_sha256(&mut tx, workspace_id, id).await?;
-        sqlx::query("UPDATE solution_pack_plans SET resource_evidence_sha256=$3,resource_evidence_format=2 WHERE workspace_id=$1 AND id=$2")
+        let evidence_format = if manifest.resources.presentation_assets.is_empty() {
+            2_i16
+        } else {
+            3_i16
+        };
+        let evidence_sha256 = if evidence_format == 3 {
+            plan_resource_evidence_sha256_v3(&mut tx, workspace_id, id).await?
+        } else {
+            plan_resource_evidence_sha256_v2(&mut tx, workspace_id, id).await?
+        };
+        sqlx::query("UPDATE solution_pack_plans SET resource_evidence_sha256=$3,resource_evidence_format=$4 WHERE workspace_id=$1 AND id=$2")
             .bind(workspace_id)
             .bind(id)
             .bind(evidence_sha256)
+            .bind(evidence_format)
             .execute(&mut *tx)
             .await?;
         insert_plan_checks(&mut tx, workspace_id, id, pack.checks()).await?;
@@ -935,7 +1421,90 @@ impl CatalogRepository {
         }
         audit_repository.write_audit_event(&mut tx).await?;
         tx.commit().await?;
-        Ok(plan)
+
+        for mapping in &asset_creates {
+            let asset = pack
+                .presentation_asset(&mapping.logical_key)
+                .expect("create asset was validated");
+            let key = presentation_asset_object_key(workspace_id, id, mapping.target_id);
+            let object = StoredObject {
+                bytes: bytes::Bytes::from(asset.stored_bytes.clone()),
+                content_type: Some(asset.media_type.clone()),
+            };
+            let preexisting = match get_object_for_integrity(
+                object_store,
+                &key,
+                asset.stored_bytes.len(),
+            )
+            .await
+            {
+                Ok(stored) => Some(
+                    stored.bytes.len() == asset.stored_bytes.len()
+                        && format!("{:x}", Sha256::digest(&stored.bytes)) == asset.stored_sha256,
+                ),
+                Err(
+                    ObjectStoreError::Unavailable
+                    | ObjectStoreError::TimedOut(_)
+                    | ObjectStoreError::Operation(_),
+                ) => Some(false),
+                Err(ObjectStoreError::NotFound) => None,
+            };
+            let uploaded = match preexisting {
+                Some(exact) => exact,
+                None => match object_store.put(&key, object).await {
+                    Ok(()) => true,
+                    Err(_) => {
+                        get_object_for_integrity(object_store, &key, asset.stored_bytes.len())
+                            .await
+                            .is_ok_and(|stored| {
+                                stored.bytes.len() == asset.stored_bytes.len()
+                                    && format!("{:x}", Sha256::digest(&stored.bytes))
+                                        == asset.stored_sha256
+                            })
+                    }
+                },
+            };
+            if !uploaded {
+                sqlx::query("UPDATE solution_pack_plan_asset_objects SET state='cleanup_pending',updated_at=now() WHERE workspace_id=$1 AND plan_id=$2 AND state IN ('uploading','staged')")
+                    .bind(workspace_id)
+                    .bind(id)
+                    .execute(&self.pool)
+                    .await?;
+                for cleanup_mapping in &asset_creates {
+                    let cleanup_key =
+                        presentation_asset_object_key(workspace_id, id, cleanup_mapping.target_id);
+                    let _ = object_store.delete(&cleanup_key).await;
+                }
+                return Err(RepositoryError::SolutionPackAssetStorageUnavailable);
+            }
+            sqlx::query("UPDATE solution_pack_plan_asset_objects SET state='staged',updated_at=now() WHERE workspace_id=$1 AND plan_id=$2 AND logical_key=$3 AND state='uploading'")
+                .bind(workspace_id)
+                .bind(id)
+                .bind(&mapping.logical_key)
+                .execute(&self.pool)
+                .await?;
+        }
+        if !asset_creates.is_empty() {
+            let mut finalize = self.pool.begin().await?;
+            sqlx::query("UPDATE solution_pack_plans SET ready=$3 WHERE workspace_id=$1 AND id=$2")
+                .bind(workspace_id)
+                .bind(id)
+                .bind(draft.ready)
+                .execute(&mut *finalize)
+                .await?;
+            let evidence_sha256 =
+                plan_resource_evidence_sha256_v3(&mut finalize, workspace_id, id).await?;
+            sqlx::query("UPDATE solution_pack_plans SET resource_evidence_sha256=$3 WHERE workspace_id=$1 AND id=$2")
+                .bind(workspace_id)
+                .bind(id)
+                .bind(evidence_sha256)
+                .execute(&mut *finalize)
+                .await?;
+            finalize.commit().await?;
+        }
+        self.get_solution_pack_plan(id)
+            .await?
+            .ok_or(RepositoryError::NotFound("solution-pack plan"))
     }
 
     pub async fn get_solution_pack_plan(
@@ -1194,7 +1763,75 @@ async fn insert_release_changes(
     Ok(())
 }
 
-async fn plan_resource_evidence_sha256(
+fn presentation_asset_object_key(workspace_id: Uuid, plan_id: Uuid, target_id: Uuid) -> String {
+    let mut hasher = Sha256::new();
+    hasher.update(b"attricat.presentation-asset.object.v1\0");
+    hasher.update(workspace_id.as_bytes());
+    hasher.update(plan_id.as_bytes());
+    hasher.update(target_id.as_bytes());
+    format!("presentation-assets/{:x}", hasher.finalize())
+}
+
+async fn plan_resource_evidence_sha256_v3(
+    tx: &mut Transaction<'_, Postgres>,
+    workspace_id: Uuid,
+    plan_id: Uuid,
+) -> Result<String, RepositoryError> {
+    let header: Value = sqlx::query_scalar(
+        "SELECT jsonb_build_object('format_version',2,'plan_id',p.id,'workspace_id',p.workspace_id,'archive_sha256',p.archive_sha256,'pack_id',p.pack_id,'pack_version',p.pack_version,'prefix',p.prefix,'blueprint_publication',p.blueprint_publication,'prior_application_id',p.prior_application_id,'prior_pack_version',a.pack_version,'ready',p.ready) FROM solution_pack_plans p LEFT JOIN solution_pack_applications a ON a.workspace_id=p.workspace_id AND a.id=p.prior_application_id WHERE p.workspace_id=$1 AND p.id=$2",
+    )
+    .bind(workspace_id)
+    .bind(plan_id)
+    .fetch_one(&mut **tx)
+    .await?;
+    let release_changes = sqlx::query_as::<_, SolutionPackReleaseChange>(
+        "SELECT position,logical_key,change_kind,prior_target_id,prior_target_code,prior_target_version,prior_canonical_definition_sha256,current_canonical_definition_sha256,reason_code,evidence FROM solution_pack_plan_release_changes WHERE workspace_id=$1 AND plan_id=$2 ORDER BY position",
+    )
+    .bind(workspace_id)
+    .bind(plan_id)
+    .fetch_all(&mut **tx)
+    .await?;
+    let mappings = sqlx::query_as::<_, PlanEvidenceMapping>(
+        "SELECT position,resource_kind,logical_key,target_id,target_code,target_version,mapping_kind,snapshot FROM solution_pack_plan_mappings WHERE workspace_id=$1 AND plan_id=$2 ORDER BY position",
+    )
+    .bind(workspace_id)
+    .bind(plan_id)
+    .fetch_all(&mut **tx)
+    .await?;
+    let actions = sqlx::query_as::<_, PlanEvidenceAction>(
+        "SELECT position,resource_kind,logical_key,action,reason_code,summary,normalized_payload,preconditions FROM solution_pack_plan_actions WHERE workspace_id=$1 AND plan_id=$2 ORDER BY position",
+    )
+    .bind(workspace_id)
+    .bind(plan_id)
+    .fetch_all(&mut **tx)
+    .await?;
+    let asset_objects = sqlx::query_as::<_, PlanEvidenceAssetObject>(
+        "SELECT logical_key,target_id,object_key,media_type,byte_size,sha256 FROM solution_pack_plan_asset_objects WHERE workspace_id=$1 AND plan_id=$2 ORDER BY logical_key",
+    )
+    .bind(workspace_id)
+    .bind(plan_id)
+    .fetch_all(&mut **tx)
+    .await?;
+    let extension_requirements = sqlx::query_as::<_, PlanEvidenceExtensionRequirement>(
+        "SELECT position,logical_key,extension_id,version_requirement,required,configuration_template_path,configuration_template_sha256,status,reason_code,installed_release_id,installed_version,installed_state,configuration_matches,evaluation_template FROM solution_pack_plan_extension_requirements WHERE workspace_id=$1 AND plan_id=$2 ORDER BY position",
+    )
+    .bind(workspace_id)
+    .bind(plan_id)
+    .fetch_all(&mut **tx)
+    .await?;
+    let encoded = serde_json::to_vec(&(
+        header,
+        release_changes,
+        mappings,
+        actions,
+        asset_objects,
+        extension_requirements,
+    ))
+    .map_err(|error| RepositoryError::InvalidSolutionPackPlan(error.to_string()))?;
+    Ok(format!("{:x}", Sha256::digest(encoded)))
+}
+
+async fn plan_resource_evidence_sha256_v2(
     tx: &mut Transaction<'_, Postgres>,
     workspace_id: Uuid,
     plan_id: Uuid,
@@ -1493,6 +2130,19 @@ struct StepApplicationError {
 
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
+struct PresentationAssetPayload {
+    purpose: String,
+    media_type: String,
+    byte_size: i64,
+    source_byte_size: i64,
+    source_sha256: String,
+    stored_sha256: String,
+    width: Option<i32>,
+    height: Option<i32>,
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
 struct BlueprintPayload {
     definition: String,
     version: i64,
@@ -1546,13 +2196,23 @@ impl CatalogRepository {
     pub async fn apply_solution_pack_plan(
         &self,
         plan_id: Uuid,
+        object_store: &dyn ObjectStore,
     ) -> Result<SolutionPackApplication, RepositoryError> {
         let application_id = self.prepare_solution_pack_application(plan_id).await?;
         loop {
-            match self.apply_next_solution_pack_step(application_id).await {
+            match self
+                .apply_next_solution_pack_step(application_id, object_store)
+                .await
+            {
                 Ok(true) => continue,
                 Ok(false) => break,
                 Err(failure) => {
+                    if matches!(
+                        failure.error,
+                        RepositoryError::SolutionPackAssetStorageUnavailable
+                    ) {
+                        return Err(failure.error);
+                    }
                     if !matches!(
                         failure.error,
                         RepositoryError::SolutionPackApplicationFailed(_)
@@ -1611,9 +2271,9 @@ impl CatalogRepository {
         .bind(plan_id)
         .fetch_one(&mut **tx)
         .await?;
-        if (evidence_format == Some(2) && stored_evidence_sha256.is_none())
+        if (matches!(evidence_format, Some(2 | 3)) && stored_evidence_sha256.is_none())
             || (prior_application_id.is_some()
-                && (evidence_format != Some(2) || stored_evidence_sha256.is_none()))
+                && (!matches!(evidence_format, Some(2 | 3)) || stored_evidence_sha256.is_none()))
         {
             return Err(RepositoryError::InvalidSolutionPackPlan(
                 "persisted solution-pack resource evidence is missing".into(),
@@ -1622,10 +2282,10 @@ impl CatalogRepository {
         if let Some(stored_evidence_sha256) = stored_evidence_sha256 {
             // A persisted digest is authoritative even if every covered row or its
             // mapping/action discriminator was modified after review.
-            let actual = if evidence_format == Some(2) {
-                plan_resource_evidence_sha256(tx, workspace_id, plan_id).await?
-            } else {
-                legacy_plan_resource_evidence_sha256(tx, workspace_id, plan_id).await?
+            let actual = match evidence_format {
+                Some(3) => plan_resource_evidence_sha256_v3(tx, workspace_id, plan_id).await?,
+                Some(2) => plan_resource_evidence_sha256_v2(tx, workspace_id, plan_id).await?,
+                _ => legacy_plan_resource_evidence_sha256(tx, workspace_id, plan_id).await?,
             };
             if stored_evidence_sha256 != actual {
                 return Err(RepositoryError::InvalidSolutionPackPlan(
@@ -1657,6 +2317,11 @@ impl CatalogRepository {
                     "existing" => mapping.target_version.is_some_and(|version| version > 0),
                     _ => false,
                 },
+                "presentation_asset" => {
+                    matches!(mapping.mapping_kind.as_str(), "create" | "existing")
+                        && mapping.target_version.is_none()
+                        && mapping.target_code == "presentation_asset"
+                }
                 "workspace_setting" => {
                     mapping.mapping_kind == "workspace"
                         && mapping.target_id == workspace_id
@@ -1674,7 +2339,36 @@ impl CatalogRepository {
                     "unsupported persisted resource mapping".into(),
                 ));
             }
-            if mapping.mapping_kind == "existing" {
+            if mapping.mapping_kind == "existing" && mapping.resource_kind == "presentation_asset" {
+                let snapshot: ExistingAssetEvidence =
+                    serde_json::from_value(mapping.snapshot.clone().ok_or_else(|| {
+                        RepositoryError::InvalidSolutionPackPlan(
+                            "existing asset mapping is missing snapshot evidence".into(),
+                        )
+                    })?)
+                    .map_err(|_| {
+                        RepositoryError::InvalidSolutionPackPlan(
+                            "existing asset mapping snapshot is invalid".into(),
+                        )
+                    })?;
+                if snapshot.id != mapping.target_id
+                    || snapshot.kind.is_some()
+                    || !matches!(snapshot.purpose.as_str(), "logo" | "icon" | "illustration")
+                    || !matches!(
+                        snapshot.media_type.as_str(),
+                        "image/png" | "image/jpeg" | "image/webp" | "image/svg+xml"
+                    )
+                    || snapshot.byte_size <= 0
+                    || snapshot.byte_size > 2 * 1024 * 1024
+                    || snapshot.sha256.len() != 64
+                    || snapshot.source_sha256.len() != 64
+                {
+                    return Err(RepositoryError::InvalidSolutionPackPlan(
+                        "existing asset mapping snapshot does not match its target".into(),
+                    ));
+                }
+            }
+            if mapping.mapping_kind == "existing" && mapping.resource_kind == "blueprint" {
                 let snapshot = mapping
                     .snapshot
                     .clone()
@@ -1736,6 +2430,11 @@ impl CatalogRepository {
                         action.action.as_str(),
                         "append" | "satisfied" | "skip" | "conflict" | "blocked"
                     ),
+                    "presentation_asset" => matches!(
+                        (action.action.as_str(), mapping.mapping_kind.as_str()),
+                        ("create" | "skip" | "conflict" | "blocked", "create")
+                            | ("map" | "conflict" | "blocked", "existing")
+                    ),
                     _ => false,
                 };
             if !valid {
@@ -1743,7 +2442,85 @@ impl CatalogRepository {
                     "unsupported persisted resource action".into(),
                 ));
             }
-            if action.action == "map" {
+            if action.resource_kind == "presentation_asset"
+                && action.action == "skip"
+                && (action.reason_code != "optional_not_selected"
+                    || action.normalized_payload.is_some()
+                    || action.preconditions != serde_json::json!([]))
+            {
+                return Err(RepositoryError::InvalidSolutionPackPlan(
+                    "persisted optional presentation asset skip evidence is invalid".into(),
+                ));
+            }
+            if action.resource_kind == "presentation_asset" && action.action == "create" {
+                let payload: PresentationAssetPayload =
+                    serde_json::from_value(action.normalized_payload.clone().ok_or_else(|| {
+                        RepositoryError::InvalidSolutionPackPlan(
+                            "persisted presentation asset payload is missing".into(),
+                        )
+                    })?)
+                    .map_err(|_| {
+                        RepositoryError::InvalidSolutionPackPlan(
+                            "persisted presentation asset payload is invalid".into(),
+                        )
+                    })?;
+                let staged = sqlx::query_as::<_, (Uuid, String, i64, String, String)>(
+                    "SELECT target_id,media_type,byte_size,sha256,state FROM solution_pack_plan_asset_objects WHERE workspace_id=$1 AND plan_id=$2 AND logical_key=$3",
+                )
+                .bind(workspace_id)
+                .bind(plan_id)
+                .bind(&action.logical_key)
+                .fetch_optional(&mut **tx)
+                .await?
+                .ok_or_else(|| RepositoryError::InvalidSolutionPackPlan(
+                    "persisted presentation asset staging evidence is missing".into(),
+                ))?;
+                if staged.0 != mapping.target_id
+                    || staged.1 != payload.media_type
+                    || staged.2 != payload.byte_size
+                    || staged.3 != payload.stored_sha256
+                    || !matches!(staged.4.as_str(), "staged" | "claimed")
+                {
+                    return Err(RepositoryError::InvalidSolutionPackPlan(
+                        "persisted presentation asset staging evidence is inconsistent".into(),
+                    ));
+                }
+            }
+            if action.action == "map" && action.resource_kind == "presentation_asset" {
+                if !matches!(
+                    action.reason_code.as_str(),
+                    "exact_asset_match" | "unchanged_from_prior_application"
+                ) || action.normalized_payload.is_some()
+                {
+                    return Err(RepositoryError::InvalidSolutionPackPlan(
+                        "persisted asset map action evidence is invalid".into(),
+                    ));
+                }
+                let preconditions: Vec<ExistingAssetEvidence> =
+                    serde_json::from_value(action.preconditions.clone()).map_err(|_| {
+                        RepositoryError::InvalidSolutionPackPlan(
+                            "persisted asset map preconditions are invalid".into(),
+                        )
+                    })?;
+                let snapshot: ExistingAssetEvidence = serde_json::from_value(
+                    mapping.snapshot.clone().expect("existing asset snapshot"),
+                )
+                .expect("existing asset snapshot validated");
+                if preconditions.len() != 1
+                    || preconditions[0].kind.as_deref() != Some("existing_presentation_asset")
+                    || preconditions[0].id != snapshot.id
+                    || preconditions[0].purpose != snapshot.purpose
+                    || preconditions[0].media_type != snapshot.media_type
+                    || preconditions[0].byte_size != snapshot.byte_size
+                    || preconditions[0].sha256 != snapshot.sha256
+                    || preconditions[0].source_sha256 != snapshot.source_sha256
+                {
+                    return Err(RepositoryError::InvalidSolutionPackPlan(
+                        "persisted asset map evidence does not match its reviewed snapshot".into(),
+                    ));
+                }
+            }
+            if action.action == "map" && action.resource_kind == "blueprint" {
                 if !matches!(
                     action.reason_code.as_str(),
                     "exact_blueprint_match" | "unchanged_from_prior_application"
@@ -2126,6 +2903,34 @@ impl CatalogRepository {
         .fetch_all(&mut **tx)
         .await?;
         for step in steps {
+            if step.action == "map" && step.resource_kind == "presentation_asset" {
+                let expected: Vec<ExistingAssetEvidence> =
+                    serde_json::from_value(step.preconditions).map_err(|_| {
+                        RepositoryError::InvalidSolutionPackPlan(
+                            "invalid existing-asset preconditions".into(),
+                        )
+                    })?;
+                let actual = sqlx::query_as::<_, (String, String, i64, String)>(
+                    "SELECT purpose,media_type,byte_size,sha256 FROM presentation_assets WHERE workspace_id=$1 AND id=$2 FOR SHARE",
+                )
+                .bind(workspace_id)
+                .bind(step.target_id)
+                .fetch_optional(&mut **tx)
+                .await?;
+                if expected.len() != 1
+                    || expected[0].kind.as_deref() != Some("existing_presentation_asset")
+                    || expected[0].id != step.target_id
+                    || actual.as_ref().is_none_or(|actual| {
+                        actual.0 != expected[0].purpose
+                            || actual.1 != expected[0].media_type
+                            || actual.2 != expected[0].byte_size
+                            || actual.3 != expected[0].sha256
+                    })
+                {
+                    return Err(RepositoryError::SolutionPackPlanStale);
+                }
+                continue;
+            }
             if step.action == "map" {
                 continue;
             }
@@ -2213,6 +3018,19 @@ impl CatalogRepository {
                 return Err(RepositoryError::InvalidSolutionPackPlan(
                     "persisted application preconditions do not match the step".into(),
                 ));
+            }
+            if step.resource_kind == "presentation_asset" {
+                let exists = sqlx::query_scalar::<_, bool>(
+                    "SELECT EXISTS(SELECT 1 FROM presentation_assets WHERE workspace_id=$1 AND id=$2)",
+                )
+                .bind(workspace_id)
+                .bind(step.target_id)
+                .fetch_one(&mut **tx)
+                .await?;
+                if (step.state == "completed") != exists {
+                    return Err(RepositoryError::SolutionPackPlanStale);
+                }
+                continue;
             }
             if step.resource_kind != "blueprint" {
                 return Err(RepositoryError::InvalidSolutionPackPlan(
@@ -2327,7 +3145,7 @@ impl CatalogRepository {
     ) -> Result<(), RepositoryError> {
         let workspace_id = self.workspace_id.unwrap_or(Self::DEFAULT_WORKSPACE_ID);
         let rows = sqlx::query_as::<_, (Uuid, String, Option<i64>, Value)>(
-            "SELECT s.target_id,s.target_code,s.target_version,a.preconditions FROM solution_pack_application_steps s JOIN solution_pack_plan_actions a ON a.plan_id=s.plan_id AND a.position=s.position WHERE s.workspace_id=$1 AND s.application_id=$2 AND a.action='map' ORDER BY s.target_code,s.target_id",
+            "SELECT s.target_id,s.target_code,s.target_version,a.preconditions FROM solution_pack_application_steps s JOIN solution_pack_plan_actions a ON a.plan_id=s.plan_id AND a.position=s.position WHERE s.workspace_id=$1 AND s.application_id=$2 AND a.action='map' AND s.resource_kind='blueprint' ORDER BY s.target_code,s.target_id",
         )
         .bind(workspace_id)
         .bind(application_id)
@@ -2343,20 +3161,26 @@ impl CatalogRepository {
     async fn apply_next_solution_pack_step(
         &self,
         application_id: Uuid,
+        object_store: &dyn ObjectStore,
     ) -> Result<bool, StepApplicationError> {
         let mut attempted_position = None;
-        self.apply_next_solution_pack_step_inner(application_id, &mut attempted_position)
-            .await
-            .map_err(|error| StepApplicationError {
-                position: attempted_position,
-                error,
-            })
+        self.apply_next_solution_pack_step_inner(
+            application_id,
+            &mut attempted_position,
+            object_store,
+        )
+        .await
+        .map_err(|error| StepApplicationError {
+            position: attempted_position,
+            error,
+        })
     }
 
     async fn apply_next_solution_pack_step_inner(
         &self,
         application_id: Uuid,
         attempted_position: &mut Option<i64>,
+        object_store: &dyn ObjectStore,
     ) -> Result<bool, RepositoryError> {
         let workspace_id = self.workspace_id.unwrap_or(Self::DEFAULT_WORKSPACE_ID);
         let mut tx = self.pool.begin().await?;
@@ -2406,17 +3230,65 @@ impl CatalogRepository {
             self.ensure_target_absent(&mut tx, &step).await?;
         }
         let (result_snapshot, events) = if step.action == "map" {
-            (
-                self.revalidate_existing_blueprint(
-                    &mut tx,
-                    step.target_id,
-                    &step.target_code,
-                    step.target_version,
-                    step.preconditions.clone(),
+            if step.resource_kind == "presentation_asset" {
+                let expected: Vec<ExistingAssetEvidence> =
+                    serde_json::from_value(step.preconditions.clone()).map_err(|_| {
+                        RepositoryError::InvalidSolutionPackPlan(
+                            "invalid existing-asset preconditions".into(),
+                        )
+                    })?;
+                let actual = sqlx::query_as::<_, (String, String, i64, String, String)>(
+                    "SELECT purpose,media_type,byte_size,sha256,object_key FROM presentation_assets WHERE workspace_id=$1 AND id=$2 FOR SHARE",
                 )
-                .await?,
-                Vec::new(),
-            )
+                .bind(workspace_id)
+                .bind(step.target_id)
+                .fetch_optional(&mut *tx)
+                .await?
+                .ok_or(RepositoryError::SolutionPackPlanStale)?;
+                if expected.len() != 1
+                    || expected[0].purpose != actual.0
+                    || expected[0].media_type != actual.1
+                    || expected[0].byte_size != actual.2
+                    || expected[0].sha256 != actual.3
+                {
+                    return Err(RepositoryError::SolutionPackPlanStale);
+                }
+                let expected_size = usize::try_from(actual.2)
+                    .map_err(|_| RepositoryError::SolutionPackAssetObjectIntegrityFailed)?;
+                let stored = get_object_for_integrity(object_store, &actual.4, expected_size)
+                    .await
+                    .map_err(|error| match error {
+                        ObjectStoreError::Unavailable
+                        | ObjectStoreError::TimedOut(_)
+                        | ObjectStoreError::Operation(_) => {
+                            RepositoryError::SolutionPackAssetStorageUnavailable
+                        }
+                        ObjectStoreError::NotFound => {
+                            RepositoryError::SolutionPackAssetObjectIntegrityFailed
+                        }
+                    })?;
+                if stored.bytes.len() as i64 != actual.2
+                    || format!("{:x}", Sha256::digest(&stored.bytes)) != actual.3
+                {
+                    return Err(RepositoryError::SolutionPackAssetObjectIntegrityFailed);
+                }
+                (
+                    serde_json::json!({"outcome":"reused","id":step.target_id,"purpose":actual.0,"media_type":actual.1,"byte_size":actual.2,"sha256":actual.3,"source_sha256":expected[0].source_sha256}),
+                    Vec::new(),
+                )
+            } else {
+                (
+                    self.revalidate_existing_blueprint(
+                        &mut tx,
+                        step.target_id,
+                        &step.target_code,
+                        step.target_version,
+                        step.preconditions.clone(),
+                    )
+                    .await?,
+                    Vec::new(),
+                )
+            }
         } else {
             match step.resource_kind.as_str() {
                 "blueprint" => {
@@ -2480,6 +3352,93 @@ impl CatalogRepository {
                     (
                         serde_json::json!({"id":blueprint.id,"code":blueprint.code,"version":blueprint.version,"status":blueprint.status}),
                         events,
+                    )
+                }
+                "presentation_asset" => {
+                    let payload: PresentationAssetPayload = serde_json::from_value(
+                        step.normalized_payload.clone().ok_or_else(|| {
+                            RepositoryError::InvalidSolutionPackPlan(
+                                "missing presentation asset payload".into(),
+                            )
+                        })?,
+                    )
+                    .map_err(|_| {
+                        RepositoryError::InvalidSolutionPackPlan(
+                            "invalid presentation asset payload".into(),
+                        )
+                    })?;
+                    if payload.source_sha256.len() != 64
+                        || payload.stored_sha256.len() != 64
+                        || payload.byte_size <= 0
+                        || payload.byte_size > 2 * 1024 * 1024
+                        || payload.source_byte_size <= 0
+                        || payload.source_byte_size > 2 * 1024 * 1024
+                    {
+                        return Err(RepositoryError::InvalidSolutionPackPlan(
+                            "invalid presentation asset payload evidence".into(),
+                        ));
+                    }
+                    let staged = sqlx::query_as::<_, (String, String, i64, String, String)>(
+                        "SELECT object_key,media_type,byte_size,sha256,state FROM solution_pack_plan_asset_objects WHERE workspace_id=$1 AND plan_id=$2 AND logical_key=$3 AND target_id=$4 FOR UPDATE",
+                    )
+                    .bind(workspace_id)
+                    .bind(plan_id)
+                    .bind(&step.logical_key)
+                    .bind(step.target_id)
+                    .fetch_optional(&mut *tx)
+                    .await?
+                    .ok_or_else(|| RepositoryError::InvalidSolutionPackPlan(
+                        "presentation asset staging evidence is missing".into(),
+                    ))?;
+                    if !matches!(staged.4.as_str(), "staged" | "claimed")
+                        || staged.1 != payload.media_type
+                        || staged.2 != payload.byte_size
+                        || staged.3 != payload.stored_sha256
+                    {
+                        return Err(RepositoryError::InvalidSolutionPackPlan(
+                            "presentation asset staging evidence is inconsistent".into(),
+                        ));
+                    }
+                    let expected_size = usize::try_from(payload.byte_size)
+                        .map_err(|_| RepositoryError::SolutionPackAssetObjectIntegrityFailed)?;
+                    let stored = get_object_for_integrity(object_store, &staged.0, expected_size)
+                        .await
+                        .map_err(|error| match error {
+                            ObjectStoreError::Unavailable
+                            | ObjectStoreError::TimedOut(_)
+                            | ObjectStoreError::Operation(_) => {
+                                RepositoryError::SolutionPackAssetStorageUnavailable
+                            }
+                            ObjectStoreError::NotFound => {
+                                RepositoryError::SolutionPackAssetObjectIntegrityFailed
+                            }
+                        })?;
+                    if stored.bytes.len() as i64 != payload.byte_size
+                        || format!("{:x}", Sha256::digest(&stored.bytes)) != payload.stored_sha256
+                    {
+                        return Err(RepositoryError::SolutionPackAssetObjectIntegrityFailed);
+                    }
+                    sqlx::query("INSERT INTO presentation_assets (id,workspace_id,purpose,media_type,byte_size,sha256,width,height,object_key) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)")
+                        .bind(step.target_id)
+                        .bind(workspace_id)
+                        .bind(&payload.purpose)
+                        .bind(&payload.media_type)
+                        .bind(payload.byte_size)
+                        .bind(&payload.stored_sha256)
+                        .bind(payload.width)
+                        .bind(payload.height)
+                        .bind(&staged.0)
+                        .execute(&mut *tx)
+                        .await?;
+                    sqlx::query("UPDATE solution_pack_plan_asset_objects SET state='claimed',updated_at=now() WHERE workspace_id=$1 AND plan_id=$2 AND logical_key=$3")
+                        .bind(workspace_id)
+                        .bind(plan_id)
+                        .bind(&step.logical_key)
+                        .execute(&mut *tx)
+                        .await?;
+                    (
+                        serde_json::json!({"id":step.target_id,"purpose":payload.purpose,"media_type":payload.media_type,"byte_size":payload.byte_size,"sha256":payload.stored_sha256,"source_byte_size":payload.source_byte_size,"source_sha256":payload.source_sha256}),
+                        Vec::new(),
                     )
                 }
                 "workspace_setting" => {
@@ -2628,6 +3587,20 @@ impl CatalogRepository {
         step: &PendingApplicationStep,
     ) -> Result<(), RepositoryError> {
         let workspace_id = self.workspace_id.unwrap_or(Self::DEFAULT_WORKSPACE_ID);
+        if step.resource_kind == "presentation_asset" {
+            let exists: bool = sqlx::query_scalar(
+                "SELECT EXISTS(SELECT 1 FROM presentation_assets WHERE workspace_id=$1 AND id=$2)",
+            )
+            .bind(workspace_id)
+            .bind(step.target_id)
+            .fetch_one(&mut **tx)
+            .await?;
+            return if exists {
+                Err(RepositoryError::SolutionPackPlanStale)
+            } else {
+                Ok(())
+            };
+        }
         if step.resource_kind != "blueprint" {
             return Err(RepositoryError::InvalidSolutionPackPlan(
                 "unsupported persisted resource kind".into(),
@@ -2700,6 +3673,9 @@ impl CatalogRepository {
         let (state, code) = match error {
             RepositoryError::SolutionPackPlanStale => ("invalid", "plan_stale"),
             RepositoryError::SolutionPackApplicationInvalid => ("invalid", "application_invalid"),
+            RepositoryError::SolutionPackAssetObjectIntegrityFailed => {
+                ("invalid", "asset_object_integrity_failed")
+            }
             _ => ("failed", "step_failed"),
         };
         let message = bounded_diagnostic(&error.to_string());
@@ -3525,11 +4501,14 @@ mod tests {
             .await
             .unwrap();
         let repository = CatalogRepository::new(pool.clone());
+        let object_store = crate::storage::FakeObjectStore::available();
         for (action, with_step) in [("skip", false), ("create", false), ("create", true)] {
             let (plan_id, application_id) =
                 insert_legacy_context_plan(&pool, action, with_step).await;
             assert!(matches!(
-                repository.apply_solution_pack_plan(plan_id).await,
+                repository
+                    .apply_solution_pack_plan(plan_id, &object_store)
+                    .await,
                 Err(RepositoryError::InvalidSolutionPackPlan(_))
             ));
             if let Some(application_id) = application_id {
@@ -3619,7 +4598,11 @@ value_type = "string"
         sqlx::query("INSERT INTO solution_pack_application_steps (application_id,workspace_id,position,plan_id,resource_kind,logical_key,target_id,target_code,state,diagnostic_code,diagnostic_message) VALUES ($1,$2,0,$3,'workspace_setting',$4,$2,'explore_navigation','failed','step_failed','synthetic transient failure')")
             .bind(application_id).bind(workspace_id).bind(plan_id).bind(logical_key).execute(&pool).await.unwrap();
 
-        let application = repository.apply_solution_pack_plan(plan_id).await.unwrap();
+        let object_store = crate::storage::FakeObjectStore::available();
+        let application = repository
+            .apply_solution_pack_plan(plan_id, &object_store)
+            .await
+            .unwrap();
         assert_eq!(application.state, "completed");
         assert_eq!(application.steps[0].state, "completed");
         assert_eq!(
@@ -3633,6 +4616,111 @@ value_type = "string"
                 .await
                 .unwrap();
         assert_eq!(navigation[0]["blueprint_code"], "retry_product");
+    }
+
+    #[sqlx::test(migrations = "./migrations")]
+    async fn application_insertion_plan_lock_wins_against_expired_staging_cleanup(
+        pool: sqlx::PgPool,
+    ) {
+        let workspace_id = CatalogRepository::DEFAULT_WORKSPACE_ID;
+        let plan_id = Uuid::new_v4();
+        let object_key = format!("presentation-assets/{plan_id}");
+        sqlx::query("INSERT INTO solution_pack_plans (id,workspace_id,source_kind,source_metadata,archive_sha256,manifest_version,pack_id,pack_name,pack_version,pack_description,host_api,prefix,blueprint_publication,ready,created_at,expires_at) VALUES ($1,$2,'local_archive','{\"side_loaded\":true}'::jsonb,$3,1,$4,'Cleanup race','1.0.0','Cleanup race','^1.0','cleanup_race','draft',true,clock_timestamp()-interval '2 hours',clock_timestamp()-interval '1 hour')")
+            .bind(plan_id)
+            .bind(workspace_id)
+            .bind("0".repeat(64))
+            .bind(format!("attricat.cleanup-race.{plan_id}"))
+            .execute(&pool)
+            .await
+            .unwrap();
+        sqlx::query("INSERT INTO solution_pack_plan_asset_objects (plan_id,workspace_id,logical_key,target_id,object_key,media_type,byte_size,sha256,state) VALUES ($1,$2,'assets/logo',$3,$4,'image/svg+xml',1,$5,'staged')")
+            .bind(plan_id)
+            .bind(workspace_id)
+            .bind(Uuid::new_v4())
+            .bind(&object_key)
+            .bind(format!("{:x}", Sha256::digest(b"x")))
+            .execute(&pool)
+            .await
+            .unwrap();
+        let object_store = std::sync::Arc::new(crate::storage::FakeObjectStore::available());
+        object_store
+            .put(
+                &object_key,
+                StoredObject {
+                    bytes: bytes::Bytes::from_static(b"x"),
+                    content_type: Some("image/svg+xml".to_owned()),
+                },
+            )
+            .await
+            .unwrap();
+
+        // Model application preparation precisely: acquire the plan lock first, then
+        // allow cleanup to issue its competing plan/staging lock query.
+        let mut application_tx = pool.begin().await.unwrap();
+        sqlx::query("SELECT id FROM solution_pack_plans WHERE id=$1 FOR UPDATE")
+            .bind(plan_id)
+            .fetch_one(&mut *application_tx)
+            .await
+            .unwrap();
+        let cleanup_repository = CatalogRepository::new(pool.clone());
+        let cleanup_store = object_store.clone();
+        let cleanup = tokio::spawn(async move {
+            cleanup_repository
+                .reconcile_solution_pack_asset_cleanup(cleanup_store.as_ref())
+                .await
+        });
+
+        // `SKIP LOCKED` makes reconciliation complete while the preparation
+        // transaction still owns the plan lock. Awaiting it here is the deterministic
+        // barrier: cleanup has inspected candidates before application insertion continues.
+        cleanup.await.unwrap().unwrap();
+        assert_eq!(object_store.object_count().await, 1);
+        assert_eq!(
+            sqlx::query_scalar::<_, String>(
+                "SELECT state FROM solution_pack_plan_asset_objects WHERE plan_id=$1"
+            )
+            .bind(plan_id)
+            .fetch_one(&pool)
+            .await
+            .unwrap(),
+            "staged"
+        );
+
+        let application_id = Uuid::new_v4();
+        let request_id = Uuid::new_v4();
+        sqlx::query("INSERT INTO solution_pack_applications (id,workspace_id,plan_id,request_id,correlation_id,source_kind,source_metadata,archive_sha256,pack_id,pack_version,blueprint_publication,state,mapping_snapshot) VALUES ($1,$2,$3,$4,$4,'local_archive','{\"side_loaded\":true}'::jsonb,$5,$6,'1.0.0','draft','running','[]'::jsonb)")
+            .bind(application_id)
+            .bind(workspace_id)
+            .bind(plan_id)
+            .bind(request_id)
+            .bind("0".repeat(64))
+            .bind(format!("attricat.cleanup-race.{plan_id}"))
+            .execute(&mut *application_tx)
+            .await
+            .unwrap();
+        application_tx.commit().await.unwrap();
+
+        assert_eq!(object_store.object_count().await, 1);
+        assert_eq!(
+            sqlx::query_scalar::<_, String>(
+                "SELECT state FROM solution_pack_plan_asset_objects WHERE plan_id=$1"
+            )
+            .bind(plan_id)
+            .fetch_one(&pool)
+            .await
+            .unwrap(),
+            "staged"
+        );
+        assert_eq!(
+            sqlx::query_scalar::<_, i64>(
+                "SELECT count(*) FROM solution_pack_applications WHERE plan_id=$1"
+            )
+            .bind(plan_id)
+            .fetch_one(&pool)
+            .await
+            .unwrap(),
+            1
+        );
     }
 
     #[sqlx::test(migrations = "./migrations")]
