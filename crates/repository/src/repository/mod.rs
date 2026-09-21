@@ -40,6 +40,7 @@ mod entity_migration;
 mod entity_projection;
 mod entity_publications;
 mod entity_search;
+mod extension_catalog_data;
 mod extension_operation_artifacts;
 mod extension_operations;
 mod extension_registries;
@@ -68,6 +69,10 @@ pub use catalog_domain::model::{FileMetadata, FileVariantMetadata};
 pub use domain_events::{EventConsumer, EventDelivery, EventPublisher, FailedEventDelivery};
 pub use entity_search::{
     EntityRelationshipFilter, EntitySearchFilter, EntitySearchSort, decode_search_cursor,
+};
+pub use extension_catalog_data::{
+    ExtensionCatalogPage, ExtensionCatalogPageRequest, MAX_EXTENSION_CATALOG_PAGE_SIZE,
+    MAX_EXTENSION_LOOKUP_VALUE_BYTES,
 };
 pub use extension_operation_artifacts::{ExtensionOperationArtifact, MAX_OPERATION_ARTIFACT_BYTES};
 pub use extension_operations::{

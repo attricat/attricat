@@ -36,9 +36,10 @@ use crate::{
         ArtifactKind, EventHandler as ManifestEventHandler, MAX_EXTENSION_IDENTIFIER_BYTES,
     },
     model::{AppendAttributeValues, NewAttributeValue},
-    repository::ClaimedTask,
-    repository::ExtensionOperationArtifact,
-    repository::{CatalogRepository, ExtensionConfigurationScope, ExtensionRuntimeInstallation},
+    repository::{
+        CatalogRepository, ClaimedTask, ExtensionCatalogPageRequest, ExtensionConfigurationScope,
+        ExtensionOperationArtifact, ExtensionRuntimeInstallation,
+    },
     storage::{ObjectStore, ObjectStoreError},
     task_queue::TaskKind,
     task_worker::{TaskHandler, TaskHandlerError, TaskOutcome},
@@ -709,6 +710,9 @@ impl catalog::host::api::Host for HostState {
                 .map_err(|error| error.to_string())?;
             return Ok("null".to_owned());
         }
+        if operation == "catalog.read.v1" {
+            return self.catalog_read_call(&request).await;
+        }
         self.storage_call(&operation, &request).await
     }
 
@@ -876,6 +880,60 @@ impl HostState {
         Ok(())
     }
 
+    /// The v1 JSON host call is retained for older components. Unlike generic
+    /// search it exposes only the two bounded extension-data operations below.
+    async fn catalog_read_call(&self, request: &str) -> Result<String, String> {
+        let input: CatalogReadRequest = parse_storage_request(request)?;
+        match input {
+            CatalogReadRequest::Page {
+                blueprint_id,
+                blueprint_version,
+                context_id,
+                publication_context_id,
+                cursor,
+                limit,
+            } => {
+                let page = self
+                    .repository
+                    .extension_catalog_page(ExtensionCatalogPageRequest {
+                        blueprint_id: parse_uuid(&blueprint_id, "blueprint ID")?,
+                        blueprint_version,
+                        context_id: context_id
+                            .as_deref()
+                            .map(|value| parse_uuid(value, "context ID"))
+                            .transpose()?,
+                        publication_context_id: publication_context_id
+                            .as_deref()
+                            .map(|value| parse_uuid(value, "publication context ID"))
+                            .transpose()?,
+                        cursor,
+                        limit,
+                    })
+                    .await
+                    .map_err(|error| error.to_string())?;
+                bounded_serialize(&page)
+            }
+            CatalogReadRequest::Lookup {
+                blueprint_id,
+                blueprint_version,
+                attribute_id,
+                value,
+            } => {
+                let entity = self
+                    .repository
+                    .extension_catalog_lookup(
+                        parse_uuid(&blueprint_id, "blueprint ID")?,
+                        blueprint_version,
+                        parse_uuid(&attribute_id, "attribute ID")?,
+                        &value,
+                    )
+                    .await
+                    .map_err(|error| error.to_string())?;
+                bounded_serialize(&entity)
+            }
+        }
+    }
+
     async fn storage_call(&self, operation: &str, request: &str) -> Result<String, String> {
         let release_id = self.installation.installed_release_id;
         let extension_id = &self.installation.extension_id;
@@ -994,6 +1052,25 @@ struct EventEmit {
     aggregate_kind: String,
     aggregate_id: String,
     payload: Value,
+}
+
+#[derive(Deserialize)]
+#[serde(tag = "operation", rename_all = "snake_case", deny_unknown_fields)]
+enum CatalogReadRequest {
+    Page {
+        blueprint_id: String,
+        blueprint_version: i64,
+        context_id: Option<String>,
+        publication_context_id: Option<String>,
+        cursor: Option<String>,
+        limit: u32,
+    },
+    Lookup {
+        blueprint_id: String,
+        blueprint_version: i64,
+        attribute_id: String,
+        value: String,
+    },
 }
 
 #[derive(Deserialize)]
