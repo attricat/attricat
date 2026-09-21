@@ -9,9 +9,73 @@ use crate::persistence_rows::{Db, IntoDomain};
 use base64::{Engine as _, engine::general_purpose::URL_SAFE_NO_PAD};
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
+use serde_json::Value;
 
 pub const MAX_EXTENSION_CATALOG_PAGE_SIZE: u32 = 100;
 pub const MAX_EXTENSION_LOOKUP_VALUE_BYTES: usize = 512;
+pub const MAX_EXTENSION_BATCH_INTENTS: usize = 100;
+pub const MAX_EXTENSION_BATCH_KEY_BYTES: usize = 256;
+pub const MAX_EXTENSION_INTENT_KEY_BYTES: usize = 128;
+
+/// A bounded, host-owned mutation envelope. The component never receives a
+/// repository handle: this payload is validated then committed through the
+/// same entity mutation transaction that writes audit and outbox records.
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct ExtensionCatalogBatch {
+    pub batch_key: String,
+    pub dry_run: bool,
+    pub intents: Vec<ExtensionCatalogIntent>,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(tag = "kind", rename_all = "snake_case", deny_unknown_fields)]
+pub enum ExtensionCatalogIntent {
+    Create {
+        intent_key: String,
+        blueprint_id: Uuid,
+        blueprint_version: i64,
+        values: Vec<NewAttributeValue>,
+        #[serde(default)]
+        system_tags: Vec<String>,
+        #[serde(default = "empty_object")]
+        system_metadata: Value,
+    },
+    Update {
+        intent_key: String,
+        entity_id: Uuid,
+        #[serde(default)]
+        values: Vec<NewAttributeValue>,
+        #[serde(default)]
+        relationships: Vec<RelationshipTargets>,
+    },
+    Relationships {
+        intent_key: String,
+        entity_id: Uuid,
+        relationships: Vec<RelationshipTargets>,
+    },
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ExtensionCatalogIntentStatus {
+    Applied,
+    AlreadyApplied,
+    Validated,
+    Rejected,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct ExtensionCatalogIntentOutcome {
+    pub intent_key: String,
+    pub status: ExtensionCatalogIntentStatus,
+    pub entity_id: Option<Uuid>,
+    pub error: Option<String>,
+}
+
+fn empty_object() -> Value {
+    Value::Object(Default::default())
+}
 
 #[derive(Clone, Debug)]
 pub struct ExtensionCatalogPageRequest {

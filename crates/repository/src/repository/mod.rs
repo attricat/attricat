@@ -71,8 +71,9 @@ pub use entity_search::{
     EntityRelationshipFilter, EntitySearchFilter, EntitySearchSort, decode_search_cursor,
 };
 pub use extension_catalog_data::{
-    ExtensionCatalogPage, ExtensionCatalogPageRequest, MAX_EXTENSION_CATALOG_PAGE_SIZE,
-    MAX_EXTENSION_LOOKUP_VALUE_BYTES,
+    ExtensionCatalogBatch, ExtensionCatalogIntent, ExtensionCatalogIntentOutcome,
+    ExtensionCatalogIntentStatus, ExtensionCatalogPage, ExtensionCatalogPageRequest,
+    MAX_EXTENSION_BATCH_INTENTS, MAX_EXTENSION_CATALOG_PAGE_SIZE, MAX_EXTENSION_LOOKUP_VALUE_BYTES,
 };
 pub use extension_operation_artifacts::{ExtensionOperationArtifact, MAX_OPERATION_ARTIFACT_BYTES};
 pub use extension_operations::{

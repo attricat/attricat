@@ -713,6 +713,9 @@ impl catalog::host::api::Host for HostState {
         if operation == "catalog.read.v1" {
             return self.catalog_read_call(&request).await;
         }
+        if operation == "catalog.command.v1" {
+            return self.catalog_command_call(&request).await;
+        }
         self.storage_call(&operation, &request).await
     }
 
@@ -934,6 +937,19 @@ impl HostState {
         }
     }
 
+    async fn catalog_command_call(&self, request: &str) -> Result<String, String> {
+        let input: CatalogCommandRequest = parse_storage_request(request)?;
+        let CatalogCommandRequest::Batch { batch } = input;
+        let repository = self
+            .repository
+            .for_extension(&self.installation.extension_id);
+        let outcomes = CatalogMutationService::new(&repository)
+            .execute_extension_catalog_batch(batch)
+            .await
+            .map_err(|error| error.to_string())?;
+        bounded_serialize(&outcomes)
+    }
+
     async fn storage_call(&self, operation: &str, request: &str) -> Result<String, String> {
         let release_id = self.installation.installed_release_id;
         let extension_id = &self.installation.extension_id;
@@ -1070,6 +1086,14 @@ enum CatalogReadRequest {
         blueprint_version: i64,
         attribute_id: String,
         value: String,
+    },
+}
+
+#[derive(Deserialize)]
+#[serde(tag = "operation", rename_all = "snake_case", deny_unknown_fields)]
+enum CatalogCommandRequest {
+    Batch {
+        batch: crate::repository::ExtensionCatalogBatch,
     },
 }
 

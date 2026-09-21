@@ -1,4 +1,9 @@
 use super::entity_search::empty_projections;
+use super::extension_catalog_data::{
+    ExtensionCatalogBatch, ExtensionCatalogIntent, ExtensionCatalogIntentOutcome,
+    ExtensionCatalogIntentStatus, MAX_EXTENSION_BATCH_INTENTS, MAX_EXTENSION_BATCH_KEY_BYTES,
+    MAX_EXTENSION_INTENT_KEY_BYTES,
+};
 use super::values::{NativeValue, ValueType};
 use super::*;
 use crate::domain_events::{
@@ -9,6 +14,7 @@ use crate::persistence_rows::{Db, IntoDomain};
 use catalog_validation::validate_json_schema;
 use chrono::Utc;
 use serde_json::{Map, Value};
+use sha2::Digest;
 use sqlx::{Postgres, Transaction};
 use std::collections::{BTreeMap, BTreeSet, HashSet};
 
@@ -1587,6 +1593,317 @@ impl CatalogRepository {
             .execute(&mut **transaction)
             .await?;
         Ok(())
+    }
+    /// Applies one bounded extension batch. Each intent receives its own
+    /// transaction so a retry may return durable per-intent outcomes without
+    /// repeating a catalog mutation. The marker, audit rows, outbox event and
+    /// task-fence check share that transaction.
+    pub async fn execute_extension_catalog_batch(
+        &self,
+        batch: ExtensionCatalogBatch,
+    ) -> Result<Vec<ExtensionCatalogIntentOutcome>, RepositoryError> {
+        if batch.batch_key.is_empty()
+            || batch.batch_key.len() > MAX_EXTENSION_BATCH_KEY_BYTES
+            || !batch.batch_key.is_ascii()
+        {
+            return Err(RepositoryError::InvalidExtension(
+                "batch key must be 1-256 ASCII bytes".into(),
+            ));
+        }
+        if batch.intents.is_empty() || batch.intents.len() > MAX_EXTENSION_BATCH_INTENTS {
+            return Err(RepositoryError::InvalidExtension(
+                "batch must contain 1-100 intents".into(),
+            ));
+        }
+        let extension_id = self.extension_id.as_deref().ok_or_else(|| {
+            RepositoryError::InvalidExtension(
+                "extension batch requires extension provenance".into(),
+            )
+        })?;
+        let mut outcomes = Vec::with_capacity(batch.intents.len());
+        let mut keys = HashSet::new();
+        for intent in batch.intents {
+            let key = extension_intent_key(&intent).to_owned();
+            if key.is_empty()
+                || key.len() > MAX_EXTENSION_INTENT_KEY_BYTES
+                || !key.is_ascii()
+                || !keys.insert(key.clone())
+            {
+                return Err(RepositoryError::InvalidExtension(
+                    "intent keys must be unique 1-128 ASCII bytes".into(),
+                ));
+            }
+            match self
+                .execute_extension_catalog_intent(
+                    extension_id,
+                    &batch.batch_key,
+                    batch.dry_run,
+                    intent,
+                )
+                .await
+            {
+                Ok(outcome) => outcomes.push(outcome),
+                Err(error) => outcomes.push(ExtensionCatalogIntentOutcome {
+                    intent_key: key,
+                    status: ExtensionCatalogIntentStatus::Rejected,
+                    entity_id: None,
+                    error: Some(error.to_string()),
+                }),
+            }
+        }
+        Ok(outcomes)
+    }
+
+    async fn execute_extension_catalog_intent(
+        &self,
+        extension_id: &str,
+        batch_key: &str,
+        dry_run: bool,
+        intent: ExtensionCatalogIntent,
+    ) -> Result<ExtensionCatalogIntentOutcome, RepositoryError> {
+        let key = extension_intent_key(&intent).to_owned();
+        let serialized = serde_json::to_vec(&intent).expect("extension intent serializes");
+        let input_hash = format!("{:x}", sha2::Sha256::digest(serialized));
+        let ws = self.workspace_id.unwrap_or(Self::DEFAULT_WORKSPACE_ID);
+        let mut transaction = self.pool.begin().await?;
+        if !dry_run {
+            let existing: Option<(String, Value)> = sqlx::query_as("SELECT input_hash,outcome FROM extension_catalog_batch_intents WHERE workspace_id=$1 AND extension_id=$2 AND batch_key=$3 AND intent_key=$4 FOR UPDATE")
+                .bind(ws).bind(extension_id).bind(batch_key).bind(&key).fetch_optional(&mut *transaction).await?;
+            if let Some((existing_hash, outcome)) = existing {
+                if existing_hash != input_hash {
+                    return Err(RepositoryError::InvalidExtension(
+                        "intent key was reused with different input".into(),
+                    ));
+                }
+                let mut outcome: ExtensionCatalogIntentOutcome = serde_json::from_value(outcome)
+                    .map_err(|_| {
+                        RepositoryError::InvalidExtension("stored batch outcome is invalid".into())
+                    })?;
+                outcome.status = ExtensionCatalogIntentStatus::AlreadyApplied;
+                transaction.commit().await?;
+                return Ok(outcome);
+            }
+        }
+        let result = self
+            .apply_extension_catalog_intent(&mut transaction, intent)
+            .await;
+        match result {
+            Ok(entity_id) => {
+                let status = if dry_run {
+                    ExtensionCatalogIntentStatus::Validated
+                } else {
+                    ExtensionCatalogIntentStatus::Applied
+                };
+                let outcome = ExtensionCatalogIntentOutcome {
+                    intent_key: key.clone(),
+                    status,
+                    entity_id: Some(entity_id),
+                    error: None,
+                };
+                if dry_run {
+                    transaction.rollback().await?;
+                    return Ok(outcome);
+                }
+                self.ensure_task_fence(&mut transaction).await?;
+                sqlx::query("INSERT INTO extension_catalog_batch_intents(workspace_id,extension_id,batch_key,intent_key,input_hash,outcome) VALUES($1,$2,$3,$4,$5,$6)")
+                    .bind(ws).bind(extension_id).bind(batch_key).bind(&key).bind(input_hash).bind(serde_json::to_value(&outcome).expect("outcome serializes")).execute(&mut *transaction).await?;
+                transaction.commit().await?;
+                Ok(outcome)
+            }
+            Err(error) => {
+                transaction.rollback().await?;
+                if dry_run {
+                    Ok(ExtensionCatalogIntentOutcome {
+                        intent_key: key,
+                        status: ExtensionCatalogIntentStatus::Rejected,
+                        entity_id: None,
+                        error: Some(error.to_string()),
+                    })
+                } else {
+                    Err(error)
+                }
+            }
+        }
+    }
+
+    async fn apply_extension_catalog_intent(
+        &self,
+        transaction: &mut Transaction<'_, Postgres>,
+        intent: ExtensionCatalogIntent,
+    ) -> Result<Uuid, RepositoryError> {
+        match intent {
+            ExtensionCatalogIntent::Create {
+                blueprint_id,
+                blueprint_version,
+                values,
+                system_tags,
+                system_metadata,
+                ..
+            } => {
+                validate_system_annotations(&system_tags, &system_metadata)?;
+                if values
+                    .iter()
+                    .any(|value| matches!(value, NewAttributeValue::Relationship { .. }))
+                {
+                    self.lock_relationship_cardinality_writes(transaction)
+                        .await?;
+                }
+                let entity = self
+                    .insert_entity(
+                        transaction,
+                        blueprint_id,
+                        blueprint_version,
+                        system_tags,
+                        system_metadata,
+                    )
+                    .await?;
+                let default_context_id = self
+                    .resolve_context_id(transaction, None)
+                    .await?
+                    .expect("default context required");
+                let attributes = self
+                    .list_attributes_in_transaction(
+                        transaction,
+                        entity.blueprint_id,
+                        entity.blueprint_version,
+                    )
+                    .await?;
+                for attribute in attributes.iter().filter(|attribute| {
+                    attribute.default_value.is_some()
+                        && !values.iter().any(|value| {
+                            matches!(
+                                value,
+                                NewAttributeValue::Scalar { attribute_id, attribute_code, context_id, .. }
+                                    if (attribute_id == &Some(attribute.id)
+                                        || attribute_code.as_deref() == Some(attribute.code.as_str()))
+                                        && context_id.is_none_or(|id| id == default_context_id)
+                            )
+                        })
+                }) {
+                    self.insert_value(transaction, &entity, NewAttributeValue::Scalar { attribute_id: Some(attribute.id), attribute_code: None, context_id: Some(default_context_id), value: attribute.default_value.clone().expect("default exists") }).await?;
+                }
+                for value in values {
+                    self.insert_value(transaction, &entity, value).await?;
+                }
+                self.validate_entity_schema(transaction, &entity).await?;
+                let preview = Self::build_preview_projection(transaction, entity.id).await?;
+                let entity = self.store_preview(transaction, entity.id, preview).await?;
+                let changes = Self::audit_changes(
+                    entity.id,
+                    Vec::new(),
+                    self.entity_audit_snapshot(transaction, entity.id).await?,
+                    false,
+                );
+                let event = self.core_event(
+                    ENTITY_CREATED_V1,
+                    "entity",
+                    entity.id,
+                    serde_json::to_value(EntityMutationV1 {
+                        entity_id: entity.id,
+                        blueprint_id: entity.blueprint_id,
+                        blueprint_version: entity.blueprint_version,
+                        facts: Self::affected_facts(&changes),
+                    })
+                    .expect("event serializes"),
+                );
+                self.commit_entity_mutation_in_transaction(transaction, changes, event)
+                    .await?;
+                Ok(entity.id)
+            }
+            ExtensionCatalogIntent::Update {
+                entity_id,
+                values,
+                relationships,
+                ..
+            } => {
+                self.apply_extension_catalog_update(transaction, entity_id, values, relationships)
+                    .await
+            }
+            ExtensionCatalogIntent::Relationships {
+                entity_id,
+                relationships,
+                ..
+            } => {
+                self.apply_extension_catalog_update(
+                    transaction,
+                    entity_id,
+                    Vec::new(),
+                    relationships,
+                )
+                .await
+            }
+        }
+    }
+
+    async fn apply_extension_catalog_update(
+        &self,
+        transaction: &mut Transaction<'_, Postgres>,
+        entity_id: Uuid,
+        values: Vec<NewAttributeValue>,
+        relationships: Vec<RelationshipTargets>,
+    ) -> Result<Uuid, RepositoryError> {
+        if !relationships.is_empty()
+            || values
+                .iter()
+                .any(|value| matches!(value, NewAttributeValue::Relationship { .. }))
+        {
+            self.lock_relationship_cardinality_writes(transaction)
+                .await?;
+        }
+        let before = self.entity_audit_snapshot(transaction, entity_id).await?;
+        let entity = self.lock_entity(transaction, entity_id).await?;
+        for value in values {
+            self.insert_value(transaction, &entity, value).await?;
+        }
+        self.replace_relationship_sets(transaction, &entity, relationships)
+            .await?;
+        self.validate_entity_schema(transaction, &entity).await?;
+        let preview = Self::build_preview_projection(transaction, entity.id).await?;
+        let entity = self.store_preview(transaction, entity.id, preview).await?;
+        let changes = Self::audit_changes(
+            entity.id,
+            before,
+            self.entity_audit_snapshot(transaction, entity.id).await?,
+            false,
+        );
+        let event = self.core_event(
+            ENTITY_UPDATED_V1,
+            "entity",
+            entity.id,
+            serde_json::to_value(EntityMutationV1 {
+                entity_id: entity.id,
+                blueprint_id: entity.blueprint_id,
+                blueprint_version: entity.blueprint_version,
+                facts: Self::affected_facts(&changes),
+            })
+            .expect("event serializes"),
+        );
+        self.commit_entity_mutation_in_transaction(transaction, changes, event)
+            .await?;
+        Ok(entity.id)
+    }
+
+    async fn commit_entity_mutation_in_transaction(
+        &self,
+        transaction: &mut Transaction<'_, Postgres>,
+        changes: Vec<AuditEventChange>,
+        event: NewDomainEvent,
+    ) -> Result<(), RepositoryError> {
+        self.ensure_task_fence(transaction).await?;
+        if let Some(audit_event_id) = self.write_audit_event(transaction).await? {
+            for change in changes {
+                sqlx::query("INSERT INTO audit_event_changes (id,audit_event_id,workspace_id,entity_id,attribute_id,attribute_code,context_id,context_code,change_kind,before_value,after_value) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)").bind(Uuid::new_v4()).bind(audit_event_id).bind(self.workspace_id.unwrap_or(Self::DEFAULT_WORKSPACE_ID)).bind(change.entity_id).bind(change.attribute_id).bind(change.attribute_code).bind(change.context_id).bind(change.context_code).bind(change.change_kind).bind(change.before_value).bind(change.after_value).execute(&mut **transaction).await?;
+            }
+        }
+        self.enqueue_event(transaction, event).await.map(|_| ())
+    }
+}
+
+fn extension_intent_key(intent: &ExtensionCatalogIntent) -> &str {
+    match intent {
+        ExtensionCatalogIntent::Create { intent_key, .. }
+        | ExtensionCatalogIntent::Update { intent_key, .. }
+        | ExtensionCatalogIntent::Relationships { intent_key, .. } => intent_key,
     }
 }
 
