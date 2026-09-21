@@ -337,7 +337,7 @@ pub fn router(state: AppState) -> Router {
         .route(
             "/solution-packs/plans",
             post(solution_packs::create_plan).layer(axum::extract::DefaultBodyLimit::max(
-                MAX_SOLUTION_PACK_ARCHIVE_BYTES,
+                MAX_SOLUTION_PACK_ARCHIVE_BYTES + 128 * 1024,
             )),
         )
         .route(

@@ -2277,10 +2277,33 @@ pub struct PlanningExploreNavigationEntry {
     pub visible_to_role_codes: Vec<String>,
 }
 
+#[derive(Clone, Debug, Deserialize, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
+pub struct BlueprintMappingRequest {
+    pub key: String,
+    pub code: String,
+}
+
+#[derive(Clone, Debug)]
+pub struct ExistingBlueprintSnapshot {
+    pub id: uuid::Uuid,
+    pub code: String,
+    pub version: i64,
+    pub kind: String,
+    /// Hash of the stored definition after the same TOML parse/serialize
+    /// canonicalization used for normalized pack definitions.
+    pub canonical_definition_hash: String,
+    /// Raw stored-source hash retained as immutable stale evidence.
+    pub definition_hash: String,
+}
+
 #[derive(Debug)]
 pub struct PlanningWorkspaceSnapshot {
     pub workspace_id: uuid::Uuid,
     pub physical_codes: BTreeSet<String>,
+    /// Explicit selections keyed by pack-local blueprint key. Missing targets
+    /// are rejected before the planner is called; the planner never searches.
+    pub existing_blueprints: BTreeMap<String, ExistingBlueprintSnapshot>,
     pub installed_extensions: BTreeMap<String, InstalledExtensionSnapshot>,
     pub explore_navigation: Vec<PlanningExploreNavigationEntry>,
     pub explore_navigation_valid: bool,
@@ -2447,10 +2470,42 @@ fn contribution_availability_reason(
     }
 }
 
-/// Builds a create-only plan from an already validated local archive. The
-/// workspace snapshot is deliberately supplied by the caller so repository
-/// fetching can later be added without coupling planning to an archive source.
-pub fn build_create_only_plan(
+pub fn validate_blueprint_mapping_requests(
+    pack: &ValidatedSolutionPack,
+    mappings: &[BlueprintMappingRequest],
+) -> Result<(), SolutionPackError> {
+    if mappings.len() > MAX_SOLUTION_PACK_BLUEPRINTS {
+        return invalid("too many blueprint mappings");
+    }
+    let declared = pack
+        .manifest()
+        .resources
+        .blueprints
+        .iter()
+        .map(|resource| resource.key.as_str())
+        .collect::<HashSet<_>>();
+    let mut seen = HashSet::new();
+    for mapping in mappings {
+        if !declared.contains(mapping.key.as_str()) {
+            return invalid(format!("unknown blueprint mapping key '{}'", mapping.key));
+        }
+        if !seen.insert(mapping.key.as_str()) {
+            return invalid(format!("duplicate blueprint mapping key '{}'", mapping.key));
+        }
+        if mapping.code.len() > MAX_IDENTIFIER_BYTES || !is_valid_stable_code(&mapping.code) {
+            return invalid(format!(
+                "invalid existing blueprint code for '{}'",
+                mapping.key
+            ));
+        }
+    }
+    Ok(())
+}
+
+/// Builds a plan from an already validated local archive and an explicit set
+/// of previously resolved existing-blueprint selections. No selection is ever
+/// inferred from a code collision.
+pub fn build_solution_pack_plan(
     pack: &ValidatedSolutionPack,
     prefix: &str,
     publication: BlueprintPublication,
@@ -2479,14 +2534,33 @@ pub fn build_create_only_plan(
 
     let mut mappings_by_key = BTreeMap::new();
     for (logical_key, (kind, _)) in &resources {
-        let code = format!("{prefix}_{}", resource_code(logical_key));
-        if code.len() > MAX_IDENTIFIER_BYTES || !is_valid_stable_code(&code) {
-            return invalid(format!(
-                "prefix produces an invalid physical code for '{logical_key}'"
-            ));
-        }
-        mappings_by_key.insert(
-            logical_key.clone(),
+        let mapping = if let Some(existing) = workspace.existing_blueprints.get(logical_key) {
+            PlannedMapping {
+                resource_kind: kind,
+                logical_key: logical_key.clone(),
+                target_id: existing.id,
+                target_code: existing.code.clone(),
+                target_version: Some(existing.version),
+                mapping_kind: "existing",
+                snapshot: serde_json::json!({
+                    "id": existing.id,
+                    "code": existing.code,
+                    "version": existing.version,
+                    "kind": existing.kind,
+                    "canonical_definition_hash": existing.canonical_definition_hash,
+                    "definition_hash": existing.definition_hash,
+                    "status": "published",
+                    "deleted": false,
+                }),
+            }
+        } else {
+            let generated_code = format!("{prefix}_{}", resource_code(logical_key));
+            if generated_code.len() > MAX_IDENTIFIER_BYTES || !is_valid_stable_code(&generated_code)
+            {
+                return invalid(format!(
+                    "prefix produces an invalid physical code for '{logical_key}'"
+                ));
+            }
             PlannedMapping {
                 resource_kind: kind,
                 logical_key: logical_key.clone(),
@@ -2497,12 +2571,13 @@ pub fn build_create_only_plan(
                     publication,
                     logical_key,
                 ),
-                target_code: code.clone(),
-                target_version: (*kind == "blueprint").then_some(1),
+                target_code: generated_code.clone(),
+                target_version: Some(1),
                 mapping_kind: "create",
-                snapshot: serde_json::json!({"code": code, "version": (*kind == "blueprint").then_some(1)}),
-            },
-        );
+                snapshot: serde_json::json!({"code": generated_code, "version": 1}),
+            }
+        };
+        mappings_by_key.insert(logical_key.clone(), mapping);
     }
     if pack.explore_navigation().is_some() {
         mappings_by_key.insert(
@@ -2605,12 +2680,41 @@ pub fn build_create_only_plan(
     let mut outcomes = HashMap::<String, (&'static str, &'static str)>::new();
     for (logical_key, (_, resource)) in &resources {
         let mapping = &mappings_by_key[logical_key];
+        let explicitly_mapped = mapping.mapping_kind == "existing";
+        let mapping_compatible = if explicitly_mapped {
+            let existing = &workspace.existing_blueprints[logical_key];
+            let normalized = normalized_blueprint_payload(
+                pack.blueprint(logical_key)
+                    .expect("validated blueprint exists"),
+                &mappings_by_key,
+                publication,
+                &blueprint_layout_allowed[logical_key],
+                workspace,
+                manifest,
+            )?;
+            let definition = normalized["definition"]
+                .as_str()
+                .expect("normalized blueprint definition is a string");
+            existing.canonical_definition_hash == catalog_blueprint::raw_hash(definition)
+                && existing.kind
+                    == blueprint_kind_name(
+                        pack.blueprint(logical_key)
+                            .expect("validated blueprint exists")
+                            .kind(),
+                    )
+        } else {
+            false
+        };
         outcomes.insert(
             logical_key.clone(),
-            if !resource.required {
+            if !resource.required && !explicitly_mapped {
                 ("skip", "optional_not_selected")
             } else if let Some(reason) = blueprint_layout_blocked.get(logical_key) {
                 ("blocked", *reason)
+            } else if explicitly_mapped && !mapping_compatible {
+                ("conflict", "existing_blueprint_incompatible")
+            } else if explicitly_mapped {
+                ("map", "exact_blueprint_match")
             } else if generated_code_counts[mapping.target_code.as_str()] > 1 {
                 ("conflict", "duplicate_target_code")
             } else if workspace.physical_codes.contains(&mapping.target_code) {
@@ -2629,11 +2733,11 @@ pub fn build_create_only_plan(
     loop {
         let newly_blocked = outcomes
             .iter()
-            .filter(|(_, (action, _))| *action == "create")
+            .filter(|(_, (action, _))| matches!(*action, "create" | "map"))
             .filter(|(key, _)| {
                 dependencies[*key]
                     .iter()
-                    .any(|dependency| outcomes[dependency].0 != "create")
+                    .any(|dependency| !matches!(outcomes[dependency].0, "create" | "map"))
             })
             .map(|(key, _)| key.clone())
             .collect::<Vec<_>>();
@@ -2645,6 +2749,14 @@ pub fn build_create_only_plan(
         }
     }
 
+    // Existing blueprints already exist, so their outbound publication-time
+    // dependencies impose no creation order. Keep them as dependency targets
+    // for resources that will be created, but clear their own outbound edges.
+    for (key, dependencies) in &mut ordering_dependencies {
+        if outcomes[key].0 != "create" {
+            dependencies.clear();
+        }
+    }
     let ordered_keys = topological_resource_order(&ordering_dependencies)?;
     let mut actions = Vec::with_capacity(ordered_keys.len());
     for logical_key in ordered_keys {
@@ -2666,7 +2778,20 @@ pub fn build_create_only_plan(
         } else {
             None
         };
-        let preconditions = if matches!(action, "create" | "conflict") {
+        let preconditions = if action == "map" {
+            let existing = &workspace.existing_blueprints[&logical_key];
+            serde_json::json!([{
+                "kind": "existing_blueprint",
+                "id": existing.id,
+                "code": existing.code,
+                "version": existing.version,
+                "definition_hash": existing.definition_hash,
+                "canonical_definition_hash": existing.canonical_definition_hash,
+                "blueprint_kind": existing.kind,
+                "status": "published",
+                "deleted": false
+            }])
+        } else if matches!(action, "create" | "conflict") && mapping.mapping_kind == "create" {
             serde_json::json!([{"kind": "target_absent", "resource_kind": kind, "code": mapping.target_code}])
         } else {
             serde_json::json!([])
@@ -2747,9 +2872,10 @@ pub fn build_create_only_plan(
                 .visible_to_role_codes
                 .iter()
                 .all(|role| workspace.role_codes.contains(role));
-            let blueprint_creatable = outcomes
-                .get(&entry.blueprint)
-                .is_some_and(|(action, _)| *action == "create");
+            let blueprint_available = outcomes.get(&entry.blueprint).is_some_and(|(action, _)| {
+                *action == "map"
+                    || (*action == "create" && publication == BlueprintPublication::Publish)
+            });
             let (outcome, reason) = if !roles_available {
                 unmet_reason.get_or_insert("unknown_role_code");
                 ("unmet", "unknown_role_code")
@@ -2766,12 +2892,14 @@ pub fn build_create_only_plan(
                     unmet_reason.get_or_insert("blueprint_not_published");
                     ("unmet", "blueprint_not_published")
                 }
-            } else if publication != BlueprintPublication::Publish {
-                unmet_reason.get_or_insert("blueprint_not_published");
-                ("unmet", "blueprint_not_published")
-            } else if !blueprint_creatable {
-                unmet_reason.get_or_insert("blueprint_not_creatable");
-                ("unmet", "blueprint_not_creatable")
+            } else if !blueprint_available {
+                let reason = if publication != BlueprintPublication::Publish {
+                    "blueprint_not_published"
+                } else {
+                    "blueprint_not_creatable"
+                };
+                unmet_reason.get_or_insert(reason);
+                ("unmet", reason)
             } else {
                 ("append", "target_absent")
             };
@@ -2968,12 +3096,14 @@ pub fn build_create_only_plan(
             )
         })
         .collect::<Vec<_>>();
-    let ready = actions
+    let ready = actions.iter().all(|action| {
+        matches!(
+            action.action,
+            "create" | "map" | "append" | "satisfied" | "skip"
+        )
+    }) && extension_requirements
         .iter()
-        .all(|action| matches!(action.action, "create" | "append" | "satisfied" | "skip"))
-        && extension_requirements
-            .iter()
-            .all(|requirement| requirement.status != "blocked");
+        .all(|requirement| requirement.status != "blocked");
 
     Ok(SolutionPackPlanDraft {
         ready,
@@ -2981,6 +3111,13 @@ pub fn build_create_only_plan(
         actions,
         extension_requirements,
     })
+}
+
+fn blueprint_kind_name(kind: BlueprintKind) -> &'static str {
+    match kind {
+        BlueprintKind::Entity => "entity",
+        BlueprintKind::Mixin => "mixin",
+    }
 }
 
 fn deterministic_target_id(
@@ -3097,7 +3234,14 @@ fn normalized_blueprint_payload(
                 "code".to_owned(),
                 toml::Value::String(mappings[&key].target_code.clone()),
             );
-            include.insert("version".to_owned(), toml::Value::Integer(1));
+            include.insert(
+                "version".to_owned(),
+                toml::Value::Integer(
+                    mappings[&key]
+                        .target_version
+                        .expect("blueprint mappings have a revision"),
+                ),
+            );
         }
     }
     if let Some(attributes) = table
@@ -3629,6 +3773,7 @@ target_blueprint = "blueprints/product"
         let workspace = |extension_layout| PlanningWorkspaceSnapshot {
             workspace_id: uuid::Uuid::nil(),
             physical_codes: BTreeSet::from(["default".to_owned()]),
+            existing_blueprints: BTreeMap::new(),
             installed_extensions: BTreeMap::from([("acme.shop".to_owned(), installed.clone())]),
             explore_navigation: Vec::new(),
             explore_navigation_valid: true,
@@ -3638,7 +3783,7 @@ target_blueprint = "blueprints/product"
             published_entity_codes: BTreeSet::new(),
         };
         let action_for = |current| {
-            build_create_only_plan(
+            build_solution_pack_plan(
                 &pack,
                 "shop",
                 BlueprintPublication::Draft,
@@ -3676,13 +3821,14 @@ target_blueprint = "blueprints/product"
         );
 
         let unavailable_action = |installed: Option<InstalledExtensionSnapshot>| {
-            let plan = build_create_only_plan(
+            let plan = build_solution_pack_plan(
                 &pack,
                 "shop",
                 BlueprintPublication::Draft,
                 &PlanningWorkspaceSnapshot {
                     workspace_id: uuid::Uuid::nil(),
                     physical_codes: BTreeSet::from(["default".to_owned()]),
+                    existing_blueprints: BTreeMap::new(),
                     installed_extensions: installed
                         .map(|installed| BTreeMap::from([("acme.shop".to_owned(), installed)]))
                         .unwrap_or_default(),
@@ -3731,13 +3877,14 @@ target_blueprint = "blueprints/product"
             false,
         ))
         .unwrap();
-        let optional_plan = build_create_only_plan(
+        let optional_plan = build_solution_pack_plan(
             &optional_pack,
             "shop",
             BlueprintPublication::Draft,
             &PlanningWorkspaceSnapshot {
                 workspace_id: uuid::Uuid::nil(),
                 physical_codes: BTreeSet::from(["default".to_owned()]),
+                existing_blueprints: BTreeMap::new(),
                 installed_extensions: BTreeMap::new(),
                 explore_navigation: Vec::new(),
                 explore_navigation_valid: true,
@@ -3789,13 +3936,14 @@ hidden = []
             let mut files = valid_files();
             files[0] = (files[0].0, &blueprint);
             let pack = ValidatedSolutionPack::from_tar_zst(&archive(&manifest, &files)).unwrap();
-            let plan = build_create_only_plan(
+            let plan = build_solution_pack_plan(
                 &pack,
                 "shop",
                 BlueprintPublication::Draft,
                 &PlanningWorkspaceSnapshot {
                     workspace_id: uuid::Uuid::nil(),
                     physical_codes: BTreeSet::from(["default".to_owned()]),
+                    existing_blueprints: BTreeMap::new(),
                     installed_extensions: BTreeMap::new(),
                     explore_navigation: Vec::new(),
                     explore_navigation_valid: true,
@@ -3820,6 +3968,64 @@ hidden = []
                         .contains("acme.shop:action")
                 );
                 assert_eq!(action.summary["extension_layout"][0]["outcome"], "skip");
+            } else {
+                for contributions in [
+                    BTreeMap::new(),
+                    BTreeMap::from([(
+                        "acme.shop:action".to_owned(),
+                        "entity_preview_panel".to_owned(),
+                    )]),
+                ] {
+                    let mapped = build_solution_pack_plan(
+                        &pack,
+                        "shop",
+                        BlueprintPublication::Draft,
+                        &PlanningWorkspaceSnapshot {
+                            workspace_id: uuid::Uuid::nil(),
+                            physical_codes: BTreeSet::from(["shop_product".to_owned()]),
+                            existing_blueprints: BTreeMap::from([(
+                                "blueprints/product".to_owned(),
+                                ExistingBlueprintSnapshot {
+                                    id: uuid::Uuid::from_u128(100),
+                                    code: "shop_product".to_owned(),
+                                    version: 1,
+                                    kind: "entity".to_owned(),
+                                    canonical_definition_hash: "0".repeat(64),
+                                    definition_hash: "0".repeat(64),
+                                },
+                            )]),
+                            installed_extensions: BTreeMap::from([(
+                                "acme.shop".to_owned(),
+                                InstalledExtensionSnapshot {
+                                    installed_release_id: uuid::Uuid::from_u128(101),
+                                    version: "1.0.0".to_owned(),
+                                    state: "enabled".to_owned(),
+                                    configuration: json!({}),
+                                    policy_compatible: true,
+                                    contributions,
+                                },
+                            )]),
+                            explore_navigation: Vec::new(),
+                            explore_navigation_valid: true,
+                            extension_layout: json!({"version":1,"outlets":{}}),
+                            extension_layout_valid: true,
+                            role_codes: BTreeSet::new(),
+                            published_entity_codes: BTreeSet::from(["shop_product".to_owned()]),
+                        },
+                    )
+                    .unwrap();
+                    let mapped_product = mapped
+                        .actions
+                        .iter()
+                        .find(|action| action.logical_key == "blueprints/product")
+                        .unwrap();
+                    assert_eq!(
+                        (mapped_product.action, mapped_product.reason_code),
+                        ("blocked", "extension_contribution_unavailable")
+                    );
+                    assert_eq!(mapped.extension_requirements[0].status, "satisfied");
+                    assert!(!mapped.ready);
+                }
             }
         }
     }
@@ -3948,6 +4154,7 @@ hidden = ["acme.shop:a_action"]
         let workspace = |navigation| PlanningWorkspaceSnapshot {
             workspace_id: uuid::Uuid::nil(),
             physical_codes: BTreeSet::from(["default".to_owned()]),
+            existing_blueprints: BTreeMap::new(),
             installed_extensions: BTreeMap::new(),
             explore_navigation: navigation,
             explore_navigation_valid: true,
@@ -3956,7 +4163,7 @@ hidden = ["acme.shop:a_action"]
             role_codes: BTreeSet::from(["editor".to_owned(), "viewer".to_owned()]),
             published_entity_codes: BTreeSet::from(["ecom_product".to_owned()]),
         };
-        let appended = build_create_only_plan(
+        let appended = build_solution_pack_plan(
             &pack,
             "ecom",
             BlueprintPublication::Publish,
@@ -3974,7 +4181,7 @@ hidden = ["acme.shop:a_action"]
             blueprint_code: "ecom_product".to_owned(),
             visible_to_role_codes: vec!["viewer".to_owned(), "editor".to_owned()],
         };
-        let satisfied = build_create_only_plan(
+        let satisfied = build_solution_pack_plan(
             &pack,
             "ecom",
             BlueprintPublication::Publish,
@@ -3987,7 +4194,7 @@ hidden = ["acme.shop:a_action"]
             blueprint_code: "ecom_product".to_owned(),
             visible_to_role_codes: vec!["viewer".to_owned()],
         };
-        let conflicted = build_create_only_plan(
+        let conflicted = build_solution_pack_plan(
             &pack,
             "ecom",
             BlueprintPublication::Publish,
@@ -4004,13 +4211,14 @@ hidden = ["acme.shop:a_action"]
             let pack =
                 ValidatedSolutionPack::from_tar_zst(&archive_with_explore_navigation(required))
                     .unwrap();
-            let plan = build_create_only_plan(
+            let plan = build_solution_pack_plan(
                 &pack,
                 "ecom",
                 BlueprintPublication::Draft,
                 &PlanningWorkspaceSnapshot {
                     workspace_id: uuid::Uuid::nil(),
                     physical_codes: BTreeSet::from(["default".to_owned()]),
+                    existing_blueprints: BTreeMap::new(),
                     installed_extensions: BTreeMap::new(),
                     explore_navigation: Vec::new(),
                     explore_navigation_valid: true,
@@ -4038,13 +4246,14 @@ hidden = ["acme.shop:a_action"]
             ("workspace/explore-navigation.json", navigation.as_slice()),
         ];
         let pack = ValidatedSolutionPack::from_tar_zst(&archive(&manifest, &files)).unwrap();
-        let plan = build_create_only_plan(
+        let plan = build_solution_pack_plan(
             &pack,
             "ecom",
             BlueprintPublication::Publish,
             &PlanningWorkspaceSnapshot {
                 workspace_id: uuid::Uuid::nil(),
                 physical_codes: BTreeSet::from(["default".to_owned()]),
+                existing_blueprints: BTreeMap::new(),
                 installed_extensions: BTreeMap::new(),
                 explore_navigation: Vec::new(),
                 explore_navigation_valid: true,
@@ -5122,13 +5331,14 @@ value_type = "string"
     fn planner_rewrites_portable_references_and_orders_dependencies() {
         let pack = ValidatedSolutionPack::from_tar_zst(&archive(&manifest_value(), &valid_files()))
             .unwrap();
-        let plan = build_create_only_plan(
+        let plan = build_solution_pack_plan(
             &pack,
             "ecom",
             BlueprintPublication::Publish,
             &PlanningWorkspaceSnapshot {
                 workspace_id: uuid::Uuid::nil(),
                 physical_codes: BTreeSet::from(["default".to_owned()]),
+                existing_blueprints: BTreeMap::new(),
                 installed_extensions: BTreeMap::new(),
                 explore_navigation: Vec::new(),
                 explore_navigation_valid: true,
@@ -5216,13 +5426,14 @@ value_type = "string"
             ("blueprints/base.toml", mixin.as_slice()),
         ];
         let pack = ValidatedSolutionPack::from_tar_zst(&archive(&manifest, &files)).unwrap();
-        let plan = build_create_only_plan(
+        let plan = build_solution_pack_plan(
             &pack,
             "mapped",
             BlueprintPublication::Draft,
             &PlanningWorkspaceSnapshot {
                 workspace_id: uuid::Uuid::nil(),
                 physical_codes: BTreeSet::from(["default".to_owned()]),
+                existing_blueprints: BTreeMap::new(),
                 installed_extensions: BTreeMap::new(),
                 explore_navigation: Vec::new(),
                 explore_navigation_valid: true,
@@ -5240,6 +5451,208 @@ value_type = "string"
         assert!(definition.contains("code = \"mapped_base\""));
         assert!(definition.contains("version = 1"));
         assert!(!definition.contains("key = \"blueprints/base\""));
+
+        let base_definition = plan.actions[0].normalized_payload.as_ref().unwrap()["definition"]
+            .as_str()
+            .unwrap();
+        let existing_id = uuid::Uuid::from_u128(42);
+        let reused = build_solution_pack_plan(
+            &pack,
+            "mapped",
+            BlueprintPublication::Draft,
+            &PlanningWorkspaceSnapshot {
+                workspace_id: uuid::Uuid::nil(),
+                physical_codes: BTreeSet::from(["default".to_owned(), "mapped_base".to_owned()]),
+                existing_blueprints: BTreeMap::from([(
+                    "blueprints/base".to_owned(),
+                    ExistingBlueprintSnapshot {
+                        id: existing_id,
+                        code: "mapped_base".to_owned(),
+                        version: 7,
+                        kind: "mixin".to_owned(),
+                        canonical_definition_hash: catalog_blueprint::raw_hash(base_definition),
+                        definition_hash: catalog_blueprint::raw_hash(base_definition),
+                    },
+                )]),
+                installed_extensions: BTreeMap::new(),
+                explore_navigation: Vec::new(),
+                explore_navigation_valid: true,
+                extension_layout: serde_json::json!({"version":1,"outlets":{}}),
+                extension_layout_valid: true,
+                role_codes: BTreeSet::new(),
+                published_entity_codes: BTreeSet::new(),
+            },
+        )
+        .unwrap();
+        assert!(reused.ready);
+        assert_eq!(reused.actions[0].action, "map");
+        assert_eq!(reused.actions[0].reason_code, "exact_blueprint_match");
+        assert!(reused.actions[0].normalized_payload.is_none());
+        assert_eq!(reused.mappings[0].mapping_kind, "existing");
+        assert_eq!(reused.mappings[0].target_id, existing_id);
+        assert_eq!(reused.mappings[0].target_version, Some(7));
+        let dependent = reused.actions[1].normalized_payload.as_ref().unwrap()["definition"]
+            .as_str()
+            .unwrap();
+        assert!(dependent.contains("version = 7"));
+
+        let incompatible = build_solution_pack_plan(
+            &pack,
+            "mapped",
+            BlueprintPublication::Draft,
+            &PlanningWorkspaceSnapshot {
+                workspace_id: uuid::Uuid::nil(),
+                physical_codes: BTreeSet::from(["mapped_base".to_owned()]),
+                existing_blueprints: BTreeMap::from([(
+                    "blueprints/base".to_owned(),
+                    ExistingBlueprintSnapshot {
+                        id: existing_id,
+                        code: "mapped_base".to_owned(),
+                        version: 7,
+                        kind: "mixin".to_owned(),
+                        canonical_definition_hash: "0".repeat(64),
+                        definition_hash: "0".repeat(64),
+                    },
+                )]),
+                installed_extensions: BTreeMap::new(),
+                explore_navigation: Vec::new(),
+                explore_navigation_valid: true,
+                extension_layout: serde_json::json!({"version":1,"outlets":{}}),
+                extension_layout_valid: true,
+                role_codes: BTreeSet::new(),
+                published_entity_codes: BTreeSet::new(),
+            },
+        )
+        .unwrap();
+        assert!(!incompatible.ready);
+        assert_eq!(incompatible.actions[0].action, "conflict");
+        assert_eq!(
+            incompatible.actions[0].reason_code,
+            "existing_blueprint_incompatible"
+        );
+    }
+
+    #[test]
+    fn rejects_invalid_explicit_blueprint_mapping_requests() {
+        let pack = ValidatedSolutionPack::from_tar_zst(&archive(&manifest_value(), &valid_files()))
+            .unwrap();
+        assert!(
+            validate_blueprint_mapping_requests(
+                &pack,
+                &[
+                    BlueprintMappingRequest {
+                        key: "blueprints/product".to_owned(),
+                        code: "shared".to_owned(),
+                    },
+                    BlueprintMappingRequest {
+                        key: "blueprints/product".to_owned(),
+                        code: "other".to_owned(),
+                    },
+                ],
+            )
+            .unwrap_err()
+            .to_string()
+            .contains("duplicate")
+        );
+        assert!(
+            validate_blueprint_mapping_requests(
+                &pack,
+                &vec![
+                    BlueprintMappingRequest {
+                        key: "blueprints/product".to_owned(),
+                        code: "shared".to_owned(),
+                    };
+                    MAX_SOLUTION_PACK_BLUEPRINTS + 1
+                ],
+            )
+            .unwrap_err()
+            .to_string()
+            .contains("too many")
+        );
+        for request in [
+            BlueprintMappingRequest {
+                key: "blueprints/unknown".to_owned(),
+                code: "shared".to_owned(),
+            },
+            BlueprintMappingRequest {
+                key: "blueprints/product".to_owned(),
+                code: "Unsafe-code".to_owned(),
+            },
+        ] {
+            assert!(validate_blueprint_mapping_requests(&pack, &[request]).is_err());
+        }
+    }
+
+    #[test]
+    fn fully_mapped_resource_does_not_validate_an_unused_generated_code() {
+        let suffix = "a".repeat(117);
+        let key = format!("blueprints/{suffix}");
+        assert_eq!(key.len(), MAX_IDENTIFIER_BYTES);
+        let blueprint = format!(
+            r#"format_version = 1
+code = "{suffix}"
+name = "Portable"
+kind = "entity"
+[views.dropdown_option]
+type = "dropdown_option"
+fields = ["name"]
+[[attributes]]
+code = "name"
+value_type = "string"
+"#
+        )
+        .into_bytes();
+        let manifest = json!({
+            "manifest_version": 1,
+            "id": "attricat.long-key",
+            "name": "Long key",
+            "version": "1.0.0",
+            "description": "Mapped long logical key",
+            "catalog": {"host_api": "^1.0"},
+            "resources": {"blueprints": [resource(&key, "blueprints/long.toml", &blueprint)]}
+        });
+        let pack = ValidatedSolutionPack::from_tar_zst(&archive(
+            &manifest,
+            &[("blueprints/long.toml", blueprint.as_slice())],
+        ))
+        .unwrap();
+        let mut canonical: toml::Value =
+            toml::from_str(std::str::from_utf8(&blueprint).unwrap()).unwrap();
+        canonical
+            .as_table_mut()
+            .unwrap()
+            .insert("code".to_owned(), toml::Value::String("shared".to_owned()));
+        let definition = toml::to_string(&canonical).unwrap();
+        let plan = build_solution_pack_plan(
+            &pack,
+            "a2345678901234567890123456789012",
+            BlueprintPublication::Draft,
+            &PlanningWorkspaceSnapshot {
+                workspace_id: uuid::Uuid::nil(),
+                physical_codes: BTreeSet::from(["shared".to_owned()]),
+                existing_blueprints: BTreeMap::from([(
+                    key.clone(),
+                    ExistingBlueprintSnapshot {
+                        id: uuid::Uuid::from_u128(102),
+                        code: "shared".to_owned(),
+                        version: 3,
+                        kind: "entity".to_owned(),
+                        canonical_definition_hash: catalog_blueprint::raw_hash(&definition),
+                        definition_hash: catalog_blueprint::raw_hash(&definition),
+                    },
+                )]),
+                installed_extensions: BTreeMap::new(),
+                explore_navigation: Vec::new(),
+                explore_navigation_valid: true,
+                extension_layout: json!({"version":1,"outlets":{}}),
+                extension_layout_valid: true,
+                role_codes: BTreeSet::new(),
+                published_entity_codes: BTreeSet::from(["shared".to_owned()]),
+            },
+        )
+        .unwrap();
+        assert!(plan.ready);
+        assert_eq!(plan.actions[0].action, "map");
     }
 
     #[test]
@@ -5255,13 +5668,14 @@ value_type = "string"
         }
         let pack = ValidatedSolutionPack::from_tar_zst(&archive(&manifest_value(), &valid_files()))
             .unwrap();
-        let plan = build_create_only_plan(
+        let plan = build_solution_pack_plan(
             &pack,
             "ecom",
             BlueprintPublication::Draft,
             &PlanningWorkspaceSnapshot {
                 workspace_id: uuid::Uuid::nil(),
                 physical_codes: BTreeSet::from(["default".to_owned(), "ecom_product".to_owned()]),
+                existing_blueprints: BTreeMap::new(),
                 installed_extensions: BTreeMap::new(),
                 explore_navigation: Vec::new(),
                 explore_navigation_valid: true,
@@ -5288,13 +5702,14 @@ value_type = "string"
         manifest["resources"]["blueprints"][1]["required"] = json!(false);
         let pack =
             ValidatedSolutionPack::from_tar_zst(&archive(&manifest, &valid_files())).unwrap();
-        let plan = build_create_only_plan(
+        let plan = build_solution_pack_plan(
             &pack,
             "ecom",
             BlueprintPublication::Draft,
             &PlanningWorkspaceSnapshot {
                 workspace_id: uuid::Uuid::nil(),
                 physical_codes: BTreeSet::from(["default".to_owned()]),
+                existing_blueprints: BTreeMap::new(),
                 installed_extensions: BTreeMap::new(),
                 explore_navigation: Vec::new(),
                 explore_navigation_valid: true,
@@ -5324,6 +5739,275 @@ value_type = "string"
             ("blocked", "dependency_not_creatable")
         );
         assert!(!plan.ready);
+
+        let required_pack =
+            ValidatedSolutionPack::from_tar_zst(&archive(&manifest_value(), &valid_files()))
+                .unwrap();
+        let baseline = build_solution_pack_plan(
+            &required_pack,
+            "ecom",
+            BlueprintPublication::Draft,
+            &PlanningWorkspaceSnapshot {
+                workspace_id: uuid::Uuid::nil(),
+                physical_codes: BTreeSet::new(),
+                existing_blueprints: BTreeMap::new(),
+                installed_extensions: BTreeMap::new(),
+                explore_navigation: Vec::new(),
+                explore_navigation_valid: true,
+                extension_layout: json!({"version":1,"outlets":{}}),
+                extension_layout_valid: true,
+                role_codes: BTreeSet::new(),
+                published_entity_codes: BTreeSet::new(),
+            },
+        )
+        .unwrap();
+        let product_definition = baseline
+            .actions
+            .iter()
+            .find(|action| action.logical_key == "blueprints/product")
+            .unwrap()
+            .normalized_payload
+            .as_ref()
+            .unwrap()["definition"]
+            .as_str()
+            .unwrap();
+        let mapped = build_solution_pack_plan(
+            &pack,
+            "ecom",
+            BlueprintPublication::Draft,
+            &PlanningWorkspaceSnapshot {
+                workspace_id: uuid::Uuid::nil(),
+                physical_codes: BTreeSet::from(["ecom_product".to_owned()]),
+                existing_blueprints: BTreeMap::from([(
+                    "blueprints/product".to_owned(),
+                    ExistingBlueprintSnapshot {
+                        id: uuid::Uuid::from_u128(99),
+                        code: "ecom_product".to_owned(),
+                        version: 1,
+                        kind: "entity".to_owned(),
+                        canonical_definition_hash: catalog_blueprint::raw_hash(product_definition),
+                        definition_hash: catalog_blueprint::raw_hash(product_definition),
+                    },
+                )]),
+                installed_extensions: BTreeMap::new(),
+                explore_navigation: Vec::new(),
+                explore_navigation_valid: true,
+                extension_layout: json!({"version":1,"outlets":{}}),
+                extension_layout_valid: true,
+                role_codes: BTreeSet::new(),
+                published_entity_codes: BTreeSet::from(["ecom_product".to_owned()]),
+            },
+        )
+        .unwrap();
+        let mapped_product = mapped
+            .actions
+            .iter()
+            .find(|action| action.logical_key == "blueprints/product")
+            .unwrap();
+        assert_eq!(
+            (mapped_product.action, mapped_product.reason_code),
+            ("blocked", "dependency_not_creatable")
+        );
+        assert!(!mapped.ready);
+    }
+
+    #[test]
+    fn mapped_blueprints_are_blocked_by_skipped_include_relationship_and_view_dependencies() {
+        let cases = [
+            (
+                "include",
+                br#"format_version = 1
+code = "main"
+name = "Main"
+kind = "mixin"
+includes = [{ alias = "base", key = "blueprints/dep" }]
+[[attributes]]
+code = "name"
+from = "base.name"
+"#
+                .as_slice(),
+                br#"format_version = 1
+code = "dep"
+name = "Dependency"
+kind = "mixin"
+[[attributes]]
+code = "name"
+value_type = "string"
+"#
+                .as_slice(),
+                "mixin",
+            ),
+            (
+                "relationship",
+                br#"format_version = 1
+code = "main"
+name = "Main"
+kind = "entity"
+[views.dropdown_option]
+type = "dropdown_option"
+fields = ["name"]
+[[attributes]]
+code = "name"
+value_type = "string"
+[[attributes]]
+code = "dep"
+value_type = "relationship"
+target_blueprint = "blueprints/dep"
+"#
+                .as_slice(),
+                br#"format_version = 1
+code = "dep"
+name = "Dependency"
+kind = "entity"
+[views.dropdown_option]
+type = "dropdown_option"
+fields = ["name"]
+[[attributes]]
+code = "name"
+value_type = "string"
+"#
+                .as_slice(),
+                "entity",
+            ),
+            (
+                "view",
+                br#"format_version = 1
+code = "main"
+name = "Main"
+kind = "entity"
+[views.dropdown_option]
+type = "dropdown_option"
+fields = ["name"]
+[views.detail]
+type = "stack"
+[[views.detail.children]]
+type = "tabs"
+[[views.detail.children.tabs]]
+label = "Relationships"
+[[views.detail.children.tabs.children]]
+type = "grid"
+[[views.detail.children.tabs.children.children]]
+type = "incoming_relationship_list"
+label = "Dependencies"
+relationships = [{ source_blueprint = "blueprints/dep", field = "main_ref" }]
+page_size = 10
+[[attributes]]
+code = "name"
+value_type = "string"
+"#
+                .as_slice(),
+                br#"format_version = 1
+code = "dep"
+name = "Dependency"
+kind = "entity"
+[views.dropdown_option]
+type = "dropdown_option"
+fields = ["name"]
+[[attributes]]
+code = "name"
+value_type = "string"
+[[attributes]]
+code = "main_ref"
+value_type = "relationship"
+target_blueprint = "blueprints/main"
+"#
+                .as_slice(),
+                "entity",
+            ),
+        ];
+        for (case, main, dep, main_kind) in cases {
+            let manifest_for = |dep_required| {
+                let mut dep_resource = resource("blueprints/dep", "blueprints/dep.toml", dep);
+                dep_resource["required"] = json!(dep_required);
+                json!({
+                    "manifest_version": 1,
+                    "id": format!("attricat.dependency-{case}"),
+                    "name": "Dependency",
+                    "version": "1.0.0",
+                    "description": "Mapped dependency closure",
+                    "catalog": {"host_api": "^1.0"},
+                    "resources": {"blueprints": [
+                        resource("blueprints/main", "blueprints/main.toml", main),
+                        dep_resource
+                    ]}
+                })
+            };
+            let files = [("blueprints/main.toml", main), ("blueprints/dep.toml", dep)];
+            let required_pack =
+                ValidatedSolutionPack::from_tar_zst(&archive(&manifest_for(true), &files))
+                    .unwrap_or_else(|error| panic!("{case}: {error}"));
+            let empty_workspace = PlanningWorkspaceSnapshot {
+                workspace_id: uuid::Uuid::nil(),
+                physical_codes: BTreeSet::new(),
+                existing_blueprints: BTreeMap::new(),
+                installed_extensions: BTreeMap::new(),
+                explore_navigation: Vec::new(),
+                explore_navigation_valid: true,
+                extension_layout: json!({"version":1,"outlets":{}}),
+                extension_layout_valid: true,
+                role_codes: BTreeSet::new(),
+                published_entity_codes: BTreeSet::new(),
+            };
+            let baseline = build_solution_pack_plan(
+                &required_pack,
+                "deps",
+                BlueprintPublication::Draft,
+                &empty_workspace,
+            )
+            .unwrap();
+            let main_definition = baseline
+                .actions
+                .iter()
+                .find(|action| action.logical_key == "blueprints/main")
+                .unwrap()
+                .normalized_payload
+                .as_ref()
+                .unwrap()["definition"]
+                .as_str()
+                .unwrap();
+            let optional_pack =
+                ValidatedSolutionPack::from_tar_zst(&archive(&manifest_for(false), &files))
+                    .unwrap();
+            let mapped = build_solution_pack_plan(
+                &optional_pack,
+                "deps",
+                BlueprintPublication::Draft,
+                &PlanningWorkspaceSnapshot {
+                    workspace_id: uuid::Uuid::nil(),
+                    physical_codes: BTreeSet::from(["deps_main".to_owned()]),
+                    existing_blueprints: BTreeMap::from([(
+                        "blueprints/main".to_owned(),
+                        ExistingBlueprintSnapshot {
+                            id: uuid::Uuid::new_v4(),
+                            code: "deps_main".to_owned(),
+                            version: 1,
+                            kind: main_kind.to_owned(),
+                            canonical_definition_hash: catalog_blueprint::raw_hash(main_definition),
+                            definition_hash: catalog_blueprint::raw_hash(main_definition),
+                        },
+                    )]),
+                    installed_extensions: BTreeMap::new(),
+                    explore_navigation: Vec::new(),
+                    explore_navigation_valid: true,
+                    extension_layout: json!({"version":1,"outlets":{}}),
+                    extension_layout_valid: true,
+                    role_codes: BTreeSet::new(),
+                    published_entity_codes: BTreeSet::from(["deps_main".to_owned()]),
+                },
+            )
+            .unwrap();
+            let main_action = mapped
+                .actions
+                .iter()
+                .find(|action| action.logical_key == "blueprints/main")
+                .unwrap();
+            assert_eq!(
+                (main_action.action, main_action.reason_code),
+                ("blocked", "dependency_not_creatable"),
+                "{case}"
+            );
+            assert!(!mapped.ready, "{case}");
+        }
     }
 
     #[test]
@@ -5377,6 +6061,7 @@ value_type = "string"
         let workspace = PlanningWorkspaceSnapshot {
             workspace_id: uuid::Uuid::nil(),
             physical_codes: BTreeSet::from(["default".to_owned()]),
+            existing_blueprints: BTreeMap::new(),
             installed_extensions: BTreeMap::new(),
             explore_navigation: Vec::new(),
             explore_navigation_valid: true,
@@ -5386,8 +6071,9 @@ value_type = "string"
             published_entity_codes: BTreeSet::new(),
         };
 
-        let draft = build_create_only_plan(&pack, "paths", BlueprintPublication::Draft, &workspace)
-            .unwrap();
+        let draft =
+            build_solution_pack_plan(&pack, "paths", BlueprintPublication::Draft, &workspace)
+                .unwrap();
         let product_action = draft
             .actions
             .iter()
@@ -5400,7 +6086,7 @@ value_type = "string"
         assert!(!draft.ready);
 
         let publish =
-            build_create_only_plan(&pack, "paths", BlueprintPublication::Publish, &workspace)
+            build_solution_pack_plan(&pack, "paths", BlueprintPublication::Publish, &workspace)
                 .unwrap();
         assert!(publish.ready);
         assert_eq!(
@@ -5438,7 +6124,7 @@ target_blueprint = "blueprints/product"
         ];
         let cyclic_pack =
             ValidatedSolutionPack::from_tar_zst(&archive(&cyclic_manifest, &cyclic_files)).unwrap();
-        let error = build_create_only_plan(
+        let error = build_solution_pack_plan(
             &cyclic_pack,
             "paths",
             BlueprintPublication::Publish,
@@ -5446,6 +6132,81 @@ target_blueprint = "blueprints/product"
         )
         .unwrap_err();
         assert!(error.to_string().contains("dependencies contain a cycle"));
+
+        let mut mapping_graph = BTreeMap::new();
+        for (key, code, version, id) in [
+            ("blueprints/category", "existing_category", 4, 103_u128),
+            ("blueprints/product", "existing_product", 6, 104_u128),
+        ] {
+            mapping_graph.insert(
+                key.to_owned(),
+                PlannedMapping {
+                    resource_kind: "blueprint",
+                    logical_key: key.to_owned(),
+                    target_id: uuid::Uuid::from_u128(id),
+                    target_code: code.to_owned(),
+                    target_version: Some(version),
+                    mapping_kind: "existing",
+                    snapshot: json!({}),
+                },
+            );
+        }
+        let mut mapped_workspace = PlanningWorkspaceSnapshot {
+            workspace_id: uuid::Uuid::nil(),
+            physical_codes: BTreeSet::from([
+                "existing_category".to_owned(),
+                "existing_product".to_owned(),
+            ]),
+            existing_blueprints: BTreeMap::new(),
+            installed_extensions: BTreeMap::new(),
+            explore_navigation: Vec::new(),
+            explore_navigation_valid: true,
+            extension_layout: json!({"version":1,"outlets":{}}),
+            extension_layout_valid: true,
+            role_codes: BTreeSet::new(),
+            published_entity_codes: BTreeSet::from([
+                "existing_category".to_owned(),
+                "existing_product".to_owned(),
+            ]),
+        };
+        for (key, code, version, id) in [
+            ("blueprints/category", "existing_category", 4, 103_u128),
+            ("blueprints/product", "existing_product", 6, 104_u128),
+        ] {
+            let payload = normalized_blueprint_payload(
+                cyclic_pack.blueprint(key).unwrap(),
+                &mapping_graph,
+                BlueprintPublication::Publish,
+                &HashSet::new(),
+                &mapped_workspace,
+                cyclic_pack.manifest(),
+            )
+            .unwrap();
+            mapped_workspace.existing_blueprints.insert(
+                key.to_owned(),
+                ExistingBlueprintSnapshot {
+                    id: uuid::Uuid::from_u128(id),
+                    code: code.to_owned(),
+                    version,
+                    kind: "entity".to_owned(),
+                    canonical_definition_hash: catalog_blueprint::raw_hash(
+                        payload["definition"].as_str().unwrap(),
+                    ),
+                    definition_hash: catalog_blueprint::raw_hash(
+                        payload["definition"].as_str().unwrap(),
+                    ),
+                },
+            );
+        }
+        let mapped = build_solution_pack_plan(
+            &cyclic_pack,
+            "paths",
+            BlueprintPublication::Publish,
+            &mapped_workspace,
+        )
+        .unwrap();
+        assert!(mapped.ready);
+        assert!(mapped.actions.iter().all(|action| action.action == "map"));
     }
 
     #[test]
@@ -5455,6 +6216,7 @@ target_blueprint = "blueprints/product"
         let workspace = PlanningWorkspaceSnapshot {
             workspace_id: uuid::Uuid::from_u128(1),
             physical_codes: BTreeSet::from(["default".to_owned(), "ecom_product".to_owned()]),
+            existing_blueprints: BTreeMap::new(),
             installed_extensions: BTreeMap::new(),
             explore_navigation: Vec::new(),
             explore_navigation_valid: true,
@@ -5464,10 +6226,10 @@ target_blueprint = "blueprints/product"
             published_entity_codes: BTreeSet::new(),
         };
         let first =
-            build_create_only_plan(&pack, "ecom", BlueprintPublication::Publish, &workspace)
+            build_solution_pack_plan(&pack, "ecom", BlueprintPublication::Publish, &workspace)
                 .unwrap();
         let second =
-            build_create_only_plan(&pack, "ecom", BlueprintPublication::Publish, &workspace)
+            build_solution_pack_plan(&pack, "ecom", BlueprintPublication::Publish, &workspace)
                 .unwrap();
 
         assert_eq!(

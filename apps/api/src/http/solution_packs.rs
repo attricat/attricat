@@ -1,7 +1,8 @@
 use axum::{
     Json,
+    body::to_bytes,
     extract::{
-        Path, Query,
+        FromRequest, Multipart, Path, Query, Request,
         rejection::{BytesRejection, PathRejection, QueryRejection},
     },
     http::{HeaderMap, StatusCode, header},
@@ -17,7 +18,8 @@ use crate::{
         SolutionPackCheckRunSummary, SolutionPackPlan,
     },
     solution_packs::{
-        BlueprintPublication, MAX_SOLUTION_PACK_CHECK_RUN_RESPONSE_BYTES,
+        BlueprintMappingRequest, BlueprintPublication, MAX_SOLUTION_PACK_ARCHIVE_BYTES,
+        MAX_SOLUTION_PACK_BLUEPRINTS, MAX_SOLUTION_PACK_CHECK_RUN_RESPONSE_BYTES,
         MAX_SOLUTION_PACK_INSPECTION_RESPONSE_BYTES, MAX_SOLUTION_PACK_PLAN_RESPONSE_BYTES,
         SolutionPackExtensionRequirement, SolutionPackResource, ValidatedSolutionPack,
     },
@@ -211,23 +213,138 @@ pub(super) struct CreatePlanQuery {
     blueprint_publication: BlueprintPublication,
 }
 
-/// Validates an uploaded archive again and persists an immutable create-only dry-run.
+/// Validates an uploaded archive again and persists an immutable dry-run. Raw
+/// zstd remains the no-choice protocol; multipart adds only explicit blueprint
+/// selections and still streams the archive into a bounded buffer.
 pub(super) async fn create_plan(
     ScopedRepository(repository): ScopedRepository,
     query: Result<Query<CreatePlanQuery>, QueryRejection>,
-    headers: HeaderMap,
-    archive: Result<Bytes, BytesRejection>,
+    request: Request,
 ) -> Result<(StatusCode, Json<SolutionPackPlan>), ApiError> {
-    require_zstd(&headers)?;
     let Query(query) = query.map_err(ApiError::from_query_rejection)?;
-    let archive = archive.map_err(ApiError::from_bytes_rejection)?;
+    let (archive, mappings) = parse_plan_request(request).await?;
     let pack = ValidatedSolutionPack::from_tar_zst(&archive)
         .map_err(|error| ApiError::invalid_input(error.to_string()))?;
     let plan = repository
-        .create_solution_pack_plan(&pack, &query.prefix, query.blueprint_publication)
+        .create_solution_pack_plan(&pack, &query.prefix, query.blueprint_publication, &mappings)
         .await?;
-    // The repository validated this exact public representation before commit.
     Ok((StatusCode::CREATED, Json(plan)))
+}
+
+async fn parse_plan_request(
+    request: Request,
+) -> Result<(Bytes, Vec<BlueprintMappingRequest>), ApiError> {
+    let media_type = request
+        .headers()
+        .get(header::CONTENT_TYPE)
+        .and_then(|value| value.to_str().ok())
+        .and_then(|value| value.split(';').next())
+        .map(str::trim);
+    if media_type.is_some_and(|value| value.eq_ignore_ascii_case("application/zstd")) {
+        let bytes = to_bytes(request.into_body(), MAX_SOLUTION_PACK_ARCHIVE_BYTES)
+            .await
+            .map_err(|_| ApiError::payload_too_large())?;
+        return Ok((bytes, Vec::new()));
+    }
+    if !media_type.is_some_and(|value| value.eq_ignore_ascii_case("multipart/form-data")) {
+        return Err(ApiError::unsupported_media_type());
+    }
+
+    let mut multipart = Multipart::from_request(request, &())
+        .await
+        .map_err(|error| {
+            if error.status() == StatusCode::PAYLOAD_TOO_LARGE {
+                ApiError::payload_too_large()
+            } else {
+                ApiError::invalid_input("invalid solution-pack multipart request".into())
+            }
+        })?;
+    let mut archive = None;
+    let mut mappings = Vec::new();
+    let mut metadata_bytes = 0usize;
+    while let Some(mut field) = multipart
+        .next_field()
+        .await
+        .map_err(|error| multipart_error(error, "invalid solution-pack multipart request"))?
+    {
+        match field.name() {
+            Some("archive") => {
+                if archive.is_some() {
+                    return Err(ApiError::invalid_input(
+                        "multipart request contains duplicate archive parts".into(),
+                    ));
+                }
+                if field.content_type() != Some("application/zstd") {
+                    return Err(ApiError::unsupported_media_type());
+                }
+                let mut bytes = Vec::new();
+                while let Some(chunk) = field
+                    .chunk()
+                    .await
+                    .map_err(|error| multipart_error(error, "invalid solution-pack archive part"))?
+                {
+                    if bytes.len().saturating_add(chunk.len()) > MAX_SOLUTION_PACK_ARCHIVE_BYTES {
+                        return Err(ApiError::payload_too_large());
+                    }
+                    bytes.extend_from_slice(&chunk);
+                }
+                archive = Some(Bytes::from(bytes));
+            }
+            Some("blueprint_map") => {
+                if mappings.len() >= MAX_SOLUTION_PACK_BLUEPRINTS {
+                    return Err(ApiError::invalid_input(
+                        "too many blueprint mappings".into(),
+                    ));
+                }
+                let mut bytes = Vec::new();
+                while let Some(chunk) = field
+                    .chunk()
+                    .await
+                    .map_err(|error| multipart_error(error, "invalid blueprint mapping part"))?
+                {
+                    if metadata_bytes
+                        .saturating_add(bytes.len())
+                        .saturating_add(chunk.len())
+                        > 64 * 1024
+                    {
+                        return Err(ApiError::invalid_input(
+                            "blueprint mapping metadata exceeds the size limit".into(),
+                        ));
+                    }
+                    bytes.extend_from_slice(&chunk);
+                }
+                metadata_bytes += bytes.len();
+                let text = std::str::from_utf8(&bytes).map_err(|_| {
+                    ApiError::invalid_input("blueprint mapping must be UTF-8".into())
+                })?;
+                mappings.push(serde_json::from_str(text).map_err(|_| {
+                    ApiError::invalid_input(
+                        "blueprint mapping must be a {key,code} JSON object".into(),
+                    )
+                })?);
+            }
+            _ => {
+                return Err(ApiError::invalid_input(
+                    "unknown solution-pack multipart part".into(),
+                ));
+            }
+        }
+    }
+    let archive = archive.ok_or_else(|| {
+        ApiError::invalid_input("multipart request is missing the archive part".into())
+    })?;
+    Ok((archive, mappings))
+}
+
+fn multipart_error(
+    error: axum::extract::multipart::MultipartError,
+    message: &'static str,
+) -> ApiError {
+    if error.status() == StatusCode::PAYLOAD_TOO_LARGE {
+        ApiError::payload_too_large()
+    } else {
+        ApiError::invalid_input(message.into())
+    }
 }
 
 pub(super) async fn apply_plan(

@@ -915,6 +915,9 @@ enum SolutionPackCommand {
         prefix: Option<String>,
         #[arg(long)]
         blueprint_publication: Option<BlueprintPublicationArgument>,
+        /// Explicitly reuse a published blueprint (`logical_key=existing_code`).
+        #[arg(long = "map", value_name = "LOGICAL_KEY=EXISTING_CODE")]
+        blueprint_maps: Vec<String>,
     },
     /// Apply exactly the persisted immutable plan; no choices are recomputed.
     Apply { plan_id: Uuid },
@@ -2311,7 +2314,8 @@ async fn solution_pack_command(
             file: None,
             prefix: None,
             blueprint_publication: None,
-        } => {
+            blueprint_maps,
+        } if blueprint_maps.is_empty() => {
             request(
                 client,
                 server,
@@ -2326,13 +2330,18 @@ async fn solution_pack_command(
             file: Some(file),
             prefix: Some(prefix),
             blueprint_publication: Some(publication),
+            blueprint_maps,
         } => {
             let path = format!(
                 "/solution-packs/plans?prefix={}&blueprint_publication={}",
                 segment(prefix),
                 publication.as_str()
             );
-            raw_upload(client, server, &path, &file, "application/zstd").await
+            if blueprint_maps.is_empty() {
+                raw_upload(client, server, &path, &file, "application/zstd").await
+            } else {
+                solution_pack_plan_upload(client, server, &path, &file, &blueprint_maps).await
+            }
         }
         SolutionPackCommand::Plan { .. } => Err(CliError::Input(
             "solution-pack plan requires --file, --prefix, and --blueprint-publication; plan show accepts only a plan ID".to_owned(),
@@ -2569,6 +2578,65 @@ async fn raw_upload(
     )
     .await
 }
+async fn solution_pack_plan_upload(
+    client: &Client,
+    server: &Url,
+    path: &str,
+    archive: &Path,
+    requested_maps: &[String],
+) -> Result<String, CliError> {
+    let mut seen = std::collections::BTreeSet::new();
+    let mut parsed = Vec::with_capacity(requested_maps.len());
+    for requested in requested_maps {
+        let (key, code) = requested
+            .split_once('=')
+            .ok_or_else(|| CliError::Input("--map must be LOGICAL_KEY=EXISTING_CODE".to_owned()))?;
+        let safe_code = !code.is_empty()
+            && code.len() <= 128
+            && code.as_bytes()[0].is_ascii_lowercase()
+            && code
+                .bytes()
+                .all(|byte| byte.is_ascii_lowercase() || byte.is_ascii_digit() || byte == b'_')
+            && !code.ends_with('_');
+        if !key.starts_with("blueprints/") || key.len() > 128 || !safe_code {
+            return Err(CliError::Input(format!(
+                "invalid --map value '{requested}'"
+            )));
+        }
+        if !seen.insert(key.to_owned()) {
+            return Err(CliError::Input(format!("duplicate --map key '{key}'")));
+        }
+        parsed.push(serde_json::json!({"key": key, "code": code}).to_string());
+    }
+
+    let length = fs::metadata(archive)
+        .map_err(|error| CliError::Input(format!("cannot read {}: {error}", archive.display())))?
+        .len();
+    let stream =
+        tokio_util::io::ReaderStream::new(tokio::fs::File::open(archive).await.map_err(
+            |error| CliError::Input(format!("cannot read {}: {error}", archive.display())),
+        )?);
+    let archive_part =
+        reqwest::multipart::Part::stream_with_length(reqwest::Body::wrap_stream(stream), length)
+            .file_name("solution-pack.tar.zst")
+            .mime_str("application/zstd")
+            .map_err(|error| CliError::Input(error.to_string()))?;
+    let mut form = reqwest::multipart::Form::new().part("archive", archive_part);
+    for mapping in parsed {
+        form = form.text("blueprint_map", mapping);
+    }
+    raw_response(
+        client
+            .post(endpoint(server, path)?)
+            .multipart(form)
+            .timeout(TRANSFER_TIMEOUT)
+            .send()
+            .await
+            .map_err(|error| CliError::Transport(error.to_string()))?,
+    )
+    .await
+}
+
 async fn multipart_upload(
     client: &Client,
     server: &Url,
@@ -4203,6 +4271,7 @@ value = "Blue shirt"
                 file: Some(PathBuf::from("pack.tar.zst")),
                 prefix: Some("ecom".to_owned()),
                 blueprint_publication: None,
+                blueprint_maps: Vec::new(),
             },
         )
         .await;
@@ -4218,10 +4287,42 @@ value = "Blue shirt"
                 file: Some(PathBuf::from("pack.tar.zst")),
                 prefix: Some("ecom".to_owned()),
                 blueprint_publication: Some(BlueprintPublicationArgument::Draft),
+                blueprint_maps: Vec::new(),
             },
         )
         .await;
         assert!(matches!(mixed_show, Err(CliError::Input(_))));
+
+        let mut command = <Cli as clap::CommandFactory>::command();
+        let help = command
+            .find_subcommand_mut("solution-pack")
+            .unwrap()
+            .find_subcommand_mut("plan")
+            .unwrap()
+            .render_long_help()
+            .to_string();
+        assert!(help.contains("--map <LOGICAL_KEY=EXISTING_CODE>"));
+
+        for mapping in [
+            "missing_equals",
+            "=missing_key",
+            "blueprints/product=Unsafe-code",
+            "contexts/default=valid_code",
+        ] {
+            let invalid_mapping = solution_pack_command(
+                &Client::new(),
+                &api,
+                SolutionPackCommand::Plan {
+                    command: None,
+                    file: Some(PathBuf::from("pack.tar.zst")),
+                    prefix: Some("ecom".to_owned()),
+                    blueprint_publication: Some(BlueprintPublicationArgument::Draft),
+                    blueprint_maps: vec![mapping.to_owned()],
+                },
+            )
+            .await;
+            assert!(matches!(invalid_mapping, Err(CliError::Input(_))));
+        }
     }
 
     #[tokio::test]
@@ -4289,6 +4390,7 @@ value = "Blue shirt"
                 file: Some(archive.path().to_path_buf()),
                 prefix: Some("shop prefix".to_owned()),
                 blueprint_publication: Some(BlueprintPublicationArgument::Publish),
+                blueprint_maps: Vec::new(),
             },
         )
         .await
@@ -4303,6 +4405,51 @@ value = "Blue shirt"
                 b"opaque archive bytes".to_vec()
             )
         );
+
+        solution_pack_command(
+            &Client::new(),
+            &api,
+            SolutionPackCommand::Plan {
+                command: None,
+                file: Some(archive.path().to_path_buf()),
+                prefix: Some("shop".to_owned()),
+                blueprint_publication: Some(BlueprintPublicationArgument::Publish),
+                blueprint_maps: vec![
+                    "blueprints/product=shared_product".to_owned(),
+                    "blueprints/category=shared_category".to_owned(),
+                ],
+            },
+        )
+        .await
+        .unwrap();
+        let (query, content_type, body) = received.lock().unwrap().take().unwrap();
+        assert_eq!(query, "prefix=shop&blueprint_publication=publish");
+        assert!(content_type.starts_with("multipart/form-data; boundary="));
+        let body = String::from_utf8(body).unwrap();
+        assert!(body.contains("name=\"archive\""));
+        assert!(body.contains("application/zstd"));
+        assert!(body.contains("opaque archive bytes"));
+        assert_eq!(body.matches("name=\"blueprint_map\"").count(), 2);
+        assert!(body.contains("blueprints/product"));
+        assert!(body.contains("shared_product"));
+
+        let duplicate = solution_pack_command(
+            &Client::new(),
+            &api,
+            SolutionPackCommand::Plan {
+                command: None,
+                file: Some(archive.path().to_path_buf()),
+                prefix: Some("shop".to_owned()),
+                blueprint_publication: Some(BlueprintPublicationArgument::Publish),
+                blueprint_maps: vec![
+                    "blueprints/product=shared_product".to_owned(),
+                    "blueprints/product=other_product".to_owned(),
+                ],
+            },
+        )
+        .await;
+        assert!(matches!(duplicate, Err(CliError::Input(_))));
+
         let shown = solution_pack_command(
             &Client::new(),
             &api,
@@ -4311,6 +4458,7 @@ value = "Blue shirt"
                 file: None,
                 prefix: None,
                 blueprint_publication: None,
+                blueprint_maps: Vec::new(),
             },
         )
         .await

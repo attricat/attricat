@@ -4,6 +4,9 @@ use sqlx::PgPool;
 use uuid::Uuid;
 
 const REMOVE_CONTEXTS_MIGRATION: &str = "20261013000000_remove_solution_pack_contexts.sql";
+const EXISTING_BLUEPRINT_MIGRATION: &str =
+    "20261014000000_solution_pack_existing_blueprint_mappings.sql";
+const PLAN_EVIDENCE_MIGRATION: &str = "20261015000000_solution_pack_plan_evidence_hash.sql";
 
 async fn apply_migration(pool: &PgPool, path: &PathBuf) {
     let sql = fs::read_to_string(path).unwrap();
@@ -131,5 +134,57 @@ async fn context_constraint_upgrade_preserves_history_and_rejects_new_rows(pool:
             .execute(&pool)
             .await
             .is_err()
+    );
+
+    apply_migration(&pool, &migrations.join(EXISTING_BLUEPRINT_MIGRATION)).await;
+    let existing_id = Uuid::new_v4();
+    sqlx::query("INSERT INTO solution_pack_plan_mappings (plan_id,workspace_id,position,resource_kind,logical_key,target_id,target_code,target_version,mapping_kind,snapshot) VALUES ($1,$2,3,'blueprint','blueprints/reused',$3,'shared_blueprint',7,'existing','{\"status\":\"published\"}'::jsonb)")
+        .bind(plan_id)
+        .bind(workspace_id)
+        .bind(existing_id)
+        .execute(&pool)
+        .await
+        .unwrap();
+    sqlx::query("INSERT INTO solution_pack_plan_actions (plan_id,workspace_id,position,resource_kind,logical_key,action,reason_code,summary,normalized_payload,preconditions) VALUES ($1,$2,2,'blueprint','blueprints/reused','map','exact_blueprint_match','{}'::jsonb,NULL,'[]'::jsonb)")
+        .bind(plan_id)
+        .bind(workspace_id)
+        .execute(&pool)
+        .await
+        .unwrap();
+    assert!(
+        sqlx::query("INSERT INTO solution_pack_plan_mappings (plan_id,workspace_id,position,resource_kind,logical_key,target_id,target_code,target_version,mapping_kind,snapshot) VALUES ($1,$2,4,'blueprint','blueprints/unsupported',$3,'unsupported',1,'automatic','{}'::jsonb)")
+            .bind(plan_id)
+            .bind(workspace_id)
+            .bind(Uuid::new_v4())
+            .execute(&pool)
+            .await
+            .is_err()
+    );
+
+    apply_migration(&pool, &migrations.join(PLAN_EVIDENCE_MIGRATION)).await;
+    assert_eq!(
+        sqlx::query_scalar::<_, Option<String>>(
+            "SELECT resource_evidence_sha256 FROM solution_pack_plans WHERE id=$1"
+        )
+        .bind(plan_id)
+        .fetch_one(&pool)
+        .await
+        .unwrap(),
+        None
+    );
+    sqlx::query("UPDATE solution_pack_plans SET resource_evidence_sha256=$2 WHERE id=$1")
+        .bind(plan_id)
+        .bind("a".repeat(64))
+        .execute(&pool)
+        .await
+        .unwrap();
+    assert!(
+        sqlx::query(
+            "UPDATE solution_pack_plans SET resource_evidence_sha256='invalid' WHERE id=$1"
+        )
+        .bind(plan_id)
+        .execute(&pool)
+        .await
+        .is_err()
     );
 }

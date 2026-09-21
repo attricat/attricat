@@ -140,6 +140,50 @@ fn archive_with_two_blueprints() -> Vec<u8> {
     zstd::stream::encode_all(Cursor::new(tar_bytes), 0).unwrap()
 }
 
+fn archive_with_reverse_order_dependency() -> Vec<u8> {
+    const DEPENDENT_PRODUCT: &[u8] = br#"
+format_version = 1
+code = "product"
+name = "Product"
+kind = "entity"
+
+[views.dropdown_option]
+type = "dropdown_option"
+fields = ["name"]
+
+[[attributes]]
+code = "name"
+value_type = "string"
+
+[[attributes]]
+code = "category"
+value_type = "relationship"
+target_blueprint = "blueprints/category"
+"#;
+    let manifest = serde_json::to_vec(&json!({
+        "manifest_version": 1,
+        "id": "attricat.reverse-order",
+        "name": "Reverse order",
+        "version": "1.0.0",
+        "description": "Declaration order differs from dependency order",
+        "catalog": {"host_api": "^1.0"},
+        "resources": {"blueprints": [
+            {"key":"blueprints/product","path":"blueprints/product.toml","required":true,"sha256":digest(DEPENDENT_PRODUCT)},
+            {"key":"blueprints/category","path":"blueprints/category.toml","required":true,"sha256":digest(CATEGORY_BLUEPRINT)}
+        ]}
+    }))
+    .unwrap();
+    let mut tar_bytes = Vec::new();
+    {
+        let mut tar = tar::Builder::new(&mut tar_bytes);
+        append_file(&mut tar, "solution-pack.json", &manifest);
+        append_file(&mut tar, "blueprints/product.toml", DEPENDENT_PRODUCT);
+        append_file(&mut tar, "blueprints/category.toml", CATEGORY_BLUEPRINT);
+        tar.finish().unwrap();
+    }
+    zstd::stream::encode_all(Cursor::new(tar_bytes), 0).unwrap()
+}
+
 fn archive_with_all_checks() -> Vec<u8> {
     const TEMPLATE: &[u8] = br#"{"nested":{"enabled":true},"list":[1,2]}"#;
     let navigation = serde_json::to_vec(&json!({
@@ -471,9 +515,13 @@ fn archive_with_explore_navigation_roles(role_codes: &[&str]) -> Vec<u8> {
 }
 
 fn archive_with_options(product_blueprint: &[u8]) -> Vec<u8> {
+    archive_with_pack_id(product_blueprint, "attricat.ecommerce")
+}
+
+fn archive_with_pack_id(product_blueprint: &[u8], pack_id: &str) -> Vec<u8> {
     let manifest = serde_json::to_vec(&json!({
         "manifest_version": 1,
-        "id": "attricat.ecommerce",
+        "id": pack_id,
         "name": "Ecommerce",
         "version": "1.2.0",
         "description": "Starter catalog",
@@ -679,6 +727,35 @@ async fn create_plan_with_publication(
         ))
         .header("content-type", "application/zstd")
         .body(archive)
+        .send()
+        .await
+        .unwrap()
+}
+
+async fn create_plan_with_maps(
+    client: &Client,
+    base_url: &str,
+    archive: Vec<u8>,
+    prefix: &str,
+    publication: &str,
+    mappings: &[(&str, &str)],
+) -> reqwest::Response {
+    let archive = reqwest::multipart::Part::bytes(archive)
+        .file_name("pack.tar.zst")
+        .mime_str("application/zstd")
+        .unwrap();
+    let mut form = reqwest::multipart::Form::new().part("archive", archive);
+    for (key, code) in mappings {
+        form = form.text(
+            "blueprint_map",
+            json!({"key": key, "code": code}).to_string(),
+        );
+    }
+    client
+        .post(format!(
+            "{base_url}/solution-packs/plans?prefix={prefix}&blueprint_publication={publication}"
+        ))
+        .multipart(form)
         .send()
         .await
         .unwrap()
@@ -891,6 +968,36 @@ async fn inspection_requires_browser_session_csrf(pool: PgPool) {
         .await
         .unwrap();
     assert_eq!(valid_plan_csrf.status(), StatusCode::CREATED);
+    let multipart_form = || {
+        reqwest::multipart::Form::new().part(
+            "archive",
+            reqwest::multipart::Part::bytes(valid_archive())
+                .mime_str("application/zstd")
+                .unwrap(),
+        )
+    };
+    let missing_multipart_csrf = client
+        .post(format!(
+            "{base_url}/solution-packs/plans?prefix=csrf_multi&blueprint_publication=draft"
+        ))
+        .header("cookie", &cookie)
+        .multipart(multipart_form())
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(missing_multipart_csrf.status(), StatusCode::FORBIDDEN);
+    let valid_multipart_csrf = client
+        .post(format!(
+            "{base_url}/solution-packs/plans?prefix=csrf_multi&blueprint_publication=draft"
+        ))
+        .header("cookie", &cookie)
+        .header("x-catalog-csrf", csrf_value)
+        .multipart(multipart_form())
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(valid_multipart_csrf.status(), StatusCode::CREATED);
+
     let plan = valid_plan_csrf.json::<Value>().await.unwrap();
     let apply_url = format!(
         "{base_url}/solution-packs/plans/{}/apply",
@@ -1960,6 +2067,798 @@ async fn plan_validates_prefix_and_reports_existing_code_conflicts(pool: PgPool)
     assert_eq!(body["ready"], false);
     assert_eq!(body["conflicts"][0]["logical_key"], "blueprints/product");
     assert_eq!(body["conflicts"][0]["reason_code"], "target_code_exists");
+    server.abort();
+}
+
+#[sqlx::test(migrations = "./migrations")]
+async fn apply_joins_actions_to_mappings_by_logical_key_not_position(pool: PgPool) {
+    let (base_url, server) = start_server(pool.clone()).await;
+    let client = authenticated_client();
+    let plan = create_plan(
+        &client,
+        &base_url,
+        archive_with_reverse_order_dependency(),
+        "ordered",
+    )
+    .await;
+    assert_eq!(plan.status(), StatusCode::CREATED);
+    let plan = plan.json::<Value>().await.unwrap();
+    let plan_id = plan["id"].as_str().unwrap().parse::<Uuid>().unwrap();
+    assert_eq!(
+        plan["actions"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|action| action["logical_key"].as_str().unwrap())
+            .collect::<Vec<_>>(),
+        ["blueprints/category", "blueprints/product"]
+    );
+    // Persisted mappings preserve an independent position space. Deliberately
+    // reverse it to prove apply joins immutable evidence by logical key.
+    sqlx::query("UPDATE solution_pack_plan_mappings SET position=position+10 WHERE plan_id=$1")
+        .bind(plan_id)
+        .execute(&pool)
+        .await
+        .unwrap();
+    sqlx::query("UPDATE solution_pack_plan_mappings SET position=11-position WHERE plan_id=$1")
+        .bind(plan_id)
+        .execute(&pool)
+        .await
+        .unwrap();
+    assert_eq!(
+        apply_plan(&client, &base_url, plan["id"].as_str().unwrap())
+            .await
+            .status(),
+        StatusCode::OK
+    );
+    server.abort();
+}
+
+#[sqlx::test(migrations = "./migrations")]
+async fn mapped_plan_digest_rejects_kind_downgrade_and_resource_row_removal(pool: PgPool) {
+    let (base_url, server) = start_server(pool.clone()).await;
+    let client = authenticated_client();
+    let source =
+        create_plan_with_publication(&client, &base_url, valid_archive(), "shared", "publish")
+            .await
+            .json::<Value>()
+            .await
+            .unwrap();
+    assert_eq!(
+        apply_plan(&client, &base_url, source["id"].as_str().unwrap())
+            .await
+            .status(),
+        StatusCode::OK
+    );
+    let workspace_id = BOOTSTRAP_WORKSPACE_ID.parse::<Uuid>().unwrap();
+    let blueprint_count_before =
+        sqlx::query_scalar::<_, i64>("SELECT count(*) FROM blueprints WHERE workspace_id=$1")
+            .bind(workspace_id)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+
+    let downgraded = create_plan_with_maps(
+        &client,
+        &base_url,
+        valid_archive(),
+        "shared",
+        "publish",
+        &[("blueprints/product", "shared_product")],
+    )
+    .await
+    .json::<Value>()
+    .await
+    .unwrap();
+    let downgraded_id = downgraded["id"].as_str().unwrap().parse::<Uuid>().unwrap();
+    assert_eq!(
+        sqlx::query_scalar::<_, Option<String>>(
+            "SELECT resource_evidence_sha256 FROM solution_pack_plans WHERE id=$1"
+        )
+        .bind(downgraded_id)
+        .fetch_one(&pool)
+        .await
+        .unwrap()
+        .map(|digest| digest.len()),
+        Some(64)
+    );
+    let create_payload = json!({
+        "definition": std::str::from_utf8(PRODUCT_BLUEPRINT)
+            .unwrap()
+            .replace("code = \"product\"", "code = \"shared_product\""),
+        "version": 1,
+        "publication": "publish",
+        "extension_contributions": []
+    });
+    sqlx::query("UPDATE solution_pack_plan_mappings SET mapping_kind='create' WHERE plan_id=$1 AND logical_key='blueprints/product'")
+        .bind(downgraded_id)
+        .execute(&pool)
+        .await
+        .unwrap();
+    sqlx::query("UPDATE solution_pack_plan_actions SET action='create',reason_code='target_absent',normalized_payload=$2,preconditions=$3 WHERE plan_id=$1 AND logical_key='blueprints/product'")
+        .bind(downgraded_id)
+        .bind(create_payload)
+        .bind(json!([{"kind":"target_absent","resource_kind":"blueprint","code":"shared_product"}]))
+        .execute(&pool)
+        .await
+        .unwrap();
+    let response = apply_plan(&client, &base_url, &downgraded_id.to_string()).await;
+    assert_eq!(response.status(), StatusCode::UNPROCESSABLE_ENTITY);
+    assert_eq!(
+        response.json::<Value>().await.unwrap()["error"]["code"],
+        "invalid_input"
+    );
+    assert_eq!(
+        sqlx::query_scalar::<_, i64>(
+            "SELECT count(*) FROM solution_pack_applications WHERE plan_id=$1"
+        )
+        .bind(downgraded_id)
+        .fetch_one(&pool)
+        .await
+        .unwrap(),
+        0
+    );
+
+    let missing_digest = create_plan_with_maps(
+        &client,
+        &base_url,
+        valid_archive(),
+        "shared",
+        "publish",
+        &[("blueprints/product", "shared_product")],
+    )
+    .await
+    .json::<Value>()
+    .await
+    .unwrap();
+    let missing_digest_id = missing_digest["id"]
+        .as_str()
+        .unwrap()
+        .parse::<Uuid>()
+        .unwrap();
+    sqlx::query("UPDATE solution_pack_plans SET resource_evidence_sha256=NULL WHERE id=$1")
+        .bind(missing_digest_id)
+        .execute(&pool)
+        .await
+        .unwrap();
+    let response = apply_plan(&client, &base_url, &missing_digest_id.to_string()).await;
+    assert_eq!(response.status(), StatusCode::UNPROCESSABLE_ENTITY);
+    assert_eq!(
+        response.json::<Value>().await.unwrap()["error"]["code"],
+        "invalid_input"
+    );
+    assert_eq!(
+        sqlx::query_scalar::<_, i64>(
+            "SELECT count(*) FROM solution_pack_applications WHERE plan_id=$1"
+        )
+        .bind(missing_digest_id)
+        .fetch_one(&pool)
+        .await
+        .unwrap(),
+        0
+    );
+
+    let removed = create_plan_with_maps(
+        &client,
+        &base_url,
+        valid_archive(),
+        "shared",
+        "publish",
+        &[("blueprints/product", "shared_product")],
+    )
+    .await
+    .json::<Value>()
+    .await
+    .unwrap();
+    let removed_id = removed["id"].as_str().unwrap().parse::<Uuid>().unwrap();
+    sqlx::query("DELETE FROM solution_pack_plan_actions WHERE plan_id=$1")
+        .bind(removed_id)
+        .execute(&pool)
+        .await
+        .unwrap();
+    sqlx::query("DELETE FROM solution_pack_plan_mappings WHERE plan_id=$1")
+        .bind(removed_id)
+        .execute(&pool)
+        .await
+        .unwrap();
+    let response = apply_plan(&client, &base_url, &removed_id.to_string()).await;
+    assert_eq!(response.status(), StatusCode::UNPROCESSABLE_ENTITY);
+    assert_eq!(
+        response.json::<Value>().await.unwrap()["error"]["code"],
+        "invalid_input"
+    );
+    assert_eq!(
+        sqlx::query_scalar::<_, i64>(
+            "SELECT count(*) FROM solution_pack_applications WHERE plan_id=$1"
+        )
+        .bind(removed_id)
+        .fetch_one(&pool)
+        .await
+        .unwrap(),
+        0
+    );
+    assert_eq!(
+        sqlx::query_scalar::<_, i64>("SELECT count(*) FROM blueprints WHERE workspace_id=$1")
+            .bind(workspace_id)
+            .fetch_one(&pool)
+            .await
+            .unwrap(),
+        blueprint_count_before
+    );
+    server.abort();
+}
+
+#[sqlx::test(migrations = "./migrations")]
+async fn legacy_create_only_plan_without_resource_digest_still_applies(pool: PgPool) {
+    let (base_url, server) = start_server(pool.clone()).await;
+    let client = authenticated_client();
+    let plan = create_plan(&client, &base_url, valid_archive(), "legacy").await;
+    assert_eq!(plan.status(), StatusCode::CREATED);
+    let plan = plan.json::<Value>().await.unwrap();
+    let plan_id = plan["id"].as_str().unwrap().parse::<Uuid>().unwrap();
+    assert_eq!(
+        sqlx::query_scalar::<_, Option<String>>(
+            "SELECT resource_evidence_sha256 FROM solution_pack_plans WHERE id=$1"
+        )
+        .bind(plan_id)
+        .fetch_one(&pool)
+        .await
+        .unwrap(),
+        None
+    );
+    assert_eq!(
+        apply_plan(&client, &base_url, &plan_id.to_string())
+            .await
+            .status(),
+        StatusCode::OK
+    );
+    server.abort();
+}
+
+#[sqlx::test(migrations = "./migrations")]
+async fn explicit_exact_blueprint_mapping_reuses_without_mutation_and_revalidates(pool: PgPool) {
+    let (base_url, server) = start_server(pool.clone()).await;
+    let client = authenticated_client();
+    let first =
+        create_plan_with_publication(&client, &base_url, valid_archive(), "shared", "publish")
+            .await;
+    assert_eq!(first.status(), StatusCode::CREATED);
+    let first = first.json::<Value>().await.unwrap();
+    let applied = apply_plan(&client, &base_url, first["id"].as_str().unwrap()).await;
+    assert_eq!(applied.status(), StatusCode::OK);
+
+    let differently_formatted = format!(
+        "# administrator-authored formatting\n\n{}\n# another harmless comment\n",
+        std::str::from_utf8(PRODUCT_BLUEPRINT)
+            .unwrap()
+            .replace("code = \"product\"", "code = \"semantic_product\"")
+    );
+    let semantic_created = client
+        .post(format!("{base_url}/blueprints"))
+        .json(&json!({"definition": differently_formatted}))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(semantic_created.status(), StatusCode::CREATED);
+    let semantic_created = semantic_created.json::<Value>().await.unwrap();
+    let semantic_id = semantic_created["blueprint"]["id"].as_str().unwrap();
+    let semantic_published = client
+        .post(format!(
+            "{base_url}/blueprints/{semantic_id}/versions/1/publish"
+        ))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(semantic_published.status(), StatusCode::OK);
+    let semantic = create_plan_with_maps(
+        &client,
+        &base_url,
+        valid_archive(),
+        "semantic",
+        "publish",
+        &[("blueprints/product", "semantic_product")],
+    )
+    .await;
+    assert_eq!(semantic.status(), StatusCode::CREATED);
+    let semantic = semantic.json::<Value>().await.unwrap();
+    assert_eq!(semantic["ready"], true);
+    assert_eq!(semantic["actions"][0]["action"], "map");
+
+    let draft_only = create_plan(&client, &base_url, valid_archive(), "draftonly")
+        .await
+        .json::<Value>()
+        .await
+        .unwrap();
+    assert_eq!(
+        apply_plan(&client, &base_url, draft_only["id"].as_str().unwrap())
+            .await
+            .status(),
+        StatusCode::OK
+    );
+    let unpublished = create_plan_with_maps(
+        &client,
+        &base_url,
+        valid_archive(),
+        "draftonly",
+        "draft",
+        &[("blueprints/product", "draftonly_product")],
+    )
+    .await;
+    assert_eq!(unpublished.status(), StatusCode::UNPROCESSABLE_ENTITY);
+
+    let deleted_plan =
+        create_plan_with_publication(&client, &base_url, valid_archive(), "deleted", "publish")
+            .await
+            .json::<Value>()
+            .await
+            .unwrap();
+    assert_eq!(
+        apply_plan(&client, &base_url, deleted_plan["id"].as_str().unwrap())
+            .await
+            .status(),
+        StatusCode::OK
+    );
+    sqlx::query("UPDATE blueprints SET deleted_at=clock_timestamp() WHERE workspace_id=$1 AND code='deleted_product'")
+        .bind(BOOTSTRAP_WORKSPACE_ID.parse::<Uuid>().unwrap())
+        .execute(&pool)
+        .await
+        .unwrap();
+    let deleted = create_plan_with_maps(
+        &client,
+        &base_url,
+        valid_archive(),
+        "deleted",
+        "publish",
+        &[("blueprints/product", "deleted_product")],
+    )
+    .await;
+    assert_eq!(deleted.status(), StatusCode::UNPROCESSABLE_ENTITY);
+
+    let foreign_workspace = Uuid::new_v4();
+    sqlx::query("INSERT INTO workspaces (id,slug,name,login_identifier) VALUES ($1,$2,'Foreign mapping',$3)")
+        .bind(foreign_workspace)
+        .bind(format!("foreign-map-{foreign_workspace}"))
+        .bind(format!("foreign-map-{foreign_workspace}.example.test"))
+        .execute(&pool)
+        .await
+        .unwrap();
+    sqlx::query("INSERT INTO blueprints (id,workspace_id,code,name,kind,version,includes,views,entity_schema,status,published_at,definition,definition_hash) SELECT $1,$2,'foreign_product',name,kind,version,includes,views,entity_schema,status,published_at,definition,definition_hash FROM blueprints WHERE workspace_id=$3 AND code='shared_product' AND version=1")
+        .bind(Uuid::new_v4())
+        .bind(foreign_workspace)
+        .bind(BOOTSTRAP_WORKSPACE_ID.parse::<Uuid>().unwrap())
+        .execute(&pool)
+        .await
+        .unwrap();
+    let foreign = create_plan_with_maps(
+        &client,
+        &base_url,
+        valid_archive(),
+        "foreign",
+        "publish",
+        &[("blueprints/product", "foreign_product")],
+    )
+    .await;
+    assert_eq!(foreign.status(), StatusCode::UNPROCESSABLE_ENTITY);
+
+    for invalid_maps in [
+        vec![
+            ("blueprints/product", "shared_product"),
+            ("blueprints/product", "shared_product"),
+        ],
+        vec![("blueprints/unknown", "shared_product")],
+        vec![("blueprints/product", "Unsafe-code")],
+    ] {
+        let invalid = create_plan_with_maps(
+            &client,
+            &base_url,
+            valid_archive(),
+            "shared",
+            "publish",
+            &invalid_maps,
+        )
+        .await;
+        assert_eq!(invalid.status(), StatusCode::UNPROCESSABLE_ENTITY);
+    }
+    let plan_url =
+        format!("{base_url}/solution-packs/plans?prefix=shared&blueprint_publication=publish");
+    let malformed = client
+        .post(&plan_url)
+        .multipart(reqwest::multipart::Form::new().text("unexpected", "value"))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(malformed.status(), StatusCode::UNPROCESSABLE_ENTITY);
+    let missing_archive = client
+        .post(&plan_url)
+        .multipart(reqwest::multipart::Form::new().text(
+            "blueprint_map",
+            json!({"key":"blueprints/product","code":"shared_product"}).to_string(),
+        ))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(missing_archive.status(), StatusCode::UNPROCESSABLE_ENTITY);
+    let wrong_archive_type = client
+        .post(&plan_url)
+        .multipart(
+            reqwest::multipart::Form::new().part(
+                "archive",
+                reqwest::multipart::Part::bytes(valid_archive())
+                    .mime_str("application/octet-stream")
+                    .unwrap(),
+            ),
+        )
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(
+        wrong_archive_type.status(),
+        StatusCode::UNSUPPORTED_MEDIA_TYPE
+    );
+    let duplicate_archive = client
+        .post(&plan_url)
+        .multipart(
+            reqwest::multipart::Form::new()
+                .part(
+                    "archive",
+                    reqwest::multipart::Part::bytes(valid_archive())
+                        .mime_str("application/zstd")
+                        .unwrap(),
+                )
+                .part(
+                    "archive",
+                    reqwest::multipart::Part::bytes(valid_archive())
+                        .mime_str("application/zstd")
+                        .unwrap(),
+                ),
+        )
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(duplicate_archive.status(), StatusCode::UNPROCESSABLE_ENTITY);
+    let oversized_mapping = client
+        .post(&plan_url)
+        .multipart(
+            reqwest::multipart::Form::new()
+                .part(
+                    "archive",
+                    reqwest::multipart::Part::bytes(valid_archive())
+                        .mime_str("application/zstd")
+                        .unwrap(),
+                )
+                .text("blueprint_map", "x".repeat(64 * 1024 + 1)),
+        )
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(oversized_mapping.status(), StatusCode::UNPROCESSABLE_ENTITY);
+    assert_eq!(
+        oversized_mapping.json::<Value>().await.unwrap()["error"]["code"],
+        "invalid_input"
+    );
+    let mut too_many_form = reqwest::multipart::Form::new().part(
+        "archive",
+        reqwest::multipart::Part::bytes(valid_archive())
+            .mime_str("application/zstd")
+            .unwrap(),
+    );
+    for index in 0..=64 {
+        too_many_form = too_many_form.text(
+            "blueprint_map",
+            json!({"key":format!("blueprints/{index}"),"code":format!("code_{index}")}).to_string(),
+        );
+    }
+    let too_many = client
+        .post(&plan_url)
+        .multipart(too_many_form)
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(too_many.status(), StatusCode::UNPROCESSABLE_ENTITY);
+    let oversized_archive = client
+        .post(&plan_url)
+        .multipart(
+            reqwest::multipart::Form::new().part(
+                "archive",
+                reqwest::multipart::Part::bytes(vec![0; 32 * 1024 * 1024 + 1])
+                    .mime_str("application/zstd")
+                    .unwrap(),
+            ),
+        )
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(oversized_archive.status(), StatusCode::PAYLOAD_TOO_LARGE);
+
+    let before_count: i64 = sqlx::query_scalar(
+        "SELECT count(*) FROM blueprints WHERE workspace_id=$1 AND code='shared_product'",
+    )
+    .bind(BOOTSTRAP_WORKSPACE_ID.parse::<Uuid>().unwrap())
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    let mapped = create_plan_with_maps(
+        &client,
+        &base_url,
+        valid_archive(),
+        "shared",
+        "publish",
+        &[("blueprints/product", "shared_product")],
+    )
+    .await;
+    assert_eq!(mapped.status(), StatusCode::CREATED);
+    let mapped = mapped.json::<Value>().await.unwrap();
+    assert_eq!(mapped["ready"], true);
+    assert_eq!(mapped["mappings"][0]["mapping_kind"], "existing");
+    assert_eq!(mapped["mappings"][0]["target_version"], 1);
+    assert_eq!(mapped["mappings"][0]["snapshot"]["status"], "published");
+    assert_eq!(mapped["actions"][0]["action"], "map");
+    assert_eq!(mapped["actions"][0]["reason_code"], "exact_blueprint_match");
+
+    let application = apply_plan(&client, &base_url, mapped["id"].as_str().unwrap()).await;
+    assert_eq!(application.status(), StatusCode::OK);
+    let application = application.json::<Value>().await.unwrap();
+    assert_eq!(
+        application["steps"][0]["result_snapshot"]["outcome"],
+        "reused"
+    );
+    assert_eq!(
+        application["steps"][0]["result_snapshot"]["status"],
+        "published"
+    );
+    let after_count: i64 = sqlx::query_scalar(
+        "SELECT count(*) FROM blueprints WHERE workspace_id=$1 AND code='shared_product'",
+    )
+    .bind(BOOTSTRAP_WORKSPACE_ID.parse::<Uuid>().unwrap())
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert_eq!(after_count, before_count);
+
+    let distinct_pack = create_plan_with_maps(
+        &client,
+        &base_url,
+        archive_with_pack_id(PRODUCT_BLUEPRINT, "attricat.distinct-pack"),
+        "shared",
+        "publish",
+        &[("blueprints/product", "shared_product")],
+    )
+    .await
+    .json::<Value>()
+    .await
+    .unwrap();
+    assert_eq!(distinct_pack["ready"], true);
+    assert_eq!(
+        apply_plan(&client, &base_url, distinct_pack["id"].as_str().unwrap())
+            .await
+            .status(),
+        StatusCode::OK
+    );
+    assert_eq!(
+        sqlx::query_scalar::<_, i64>(
+            "SELECT count(*) FROM blueprints WHERE workspace_id=$1 AND code='shared_product'"
+        )
+        .bind(BOOTSTRAP_WORKSPACE_ID.parse::<Uuid>().unwrap())
+        .fetch_one(&pool)
+        .await
+        .unwrap(),
+        before_count
+    );
+
+    let shared_id = first["mappings"][0]["target_id"].as_str().unwrap();
+    let revision_definition = std::str::from_utf8(PRODUCT_BLUEPRINT)
+        .unwrap()
+        .replace("code = \"product\"", "code = \"shared_product\"");
+    let revision = client
+        .post(format!("{base_url}/blueprints/{shared_id}/versions"))
+        .json(&json!({"definition":revision_definition}))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(revision.status(), StatusCode::CREATED);
+    let racing_plan = create_plan_with_maps(
+        &client,
+        &base_url,
+        valid_archive(),
+        "shared",
+        "publish",
+        &[("blueprints/product", "shared_product")],
+    )
+    .await
+    .json::<Value>()
+    .await
+    .unwrap();
+    let mut publication = pool.begin().await.unwrap();
+    sqlx::query("SELECT version FROM blueprints WHERE workspace_id=$1 AND code='shared_product' AND version=2 FOR UPDATE")
+        .bind(BOOTSTRAP_WORKSPACE_ID.parse::<Uuid>().unwrap())
+        .fetch_one(&mut *publication)
+        .await
+        .unwrap();
+    let racing_client = client.clone();
+    let racing_url = base_url.clone();
+    let racing_plan_id = racing_plan["id"].as_str().unwrap().to_owned();
+    let racing_apply =
+        tokio::spawn(async move { apply_plan(&racing_client, &racing_url, &racing_plan_id).await });
+    tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+    sqlx::query("UPDATE blueprints SET status='published',published_at=clock_timestamp() WHERE workspace_id=$1 AND code='shared_product' AND version=2")
+        .bind(BOOTSTRAP_WORKSPACE_ID.parse::<Uuid>().unwrap())
+        .execute(&mut *publication)
+        .await
+        .unwrap();
+    publication.commit().await.unwrap();
+    let racing_apply = racing_apply.await.unwrap();
+    assert_eq!(racing_apply.status(), StatusCode::CONFLICT);
+    assert_eq!(
+        racing_apply.json::<Value>().await.unwrap()["error"]["code"],
+        "solution_pack_plan_stale"
+    );
+
+    let incompatible_source = std::str::from_utf8(PRODUCT_BLUEPRINT)
+        .unwrap()
+        .replace("name = \"Product\"", "name = \"Similar Product\"");
+    let incompatible = create_plan_with_maps(
+        &client,
+        &base_url,
+        archive_with_blueprint(incompatible_source.as_bytes()),
+        "shared",
+        "publish",
+        &[("blueprints/product", "shared_product")],
+    )
+    .await;
+    assert_eq!(incompatible.status(), StatusCode::CREATED);
+    let incompatible = incompatible.json::<Value>().await.unwrap();
+    assert_eq!(incompatible["ready"], false);
+    assert_eq!(incompatible["actions"][0]["action"], "conflict");
+    assert_eq!(
+        incompatible["actions"][0]["reason_code"],
+        "existing_blueprint_incompatible"
+    );
+
+    let other_plan =
+        create_plan_with_publication(&client, &base_url, valid_archive(), "other", "publish")
+            .await
+            .json::<Value>()
+            .await
+            .unwrap();
+    assert_eq!(
+        apply_plan(&client, &base_url, other_plan["id"].as_str().unwrap())
+            .await
+            .status(),
+        StatusCode::OK
+    );
+    let forged = create_plan_with_maps(
+        &client,
+        &base_url,
+        valid_archive(),
+        "shared",
+        "publish",
+        &[("blueprints/product", "shared_product")],
+    )
+    .await
+    .json::<Value>()
+    .await
+    .unwrap();
+    let forged_plan_id = forged["id"].as_str().unwrap().parse::<Uuid>().unwrap();
+    let (other_id, other_version, other_hash, other_kind): (Uuid, i64, String, String) =
+        sqlx::query_as("SELECT id,version,definition_hash,kind FROM blueprints WHERE workspace_id=$1 AND code='other_product' AND status='published'")
+            .bind(BOOTSTRAP_WORKSPACE_ID.parse::<Uuid>().unwrap())
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+    sqlx::query("UPDATE solution_pack_plan_mappings SET target_id=$2,target_code='other_product',target_version=$3 WHERE plan_id=$1 AND logical_key='blueprints/product'")
+        .bind(forged_plan_id)
+        .bind(other_id)
+        .bind(other_version)
+        .execute(&pool)
+        .await
+        .unwrap();
+    sqlx::query("UPDATE solution_pack_plan_actions SET preconditions=$2 WHERE plan_id=$1 AND logical_key='blueprints/product'")
+        .bind(forged_plan_id)
+        .bind(json!([{
+            "kind":"existing_blueprint",
+            "id":other_id,
+            "code":"other_product",
+            "version":other_version,
+            "definition_hash":other_hash,
+            "blueprint_kind":other_kind,
+            "status":"published",
+            "deleted":false
+        }]))
+        .execute(&pool)
+        .await
+        .unwrap();
+    let forged_apply = apply_plan(&client, &base_url, &forged_plan_id.to_string()).await;
+    assert_eq!(forged_apply.status(), StatusCode::UNPROCESSABLE_ENTITY);
+    assert_eq!(
+        forged_apply.json::<Value>().await.unwrap()["error"]["code"],
+        "invalid_input"
+    );
+    assert_eq!(
+        sqlx::query_scalar::<_, i64>(
+            "SELECT count(*) FROM solution_pack_applications WHERE plan_id=$1"
+        )
+        .bind(forged_plan_id)
+        .fetch_one(&pool)
+        .await
+        .unwrap(),
+        0
+    );
+
+    for mutation in ["snapshot", "precondition", "action"] {
+        let forged = create_plan_with_maps(
+            &client,
+            &base_url,
+            valid_archive(),
+            "shared",
+            "publish",
+            &[("blueprints/product", "shared_product")],
+        )
+        .await
+        .json::<Value>()
+        .await
+        .unwrap();
+        let plan_id = forged["id"].as_str().unwrap().parse::<Uuid>().unwrap();
+        let query = match mutation {
+            "snapshot" => {
+                "UPDATE solution_pack_plan_mappings SET snapshot=jsonb_set(snapshot,'{status}','\"draft\"'::jsonb) WHERE plan_id=$1 AND logical_key='blueprints/product'"
+            }
+            "precondition" => {
+                "UPDATE solution_pack_plan_actions SET preconditions=jsonb_set(preconditions,'{0,status}','\"draft\"'::jsonb) WHERE plan_id=$1 AND logical_key='blueprints/product'"
+            }
+            "action" => {
+                "UPDATE solution_pack_plan_actions SET reason_code='target_absent' WHERE plan_id=$1 AND logical_key='blueprints/product'"
+            }
+            _ => unreachable!(),
+        };
+        sqlx::query(query)
+            .bind(plan_id)
+            .execute(&pool)
+            .await
+            .unwrap();
+        let response = apply_plan(&client, &base_url, &plan_id.to_string()).await;
+        assert_eq!(
+            response.status(),
+            StatusCode::UNPROCESSABLE_ENTITY,
+            "{mutation}"
+        );
+        assert_eq!(
+            sqlx::query_scalar::<_, i64>(
+                "SELECT count(*) FROM solution_pack_applications WHERE plan_id=$1"
+            )
+            .bind(plan_id)
+            .fetch_one(&pool)
+            .await
+            .unwrap(),
+            0,
+            "{mutation}"
+        );
+    }
+
+    let stale = create_plan_with_maps(
+        &client,
+        &base_url,
+        valid_archive(),
+        "shared",
+        "publish",
+        &[("blueprints/product", "shared_product")],
+    )
+    .await
+    .json::<Value>()
+    .await
+    .unwrap();
+    sqlx::query(
+        "UPDATE blueprints SET status='draft' WHERE workspace_id=$1 AND code='shared_product'",
+    )
+    .bind(BOOTSTRAP_WORKSPACE_ID.parse::<Uuid>().unwrap())
+    .execute(&pool)
+    .await
+    .unwrap();
+    let stale_apply = apply_plan(&client, &base_url, stale["id"].as_str().unwrap()).await;
+    assert_eq!(stale_apply.status(), StatusCode::CONFLICT);
+    assert_eq!(
+        stale_apply.json::<Value>().await.unwrap()["error"]["code"],
+        "solution_pack_plan_stale"
+    );
     server.abort();
 }
 

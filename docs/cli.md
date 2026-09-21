@@ -232,7 +232,11 @@ and `command --payload` is the contribution-defined JSON payload.
 `file upload` streams each repeated `--file` as a `files` multipart part and
 sends `context_id` as the optional multipart text field. `extension sideload`,
 `solution-pack inspect`, and solution-pack plan creation stream archives as
-`application/zstd`. Solution-pack inspection, planning, application, and history are performed only by
+`application/zstd` when no reuse choices are supplied. Repeated
+`solution-pack plan --map logical_key=existing_code` flags use a streamed
+multipart archive plus bounded mapping metadata; mappings are explicit and the
+server accepts only exact same-workspace published blueprint revisions.
+Solution-pack inspection, planning, application, and history are performed only by
 the authenticated server; the CLI neither unpacks nor validates the archive and
 prints only the server's safe, bounded JSON response. `solution-pack apply` accepts only a UUID plan ID and has no flags that can alter the persisted plan. History contains provenance and step results but no blueprint source or normalized resource payloads. Uploads and downloads retain the
 five-second connection timeout but are not subject to the normal 30-second JSON

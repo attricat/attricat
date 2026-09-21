@@ -1,14 +1,14 @@
 # Solution Packs
 
 > **Status:** v1 archive validation, administrator inspection, immutable
-> create-only planning, and durable application/history for blueprints are
-> implemented. Packs may also declare bounded extension
+> create planning, explicit exact reuse of existing published blueprints, and
+> durable application/history for blueprints are implemented. Packs may also declare bounded extension
 > requirements, non-secret configuration templates, Explore navigation defaults,
 > bounded workspace extension layouts, and entity-blueprint extension layouts.
 > Administrators upload `.tar.zst` archives; broader resource types remain deferred.
 >
-> **Scope of this document:** Sections that describe existing-resource
-> adoption, updates, workspace settings other than the two bounded defaults,
+> **Scope of this document:** Sections that describe automatic or non-blueprint
+> existing-resource adoption, updates, workspace settings other than the two bounded defaults,
 > assets, sample data, prerequisites, export, or ownership are future target
 > design, not implemented v1 behavior. The explicitly marked v1 sections below
 > define the current product contract.
@@ -35,7 +35,7 @@ identifiers. Catalog resolves that intent to workspace-owned resources through
 a reviewed application plan. Once applied, those resources and settings belong
 to the workspace rather than remaining managed by the pack.
 
-## Target design principles (v1 implements the create-only subset)
+## Target design principles (v1 implements creation and explicit blueprint reuse)
 
 - **Administrative:** packs are visible and operable only through authorized
   administration workflows; ordinary users see only the resulting workspace.
@@ -74,7 +74,7 @@ bounded workspace-setting boundary.
 | Sample data | Optional, separately selected, visibly marked, portable, and idempotently mapped; never treated as production configuration. |
 
 Not every content type ships in the current implementation. The
-[initial delivery boundary](#initial-delivery-boundary) implements blueprint creation, bounded Explore navigation and extension-layout defaults,
+[initial delivery boundary](#initial-delivery-boundary) implements blueprint creation and explicit exact reuse, bounded Explore navigation and extension-layout defaults,
 entity-blueprint extension layouts, read-only extension requirement evaluation,
 and bounded guided setup with informational check runs.
 
@@ -181,7 +181,12 @@ Keys are immutable after publication. Renaming a key means removing one logical
 resource and adding another and must be treated as such when planning a later
 release. Display names are not identifiers.
 
-## Logical identifiers and workspace mappings (future beyond v1 creation)
+## Logical identifiers and workspace mappings
+
+Implemented v1 mapping covers newly created resources, explicit administrator-selected
+exact blueprint reuse, and the two bounded workspace-setting merges. Automatic or
+suggested mapping, non-blueprint existing-resource adoption, and update/successor
+planning remain future-only design.
 
 Pack files reference logical keys, never workspace UUIDs or assumed physical
 codes. During application, the planner resolves every key to one
@@ -210,9 +215,10 @@ explicit choices:
 
 Catalog never silently overwrites, renames, or maps an existing blueprint,
 setting, or asset. A successful application preserves its mapping as
-provenance. A later application may use that recorded mapping as a planning
-input, but it does not make the resource pack-owned or prevent ordinary
-workspace changes. This allows packs with overlapping local names to coexist.
+provenance. Future automatic planning may use that record as an input; implemented
+v1 requires every existing-blueprint selection to be supplied explicitly. The
+record does not make the resource pack-owned or prevent ordinary workspace changes.
+This allows packs with overlapping local names to coexist.
 
 The plan distinguishes a newly created resource from a compatible existing
 resource selected by the administrator. That distinction is historical
@@ -221,14 +227,15 @@ soon as the plan is applied.
 
 ## Multiple packs in one workspace
 
-The implemented v1 can apply multiple create-only plans when their target codes
-do not collide. Explore-navigation and extension-layout entries compose through
+The implemented v1 can apply multiple plans when newly created target codes do
+not collide. An administrator may explicitly map pack blueprint keys to the same
+compatible existing blueprint across multiple plans. Explore-navigation and extension-layout entries compose through
 their bounded item-level merge rules: absent entries append, exact entries are
 no-ops, and incompatible placements conflict without replacing unrelated data.
 Compatible installed contributions may be shared as declarative availability,
-but packs never mutate their lifecycle. Existing-resource compatibility mapping,
-configuration composition, and generic workspace-setting composition described
-below remain future design.
+but packs never mutate their lifecycle. Automatic or suggested resource mapping,
+non-blueprint compatibility mapping, configuration composition, and generic
+workspace-setting composition described below remain future design.
 
 A workspace may apply multiple solution packs. This is a core composition
 requirement, not an exceptional migration path: for example, one workspace may
@@ -240,9 +247,10 @@ overlapping local key names because references are qualified by pack ID and
 resolved while each plan is created.
 
 Installed extension contributions and exact bounded workspace-setting entries
-can be shared by multiple plans through `satisfied` actions. Mapping a second
-pack to a compatible blueprint produced by an earlier application is
-future design. No application gives a pack continuing ownership or creates a
+can be shared by multiple plans through `satisfied` actions. An administrator
+may explicitly map a second pack to an exactly compatible blueprint produced by
+an earlier application; automatic inference from prior applications is not
+implemented. No application gives a pack continuing ownership or creates a
 permanent pack dependency; applied resources and settings remain workspace-owned.
 
 Implemented composition follows these rules:
@@ -259,8 +267,8 @@ Implemented composition follows these rules:
 - extension grants, configuration, and enablement remain ordinary workspace
   decisions outside pack application.
 
-Generic settings, existing-resource adoption, configuration composition, and
-prior-application compatibility mapping remain future design.
+Generic settings, non-blueprint existing-resource adoption, configuration
+composition, and automatic prior-application mapping remain future design.
 
 Applying the same pack release with the same choices is idempotent. Applying a
 different release of the same pack creates a new reviewed application plan; it
@@ -282,9 +290,10 @@ compiles a native blueprint definition using the application's mapped codes.
 The resulting definition must pass the ordinary blueprint compiler.
 
 An application may create and publish a new blueprint only when the plan
-explicitly says so. A later pack release never edits a published revision in
-place; if selected, its plan creates a draft successor and shows schema and
-entity-migration consequences before publication.
+explicitly says so. **Future-only design:** a later-release planner may propose a
+draft successor and show schema and entity-migration consequences before
+publication. Implemented v1 does not create successor revisions or update an
+existing blueprint through a solution pack.
 
 ### Context boundary
 
@@ -375,7 +384,9 @@ Entity-blueprint `extension_layout` views are also accepted for newly created
 pack blueprints, limited by the ordinary compiler to entity-owned outlets.
 References are checked against the same immutable release snapshot. Optional
 extension requirements remove only unavailable layout keys; required unavailable
-keys block blueprint creation. Existing blueprints are never updated or adopted.
+keys block blueprint creation. Existing blueprints are never updated or
+automatically adopted; explicit reuse is limited to the exact blueprint mapping
+contract above.
 
 Branding/assets, generic settings, adoption, ownership, and uninstall remain out
 of scope.
@@ -500,6 +511,8 @@ planner uses an explicit prefix and blueprint publication preference:
 
 ```sh
 acli solution-pack plan --file pack.tar.zst --prefix ecom --blueprint-publication draft
+acli solution-pack plan --file pack.tar.zst --prefix ecom --blueprint-publication publish \
+  --map blueprints/product=shared_product --map blueprints/category=shared_category
 acli solution-pack plan show <plan-id>
 acli solution-pack apply <plan-id>
 acli solution-pack applications list
@@ -514,8 +527,15 @@ never creates or publishes a blueprint. Prefixes are 1–32 bytes, begin with a
 lowercase ASCII letter, contain only lowercase letters, digits, and underscores,
 and do not end in an underscore. Optional v1 resources are conservatively
 skipped; a selected required resource whose dependency would be skipped is
-blocked. Existing target codes are conflicts and are never adopted or replaced.
-V1 pack blueprints reject workspace-role publication policies and
+blocked. Existing target codes remain conflicts unless the administrator
+explicitly supplies a `--map logical_key=existing_code` choice. A mapped target
+must be a same-workspace, non-deleted published blueprint whose definition,
+after the same TOML parse/serialize canonicalization as the pack definition,
+matches exactly, including kind, references, and effective include revisions.
+Formatting, comments, and source table ordering do not affect compatibility;
+the separately persisted raw stored-source hash remains an apply-time stale
+precondition. Catalog never searches for or suggests mappings and never mutates a
+mapped blueprint. V1 pack blueprints reject workspace-role publication policies and
 extension-provided table renderers. Entity-owned extension layouts are validated
 against tenant-scoped immutable installed-release manifests. Planning snapshots
 the exact release, lifecycle state, policy compatibility, declared contributions,
@@ -542,6 +562,7 @@ Validation produces no workspace changes. An authorized administrator uploads a
 V1 actions are:
 
 - `create`: create a required blueprint at its persisted target;
+- `map`: reuse only the explicitly selected, exact published blueprint revision;
 - `append`: append absent Explore navigation or extension-layout entries;
 - `satisfied`: record exact workspace-setting entries without changing them;
 - `skip`: omit an optional resource or unmet optional navigation/layout entry;
@@ -553,7 +574,11 @@ V1 actions are:
 
 V1 does not emit `adopt`, `update`, or `keep`. Candidate mappings remain visible
 in the plan, including skipped resources. The application mapping snapshot
-contains mappings for executed `create`, `append`, and `satisfied` actions.
+contains mappings for executed `create`, `map`, `append`, and `satisfied`
+actions. Existing mappings pin target ID, code, revision, raw definition hash,
+canonical compatibility hash, kind, published status, and non-deletion as
+immutable preconditions. A separate server-computed plan evidence digest makes
+inconsistent persisted mapping/action edits fail closed before application.
 
 Extension requirements are immutable plan evidence, not application steps. A
 compatible installed release satisfies a requirement when it is enabled or
@@ -588,7 +613,11 @@ satisfied. Optional skipped requirements remain skipped even if the workspace
 later changes.
 
 A new application may start only while its ready plan is unexpired. Each create
-step revalidates its persisted `target_absent` code precondition. A target that
+step revalidates its persisted `target_absent` code precondition. Every map step
+and each downstream step revalidate the mapped blueprint's exact workspace, ID,
+code, revision, definition hash, published status, and non-deletion. Map steps
+record durable `reused` evidence but produce no blueprint mutation or domain
+event. A target that
 appears before or while the ordinary blueprint mutation runs makes the
 application invalid with `plan_stale`; Catalog never adopts or overwrites it.
 Once an application has started, plan expiry does not strand it: retries
@@ -610,13 +639,17 @@ responses are compact and omit mappings and steps; show responses include both.
 Neither response contains normalized payloads, blueprint definitions, archive
 bytes, or secret values.
 
-Richer source/release provenance, selected options, reused-resource evidence,
-generic settings fragments, prerequisites, extension mutation outcomes, and
+Richer source/release provenance, selected options, generic settings fragments,
+prerequisites, extension mutation outcomes, and
 manual checklist completion are future design. Application records are
 administrator-facing evidence, not controllers: they do not retain ownership,
 lock resources, detect drift, authorize later changes, or provide uninstall.
 
-## Later releases and workspace changes (future design)
+## Later releases and workspace changes (future-only design)
+
+> This entire section describes unimplemented successor/update planning. In
+> implemented v1, a different pack release creates an independent reviewed plan
+> and receives no automatic prior mapping or update behavior.
 
 A successful application is not a continuing desired-state declaration.
 Administrators may freely edit the resulting blueprints and settings,
