@@ -75,14 +75,22 @@ contribution keys, outlets, placement flags, and exact installed release
 identity needed for private apply-time revalidation.
 `solution_pack_plan_extension_requirements` separately stores deterministic
 required/optional compatibility outcomes and the bounded template needed for
-private apply-time revalidation. Public plan responses expose only safe
-requirement state and template path/digest metadata, never template or installed
+private apply-time revalidation. Optional `prior_application_id` records an explicit
+completed-application lineage choice. `solution_pack_plan_release_changes` stores
+at most one ordered added, unchanged, changed, or removed evidence row per prior or
+current blueprint key, including safe target identity and canonical hashes; removed
+rows have no executable action. A versioned digest covers the plan header, lineage,
+ordered release changes, mappings, private actions, and extension evaluations.
+Public plan responses expose only safe release evidence, requirement state, and
+template path/digest metadata, never definitions, templates, or installed
 configuration values. Archive bytes are never retained, and there are no plan
 update routes. Planning writes its audit event in the same explicit transaction
 and never mutates catalog resources or extension lifecycle state.
 
 `solution_pack_applications` has one immutable identity per plan and snapshots
-safe source, digest, publication, and logical-to-physical mapping provenance.
+safe source, digest, publication, logical-to-physical mapping provenance, optional
+prior application identity, and the ordered release-change evidence. Existing rows
+remain null-lineage with an empty release-change array; no lineage is inferred.
 Its bounded state is `running`, `completed`, `failed`, or `invalid`; bounded
 diagnostic fields retain resumable failure evidence. Ordered
 `solution_pack_application_steps` are completed in the same explicit

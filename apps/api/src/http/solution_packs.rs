@@ -211,6 +211,7 @@ pub(super) async fn inspect(
 pub(super) struct CreatePlanQuery {
     prefix: String,
     blueprint_publication: BlueprintPublication,
+    from_application: Option<Uuid>,
 }
 
 /// Validates an uploaded archive again and persists an immutable dry-run. Raw
@@ -223,10 +224,21 @@ pub(super) async fn create_plan(
 ) -> Result<(StatusCode, Json<SolutionPackPlan>), ApiError> {
     let Query(query) = query.map_err(ApiError::from_query_rejection)?;
     let (archive, mappings) = parse_plan_request(request).await?;
+    if query.from_application.is_some() && !mappings.is_empty() {
+        return Err(ApiError::invalid_input(
+            "from_application and blueprint mappings are mutually exclusive".into(),
+        ));
+    }
     let pack = ValidatedSolutionPack::from_tar_zst(&archive)
         .map_err(|error| ApiError::invalid_input(error.to_string()))?;
     let plan = repository
-        .create_solution_pack_plan(&pack, &query.prefix, query.blueprint_publication, &mappings)
+        .create_solution_pack_plan(
+            &pack,
+            &query.prefix,
+            query.blueprint_publication,
+            &mappings,
+            query.from_application,
+        )
         .await?;
     Ok((StatusCode::CREATED, Json(plan)))
 }

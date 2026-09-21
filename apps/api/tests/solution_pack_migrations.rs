@@ -7,6 +7,7 @@ const REMOVE_CONTEXTS_MIGRATION: &str = "20261013000000_remove_solution_pack_con
 const EXISTING_BLUEPRINT_MIGRATION: &str =
     "20261014000000_solution_pack_existing_blueprint_mappings.sql";
 const PLAN_EVIDENCE_MIGRATION: &str = "20261015000000_solution_pack_plan_evidence_hash.sql";
+const LATER_RELEASE_MIGRATION: &str = "20261016000000_solution_pack_later_releases.sql";
 
 async fn apply_migration(pool: &PgPool, path: &PathBuf) {
     let sql = fs::read_to_string(path).unwrap();
@@ -186,5 +187,46 @@ async fn context_constraint_upgrade_preserves_history_and_rejects_new_rows(pool:
         .execute(&pool)
         .await
         .is_err()
+    );
+
+    apply_migration(&pool, &migrations.join(LATER_RELEASE_MIGRATION)).await;
+    assert_eq!(
+        sqlx::query_scalar::<_, serde_json::Value>(
+            "SELECT release_change_snapshot FROM solution_pack_applications WHERE id=$1"
+        )
+        .bind(application_id)
+        .fetch_one(&pool)
+        .await
+        .unwrap(),
+        serde_json::json!([])
+    );
+    sqlx::query("UPDATE solution_pack_plans SET prior_application_id=$2,resource_evidence_format=2 WHERE id=$1")
+        .bind(plan_id)
+        .bind(application_id)
+        .execute(&pool)
+        .await
+        .unwrap();
+    assert!(
+        sqlx::query("UPDATE solution_pack_plans SET resource_evidence_sha256=NULL WHERE id=$1")
+            .bind(plan_id)
+            .execute(&pool)
+            .await
+            .is_err()
+    );
+    sqlx::query("INSERT INTO solution_pack_plan_release_changes (plan_id,workspace_id,position,logical_key,change_kind,current_canonical_definition_sha256,reason_code,evidence) VALUES ($1,$2,0,'blueprints/added','added',$3,'new_blueprint','{}'::jsonb)")
+        .bind(plan_id)
+        .bind(workspace_id)
+        .bind("b".repeat(64))
+        .execute(&pool)
+        .await
+        .unwrap();
+    assert!(
+        sqlx::query("INSERT INTO solution_pack_plan_release_changes (plan_id,workspace_id,position,logical_key,change_kind,current_canonical_definition_sha256,reason_code,evidence) VALUES ($1,$2,1,'blueprints/invalid','unchanged',$3,'unchanged_from_prior_application','{}'::jsonb)")
+            .bind(plan_id)
+            .bind(workspace_id)
+            .bind("b".repeat(64))
+            .execute(&pool)
+            .await
+            .is_err()
     );
 }

@@ -183,10 +183,11 @@ release. Display names are not identifiers.
 
 ## Logical identifiers and workspace mappings
 
-Implemented v1 mapping covers newly created resources, explicit administrator-selected
-exact blueprint reuse, and the two bounded workspace-setting merges. Automatic or
-suggested mapping, non-blueprint existing-resource adoption, and update/successor
-planning remain future-only design.
+Implemented mapping covers newly created resources, explicit administrator-selected
+exact blueprint reuse, explicit reuse of unchanged blueprints from one named completed
+prior application of the same pack, and the two bounded workspace-setting merges.
+Automatic discovery or suggestions, non-blueprint existing-resource adoption, and
+update/successor planning remain out of scope.
 
 Pack files reference logical keys, never workspace UUIDs or assumed physical
 codes. During application, the planner resolves every key to one
@@ -215,10 +216,11 @@ explicit choices:
 
 Catalog never silently overwrites, renames, or maps an existing blueprint,
 setting, or asset. A successful application preserves its mapping as
-provenance. Future automatic planning may use that record as an input; implemented
-v1 requires every existing-blueprint selection to be supplied explicitly. The
-record does not make the resource pack-owned or prevent ordinary workspace changes.
-This allows packs with overlapping local names to coexist.
+provenance. Existing-blueprint selection is always explicit: administrators either
+supply `--map` choices or name exactly one completed application with
+`--from-application`. Catalog never searches application history or suggests a
+candidate. The record does not make the resource pack-owned or prevent ordinary
+workspace changes. This allows packs with overlapping local names to coexist.
 
 The plan distinguishes a newly created resource from a compatible existing
 resource selected by the administrator. That distinction is historical
@@ -268,12 +270,19 @@ Implemented composition follows these rules:
   decisions outside pack application.
 
 Generic settings, non-blueprint existing-resource adoption, configuration
-composition, and automatic prior-application mapping remain future design.
+composition, and automatic prior-application discovery remain out of scope.
 
-Applying the same pack release with the same choices is idempotent. Applying a
-different release of the same pack creates a new reviewed application plan; it
-is not a second managed instance and does not establish an upgrade relationship
-with resources produced by the earlier release.
+An administrator may explicitly select one completed same-workspace application of
+the same pack when planning a strictly newer SemVer release. Unchanged current
+blueprint keys reuse the exact published target revision from that application;
+new keys use ordinary create planning. Changed definitions are blocked as
+`update_not_supported`. Missing, deleted, unpublished, newer-revision, or hash-drifted
+prior targets conflict rather than being replaced. Removed prior blueprint keys are
+bounded informational evidence only and never produce an action or deletion. Prior
+create and map targets follow the same rules, while a target created as draft by the
+prior application is not eligible for reuse. This lineage does not create managed
+ownership, updates, successors, migrations, downgrade/replay behavior, or uninstall
+semantics.
 
 ## Pack contents (v1 blueprints, settings, extensions, and guidance)
 
@@ -513,6 +522,8 @@ planner uses an explicit prefix and blueprint publication preference:
 acli solution-pack plan --file pack.tar.zst --prefix ecom --blueprint-publication draft
 acli solution-pack plan --file pack.tar.zst --prefix ecom --blueprint-publication publish \
   --map blueprints/product=shared_product --map blueprints/category=shared_category
+acli solution-pack plan --file pack-v2.tar.zst --prefix ecom --blueprint-publication publish \
+  --from-application <completed-application-id>
 acli solution-pack plan show <plan-id>
 acli solution-pack apply <plan-id>
 acli solution-pack applications list
@@ -535,7 +546,11 @@ matches exactly, including kind, references, and effective include revisions.
 Formatting, comments, and source table ordering do not affect compatibility;
 the separately persisted raw stored-source hash remains an apply-time stale
 precondition. Catalog never searches for or suggests mappings and never mutates a
-mapped blueprint. V1 pack blueprints reject workspace-role publication policies and
+mapped blueprint. `--map` and `--from-application` are mutually exclusive. The latter
+UUID is a query choice while the archive remains a raw `application/zstd` request.
+The plan and application history retain the selected prior application plus ordered
+added/unchanged/changed/removed evidence and canonical definition hashes. Pack
+blueprints reject workspace-role publication policies and
 extension-provided table renderers. Entity-owned extension layouts are validated
 against tenant-scoped immutable installed-release manifests. Planning snapshots
 the exact release, lifecycle state, policy compatibility, declared contributions,
@@ -562,7 +577,7 @@ Validation produces no workspace changes. An authorized administrator uploads a
 V1 actions are:
 
 - `create`: create a required blueprint at its persisted target;
-- `map`: reuse only the explicitly selected, exact published blueprint revision;
+- `map`: reuse only an explicitly selected exact published blueprint revision, including an unchanged target from a named prior application;
 - `append`: append absent Explore navigation or extension-layout entries;
 - `satisfied`: record exact workspace-setting entries without changing them;
 - `skip`: omit an optional resource or unmet optional navigation/layout entry;
@@ -577,8 +592,9 @@ in the plan, including skipped resources. The application mapping snapshot
 contains mappings for executed `create`, `map`, `append`, and `satisfied`
 actions. Existing mappings pin target ID, code, revision, raw definition hash,
 canonical compatibility hash, kind, published status, and non-deletion as
-immutable preconditions. A separate server-computed plan evidence digest makes
-inconsistent persisted mapping/action edits fail closed before application.
+immutable preconditions. A versioned server-computed plan evidence digest covers lineage, ordered release
+changes, mappings, actions, and extension-requirement evaluations so inconsistent
+persisted choices fail closed before application.
 
 Extension requirements are immutable plan evidence, not application steps. A
 compatible installed release satisfies a requirement when it is enabled or
@@ -639,43 +655,45 @@ responses are compact and omit mappings and steps; show responses include both.
 Neither response contains normalized payloads, blueprint definitions, archive
 bytes, or secret values.
 
-Richer source/release provenance, selected options, generic settings fragments,
-prerequisites, extension mutation outcomes, and
-manual checklist completion are future design. Application records are
+Remote source provenance, generic settings fragments, extension mutation outcomes,
+and manual checklist completion are future design. Application records are
 administrator-facing evidence, not controllers: they do not retain ownership,
 lock resources, detect drift, authorize later changes, or provide uninstall.
 
-## Later releases and workspace changes (future-only design)
+## Later releases and workspace changes
 
-> This entire section describes unimplemented successor/update planning. In
-> implemented v1, a different pack release creates an independent reviewed plan
-> and receives no automatic prior mapping or update behavior.
+The implemented conservative subset requires an administrator to name exactly
+one completed application with `--from-application`. It compares a strictly
+newer release of the same pack against that explicit lineage, reuses only
+unchanged exact published targets, creates new keys through ordinary planning,
+blocks changed definitions, and records removed keys without deleting them.
+Catalog never searches history or infers lineage automatically.
 
 A successful application is not a continuing desired-state declaration.
 Administrators may freely edit the resulting blueprints and settings,
-extension configuration, and data through their ordinary workflows. Catalog
-does not label those edits as drift or try to restore the template.
+extension configuration, and data through their ordinary workflows. A later
+plan detects missing, unpublished, revision-changed, or hash-drifted retained
+targets as conflicts; it does not restore them or claim ownership.
 
-A later release of the same pack is another template application. Its planner
-may use a prior application record and surviving mappings to explain likely
-changes, but the current workspace is authoritative. The release has no right
-to overwrite earlier output. The plan classifies each proposed resource as new,
-already satisfied, compatible update, or conflict and requires explicit choices
-where intent is ambiguous.
+### Successor and update planning (future-only design)
 
-In particular:
+The implemented explicit-lineage comparison never emits an update or successor.
+Future advanced planning could review compatible updates or draft successor
+revisions, but it would still have no right to overwrite earlier output or make
+ambiguous choices automatically. In particular, any such future behavior must
+preserve these boundaries:
 
-- published blueprints receive new draft revisions, never in-place edits;
+- published blueprints are never edited in place;
 - workspace modifications are never silently reset to a pack baseline;
 - extension upgrades, grants, configuration, and enabling use the ordinary
   extension lifecycle and approvals;
 - workspace settings preserve unrelated keys and user additions; and
-- removal of a resource from a later pack release does not propose deletion of
+- removal of a resource from a later pack release never proposes deletion of
   the corresponding workspace resource.
 
-Application-history commands may show which release originally proposed a
-resource and the result recorded at that time. They do not claim that the
-current resource still matches the pack.
+Application-history commands show the explicitly selected prior application,
+release comparison, original mappings, and recorded results. They do not claim
+that the current resource still matches the pack.
 
 ## No pack-level uninstall
 
@@ -724,6 +742,6 @@ starter packs:
 
 Extension dependencies, permission review, configuration templates, and Explore
 navigation defaults follow the core planner. Other workspace/layout defaults,
-later-release planning, sample data, and curated Ecommerce and Warehouse packs
+successor/update planning, sample data, and curated Ecommerce and Warehouse packs
 build on those contracts. Pack archives continue to be supplied explicitly as
 `.tar.zst` files; no repository-access path is planned.

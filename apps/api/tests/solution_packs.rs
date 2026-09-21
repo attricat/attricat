@@ -41,6 +41,52 @@ fields = ["name"]
 code = "name"
 value_type = "string"
 "#;
+const CHANGED_CATEGORY_BLUEPRINT: &[u8] = br#"
+format_version = 1
+code = "category"
+name = "Changed category"
+kind = "entity"
+
+[views.dropdown_option]
+type = "dropdown_option"
+fields = ["name"]
+
+[[attributes]]
+code = "name"
+value_type = "string"
+
+[[attributes]]
+code = "description"
+value_type = "string"
+"#;
+const LEGACY_BLUEPRINT: &[u8] = br#"
+format_version = 1
+code = "legacy"
+name = "Legacy"
+kind = "entity"
+
+[views.dropdown_option]
+type = "dropdown_option"
+fields = ["name"]
+
+[[attributes]]
+code = "name"
+value_type = "string"
+"#;
+const ACCESSORY_BLUEPRINT: &[u8] = br#"
+format_version = 1
+code = "accessory"
+name = "Accessory"
+kind = "entity"
+
+[views.dropdown_option]
+type = "dropdown_option"
+fields = ["name"]
+
+[[attributes]]
+code = "name"
+value_type = "string"
+"#;
 
 fn digest(bytes: &[u8]) -> String {
     Sha256::digest(bytes)
@@ -519,28 +565,42 @@ fn archive_with_options(product_blueprint: &[u8]) -> Vec<u8> {
 }
 
 fn archive_with_pack_id(product_blueprint: &[u8], pack_id: &str) -> Vec<u8> {
+    release_archive(
+        pack_id,
+        "1.2.0",
+        &[("blueprints/product", product_blueprint)],
+    )
+}
+
+fn release_archive(pack_id: &str, version: &str, blueprints: &[(&str, &[u8])]) -> Vec<u8> {
+    let resources = blueprints
+        .iter()
+        .map(|(key, definition)| {
+            json!({
+                "key": key,
+                "path": format!("{key}.toml"),
+                "required": true,
+                "sha256": digest(definition),
+            })
+        })
+        .collect::<Vec<_>>();
     let manifest = serde_json::to_vec(&json!({
         "manifest_version": 1,
         "id": pack_id,
-        "name": "Ecommerce",
-        "version": "1.2.0",
-        "description": "Starter catalog",
+        "name": "Release test pack",
+        "version": version,
+        "description": "Later-release fixture",
         "catalog": {"host_api": ">=1.0.0, <2.0.0"},
-        "resources": {
-            "blueprints": [{
-                "key": "blueprints/product",
-                "path": "blueprints/product.toml",
-                "required": true,
-                "sha256": digest(product_blueprint)
-            }]
-        }
+        "resources": {"blueprints": resources},
     }))
     .unwrap();
     let mut tar_bytes = Vec::new();
     {
         let mut tar = tar::Builder::new(&mut tar_bytes);
         append_file(&mut tar, "solution-pack.json", &manifest);
-        append_file(&mut tar, "blueprints/product.toml", product_blueprint);
+        for (key, definition) in blueprints {
+            append_file(&mut tar, &format!("{key}.toml"), definition);
+        }
         tar.finish().unwrap();
     }
     zstd::stream::encode_all(Cursor::new(tar_bytes), 0).unwrap()
@@ -724,6 +784,25 @@ async fn create_plan_with_publication(
     client
         .post(format!(
             "{base_url}/solution-packs/plans?prefix={prefix}&blueprint_publication={publication}"
+        ))
+        .header("content-type", "application/zstd")
+        .body(archive)
+        .send()
+        .await
+        .unwrap()
+}
+
+async fn create_plan_from_application(
+    client: &Client,
+    base_url: &str,
+    archive: Vec<u8>,
+    prefix: &str,
+    publication: &str,
+    application_id: Uuid,
+) -> reqwest::Response {
+    client
+        .post(format!(
+            "{base_url}/solution-packs/plans?prefix={prefix}&blueprint_publication={publication}&from_application={application_id}"
         ))
         .header("content-type", "application/zstd")
         .body(archive)
@@ -2025,6 +2104,585 @@ async fn plan_creation_persists_an_audited_immutable_dry_run_without_catalog_mut
 }
 
 #[sqlx::test(migrations = "./migrations")]
+async fn explicit_prior_application_classifies_and_persists_later_release_evidence(pool: PgPool) {
+    let (base_url, server) = start_server(pool.clone()).await;
+    let client = authenticated_client();
+    let prior_archive = release_archive(
+        "attricat.release-test",
+        "1.0.0",
+        &[
+            ("blueprints/product", PRODUCT_BLUEPRINT),
+            ("blueprints/category", CATEGORY_BLUEPRINT),
+            ("blueprints/legacy", LEGACY_BLUEPRINT),
+        ],
+    );
+    let prior_plan = create_plan_with_publication(
+        &client,
+        &base_url,
+        prior_archive.clone(),
+        "release",
+        "publish",
+    )
+    .await;
+    assert_eq!(prior_plan.status(), StatusCode::CREATED);
+    let prior_plan = prior_plan.json::<Value>().await.unwrap();
+    let prior_application =
+        apply_plan(&client, &base_url, prior_plan["id"].as_str().unwrap()).await;
+    assert_eq!(prior_application.status(), StatusCode::OK);
+    let prior_application = prior_application.json::<Value>().await.unwrap();
+    let prior_application_id = prior_application["id"]
+        .as_str()
+        .unwrap()
+        .parse::<Uuid>()
+        .unwrap();
+
+    let changed_archive = release_archive(
+        "attricat.release-test",
+        "1.1.0",
+        &[
+            ("blueprints/product", PRODUCT_BLUEPRINT),
+            ("blueprints/category", CHANGED_CATEGORY_BLUEPRINT),
+            ("blueprints/accessory", ACCESSORY_BLUEPRINT),
+        ],
+    );
+    let changed = create_plan_from_application(
+        &client,
+        &base_url,
+        changed_archive,
+        "release_next",
+        "publish",
+        prior_application_id,
+    )
+    .await;
+    assert_eq!(changed.status(), StatusCode::CREATED);
+    let changed = changed.json::<Value>().await.unwrap();
+    assert_eq!(
+        changed["prior_application_id"],
+        prior_application_id.to_string()
+    );
+    assert_eq!(changed["ready"], false);
+    assert_eq!(
+        changed["release_changes"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|change| (
+                change["logical_key"].as_str().unwrap(),
+                change["change_kind"].as_str().unwrap(),
+                change["reason_code"].as_str().unwrap(),
+            ))
+            .collect::<Vec<_>>(),
+        vec![
+            (
+                "blueprints/product",
+                "unchanged",
+                "unchanged_from_prior_application",
+            ),
+            ("blueprints/category", "changed", "update_not_supported",),
+            ("blueprints/accessory", "added", "new_blueprint"),
+            ("blueprints/legacy", "removed", "removed_from_release",),
+        ]
+    );
+    assert_eq!(
+        changed["actions"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|action| action["logical_key"] == "blueprints/product")
+            .unwrap()["action"],
+        "map"
+    );
+    assert_eq!(
+        changed["actions"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|action| action["logical_key"] == "blueprints/category")
+            .unwrap()["reason_code"],
+        "update_not_supported"
+    );
+    assert!(
+        changed["actions"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .all(|action| action["logical_key"] != "blueprints/legacy")
+    );
+    let changed_plan_id = changed["id"].as_str().unwrap().parse::<Uuid>().unwrap();
+    sqlx::query("UPDATE solution_pack_plans SET ready=true WHERE id=$1")
+        .bind(changed_plan_id)
+        .execute(&pool)
+        .await
+        .unwrap();
+    let forged_ready = apply_plan(&client, &base_url, &changed_plan_id.to_string()).await;
+    assert_eq!(forged_ready.status(), StatusCode::UNPROCESSABLE_ENTITY);
+    assert_eq!(
+        sqlx::query_scalar::<_, i64>(
+            "SELECT count(*) FROM solution_pack_applications WHERE plan_id=$1"
+        )
+        .bind(changed_plan_id)
+        .fetch_one(&pool)
+        .await
+        .unwrap(),
+        0
+    );
+    assert_eq!(
+        sqlx::query_scalar::<_, i64>(
+            "SELECT count(*) FROM blueprints WHERE code='release_next_accessory'"
+        )
+        .fetch_one(&pool)
+        .await
+        .unwrap(),
+        0
+    );
+
+    let compatible_archive = release_archive(
+        "attricat.release-test",
+        "1.1.0",
+        &[
+            ("blueprints/product", PRODUCT_BLUEPRINT),
+            ("blueprints/category", CATEGORY_BLUEPRINT),
+            ("blueprints/accessory", ACCESSORY_BLUEPRINT),
+        ],
+    );
+    let compatible = create_plan_from_application(
+        &client,
+        &base_url,
+        compatible_archive.clone(),
+        "release_next",
+        "publish",
+        prior_application_id,
+    )
+    .await;
+    assert_eq!(compatible.status(), StatusCode::CREATED);
+    let compatible = compatible.json::<Value>().await.unwrap();
+    assert_eq!(compatible["ready"], true);
+    let application = apply_plan(&client, &base_url, compatible["id"].as_str().unwrap()).await;
+    assert_eq!(application.status(), StatusCode::OK);
+    let application = application.json::<Value>().await.unwrap();
+    assert_eq!(
+        application["prior_application_id"],
+        prior_application_id.to_string()
+    );
+    assert_eq!(
+        application["release_change_snapshot"],
+        compatible["release_changes"]
+    );
+    assert_eq!(application["steps"].as_array().unwrap().len(), 3);
+
+    let create_only_lineage = create_plan_from_application(
+        &client,
+        &base_url,
+        release_archive(
+            "attricat.release-test",
+            "1.2.0",
+            &[("blueprints/accessory", ACCESSORY_BLUEPRINT)],
+        ),
+        "release_create_only",
+        "publish",
+        prior_application_id,
+    )
+    .await
+    .json::<Value>()
+    .await
+    .unwrap();
+    assert_eq!(create_only_lineage["ready"], true);
+    assert!(
+        create_only_lineage["mappings"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .all(|mapping| mapping["mapping_kind"] == "create")
+    );
+    let create_only_plan_id = create_only_lineage["id"]
+        .as_str()
+        .unwrap()
+        .parse::<Uuid>()
+        .unwrap();
+    sqlx::query("UPDATE solution_pack_plans SET resource_evidence_format=NULL,resource_evidence_sha256=NULL WHERE id=$1")
+        .bind(create_only_plan_id)
+        .execute(&pool)
+        .await
+        .unwrap();
+    let downgraded = apply_plan(&client, &base_url, &create_only_plan_id.to_string()).await;
+    assert_eq!(downgraded.status(), StatusCode::UNPROCESSABLE_ENTITY);
+    assert_eq!(
+        sqlx::query_scalar::<_, i64>(
+            "SELECT count(*) FROM solution_pack_applications WHERE plan_id=$1"
+        )
+        .bind(create_only_plan_id)
+        .fetch_one(&pool)
+        .await
+        .unwrap(),
+        0
+    );
+
+    let tampered = create_plan_from_application(
+        &client,
+        &base_url,
+        compatible_archive.clone(),
+        "release_tampered",
+        "publish",
+        prior_application_id,
+    )
+    .await
+    .json::<Value>()
+    .await
+    .unwrap();
+    let tampered_plan_id = tampered["id"].as_str().unwrap().parse::<Uuid>().unwrap();
+    sqlx::query("UPDATE solution_pack_plan_release_changes SET reason_code='tampered_evidence' WHERE plan_id=$1 AND position=0")
+        .bind(tampered_plan_id)
+        .execute(&pool)
+        .await
+        .unwrap();
+    let rejected = apply_plan(&client, &base_url, &tampered_plan_id.to_string()).await;
+    assert_eq!(rejected.status(), StatusCode::UNPROCESSABLE_ENTITY);
+    assert_eq!(
+        rejected.json::<Value>().await.unwrap()["error"]["code"],
+        "invalid_input"
+    );
+
+    let equal_release = create_plan_from_application(
+        &client,
+        &base_url,
+        prior_archive,
+        "release_equal",
+        "publish",
+        prior_application_id,
+    )
+    .await;
+    assert_eq!(equal_release.status(), StatusCode::UNPROCESSABLE_ENTITY);
+    assert_eq!(
+        equal_release.json::<Value>().await.unwrap()["error"]["code"],
+        "invalid_input"
+    );
+    for version in ["0.9.0", "1.0.0+different-build"] {
+        let non_increasing = create_plan_from_application(
+            &client,
+            &base_url,
+            release_archive(
+                "attricat.release-test",
+                version,
+                &[("blueprints/product", PRODUCT_BLUEPRINT)],
+            ),
+            "release_non_increasing",
+            "publish",
+            prior_application_id,
+        )
+        .await;
+        assert_eq!(non_increasing.status(), StatusCode::UNPROCESSABLE_ENTITY);
+    }
+    let missing = create_plan_from_application(
+        &client,
+        &base_url,
+        compatible_archive.clone(),
+        "release_missing",
+        "publish",
+        Uuid::new_v4(),
+    )
+    .await;
+    assert_eq!(missing.status(), StatusCode::NOT_FOUND);
+    let malformed = client
+        .post(format!(
+            "{base_url}/solution-packs/plans?prefix=release_malformed&blueprint_publication=publish&from_application=not-a-uuid"
+        ))
+        .header("content-type", "application/zstd")
+        .body(compatible_archive.clone())
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(malformed.status(), StatusCode::BAD_REQUEST);
+    assert_eq!(
+        malformed.json::<Value>().await.unwrap()["error"]["code"],
+        "bad_request"
+    );
+    let wrong_pack = create_plan_from_application(
+        &client,
+        &base_url,
+        release_archive(
+            "attricat.different-pack",
+            "2.0.0",
+            &[("blueprints/product", PRODUCT_BLUEPRINT)],
+        ),
+        "release_wrong_pack",
+        "publish",
+        prior_application_id,
+    )
+    .await;
+    assert_eq!(wrong_pack.status(), StatusCode::UNPROCESSABLE_ENTITY);
+
+    let mixed = client
+        .post(format!(
+            "{base_url}/solution-packs/plans?prefix=release_mixed&blueprint_publication=publish&from_application={prior_application_id}"
+        ))
+        .multipart(
+            reqwest::multipart::Form::new()
+                .part(
+                    "archive",
+                    reqwest::multipart::Part::bytes(compatible_archive.clone())
+                        .mime_str("application/zstd")
+                        .unwrap(),
+                )
+                .text(
+                    "blueprint_map",
+                    json!({"key":"blueprints/product","code":"release_product"}).to_string(),
+                ),
+        )
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(mixed.status(), StatusCode::UNPROCESSABLE_ENTITY);
+
+    let prior_product_id = compatible["release_changes"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|change| change["logical_key"] == "blueprints/product")
+        .unwrap()["prior_target_id"]
+        .as_str()
+        .unwrap();
+    let revision_definition = std::str::from_utf8(PRODUCT_BLUEPRINT)
+        .unwrap()
+        .replace("code = \"product\"", "code = \"release_product\"");
+    let revision = client
+        .post(format!("{base_url}/blueprints/{prior_product_id}/versions"))
+        .json(&json!({"definition":revision_definition}))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(revision.status(), StatusCode::CREATED);
+    let published = client
+        .post(format!(
+            "{base_url}/blueprints/{prior_product_id}/versions/2/publish"
+        ))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(published.status(), StatusCode::OK);
+    let drifted = create_plan_from_application(
+        &client,
+        &base_url,
+        release_archive(
+            "attricat.release-test",
+            "1.2.0",
+            &[("blueprints/product", PRODUCT_BLUEPRINT)],
+        ),
+        "release_drifted",
+        "publish",
+        prior_application_id,
+    )
+    .await;
+    assert_eq!(drifted.status(), StatusCode::CREATED);
+    let drifted = drifted.json::<Value>().await.unwrap();
+    assert_eq!(drifted["ready"], false);
+    assert_eq!(
+        drifted["release_changes"][0]["reason_code"],
+        "prior_target_revision_drifted"
+    );
+
+    assert_eq!(
+        sqlx::query_scalar::<_, Option<Uuid>>(
+            "SELECT prior_application_id FROM solution_pack_applications WHERE id=$1"
+        )
+        .bind(application["id"].as_str().unwrap().parse::<Uuid>().unwrap())
+        .fetch_one(&pool)
+        .await
+        .unwrap(),
+        Some(prior_application_id)
+    );
+
+    let prior_plan_id = prior_plan["id"].as_str().unwrap().parse::<Uuid>().unwrap();
+    sqlx::query("UPDATE solution_pack_plan_actions SET summary=jsonb_set(summary,'{tampered}','true'::jsonb) WHERE plan_id=$1 AND logical_key='blueprints/product'")
+        .bind(prior_plan_id)
+        .execute(&pool)
+        .await
+        .unwrap();
+    let forged_prior = create_plan_from_application(
+        &client,
+        &base_url,
+        release_archive(
+            "attricat.release-test",
+            "1.3.0",
+            &[("blueprints/product", PRODUCT_BLUEPRINT)],
+        ),
+        "release_forged_prior",
+        "publish",
+        prior_application_id,
+    )
+    .await;
+    assert_eq!(forged_prior.status(), StatusCode::UNPROCESSABLE_ENTITY);
+
+    sqlx::query(
+        "UPDATE solution_pack_applications SET state='running',completed_at=NULL WHERE id=$1",
+    )
+    .bind(prior_application_id)
+    .execute(&pool)
+    .await
+    .unwrap();
+    let incomplete_prior = create_plan_from_application(
+        &client,
+        &base_url,
+        release_archive(
+            "attricat.release-test",
+            "1.4.0",
+            &[("blueprints/product", PRODUCT_BLUEPRINT)],
+        ),
+        "release_incomplete_prior",
+        "publish",
+        prior_application_id,
+    )
+    .await;
+    assert_eq!(incomplete_prior.status(), StatusCode::UNPROCESSABLE_ENTITY);
+    server.abort();
+}
+
+#[sqlx::test(migrations = "./migrations")]
+async fn draft_created_prior_blueprint_is_not_reused_by_a_later_release(pool: PgPool) {
+    let (base_url, server) = start_server(pool).await;
+    let client = authenticated_client();
+    let prior = release_archive(
+        "attricat.draft-release-test",
+        "1.0.0",
+        &[("blueprints/product", PRODUCT_BLUEPRINT)],
+    );
+    let plan = create_plan(&client, &base_url, prior, "draft_release").await;
+    let plan = plan.json::<Value>().await.unwrap();
+    let application = apply_plan(&client, &base_url, plan["id"].as_str().unwrap()).await;
+    assert_eq!(application.status(), StatusCode::OK);
+    let application_id = application.json::<Value>().await.unwrap()["id"]
+        .as_str()
+        .unwrap()
+        .parse::<Uuid>()
+        .unwrap();
+    let later = release_archive(
+        "attricat.draft-release-test",
+        "1.1.0",
+        &[("blueprints/product", PRODUCT_BLUEPRINT)],
+    );
+    let response = create_plan_from_application(
+        &client,
+        &base_url,
+        later,
+        "draft_release_next",
+        "publish",
+        application_id,
+    )
+    .await;
+    assert_eq!(response.status(), StatusCode::CREATED);
+    let plan = response.json::<Value>().await.unwrap();
+    assert_eq!(plan["ready"], false);
+    assert_eq!(plan["release_changes"][0]["change_kind"], "unchanged");
+    assert_eq!(
+        plan["release_changes"][0]["reason_code"],
+        "prior_target_unpublished"
+    );
+    assert_eq!(plan["actions"][0]["action"], "conflict");
+    assert_eq!(
+        plan["actions"][0]["reason_code"],
+        "prior_target_unpublished"
+    );
+    server.abort();
+}
+
+#[sqlx::test(migrations = "./migrations")]
+async fn later_release_reports_missing_deleted_and_hash_drifted_prior_targets(pool: PgPool) {
+    let (base_url, server) = start_server(pool.clone()).await;
+    let client = authenticated_client();
+    let prior = release_archive(
+        "attricat.target-drift-test",
+        "1.0.0",
+        &[
+            ("blueprints/product", PRODUCT_BLUEPRINT),
+            ("blueprints/category", CATEGORY_BLUEPRINT),
+            ("blueprints/legacy", LEGACY_BLUEPRINT),
+        ],
+    );
+    let plan = create_plan_with_publication(&client, &base_url, prior, "lineage_drift", "publish")
+        .await
+        .json::<Value>()
+        .await
+        .unwrap();
+    let applied = apply_plan(&client, &base_url, plan["id"].as_str().unwrap()).await;
+    assert_eq!(applied.status(), StatusCode::OK);
+    let application_id = applied.json::<Value>().await.unwrap()["id"]
+        .as_str()
+        .unwrap()
+        .parse::<Uuid>()
+        .unwrap();
+
+    sqlx::query("DELETE FROM attributes WHERE workspace_id=$1 AND blueprint_id=(SELECT id FROM blueprints WHERE workspace_id=$1 AND code='lineage_drift_product')")
+        .bind(BOOTSTRAP_WORKSPACE_ID.parse::<Uuid>().unwrap())
+        .execute(&pool)
+        .await
+        .unwrap();
+    sqlx::query("DELETE FROM blueprints WHERE workspace_id=$1 AND code='lineage_drift_product'")
+        .bind(BOOTSTRAP_WORKSPACE_ID.parse::<Uuid>().unwrap())
+        .execute(&pool)
+        .await
+        .unwrap();
+    sqlx::query("UPDATE blueprints SET deleted_at=clock_timestamp() WHERE workspace_id=$1 AND code='lineage_drift_category'")
+        .bind(BOOTSTRAP_WORKSPACE_ID.parse::<Uuid>().unwrap())
+        .execute(&pool)
+        .await
+        .unwrap();
+    let drifted_definition = std::str::from_utf8(LEGACY_BLUEPRINT)
+        .unwrap()
+        .replace("code = \"legacy\"", "code = \"lineage_drift_legacy\"")
+        .replace("name = \"Legacy\"", "name = \"Drifted legacy\"");
+    sqlx::query(
+        "UPDATE blueprints SET definition=$2 WHERE workspace_id=$1 AND code='lineage_drift_legacy'",
+    )
+    .bind(BOOTSTRAP_WORKSPACE_ID.parse::<Uuid>().unwrap())
+    .bind(drifted_definition)
+    .execute(&pool)
+    .await
+    .unwrap();
+
+    let later = release_archive(
+        "attricat.target-drift-test",
+        "1.1.0",
+        &[
+            ("blueprints/product", PRODUCT_BLUEPRINT),
+            ("blueprints/category", CATEGORY_BLUEPRINT),
+            ("blueprints/legacy", LEGACY_BLUEPRINT),
+        ],
+    );
+    let response = create_plan_from_application(
+        &client,
+        &base_url,
+        later,
+        "lineage_drift_next",
+        "publish",
+        application_id,
+    )
+    .await;
+    assert_eq!(response.status(), StatusCode::CREATED);
+    let plan = response.json::<Value>().await.unwrap();
+    assert_eq!(plan["ready"], false);
+    assert_eq!(
+        plan["release_changes"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|change| change["reason_code"].as_str().unwrap())
+            .collect::<Vec<_>>(),
+        vec![
+            "prior_target_missing",
+            "prior_target_deleted",
+            "prior_target_drifted",
+        ]
+    );
+    assert!(
+        plan["actions"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .all(|action| action["action"] == "conflict")
+    );
+    server.abort();
+}
+
+#[sqlx::test(migrations = "./migrations")]
 async fn plan_validates_prefix_and_reports_existing_code_conflicts(pool: PgPool) {
     let (base_url, server) = start_server(pool).await;
     let client = authenticated_client();
@@ -2093,8 +2751,14 @@ async fn apply_joins_actions_to_mappings_by_logical_key_not_position(pool: PgPoo
             .collect::<Vec<_>>(),
         ["blueprints/category", "blueprints/product"]
     );
-    // Persisted mappings preserve an independent position space. Deliberately
-    // reverse it to prove apply joins immutable evidence by logical key.
+    // Simulate a legacy create-only plan, which predates the versioned digest.
+    // Its mappings preserve an independent position space; reverse that space
+    // to prove legacy apply joins evidence by logical key.
+    sqlx::query("UPDATE solution_pack_plans SET resource_evidence_format=NULL,resource_evidence_sha256=NULL WHERE id=$1")
+        .bind(plan_id)
+        .execute(&pool)
+        .await
+        .unwrap();
     sqlx::query("UPDATE solution_pack_plan_mappings SET position=position+10 WHERE plan_id=$1")
         .bind(plan_id)
         .execute(&pool)
@@ -2216,7 +2880,7 @@ async fn mapped_plan_digest_rejects_kind_downgrade_and_resource_row_removal(pool
         .unwrap()
         .parse::<Uuid>()
         .unwrap();
-    sqlx::query("UPDATE solution_pack_plans SET resource_evidence_sha256=NULL WHERE id=$1")
+    sqlx::query("UPDATE solution_pack_plans SET resource_evidence_format=NULL,resource_evidence_sha256=NULL WHERE id=$1")
         .bind(missing_digest_id)
         .execute(&pool)
         .await
@@ -2297,20 +2961,232 @@ async fn legacy_create_only_plan_without_resource_digest_still_applies(pool: PgP
     let plan = plan.json::<Value>().await.unwrap();
     let plan_id = plan["id"].as_str().unwrap().parse::<Uuid>().unwrap();
     assert_eq!(
-        sqlx::query_scalar::<_, Option<String>>(
-            "SELECT resource_evidence_sha256 FROM solution_pack_plans WHERE id=$1"
+        sqlx::query_as::<_, (Option<String>, Option<i16>)>(
+            "SELECT resource_evidence_sha256,resource_evidence_format FROM solution_pack_plans WHERE id=$1"
         )
         .bind(plan_id)
         .fetch_one(&pool)
         .await
-        .unwrap(),
-        None
+        .unwrap()
+        .1,
+        Some(2)
     );
+    sqlx::query("UPDATE solution_pack_plans SET resource_evidence_format=NULL,resource_evidence_sha256=NULL WHERE id=$1")
+        .bind(plan_id)
+        .execute(&pool)
+        .await
+        .unwrap();
     assert_eq!(
         apply_plan(&client, &base_url, &plan_id.to_string())
             .await
             .status(),
         StatusCode::OK
+    );
+    server.abort();
+}
+
+#[sqlx::test(migrations = "./migrations")]
+async fn digestless_completed_application_cannot_be_a_lineage_source(pool: PgPool) {
+    let (base_url, server) = start_server(pool.clone()).await;
+    let client = authenticated_client();
+    let prior = create_plan_with_publication(
+        &client,
+        &base_url,
+        valid_archive(),
+        "digestless_source",
+        "publish",
+    )
+    .await
+    .json::<Value>()
+    .await
+    .unwrap();
+    let prior_plan_id = prior["id"].as_str().unwrap().parse::<Uuid>().unwrap();
+    let applied = apply_plan(&client, &base_url, prior["id"].as_str().unwrap()).await;
+    assert_eq!(applied.status(), StatusCode::OK);
+    let prior_application_id = applied.json::<Value>().await.unwrap()["id"]
+        .as_str()
+        .unwrap()
+        .parse::<Uuid>()
+        .unwrap();
+    sqlx::query("UPDATE solution_pack_plans SET resource_evidence_format=NULL,resource_evidence_sha256=NULL WHERE id=$1")
+        .bind(prior_plan_id)
+        .execute(&pool)
+        .await
+        .unwrap();
+    let plan_count: i64 = sqlx::query_scalar("SELECT count(*) FROM solution_pack_plans")
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+    let blueprint_count: i64 = sqlx::query_scalar("SELECT count(*) FROM blueprints")
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+
+    let response = create_plan_from_application(
+        &client,
+        &base_url,
+        release_archive(
+            "attricat.ecommerce",
+            "1.3.0",
+            &[("blueprints/product", PRODUCT_BLUEPRINT)],
+        ),
+        "digestless_later",
+        "publish",
+        prior_application_id,
+    )
+    .await;
+    assert_eq!(response.status(), StatusCode::UNPROCESSABLE_ENTITY);
+    assert_eq!(
+        response.json::<Value>().await.unwrap()["error"]["code"],
+        "invalid_input"
+    );
+    assert_eq!(
+        sqlx::query_scalar::<_, i64>("SELECT count(*) FROM solution_pack_plans")
+            .fetch_one(&pool)
+            .await
+            .unwrap(),
+        plan_count
+    );
+    assert_eq!(
+        sqlx::query_scalar::<_, i64>("SELECT count(*) FROM blueprints")
+            .fetch_one(&pool)
+            .await
+            .unwrap(),
+        blueprint_count
+    );
+    server.abort();
+}
+
+#[sqlx::test(migrations = "./migrations")]
+async fn later_release_reuses_target_from_prior_explicit_mapping_without_mutation(pool: PgPool) {
+    let (base_url, server) = start_server(pool.clone()).await;
+    let client = authenticated_client();
+    let seed = create_plan_with_publication(
+        &client,
+        &base_url,
+        release_archive(
+            "attricat.mapping-seed",
+            "1.0.0",
+            &[("blueprints/product", PRODUCT_BLUEPRINT)],
+        ),
+        "mapped_target",
+        "publish",
+    )
+    .await
+    .json::<Value>()
+    .await
+    .unwrap();
+    let target_id = seed["mappings"][0]["target_id"]
+        .as_str()
+        .unwrap()
+        .parse::<Uuid>()
+        .unwrap();
+    assert_eq!(
+        apply_plan(&client, &base_url, seed["id"].as_str().unwrap())
+            .await
+            .status(),
+        StatusCode::OK
+    );
+
+    let mapped = create_plan_with_maps(
+        &client,
+        &base_url,
+        release_archive(
+            "attricat.mapped-lineage",
+            "1.0.0",
+            &[("blueprints/product", PRODUCT_BLUEPRINT)],
+        ),
+        "mapped_v1",
+        "publish",
+        &[("blueprints/product", "mapped_target_product")],
+    )
+    .await;
+    assert_eq!(mapped.status(), StatusCode::CREATED);
+    let mapped = mapped.json::<Value>().await.unwrap();
+    assert_eq!(mapped["mappings"][0]["mapping_kind"], "existing");
+    assert_eq!(mapped["mappings"][0]["target_id"], target_id.to_string());
+    let mapped_application = apply_plan(&client, &base_url, mapped["id"].as_str().unwrap()).await;
+    assert_eq!(mapped_application.status(), StatusCode::OK);
+    let mapped_application = mapped_application.json::<Value>().await.unwrap();
+    let mapped_application_id = mapped_application["id"]
+        .as_str()
+        .unwrap()
+        .parse::<Uuid>()
+        .unwrap();
+    assert_eq!(
+        mapped_application["steps"][0]["result_snapshot"]["outcome"],
+        "reused"
+    );
+
+    let blueprint_count: i64 = sqlx::query_scalar("SELECT count(*) FROM blueprints")
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+    let later = create_plan_from_application(
+        &client,
+        &base_url,
+        release_archive(
+            "attricat.mapped-lineage",
+            "1.1.0",
+            &[("blueprints/product", PRODUCT_BLUEPRINT)],
+        ),
+        "mapped_v2",
+        "publish",
+        mapped_application_id,
+    )
+    .await;
+    assert_eq!(later.status(), StatusCode::CREATED);
+    let later = later.json::<Value>().await.unwrap();
+    assert_eq!(later["ready"], true);
+    assert_eq!(
+        later["prior_application_id"],
+        mapped_application_id.to_string()
+    );
+    assert_eq!(later["release_changes"][0]["change_kind"], "unchanged");
+    assert_eq!(
+        later["release_changes"][0]["reason_code"],
+        "unchanged_from_prior_application"
+    );
+    assert_eq!(
+        later["release_changes"][0]["prior_target_id"],
+        target_id.to_string()
+    );
+    assert_eq!(
+        later["release_changes"][0]["prior_target_code"],
+        "mapped_target_product"
+    );
+    assert_eq!(later["release_changes"][0]["prior_target_version"], 1);
+    assert_eq!(later["mappings"][0]["mapping_kind"], "existing");
+    assert_eq!(later["mappings"][0]["target_id"], target_id.to_string());
+    assert_eq!(later["mappings"][0]["target_code"], "mapped_target_product");
+    assert_eq!(later["mappings"][0]["target_version"], 1);
+    assert_eq!(later["actions"][0]["action"], "map");
+
+    let later_application = apply_plan(&client, &base_url, later["id"].as_str().unwrap()).await;
+    assert_eq!(later_application.status(), StatusCode::OK);
+    let later_application = later_application.json::<Value>().await.unwrap();
+    assert_eq!(
+        later_application["prior_application_id"],
+        mapped_application_id.to_string()
+    );
+    assert_eq!(
+        later_application["release_change_snapshot"],
+        later["release_changes"]
+    );
+    assert_eq!(
+        later_application["steps"][0]["result_snapshot"]["outcome"],
+        "reused"
+    );
+    assert_eq!(
+        later_application["steps"][0]["result_snapshot"]["id"],
+        target_id.to_string()
+    );
+    assert_eq!(
+        sqlx::query_scalar::<_, i64>("SELECT count(*) FROM blueprints")
+            .fetch_one(&pool)
+            .await
+            .unwrap(),
+        blueprint_count
     );
     server.abort();
 }
@@ -2943,6 +3819,20 @@ async fn plan_routes_require_solution_pack_permission_and_isolate_workspaces(poo
         .await
         .unwrap();
     assert_eq!(hidden_show.status(), StatusCode::NOT_FOUND);
+    let hidden_lineage = create_plan_from_application(
+        &authenticated_client(),
+        &base_url,
+        release_archive(
+            "attricat.hidden",
+            "1.1.0",
+            &[("blueprints/product", PRODUCT_BLUEPRINT)],
+        ),
+        "hidden_lineage",
+        "publish",
+        hidden_application,
+    )
+    .await;
+    assert_eq!(hidden_lineage.status(), StatusCode::NOT_FOUND);
     let hidden_run = Uuid::new_v4();
     let hidden_request = Uuid::new_v4();
     sqlx::query("INSERT INTO solution_pack_check_runs (id,workspace_id,application_id,request_id,correlation_id,trigger,total_count,passed_count,failed_count,started_at,completed_at) VALUES ($1,$2,$3,$4,$4,'manual',0,0,0,now(),now())")
@@ -3685,10 +4575,10 @@ async fn satisfied_navigation_step_is_durable_and_visibility_change_is_stale(poo
         satisfied["actions"].as_array().unwrap().last().unwrap()["action"],
         "satisfied"
     );
-    // The blueprint collision correctly makes the ordinary plan not ready. Make
-    // only the persisted satisfied setting step executable to exercise its
-    // application/retry contract without introducing existing-resource adoption.
-    sqlx::query("UPDATE solution_pack_plans SET ready=true WHERE id=$1")
+    // Simulate a legacy create/workspace-only plan without a versioned digest,
+    // then make only the persisted satisfied setting step executable to exercise
+    // its application/retry contract without existing-resource adoption.
+    sqlx::query("UPDATE solution_pack_plans SET ready=true,resource_evidence_format=NULL,resource_evidence_sha256=NULL WHERE id=$1")
         .bind(satisfied["id"].as_str().unwrap().parse::<Uuid>().unwrap())
         .execute(&pool)
         .await
@@ -4212,6 +5102,13 @@ async fn failed_step_is_durable_and_retry_resumes_without_duplicate_completed_re
     .fetch_one(&pool)
     .await
     .unwrap();
+    // Exercise durable step failure compatibility through the legacy
+    // create-only path, which intentionally has no resource digest.
+    sqlx::query("UPDATE solution_pack_plans SET resource_evidence_format=NULL,resource_evidence_sha256=NULL WHERE id=$1")
+        .bind(plan_id)
+        .execute(&pool)
+        .await
+        .unwrap();
     sqlx::query("UPDATE solution_pack_plan_actions SET normalized_payload='{}'::jsonb WHERE plan_id=$1 AND logical_key='blueprints/product'")
         .bind(plan_id)
         .execute(&pool)

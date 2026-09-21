@@ -45,6 +45,7 @@ pub struct SolutionPackPlan {
     pub host_api: String,
     pub prefix: String,
     pub blueprint_publication: String,
+    pub prior_application_id: Option<Uuid>,
     pub ready: bool,
     pub readme_markdown: Option<String>,
     pub release_notes_markdown: Option<String>,
@@ -61,6 +62,50 @@ pub struct SolutionPackPlan {
     pub extension_requirements: Vec<SolutionPackPlanExtensionRequirement>,
     #[sqlx(skip)]
     pub checks: Vec<SolutionPackCheckSummary>,
+    #[sqlx(skip)]
+    pub release_changes: Vec<SolutionPackReleaseChange>,
+}
+
+#[derive(Clone, Debug, Serialize, sqlx::FromRow)]
+pub struct SolutionPackReleaseChange {
+    pub position: i64,
+    pub logical_key: String,
+    pub change_kind: String,
+    pub prior_target_id: Option<Uuid>,
+    pub prior_target_code: Option<String>,
+    pub prior_target_version: Option<i64>,
+    pub prior_canonical_definition_sha256: Option<String>,
+    pub current_canonical_definition_sha256: Option<String>,
+    pub reason_code: String,
+    pub evidence: Value,
+}
+
+#[derive(Clone, Debug)]
+struct PriorBlueprint {
+    position: i64,
+    logical_key: String,
+    target_id: Uuid,
+    target_code: String,
+    target_version: i64,
+    kind: String,
+    canonical_definition_sha256: String,
+    definition_hash: String,
+    was_published: bool,
+}
+
+#[derive(sqlx::FromRow)]
+struct PriorExecutionRow {
+    position: i64,
+    logical_key: String,
+    target_id: Uuid,
+    target_code: String,
+    target_version: Option<i64>,
+    mapping_kind: String,
+    mapping_snapshot: Value,
+    action: String,
+    normalized_payload: Option<Value>,
+    step_state: String,
+    result_snapshot: Option<Value>,
 }
 
 #[derive(Clone, Debug, Serialize, sqlx::FromRow)]
@@ -127,6 +172,24 @@ struct PlanEvidenceAction {
     summary: Value,
     normalized_payload: Option<Value>,
     preconditions: Value,
+}
+
+#[derive(Serialize, sqlx::FromRow)]
+struct PlanEvidenceExtensionRequirement {
+    position: i64,
+    logical_key: String,
+    extension_id: String,
+    version_requirement: String,
+    required: bool,
+    configuration_template_path: Option<String>,
+    configuration_template_sha256: Option<String>,
+    status: String,
+    reason_code: String,
+    installed_release_id: Option<Uuid>,
+    installed_version: Option<String>,
+    installed_state: Option<String>,
+    configuration_matches: Option<bool>,
+    evaluation_template: Value,
 }
 
 #[derive(Clone, Debug, Serialize)]
@@ -218,6 +281,188 @@ fn installed_extension_snapshot(
     ))
 }
 
+async fn load_prior_application(
+    repository: &CatalogRepository,
+    tx: &mut Transaction<'_, Postgres>,
+    workspace_id: Uuid,
+    application_id: Uuid,
+    pack: &ValidatedSolutionPack,
+) -> Result<(String, Vec<PriorBlueprint>), RepositoryError> {
+    let (state, pack_id, pack_version, plan_id) =
+        sqlx::query_as::<_, (String, String, String, Uuid)>(
+            "SELECT state,pack_id,pack_version,plan_id FROM solution_pack_applications WHERE workspace_id=$1 AND id=$2 FOR SHARE",
+        )
+        .bind(workspace_id)
+        .bind(application_id)
+        .fetch_optional(&mut **tx)
+        .await?
+        .ok_or(RepositoryError::NotFound("solution-pack application"))?;
+    if state != "completed" {
+        return Err(RepositoryError::InvalidSolutionPackPlan(
+            "prior solution-pack application is not completed".into(),
+        ));
+    }
+    if pack_id != pack.manifest().id {
+        return Err(RepositoryError::InvalidSolutionPackPlan(
+            "prior solution-pack application has a different pack ID".into(),
+        ));
+    }
+    let prior_version = semver::Version::parse(&pack_version).map_err(|_| {
+        RepositoryError::InvalidSolutionPackPlan(
+            "prior solution-pack application has an invalid version".into(),
+        )
+    })?;
+    let current_version = semver::Version::parse(&pack.manifest().version).map_err(|_| {
+        RepositoryError::InvalidSolutionPackPlan("solution-pack version is invalid".into())
+    })?;
+    if current_version.cmp_precedence(&prior_version) != std::cmp::Ordering::Greater {
+        return Err(RepositoryError::InvalidSolutionPackPlan(
+            "solution-pack version must be greater than the prior application version".into(),
+        ));
+    }
+    repository
+        .validate_persisted_solution_pack_resources(tx, plan_id)
+        .await?;
+    let source_evidence_sha256: Option<String> = sqlx::query_scalar(
+        "SELECT resource_evidence_sha256 FROM solution_pack_plans WHERE workspace_id=$1 AND id=$2",
+    )
+    .bind(workspace_id)
+    .bind(plan_id)
+    .fetch_one(&mut **tx)
+    .await?;
+    if source_evidence_sha256.is_none() {
+        return Err(RepositoryError::InvalidSolutionPackPlan(
+            "prior solution-pack application is missing plan integrity evidence".into(),
+        ));
+    }
+
+    let expected_blueprint_count = sqlx::query_scalar::<_, i64>(
+        "SELECT count(*) FROM solution_pack_plan_actions WHERE workspace_id=$1 AND plan_id=$2 AND resource_kind='blueprint' AND action IN ('create','map')",
+    )
+    .bind(workspace_id)
+    .bind(plan_id)
+    .fetch_one(&mut **tx)
+    .await?;
+    let rows = sqlx::query_as::<_, PriorExecutionRow>(
+        "SELECT m.position,m.logical_key,m.target_id,m.target_code,m.target_version,m.mapping_kind,m.snapshot AS mapping_snapshot,a.action,a.normalized_payload,s.state AS step_state,s.result_snapshot FROM solution_pack_plan_mappings m JOIN solution_pack_plan_actions a ON a.plan_id=m.plan_id AND a.logical_key=m.logical_key JOIN solution_pack_application_steps s ON s.application_id=$3 AND s.plan_id=m.plan_id AND s.logical_key=m.logical_key WHERE m.workspace_id=$1 AND m.plan_id=$2 AND m.resource_kind='blueprint' AND a.resource_kind='blueprint' AND s.resource_kind='blueprint' AND a.action IN ('create','map') ORDER BY m.position",
+    )
+    .bind(workspace_id)
+    .bind(plan_id)
+    .bind(application_id)
+    .fetch_all(&mut **tx)
+    .await?;
+    if rows.len() as i64 != expected_blueprint_count {
+        return Err(RepositoryError::InvalidSolutionPackPlan(
+            "prior solution-pack application has incomplete blueprint evidence".into(),
+        ));
+    }
+    let mut prior = Vec::with_capacity(rows.len());
+    for row in rows {
+        if row.step_state != "completed" {
+            return Err(RepositoryError::InvalidSolutionPackPlan(
+                "prior solution-pack application has incomplete blueprint evidence".into(),
+            ));
+        }
+        let target_version = row
+            .target_version
+            .filter(|version| *version > 0)
+            .ok_or_else(|| {
+                RepositoryError::InvalidSolutionPackPlan(
+                    "prior solution-pack application has invalid blueprint revision evidence"
+                        .into(),
+                )
+            })?;
+        let result = row
+            .result_snapshot
+            .as_ref()
+            .and_then(Value::as_object)
+            .ok_or_else(|| {
+                RepositoryError::InvalidSolutionPackPlan(
+                    "prior solution-pack application is missing blueprint result evidence".into(),
+                )
+            })?;
+        if result.get("id").and_then(Value::as_str) != Some(row.target_id.to_string().as_str())
+            || result.get("code").and_then(Value::as_str) != Some(row.target_code.as_str())
+            || result.get("version").and_then(Value::as_i64) != Some(target_version)
+        {
+            return Err(RepositoryError::InvalidSolutionPackPlan(
+                "prior solution-pack blueprint result evidence is inconsistent".into(),
+            ));
+        }
+        let was_published = result.get("status").and_then(Value::as_str) == Some("published");
+        let (kind, canonical_definition_sha256, definition_hash) =
+            match (row.action.as_str(), row.mapping_kind.as_str()) {
+                ("map", "existing") => {
+                    let snapshot: ExistingBlueprintMappingSnapshot =
+                        serde_json::from_value(row.mapping_snapshot).map_err(|_| {
+                            RepositoryError::InvalidSolutionPackPlan(
+                                "prior mapped blueprint evidence is invalid".into(),
+                            )
+                        })?;
+                    if snapshot.id != row.target_id
+                        || snapshot.code != row.target_code
+                        || snapshot.version != target_version
+                    {
+                        return Err(RepositoryError::InvalidSolutionPackPlan(
+                            "prior mapped blueprint evidence is inconsistent".into(),
+                        ));
+                    }
+                    (
+                        snapshot.kind,
+                        snapshot.canonical_definition_hash,
+                        snapshot.definition_hash,
+                    )
+                }
+                ("create", "create") => {
+                    let definition = row
+                        .normalized_payload
+                        .as_ref()
+                        .and_then(|payload| payload.get("definition"))
+                        .and_then(Value::as_str)
+                        .ok_or_else(|| {
+                            RepositoryError::InvalidSolutionPackPlan(
+                                "prior created blueprint evidence is invalid".into(),
+                            )
+                        })?;
+                    let value: toml::Value = toml::from_str(definition).map_err(|_| {
+                        RepositoryError::InvalidSolutionPackPlan(
+                            "prior created blueprint definition is invalid".into(),
+                        )
+                    })?;
+                    let kind = value
+                        .get("kind")
+                        .and_then(toml::Value::as_str)
+                        .filter(|kind| matches!(*kind, "entity" | "mixin"))
+                        .ok_or_else(|| {
+                            RepositoryError::InvalidSolutionPackPlan(
+                                "prior created blueprint kind is invalid".into(),
+                            )
+                        })?
+                        .to_owned();
+                    let hash = catalog_blueprint::raw_hash(definition);
+                    (kind, hash.clone(), hash)
+                }
+                _ => {
+                    return Err(RepositoryError::InvalidSolutionPackPlan(
+                        "prior solution-pack blueprint execution is unsupported".into(),
+                    ));
+                }
+            };
+        prior.push(PriorBlueprint {
+            position: row.position,
+            logical_key: row.logical_key,
+            target_id: row.target_id,
+            target_code: row.target_code,
+            target_version,
+            kind,
+            canonical_definition_sha256,
+            definition_hash,
+            was_published,
+        });
+    }
+    Ok((pack_version, prior))
+}
+
 impl CatalogRepository {
     /// Solution-pack permissions are bootstrapped in application code so the
     /// database migration history remains declarative.
@@ -245,7 +490,13 @@ impl CatalogRepository {
         prefix: &str,
         publication: BlueprintPublication,
         requested_mappings: &[BlueprintMappingRequest],
+        prior_application_id: Option<Uuid>,
     ) -> Result<SolutionPackPlan, RepositoryError> {
+        if prior_application_id.is_some() && !requested_mappings.is_empty() {
+            return Err(RepositoryError::InvalidSolutionPackPlan(
+                "from_application and explicit blueprint mappings are mutually exclusive".into(),
+            ));
+        }
         validate_blueprint_mapping_requests(pack, requested_mappings)
             .map_err(|error| RepositoryError::InvalidSolutionPackPlan(error.to_string()))?;
         let workspace_id = self.workspace_id.unwrap_or(Self::DEFAULT_WORKSPACE_ID);
@@ -253,6 +504,15 @@ impl CatalogRepository {
         sqlx::query("SET TRANSACTION ISOLATION LEVEL REPEATABLE READ")
             .execute(&mut *tx)
             .await?;
+        let (prior_pack_version, prior_blueprints) = if let Some(application_id) =
+            prior_application_id
+        {
+            let (version, blueprints) =
+                load_prior_application(self, &mut tx, workspace_id, application_id, pack).await?;
+            (Some(version), blueprints)
+        } else {
+            (None, Vec::new())
+        };
         let physical_codes = sqlx::query_scalar::<_, String>(
             "SELECT code FROM blueprints WHERE workspace_id = $1 AND code IS NOT NULL UNION SELECT code FROM attribute_contexts WHERE workspace_id = $1",
         )
@@ -366,6 +626,114 @@ impl CatalogRepository {
                 },
             );
         }
+        let current_blueprint_keys = pack
+            .manifest()
+            .resources
+            .blueprints
+            .iter()
+            .map(|resource| resource.key.as_str())
+            .collect::<std::collections::BTreeSet<_>>();
+        let mut prior_target_conflicts = std::collections::BTreeMap::new();
+        for prior in &prior_blueprints {
+            if !current_blueprint_keys.contains(prior.logical_key.as_str()) {
+                continue;
+            }
+            let current = sqlx::query_as::<_, (Uuid, Option<String>, i64, String, String, String, String, Option<DateTime<Utc>>)>(
+                "SELECT id,code,version,kind,definition_hash,definition,status,deleted_at FROM blueprints WHERE workspace_id=$1 AND id=$2 AND version=$3",
+            )
+            .bind(workspace_id)
+            .bind(prior.target_id)
+            .bind(prior.target_version)
+            .fetch_optional(&mut *tx)
+            .await?;
+            let latest_published_version = sqlx::query_scalar::<_, Option<i64>>(
+                "SELECT max(version) FROM blueprints WHERE workspace_id=$1 AND id=$2 AND status='published' AND deleted_at IS NULL",
+            )
+            .bind(workspace_id)
+            .bind(prior.target_id)
+            .fetch_one(&mut *tx)
+            .await?;
+            let mut conflict = (!prior.was_published).then_some("prior_target_unpublished");
+            let mut snapshot = ExistingBlueprintSnapshot {
+                id: prior.target_id,
+                code: prior.target_code.clone(),
+                version: prior.target_version,
+                kind: prior.kind.clone(),
+                canonical_definition_hash: prior.canonical_definition_sha256.clone(),
+                definition_hash: prior.definition_hash.clone(),
+            };
+            if conflict.is_none() {
+                match current {
+                    None if latest_published_version.is_some() => {
+                        conflict = Some("prior_target_revision_drifted");
+                    }
+                    None => conflict = Some("prior_target_missing"),
+                    Some((
+                        id,
+                        code,
+                        version,
+                        kind,
+                        definition_hash,
+                        definition,
+                        status,
+                        deleted_at,
+                    )) => {
+                        if deleted_at.is_some() {
+                            conflict = Some("prior_target_deleted");
+                        } else if status != "published" {
+                            conflict = Some("prior_target_unpublished");
+                        } else if latest_published_version != Some(prior.target_version)
+                            || code.as_deref() != Some(prior.target_code.as_str())
+                            || version != prior.target_version
+                            || kind != prior.kind
+                        {
+                            conflict = Some("prior_target_revision_drifted");
+                        } else {
+                            let compiled = crate::blueprint_resolver::compile_definition(
+                                &mut tx,
+                                workspace_id,
+                                &definition,
+                            )
+                            .await;
+                            let canonical = toml::from_str::<toml::Value>(&definition)
+                                .ok()
+                                .and_then(|value| toml::to_string(&value).ok())
+                                .map(|definition| catalog_blueprint::raw_hash(&definition));
+                            if compiled
+                                .ok()
+                                .map(|value| value.raw_definition_hash)
+                                .as_deref()
+                                != Some(definition_hash.as_str())
+                                || definition_hash != prior.definition_hash
+                                || canonical.as_deref()
+                                    != Some(prior.canonical_definition_sha256.as_str())
+                            {
+                                conflict = Some("prior_target_drifted");
+                            } else {
+                                snapshot = ExistingBlueprintSnapshot {
+                                    id,
+                                    code: code.expect("validated target code"),
+                                    version,
+                                    kind,
+                                    canonical_definition_hash: canonical
+                                        .expect("validated canonical hash"),
+                                    definition_hash,
+                                };
+                            }
+                        }
+                    }
+                }
+            }
+            if let Some(reason) = conflict {
+                prior_target_conflicts.insert(prior.logical_key.clone(), reason);
+                // Make the target unavailable to the ordinary planner so its
+                // existing dependency propagation and workspace-setting
+                // semantics remain authoritative.
+                snapshot.canonical_definition_hash = "0".repeat(64);
+            }
+            existing_blueprints.insert(prior.logical_key.clone(), snapshot);
+        }
+
         let extension_ids = pack
             .manifest()
             .extensions
@@ -386,7 +754,7 @@ impl CatalogRepository {
             .map(installed_extension_snapshot)
             .collect::<Result<_, _>>()?
         };
-        let draft = build_solution_pack_plan(
+        let mut draft = build_solution_pack_plan(
             pack,
             prefix,
             publication,
@@ -404,6 +772,90 @@ impl CatalogRepository {
             },
         )
         .map_err(|error| RepositoryError::InvalidSolutionPackPlan(error.to_string()))?;
+
+        let mut release_changes = Vec::new();
+        if prior_application_id.is_some() {
+            let prior_by_key = prior_blueprints
+                .iter()
+                .map(|prior| (prior.logical_key.as_str(), prior))
+                .collect::<std::collections::BTreeMap<_, _>>();
+            for resource in &pack.manifest().resources.blueprints {
+                let current_hash = draft
+                    .blueprint_canonical_definition_hashes
+                    .get(&resource.key)
+                    .cloned()
+                    .ok_or_else(|| {
+                        RepositoryError::InvalidSolutionPackPlan(
+                            "current blueprint canonical evidence is missing".into(),
+                        )
+                    })?;
+                let (change_kind, reason_code, prior) =
+                    match prior_by_key.get(resource.key.as_str()) {
+                        None => ("added", "new_blueprint", None),
+                        Some(prior) if prior.canonical_definition_sha256 != current_hash => {
+                            ("changed", "update_not_supported", Some(*prior))
+                        }
+                        Some(prior) => (
+                            "unchanged",
+                            "unchanged_from_prior_application",
+                            Some(*prior),
+                        ),
+                    };
+                let action = draft
+                    .actions
+                    .iter_mut()
+                    .find(|action| {
+                        action.resource_kind == "blueprint" && action.logical_key == resource.key
+                    })
+                    .expect("planner emits every blueprint action");
+                if let Some(target_reason) = prior_target_conflicts.get(&resource.key) {
+                    action.action = "conflict";
+                    action.reason_code = target_reason;
+                    action.normalized_payload = None;
+                    draft.ready = false;
+                } else if change_kind == "changed" {
+                    action.action = "conflict";
+                    action.reason_code = "update_not_supported";
+                    action.normalized_payload = None;
+                    draft.ready = false;
+                } else if change_kind == "unchanged" && action.action == "map" {
+                    action.reason_code = "unchanged_from_prior_application";
+                }
+                release_changes.push(SolutionPackReleaseChange {
+                    position: release_changes.len() as i64,
+                    logical_key: resource.key.clone(),
+                    change_kind: change_kind.to_owned(),
+                    prior_target_id: prior.map(|prior| prior.target_id),
+                    prior_target_code: prior.map(|prior| prior.target_code.clone()),
+                    prior_target_version: prior.map(|prior| prior.target_version),
+                    prior_canonical_definition_sha256: prior
+                        .map(|prior| prior.canonical_definition_sha256.clone()),
+                    current_canonical_definition_sha256: Some(current_hash),
+                    reason_code: prior_target_conflicts
+                        .get(&resource.key)
+                        .copied()
+                        .unwrap_or(reason_code)
+                        .to_owned(),
+                    evidence: serde_json::json!({"prior_pack_version":prior_pack_version}),
+                });
+            }
+            for prior in &prior_blueprints {
+                if !current_blueprint_keys.contains(prior.logical_key.as_str()) {
+                    release_changes.push(SolutionPackReleaseChange {
+                        position: release_changes.len() as i64,
+                        logical_key: prior.logical_key.clone(),
+                        change_kind: "removed".into(),
+                        prior_target_id: Some(prior.target_id),
+                        prior_target_code: Some(prior.target_code.clone()),
+                        prior_target_version: Some(prior.target_version),
+                        prior_canonical_definition_sha256: Some(prior.canonical_definition_sha256.clone()),
+                        current_canonical_definition_sha256: None,
+                        reason_code: "removed_from_release".into(),
+                        evidence: serde_json::json!({"prior_position":prior.position,"prior_pack_version":prior_pack_version}),
+                    });
+                }
+            }
+        }
 
         let id = Uuid::new_v4();
         let created_at = Utc::now();
@@ -423,6 +875,7 @@ impl CatalogRepository {
             prefix,
             publication,
             (created_at, expires_at),
+            (prior_application_id, release_changes.clone()),
             &draft,
         );
         let response_size = serde_json::to_vec(&plan)
@@ -434,7 +887,7 @@ impl CatalogRepository {
             ));
         }
         sqlx::query(
-            "INSERT INTO solution_pack_plans (id, workspace_id, actor_user_id, actor_token_id, source_kind, source_metadata, archive_sha256, manifest_version, pack_id, pack_name, pack_version, pack_description, host_api, prefix, blueprint_publication, ready, created_at, expires_at, readme_markdown, release_notes_markdown, setup_checklist) VALUES ($1, $2, $3, $4, 'local_archive', $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20)",
+            "INSERT INTO solution_pack_plans (id, workspace_id, actor_user_id, actor_token_id, source_kind, source_metadata, archive_sha256, manifest_version, pack_id, pack_name, pack_version, pack_description, host_api, prefix, blueprint_publication, prior_application_id, ready, created_at, expires_at, readme_markdown, release_notes_markdown, setup_checklist) VALUES ($1, $2, $3, $4, 'local_archive', $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21)",
         )
         .bind(id)
         .bind(workspace_id)
@@ -450,6 +903,7 @@ impl CatalogRepository {
         .bind(&manifest.catalog.host_api)
         .bind(prefix)
         .bind(publication.as_str())
+        .bind(prior_application_id)
         .bind(draft.ready)
         .bind(created_at)
         .bind(expires_at)
@@ -466,19 +920,14 @@ impl CatalogRepository {
         .execute(&mut *tx)
         .await?;
         insert_plan_rows(&mut tx, workspace_id, id, &draft).await?;
-        if draft
-            .mappings
-            .iter()
-            .any(|mapping| mapping.mapping_kind == "existing")
-        {
-            let evidence_sha256 = plan_resource_evidence_sha256(&mut tx, workspace_id, id).await?;
-            sqlx::query("UPDATE solution_pack_plans SET resource_evidence_sha256=$3 WHERE workspace_id=$1 AND id=$2")
-                .bind(workspace_id)
-                .bind(id)
-                .bind(evidence_sha256)
-                .execute(&mut *tx)
-                .await?;
-        }
+        insert_release_changes(&mut tx, workspace_id, id, &release_changes).await?;
+        let evidence_sha256 = plan_resource_evidence_sha256(&mut tx, workspace_id, id).await?;
+        sqlx::query("UPDATE solution_pack_plans SET resource_evidence_sha256=$3,resource_evidence_format=2 WHERE workspace_id=$1 AND id=$2")
+            .bind(workspace_id)
+            .bind(id)
+            .bind(evidence_sha256)
+            .execute(&mut *tx)
+            .await?;
         insert_plan_checks(&mut tx, workspace_id, id, pack.checks()).await?;
         let mut audit_repository = self.clone();
         if let Some(audit) = audit_repository.audit_context.as_mut() {
@@ -495,7 +944,7 @@ impl CatalogRepository {
     ) -> Result<Option<SolutionPackPlan>, RepositoryError> {
         let workspace_id = self.workspace_id.unwrap_or(Self::DEFAULT_WORKSPACE_ID);
         let Some(mut plan) = sqlx::query_as::<_, SolutionPackPlan>(
-            "SELECT id, workspace_id, source_kind, source_metadata, archive_sha256, manifest_version, pack_id, pack_name, pack_version, pack_description, host_api, prefix, blueprint_publication, ready, readme_markdown, release_notes_markdown, setup_checklist, created_at, expires_at FROM solution_pack_plans WHERE workspace_id = $1 AND id = $2",
+            "SELECT id, workspace_id, source_kind, source_metadata, archive_sha256, manifest_version, pack_id, pack_name, pack_version, pack_description, host_api, prefix, blueprint_publication, prior_application_id, ready, readme_markdown, release_notes_markdown, setup_checklist, created_at, expires_at FROM solution_pack_plans WHERE workspace_id = $1 AND id = $2",
         )
         .bind(workspace_id)
         .bind(plan_id)
@@ -527,6 +976,13 @@ impl CatalogRepository {
         .fetch_all(&self.pool)
         .await?;
         plan.checks = load_plan_check_summaries(&self.pool, workspace_id, plan_id).await?;
+        plan.release_changes = sqlx::query_as::<_, SolutionPackReleaseChange>(
+            "SELECT position,logical_key,change_kind,prior_target_id,prior_target_code,prior_target_version,prior_canonical_definition_sha256,current_canonical_definition_sha256,reason_code,evidence FROM solution_pack_plan_release_changes WHERE workspace_id=$1 AND plan_id=$2 ORDER BY position",
+        )
+        .bind(workspace_id)
+        .bind(plan_id)
+        .fetch_all(&self.pool)
+        .await?;
         Ok(Some(plan))
     }
 }
@@ -537,10 +993,12 @@ fn materialize_plan(
     prefix: &str,
     publication: BlueprintPublication,
     timestamps: (DateTime<Utc>, DateTime<Utc>),
+    lineage: (Option<Uuid>, Vec<SolutionPackReleaseChange>),
     draft: &SolutionPackPlanDraft,
 ) -> SolutionPackPlan {
     let (id, workspace_id) = identity;
     let (created_at, expires_at) = timestamps;
+    let (prior_application_id, release_changes) = lineage;
     let manifest = pack.manifest();
     let mappings = draft
         .mappings
@@ -608,6 +1066,7 @@ fn materialize_plan(
         host_api: manifest.catalog.host_api.clone(),
         prefix: prefix.to_owned(),
         blueprint_publication: publication.as_str().to_owned(),
+        prior_application_id,
         ready: draft.ready,
         readme_markdown: pack.guidance().readme_markdown.clone(),
         release_notes_markdown: pack.guidance().release_notes_markdown.clone(),
@@ -631,6 +1090,7 @@ fn materialize_plan(
                 predicate_type: check.predicate.predicate_type().to_owned(),
             })
             .collect(),
+        release_changes,
     }
 }
 
@@ -708,7 +1168,84 @@ async fn insert_plan_rows(
     Ok(())
 }
 
+async fn insert_release_changes(
+    tx: &mut Transaction<'_, Postgres>,
+    workspace_id: Uuid,
+    plan_id: Uuid,
+    changes: &[SolutionPackReleaseChange],
+) -> Result<(), RepositoryError> {
+    for change in changes {
+        sqlx::query("INSERT INTO solution_pack_plan_release_changes (plan_id,workspace_id,position,logical_key,change_kind,prior_target_id,prior_target_code,prior_target_version,prior_canonical_definition_sha256,current_canonical_definition_sha256,reason_code,evidence) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)")
+            .bind(plan_id)
+            .bind(workspace_id)
+            .bind(change.position)
+            .bind(&change.logical_key)
+            .bind(&change.change_kind)
+            .bind(change.prior_target_id)
+            .bind(&change.prior_target_code)
+            .bind(change.prior_target_version)
+            .bind(&change.prior_canonical_definition_sha256)
+            .bind(&change.current_canonical_definition_sha256)
+            .bind(&change.reason_code)
+            .bind(&change.evidence)
+            .execute(&mut **tx)
+            .await?;
+    }
+    Ok(())
+}
+
 async fn plan_resource_evidence_sha256(
+    tx: &mut Transaction<'_, Postgres>,
+    workspace_id: Uuid,
+    plan_id: Uuid,
+) -> Result<String, RepositoryError> {
+    let header: Value = sqlx::query_scalar(
+        "SELECT jsonb_build_object('format_version',2,'plan_id',p.id,'workspace_id',p.workspace_id,'archive_sha256',p.archive_sha256,'pack_id',p.pack_id,'pack_version',p.pack_version,'prefix',p.prefix,'blueprint_publication',p.blueprint_publication,'prior_application_id',p.prior_application_id,'prior_pack_version',a.pack_version,'ready',p.ready) FROM solution_pack_plans p LEFT JOIN solution_pack_applications a ON a.workspace_id=p.workspace_id AND a.id=p.prior_application_id WHERE p.workspace_id=$1 AND p.id=$2",
+    )
+    .bind(workspace_id)
+    .bind(plan_id)
+    .fetch_one(&mut **tx)
+    .await?;
+    let release_changes = sqlx::query_as::<_, SolutionPackReleaseChange>(
+        "SELECT position,logical_key,change_kind,prior_target_id,prior_target_code,prior_target_version,prior_canonical_definition_sha256,current_canonical_definition_sha256,reason_code,evidence FROM solution_pack_plan_release_changes WHERE workspace_id=$1 AND plan_id=$2 ORDER BY position",
+    )
+    .bind(workspace_id)
+    .bind(plan_id)
+    .fetch_all(&mut **tx)
+    .await?;
+    let mappings = sqlx::query_as::<_, PlanEvidenceMapping>(
+        "SELECT position,resource_kind,logical_key,target_id,target_code,target_version,mapping_kind,snapshot FROM solution_pack_plan_mappings WHERE workspace_id=$1 AND plan_id=$2 ORDER BY position",
+    )
+    .bind(workspace_id)
+    .bind(plan_id)
+    .fetch_all(&mut **tx)
+    .await?;
+    let actions = sqlx::query_as::<_, PlanEvidenceAction>(
+        "SELECT position,resource_kind,logical_key,action,reason_code,summary,normalized_payload,preconditions FROM solution_pack_plan_actions WHERE workspace_id=$1 AND plan_id=$2 ORDER BY position",
+    )
+    .bind(workspace_id)
+    .bind(plan_id)
+    .fetch_all(&mut **tx)
+    .await?;
+    let extension_requirements = sqlx::query_as::<_, PlanEvidenceExtensionRequirement>(
+        "SELECT position,logical_key,extension_id,version_requirement,required,configuration_template_path,configuration_template_sha256,status,reason_code,installed_release_id,installed_version,installed_state,configuration_matches,evaluation_template FROM solution_pack_plan_extension_requirements WHERE workspace_id=$1 AND plan_id=$2 ORDER BY position",
+    )
+    .bind(workspace_id)
+    .bind(plan_id)
+    .fetch_all(&mut **tx)
+    .await?;
+    let encoded = serde_json::to_vec(&(
+        header,
+        release_changes,
+        mappings,
+        actions,
+        extension_requirements,
+    ))
+    .map_err(|error| RepositoryError::InvalidSolutionPackPlan(error.to_string()))?;
+    Ok(format!("{:x}", Sha256::digest(encoded)))
+}
+
+async fn legacy_plan_resource_evidence_sha256(
     tx: &mut Transaction<'_, Postgres>,
     workspace_id: Uuid,
     plan_id: Uuid,
@@ -796,10 +1333,12 @@ pub struct SolutionPackApplication {
     pub pack_id: String,
     pub pack_version: String,
     pub blueprint_publication: String,
+    pub prior_application_id: Option<Uuid>,
     pub state: String,
     pub diagnostic_code: Option<String>,
     pub diagnostic_message: Option<String>,
     pub mapping_snapshot: Value,
+    pub release_change_snapshot: Value,
     pub readme_markdown: Option<String>,
     pub release_notes_markdown: Option<String>,
     pub setup_checklist: Option<Value>,
@@ -862,6 +1401,7 @@ pub struct SolutionPackApplicationSummary {
     pub pack_id: String,
     pub pack_version: String,
     pub blueprint_publication: String,
+    pub prior_application_id: Option<Uuid>,
     pub state: String,
     pub diagnostic_code: Option<String>,
     pub diagnostic_message: Option<String>,
@@ -1061,17 +1601,32 @@ impl CatalogRepository {
         .bind(plan_id)
         .fetch_all(&mut **tx)
         .await?;
-        let stored_evidence_sha256: Option<String> = sqlx::query_scalar(
-            "SELECT resource_evidence_sha256 FROM solution_pack_plans WHERE workspace_id=$1 AND id=$2",
+        let (stored_evidence_sha256, evidence_format, prior_application_id) = sqlx::query_as::<
+            _,
+            (Option<String>, Option<i16>, Option<Uuid>),
+        >(
+            "SELECT resource_evidence_sha256,resource_evidence_format,prior_application_id FROM solution_pack_plans WHERE workspace_id=$1 AND id=$2",
         )
         .bind(workspace_id)
         .bind(plan_id)
         .fetch_one(&mut **tx)
         .await?;
+        if (evidence_format == Some(2) && stored_evidence_sha256.is_none())
+            || (prior_application_id.is_some()
+                && (evidence_format != Some(2) || stored_evidence_sha256.is_none()))
+        {
+            return Err(RepositoryError::InvalidSolutionPackPlan(
+                "persisted solution-pack resource evidence is missing".into(),
+            ));
+        }
         if let Some(stored_evidence_sha256) = stored_evidence_sha256 {
             // A persisted digest is authoritative even if every covered row or its
             // mapping/action discriminator was modified after review.
-            let actual = plan_resource_evidence_sha256(tx, workspace_id, plan_id).await?;
+            let actual = if evidence_format == Some(2) {
+                plan_resource_evidence_sha256(tx, workspace_id, plan_id).await?
+            } else {
+                legacy_plan_resource_evidence_sha256(tx, workspace_id, plan_id).await?
+            };
             if stored_evidence_sha256 != actual {
                 return Err(RepositoryError::InvalidSolutionPackPlan(
                     "persisted solution-pack resource evidence is inconsistent".into(),
@@ -1189,8 +1744,10 @@ impl CatalogRepository {
                 ));
             }
             if action.action == "map" {
-                if action.reason_code != "exact_blueprint_match"
-                    || action.normalized_payload.is_some()
+                if !matches!(
+                    action.reason_code.as_str(),
+                    "exact_blueprint_match" | "unchanged_from_prior_application"
+                ) || action.normalized_payload.is_some()
                 {
                     return Err(RepositoryError::InvalidSolutionPackPlan(
                         "persisted map action evidence is invalid".into(),
@@ -1237,7 +1794,7 @@ impl CatalogRepository {
         let workspace_id = self.workspace_id.unwrap_or(Self::DEFAULT_WORKSPACE_ID);
         let mut tx = self.pool.begin().await?;
         let plan = sqlx::query_as::<_, SolutionPackPlan>(
-            "SELECT id, workspace_id, source_kind, source_metadata, archive_sha256, manifest_version, pack_id, pack_name, pack_version, pack_description, host_api, prefix, blueprint_publication, ready, readme_markdown, release_notes_markdown, setup_checklist, created_at, expires_at FROM solution_pack_plans WHERE workspace_id = $1 AND id = $2 FOR UPDATE",
+            "SELECT id, workspace_id, source_kind, source_metadata, archive_sha256, manifest_version, pack_id, pack_name, pack_version, pack_description, host_api, prefix, blueprint_publication, prior_application_id, ready, readme_markdown, release_notes_markdown, setup_checklist, created_at, expires_at FROM solution_pack_plans WHERE workspace_id = $1 AND id = $2 FOR UPDATE",
         )
         .bind(workspace_id)
         .bind(plan_id)
@@ -1296,6 +1853,15 @@ impl CatalogRepository {
         .await?;
         let mapping_snapshot = serde_json::to_value(&mappings)
             .map_err(|error| RepositoryError::InvalidSolutionPackPlan(error.to_string()))?;
+        let release_changes = sqlx::query_as::<_, SolutionPackReleaseChange>(
+            "SELECT position,logical_key,change_kind,prior_target_id,prior_target_code,prior_target_version,prior_canonical_definition_sha256,current_canonical_definition_sha256,reason_code,evidence FROM solution_pack_plan_release_changes WHERE workspace_id=$1 AND plan_id=$2 ORDER BY position",
+        )
+        .bind(workspace_id)
+        .bind(plan_id)
+        .fetch_all(&mut *tx)
+        .await?;
+        let release_change_snapshot = serde_json::to_value(release_changes)
+            .map_err(|error| RepositoryError::InvalidSolutionPackPlan(error.to_string()))?;
         let application_id = Uuid::new_v4();
         let actor_user_id = self
             .audit_context
@@ -1314,7 +1880,7 @@ impl CatalogRepository {
             .as_ref()
             .map_or(request_id, |value| value.correlation_id);
         let inserted = sqlx::query_scalar::<_, Uuid>(
-            "INSERT INTO solution_pack_applications (id, workspace_id, plan_id, actor_user_id, actor_token_id, request_id, correlation_id, source_kind, source_metadata, archive_sha256, pack_id, pack_version, blueprint_publication, state, mapping_snapshot, readme_markdown, release_notes_markdown, setup_checklist) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,'running',$14,$15,$16,$17) ON CONFLICT (plan_id) DO NOTHING RETURNING id",
+            "INSERT INTO solution_pack_applications (id, workspace_id, plan_id, actor_user_id, actor_token_id, request_id, correlation_id, source_kind, source_metadata, archive_sha256, pack_id, pack_version, blueprint_publication, prior_application_id, state, mapping_snapshot, release_change_snapshot, readme_markdown, release_notes_markdown, setup_checklist) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,'running',$15,$16,$17,$18,$19) ON CONFLICT (plan_id) DO NOTHING RETURNING id",
         )
         .bind(application_id)
         .bind(workspace_id)
@@ -1329,7 +1895,9 @@ impl CatalogRepository {
         .bind(&plan.pack_id)
         .bind(&plan.pack_version)
         .bind(&plan.blueprint_publication)
+        .bind(plan.prior_application_id)
         .bind(mapping_snapshot)
+        .bind(release_change_snapshot)
         .bind(&plan.readme_markdown)
         .bind(&plan.release_notes_markdown)
         .bind(&plan.setup_checklist)
@@ -2155,7 +2723,7 @@ impl CatalogRepository {
             .execute(&mut *tx)
             .await?;
         let Some(mut application) = sqlx::query_as::<_, SolutionPackApplication>(
-            "SELECT id,workspace_id,plan_id,request_id,correlation_id,source_kind,source_metadata,archive_sha256,pack_id,pack_version,blueprint_publication,state,diagnostic_code,diagnostic_message,mapping_snapshot,readme_markdown,release_notes_markdown,setup_checklist,started_at,updated_at,completed_at FROM solution_pack_applications WHERE workspace_id=$1 AND id=$2",
+            "SELECT id,workspace_id,plan_id,request_id,correlation_id,source_kind,source_metadata,archive_sha256,pack_id,pack_version,blueprint_publication,prior_application_id,state,diagnostic_code,diagnostic_message,mapping_snapshot,release_change_snapshot,readme_markdown,release_notes_markdown,setup_checklist,started_at,updated_at,completed_at FROM solution_pack_applications WHERE workspace_id=$1 AND id=$2",
         )
         .bind(workspace_id).bind(application_id).fetch_optional(&mut *tx).await? else {
             tx.commit().await?;
@@ -2348,7 +2916,7 @@ impl CatalogRepository {
     ) -> Result<Vec<SolutionPackApplicationSummary>, RepositoryError> {
         let workspace_id = self.workspace_id.unwrap_or(Self::DEFAULT_WORKSPACE_ID);
         Ok(sqlx::query_as::<_, SolutionPackApplicationSummary>(
-            "SELECT id,plan_id,request_id,correlation_id,source_kind,source_metadata,archive_sha256,pack_id,pack_version,blueprint_publication,state,diagnostic_code,diagnostic_message,started_at,updated_at,completed_at FROM solution_pack_applications WHERE workspace_id=$1 ORDER BY started_at DESC,id DESC LIMIT $2 OFFSET $3",
+            "SELECT id,plan_id,request_id,correlation_id,source_kind,source_metadata,archive_sha256,pack_id,pack_version,blueprint_publication,prior_application_id,state,diagnostic_code,diagnostic_message,started_at,updated_at,completed_at FROM solution_pack_applications WHERE workspace_id=$1 ORDER BY started_at DESC,id DESC LIMIT $2 OFFSET $3",
         ).bind(workspace_id).bind(limit).bind(offset).fetch_all(&self.pool).await?)
     }
 }

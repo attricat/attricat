@@ -2358,6 +2358,10 @@ pub struct SolutionPackPlanDraft {
     pub mappings: Vec<PlannedMapping>,
     pub actions: Vec<PlannedAction>,
     pub extension_requirements: Vec<PlannedExtensionRequirement>,
+    /// Canonical physical definitions computed from the current archive and
+    /// this plan's exact logical-key mappings. This is repository-only release
+    /// evidence and is not itself persisted as an executable payload.
+    pub blueprint_canonical_definition_hashes: BTreeMap<String, String>,
 }
 
 pub fn evaluate_extension_requirement(
@@ -2678,6 +2682,7 @@ pub fn build_solution_pack_plan(
     }
 
     let mut outcomes = HashMap::<String, (&'static str, &'static str)>::new();
+    let mut blueprint_canonical_definition_hashes = BTreeMap::new();
     for (logical_key, (_, resource)) in &resources {
         let mapping = &mappings_by_key[logical_key];
         let explicitly_mapped = mapping.mapping_kind == "existing";
@@ -2695,7 +2700,10 @@ pub fn build_solution_pack_plan(
             let definition = normalized["definition"]
                 .as_str()
                 .expect("normalized blueprint definition is a string");
-            existing.canonical_definition_hash == catalog_blueprint::raw_hash(definition)
+            let canonical_definition_hash = catalog_blueprint::raw_hash(definition);
+            blueprint_canonical_definition_hashes
+                .insert(logical_key.clone(), canonical_definition_hash.clone());
+            existing.canonical_definition_hash == canonical_definition_hash
                 && existing.kind
                     == blueprint_kind_name(
                         pack.blueprint(logical_key)
@@ -2703,6 +2711,20 @@ pub fn build_solution_pack_plan(
                             .kind(),
                     )
         } else {
+            let normalized = normalized_blueprint_payload(
+                pack.blueprint(logical_key)
+                    .expect("validated blueprint exists"),
+                &mappings_by_key,
+                publication,
+                &blueprint_layout_allowed[logical_key],
+                workspace,
+                manifest,
+            )?;
+            let definition = normalized["definition"]
+                .as_str()
+                .expect("normalized blueprint definition is a string");
+            blueprint_canonical_definition_hashes
+                .insert(logical_key.clone(), catalog_blueprint::raw_hash(definition));
             false
         };
         outcomes.insert(
@@ -2850,6 +2872,7 @@ pub fn build_solution_pack_plan(
                 mappings: mappings_by_key.into_values().collect(),
                 actions,
                 extension_requirements,
+                blueprint_canonical_definition_hashes,
             });
         }
 
@@ -3110,6 +3133,7 @@ pub fn build_solution_pack_plan(
         mappings: mappings_by_key.into_values().collect(),
         actions,
         extension_requirements,
+        blueprint_canonical_definition_hashes,
     })
 }
 

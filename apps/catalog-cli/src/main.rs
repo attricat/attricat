@@ -916,8 +916,15 @@ enum SolutionPackCommand {
         #[arg(long)]
         blueprint_publication: Option<BlueprintPublicationArgument>,
         /// Explicitly reuse a published blueprint (`logical_key=existing_code`).
-        #[arg(long = "map", value_name = "LOGICAL_KEY=EXISTING_CODE")]
+        #[arg(
+            long = "map",
+            value_name = "LOGICAL_KEY=EXISTING_CODE",
+            conflicts_with = "from_application"
+        )]
         blueprint_maps: Vec<String>,
+        /// Reuse unchanged published blueprints from one completed application.
+        #[arg(long, conflicts_with = "blueprint_maps")]
+        from_application: Option<Uuid>,
     },
     /// Apply exactly the persisted immutable plan; no choices are recomputed.
     Apply { plan_id: Uuid },
@@ -2315,6 +2322,7 @@ async fn solution_pack_command(
             prefix: None,
             blueprint_publication: None,
             blueprint_maps,
+            from_application: None,
         } if blueprint_maps.is_empty() => {
             request(
                 client,
@@ -2331,12 +2339,17 @@ async fn solution_pack_command(
             prefix: Some(prefix),
             blueprint_publication: Some(publication),
             blueprint_maps,
+            from_application,
         } => {
-            let path = format!(
+            let mut path = format!(
                 "/solution-packs/plans?prefix={}&blueprint_publication={}",
                 segment(prefix),
                 publication.as_str()
             );
+            if let Some(application_id) = from_application {
+                path.push_str("&from_application=");
+                path.push_str(&segment(application_id));
+            }
             if blueprint_maps.is_empty() {
                 raw_upload(client, server, &path, &file, "application/zstd").await
             } else {
@@ -4023,6 +4036,40 @@ value = "Blue shirt"
             "publish",
         ]);
         assert!(create.is_ok());
+        assert!(
+            Cli::try_parse_from([
+                "acli",
+                "solution-pack",
+                "plan",
+                "--file",
+                "pack.tar.zst",
+                "--prefix",
+                "ecom",
+                "--blueprint-publication",
+                "publish",
+                "--from-application",
+                "00000000-0000-4000-8000-000000000001",
+            ])
+            .is_ok()
+        );
+        assert!(
+            Cli::try_parse_from([
+                "acli",
+                "solution-pack",
+                "plan",
+                "--file",
+                "pack.tar.zst",
+                "--prefix",
+                "ecom",
+                "--blueprint-publication",
+                "publish",
+                "--from-application",
+                "00000000-0000-4000-8000-000000000001",
+                "--map",
+                "blueprints/product=shared_product",
+            ])
+            .is_err()
+        );
         let show = Cli::try_parse_from([
             "acli",
             "solution-pack",
@@ -4272,6 +4319,7 @@ value = "Blue shirt"
                 prefix: Some("ecom".to_owned()),
                 blueprint_publication: None,
                 blueprint_maps: Vec::new(),
+                from_application: None,
             },
         )
         .await;
@@ -4288,6 +4336,7 @@ value = "Blue shirt"
                 prefix: Some("ecom".to_owned()),
                 blueprint_publication: Some(BlueprintPublicationArgument::Draft),
                 blueprint_maps: Vec::new(),
+                from_application: None,
             },
         )
         .await;
@@ -4318,6 +4367,7 @@ value = "Blue shirt"
                     prefix: Some("ecom".to_owned()),
                     blueprint_publication: Some(BlueprintPublicationArgument::Draft),
                     blueprint_maps: vec![mapping.to_owned()],
+                    from_application: None,
                 },
             )
             .await;
@@ -4391,6 +4441,7 @@ value = "Blue shirt"
                 prefix: Some("shop prefix".to_owned()),
                 blueprint_publication: Some(BlueprintPublicationArgument::Publish),
                 blueprint_maps: Vec::new(),
+                from_application: None,
             },
         )
         .await
@@ -4401,6 +4452,32 @@ value = "Blue shirt"
             received.lock().unwrap().take().unwrap(),
             (
                 "prefix=shop+prefix&blueprint_publication=publish".to_owned(),
+                "application/zstd".to_owned(),
+                b"opaque archive bytes".to_vec()
+            )
+        );
+
+        let prior_application_id = Uuid::parse_str("00000000-0000-4000-8000-000000000123").unwrap();
+        solution_pack_command(
+            &Client::new(),
+            &api,
+            SolutionPackCommand::Plan {
+                command: None,
+                file: Some(archive.path().to_path_buf()),
+                prefix: Some("shop".to_owned()),
+                blueprint_publication: Some(BlueprintPublicationArgument::Publish),
+                blueprint_maps: Vec::new(),
+                from_application: Some(prior_application_id),
+            },
+        )
+        .await
+        .unwrap();
+        assert_eq!(
+            received.lock().unwrap().take().unwrap(),
+            (
+                format!(
+                    "prefix=shop&blueprint_publication=publish&from_application={prior_application_id}"
+                ),
                 "application/zstd".to_owned(),
                 b"opaque archive bytes".to_vec()
             )
@@ -4418,6 +4495,7 @@ value = "Blue shirt"
                     "blueprints/product=shared_product".to_owned(),
                     "blueprints/category=shared_category".to_owned(),
                 ],
+                from_application: None,
             },
         )
         .await
@@ -4445,6 +4523,7 @@ value = "Blue shirt"
                     "blueprints/product=shared_product".to_owned(),
                     "blueprints/product=other_product".to_owned(),
                 ],
+                from_application: None,
             },
         )
         .await;
@@ -4459,6 +4538,7 @@ value = "Blue shirt"
                 prefix: None,
                 blueprint_publication: None,
                 blueprint_maps: Vec::new(),
+                from_application: None,
             },
         )
         .await
