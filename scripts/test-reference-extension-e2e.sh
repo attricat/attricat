@@ -1,7 +1,6 @@
 #!/usr/bin/env bash
-# Runs against the worktree-local stack.  This intentionally drives the public
-# CLI/HTTP boundary; it does not construct repositories, fake object stores, or
-# invoke an extension runtime directly.
+# Runs against the worktree-local stack through its public CLI/HTTP boundary.
+# The sibling example is the maintained host-integration extension.
 set -euo pipefail
 
 root=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
@@ -15,83 +14,40 @@ command -v jq >/dev/null || { echo 'jq is required' >&2; exit 1; }
 
 cli=(cargo run --quiet -p cli -- --token "$CATALOG_TOKEN")
 api() { curl --fail-with-body --silent --show-error -H "Authorization: Bearer $CATALOG_TOKEN" -H 'Content-Type: application/json' "$@"; }
-wait_for_status() {
-  local id=$1 wanted=$2 deadline=$((SECONDS + 60)) status
-  while (( SECONDS < deadline )); do
-    status=$(api "$CATALOG_API_URL/extension-operation-runs" | jq -r ".[] | select(.id == \"$id\") | .status")
-    [[ "$status" == "$wanted" ]] && return
-    sleep 1
-  done
-  echo "run $id did not reach $wanted" >&2
-  return 1
-}
 
 (cd "$example_extension" && just check && just pack)
-customer_blueprint=$(mktemp)
-customer_code="reference_customer_${RANDOM}_${RANDOM}"
-trap 'rm -f "$customer_blueprint"' EXIT
-cat >"$customer_blueprint" <<TOML
-format_version = 1
-code = "$customer_code"
-name = "Reference customer"
-kind = "entity"
-[views.dropdown_option]
-type = "dropdown_option"
-fields = ["external_id"]
-[[attributes]]
-code = "external_id"
-value_type = "string"
-[[attributes]]
-code = "name"
-value_type = "string"
-[[attributes]]
-code = "email"
-value_type = "string"
-TOML
-# Creation is server-side validation; publishing establishes the customer
-# contract before the packaged importer/exporter runs.
-blueprint_id=$("${cli[@]}" blueprint create --file "$customer_blueprint" | jq -r '.blueprint.id')
-"${cli[@]}" blueprint publish "$blueprint_id" 1 >/dev/null
-for kind in importer exporter; do
-  "${cli[@]}" extension sideload --file "$example_extension/dist/reference-customer-$kind.tar.zst" >/dev/null
-  id="attricat.reference-customer-$kind"
-  "${cli[@]}" extension grant "$id" --grant-kind capability --grant-id artifacts.write >/dev/null
-  "${cli[@]}" extension enable "$id" >/dev/null
-done
+manifest="$example_extension/manifest.json"
+extension_id=$(jq -r '.catalog.id' "$manifest")
+version=$(jq -r '.version' "$manifest")
+archive="$example_extension/dist/$extension_id-$version.tar.zst"
+test -s "$archive" || { echo "missing packaged example archive: $archive" >&2; exit 1; }
 
-# Invalid input is rejected before a durable run is created.
-if api -X POST "$CATALOG_API_URL/extensions/attricat.reference-customer-importer/operations" \
-  --data '{"operation_id":"import-customers","input":{"unexpected":true},"source_reference":{},"destination_reference":{},"idempotency_key":"reference-invalid"}' >/dev/null; then
-  echo 'invalid operation request was accepted' >&2; exit 1
-fi
+# Package, side-load, grant every declared capability, and enable the same
+# extension maintained by the sibling checkout. This proves host installer,
+# permissions, component validation, and client-artifact delivery together.
+# A prior interrupted verification may have left a disabled installation.
+"${cli[@]}" extension remove "$extension_id" >/dev/null 2>&1 || true
+"${cli[@]}" extension sideload --file "$archive" >/dev/null
+while IFS= read -r permission; do
+  "${cli[@]}" extension grant "$extension_id" --grant-kind capability --grant-id "$permission" >/dev/null
+done < <(jq -r '.permissions[]' "$manifest")
+"${cli[@]}" extension enable "$extension_id" >/dev/null
 
-start() {
-  local extension=$1 operation=$2 key=$3
-  api -X POST "$CATALOG_API_URL/extensions/$extension/operations" --data "{\"operation_id\":\"$operation\",\"input\":{\"fixture\":\"customers.ndjson\"},\"source_reference\":{},\"destination_reference\":{},\"idempotency_key\":\"$key\"}" | jq -r .id
-}
-import_run=$(start attricat.reference-customer-importer import-customers reference-import)
-# Duplicate delivery is idempotent at the public operation boundary.
-[[ "$import_run" == "$(start attricat.reference-customer-importer import-customers reference-import)" ]]
-wait_for_status "$import_run" completed
-export_run=$(start attricat.reference-customer-exporter export-customers reference-export)
-wait_for_status "$export_run" completed
+detail=$("${cli[@]}" extension detail "$extension_id")
+echo "$detail" | jq -e '.installation.state == "enabled"' >/dev/null
+release_id=$(echo "$detail" | jq -r '.installation.installed_release_id')
+[[ "$release_id" != "null" && -n "$release_id" ]] || { echo 'enabled extension did not expose a release ID' >&2; exit 1; }
 
-# A queued run cancels without entering the component; avoid racing the local
-# worker by use of a deliberately invalid stale operation ID. The cancellation
-# endpoint remains a public, idempotent lifecycle call.
-cancel_run=$(start attricat.reference-customer-exporter export-customers reference-cancel)
-api -X POST "$CATALOG_API_URL/extension-operation-runs/$cancel_run/cancel" >/dev/null
-wait_for_status "$cancel_run" cancelled
-"${cli[@]}" extension disable attricat.reference-customer-exporter >/dev/null
-"${cli[@]}" extension revoke attricat.reference-customer-exporter capability artifacts.write >/dev/null
-if api -X POST "$CATALOG_API_URL/extensions/attricat.reference-customer-exporter/operations" \
-  --data '{"operation_id":"export-customers","input":{"fixture":"customers.ndjson"},"source_reference":{},"destination_reference":{},"idempotency_key":"reference-revoked"}' >/dev/null; then
-  echo 'revoked extension was allowed to start' >&2; exit 1
-fi
-"${cli[@]}" extension quarantine attricat.reference-customer-importer --diagnostic-code reference-e2e >/dev/null
-"${cli[@]}" extension detail attricat.reference-customer-importer | jq -e '.state == "quarantined"' >/dev/null
+# Fetch a real declared client contribution through the mediated artifact API.
+contribution=$(jq -r '.ui[] | select(.artifact != null) | .id' "$manifest" | head -1)
+artifact=$(mktemp)
+trap 'rm -f "$artifact"' EXIT
+"${cli[@]}" extension artifact "$extension_id" "$contribution" --output "$artifact" >/dev/null
+test -s "$artifact"
 
-# The audit endpoint is the public evidence surface for package, grant, enable,
-# revoke, cancel, and quarantine lifecycle actions.
+# Quarantine is a public lifecycle action; the audit API is the public evidence
+# surface for package, grants, enablement, artifact delivery, and quarantine.
+"${cli[@]}" extension quarantine "$extension_id" --diagnostic-code reference-e2e >/dev/null
+"${cli[@]}" extension detail "$extension_id" | jq -e '.installation.state == "quarantined"' >/dev/null
 "${cli[@]}" audit list --limit 100 | jq -e '.events | map(.target.type) | any(. == "extension")' >/dev/null
-printf 'reference extension E2E passed: import=%s export=%s cancel=%s\n' "$import_run" "$export_run" "$cancel_run"
+printf 'reference extension E2E passed: extension=%s release=%s contribution=%s\n' "$extension_id" "$release_id" "$contribution"

@@ -696,7 +696,8 @@ export CATALOG_TOKEN=... # owner token for this worktree
 just test-reference-extension-e2e
 ```
 
-The suite builds and packages both sibling archives, side-loads them through the
-public CLI, grants/enables them, validates and publishes the customer blueprint,
-and drives public operation, cancellation, revocation, quarantine, duplicate
-idempotency, and audit endpoints. It does not use repository/runtime mocks.
+The suite builds and packages the maintained sibling example archive, side-loads
+it through the public CLI, grants every manifest-declared capability, enables
+it, downloads a declared client contribution through the mediated artifact API,
+and verifies quarantine and audit lifecycle evidence. It does not use
+repository/runtime mocks.
