@@ -27,7 +27,20 @@ value_type = "string"
 
 # source-only marker: BLUEPRINT_SOURCE_SECRET
 "#;
-const WEB_CONTEXT: &[u8] = br#"{"format_version":1,"code":"web","data":{"secret":"CONTEXT_DATA_SECRET"},"parent":"system/default"}"#;
+const CATEGORY_BLUEPRINT: &[u8] = br#"
+format_version = 1
+code = "category"
+name = "Category"
+kind = "entity"
+
+[views.dropdown_option]
+type = "dropdown_option"
+fields = ["name"]
+
+[[attributes]]
+code = "name"
+value_type = "string"
+"#;
 
 fn digest(bytes: &[u8]) -> String {
     Sha256::digest(bytes)
@@ -38,6 +51,33 @@ fn digest(bytes: &[u8]) -> String {
 
 fn valid_archive() -> Vec<u8> {
     archive_with_blueprint(PRODUCT_BLUEPRINT)
+}
+
+fn archive_with_rejected_context_resource() -> Vec<u8> {
+    const CONTEXT: &[u8] =
+        br#"{"format_version":1,"code":"web","data":{},"parent":"system/default"}"#;
+    let manifest = serde_json::to_vec(&json!({
+        "manifest_version": 1,
+        "id": "attricat.rejected-context",
+        "name": "Rejected context",
+        "version": "1.0.0",
+        "description": "Contexts are not pack resources",
+        "catalog": {"host_api": "^1.0"},
+        "resources": {
+            "blueprints": [{"key":"blueprints/product","path":"blueprints/product.toml","required":true,"sha256":digest(PRODUCT_BLUEPRINT)}],
+            "contexts": [{"key":"contexts/web","path":"contexts/web.json","required":true,"sha256":digest(CONTEXT)}]
+        }
+    }))
+    .unwrap();
+    let mut tar_bytes = Vec::new();
+    {
+        let mut tar = tar::Builder::new(&mut tar_bytes);
+        append_file(&mut tar, "solution-pack.json", &manifest);
+        append_file(&mut tar, "blueprints/product.toml", PRODUCT_BLUEPRINT);
+        append_file(&mut tar, "contexts/web.json", CONTEXT);
+        tar.finish().unwrap();
+    }
+    zstd::stream::encode_all(Cursor::new(tar_bytes), 0).unwrap()
 }
 
 fn archive_with_guidance_and_checks() -> Vec<u8> {
@@ -72,7 +112,32 @@ fn archive_with_guidance_and_checks() -> Vec<u8> {
 }
 
 fn archive_with_blueprint(product_blueprint: &[u8]) -> Vec<u8> {
-    archive_with_options(product_blueprint, false)
+    archive_with_options(product_blueprint)
+}
+
+fn archive_with_two_blueprints() -> Vec<u8> {
+    let manifest = serde_json::to_vec(&json!({
+        "manifest_version": 1,
+        "id": "attricat.two-blueprints",
+        "name": "Two blueprints",
+        "version": "1.0.0",
+        "description": "Retry fixture",
+        "catalog": {"host_api": "^1.0"},
+        "resources": {"blueprints": [
+            {"key":"blueprints/product","path":"blueprints/product.toml","required":true,"sha256":digest(PRODUCT_BLUEPRINT)},
+            {"key":"blueprints/category","path":"blueprints/category.toml","required":true,"sha256":digest(CATEGORY_BLUEPRINT)}
+        ]}
+    }))
+    .unwrap();
+    let mut tar_bytes = Vec::new();
+    {
+        let mut tar = tar::Builder::new(&mut tar_bytes);
+        append_file(&mut tar, "solution-pack.json", &manifest);
+        append_file(&mut tar, "blueprints/product.toml", PRODUCT_BLUEPRINT);
+        append_file(&mut tar, "blueprints/category.toml", CATEGORY_BLUEPRINT);
+        tar.finish().unwrap();
+    }
+    zstd::stream::encode_all(Cursor::new(tar_bytes), 0).unwrap()
 }
 
 fn archive_with_all_checks() -> Vec<u8> {
@@ -152,39 +217,6 @@ fn archive_with_checklist(checklist: &[u8]) -> Vec<u8> {
     zstd::stream::encode_all(Cursor::new(tar_bytes), 0).unwrap()
 }
 
-fn archive_with_required_context(product_blueprint: &[u8]) -> Vec<u8> {
-    archive_with_options(product_blueprint, true)
-}
-
-fn context_only_archive() -> Vec<u8> {
-    let manifest = serde_json::to_vec(&json!({
-        "manifest_version": 1,
-        "id": "attricat.contexts",
-        "name": "Contexts",
-        "version": "1.0.0",
-        "description": "Context starter",
-        "catalog": {"host_api": "^1.0"},
-        "resources": {
-            "blueprints": [],
-            "contexts": [{
-                "key": "contexts/web",
-                "path": "contexts/web.json",
-                "required": true,
-                "sha256": digest(WEB_CONTEXT)
-            }]
-        }
-    }))
-    .unwrap();
-    let mut tar_bytes = Vec::new();
-    {
-        let mut tar = tar::Builder::new(&mut tar_bytes);
-        append_file(&mut tar, "solution-pack.json", &manifest);
-        append_file(&mut tar, "contexts/web.json", WEB_CONTEXT);
-        tar.finish().unwrap();
-    }
-    zstd::stream::encode_all(Cursor::new(tar_bytes), 0).unwrap()
-}
-
 fn archive_with_extension_requirement(required: bool) -> Vec<u8> {
     const TEMPLATE: &[u8] = br#"{"endpoint":"TEMPLATE_VALUE_SENTINEL"}"#;
     let manifest = serde_json::to_vec(&json!({
@@ -195,11 +227,11 @@ fn archive_with_extension_requirement(required: bool) -> Vec<u8> {
         "description": "Extension requirement test",
         "catalog": {"host_api": "^1.0"},
         "resources": {
-            "contexts": [{
-                "key": "contexts/web",
-                "path": "contexts/web.json",
+            "blueprints": [{
+                "key": "blueprints/product",
+                "path": "blueprints/product.toml",
                 "required": true,
-                "sha256": digest(WEB_CONTEXT)
+                "sha256": digest(PRODUCT_BLUEPRINT)
             }]
         },
         "extensions": [{
@@ -218,7 +250,7 @@ fn archive_with_extension_requirement(required: bool) -> Vec<u8> {
     {
         let mut tar = tar::Builder::new(&mut tar_bytes);
         append_file(&mut tar, "solution-pack.json", &manifest);
-        append_file(&mut tar, "contexts/web.json", WEB_CONTEXT);
+        append_file(&mut tar, "blueprints/product.toml", PRODUCT_BLUEPRINT);
         append_file(&mut tar, "extensions/shopify.json", TEMPLATE);
         tar.finish().unwrap();
     }
@@ -438,7 +470,7 @@ fn archive_with_explore_navigation_roles(role_codes: &[&str]) -> Vec<u8> {
     zstd::stream::encode_all(Cursor::new(tar_bytes), 0).unwrap()
 }
 
-fn archive_with_options(product_blueprint: &[u8], context_required: bool) -> Vec<u8> {
+fn archive_with_options(product_blueprint: &[u8]) -> Vec<u8> {
     let manifest = serde_json::to_vec(&json!({
         "manifest_version": 1,
         "id": "attricat.ecommerce",
@@ -452,12 +484,6 @@ fn archive_with_options(product_blueprint: &[u8], context_required: bool) -> Vec
                 "path": "blueprints/product.toml",
                 "required": true,
                 "sha256": digest(product_blueprint)
-            }],
-            "contexts": [{
-                "key": "contexts/web",
-                "path": "contexts/web.json",
-                "required": context_required,
-                "sha256": digest(WEB_CONTEXT)
             }]
         }
     }))
@@ -467,7 +493,6 @@ fn archive_with_options(product_blueprint: &[u8], context_required: bool) -> Vec
         let mut tar = tar::Builder::new(&mut tar_bytes);
         append_file(&mut tar, "solution-pack.json", &manifest);
         append_file(&mut tar, "blueprints/product.toml", product_blueprint);
-        append_file(&mut tar, "contexts/web.json", WEB_CONTEXT);
         tar.finish().unwrap();
     }
     zstd::stream::encode_all(Cursor::new(tar_bytes), 0).unwrap()
@@ -1442,6 +1467,54 @@ value_type = "string"
 }
 
 #[sqlx::test(migrations = "./migrations")]
+async fn context_resources_are_rejected_by_inspection_and_planning(pool: PgPool) {
+    let (base_url, server) = start_server(pool.clone()).await;
+    let client = authenticated_client();
+    let contexts_before: i64 = sqlx::query_scalar("SELECT count(*) FROM attribute_contexts")
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+    let plans_before: i64 = sqlx::query_scalar("SELECT count(*) FROM solution_pack_plans")
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+
+    let inspection = inspect(&client, &base_url, archive_with_rejected_context_resource()).await;
+    assert_eq!(inspection.status(), StatusCode::UNPROCESSABLE_ENTITY);
+    assert_eq!(
+        inspection.json::<Value>().await.unwrap()["error"]["code"],
+        "invalid_input"
+    );
+    let plan = create_plan(
+        &client,
+        &base_url,
+        archive_with_rejected_context_resource(),
+        "rejected",
+    )
+    .await;
+    assert_eq!(plan.status(), StatusCode::UNPROCESSABLE_ENTITY);
+    assert_eq!(
+        plan.json::<Value>().await.unwrap()["error"]["code"],
+        "invalid_input"
+    );
+    assert_eq!(
+        sqlx::query_scalar::<_, i64>("SELECT count(*) FROM attribute_contexts")
+            .fetch_one(&pool)
+            .await
+            .unwrap(),
+        contexts_before
+    );
+    assert_eq!(
+        sqlx::query_scalar::<_, i64>("SELECT count(*) FROM solution_pack_plans")
+            .fetch_one(&pool)
+            .await
+            .unwrap(),
+        plans_before
+    );
+    server.abort();
+}
+
+#[sqlx::test(migrations = "./migrations")]
 async fn valid_inspection_returns_only_safe_summaries_without_persisting(pool: PgPool) {
     let (base_url, server) = start_server(pool.clone()).await;
     let archive = valid_archive();
@@ -1464,7 +1537,6 @@ async fn valid_inspection_returns_only_safe_summaries_without_persisting(pool: P
         "response must fit the CLI limit"
     );
     assert!(!body_text.contains("BLUEPRINT_SOURCE_SECRET"));
-    assert!(!body_text.contains("CONTEXT_DATA_SECRET"));
     let body: Value = serde_json::from_str(&body_text).unwrap();
     assert_eq!(
         body.as_object()
@@ -1491,9 +1563,7 @@ async fn valid_inspection_returns_only_safe_summaries_without_persisting(pool: P
     );
     assert_eq!(body["resources"]["blueprints"][0]["code"], "product");
     assert_eq!(body["resources"]["blueprints"][0]["includes"], json!([]));
-    assert_eq!(body["resources"]["contexts"][0]["key"], "contexts/web");
-    assert_eq!(body["resources"]["contexts"][0]["code"], "web");
-    assert_eq!(body["resources"]["contexts"][0]["parent"], "system/default");
+    assert!(body["resources"].get("contexts").is_none());
     assert_eq!(
         sqlx::query_scalar::<_, i64>("SELECT count(*) FROM blueprints")
             .fetch_one(&pool)
@@ -1649,7 +1719,7 @@ async fn compatible_disabled_extension_satisfies_plan_and_is_revalidated_on_appl
     );
     assert_eq!(
         sqlx::query_scalar::<_, i64>(
-            "SELECT count(*) FROM attribute_contexts WHERE workspace_id=$1 AND code='extok_web'"
+            "SELECT count(*) FROM blueprints WHERE workspace_id=$1 AND code='extok_product'"
         )
         .bind(workspace_id)
         .fetch_one(&pool)
@@ -1779,7 +1849,6 @@ async fn plan_creation_persists_an_audited_immutable_dry_run_without_catalog_mut
     assert_eq!(response.status(), StatusCode::CREATED);
     let text = response.text().await.unwrap();
     assert!(!text.contains("BLUEPRINT_SOURCE_SECRET"));
-    assert!(!text.contains("CONTEXT_DATA_SECRET"));
     let body: Value = serde_json::from_str(&text).unwrap();
     assert_eq!(body["source_kind"], "local_archive");
     assert_eq!(body["source_metadata"]["side_loaded"], true);
@@ -1790,12 +1859,8 @@ async fn plan_creation_persists_an_audited_immutable_dry_run_without_catalog_mut
     assert_eq!(body["conflicts"], json!([]));
     assert_eq!(body["actions"][0]["logical_key"], "blueprints/product");
     assert_eq!(body["actions"][0]["action"], "create");
-    assert_eq!(body["actions"][1]["logical_key"], "contexts/web");
-    assert_eq!(body["actions"][1]["action"], "skip");
     assert_eq!(body["mappings"][0]["logical_key"], "blueprints/product");
     assert_eq!(body["mappings"][0]["target_code"], "ecom_product");
-    assert_eq!(body["mappings"][1]["logical_key"], "contexts/web");
-    assert_eq!(body["mappings"][2]["logical_key"], "system/default");
 
     let plan_id = body["id"].as_str().unwrap();
     let fetched = authenticated_client()
@@ -2805,16 +2870,10 @@ async fn duplicate_system_and_workspace_role_codes_remain_valid_for_navigation(p
 }
 
 #[sqlx::test(migrations = "./migrations")]
-async fn apply_creates_context_and_draft_blueprint_once_with_safe_history(pool: PgPool) {
+async fn apply_creates_draft_blueprint_once_with_safe_history(pool: PgPool) {
     let (base_url, server) = start_server(pool.clone()).await;
     let client = authenticated_client();
-    let plan = create_plan(
-        &client,
-        &base_url,
-        archive_with_required_context(PRODUCT_BLUEPRINT),
-        "starter",
-    )
-    .await;
+    let plan = create_plan(&client, &base_url, valid_archive(), "starter").await;
     assert_eq!(plan.status(), StatusCode::CREATED);
     let plan = plan.json::<Value>().await.unwrap();
     assert_eq!(plan["ready"], true);
@@ -2824,26 +2883,17 @@ async fn apply_creates_context_and_draft_blueprint_once_with_safe_history(pool: 
     assert_eq!(applied.status(), StatusCode::OK);
     let text = applied.text().await.unwrap();
     assert!(!text.contains("BLUEPRINT_SOURCE_SECRET"));
-    assert!(!text.contains("CONTEXT_DATA_SECRET"));
     assert!(!text.contains("definition"));
     assert!(!text.contains("normalized_payload"));
     let application: Value = serde_json::from_str(&text).unwrap();
     assert_eq!(application["state"], "completed");
-    assert_eq!(application["mapping_snapshot"].as_array().unwrap().len(), 2);
-    assert!(
-        application["mapping_snapshot"]
-            .as_array()
-            .unwrap()
-            .iter()
-            .all(|mapping| mapping["logical_key"] != "system/default")
-    );
-    assert_eq!(application["steps"].as_array().unwrap().len(), 2);
+    assert_eq!(application["mapping_snapshot"].as_array().unwrap().len(), 1);
+    assert_eq!(application["steps"].as_array().unwrap().len(), 1);
     assert_eq!(application["steps"][0]["resource_kind"], "blueprint");
     assert_eq!(
         application["steps"][0]["result_snapshot"]["status"],
         "draft"
     );
-    assert_eq!(application["steps"][1]["resource_kind"], "context");
 
     let repeated = apply_plan(&client, &base_url, plan_id).await;
     assert_eq!(repeated.status(), StatusCode::OK);
@@ -2854,15 +2904,6 @@ async fn apply_creates_context_and_draft_blueprint_once_with_safe_history(pool: 
     assert_eq!(
         sqlx::query_scalar::<_, i64>(
             "SELECT count(*) FROM blueprints WHERE code='starter_product'"
-        )
-        .fetch_one(&pool)
-        .await
-        .unwrap(),
-        1
-    );
-    assert_eq!(
-        sqlx::query_scalar::<_, i64>(
-            "SELECT count(*) FROM attribute_contexts WHERE code='starter_web'"
         )
         .fetch_one(&pool)
         .await
@@ -2888,7 +2929,7 @@ async fn apply_creates_context_and_draft_blueprint_once_with_safe_history(pool: 
         .fetch_one(&pool)
         .await
         .unwrap(),
-        3
+        2
     );
     assert_eq!(
         sqlx::query_scalar::<_, i64>(
@@ -2919,7 +2960,6 @@ async fn apply_creates_context_and_draft_blueprint_once_with_safe_history(pool: 
     assert_eq!(listed.status(), StatusCode::OK);
     let listed_text = listed.text().await.unwrap();
     assert!(!listed_text.contains("BLUEPRINT_SOURCE_SECRET"));
-    assert!(!listed_text.contains("CONTEXT_DATA_SECRET"));
     assert!(!listed_text.contains("normalized_payload"));
     let listed: Value = serde_json::from_str(&listed_text).unwrap();
     assert_eq!(listed[0]["id"], application["id"]);
@@ -2936,7 +2976,6 @@ async fn apply_creates_context_and_draft_blueprint_once_with_safe_history(pool: 
     assert_eq!(shown.status(), StatusCode::OK);
     let shown_text = shown.text().await.unwrap();
     assert!(!shown_text.contains("BLUEPRINT_SOURCE_SECRET"));
-    assert!(!shown_text.contains("CONTEXT_DATA_SECRET"));
     assert!(!shown_text.contains("normalized_payload"));
     assert_eq!(
         serde_json::from_str::<Value>(&shown_text).unwrap()["steps"],
@@ -2982,11 +3021,11 @@ async fn application_read_contract_rejects_bad_inputs_and_keeps_max_pages_compac
         .map(|index| {
             json!({
                 "position": index,
-                "resource_kind": if index < 64 { "blueprint" } else { "context" },
+                "resource_kind": "blueprint",
                 "logical_key": format!("resources/{index:03}_{}", "x".repeat(96)),
                 "target_id": Uuid::new_v4(),
                 "target_code": format!("target_{index:03}_{}", "x".repeat(32)),
-                "target_version": if index < 64 { Some(1) } else { None },
+                "target_version": Some(1),
                 "mapping_kind": "create"
             })
         })
@@ -3130,47 +3169,23 @@ async fn apply_respects_publish_and_rejects_expired_blocked_and_stale_plans(pool
         "solution_pack_plan_stale"
     );
 
-    let cross_context = create_plan(&client, &base_url, context_only_archive(), "crossctx")
-        .await
-        .json::<Value>()
-        .await
-        .unwrap();
-    let definition = std::str::from_utf8(PRODUCT_BLUEPRINT)
-        .unwrap()
-        .replace("code = \"product\"", "code = \"crossctx_web\"");
-    let created = client
-        .post(format!("{base_url}/blueprints"))
-        .json(&json!({"definition": definition}))
-        .send()
-        .await
-        .unwrap();
-    assert_eq!(created.status(), StatusCode::CREATED);
-    let response = apply_plan(&client, &base_url, cross_context["id"].as_str().unwrap()).await;
-    assert_eq!(response.status(), StatusCode::CONFLICT);
-    assert_eq!(
-        response.json::<Value>().await.unwrap()["error"]["code"],
-        "solution_pack_plan_stale"
-    );
     server.abort();
 }
 
 #[sqlx::test(migrations = "./migrations")]
-async fn target_created_while_a_step_is_executing_invalidates_the_application(pool: PgPool) {
+async fn cross_kind_target_created_while_a_step_is_executing_invalidates_the_application(
+    pool: PgPool,
+) {
     let (base_url, server) = start_server(pool.clone()).await;
     let client = authenticated_client();
-    let plan = create_plan(
-        &client,
-        &base_url,
-        archive_with_required_context(PRODUCT_BLUEPRINT),
-        "racing",
-    )
-    .await
-    .json::<Value>()
-    .await
-    .unwrap();
+    let plan = create_plan(&client, &base_url, valid_archive(), "racing")
+        .await
+        .json::<Value>()
+        .await
+        .unwrap();
     let plan_id = plan["id"].as_str().unwrap().parse::<Uuid>().unwrap();
     let (target_id, target_code): (Uuid, String) = sqlx::query_as(
-        "SELECT target_id,target_code FROM solution_pack_plan_mappings WHERE plan_id=$1 AND logical_key='contexts/web'",
+        "SELECT target_id,target_code FROM solution_pack_plan_mappings WHERE plan_id=$1 AND logical_key='blueprints/product'",
     )
     .bind(plan_id)
     .fetch_one(&pool)
@@ -3221,63 +3236,6 @@ async fn target_created_while_a_step_is_executing_invalidates_the_application(po
         .await
         .unwrap(),
         "invalid"
-    );
-    server.abort();
-}
-
-#[sqlx::test(migrations = "./migrations")]
-async fn concurrent_cross_kind_create_invalidates_the_application(pool: PgPool) {
-    let (base_url, server) = start_server(pool.clone()).await;
-    let client = authenticated_client();
-    let plan = create_plan(&client, &base_url, context_only_archive(), "crossrace")
-        .await
-        .json::<Value>()
-        .await
-        .unwrap();
-    let plan_id = plan["id"].as_str().unwrap().to_owned();
-    let target_code = "crossrace_web";
-    let definition = std::str::from_utf8(PRODUCT_BLUEPRINT)
-        .unwrap()
-        .replace("code = \"product\"", &format!("code = \"{target_code}\""));
-
-    let mut blocker = pool.begin().await.unwrap();
-    sqlx::query("LOCK TABLE blueprints IN SHARE ROW EXCLUSIVE MODE")
-        .execute(&mut *blocker)
-        .await
-        .unwrap();
-    let create_client = client.clone();
-    let create_url = base_url.clone();
-    let create = tokio::spawn(async move {
-        create_client
-            .post(format!("{create_url}/blueprints"))
-            .json(&json!({"definition": definition}))
-            .send()
-            .await
-            .unwrap()
-    });
-    tokio::time::sleep(std::time::Duration::from_millis(100)).await;
-
-    let apply_client = client.clone();
-    let apply_url = base_url.clone();
-    let apply = tokio::spawn(async move { apply_plan(&apply_client, &apply_url, &plan_id).await });
-    tokio::time::sleep(std::time::Duration::from_millis(100)).await;
-    blocker.commit().await.unwrap();
-
-    assert_eq!(create.await.unwrap().status(), StatusCode::CREATED);
-    let response = apply.await.unwrap();
-    assert_eq!(response.status(), StatusCode::CONFLICT);
-    assert_eq!(
-        response.json::<Value>().await.unwrap()["error"]["code"],
-        "solution_pack_plan_stale"
-    );
-    assert_eq!(
-        sqlx::query_scalar::<_, i64>(
-            "SELECT count(*) FROM attribute_contexts WHERE code='crossrace_web'"
-        )
-        .fetch_one(&pool)
-        .await
-        .unwrap(),
-        0
     );
     server.abort();
 }
@@ -3342,25 +3300,20 @@ async fn failed_step_is_durable_and_retry_resumes_without_duplicate_completed_re
 ) {
     let (base_url, server) = start_server(pool.clone()).await;
     let client = authenticated_client();
-    let plan = create_plan(
-        &client,
-        &base_url,
-        archive_with_required_context(PRODUCT_BLUEPRINT),
-        "resume",
-    )
-    .await
-    .json::<Value>()
-    .await
-    .unwrap();
+    let plan = create_plan(&client, &base_url, archive_with_two_blueprints(), "resume")
+        .await
+        .json::<Value>()
+        .await
+        .unwrap();
     let plan_id = plan["id"].as_str().unwrap().parse::<Uuid>().unwrap();
     let original_payload: Value = sqlx::query_scalar(
-        "SELECT normalized_payload FROM solution_pack_plan_actions WHERE plan_id=$1 AND resource_kind='context'",
+        "SELECT normalized_payload FROM solution_pack_plan_actions WHERE plan_id=$1 AND logical_key='blueprints/product'",
     )
     .bind(plan_id)
     .fetch_one(&pool)
     .await
     .unwrap();
-    sqlx::query("UPDATE solution_pack_plan_actions SET normalized_payload='{}'::jsonb WHERE plan_id=$1 AND resource_kind='context'")
+    sqlx::query("UPDATE solution_pack_plan_actions SET normalized_payload='{}'::jsonb WHERE plan_id=$1 AND logical_key='blueprints/product'")
         .bind(plan_id)
         .execute(&pool)
         .await
@@ -3379,7 +3332,7 @@ async fn failed_step_is_durable_and_retry_resumes_without_duplicate_completed_re
         "failed"
     );
     let failed_step: (String, Option<String>) = sqlx::query_as(
-        "SELECT state, diagnostic_code FROM solution_pack_application_steps WHERE application_id=(SELECT id FROM solution_pack_applications WHERE plan_id=$1) AND logical_key='contexts/web'",
+        "SELECT state, diagnostic_code FROM solution_pack_application_steps WHERE application_id=(SELECT id FROM solution_pack_applications WHERE plan_id=$1) AND logical_key='blueprints/product'",
     )
     .bind(plan_id)
     .fetch_one(&pool)
@@ -3390,13 +3343,15 @@ async fn failed_step_is_durable_and_retry_resumes_without_duplicate_completed_re
         ("failed".to_owned(), Some("step_failed".to_owned()))
     );
     assert_eq!(
-        sqlx::query_scalar::<_, i64>("SELECT count(*) FROM blueprints WHERE code='resume_product'")
-            .fetch_one(&pool)
-            .await
-            .unwrap(),
+        sqlx::query_scalar::<_, i64>(
+            "SELECT count(*) FROM blueprints WHERE code='resume_category'"
+        )
+        .fetch_one(&pool)
+        .await
+        .unwrap(),
         1
     );
-    sqlx::query("UPDATE solution_pack_plan_actions SET normalized_payload=$2 WHERE plan_id=$1 AND resource_kind='context'")
+    sqlx::query("UPDATE solution_pack_plan_actions SET normalized_payload=$2 WHERE plan_id=$1 AND logical_key='blueprints/product'")
         .bind(plan_id)
         .bind(original_payload)
         .execute(&pool)
@@ -3457,15 +3412,6 @@ async fn failed_step_is_durable_and_retry_resumes_without_duplicate_completed_re
             .fetch_one(&pool)
             .await
             .unwrap(),
-        1
-    );
-    assert_eq!(
-        sqlx::query_scalar::<_, i64>(
-            "SELECT count(*) FROM attribute_contexts WHERE code='resume_web'"
-        )
-        .fetch_one(&pool)
-        .await
-        .unwrap(),
         1
     );
     server.abort();

@@ -65,13 +65,6 @@
             "$ref": "#/$defs/blueprintResource"
           }
         },
-        "contexts": {
-          "type": "array",
-          "maxItems": 128,
-          "items": {
-            "$ref": "#/$defs/contextResource"
-          }
-        },
         "workspace_settings": {
           "type": "array",
           "maxItems": 2,
@@ -110,16 +103,6 @@
           ],
           "properties": {
             "blueprints": {
-              "minItems": 1
-            }
-          }
-        },
-        {
-          "required": [
-            "contexts"
-          ],
-          "properties": {
-            "contexts": {
               "minItems": 1
             }
           }
@@ -172,34 +155,6 @@
           "type": "string",
           "maxLength": 512,
           "pattern": "^blueprints/.+\\.toml$"
-        },
-        "required": {
-          "type": "boolean"
-        },
-        "sha256": {
-          "$ref": "#/$defs/digest"
-        }
-      }
-    },
-    "contextResource": {
-      "type": "object",
-      "additionalProperties": false,
-      "required": [
-        "key",
-        "path",
-        "required",
-        "sha256"
-      ],
-      "properties": {
-        "key": {
-          "type": "string",
-          "maxLength": 128,
-          "pattern": "^contexts/[a-z][a-z0-9_-]*$"
-        },
-        "path": {
-          "type": "string",
-          "maxLength": 512,
-          "pattern": "^contexts/.+\\.json$"
         },
         "required": {
           "type": "boolean"

@@ -28,14 +28,12 @@ use crate::extensions::{
 pub const SOLUTION_PACK_MANIFEST_VERSION: u32 = 1;
 pub const SOLUTION_PACK_RESOURCE_FORMAT_VERSION: u32 = 1;
 pub const SOLUTION_PACK_MANIFEST_PATH: &str = "solution-pack.json";
-pub const SYSTEM_DEFAULT_CONTEXT_KEY: &str = "system/default";
 pub const MAX_SOLUTION_PACK_ARCHIVE_BYTES: usize = 32 * 1024 * 1024;
 pub const MAX_SOLUTION_PACK_EXPANDED_BYTES: usize = 128 * 1024 * 1024;
 pub const MAX_SOLUTION_PACK_FILE_BYTES: usize = 8 * 1024 * 1024;
 pub const MAX_SOLUTION_PACK_MANIFEST_BYTES: usize = 256 * 1024;
 pub const MAX_SOLUTION_PACK_ARCHIVE_ENTRIES: usize = 256;
 pub const MAX_SOLUTION_PACK_BLUEPRINTS: usize = 64;
-pub const MAX_SOLUTION_PACK_CONTEXTS: usize = 128;
 pub const MAX_SOLUTION_PACK_WORKSPACE_SETTINGS: usize = 2;
 pub const MAX_SOLUTION_PACK_EXPLORE_NAVIGATION_ENTRIES: usize = 64;
 pub const MAX_SOLUTION_PACK_EXTENSION_LAYOUT_ENTRIES: usize = 64;
@@ -185,8 +183,6 @@ pub struct SolutionPackResources {
     #[serde(default)]
     pub blueprints: Vec<SolutionPackResource>,
     #[serde(default)]
-    pub contexts: Vec<SolutionPackResource>,
-    #[serde(default)]
     pub workspace_settings: Vec<SolutionPackResource>,
 }
 
@@ -214,15 +210,6 @@ pub struct SolutionPackExtensionRequirement {
 pub struct SolutionPackConfigurationTemplateRef {
     pub path: String,
     pub sha256: String,
-}
-
-#[derive(Clone, Debug, Deserialize, Serialize)]
-#[serde(deny_unknown_fields)]
-pub struct SolutionPackContext {
-    pub format_version: u32,
-    pub code: String,
-    pub data: Value,
-    pub parent: String,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -277,7 +264,6 @@ pub struct ValidatedSolutionPack {
     archive_sha256: String,
     files: BTreeMap<String, Vec<u8>>,
     blueprints: BTreeMap<String, SolutionPackBlueprint>,
-    contexts: BTreeMap<String, SolutionPackContext>,
     explore_navigation: Option<SolutionPackExploreNavigation>,
     extension_layout: Option<SolutionPackExtensionLayout>,
     configuration_templates: BTreeMap<String, Value>,
@@ -512,7 +498,7 @@ impl ValidatedSolutionPack {
             })?;
         validate_manifest(&manifest)?;
         validate_declared_files(&manifest, &files)?;
-        let (blueprints, contexts) = validate_content(&manifest, &files)?;
+        let blueprints = validate_content(&manifest, &files)?;
         let explore_navigation = validate_explore_navigation(&manifest, &files, &blueprints)?;
         let extension_layout = validate_extension_layout(&manifest, &files)?;
         validate_blueprint_extension_layouts(&manifest, &blueprints)?;
@@ -525,7 +511,6 @@ impl ValidatedSolutionPack {
             archive_sha256: sha256_hex(archive),
             files,
             blueprints,
-            contexts,
             explore_navigation,
             extension_layout,
             configuration_templates,
@@ -550,10 +535,6 @@ impl ValidatedSolutionPack {
 
     pub fn blueprint(&self, key: &str) -> Option<&SolutionPackBlueprint> {
         self.blueprints.get(key)
-    }
-
-    pub fn context(&self, key: &str) -> Option<&SolutionPackContext> {
-        self.contexts.get(key)
     }
 
     pub fn explore_navigation(&self) -> Option<&SolutionPackExploreNavigation> {
@@ -597,17 +578,12 @@ fn validate_manifest(manifest: &SolutionPackManifest) -> Result<(), SolutionPack
         return invalid("catalog.host_api is incompatible with this host");
     }
 
-    if manifest.resources.blueprints.is_empty()
-        && manifest.resources.contexts.is_empty()
-        && manifest.resources.workspace_settings.is_empty()
+    if manifest.resources.blueprints.is_empty() && manifest.resources.workspace_settings.is_empty()
     {
-        return invalid("at least one blueprint, context, or workspace setting is required");
+        return invalid("at least one blueprint or workspace setting is required");
     }
     if manifest.resources.blueprints.len() > MAX_SOLUTION_PACK_BLUEPRINTS {
         return invalid("solution-pack manifest declares too many blueprints");
-    }
-    if manifest.resources.contexts.len() > MAX_SOLUTION_PACK_CONTEXTS {
-        return invalid("solution-pack manifest declares too many contexts");
     }
     if manifest.resources.workspace_settings.len() > MAX_SOLUTION_PACK_WORKSPACE_SETTINGS {
         return invalid("solution-pack manifest declares too many workspace settings");
@@ -620,13 +596,6 @@ fn validate_manifest(manifest: &SolutionPackManifest) -> Result<(), SolutionPack
         .blueprints
         .iter()
         .map(|resource| ("blueprints", resource))
-        .chain(
-            manifest
-                .resources
-                .contexts
-                .iter()
-                .map(|resource| ("contexts", resource)),
-        )
         .chain(
             manifest
                 .resources
@@ -790,9 +759,6 @@ fn validate_resource(kind: &str, resource: &SolutionPackResource) -> Result<(), 
         })?;
         return Ok(());
     }
-    if kind == "contexts" && resource.key == SYSTEM_DEFAULT_CONTEXT_KEY {
-        return invalid("the system default context cannot be declared by a pack");
-    }
     let Some(code) = resource.key.strip_prefix(&format!("{kind}/")) else {
         return invalid(format!(
             "resource key '{}' must be in the {kind}/ namespace",
@@ -811,11 +777,7 @@ fn validate_resource(kind: &str, resource: &SolutionPackResource) -> Result<(), 
     {
         return invalid(format!("resource path '{}' is invalid", resource.path));
     }
-    let expected_extension = if kind == "blueprints" {
-        ".toml"
-    } else {
-        ".json"
-    };
+    let expected_extension = ".toml";
     if !resource.path.ends_with(expected_extension) {
         return invalid(format!(
             "resource path '{}' must end in {expected_extension}",
@@ -839,7 +801,6 @@ fn validate_declared_files(
         .resources
         .blueprints
         .iter()
-        .chain(&manifest.resources.contexts)
         .chain(&manifest.resources.workspace_settings)
         .map(|resource| resource.path.as_str())
         .chain(
@@ -867,7 +828,6 @@ fn validate_declared_files(
         .resources
         .blueprints
         .iter()
-        .chain(&manifest.resources.contexts)
         .chain(&manifest.resources.workspace_settings)
         .map(|resource| {
             (
@@ -1482,10 +1442,7 @@ pub fn json_deep_contains(actual: &Value, expected: &Value) -> bool {
     }
 }
 
-type ValidatedContent = (
-    BTreeMap<String, SolutionPackBlueprint>,
-    BTreeMap<String, SolutionPackContext>,
-);
+type ValidatedContent = BTreeMap<String, SolutionPackBlueprint>;
 
 struct PreparedBlueprint {
     portable: SolutionPackBlueprint,
@@ -1555,57 +1512,7 @@ fn validate_content(
         })
         .collect();
 
-    let context_keys = manifest
-        .resources
-        .contexts
-        .iter()
-        .map(|resource| resource.key.as_str())
-        .collect::<HashSet<_>>();
-    let mut context_dependencies: HashMap<&str, Vec<&str>> = HashMap::new();
-    let mut contexts = BTreeMap::new();
-    for resource in &manifest.resources.contexts {
-        if resource.key == SYSTEM_DEFAULT_CONTEXT_KEY {
-            return invalid("the system default context cannot be declared by a pack");
-        }
-        let context: SolutionPackContext =
-            serde_json::from_slice(&files[&resource.path]).map_err(|_| {
-                SolutionPackError::Invalid(format!(
-                    "context '{}' is not valid strict context JSON",
-                    resource.key
-                ))
-            })?;
-        if context.format_version != SOLUTION_PACK_RESOURCE_FORMAT_VERSION {
-            return invalid(format!(
-                "context '{}' has unsupported format_version {}",
-                resource.key, context.format_version
-            ));
-        }
-        let expected_code = resource_code(&resource.key);
-        if context.code != expected_code {
-            return invalid(format!(
-                "context '{}' code must be '{expected_code}'",
-                resource.key
-            ));
-        }
-        if !context.data.is_object() {
-            return invalid(format!("context '{}' data must be an object", resource.key));
-        }
-        let dependencies = if context.parent == SYSTEM_DEFAULT_CONTEXT_KEY {
-            Vec::new()
-        } else if let Some(parent) = context_keys.get(context.parent.as_str()) {
-            vec![*parent]
-        } else {
-            return invalid(format!(
-                "context '{}' references undeclared parent '{}'",
-                resource.key, context.parent
-            ));
-        };
-        context_dependencies.insert(&resource.key, dependencies);
-        contexts.insert(resource.key.clone(), context);
-    }
-    validate_acyclic(&context_dependencies, "context parent")?;
-
-    Ok((blueprints, contexts))
+    Ok(blueprints)
 }
 
 fn prepare_blueprint(
@@ -2374,7 +2281,6 @@ pub struct PlanningExploreNavigationEntry {
 pub struct PlanningWorkspaceSnapshot {
     pub workspace_id: uuid::Uuid,
     pub physical_codes: BTreeSet<String>,
-    pub default_context_id: uuid::Uuid,
     pub installed_extensions: BTreeMap<String, InstalledExtensionSnapshot>,
     pub explore_navigation: Vec<PlanningExploreNavigationEntry>,
     pub explore_navigation_valid: bool,
@@ -2558,13 +2464,6 @@ pub fn build_create_only_plan(
         .blueprints
         .iter()
         .map(|resource| (resource.key.clone(), ("blueprint", resource)))
-        .chain(
-            manifest
-                .resources
-                .contexts
-                .iter()
-                .map(|resource| (resource.key.clone(), ("context", resource))),
-        )
         .collect::<BTreeMap<_, _>>();
 
     let mut dependencies = BTreeMap::<String, BTreeSet<String>>::new();
@@ -2577,32 +2476,8 @@ pub fn build_create_only_plan(
                 .clone(),
         );
     }
-    for resource in &manifest.resources.contexts {
-        let context = pack
-            .context(&resource.key)
-            .expect("validated context exists");
-        dependencies.insert(
-            resource.key.clone(),
-            (context.parent != SYSTEM_DEFAULT_CONTEXT_KEY)
-                .then(|| context.parent.clone())
-                .into_iter()
-                .collect(),
-        );
-    }
 
     let mut mappings_by_key = BTreeMap::new();
-    mappings_by_key.insert(
-        SYSTEM_DEFAULT_CONTEXT_KEY.to_owned(),
-        PlannedMapping {
-            resource_kind: "context",
-            logical_key: SYSTEM_DEFAULT_CONTEXT_KEY.to_owned(),
-            target_id: workspace.default_context_id,
-            target_code: "default".to_owned(),
-            target_version: None,
-            mapping_kind: "system",
-            snapshot: serde_json::json!({"system": true, "code": "default"}),
-        },
-    );
     for (logical_key, (kind, _)) in &resources {
         let code = format!("{prefix}_{}", resource_code(logical_key));
         if code.len() > MAX_IDENTIFIER_BYTES || !is_valid_stable_code(&code) {
@@ -2658,7 +2533,7 @@ pub fn build_create_only_plan(
         );
     }
 
-    // Includes and context parents constrain apply order. A published target is
+    // Includes constrain apply order. A published target is
     // also required before ordinary validation can resolve a relationship table
     // path. Other relationship references may legitimately be cyclic.
     let mut ordering_dependencies = BTreeMap::new();
@@ -2675,18 +2550,6 @@ pub fn build_create_only_plan(
             resource_dependencies.extend(blueprint.table_path_dependencies().iter().cloned());
         }
         ordering_dependencies.insert(resource.key.clone(), resource_dependencies);
-    }
-    for resource in &manifest.resources.contexts {
-        let context = pack
-            .context(&resource.key)
-            .expect("validated context exists");
-        ordering_dependencies.insert(
-            resource.key.clone(),
-            (context.parent != SYSTEM_DEFAULT_CONTEXT_KEY)
-                .then(|| context.parent.clone())
-                .into_iter()
-                .collect(),
-        );
     }
 
     let mut generated_code_counts = HashMap::<&str, usize>::new();
@@ -2791,24 +2654,15 @@ pub fn build_create_only_plan(
         let mapping = &mappings_by_key[&logical_key];
         let (action, reason_code) = outcomes[&logical_key];
         let normalized_payload = if action == "create" {
-            Some(if *kind == "blueprint" {
-                normalized_blueprint_payload(
-                    pack.blueprint(&logical_key)
-                        .expect("validated blueprint exists"),
-                    &mappings_by_key,
-                    publication,
-                    &blueprint_layout_allowed[&logical_key],
-                    workspace,
-                    manifest,
-                )?
-            } else {
-                normalized_context_payload(
-                    &logical_key,
-                    pack.context(&logical_key)
-                        .expect("validated context exists"),
-                    &mappings_by_key,
-                )
-            })
+            Some(normalized_blueprint_payload(
+                pack.blueprint(&logical_key)
+                    .expect("validated blueprint exists"),
+                &mappings_by_key,
+                publication,
+                &blueprint_layout_allowed[&logical_key],
+                workspace,
+                manifest,
+            )?)
         } else {
             None
         };
@@ -3352,20 +3206,6 @@ fn normalize_view_references(
     }
 }
 
-fn normalized_context_payload(
-    logical_key: &str,
-    context: &SolutionPackContext,
-    mappings: &BTreeMap<String, PlannedMapping>,
-) -> Value {
-    let parent = &mappings[&context.parent];
-    serde_json::json!({
-        "code": mappings[logical_key].target_code,
-        "data": context.data,
-        "parent_id": parent.target_id,
-        "parent_code": parent.target_code,
-    })
-}
-
 #[cfg(test)]
 mod tests {
     use std::io::Write;
@@ -3431,8 +3271,6 @@ code = "products"
 value_type = "relationship"
 target_blueprint = "blueprints/product"
 "#;
-    const WEB_CONTEXT: &[u8] =
-        br#"{"format_version":1,"code":"web","data":{"channel":"web"},"parent":"system/default"}"#;
     const EXPLORE_NAVIGATION: &[u8] = br#"{"format_version":1,"kind":"explore_navigation","entries":[{"blueprint":"blueprints/product","visible_to_role_codes":["viewer","editor"]}]}"#;
 
     fn digest(bytes: &[u8]) -> String {
@@ -3455,8 +3293,7 @@ target_blueprint = "blueprints/product"
                 "blueprints": [
                     resource("blueprints/product", "blueprints/product.toml", PRODUCT_BLUEPRINT),
                     resource("blueprints/category", "blueprints/category.toml", CATEGORY_BLUEPRINT)
-                ],
-                "contexts": [resource("contexts/web", "contexts/web.json", WEB_CONTEXT)]
+                ]
             }
         })
     }
@@ -3465,7 +3302,6 @@ target_blueprint = "blueprints/product"
         vec![
             ("blueprints/product.toml", PRODUCT_BLUEPRINT),
             ("blueprints/category.toml", CATEGORY_BLUEPRINT),
-            ("contexts/web.json", WEB_CONTEXT),
         ]
     }
 
@@ -3574,12 +3410,11 @@ target_blueprint = "blueprints/product"
         assert_eq!(pack.manifest().id, "attricat.ecommerce");
         assert_eq!(pack.manifest().version, "1.2.0");
         assert_eq!(pack.archive_sha256(), digest(&archive_bytes));
-        assert_eq!(pack.files().count(), 3);
+        assert_eq!(pack.files().count(), 2);
         assert_eq!(
             pack.blueprint("blueprints/product").unwrap().code(),
             "product"
         );
-        assert_eq!(pack.context("contexts/web").unwrap().code, "web");
 
         let mut illustrative_range = manifest_value();
         illustrative_range["catalog"]["host_api"] = json!(">=1.0.0 <2.0.0");
@@ -3624,7 +3459,7 @@ target_blueprint = "blueprints/product"
 
         let unsafe_readme = b"![remote](https://example.test/image.png)";
         manifest["documentation"]["readme"]["sha256"] = json!(digest(unsafe_readme));
-        files[3] = ("README.md", unsafe_readme);
+        files[2] = ("README.md", unsafe_readme);
         assert_invalid(&archive(&manifest, &files), "unsafe Markdown");
     }
 
@@ -3691,9 +3526,17 @@ target_blueprint = "blueprints/product"
         ]);
         assert_invalid(&archive(&manifest, &files), "undeclared blueprint");
 
+        let context_reference = br#"{"format_version":1,"checks":[{"key":"checks/context","title":"Context","predicate":{"type":"blueprint_published","blueprint":"contexts/web"}}]}"#;
+        manifest["checks"]["sha256"] = json!(digest(context_reference));
+        files[3] = ("checks.json", context_reference);
+        assert_invalid(
+            &archive(&manifest, &files),
+            "undeclared blueprint 'contexts/web'",
+        );
+
         let unknown = br#"{"format_version":1,"checks":[],"query":"select *"}"#;
         manifest["checks"]["sha256"] = json!(digest(unknown));
-        files[4] = ("checks.json", unknown);
+        files[3] = ("checks.json", unknown);
         assert_invalid(&archive(&manifest, &files), "not valid strict JSON");
     }
 
@@ -3786,7 +3629,6 @@ target_blueprint = "blueprints/product"
         let workspace = |extension_layout| PlanningWorkspaceSnapshot {
             workspace_id: uuid::Uuid::nil(),
             physical_codes: BTreeSet::from(["default".to_owned()]),
-            default_context_id: uuid::Uuid::nil(),
             installed_extensions: BTreeMap::from([("acme.shop".to_owned(), installed.clone())]),
             explore_navigation: Vec::new(),
             explore_navigation_valid: true,
@@ -3841,7 +3683,6 @@ target_blueprint = "blueprints/product"
                 &PlanningWorkspaceSnapshot {
                     workspace_id: uuid::Uuid::nil(),
                     physical_codes: BTreeSet::from(["default".to_owned()]),
-                    default_context_id: uuid::Uuid::nil(),
                     installed_extensions: installed
                         .map(|installed| BTreeMap::from([("acme.shop".to_owned(), installed)]))
                         .unwrap_or_default(),
@@ -3897,7 +3738,6 @@ target_blueprint = "blueprints/product"
             &PlanningWorkspaceSnapshot {
                 workspace_id: uuid::Uuid::nil(),
                 physical_codes: BTreeSet::from(["default".to_owned()]),
-                default_context_id: uuid::Uuid::nil(),
                 installed_extensions: BTreeMap::new(),
                 explore_navigation: Vec::new(),
                 explore_navigation_valid: true,
@@ -3956,7 +3796,6 @@ hidden = []
                 &PlanningWorkspaceSnapshot {
                     workspace_id: uuid::Uuid::nil(),
                     physical_codes: BTreeSet::from(["default".to_owned()]),
-                    default_context_id: uuid::Uuid::nil(),
                     installed_extensions: BTreeMap::new(),
                     explore_navigation: Vec::new(),
                     explore_navigation_valid: true,
@@ -4109,7 +3948,6 @@ hidden = ["acme.shop:a_action"]
         let workspace = |navigation| PlanningWorkspaceSnapshot {
             workspace_id: uuid::Uuid::nil(),
             physical_codes: BTreeSet::from(["default".to_owned()]),
-            default_context_id: uuid::Uuid::nil(),
             installed_extensions: BTreeMap::new(),
             explore_navigation: navigation,
             explore_navigation_valid: true,
@@ -4173,7 +4011,6 @@ hidden = ["acme.shop:a_action"]
                 &PlanningWorkspaceSnapshot {
                     workspace_id: uuid::Uuid::nil(),
                     physical_codes: BTreeSet::from(["default".to_owned()]),
-                    default_context_id: uuid::Uuid::nil(),
                     installed_extensions: BTreeMap::new(),
                     explore_navigation: Vec::new(),
                     explore_navigation_valid: true,
@@ -4198,7 +4035,6 @@ hidden = ["acme.shop:a_action"]
         let files = [
             ("blueprints/product.toml", PRODUCT_BLUEPRINT),
             ("blueprints/category.toml", CATEGORY_BLUEPRINT),
-            ("contexts/web.json", WEB_CONTEXT),
             ("workspace/explore-navigation.json", navigation.as_slice()),
         ];
         let pack = ValidatedSolutionPack::from_tar_zst(&archive(&manifest, &files)).unwrap();
@@ -4209,7 +4045,6 @@ hidden = ["acme.shop:a_action"]
             &PlanningWorkspaceSnapshot {
                 workspace_id: uuid::Uuid::nil(),
                 physical_codes: BTreeSet::from(["default".to_owned()]),
-                default_context_id: uuid::Uuid::nil(),
                 installed_extensions: BTreeMap::new(),
                 explore_navigation: Vec::new(),
                 explore_navigation_valid: true,
@@ -4431,6 +4266,15 @@ hidden = ["acme.shop:a_action"]
                 .unwrap()
                 .is_empty()
         );
+        for contexts in [json!([]), json!([{"key": "contexts/web"}])] {
+            let mut with_contexts = manifest_value();
+            with_contexts["resources"]["contexts"] = contexts;
+            assert!(
+                !catalog_validation::validate_json_schema(&schema, &with_contexts)
+                    .unwrap()
+                    .is_empty()
+            );
+        }
         let mut with_navigation = manifest_value();
         with_navigation["resources"]["workspace_settings"] = json!([{
             "key": "workspace/explore-navigation",
@@ -4821,7 +4665,7 @@ hidden = ["acme.shop:a_action"]
     #[test]
     fn rejects_missing_undeclared_and_digest_mismatched_files() {
         let files = valid_files();
-        assert_invalid(&archive(&manifest_value(), &files[..2]), "is missing");
+        assert_invalid(&archive(&manifest_value(), &files[..1]), "is missing");
 
         let mut extra = files.clone();
         extra.push(("README.md", b"undeclared"));
@@ -4966,7 +4810,6 @@ value_type = "string"
         let files = vec![
             ("blueprints/product.toml", product.as_slice()),
             ("blueprints/category.toml", mixin.as_slice()),
-            ("contexts/web.json", WEB_CONTEXT),
         ];
         let mut manifest = manifest_value();
         manifest["resources"]["blueprints"][0]["sha256"] = json!(digest(product));
@@ -4984,16 +4827,6 @@ value_type = "string"
                 .unwrap_err()
                 .to_string()
                 .contains("too many blueprints")
-        );
-
-        let mut manifest: SolutionPackManifest = serde_json::from_value(manifest_value()).unwrap();
-        let context = manifest.resources.contexts[0].clone();
-        manifest.resources.contexts = vec![context; MAX_SOLUTION_PACK_CONTEXTS + 1];
-        assert!(
-            validate_manifest(&manifest)
-                .unwrap_err()
-                .to_string()
-                .contains("too many contexts")
         );
 
         let mut manifest: SolutionPackManifest = serde_json::from_value(manifest_value()).unwrap();
@@ -5121,7 +4954,7 @@ kind = "mixin"
             "version": "1.0.0",
             "description": "Complex pack",
             "catalog": {"host_api": "^1.0"},
-            "resources": {"blueprints": resources, "contexts": []}
+            "resources": {"blueprints": resources}
         });
         assert_invalid(
             &archive(&manifest, &file_refs),
@@ -5158,7 +4991,6 @@ kind = "mixin"
         let files = vec![
             ("blueprints/product.toml", product),
             ("blueprints/category.toml", category),
-            ("contexts/web.json", WEB_CONTEXT),
         ];
         let mut manifest = manifest_value();
         manifest["resources"]["blueprints"][0]["sha256"] = json!(digest(product));
@@ -5193,7 +5025,6 @@ kind = "mixin"
         let files = vec![
             ("blueprints/product.toml", portable.as_slice()),
             ("blueprints/category.toml", mixin.as_slice()),
-            ("contexts/web.json", WEB_CONTEXT),
         ];
         let mut manifest = manifest_value();
         manifest["resources"]["blueprints"][0]["sha256"] = json!(digest(&portable));
@@ -5211,7 +5042,6 @@ kind = "mixin"
         let files = vec![
             ("blueprints/product.toml", first.as_slice()),
             ("blueprints/category.toml", second.as_slice()),
-            ("contexts/web.json", WEB_CONTEXT),
         ];
         let mut manifest = manifest_value();
         manifest["resources"]["blueprints"][0]["sha256"] = json!(digest(&first));
@@ -5270,65 +5100,22 @@ value_type = "string"
     }
 
     #[test]
-    fn validates_context_content_parent_references_and_cycles() {
-        let unknown_field = br#"{"format_version":1,"code":"web","data":{},"parent":"system/default","unknown":true}"#;
-        assert_context_error(unknown_field, "strict context JSON");
-
-        let unknown_parent =
-            br#"{"format_version":1,"code":"web","data":{},"parent":"contexts/missing"}"#;
-        assert_context_error(unknown_parent, "undeclared parent");
-
-        let bad_data = br#"{"format_version":1,"code":"web","data":[],"parent":"system/default"}"#;
-        assert_context_error(bad_data, "data must be an object");
-
-        let bad_version =
-            br#"{"format_version":2,"code":"web","data":{},"parent":"system/default"}"#;
-        assert_context_error(bad_version, "unsupported format_version");
-
-        let bad_code =
-            br#"{"format_version":1,"code":"other","data":{},"parent":"system/default"}"#;
-        assert_context_error(bad_code, "code must be 'web'");
-
-        let default =
-            br#"{"format_version":1,"code":"default","data":{},"parent":"system/default"}"#;
-        let default_manifest = json!({
-            "manifest_version":1,"id":"attricat.test","name":"Test","version":"1.0.0",
-            "description":"Test pack","catalog":{"host_api":"^1.0"},
-            "resources":{"blueprints":[],"contexts":[resource("system/default", "contexts/default.json", default)]}
-        });
-        assert_invalid(
-            &archive(&default_manifest, &[("contexts/default.json", default)]),
-            "system default context cannot be declared",
-        );
-
-        let a = br#"{"format_version":1,"code":"a","data":{},"parent":"contexts/b"}"#;
-        let b = br#"{"format_version":1,"code":"b","data":{},"parent":"contexts/a"}"#;
-        let files = vec![
-            ("contexts/a.json", a.as_slice()),
-            ("contexts/b.json", b.as_slice()),
-        ];
-        let manifest = json!({
-            "manifest_version":1,"id":"attricat.test","name":"Test","version":"1.0.0",
-            "description":"Test pack","catalog":{"host_api":"^1.0"},
-            "resources":{"blueprints":[],"contexts":[
-                resource("contexts/a", "contexts/a.json", a),
-                resource("contexts/b", "contexts/b.json", b)
-            ]}
-        });
-        assert_invalid(
-            &archive(&manifest, &files),
-            "parent references contain a cycle",
-        );
-    }
-
-    fn assert_context_error(context: &[u8], expected: &str) {
-        let files = vec![("contexts/web.json", context)];
-        let manifest = json!({
-            "manifest_version":1,"id":"attricat.test","name":"Test","version":"1.0.0",
-            "description":"Test pack","catalog":{"host_api":"^1.0"},
-            "resources":{"blueprints":[],"contexts":[resource("contexts/web", "contexts/web.json", context)]}
-        });
-        assert_invalid(&archive(&manifest, &files), expected);
+    fn rejects_context_resources_as_unknown_manifest_content() {
+        for contexts in [
+            json!([]),
+            json!([resource(
+                "contexts/web",
+                "contexts/web.json",
+                br#"{"format_version":1,"code":"web","data":{}}"#,
+            )]),
+        ] {
+            let mut manifest = manifest_value();
+            manifest["resources"]["contexts"] = contexts;
+            assert_invalid(
+                &archive(&manifest, &valid_files()),
+                "not a valid strict v1 manifest",
+            );
+        }
     }
 
     #[test]
@@ -5342,7 +5129,6 @@ value_type = "string"
             &PlanningWorkspaceSnapshot {
                 workspace_id: uuid::Uuid::nil(),
                 physical_codes: BTreeSet::from(["default".to_owned()]),
-                default_context_id: uuid::Uuid::nil(),
                 installed_extensions: BTreeMap::new(),
                 explore_navigation: Vec::new(),
                 explore_navigation_valid: true,
@@ -5360,7 +5146,7 @@ value_type = "string"
                 .iter()
                 .map(|action| action.logical_key.as_str())
                 .collect::<Vec<_>>(),
-            ["blueprints/category", "blueprints/product", "contexts/web"]
+            ["blueprints/category", "blueprints/product"]
         );
         assert!(plan.actions.iter().all(|action| action.action == "create"));
         let product = plan
@@ -5389,15 +5175,6 @@ value_type = "string"
             .unwrap();
         assert!(category_definition.contains("source_blueprint = \"ecom_product\""));
         assert!(category_definition.contains("target_blueprint = \"ecom_product\""));
-        let context = plan
-            .actions
-            .iter()
-            .find(|action| action.logical_key == "contexts/web")
-            .unwrap();
-        assert_eq!(
-            context.normalized_payload.as_ref().unwrap()["parent_code"],
-            "default"
-        );
     }
 
     #[test]
@@ -5432,7 +5209,7 @@ value_type = "string"
             "resources": {"blueprints": [
                 resource("blueprints/product", "blueprints/product.toml", entity),
                 resource("blueprints/base", "blueprints/base.toml", mixin)
-            ], "contexts": []}
+            ]}
         });
         let files = [
             ("blueprints/product.toml", entity.as_slice()),
@@ -5446,7 +5223,6 @@ value_type = "string"
             &PlanningWorkspaceSnapshot {
                 workspace_id: uuid::Uuid::nil(),
                 physical_codes: BTreeSet::from(["default".to_owned()]),
-                default_context_id: uuid::Uuid::nil(),
                 installed_extensions: BTreeMap::new(),
                 explore_navigation: Vec::new(),
                 explore_navigation_valid: true,
@@ -5486,7 +5262,6 @@ value_type = "string"
             &PlanningWorkspaceSnapshot {
                 workspace_id: uuid::Uuid::nil(),
                 physical_codes: BTreeSet::from(["default".to_owned(), "ecom_product".to_owned()]),
-                default_context_id: uuid::Uuid::nil(),
                 installed_extensions: BTreeMap::new(),
                 explore_navigation: Vec::new(),
                 explore_navigation_valid: true,
@@ -5520,7 +5295,6 @@ value_type = "string"
             &PlanningWorkspaceSnapshot {
                 workspace_id: uuid::Uuid::nil(),
                 physical_codes: BTreeSet::from(["default".to_owned()]),
-                default_context_id: uuid::Uuid::nil(),
                 installed_extensions: BTreeMap::new(),
                 explore_navigation: Vec::new(),
                 explore_navigation_valid: true,
@@ -5593,7 +5367,7 @@ value_type = "string"
             "resources": {"blueprints": [
                 resource("blueprints/product", "blueprints/product.toml", product),
                 resource("blueprints/category", "blueprints/category.toml", category)
-            ], "contexts": []}
+            ]}
         });
         let files = [
             ("blueprints/product.toml", product.as_slice()),
@@ -5603,7 +5377,6 @@ value_type = "string"
         let workspace = PlanningWorkspaceSnapshot {
             workspace_id: uuid::Uuid::nil(),
             physical_codes: BTreeSet::from(["default".to_owned()]),
-            default_context_id: uuid::Uuid::nil(),
             installed_extensions: BTreeMap::new(),
             explore_navigation: Vec::new(),
             explore_navigation_valid: true,
@@ -5682,7 +5455,6 @@ target_blueprint = "blueprints/product"
         let workspace = PlanningWorkspaceSnapshot {
             workspace_id: uuid::Uuid::from_u128(1),
             physical_codes: BTreeSet::from(["default".to_owned(), "ecom_product".to_owned()]),
-            default_context_id: uuid::Uuid::from_u128(2),
             installed_extensions: BTreeMap::new(),
             explore_navigation: Vec::new(),
             explore_navigation_valid: true,
@@ -5731,61 +5503,6 @@ target_blueprint = "blueprints/product"
             (product.action, product.reason_code),
             ("conflict", "target_code_exists")
         );
-
-        let simple_product = br#"format_version = 1
-code = "product"
-name = "Product"
-kind = "entity"
-[views.dropdown_option]
-type = "dropdown_option"
-fields = ["name"]
-[[attributes]]
-code = "name"
-value_type = "string"
-"#;
-        let context =
-            br#"{"format_version":1,"code":"product","data":{},"parent":"system/default"}"#;
-        let duplicate_manifest = json!({
-            "manifest_version": 1,
-            "id": "attricat.duplicates",
-            "name": "Duplicates",
-            "version": "1.0.0",
-            "description": "Duplicate generated codes",
-            "catalog": {"host_api": "^1.0"},
-            "resources": {
-                "blueprints": [resource("blueprints/product", "blueprints/product.toml", simple_product)],
-                "contexts": [resource("contexts/product", "contexts/product.json", context)]
-            }
-        });
-        let duplicate_pack = ValidatedSolutionPack::from_tar_zst(&archive(
-            &duplicate_manifest,
-            &[
-                ("blueprints/product.toml", simple_product.as_slice()),
-                ("contexts/product.json", context),
-            ],
-        ))
-        .unwrap();
-        let duplicate_plan = build_create_only_plan(
-            &duplicate_pack,
-            "new",
-            BlueprintPublication::Publish,
-            &PlanningWorkspaceSnapshot {
-                workspace_id: uuid::Uuid::nil(),
-                physical_codes: BTreeSet::from(["default".to_owned()]),
-                default_context_id: uuid::Uuid::nil(),
-                installed_extensions: BTreeMap::new(),
-                explore_navigation: Vec::new(),
-                explore_navigation_valid: true,
-                extension_layout: serde_json::json!({"version":1,"outlets":{}}),
-                extension_layout_valid: true,
-                role_codes: BTreeSet::new(),
-                published_entity_codes: BTreeSet::new(),
-            },
-        )
-        .unwrap();
-        assert!(duplicate_plan.actions.iter().all(|action| {
-            (action.action, action.reason_code) == ("conflict", "duplicate_target_code")
-        }));
     }
 
     #[test]

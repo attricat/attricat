@@ -6,13 +6,13 @@ use sqlx::{Postgres, Transaction};
 use uuid::Uuid;
 
 use crate::{
-    domain_events::{BLUEPRINT_CREATED_V1, BLUEPRINT_PUBLISHED_V1, CONTEXT_CREATED_V1},
+    domain_events::{BLUEPRINT_CREATED_V1, BLUEPRINT_PUBLISHED_V1},
     extension_policy,
     extensions::{
         ExtensionLayoutPlacement, Manifest, classify_extension_layout_placement,
         valid_contribution_key,
     },
-    model::{CreateAttributeContext, CreateBlueprint},
+    model::CreateBlueprint,
     solution_packs::{
         BlueprintPublication, InstalledExtensionSnapshot,
         MAX_SOLUTION_PACK_CHECK_RUN_RESPONSE_BYTES, MAX_SOLUTION_PACK_PLAN_RESPONSE_BYTES,
@@ -25,7 +25,7 @@ use crate::{
 
 use super::{
     CatalogRepository, EventPublisher, ExploreNavigationEntry, RepositoryError,
-    blueprints::blueprint_event, contexts::context_event,
+    blueprints::blueprint_event,
 };
 
 #[derive(Clone, Debug, Serialize, sqlx::FromRow)]
@@ -213,12 +213,6 @@ impl CatalogRepository {
         sqlx::query("SET TRANSACTION ISOLATION LEVEL REPEATABLE READ")
             .execute(&mut *tx)
             .await?;
-        let default_context_id = sqlx::query_scalar::<_, Uuid>(
-            "SELECT id FROM attribute_contexts WHERE workspace_id = $1 AND code = 'default'",
-        )
-        .bind(workspace_id)
-        .fetch_one(&mut *tx)
-        .await?;
         let physical_codes = sqlx::query_scalar::<_, String>(
             "SELECT code FROM blueprints WHERE workspace_id = $1 AND code IS NOT NULL UNION SELECT code FROM attribute_contexts WHERE workspace_id = $1",
         )
@@ -302,7 +296,6 @@ impl CatalogRepository {
             &PlanningWorkspaceSnapshot {
                 workspace_id,
                 physical_codes,
-                default_context_id,
                 installed_extensions,
                 explore_navigation,
                 explore_navigation_valid,
@@ -796,16 +789,6 @@ struct StepApplicationError {
 
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
-struct ContextPayload {
-    code: String,
-    data: Value,
-    parent_id: Uuid,
-    #[allow(dead_code)]
-    parent_code: String,
-}
-
-#[derive(Deserialize)]
-#[serde(deny_unknown_fields)]
 struct BlueprintPayload {
     definition: String,
     version: i64,
@@ -894,6 +877,87 @@ impl CatalogRepository {
             .ok_or(RepositoryError::NotFound("solution-pack application"))
     }
 
+    async fn validate_persisted_solution_pack_resources(
+        &self,
+        tx: &mut Transaction<'_, Postgres>,
+        plan_id: Uuid,
+    ) -> Result<(), RepositoryError> {
+        let workspace_id = self.workspace_id.unwrap_or(Self::DEFAULT_WORKSPACE_ID);
+        let mappings = sqlx::query_as::<_, SolutionPackPlanMapping>(
+            "SELECT position,resource_kind,logical_key,target_id,target_code,target_version,mapping_kind FROM solution_pack_plan_mappings WHERE workspace_id=$1 AND plan_id=$2 ORDER BY position",
+        )
+        .bind(workspace_id)
+        .bind(plan_id)
+        .fetch_all(&mut **tx)
+        .await?;
+        let actions = sqlx::query_as::<_, SolutionPackPlanAction>(
+            "SELECT position,resource_kind,logical_key,action,reason_code,summary,preconditions FROM solution_pack_plan_actions WHERE workspace_id=$1 AND plan_id=$2 ORDER BY position",
+        )
+        .bind(workspace_id)
+        .bind(plan_id)
+        .fetch_all(&mut **tx)
+        .await?;
+        if mappings.len() != actions.len() {
+            return Err(RepositoryError::InvalidSolutionPackPlan(
+                "persisted resource mappings and actions do not match".into(),
+            ));
+        }
+        let mappings_by_key = mappings
+            .iter()
+            .map(|mapping| (mapping.logical_key.as_str(), mapping))
+            .collect::<std::collections::BTreeMap<_, _>>();
+        for mapping in &mappings {
+            let valid = match mapping.resource_kind.as_str() {
+                "blueprint" => {
+                    mapping.mapping_kind == "create" && mapping.target_version == Some(1)
+                }
+                "workspace_setting" => {
+                    mapping.mapping_kind == "workspace"
+                        && mapping.target_id == workspace_id
+                        && mapping.target_version.is_none()
+                        && matches!(
+                            (mapping.logical_key.as_str(), mapping.target_code.as_str()),
+                            ("workspace/explore-navigation", "explore_navigation")
+                                | ("workspace/extension-layout", "extension_layout")
+                        )
+                }
+                _ => false,
+            };
+            if !valid {
+                return Err(RepositoryError::InvalidSolutionPackPlan(
+                    "unsupported persisted resource mapping".into(),
+                ));
+            }
+        }
+        for action in &actions {
+            let Some(mapping) = mappings_by_key.get(action.logical_key.as_str()) else {
+                return Err(RepositoryError::InvalidSolutionPackPlan(
+                    "persisted resource action has no mapping".into(),
+                ));
+            };
+            let valid = action.resource_kind == mapping.resource_kind
+                && match action.resource_kind.as_str() {
+                    "blueprint" => {
+                        matches!(
+                            action.action.as_str(),
+                            "create" | "skip" | "conflict" | "blocked"
+                        )
+                    }
+                    "workspace_setting" => matches!(
+                        action.action.as_str(),
+                        "append" | "satisfied" | "skip" | "conflict" | "blocked"
+                    ),
+                    _ => false,
+                };
+            if !valid {
+                return Err(RepositoryError::InvalidSolutionPackPlan(
+                    "unsupported persisted resource action".into(),
+                ));
+            }
+        }
+        Ok(())
+    }
+
     async fn prepare_solution_pack_application(
         &self,
         plan_id: Uuid,
@@ -933,6 +997,8 @@ impl CatalogRepository {
                 return Err(RepositoryError::SolutionPackPlanExpired);
             }
         }
+        self.validate_persisted_solution_pack_resources(&mut tx, plan_id)
+            .await?;
         if let Err(error) = self
             .revalidate_required_extension_requirements(&mut tx, plan_id)
             .await
@@ -1291,7 +1357,7 @@ impl CatalogRepository {
                     "persisted application preconditions do not match the step".into(),
                 ));
             }
-            if !matches!(step.resource_kind.as_str(), "context" | "blueprint") {
+            if step.resource_kind != "blueprint" {
                 return Err(RepositoryError::InvalidSolutionPackPlan(
                     "unsupported persisted resource kind".into(),
                 ));
@@ -1374,35 +1440,6 @@ impl CatalogRepository {
             self.ensure_target_absent(&mut tx, &step).await?;
         }
         let (result_snapshot, events) = match step.resource_kind.as_str() {
-            "context" => {
-                let payload: ContextPayload =
-                    serde_json::from_value(step.normalized_payload.clone()).map_err(|_| {
-                        RepositoryError::InvalidSolutionPackPlan(
-                            "invalid persisted context payload".into(),
-                        )
-                    })?;
-                if payload.code != step.target_code {
-                    return Err(RepositoryError::InvalidSolutionPackPlan(
-                        "persisted context mapping does not match its payload".into(),
-                    ));
-                }
-                let context = self
-                    .create_context_in_transaction(
-                        &mut tx,
-                        step.target_id,
-                        CreateAttributeContext {
-                            code: payload.code,
-                            data: payload.data,
-                            parent_id: Some(payload.parent_id),
-                        },
-                    )
-                    .await
-                    .map_err(solution_pack_mutation_error)?;
-                (
-                    serde_json::json!({"id":context.id,"code":context.code,"parent_id":context.parent_id}),
-                    vec![context_event(self, CONTEXT_CREATED_V1, &context)],
-                )
-            }
             "blueprint" => {
                 let payload: BlueprintPayload =
                     serde_json::from_value(step.normalized_payload.clone()).map_err(|_| {
@@ -1591,7 +1628,7 @@ impl CatalogRepository {
         step: &PendingApplicationStep,
     ) -> Result<(), RepositoryError> {
         let workspace_id = self.workspace_id.unwrap_or(Self::DEFAULT_WORKSPACE_ID);
-        if !matches!(step.resource_kind.as_str(), "context" | "blueprint") {
+        if step.resource_kind != "blueprint" {
             return Err(RepositoryError::InvalidSolutionPackPlan(
                 "unsupported persisted resource kind".into(),
             ));
@@ -2393,6 +2430,135 @@ mod tests {
         );
     }
 
+    async fn insert_legacy_context_plan(
+        pool: &sqlx::PgPool,
+        action: &str,
+        with_application_step: bool,
+    ) -> (Uuid, Option<Uuid>) {
+        let workspace_id = CatalogRepository::DEFAULT_WORKSPACE_ID;
+        let plan_id = Uuid::new_v4();
+        sqlx::query("INSERT INTO solution_pack_plans (id,workspace_id,source_kind,source_metadata,archive_sha256,manifest_version,pack_id,pack_name,pack_version,pack_description,host_api,prefix,blueprint_publication,ready,expires_at) VALUES ($1,$2,'local_archive','{\"side_loaded\":true}'::jsonb,$3,1,$4,'Legacy context','1.0.0','Legacy context evidence','^1.0','legacy','draft',true,clock_timestamp() + interval '24 hours')")
+            .bind(plan_id)
+            .bind(workspace_id)
+            .bind("0".repeat(64))
+            .bind(format!("attricat.legacy-context.{plan_id}"))
+            .execute(pool)
+            .await
+            .unwrap();
+        let target_id = Uuid::new_v4();
+        sqlx::query("INSERT INTO solution_pack_plan_mappings (plan_id,workspace_id,position,resource_kind,logical_key,target_id,target_code,mapping_kind,snapshot) VALUES ($1,$2,0,'context','contexts/legacy',$3,'legacy_context','create','{}'::jsonb)")
+            .bind(plan_id)
+            .bind(workspace_id)
+            .bind(target_id)
+            .execute(pool)
+            .await
+            .unwrap();
+        let normalized_payload = (action == "create")
+            .then(|| serde_json::json!({"code":"legacy_context","data":{},"parent_id":Uuid::nil(),"parent_code":"default"}));
+        let preconditions = if action == "create" {
+            serde_json::json!([{"kind":"target_absent","resource_kind":"context","code":"legacy_context"}])
+        } else {
+            serde_json::json!([])
+        };
+        sqlx::query("INSERT INTO solution_pack_plan_actions (plan_id,workspace_id,position,resource_kind,logical_key,action,reason_code,summary,normalized_payload,preconditions) VALUES ($1,$2,0,'context','contexts/legacy',$3,'legacy_context','{}'::jsonb,$4,$5)")
+            .bind(plan_id)
+            .bind(workspace_id)
+            .bind(action)
+            .bind(normalized_payload)
+            .bind(preconditions)
+            .execute(pool)
+            .await
+            .unwrap();
+        if !with_application_step {
+            return (plan_id, None);
+        }
+        let application_id = Uuid::new_v4();
+        let request_id = Uuid::new_v4();
+        sqlx::query("INSERT INTO solution_pack_applications (id,workspace_id,plan_id,request_id,correlation_id,source_kind,source_metadata,archive_sha256,pack_id,pack_version,blueprint_publication,state,mapping_snapshot) VALUES ($1,$2,$3,$4,$4,'local_archive','{\"side_loaded\":true}'::jsonb,$5,$6,'1.0.0','draft','running','[]'::jsonb)")
+            .bind(application_id)
+            .bind(workspace_id)
+            .bind(plan_id)
+            .bind(request_id)
+            .bind("0".repeat(64))
+            .bind(format!("attricat.legacy-context.{plan_id}"))
+            .execute(pool)
+            .await
+            .unwrap();
+        sqlx::query("INSERT INTO solution_pack_application_steps (application_id,workspace_id,position,plan_id,resource_kind,logical_key,target_id,target_code,state) VALUES ($1,$2,0,$3,'context','contexts/legacy',$4,'legacy_context','pending')")
+            .bind(application_id)
+            .bind(workspace_id)
+            .bind(plan_id)
+            .bind(target_id)
+            .execute(pool)
+            .await
+            .unwrap();
+        (plan_id, Some(application_id))
+    }
+
+    #[sqlx::test(migrations = "./migrations")]
+    async fn legacy_context_actions_and_steps_fail_closed(pool: sqlx::PgPool) {
+        for constraint in [
+            "solution_pack_plan_mappings_resource_kind_check",
+            "solution_pack_plan_actions_resource_kind_check",
+            "solution_pack_application_steps_resource_kind_check",
+        ] {
+            let table = if constraint.starts_with("solution_pack_plan_mappings") {
+                "solution_pack_plan_mappings"
+            } else if constraint.starts_with("solution_pack_plan_actions") {
+                "solution_pack_plan_actions"
+            } else {
+                "solution_pack_application_steps"
+            };
+            sqlx::query(&format!("ALTER TABLE {table} DROP CONSTRAINT {constraint}"))
+                .execute(&pool)
+                .await
+                .unwrap();
+        }
+        let context_count: i64 = sqlx::query_scalar("SELECT count(*) FROM attribute_contexts")
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+        let repository = CatalogRepository::new(pool.clone());
+        for (action, with_step) in [("skip", false), ("create", false), ("create", true)] {
+            let (plan_id, application_id) =
+                insert_legacy_context_plan(&pool, action, with_step).await;
+            assert!(matches!(
+                repository.apply_solution_pack_plan(plan_id).await,
+                Err(RepositoryError::InvalidSolutionPackPlan(_))
+            ));
+            if let Some(application_id) = application_id {
+                assert_eq!(
+                    sqlx::query_scalar::<_, String>(
+                        "SELECT state FROM solution_pack_applications WHERE id=$1"
+                    )
+                    .bind(application_id)
+                    .fetch_one(&pool)
+                    .await
+                    .unwrap(),
+                    "running"
+                );
+            } else {
+                assert_eq!(
+                    sqlx::query_scalar::<_, i64>(
+                        "SELECT count(*) FROM solution_pack_applications WHERE plan_id=$1"
+                    )
+                    .bind(plan_id)
+                    .fetch_one(&pool)
+                    .await
+                    .unwrap(),
+                    0
+                );
+            }
+        }
+        assert_eq!(
+            sqlx::query_scalar::<_, i64>("SELECT count(*) FROM attribute_contexts")
+                .fetch_one(&pool)
+                .await
+                .unwrap(),
+            context_count
+        );
+    }
+
     #[sqlx::test(migrations = "./migrations")]
     async fn failed_navigation_step_revalidates_and_resumes(pool: sqlx::PgPool) {
         let workspace_id = CatalogRepository::DEFAULT_WORKSPACE_ID;
@@ -2476,13 +2642,13 @@ value_type = "string"
             .await
             .unwrap();
         for position in 0_i64..2 {
-            let logical_key = format!("contexts/{position}");
+            let logical_key = format!("blueprints/{position}");
             let target_id = Uuid::new_v4();
             let target_code = format!("reconcile_{position}");
-            sqlx::query("INSERT INTO solution_pack_plan_mappings (plan_id,workspace_id,position,resource_kind,logical_key,target_id,target_code,mapping_kind,snapshot) VALUES ($1,$2,$3,'context',$4,$5,$6,'create','{}'::jsonb)")
+            sqlx::query("INSERT INTO solution_pack_plan_mappings (plan_id,workspace_id,position,resource_kind,logical_key,target_id,target_code,mapping_kind,snapshot) VALUES ($1,$2,$3,'blueprint',$4,$5,$6,'create','{}'::jsonb)")
                 .bind(plan_id).bind(workspace_id).bind(position).bind(&logical_key).bind(target_id).bind(&target_code).execute(&pool).await.unwrap();
-            sqlx::query("INSERT INTO solution_pack_plan_actions (plan_id,workspace_id,position,resource_kind,logical_key,action,reason_code,summary,normalized_payload,preconditions) VALUES ($1,$2,$3,'context',$4,'create','target_absent','{}'::jsonb,'{}'::jsonb,$5)")
-                .bind(plan_id).bind(workspace_id).bind(position).bind(&logical_key).bind(serde_json::json!([{"kind":"target_absent","resource_kind":"context","code":target_code}])).execute(&pool).await.unwrap();
+            sqlx::query("INSERT INTO solution_pack_plan_actions (plan_id,workspace_id,position,resource_kind,logical_key,action,reason_code,summary,normalized_payload,preconditions) VALUES ($1,$2,$3,'blueprint',$4,'create','target_absent','{}'::jsonb,'{}'::jsonb,$5)")
+                .bind(plan_id).bind(workspace_id).bind(position).bind(&logical_key).bind(serde_json::json!([{"kind":"target_absent","resource_kind":"blueprint","code":target_code}])).execute(&pool).await.unwrap();
         }
         sqlx::query("INSERT INTO solution_pack_applications (id,workspace_id,plan_id,request_id,correlation_id,source_kind,source_metadata,archive_sha256,pack_id,pack_version,blueprint_publication,state,mapping_snapshot) VALUES ($1,$2,$3,$4,$4,'local_archive','{\"side_loaded\":true}'::jsonb,$5,'attricat.reconcile','1.0.0','draft','running','[]'::jsonb)")
             .bind(application_id).bind(workspace_id).bind(plan_id).bind(Uuid::new_v4()).bind("0".repeat(64)).execute(&pool).await.unwrap();

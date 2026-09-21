@@ -50,7 +50,6 @@ struct CatalogSummary {
 #[derive(Serialize)]
 struct ResourceSummaries {
     blueprints: Vec<BlueprintSummary>,
-    contexts: Vec<ContextSummary>,
     workspace_settings: Vec<WorkspaceSettingSummary>,
 }
 
@@ -67,15 +66,6 @@ struct BlueprintSummary {
 struct BlueprintIncludeSummary {
     alias: String,
     key: String,
-}
-
-#[derive(Serialize)]
-struct ContextSummary {
-    key: String,
-    code: String,
-    required: bool,
-    sha256: String,
-    parent: String,
 }
 
 #[derive(Serialize)]
@@ -136,12 +126,6 @@ pub(super) async fn inspect(
         .iter()
         .map(|resource| blueprint_summary(&pack, resource))
         .collect();
-    let contexts = manifest
-        .resources
-        .contexts
-        .iter()
-        .map(|resource| context_summary(&pack, resource))
-        .collect();
     let response = InspectionResponse {
         archive_sha256: pack.archive_sha256().to_owned(),
         manifest: ManifestSummary {
@@ -156,7 +140,6 @@ pub(super) async fn inspect(
         },
         resources: ResourceSummaries {
             blueprints,
-            contexts,
             workspace_settings: manifest
                 .resources
                 .workspace_settings
@@ -458,22 +441,6 @@ fn extension_requirement_summary(
     }
 }
 
-fn context_summary(
-    pack: &ValidatedSolutionPack,
-    resource: &SolutionPackResource,
-) -> ContextSummary {
-    let context = pack
-        .context(&resource.key)
-        .expect("validated context resource is available");
-    ContextSummary {
-        key: resource.key.clone(),
-        code: context.code.clone(),
-        required: resource.required,
-        sha256: resource.sha256.clone(),
-        parent: context.parent.clone(),
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -493,7 +460,6 @@ mod tests {
             },
             resources: ResourceSummaries {
                 blueprints: Vec::new(),
-                contexts: Vec::new(),
                 workspace_settings: Vec::new(),
             },
             extensions: Vec::new(),

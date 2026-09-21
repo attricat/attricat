@@ -43,7 +43,7 @@ runs the ignored RustFS compatibility test.
 - [Domain eventing](eventing.md): transactional outbox contract and delivery semantics.
 - [Extensions](extensions.md): strict manifest, permissions, webhook, and lifecycle contracts.
 - [Solution packs](solution-packs.md): uploaded portable templates with validated
-  blueprint/context application, extension requirement evaluation, and provenance.
+  blueprint application, extension requirement evaluation, and provenance.
 - [Authentication and identity adapters](authentication.md): local password
   lifecycle plus the provider-neutral external identity seam.
 - [JSON Schema validation](json-schema-validation.md): attribute and entity

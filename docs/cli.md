@@ -234,7 +234,7 @@ sends `context_id` as the optional multipart text field. `extension sideload`,
 `solution-pack inspect`, and solution-pack plan creation stream archives as
 `application/zstd`. Solution-pack inspection, planning, application, and history are performed only by
 the authenticated server; the CLI neither unpacks nor validates the archive and
-prints only the server's safe, bounded JSON response. `solution-pack apply` accepts only a UUID plan ID and has no flags that can alter the persisted plan. History contains provenance and step results but no blueprint source or context data. Uploads and downloads retain the
+prints only the server's safe, bounded JSON response. `solution-pack apply` accepts only a UUID plan ID and has no flags that can alter the persisted plan. History contains provenance and step results but no blueprint source or normalized resource payloads. Uploads and downloads retain the
 five-second connection timeout but are not subject to the normal 30-second JSON
 request timeout. File downloads, extension artifacts,
 and metrics stream to `--output`; they do not put binary, JavaScript, or

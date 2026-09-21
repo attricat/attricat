@@ -1,8 +1,8 @@
 # Solution Packs
 
 > **Status:** v1 archive validation, administrator inspection, immutable
-> create-only planning, and durable application/history for contexts and
-> blueprints are implemented. Packs may also declare bounded extension
+> create-only planning, and durable application/history for blueprints are
+> implemented. Packs may also declare bounded extension
 > requirements, non-secret configuration templates, Explore navigation defaults,
 > bounded workspace extension layouts, and entity-blueprint extension layouts.
 > Administrators upload `.tar.zst` archives; broader resource types remain deferred.
@@ -60,13 +60,13 @@ to the workspace rather than remaining managed by the pack.
 
 ## Future target content at a glance
 
-The following table is roadmap design beyond the implemented v1 context and
-blueprint boundary.
+The following table is roadmap design beyond the implemented v1 blueprint and
+bounded workspace-setting boundary.
 
 | Content | Target pack behavior |
 | --- | --- |
 | Blueprints, attributes, relationships, and views | Declared through logical keys and compiled into ordinary versioned blueprint definitions. |
-| Contexts and publication-channel defaults | Added to the rooted hierarchy through mapped context codes; the system `default` context is never replaced. |
+| Contexts and publication-channel defaults | Not pack content. Contexts are administrator-managed workspace operating structure and are never created, mapped, updated, or referenced by packs. |
 | Extension requirements | **Implemented subset:** declare installed-package ID/version compatibility and an optional bounded non-secret literal JSON configuration template. Stable manifest contribution references may supply workspace and new entity-blueprint layout defaults. Installation, upgrade, configuration, grants, and enablement remain separate ordinary approvals. |
 | Workspace defaults | **Implemented subset:** append pinned Explore entries and compatible extension contributions without replacing unrelated navigation, layout data, or settings. Other settings remain deferred. |
 | Branding, themes, and static assets | Install only declared, digest-verified files of supported media types for host-defined purposes. |
@@ -74,8 +74,7 @@ blueprint boundary.
 | Sample data | Optional, separately selected, visibly marked, portable, and idempotently mapped; never treated as production configuration. |
 
 Not every content type ships in the current implementation. The
-[initial delivery boundary](#initial-delivery-boundary) implements blueprint and
-context creation, bounded Explore navigation and extension-layout defaults,
+[initial delivery boundary](#initial-delivery-boundary) implements blueprint creation, bounded Explore navigation and extension-layout defaults,
 entity-blueprint extension layouts, read-only extension requirement evaluation,
 and bounded guided setup with informational check runs.
 
@@ -111,8 +110,8 @@ Before planning, Catalog validates at least:
 - declared pack identity and version plus the whole-archive digest;
 - host compatibility and supported resource contract versions;
 - uniqueness and referential integrity of logical resource keys; and
-- schemas for blueprints, contexts, settings, templates, checks, and sample
-  data before any workspace mutation.
+- schemas for blueprints, settings, templates, checks, and sample data before
+  any workspace mutation.
 
 Unknown manifest fields are rejected at the contract version where they occur.
 Archive validity does not imply that its proposed changes are safe for a
@@ -148,12 +147,6 @@ publish a strict JSON Schema before accepting archives:
       "required": true,
       "sha256": "<lowercase-sha256>"
     }],
-    "contexts": [{
-      "key": "contexts/web",
-      "path": "contexts/web.json",
-      "required": true,
-      "sha256": "<lowercase-sha256>"
-    }],
     "workspace_settings": [{
       "key": "workspace/explore-navigation",
       "path": "workspace/explore-navigation.json",
@@ -181,7 +174,6 @@ and key, for example:
 ```text
 attricat.ecommerce/blueprints/product
 attricat.ecommerce/blueprints/product/attributes/sku
-attricat.ecommerce/contexts/web
 attricat.ecommerce/extensions/shopify
 ```
 
@@ -197,14 +189,15 @@ workspace-owned resource and records that mapping in the immutable application
 record.
 
 For a new globally code-addressed resource, an administrator chooses or accepts
-a pack prefix. The planner can then produce codes such as `ecom_product`,
-`ecom_category`, and `ecom_web`. Attribute codes such as `sku` remain local to
+a pack prefix. The planner can then produce codes such as `ecom_product` and
+`ecom_category`. Attribute codes such as `sku` remain local to
 the mapped blueprint, but references to them still use logical attribute keys.
 Relationships, views, templates, layouts, checks, and settings are compiled
 through the same stored mapping.
 
-The built-in `default` context is referenced through a reserved system key. A
-pack cannot create, rename, or replace it.
+Contexts are administrator-managed workspace operating structure, not solution-pack
+resources. Pack manifests cannot declare context keys or hierarchy references,
+and application plans never create, map, or update contexts.
 
 If a proposed code or logical purpose collides, the plan requires one of these
 explicit choices:
@@ -216,7 +209,7 @@ explicit choices:
 4. skip an optional component and everything that requires it.
 
 Catalog never silently overwrites, renames, or maps an existing blueprint,
-context, setting, or asset. A successful application preserves its mapping as
+setting, or asset. A successful application preserves its mapping as
 provenance. A later application may use that recorded mapping as a planning
 input, but it does not make the resource pack-owned or prevent ordinary
 workspace changes. This allows packs with overlapping local names to coexist.
@@ -248,7 +241,7 @@ resolved while each plan is created.
 
 Installed extension contributions and exact bounded workspace-setting entries
 can be shared by multiple plans through `satisfied` actions. Mapping a second
-pack to a compatible blueprint or context produced by an earlier application is
+pack to a compatible blueprint produced by an earlier application is
 future design. No application gives a pack continuing ownership or creates a
 permanent pack dependency; applied resources and settings remain workspace-owned.
 
@@ -274,7 +267,7 @@ different release of the same pack creates a new reviewed application plan; it
 is not a second managed instance and does not establish an upgrade relationship
 with resources produced by the earlier release.
 
-## Pack contents (v1 blueprints, contexts, settings, extensions, and guidance)
+## Pack contents (v1 blueprints, settings, extensions, and guidance)
 
 ### Blueprints and views
 
@@ -293,15 +286,14 @@ explicitly says so. A later pack release never edits a published revision in
 place; if selected, its plan creates a draft successor and shows schema and
 entity-migration consequences before publication.
 
-### Context hierarchy
+### Context boundary
 
-A pack may declare context nodes, parent relationships, context metadata, and
-optional publication-channel defaults. Parent references use logical context
-keys. New contexts receive mapped physical codes and must obey the ordinary
-single-root, cycle, authorization, and deletion rules.
-
-The pack cannot replace the workspace's root `default` context or assume that a
-generic code such as `web` is available.
+Contexts are ordinary, administrator-managed workspace operating structure and
+are never solution-pack content. The manifest has no `resources.contexts`
+field; strict manifests that include it are rejected as unknown. Pack logical
+references cannot use context keys, and planning or
+application cannot create, map, update, or reference a context hierarchy.
+Guidance and checks do not gain an implicit context prerequisite contract in v1.
 
 ### Extension requirements
 
@@ -503,7 +495,7 @@ acli solution-pack inspect --file pack.tar.zst
 ```
 
 Inspection does not persist the archive, apply resources, or expose blueprint
-source and context data in its response. The implemented uploaded-archive
+source or normalized resource payloads in its response. The implemented uploaded-archive
 planner uses an explicit prefix and blueprint publication preference:
 
 ```sh
@@ -549,7 +541,7 @@ Validation produces no workspace changes. An authorized administrator uploads a
 
 V1 actions are:
 
-- `create`: create a required context or blueprint at its persisted target;
+- `create`: create a required blueprint at its persisted target;
 - `append`: append absent Explore navigation or extension-layout entries;
 - `satisfied`: record exact workspace-setting entries without changing them;
 - `skip`: omit an optional resource or unmet optional navigation/layout entry;
@@ -597,7 +589,7 @@ later changes.
 
 A new application may start only while its ready plan is unexpired. Each create
 step revalidates its persisted `target_absent` code precondition. A target that
-appears before or while the ordinary context/blueprint mutation runs makes the
+appears before or while the ordinary blueprint mutation runs makes the
 application invalid with `plan_stale`; Catalog never adopts or overwrites it.
 Once an application has started, plan expiry does not strand it: retries
 revalidate completed and pending targets and resume durable work.
@@ -611,12 +603,12 @@ not misreported against a later pending step.
 
 Implemented application evidence contains the uploaded-archive source marker
 and digest, pack ID/version, blueprint publication choice, executed mapping
-snapshot, ordered context/blueprint/workspace-setting step results, state and
+snapshot, ordered blueprint/workspace-setting step results, state and
 bounded diagnostics, actor token/user columns, timestamps, and
 request/correlation identifiers. List
 responses are compact and omit mappings and steps; show responses include both.
-Neither response contains normalized payloads, blueprint definitions, context
-data, archive bytes, or secret values.
+Neither response contains normalized payloads, blueprint definitions, archive
+bytes, or secret values.
 
 Richer source/release provenance, selected options, reused-resource evidence,
 generic settings fragments, prerequisites, extension mutation outcomes, and
@@ -627,7 +619,7 @@ lock resources, detect drift, authorize later changes, or provide uninstall.
 ## Later releases and workspace changes (future design)
 
 A successful application is not a continuing desired-state declaration.
-Administrators may freely edit the resulting blueprints, contexts, settings,
+Administrators may freely edit the resulting blueprints and settings,
 extension configuration, and data through their ordinary workflows. Catalog
 does not label those edits as drift or try to restore the template.
 
@@ -655,7 +647,7 @@ current resource still matches the pack.
 ## No pack-level uninstall
 
 There is no detach or uninstall operation for a solution pack as a whole. Once
-a plan is applied, its blueprints, contexts, settings, assets, extensions, and
+a plan is applied, its blueprints, settings, assets, extensions, and
 sample entities are workspace state. The application record remains as audit
 and provenance history.
 
@@ -685,13 +677,13 @@ redistribute extension packages, fonts, logos, or customer content.
 
 ## Longer-term delivery boundary
 
-The intended delivery sequence validates the architecture with blueprint and
-context starter packs:
+The intended delivery sequence validates the architecture with blueprint
+starter packs:
 
 1. strict manifest/archive validation;
 2. logical identifiers, prefix selection, and recorded mapping snapshots;
 3. multiple pack IDs coexisting through independent application records;
-4. blueprint, view, and context planning;
+4. blueprint and view planning;
 5. deterministic dry runs with collision and cross-pack conflict choices;
 6. durable, idempotent application records and audit history;
 7. administrator-only CLI commands for plan review and apply; and

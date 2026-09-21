@@ -65,8 +65,12 @@ and blueprint publication preference, readiness, and a fixed 24-hour expiry.
 codes, and revision 1 where relevant. `solution_pack_plan_actions` stores a
 deterministic dependency-first order,
 create/append/satisfied/skip/conflict/blocked reasons, preconditions, and
-normalized blueprint/context or bounded Explore-navigation and extension-layout
-payloads consumed by apply. Extension-layout payloads retain only stable
+normalized blueprint or bounded Explore-navigation and extension-layout
+payloads consumed by apply. Resource-kind constraints enforce only `blueprint`
+and `workspace_setting` for new writes; historical context/system rows accepted
+before context-pack removal remain readable but are rejected by application
+revalidation. Contexts remain ordinary workspace structure outside solution-pack
+persistence and execution. Extension-layout payloads retain only stable
 contribution keys, outlets, placement flags, and exact installed release
 identity needed for private apply-time revalidation.
 `solution_pack_plan_extension_requirements` separately stores deterministic
@@ -82,7 +86,7 @@ safe source, digest, publication, and logical-to-physical mapping provenance.
 Its bounded state is `running`, `completed`, `failed`, or `invalid`; bounded
 diagnostic fields retain resumable failure evidence. Ordered
 `solution_pack_application_steps` are completed in the same explicit
-transaction as each ordinary context or blueprint mutation, or a bounded
+transaction as each ordinary blueprint mutation, or a bounded
 Explore-navigation/extension-layout append or no-op, and its audit/domain-event
 evidence. Extension-layout steps lock the workspace row shared with ordinary
 full layout replacement, merge item-by-item, and retain only bounded count,
