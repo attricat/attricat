@@ -1,6 +1,11 @@
 mod support;
 
-use std::{io::Cursor, sync::Arc};
+use std::{
+    io::Cursor,
+    path::{Path, PathBuf},
+    process::Command,
+    sync::Arc,
+};
 
 use api::{
     extension_installer::{ExtensionInstaller, installed_artifact_key},
@@ -8,10 +13,106 @@ use api::{
     repository::CatalogRepository,
     storage::{FakeObjectStore, ObjectStore},
 };
+use async_trait::async_trait;
 use support::{Value, authenticated_client, json, start_server_with_object_store};
 use uuid::Uuid;
 
 const ARTIFACT_BYTES: &[u8] = b"server bytes";
+
+#[derive(Clone, Copy)]
+enum ArtifactUploadFault {
+    FailUpload,
+    DeleteMetadataBeforeCompletion,
+}
+
+struct FaultingArtifactStore {
+    inner: Arc<FakeObjectStore>,
+    pool: sqlx::PgPool,
+    fault: tokio::sync::Mutex<ArtifactUploadFault>,
+}
+
+impl FaultingArtifactStore {
+    fn new(inner: Arc<FakeObjectStore>, pool: sqlx::PgPool, fault: ArtifactUploadFault) -> Self {
+        Self {
+            inner,
+            pool,
+            fault: tokio::sync::Mutex::new(fault),
+        }
+    }
+
+    async fn set_fault(&self, fault: ArtifactUploadFault) {
+        *self.fault.lock().await = fault;
+    }
+}
+
+#[async_trait]
+impl ObjectStore for FaultingArtifactStore {
+    async fn put(
+        &self,
+        key: &str,
+        object: api::storage::StoredObject,
+    ) -> Result<(), api::storage::ObjectStoreError> {
+        self.inner.put(key, object).await
+    }
+    async fn put_file(
+        &self,
+        key: &str,
+        path: &Path,
+        content_type: Option<&str>,
+    ) -> Result<(), api::storage::ObjectStoreError> {
+        match *self.fault.lock().await {
+            ArtifactUploadFault::FailUpload => {
+                Err(api::storage::ObjectStoreError::Operation("fault"))
+            }
+            ArtifactUploadFault::DeleteMetadataBeforeCompletion => {
+                self.inner.put_file(key, path, content_type).await?;
+                let id = key
+                    .rsplit('/')
+                    .next()
+                    .and_then(|id| id.parse::<Uuid>().ok())
+                    .expect("output key ends in artifact UUID");
+                sqlx::query("DELETE FROM extension_operation_artifacts WHERE id=$1")
+                    .bind(id)
+                    .execute(&self.pool)
+                    .await
+                    .map_err(|_| api::storage::ObjectStoreError::Operation("fault"))?;
+                Ok(())
+            }
+        }
+    }
+    async fn get(
+        &self,
+        key: &str,
+    ) -> Result<api::storage::StoredObject, api::storage::ObjectStoreError> {
+        self.inner.get(key).await
+    }
+    async fn get_stream(
+        &self,
+        key: &str,
+    ) -> Result<api::storage::StoredObjectStream, api::storage::ObjectStoreError> {
+        self.inner.get_stream(key).await
+    }
+    async fn get_range(
+        &self,
+        key: &str,
+        range: Option<&str>,
+    ) -> Result<api::storage::StoredObject, api::storage::ObjectStoreError> {
+        self.inner.get_range(key, range).await
+    }
+    async fn get_range_stream(
+        &self,
+        key: &str,
+        range: Option<&str>,
+    ) -> Result<api::storage::StoredObjectStream, api::storage::ObjectStoreError> {
+        self.inner.get_range_stream(key, range).await
+    }
+    async fn delete(&self, key: &str) -> Result<(), api::storage::ObjectStoreError> {
+        self.inner.delete(key).await
+    }
+    async fn readiness(&self) -> Result<(), api::storage::ObjectStoreError> {
+        self.inner.readiness().await
+    }
+}
 
 fn release_archive(version: &str, dependencies: Value, artifact_bytes: &[u8]) -> Vec<u8> {
     let manifest = serde_json::to_vec(&json!({
@@ -44,6 +145,69 @@ fn release_archive(version: &str, dependencies: Value, artifact_bytes: &[u8]) ->
         let mut tar = tar::Builder::new(&mut tar_bytes);
         append_file(&mut tar, "manifest.json", &manifest);
         append_file(&mut tar, "server.wasm", artifact_bytes);
+        tar.finish().unwrap();
+    }
+    zstd::stream::encode_all(Cursor::new(tar_bytes), 0).unwrap()
+}
+
+fn artifact_stream_component() -> Vec<u8> {
+    let root = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .parent()
+        .and_then(|path| path.parent())
+        .expect("API crate is below workspace root")
+        .to_owned();
+    assert!(
+        Command::new("cargo")
+            .current_dir(&root)
+            .args([
+                "build",
+                "-p",
+                "catalog-artifact-test-component",
+                "--target",
+                "wasm32-unknown-unknown",
+                "--release",
+            ])
+            .status()
+            .expect("cargo must be available for the component fixture")
+            .success()
+    );
+    let core =
+        root.join("target/wasm32-unknown-unknown/release/catalog_artifact_test_component.wasm");
+    let component = root.join("target/artifact-stream-test.component.wasm");
+    assert!(
+        Command::new("wasm-tools")
+            .args(["component", "new"])
+            .arg(core)
+            .args(["-o"])
+            .arg(&component)
+            .status()
+            .expect("wasm-tools must be available for the component fixture")
+            .success()
+    );
+    std::fs::read(component).expect("component fixture must be readable")
+}
+
+fn artifact_operation_release_archive(extension_id: &str, component: &[u8]) -> Vec<u8> {
+    let manifest = serde_json::to_vec(&json!({
+        "manifest_version": 1,
+        "name": "Artifact operation extension",
+        "version": "1.0.0",
+        "description": "artifact WIT runtime integration test",
+        "icons": {"48": "icon.png"},
+        "catalog": {"id": extension_id, "host_api": ">=1.3.0, <2.0.0"},
+        "permissions": ["artifacts.read", "artifacts.write"],
+        "artifacts": [{"id": "server", "kind": "server_wasm", "path": "server.wasm"}],
+        "configuration": {"version": 1, "schema": {"type": "object", "additionalProperties": false}},
+        "server": {"operations": [{
+            "id": "copy", "handler": "copy", "request_schema": {"type": "object"},
+            "max_request_bytes": 1024, "max_checkpoint_bytes": 1024
+        }]}
+    })).unwrap();
+    let mut tar_bytes = Vec::new();
+    {
+        let mut tar = tar::Builder::new(&mut tar_bytes);
+        append_file(&mut tar, "manifest.json", &manifest);
+        append_file(&mut tar, "server.wasm", component);
         tar.finish().unwrap();
     }
     zstd::stream::encode_all(Cursor::new(tar_bytes), 0).unwrap()
@@ -1910,4 +2074,240 @@ async fn operation_artifacts_are_run_scoped_quota_bound_cleaned_and_downloadable
         "aborted"
     );
     server.abort();
+}
+
+#[sqlx::test(migrations = "./migrations")]
+async fn artifact_wit_component_copies_a_large_approved_input_in_bounded_chunks(
+    pool: sqlx::PgPool,
+) {
+    use api::{
+        extension_runtime::{
+            ExtensionOperationTaskHandler, ExtensionRuntime, ExtensionRuntimeConfig,
+        },
+        repository::StartExtensionOperation,
+        storage::StoredObject,
+        task_worker::TaskHandler,
+    };
+    use catalog_domain::task_queue::TaskKind;
+    use sha2::{Digest, Sha256};
+    use std::time::Duration;
+
+    let workspace = Uuid::from_u128(0x00000000000040008000000000000002);
+    let repository = CatalogRepository::system(pool.clone())
+        .for_workspace(workspace)
+        .await
+        .unwrap();
+    let store = Arc::new(FakeObjectStore::available());
+    let component = artifact_stream_component();
+    ExtensionInstaller::new(repository.clone(), store.clone())
+        .install(
+            "test",
+            &artifact_operation_release_archive("acme.artifact-wit", &component),
+        )
+        .await
+        .unwrap();
+    for capability in ["artifacts.read", "artifacts.write"] {
+        repository
+            .grant_extension("acme.artifact-wit", "capability", capability)
+            .await
+            .unwrap();
+    }
+    repository
+        .enable_extension("acme.artifact-wit")
+        .await
+        .unwrap();
+    let release_id = repository
+        .installed_extension("acme.artifact-wit")
+        .await
+        .unwrap()
+        .installed_release_id;
+
+    // The guest calls read with 64 KiB, so this 128 KiB + 17-byte input requires
+    // multiple bounded host calls and is never sent through operation JSON.
+    let input = (0..(128 * 1024 + 17))
+        .map(|index| (index % 251) as u8)
+        .collect::<Vec<_>>();
+    let file_id = Uuid::new_v4();
+    let source_key = "files/artifact-wit-input";
+    store
+        .put(
+            source_key,
+            StoredObject {
+                bytes: input.clone().into(),
+                content_type: Some("application/octet-stream".into()),
+            },
+        )
+        .await
+        .unwrap();
+    sqlx::query("INSERT INTO files(id,workspace_id,original_filename,display_filename,mime_type,byte_size,sha256,original_key,status) VALUES($1,$2,'large.bin','large.bin','application/octet-stream',$3,$4,$5,'ready')")
+        .bind(file_id)
+        .bind(workspace)
+        .bind(input.len() as i64)
+        .bind(format!("{:x}", Sha256::digest(&input)))
+        .bind(source_key)
+        .execute(&pool)
+        .await
+        .unwrap();
+    let run_id = repository
+        .start_extension_operation(StartExtensionOperation {
+            extension_id: "acme.artifact-wit".into(),
+            expected_release_id: release_id,
+            operation_id: "copy".into(),
+            input: json!({}),
+            source_reference: json!({"input_file_id": file_id}),
+            destination_reference: json!({}),
+            idempotency_key: "copy-large-input".into(),
+        })
+        .await
+        .unwrap();
+    let task = repository
+        .claim_task_for_kinds(
+            "artifact-wit-test",
+            Duration::from_secs(30),
+            &[TaskKind::ExtensionOperationRunV1],
+        )
+        .await
+        .unwrap()
+        .unwrap();
+    let runtime = ExtensionRuntime::new(store.clone(), ExtensionRuntimeConfig::default()).unwrap();
+    let handler = ExtensionOperationTaskHandler::new(repository.clone(), runtime);
+    handler.handle(task).await.unwrap();
+
+    let (artifact_id, key, checksum, length): (Uuid, String, String, i64) = sqlx::query_as(
+        "SELECT id,object_key,checksum_sha256,content_length FROM extension_operation_artifacts WHERE operation_run_id=$1 AND direction='output' AND state='completed'",
+    )
+    .bind(run_id)
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert_eq!(length, input.len() as i64);
+    assert_eq!(checksum, format!("{:x}", Sha256::digest(&input)));
+    assert_eq!(
+        store.get(&key).await.unwrap().bytes.as_ref(),
+        input.as_slice()
+    );
+    assert!(
+        repository
+            .completed_extension_operation_artifact(run_id, artifact_id)
+            .await
+            .is_ok()
+    );
+}
+
+#[sqlx::test(migrations = "./migrations")]
+async fn artifact_completion_faults_abort_metadata_and_delete_orphans(pool: sqlx::PgPool) {
+    use api::{
+        extension_runtime::{
+            ExtensionOperationTaskHandler, ExtensionRuntime, ExtensionRuntimeConfig,
+        },
+        repository::StartExtensionOperation,
+        storage::StoredObject,
+        task_worker::TaskHandler,
+    };
+    use catalog_domain::task_queue::TaskKind;
+    use sha2::{Digest, Sha256};
+    use std::time::Duration;
+
+    let workspace = Uuid::from_u128(0x00000000000040008000000000000002);
+    let repository = CatalogRepository::system(pool.clone())
+        .for_workspace(workspace)
+        .await
+        .unwrap();
+    let inner = Arc::new(FakeObjectStore::available());
+    let store = Arc::new(FaultingArtifactStore::new(
+        inner.clone(),
+        pool.clone(),
+        ArtifactUploadFault::FailUpload,
+    ));
+    ExtensionInstaller::new(repository.clone(), store.clone())
+        .install(
+            "test",
+            &artifact_operation_release_archive(
+                "acme.artifact-fault",
+                &artifact_stream_component(),
+            ),
+        )
+        .await
+        .unwrap();
+    for capability in ["artifacts.read", "artifacts.write"] {
+        repository
+            .grant_extension("acme.artifact-fault", "capability", capability)
+            .await
+            .unwrap();
+    }
+    repository
+        .enable_extension("acme.artifact-fault")
+        .await
+        .unwrap();
+    let release_id = repository
+        .installed_extension("acme.artifact-fault")
+        .await
+        .unwrap()
+        .installed_release_id;
+    let input = vec![9_u8; 64 * 1024 + 1];
+    let file_id = Uuid::new_v4();
+    inner
+        .put(
+            "files/fault-input",
+            StoredObject {
+                bytes: input.clone().into(),
+                content_type: Some("application/octet-stream".into()),
+            },
+        )
+        .await
+        .unwrap();
+    sqlx::query("INSERT INTO files(id,workspace_id,original_filename,display_filename,mime_type,byte_size,sha256,original_key,status) VALUES($1,$2,'fault.bin','fault.bin','application/octet-stream',$3,$4,'files/fault-input','ready')")
+        .bind(file_id).bind(workspace).bind(input.len() as i64).bind(format!("{:x}", Sha256::digest(&input))).execute(&pool).await.unwrap();
+
+    let retained_before_failures = inner.object_count().await;
+    for (idempotency_key, fault) in [
+        ("upload-failure", ArtifactUploadFault::FailUpload),
+        (
+            "database-failure",
+            ArtifactUploadFault::DeleteMetadataBeforeCompletion,
+        ),
+    ] {
+        store.set_fault(fault).await;
+        let run_id = repository
+            .start_extension_operation(StartExtensionOperation {
+                extension_id: "acme.artifact-fault".into(),
+                expected_release_id: release_id,
+                operation_id: "copy".into(),
+                input: json!({}),
+                source_reference: json!({"input_file_id": file_id}),
+                destination_reference: json!({}),
+                idempotency_key: idempotency_key.into(),
+            })
+            .await
+            .unwrap();
+        let task = repository
+            .claim_task_for_kinds(
+                idempotency_key,
+                Duration::from_secs(30),
+                &[TaskKind::ExtensionOperationRunV1],
+            )
+            .await
+            .unwrap()
+            .unwrap();
+        let runtime =
+            ExtensionRuntime::new(store.clone(), ExtensionRuntimeConfig::default()).unwrap();
+        ExtensionOperationTaskHandler::new(repository.clone(), runtime)
+            .handle(task)
+            .await
+            .unwrap();
+        let states: Vec<String> = sqlx::query_scalar("SELECT state FROM extension_operation_artifacts WHERE operation_run_id=$1 AND direction='output'")
+            .bind(run_id).fetch_all(&pool).await.unwrap();
+        if matches!(fault, ArtifactUploadFault::FailUpload) {
+            assert_eq!(states, ["aborted"]);
+        } else {
+            // The injected delete simulates a database completion failure after
+            // object upload. Runtime compensation removes the orphan object.
+            assert!(states.is_empty());
+        }
+    }
+    assert_eq!(
+        inner.object_count().await,
+        retained_before_failures,
+        "failed outputs are never retained"
+    );
 }

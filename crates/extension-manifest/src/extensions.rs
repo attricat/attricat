@@ -1094,11 +1094,14 @@ impl Webhook {
 }
 
 fn require_operation_host_api(range: &VersionReq) -> Result<(), ManifestError> {
-    if range.matches(&Version::new(1, 2, 0)) && !range.matches(&Version::new(1, 1, 0)) {
+    if (range.matches(&Version::new(1, 2, 0)) || range.matches(&Version::new(1, 3, 0)))
+        && !range.matches(&Version::new(1, 1, 0))
+    {
         Ok(())
     } else {
         Err(ManifestError::Invalid(
-            "server operations require catalog.host_api compatible with 1.2 but not 1.1".into(),
+            "server operations require catalog.host_api compatible with 1.2 or 1.3 but not 1.1"
+                .into(),
         ))
     }
 }

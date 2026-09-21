@@ -53,4 +53,5 @@ tracing-subscriber = { version = "0.3", features = ["env-filter", "json"] }
 url = "2"
 uuid = { version = "1", features = ["serde", "v4"] }
 wasmtime = { version = "48", default-features = false, features = ["async", "component-model", "cranelift", "runtime"] }
+wit-bindgen = "0.57"
 zstd = "0.13"
