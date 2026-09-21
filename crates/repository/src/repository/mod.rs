@@ -282,6 +282,10 @@ pub enum RepositoryError {
     InvalidHierarchyRelationship,
     #[error("invalid blueprint definition: {0}")]
     InvalidBlueprintDefinition(String),
+    #[error("global relationship search exceeded its {dimension} budget")]
+    RelationshipSearchBudgetExceeded { dimension: &'static str },
+    #[error("global relationship search exceeded its PostgreSQL statement timeout")]
+    RelationshipSearchTimedOut,
     #[error("blueprint code is already owned by another blueprint")]
     BlueprintCodeTaken,
     #[error("workflow code is already in use")]
