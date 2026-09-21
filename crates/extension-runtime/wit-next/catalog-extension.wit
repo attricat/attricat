@@ -54,6 +54,9 @@ interface api {
   write: func(request: write-request) -> result<write-response, string>;
   scoped-configuration-get: func(scope: configuration-scope) -> result<option<string>, string>;
   scoped-configuration-set: func(request: scoped-configuration-update) -> result<_, string>;
+  /// Generic capability-mediated calls, including secrets.get.v1 and
+  /// network.request.v1. Typed v1.1 methods remain available for Catalog data.
+  call: func(operation: string, request: string) -> result<string, string>;
   log: func(level: string, message: string) -> result<_, string>;
 }
 

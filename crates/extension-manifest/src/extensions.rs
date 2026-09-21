@@ -29,6 +29,8 @@ pub const DEFAULT_HOST_RESPONSE_BYTES: u64 = 1024 * 1024;
 pub const DEFAULT_HOST_TIMEOUT_MILLIS: u64 = 10_000;
 pub const MAX_HOST_REQUEST_BYTES: u64 = DEFAULT_HOST_REQUEST_BYTES;
 pub const MAX_HOST_RESPONSE_BYTES: u64 = DEFAULT_HOST_REQUEST_BYTES;
+pub const MAX_NETWORK_RESPONSE_BYTES: u64 = DEFAULT_HOST_RESPONSE_BYTES;
+pub const MAX_HOST_TIMEOUT_MILLIS: u64 = 60_000;
 pub const MAX_EXTENSION_IDENTIFIER_BYTES: usize = 128;
 pub const CAPABILITIES: &[&str] = &[
     "catalog.read",
@@ -909,6 +911,12 @@ impl HostPermission {
         let Some(host) = url.host_str() else {
             return false;
         };
+        // Do not allow a server which decodes path escapes differently to turn
+        // an allowlisted prefix into a traversal outside it.
+        let path = url.path().to_ascii_lowercase();
+        if path.contains("%2e") || path.contains("%2f") || path.contains("%5c") {
+            return false;
+        }
         self.matches.iter().any(|pattern| {
             let Ok(pattern_url) = Url::parse(pattern) else {
                 return false;
@@ -940,6 +948,9 @@ impl HostPermission {
             || self.max_request_bytes == 0
             || self.max_response_bytes == 0
             || self.timeout_ms == 0
+            || self.max_request_bytes > MAX_HOST_REQUEST_BYTES
+            || self.max_response_bytes > MAX_NETWORK_RESPONSE_BYTES
+            || self.timeout_ms > MAX_HOST_TIMEOUT_MILLIS
         {
             return Err(ManifestError::Invalid(format!(
                 "host permission '{}' has empty or unbounded rules",
@@ -1823,11 +1834,20 @@ mod tests {
             &Url::parse("http://api.example.com/v1/items").unwrap(),
             "POST"
         ));
+        assert!(!rule.allows_request(
+            &Url::parse("https://api.example.com/v1/%2e%2e/admin").unwrap(),
+            "POST"
+        ));
         let plaintext = HostPermission {
             matches: vec!["http://api.example.com/v1/*".into()],
             ..rule
         };
         assert!(plaintext.validate().is_err());
+        let unbounded = HostPermission {
+            max_response_bytes: MAX_NETWORK_RESPONSE_BYTES + 1,
+            ..plaintext
+        };
+        assert!(unbounded.validate().is_err());
     }
 
     #[test]

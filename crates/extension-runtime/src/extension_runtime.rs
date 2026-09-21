@@ -706,11 +706,12 @@ impl catalog::host::api::Host for HostState {
             "network.request.v1" => "network.request",
             _ => return Err("unknown host operation".into()),
         };
-        if let Err(error) = self.require(required) {
-            metrics::counter!("catalog_extension_host_calls_total", "outcome" => "denied", "operation" => operation).increment(1);
-            return Err(error.to_string());
-        }
-        if self
+        // The invocation was selected from a snapshot, but grants, configuration,
+        // containment, lifecycle state, or the installed release can change while
+        // untrusted component code is running. Refresh the entire snapshot at
+        // every host call; merely checking that one still exists would retain
+        // revoked grants in `self.installation`.
+        let installation = self
             .repository
             .runtime_extension_installation(
                 &self.installation.extension_id,
@@ -718,9 +719,11 @@ impl catalog::host::api::Host for HostState {
             )
             .await
             .map_err(|_| "extension authorization could not be checked")?
-            .is_none()
-        {
-            return Err("extension invocation is no longer authorized".into());
+            .ok_or_else(|| "extension invocation is no longer authorized".to_owned())?;
+        self.installation = installation;
+        if let Err(error) = self.require(required) {
+            metrics::counter!("catalog_extension_host_calls_total", "outcome" => "denied", "operation" => operation).increment(1);
+            return Err(error.to_string());
         }
         if operation == "configuration.get.v1" {
             return Ok(self.installation.configuration.to_string());
@@ -909,16 +912,19 @@ impl host_v11::catalog::host::api::Host for HostState {
             .map_err(|error| error.to_string())
     }
 
+    async fn call(&mut self, operation: String, request: String) -> Result<String, String> {
+        <Self as catalog::host::api::Host>::call(self, operation, request).await
+    }
+
     async fn log(&mut self, level: String, message: String) -> Result<(), String> {
         <Self as catalog::host::api::Host>::log(self, level, message).await
     }
 }
 
 impl HostState {
-    async fn require_active(&self, capability: &str) -> Result<(), String> {
-        self.require(capability)
-            .map_err(|error| error.to_string())?;
-        self.repository
+    async fn require_active(&mut self, capability: &str) -> Result<(), String> {
+        let installation = self
+            .repository
             .runtime_extension_installation(
                 &self.installation.extension_id,
                 self.installation.installed_release_id,
@@ -926,7 +932,8 @@ impl HostState {
             .await
             .map_err(|_| "extension authorization could not be checked")?
             .ok_or_else(|| "extension invocation is no longer authorized".to_owned())?;
-        Ok(())
+        self.installation = installation;
+        self.require(capability).map_err(|error| error.to_string())
     }
 
     /// The v1 JSON host call is retained for older components. Unlike generic
@@ -1019,12 +1026,6 @@ impl HostState {
     /// rustls client is pinned to those public addresses.
     async fn network_request(&self, request: &str) -> Result<String, String> {
         let input: NetworkRequest = parse_host_request(request, "network request")?;
-        if !allow_network_request(
-            self.installation.installed_release_id,
-            &self.installation.extension_id,
-        ) {
-            return Err("network request rate limit exceeded".into());
-        }
         let method =
             Method::from_bytes(input.method.as_bytes()).map_err(|_| "invalid HTTP method")?;
         let url = Url::parse(&input.url).map_err(|_| "invalid HTTPS URL")?;
@@ -1119,7 +1120,16 @@ impl HostState {
                     .map_err(|_| "secret cannot be used as a header")?,
             );
         }
+        if !allow_network_request(
+            self.installation.installed_release_id,
+            &self.installation.extension_id,
+        ) {
+            return Err("network request rate limit exceeded".into());
+        }
         let client = Client::builder()
+            // Environment proxy settings would bypass the checked/pinned target
+            // address and turn this broker into an SSRF proxy.
+            .no_proxy()
             .redirect(Policy::none())
             .https_only(true)
             .resolve_to_addrs(host, &addresses)
@@ -1781,9 +1791,11 @@ pub fn start_event_delivery_coordinator(
 #[cfg(test)]
 mod tests {
     use sha2::{Digest, Sha256};
+    use uuid::Uuid;
 
     use super::{
-        MAX_ARTIFACT_CHUNK_BYTES, host_v11, parse_bounded_json, to_configuration_scope, uses_v11,
+        MAX_ARTIFACT_CHUNK_BYTES, NETWORK_RATE_LIMIT, allow_network_request, host_v11,
+        parse_bounded_json, to_configuration_scope, uses_v11, valid_secret_name,
     };
 
     #[test]
@@ -1801,6 +1813,25 @@ mod tests {
             format!("{:x}", Sha256::digest(b"bounded output")),
             "d047501029296dac4c1be5e22f05ff7229244184357ac63424d75339009a77e3"
         );
+    }
+
+    #[test]
+    fn network_rate_limit_is_release_scoped_and_failed_calls_do_not_share_a_bucket() {
+        let release = Uuid::new_v4();
+        for _ in 0..NETWORK_RATE_LIMIT {
+            assert!(allow_network_request(release, "acme.extension"));
+        }
+        assert!(!allow_network_request(release, "acme.extension"));
+        assert!(allow_network_request(Uuid::new_v4(), "acme.extension"));
+        assert!(allow_network_request(release, "acme.other"));
+    }
+
+    #[test]
+    fn secret_names_are_bounded_stable_identifiers() {
+        assert!(valid_secret_name("destination-token_1").is_ok());
+        assert!(valid_secret_name("").is_err());
+        assert!(valid_secret_name("contains space").is_err());
+        assert!(valid_secret_name(&"x".repeat(129)).is_err());
     }
 
     #[test]

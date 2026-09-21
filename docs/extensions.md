@@ -191,9 +191,9 @@ declarative and contain no behavior.
 
 Catalog provides management APIs and web UI for registry sources, discovery,
 installation, configuration, grants, lifecycle actions, and client runtime
-descriptors. Server WASM execution, client components, storage, commands, and
-host API 1.1 are implemented. Mediated extension-owned event publication is
-implemented; mediated network/secrets APIs and webhook delivery remain follow-on work.
+descriptors. Server WASM execution, client components, storage, commands, mediated
+extension-owned event publication, and mediated network/secrets APIs are
+implemented. Webhook delivery remains follow-on work.
 
 ## Server WASM runtime (#145)
 
@@ -674,5 +674,4 @@ authorized command broker.
 
 ## Current implementation limitations
 
-Mediated network, secrets, request/response calls, and webhook-delivery
-functionality remain deferred as described above.
+Webhook delivery remains deferred as described above.
