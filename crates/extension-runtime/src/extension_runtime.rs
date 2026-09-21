@@ -916,6 +916,24 @@ impl HostState {
                     .map_err(|error| error.to_string())?;
                 bounded_serialize(&page)
             }
+            CatalogReadRequest::Changes {
+                blueprint_id,
+                blueprint_version,
+                cursor,
+                limit,
+            } => {
+                let page = self
+                    .repository
+                    .extension_catalog_changes(
+                        parse_uuid(&blueprint_id, "blueprint ID")?,
+                        blueprint_version,
+                        cursor,
+                        limit,
+                    )
+                    .await
+                    .map_err(|error| error.to_string())?;
+                bounded_serialize(&page)
+            }
             CatalogReadRequest::Lookup {
                 blueprint_id,
                 blueprint_version,
@@ -1078,6 +1096,12 @@ enum CatalogReadRequest {
         blueprint_version: i64,
         context_id: Option<String>,
         publication_context_id: Option<String>,
+        cursor: Option<String>,
+        limit: u32,
+    },
+    Changes {
+        blueprint_id: String,
+        blueprint_version: i64,
         cursor: Option<String>,
         limit: u32,
     },

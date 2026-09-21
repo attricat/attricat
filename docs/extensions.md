@@ -220,7 +220,14 @@ messages (16 KiB). Every operation is capability checked at the point of call.
 `storage.put.v1`), `storage.delete.v1`, and `storage.list.v1` are available to
 components with `storage.extension`. `secrets.get.v1`, `catalog.read.v1`,
 `catalog.command.v1`, and `network.request.v1` are recognized and
-capability-checked but are not implemented by this deployment. `events.emit.v1`
+capability-checked but are not implemented by this deployment. The legacy JSON
+`catalog.read.v1` surface additionally provides bounded `page`, `changes`, and
+single-attribute `lookup` requests; `page` cursors pin a database-clock snapshot
+and `changes` cursors pin a domain-event sequence high-water mark. Cursors are
+opaque and filter/workspace-bound. `catalog.command.v1` accepts a bounded,
+idempotent batch of typed `create`, `update`, `relationships`, or `upsert`
+intents. An upsert serializes its declared blueprint/attribute business key,
+creates only when it is absent, and rejects an ambiguous match. `events.emit.v1`
 is implemented only for a manifest-declared, per-contract event export as
 described in [Inter-extension events](#inter-extension-events). In particular,
 `network.request.v1` never grants ambient sockets. The manifest
@@ -294,7 +301,7 @@ scope for this contract and require a separately versioned design.
 
 ## Durable server operations (host API 1.2)
 
-A release compatible with `catalog:host@1.2.0` may declare `server.operations`.
+A release compatible with `catalog:host@1.2.0` may declare `server.operations`. Its immutable WIT records (`operation-request` and `batch-result`) are the typed, versioned operation ABI; operation IDs, run IDs, batch keys, checkpoint, progress, and completion state are not overloaded into an unversioned host call.
 Each operation has a stable ID, component handler selector, object request schema,
 and 64 KiB-or-smaller request/checkpoint limits. The immutable v1.2 WIT package is at
 `crates/extension-runtime/wit-operations/catalog-extension.wit`. Artifact

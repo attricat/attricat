@@ -1832,6 +1832,67 @@ impl CatalogRepository {
                 )
                 .await
             }
+            ExtensionCatalogIntent::Upsert {
+                blueprint_id,
+                blueprint_version,
+                lookup_attribute_id,
+                lookup_value,
+                values,
+                relationships,
+                system_tags,
+                system_metadata,
+                ..
+            } => {
+                if lookup_value.is_empty()
+                    || lookup_value.len()
+                        > super::extension_catalog_data::MAX_EXTENSION_LOOKUP_VALUE_BYTES
+                {
+                    return Err(RepositoryError::InvalidExtension(
+                        "upsert lookup value must be 1-512 bytes".into(),
+                    ));
+                }
+                let workspace_id = self.workspace_id.unwrap_or(Self::DEFAULT_WORKSPACE_ID);
+                // There is no global uniqueness constraint for arbitrary blueprint
+                // attributes. Serialize this declared business key so concurrent
+                // absent-key upserts cannot both take the create branch.
+                sqlx::query("SELECT pg_advisory_xact_lock(hashtextextended($1, 0))")
+                    .bind(format!("extension-upsert:{workspace_id}:{blueprint_id}:{blueprint_version}:{lookup_attribute_id}:{lookup_value}"))
+                    .execute(&mut **transaction).await?;
+                let matches: Vec<Uuid> = sqlx::query_scalar(
+                    "SELECT e.id FROM entities e JOIN attribute_values v ON v.entity_id=e.id AND v.workspace_id=e.workspace_id AND v.active \
+                     WHERE e.workspace_id=$1 AND e.deleted_at IS NULL AND e.blueprint_id=$2 AND e.blueprint_version=$3 \
+                       AND v.attribute_id=$4 AND v.relationship_target_entity_id IS NULL AND v.value_text=$5 \
+                     ORDER BY e.id FOR UPDATE OF e LIMIT 2",
+                ).bind(workspace_id).bind(blueprint_id).bind(blueprint_version).bind(lookup_attribute_id).bind(&lookup_value).fetch_all(&mut **transaction).await?;
+                match matches.as_slice() {
+                    [entity_id] => {
+                        self.apply_extension_catalog_update(
+                            transaction,
+                            *entity_id,
+                            values,
+                            relationships,
+                        )
+                        .await
+                    }
+                    [] => {
+                        Box::pin(self.apply_extension_catalog_intent(
+                            transaction,
+                            ExtensionCatalogIntent::Create {
+                                intent_key: String::new(),
+                                blueprint_id,
+                                blueprint_version,
+                                values,
+                                system_tags,
+                                system_metadata,
+                            },
+                        ))
+                        .await
+                    }
+                    _ => Err(RepositoryError::InvalidExtension(
+                        "upsert lookup matched multiple entities".into(),
+                    )),
+                }
+            }
         }
     }
 
@@ -1903,7 +1964,8 @@ fn extension_intent_key(intent: &ExtensionCatalogIntent) -> &str {
     match intent {
         ExtensionCatalogIntent::Create { intent_key, .. }
         | ExtensionCatalogIntent::Update { intent_key, .. }
-        | ExtensionCatalogIntent::Relationships { intent_key, .. } => intent_key,
+        | ExtensionCatalogIntent::Relationships { intent_key, .. }
+        | ExtensionCatalogIntent::Upsert { intent_key, .. } => intent_key,
     }
 }
 

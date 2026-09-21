@@ -9,8 +9,11 @@ use std::{
 
 use api::{
     extension_installer::{ExtensionInstaller, installed_artifact_key},
-    model::CreateBlueprint,
-    repository::CatalogRepository,
+    model::{CreateBlueprint, NewAttributeValue},
+    repository::{
+        CatalogRepository, ExtensionCatalogBatch, ExtensionCatalogIntent,
+        ExtensionCatalogIntentStatus,
+    },
     storage::{FakeObjectStore, ObjectStore},
 };
 use async_trait::async_trait;
@@ -18,6 +21,21 @@ use support::{Value, authenticated_client, json, start_server_with_object_store}
 use uuid::Uuid;
 
 const ARTIFACT_BYTES: &[u8] = b"server bytes";
+const SYNC_BLUEPRINT: &str = r#"
+format_version = 1
+code = "extension_sync_item"
+name = "Extension sync item"
+kind = "entity"
+[views.dropdown_option]
+type = "dropdown_option"
+fields = ["external_id"]
+[[attributes]]
+code = "external_id"
+value_type = "string"
+[[attributes]]
+code = "title"
+value_type = "string"
+"#;
 
 #[derive(Clone, Copy)]
 enum ArtifactUploadFault {
@@ -371,6 +389,134 @@ fn append_file(tar: &mut tar::Builder<&mut Vec<u8>>, path: &str, bytes: &[u8]) {
     header.set_mode(0o644);
     header.set_cksum();
     tar.append_data(&mut header, path, bytes).unwrap();
+}
+
+#[sqlx::test(migrations = "./migrations")]
+async fn extension_catalog_upsert_is_idempotent_and_emits_a_change_feed(pool: sqlx::PgPool) {
+    let repository = CatalogRepository::system(pool)
+        .for_workspace(Uuid::from_u128(0x00000000000040008000000000000002))
+        .await
+        .unwrap()
+        .for_extension("acme.sync");
+    let blueprint = repository
+        .create_blueprint(CreateBlueprint {
+            definition: SYNC_BLUEPRINT.into(),
+        })
+        .await
+        .unwrap();
+    repository
+        .publish_blueprint_revision(blueprint.blueprint.id, blueprint.blueprint.version)
+        .await
+        .unwrap();
+    let attributes = &blueprint.attributes;
+    let external_id = attributes
+        .iter()
+        .find(|attribute| attribute.code == "external_id")
+        .unwrap()
+        .id;
+    let batch = |key: &str, title: &str| ExtensionCatalogBatch {
+        batch_key: key.into(),
+        dry_run: false,
+        intents: vec![ExtensionCatalogIntent::Upsert {
+            intent_key: "item-1".into(),
+            blueprint_id: blueprint.blueprint.id,
+            blueprint_version: blueprint.blueprint.version,
+            lookup_attribute_id: external_id,
+            lookup_value: "external-1".into(),
+            relationships: vec![],
+            system_tags: vec![],
+            system_metadata: json!({}),
+            values: vec![
+                NewAttributeValue::Scalar {
+                    attribute_id: Some(external_id),
+                    attribute_code: None,
+                    context_id: None,
+                    value: json!("external-1"),
+                },
+                NewAttributeValue::Scalar {
+                    attribute_id: None,
+                    attribute_code: Some("title".into()),
+                    context_id: None,
+                    value: json!(title),
+                },
+            ],
+        }],
+    };
+    let created = repository
+        .execute_extension_catalog_batch(batch("batch-1", "first"))
+        .await
+        .unwrap();
+    assert_eq!(
+        created[0].status,
+        ExtensionCatalogIntentStatus::Applied,
+        "{:?}",
+        created[0].error
+    );
+    let entity_id = created[0].entity_id.unwrap();
+    let replay = repository
+        .execute_extension_catalog_batch(batch("batch-1", "first"))
+        .await
+        .unwrap();
+    assert_eq!(
+        replay[0].status,
+        ExtensionCatalogIntentStatus::AlreadyApplied
+    );
+    assert_eq!(replay[0].entity_id, Some(entity_id));
+    let updated = repository
+        .execute_extension_catalog_batch(batch("batch-2", "second"))
+        .await
+        .unwrap();
+    assert_eq!(updated[0].entity_id, Some(entity_id));
+
+    let entity_version = repository
+        .get_entity(entity_id)
+        .await
+        .unwrap()
+        .unwrap()
+        .blueprint_version;
+    let snapshot = repository
+        .extension_catalog_page(api::repository::ExtensionCatalogPageRequest {
+            blueprint_id: blueprint.blueprint.id,
+            blueprint_version: entity_version,
+            context_id: None,
+            publication_context_id: None,
+            cursor: None,
+            limit: 1,
+        })
+        .await
+        .unwrap();
+    assert_eq!(snapshot.entities.len(), 1);
+    let changes = repository
+        .extension_catalog_changes(blueprint.blueprint.id, entity_version, None, 1)
+        .await
+        .unwrap();
+    assert_eq!(changes.events.len(), 1);
+    assert_eq!(changes.events[0].aggregate_id, entity_id);
+    let cursor = changes
+        .next_cursor
+        .expect("the initial create and update are paged");
+    repository
+        .execute_extension_catalog_batch(batch("batch-3", "third"))
+        .await
+        .unwrap();
+    let stable_tail = repository
+        .extension_catalog_changes(blueprint.blueprint.id, entity_version, Some(cursor), 1)
+        .await
+        .unwrap();
+    assert_eq!(stable_tail.events.len(), 1);
+    assert!(
+        stable_tail.next_cursor.is_none(),
+        "new events cannot enter an established cursor"
+    );
+    assert_eq!(
+        repository
+            .extension_catalog_changes(blueprint.blueprint.id, entity_version, None, 10)
+            .await
+            .unwrap()
+            .events
+            .len(),
+        3
+    );
 }
 
 #[sqlx::test(migrations = "./migrations")]

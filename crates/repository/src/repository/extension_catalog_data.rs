@@ -54,9 +54,26 @@ pub enum ExtensionCatalogIntent {
         entity_id: Uuid,
         relationships: Vec<RelationshipTargets>,
     },
+    /// Creates when the declared business value is absent, otherwise updates
+    /// that one entity. The intent marker makes both branches replay-safe.
+    Upsert {
+        intent_key: String,
+        blueprint_id: Uuid,
+        blueprint_version: i64,
+        lookup_attribute_id: Uuid,
+        lookup_value: String,
+        #[serde(default)]
+        values: Vec<NewAttributeValue>,
+        #[serde(default)]
+        relationships: Vec<RelationshipTargets>,
+        #[serde(default)]
+        system_tags: Vec<String>,
+        #[serde(default = "empty_object")]
+        system_metadata: Value,
+    },
 }
 
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum ExtensionCatalogIntentStatus {
     Applied,
@@ -93,6 +110,15 @@ pub struct ExtensionCatalogPage {
     pub next_cursor: Option<String>,
 }
 
+/// A stable, ordered page of entity mutation events. `next_cursor` carries the
+/// high-water sequence captured by the first request, so events committed after
+/// that request are never interleaved into an in-progress catch-up.
+#[derive(Clone, Debug, Serialize)]
+pub struct ExtensionCatalogChangePage {
+    pub events: Vec<crate::domain_events::DomainEvent>,
+    pub next_cursor: Option<String>,
+}
+
 #[derive(Clone, Debug, Serialize, Deserialize)]
 struct ExtensionCatalogCursor {
     workspace_id: Uuid,
@@ -103,6 +129,15 @@ struct ExtensionCatalogCursor {
     snapshot_at: DateTime<Utc>,
     created_at: DateTime<Utc>,
     entity_id: Uuid,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+struct ExtensionCatalogChangeCursor {
+    workspace_id: Uuid,
+    blueprint_id: Uuid,
+    blueprint_version: i64,
+    high_water_sequence: i64,
+    after_sequence: i64,
 }
 
 impl CatalogRepository {
@@ -143,7 +178,12 @@ impl CatalogRepository {
                 Some(cursor.entity_id),
             )
         } else {
-            (Utc::now(), None, None)
+            // The database is the ordering authority. Its clock avoids losing a
+            // row when the host process clock lags the database clock.
+            let snapshot_at: DateTime<Utc> = sqlx::query_scalar("SELECT clock_timestamp()")
+                .fetch_one(&self.pool)
+                .await?;
+            (snapshot_at, None, None)
         };
         if let Some(context_id) = request.context_id {
             let exists: Option<Uuid> = sqlx::query_scalar(
@@ -193,6 +233,76 @@ impl CatalogRepository {
         })
     }
 
+    /// Reads entity mutation events in sequence order. This is deliberately a
+    /// separate cursor from snapshots: a client first completes a snapshot,
+    /// then persists the returned change cursor and consumes changes.
+    pub async fn extension_catalog_changes(
+        &self,
+        blueprint_id: Uuid,
+        blueprint_version: i64,
+        cursor: Option<String>,
+        limit: u32,
+    ) -> Result<ExtensionCatalogChangePage, RepositoryError> {
+        if limit == 0 || limit > MAX_EXTENSION_CATALOG_PAGE_SIZE {
+            return Err(RepositoryError::InvalidExtension(format!(
+                "catalog change limit must be 1-{MAX_EXTENSION_CATALOG_PAGE_SIZE}"
+            )));
+        }
+        let workspace_id = self.workspace_id.ok_or_else(|| {
+            RepositoryError::InvalidExtension(
+                "extension catalog changes require a workspace".into(),
+            )
+        })?;
+        let cursor = cursor
+            .as_deref()
+            .map(decode_extension_change_cursor)
+            .transpose()?;
+        let (high_water_sequence, after_sequence) = if let Some(cursor) = cursor {
+            if cursor.workspace_id != workspace_id
+                || cursor.blueprint_id != blueprint_id
+                || cursor.blueprint_version != blueprint_version
+            {
+                return Err(RepositoryError::InvalidExtension(
+                    "catalog change cursor does not match this workspace or filter".into(),
+                ));
+            }
+            (cursor.high_water_sequence, cursor.after_sequence)
+        } else {
+            let high_water_sequence: i64 = sqlx::query_scalar(
+                "SELECT COALESCE(MAX(sequence), 0) FROM domain_events WHERE workspace_id=$1",
+            )
+            .bind(workspace_id)
+            .fetch_one(&self.pool)
+            .await?;
+            (high_water_sequence, 0)
+        };
+        let events = sqlx::query_as::<_, crate::domain_events::DomainEvent>(
+            "SELECT id,sequence,workspace_id,occurred_at,event_type,aggregate_kind,aggregate_id,correlation_id,causation_id,source_kind,source_name,metadata,payload \
+             FROM domain_events WHERE workspace_id=$1 AND aggregate_kind='entity' AND sequence > $2 AND sequence <= $3 \
+               AND payload->>'blueprint_id'=$4 AND (payload->>'blueprint_version')::bigint=$5 \
+             ORDER BY sequence LIMIT $6",
+        ).bind(workspace_id).bind(after_sequence).bind(high_water_sequence).bind(blueprint_id.to_string()).bind(blueprint_version).bind(i64::from(limit) + 1).fetch_all(&self.pool).await?;
+        let mut events = events;
+        let next_cursor = if events.len() > limit as usize {
+            events.pop();
+            events.last().map(|event| {
+                encode_extension_change_cursor(&ExtensionCatalogChangeCursor {
+                    workspace_id,
+                    blueprint_id,
+                    blueprint_version,
+                    high_water_sequence,
+                    after_sequence: event.sequence,
+                })
+            })
+        } else {
+            None
+        };
+        Ok(ExtensionCatalogChangePage {
+            events,
+            next_cursor,
+        })
+    }
+
     /// Resolves one business identifier only within a declared blueprint and
     /// attribute. It intentionally is not a general search endpoint.
     pub async fn extension_catalog_lookup(
@@ -214,7 +324,7 @@ impl CatalogRepository {
             "SELECT e.id,e.blueprint_id,e.blueprint_version,e.projections,e.system_tags,e.system_metadata,e.created_at,e.updated_at,e.deleted_at \
              FROM entities e JOIN attribute_values v ON v.entity_id=e.id AND v.workspace_id=e.workspace_id AND v.active \
              WHERE e.workspace_id=$1 AND e.deleted_at IS NULL AND e.blueprint_id=$2 AND e.blueprint_version=$3 \
-               AND v.attribute_id=$4 AND v.relationship_target_entity_id IS NULL AND v.value = to_jsonb($5::text) LIMIT 2",
+               AND v.attribute_id=$4 AND v.relationship_target_entity_id IS NULL AND v.value_text = $5 LIMIT 2",
         ).bind(workspace_id).bind(blueprint_id).bind(blueprint_version).bind(attribute_id).bind(value)
         .fetch_all(&self.pool).await?.into_domain().into_iter().next())
     }
@@ -234,6 +344,23 @@ fn decode_extension_cursor(value: &str) -> Result<ExtensionCatalogCursor, Reposi
 }
 fn encode_extension_cursor(cursor: &ExtensionCatalogCursor) -> String {
     URL_SAFE_NO_PAD.encode(serde_json::to_vec(cursor).expect("extension cursor serializes"))
+}
+fn decode_extension_change_cursor(
+    value: &str,
+) -> Result<ExtensionCatalogChangeCursor, RepositoryError> {
+    if value.len() > 2048 {
+        return Err(RepositoryError::InvalidExtension(
+            "catalog change cursor is invalid".into(),
+        ));
+    }
+    let bytes = URL_SAFE_NO_PAD.decode(value).map_err(|_| {
+        RepositoryError::InvalidExtension("catalog change cursor is invalid".into())
+    })?;
+    serde_json::from_slice(&bytes)
+        .map_err(|_| RepositoryError::InvalidExtension("catalog change cursor is invalid".into()))
+}
+fn encode_extension_change_cursor(cursor: &ExtensionCatalogChangeCursor) -> String {
+    URL_SAFE_NO_PAD.encode(serde_json::to_vec(cursor).expect("extension change cursor serializes"))
 }
 
 #[cfg(test)]
