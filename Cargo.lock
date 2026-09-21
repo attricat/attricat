@@ -939,6 +939,7 @@ dependencies = [
  "catalog-repository",
  "catalog-storage",
  "catalog-workers",
+ "chrono",
  "metrics",
  "semver",
  "serde",

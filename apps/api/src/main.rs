@@ -284,6 +284,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         task_repository.clone(),
         extension_runtime.clone(),
     )));
+    task_handlers.push(Arc::new(
+        extension_runtime::ExtensionOperationTaskHandler::new(
+            task_repository.clone(),
+            extension_runtime.clone(),
+        ),
+    ));
     task_handlers.push(workflow_runtime::task_handler(task_repository.clone()));
     task_handlers.push(rule_runtime::task_handler(task_repository.clone()));
     let blueprint_migration_config =

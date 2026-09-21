@@ -22,8 +22,8 @@ use crate::{
         validate_schema,
     },
     repository::{
-        ExtensionGrant, ExtensionInstallation, ExtensionLifecycleRecord, ExtensionStorageError,
-        InstalledExtension,
+        ExtensionGrant, ExtensionInstallation, ExtensionLifecycleRecord, ExtensionOperationRun,
+        ExtensionStorageError, InstalledExtension, StartExtensionOperation,
     },
     storage::ObjectStoreError,
 };
@@ -197,6 +197,55 @@ pub(super) struct WorkspaceExtensionsModeRequest {
 #[derive(Serialize)]
 pub(super) struct WorkspaceExtensionsModeResponse {
     enabled: bool,
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+pub(super) struct StartOperationRequest {
+    operation_id: String,
+    input: Value,
+    #[serde(default = "empty_object")]
+    source_reference: Value,
+    #[serde(default = "empty_object")]
+    destination_reference: Value,
+    idempotency_key: String,
+}
+
+fn empty_object() -> Value {
+    json!({})
+}
+
+#[derive(Serialize)]
+pub(super) struct OperationRunResponse {
+    id: Uuid,
+    extension_id: String,
+    installed_release_id: Uuid,
+    abi_version: String,
+    operation_id: String,
+    status: String,
+    progress: Value,
+    attempts: i32,
+    last_error_code: Option<String>,
+    created_at: chrono::DateTime<chrono::Utc>,
+    completed_at: Option<chrono::DateTime<chrono::Utc>>,
+}
+
+impl From<ExtensionOperationRun> for OperationRunResponse {
+    fn from(value: ExtensionOperationRun) -> Self {
+        Self {
+            id: value.id,
+            extension_id: value.extension_id,
+            installed_release_id: value.installed_release_id,
+            abi_version: value.abi_version,
+            operation_id: value.operation_id,
+            status: value.status,
+            progress: value.progress,
+            attempts: value.attempts,
+            last_error_code: value.last_error_code,
+            created_at: value.created_at,
+            completed_at: value.completed_at,
+        }
+    }
 }
 
 #[derive(Deserialize)]
@@ -469,6 +518,90 @@ pub(super) async fn remove(
 ) -> Result<StatusCode, ApiError> {
     repository.remove_extension(&extension_id).await?;
     Ok(StatusCode::NO_CONTENT)
+}
+
+/// Starts a release-pinned operation. Only bounded object input crosses this
+/// endpoint; operator projections intentionally never return that input.
+pub(super) async fn start_operation(
+    ScopedRepository(repository): ScopedRepository,
+    Path(extension_id): Path<String>,
+    ApiJson(input): ApiJson<StartOperationRequest>,
+) -> Result<(StatusCode, Json<Value>), ApiError> {
+    if input.operation_id.len() > MAX_EXTENSION_IDENTIFIER_BYTES {
+        return Err(ApiError::invalid_input(
+            "invalid extension operation request".into(),
+        ));
+    }
+    let installation = repository
+        .runtime_extension_installation(
+            &extension_id,
+            repository
+                .installed_extension(&extension_id)
+                .await?
+                .installed_release_id,
+        )
+        .await?
+        .ok_or_else(ApiError::forbidden)?;
+    let operation = installation
+        .manifest
+        .server
+        .as_ref()
+        .and_then(|server| {
+            server
+                .operations
+                .iter()
+                .find(|operation| operation.id == input.operation_id)
+        })
+        .ok_or_else(|| ApiError::not_found("extension operation"))?;
+    validate_schema(&operation.request_schema, &input.input)
+        .map_err(|error| ApiError::invalid_input(error.to_string()))?;
+    let id = repository
+        .start_extension_operation(StartExtensionOperation {
+            extension_id,
+            expected_release_id: installation.installed_release_id,
+            operation_id: input.operation_id,
+            input: input.input,
+            source_reference: input.source_reference,
+            destination_reference: input.destination_reference,
+            idempotency_key: input.idempotency_key,
+        })
+        .await?;
+    Ok((StatusCode::ACCEPTED, Json(json!({"id": id}))))
+}
+
+pub(super) async fn list_operation_runs(
+    ScopedRepository(repository): ScopedRepository,
+) -> Result<Json<Vec<OperationRunResponse>>, ApiError> {
+    Ok(Json(
+        repository
+            .list_extension_operation_runs()
+            .await?
+            .into_iter()
+            .map(Into::into)
+            .collect(),
+    ))
+}
+
+pub(super) async fn cancel_operation(
+    ScopedRepository(repository): ScopedRepository,
+    Path(id): Path<Uuid>,
+) -> Result<StatusCode, ApiError> {
+    if repository.cancel_extension_operation(id).await? {
+        Ok(StatusCode::NO_CONTENT)
+    } else {
+        Err(ApiError::not_found("extension operation run"))
+    }
+}
+
+pub(super) async fn replay_operation(
+    ScopedRepository(repository): ScopedRepository,
+    Path(id): Path<Uuid>,
+) -> Result<StatusCode, ApiError> {
+    if repository.replay_extension_operation(id).await? {
+        Ok(StatusCode::ACCEPTED)
+    } else {
+        Err(ApiError::not_found("dead-lettered extension operation run"))
+    }
 }
 
 /// Returns only contributions from currently enabled installations.

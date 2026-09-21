@@ -40,6 +40,7 @@ mod entity_migration;
 mod entity_projection;
 mod entity_publications;
 mod entity_search;
+mod extension_operations;
 mod extension_registries;
 mod extension_scoped_configuration;
 mod extension_storage;
@@ -66,6 +67,9 @@ pub use catalog_domain::model::{FileMetadata, FileVariantMetadata};
 pub use domain_events::{EventConsumer, EventDelivery, EventPublisher, FailedEventDelivery};
 pub use entity_search::{
     EntityRelationshipFilter, EntitySearchFilter, EntitySearchSort, decode_search_cursor,
+};
+pub use extension_operations::{
+    ClaimedExtensionOperationRun, ExtensionOperationRun, StartExtensionOperation,
 };
 pub use extension_registries::ExtensionRegistrySource;
 pub use extension_scoped_configuration::ExtensionConfigurationScope;
@@ -505,6 +509,17 @@ impl CatalogRepository {
 
     /// Attaches a blueprint migration task lease to batch and per-entity
     /// checkpoints. A reclaimed task cannot advance an old batch execution.
+    /// Fences extension operation checkpoints with the shared envelope token.
+    pub fn for_extension_operation_task(&self, task: &ClaimedTask) -> Self {
+        let mut repository = self.clone();
+        repository.task_fence = Some(TaskFence {
+            task_id: task.id,
+            lease_owner: task.lease_owner.clone(),
+            lease_token: task.lease_token,
+        });
+        repository
+    }
+
     pub fn for_blueprint_migration_task(&self, task: &ClaimedTask) -> Self {
         let mut repository = self.clone();
         repository.task_fence = Some(TaskFence {

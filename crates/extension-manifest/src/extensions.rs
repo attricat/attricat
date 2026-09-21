@@ -19,7 +19,7 @@ use thiserror::Error;
 pub const MANIFEST_VERSION: u32 = 1;
 /// The newest host contract accepted by manifests. Components importing
 /// `catalog:host@1.0.0` remain supported by the unchanged v1 WIT package.
-pub const SUPPORTED_HOST_API: &str = "1.1.0";
+pub const SUPPORTED_HOST_API: &str = "1.2.0";
 pub const MAX_EXTENSION_ARCHIVE_BYTES: usize = 32 * 1024 * 1024;
 pub const MAX_EXTENSION_UNPACKED_BYTES: usize = 128 * 1024 * 1024;
 pub const MAX_EXTENSION_ARCHIVE_ENTRIES: usize = 256;
@@ -232,6 +232,10 @@ pub struct Server {
     /// browser access; the host resolves and authorizes each invocation.
     #[serde(default)]
     pub commands: Vec<ServerCommand>,
+    /// Long-running, checkpointed component operations. These use the immutable
+    /// catalog:host@1.2.0 operation ABI and are always release-pinned.
+    #[serde(default)]
+    pub operations: Vec<ServerOperation>,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -256,6 +260,19 @@ pub struct EventHandler {
     pub id: String,
     pub event_types: Vec<String>,
     pub handler: String,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct ServerOperation {
+    pub id: String,
+    /// Stable component operation name. It is deliberately not a host route.
+    pub handler: String,
+    pub request_schema: Value,
+    #[serde(default = "default_command_bytes")]
+    pub max_request_bytes: u64,
+    #[serde(default = "default_command_bytes")]
+    pub max_checkpoint_bytes: u64,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -567,7 +584,19 @@ impl Manifest {
             for command in &server.commands {
                 command.validate(&self.permissions)?;
             }
-            if (!server.event_handlers.is_empty() || !server.commands.is_empty())
+            if !server.operations.is_empty() {
+                require_operation_host_api(&range)?;
+            }
+            unique(
+                server.operations.iter().map(|operation| &operation.id),
+                "server operation",
+            )?;
+            for operation in &server.operations {
+                operation.validate()?;
+            }
+            if (!server.event_handlers.is_empty()
+                || !server.commands.is_empty()
+                || !server.operations.is_empty())
                 && !self
                     .artifacts
                     .iter()
@@ -1007,6 +1036,25 @@ impl ServerCommand {
     }
 }
 
+impl ServerOperation {
+    fn validate(&self) -> Result<(), ManifestError> {
+        valid_id(&self.id, "server operation id")?;
+        valid_id(&self.handler, "server operation handler")?;
+        if !self.request_schema.is_object()
+            || self.max_request_bytes == 0
+            || self.max_request_bytes > MAX_HOST_REQUEST_BYTES
+            || self.max_checkpoint_bytes == 0
+            || self.max_checkpoint_bytes > MAX_HOST_REQUEST_BYTES
+        {
+            return Err(ManifestError::Invalid(format!(
+                "server operation '{}' requires bounded object request and checkpoint schemas",
+                self.id
+            )));
+        }
+        Ok(())
+    }
+}
+
 impl Webhook {
     fn validate(&self, permissions: &[String]) -> Result<(), ManifestError> {
         valid_id(&self.id, "webhook id")?;
@@ -1040,6 +1088,16 @@ impl Webhook {
             )));
         }
         Ok(())
+    }
+}
+
+fn require_operation_host_api(range: &VersionReq) -> Result<(), ManifestError> {
+    if range.matches(&Version::new(1, 2, 0)) && !range.matches(&Version::new(1, 1, 0)) {
+        Ok(())
+    } else {
+        Err(ManifestError::Invalid(
+            "server operations require catalog.host_api compatible with 1.2 but not 1.1".into(),
+        ))
     }
 }
 
@@ -1457,6 +1515,26 @@ mod tests {
         assert!(value.validate(SUPPORTED_HOST_API).is_err());
         value.attribute_types[0].primitive = "json".into();
         value.attribute_types[0].version = "not-semver".into();
+        assert!(value.validate(SUPPORTED_HOST_API).is_err());
+    }
+
+    #[test]
+    fn operations_require_the_immutable_v12_contract_and_bounded_objects() {
+        let mut value = manifest();
+        value.catalog.host_api = ">=1.2.0, <2.0.0".into();
+        value.server.as_mut().unwrap().operations = vec![ServerOperation {
+            id: "import-records".into(),
+            handler: "import-records".into(),
+            request_schema: serde_json::json!({"type":"object"}),
+            max_request_bytes: 1024,
+            max_checkpoint_bytes: 1024,
+        }];
+        assert!(value.validate(SUPPORTED_HOST_API).is_ok());
+
+        value.catalog.host_api = ">=1.1.0, <2.0.0".into();
+        assert!(value.validate(SUPPORTED_HOST_API).is_err());
+        value.catalog.host_api = ">=1.2.0, <2.0.0".into();
+        value.server.as_mut().unwrap().operations[0].request_schema = serde_json::json!([]);
         assert!(value.validate(SUPPORTED_HOST_API).is_err());
     }
 

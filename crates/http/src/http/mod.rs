@@ -326,6 +326,18 @@ pub fn router(state: AppState) -> Router {
         )
         .route("/extensions/runtime", get(extensions::runtime))
         .route(
+            "/extension-operation-runs",
+            get(extensions::list_operation_runs),
+        )
+        .route(
+            "/extension-operation-runs/{id}/cancel",
+            post(extensions::cancel_operation),
+        )
+        .route(
+            "/extension-operation-runs/{id}/replay",
+            post(extensions::replay_operation),
+        )
+        .route(
             "/workspace/extensions-mode",
             put(extensions::set_workspace_mode),
         )
@@ -357,6 +369,10 @@ pub fn router(state: AppState) -> Router {
         .route(
             "/extensions/{extension_id}/quarantine",
             post(extensions::quarantine),
+        )
+        .route(
+            "/extensions/{extension_id}/operations",
+            post(extensions::start_operation),
         )
         .route(
             "/extensions/{extension_id}/{contribution_id}/command",

@@ -20,15 +20,17 @@ pub enum TaskKind {
     WorkflowRunV1,
     RuleRunV1,
     BlueprintMigrationBatchV1,
+    ExtensionOperationRunV1,
 }
 
 impl TaskKind {
-    pub const ALL: [Self; 5] = [
+    pub const ALL: [Self; 6] = [
         Self::AgentRunV1,
         Self::EventDeliveryV1,
         Self::WorkflowRunV1,
         Self::RuleRunV1,
         Self::BlueprintMigrationBatchV1,
+        Self::ExtensionOperationRunV1,
     ];
 
     pub const fn as_str(self) -> &'static str {
@@ -38,6 +40,7 @@ impl TaskKind {
             Self::WorkflowRunV1 => "workflow_run.v1",
             Self::RuleRunV1 => "rule_run.v1",
             Self::BlueprintMigrationBatchV1 => "blueprint_migration_batch.v1",
+            Self::ExtensionOperationRunV1 => "extension_operation_run.v1",
         }
     }
 
@@ -52,6 +55,7 @@ impl TaskKind {
             // Batch checkpoints are token-fenced and retry-safe. A short
             // lease plus heartbeats makes shutdown/crash recovery prompt.
             Self::BlueprintMigrationBatchV1 => TaskPolicy::new(30, 5, false, false),
+            Self::ExtensionOperationRunV1 => TaskPolicy::new(30, 5, true, true),
         }
     }
 }
@@ -76,6 +80,7 @@ impl FromStr for TaskKind {
             "workflow_run.v1" => Ok(Self::WorkflowRunV1),
             "rule_run.v1" => Ok(Self::RuleRunV1),
             "blueprint_migration_batch.v1" => Ok(Self::BlueprintMigrationBatchV1),
+            "extension_operation_run.v1" => Ok(Self::ExtensionOperationRunV1),
             _ => Err(ParseTaskKindError(value.to_owned())),
         }
     }

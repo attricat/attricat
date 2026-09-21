@@ -291,6 +291,36 @@ ignore events whose source is their own extension ID to prevent feedback loops.
 Request/response calls, cancellation, and shared state are deliberately out of
 scope for this contract and require a separately versioned design.
 
+## Durable server operations (host API 1.2)
+
+A release compatible with `catalog:host@1.2.0` may declare `server.operations`.
+Each operation has a stable ID, component handler selector, object request schema,
+and 64 KiB-or-smaller request/checkpoint limits. The immutable WIT package is at
+`crates/extension-runtime/wit-operations/catalog-extension.wit`; its request
+contains the run ID, handler selector, configuration snapshot, input, checkpoint,
+and durable batch key. Its operation world calls `prepare`, `start`,
+`process-batch`, `checkpoint`, `finish`, and cooperative `cancel`.
+
+Catalog creates one durable run per workspace, pinned installed release, operation,
+and idempotency key. The task queue leases the run with a fresh token; every
+checkpoint is committed with that same token, so a stale worker cannot advance
+progress after a lease expiry. The batch key changes only after a checkpoint
+commits. Consequently a crash before checkpoint replays the same batch key, and
+a crash after a component's domain commit but before checkpoint is safe only when
+the component treats that key as idempotent. Restarts reclaim the pending run
+from its last committed checkpoint. Runs never switch to upgraded code: disable,
+quarantine, grant loss, and upgrades pause a release-pinned run until that exact
+release is authorized again. Cancelling queued work is terminal immediately;
+cancelling leased work invokes cooperative cancellation at the next batch.
+
+`POST /extensions/{extension_id}/operations` starts a run, while operators can
+list `GET /extension-operation-runs`, cancel a run, or replay only a dead-lettered
+run through its corresponding `cancel` and `replay` endpoints. Configuration,
+input, source/destination references, and checkpoints are never returned by the
+management API or written to audit metadata. Configuration and diagnostics are
+redacted before management-visible persistence; secret-, credential-, password-,
+token-, key-, and authorization-named fields are replaced with `[redacted]`.
+
 ## Client extension runtime (v1)
 
 Enabled `client_component` artifacts can expose a strict `ui` contribution:

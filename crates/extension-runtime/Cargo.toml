@@ -13,6 +13,7 @@ catalog-extension-manifest = { path = "../extension-manifest" }
 catalog-repository = { path = "../repository" }
 catalog-storage = { path = "../storage" }
 catalog-workers = { path = "../workers" }
+chrono.workspace = true
 metrics.workspace = true
 semver.workspace = true
 serde.workspace = true

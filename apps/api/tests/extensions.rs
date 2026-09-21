@@ -49,6 +49,31 @@ fn release_archive(version: &str, dependencies: Value, artifact_bytes: &[u8]) ->
     zstd::stream::encode_all(Cursor::new(tar_bytes), 0).unwrap()
 }
 
+fn operation_release_archive(extension_id: &str) -> Vec<u8> {
+    let manifest = serde_json::to_vec(&json!({
+        "manifest_version": 1,
+        "name": "Operation extension",
+        "version": "1.0.0",
+        "description": "durable operation integration test",
+        "icons": {"48": "icon.png"},
+        "catalog": {"id": extension_id, "host_api": ">=1.2.0, <2.0.0"},
+        "artifacts": [{"id": "server", "kind": "server_wasm", "path": "server.wasm"}],
+        "configuration": {"version": 1, "schema": {"type": "object", "additionalProperties": false}},
+        "server": {"operations": [{
+            "id": "import", "handler": "import", "request_schema": {"type": "object"},
+            "max_request_bytes": 1024, "max_checkpoint_bytes": 1024
+        }]}
+    })).unwrap();
+    let mut tar_bytes = Vec::new();
+    {
+        let mut tar = tar::Builder::new(&mut tar_bytes);
+        append_file(&mut tar, "manifest.json", &manifest);
+        append_file(&mut tar, "server.wasm", ARTIFACT_BYTES);
+        tar.finish().unwrap();
+    }
+    zstd::stream::encode_all(Cursor::new(tar_bytes), 0).unwrap()
+}
+
 fn event_contract_release_archive(extension_id: &str, producer: bool) -> Vec<u8> {
     let contracts = if producer {
         json!({"exports": [{"id": "inventory", "version": "1.0.0", "event_type": "plugin.acme.producer.inventory_changed.v1", "schema": {"type": "object"}, "max_payload_bytes": 1024}], "consumes": []})
@@ -207,7 +232,7 @@ async fn sideload_installs_a_validated_local_archive(pool: sqlx::PgPool) {
 #[sqlx::test(migrations = "./migrations")]
 async fn enabled_event_types_follow_authorized_consumption_contracts(pool: sqlx::PgPool) {
     let workspace = Uuid::from_u128(0x00000000000040008000000000000002);
-    let repository = CatalogRepository::new(pool.clone())
+    let repository = CatalogRepository::system(pool.clone())
         .for_workspace(workspace)
         .await
         .unwrap();
@@ -699,6 +724,257 @@ value_type = "string"
             .collect::<Vec<_>>(),
         ["acme.alpha:panel", "acme.zebra:panel"]
     );
+}
+
+#[sqlx::test(migrations = "./migrations")]
+async fn operation_runs_keep_a_batch_key_across_crash_reclaim_and_fence_stale_checkpoints(
+    pool: sqlx::PgPool,
+) {
+    use api::repository::StartExtensionOperation;
+    use catalog_domain::task_queue::TaskKind;
+    use std::time::Duration;
+
+    let workspace = Uuid::from_u128(0x00000000000040008000000000000002);
+    let repository = CatalogRepository::system(pool.clone())
+        .for_workspace(workspace)
+        .await
+        .unwrap();
+    ExtensionInstaller::new(repository.clone(), Arc::new(FakeObjectStore::available()))
+        .install("test", &operation_release_archive("acme.operations"))
+        .await
+        .unwrap();
+    repository
+        .enable_extension("acme.operations")
+        .await
+        .unwrap();
+    let request = StartExtensionOperation {
+        extension_id: "acme.operations".into(),
+        expected_release_id: repository
+            .installed_extension("acme.operations")
+            .await
+            .unwrap()
+            .installed_release_id,
+        operation_id: "import".into(),
+        input: json!({}),
+        source_reference: json!({"token": "hidden"}),
+        destination_reference: json!({}),
+        idempotency_key: "same-request".into(),
+    };
+    let run_id = repository
+        .start_extension_operation(request.clone())
+        .await
+        .unwrap();
+    assert_eq!(
+        run_id,
+        repository.start_extension_operation(request).await.unwrap()
+    );
+
+    let first = repository
+        .claim_task_for_kinds(
+            "first",
+            Duration::from_secs(30),
+            &[TaskKind::ExtensionOperationRunV1],
+        )
+        .await
+        .unwrap()
+        .unwrap();
+    let first_run = repository
+        .begin_extension_operation_task(&first)
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(first_run.batch_key, "same-request:0");
+    // Simulate a process crash before its checkpoint transaction. Reclaiming
+    // must reissue the same idempotency key so a prior domain commit is safe.
+    sqlx::query("UPDATE tasks SET lease_until=clock_timestamp()-interval '1 second' WHERE id=$1")
+        .bind(first.id)
+        .execute(&pool)
+        .await
+        .unwrap();
+    let second = repository
+        .claim_task_for_kinds(
+            "second",
+            Duration::from_secs(30),
+            &[TaskKind::ExtensionOperationRunV1],
+        )
+        .await
+        .unwrap()
+        .unwrap();
+    let second_run = repository
+        .begin_extension_operation_task(&second)
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(second_run.batch_key, first_run.batch_key);
+    repository
+        .checkpoint_extension_operation_task(
+            &second,
+            &second_run,
+            // `{}` is a valid durable extension checkpoint. Lifecycle state
+            // must be explicit rather than inferring that this is unstarted.
+            json!({}),
+            json!({"written": 1}),
+            false,
+        )
+        .await
+        .unwrap();
+    assert!(
+        repository
+            .checkpoint_extension_operation_task(
+                &first,
+                &first_run,
+                json!({"cursor": 99}),
+                json!({}),
+                false
+            )
+            .await
+            .is_err()
+    );
+    assert!(
+        sqlx::query_scalar::<_, bool>(
+            "SELECT lifecycle_started FROM extension_operation_runs WHERE id=$1"
+        )
+        .bind(run_id)
+        .fetch_one(&pool)
+        .await
+        .unwrap()
+    );
+
+    // A cancellation which races a normal checkpoint cannot make the run
+    // terminal until the worker has durably recorded the WIT cancel callback.
+    // The first checkpoint returns it to pending rather than silently marking
+    // it cancelled; the next lease records delivery before terminalizing it.
+    repository
+        .reschedule_task_at(
+            second.id,
+            &second.lease_owner,
+            second.lease_token,
+            chrono::Utc::now(),
+        )
+        .await
+        .unwrap();
+    sqlx::query("UPDATE extension_operation_runs SET cancellation_requested=true WHERE id=$1")
+        .bind(run_id)
+        .execute(&pool)
+        .await
+        .unwrap();
+    let third = repository
+        .claim_task_for_kinds(
+            "third",
+            Duration::from_secs(30),
+            &[TaskKind::ExtensionOperationRunV1],
+        )
+        .await
+        .unwrap()
+        .unwrap();
+    let third_run = repository
+        .begin_extension_operation_task(&third)
+        .await
+        .unwrap()
+        .unwrap();
+    assert!(
+        !repository
+            .checkpoint_extension_operation_task(&third, &third_run, json!({}), json!({}), true)
+            .await
+            .unwrap()
+    );
+    repository
+        .reschedule_task_at(
+            third.id,
+            &third.lease_owner,
+            third.lease_token,
+            chrono::Utc::now(),
+        )
+        .await
+        .unwrap();
+    let fourth = repository
+        .claim_task_for_kinds(
+            "fourth",
+            Duration::from_secs(30),
+            &[TaskKind::ExtensionOperationRunV1],
+        )
+        .await
+        .unwrap()
+        .unwrap();
+    let fourth_run = repository
+        .begin_extension_operation_task(&fourth)
+        .await
+        .unwrap()
+        .unwrap();
+    repository
+        .mark_extension_operation_cancellation_delivered(&fourth)
+        .await
+        .unwrap();
+    assert!(
+        repository
+            .checkpoint_extension_operation_task(&fourth, &fourth_run, json!({}), json!({}), true)
+            .await
+            .unwrap()
+    );
+    assert_eq!(
+        sqlx::query_scalar::<_, String>("SELECT status FROM extension_operation_runs WHERE id=$1")
+            .bind(run_id)
+            .fetch_one(&pool)
+            .await
+            .unwrap(),
+        "cancelled"
+    );
+}
+
+#[sqlx::test(migrations = "./migrations")]
+async fn operation_http_routes_start_list_and_cancel_without_exposing_input(pool: sqlx::PgPool) {
+    let workspace = Uuid::from_u128(0x00000000000040008000000000000002);
+    let repository = CatalogRepository::system(pool.clone())
+        .for_workspace(workspace)
+        .await
+        .unwrap();
+    ExtensionInstaller::new(repository.clone(), Arc::new(FakeObjectStore::available()))
+        .install("test", &operation_release_archive("acme.operation-http"))
+        .await
+        .unwrap();
+    repository
+        .enable_extension("acme.operation-http")
+        .await
+        .unwrap();
+
+    let (base, server) =
+        start_server_with_object_store(pool, Arc::new(FakeObjectStore::available())).await;
+    let response = authenticated_client()
+        .post(format!("{base}/extensions/acme.operation-http/operations"))
+        .json(&json!({
+            "operation_id": "import",
+            "input": {"safe": "value", "token": "not-returned"},
+            "source_reference": {"token": "redacted"},
+            "destination_reference": {},
+            "idempotency_key": "operation-http-1"
+        }))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(response.status(), reqwest::StatusCode::ACCEPTED);
+    let id = response.json::<Value>().await.unwrap()["id"]
+        .as_str()
+        .unwrap()
+        .to_owned();
+
+    let response = authenticated_client()
+        .get(format!("{base}/extension-operation-runs"))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(response.status(), reqwest::StatusCode::OK);
+    let runs = response.json::<Value>().await.unwrap();
+    assert_eq!(runs[0]["id"].as_str(), Some(id.as_str()));
+    assert!(runs[0].get("input").is_none());
+    assert!(runs[0].get("checkpoint").is_none());
+
+    let response = authenticated_client()
+        .post(format!("{base}/extension-operation-runs/{id}/cancel"))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(response.status(), reqwest::StatusCode::NO_CONTENT);
+    server.abort();
 }
 
 #[sqlx::test(migrations = "./migrations")]

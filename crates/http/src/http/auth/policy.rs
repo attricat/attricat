@@ -51,6 +51,15 @@ pub(super) fn policy(method: &Method, path: &str) -> Option<Policy> {
             target: TargetKind::None,
         });
     }
+    if path == "/extension-operation-runs"
+        || path.starts_with("/extension-operation-runs/")
+        || path == "/extensions/{extension_id}/operations"
+    {
+        return Some(Policy {
+            permission: "extensions.manage",
+            target: TargetKind::None,
+        });
+    }
     if path == "/extensions/{extension_id}/{contribution_id}/command" {
         return Some(Policy {
             permission: "entities.write",
@@ -478,6 +487,17 @@ mod tests {
                 .permission,
             "extensions.manage"
         );
+        for path in [
+            "/extensions/{extension_id}/operations",
+            "/extension-operation-runs",
+            "/extension-operation-runs/{id}/cancel",
+            "/extension-operation-runs/{id}/replay",
+        ] {
+            assert_eq!(
+                policy(&Method::POST, path).unwrap().permission,
+                "extensions.manage"
+            );
+        }
         assert_eq!(
             policy(
                 &Method::GET,
