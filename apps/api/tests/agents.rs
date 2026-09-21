@@ -7,7 +7,7 @@ use api::{
     agent_worker,
     agents::AgentProviderConfig,
     file_worker::{FileWorker, WorkerConfig},
-    repository::CatalogRepository,
+    repository::{CatalogRepository, RepositoryError},
     storage::FakeObjectStore,
     task_worker::TaskHandler,
 };
@@ -386,6 +386,173 @@ async fn agent_read_tools_enforce_initiator_permissions_and_scopes(pool: PgPool)
         json!([context])
     );
     server.abort();
+}
+
+#[sqlx::test]
+async fn reconciliation_skips_a_file_locked_by_an_attachment_transaction(pool: PgPool) {
+    let workspace_id = BOOTSTRAP_WORKSPACE_ID.parse::<Uuid>().unwrap();
+    let conversation_id = Uuid::new_v4();
+    let message_id = Uuid::new_v4();
+    let file_id = Uuid::new_v4();
+    sqlx::query(
+        "INSERT INTO conversations (id, workspace_id, title) VALUES ($1, $2, 'locked attachment')",
+    )
+    .bind(conversation_id)
+    .bind(workspace_id)
+    .execute(&pool)
+    .await
+    .unwrap();
+    sqlx::query("INSERT INTO files (id, workspace_id, original_filename, display_filename, mime_type, byte_size, sha256, original_key, status, attachment_expires_at) VALUES ($1, $2, 'report.pdf', 'report.pdf', 'application/pdf', 7, $3, 'files/locked-report.pdf', 'ready', now() - interval '1 second')")
+        .bind(file_id)
+        .bind(workspace_id)
+        .bind("0".repeat(64))
+        .execute(&pool)
+        .await
+        .unwrap();
+
+    // This is the file-locking portion of append_conversation_message_with_attachments.
+    // Reconciliation must skip it rather than decide from a stale absence of an attachment.
+    let mut attachment = pool.begin().await.unwrap();
+    sqlx::query("SELECT id FROM files WHERE id = $1 AND workspace_id = $2 AND deleted_at IS NULL FOR UPDATE")
+        .bind(file_id)
+        .bind(workspace_id)
+        .fetch_one(&mut *attachment)
+        .await
+        .unwrap();
+    sqlx::query("INSERT INTO conversation_messages (id, conversation_id, sequence, role, content) VALUES ($1, $2, 0, 'user', '\"keep it\"')")
+        .bind(message_id)
+        .bind(conversation_id)
+        .execute(&mut *attachment)
+        .await
+        .unwrap();
+    sqlx::query("INSERT INTO conversation_message_attachments (id, workspace_id, message_id, file_id, position) VALUES ($1, $2, $3, $4, 0)")
+        .bind(Uuid::new_v4())
+        .bind(workspace_id)
+        .bind(message_id)
+        .bind(file_id)
+        .execute(&mut *attachment)
+        .await
+        .unwrap();
+
+    let worker = FileWorker::new(
+        pool.clone(),
+        Arc::new(FakeObjectStore::available()),
+        WorkerConfig {
+            worker_id: "test-worker".into(),
+            max_pixels: 1,
+            max_attempts: 1,
+            delete_grace: Duration::from_secs(60),
+        },
+    );
+    worker.reconcile().await.unwrap();
+    attachment.commit().await.unwrap();
+
+    assert!(
+        sqlx::query_scalar::<_, Option<chrono::DateTime<chrono::Utc>>>(
+            "SELECT deleted_at FROM files WHERE id = $1"
+        )
+        .bind(file_id)
+        .fetch_one(&pool)
+        .await
+        .unwrap()
+        .is_none()
+    );
+    worker.reconcile().await.unwrap();
+    assert!(
+        sqlx::query_scalar::<_, Option<chrono::DateTime<chrono::Utc>>>(
+            "SELECT deleted_at FROM files WHERE id = $1"
+        )
+        .bind(file_id)
+        .fetch_one(&pool)
+        .await
+        .unwrap()
+        .is_none()
+    );
+}
+
+#[sqlx::test]
+async fn reconciliation_first_rejects_deleted_and_cross_tenant_attachments(pool: PgPool) {
+    let workspace_id = BOOTSTRAP_WORKSPACE_ID.parse::<Uuid>().unwrap();
+    let other_workspace_id = Uuid::new_v4();
+    let conversation_id = Uuid::new_v4();
+    let other_conversation_id = Uuid::new_v4();
+    let deleted_file_id = Uuid::new_v4();
+    let live_file_id = Uuid::new_v4();
+    sqlx::query("INSERT INTO workspaces (id, slug, name, login_identifier) VALUES ($1, 'attachment-other', 'Attachment other', 'attachment-other.local')")
+        .bind(other_workspace_id).execute(&pool).await.unwrap();
+    for (id, workspace, title) in [
+        (conversation_id, workspace_id, "local"),
+        (other_conversation_id, other_workspace_id, "other"),
+    ] {
+        sqlx::query("INSERT INTO conversations (id, workspace_id, title) VALUES ($1, $2, $3)")
+            .bind(id)
+            .bind(workspace)
+            .bind(title)
+            .execute(&pool)
+            .await
+            .unwrap();
+    }
+    for (id, expires_at) in [
+        (deleted_file_id, "now() - interval '1 second'"),
+        (live_file_id, "now() + interval '1 hour'"),
+    ] {
+        sqlx::query(&format!("INSERT INTO files (id, workspace_id, original_filename, display_filename, mime_type, byte_size, sha256, original_key, status, attachment_expires_at) VALUES ($1, $2, 'report.pdf', 'report.pdf', 'application/pdf', 7, $3, 'files/{id}', 'ready', {expires_at})"))
+            .bind(id).bind(workspace_id).bind("0".repeat(64)).execute(&pool).await.unwrap();
+    }
+    let worker = FileWorker::new(
+        pool.clone(),
+        Arc::new(FakeObjectStore::available()),
+        WorkerConfig {
+            worker_id: "test-worker".into(),
+            max_pixels: 1,
+            max_attempts: 1,
+            delete_grace: Duration::from_secs(60),
+        },
+    );
+    worker.reconcile().await.unwrap();
+
+    let repository = CatalogRepository::new(pool.clone())
+        .for_workspace(workspace_id)
+        .await
+        .unwrap();
+    assert!(matches!(
+        repository
+            .append_conversation_message_with_attachments(
+                conversation_id,
+                None,
+                "user",
+                json!("too late"),
+                &[deleted_file_id]
+            )
+            .await,
+        Err(RepositoryError::NotFound("file"))
+    ));
+    let other_repository = CatalogRepository::new(pool.clone())
+        .for_workspace(other_workspace_id)
+        .await
+        .unwrap();
+    assert!(matches!(
+        other_repository
+            .append_conversation_message_with_attachments(
+                other_conversation_id,
+                None,
+                "user",
+                json!("not ours"),
+                &[live_file_id]
+            )
+            .await,
+        Err(RepositoryError::NotFound("file"))
+    ));
+    assert_eq!(
+        sqlx::query_scalar::<_, i64>(
+            "SELECT COUNT(*) FROM conversation_message_attachments WHERE file_id = ANY($1)"
+        )
+        .bind(&[deleted_file_id, live_file_id][..])
+        .fetch_one(&pool)
+        .await
+        .unwrap(),
+        0
+    );
 }
 
 #[sqlx::test]

@@ -251,14 +251,43 @@ impl FileWorker {
     /// purge job. Repeated runs are harmless and never delete before grace.
     pub async fn reconcile(&self) -> Result<(), sqlx::Error> {
         let grace = self.config.delete_grace.as_secs() as i64;
-        let marked = sqlx::query(r#"UPDATE files f SET status = 'deleted', deleted_at = now(), purge_after = now() + make_interval(secs => $1), updated_at = now()
+        let mut transaction = self.pool.begin().await?;
+
+        // Attachment creation locks its file before recording the attachment.
+        // Lock candidates first (and skip an in-progress attachment) so the
+        // reference check and deletion decision share that same lock. This
+        // serializes the two transactions: an attachment that gets the lock
+        // first is retained; a file reconciliation that gets it first makes a
+        // later attachment fail its existing live-file authorization check.
+        let candidates: Vec<Uuid> = sqlx::query_scalar(
+            r#"SELECT f.id FROM files f
             WHERE f.deleted_at IS NULL
               AND (f.attachment_expires_at IS NULL OR f.attachment_expires_at <= now())
               AND NOT EXISTS (SELECT 1 FROM attribute_file_references r WHERE r.workspace_id = f.workspace_id AND r.file_id = f.id)
-              AND NOT EXISTS (SELECT 1 FROM conversation_message_attachments a WHERE a.workspace_id = f.workspace_id AND a.file_id = f.id)"#).bind(grace).execute(&self.pool).await?;
+              AND NOT EXISTS (SELECT 1 FROM conversation_message_attachments a WHERE a.workspace_id = f.workspace_id AND a.file_id = f.id)
+            ORDER BY f.id
+            FOR UPDATE SKIP LOCKED"#,
+        )
+        .fetch_all(&mut *transaction)
+        .await?;
+        let marked = if candidates.is_empty() {
+            0
+        } else {
+            sqlx::query(r#"UPDATE files f SET status = 'deleted', deleted_at = now(), purge_after = now() + make_interval(secs => $1), updated_at = now()
+                WHERE f.id = ANY($2)
+                  AND f.deleted_at IS NULL
+                  AND (f.attachment_expires_at IS NULL OR f.attachment_expires_at <= now())
+                  AND NOT EXISTS (SELECT 1 FROM attribute_file_references r WHERE r.workspace_id = f.workspace_id AND r.file_id = f.id)
+                  AND NOT EXISTS (SELECT 1 FROM conversation_message_attachments a WHERE a.workspace_id = f.workspace_id AND a.file_id = f.id)"#)
+                .bind(grace)
+                .bind(&candidates)
+                .execute(&mut *transaction)
+                .await?
+                .rows_affected()
+        };
+        transaction.commit().await?;
         metrics::counter!("catalog_file_reconciliation_total", "outcome" => "success").increment(1);
-        metrics::counter!("catalog_file_reconciliation_files_marked_total")
-            .increment(marked.rows_affected());
+        metrics::counter!("catalog_file_reconciliation_files_marked_total").increment(marked);
         let due: Vec<(Uuid, Uuid, DateTime<Utc>)> = sqlx::query_as(r#"SELECT f.workspace_id, f.id, f.purge_after FROM files f
             WHERE f.deleted_at IS NOT NULL AND f.purge_after <= now()
               AND NOT EXISTS (SELECT 1 FROM file_processing_jobs j WHERE j.file_id = f.id AND j.kind = 'purge' AND j.status IN ('queued','running','retryable','completed'))"#)
@@ -270,7 +299,7 @@ impl FileWorker {
         }
         metrics::counter!("catalog_file_purge_jobs_queued_total").increment(due_count);
         tracing::info!(
-            files_marked = marked.rows_affected(),
+            files_marked = marked,
             purge_jobs_queued = due_count,
             "file reconciliation completed"
         );
