@@ -15,8 +15,8 @@ import {
   Typography,
 } from '@mui/material';
 import { useQuery } from '@tanstack/react-query';
-import { Link, useRouterState } from '@tanstack/react-router';
-import { useState } from 'react';
+import { useNavigate, useRouterState } from '@tanstack/react-router';
+import { type MouseEvent, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { z } from 'zod';
 import { ExtensionFrame } from './ExtensionFrame';
@@ -73,19 +73,29 @@ const ExtensionNavigationItem = ({
   onNavigate?: () => void;
 }) => {
   const { pathname } = useRouterState({ select: (state) => state.location });
-  if (contribution.kind !== 'navigation' || !contribution.route) return null;
-  const target = `/extensions/${contribution.extension_id}/${contribution.route}`;
+  const navigate = useNavigate();
+  const contributionRoute = contribution.route;
+  if (contribution.kind !== 'navigation' || !contributionRoute) return null;
+  const target = `/extensions/${contribution.extension_id}/${contributionRoute}`;
+  const handleNavigate = (event: MouseEvent<HTMLAnchorElement>) => {
+    event.preventDefault();
+    onNavigate?.();
+    void navigate({
+      to: '/extensions/$extensionId/$contributionId',
+      params: {
+        extensionId: contribution.extension_id,
+        contributionId: contributionRoute,
+      },
+    });
+  };
   return (
     <ListItemButton
+      aria-current={pathname === target ? 'page' : undefined}
       aria-label={contribution.title ?? contribution.id}
-      component={Link}
-      onClick={onNavigate}
+      component="a"
+      href={target}
+      onClick={handleNavigate}
       selected={pathname === target}
-      to="/extensions/$extensionId/$contributionId"
-      params={{
-        extensionId: contribution.extension_id,
-        contributionId: contribution.route,
-      }}
     >
       <ListItemIcon>
         <ExtensionIcon />

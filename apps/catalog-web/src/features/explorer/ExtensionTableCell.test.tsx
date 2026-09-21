@@ -53,6 +53,7 @@ const contribution: ExtensionContribution = {
   id: 'example.currency',
   kind: 'embedded',
   outlet: 'explorer_table_cell',
+  route: null,
   release_id: '22222222-2222-4222-8222-222222222222',
   title: null,
   version: 1,

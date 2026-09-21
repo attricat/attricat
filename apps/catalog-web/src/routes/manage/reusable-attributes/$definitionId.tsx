@@ -5,6 +5,8 @@ const ReusableAttributeEditorRoute = () => (
   <ReusableAttributeEditorPage definitionId={Route.useParams().definitionId} />
 );
 
-export const Route = createFileRoute('/manage/reusable-attributes/$definitionId')({
+export const Route = createFileRoute(
+  '/manage/reusable-attributes/$definitionId',
+)({
   component: ReusableAttributeEditorRoute,
 });

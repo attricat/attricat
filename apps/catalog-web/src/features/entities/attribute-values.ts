@@ -30,7 +30,10 @@ const scalarValueSchemas = {
     try {
       return JSON.parse(value);
     } catch {
-      context.addIssue({ code: z.ZodIssueCode.custom, message: 'Expected JSON' });
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: 'Expected JSON',
+      });
       return z.NEVER;
     }
   }),

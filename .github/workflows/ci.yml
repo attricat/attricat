@@ -43,3 +43,149 @@ jobs:
       - run: cargo clippy --locked --workspace --all-targets -- -D warnings
       - run: cargo test --locked --workspace
       - run: cargo deny check
+
+  web:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .node-version
+      - name: Enable the pinned pnpm version
+        run: |
+          corepack enable
+          corepack install
+          test "$(pnpm --version)" = "11.25.0"
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm --dir apps/catalog-web format:check
+      - run: pnpm --dir apps/catalog-web lint
+      - run: pnpm --dir apps/catalog-web typecheck
+      - run: pnpm --dir apps/catalog-web test
+      - run: pnpm --dir apps/catalog-web build
+      - run: pnpm --dir apps/catalog-web inspect:bundle
+      - run: pnpm --dir apps/docs build
+      - name: Upload production web artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: web-and-docs-build
+          if-no-files-found: ignore
+          path: |
+            apps/catalog-web/dist
+            apps/docs/dist
+
+  extension-smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/checkout@v4
+        with:
+          repository: attricat/attricat-extension-example
+          path: attricat-extension-example
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .node-version
+      - name: Enable the pinned pnpm version
+        run: |
+          corepack enable
+          corepack install
+          test "$(pnpm --version)" = "11.25.0"
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm --dir attricat-extension-example install --frozen-lockfile
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: 1.95.0
+      - uses: taiki-e/install-action@wasm-tools
+      - run: rustup target add wasm32-unknown-unknown
+      - name: Build and package the side-loadable extension
+        run: just pack
+        working-directory: attricat-extension-example
+      - run: pnpm --dir apps/catalog-web exec playwright install --with-deps chromium
+      - name: Side-load the package and exercise its browser and WASM action
+        env:
+          ATTRICAT_EXTENSION_EXAMPLE_DIR: ${{ github.workspace }}/attricat-extension-example
+        run: pnpm --dir apps/catalog-web exec node ../../scripts/test-e2e.mjs extensions.spec.ts
+      - name: Upload extension smoke diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: extension-smoke-diagnostics
+          if-no-files-found: ignore
+          path: |
+            attricat-extension-example/dist/*.tar.zst
+            apps/catalog-web/test-results
+            apps/catalog-web/playwright-report
+
+  release-smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    services:
+      postgres:
+        image: postgres:18-alpine
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: catalog
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d catalog"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+      rustfs:
+        image: rustfs/rustfs:1.0.0-beta.12
+        env:
+          RUSTFS_ACCESS_KEY: catalog-ci
+          RUSTFS_SECRET_KEY: catalog-ci-secret
+        ports:
+          - 9000:9000
+        options: >-
+          --health-cmd "curl --fail --silent http://127.0.0.1:9000/health/live"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
+    env:
+      DATABASE_URL: postgres://postgres:postgres@localhost:5432/catalog
+      BIND_ADDR: 127.0.0.1:3000
+      CATALOG_BOOTSTRAP_OWNER_ID: 00000000-0000-4000-8000-000000000301
+      CATALOG_BOOTSTRAP_OWNER_EMAIL: owner@example.test
+      CATALOG_BOOTSTRAP_OWNER_PASSWORD: ci-only-owner-password
+      SESSION_COOKIE_SECURE: "false"
+      S3_ENDPOINT: http://127.0.0.1:9000
+      S3_REGION: us-east-1
+      S3_BUCKET: catalog-files
+      S3_ACCESS_KEY_ID: catalog-ci
+      S3_SECRET_ACCESS_KEY: catalog-ci-secret
+      S3_FORCE_PATH_STYLE: "true"
+      S3_UPLOAD_TIMEOUT_SECONDS: "30"
+      S3_DOWNLOAD_TIMEOUT_SECONDS: "30"
+      CI_SMOKE_ARTIFACT_DIR: artifacts/release-smoke
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: 1.95.0
+      - uses: Swatinem/rust-cache@v2
+      - name: Create the deployment object-store bucket
+        run: >-
+          docker run --rm --network host
+          -e AWS_ACCESS_KEY_ID -e AWS_SECRET_ACCESS_KEY -e AWS_DEFAULT_REGION=us-east-1
+          amazon/aws-cli:2.31.0 --endpoint-url "$S3_ENDPOINT" s3api create-bucket --bucket "$S3_BUCKET"
+      - name: Build deployment release artifacts
+        run: cargo build --release --locked -p api --bin api --bin file-worker -p cli
+      - name: Apply embedded migrations and smoke the release binaries
+        run: scripts/release-smoke.sh
+      - name: Upload release artifact and diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-artifact-and-smoke-diagnostics
+          if-no-files-found: ignore
+          path: |
+            target/release/api
+            target/release/file-worker
+            target/release/acli
+            artifacts/release-smoke

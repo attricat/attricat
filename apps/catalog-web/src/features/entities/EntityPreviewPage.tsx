@@ -153,17 +153,17 @@ export const EntityPreviewPage = ({
               />
             )}
             {blueprint.data && (
-            <Tooltip title={blueprint.data.blueprint.name}>
-              <RouterButton
-                params={{ blueprintId: blueprint.data.blueprint.id }}
-                size="small"
-                startIcon={<BlueprintIcon />}
-                to="/manage/blueprints/$blueprintId"
-                variant="text"
-              >
-                {t('entities.blueprint')}: {blueprint.data.blueprint.name}
-              </RouterButton>
-            </Tooltip>
+              <Tooltip title={blueprint.data.blueprint.name}>
+                <RouterButton
+                  params={{ blueprintId: blueprint.data.blueprint.id }}
+                  size="small"
+                  startIcon={<BlueprintIcon />}
+                  to="/manage/blueprints/$blueprintId"
+                  variant="text"
+                >
+                  {t('entities.blueprint')}: {blueprint.data.blueprint.name}
+                </RouterButton>
+              </Tooltip>
             )}
           </>
         }

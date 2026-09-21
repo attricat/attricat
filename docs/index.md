@@ -2,7 +2,7 @@
 
 ## Getting Started
 
-1. Install a Docker-compatible runtime, Rust, Node.js 18 or newer, `just`,
+1. Install a Docker-compatible runtime, Rust, Node.js 22.14.0, pnpm 11.25.0 (Corepack manages this automatically), `just`,
    `process-compose`, and `watchexec`.
 2. Run `just setup` once. It installs frontend dependencies, creates `.env`
    from `.env.example`, and assigns persistent ports for this worktree.

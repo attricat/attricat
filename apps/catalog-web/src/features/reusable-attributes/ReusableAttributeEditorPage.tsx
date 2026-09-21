@@ -70,7 +70,8 @@ export const ReusableAttributeEditorPage = ({
     ?.filter((item) => item.definition_id === definitionId)
     .sort((left, right) => right.version - left.version)[0];
   const [editedDefinition, setEditedDefinition] = useState<string>();
-  const definition = editedDefinition ?? attribute?.definition ?? newAttributeDefinition;
+  const definition =
+    editedDefinition ?? attribute?.definition ?? newAttributeDefinition;
   const save = useMutation({
     mutationFn: () =>
       attribute
@@ -107,10 +108,14 @@ export const ReusableAttributeEditorPage = ({
       <Stack spacing={3}>
         <PageHeader
           description="Namespace is derived from the active workspace and cannot be set in the definition."
-          title={attribute ? `Edit ${attribute.name}` : 'New reusable attribute'}
+          title={
+            attribute ? `Edit ${attribute.name}` : 'New reusable attribute'
+          }
           actions={
             <Stack direction="row" spacing={1}>
-              <Button onClick={() => navigate({ to: '/manage/reusable-attributes' })}>
+              <Button
+                onClick={() => navigate({ to: '/manage/reusable-attributes' })}
+              >
                 Cancel
               </Button>
               <Button

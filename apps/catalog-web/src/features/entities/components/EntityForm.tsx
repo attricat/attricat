@@ -404,7 +404,11 @@ export const EntityForm = ({
         )}
         {footerActions}
         {showSubmitButton && (
-          <Button disabled={isLoadingBlueprint} type="submit" variant="contained">
+          <Button
+            disabled={isLoadingBlueprint}
+            type="submit"
+            variant="contained"
+          >
             {isLoadingBlueprint ? t('entities.loadingBlueprint') : submitLabel}
           </Button>
         )}

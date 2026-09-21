@@ -299,11 +299,15 @@ export const EditEntityPage = ({ entityId }: { entityId: string }) => {
             onClose={closeReusableAttributeDialog}
             open={isReusableAttributeDialogOpen}
           >
-            <DialogTitle>{t('entities.addReusableAttributeOrGroup')}</DialogTitle>
+            <DialogTitle>
+              {t('entities.addReusableAttributeOrGroup')}
+            </DialogTitle>
             <DialogContent>
               {reusableSelectionType === null && (
                 <Stack spacing={2} sx={{ pt: 1 }}>
-                  <Typography>{t('entities.chooseReusableAttributeOrGroup')}</Typography>
+                  <Typography>
+                    {t('entities.chooseReusableAttributeOrGroup')}
+                  </Typography>
                   <Stack direction={{ sm: 'row' }} spacing={1}>
                     <Button
                       onClick={() => setReusableSelectionType('attribute')}
@@ -336,8 +340,8 @@ export const EditEntityPage = ({ entityId }: { entityId: string }) => {
                   </MenuItem>
                   {latestReusableAttributes.map((attribute) => (
                     <MenuItem key={attribute.id} value={attribute.id}>
-                      {attribute.namespace}:{attribute.code} · {attribute.name} v
-                      {attribute.version}
+                      {attribute.namespace}:{attribute.code} · {attribute.name}{' '}
+                      v{attribute.version}
                     </MenuItem>
                   ))}
                 </TextField>
@@ -346,12 +350,16 @@ export const EditEntityPage = ({ entityId }: { entityId: string }) => {
                 <TextField
                   fullWidth
                   label={t('entities.attributeGroup')}
-                  onChange={(event) => setSelectedReusableGroup(event.target.value)}
+                  onChange={(event) =>
+                    setSelectedReusableGroup(event.target.value)
+                  }
                   select
                   sx={{ mt: 1 }}
                   value={selectedReusableGroup}
                 >
-                  <MenuItem value="">{t('entities.selectAttributeGroup')}</MenuItem>
+                  <MenuItem value="">
+                    {t('entities.selectAttributeGroup')}
+                  </MenuItem>
                   {(reusableGroups.data ?? []).map((group) => (
                     <MenuItem key={group.id} value={group.id}>
                       {group.name}
