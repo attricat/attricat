@@ -2326,6 +2326,7 @@ fn text_only_search(value: &str) -> bool {
 }
 
 #[cfg(test)]
+#[allow(clippy::items_after_test_module)]
 mod global_search_budget_tests {
     use super::*;
 

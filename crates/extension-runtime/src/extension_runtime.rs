@@ -85,7 +85,9 @@ const MAX_WRITE_VALUES: usize = 100;
 const EPOCH_TICK_INTERVAL: Duration = Duration::from_millis(10);
 const NETWORK_RATE_WINDOW: Duration = Duration::from_secs(60);
 const NETWORK_RATE_LIMIT: usize = 60;
-static NETWORK_RATE_BUCKETS: LazyLock<Mutex<HashMap<(Uuid, String), VecDeque<Instant>>>> =
+type NetworkRateBucketKey = (Uuid, String);
+type NetworkRateBuckets = HashMap<NetworkRateBucketKey, VecDeque<Instant>>;
+static NETWORK_RATE_BUCKETS: LazyLock<Mutex<NetworkRateBuckets>> =
     LazyLock::new(|| Mutex::new(HashMap::new()));
 
 fn allow_network_request(workspace_id: Uuid, extension_id: &str) -> bool {
@@ -273,6 +275,7 @@ impl ExtensionRuntime {
     /// Executes one bounded v1.2 operation batch. The component is selected by
     /// the run's immutable release snapshot; no current-installation lookup can
     /// substitute upgraded code.
+    #[allow(clippy::too_many_arguments)]
     async fn invoke_operation_batch(
         &self,
         installation: &ExtensionRuntimeInstallation,
@@ -1798,7 +1801,10 @@ pub fn start_event_delivery_coordinator(
     })
 }
 
+const _: () = assert!(MAX_ARTIFACT_CHUNK_BYTES <= MAX_HOST_JSON_BYTES);
+
 #[cfg(test)]
+#[allow(clippy::items_after_test_module)]
 mod tests {
     use sha2::{Digest, Sha256};
     use uuid::Uuid;
@@ -1818,7 +1824,6 @@ mod tests {
     #[test]
     fn artifact_stream_contract_keeps_chunks_and_checksums_bounded() {
         assert_eq!(MAX_ARTIFACT_CHUNK_BYTES, 64 * 1024);
-        assert!(MAX_ARTIFACT_CHUNK_BYTES <= super::MAX_HOST_JSON_BYTES);
         assert_eq!(
             format!("{:x}", Sha256::digest(b"bounded output")),
             "d047501029296dac4c1be5e22f05ff7229244184357ac63424d75339009a77e3"

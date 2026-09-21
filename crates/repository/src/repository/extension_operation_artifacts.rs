@@ -159,7 +159,7 @@ impl CatalogRepository {
         run_id: Uuid,
         bytes: i64,
     ) -> Result<(), RepositoryError> {
-        if bytes < 0 || bytes > MAX_OPERATION_ARTIFACT_BYTES {
+        if !(0..=MAX_OPERATION_ARTIFACT_BYTES).contains(&bytes) {
             return Err(artifact_error("artifact chunk exceeds quota"));
         }
         let mut tx = self.pool.begin().await?;
@@ -246,17 +246,6 @@ impl CatalogRepository {
     }
 }
 
-#[cfg(test)]
-mod tests {
-    use super::{
-        MAX_OPERATION_ARTIFACT_BYTES, MAX_OPERATION_RUN_ARTIFACT_BYTES,
-        MAX_OPERATION_WORKSPACE_ARTIFACT_BYTES,
-    };
-
-    #[test]
-    fn artifact_quotas_are_nested_and_finite() {
-        assert!(MAX_OPERATION_ARTIFACT_BYTES > 0);
-        assert!(MAX_OPERATION_ARTIFACT_BYTES <= MAX_OPERATION_RUN_ARTIFACT_BYTES);
-        assert!(MAX_OPERATION_RUN_ARTIFACT_BYTES <= MAX_OPERATION_WORKSPACE_ARTIFACT_BYTES);
-    }
-}
+const _: () = assert!(MAX_OPERATION_ARTIFACT_BYTES > 0);
+const _: () = assert!(MAX_OPERATION_ARTIFACT_BYTES <= MAX_OPERATION_RUN_ARTIFACT_BYTES);
+const _: () = assert!(MAX_OPERATION_RUN_ARTIFACT_BYTES <= MAX_OPERATION_WORKSPACE_ARTIFACT_BYTES);

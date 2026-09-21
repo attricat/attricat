@@ -16,7 +16,7 @@ async fn catalog_workflow_compiles_explicit_toml_selections_and_rebuilds_preview
             .json::<Value>()
             .await
             .unwrap(),
-        json!({ "status": "ok" })
+        json!({ "status": "live" })
     );
 
     let seo = create_blueprint(

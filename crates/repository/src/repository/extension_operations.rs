@@ -15,6 +15,20 @@ use super::{CatalogRepository, ClaimedTask, RepositoryError};
 const MAX_JSON_BYTES: usize = 64 * 1024;
 const MAX_IDEMPOTENCY_BYTES: usize = 128;
 
+type ClaimedOperationRunRow = (
+    String,
+    bool,
+    bool,
+    String,
+    Uuid,
+    String,
+    Value,
+    Value,
+    Value,
+    String,
+    i32,
+);
+
 #[derive(Clone, Debug)]
 pub struct StartExtensionOperation {
     pub extension_id: String,
@@ -271,7 +285,7 @@ impl CatalogRepository {
         self.for_extension_operation_task(task)
             .ensure_task_fence(&mut transaction)
             .await?;
-        let row: Option<(String, bool, bool, String, Uuid, String, Value, Value, Value, String, i32)> = sqlx::query_as(
+        let row: Option<ClaimedOperationRunRow> = sqlx::query_as(
             "SELECT status,cancellation_requested,lifecycle_started,extension_id,installed_release_id,operation_id,configuration_snapshot,input,checkpoint,idempotency_key,batch_number FROM extension_operation_runs WHERE id=$1 AND workspace_id=$2 FOR UPDATE",
         )
         .bind(task.subject_id)

@@ -511,7 +511,7 @@ async fn reconciliation_first_rejects_deleted_and_cross_tenant_attachments(pool:
     );
     worker.reconcile().await.unwrap();
 
-    let repository = CatalogRepository::new(pool.clone())
+    let repository = CatalogRepository::system(pool.clone())
         .for_workspace(workspace_id)
         .await
         .unwrap();
@@ -527,7 +527,7 @@ async fn reconciliation_first_rejects_deleted_and_cross_tenant_attachments(pool:
             .await,
         Err(RepositoryError::NotFound("file"))
     ));
-    let other_repository = CatalogRepository::new(pool.clone())
+    let other_repository = CatalogRepository::system(pool.clone())
         .for_workspace(other_workspace_id)
         .await
         .unwrap();
