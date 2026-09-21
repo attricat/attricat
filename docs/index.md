@@ -21,7 +21,8 @@ Stop `just dev` with `Ctrl-C`. Its exit trap also runs `just down`, stopping
 and removing the local containers.
 
 See [Configuration](configuration.md) for connection, proxy, file-storage, and API limit
-settings. The local RustFS-backed production-compatibility check is opt-in and
+settings, and [Production operations](operations.md) for rollout, recovery, and
+backup/restore procedures. The local RustFS-backed production-compatibility check is opt-in and
 uses the same `S3_*` settings as the API:
 
 ```sh

@@ -1,6 +1,55 @@
 mod support;
 
+use std::sync::Arc;
+
+use api::storage::FakeObjectStore;
 use support::*;
+
+#[sqlx::test]
+async fn liveness_and_readiness_have_distinct_dependency_semantics(pool: PgPool) {
+    let store = Arc::new(FakeObjectStore::available());
+    let (base_url, server) = start_server_with_object_store(pool, store.clone()).await;
+    let client = reqwest::Client::new();
+
+    let live = client
+        .get(format!("{base_url}/health/live"))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(live.status(), StatusCode::OK);
+    assert_eq!(live.json::<Value>().await.unwrap()["status"], "live");
+    assert_eq!(
+        client
+            .get(format!("{base_url}/health/ready"))
+            .send()
+            .await
+            .unwrap()
+            .status(),
+        StatusCode::OK
+    );
+
+    store.set_available(false);
+    assert_eq!(
+        client
+            .get(format!("{base_url}/health/live"))
+            .send()
+            .await
+            .unwrap()
+            .status(),
+        StatusCode::OK
+    );
+    let not_ready = client
+        .get(format!("{base_url}/health/ready"))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(not_ready.status(), StatusCode::SERVICE_UNAVAILABLE);
+    assert_eq!(
+        not_ready.json::<Value>().await.unwrap()["status"],
+        "not_ready"
+    );
+    server.abort();
+}
 
 #[sqlx::test]
 async fn data_health_sections_return_an_empty_catalog(pool: PgPool) {

@@ -734,7 +734,7 @@ async fn enabled_client_contributions_are_hidden_after_state_changes(pool: sqlx:
     assert_eq!(
         contributions[0].artifact_key,
         Some(format!(
-            "extensions/{}/client",
+            "extensions/v1/{}/client",
             contributions[0].installed_release_id
         ))
     );
@@ -2119,7 +2119,7 @@ async fn operation_artifacts_are_run_scoped_quota_bound_cleaned_and_downloadable
         .await
         .unwrap();
     let checksum = format!("{:x}", Sha256::digest(body));
-    let key = format!("extension-operation-artifacts/{}", completed.id);
+    let key = format!("extension-operation-artifacts/v1/{}", completed.id);
     store
         .put(
             &key,

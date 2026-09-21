@@ -297,7 +297,12 @@ pub fn router(state: AppState) -> Router {
             "/agent/tool-calls/{tool_call_id}/reject",
             post(agents::reject),
         )
-        .route("/health", get(data_health::health))
+        // `/health` remains the compatibility liveness probe. Readiness is
+        // separate so load balancers withdraw an unhealthy dependency graph
+        // without restarting an otherwise live process.
+        .route("/health", get(data_health::liveness))
+        .route("/health/live", get(data_health::liveness))
+        .route("/health/ready", get(data_health::readiness))
         .route(
             "/extension-registries",
             get(extension_registries::list).post(extension_registries::create),

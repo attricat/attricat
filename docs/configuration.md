@@ -60,6 +60,7 @@ or inaccessible configured bucket.
 | `WEB_PORT` | `5173` | Vite | Listener port for the development web app. |
 | `SMTP_HOST` | `127.0.0.1` | API local development | Mailpit SMTP host. |
 | `SMTP_PORT` | `1025` | API local development | Mailpit SMTP port; `just setup` sets it to the worktree-specific port. |
+| `SMTP_TLS_MODE` | `starttls` | API | Required SMTP encryption mode: `starttls` or `implicit` in production. `disabled` is only for the trusted local Mailpit relay. Opportunistic TLS is rejected. |
 | `SMTP_USERNAME` | Unset | API | Optional SMTP username. |
 | `SMTP_PASSWORD` | Unset | API | Optional SMTP password; keep it in a secret manager outside local development. |
 | `MAIL_FROM` | `Catalog <no-reply@catalog.local>` | API local development | Sender address for lifecycle email. |
@@ -195,7 +196,9 @@ recorded as skipped rather than executed concurrently.
 Mailpit is a local-development and E2E adapter only; it is not production mail
 configuration. Source `.catalog-worktree` after `just dev`, open
 `$MAILPIT_UI_URL` for manual inspection, and use its REST API
-for E2E mailbox retrieval. Production mail delivery is deliberately deferred.
+for E2E mailbox retrieval. Production SMTP requires `SMTP_TLS_MODE=starttls`
+or `implicit`; `disabled` is restricted to a trusted local relay. See
+[Production operations](operations.md) for rollout, rotation, and recovery.
 
 A failed durable job can be returned to the queue by an operator with
 `cargo run -p api --bin file-worker -- --retry <job-uuid>`. The command resets

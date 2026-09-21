@@ -96,7 +96,7 @@ pub(super) async fn authorize(
     next: Next,
 ) -> Result<Response, ApiError> {
     let path = request.uri().path();
-    if path == "/health"
+    if matches!(path, "/health" | "/health/live" | "/health/ready")
         || path == "/auth/login"
         || path == "/auth/discover"
         || path == "/auth/password-reset"

@@ -16,6 +16,7 @@ use std::{
 
 use base64::{Engine as _, engine::general_purpose::STANDARD as BASE64};
 use futures_util::StreamExt;
+use metrics::{counter, histogram};
 use reqwest::{Client, Method, redirect::Policy};
 use url::Url;
 
@@ -1491,6 +1492,8 @@ impl TaskHandler for ExtensionOperationTaskHandler {
         else {
             return Ok(TaskOutcome::Complete);
         };
+        counter!("catalog_extension_operations_total", "outcome" => "started").increment(1);
+        let operation_started = Instant::now();
         let Some(installation) = repository
             .runtime_extension_installation(&run.extension_id, run.installed_release_id)
             .await
@@ -1546,6 +1549,9 @@ impl TaskHandler for ExtensionOperationTaskHandler {
                         code: "operation",
                         message: failure.to_string(),
                     })?;
+                counter!("catalog_extension_operations_total", "outcome" => "failed").increment(1);
+                histogram!("catalog_extension_operation_duration_seconds", "outcome" => "failed")
+                    .record(operation_started.elapsed().as_secs_f64());
                 return Ok(TaskOutcome::DeadLettered);
             }
         };
@@ -1601,6 +1607,10 @@ impl TaskHandler for ExtensionOperationTaskHandler {
                 code: "operation",
                 message: e.to_string(),
             })?;
+        let outcome = if terminal { "completed" } else { "rescheduled" };
+        counter!("catalog_extension_operations_total", "outcome" => outcome).increment(1);
+        histogram!("catalog_extension_operation_duration_seconds", "outcome" => outcome)
+            .record(operation_started.elapsed().as_secs_f64());
         if terminal {
             Ok(TaskOutcome::Complete)
         } else {
@@ -2027,7 +2037,9 @@ impl host_operations::catalog::host::artifacts::Host for OperationState {
             let _ = std::fs::remove_file(&output.path);
             return Err("artifact checksum mismatch".into());
         }
-        let key = format!("extension-operation-artifacts/{}", output.artifact.id);
+        // The prefix is an immutable storage format contract. Future artifact
+        // layouts get a new version rather than changing how v1 objects read.
+        let key = format!("extension-operation-artifacts/v1/{}", output.artifact.id);
         if self
             .object_store
             .put_file(&key, &output.path, Some(&output.artifact.media_type))

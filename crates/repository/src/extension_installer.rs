@@ -126,9 +126,25 @@ impl ExtensionInstaller {
     }
 }
 
-/// Immutable, opaque object key derived from the installed-release identity
-/// and manifest artifact ID. The runtime can derive it from the release record
-/// and manifest without a second artifact table.
+/// Immutable, opaque, format-versioned object key derived from the
+/// installed-release identity and manifest artifact ID. The runtime can derive
+/// it from the release record and manifest without a second artifact table.
+/// New storage layouts must use a new prefix rather than reinterpret v1 bytes.
 pub fn installed_artifact_key(installed_release_id: Uuid, artifact_id: &str) -> String {
-    format!("extensions/{installed_release_id}/{artifact_id}")
+    format!("extensions/v1/{installed_release_id}/{artifact_id}")
+}
+
+#[cfg(test)]
+mod tests {
+    use super::installed_artifact_key;
+    use uuid::Uuid;
+
+    #[test]
+    fn installed_artifact_keys_pin_the_storage_format_version() {
+        let key = installed_artifact_key(Uuid::nil(), "server");
+        assert_eq!(
+            key,
+            "extensions/v1/00000000-0000-0000-0000-000000000000/server"
+        );
+    }
 }

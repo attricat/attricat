@@ -4,11 +4,16 @@
 //! handler have cut over. An empty registry is intentional during the initial
 //! rollout: the worker remains supervised but never leases unhandled work.
 
-use std::{collections::HashMap, env, sync::Arc, time::Duration};
+use std::{
+    collections::HashMap,
+    env,
+    sync::Arc,
+    time::{Duration, Instant},
+};
 
 use async_trait::async_trait;
 use chrono::Utc;
-use metrics::{counter, gauge};
+use metrics::{counter, gauge, histogram};
 use tokio::{sync::watch, task::JoinSet, time};
 use uuid::Uuid;
 
@@ -224,7 +229,9 @@ fn bounded_error(code: &str, message: &str) -> (String, String) {
 }
 
 async fn execute(repository: CatalogRepository, handler: Arc<dyn TaskHandler>, task: ClaimedTask) {
+    let started = Instant::now();
     let kind = task.kind;
+    gauge!("catalog_task_worker_tasks_in_flight", "kind" => kind.as_str()).increment(1.0);
     let lease_duration = kind.policy().lease_duration;
     let heartbeat_every = lease_duration
         .checked_div(3)
@@ -241,6 +248,8 @@ async fn execute(repository: CatalogRepository, handler: Arc<dyn TaskHandler>, t
                     counter!("catalog_tasks_total", "kind" => kind.as_str(), "outcome" => "lease_lost").increment(1);
                     tracing::warn!(task_id = %task.id, kind = %kind, error = %error, "task heartbeat lost its lease");
                     handler.on_lease_lost(task.clone()).await;
+                    histogram!("catalog_task_worker_task_duration_seconds", "kind" => kind.as_str(), "outcome" => "lease_lost").record(started.elapsed().as_secs_f64());
+                    gauge!("catalog_task_worker_tasks_in_flight", "kind" => kind.as_str()).decrement(1.0);
                     return;
                 }
             }
@@ -294,17 +303,22 @@ async fn execute(repository: CatalogRepository, handler: Arc<dyn TaskHandler>, t
                 })
         }
     };
-    match result {
+    let metric_outcome = match result {
         Ok(outcome) => {
             counter!("catalog_tasks_total", "kind" => kind.as_str(), "outcome" => outcome)
-                .increment(1)
+                .increment(1);
+            outcome
         }
         Err(error) => {
             counter!("catalog_tasks_total", "kind" => kind.as_str(), "outcome" => "lease_lost")
                 .increment(1);
             tracing::warn!(task_id = %task.id, kind = %kind, error = %error, "task outcome could not be committed");
+            "lease_lost"
         }
-    }
+    };
+    histogram!("catalog_task_worker_task_duration_seconds", "kind" => kind.as_str(), "outcome" => metric_outcome)
+        .record(started.elapsed().as_secs_f64());
+    gauge!("catalog_task_worker_tasks_in_flight", "kind" => kind.as_str()).decrement(1.0);
 }
 
 #[cfg(test)]

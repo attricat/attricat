@@ -244,6 +244,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         &mail_from,
         std::env::var("SMTP_USERNAME").ok(),
         std::env::var("SMTP_PASSWORD").ok(),
+        &std::env::var("SMTP_TLS_MODE").unwrap_or_else(|_| "starttls".to_owned()),
     )?);
     let official_registry = std::env::var("EXTENSION_OFFICIAL_REGISTRY")
         .unwrap_or_else(|_| DEFAULT_OFFICIAL_REGISTRY.to_owned())

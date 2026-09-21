@@ -8,6 +8,14 @@ use crate::model::{
 };
 
 impl CatalogRepository {
+    /// Performs a bounded, side-effect-free database dependency probe for the
+    /// API readiness endpoint. This is intentionally separate from liveness:
+    /// a live process with an unavailable database must not receive traffic.
+    pub async fn readiness(&self) -> Result<(), RepositoryError> {
+        sqlx::query("SELECT 1").execute(&self.pool).await?;
+        Ok(())
+    }
+
     pub async fn data_health_summary(
         &self,
         stale_after_days: i64,
