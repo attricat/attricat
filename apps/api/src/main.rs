@@ -1,4 +1,4 @@
-use std::{net::SocketAddr, str::FromStr, sync::Arc};
+use std::{net::SocketAddr, str::FromStr, sync::Arc, time::Instant};
 
 use api::{
     MIGRATOR, agent_worker,
@@ -18,7 +18,7 @@ use api::{
     file_access::AllowFileAccess,
     http::{AppState, router},
     mail::SmtpMailDelivery,
-    repository::CatalogRepository,
+    repository::{CatalogRepository, ValueHistoryRetentionDays},
     rule_runtime,
     storage::{ObjectStore, S3ObjectStore, StorageConfig},
     task_worker::{self, TaskHandlerRegistry, TaskWorkerConfig},
@@ -34,6 +34,13 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     dotenvy::dotenv().ok();
     init_tracing("attricat-api")?;
     let metrics = init_metrics()?;
+    // Validate this before establishing a maintenance connection. The cleanup
+    // API accepts only this positive domain type, preventing zero/negative
+    // configuration from reaching its destructive DELETE.
+    let history_retention_days = std::env::var("ATTRIBUTE_VALUE_HISTORY_RETENTION_DAYS")
+        .unwrap_or_else(|_| "90".to_owned())
+        .parse::<ValueHistoryRetentionDays>()
+        .map_err(|error| format!("ATTRIBUTE_VALUE_HISTORY_RETENTION_DAYS {error}"))?;
     let agent_provider = AgentProviderConfig::from_env()
         .map_err(|error| format!("invalid agent provider configuration: {error}"))?;
     if agent_provider.is_some() {
@@ -163,12 +170,41 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
             .ensure_bootstrap_local_password(&email, password)
             .await?;
     }
-    let history_retention_days = std::env::var("ATTRIBUTE_VALUE_HISTORY_RETENTION_DAYS")
-        .unwrap_or_else(|_| "90".to_owned())
-        .parse()?;
-    CatalogRepository::new(maintenance_pool.clone())
+    let cleanup_started = Instant::now();
+    match CatalogRepository::new(maintenance_pool.clone())
         .purge_value_history(history_retention_days)
-        .await?;
+        .await
+    {
+        Ok(deleted_entries) => {
+            let elapsed_seconds = cleanup_started.elapsed().as_secs_f64();
+            metrics::counter!("catalog_value_history_cleanup_total", "outcome" => "success")
+                .increment(1);
+            metrics::counter!("catalog_value_history_entries_purged_total")
+                .increment(deleted_entries);
+            metrics::histogram!("catalog_value_history_cleanup_duration_seconds")
+                .record(elapsed_seconds);
+            tracing::info!(
+                retention_days = history_retention_days.get(),
+                deleted_entries,
+                elapsed_seconds,
+                "attribute value history cleanup completed"
+            );
+        }
+        Err(error) => {
+            let elapsed_seconds = cleanup_started.elapsed().as_secs_f64();
+            metrics::counter!("catalog_value_history_cleanup_total", "outcome" => "failed")
+                .increment(1);
+            metrics::histogram!("catalog_value_history_cleanup_duration_seconds")
+                .record(elapsed_seconds);
+            tracing::error!(
+                retention_days = history_retention_days.get(),
+                elapsed_seconds,
+                error = %error,
+                "attribute value history cleanup failed; refusing to report successful startup maintenance"
+            );
+            return Err(format!("attribute value history cleanup failed: {error}").into());
+        }
+    }
     maintenance_pool.close().await;
 
     // Public authentication uses this unscoped pool. Authorization creates a

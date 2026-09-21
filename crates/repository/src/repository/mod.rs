@@ -1,5 +1,7 @@
 use std::{
     collections::{HashMap, HashSet},
+    num::NonZeroI64,
+    str::FromStr,
     sync::Arc,
 };
 
@@ -179,6 +181,63 @@ struct WorkspacePoolCache {
 }
 
 const MAX_WORKSPACE_POOLS: usize = 32;
+
+/// A retention interval that is safe to pass to destructive history cleanup.
+///
+/// Construction rejects zero, negative, malformed, and signed-integer-overflow
+/// values, so callers cannot accidentally turn retention cleanup into a purge
+/// of current history.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct ValueHistoryRetentionDays(NonZeroI64);
+
+impl ValueHistoryRetentionDays {
+    pub const fn get(self) -> i64 {
+        self.0.get()
+    }
+}
+
+impl FromStr for ValueHistoryRetentionDays {
+    type Err = &'static str;
+
+    fn from_str(value: &str) -> Result<Self, Self::Err> {
+        value
+            .parse::<i64>()
+            .ok()
+            .and_then(NonZeroI64::new)
+            .filter(|days| days.get() > 0)
+            .map(Self)
+            .ok_or("must be a positive integer")
+    }
+}
+
+#[cfg(test)]
+mod value_history_retention_days_tests {
+    use super::ValueHistoryRetentionDays;
+
+    #[test]
+    fn accepts_the_positive_i64_bounds() {
+        assert_eq!("1".parse::<ValueHistoryRetentionDays>().unwrap().get(), 1);
+        assert_eq!(
+            i64::MAX
+                .to_string()
+                .parse::<ValueHistoryRetentionDays>()
+                .unwrap()
+                .get(),
+            i64::MAX
+        );
+    }
+
+    #[test]
+    fn rejects_zero_negative_malformed_and_overflow_values() {
+        for value in ["0", "-1", "not-a-number", "9223372036854775808"] {
+            assert_eq!(
+                value.parse::<ValueHistoryRetentionDays>().unwrap_err(),
+                "must be a positive integer",
+                "{value} must not enable destructive cleanup"
+            );
+        }
+    }
+}
 
 #[derive(Debug, Error)]
 pub enum RepositoryError {
@@ -662,14 +721,21 @@ impl CatalogRepository {
         Ok(())
     }
 
-    pub async fn purge_value_history(&self, retention_days: i64) -> Result<(), RepositoryError> {
-        sqlx::query(
+    /// Removes only history older than a validated positive retention interval.
+    ///
+    /// A single `DELETE` is atomic: if it fails, PostgreSQL rolls it back and
+    /// callers receive an error rather than treating maintenance as successful.
+    pub async fn purge_value_history(
+        &self,
+        retention_days: ValueHistoryRetentionDays,
+    ) -> Result<u64, RepositoryError> {
+        Ok(sqlx::query(
             "DELETE FROM attribute_value_history WHERE archived_at < now() - ($1 * interval '1 day')",
         )
-        .bind(retention_days)
+        .bind(retention_days.get())
         .execute(&self.pool)
-        .await?;
-        Ok(())
+        .await?
+        .rows_affected())
     }
 
     pub fn with_audit_context(mut self, audit_context: AuditContext) -> Self {
