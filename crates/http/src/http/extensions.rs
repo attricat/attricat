@@ -758,6 +758,63 @@ pub(super) async fn storage(
     Ok(Json(response))
 }
 
+/// Downloads a completed operation artifact through workspace authorization.
+/// The object key is resolved only after the repository scopes the run and
+/// artifact to the signed-in workspace; it is never returned to callers.
+pub(super) async fn download_operation_artifact(
+    State(state): State<AppState>,
+    ScopedRepository(repository): ScopedRepository,
+    Path((run_id, artifact_id)): Path<(Uuid, Uuid)>,
+) -> Result<Response, ApiError> {
+    let artifact = repository
+        .completed_extension_operation_artifact(run_id, artifact_id)
+        .await?;
+    let key = artifact
+        .object_key
+        .ok_or_else(|| ApiError::not_found("completed operation artifact"))?;
+    let object = state
+        .object_store
+        .get_stream(&key)
+        .await
+        .map_err(|error| match error {
+            ObjectStoreError::Unavailable | ObjectStoreError::TimedOut(_) => {
+                ApiError::service_unavailable("operation artifact storage is unavailable")
+            }
+            ObjectStoreError::Operation(_) => {
+                ApiError::internal("operation artifact could not be loaded")
+            }
+        })?;
+    let mut response = Response::new(Body::from_stream(object.stream));
+    let headers = response.headers_mut();
+    headers.insert(
+        header::CONTENT_TYPE,
+        HeaderValue::from_str(&artifact.media_type)
+            .map_err(|_| ApiError::internal("stored operation artifact media type is invalid"))?,
+    );
+    headers.insert(
+        header::CONTENT_LENGTH,
+        HeaderValue::from_str(&artifact.content_length.to_string())
+            .expect("non-negative artifact length"),
+    );
+    headers.insert(
+        header::ETAG,
+        HeaderValue::from_str(&format!(
+            "\"{}\"",
+            artifact.checksum_sha256.unwrap_or_default()
+        ))
+        .expect("checksum is a valid header"),
+    );
+    headers.insert(
+        header::CACHE_CONTROL,
+        HeaderValue::from_static("private, immutable"),
+    );
+    headers.insert(
+        header::X_CONTENT_TYPE_OPTIONS,
+        HeaderValue::from_static("nosniff"),
+    );
+    Ok(response)
+}
+
 pub(super) async fn artifact(
     State(state): State<AppState>,
     ScopedRepository(repository): ScopedRepository,

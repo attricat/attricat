@@ -330,6 +330,10 @@ pub fn router(state: AppState) -> Router {
             get(extensions::list_operation_runs),
         )
         .route(
+            "/extension-operation-runs/{run_id}/artifacts/{artifact_id}/download",
+            get(extensions::download_operation_artifact),
+        )
+        .route(
             "/extension-operation-runs/{id}/cancel",
             post(extensions::cancel_operation),
         )

@@ -7,6 +7,9 @@
 
 use std::{
     collections::{HashMap, VecDeque},
+    fs::{File, OpenOptions},
+    io::Write,
+    path::PathBuf,
     sync::{Arc, Mutex},
     time::Duration,
 };
@@ -15,12 +18,13 @@ use async_trait::async_trait;
 use semver::{Version, VersionReq};
 use serde::Deserialize;
 use serde_json::{Value, json};
+use sha2::{Digest, Sha256};
 use thiserror::Error;
 use tokio::sync::watch;
 use uuid::Uuid;
 use wasmtime::{
     Config, Engine, Store, StoreLimits, StoreLimitsBuilder,
-    component::{Component, HasSelf, Linker},
+    component::{Component, HasSelf, Linker, Resource, ResourceTable},
 };
 
 use crate::{
@@ -33,6 +37,7 @@ use crate::{
     },
     model::{AppendAttributeValues, NewAttributeValue},
     repository::ClaimedTask,
+    repository::ExtensionOperationArtifact,
     repository::{CatalogRepository, ExtensionConfigurationScope, ExtensionRuntimeInstallation},
     storage::{ObjectStore, ObjectStoreError},
     task_queue::TaskKind,
@@ -49,6 +54,11 @@ mod host_operations {
     wasmtime::component::bindgen!({
         path: "wit-operations",
         world: "catalog-extension-operation",
+        with: {
+            "catalog:host/artifacts.input-artifact": crate::extension_runtime::InputArtifactStream,
+            "catalog:host/artifacts.output-artifact": crate::extension_runtime::OutputArtifactStream,
+        },
+        imports: { default: async },
         exports: { default: async },
     });
 }
@@ -234,6 +244,7 @@ impl ExtensionRuntime {
     async fn invoke_operation_batch(
         &self,
         installation: &ExtensionRuntimeInstallation,
+        repository: CatalogRepository,
         run_id: uuid::Uuid,
         operation_handler: &str,
         configuration: &Value,
@@ -258,7 +269,13 @@ impl ExtensionRuntime {
         };
         let mut store = Store::new(
             &self.engine,
-            OperationState::new(self.config.max_memory_bytes),
+            OperationState::new(
+                self.config.max_memory_bytes,
+                installation.clone(),
+                repository.clone(),
+                self.object_store.clone(),
+                run_id,
+            ),
         );
         store.limiter(|state| &mut state.limits);
         store
@@ -268,7 +285,12 @@ impl ExtensionRuntime {
             (self.config.invocation_timeout.as_millis() / EPOCH_TICK_INTERVAL.as_millis()).max(1)
                 as u64,
         );
-        let linker = Linker::new(&self.engine);
+        let mut linker = Linker::new(&self.engine);
+        host_operations::CatalogExtensionOperation::add_to_linker::<
+            OperationState,
+            HasSelf<OperationState>,
+        >(&mut linker, |state| state)
+        .map_err(|error| ExtensionRuntimeError::Runtime(error.to_string()))?;
         let bindings = host_operations::CatalogExtensionOperation::instantiate_async(
             &mut store, &component, &linker,
         )
@@ -523,19 +545,80 @@ fn to_wit_event(event: &DomainEvent) -> catalog::host::api::Event {
     }
 }
 
-#[derive(Clone)]
+const MAX_ARTIFACT_CHUNK_BYTES: usize = 64 * 1024;
+
+pub struct InputArtifactStream {
+    artifact: ExtensionOperationArtifact,
+    offset: i64,
+}
+
+pub struct OutputArtifactStream {
+    artifact: ExtensionOperationArtifact,
+    path: PathBuf,
+    hasher: Sha256,
+}
+
 struct OperationState {
     limits: StoreLimits,
+    installation: ExtensionRuntimeInstallation,
+    repository: CatalogRepository,
+    object_store: Arc<dyn ObjectStore>,
+    run_id: Uuid,
+    artifacts: ResourceTable,
 }
 
 impl OperationState {
-    fn new(max_memory_bytes: usize) -> Self {
+    fn new(
+        max_memory_bytes: usize,
+        installation: ExtensionRuntimeInstallation,
+        repository: CatalogRepository,
+        object_store: Arc<dyn ObjectStore>,
+        run_id: Uuid,
+    ) -> Self {
         Self {
             limits: StoreLimitsBuilder::new()
                 .memory_size(max_memory_bytes)
                 .build(),
+            installation,
+            repository,
+            object_store,
+            run_id,
+            artifacts: ResourceTable::new(),
         }
     }
+
+    fn require(&self, capability: &str) -> Result<(), String> {
+        if self.installation.capability_grants.contains(capability) {
+            Ok(())
+        } else {
+            Err(format!("missing capability '{capability}'"))
+        }
+    }
+
+    fn artifact_access(
+        &self,
+        capability: &str,
+    ) -> Result<(CatalogRepository, String, Uuid), String> {
+        self.require(capability)?;
+        Ok((
+            self.repository.clone(),
+            self.installation.extension_id.clone(),
+            self.installation.installed_release_id,
+        ))
+    }
+}
+
+async fn ensure_operation_artifact_access(
+    repository: CatalogRepository,
+    extension_id: String,
+    release_id: Uuid,
+) -> Result<(), String> {
+    repository
+        .runtime_extension_installation(&extension_id, release_id)
+        .await
+        .map_err(|_| "extension authorization could not be checked")?
+        .ok_or_else(|| "extension invocation is no longer authorized".to_owned())?;
+    Ok(())
 }
 
 #[derive(Clone)]
@@ -989,6 +1072,18 @@ impl TaskHandler for ExtensionOperationTaskHandler {
                 code: "workspace",
                 message: e.to_string(),
             })?;
+        // Abandoned streams are temporary only. Completed artifacts are never
+        // selected by this cleanup path and therefore remain immutable.
+        for key in repository
+            .abort_stale_extension_operation_artifacts()
+            .await
+            .map_err(|error| TaskHandlerError {
+                code: "operation",
+                message: error.to_string(),
+            })?
+        {
+            let _ = self.runtime.object_store.delete(&key).await;
+        }
         let Some(run) = repository
             .begin_extension_operation_task(&task)
             .await
@@ -1032,6 +1127,7 @@ impl TaskHandler for ExtensionOperationTaskHandler {
             .runtime
             .invoke_operation_batch(
                 &installation,
+                repository.clone(),
                 run.id,
                 &run.operation_handler,
                 &run.configuration,
@@ -1076,6 +1172,7 @@ impl TaskHandler for ExtensionOperationTaskHandler {
                 self.runtime
                     .invoke_operation_batch(
                         &installation,
+                        repository.clone(),
                         run.id,
                         &run.operation_handler,
                         &run.configuration,
@@ -1269,6 +1366,10 @@ pub fn start_event_delivery_coordinator(
             for workspace_id in repository.active_workspace_ids().await.unwrap_or_default() {
                 let result = async {
                     let scoped = repository.for_workspace(workspace_id).await?;
+                    // Incomplete operation output has no committed object key;
+                    // this periodic lifecycle sweep makes interrupted streams
+                    // unavailable even when no subsequent operation task runs.
+                    scoped.abort_stale_extension_operation_artifacts().await?;
                     scoped
                         .ensure_event_consumer("catalog.extensions.wasm", &[])
                         .await?;
@@ -1292,13 +1393,27 @@ pub fn start_event_delivery_coordinator(
 
 #[cfg(test)]
 mod tests {
-    use super::{host_v11, parse_bounded_json, to_configuration_scope, uses_v11};
+    use sha2::{Digest, Sha256};
+
+    use super::{
+        MAX_ARTIFACT_CHUNK_BYTES, host_v11, parse_bounded_json, to_configuration_scope, uses_v11,
+    };
 
     #[test]
     fn selects_an_explicit_abi_without_upgrading_v1_ranges() {
         assert!(!uses_v11("^1.0"));
         assert!(uses_v11(">=1.1.0, <2.0.0"));
         assert!(!uses_v11(">=1.0.0, <2.0.0"));
+    }
+
+    #[test]
+    fn artifact_stream_contract_keeps_chunks_and_checksums_bounded() {
+        assert_eq!(MAX_ARTIFACT_CHUNK_BYTES, 64 * 1024);
+        assert!(MAX_ARTIFACT_CHUNK_BYTES <= super::MAX_HOST_JSON_BYTES);
+        assert_eq!(
+            format!("{:x}", Sha256::digest(b"bounded output")),
+            "d047501029296dac4c1be5e22f05ff7229244184357ac63424d75339009a77e3"
+        );
     }
 
     #[test]
@@ -1314,5 +1429,236 @@ mod tests {
             })
             .is_err()
         );
+    }
+}
+
+impl host_operations::catalog::host::artifacts::Host for OperationState {
+    async fn open_input(
+        &mut self,
+        artifact_id: String,
+    ) -> Result<Resource<InputArtifactStream>, String> {
+        let (repository, extension_id, release_id) = self.artifact_access("artifacts.read")?;
+        ensure_operation_artifact_access(repository, extension_id, release_id).await?;
+        let artifact_id = artifact_id
+            .parse()
+            .map_err(|_| "invalid artifact handle".to_owned())?;
+        let artifact = self
+            .repository
+            .extension_operation_input_artifact(
+                self.run_id,
+                &self.installation.extension_id,
+                self.installation.installed_release_id,
+                artifact_id,
+            )
+            .await
+            .map_err(|_| "operation input artifact is not authorized".to_owned())?;
+        self.artifacts
+            .push(InputArtifactStream {
+                artifact,
+                offset: 0,
+            })
+            .map_err(|_| "artifact handle limit reached".to_owned())
+    }
+
+    async fn describe_input(
+        &mut self,
+        handle: Resource<InputArtifactStream>,
+    ) -> Result<host_operations::catalog::host::artifacts::InputMetadata, String> {
+        let (repository, extension_id, release_id) = self.artifact_access("artifacts.read")?;
+        ensure_operation_artifact_access(repository, extension_id, release_id).await?;
+        let artifact = self
+            .artifacts
+            .get(&handle)
+            .map_err(|_| "invalid artifact handle".to_owned())?;
+        Ok(host_operations::catalog::host::artifacts::InputMetadata {
+            content_length: artifact.artifact.content_length as u64,
+            media_type: artifact.artifact.media_type.clone(),
+            checksum_sha256: artifact
+                .artifact
+                .checksum_sha256
+                .clone()
+                .unwrap_or_default(),
+        })
+    }
+
+    async fn read(
+        &mut self,
+        handle: Resource<InputArtifactStream>,
+        max_bytes: u32,
+    ) -> Result<Vec<u8>, String> {
+        let (repository, extension_id, release_id) = self.artifact_access("artifacts.read")?;
+        ensure_operation_artifact_access(repository, extension_id, release_id).await?;
+        let max_bytes =
+            usize::try_from(max_bytes).map_err(|_| "invalid artifact chunk".to_owned())?;
+        if max_bytes == 0 || max_bytes > MAX_ARTIFACT_CHUNK_BYTES {
+            return Err("artifact read chunk exceeds limit".into());
+        }
+        let (key, offset, length) = {
+            let stream = self
+                .artifacts
+                .get(&handle)
+                .map_err(|_| "invalid artifact handle".to_owned())?;
+            (
+                stream
+                    .artifact
+                    .object_key
+                    .clone()
+                    .ok_or_else(|| "artifact is unavailable".to_owned())?,
+                stream.offset,
+                stream.artifact.content_length,
+            )
+        };
+        if offset >= length {
+            return Ok(Vec::new());
+        }
+        let end = (offset + max_bytes as i64 - 1).min(length - 1);
+        let object = self
+            .object_store
+            .get_range(&key, Some(&format!("bytes={offset}-{end}")))
+            .await
+            .map_err(|_| "artifact storage is unavailable".to_owned())?;
+        if object.bytes.len() > max_bytes {
+            return Err("artifact storage returned oversized chunk".into());
+        }
+        let bytes = object.bytes.to_vec();
+        self.artifacts
+            .get_mut(&handle)
+            .map_err(|_| "invalid artifact handle".to_owned())?
+            .offset += bytes.len() as i64;
+        Ok(bytes)
+    }
+
+    async fn create_output(
+        &mut self,
+        media_type: String,
+    ) -> Result<Resource<OutputArtifactStream>, String> {
+        let (repository, extension_id, release_id) = self.artifact_access("artifacts.write")?;
+        ensure_operation_artifact_access(repository, extension_id, release_id).await?;
+        let artifact = self
+            .repository
+            .create_extension_operation_output_artifact(
+                self.run_id,
+                &self.installation.extension_id,
+                self.installation.installed_release_id,
+                &media_type,
+            )
+            .await
+            .map_err(|_| "operation artifact quota exhausted".to_owned())?;
+        let path = std::env::temp_dir().join(format!("catalog-operation-artifact-{}", artifact.id));
+        File::create(&path).map_err(|_| "temporary artifact storage is unavailable".to_owned())?;
+        self.artifacts
+            .push(OutputArtifactStream {
+                artifact,
+                path,
+                hasher: Sha256::new(),
+            })
+            .map_err(|_| "artifact handle limit reached".to_owned())
+    }
+
+    async fn write(
+        &mut self,
+        handle: Resource<OutputArtifactStream>,
+        bytes: Vec<u8>,
+    ) -> Result<(), String> {
+        let (repository, extension_id, release_id) = self.artifact_access("artifacts.write")?;
+        ensure_operation_artifact_access(repository, extension_id, release_id).await?;
+        if bytes.is_empty() || bytes.len() > MAX_ARTIFACT_CHUNK_BYTES {
+            return Err("artifact write chunk exceeds limit".into());
+        }
+        let artifact_id = self
+            .artifacts
+            .get(&handle)
+            .map_err(|_| "invalid artifact handle".to_owned())?
+            .artifact
+            .id;
+        self.repository
+            .reserve_extension_operation_artifact_bytes(
+                artifact_id,
+                self.run_id,
+                bytes.len() as i64,
+            )
+            .await
+            .map_err(|_| "operation artifact quota exhausted".to_owned())?;
+        let output = self
+            .artifacts
+            .get_mut(&handle)
+            .map_err(|_| "invalid artifact handle".to_owned())?;
+        OpenOptions::new()
+            .append(true)
+            .open(&output.path)
+            .and_then(|mut file| file.write_all(&bytes))
+            .map_err(|_| "temporary artifact storage is unavailable".to_owned())?;
+        output.hasher.update(&bytes);
+        Ok(())
+    }
+
+    async fn complete(
+        &mut self,
+        handle: Resource<OutputArtifactStream>,
+        checksum_sha256: String,
+    ) -> Result<host_operations::catalog::host::artifacts::OutputMetadata, String> {
+        let (repository, extension_id, release_id) = self.artifact_access("artifacts.write")?;
+        ensure_operation_artifact_access(repository, extension_id, release_id).await?;
+        let output = self
+            .artifacts
+            .delete(handle)
+            .map_err(|_| "invalid artifact handle".to_owned())?;
+        let actual = format!("{:x}", output.hasher.finalize());
+        if checksum_sha256 != actual {
+            let _ = self
+                .repository
+                .abort_extension_operation_artifact(output.artifact.id, self.run_id)
+                .await;
+            let _ = std::fs::remove_file(&output.path);
+            return Err("artifact checksum mismatch".into());
+        }
+        let key = format!("extension-operation-artifacts/{}", output.artifact.id);
+        self.object_store
+            .put_file(&key, &output.path, Some(&output.artifact.media_type))
+            .await
+            .map_err(|_| "artifact storage is unavailable".to_owned())?;
+        let artifact = self
+            .repository
+            .complete_extension_operation_artifact(output.artifact.id, self.run_id, &actual, &key)
+            .await
+            .map_err(|_| "operation output artifact is not completable".to_owned())?;
+        let _ = std::fs::remove_file(&output.path);
+        Ok(host_operations::catalog::host::artifacts::OutputMetadata {
+            artifact_id: artifact.id.to_string(),
+            content_length: artifact.content_length as u64,
+            media_type: artifact.media_type,
+            checksum_sha256: actual,
+        })
+    }
+
+    async fn abort(&mut self, handle: Resource<OutputArtifactStream>) -> Result<(), String> {
+        let (repository, extension_id, release_id) = self.artifact_access("artifacts.write")?;
+        ensure_operation_artifact_access(repository, extension_id, release_id).await?;
+        let output = self
+            .artifacts
+            .delete(handle)
+            .map_err(|_| "invalid artifact handle".to_owned())?;
+        self.repository
+            .abort_extension_operation_artifact(output.artifact.id, self.run_id)
+            .await
+            .map_err(|_| "operation output artifact could not be aborted".to_owned())?;
+        let _ = std::fs::remove_file(&output.path);
+        Ok(())
+    }
+}
+
+impl host_operations::catalog::host::artifacts::HostInputArtifact for OperationState {
+    async fn drop(&mut self, handle: Resource<InputArtifactStream>) -> wasmtime::Result<()> {
+        self.artifacts.delete(handle)?;
+        Ok(())
+    }
+}
+
+impl host_operations::catalog::host::artifacts::HostOutputArtifact for OperationState {
+    async fn drop(&mut self, handle: Resource<OutputArtifactStream>) -> wasmtime::Result<()> {
+        if let Ok(output) = self.artifacts.delete(handle) {
+            let _ = std::fs::remove_file(&output.path);
+        }
+        Ok(())
     }
 }

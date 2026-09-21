@@ -315,7 +315,16 @@ cancelling leased work invokes cooperative cancellation at the next batch.
 
 `POST /extensions/{extension_id}/operations` starts a run, while operators can
 list `GET /extension-operation-runs`, cancel a run, or replay only a dead-lettered
-run through its corresponding `cancel` and `replay` endpoints. Configuration,
+run through its corresponding `cancel` and `replay` endpoints. The v1.2 operation
+WIT also imports host-managed `artifacts` resources. Releases need explicit
+`artifacts.read` and/or `artifacts.write` grants. Components open only run-bound
+approved inputs, read or write at most 64 KiB per call, and exchange opaque
+resource handles rather than object keys. Output content is staged locally under
+the bounded artifact/run/workspace quotas, committed only after its SHA-256
+matches the supplied checksum, and then becomes immutable. Completed output is
+available only to an authorized workspace operator at
+`GET /extension-operation-runs/{run_id}/artifacts/{artifact_id}/download`; failed,
+aborted, and abandoned temporary output is not downloadable and is cleaned up. Configuration,
 input, source/destination references, and checkpoints are never returned by the
 management API or written to audit metadata. Configuration and diagnostics are
 redacted before management-visible persistence; secret-, credential-, password-,

@@ -40,6 +40,7 @@ mod entity_migration;
 mod entity_projection;
 mod entity_publications;
 mod entity_search;
+mod extension_operation_artifacts;
 mod extension_operations;
 mod extension_registries;
 mod extension_scoped_configuration;
@@ -68,6 +69,7 @@ pub use domain_events::{EventConsumer, EventDelivery, EventPublisher, FailedEven
 pub use entity_search::{
     EntityRelationshipFilter, EntitySearchFilter, EntitySearchSort, decode_search_cursor,
 };
+pub use extension_operation_artifacts::{ExtensionOperationArtifact, MAX_OPERATION_ARTIFACT_BYTES};
 pub use extension_operations::{
     ClaimedExtensionOperationRun, ExtensionOperationRun, StartExtensionOperation,
 };

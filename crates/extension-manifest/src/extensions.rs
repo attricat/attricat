@@ -35,6 +35,8 @@ pub const CAPABILITIES: &[&str] = &[
     "events.subscribe",
     "events.emit",
     "storage.extension",
+    "artifacts.read",
+    "artifacts.write",
     "configuration.read",
     "configuration.write",
     "client.commands",
