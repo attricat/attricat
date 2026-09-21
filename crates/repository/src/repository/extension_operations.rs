@@ -206,6 +206,7 @@ impl CatalogRepository {
             ));
         }
 
+        let source_reference = input.source_reference.clone();
         let id = Uuid::new_v4();
         let inserted: Option<Uuid> = sqlx::query_scalar(
             "INSERT INTO extension_operation_runs(id,workspace_id,extension_id,installed_release_id,abi_version,operation_id,actor_user_id,actor_token_id,configuration_snapshot,input,source_reference,destination_reference,idempotency_key) VALUES($1,$2,$3,$4,'1.2.0',$5,$6,$7,$8,$9,$10,$11,$12) ON CONFLICT(workspace_id,extension_id,installed_release_id,operation_id,idempotency_key) DO NOTHING RETURNING id",
@@ -225,6 +226,14 @@ impl CatalogRepository {
         .fetch_optional(&mut *transaction)
         .await?;
         if let Some(run_id) = inserted {
+            self.attach_extension_operation_input_file(
+                &mut transaction,
+                run_id,
+                &input.extension_id,
+                release,
+                &source_reference,
+            )
+            .await?;
             self.enqueue_extension_operation_task(&mut transaction, run_id)
                 .await?;
             transaction.commit().await?;

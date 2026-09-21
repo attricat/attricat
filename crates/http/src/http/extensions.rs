@@ -722,7 +722,10 @@ pub(super) async fn command(
             command.max_response_bytes,
         )
         .await
-        .map_err(|_| ApiError::service_unavailable("extension command failed"))?;
+        .map_err(|_| {
+            tracing::warn!(extension = %extension_id, command = %command.id, "extension command failed");
+            ApiError::service_unavailable("extension command failed")
+        })?;
     let response: Value = serde_json::from_str(&response)
         .map_err(|_| ApiError::service_unavailable("extension command returned invalid JSON"))?;
     validate_schema(&command.response_schema, &response)

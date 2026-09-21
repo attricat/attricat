@@ -52,7 +52,7 @@ wasmtime::component::bindgen!({
 });
 mod host_operations {
     wasmtime::component::bindgen!({
-        path: "wit-operations",
+        path: "wit-artifacts",
         world: "catalog-extension-operation",
         with: {
             "catalog:host/artifacts.input-artifact": crate::extension_runtime::InputArtifactStream,
@@ -1439,16 +1439,13 @@ impl host_operations::catalog::host::artifacts::Host for OperationState {
     ) -> Result<Resource<InputArtifactStream>, String> {
         let (repository, extension_id, release_id) = self.artifact_access("artifacts.read")?;
         ensure_operation_artifact_access(repository, extension_id, release_id).await?;
-        let artifact_id = artifact_id
-            .parse()
-            .map_err(|_| "invalid artifact handle".to_owned())?;
         let artifact = self
             .repository
             .extension_operation_input_artifact(
                 self.run_id,
                 &self.installation.extension_id,
                 self.installation.installed_release_id,
-                artifact_id,
+                &artifact_id,
             )
             .await
             .map_err(|_| "operation input artifact is not authorized".to_owned())?;
@@ -1613,15 +1610,38 @@ impl host_operations::catalog::host::artifacts::Host for OperationState {
             return Err("artifact checksum mismatch".into());
         }
         let key = format!("extension-operation-artifacts/{}", output.artifact.id);
-        self.object_store
+        if self
+            .object_store
             .put_file(&key, &output.path, Some(&output.artifact.media_type))
             .await
-            .map_err(|_| "artifact storage is unavailable".to_owned())?;
-        let artifact = self
+            .is_err()
+        {
+            let _ = self
+                .repository
+                .abort_extension_operation_artifact(output.artifact.id, self.run_id)
+                .await;
+            let _ = std::fs::remove_file(&output.path);
+            return Err("artifact storage is unavailable".into());
+        }
+        let artifact = match self
             .repository
             .complete_extension_operation_artifact(output.artifact.id, self.run_id, &actual, &key)
             .await
-            .map_err(|_| "operation output artifact is not completable".to_owned())?;
+        {
+            Ok(artifact) => artifact,
+            Err(_) => {
+                // An object write can succeed before its database completion
+                // transaction. Delete that orphan before returning; the
+                // incomplete row is also terminalized so retry cannot expose it.
+                let _ = self.object_store.delete(&key).await;
+                let _ = self
+                    .repository
+                    .abort_extension_operation_artifact(output.artifact.id, self.run_id)
+                    .await;
+                let _ = std::fs::remove_file(&output.path);
+                return Err("operation output artifact is not completable".into());
+            }
+        };
         let _ = std::fs::remove_file(&output.path);
         Ok(host_operations::catalog::host::artifacts::OutputMetadata {
             artifact_id: artifact.id.to_string(),
@@ -1657,6 +1677,13 @@ impl host_operations::catalog::host::artifacts::HostInputArtifact for OperationS
 impl host_operations::catalog::host::artifacts::HostOutputArtifact for OperationState {
     async fn drop(&mut self, handle: Resource<OutputArtifactStream>) -> wasmtime::Result<()> {
         if let Ok(output) = self.artifacts.delete(handle) {
+            // Resource destruction is the normal trap/unwind cleanup path.
+            // It must terminalize the durable record immediately rather than
+            // relying solely on the periodic abandoned-stream sweep.
+            let _ = self
+                .repository
+                .abort_extension_operation_artifact(output.artifact.id, self.run_id)
+                .await;
             let _ = std::fs::remove_file(&output.path);
         }
         Ok(())

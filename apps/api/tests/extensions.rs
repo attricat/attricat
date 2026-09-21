@@ -1583,3 +1583,331 @@ async fn lifecycle_installs_validated_archive_artifacts_and_retains_history(pool
         0
     );
 }
+
+#[sqlx::test(migrations = "./migrations")]
+async fn operation_artifacts_are_run_scoped_quota_bound_cleaned_and_downloadable(
+    pool: sqlx::PgPool,
+) {
+    use api::{
+        repository::{MAX_OPERATION_ARTIFACT_BYTES, StartExtensionOperation},
+        storage::StoredObject,
+    };
+    use catalog_domain::task_queue::TaskKind;
+    use sha2::{Digest, Sha256};
+    use std::time::Duration;
+
+    let workspace = Uuid::from_u128(0x00000000000040008000000000000002);
+    let repository = CatalogRepository::system(pool.clone())
+        .for_workspace(workspace)
+        .await
+        .unwrap();
+    let store = Arc::new(FakeObjectStore::available());
+    ExtensionInstaller::new(repository.clone(), store.clone())
+        .install(
+            "test",
+            &operation_release_archive("acme.artifact-operation"),
+        )
+        .await
+        .unwrap();
+    repository
+        .enable_extension("acme.artifact-operation")
+        .await
+        .unwrap();
+    let release_id = repository
+        .installed_extension("acme.artifact-operation")
+        .await
+        .unwrap()
+        .installed_release_id;
+
+    // Durable operation creation, not component JSON, attaches the only
+    // approved input source. The file key remains a server-only field.
+    let file_id = Uuid::new_v4();
+    // It is deliberately larger than the JSON/WIT chunk bound; only metadata
+    // crosses operation creation and the component reads it incrementally.
+    let input = vec![b'x'; 64 * 1024 + 1];
+    sqlx::query("INSERT INTO files(id,workspace_id,original_filename,display_filename,mime_type,byte_size,sha256,original_key,status) VALUES($1,$2,'input.csv','input.csv','text/csv',$3,$4,'files/approved-input','ready')")
+        .bind(file_id).bind(workspace).bind(input.len() as i64).bind(format!("{:x}", Sha256::digest(&input))).execute(&pool).await.unwrap();
+    let run_id = repository
+        .start_extension_operation(StartExtensionOperation {
+            extension_id: "acme.artifact-operation".into(),
+            expected_release_id: release_id,
+            operation_id: "import".into(),
+            input: json!({}),
+            source_reference: json!({"input_file_id": file_id}),
+            destination_reference: json!({}),
+            idempotency_key: "artifact-input".into(),
+        })
+        .await
+        .unwrap();
+    let claimed = repository
+        .claim_task_for_kinds(
+            "artifact-test",
+            Duration::from_secs(30),
+            &[TaskKind::ExtensionOperationRunV1],
+        )
+        .await
+        .unwrap()
+        .unwrap();
+    repository
+        .begin_extension_operation_task(&claimed)
+        .await
+        .unwrap()
+        .unwrap();
+    let input_artifact = repository
+        .extension_operation_input_artifact(run_id, "acme.artifact-operation", release_id, "source")
+        .await
+        .unwrap();
+    assert_eq!(input_artifact.content_length, input.len() as i64);
+    assert!(input_artifact.content_length > 64 * 1024);
+    assert_eq!(
+        input_artifact.object_key.as_deref(),
+        Some("files/approved-input")
+    );
+    // A worker restart reclaims the run and still resolves the durable input
+    // attachment; it never relies on an in-memory handle or file key.
+    sqlx::query("UPDATE tasks SET lease_until=clock_timestamp()-interval '1 second' WHERE id=$1")
+        .bind(claimed.id)
+        .execute(&pool)
+        .await
+        .unwrap();
+    let restarted = repository
+        .claim_task_for_kinds(
+            "artifact-restarted",
+            Duration::from_secs(30),
+            &[TaskKind::ExtensionOperationRunV1],
+        )
+        .await
+        .unwrap()
+        .unwrap();
+    repository
+        .begin_extension_operation_task(&restarted)
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(
+        repository
+            .extension_operation_input_artifact(
+                run_id,
+                "acme.artifact-operation",
+                release_id,
+                "source"
+            )
+            .await
+            .unwrap()
+            .id,
+        input_artifact.id
+    );
+
+    // A foreign workspace, random selector, and mismatched release cannot
+    // reuse a valid opaque handle or metadata record.
+    let foreign_workspace = Uuid::new_v4();
+    sqlx::query("INSERT INTO workspaces(id,slug,name,login_identifier) VALUES($1,$2,'Foreign',$3)")
+        .bind(foreign_workspace)
+        .bind(format!(
+            "foreign-{}",
+            &foreign_workspace.simple().to_string()[..8]
+        ))
+        .bind(format!(
+            "foreign-{}.local",
+            &foreign_workspace.simple().to_string()[..8]
+        ))
+        .execute(&pool)
+        .await
+        .unwrap();
+    let foreign = CatalogRepository::system(pool.clone())
+        .for_workspace(foreign_workspace)
+        .await
+        .unwrap();
+    assert!(
+        foreign
+            .extension_operation_input_artifact(
+                run_id,
+                "acme.artifact-operation",
+                release_id,
+                "source"
+            )
+            .await
+            .is_err()
+    );
+    assert!(
+        repository
+            .extension_operation_input_artifact(
+                run_id,
+                "acme.artifact-operation",
+                release_id,
+                &Uuid::new_v4().to_string()
+            )
+            .await
+            .is_err()
+    );
+    assert!(
+        repository
+            .create_extension_operation_output_artifact(
+                run_id,
+                "forged.extension",
+                release_id,
+                "text/csv"
+            )
+            .await
+            .is_err()
+    );
+
+    let output = repository
+        .create_extension_operation_output_artifact(
+            run_id,
+            "acme.artifact-operation",
+            release_id,
+            "text/csv",
+        )
+        .await
+        .unwrap();
+    // Quotas are enforced against persisted bytes rather than caller claims.
+    sqlx::query("UPDATE extension_operation_artifacts SET content_length=$2 WHERE id=$1")
+        .bind(output.id)
+        .bind(MAX_OPERATION_ARTIFACT_BYTES)
+        .execute(&pool)
+        .await
+        .unwrap();
+    assert!(
+        repository
+            .reserve_extension_operation_artifact_bytes(output.id, run_id, 1)
+            .await
+            .is_err()
+    );
+    assert!(
+        repository
+            .complete_extension_operation_artifact(
+                output.id,
+                run_id,
+                "not-a-checksum",
+                "private/key"
+            )
+            .await
+            .is_err()
+    );
+
+    // Interrupted output is terminalized by cleanup, while completed output is
+    // excluded even when old enough to be swept.
+    assert!(
+        repository
+            .abort_extension_operation_artifact(output.id, run_id)
+            .await
+            .unwrap()
+    );
+    let completed = repository
+        .create_extension_operation_output_artifact(
+            run_id,
+            "acme.artifact-operation",
+            release_id,
+            "text/csv",
+        )
+        .await
+        .unwrap();
+    let body = b"completed export";
+    repository
+        .reserve_extension_operation_artifact_bytes(completed.id, run_id, body.len() as i64)
+        .await
+        .unwrap();
+    let checksum = format!("{:x}", Sha256::digest(body));
+    let key = format!("extension-operation-artifacts/{}", completed.id);
+    store
+        .put(
+            &key,
+            StoredObject {
+                bytes: body.to_vec().into(),
+                content_type: Some("text/csv".into()),
+            },
+        )
+        .await
+        .unwrap();
+    repository
+        .complete_extension_operation_artifact(completed.id, run_id, &checksum, &key)
+        .await
+        .unwrap();
+    // Completion is immutable: neither a different checksum nor an object key
+    // can replace a committed output.
+    assert!(
+        repository
+            .complete_extension_operation_artifact(
+                completed.id,
+                run_id,
+                &checksum,
+                "replacement-key"
+            )
+            .await
+            .is_err()
+    );
+    assert!(
+        foreign
+            .completed_extension_operation_artifact(run_id, completed.id)
+            .await
+            .is_err()
+    );
+    sqlx::query("UPDATE extension_operation_artifacts SET updated_at=clock_timestamp()-interval '2 hours' WHERE id=$1")
+        .bind(completed.id).execute(&pool).await.unwrap();
+    assert!(
+        repository
+            .abort_stale_extension_operation_artifacts()
+            .await
+            .unwrap()
+            .is_empty()
+    );
+
+    let (base, server) = start_server_with_object_store(pool.clone(), store).await;
+    let response = authenticated_client()
+        .get(format!(
+            "{base}/extension-operation-runs/{run_id}/artifacts/{}/download",
+            completed.id
+        ))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(response.status(), reqwest::StatusCode::OK);
+    assert_eq!(
+        response.headers()[reqwest::header::ETAG],
+        format!("\"{checksum}\"")
+    );
+    assert_eq!(response.bytes().await.unwrap().as_ref(), body);
+    assert_eq!(
+        authenticated_client()
+            .get(format!(
+                "{base}/extension-operation-runs/{run_id}/artifacts/{}/download",
+                Uuid::new_v4()
+            ))
+            .send()
+            .await
+            .unwrap()
+            .status(),
+        reqwest::StatusCode::NOT_FOUND
+    );
+
+    // Cancellation leaves a temporary output non-downloadable until the
+    // resource/trap cleanup path aborts it; completed output above remains.
+    let interrupted = repository
+        .create_extension_operation_output_artifact(
+            run_id,
+            "acme.artifact-operation",
+            release_id,
+            "text/csv",
+        )
+        .await
+        .unwrap();
+    assert!(repository.cancel_extension_operation(run_id).await.unwrap());
+    assert!(
+        repository
+            .abort_extension_operation_artifact(interrupted.id, run_id)
+            .await
+            .unwrap()
+    );
+    assert_eq!(
+        sqlx::query_scalar::<_, String>(
+            "SELECT state FROM extension_operation_artifacts WHERE id=$1"
+        )
+        .bind(interrupted.id)
+        .fetch_one(&pool)
+        .await
+        .unwrap(),
+        "aborted"
+    );
+    server.abort();
+}

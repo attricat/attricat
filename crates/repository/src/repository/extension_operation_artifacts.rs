@@ -5,7 +5,8 @@
 //! metadata before it asks object storage for bytes.
 
 use chrono::{DateTime, Utc};
-use sqlx::FromRow;
+use serde_json::Value;
+use sqlx::{FromRow, Postgres, Transaction};
 use uuid::Uuid;
 
 use super::{CatalogRepository, RepositoryError};
@@ -36,6 +37,44 @@ fn artifact_error(message: &str) -> RepositoryError {
 }
 
 impl CatalogRepository {
+    /// Attaches a ready, workspace-owned Catalog file as this run's approved
+    /// input. `source_reference.input_file_id` is the only supported public
+    /// attachment shape; callers cannot supply an object key, checksum, or
+    /// arbitrary artifact metadata.
+    pub(crate) async fn attach_extension_operation_input_file(
+        &self,
+        transaction: &mut Transaction<'_, Postgres>,
+        run_id: Uuid,
+        extension_id: &str,
+        release_id: Uuid,
+        source_reference: &Value,
+    ) -> Result<Option<Uuid>, RepositoryError> {
+        let Some(value) = source_reference.get("input_file_id") else {
+            return Ok(None);
+        };
+        let file_id: Uuid = value
+            .as_str()
+            .ok_or_else(|| artifact_error("input_file_id must be a UUID"))?
+            .parse()
+            .map_err(|_| artifact_error("input_file_id must be a UUID"))?;
+        let row: Option<(String, i64, String, String)> = sqlx::query_as(
+            "SELECT mime_type,byte_size,sha256,original_key FROM files WHERE id=$1 AND workspace_id=$2 AND status='ready' AND deleted_at IS NULL FOR UPDATE",
+        )
+        .bind(file_id).bind(self.extension_workspace()).fetch_optional(&mut **transaction).await?;
+        let Some((media_type, content_length, checksum_sha256, object_key)) = row else {
+            return Err(artifact_error(
+                "input file is not an approved workspace file",
+            ));
+        };
+        let artifact_id = Uuid::new_v4();
+        sqlx::query(
+            "INSERT INTO extension_operation_artifacts(id,workspace_id,extension_id,installed_release_id,operation_run_id,direction,state,content_length,media_type,checksum_sha256,object_key,completed_at) VALUES($1,$2,$3,$4,$5,'input','completed',$6,$7,$8,$9,clock_timestamp())",
+        )
+        .bind(artifact_id).bind(self.extension_workspace()).bind(extension_id).bind(release_id).bind(run_id)
+        .bind(content_length).bind(media_type).bind(checksum_sha256).bind(object_key).execute(&mut **transaction).await?;
+        Ok(Some(artifact_id))
+    }
+
     /// Allocates a write-only output for the exact active run. This is done
     /// before a component receives its opaque handle so tenant/release and
     /// quota checks cannot be bypassed by a forged WIT argument.
@@ -65,10 +104,10 @@ impl CatalogRepository {
             return Err(artifact_error("operation artifact is not authorized"));
         }
         let workspace_bytes: i64 = sqlx::query_scalar(
-            "SELECT COALESCE(SUM(content_length),0) FROM extension_operation_artifacts WHERE workspace_id=$1 AND state IN ('incomplete','completed')",
+            "SELECT COALESCE(SUM(content_length),0)::bigint FROM extension_operation_artifacts WHERE workspace_id=$1 AND state IN ('incomplete','completed')",
         ).bind(self.extension_workspace()).fetch_one(&mut *tx).await?;
         let run_bytes: i64 = sqlx::query_scalar(
-            "SELECT COALESCE(SUM(content_length),0) FROM extension_operation_artifacts WHERE workspace_id=$1 AND operation_run_id=$2 AND state IN ('incomplete','completed')",
+            "SELECT COALESCE(SUM(content_length),0)::bigint FROM extension_operation_artifacts WHERE workspace_id=$1 AND operation_run_id=$2 AND state IN ('incomplete','completed')",
         ).bind(self.extension_workspace()).bind(run_id).fetch_one(&mut *tx).await?;
         // Reserve no bytes at allocation; writes reserve their exact committed
         // length below. These checks make zero-byte handle floods bounded by
@@ -92,10 +131,22 @@ impl CatalogRepository {
         run_id: Uuid,
         extension_id: &str,
         release_id: Uuid,
-        artifact_id: Uuid,
+        selector: &str,
     ) -> Result<ExtensionOperationArtifact, RepositoryError> {
+        // `source` selects the one input attached transactionally by durable
+        // operation creation. UUID selectors are retained for a future
+        // multi-input contract, but still require the exact run/release scope.
+        let artifact_id = if selector == "source" {
+            None
+        } else {
+            Some(
+                selector
+                    .parse::<Uuid>()
+                    .map_err(|_| artifact_error("invalid input artifact handle"))?,
+            )
+        };
         sqlx::query_as(
-            "SELECT a.id,a.workspace_id,a.extension_id,a.installed_release_id,a.operation_run_id,a.direction,a.state,a.content_length,a.media_type,a.checksum_sha256,a.object_key,a.created_at,a.completed_at FROM extension_operation_artifacts a JOIN extension_operation_runs r ON r.id=a.operation_run_id WHERE a.id=$1 AND a.workspace_id=$2 AND a.operation_run_id=$3 AND a.extension_id=$4 AND a.installed_release_id=$5 AND a.direction='input' AND a.state='completed' AND r.status='leased'",
+            "SELECT a.id,a.workspace_id,a.extension_id,a.installed_release_id,a.operation_run_id,a.direction,a.state,a.content_length,a.media_type,a.checksum_sha256,a.object_key,a.created_at,a.completed_at FROM extension_operation_artifacts a JOIN extension_operation_runs r ON r.id=a.operation_run_id WHERE ($1::uuid IS NULL OR a.id=$1) AND a.workspace_id=$2 AND a.operation_run_id=$3 AND a.extension_id=$4 AND a.installed_release_id=$5 AND a.direction='input' AND a.state='completed' AND r.status='leased' ORDER BY a.created_at LIMIT 1",
         ).bind(artifact_id).bind(self.extension_workspace()).bind(run_id).bind(extension_id).bind(release_id).fetch_optional(&self.pool).await?
          .ok_or_else(|| artifact_error("operation input artifact is not authorized"))
     }
@@ -124,9 +175,9 @@ impl CatalogRepository {
         let next = length
             .checked_add(bytes)
             .ok_or_else(|| artifact_error("artifact quota exhausted"))?;
-        let run_total: i64 = sqlx::query_scalar("SELECT COALESCE(SUM(content_length),0) FROM extension_operation_artifacts WHERE workspace_id=$1 AND operation_run_id=$2 AND state IN ('incomplete','completed')")
+        let run_total: i64 = sqlx::query_scalar("SELECT COALESCE(SUM(content_length),0)::bigint FROM extension_operation_artifacts WHERE workspace_id=$1 AND operation_run_id=$2 AND state IN ('incomplete','completed')")
             .bind(self.extension_workspace()).bind(run_id).fetch_one(&mut *tx).await?;
-        let workspace_total: i64 = sqlx::query_scalar("SELECT COALESCE(SUM(content_length),0) FROM extension_operation_artifacts WHERE workspace_id=$1 AND state IN ('incomplete','completed')")
+        let workspace_total: i64 = sqlx::query_scalar("SELECT COALESCE(SUM(content_length),0)::bigint FROM extension_operation_artifacts WHERE workspace_id=$1 AND state IN ('incomplete','completed')")
             .bind(self.extension_workspace()).fetch_one(&mut *tx).await?;
         if next > MAX_OPERATION_ARTIFACT_BYTES
             || run_total

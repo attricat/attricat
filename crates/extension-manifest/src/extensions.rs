@@ -19,7 +19,7 @@ use thiserror::Error;
 pub const MANIFEST_VERSION: u32 = 1;
 /// The newest host contract accepted by manifests. Components importing
 /// `catalog:host@1.0.0` remain supported by the unchanged v1 WIT package.
-pub const SUPPORTED_HOST_API: &str = "1.2.0";
+pub const SUPPORTED_HOST_API: &str = "1.3.0";
 pub const MAX_EXTENSION_ARCHIVE_BYTES: usize = 32 * 1024 * 1024;
 pub const MAX_EXTENSION_UNPACKED_BYTES: usize = 128 * 1024 * 1024;
 pub const MAX_EXTENSION_ARCHIVE_ENTRIES: usize = 256;
@@ -1592,6 +1592,25 @@ mod tests {
         assert!(value.validate(SUPPORTED_HOST_API).is_err());
         value.ui[1].route = Some("workbench".into());
         value.ui[0].kind = UiContributionKind::Embedded;
+        assert!(value.validate(SUPPORTED_HOST_API).is_err());
+    }
+
+    #[test]
+    fn recognizes_artifact_stream_capabilities() {
+        let mut value = manifest();
+        value.catalog.host_api = ">=1.3.0, <2.0.0".into();
+        value.permissions = vec![
+            "network.request".into(),
+            "webhooks.receive".into(),
+            "artifacts.read".into(),
+            "artifacts.write".into(),
+        ];
+        assert!(
+            value.validate(SUPPORTED_HOST_API).is_ok(),
+            "{:?}",
+            value.validate(SUPPORTED_HOST_API)
+        );
+        value.permissions[3] = "artifacts.execute".into();
         assert!(value.validate(SUPPORTED_HOST_API).is_err());
     }
 

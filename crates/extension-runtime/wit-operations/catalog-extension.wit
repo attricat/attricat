@@ -1,24 +1,5 @@
-// Checkpointed operation ABI. Components have no WASI. Artifact resources are
-// capability-gated host-managed streams; identifiers and object-store keys are
-// never exposed to a component.
+// Checkpointed operation ABI. This package is immutable once released.
 package catalog:host@1.2.0;
-
-interface artifacts {
-  resource input-artifact;
-  resource output-artifact;
-
-  record input-metadata { content-length: u64, media-type: string, checksum-sha256: string }
-  record output-metadata { artifact-id: string, content-length: u64, media-type: string, checksum-sha256: string }
-
-  open-input: func(artifact-id: string) -> result<input-artifact, string>;
-  describe-input: func(handle: borrow<input-artifact>) -> result<input-metadata, string>;
-  read: func(handle: borrow<input-artifact>, max-bytes: u32) -> result<list<u8>, string>;
-
-  create-output: func(media-type: string) -> result<output-artifact, string>;
-  write: func(handle: borrow<output-artifact>, bytes: list<u8>) -> result<_, string>;
-  complete: func(handle: own<output-artifact>, checksum-sha256: string) -> result<output-metadata, string>;
-  abort: func(handle: own<output-artifact>) -> result<_, string>;
-}
 
 interface operations {
   record operation-request { run-id: string, operation-id: string, configuration: string, input: string, checkpoint: string, batch-key: string }
@@ -32,6 +13,5 @@ interface operations {
 }
 
 world catalog-extension-operation {
-  import artifacts;
   export operations;
 }

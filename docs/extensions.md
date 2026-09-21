@@ -120,7 +120,8 @@ verification is deferred from the trusted-source MVP.
 ## Capabilities and egress
 
 The v1 capability catalogue is: `catalog.read`, `catalog.write`,
-`events.subscribe`, `events.emit`, `storage.extension`, `configuration.read`,
+`events.subscribe`, `events.emit`, `storage.extension`, `artifacts.read`,
+`artifacts.write`, `configuration.read`,
 `configuration.write`, `secrets.read`, `logging.write`, `client.commands`,
 `client.navigation`, `client.notification`, `client.events`, `client.refresh`,
 `client.confirmation`, `client.download`, `client.external_navigation`,
@@ -295,8 +296,10 @@ scope for this contract and require a separately versioned design.
 
 A release compatible with `catalog:host@1.2.0` may declare `server.operations`.
 Each operation has a stable ID, component handler selector, object request schema,
-and 64 KiB-or-smaller request/checkpoint limits. The immutable WIT package is at
-`crates/extension-runtime/wit-operations/catalog-extension.wit`; its request
+and 64 KiB-or-smaller request/checkpoint limits. The immutable v1.2 WIT package is at
+`crates/extension-runtime/wit-operations/catalog-extension.wit`. Artifact
+streams use the additive immutable v1.3 package at
+`crates/extension-runtime/wit-artifacts/catalog-extension.wit`; its request
 contains the run ID, handler selector, configuration snapshot, input, checkpoint,
 and durable batch key. Its operation world calls `prepare`, `start`,
 `process-batch`, `checkpoint`, `finish`, and cooperative `cancel`.
@@ -315,11 +318,15 @@ cancelling leased work invokes cooperative cancellation at the next batch.
 
 `POST /extensions/{extension_id}/operations` starts a run, while operators can
 list `GET /extension-operation-runs`, cancel a run, or replay only a dead-lettered
-run through its corresponding `cancel` and `replay` endpoints. The v1.2 operation
-WIT also imports host-managed `artifacts` resources. Releases need explicit
+run through its corresponding `cancel` and `replay` endpoints. The v1.3 artifact operation
+WIT imports host-managed `artifacts` resources. Releases need explicit
 `artifacts.read` and/or `artifacts.write` grants. Components open only run-bound
 approved inputs, read or write at most 64 KiB per call, and exchange opaque
-resource handles rather than object keys. Output content is staged locally under
+resource handles rather than object keys. An operation caller attaches a ready
+workspace file by sending `source_reference: {"input_file_id":"<uuid>"}` to
+the existing operation creation endpoint; Catalog locks and snapshots its
+metadata/key transactionally with the run. The component opens that attached
+input as `open-input("source")`, never by a file ID or object key. Output content is staged locally under
 the bounded artifact/run/workspace quotas, committed only after its SHA-256
 matches the supplied checksum, and then becomes immutable. Completed output is
 available only to an authorized workspace operator at
