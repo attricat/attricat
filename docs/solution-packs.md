@@ -11,9 +11,10 @@
 >
 > **Scope of this document:** Sections that describe automatic or non-blueprint
 > existing-resource adoption, updates, workspace settings other than the two bounded defaults,
-> presentation-asset update/delete/ownership, sample data, prerequisites, or export are future target
-> design, not implemented v1 behavior. The explicitly marked v1 sections below
-> define the current product contract.
+> presentation-asset update/delete/ownership, prerequisites, or export are future target
+> design, not implemented v1 behavior. The optional sample-data architecture
+> contract is approved, but its runtime remains unimplemented. The explicitly
+> marked v1 sections below define the current product contract.
 
 A solution pack is a versioned, declarative bundle of catalog structure,
 workspace defaults, extension requirements, assets, and setup guidance. Packs
@@ -73,7 +74,7 @@ bounded workspace-setting boundary.
 | Workspace defaults | **Implemented subset:** append pinned Explore entries and compatible extension contributions without replacing unrelated navigation, layout data, or settings. Other settings remain deferred. |
 | Branding, themes, and static assets | **Implemented bounded subset:** declarations are digest/signature checked, SVG is normalized through a fail-closed static allowlist, normalized bytes are durably staged into immutable plans, and apply creates or explicitly maps ordinary private assets. Changed later-release assets block; removed assets are information only. |
 | Documentation and setup | **Implemented subset:** bounded safe Markdown guidance, release notes, a structured checklist, and six host-defined informational checks with immutable run history. |
-| Sample data | Optional, separately selected, visibly marked, portable, and idempotently mapped; never treated as production configuration. |
+| Sample data | **Approved contract; not implemented:** optional, explicitly selected, visibly marked synthetic entities under the bounded [sample-data decision](solution-pack-sample-data.md). |
 
 Not every content type ships in the current implementation. The
 [initial delivery boundary](#initial-delivery-boundary) implements blueprint creation and explicit exact reuse, bounded Explore navigation and extension-layout defaults,
@@ -112,8 +113,8 @@ Before planning, Catalog validates at least:
 - declared pack identity and version plus the whole-archive digest;
 - host compatibility and supported resource contract versions;
 - uniqueness and referential integrity of logical resource keys; and
-- schemas for blueprints, settings, templates, checks, and sample data before
-  any workspace mutation.
+- schemas for blueprints, settings, templates, and checks before any workspace
+  mutation, and the approved sample-data schema once that runtime is implemented.
 
 Unknown manifest fields are rejected at the contract version where they occur.
 Archive validity does not imply that its proposed changes are safe for a
@@ -489,18 +490,20 @@ Public responses expose only bounded guidance, check key/title/type, run counts,
 and safe result evidence—never resource source, extension manifests, installed
 configuration, or template values.
 
-### Optional sample data
+### Optional sample data (approved contract; not implemented)
 
-Sample data is a separate, optional component and is never installed by
-selecting production configuration alone. It uses pack-local entity keys and
-logical resource references, must pass normal entity and relationship
-validation, and is visibly labelled sample content.
+The [optional sample-data architecture decision](solution-pack-sample-data.md)
+is approved as a prerequisite for later implementation. It requires explicit
+`--include-sample-data` selection, synthetic author attestation plus fail-closed
+syntactic screening and trusted review, durable same-release identity
+reservation with original-plan retry and strictly-newer lineage, private value
+cleanup, ordinary audit and automation, default-context resolution, a visible
+removable sample marker, and same-file acyclic relationships.
 
-Sample data cannot contain customer exports, personal data, credentials,
-production endpoints, file object keys, or opaque database IDs. Reapplying a
-release uses recorded sample-entity mappings and must not duplicate entities.
-After application, sample entities are ordinary workspace data and are not
-removed through a pack-level operation.
+The decision does not make sample data a current capability. It also does not
+claim semantic or provenance proof and does not introduce entity publication,
+update, delete, ownership, reconciliation, entity cleanup, or uninstall
+behavior.
 
 ## Content that packs must not include
 
@@ -755,8 +758,8 @@ raw workspace dump. The exporter:
 2. replaces workspace IDs and physical cross-references with generated logical
    keys;
 3. excludes secrets, grants, users, memberships, audit data, runtime state,
-   object-store keys, and customer entities unless explicitly exporting
-   sanitized sample data;
+   object-store keys, and all customer or sample entities; the approved
+   sample-data contract does not provide export;
 4. reports references that cannot be made portable; and
 5. emits files that must pass the same pack validator before review and release.
 
@@ -779,6 +782,7 @@ starter packs:
 
 Extension dependencies, permission review, configuration templates, and Explore
 navigation defaults follow the core planner. Other workspace/layout defaults,
-successor/update planning, sample data, and curated Ecommerce and Warehouse packs
-build on those contracts. Pack archives continue to be supplied explicitly as
-`.tar.zst` files; no repository-access path is planned.
+successor/update planning, implementation of the approved sample-data contract,
+and curated Ecommerce and Warehouse packs build on those contracts. Pack archives
+continue to be supplied explicitly as `.tar.zst` files; no repository-access path
+is planned.
