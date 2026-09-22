@@ -19,7 +19,9 @@ pub mod constants {
     pub const MAINTENANCE_POOL_CONNECTIONS: u32 = 1;
 }
 pub use catalog_events as domain_events;
-pub use catalog_extension_manifest::{extension_policy, extensions};
+pub use catalog_extension_manifest::{
+    extension_policy, extensions, solution_pack_sample_data, solution_packs,
+};
 pub use catalog_extension_runtime as extension_runtime;
 pub use catalog_http::{http, mail, telemetry};
 pub use catalog_repository::{
@@ -29,7 +31,8 @@ pub use catalog_repository::{
 pub use catalog_storage as storage;
 pub use catalog_workers::{
     agent_provider, agent_runner, agent_tools, agent_worker, blueprint_migration_worker,
-    event_dispatcher, file_worker, rule_runtime, task_worker, workflow_runtime,
+    event_dispatcher, file_worker, rule_runtime, solution_pack_housekeeping, task_worker,
+    workflow_runtime,
 };
 
 use sqlx::migrate::Migrator;

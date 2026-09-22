@@ -8,7 +8,8 @@ use super::values::{NativeValue, ValueType};
 use super::*;
 use crate::domain_events::{
     ATTRIBUTE_VALUE_CHANGED_V1, AttributeValueMutationV1, ENTITY_CREATED_V1, ENTITY_DELETED_V1,
-    ENTITY_UPDATED_V1, EntityMutationV1, RELATIONSHIP_CHANGED_V1, RelationshipMutationV1,
+    ENTITY_UPDATED_V1, EntityMutationV1, NewDomainEvent, RELATIONSHIP_CHANGED_V1,
+    RelationshipMutationV1,
 };
 use crate::persistence_rows::{Db, IntoDomain};
 use catalog_validation::validate_json_schema;
@@ -39,6 +40,16 @@ fn workflow_event_path<'a>(value: &'a Value, path: &str) -> Option<&'a Value> {
     })
 }
 
+pub(super) struct ChosenIdEntityCreate {
+    pub entity_id: Uuid,
+    pub blueprint_id: Uuid,
+    pub blueprint_version: i64,
+    pub values: Vec<NewAttributeValue>,
+    pub system_tags: Vec<String>,
+    pub system_metadata: Value,
+    pub host_sample_marker: bool,
+}
+
 struct CardinalityCheck<'a> {
     entity: &'a Entity,
     attribute_id: Uuid,
@@ -59,20 +70,68 @@ impl CatalogRepository {
         system_tags: Vec<String>,
         system_metadata: Value,
     ) -> Result<Entity, RepositoryError> {
-        validate_system_annotations(&system_tags, &system_metadata)?;
+        let mut transaction = self.pool.begin().await?;
+        let (entity, changes, event) = self
+            .create_entity_in_transaction(
+                &mut transaction,
+                ChosenIdEntityCreate {
+                    entity_id: Uuid::new_v4(),
+                    blueprint_id,
+                    blueprint_version,
+                    values,
+                    system_tags,
+                    system_metadata,
+                    host_sample_marker: false,
+                },
+            )
+            .await?;
+        self.stage_entity_mutation(&mut transaction, changes, event)
+            .await?;
+        transaction.commit().await?;
+        Ok(entity)
+    }
+
+    /// Chosen-ID, caller-transaction seam for ordinary entity creation.
+    pub(super) async fn create_entity_in_transaction(
+        &self,
+        transaction: &mut Transaction<'_, Postgres>,
+        input: ChosenIdEntityCreate,
+    ) -> Result<(Entity, Vec<AuditEventChange>, NewDomainEvent), RepositoryError> {
+        let ChosenIdEntityCreate {
+            entity_id,
+            blueprint_id,
+            blueprint_version,
+            values,
+            system_tags,
+            system_metadata,
+            host_sample_marker,
+        } = input;
+        if host_sample_marker {
+            let ordinary_tags = system_tags
+                .iter()
+                .filter(|tag| tag.as_str() != "attricat.sample")
+                .cloned()
+                .collect::<Vec<_>>();
+            if ordinary_tags.len() + 1 != system_tags.len() {
+                return Err(RepositoryError::InvalidSystemTags);
+            }
+            validate_system_annotations(&ordinary_tags, &system_metadata)?;
+        } else {
+            validate_system_annotations(&system_tags, &system_metadata)?;
+        }
         // Do not expose an entity before its initial values and derived preview
         // agree; otherwise a concurrent reader can observe a partial create.
-        let mut transaction = self.pool.begin().await?;
         if values
             .iter()
             .any(|value| matches!(value, NewAttributeValue::Relationship { .. }))
         {
-            self.lock_relationship_cardinality_writes(&mut transaction)
+            self.lock_relationship_cardinality_writes(transaction)
                 .await?;
         }
         let entity = self
             .insert_entity(
-                &mut transaction,
+                transaction,
+                entity_id,
                 blueprint_id,
                 blueprint_version,
                 system_tags,
@@ -80,12 +139,12 @@ impl CatalogRepository {
             )
             .await?;
         let default_context_id = self
-            .resolve_context_id(&mut transaction, None)
+            .resolve_context_id(transaction, None)
             .await?
             .expect("the default context is required");
         let attributes = self
             .list_attributes_in_transaction(
-                &mut transaction,
+                transaction,
                 entity.blueprint_id,
                 entity.blueprint_version,
             )
@@ -107,7 +166,7 @@ impl CatalogRepository {
                 })
         }) {
             self.insert_value(
-                &mut transaction,
+                transaction,
                 &entity,
                 NewAttributeValue::Scalar {
                     attribute_id: Some(attribute.id),
@@ -119,17 +178,12 @@ impl CatalogRepository {
             .await?;
         }
         for value in values {
-            self.insert_value(&mut transaction, &entity, value).await?;
+            self.insert_value(transaction, &entity, value).await?;
         }
-        self.validate_entity_schema(&mut transaction, &entity)
-            .await?;
-        let preview = Self::build_preview_projection(&mut transaction, entity.id).await?;
-        let entity = self
-            .store_preview(&mut transaction, entity.id, preview)
-            .await?;
-        let after = self
-            .entity_audit_snapshot(&mut transaction, entity.id)
-            .await?;
+        self.validate_entity_schema(transaction, &entity).await?;
+        let preview = Self::build_preview_projection(transaction, entity.id).await?;
+        let entity = self.store_preview(transaction, entity.id, preview).await?;
+        let after = self.entity_audit_snapshot(transaction, entity.id).await?;
         let changes = Self::audit_changes(entity.id, Vec::new(), after, false);
         let event = self.core_event(
             ENTITY_CREATED_V1,
@@ -143,9 +197,7 @@ impl CatalogRepository {
             })
             .expect("entity-created payload is serializable"),
         );
-        self.commit_entity_mutation(transaction, changes, event)
-            .await?;
-        Ok(entity)
+        Ok((entity, changes, event))
     }
 
     pub async fn update_entity_with_values(
@@ -157,9 +209,6 @@ impl CatalogRepository {
         system_tags: Option<Vec<String>>,
         system_metadata: Option<Value>,
     ) -> Result<Entity, RepositoryError> {
-        if let Some(tags) = &system_tags {
-            validate_system_tags(tags)?;
-        }
         if let Some(metadata) = &system_metadata {
             validate_system_metadata(metadata)?;
         }
@@ -178,6 +227,9 @@ impl CatalogRepository {
         // The row lock serializes writers for an entity. It protects both the
         // one-latest-value invariant and the preview rebuilt from that state.
         let entity = self.lock_entity(&mut transaction, entity_id).await?;
+        if let Some(tags) = &system_tags {
+            validate_system_tag_update(&entity.system_tags, tags)?;
+        }
         if system_tags.is_some() || system_metadata.is_some() {
             sqlx::query(
                 r#"UPDATE entities
@@ -306,7 +358,7 @@ impl CatalogRepository {
                         result.push(tag.clone());
                     }
                 }
-                validate_system_tags(&result)?;
+                validate_system_tag_update(&entity.system_tags, &result)?;
                 (Vec::new(), Some(result), None)
             }
             catalog_workflow::Action::SystemTagsRemove { tags } => (
@@ -452,7 +504,7 @@ impl CatalogRepository {
 
     pub async fn get_entity(&self, entity_id: Uuid) -> Result<Option<Entity>, RepositoryError> {
         Ok(sqlx::query_as::<_, Db<Entity>>(
-            r#"SELECT id, blueprint_id, blueprint_version, projections, system_tags, system_metadata, created_at, updated_at, deleted_at
+            r#"SELECT id, blueprint_id, blueprint_version, projections, system_tags, system_metadata, ('attricat.sample'=ANY(system_tags)) AS is_sample, created_at, updated_at, deleted_at
                FROM entities
                WHERE id = $1 AND workspace_id = $2 AND deleted_at IS NULL"#,
         )
@@ -522,7 +574,7 @@ impl CatalogRepository {
             .entity_audit_snapshot(&mut transaction, entity_id)
             .await?;
         let entity = sqlx::query_as::<_, Db<Entity>>(
-            r#"SELECT id, blueprint_id, blueprint_version, projections, system_tags, system_metadata, created_at, updated_at, deleted_at
+            r#"SELECT id, blueprint_id, blueprint_version, projections, system_tags, system_metadata, ('attricat.sample'=ANY(system_tags)) AS is_sample, created_at, updated_at, deleted_at
                FROM entities
                WHERE id = $1 AND workspace_id = $2 AND deleted_at IS NULL
                FOR UPDATE"#,
@@ -531,6 +583,7 @@ impl CatalogRepository {
         .bind(self.workspace_id.unwrap_or(Self::DEFAULT_WORKSPACE_ID))
         .fetch_optional(&mut *transaction)
         .await?
+        .into_domain()
         .ok_or(RepositoryError::NotFound("entity"))?;
 
         let mut values = Vec::with_capacity(input.values.len());
@@ -1012,7 +1065,7 @@ impl CatalogRepository {
         entity_id: Uuid,
     ) -> Result<Entity, RepositoryError> {
         sqlx::query_as::<_, Db<Entity>>(
-            r#"SELECT id, blueprint_id, blueprint_version, projections, system_tags, system_metadata, created_at, updated_at, deleted_at
+            r#"SELECT id, blueprint_id, blueprint_version, projections, system_tags, system_metadata, ('attricat.sample'=ANY(system_tags)) AS is_sample, created_at, updated_at, deleted_at
                FROM entities WHERE id = $1 AND workspace_id = $2 AND deleted_at IS NULL FOR UPDATE"#,
         )
         .bind(entity_id)
@@ -1026,6 +1079,7 @@ impl CatalogRepository {
     async fn insert_entity(
         &self,
         transaction: &mut Transaction<'_, Postgres>,
+        entity_id: Uuid,
         blueprint_id: Uuid,
         blueprint_version: i64,
         system_tags: Vec<String>,
@@ -1036,9 +1090,9 @@ impl CatalogRepository {
                SELECT $1, $2, b.id, b.version, $3, $4, $5
                FROM blueprints b
                 WHERE b.id = $6 AND b.version = $7 AND b.workspace_id = $2 AND b.kind = 'entity' AND b.status = 'published' AND b.deleted_at IS NULL
-                RETURNING id, blueprint_id, blueprint_version, projections, system_tags, system_metadata, created_at, updated_at, deleted_at"#,
+                RETURNING id, blueprint_id, blueprint_version, projections, system_tags, system_metadata, ('attricat.sample'=ANY(system_tags)) AS is_sample, created_at, updated_at, deleted_at"#,
         )
-        .bind(Uuid::new_v4())
+        .bind(entity_id)
         .bind(self.workspace_id.unwrap_or(Self::DEFAULT_WORKSPACE_ID))
         .bind(empty_projections())
         .bind(system_tags)
@@ -1751,6 +1805,7 @@ impl CatalogRepository {
                 let entity = self
                     .insert_entity(
                         transaction,
+                        Uuid::new_v4(),
                         blueprint_id,
                         blueprint_version,
                         system_tags,
@@ -1974,11 +2029,28 @@ fn validate_system_annotations(tags: &[String], metadata: &Value) -> Result<(), 
     validate_system_metadata(metadata)
 }
 
+fn validate_system_tag_update(
+    current: &[String],
+    requested: &[String],
+) -> Result<(), RepositoryError> {
+    let marker = "attricat.sample";
+    if requested.iter().any(|tag| tag == marker) && !current.iter().any(|tag| tag == marker) {
+        return Err(RepositoryError::InvalidSystemTags);
+    }
+    validate_system_tags(
+        &requested
+            .iter()
+            .filter(|tag| tag.as_str() != marker)
+            .cloned()
+            .collect::<Vec<_>>(),
+    )
+}
+
 pub(super) fn validate_system_tags(tags: &[String]) -> Result<(), RepositoryError> {
     if tags.len() > 100
         || tags
             .iter()
-            .any(|tag| tag.trim().is_empty() || tag.len() > 128)
+            .any(|tag| tag.trim().is_empty() || tag.len() > 128 || tag == "attricat.sample")
         || tags.iter().collect::<HashSet<_>>().len() != tags.len()
     {
         return Err(RepositoryError::InvalidSystemTags);

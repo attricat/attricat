@@ -62,6 +62,7 @@ describe('entity API client', () => {
         blueprint_id: blueprintId,
         blueprint_version: 2,
         id: entityId,
+        is_sample: false,
       },
       blueprint: blueprintWithAttributes,
       values: [],
@@ -215,6 +216,7 @@ describe('entity API client', () => {
       blueprint_id: blueprintId,
       blueprint_version: 2,
       id: entityId,
+      is_sample: false,
     };
     respond(entity);
     await createEntity({
@@ -289,6 +291,7 @@ describe('entity API client', () => {
           id: entityId,
           blueprint_version: 1,
           schema_outdated: true,
+          is_sample: false,
           display: { default: 'Legacy product' },
           preview: { default: { title: 'Legacy product' } },
         },
@@ -320,6 +323,7 @@ describe('entity API client', () => {
           id: entityId,
           blueprint_version: 1,
           schema_outdated: false,
+          is_sample: false,
           display: { default: 'Red product' },
           preview: { default: { title: 'Red product' } },
           match_explanations: [
@@ -498,6 +502,7 @@ describe('entity API client', () => {
           id: entityId,
           blueprint_code: 'product',
           blueprint_version: 1,
+          is_sample: false,
           display: { default: 'Navy shirt' },
         },
       ],
@@ -530,6 +535,7 @@ describe('entity API client', () => {
         id: entityId,
         blueprint_id: entityId,
         blueprint_version: 1,
+        is_sample: false,
       },
       requested_context: {
         id: entityId,

@@ -177,6 +177,7 @@ domain_row!(Entity {
     projections,
     system_tags,
     system_metadata,
+    is_sample,
     created_at,
     updated_at,
     deleted_at,

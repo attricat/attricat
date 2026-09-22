@@ -144,7 +144,7 @@ export const EntityPreviewPage = ({
     <PageContainer>
       <PageHeader
         actions={
-          <>
+          <Box sx={{ alignItems: 'center', display: 'flex', gap: 1 }}>
             {findings.data?.some((finding) => finding.state !== 'resolved') && (
               <Chip
                 color="warning"
@@ -152,20 +152,23 @@ export const EntityPreviewPage = ({
                 size="small"
               />
             )}
-            {blueprint.data && (
-            <Tooltip title={blueprint.data.blueprint.name}>
-              <RouterButton
-                params={{ blueprintId: blueprint.data.blueprint.id }}
-                size="small"
-                startIcon={<BlueprintIcon />}
-                to="/manage/blueprints/$blueprintId"
-                variant="text"
-              >
-                {t('entities.blueprint')}: {blueprint.data.blueprint.name}
-              </RouterButton>
-            </Tooltip>
+            {resolved.data?.entity.is_sample && (
+              <Chip color="info" label={t('entities.sample')} size="small" />
             )}
-          </>
+            {blueprint.data && (
+              <Tooltip title={blueprint.data.blueprint.name}>
+                <RouterButton
+                  params={{ blueprintId: blueprint.data.blueprint.id }}
+                  size="small"
+                  startIcon={<BlueprintIcon />}
+                  to="/manage/blueprints/$blueprintId"
+                  variant="text"
+                >
+                  {t('entities.blueprint')}: {blueprint.data.blueprint.name}
+                </RouterButton>
+              </Tooltip>
+            )}
+          </Box>
         }
         eyebrow={
           blueprint.data ? (

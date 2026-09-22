@@ -76,39 +76,8 @@ impl CatalogRepository {
         input: CreateBlueprint,
     ) -> Result<BlueprintWithAttributes, RepositoryError> {
         let mut transaction = self.pool.begin().await?;
-        let compiled = compile_definition(
-            &mut transaction,
-            self.workspace_id.unwrap_or(Self::DEFAULT_WORKSPACE_ID),
-            &input.definition,
-        )
-        .await?;
-        // PostgreSQL cannot express uniqueness across all revisions with the
-        // versioned primary key. Serialize writers for this code so the
-        // existence check and first-revision insert are one logical operation.
-        sqlx::query("SELECT pg_advisory_xact_lock(hashtext($1))")
-            .bind(&compiled.code)
-            .execute(&mut *transaction)
-            .await?;
-        let code_exists = sqlx::query_scalar::<_, Uuid>(
-            "SELECT id FROM blueprints WHERE code = $1 AND workspace_id = $2 LIMIT 1",
-        )
-        .bind(&compiled.code)
-        .bind(self.workspace_id.unwrap_or(Self::DEFAULT_WORKSPACE_ID))
-        .fetch_optional(&mut *transaction)
-        .await?
-        .is_some();
-        if code_exists {
-            return Err(RepositoryError::BlueprintCodeTaken);
-        }
-
         let result = self
-            .insert_blueprint_revision_in_transaction(
-                &mut transaction,
-                Uuid::new_v4(),
-                1,
-                input.definition,
-                compiled,
-            )
+            .create_blueprint_in_transaction(&mut transaction, Uuid::new_v4(), input)
             .await?;
         self.commit_mutation_with_event(
             transaction,
@@ -118,6 +87,41 @@ impl CatalogRepository {
         self.get_blueprint_by_code_and_version(&result.blueprint.code, result.blueprint.version)
             .await?
             .ok_or(RepositoryError::NotFound("blueprint"))
+    }
+
+    /// Shared mutation seam for callers that atomically persist additional
+    /// evidence with an ordinary first blueprint revision.
+    pub(super) async fn create_blueprint_in_transaction(
+        &self,
+        transaction: &mut Transaction<'_, Postgres>,
+        blueprint_id: Uuid,
+        input: CreateBlueprint,
+    ) -> Result<BlueprintWithAttributes, RepositoryError> {
+        let compiled = compile_definition(
+            transaction,
+            self.workspace_id.unwrap_or(Self::DEFAULT_WORKSPACE_ID),
+            &input.definition,
+        )
+        .await?;
+        // Serialize all blueprint/context writers for one workspace code. The
+        // shared logical namespace is required by solution-pack mappings and
+        // also prevents ordinary creates from racing an applying plan.
+        let workspace_id = self.workspace_id.unwrap_or(Self::DEFAULT_WORKSPACE_ID);
+        super::lock_workspace_resource_code(transaction, workspace_id, &compiled.code).await?;
+        if !super::workspace_resource_code_matches(transaction, workspace_id, &compiled.code)
+            .await?
+            .is_empty()
+        {
+            return Err(RepositoryError::CatalogCodeTaken);
+        }
+        self.insert_blueprint_revision_in_transaction(
+            transaction,
+            blueprint_id,
+            1,
+            input.definition,
+            compiled,
+        )
+        .await
     }
 
     pub async fn create_blueprint_revision(
@@ -404,6 +408,7 @@ impl CatalogRepository {
         .bind(self.workspace_id.unwrap_or(Self::DEFAULT_WORKSPACE_ID))
         .fetch_optional(&mut *transaction)
         .await?
+        .into_domain()
         .ok_or(RepositoryError::NotFound("blueprint version"))?;
         if blueprint.status == "draft" {
             // Installed renderers and target revisions can change after a draft
@@ -484,6 +489,70 @@ impl CatalogRepository {
         self.get_blueprint_revision(blueprint_id, version)
             .await?
             .ok_or(RepositoryError::NotFound("blueprint version"))
+    }
+
+    pub(super) async fn publish_blueprint_in_transaction(
+        &self,
+        transaction: &mut Transaction<'_, Postgres>,
+        blueprint_id: Uuid,
+        version: i64,
+    ) -> Result<Blueprint, RepositoryError> {
+        let mut blueprint = sqlx::query_as::<_, Db<Blueprint>>(
+            r#"SELECT id, code, name, kind, version, includes, views, entity_schema, status, published_at, created_at, updated_at, deleted_at, definition, definition_hash
+               FROM blueprints
+               WHERE id = $1 AND version = $2 AND workspace_id = $3 AND deleted_at IS NULL
+               FOR UPDATE"#,
+        )
+        .bind(blueprint_id)
+        .bind(version)
+        .bind(self.workspace_id.unwrap_or(Self::DEFAULT_WORKSPACE_ID))
+        .fetch_optional(&mut **transaction)
+        .await?
+        .into_domain()
+        .ok_or(RepositoryError::NotFound("blueprint version"))?;
+        if blueprint.status == "draft" {
+            compile_definition(
+                transaction,
+                self.workspace_id.unwrap_or(Self::DEFAULT_WORKSPACE_ID),
+                &blueprint.definition,
+            )
+            .await?;
+            self.validate_publication_roles(transaction, &blueprint.definition)
+                .await?;
+            self.validate_publication_extension_layout(&blueprint.definition)
+                .await?;
+            let includes_published = sqlx::query_scalar::<_, bool>(
+                r#"SELECT NOT EXISTS (
+                       SELECT 1 FROM jsonb_array_elements($1) include
+                       WHERE NOT EXISTS (
+                           SELECT 1 FROM blueprints included
+                           WHERE included.code = include ->> 'code'
+                             AND included.workspace_id = $2
+                             AND included.version = (include ->> 'version')::bigint
+                             AND included.kind = 'mixin'
+                             AND included.status = 'published'
+                             AND included.deleted_at IS NULL))"#,
+            )
+            .bind(&blueprint.includes)
+            .bind(self.workspace_id.unwrap_or(Self::DEFAULT_WORKSPACE_ID))
+            .fetch_one(&mut **transaction)
+            .await?;
+            if !includes_published {
+                return Err(RepositoryError::BlueprintNotPublished);
+            }
+            blueprint = sqlx::query_as::<_, Db<Blueprint>>(
+                r#"UPDATE blueprints SET status = 'published', published_at = now(), updated_at = now()
+                   WHERE id = $1 AND version = $2 AND workspace_id = $3
+                   RETURNING id, code, name, kind, version, includes, views, entity_schema, status, published_at, created_at, updated_at, deleted_at, definition, definition_hash"#,
+            )
+            .bind(blueprint_id)
+            .bind(version)
+            .bind(self.workspace_id.unwrap_or(Self::DEFAULT_WORKSPACE_ID))
+            .fetch_one(&mut **transaction)
+            .await?
+            .into_domain();
+        }
+        Ok(blueprint)
     }
 
     /// A layout may retain unknown keys for a removed extension, but a key that
@@ -753,7 +822,7 @@ fn validate_attribute_default_value(
     Ok(())
 }
 
-fn blueprint_event(
+pub(super) fn blueprint_event(
     repository: &CatalogRepository,
     event_type: &str,
     blueprint: &Blueprint,

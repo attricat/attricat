@@ -88,6 +88,8 @@ fn action(method: &Method, route: &str) -> String {
 fn audit_permission(method: &Method, route: &str) -> &'static str {
     if route == "/extensions/{extension_id}/{contribution_id}/command" {
         "entities.write"
+    } else if route.starts_with("/solution-packs") || route.starts_with("/presentation-assets") {
+        "solution_packs.manage"
     } else if route.starts_with("/extension-registries") || route.starts_with("/extensions") {
         "extensions.manage"
     } else if route.starts_with("/workflows") {

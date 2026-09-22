@@ -10,7 +10,9 @@ use uuid::Uuid;
 use crate::{
     extension_installer::installed_artifact_key,
     extension_policy,
-    extensions::{Manifest, SUPPORTED_HOST_API, UiContributionKind, UiOutlet},
+    extensions::{
+        Manifest, SUPPORTED_HOST_API, UiContributionKind, UiOutlet, valid_contribution_key,
+    },
 };
 
 use super::{AuditContext, CatalogRepository, RepositoryError};
@@ -19,23 +21,9 @@ fn event_contract_grant_id(provider: &str, contract: &str) -> String {
     format!("{provider}:{contract}")
 }
 
-fn valid_contribution_key(value: &str) -> bool {
-    let Some((extension_id, contribution_id)) = value.split_once(':') else {
-        return false;
-    };
-    value.len() <= 256
-        && !extension_id.is_empty()
-        && !contribution_id.is_empty()
-        && !contribution_id.contains(':')
-        && value
-            .chars()
-            .filter(|character| *character != ':')
-            .all(|character| character.is_ascii_alphanumeric() || "._-".contains(character))
-}
-
 /// Configuration is data only: outlet names and stable contribution keys. It
 /// deliberately cannot contain selectors, component names, or placement rules.
-fn validate_workspace_extension_layout(layout: &Value) -> Result<(), RepositoryError> {
+pub(crate) fn validate_workspace_extension_layout(layout: &Value) -> Result<(), RepositoryError> {
     let object = layout.as_object().ok_or(RepositoryError::InvalidCode)?;
     if object.len() != 2
         || object.get("version").and_then(Value::as_u64) != Some(1)
@@ -61,18 +49,30 @@ fn validate_workspace_extension_layout(layout: &Value) -> Result<(), RepositoryE
         } else {
             ["order", "hidden"].as_slice()
         };
-        let ordered: HashSet<_> = item["order"]
-            .as_array()
+        let ordered: HashSet<_> = item
+            .get("order")
+            .and_then(Value::as_array)
             .ok_or(RepositoryError::InvalidCode)?
             .iter()
             .filter_map(Value::as_str)
             .collect();
-        let hidden: HashSet<_> = item["hidden"]
-            .as_array()
+        let hidden: HashSet<_> = item
+            .get("hidden")
+            .and_then(Value::as_array)
             .ok_or(RepositoryError::InvalidCode)?
             .iter()
             .filter_map(Value::as_str)
             .collect();
+        if navigation
+            && item
+                .get("promoted")
+                .and_then(Value::as_array)
+                .ok_or(RepositoryError::InvalidCode)?
+                .iter()
+                .any(|entry| entry.as_str().is_none_or(|entry| !ordered.contains(entry)))
+        {
+            return Err(RepositoryError::InvalidCode);
+        }
         if !ordered.is_disjoint(&hidden)
             || ordered
                 .iter()
@@ -100,11 +100,14 @@ fn validate_workspace_extension_layout(layout: &Value) -> Result<(), RepositoryE
                 && entries.iter().filter_map(Value::as_str).any(|entry| {
                     !classified.insert(entry)
                         || (*key == "promoted"
-                            && item["hidden"].as_array().is_some_and(|hidden| {
-                                hidden
-                                    .iter()
-                                    .any(|candidate| candidate.as_str() == Some(entry))
-                            }))
+                            && item
+                                .get("hidden")
+                                .and_then(Value::as_array)
+                                .is_some_and(|hidden| {
+                                    hidden
+                                        .iter()
+                                        .any(|candidate| candidate.as_str() == Some(entry))
+                                }))
                 })
             {
                 return Err(RepositoryError::InvalidCode);
@@ -620,17 +623,71 @@ impl CatalogRepository {
         .unwrap_or_else(|| json!({"version": 1, "outlets": {}})))
     }
 
+    async fn lock_workspace_settings_in_transaction(
+        &self,
+        transaction: &mut Transaction<'_, Postgres>,
+        workspace_id: Uuid,
+    ) -> Result<Value, RepositoryError> {
+        let settings: Value = sqlx::query_scalar(
+            "SELECT settings FROM workspaces WHERE id = $1 AND deleted_at IS NULL FOR UPDATE",
+        )
+        .bind(workspace_id)
+        .fetch_one(&mut **transaction)
+        .await?;
+        if !settings.is_object() {
+            return Err(RepositoryError::InvalidCode);
+        }
+        Ok(settings)
+    }
+
+    pub(crate) async fn lock_workspace_extension_layout_in_transaction(
+        &self,
+        transaction: &mut Transaction<'_, Postgres>,
+        workspace_id: Uuid,
+    ) -> Result<Value, RepositoryError> {
+        let settings = self
+            .lock_workspace_settings_in_transaction(transaction, workspace_id)
+            .await?;
+        let layout = settings
+            .get("extension_layout")
+            .cloned()
+            .unwrap_or_else(|| json!({"version":1,"outlets":{}}));
+        validate_workspace_extension_layout(&layout)?;
+        Ok(layout)
+    }
+
+    pub(crate) async fn write_workspace_extension_layout_in_transaction(
+        &self,
+        transaction: &mut Transaction<'_, Postgres>,
+        workspace_id: Uuid,
+        layout: &Value,
+    ) -> Result<(), RepositoryError> {
+        validate_workspace_extension_layout(layout)?;
+        let updated = sqlx::query("UPDATE workspaces SET settings = jsonb_set(settings, '{extension_layout}', $1::jsonb, true), updated_at = clock_timestamp() WHERE id = $2 AND deleted_at IS NULL AND jsonb_typeof(settings) = 'object'")
+            .bind(layout)
+            .bind(workspace_id)
+            .execute(&mut **transaction)
+            .await?;
+        if updated.rows_affected() != 1 {
+            return Err(RepositoryError::InvalidCode);
+        }
+        Ok(())
+    }
+
     pub async fn update_workspace_extension_layout(
         &self,
         layout: Value,
     ) -> Result<(), RepositoryError> {
         validate_workspace_extension_layout(&layout)?;
         let mut transaction = self.pool.begin().await?;
-        sqlx::query("UPDATE workspaces SET settings = jsonb_set(settings, '{extension_layout}', $1::jsonb, true), updated_at = clock_timestamp() WHERE id = $2")
-            .bind(&layout)
-            .bind(self.extension_workspace())
-            .execute(&mut *transaction)
+        self.lock_workspace_settings_in_transaction(&mut transaction, self.extension_workspace())
             .await?;
+        self.write_workspace_extension_layout_in_transaction(
+            &mut transaction,
+            self.extension_workspace(),
+            &layout,
+        )
+        .await?;
         let mut audit_repository = self.clone();
         let mut audit = audit_repository
             .audit_context

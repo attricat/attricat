@@ -807,6 +807,74 @@ async fn enabled_client_contributions_are_hidden_after_state_changes(pool: sqlx:
 }
 
 #[sqlx::test(migrations = "./migrations")]
+async fn extension_layout_replacement_rejects_non_object_roots_and_repairs_malformed_layout(
+    pool: sqlx::PgPool,
+) {
+    let workspace = Uuid::from_u128(0x00000000000040008000000000000002);
+    let repository = CatalogRepository::new(pool.clone(), workspace);
+    for malformed in [json!("scalar"), json!([])] {
+        sqlx::query("UPDATE workspaces SET settings=$2 WHERE id=$1")
+            .bind(workspace)
+            .bind(malformed.clone())
+            .execute(&pool)
+            .await
+            .unwrap();
+        assert!(
+            repository
+                .update_workspace_extension_layout(json!({"version":1,"outlets":{}}))
+                .await
+                .is_err()
+        );
+        let stored: Value = sqlx::query_scalar("SELECT settings FROM workspaces WHERE id=$1")
+            .bind(workspace)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+        assert_eq!(stored, malformed);
+    }
+    let audits: i64 = sqlx::query_scalar(
+        "SELECT count(*) FROM audit_events WHERE workspace_id=$1 AND action='workspace.extension_layout.set'",
+    )
+    .bind(workspace)
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert_eq!(audits, 0);
+
+    sqlx::query("UPDATE workspaces SET settings=$2 WHERE id=$1")
+        .bind(workspace)
+        .bind(json!({"theme":"dark","extension_layout":{"malformed":true}}))
+        .execute(&pool)
+        .await
+        .unwrap();
+    let replacement = json!({
+        "version":1,
+        "outlets": {
+            "navigation": {"order":[],"hidden":[],"promoted":[]}
+        }
+    });
+    repository
+        .update_workspace_extension_layout(replacement.clone())
+        .await
+        .unwrap();
+    let repaired: Value = sqlx::query_scalar("SELECT settings FROM workspaces WHERE id=$1")
+        .bind(workspace)
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+    assert_eq!(repaired["theme"], "dark");
+    assert_eq!(repaired["extension_layout"], replacement);
+    let audits: i64 = sqlx::query_scalar(
+        "SELECT count(*) FROM audit_events WHERE workspace_id=$1 AND action='workspace.extension_layout.set'",
+    )
+    .bind(workspace)
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert_eq!(audits, 1);
+}
+
+#[sqlx::test(migrations = "./migrations")]
 async fn extension_layout_order_is_stable_and_host_owned(pool: sqlx::PgPool) {
     let workspace = Uuid::from_u128(0x00000000000040008000000000000002);
     let repository = CatalogRepository::system(pool.clone())
@@ -884,6 +952,30 @@ async fn extension_layout_order_is_stable_and_host_owned(pool: sqlx::PgPool) {
             "outlets": {
                 "entity_action": {"order": ["acme.shared:item"], "hidden": []},
                 "entity_preview_panel": {"order": ["acme.shared:item"], "hidden": []}
+            }
+        }),
+        json!({
+            "version": 1,
+            "outlets": {
+                "navigation": {
+                    "order": [],
+                    "hidden": [],
+                    "promoted": ["acme.shared:item"]
+                }
+            }
+        }),
+        json!({
+            "version": 1,
+            "outlets": {
+                "navigation": {
+                    "order": [],
+                    "hidden": [],
+                    "promoted": ["acme.shared:item"]
+                },
+                "entity_action": {
+                    "order": ["acme.shared:item"],
+                    "hidden": []
+                }
             }
         }),
     ] {
@@ -1159,7 +1251,9 @@ async fn operation_runs_keep_a_batch_key_across_crash_reclaim_and_fence_stale_ch
             second.id,
             &second.lease_owner,
             second.lease_token,
-            chrono::Utc::now(),
+            // Keep the immediate-reclaim assertion independent of small host
+            // and database-container clock skew.
+            chrono::Utc::now() - chrono::Duration::seconds(1),
         )
         .await
         .unwrap();
@@ -1193,7 +1287,7 @@ async fn operation_runs_keep_a_batch_key_across_crash_reclaim_and_fence_stale_ch
             third.id,
             &third.lease_owner,
             third.lease_token,
-            chrono::Utc::now(),
+            chrono::Utc::now() - chrono::Duration::seconds(1),
         )
         .await
         .unwrap();

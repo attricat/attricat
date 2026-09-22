@@ -203,6 +203,7 @@ impl CatalogRepository {
                 id: entity.id,
                 blueprint_id: entity.blueprint_id,
                 blueprint_version: entity.blueprint_version,
+                is_sample: entity.is_sample,
             },
             requested_context,
             values: Value::Object(values),
@@ -429,7 +430,7 @@ impl CatalogRepository {
             r#"UPDATE entities
                SET projections = jsonb_set(projections, '{preview}', $2, true), updated_at = now()
                WHERE id = $1
-                RETURNING id, blueprint_id, blueprint_version, projections, system_tags, system_metadata, created_at, updated_at, deleted_at"#,
+                RETURNING id, blueprint_id, blueprint_version, projections, system_tags, system_metadata, ('attricat.sample'=ANY(system_tags)) AS is_sample, created_at, updated_at, deleted_at"#,
         )
         .bind(entity_id)
         .bind(preview)

@@ -11,7 +11,7 @@ use api::{
     http::{AppState, router},
     mail::{MailDelivery, MailError},
     repository::CatalogRepository,
-    storage::FakeObjectStore,
+    storage::{FakeObjectStore, ObjectStore},
     telemetry::init_metrics,
 };
 use async_trait::async_trait;
@@ -95,6 +95,13 @@ pub async fn start_server_with_object_store(
     pool: PgPool,
     object_store: Arc<FakeObjectStore>,
 ) -> (String, JoinHandle<()>) {
+    start_server_with_custom_object_store(pool, object_store).await
+}
+
+pub async fn start_server_with_custom_object_store(
+    pool: PgPool,
+    object_store: Arc<dyn ObjectStore>,
+) -> (String, JoinHandle<()>) {
     start_server_with_auth_mode_and_store(
         pool,
         0,
@@ -156,7 +163,7 @@ async fn start_server_with_auth_mode_and_store(
     pool: PgPool,
     data_health_cache_ttl_seconds: u64,
     allow_trusted_headers: bool,
-    object_store: Arc<FakeObjectStore>,
+    object_store: Arc<dyn ObjectStore>,
     file_access_policy: Arc<dyn FileAccessPolicy>,
     mail_delivery: Arc<dyn MailDelivery>,
 ) -> (String, JoinHandle<()>) {
@@ -176,7 +183,7 @@ async fn start_server_with_auth_mode_and_store_with_devtools(
     pool: PgPool,
     data_health_cache_ttl_seconds: u64,
     allow_trusted_headers: bool,
-    object_store: Arc<FakeObjectStore>,
+    object_store: Arc<dyn ObjectStore>,
     file_access_policy: Arc<dyn FileAccessPolicy>,
     mail_delivery: Arc<dyn MailDelivery>,
     devtools_enabled: bool,
@@ -229,6 +236,10 @@ async fn start_server_with_auth_mode_and_store_with_devtools(
         .unwrap();
     CatalogRepository::system(pool.clone())
         .ensure_entity_publication_permissions()
+        .await
+        .unwrap();
+    CatalogRepository::system(pool.clone())
+        .ensure_solution_pack_permissions()
         .await
         .unwrap();
     let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();

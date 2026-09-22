@@ -458,12 +458,17 @@ export const ExplorerResultsTable = ({
       id: 'display',
       header: t('explorer.display'),
       cell: (info) => (
-        <Link
-          params={{ entityId: info.row.original.id }}
-          to="/entities/$entityId"
-        >
-          {displayLabel(info.row.original.display, info.row.original.id)}
-        </Link>
+        <Box sx={{ alignItems: 'center', display: 'flex', gap: 1 }}>
+          <Link
+            params={{ entityId: info.row.original.id }}
+            to="/entities/$entityId"
+          >
+            {displayLabel(info.row.original.display, info.row.original.id)}
+          </Link>
+          {info.row.original.is_sample && (
+            <Chip color="info" label={t('entities.sample')} size="small" />
+          )}
+        </Box>
       ),
     }) as LegacyColumnDef<EntityItem, unknown>,
     columnHelper.display({

@@ -8,7 +8,9 @@ import VisibilityOutlinedIcon from '@mui/icons-material/VisibilityOutlined';
 import WarningAmberOutlinedIcon from '@mui/icons-material/WarningAmberOutlined';
 import {
   Alert,
+  Box,
   Button,
+  Chip,
   Dialog,
   DialogActions,
   DialogContent,
@@ -160,18 +162,23 @@ export const EditEntityPage = ({ entityId }: { entityId: string }) => {
       <PageHeader
         actions={
           entityForm.data && (
-            <Tooltip title={entityForm.data.blueprint.blueprint.name}>
-              <RouterButton
-                params={{ blueprintId: entityForm.data.entity.blueprint_id }}
-                size="small"
-                startIcon={<BlueprintIcon />}
-                to="/manage/blueprints/$blueprintId"
-                variant="text"
-              >
-                {t('entities.blueprint')}:{' '}
-                {entityForm.data.blueprint.blueprint.name}
-              </RouterButton>
-            </Tooltip>
+            <Box sx={{ alignItems: 'center', display: 'flex', gap: 1 }}>
+              {entityForm.data.entity.is_sample && (
+                <Chip color="info" label={t('entities.sample')} size="small" />
+              )}
+              <Tooltip title={entityForm.data.blueprint.blueprint.name}>
+                <RouterButton
+                  params={{ blueprintId: entityForm.data.entity.blueprint_id }}
+                  size="small"
+                  startIcon={<BlueprintIcon />}
+                  to="/manage/blueprints/$blueprintId"
+                  variant="text"
+                >
+                  {t('entities.blueprint')}:{' '}
+                  {entityForm.data.blueprint.blueprint.name}
+                </RouterButton>
+              </Tooltip>
+            </Box>
           )
         }
         eyebrow={
@@ -299,11 +306,15 @@ export const EditEntityPage = ({ entityId }: { entityId: string }) => {
             onClose={closeReusableAttributeDialog}
             open={isReusableAttributeDialogOpen}
           >
-            <DialogTitle>{t('entities.addReusableAttributeOrGroup')}</DialogTitle>
+            <DialogTitle>
+              {t('entities.addReusableAttributeOrGroup')}
+            </DialogTitle>
             <DialogContent>
               {reusableSelectionType === null && (
                 <Stack spacing={2} sx={{ pt: 1 }}>
-                  <Typography>{t('entities.chooseReusableAttributeOrGroup')}</Typography>
+                  <Typography>
+                    {t('entities.chooseReusableAttributeOrGroup')}
+                  </Typography>
                   <Stack direction={{ sm: 'row' }} spacing={1}>
                     <Button
                       onClick={() => setReusableSelectionType('attribute')}
@@ -336,8 +347,8 @@ export const EditEntityPage = ({ entityId }: { entityId: string }) => {
                   </MenuItem>
                   {latestReusableAttributes.map((attribute) => (
                     <MenuItem key={attribute.id} value={attribute.id}>
-                      {attribute.namespace}:{attribute.code} · {attribute.name} v
-                      {attribute.version}
+                      {attribute.namespace}:{attribute.code} · {attribute.name}{' '}
+                      v{attribute.version}
                     </MenuItem>
                   ))}
                 </TextField>
@@ -346,12 +357,16 @@ export const EditEntityPage = ({ entityId }: { entityId: string }) => {
                 <TextField
                   fullWidth
                   label={t('entities.attributeGroup')}
-                  onChange={(event) => setSelectedReusableGroup(event.target.value)}
+                  onChange={(event) =>
+                    setSelectedReusableGroup(event.target.value)
+                  }
                   select
                   sx={{ mt: 1 }}
                   value={selectedReusableGroup}
                 >
-                  <MenuItem value="">{t('entities.selectAttributeGroup')}</MenuItem>
+                  <MenuItem value="">
+                    {t('entities.selectAttributeGroup')}
+                  </MenuItem>
                   {(reusableGroups.data ?? []).map((group) => (
                     <MenuItem key={group.id} value={group.id}>
                       {group.name}

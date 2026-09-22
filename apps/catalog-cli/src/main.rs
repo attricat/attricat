@@ -6,7 +6,7 @@ use std::{
     time::Duration,
 };
 
-use clap::{Args, Parser, Subcommand};
+use clap::{Args, Parser, Subcommand, ValueEnum};
 use futures_util::StreamExt;
 use reqwest::{Client, Method};
 use serde::{Deserialize, Serialize};
@@ -105,6 +105,15 @@ enum Command {
     Extension {
         #[command(subcommand)]
         command: ExtensionCommand,
+    },
+    SolutionPack {
+        #[command(subcommand)]
+        command: SolutionPackCommand,
+    },
+    /// Discover and download immutable private presentation assets.
+    PresentationAsset {
+        #[command(subcommand)]
+        command: PresentationAssetCommand,
     },
     File {
         #[command(subcommand)]
@@ -844,6 +853,128 @@ enum ExtensionCommand {
     },
 }
 
+#[derive(Clone, Copy, ValueEnum)]
+enum BlueprintPublicationArgument {
+    Draft,
+    Publish,
+}
+
+impl BlueprintPublicationArgument {
+    fn as_str(self) -> &'static str {
+        match self {
+            Self::Draft => "draft",
+            Self::Publish => "publish",
+        }
+    }
+}
+
+#[derive(Subcommand)]
+enum SolutionPackPlanCommand {
+    /// Show one immutable workspace-scoped plan.
+    Show { plan_id: Uuid },
+}
+
+#[derive(Subcommand)]
+enum SolutionPackApplicationsCommand {
+    /// List bounded application history for the active workspace.
+    List {
+        #[arg(long, default_value_t = 25)]
+        limit: u32,
+        #[arg(long, default_value_t = 0)]
+        offset: u32,
+    },
+    /// Show one workspace-scoped application and its ordered steps.
+    Show { application_id: Uuid },
+    /// Permanently abandon a resumable sample-selected application.
+    Abandon { application_id: Uuid },
+}
+
+#[derive(Subcommand)]
+enum SolutionPackChecksCommand {
+    /// Evaluate the application's informational checks against current state.
+    Rerun { application_id: Uuid },
+    /// List bounded immutable check-run history.
+    List {
+        application_id: Uuid,
+        #[arg(long, default_value_t = 25)]
+        limit: u32,
+        #[arg(long, default_value_t = 0)]
+        offset: u32,
+    },
+    /// Show one immutable check run and its ordered results.
+    Show { application_id: Uuid, run_id: Uuid },
+}
+
+#[derive(Subcommand)]
+enum SolutionPackCommand {
+    /// Validate and summarize a local archive on the authoritative server.
+    Inspect {
+        #[arg(long)]
+        file: PathBuf,
+    },
+    /// Create a local-archive plan, or show an existing plan.
+    Plan {
+        #[command(subcommand)]
+        command: Option<SolutionPackPlanCommand>,
+        #[arg(long)]
+        file: Option<PathBuf>,
+        #[arg(long)]
+        prefix: Option<String>,
+        #[arg(long)]
+        blueprint_publication: Option<BlueprintPublicationArgument>,
+        /// Explicitly reuse a published blueprint (`logical_key=existing_code`).
+        #[arg(
+            long = "map",
+            value_name = "LOGICAL_KEY=EXISTING_CODE",
+            conflicts_with = "from_application"
+        )]
+        blueprint_maps: Vec<String>,
+        /// Explicitly reuse an immutable presentation asset (`logical_key=asset_uuid`).
+        #[arg(
+            long = "map-asset",
+            value_name = "LOGICAL_KEY=ASSET_UUID",
+            conflicts_with = "from_application"
+        )]
+        asset_maps: Vec<String>,
+        /// Reuse unchanged resources from one completed application.
+        #[arg(long, conflicts_with_all = ["blueprint_maps", "asset_maps"])]
+        from_application: Option<Uuid>,
+        /// Explicitly select the pack's optional synthetic sample entities.
+        #[arg(long)]
+        include_sample_data: bool,
+    },
+    /// Apply exactly the persisted immutable plan; no choices are recomputed.
+    Apply { plan_id: Uuid },
+    /// Read durable application history.
+    Applications {
+        #[command(subcommand)]
+        command: SolutionPackApplicationsCommand,
+    },
+    /// Evaluate and read informational setup checks.
+    Checks {
+        #[command(subcommand)]
+        command: SolutionPackChecksCommand,
+    },
+}
+
+#[derive(Subcommand)]
+enum PresentationAssetCommand {
+    List {
+        #[arg(long, default_value_t = 25, value_parser = clap::value_parser!(u16).range(1..=100))]
+        limit: u16,
+        #[arg(long, default_value_t = 0, value_parser = clap::value_parser!(u16).range(0..=10000))]
+        offset: u16,
+    },
+    Show {
+        asset_id: Uuid,
+    },
+    Download {
+        asset_id: Uuid,
+        #[arg(long)]
+        output: PathBuf,
+    },
+}
+
 #[derive(Subcommand)]
 enum FileCommand {
     Upload {
@@ -1528,6 +1659,12 @@ async fn run(cli: Cli) -> Result<String, CliError> {
         Command::Workflow { command } => workflow_command(&client, &server, command).await,
         Command::ExtensionRegistry { command } => extension_registry_command(&client, &server, command).await,
         Command::Extension { command } => extension_command(&client, &server, command).await,
+        Command::SolutionPack { command } => {
+            solution_pack_command(&client, &server, command).await
+        }
+        Command::PresentationAsset { command } => {
+            presentation_asset_command(&client, &server, command).await
+        }
         Command::File { command } => file_command(&client, &server, command).await,
         Command::Metrics { command: MetricsCommand::Get { output } } => raw_download(&client, &server, "/metrics", &output, None).await,
         Command::Value { command } => match command {
@@ -2201,6 +2338,144 @@ async fn extension_command(
 }
 }
 
+async fn solution_pack_command(
+    client: &Client,
+    server: &Url,
+    command: SolutionPackCommand,
+) -> Result<String, CliError> {
+    match command {
+        SolutionPackCommand::Inspect { file } => {
+            raw_upload(
+                client,
+                server,
+                "/solution-packs/inspect",
+                &file,
+                "application/zstd",
+            )
+            .await
+        }
+        SolutionPackCommand::Plan {
+            command: Some(SolutionPackPlanCommand::Show { plan_id }),
+            file: None,
+            prefix: None,
+            blueprint_publication: None,
+            blueprint_maps,
+            asset_maps,
+            from_application: None,
+            include_sample_data: false,
+        } if blueprint_maps.is_empty() && asset_maps.is_empty() => {
+            request(
+                client,
+                server,
+                Method::GET,
+                &format!("/solution-packs/plans/{}", segment(plan_id)),
+                None,
+            )
+            .await
+        }
+        SolutionPackCommand::Plan {
+            command: None,
+            file: Some(file),
+            prefix: Some(prefix),
+            blueprint_publication: Some(publication),
+            blueprint_maps,
+            asset_maps,
+            from_application,
+            include_sample_data,
+        } => {
+            let mut path = format!(
+                "/solution-packs/plans?prefix={}&blueprint_publication={}",
+                segment(prefix),
+                publication.as_str()
+            );
+            if let Some(application_id) = from_application {
+                path.push_str("&from_application=");
+                path.push_str(&segment(application_id));
+            }
+            if include_sample_data {
+                path.push_str("&include_sample_data=true");
+            }
+            if blueprint_maps.is_empty() && asset_maps.is_empty() {
+                raw_upload(client, server, &path, &file, "application/zstd").await
+            } else {
+                solution_pack_plan_upload(
+                    client,
+                    server,
+                    &path,
+                    &file,
+                    &blueprint_maps,
+                    &asset_maps,
+                )
+                .await
+            }
+        }
+        SolutionPackCommand::Plan { .. } => Err(CliError::Input(
+            "solution-pack plan requires --file, --prefix, and --blueprint-publication; plan show accepts only a plan ID".to_owned(),
+        )),
+        SolutionPackCommand::Apply { plan_id } => {
+            request(
+                client,
+                server,
+                Method::POST,
+                &format!("/solution-packs/plans/{}/apply", segment(plan_id)),
+                None,
+            )
+            .await
+        }
+        SolutionPackCommand::Applications {
+            command: SolutionPackApplicationsCommand::List { limit, offset },
+        } => {
+            request(
+                client,
+                server,
+                Method::GET,
+                &format!("/solution-packs/applications?limit={limit}&offset={offset}"),
+                None,
+            )
+            .await
+        }
+        SolutionPackCommand::Applications {
+            command: SolutionPackApplicationsCommand::Show { application_id },
+        } => {
+            request(
+                client,
+                server,
+                Method::GET,
+                &format!(
+                    "/solution-packs/applications/{}",
+                    segment(application_id)
+                ),
+                None,
+            )
+            .await
+        }
+        SolutionPackCommand::Applications {
+            command: SolutionPackApplicationsCommand::Abandon { application_id },
+        } => {
+            request(
+                client,
+                server,
+                Method::POST,
+                &format!(
+                    "/solution-packs/applications/{}/abandon",
+                    segment(application_id)
+                ),
+                None,
+            )
+            .await
+        }
+        SolutionPackCommand::Checks { command: SolutionPackChecksCommand::Rerun { application_id } } => {
+            request(client, server, Method::POST, &format!("/solution-packs/applications/{}/checks", segment(application_id)), None).await
+        }
+        SolutionPackCommand::Checks { command: SolutionPackChecksCommand::List { application_id, limit, offset } } => {
+            request(client, server, Method::GET, &format!("/solution-packs/applications/{}/checks?limit={limit}&offset={offset}", segment(application_id)), None).await
+        }
+        SolutionPackCommand::Checks { command: SolutionPackChecksCommand::Show { application_id, run_id } } => {
+            request(client, server, Method::GET, &format!("/solution-packs/applications/{}/checks/{}", segment(application_id), segment(run_id)), None).await
+        }
+    }
+}
+
 async fn entity_publication_command(
     client: &Client,
     server: &Url,
@@ -2252,6 +2527,45 @@ async fn entity_publication_command(
                     "/v1/entities/{}/publications/publish-all",
                     segment(entity_id)
                 ),
+                None,
+            )
+            .await
+        }
+    }
+}
+
+async fn presentation_asset_command(
+    client: &Client,
+    server: &Url,
+    command: PresentationAssetCommand,
+) -> Result<String, CliError> {
+    match command {
+        PresentationAssetCommand::List { limit, offset } => {
+            request(
+                client,
+                server,
+                Method::GET,
+                &format!("/presentation-assets?limit={limit}&offset={offset}"),
+                None,
+            )
+            .await
+        }
+        PresentationAssetCommand::Show { asset_id } => {
+            request(
+                client,
+                server,
+                Method::GET,
+                &format!("/presentation-assets/{}", segment(asset_id)),
+                None,
+            )
+            .await
+        }
+        PresentationAssetCommand::Download { asset_id, output } => {
+            raw_download(
+                client,
+                server,
+                &format!("/presentation-assets/{}/content", segment(asset_id)),
+                &output,
                 None,
             )
             .await
@@ -2384,6 +2698,90 @@ async fn raw_upload(
     )
     .await
 }
+async fn solution_pack_plan_upload(
+    client: &Client,
+    server: &Url,
+    path: &str,
+    archive: &Path,
+    requested_maps: &[String],
+    requested_asset_maps: &[String],
+) -> Result<String, CliError> {
+    let mut seen = std::collections::BTreeSet::new();
+    let mut parsed = Vec::with_capacity(requested_maps.len());
+    for requested in requested_maps {
+        let (key, code) = requested
+            .split_once('=')
+            .ok_or_else(|| CliError::Input("--map must be LOGICAL_KEY=EXISTING_CODE".to_owned()))?;
+        let safe_code = !code.is_empty()
+            && code.len() <= 128
+            && code.as_bytes()[0].is_ascii_lowercase()
+            && code
+                .bytes()
+                .all(|byte| byte.is_ascii_lowercase() || byte.is_ascii_digit() || byte == b'_')
+            && !code.ends_with('_');
+        if !key.starts_with("blueprints/") || key.len() > 128 || !safe_code {
+            return Err(CliError::Input(format!(
+                "invalid --map value '{requested}'"
+            )));
+        }
+        if !seen.insert(key.to_owned()) {
+            return Err(CliError::Input(format!("duplicate --map key '{key}'")));
+        }
+        parsed.push(serde_json::json!({"key": key, "code": code}).to_string());
+    }
+
+    let mut seen_assets = std::collections::BTreeSet::new();
+    let mut parsed_assets = Vec::with_capacity(requested_asset_maps.len());
+    for requested in requested_asset_maps {
+        let (key, id) = requested.split_once('=').ok_or_else(|| {
+            CliError::Input("--map-asset must be LOGICAL_KEY=ASSET_UUID".to_owned())
+        })?;
+        let id = Uuid::parse_str(id)
+            .map_err(|_| CliError::Input(format!("invalid --map-asset value '{requested}'")))?;
+        if !key.starts_with("assets/") || key.len() > 128 {
+            return Err(CliError::Input(format!(
+                "invalid --map-asset value '{requested}'"
+            )));
+        }
+        if !seen_assets.insert(key.to_owned()) {
+            return Err(CliError::Input(format!(
+                "duplicate --map-asset key '{key}'"
+            )));
+        }
+        parsed_assets.push(serde_json::json!({"key": key, "id": id}).to_string());
+    }
+
+    let length = fs::metadata(archive)
+        .map_err(|error| CliError::Input(format!("cannot read {}: {error}", archive.display())))?
+        .len();
+    let stream =
+        tokio_util::io::ReaderStream::new(tokio::fs::File::open(archive).await.map_err(
+            |error| CliError::Input(format!("cannot read {}: {error}", archive.display())),
+        )?);
+    let archive_part =
+        reqwest::multipart::Part::stream_with_length(reqwest::Body::wrap_stream(stream), length)
+            .file_name("solution-pack.tar.zst")
+            .mime_str("application/zstd")
+            .map_err(|error| CliError::Input(error.to_string()))?;
+    let mut form = reqwest::multipart::Form::new().part("archive", archive_part);
+    for mapping in parsed {
+        form = form.text("blueprint_map", mapping);
+    }
+    for mapping in parsed_assets {
+        form = form.text("asset_map", mapping);
+    }
+    raw_response(
+        client
+            .post(endpoint(server, path)?)
+            .multipart(form)
+            .timeout(TRANSFER_TIMEOUT)
+            .send()
+            .await
+            .map_err(|error| CliError::Transport(error.to_string()))?,
+    )
+    .await
+}
+
 async fn multipart_upload(
     client: &Client,
     server: &Url,
@@ -3438,6 +3836,11 @@ value = "Blue shirt"
             Err(error) if error.kind() == clap::error::ErrorKind::DisplayHelp
         ));
         assert!(Cli::try_parse_from(["acli", "workflow", "validate", "--stdin"]).is_ok());
+        assert!(
+            Cli::try_parse_from(["acli", "solution-pack", "inspect", "--file", "pack.tar.zst"])
+                .is_ok()
+        );
+        assert!(Cli::try_parse_from(["acli", "solution-pack", "inspect"]).is_err());
         assert!(Cli::try_parse_from(["acli", "--no-env", "health"]).is_ok());
         assert!(
             Cli::try_parse_from([
@@ -3686,6 +4089,674 @@ value = "Blue shirt"
         )
         .await;
         assert!(matches!(result, Err(CliError::InvalidResponse)));
+        server.abort();
+    }
+
+    #[tokio::test]
+    async fn solution_pack_inspect_streams_the_archive_to_the_server() {
+        use std::sync::{Arc, Mutex};
+
+        let received = Arc::new(Mutex::new(None));
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let address = listener.local_addr().unwrap();
+        let server = tokio::spawn({
+            let received = received.clone();
+            async move {
+                let app = axum::Router::new().route(
+                    "/solution-packs/inspect",
+                    axum::routing::post(
+                        move |headers: axum::http::HeaderMap, body: axum::body::Bytes| {
+                            let received = received.clone();
+                            async move {
+                                *received.lock().unwrap() = Some((
+                                    headers
+                                        .get(axum::http::header::CONTENT_TYPE)
+                                        .unwrap()
+                                        .to_str()
+                                        .unwrap()
+                                        .to_owned(),
+                                    body.to_vec(),
+                                ));
+                                axum::Json(json!({"archive_sha256": "server-validated"}))
+                            }
+                        },
+                    ),
+                );
+                axum::serve(listener, app).await.unwrap();
+            }
+        });
+        let archive = tempfile::NamedTempFile::new().unwrap();
+        fs::write(archive.path(), b"opaque archive bytes").unwrap();
+
+        let body = run(Cli {
+            server: Some(Url::parse(&format!("http://{address}")).unwrap()),
+            token: None,
+            token_stdin: false,
+            session_file: None,
+            no_env: false,
+            command: Command::SolutionPack {
+                command: SolutionPackCommand::Inspect {
+                    file: archive.path().to_path_buf(),
+                },
+            },
+        })
+        .await
+        .unwrap();
+
+        assert_eq!(body, r#"{"archive_sha256":"server-validated"}"#);
+        assert_eq!(
+            received.lock().unwrap().take().unwrap(),
+            (
+                "application/zstd".to_owned(),
+                b"opaque archive bytes".to_vec()
+            )
+        );
+        server.abort();
+    }
+
+    #[test]
+    fn presentation_asset_parser_supports_bounded_discovery_and_download() {
+        assert!(
+            Cli::try_parse_from([
+                "acli",
+                "presentation-asset",
+                "list",
+                "--limit",
+                "100",
+                "--offset",
+                "10000"
+            ])
+            .is_ok()
+        );
+        assert!(
+            Cli::try_parse_from(["acli", "presentation-asset", "list", "--limit", "101"]).is_err()
+        );
+        assert!(
+            Cli::try_parse_from([
+                "acli",
+                "presentation-asset",
+                "show",
+                "00000000-0000-4000-8000-000000000001",
+            ])
+            .is_ok()
+        );
+        assert!(
+            Cli::try_parse_from([
+                "acli",
+                "presentation-asset",
+                "download",
+                "00000000-0000-4000-8000-000000000001",
+                "--output",
+                "asset.svg",
+            ])
+            .is_ok()
+        );
+    }
+
+    #[test]
+    fn solution_pack_plan_parser_supports_create_and_show_shapes() {
+        let create = Cli::try_parse_from([
+            "acli",
+            "solution-pack",
+            "plan",
+            "--file",
+            "pack.tar.zst",
+            "--prefix",
+            "ecom",
+            "--blueprint-publication",
+            "publish",
+            "--include-sample-data",
+        ]);
+        assert!(create.is_ok());
+        assert!(
+            Cli::try_parse_from([
+                "acli",
+                "solution-pack",
+                "plan",
+                "--file",
+                "pack.tar.zst",
+                "--prefix",
+                "ecom",
+                "--blueprint-publication",
+                "publish",
+                "--from-application",
+                "00000000-0000-4000-8000-000000000001",
+            ])
+            .is_ok()
+        );
+        assert!(
+            Cli::try_parse_from([
+                "acli",
+                "solution-pack",
+                "plan",
+                "--file",
+                "pack.tar.zst",
+                "--prefix",
+                "ecom",
+                "--blueprint-publication",
+                "publish",
+                "--from-application",
+                "00000000-0000-4000-8000-000000000001",
+                "--map",
+                "blueprints/product=shared_product",
+            ])
+            .is_err()
+        );
+        let show = Cli::try_parse_from([
+            "acli",
+            "solution-pack",
+            "plan",
+            "show",
+            "00000000-0000-4000-8000-000000000001",
+        ]);
+        assert!(show.is_ok());
+        assert!(
+            Cli::try_parse_from([
+                "acli",
+                "solution-pack",
+                "apply",
+                "00000000-0000-4000-8000-000000000001",
+            ])
+            .is_ok()
+        );
+        assert!(Cli::try_parse_from(["acli", "solution-pack", "apply", "not-a-uuid"]).is_err());
+        assert!(Cli::try_parse_from(["acli", "solution-pack", "applications", "list"]).is_ok());
+        assert!(
+            Cli::try_parse_from([
+                "acli",
+                "solution-pack",
+                "applications",
+                "show",
+                "00000000-0000-4000-8000-000000000002",
+            ])
+            .is_ok()
+        );
+        assert!(
+            Cli::try_parse_from([
+                "acli",
+                "solution-pack",
+                "checks",
+                "rerun",
+                "00000000-0000-4000-8000-000000000002"
+            ])
+            .is_ok()
+        );
+        assert!(
+            Cli::try_parse_from([
+                "acli",
+                "solution-pack",
+                "checks",
+                "list",
+                "00000000-0000-4000-8000-000000000002",
+                "--limit",
+                "100",
+                "--offset",
+                "10000"
+            ])
+            .is_ok()
+        );
+        assert!(
+            Cli::try_parse_from([
+                "acli",
+                "solution-pack",
+                "checks",
+                "show",
+                "00000000-0000-4000-8000-000000000002",
+                "00000000-0000-4000-8000-000000000003"
+            ])
+            .is_ok()
+        );
+    }
+
+    #[tokio::test]
+    async fn solution_pack_apply_and_history_use_uuid_only_json_routes() {
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let address = listener.local_addr().unwrap();
+        let application_id = Uuid::from_u128(2);
+        let app =
+            axum::Router::new()
+                .route(
+                    "/solution-packs/plans/{plan_id}/apply",
+                    axum::routing::post(
+                        move |axum::extract::Path(plan_id): axum::extract::Path<Uuid>| async move {
+                            axum::Json(json!({"plan_id": plan_id}))
+                        },
+                    ),
+                )
+                .route(
+                    "/solution-packs/applications",
+                    axum::routing::get(|uri: axum::http::Uri| async move {
+                        axum::Json(json!({"query": uri.query()}))
+                    }),
+                )
+                .route(
+                    "/solution-packs/applications/{application_id}",
+                    axum::routing::get(
+                        move |axum::extract::Path(id): axum::extract::Path<Uuid>| async move {
+                            axum::Json(json!({"id": id}))
+                        },
+                    ),
+                )
+                .route(
+                    "/solution-packs/applications/{application_id}/abandon",
+                    axum::routing::post(
+                        |axum::extract::Path(id): axum::extract::Path<Uuid>| async move {
+                            axum::Json(json!({"abandoned": id}))
+                        },
+                    ),
+                )
+                .route(
+                    "/solution-packs/applications/{application_id}/checks",
+                    axum::routing::get(
+                        |axum::extract::Path(id): axum::extract::Path<Uuid>,
+                         uri: axum::http::Uri| async move {
+                            axum::Json(json!({"id":id,"query":uri.query()}))
+                        },
+                    )
+                    .post(
+                        |axum::extract::Path(id): axum::extract::Path<Uuid>| async move {
+                            axum::Json(json!({"rerun":id}))
+                        },
+                    ),
+                )
+                .route(
+                    "/solution-packs/applications/{application_id}/checks/{run_id}",
+                    axum::routing::get(
+                        |axum::extract::Path((application_id, run_id)): axum::extract::Path<(
+                            Uuid,
+                            Uuid,
+                        )>| async move {
+                            axum::Json(json!({"application_id":application_id,"run_id":run_id}))
+                        },
+                    ),
+                );
+        let server = tokio::spawn(async move { axum::serve(listener, app).await.unwrap() });
+        let client = Client::new();
+        let url = Url::parse(&format!("http://{address}")).unwrap();
+        let plan_id = Uuid::from_u128(1);
+        assert_eq!(
+            solution_pack_command(&client, &url, SolutionPackCommand::Apply { plan_id })
+                .await
+                .unwrap(),
+            format!(r#"{{"plan_id":"{plan_id}"}}"#)
+        );
+        assert_eq!(
+            solution_pack_command(
+                &client,
+                &url,
+                SolutionPackCommand::Applications {
+                    command: SolutionPackApplicationsCommand::List {
+                        limit: 25,
+                        offset: 0,
+                    },
+                },
+            )
+            .await
+            .unwrap(),
+            r#"{"query":"limit=25&offset=0"}"#
+        );
+        assert_eq!(
+            solution_pack_command(
+                &client,
+                &url,
+                SolutionPackCommand::Applications {
+                    command: SolutionPackApplicationsCommand::List {
+                        limit: 100,
+                        offset: 10_000,
+                    },
+                },
+            )
+            .await
+            .unwrap(),
+            r#"{"query":"limit=100&offset=10000"}"#
+        );
+        assert_eq!(
+            solution_pack_command(
+                &client,
+                &url,
+                SolutionPackCommand::Applications {
+                    command: SolutionPackApplicationsCommand::Show { application_id },
+                },
+            )
+            .await
+            .unwrap(),
+            format!(r#"{{"id":"{application_id}"}}"#)
+        );
+        assert_eq!(
+            solution_pack_command(
+                &client,
+                &url,
+                SolutionPackCommand::Applications {
+                    command: SolutionPackApplicationsCommand::Abandon { application_id },
+                },
+            )
+            .await
+            .unwrap(),
+            format!(r#"{{"abandoned":"{application_id}"}}"#)
+        );
+        assert_eq!(
+            solution_pack_command(
+                &client,
+                &url,
+                SolutionPackCommand::Checks {
+                    command: SolutionPackChecksCommand::Rerun { application_id },
+                }
+            )
+            .await
+            .unwrap(),
+            format!(r#"{{"rerun":"{application_id}"}}"#)
+        );
+        assert_eq!(
+            solution_pack_command(
+                &client,
+                &url,
+                SolutionPackCommand::Checks {
+                    command: SolutionPackChecksCommand::List {
+                        application_id,
+                        limit: 25,
+                        offset: 0
+                    },
+                }
+            )
+            .await
+            .unwrap(),
+            format!(r#"{{"id":"{application_id}","query":"limit=25&offset=0"}}"#)
+        );
+        let run_id = Uuid::from_u128(3);
+        assert_eq!(
+            solution_pack_command(
+                &client,
+                &url,
+                SolutionPackCommand::Checks {
+                    command: SolutionPackChecksCommand::Show {
+                        application_id,
+                        run_id
+                    },
+                }
+            )
+            .await
+            .unwrap(),
+            format!(r#"{{"application_id":"{application_id}","run_id":"{run_id}"}}"#)
+        );
+        server.abort();
+    }
+
+    #[tokio::test]
+    async fn solution_pack_plan_rejects_incomplete_and_invalid_forms() {
+        assert!(
+            Cli::try_parse_from([
+                "acli",
+                "solution-pack",
+                "plan",
+                "--file",
+                "pack.tar.zst",
+                "--prefix",
+                "ecom",
+                "--blueprint-publication",
+                "invalid",
+            ])
+            .is_err()
+        );
+        assert!(
+            Cli::try_parse_from(["acli", "solution-pack", "plan", "show", "not-a-uuid",]).is_err()
+        );
+
+        let api = Url::parse("http://127.0.0.1:1").unwrap();
+        let missing_publication = solution_pack_command(
+            &Client::new(),
+            &api,
+            SolutionPackCommand::Plan {
+                command: None,
+                file: Some(PathBuf::from("pack.tar.zst")),
+                prefix: Some("ecom".to_owned()),
+                blueprint_publication: None,
+                blueprint_maps: Vec::new(),
+                asset_maps: Vec::new(),
+                from_application: None,
+                include_sample_data: false,
+            },
+        )
+        .await;
+        assert!(matches!(missing_publication, Err(CliError::Input(_))));
+
+        let mixed_show = solution_pack_command(
+            &Client::new(),
+            &api,
+            SolutionPackCommand::Plan {
+                command: Some(SolutionPackPlanCommand::Show {
+                    plan_id: Uuid::nil(),
+                }),
+                file: Some(PathBuf::from("pack.tar.zst")),
+                prefix: Some("ecom".to_owned()),
+                blueprint_publication: Some(BlueprintPublicationArgument::Draft),
+                blueprint_maps: Vec::new(),
+                asset_maps: Vec::new(),
+                from_application: None,
+                include_sample_data: false,
+            },
+        )
+        .await;
+        assert!(matches!(mixed_show, Err(CliError::Input(_))));
+
+        let mut command = <Cli as clap::CommandFactory>::command();
+        let help = command
+            .find_subcommand_mut("solution-pack")
+            .unwrap()
+            .find_subcommand_mut("plan")
+            .unwrap()
+            .render_long_help()
+            .to_string();
+        assert!(help.contains("--map <LOGICAL_KEY=EXISTING_CODE>"));
+
+        for mapping in [
+            "missing_equals",
+            "=missing_key",
+            "blueprints/product=Unsafe-code",
+            "contexts/default=valid_code",
+        ] {
+            let invalid_mapping = solution_pack_command(
+                &Client::new(),
+                &api,
+                SolutionPackCommand::Plan {
+                    command: None,
+                    file: Some(PathBuf::from("pack.tar.zst")),
+                    prefix: Some("ecom".to_owned()),
+                    blueprint_publication: Some(BlueprintPublicationArgument::Draft),
+                    blueprint_maps: vec![mapping.to_owned()],
+                    asset_maps: Vec::new(),
+                    from_application: None,
+                    include_sample_data: false,
+                },
+            )
+            .await;
+            assert!(matches!(invalid_mapping, Err(CliError::Input(_))));
+        }
+    }
+
+    #[tokio::test]
+    async fn solution_pack_plan_streams_parameters_and_show_fetches_by_id() {
+        use std::sync::{Arc, Mutex};
+
+        let received = Arc::new(Mutex::new(None));
+        let plan_id = Uuid::from_u128(0x00000000000040008000000000000166);
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let address = listener.local_addr().unwrap();
+        let server = tokio::spawn({
+            let received = received.clone();
+            async move {
+                let app = axum::Router::new()
+                    .route(
+                        "/solution-packs/plans",
+                        axum::routing::post(
+                            move |uri: axum::http::Uri,
+                                  headers: axum::http::HeaderMap,
+                                  body: axum::body::Bytes| {
+                                let received = received.clone();
+                                async move {
+                                    *received.lock().unwrap() = Some((
+                                        uri.query().unwrap().to_owned(),
+                                        headers
+                                            .get(axum::http::header::CONTENT_TYPE)
+                                            .unwrap()
+                                            .to_str()
+                                            .unwrap()
+                                            .to_owned(),
+                                        body.to_vec(),
+                                    ));
+                                    axum::Json(json!({
+                                        "id":"created",
+                                        "actions":[{
+                                            "resource_kind":"workspace_setting",
+                                            "logical_key":"workspace/explore-navigation",
+                                            "action":"append"
+                                        }]
+                                    }))
+                                }
+                            },
+                        ),
+                    )
+                    .route(
+                        "/solution-packs/plans/{plan_id}",
+                        axum::routing::get(
+                            |axum::extract::Path(plan_id): axum::extract::Path<Uuid>| async move {
+                                axum::Json(json!({"id": plan_id}))
+                            },
+                        ),
+                    );
+                axum::serve(listener, app).await.unwrap();
+            }
+        });
+        let archive = tempfile::NamedTempFile::new().unwrap();
+        fs::write(archive.path(), b"opaque archive bytes").unwrap();
+        let api = Url::parse(&format!("http://{address}")).unwrap();
+
+        let created = solution_pack_command(
+            &Client::new(),
+            &api,
+            SolutionPackCommand::Plan {
+                command: None,
+                file: Some(archive.path().to_path_buf()),
+                prefix: Some("shop prefix".to_owned()),
+                blueprint_publication: Some(BlueprintPublicationArgument::Publish),
+                blueprint_maps: Vec::new(),
+                asset_maps: Vec::new(),
+                from_application: None,
+                include_sample_data: false,
+            },
+        )
+        .await
+        .unwrap();
+        assert!(created.contains(r#""resource_kind":"workspace_setting""#));
+        assert!(created.contains(r#""logical_key":"workspace/explore-navigation""#));
+        assert_eq!(
+            received.lock().unwrap().take().unwrap(),
+            (
+                "prefix=shop+prefix&blueprint_publication=publish".to_owned(),
+                "application/zstd".to_owned(),
+                b"opaque archive bytes".to_vec()
+            )
+        );
+
+        let prior_application_id = Uuid::parse_str("00000000-0000-4000-8000-000000000123").unwrap();
+        solution_pack_command(
+            &Client::new(),
+            &api,
+            SolutionPackCommand::Plan {
+                command: None,
+                file: Some(archive.path().to_path_buf()),
+                prefix: Some("shop".to_owned()),
+                blueprint_publication: Some(BlueprintPublicationArgument::Publish),
+                blueprint_maps: Vec::new(),
+                asset_maps: Vec::new(),
+                from_application: Some(prior_application_id),
+                include_sample_data: false,
+            },
+        )
+        .await
+        .unwrap();
+        assert_eq!(
+            received.lock().unwrap().take().unwrap(),
+            (
+                format!(
+                    "prefix=shop&blueprint_publication=publish&from_application={prior_application_id}"
+                ),
+                "application/zstd".to_owned(),
+                b"opaque archive bytes".to_vec()
+            )
+        );
+
+        solution_pack_command(
+            &Client::new(),
+            &api,
+            SolutionPackCommand::Plan {
+                command: None,
+                file: Some(archive.path().to_path_buf()),
+                prefix: Some("shop".to_owned()),
+                blueprint_publication: Some(BlueprintPublicationArgument::Publish),
+                blueprint_maps: vec![
+                    "blueprints/product=shared_product".to_owned(),
+                    "blueprints/category=shared_category".to_owned(),
+                ],
+                asset_maps: vec![
+                    "assets/brand-logo=00000000-0000-4000-8000-000000000999".to_owned(),
+                ],
+                from_application: None,
+                include_sample_data: false,
+            },
+        )
+        .await
+        .unwrap();
+        let (query, content_type, body) = received.lock().unwrap().take().unwrap();
+        assert_eq!(query, "prefix=shop&blueprint_publication=publish");
+        assert!(content_type.starts_with("multipart/form-data; boundary="));
+        let body = String::from_utf8(body).unwrap();
+        assert!(body.contains("name=\"archive\""));
+        assert!(body.contains("application/zstd"));
+        assert!(body.contains("opaque archive bytes"));
+        assert_eq!(body.matches("name=\"blueprint_map\"").count(), 2);
+        assert_eq!(body.matches("name=\"asset_map\"").count(), 1);
+        assert!(body.contains("assets/brand-logo"));
+        assert!(body.contains("00000000-0000-4000-8000-000000000999"));
+        assert!(body.contains("blueprints/product"));
+        assert!(body.contains("shared_product"));
+
+        let duplicate = solution_pack_command(
+            &Client::new(),
+            &api,
+            SolutionPackCommand::Plan {
+                command: None,
+                file: Some(archive.path().to_path_buf()),
+                prefix: Some("shop".to_owned()),
+                blueprint_publication: Some(BlueprintPublicationArgument::Publish),
+                blueprint_maps: vec![
+                    "blueprints/product=shared_product".to_owned(),
+                    "blueprints/product=other_product".to_owned(),
+                ],
+                asset_maps: Vec::new(),
+                from_application: None,
+                include_sample_data: false,
+            },
+        )
+        .await;
+        assert!(matches!(duplicate, Err(CliError::Input(_))));
+
+        let shown = solution_pack_command(
+            &Client::new(),
+            &api,
+            SolutionPackCommand::Plan {
+                command: Some(SolutionPackPlanCommand::Show { plan_id }),
+                file: None,
+                prefix: None,
+                blueprint_publication: None,
+                blueprint_maps: Vec::new(),
+                asset_maps: Vec::new(),
+                from_application: None,
+                include_sample_data: false,
+            },
+        )
+        .await
+        .unwrap();
+        assert!(shown.contains(&plan_id.to_string()));
         server.abort();
     }
 

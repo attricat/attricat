@@ -243,15 +243,32 @@ export const RelationshipField = ({
                     '&:hover': { bgcolor: 'action.hover' },
                   }}
                 >
-                  <Link
-                    href={previewHref(target.id)}
-                    onClick={() => markPreviewed(target.id)}
-                    rel="opener"
-                    sx={{ flexGrow: 1, minWidth: 0, mr: 1 }}
-                    target="_blank"
+                  <Box
+                    sx={{
+                      alignItems: 'center',
+                      display: 'flex',
+                      flexGrow: 1,
+                      gap: 1,
+                      minWidth: 0,
+                      mr: 1,
+                    }}
                   >
-                    {targetLabel(target)}
-                  </Link>
+                    <Link
+                      href={previewHref(target.id)}
+                      onClick={() => markPreviewed(target.id)}
+                      rel="opener"
+                      target="_blank"
+                    >
+                      {targetLabel(target)}
+                    </Link>
+                    {target.is_sample && (
+                      <Chip
+                        color="info"
+                        label={t('entities.sample')}
+                        size="small"
+                      />
+                    )}
+                  </Box>
                   <Stack direction="row" spacing={0.5}>
                     <Button
                       aria-label={t('entities.previewRelationshipOptionLabel', {

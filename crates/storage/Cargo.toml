@@ -22,3 +22,7 @@ thiserror.workspace = true
 tokio.workspace = true
 url.workspace = true
 uuid.workspace = true
+
+[dev-dependencies]
+aws-smithy-runtime-api = "1"
+aws-smithy-types = "1"

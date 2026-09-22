@@ -6,7 +6,6 @@ import {
   CircularProgress,
   Divider,
   IconButton,
-  ListItemButton,
   ListItemIcon,
   ListItemText,
   Popover,
@@ -15,7 +14,8 @@ import {
   Typography,
 } from '@mui/material';
 import { useQuery } from '@tanstack/react-query';
-import { Link, useRouterState } from '@tanstack/react-router';
+import { useRouterState } from '@tanstack/react-router';
+import { RouterListItemButton } from '../../components/RouterLink';
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { z } from 'zod';
@@ -76,9 +76,8 @@ const ExtensionNavigationItem = ({
   if (contribution.kind !== 'navigation' || !contribution.route) return null;
   const target = `/extensions/${contribution.extension_id}/${contribution.route}`;
   return (
-    <ListItemButton
+    <RouterListItemButton
       aria-label={contribution.title ?? contribution.id}
-      component={Link}
       onClick={onNavigate}
       selected={pathname === target}
       to="/extensions/$extensionId/$contributionId"
@@ -91,7 +90,7 @@ const ExtensionNavigationItem = ({
         <ExtensionIcon />
       </ListItemIcon>
       <ListItemText primary={contribution.title ?? contribution.id} />
-    </ListItemButton>
+    </RouterListItemButton>
   );
 };
 

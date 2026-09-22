@@ -50,10 +50,12 @@ mod extensions;
 mod files;
 mod health;
 mod members;
+mod presentation_assets;
 mod reusable_attributes;
 mod roles;
 mod rules;
 mod sessions;
+mod solution_packs;
 mod tasks;
 mod tokens;
 mod values;
@@ -92,8 +94,14 @@ pub use extensions::{
 };
 pub use files::{FileObject, FilePolicy, FileUploadResult, NewUploadedFile};
 pub use members::{WorkspaceInvitation, WorkspaceMember};
+pub use presentation_assets::{MAX_PRESENTATION_ASSET_PAGE_SIZE, PresentationAsset};
 pub use roles::{Permission, WorkspaceGrantTarget, WorkspaceRole};
 pub use rules::{ClaimedRuleRun, RuleCandidateResult};
+pub use solution_packs::SolutionPackCheckResult;
+pub use solution_packs::{
+    CreateSolutionPackPlanRequest, SolutionPackApplication, SolutionPackApplicationSummary,
+    SolutionPackCheckRun, SolutionPackCheckRunSummary, SolutionPackPlan,
+};
 pub use tasks::{ClaimedTask, TaskError, TaskSummary};
 pub use tokens::PersonalApiToken;
 pub use workflow_runs::WorkflowRun;
@@ -295,12 +303,30 @@ pub enum RepositoryError {
     InvalidHierarchyRelationship,
     #[error("invalid blueprint definition: {0}")]
     InvalidBlueprintDefinition(String),
+    #[error("{0}")]
+    InvalidSolutionPackPlan(String),
+    #[error("solution-pack asset storage is unavailable")]
+    SolutionPackAssetStorageUnavailable,
+    #[error("solution-pack plan is not ready to apply")]
+    SolutionPackPlanNotReady,
+    #[error("solution-pack plan has expired")]
+    SolutionPackPlanExpired,
+    #[error("solution-pack plan preconditions no longer match the workspace")]
+    SolutionPackPlanStale,
+    #[error("solution-pack presentation asset object integrity failed")]
+    SolutionPackAssetObjectIntegrityFailed,
+    #[error("solution-pack application is invalid and cannot be resumed")]
+    SolutionPackApplicationInvalid,
+    #[error("solution-pack application failed: {0}")]
+    SolutionPackApplicationFailed(String),
     #[error("global relationship search exceeded its {dimension} budget")]
     RelationshipSearchBudgetExceeded { dimension: &'static str },
     #[error("global relationship search exceeded its PostgreSQL statement timeout")]
     RelationshipSearchTimedOut,
     #[error("blueprint code is already owned by another blueprint")]
     BlueprintCodeTaken,
+    #[error("catalog code is already in use")]
+    CatalogCodeTaken,
     #[error("workflow code is already in use")]
     WorkflowCodeTaken,
     #[error("invalid workflow definition: {0}")]
@@ -353,6 +379,33 @@ impl RepositoryError {
     pub fn invalid_blueprint_definition(error: impl std::fmt::Display) -> Self {
         Self::InvalidBlueprintDefinition(error.to_string())
     }
+}
+
+pub(super) async fn lock_workspace_resource_code(
+    transaction: &mut Transaction<'_, Postgres>,
+    workspace_id: Uuid,
+    code: &str,
+) -> Result<(), RepositoryError> {
+    let lock_key = format!("{workspace_id}:{code}");
+    sqlx::query("SELECT pg_advisory_xact_lock(hashtextextended($1, 0))")
+        .bind(lock_key)
+        .execute(&mut **transaction)
+        .await?;
+    Ok(())
+}
+
+pub(super) async fn workspace_resource_code_matches(
+    transaction: &mut Transaction<'_, Postgres>,
+    workspace_id: Uuid,
+    code: &str,
+) -> Result<Vec<(String, Uuid)>, RepositoryError> {
+    Ok(sqlx::query_as::<_, (String, Uuid)>(
+        "SELECT 'blueprint'::text,id FROM blueprints WHERE workspace_id=$1 AND code=$2 UNION ALL SELECT 'context'::text,id FROM attribute_contexts WHERE workspace_id=$1 AND code=$2",
+    )
+    .bind(workspace_id)
+    .bind(code)
+    .fetch_all(&mut **transaction)
+    .await?)
 }
 
 impl CatalogRepository {
@@ -911,11 +964,23 @@ impl CatalogRepository {
         &self,
         mut transaction: Transaction<'_, Postgres>,
         changes: Vec<AuditEventChange>,
+        event: NewDomainEvent,
+    ) -> Result<(), RepositoryError> {
+        self.stage_entity_mutation(&mut transaction, changes, event)
+            .await?;
+        transaction.commit().await?;
+        Ok(())
+    }
+
+    pub(in crate::repository) async fn stage_entity_mutation(
+        &self,
+        transaction: &mut Transaction<'_, Postgres>,
+        changes: Vec<AuditEventChange>,
         mut event: NewDomainEvent,
     ) -> Result<(), RepositoryError> {
-        self.ensure_task_fence(&mut transaction).await?;
+        self.ensure_task_fence(transaction).await?;
         let retained_role = self
-            .reconcile_entity_publication(&mut transaction, event.aggregate_id, "entity_changed")
+            .reconcile_entity_publication(transaction, event.aggregate_id, "entity_changed")
             .await?;
         let publication_metadata = match retained_role {
             Some(role_code) => {
@@ -940,10 +1005,7 @@ impl CatalogRepository {
             }
         };
         if let Some(audit_event_id) = self
-            .write_audit_event_with_publication_metadata(
-                &mut transaction,
-                Some(publication_metadata),
-            )
+            .write_audit_event_with_publication_metadata(transaction, Some(publication_metadata))
             .await?
         {
             for change in changes {
@@ -959,12 +1021,11 @@ impl CatalogRepository {
                     .bind(change.change_kind)
                     .bind(change.before_value)
                     .bind(change.after_value)
-                    .execute(&mut *transaction)
+                    .execute(&mut **transaction)
                     .await?;
             }
         }
-        self.enqueue_event(&mut transaction, event).await?;
-        transaction.commit().await?;
+        self.enqueue_event(transaction, event).await?;
         Ok(())
     }
 

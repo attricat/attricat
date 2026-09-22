@@ -32,7 +32,9 @@ metrics-exporter-prometheus = "0.15"
 opentelemetry = "0.32"
 opentelemetry-otlp = { version = "0.32", default-features = false, features = ["trace", "grpc-tonic"] }
 opentelemetry_sdk = { version = "0.32", features = ["rt-tokio"] }
+quick-xml = "0.37"
 rand = "0.8"
+regex = "1"
 reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls", "stream"] }
 rust_decimal = { version = "1", features = ["serde"] }
 secrecy = "0.10"
@@ -49,6 +51,7 @@ tokio-stream = "0.1"
 toml = "0.8"
 tracing = "0.1"
 tracing-opentelemetry = "0.33"
+unicode-normalization = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter", "json"] }
 url = "2"
 uuid = { version = "1", features = ["serde", "v4"] }

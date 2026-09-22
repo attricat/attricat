@@ -24,6 +24,88 @@ pub const SUPPORTED_HOST_API: &str = "1.3.0";
 pub const MAX_EXTENSION_ARCHIVE_BYTES: usize = 32 * 1024 * 1024;
 pub const MAX_EXTENSION_UNPACKED_BYTES: usize = 128 * 1024 * 1024;
 pub const MAX_EXTENSION_ARCHIVE_ENTRIES: usize = 256;
+
+pub fn valid_contribution_key(value: &str) -> bool {
+    let Some((extension_id, contribution_id)) = value.split_once(':') else {
+        return false;
+    };
+    value.len() <= 256
+        && !extension_id.is_empty()
+        && !contribution_id.is_empty()
+        && !contribution_id.contains(':')
+        && value
+            .chars()
+            .filter(|character| *character != ':')
+            .all(|character| character.is_ascii_alphanumeric() || "._-".contains(character))
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum ExtensionLayoutPlacement {
+    Exact,
+    Absent,
+    Conflict,
+}
+
+/// Classifies one stable contribution key without interpreting unrelated
+/// layout data. Planning and application share this to keep merge semantics
+/// identical across the immutable snapshot and the locked current row.
+pub fn classify_extension_layout_placement(
+    layout: &Value,
+    contribution: &str,
+    outlet: &str,
+    hidden: bool,
+    promoted: bool,
+) -> ExtensionLayoutPlacement {
+    let mut found: Option<(&str, bool, bool)> = None;
+    let mut promoted_seen = false;
+    let Some(outlets) = layout.get("outlets").and_then(Value::as_object) else {
+        return ExtensionLayoutPlacement::Conflict;
+    };
+    for (current_outlet, item) in outlets {
+        let Some(item) = item.as_object() else {
+            return ExtensionLayoutPlacement::Conflict;
+        };
+        let is_promoted = item
+            .get("promoted")
+            .and_then(Value::as_array)
+            .is_some_and(|values| {
+                values
+                    .iter()
+                    .any(|value| value.as_str() == Some(contribution))
+            });
+        promoted_seen |= is_promoted;
+        for (list, is_hidden) in [("order", false), ("hidden", true)] {
+            if item
+                .get(list)
+                .and_then(Value::as_array)
+                .is_some_and(|values| {
+                    values
+                        .iter()
+                        .any(|value| value.as_str() == Some(contribution))
+                })
+            {
+                if found.is_some() {
+                    return ExtensionLayoutPlacement::Conflict;
+                }
+                found = Some((current_outlet, is_hidden, is_promoted));
+            }
+        }
+    }
+    if promoted_seen && !matches!(found, Some(("navigation", false, true))) {
+        return ExtensionLayoutPlacement::Conflict;
+    }
+    match found {
+        None => ExtensionLayoutPlacement::Absent,
+        Some((current_outlet, current_hidden, current_promoted))
+            if current_outlet == outlet
+                && current_hidden == hidden
+                && current_promoted == promoted =>
+        {
+            ExtensionLayoutPlacement::Exact
+        }
+        Some(_) => ExtensionLayoutPlacement::Conflict,
+    }
+}
 pub const DEFAULT_HOST_REQUEST_BYTES: u64 = 64 * 1024;
 pub const DEFAULT_HOST_RESPONSE_BYTES: u64 = 1024 * 1024;
 pub const DEFAULT_HOST_TIMEOUT_MILLIS: u64 = 10_000;
@@ -665,6 +747,13 @@ impl Manifest {
         }
         for contribution in &self.ui {
             valid_id(&contribution.id, "UI contribution id")?;
+            let contribution_key = format!("{}:{}", self.catalog.id, contribution.id);
+            if !valid_contribution_key(&contribution_key) {
+                return Err(ManifestError::Invalid(format!(
+                    "UI contribution '{}' stable key exceeds the layout key limit",
+                    contribution.id
+                )));
+            }
             if !matches!(contribution.kind, UiContributionKind::Navigation)
                 && (contribution.version == 0
                     || !contribution.artifact.as_ref().is_some_and(|artifact| {
@@ -1179,7 +1268,7 @@ fn unique<'a>(values: impl Iterator<Item = &'a String>, label: &str) -> Result<(
     }
     Ok(())
 }
-fn valid_id(value: &str, label: &str) -> Result<(), ManifestError> {
+pub fn valid_id(value: &str, label: &str) -> Result<(), ManifestError> {
     if value.is_empty()
         || value.len() > MAX_EXTENSION_IDENTIFIER_BYTES
         || !value
@@ -1481,6 +1570,111 @@ pub fn validate_schema(schema: &Value, value: &Value) -> Result<(), ManifestErro
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn shared_layout_placement_classifier_covers_plan_and_apply_states() {
+        let layout = serde_json::json!({
+            "version": 1,
+            "outlets": {
+                "navigation": {
+                    "order": ["acme.shop:nav"],
+                    "hidden": [],
+                    "promoted": ["acme.shop:nav"]
+                },
+                "entity_action": {
+                    "order": [],
+                    "hidden": ["acme.shop:hidden"]
+                }
+            }
+        });
+        for (contribution, outlet, hidden, promoted, expected) in [
+            (
+                "acme.shop:nav",
+                "navigation",
+                false,
+                true,
+                ExtensionLayoutPlacement::Exact,
+            ),
+            (
+                "acme.shop:hidden",
+                "entity_action",
+                true,
+                false,
+                ExtensionLayoutPlacement::Exact,
+            ),
+            (
+                "acme.shop:absent",
+                "entity_action",
+                false,
+                false,
+                ExtensionLayoutPlacement::Absent,
+            ),
+            (
+                "acme.shop:nav",
+                "navigation",
+                false,
+                false,
+                ExtensionLayoutPlacement::Conflict,
+            ),
+            (
+                "acme.shop:hidden",
+                "navigation",
+                true,
+                false,
+                ExtensionLayoutPlacement::Conflict,
+            ),
+        ] {
+            assert_eq!(
+                classify_extension_layout_placement(
+                    &layout,
+                    contribution,
+                    outlet,
+                    hidden,
+                    promoted,
+                ),
+                expected
+            );
+        }
+
+        for malformed in [
+            serde_json::json!({
+                "version":1,
+                "outlets": {
+                    "navigation": {
+                        "order":[],
+                        "hidden":[],
+                        "promoted":["acme.shop:item"]
+                    }
+                }
+            }),
+            serde_json::json!({
+                "version":1,
+                "outlets": {
+                    "navigation": {
+                        "order":[],
+                        "hidden":[],
+                        "promoted":["acme.shop:item"]
+                    },
+                    "entity_action": {
+                        "order":["acme.shop:item"],
+                        "hidden":[]
+                    }
+                }
+            }),
+        ] {
+            assert_eq!(
+                classify_extension_layout_placement(
+                    &malformed,
+                    "acme.shop:item",
+                    "entity_action",
+                    false,
+                    false,
+                ),
+                ExtensionLayoutPlacement::Conflict
+            );
+        }
+    }
+
     fn manifest() -> Manifest {
         serde_json::from_value(serde_json::json!({"manifest_version":1,"name":"Acme","version":"1.2.3","description":"test extension","icons":{"48":"icon.png"},"catalog":{"id":"acme.test","host_api":"^1.0"},"permissions":["network.request","webhooks.receive"],"host_permissions":[{"id":"acme","matches":["https://api.acme.example/v1/*"],"methods":["GET"]}],"artifacts":[{"id":"server","kind":"server_wasm","path":"server.wasm"}],"configuration":{"version":1,"schema":{"type":"object","required":["url"],"properties":{"url":{"type":"string"}},"additionalProperties":false}},"server":{"webhooks":[{"id":"events","event_type":"webhook.acme.events.v1","handler":"handle_events_v1","methods":["POST"],"authentication":{"type":"hmac-sha256","signature_header":"X-Signature","timestamp_header":"X-Timestamp","max_age_seconds":300,"secret":"webhook_secret"},"max_body_bytes":1024}]}})).unwrap()
     }
@@ -1502,6 +1696,59 @@ mod tests {
         invalid.optional_permissions = vec!["network.request".into(), "webhooks.receive".into()];
         assert!(invalid.validate(SUPPORTED_HOST_API).is_err());
     }
+    #[test]
+    fn ui_contribution_stable_key_enforces_combined_length_boundary() {
+        let mut value = manifest();
+        value.artifacts.push(Artifact {
+            id: "client".into(),
+            kind: ArtifactKind::ClientComponent,
+            path: "client.js".into(),
+        });
+        value.ui.push(UiContribution {
+            id: "b".repeat(128),
+            version: 1,
+            kind: UiContributionKind::Embedded,
+            artifact: Some("client".into()),
+            route: None,
+            outlet: Some(UiOutlet::Navigation),
+            title: None,
+        });
+        value.catalog.id = "a".repeat(127);
+        assert_eq!(
+            format!("{}:{}", value.catalog.id, value.ui[0].id).len(),
+            256
+        );
+        assert!(value.validate(SUPPORTED_HOST_API).is_ok());
+
+        value.catalog.id = "a".repeat(128);
+        assert_eq!(
+            format!("{}:{}", value.catalog.id, value.ui[0].id).len(),
+            257
+        );
+        let error = value.validate(SUPPORTED_HOST_API).unwrap_err();
+        assert!(error.to_string().contains("layout key limit"));
+
+        let mut invalid_contribution = value.clone();
+        invalid_contribution.catalog.id = "acme.test".into();
+        invalid_contribution.ui[0].id = "b".repeat(129);
+        assert!(
+            invalid_contribution
+                .validate(SUPPORTED_HOST_API)
+                .unwrap_err()
+                .to_string()
+                .contains("UI contribution id")
+        );
+        let mut invalid_extension = value;
+        invalid_extension.catalog.id = "a".repeat(129);
+        assert!(
+            invalid_extension
+                .validate(SUPPORTED_HOST_API)
+                .unwrap_err()
+                .to_string()
+                .contains("catalog.id")
+        );
+    }
+
     #[test]
     fn event_handlers_require_subscription_capability_and_versioned_types() {
         let mut value = manifest();

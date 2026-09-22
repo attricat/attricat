@@ -14,10 +14,12 @@ mod extensions;
 mod extractors;
 mod files;
 mod members;
+mod presentation_assets;
 mod reusable_attributes;
 mod roles;
 mod rules;
 mod sessions;
+mod solution_packs;
 mod tokens;
 mod workflows;
 mod workspace_navigation;
@@ -37,6 +39,7 @@ use crate::{
     file_access::FileAccessPolicy,
     mail::MailDelivery,
     repository::CatalogRepository,
+    solution_packs::MAX_SOLUTION_PACK_ARCHIVE_BYTES,
     storage::ObjectStore,
     telemetry::{register_request_timing, unregister_request_timing},
 };
@@ -328,6 +331,55 @@ pub fn router(state: AppState) -> Router {
             post(extensions::sideload).layer(axum::extract::DefaultBodyLimit::max(
                 MAX_EXTENSION_ARCHIVE_BYTES,
             )),
+        )
+        .route("/presentation-assets", get(presentation_assets::list))
+        .route(
+            "/presentation-assets/{asset_id}",
+            get(presentation_assets::get),
+        )
+        .route(
+            "/presentation-assets/{asset_id}/content",
+            get(presentation_assets::content),
+        )
+        .route(
+            "/solution-packs/inspect",
+            post(solution_packs::inspect).layer(axum::extract::DefaultBodyLimit::max(
+                MAX_SOLUTION_PACK_ARCHIVE_BYTES,
+            )),
+        )
+        .route(
+            "/solution-packs/plans",
+            post(solution_packs::create_plan).layer(axum::extract::DefaultBodyLimit::max(
+                MAX_SOLUTION_PACK_ARCHIVE_BYTES + 128 * 1024,
+            )),
+        )
+        .route(
+            "/solution-packs/plans/{plan_id}",
+            get(solution_packs::get_plan),
+        )
+        .route(
+            "/solution-packs/plans/{plan_id}/apply",
+            post(solution_packs::apply_plan),
+        )
+        .route(
+            "/solution-packs/applications",
+            get(solution_packs::list_applications),
+        )
+        .route(
+            "/solution-packs/applications/{application_id}",
+            get(solution_packs::get_application),
+        )
+        .route(
+            "/solution-packs/applications/{application_id}/abandon",
+            post(solution_packs::abandon_application),
+        )
+        .route(
+            "/solution-packs/applications/{application_id}/checks",
+            get(solution_packs::list_check_runs).post(solution_packs::rerun_checks),
+        )
+        .route(
+            "/solution-packs/applications/{application_id}/checks/{run_id}",
+            get(solution_packs::get_check_run),
         )
         .route("/extensions/runtime", get(extensions::runtime))
         .route(

@@ -97,7 +97,9 @@ export const EntityAttributeEditor = ({
         label={attributeLabel(attribute)}
         onChange={(event) => onChange(event.target.value)}
         multiline={attribute.value_type === attributeValueTypes.json}
-        minRows={attribute.value_type === attributeValueTypes.json ? 4 : undefined}
+        minRows={
+          attribute.value_type === attributeValueTypes.json ? 4 : undefined
+        }
         placeholder={
           attribute.value_type === attributeValueTypes.time
             ? '09:30:00 America/New_York'

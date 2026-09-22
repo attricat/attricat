@@ -56,6 +56,7 @@ const targetPage: EntitySearchResponse = {
       blueprint_version: 1,
       display: { default: 'Acme' },
       id: targetId,
+      is_sample: false,
       match_explanations: [],
       preview: {},
       schema_outdated: false,

@@ -16,16 +16,14 @@ cli=(cargo run --quiet -p cli -- --token "$CATALOG_TOKEN")
 api() { curl --fail-with-body --silent --show-error -H "Authorization: Bearer $CATALOG_TOKEN" -H 'Content-Type: application/json' "$@"; }
 
 (cd "$example_extension" && just check && just pack)
-manifest="$example_extension/manifest.json"
+manifest="$example_extension/importer/manifest.json"
+archive="$example_extension/dist/reference-customer-importer.tar.zst"
 extension_id=$(jq -r '.catalog.id' "$manifest")
-version=$(jq -r '.version' "$manifest")
-archive="$example_extension/dist/$extension_id-$version.tar.zst"
 test -s "$archive" || { echo "missing packaged example archive: $archive" >&2; exit 1; }
 
-# Package, side-load, grant every declared capability, and enable the same
-# extension maintained by the sibling checkout. This proves host installer,
-# permissions, component validation, and client-artifact delivery together.
-# A prior interrupted verification may have left a disabled installation.
+# Package, side-load, grant every declared capability, and enable the maintained
+# reference importer. A prior interrupted verification may have left an
+# installation in any terminal or disabled state.
 "${cli[@]}" extension remove "$extension_id" >/dev/null 2>&1 || true
 "${cli[@]}" extension sideload --file "$archive" >/dev/null
 while IFS= read -r permission; do
@@ -38,16 +36,32 @@ echo "$detail" | jq -e '.installation.state == "enabled"' >/dev/null
 release_id=$(echo "$detail" | jq -r '.installation.installed_release_id')
 [[ "$release_id" != "null" && -n "$release_id" ]] || { echo 'enabled extension did not expose a release ID' >&2; exit 1; }
 
-# Fetch a real declared client contribution through the mediated artifact API.
-contribution=$(jq -r '.ui[] | select(.artifact != null) | .id' "$manifest" | head -1)
-artifact=$(mktemp)
-trap 'rm -f "$artifact"' EXIT
-"${cli[@]}" extension artifact "$extension_id" "$contribution" --output "$artifact" >/dev/null
-test -s "$artifact"
+# Exercise the real v1.3 component and host-managed artifact path. The importer
+# completes one durable operation by writing the packaged customer fixture to a
+# host artifact; completion therefore proves task dispatch, Wasmtime execution,
+# permission mediation, artifact storage, and checkpointing together.
+operation_id=$(jq -r '.server.operations[0].id' "$manifest")
+idempotency_key="reference-e2e-$(date +%s)-$$"
+run=$(api -X POST "$CATALOG_API_URL/extensions/$extension_id/operations" -d "$(jq -nc --arg operation_id "$operation_id" --arg idempotency_key "$idempotency_key" '{operation_id:$operation_id,input:{fixture:"customers.ndjson"},idempotency_key:$idempotency_key}')")
+run_id=$(echo "$run" | jq -er '.id')
+for _ in $(seq 1 120); do
+  runs=$(api "$CATALOG_API_URL/extension-operation-runs")
+  status=$(echo "$runs" | jq -r --arg run_id "$run_id" '.[] | select(.id == $run_id) | .status')
+  if [[ "$status" == "completed" ]]; then
+    echo "$runs" | jq -e --arg run_id "$run_id" '.[] | select(.id == $run_id and .progress.customers == 2 and .progress.bytes > 0)' >/dev/null
+    break
+  fi
+  if [[ "$status" == "failed" || "$status" == "dead_letter" || "$status" == "cancelled" ]]; then
+    echo "reference operation ended in $status" >&2
+    exit 1
+  fi
+  sleep 1
+done
+[[ "$status" == "completed" ]] || { echo 'reference operation did not complete in time' >&2; exit 1; }
 
 # Quarantine is a public lifecycle action; the audit API is the public evidence
-# surface for package, grants, enablement, artifact delivery, and quarantine.
+# surface for package, grants, enablement, operation execution, and quarantine.
 "${cli[@]}" extension quarantine "$extension_id" --diagnostic-code reference-e2e >/dev/null
 "${cli[@]}" extension detail "$extension_id" | jq -e '.installation.state == "quarantined"' >/dev/null
 "${cli[@]}" audit list --limit 100 | jq -e '.events | map(.target.type) | any(. == "extension")' >/dev/null
-printf 'reference extension E2E passed: extension=%s release=%s contribution=%s\n' "$extension_id" "$release_id" "$contribution"
+printf 'reference extension E2E passed: extension=%s release=%s operation=%s run=%s\n' "$extension_id" "$release_id" "$operation_id" "$run_id"

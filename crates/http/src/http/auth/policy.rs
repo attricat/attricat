@@ -37,6 +37,26 @@ pub(super) fn policy(method: &Method, path: &str) -> Option<Policy> {
     } else {
         "blueprints.write"
     };
+    if path == "/solution-packs/inspect"
+        || (method == Method::GET && path == "/presentation-assets")
+        || (method == Method::GET && path == "/presentation-assets/{asset_id}")
+        || (method == Method::GET && path == "/presentation-assets/{asset_id}/content")
+        || (method == Method::POST && path == "/solution-packs/plans")
+        || (method == Method::GET && path == "/solution-packs/plans/{plan_id}")
+        || (method == Method::POST && path == "/solution-packs/plans/{plan_id}/apply")
+        || (method == Method::GET && path == "/solution-packs/applications")
+        || (method == Method::GET && path == "/solution-packs/applications/{application_id}")
+        || (method == Method::POST
+            && path == "/solution-packs/applications/{application_id}/abandon")
+        || path == "/solution-packs/applications/{application_id}/checks"
+        || (method == Method::GET
+            && path == "/solution-packs/applications/{application_id}/checks/{run_id}")
+    {
+        return Some(Policy {
+            permission: "solution_packs.manage",
+            target: TargetKind::None,
+        });
+    }
     if path == "/extension-registries/discover"
         || path.starts_with("/extension-registries/extensions/")
     {
@@ -458,6 +478,44 @@ mod tests {
             .permission,
             "entities.publish"
         );
+    }
+
+    #[test]
+    fn solution_pack_inspection_requires_manage_permission() {
+        for (method, path) in [
+            (Method::POST, "/solution-packs/inspect"),
+            (Method::GET, "/presentation-assets"),
+            (Method::GET, "/presentation-assets/{asset_id}"),
+            (Method::GET, "/presentation-assets/{asset_id}/content"),
+            (Method::POST, "/solution-packs/plans"),
+            (Method::GET, "/solution-packs/plans/{plan_id}"),
+            (Method::POST, "/solution-packs/plans/{plan_id}/apply"),
+            (Method::GET, "/solution-packs/applications"),
+            (Method::GET, "/solution-packs/applications/{application_id}"),
+            (
+                Method::POST,
+                "/solution-packs/applications/{application_id}/abandon",
+            ),
+            (
+                Method::GET,
+                "/solution-packs/applications/{application_id}/checks",
+            ),
+            (
+                Method::POST,
+                "/solution-packs/applications/{application_id}/checks",
+            ),
+            (
+                Method::GET,
+                "/solution-packs/applications/{application_id}/checks/{run_id}",
+            ),
+        ] {
+            assert_eq!(
+                policy(&method, path).unwrap().permission,
+                "solution_packs.manage"
+            );
+        }
+        assert!(policy(&Method::POST, "/solution-packs/apply").is_none());
+        assert!(policy(&Method::GET, "/solution-packs/future").is_none());
     }
 
     #[test]

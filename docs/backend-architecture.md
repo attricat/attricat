@@ -30,7 +30,7 @@ No library crate may depend on `api`. `apps/api` alone owns process startup, dat
 | --- | --- | --- |
 | `catalog-domain` | Domain DTOs, account value objects, agent/task contracts, and product safety limits | — |
 | `catalog-events` | Versioned event envelopes, names, and validation | SQLx row decoding only |
-| `catalog-extension-manifest` | Package manifests, schemas, archive validation, containment policy | archive codecs |
+| `catalog-extension-manifest` | Extension and solution-pack manifests, schemas, archive/sample-data validation, and containment policy | archive/image codecs |
 | `catalog-repository` | SQLx repository, transactional application services, registry and installer coordination | SQLx/Reqwest |
 | `catalog-storage` | Object-store interface, S3 adapter, storage configuration | AWS SDK |
 | `catalog-workers` | Task/event workers, workflow/rule/agent/file execution, and provider deployment configuration | image/EXIF/provider clients |

@@ -198,7 +198,7 @@ impl CatalogRepository {
             }
         }
         let rows = sqlx::query_as::<_, Db<Entity>>(
-            "SELECT e.id,e.blueprint_id,e.blueprint_version,e.projections,e.system_tags,e.system_metadata,e.created_at,e.updated_at,e.deleted_at \
+            "SELECT e.id,e.blueprint_id,e.blueprint_version,e.projections,e.system_tags,e.system_metadata,('attricat.sample'=ANY(e.system_tags)) AS is_sample,e.created_at,e.updated_at,e.deleted_at \
              FROM entities e \
              WHERE e.workspace_id=$1 AND e.deleted_at IS NULL AND e.blueprint_id=$2 AND e.blueprint_version=$3 \
                AND e.created_at <= $4 \
@@ -321,7 +321,7 @@ impl CatalogRepository {
             RepositoryError::InvalidExtension("extension lookup requires a workspace".into())
         })?;
         Ok(sqlx::query_as::<_, Db<Entity>>(
-            "SELECT e.id,e.blueprint_id,e.blueprint_version,e.projections,e.system_tags,e.system_metadata,e.created_at,e.updated_at,e.deleted_at \
+            "SELECT e.id,e.blueprint_id,e.blueprint_version,e.projections,e.system_tags,e.system_metadata,('attricat.sample'=ANY(e.system_tags)) AS is_sample,e.created_at,e.updated_at,e.deleted_at \
              FROM entities e JOIN attribute_values v ON v.entity_id=e.id AND v.workspace_id=e.workspace_id AND v.active \
              WHERE e.workspace_id=$1 AND e.deleted_at IS NULL AND e.blueprint_id=$2 AND e.blueprint_version=$3 \
                AND v.attribute_id=$4 AND v.relationship_target_entity_id IS NULL AND v.value_text = $5 LIMIT 2",

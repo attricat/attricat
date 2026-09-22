@@ -20,7 +20,7 @@ use api::{
     http::{AppState, router},
     mail::SmtpMailDelivery,
     repository::{CatalogRepository, ValueHistoryRetentionDays},
-    rule_runtime,
+    rule_runtime, solution_pack_housekeeping,
     storage::{ObjectStore, S3ObjectStore, StorageConfig},
     task_worker::{self, TaskHandlerRegistry, TaskWorkerConfig},
     telemetry::{init_metrics, init_tracing},
@@ -133,6 +133,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         .await?;
     CatalogRepository::system(maintenance_pool.clone())
         .ensure_workflow_permissions()
+        .await?;
+    CatalogRepository::system(maintenance_pool.clone())
+        .ensure_solution_pack_permissions()
         .await?;
     CatalogRepository::system(maintenance_pool.clone())
         .ensure_rule_permissions()
@@ -309,6 +312,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         .await?;
 
     let (shutdown_sender, shutdown_receiver) = tokio::sync::watch::channel(());
+    let solution_pack_housekeeping =
+        solution_pack_housekeeping::start(task_repository.clone(), shutdown_receiver.clone());
     let task_worker_config = TaskWorkerConfig::from_env()
         .map_err(|error| format!("invalid task worker configuration: {error}"))?;
     // Registered kinds have atomically-enqueued producers and token-fenced
@@ -407,6 +412,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     rule_worker.await?;
     extension_event_delivery_coordinator.await?;
     task_worker.await??;
+    solution_pack_housekeeping.await?;
     request_pool.close().await;
     task_pool.close().await;
 

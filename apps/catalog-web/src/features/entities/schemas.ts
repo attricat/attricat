@@ -341,6 +341,7 @@ export const entityIdentitySchema = z.object({
   id: uuidSchema,
   blueprint_id: uuidSchema,
   blueprint_version: z.number().int().positive(),
+  is_sample: z.boolean(),
 });
 export const entitySchema = entityIdentitySchema
   .extend({
@@ -352,6 +353,7 @@ const entityItemSchema = z.object({
   id: uuidSchema,
   blueprint_version: z.number().int().positive(),
   schema_outdated: z.boolean(),
+  is_sample: z.boolean(),
   display: z.record(z.string(), z.string()),
   preview: z.record(z.string(), jsonObjectSchema),
   table_values: z.record(z.string(), z.array(z.unknown())).default({}),
@@ -363,6 +365,7 @@ const entityItemSchema = z.object({
           id: uuidSchema,
           blueprint_id: uuidSchema,
           blueprint_version: z.number().int().positive(),
+          is_sample: z.boolean(),
           relationship_context_id: uuidSchema,
           relationship_context_code: z.string(),
           display: z.record(z.string(), z.string()),
@@ -444,6 +447,7 @@ const incomingRelationshipItemSchema = z.object({
   id: uuidSchema,
   blueprint_code: z.string(),
   blueprint_version: z.number().int().positive(),
+  is_sample: z.boolean(),
   display: z.record(z.string(), z.string()),
 });
 export const incomingRelationshipsPageSchema = z.object({

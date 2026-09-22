@@ -22,5 +22,6 @@ pub mod event_dispatcher;
 pub mod file_worker;
 pub mod provider_config;
 pub mod rule_runtime;
+pub mod solution_pack_housekeeping;
 pub mod task_worker;
 pub mod workflow_runtime;

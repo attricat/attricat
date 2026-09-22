@@ -54,6 +54,7 @@ const contribution: ExtensionContribution = {
   kind: 'embedded',
   outlet: 'explorer_table_cell',
   release_id: '22222222-2222-4222-8222-222222222222',
+  route: null,
   title: null,
   version: 1,
 };

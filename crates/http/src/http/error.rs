@@ -123,6 +123,13 @@ impl ApiError {
             message: "extension storage quota exceeded".to_owned(),
         }
     }
+    pub(super) fn payload_too_large() -> Self {
+        Self {
+            status: StatusCode::PAYLOAD_TOO_LARGE,
+            code: "payload_too_large",
+            message: "request body exceeds the configured size limit".to_owned(),
+        }
+    }
     pub(super) fn file_too_large() -> Self {
         Self {
             status: StatusCode::PAYLOAD_TOO_LARGE,
@@ -189,6 +196,15 @@ impl ApiError {
             | JsonRejection::MissingJsonContentType(_)
             | JsonRejection::BytesRejection(_) => Self::bad_request("request body is malformed"),
             _ => Self::bad_request("request body is malformed"),
+        }
+    }
+    pub(super) fn from_bytes_rejection(
+        rejection: axum::extract::rejection::BytesRejection,
+    ) -> Self {
+        if rejection.status() == StatusCode::PAYLOAD_TOO_LARGE {
+            Self::payload_too_large()
+        } else {
+            Self::bad_request("request body is malformed")
         }
     }
     pub(super) fn from_path_rejection(_: axum::extract::rejection::PathRejection) -> Self {
@@ -277,6 +293,37 @@ impl From<RepositoryError> for ApiError {
                 code: "migration_needs_resolution",
                 message: error.to_string(),
             },
+            RepositoryError::SolutionPackAssetStorageUnavailable => Self::storage_unavailable(),
+            RepositoryError::SolutionPackPlanNotReady => Self {
+                status: StatusCode::CONFLICT,
+                code: "solution_pack_plan_not_ready",
+                message: error.to_string(),
+            },
+            RepositoryError::SolutionPackPlanExpired => Self {
+                status: StatusCode::CONFLICT,
+                code: "solution_pack_plan_expired",
+                message: error.to_string(),
+            },
+            RepositoryError::SolutionPackPlanStale => Self {
+                status: StatusCode::CONFLICT,
+                code: "solution_pack_plan_stale",
+                message: error.to_string(),
+            },
+            RepositoryError::SolutionPackAssetObjectIntegrityFailed => Self {
+                status: StatusCode::UNPROCESSABLE_ENTITY,
+                code: "asset_object_integrity_failed",
+                message: error.to_string(),
+            },
+            RepositoryError::SolutionPackApplicationInvalid => Self {
+                status: StatusCode::CONFLICT,
+                code: "solution_pack_application_invalid",
+                message: error.to_string(),
+            },
+            RepositoryError::SolutionPackApplicationFailed(_) => Self {
+                status: StatusCode::CONFLICT,
+                code: "solution_pack_application_failed",
+                message: error.to_string(),
+            },
             RepositoryError::InvalidStoredAttributeValue => {
                 Self::internal("stored attribute value is invalid")
             }
@@ -308,6 +355,7 @@ impl From<RepositoryError> for ApiError {
             | RepositoryError::InvalidExtension(_)
             | RepositoryError::InvalidExtensionTransition(_)
             | RepositoryError::InvalidDomainEvent(_)
+            | RepositoryError::InvalidSolutionPackPlan(_)
             | RepositoryError::ReservedContextCode
             | RepositoryError::InvalidCode
             | RepositoryError::InvalidContextData
@@ -344,6 +392,7 @@ impl From<RepositoryError> for ApiError {
             },
             RepositoryError::ReusableAttributeAlreadyAttached
             | RepositoryError::BlueprintCodeTaken
+            | RepositoryError::CatalogCodeTaken
             | RepositoryError::WorkflowCodeTaken
             | RepositoryError::RuleCodeTaken => Self {
                 status: StatusCode::CONFLICT,

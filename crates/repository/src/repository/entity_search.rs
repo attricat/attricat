@@ -9,6 +9,7 @@ use uuid::Uuid;
 struct EntityPreviewRow {
     id: Uuid,
     blueprint_version: i64,
+    is_sample: bool,
     created_at: DateTime<Utc>,
     preview: Value,
     blueprint_views: Value,
@@ -19,6 +20,7 @@ struct EntityPreviewRow {
 struct SortedEntityPreviewRow {
     id: Uuid,
     blueprint_version: i64,
+    is_sample: bool,
     created_at: DateTime<Utc>,
     preview: Value,
     blueprint_views: Value,
@@ -108,6 +110,7 @@ struct RelatedTablePreviewRow {
     id: Uuid,
     blueprint_id: Uuid,
     blueprint_version: i64,
+    is_sample: bool,
     preview: Value,
     blueprint_views: Value,
     blueprint_context_fallback: Value,
@@ -118,6 +121,7 @@ struct IncomingRelationshipRow {
     id: Uuid,
     blueprint_code: String,
     blueprint_version: i64,
+    is_sample: bool,
     created_at: DateTime<Utc>,
     preview: Value,
     blueprint_views: Value,
@@ -136,7 +140,7 @@ impl CatalogRepository {
         validate_code(blueprint_code)?;
         validate_code(relationship)?;
         let rows = sqlx::query_as::<_, EntityPreviewRow>(
-            r#"SELECT target.id, target.blueprint_version, target.created_at, target.projections -> 'preview' AS preview,
+            r#"SELECT target.id, target.blueprint_version, ('attricat.sample'=ANY(target.system_tags)) AS is_sample, target.created_at, target.projections -> 'preview' AS preview,
                       b.views AS blueprint_views,
                       (SELECT COALESCE(jsonb_object_agg(attribute.code, attribute.context_fallback), '{}'::jsonb)
                          FROM attributes attribute
@@ -200,7 +204,7 @@ impl CatalogRepository {
         let (cursor_created_at, cursor_id) = cursor.unzip();
         let rows = sqlx::query_as::<_, IncomingRelationshipRow>(
             r#"SELECT source.id, b.code AS blueprint_code, source.blueprint_version,
-                      source.created_at, source.projections -> 'preview' AS preview,
+                      ('attricat.sample'=ANY(source.system_tags)) AS is_sample, source.created_at, source.projections -> 'preview' AS preview,
                       b.views AS blueprint_views,
                       (SELECT COALESCE(jsonb_object_agg(attribute.code, attribute.context_fallback), '{}'::jsonb)
                          FROM attributes attribute
@@ -254,6 +258,7 @@ impl CatalogRepository {
                     id: item.id,
                     blueprint_code: item.blueprint_code,
                     blueprint_version: item.blueprint_version,
+                    is_sample: item.is_sample,
                     display: item.display,
                 })
                 .collect(),
@@ -510,7 +515,7 @@ impl CatalogRepository {
         current_blueprint_version: i64,
     ) -> Result<(Vec<EntityPreview>, Option<String>), RepositoryError> {
         validate_system_tags(system_tags)?;
-        let sql = r#"SELECT e.id, e.blueprint_version, e.created_at, e.projections -> 'preview' AS preview,
+        let sql = r#"SELECT e.id, e.blueprint_version, ('attricat.sample'=ANY(e.system_tags)) AS is_sample, e.created_at, e.projections -> 'preview' AS preview,
                       b.views AS blueprint_views,
                       (SELECT COALESCE(jsonb_object_agg(attribute.code, attribute.context_fallback), '{}'::jsonb)
                          FROM attributes attribute
@@ -758,7 +763,7 @@ impl CatalogRepository {
                 .to_owned()
         };
         let sql = format!(
-            r#"SELECT e.id, e.blueprint_version, e.created_at, e.projections -> 'preview' AS preview,
+            r#"SELECT e.id, e.blueprint_version, ('attricat.sample'=ANY(e.system_tags)) AS is_sample, e.created_at, e.projections -> 'preview' AS preview,
                       b.views AS blueprint_views,
                       (SELECT COALESCE(jsonb_object_agg(attribute.code, attribute.context_fallback), '{{}}'::jsonb)
                          FROM attributes attribute WHERE attribute.blueprint_id = e.blueprint_id
@@ -868,7 +873,7 @@ impl CatalogRepository {
         if !cursor_is_null {
             let reverse_joins = relationship_sort_reverse_joins(sort.relationship_path.len())?;
             let sql = format!(
-                r#"SELECT e.id, e.blueprint_version, e.created_at, e.projections -> 'preview' AS preview,
+                r#"SELECT e.id, e.blueprint_version, ('attricat.sample'=ANY(e.system_tags)) AS is_sample, e.created_at, e.projections -> 'preview' AS preview,
                           b.views AS blueprint_views,
                           (SELECT COALESCE(jsonb_object_agg(attribute.code, attribute.context_fallback), '{{}}'::jsonb)
                              FROM attributes attribute WHERE attribute.blueprint_id = e.blueprint_id
@@ -929,7 +934,7 @@ impl CatalogRepository {
             let forward_joins = relationship_sort_forward_joins(sort.relationship_path.len())?;
             let null_cursor_id = cursor_is_null.then_some(cursor_id).flatten();
             let sql = format!(
-                r#"SELECT e.id, e.blueprint_version, e.created_at, e.projections -> 'preview' AS preview,
+                r#"SELECT e.id, e.blueprint_version, ('attricat.sample'=ANY(e.system_tags)) AS is_sample, e.created_at, e.projections -> 'preview' AS preview,
                           b.views AS blueprint_views,
                           (SELECT COALESCE(jsonb_object_agg(attribute.code, attribute.context_fallback), '{{}}'::jsonb)
                              FROM attributes attribute WHERE attribute.blueprint_id = e.blueprint_id
@@ -1228,7 +1233,7 @@ impl CatalogRepository {
             r#"SELECT source.id AS source_id, a.code AS attribute_code,
                       context.id AS relationship_context_id,
                       context.code AS relationship_context_code,
-                      target.id, target.blueprint_id, target.blueprint_version,
+                      target.id, target.blueprint_id, target.blueprint_version, ('attricat.sample'=ANY(target.system_tags)) AS is_sample,
                       target.projections -> 'preview' AS preview,
                       target_blueprint.views AS blueprint_views,
                       (SELECT COALESCE(jsonb_object_agg(target_attribute.code, target_attribute.context_fallback), '{}'::jsonb)
@@ -1270,6 +1275,7 @@ impl CatalogRepository {
                     id: row.id,
                     blueprint_id: row.blueprint_id,
                     blueprint_version: row.blueprint_version,
+                    is_sample: row.is_sample,
                     relationship_context_id: row.relationship_context_id,
                     relationship_context_code: row.relationship_context_code,
                     display: super::entity_projection::display_labels(
@@ -2586,6 +2592,7 @@ fn sorted_entity_preview(row: SortedEntityPreviewRow) -> EntityPreview {
     entity_preview(EntityPreviewRow {
         id: row.id,
         blueprint_version: row.blueprint_version,
+        is_sample: row.is_sample,
         created_at: row.created_at,
         preview: row.preview,
         blueprint_views: row.blueprint_views,
@@ -2598,6 +2605,7 @@ fn entity_preview(row: EntityPreviewRow) -> EntityPreview {
         id: row.id,
         blueprint_version: row.blueprint_version,
         schema_outdated: false,
+        is_sample: row.is_sample,
         created_at: row.created_at,
         display: super::entity_projection::display_labels(
             &row.preview,
@@ -2615,6 +2623,7 @@ struct IncomingRelationshipPreview {
     id: Uuid,
     blueprint_code: String,
     blueprint_version: i64,
+    is_sample: bool,
     created_at: DateTime<Utc>,
     display: Value,
 }
@@ -2624,6 +2633,7 @@ fn incoming_relationship_item(row: IncomingRelationshipRow) -> IncomingRelations
         id: row.id,
         blueprint_code: row.blueprint_code,
         blueprint_version: row.blueprint_version,
+        is_sample: row.is_sample,
         created_at: row.created_at,
         display: super::entity_projection::display_labels(
             &row.preview,

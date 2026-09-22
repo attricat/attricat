@@ -688,7 +688,9 @@ fn storage_error(error: ObjectStoreError) -> ApiError {
         ObjectStoreError::Unavailable | ObjectStoreError::TimedOut(_) => {
             ApiError::storage_unavailable()
         }
-        ObjectStoreError::Operation(_) => ApiError::internal("object storage upload failed"),
+        ObjectStoreError::NotFound | ObjectStoreError::Operation(_) => {
+            ApiError::internal("object storage upload failed")
+        }
     }
 }
 

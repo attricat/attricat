@@ -1,10 +1,6 @@
 import { z } from 'zod';
 import { request } from '../../api/request';
-import {
-  findingSchema,
-  ruleRunSchema,
-  ruleSchema,
-} from './schemas';
+import { findingSchema, ruleRunSchema, ruleSchema } from './schemas';
 export type { Finding, Rule, RuleRun } from './schemas';
 const id = (value: string) => encodeURIComponent(z.uuid().parse(value));
 export const listRules = () => request('/api/rules', z.array(ruleSchema));

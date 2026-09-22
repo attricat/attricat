@@ -1,0 +1,62 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://attricat.com/contracts/solution-pack-sample-data-v1.schema.json",
+  "title": "Attricat solution-pack sample data v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["format_version", "kind", "classification", "entities"],
+  "properties": {
+    "format_version": {"const": 1},
+    "kind": {"const": "solution_pack_sample_data"},
+    "classification": {"const": "synthetic"},
+    "entities": {
+      "type": "array", "minItems": 1, "maxItems": 256,
+      "items": {
+        "type": "object", "additionalProperties": false,
+        "required": ["key", "blueprint", "facts", "relationships"],
+        "properties": {
+          "key": {"type": "string", "pattern": "^sample-entities/[a-z][a-z0-9_-]*$", "maxLength": 144},
+          "blueprint": {"type": "string", "pattern": "^blueprints/[a-z][a-z0-9_-]*$", "maxLength": 128},
+          "facts": {
+            "type": "array", "maxItems": 128,
+            "items": {
+              "type": "object", "additionalProperties": false,
+              "required": ["attribute", "value"],
+              "properties": {
+                "attribute": {"type": "string", "pattern": "^blueprints/[a-z][a-z0-9_-]*/attributes/[a-z][a-z0-9_-]*$", "maxLength": 272},
+                "value": {
+                  "oneOf": [
+                    {"type": ["string", "number", "integer", "boolean"]},
+                    {
+                      "type": "object",
+                      "additionalProperties": false,
+                      "required": ["time", "time_zone"],
+                      "properties": {
+                        "time": {"type": "string"},
+                        "time_zone": {"type": "string"}
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "relationships": {
+            "type": "array", "maxItems": 128,
+            "items": {
+              "type": "object", "additionalProperties": false,
+              "required": ["attribute", "targets"],
+              "properties": {
+                "attribute": {"type": "string", "pattern": "^blueprints/[a-z][a-z0-9_-]*/attributes/[a-z][a-z0-9_-]*$", "maxLength": 272},
+                "targets": {
+                  "type": "array", "minItems": 1, "maxItems": 128, "uniqueItems": true,
+                  "items": {"type": "string", "pattern": "^sample-entities/[a-z][a-z0-9_-]*$", "maxLength": 144}
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

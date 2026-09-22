@@ -151,6 +151,7 @@ pub struct Entity {
     pub projections: Value,
     pub system_tags: Vec<String>,
     pub system_metadata: Value,
+    pub is_sample: bool,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
     pub deleted_at: Option<DateTime<Utc>>,
@@ -348,6 +349,7 @@ pub struct EntityPreview {
     pub id: Uuid,
     pub blueprint_version: i64,
     pub schema_outdated: bool,
+    pub is_sample: bool,
     #[serde(skip_serializing)]
     pub created_at: DateTime<Utc>,
     pub preview: Value,
@@ -369,6 +371,7 @@ pub struct RelatedEntityPreview {
     pub id: Uuid,
     pub blueprint_id: Uuid,
     pub blueprint_version: i64,
+    pub is_sample: bool,
     pub relationship_context_id: Uuid,
     pub relationship_context_code: String,
     pub display: Value,
@@ -400,6 +403,7 @@ pub struct IncomingRelationshipItem {
     pub id: Uuid,
     pub blueprint_code: String,
     pub blueprint_version: i64,
+    pub is_sample: bool,
     pub display: Value,
 }
 
@@ -446,6 +450,7 @@ pub struct EntityIdentity {
     pub id: Uuid,
     pub blueprint_id: Uuid,
     pub blueprint_version: i64,
+    pub is_sample: bool,
 }
 
 #[derive(Clone, Debug, Deserialize)]

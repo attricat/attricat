@@ -55,6 +55,7 @@ const contribution: ExtensionContribution = {
   kind: 'action',
   outlet: 'explorer_row_action',
   release_id: '11111111-1111-4111-8111-111111111111',
+  route: null,
   title: 'Example action',
   version: 1,
 };

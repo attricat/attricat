@@ -834,7 +834,7 @@ pub(super) async fn download_operation_artifact(
             ObjectStoreError::Unavailable | ObjectStoreError::TimedOut(_) => {
                 ApiError::service_unavailable("operation artifact storage is unavailable")
             }
-            ObjectStoreError::Operation(_) => {
+            ObjectStoreError::NotFound | ObjectStoreError::Operation(_) => {
                 ApiError::internal("operation artifact could not be loaded")
             }
         })?;
@@ -890,7 +890,7 @@ pub(super) async fn artifact(
                 ObjectStoreError::Unavailable | ObjectStoreError::TimedOut(_) => {
                     ApiError::service_unavailable("extension artifact storage is unavailable")
                 }
-                ObjectStoreError::Operation(_) => {
+                ObjectStoreError::NotFound | ObjectStoreError::Operation(_) => {
                     ApiError::internal("extension artifact could not be loaded")
                 }
             })?;

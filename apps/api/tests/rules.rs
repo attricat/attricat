@@ -281,7 +281,9 @@ async fn rule_page_continuation_yields_without_failure_budget(pool: PgPool) {
             first_task.id,
             &first_task.lease_owner,
             first_task.lease_token,
-            chrono::Utc::now(),
+            // Keep the immediate-reclaim assertion independent of small host
+            // and database-container clock skew.
+            chrono::Utc::now() - chrono::Duration::seconds(1),
         )
         .await
         .unwrap();

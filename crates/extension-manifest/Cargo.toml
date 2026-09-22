@@ -6,14 +6,24 @@ rust-version.workspace = true
 publish.workspace = true
 
 [dependencies]
+base64.workspace = true
+catalog-blueprint = { path = "../blueprint" }
 catalog-validation = { path = "../validation" }
+chrono.workspace = true
+chrono-tz.workspace = true
+image.workspace = true
+quick-xml.workspace = true
+regex.workspace = true
+rust_decimal.workspace = true
 semver.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 sha2.workspace = true
+subtle.workspace = true
 tar.workspace = true
 thiserror.workspace = true
 toml.workspace = true
+unicode-normalization.workspace = true
 url.workspace = true
 uuid.workspace = true
 zstd.workspace = true

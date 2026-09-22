@@ -1,0 +1,65 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://attricat.com/contracts/solution-pack-extension-layout-v1.schema.json",
+  "title": "Attricat solution-pack extension layout v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["format_version", "kind", "entries"],
+  "properties": {
+    "format_version": {"const": 1},
+    "kind": {"const": "extension_layout"},
+    "entries": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 64,
+      "uniqueItems": true,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["contribution", "outlet", "required"],
+        "properties": {
+          "contribution": {
+            "type": "string",
+            "maxLength": 256,
+            "pattern": "^[A-Za-z0-9._-]+:[A-Za-z0-9._-]+$"
+          },
+          "outlet": {
+            "enum": [
+              "navigation",
+              "entity_preview_panel",
+              "blueprint_attribute_configuration",
+              "entity_attribute_decoration",
+              "entity_action",
+              "explorer_row_action",
+              "explorer_table_cell",
+              "blueprint_detail_panel",
+              "explorer_action",
+              "explorer_bulk_action",
+              "entity_header_action",
+              "entity_attribute_panel",
+              "blueprint_panel",
+              "blueprint_publish_check",
+              "file_panel",
+              "audit_event_panel",
+              "data_health_card"
+            ]
+          },
+          "hidden": {"type": "boolean", "default": false},
+          "promoted": {"type": "boolean", "default": false},
+          "required": {"type": "boolean"}
+        },
+        "allOf": [
+          {
+            "if": {"properties": {"promoted": {"const": true}}, "required": ["promoted"]},
+            "then": {
+              "properties": {
+                "outlet": {"const": "navigation"},
+                "hidden": {"const": false}
+              }
+            }
+          }
+        ]
+      }
+    }
+  }
+}
