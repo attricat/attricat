@@ -1,6 +1,7 @@
 import { useMutation, useQuery } from '@tanstack/react-query';
 import { Link, useNavigate } from '@tanstack/react-router';
 import { BlueprintIcon } from '../../components/system-icons';
+import AutoAwesomeOutlinedIcon from '@mui/icons-material/AutoAwesomeOutlined';
 import CheckCircleOutlinedIcon from '@mui/icons-material/CheckCircleOutlined';
 import UpgradeOutlinedIcon from '@mui/icons-material/UpgradeOutlined';
 import ViewListOutlinedIcon from '@mui/icons-material/ViewListOutlined';
@@ -21,7 +22,7 @@ import {
   Tooltip,
   Typography,
 } from '@mui/material';
-import { createElement, useState } from 'react';
+import { createElement, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { listContexts } from '../contexts/api';
 import { contextQueryKeys } from '../contexts/query-keys';
@@ -29,6 +30,7 @@ import { defaultContextCode } from '../contexts/constants';
 import {
   getEntityForm,
   getCurrentBlueprint,
+  smartFillEntityForm,
   getResolvedEntityPreview,
   updateEntity,
 } from './api';
@@ -42,7 +44,7 @@ import { reusableAttributeQueryKeys } from '../reusable-attributes/query-keys';
 import type { ReusableAttribute } from '../reusable-attributes/schemas';
 import { RouterButton, RouterIconButton } from '../../components/RouterLink';
 import { EntityContextPicker } from './components/EntityContextPicker';
-import { EntityForm } from './components/EntityForm';
+import { EntityForm, type EntityFormHandle } from './components/EntityForm';
 import { EntitySchemaSubheader } from './components/EntitySchemaSubheader';
 import { EntityToolbar } from './components/EntityToolbar';
 import { PageContainer } from '../../components/PageContainer';
@@ -73,6 +75,9 @@ export const EditEntityPage = ({ entityId }: { entityId: string }) => {
   const { t } = useTranslation();
   const navigate = useNavigate({ from: '/entities/$entityId/edit' });
   const [selectedContext, setSelectedContext] = useState('');
+  const [isSmartFillDialogOpen, setSmartFillDialogOpen] = useState(false);
+  const [smartFillContent, setSmartFillContent] = useState('');
+  const entityFormRef = useRef<EntityFormHandle>(null);
   const [isReusableAttributeDialogOpen, setReusableAttributeDialogOpen] =
     useState(false);
   const [reusableSelectionType, setReusableSelectionType] = useState<
@@ -90,6 +95,20 @@ export const EditEntityPage = ({ entityId }: { entityId: string }) => {
   const entityForm = useQuery({
     queryKey: entityQueryKeys.form(entityId),
     queryFn: () => getEntityForm(entityId),
+  });
+  const smartFill = useMutation({
+    mutationFn: () =>
+      smartFillEntityForm({
+        entity_id: entityId,
+        context_id: contextId,
+        is_default_context: contextId === defaultContextId,
+        content: smartFillContent,
+      }),
+    onSuccess: ({ fields }) => {
+      entityFormRef.current?.applySmartFillValues(fields);
+      setSmartFillContent('');
+      setSmartFillDialogOpen(false);
+    },
   });
   const update = useMutation({
     mutationFn: (input: Parameters<typeof updateEntity>[1]) =>
@@ -303,6 +322,51 @@ export const EditEntityPage = ({ entityId }: { entityId: string }) => {
           <Dialog
             fullWidth
             maxWidth="sm"
+            onClose={() =>
+              !smartFill.isPending && setSmartFillDialogOpen(false)
+            }
+            open={isSmartFillDialogOpen}
+          >
+            <DialogTitle>{t('entities.smartFill')}</DialogTitle>
+            <DialogContent>
+              <Typography sx={{ mb: 2 }}>
+                {t('entities.smartFillDescription')}
+              </Typography>
+              <TextField
+                fullWidth
+                label={t('entities.smartFillInput')}
+                maxRows={12}
+                minRows={5}
+                multiline
+                onChange={(event) => setSmartFillContent(event.target.value)}
+                placeholder={t('entities.smartFillPlaceholder')}
+                value={smartFillContent}
+              />
+              {smartFill.error && (
+                <Alert severity="error" sx={{ mt: 2 }}>
+                  {smartFill.error.message}
+                </Alert>
+              )}
+            </DialogContent>
+            <DialogActions>
+              <Button
+                disabled={smartFill.isPending}
+                onClick={() => setSmartFillDialogOpen(false)}
+              >
+                {t('common.cancel')}
+              </Button>
+              <Button
+                disabled={!smartFillContent.trim() || smartFill.isPending}
+                onClick={() => smartFill.mutate()}
+                variant="contained"
+              >
+                {t('entities.applySmartFill')}
+              </Button>
+            </DialogActions>
+          </Dialog>
+          <Dialog
+            fullWidth
+            maxWidth="sm"
             onClose={closeReusableAttributeDialog}
             open={isReusableAttributeDialogOpen}
           >
@@ -443,6 +507,7 @@ export const EditEntityPage = ({ entityId }: { entityId: string }) => {
             ]}
             reusableAttributes={entityForm.data.reusable_attributes}
             resolvedValues={resolvedPreview.data?.values}
+            ref={entityFormRef}
             showBlueprintMetadata={false}
             showSubmitButton={false}
             initialValues={valuesForForm(
@@ -458,6 +523,24 @@ export const EditEntityPage = ({ entityId }: { entityId: string }) => {
             submitLabel={t('entities.saveChanges')}
           />
         </>
+      )}
+      {entityForm.data && (
+        <Tooltip title={t('entities.smartFill')}>
+          <span>
+            <Button
+              aria-label={t('entities.smartFill')}
+              disabled={
+                update.isPending || smartFill.isPending || contextId === null
+              }
+              onClick={() => setSmartFillDialogOpen(true)}
+              startIcon={<AutoAwesomeOutlinedIcon />}
+              sx={{ bottom: 24, position: 'fixed', right: 24, zIndex: 1 }}
+              variant="contained"
+            >
+              {t('entities.smartFill')}
+            </Button>
+          </span>
+        </Tooltip>
       )}
     </PageContainer>
   );

@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { render, screen } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
 import '../../i18n';
 import { ToastProvider } from '../../components/ToastProvider';
@@ -20,6 +21,7 @@ vi.mock('./api', async (importOriginal) => ({
   getCurrentBlueprint: vi.fn(),
   getEntityForm: vi.fn(),
   getResolvedEntityPreview: vi.fn(),
+  smartFillEntityForm: vi.fn(),
   updateEntity: vi.fn(),
 }));
 vi.mock('../contexts/api', async (importOriginal) => ({
@@ -48,6 +50,19 @@ const blueprint = {
 };
 
 describe('EditEntityPage', () => {
+  const renderPage = () => {
+    const queryClient = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    });
+    return render(
+      <QueryClientProvider client={queryClient}>
+        <ToastProvider>
+          <EditEntityPage entityId="123e4567-e89b-12d3-a456-426614174001" />
+        </ToastProvider>
+      </QueryClientProvider>,
+    );
+  };
+
   it('shows the localized Sample badge for a sample entity', async () => {
     vi.mocked(getEntityForm).mockResolvedValue({
       blueprint,
@@ -64,18 +79,39 @@ describe('EditEntityPage', () => {
     } as unknown as Awaited<ReturnType<typeof getEntityForm>>);
     vi.mocked(getCurrentBlueprint).mockResolvedValue(blueprint as never);
     vi.mocked(listContexts).mockResolvedValue([]);
-    const queryClient = new QueryClient({
-      defaultOptions: { queries: { retry: false } },
-    });
-
-    render(
-      <QueryClientProvider client={queryClient}>
-        <ToastProvider>
-          <EditEntityPage entityId="123e4567-e89b-12d3-a456-426614174001" />
-        </ToastProvider>
-      </QueryClientProvider>,
-    );
+    renderPage();
 
     expect(await screen.findByText('Sample')).toBeTruthy();
+  });
+
+  it('opens Smart Fill for the active entity context', async () => {
+    vi.mocked(getEntityForm).mockResolvedValue({
+      blueprint,
+      context: {},
+      entity: {
+        blueprint_id: blueprint.blueprint.id,
+        blueprint_version: 1,
+        id: '123e4567-e89b-12d3-a456-426614174001',
+        is_sample: false,
+      },
+      reusable_attributes: [],
+      reusable_values: [],
+      values: [],
+    } as unknown as Awaited<ReturnType<typeof getEntityForm>>);
+    vi.mocked(getCurrentBlueprint).mockResolvedValue(blueprint as never);
+    vi.mocked(listContexts).mockResolvedValue([
+      {
+        id: '123e4567-e89b-12d3-a456-426614174002',
+        code: 'default',
+        data: {},
+      },
+    ] as Awaited<ReturnType<typeof listContexts>>);
+    const user = userEvent.setup();
+
+    renderPage();
+    await user.click(await screen.findByRole('button', { name: 'Smart fill' }));
+
+    expect(screen.getByLabelText('Source text')).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Apply to form' })).toBeTruthy();
   });
 });

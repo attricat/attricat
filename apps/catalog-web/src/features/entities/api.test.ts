@@ -14,6 +14,7 @@ import {
   previewEntityMigration,
   getResolvedEntityPreview,
   searchEntities,
+  smartFillEntityForm,
   unpublishEntity,
   updateEntity,
 } from './api';
@@ -50,6 +51,30 @@ const respondError = (status: number, body: unknown) => {
 };
 
 describe('entity API client', () => {
+  it('sends active-context source text to Smart Fill', async () => {
+    respond({ fields: { title: 'Trail shoes' } });
+
+    await expect(
+      smartFillEntityForm({
+        entity_id: entityId,
+        context_id: null,
+        is_default_context: true,
+        content: 'Trail shoes',
+      }),
+    ).resolves.toEqual({ fields: { title: 'Trail shoes' } });
+
+    expect(fetchMock).toHaveBeenCalledWith('/api/agent/smart-fill', {
+      body: JSON.stringify({
+        entity_id: entityId,
+        context_id: null,
+        is_default_context: true,
+        content: 'Trail shoes',
+      }),
+      headers: { 'Content-Type': 'application/json' },
+      method: 'POST',
+    });
+  });
+
   it('loads blueprints and entities from their code-based routes', async () => {
     respond(blueprintWithAttributes);
     await getBlueprintByCode('summer sale', 2);
