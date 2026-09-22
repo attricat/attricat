@@ -32,13 +32,15 @@ const contributionSchema = z
     display_order: z.number().int().nonnegative(),
     navigation_group: z.enum(['promoted', 'grouped']).nullable(),
     extension_id: z.string().min(1),
+    extension_name: z.string().min(1),
     release_id: z.uuid(),
     configuration: z.unknown(),
     capabilities: z.array(z.string()),
     id: z.string().min(1),
     version: z.number().int().positive(),
-    kind: z.enum(['route', 'embedded', 'action', 'panel']),
+    kind: z.enum(['route', 'navigation', 'embedded', 'action', 'panel']),
     outlet: extensionOutletSchema.nullable(),
+    route: z.string().nullable().default(null),
     title: z.string().nullable(),
   })
   .strict();

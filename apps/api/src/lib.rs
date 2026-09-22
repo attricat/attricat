@@ -1,33 +1,39 @@
-pub mod account;
-pub mod agent_provider;
-pub mod agent_runner;
-pub mod agent_tools;
-pub mod agent_worker;
-pub mod agents;
-pub mod blueprint_migration_worker;
-mod blueprint_resolver;
-pub mod catalog_read_service;
-pub mod catalog_service;
-pub mod constants;
-pub mod domain_events;
-pub mod event_dispatcher;
-pub mod extension_installer;
-pub mod extension_policy;
-pub mod extension_registry;
-pub mod extension_runtime;
-pub mod extensions;
-pub mod file_access;
-pub mod file_worker;
-pub mod http;
-pub mod mail;
-pub mod model;
-pub mod repository;
-pub mod solution_pack_housekeeping;
-pub mod solution_pack_sample_data;
-pub mod solution_packs;
-pub mod storage;
-pub mod telemetry;
-pub mod workflow_runtime;
+//! API application compatibility facade.
+//!
+//! Implementations live in focused workspace crates. This crate keeps the
+//! historical `api::…` paths stable while the binaries remain composition roots.
+
+pub use catalog_domain::{account, model, task_queue};
+pub use catalog_workers::agents;
+
+pub mod constants {
+    //! Compatibility facade for constants now owned by their implementation layers.
+
+    pub use catalog_domain::constants::*;
+    pub use catalog_http::constants::{
+        DEFAULT_HTTP_DEFAULT_BODY_BYTES, DEFAULT_HTTP_MAX_CONCURRENT_REQUESTS,
+        DEFAULT_HTTP_REQUEST_TIMEOUT_SECONDS,
+    };
+    pub use catalog_repository::constants::{REQUEST_POOL_CONNECTIONS, TASK_POOL_CONNECTIONS};
+
+    pub const MAINTENANCE_POOL_CONNECTIONS: u32 = 1;
+}
+pub use catalog_events as domain_events;
+pub use catalog_extension_manifest::{
+    extension_policy, extensions, solution_pack_sample_data, solution_packs,
+};
+pub use catalog_extension_runtime as extension_runtime;
+pub use catalog_http::{http, mail, telemetry};
+pub use catalog_repository::{
+    catalog_read_service, catalog_service, extension_installer, extension_registry, file_access,
+    repository,
+};
+pub use catalog_storage as storage;
+pub use catalog_workers::{
+    agent_provider, agent_runner, agent_tools, agent_worker, blueprint_migration_worker,
+    event_dispatcher, file_worker, rule_runtime, solution_pack_housekeeping, task_worker,
+    workflow_runtime,
+};
 
 use sqlx::migrate::Migrator;
 

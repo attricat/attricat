@@ -116,6 +116,18 @@ SemVer release. Solution packs are installed only from administrator-uploaded
 `.tar.zst` archives; the server does not access source repositories or fetch
 remote pack releases.
 
+### `tasks`
+
+`tasks` is the durable delivery envelope for API-owned background work. It stores
+only a closed, versioned kind, workspace-scoped subject reference, small JSON
+reference payload, generation, availability, and operational state. A unique
+`(workspace_id, kind, subject_id, generation)` key makes producer retries
+idempotent. A claim writes both a worker owner and a fresh lease token; task
+state transitions require both values, so a stale worker cannot acknowledge a
+reclaimed task. `task_workspace_service` records the last claimed workspace for
+least-recently-served fairness. Domain rows remain the source of business
+progress and results; task history is retained by default. The table excludes
+file processing, which continues to use `file_processing_jobs`.
 ### `blueprints`
 
 Blueprints define entity types and reusable mixins. A blueprint family is

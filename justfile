@@ -24,6 +24,9 @@ fmt-check:
 check:
     cargo check --locked --workspace --all-targets
 
+benchmark-api-compile mode="all":
+    scripts/benchmark-api-compile.sh {{mode}}
+
 clippy:
     cargo clippy --locked --workspace --all-targets -- -D warnings
 
@@ -98,3 +101,6 @@ perf profile="smoke": _assert-env
     test -n "$CATALOG_TOKEN" || { echo "Set CATALOG_TOKEN before running performance tests." >&2; exit 1; }
     command -v k6 >/dev/null || { echo "Install k6 before running performance tests." >&2; exit 1; }
     CATALOG_SERVER="$CATALOG_API_URL" PERF_PROFILE="{{profile}}" k6 run perf/explorer.js
+
+test-reference-extension-e2e: _assert-env
+	@source .catalog-worktree; CATALOG_API_URL="http://127.0.0.1:$API_PORT" scripts/test-reference-extension-e2e.sh

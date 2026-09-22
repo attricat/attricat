@@ -46,11 +46,18 @@ acli --session-file session.json auth session|logout|renew
 acli metrics get --output metrics.prom
 
 acli solution-pack inspect --file pack.tar.zst
-acli solution-pack plan --file pack.tar.zst --prefix ecom --blueprint-publication draft|publish [--map logical_key=existing_code ... | --from-application <uuid>]
+acli solution-pack plan --file pack.tar.zst --prefix ecom --blueprint-publication draft|publish [--include-sample-data] [--map logical_key=existing_code ... --map-asset logical_key=asset_uuid ... | --from-application <uuid>]
 acli solution-pack plan show <plan-id>
 acli solution-pack apply <plan-id>
 acli solution-pack applications list [--limit 25 --offset 0]
 acli solution-pack applications show <application-id>
+acli solution-pack applications abandon <application-id>
+acli solution-pack checks rerun <application-id>
+acli solution-pack checks list <application-id> [--limit 25 --offset 0]
+acli solution-pack checks show <application-id> <run-id>
+acli presentation-asset list [--limit 25 --offset 0]
+acli presentation-asset show <asset-id>
+acli presentation-asset download <asset-id> --output <path>
 
 acli audit list [--limit 25 --offset 0] [--occurred-after <rfc3339>] [--occurred-before <rfc3339>] [--actor-user-id <uuid>] [--action-category <category>] [--target-type <type>] [--executor-type human|agent] [--agent-run-id <uuid>] [--agent-tool-call-id <uuid>]
 acli data-health summary [--stale-after-days <days>]
@@ -166,11 +173,18 @@ acli extension storage <extension-id> <contribution-id> <release-id> --body <jso
 acli extension command <extension-id> <contribution-id> --release-id <release-uuid> --command-id <id> --payload <json-or-file>
 
 acli solution-pack inspect --file pack.tar.zst
-acli solution-pack plan --file pack.tar.zst --prefix ecom --blueprint-publication draft|publish [--map logical_key=existing_code ... | --from-application <uuid>]
+acli solution-pack plan --file pack.tar.zst --prefix ecom --blueprint-publication draft|publish [--include-sample-data] [--map logical_key=existing_code ... --map-asset logical_key=asset_uuid ... | --from-application <uuid>]
 acli solution-pack plan show <plan-id>
 acli solution-pack apply <plan-id>
 acli solution-pack applications list [--limit 25 --offset 0]
 acli solution-pack applications show <application-id>
+acli solution-pack applications abandon <application-id>
+acli solution-pack checks rerun <application-id>
+acli solution-pack checks list <application-id> [--limit 25 --offset 0]
+acli solution-pack checks show <application-id> <run-id>
+acli presentation-asset list [--limit 25 --offset 0]
+acli presentation-asset show <asset-id>
+acli presentation-asset download <asset-id> --output <path>
 
 acli file upload <entity-id> <attribute-code> --file first.png [--file second.png] [--context-id <context-id>]
 acli file metadata <file-id>
@@ -233,24 +247,33 @@ and `command --payload` is the contribution-defined JSON payload.
 sends `context_id` as the optional multipart text field. `extension sideload`,
 `solution-pack inspect`, and solution-pack plan creation stream archives as
 `application/zstd` when no reuse choices are supplied. Repeated
-`solution-pack plan --map logical_key=existing_code` flags use a streamed
-multipart archive plus bounded mapping metadata; mappings are explicit and the
-server accepts only exact same-workspace published blueprint revisions.
-`solution-pack plan --from-application <uuid>` is mutually exclusive with `--map`
-and keeps the archive as raw `application/zstd`. It explicitly selects one completed
-same-workspace application of the same pack for a strictly newer SemVer release;
-the server never searches history automatically. Unchanged exact published targets
-are reused, added keys create normally, changed or drifted targets block, and removed
-keys are informational evidence only.
-Solution-pack inspection, planning, application, and history are performed only by
-the authenticated server; the CLI neither unpacks nor validates the archive and
-prints only the server's safe, bounded JSON response. `solution-pack apply` accepts only a UUID plan ID and has no flags that can alter the persisted plan. History contains provenance and step results but no blueprint source or normalized resource payloads. Uploads and downloads retain the
-five-second connection timeout but are not subject to the normal 30-second JSON
-request timeout. File downloads, extension artifacts,
-and metrics stream to `--output`; they do not put binary, JavaScript, or
-Prometheus text on stdout. An optional download `--range` is sent unchanged as
-the HTTP `Range` header. These transfer commands print `null` after success so
-normal command output remains JSON.
+`solution-pack plan --map logical_key=existing_code` and
+`--map-asset logical_key=asset_uuid` flags use a streamed multipart archive plus
+bounded mapping metadata. Blueprint mappings accept only exact same-workspace
+published revisions; asset mappings accept only immutable same-workspace
+presentation assets. `--include-sample-data` explicitly selects the pack's
+optional synthetic sample entities and is omitted by default.
+`solution-pack plan --from-application <uuid>` is mutually exclusive with both
+mapping flag types and keeps the archive as raw `application/zstd`. It explicitly
+selects one completed same-workspace application of the same pack for a strictly
+newer SemVer release; the server never searches history automatically. Unchanged
+exact published targets are reused, added keys create normally, changed or drifted
+targets block, and removed keys are informational evidence only.
+Solution-pack inspection, planning, application, checks, and history are performed
+only by the authenticated server; the CLI neither unpacks nor validates the archive
+and prints only the server's safe, bounded JSON response. `solution-pack apply`
+accepts only a UUID plan ID and has no flags that can alter the persisted plan.
+`applications abandon` permanently stops a resumable sample-selected application;
+`checks rerun`, `checks list`, and `checks show` evaluate or read informational,
+non-mutating setup checks. History contains provenance and step results but no
+blueprint source or normalized resource payloads. `presentation-asset list` and
+`show` expose safe immutable metadata, while `download --output` streams
+integrity-verified bytes. Uploads and downloads retain the five-second connection
+timeout but are not subject to the normal 30-second JSON request timeout. File and
+presentation-asset downloads, extension artifacts, and metrics stream to `--output`;
+they do not put binary, JavaScript, or Prometheus text on stdout. An optional
+download `--range` is sent unchanged as the HTTP `Range` header. These transfer
+commands print `null` after success so normal command output remains JSON.
 
 ## Event delivery operations
 

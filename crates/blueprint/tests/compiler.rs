@@ -41,6 +41,7 @@ from = "seo.meta_title"
                     code: "meta_title".to_owned(),
                     value_type: "string".to_owned(),
                     value_schema: None,
+                    extension_type: None,
                     default_value: None,
                     file_policy: None,
                     target_blueprint: None,
@@ -56,6 +57,7 @@ from = "seo.meta_title"
                     code: "meta_description".to_owned(),
                     value_type: "string".to_owned(),
                     value_schema: None,
+                    extension_type: None,
                     default_value: None,
                     file_policy: None,
                     target_blueprint: None,
@@ -955,4 +957,34 @@ cardinality = "one"
         .is_err()
     );
     assert!(parse(&source.replace("version = 1", "version = -1")).is_err());
+}
+
+#[test]
+fn parses_extension_type_reference_and_json_primitive() {
+    let source = r#"
+format_version = 1
+code = "product"
+name = "Product"
+kind = "entity"
+
+[views.dropdown_option]
+type = "dropdown_option"
+fields = ["price"]
+
+[[attributes]]
+code = "price"
+extension_type = "com.acme.commerce:money@^1"
+extension_configuration = '{"currency":"USD"}'
+
+[[attributes]]
+code = "metadata"
+value_type = "json"
+"#;
+    let compiled = compile(parse(source).unwrap(), &[], source).unwrap();
+    assert_eq!(compiled.attributes[0].value_type, "string");
+    assert_eq!(
+        compiled.attributes[0].extension_type.as_ref().unwrap()["reference"],
+        "com.acme.commerce:money@^1"
+    );
+    assert_eq!(compiled.attributes[1].value_type, "json");
 }

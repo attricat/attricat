@@ -26,6 +26,8 @@ struct RawBlueprintDefinition {
     /// definition and intentionally ignored by the core blueprint compiler.
     #[serde(default)]
     extensions: HashMap<String, toml::Value>,
+    #[serde(default)]
+    rules: Vec<toml::Value>,
     attributes: Vec<RawAttributeDeclaration>,
 }
 
@@ -34,7 +36,11 @@ struct RawBlueprintDefinition {
 struct RawAttributeDeclaration {
     code: String,
     value_type: Option<String>,
+    /// A `provider:type@semver-range` reference resolved by the host using an
+    /// enabled workspace installation.
+    extension_type: Option<String>,
     value_schema: Option<String>,
+    extension_configuration: Option<String>,
     default_value: Option<serde_json::Value>,
     cardinality: Option<String>,
     target_cardinality: Option<String>,
@@ -116,8 +122,12 @@ pub fn parse(source: &str) -> Result<BlueprintDefinition, BlueprintError> {
         }
 
         attributes.push(
-            match (attribute.value_type.clone(), attribute.from.clone()) {
-                (Some(value_type), None) => {
+            match (
+                attribute.value_type.clone(),
+                attribute.extension_type.clone(),
+                attribute.from.clone(),
+            ) {
+                (Some(value_type), None, None) => {
                     validate_non_empty(&value_type, "attribute value_type")?;
                     if !matches!(
                         value_type.as_str(),
@@ -128,6 +138,7 @@ pub fn parse(source: &str) -> Result<BlueprintDefinition, BlueprintError> {
                             | "date"
                             | "datetime"
                             | "time"
+                            | "json"
                             | "relationship"
                             | "file"
                     ) {
@@ -239,6 +250,8 @@ pub fn parse(source: &str) -> Result<BlueprintDefinition, BlueprintError> {
                         code: attribute.code,
                         value_type,
                         value_schema,
+                        extension_type: None,
+                        extension_configuration: None,
                         default_value: attribute.default_value,
                         file_policy,
                         target_blueprint: attribute.target_blueprint,
@@ -250,7 +263,7 @@ pub fn parse(source: &str) -> Result<BlueprintDefinition, BlueprintError> {
                         readonly: attribute.readonly,
                     }))
                 }
-                (None, Some(source)) if attribute.target_blueprint.is_none() => {
+                (None, None, Some(source)) if attribute.target_blueprint.is_none() => {
                     let (include_alias, attribute_code) =
                         parse_selection(&attribute.code, &source)?;
                     AttributeDeclaration::Selection {
@@ -259,9 +272,88 @@ pub fn parse(source: &str) -> Result<BlueprintDefinition, BlueprintError> {
                         attribute_code,
                     }
                 }
+                (None, Some(extension_type), None) => {
+                    if extension_type.trim().is_empty()
+                        || attribute.value_schema.is_some()
+                        || attribute.target_blueprint.is_some()
+                        || attribute.cardinality.is_some()
+                        || attribute.target_cardinality.is_some()
+                        || attribute.ordered.is_some()
+                        || !attribute.allowed_mime_groups.is_empty()
+                        || !attribute.allowed_extensions.is_empty()
+                        || attribute.max_bytes.is_some()
+                        || !attribute.purposes.is_empty()
+                        || attribute.image_only.is_some()
+                    {
+                        return Err(BlueprintError::InvalidAttributeDeclaration(attribute.code));
+                    }
+                    if !matches!(attribute.context_fallback.as_str(), "default" | "none") {
+                        return Err(BlueprintError::InvalidContextFallback {
+                            code: attribute.code,
+                            context_fallback: attribute.context_fallback,
+                        });
+                    }
+                    if !matches!(attribute.context_editable.as_str(), "all" | "default") {
+                        return Err(BlueprintError::InvalidContextEditable {
+                            code: attribute.code,
+                            context_editable: attribute.context_editable,
+                        });
+                    }
+                    let extension_configuration = parse_json_value(
+                        attribute.extension_configuration,
+                        &format!("attribute '{}'.extension_configuration", attribute.code),
+                    )?;
+                    AttributeDeclaration::Local(Box::new(LocalAttributeDeclaration {
+                        code: attribute.code,
+                        // Resolved before persistence; this keeps the pure compiler
+                        // useful without giving extensions storage control.
+                        value_type: "string".to_owned(),
+                        value_schema: None,
+                        extension_type: Some(extension_type),
+                        extension_configuration,
+                        default_value: attribute.default_value,
+                        file_policy: None,
+                        target_blueprint: None,
+                        cardinality: None,
+                        target_cardinality: None,
+                        tags: attribute.tags,
+                        context_fallback: attribute.context_fallback,
+                        context_editable: attribute.context_editable,
+                        readonly: attribute.readonly,
+                    }))
+                }
                 _ => return Err(BlueprintError::InvalidAttributeDeclaration(attribute.code)),
             },
         );
+    }
+
+    let rules = raw
+        .rules
+        .into_iter()
+        .map(catalog_rules::compile_embedded)
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(|error| BlueprintError::InvalidRule(error.to_string()))?;
+    let mut rule_codes = HashSet::new();
+    for rule in &rules {
+        if !rule_codes.insert(rule.code.clone()) {
+            return Err(BlueprintError::InvalidRule(format!(
+                "duplicate rule code '{}'",
+                rule.code
+            )));
+        }
+        let attribute = match &rule.predicate {
+            catalog_rules::Predicate::Required { attribute_code }
+            | catalog_rules::Predicate::Stale { attribute_code, .. } => Some(attribute_code),
+            _ => None,
+        };
+        if let Some(attribute) = attribute
+            && !codes.contains(attribute)
+        {
+            return Err(BlueprintError::RuleUnknownAttribute {
+                rule: rule.code.clone(),
+                attribute: attribute.clone(),
+            });
+        }
     }
 
     Ok(BlueprintDefinition {
@@ -273,6 +365,7 @@ pub fn parse(source: &str) -> Result<BlueprintDefinition, BlueprintError> {
         views: raw.views,
         entity_schema,
         publication: raw.publication,
+        rules,
         attributes,
     })
 }
@@ -325,6 +418,20 @@ fn parse_file_policy(
         purposes: attribute.purposes.clone(),
         image_only: attribute.image_only.unwrap_or(false),
     })
+}
+
+fn parse_json_value(
+    source: Option<String>,
+    field: &str,
+) -> Result<Option<serde_json::Value>, BlueprintError> {
+    source
+        .map(|source| {
+            serde_json::from_str(&source).map_err(|error| BlueprintError::InvalidJsonSchema {
+                field: field.to_owned(),
+                message: error.to_string(),
+            })
+        })
+        .transpose()
 }
 
 fn parse_json_schema(

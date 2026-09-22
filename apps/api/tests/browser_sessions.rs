@@ -167,7 +167,7 @@ async fn password_reset_requests_are_rate_limited_without_disclosing_or_issuing_
 }
 
 #[sqlx::test]
-async fn session_workspace_selects_the_rls_catalog_pool(pool: PgPool) {
+async fn session_workspace_selects_the_explicit_catalog_scope(pool: PgPool) {
     let (base_url, server) = start_session_server(pool.clone()).await;
     let owner_id = OWNER_ID.parse::<Uuid>().unwrap();
     let workspace_id = Uuid::new_v4();
@@ -284,7 +284,7 @@ async fn stale_password_verification_cannot_issue_a_session(pool: PgPool) {
         .await
         .unwrap();
 
-    let repository = CatalogRepository::new(pool.clone());
+    let repository = CatalogRepository::system(pool.clone());
     let credential = repository
         .local_login_credential("api-test-owner@example.test")
         .await

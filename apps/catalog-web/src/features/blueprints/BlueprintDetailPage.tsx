@@ -24,6 +24,7 @@ import { PageContainer } from '../../components/PageContainer';
 import { PageHeader } from '../../components/PageHeader';
 import {
   getBlueprintRevision,
+  listBlueprintMigrationBatches,
   listBlueprintRevisions,
   publishBlueprintEntities,
   publishBlueprintEntitiesAllChannels,
@@ -31,9 +32,15 @@ import {
   startSafeBlueprintMigrationBatch,
 } from './api';
 import { formatBlueprintDateTime } from './date-time';
+import {
+  ACTIVE_MIGRATION_POLL_INTERVAL_MS,
+  hasActiveMigrationForVersion,
+  isMigrationBatchActive,
+} from './migration-batches';
 import { blueprintQueryKeys } from './query-keys';
 import { RevisionHistory } from './RevisionHistory';
 import { BlueprintVersionMetadata } from './BlueprintVersionMetadata';
+import { MigrationBatchStatus } from './MigrationBatchStatus';
 import { ExtensionOutlet } from '../extensions/ExtensionOutlet';
 import { listPublicationChannels } from '../exports/api';
 import { exportQueryKeys } from '../exports/query-keys';
@@ -81,7 +88,13 @@ export const BlueprintDetailPage = ({
   const safeMigration = useMutation({
     mutationFn: (version: number) =>
       startSafeBlueprintMigrationBatch(blueprintId, version),
-    onSuccess: () => setSafeMigrationConfirmationOpen(false),
+    onSuccess: async () => {
+      setSafeMigrationConfirmationOpen(false);
+      setPageTab(3);
+      await queryClient.invalidateQueries({
+        queryKey: blueprintQueryKeys.migrationBatches(blueprintId),
+      });
+    },
   });
   const publicationChannels = useQuery({
     queryKey: exportQueryKeys.channels(),
@@ -127,6 +140,18 @@ export const BlueprintDetailPage = ({
   const blueprint = revisionItems[0];
   const latestPublished = revisionItems.find(
     (revision) => revision.status === 'published',
+  );
+  const migrationBatches = useQuery({
+    queryKey: blueprintQueryKeys.migrationBatches(blueprintId),
+    queryFn: () => listBlueprintMigrationBatches(blueprintId),
+    refetchInterval: (query) =>
+      query.state.data?.some(isMigrationBatchActive)
+        ? ACTIVE_MIGRATION_POLL_INTERVAL_MS
+        : false,
+  });
+  const currentVersionMigrationActive = hasActiveMigrationForVersion(
+    migrationBatches.data,
+    latestPublished?.version,
   );
   const safeMigrationSourceVersion = latestPublished
     ? latestPublished.version - 1
@@ -204,10 +229,16 @@ export const BlueprintDetailPage = ({
                 )}
                 {canStartSafeMigration && (
                   <Button
+                    disabled={
+                      !migrationBatches.isSuccess ||
+                      currentVersionMigrationActive
+                    }
                     onClick={() => setSafeMigrationConfirmationOpen(true)}
                     variant="contained"
                   >
-                    {t('blueprints.migrateCompatibleEntities')}
+                    {currentVersionMigrationActive
+                      ? t('blueprints.migrationInProgress')
+                      : t('blueprints.migrateCompatibleEntities')}
                   </Button>
                 )}
               </Stack>
@@ -274,6 +305,11 @@ export const BlueprintDetailPage = ({
               aria-controls="blueprint-detail-tabpanel-2"
               id="blueprint-detail-tab-2"
               label={t('blueprints.compareDefinitions')}
+            />
+            <Tab
+              aria-controls="blueprint-detail-tabpanel-3"
+              id="blueprint-detail-tab-3"
+              label={t('blueprints.migrations')}
             />
           </Tabs>
           {pageTab === 0 && left.data && (
@@ -383,6 +419,15 @@ export const BlueprintDetailPage = ({
                 </Suspense>
               </Box>
             </Paper>
+          )}
+          {pageTab === 3 && (
+            <Box
+              aria-labelledby="blueprint-detail-tab-3"
+              id="blueprint-detail-tabpanel-3"
+              role="tabpanel"
+            >
+              <MigrationBatchStatus batches={migrationBatches} />
+            </Box>
           )}
           {(safeMigration.isError || publishEntities.isError) && (
             <Alert severity="error" sx={{ mt: 2 }}>

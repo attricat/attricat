@@ -1,6 +1,13 @@
 // @vitest-environment jsdom
 import { render, screen, waitFor } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import {
+  createMemoryHistory,
+  createRootRoute,
+  createRoute,
+  createRouter,
+  RouterProvider,
+} from '@tanstack/react-router';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { ExtensionContribution } from './api';
@@ -43,10 +50,12 @@ const contribution: ExtensionContribution = {
   capabilities: [],
   configuration: null,
   extension_id: 'example.extension',
+  extension_name: 'Example Extension',
   id: 'row-action',
   kind: 'action',
   outlet: 'explorer_row_action',
   release_id: '11111111-1111-4111-8111-111111111111',
+  route: null,
   title: 'Example action',
   version: 1,
 };
@@ -139,6 +148,48 @@ describe('ExtensionOutlet', () => {
       screen.getByRole('button', { name: 'extensions.groupedNavigation' }),
     );
     expect(await screen.findByText('grouped')).toBeTruthy();
+  });
+
+  it('renders host-owned navigation links to the declared route', async () => {
+    vi.mocked(getExtensionRuntime).mockResolvedValue([
+      {
+        ...contribution,
+        contribution_key: 'example.extension:workbench-nav',
+        id: 'workbench-nav',
+        kind: 'navigation',
+        navigation_group: 'promoted',
+        outlet: 'navigation',
+        route: 'workbench',
+        title: 'Workbench',
+      },
+    ]);
+    const rootRoute = createRootRoute();
+    const indexRoute = createRoute({
+      getParentRoute: () => rootRoute,
+      path: '/extensions/$extensionId/$contributionId',
+      component: () => (
+        <ExtensionOutlet navigationDisplay="all" outlet="navigation" />
+      ),
+    });
+    const router = createRouter({
+      history: createMemoryHistory({
+        initialEntries: ['/extensions/example.extension/workbench'],
+      }),
+      routeTree: rootRoute.addChildren([indexRoute]),
+    });
+    const queryClient = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    });
+    render(
+      <QueryClientProvider client={queryClient}>
+        <RouterProvider router={router} />
+      </QueryClientProvider>,
+    );
+    const link = await screen.findByRole('link', { name: 'Workbench' });
+    expect(link.getAttribute('href')).toBe(
+      '/extensions/example.extension/workbench',
+    );
+    expect(link.getAttribute('aria-current')).toBe('page');
   });
 
   it('keeps one primary and three secondary entity actions before overflow', async () => {

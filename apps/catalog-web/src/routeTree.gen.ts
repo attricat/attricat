@@ -18,6 +18,7 @@ import { Route as AgentsConversationIdRouteImport } from './routes/agents/$conve
 import { Route as AgentsNewRouteImport } from './routes/agents/new'
 import { Route as EntitiesEntityIdRouteImport } from './routes/entities/$entityId'
 import { Route as EntitiesNewRouteImport } from './routes/entities/new'
+import { Route as ExtensionsIndexRouteImport } from './routes/extensions/index'
 import { Route as InvitationsAcceptRouteImport } from './routes/invitations/accept'
 import { Route as LoginIndexRouteImport } from './routes/login/index'
 import { Route as LoginIdentifierRouteImport } from './routes/login/$identifier'
@@ -41,7 +42,16 @@ import { Route as ManageContextsIndexRouteImport } from './routes/manage/context
 import { Route as ManageContextsNewRouteImport } from './routes/manage/contexts/new'
 import { Route as ManageExtensionsIndexRouteImport } from './routes/manage/extensions/index'
 import { Route as ManageExtensionsExtensionIdRouteImport } from './routes/manage/extensions/$extensionId'
+import { Route as ManageExtensionsInstalledRouteImport } from './routes/manage/extensions/installed'
+import { Route as ManageExtensionsLayoutRouteImport } from './routes/manage/extensions/layout'
+import { Route as ManageExtensionsMarketplaceRouteImport } from './routes/manage/extensions/marketplace'
 import { Route as ManageExtensionsSideloadRouteImport } from './routes/manage/extensions/sideload'
+import { Route as ManageReusableAttributesIndexRouteImport } from './routes/manage/reusable-attributes/index'
+import { Route as ManageReusableAttributesDefinitionIdRouteImport } from './routes/manage/reusable-attributes/$definitionId'
+import { Route as ManageReusableAttributesNewRouteImport } from './routes/manage/reusable-attributes/new'
+import { Route as ManageRulesIndexRouteImport } from './routes/manage/rules/index'
+import { Route as ManageRulesFindingsRouteImport } from './routes/manage/rules/findings'
+import { Route as ManageRulesRunsRouteImport } from './routes/manage/rules/runs'
 import { Route as ManageWorkflowsIndexRouteImport } from './routes/manage/workflows/index'
 import { Route as ManageWorkflowsWorkflowIdRouteImport } from './routes/manage/workflows/$workflowId'
 import { Route as ManageWorkflowsNewRouteImport } from './routes/manage/workflows/new'
@@ -99,6 +109,11 @@ const EntitiesEntityIdRoute = EntitiesEntityIdRouteImport.update({
 const EntitiesNewRoute = EntitiesNewRouteImport.update({
   id: '/entities/new',
   path: '/entities/new',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ExtensionsIndexRoute = ExtensionsIndexRouteImport.update({
+  id: '/extensions/',
+  path: '/extensions/',
   getParentRoute: () => rootRouteImport,
 } as any)
 const InvitationsAcceptRoute = InvitationsAcceptRouteImport.update({
@@ -220,12 +235,62 @@ const ManageExtensionsExtensionIdRoute =
     path: '/manage/extensions/$extensionId',
     getParentRoute: () => rootRouteImport,
   } as any)
+const ManageExtensionsInstalledRoute =
+  ManageExtensionsInstalledRouteImport.update({
+    id: '/manage/extensions/installed',
+    path: '/manage/extensions/installed',
+    getParentRoute: () => rootRouteImport,
+  } as any)
+const ManageExtensionsLayoutRoute = ManageExtensionsLayoutRouteImport.update({
+  id: '/manage/extensions/layout',
+  path: '/manage/extensions/layout',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ManageExtensionsMarketplaceRoute =
+  ManageExtensionsMarketplaceRouteImport.update({
+    id: '/manage/extensions/marketplace',
+    path: '/manage/extensions/marketplace',
+    getParentRoute: () => rootRouteImport,
+  } as any)
 const ManageExtensionsSideloadRoute =
   ManageExtensionsSideloadRouteImport.update({
     id: '/manage/extensions/sideload',
     path: '/manage/extensions/sideload',
     getParentRoute: () => rootRouteImport,
   } as any)
+const ManageReusableAttributesIndexRoute =
+  ManageReusableAttributesIndexRouteImport.update({
+    id: '/manage/reusable-attributes/',
+    path: '/manage/reusable-attributes/',
+    getParentRoute: () => rootRouteImport,
+  } as any)
+const ManageReusableAttributesDefinitionIdRoute =
+  ManageReusableAttributesDefinitionIdRouteImport.update({
+    id: '/manage/reusable-attributes/$definitionId',
+    path: '/manage/reusable-attributes/$definitionId',
+    getParentRoute: () => rootRouteImport,
+  } as any)
+const ManageReusableAttributesNewRoute =
+  ManageReusableAttributesNewRouteImport.update({
+    id: '/manage/reusable-attributes/new',
+    path: '/manage/reusable-attributes/new',
+    getParentRoute: () => rootRouteImport,
+  } as any)
+const ManageRulesIndexRoute = ManageRulesIndexRouteImport.update({
+  id: '/manage/rules/',
+  path: '/manage/rules/',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ManageRulesFindingsRoute = ManageRulesFindingsRouteImport.update({
+  id: '/manage/rules/findings',
+  path: '/manage/rules/findings',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ManageRulesRunsRoute = ManageRulesRunsRouteImport.update({
+  id: '/manage/rules/runs',
+  path: '/manage/rules/runs',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ManageWorkflowsIndexRoute = ManageWorkflowsIndexRouteImport.update({
   id: '/manage/workflows/',
   path: '/manage/workflows/',
@@ -317,6 +382,7 @@ export interface FileRoutesByFullPath {
   '/password-reset/confirm': typeof PasswordResetConfirmRoute
   '/profile/personal-access-tokens': typeof ProfilePersonalAccessTokensRoute
   '/agents/': typeof AgentsIndexRoute
+  '/extensions/': typeof ExtensionsIndexRoute
   '/login/': typeof LoginIndexRoute
   '/manage/': typeof ManageIndexRoute
   '/password-reset/': typeof PasswordResetIndexRoute
@@ -329,7 +395,14 @@ export interface FileRoutesByFullPath {
   '/manage/blueprints/new': typeof ManageBlueprintsNewRoute
   '/manage/contexts/new': typeof ManageContextsNewRoute
   '/manage/extensions/$extensionId': typeof ManageExtensionsExtensionIdRoute
+  '/manage/extensions/installed': typeof ManageExtensionsInstalledRoute
+  '/manage/extensions/layout': typeof ManageExtensionsLayoutRoute
+  '/manage/extensions/marketplace': typeof ManageExtensionsMarketplaceRoute
   '/manage/extensions/sideload': typeof ManageExtensionsSideloadRoute
+  '/manage/reusable-attributes/$definitionId': typeof ManageReusableAttributesDefinitionIdRoute
+  '/manage/reusable-attributes/new': typeof ManageReusableAttributesNewRoute
+  '/manage/rules/findings': typeof ManageRulesFindingsRoute
+  '/manage/rules/runs': typeof ManageRulesRunsRoute
   '/manage/workflows/$workflowId': typeof ManageWorkflowsWorkflowIdRouteWithChildren
   '/manage/workflows/new': typeof ManageWorkflowsNewRoute
   '/manage/workspace/invitations': typeof ManageWorkspaceInvitationsRoute
@@ -340,6 +413,8 @@ export interface FileRoutesByFullPath {
   '/manage/blueprints/': typeof ManageBlueprintsIndexRoute
   '/manage/contexts/': typeof ManageContextsIndexRoute
   '/manage/extensions/': typeof ManageExtensionsIndexRoute
+  '/manage/reusable-attributes/': typeof ManageReusableAttributesIndexRoute
+  '/manage/rules/': typeof ManageRulesIndexRoute
   '/manage/workflows/': typeof ManageWorkflowsIndexRoute
   '/manage/workspace/': typeof ManageWorkspaceIndexRoute
   '/manage/extensions/$owner/$repository': typeof ManageExtensionsOwnerRepositoryRoute
@@ -362,6 +437,7 @@ export interface FileRoutesByTo {
   '/password-reset/confirm': typeof PasswordResetConfirmRoute
   '/profile/personal-access-tokens': typeof ProfilePersonalAccessTokensRoute
   '/agents': typeof AgentsIndexRoute
+  '/extensions': typeof ExtensionsIndexRoute
   '/login': typeof LoginIndexRoute
   '/manage': typeof ManageIndexRoute
   '/password-reset': typeof PasswordResetIndexRoute
@@ -373,7 +449,14 @@ export interface FileRoutesByTo {
   '/manage/blueprints/new': typeof ManageBlueprintsNewRoute
   '/manage/contexts/new': typeof ManageContextsNewRoute
   '/manage/extensions/$extensionId': typeof ManageExtensionsExtensionIdRoute
+  '/manage/extensions/installed': typeof ManageExtensionsInstalledRoute
+  '/manage/extensions/layout': typeof ManageExtensionsLayoutRoute
+  '/manage/extensions/marketplace': typeof ManageExtensionsMarketplaceRoute
   '/manage/extensions/sideload': typeof ManageExtensionsSideloadRoute
+  '/manage/reusable-attributes/$definitionId': typeof ManageReusableAttributesDefinitionIdRoute
+  '/manage/reusable-attributes/new': typeof ManageReusableAttributesNewRoute
+  '/manage/rules/findings': typeof ManageRulesFindingsRoute
+  '/manage/rules/runs': typeof ManageRulesRunsRoute
   '/manage/workflows/new': typeof ManageWorkflowsNewRoute
   '/manage/workspace/invitations': typeof ManageWorkspaceInvitationsRoute
   '/manage/workspace/members': typeof ManageWorkspaceMembersRoute
@@ -383,6 +466,8 @@ export interface FileRoutesByTo {
   '/manage/blueprints': typeof ManageBlueprintsIndexRoute
   '/manage/contexts': typeof ManageContextsIndexRoute
   '/manage/extensions': typeof ManageExtensionsIndexRoute
+  '/manage/reusable-attributes': typeof ManageReusableAttributesIndexRoute
+  '/manage/rules': typeof ManageRulesIndexRoute
   '/manage/workflows': typeof ManageWorkflowsIndexRoute
   '/manage/workspace': typeof ManageWorkspaceIndexRoute
   '/manage/extensions/$owner/$repository': typeof ManageExtensionsOwnerRepositoryRoute
@@ -409,6 +494,7 @@ export interface FileRoutesById {
   '/password-reset/confirm': typeof PasswordResetConfirmRoute
   '/profile/personal-access-tokens': typeof ProfilePersonalAccessTokensRoute
   '/agents/': typeof AgentsIndexRoute
+  '/extensions/': typeof ExtensionsIndexRoute
   '/login/': typeof LoginIndexRoute
   '/manage/': typeof ManageIndexRoute
   '/password-reset/': typeof PasswordResetIndexRoute
@@ -421,7 +507,14 @@ export interface FileRoutesById {
   '/manage/blueprints/new': typeof ManageBlueprintsNewRoute
   '/manage/contexts/new': typeof ManageContextsNewRoute
   '/manage/extensions/$extensionId': typeof ManageExtensionsExtensionIdRoute
+  '/manage/extensions/installed': typeof ManageExtensionsInstalledRoute
+  '/manage/extensions/layout': typeof ManageExtensionsLayoutRoute
+  '/manage/extensions/marketplace': typeof ManageExtensionsMarketplaceRoute
   '/manage/extensions/sideload': typeof ManageExtensionsSideloadRoute
+  '/manage/reusable-attributes/$definitionId': typeof ManageReusableAttributesDefinitionIdRoute
+  '/manage/reusable-attributes/new': typeof ManageReusableAttributesNewRoute
+  '/manage/rules/findings': typeof ManageRulesFindingsRoute
+  '/manage/rules/runs': typeof ManageRulesRunsRoute
   '/manage/workflows/$workflowId': typeof ManageWorkflowsWorkflowIdRouteWithChildren
   '/manage/workflows/new': typeof ManageWorkflowsNewRoute
   '/manage/workspace/invitations': typeof ManageWorkspaceInvitationsRoute
@@ -432,6 +525,8 @@ export interface FileRoutesById {
   '/manage/blueprints/': typeof ManageBlueprintsIndexRoute
   '/manage/contexts/': typeof ManageContextsIndexRoute
   '/manage/extensions/': typeof ManageExtensionsIndexRoute
+  '/manage/reusable-attributes/': typeof ManageReusableAttributesIndexRoute
+  '/manage/rules/': typeof ManageRulesIndexRoute
   '/manage/workflows/': typeof ManageWorkflowsIndexRoute
   '/manage/workspace/': typeof ManageWorkspaceIndexRoute
   '/manage/extensions/$owner/$repository': typeof ManageExtensionsOwnerRepositoryRoute
@@ -459,6 +554,7 @@ export interface FileRouteTypes {
     | '/password-reset/confirm'
     | '/profile/personal-access-tokens'
     | '/agents/'
+    | '/extensions/'
     | '/login/'
     | '/manage/'
     | '/password-reset/'
@@ -471,7 +567,14 @@ export interface FileRouteTypes {
     | '/manage/blueprints/new'
     | '/manage/contexts/new'
     | '/manage/extensions/$extensionId'
+    | '/manage/extensions/installed'
+    | '/manage/extensions/layout'
+    | '/manage/extensions/marketplace'
     | '/manage/extensions/sideload'
+    | '/manage/reusable-attributes/$definitionId'
+    | '/manage/reusable-attributes/new'
+    | '/manage/rules/findings'
+    | '/manage/rules/runs'
     | '/manage/workflows/$workflowId'
     | '/manage/workflows/new'
     | '/manage/workspace/invitations'
@@ -482,6 +585,8 @@ export interface FileRouteTypes {
     | '/manage/blueprints/'
     | '/manage/contexts/'
     | '/manage/extensions/'
+    | '/manage/reusable-attributes/'
+    | '/manage/rules/'
     | '/manage/workflows/'
     | '/manage/workspace/'
     | '/manage/extensions/$owner/$repository'
@@ -504,6 +609,7 @@ export interface FileRouteTypes {
     | '/password-reset/confirm'
     | '/profile/personal-access-tokens'
     | '/agents'
+    | '/extensions'
     | '/login'
     | '/manage'
     | '/password-reset'
@@ -515,7 +621,14 @@ export interface FileRouteTypes {
     | '/manage/blueprints/new'
     | '/manage/contexts/new'
     | '/manage/extensions/$extensionId'
+    | '/manage/extensions/installed'
+    | '/manage/extensions/layout'
+    | '/manage/extensions/marketplace'
     | '/manage/extensions/sideload'
+    | '/manage/reusable-attributes/$definitionId'
+    | '/manage/reusable-attributes/new'
+    | '/manage/rules/findings'
+    | '/manage/rules/runs'
     | '/manage/workflows/new'
     | '/manage/workspace/invitations'
     | '/manage/workspace/members'
@@ -525,6 +638,8 @@ export interface FileRouteTypes {
     | '/manage/blueprints'
     | '/manage/contexts'
     | '/manage/extensions'
+    | '/manage/reusable-attributes'
+    | '/manage/rules'
     | '/manage/workflows'
     | '/manage/workspace'
     | '/manage/extensions/$owner/$repository'
@@ -550,6 +665,7 @@ export interface FileRouteTypes {
     | '/password-reset/confirm'
     | '/profile/personal-access-tokens'
     | '/agents/'
+    | '/extensions/'
     | '/login/'
     | '/manage/'
     | '/password-reset/'
@@ -562,7 +678,14 @@ export interface FileRouteTypes {
     | '/manage/blueprints/new'
     | '/manage/contexts/new'
     | '/manage/extensions/$extensionId'
+    | '/manage/extensions/installed'
+    | '/manage/extensions/layout'
+    | '/manage/extensions/marketplace'
     | '/manage/extensions/sideload'
+    | '/manage/reusable-attributes/$definitionId'
+    | '/manage/reusable-attributes/new'
+    | '/manage/rules/findings'
+    | '/manage/rules/runs'
     | '/manage/workflows/$workflowId'
     | '/manage/workflows/new'
     | '/manage/workspace/invitations'
@@ -573,6 +696,8 @@ export interface FileRouteTypes {
     | '/manage/blueprints/'
     | '/manage/contexts/'
     | '/manage/extensions/'
+    | '/manage/reusable-attributes/'
+    | '/manage/rules/'
     | '/manage/workflows/'
     | '/manage/workspace/'
     | '/manage/extensions/$owner/$repository'
@@ -597,6 +722,7 @@ export interface RootRouteChildren {
   ManageExportsRoute: typeof ManageExportsRoute
   PasswordResetConfirmRoute: typeof PasswordResetConfirmRoute
   AgentsIndexRoute: typeof AgentsIndexRoute
+  ExtensionsIndexRoute: typeof ExtensionsIndexRoute
   ManageIndexRoute: typeof ManageIndexRoute
   PasswordResetIndexRoute: typeof PasswordResetIndexRoute
   ExtensionsExtensionIdContributionIdRoute: typeof ExtensionsExtensionIdContributionIdRoute
@@ -604,7 +730,14 @@ export interface RootRouteChildren {
   ManageBlueprintsNewRoute: typeof ManageBlueprintsNewRoute
   ManageContextsNewRoute: typeof ManageContextsNewRoute
   ManageExtensionsExtensionIdRoute: typeof ManageExtensionsExtensionIdRoute
+  ManageExtensionsInstalledRoute: typeof ManageExtensionsInstalledRoute
+  ManageExtensionsLayoutRoute: typeof ManageExtensionsLayoutRoute
+  ManageExtensionsMarketplaceRoute: typeof ManageExtensionsMarketplaceRoute
   ManageExtensionsSideloadRoute: typeof ManageExtensionsSideloadRoute
+  ManageReusableAttributesDefinitionIdRoute: typeof ManageReusableAttributesDefinitionIdRoute
+  ManageReusableAttributesNewRoute: typeof ManageReusableAttributesNewRoute
+  ManageRulesFindingsRoute: typeof ManageRulesFindingsRoute
+  ManageRulesRunsRoute: typeof ManageRulesRunsRoute
   ManageWorkflowsWorkflowIdRoute: typeof ManageWorkflowsWorkflowIdRouteWithChildren
   ManageWorkflowsNewRoute: typeof ManageWorkflowsNewRoute
   ManageWorkspaceInvitationsRoute: typeof ManageWorkspaceInvitationsRoute
@@ -614,6 +747,8 @@ export interface RootRouteChildren {
   ManageBlueprintsIndexRoute: typeof ManageBlueprintsIndexRoute
   ManageContextsIndexRoute: typeof ManageContextsIndexRoute
   ManageExtensionsIndexRoute: typeof ManageExtensionsIndexRoute
+  ManageReusableAttributesIndexRoute: typeof ManageReusableAttributesIndexRoute
+  ManageRulesIndexRoute: typeof ManageRulesIndexRoute
   ManageWorkflowsIndexRoute: typeof ManageWorkflowsIndexRoute
   ManageWorkspaceIndexRoute: typeof ManageWorkspaceIndexRoute
   ManageExtensionsOwnerRepositoryRoute: typeof ManageExtensionsOwnerRepositoryRoute
@@ -682,6 +817,13 @@ declare module '@tanstack/react-router' {
       path: '/entities/new'
       fullPath: '/entities/new'
       preLoaderRoute: typeof EntitiesNewRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/extensions/': {
+      id: '/extensions/'
+      path: '/extensions'
+      fullPath: '/extensions/'
+      preLoaderRoute: typeof ExtensionsIndexRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/invitations/accept': {
@@ -845,11 +987,74 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ManageExtensionsExtensionIdRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/manage/extensions/installed': {
+      id: '/manage/extensions/installed'
+      path: '/manage/extensions/installed'
+      fullPath: '/manage/extensions/installed'
+      preLoaderRoute: typeof ManageExtensionsInstalledRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/manage/extensions/layout': {
+      id: '/manage/extensions/layout'
+      path: '/manage/extensions/layout'
+      fullPath: '/manage/extensions/layout'
+      preLoaderRoute: typeof ManageExtensionsLayoutRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/manage/extensions/marketplace': {
+      id: '/manage/extensions/marketplace'
+      path: '/manage/extensions/marketplace'
+      fullPath: '/manage/extensions/marketplace'
+      preLoaderRoute: typeof ManageExtensionsMarketplaceRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/manage/extensions/sideload': {
       id: '/manage/extensions/sideload'
       path: '/manage/extensions/sideload'
       fullPath: '/manage/extensions/sideload'
       preLoaderRoute: typeof ManageExtensionsSideloadRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/manage/reusable-attributes/': {
+      id: '/manage/reusable-attributes/'
+      path: '/manage/reusable-attributes'
+      fullPath: '/manage/reusable-attributes/'
+      preLoaderRoute: typeof ManageReusableAttributesIndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/manage/reusable-attributes/$definitionId': {
+      id: '/manage/reusable-attributes/$definitionId'
+      path: '/manage/reusable-attributes/$definitionId'
+      fullPath: '/manage/reusable-attributes/$definitionId'
+      preLoaderRoute: typeof ManageReusableAttributesDefinitionIdRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/manage/reusable-attributes/new': {
+      id: '/manage/reusable-attributes/new'
+      path: '/manage/reusable-attributes/new'
+      fullPath: '/manage/reusable-attributes/new'
+      preLoaderRoute: typeof ManageReusableAttributesNewRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/manage/rules/': {
+      id: '/manage/rules/'
+      path: '/manage/rules'
+      fullPath: '/manage/rules/'
+      preLoaderRoute: typeof ManageRulesIndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/manage/rules/findings': {
+      id: '/manage/rules/findings'
+      path: '/manage/rules/findings'
+      fullPath: '/manage/rules/findings'
+      preLoaderRoute: typeof ManageRulesFindingsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/manage/rules/runs': {
+      id: '/manage/rules/runs'
+      path: '/manage/rules/runs'
+      fullPath: '/manage/rules/runs'
+      preLoaderRoute: typeof ManageRulesRunsRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/manage/workflows/': {
@@ -1038,6 +1243,7 @@ const rootRouteChildren: RootRouteChildren = {
   ManageExportsRoute: ManageExportsRoute,
   PasswordResetConfirmRoute: PasswordResetConfirmRoute,
   AgentsIndexRoute: AgentsIndexRoute,
+  ExtensionsIndexRoute: ExtensionsIndexRoute,
   ManageIndexRoute: ManageIndexRoute,
   PasswordResetIndexRoute: PasswordResetIndexRoute,
   ExtensionsExtensionIdContributionIdRoute:
@@ -1047,7 +1253,15 @@ const rootRouteChildren: RootRouteChildren = {
   ManageBlueprintsNewRoute: ManageBlueprintsNewRoute,
   ManageContextsNewRoute: ManageContextsNewRoute,
   ManageExtensionsExtensionIdRoute: ManageExtensionsExtensionIdRoute,
+  ManageExtensionsInstalledRoute: ManageExtensionsInstalledRoute,
+  ManageExtensionsLayoutRoute: ManageExtensionsLayoutRoute,
+  ManageExtensionsMarketplaceRoute: ManageExtensionsMarketplaceRoute,
   ManageExtensionsSideloadRoute: ManageExtensionsSideloadRoute,
+  ManageReusableAttributesDefinitionIdRoute:
+    ManageReusableAttributesDefinitionIdRoute,
+  ManageReusableAttributesNewRoute: ManageReusableAttributesNewRoute,
+  ManageRulesFindingsRoute: ManageRulesFindingsRoute,
+  ManageRulesRunsRoute: ManageRulesRunsRoute,
   ManageWorkflowsWorkflowIdRoute: ManageWorkflowsWorkflowIdRouteWithChildren,
   ManageWorkflowsNewRoute: ManageWorkflowsNewRoute,
   ManageWorkspaceInvitationsRoute: ManageWorkspaceInvitationsRoute,
@@ -1057,6 +1271,8 @@ const rootRouteChildren: RootRouteChildren = {
   ManageBlueprintsIndexRoute: ManageBlueprintsIndexRoute,
   ManageContextsIndexRoute: ManageContextsIndexRoute,
   ManageExtensionsIndexRoute: ManageExtensionsIndexRoute,
+  ManageReusableAttributesIndexRoute: ManageReusableAttributesIndexRoute,
+  ManageRulesIndexRoute: ManageRulesIndexRoute,
   ManageWorkflowsIndexRoute: ManageWorkflowsIndexRoute,
   ManageWorkspaceIndexRoute: ManageWorkspaceIndexRoute,
   ManageExtensionsOwnerRepositoryRoute: ManageExtensionsOwnerRepositoryRoute,

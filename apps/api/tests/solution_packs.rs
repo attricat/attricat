@@ -5255,7 +5255,10 @@ async fn concurrent_ordinary_layout_replacement_and_pack_append_do_not_lose_upda
         .fetch_one(&mut *blocker)
         .await
         .unwrap();
-    let ordinary_repository = CatalogRepository::new(pool.clone());
+    let ordinary_repository = CatalogRepository::new(
+        pool.clone(),
+        Uuid::from_u128(0x00000000000040008000000000000002),
+    );
     let ordinary = tokio::spawn(async move {
         ordinary_repository
             .update_workspace_extension_layout(json!({

@@ -8,6 +8,7 @@ import {
   CircularProgress,
   Paper,
   Tooltip,
+  Typography,
 } from '@mui/material';
 import { createElement, useState } from 'react';
 import { useTranslation } from 'react-i18next';
@@ -26,6 +27,7 @@ import {
 import { listContexts } from '../contexts/api';
 import { contextQueryKeys } from '../contexts/query-keys';
 import { defaultContextCode } from '../contexts/constants';
+import { listFindings } from '../rules/api';
 import {
   getBlueprintRevision,
   getCurrentBlueprint,
@@ -125,6 +127,10 @@ export const EntityPreviewPage = ({
     },
     enabled: Boolean(resolved.data?.entity.blueprint_id),
   });
+  const findings = useQuery({
+    queryKey: ['rules', 'findings', entityId],
+    queryFn: () => listFindings(entityId),
+  });
   const detailView = blueprint.data?.blueprint.views.detail;
   const heading = findEntityHeading(detailView);
   const HeadingRenderer = resolveHeadingRenderer(heading?.component);
@@ -138,11 +144,18 @@ export const EntityPreviewPage = ({
     <PageContainer>
       <PageHeader
         actions={
-          blueprint.data && (
-            <Box sx={{ alignItems: 'center', display: 'flex', gap: 1 }}>
-              {resolved.data?.entity.is_sample && (
-                <Chip color="info" label={t('entities.sample')} size="small" />
-              )}
+          <Box sx={{ alignItems: 'center', display: 'flex', gap: 1 }}>
+            {findings.data?.some((finding) => finding.state !== 'resolved') && (
+              <Chip
+                color="warning"
+                label={`${findings.data.filter((finding) => finding.state !== 'resolved').length} data quality finding(s)`}
+                size="small"
+              />
+            )}
+            {resolved.data?.entity.is_sample && (
+              <Chip color="info" label={t('entities.sample')} size="small" />
+            )}
+            {blueprint.data && (
               <Tooltip title={blueprint.data.blueprint.name}>
                 <RouterButton
                   params={{ blueprintId: blueprint.data.blueprint.id }}
@@ -154,8 +167,8 @@ export const EntityPreviewPage = ({
                   {t('entities.blueprint')}: {blueprint.data.blueprint.name}
                 </RouterButton>
               </Tooltip>
-            </Box>
-          )
+            )}
+          </Box>
         }
         eyebrow={
           blueprint.data ? (
@@ -270,6 +283,7 @@ export const EntityPreviewPage = ({
                   />
                   <EntityView
                     attributes={blueprint.data.attributes}
+                    fallbackVisibilityScope="detail"
                     contextId={selectedContextId}
                     entityId={entityId}
                     renderAttributeDecoration={(attribute) => (
@@ -296,6 +310,19 @@ export const EntityPreviewPage = ({
                     view={detailView}
                     skipComponentId={entityHeadingComponentId}
                   />
+                  {(resolved.data.reusable_attributes?.length ?? 0) > 0 && (
+                    <Box component="section" sx={{ mt: 4 }}>
+                      <Typography component="h2" variant="h6">
+                        {t('entities.additionalAttributes')}
+                      </Typography>
+                      <EntityView
+                        attributes={resolved.data.reusable_attributes}
+                        contextId={selectedContextId}
+                        entityId={entityId}
+                        values={resolved.data.reusable_values ?? {}}
+                      />
+                    </Box>
+                  )}
                 </Paper>
                 <ExtensionOutlet
                   context={{

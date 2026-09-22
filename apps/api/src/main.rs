@@ -1,9 +1,7 @@
-use std::{net::SocketAddr, str::FromStr, sync::Arc};
+use std::{net::SocketAddr, sync::Arc, time::Instant};
 
 use api::{
-    MIGRATOR,
-    account::{Password, hash_password},
-    agent_worker,
+    MIGRATOR, agent_worker,
     agents::AgentProviderConfig,
     blueprint_migration_worker,
     constants::{
@@ -13,6 +11,7 @@ use api::{
         DEFAULT_HTTP_REQUEST_TIMEOUT_SECONDS, DEFAULT_INCOMING_RELATIONSHIP_PAGE_SIZE,
         DEFAULT_PREVIEW_RELATIONSHIP_DEPTH, DEFAULT_PREVIEW_RELATIONSHIP_ITEMS,
         DEFAULT_RELATIONSHIP_FACET_NODES, MAINTENANCE_POOL_CONNECTIONS, REQUEST_POOL_CONNECTIONS,
+        TASK_POOL_CONNECTIONS,
     },
     event_dispatcher::{self, DispatcherConfig},
     extension_registry::{DEFAULT_OFFICIAL_REGISTRY, GitHubRegistry, GitHubRepository},
@@ -20,13 +19,14 @@ use api::{
     file_access::AllowFileAccess,
     http::{AppState, router},
     mail::SmtpMailDelivery,
-    repository::CatalogRepository,
-    solution_pack_housekeeping,
+    repository::{CatalogRepository, ValueHistoryRetentionDays},
+    rule_runtime, solution_pack_housekeeping,
     storage::{ObjectStore, S3ObjectStore, StorageConfig},
+    task_worker::{self, TaskHandlerRegistry, TaskWorkerConfig},
     telemetry::{init_metrics, init_tracing},
     workflow_runtime,
 };
-use sqlx::postgres::{PgConnectOptions, PgPoolOptions};
+use sqlx::postgres::PgPoolOptions;
 use tokio::sync::Semaphore;
 use uuid::Uuid;
 
@@ -35,6 +35,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     dotenvy::dotenv().ok();
     init_tracing("attricat-api")?;
     let metrics = init_metrics()?;
+    // Validate before opening a maintenance connection, so destructive cleanup
+    // can never receive a zero or negative retention interval.
+    let history_retention_days = std::env::var("ATTRIBUTE_VALUE_HISTORY_RETENTION_DAYS")
+        .unwrap_or_else(|_| "90".to_owned())
+        .parse::<ValueHistoryRetentionDays>()
+        .map_err(|error| format!("ATTRIBUTE_VALUE_HISTORY_RETENTION_DAYS {error}"))?;
     let agent_provider = AgentProviderConfig::from_env()
         .map_err(|error| format!("invalid agent provider configuration: {error}"))?;
     if agent_provider.is_some() {
@@ -45,6 +51,20 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
 
     let database_url =
         std::env::var("DATABASE_URL").map_err(|_| "DATABASE_URL must be set to start the API")?;
+    let request_pool_connections = pool_connections(
+        "DATABASE_REQUEST_POOL_CONNECTIONS",
+        REQUEST_POOL_CONNECTIONS,
+    )?;
+    let task_pool_connections =
+        pool_connections("DATABASE_TASK_POOL_CONNECTIONS", TASK_POOL_CONNECTIONS)?;
+    tracing::info!(
+        request_pool_connections,
+        task_pool_connections,
+        total_database_connections = u64::from(MAINTENANCE_POOL_CONNECTIONS)
+            + u64::from(request_pool_connections)
+            + u64::from(task_pool_connections),
+        "configured bounded database connection pools"
+    );
     let storage_config = StorageConfig::from_env()
         .map_err(|error| format!("invalid object storage configuration: {error}"))?;
     let object_store = Arc::new(S3ObjectStore::new(storage_config).await);
@@ -99,52 +119,54 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         .await?;
     tracing::info!("running database migrations");
     MIGRATOR.run(&maintenance_pool).await?;
-    CatalogRepository::new(maintenance_pool.clone())
+    CatalogRepository::system(maintenance_pool.clone())
         .ensure_agent_permissions()
         .await?;
-    CatalogRepository::new(maintenance_pool.clone())
+    CatalogRepository::system(maintenance_pool.clone())
         .ensure_audit_permissions()
         .await?;
-    CatalogRepository::new(maintenance_pool.clone())
+    CatalogRepository::system(maintenance_pool.clone())
         .ensure_entity_publication_permissions()
         .await?;
-    CatalogRepository::new(maintenance_pool.clone())
+    CatalogRepository::system(maintenance_pool.clone())
         .ensure_extension_registry_permissions()
         .await?;
-    CatalogRepository::new(maintenance_pool.clone())
+    CatalogRepository::system(maintenance_pool.clone())
         .ensure_workflow_permissions()
         .await?;
-    CatalogRepository::new(maintenance_pool.clone())
+    CatalogRepository::system(maintenance_pool.clone())
         .ensure_solution_pack_permissions()
         .await?;
+    CatalogRepository::system(maintenance_pool.clone())
+        .ensure_rule_permissions()
+        .await?;
+    let bootstrap_repository = CatalogRepository::system(maintenance_pool.clone());
     // The identity/membership migration consumes this durable bootstrap owner
     // record to create the initial owner grant. It is set only by deployment
     // configuration, never by a catalog request.
-    let bootstrap_workspace = sqlx::query(
-        "UPDATE workspaces SET name = $2, bootstrap_owner_email = $3, updated_at = now() WHERE id = $1 AND deleted_at IS NULL",
-    )
-    .bind(workspace_id)
-    .bind(bootstrap_workspace_name)
-    .bind(&bootstrap_owner_email)
-    .execute(&maintenance_pool)
-    .await?;
-    if bootstrap_workspace.rows_affected() != 1 {
-        return Err("CATALOG_WORKSPACE_ID does not identify an active workspace".into());
-    }
+    bootstrap_repository
+        .configure_bootstrap_workspace(
+            workspace_id,
+            &bootstrap_workspace_name,
+            &bootstrap_owner_email,
+        )
+        .await?;
     // The migration defines the identity/RBAC schema, but configuration is
     // available only after migrations. Bootstrap the configured owner here so
     // a fresh installation receives its initial durable owner grant.
-    bootstrap_workspace_owner(
-        &maintenance_pool,
-        workspace_id,
-        bootstrap_owner_id.unwrap_or_else(Uuid::new_v4),
-        Uuid::new_v4(),
-        Uuid::new_v4(),
-        &bootstrap_owner_email,
-    )
-    .await?;
+    bootstrap_repository
+        .ensure_bootstrap_workspace_owner(
+            workspace_id,
+            bootstrap_owner_id.unwrap_or_else(Uuid::new_v4),
+            Uuid::new_v4(),
+            Uuid::new_v4(),
+            &bootstrap_owner_email,
+        )
+        .await?;
     if let Some(password) = bootstrap_owner_password {
-        create_bootstrap_password(&maintenance_pool, &bootstrap_owner_email, password).await?;
+        bootstrap_repository
+            .ensure_bootstrap_local_password(&bootstrap_owner_email, password)
+            .await?;
     }
     // The browser E2E harness needs an independent principal for server-side
     // fixture setup, because login rotation deliberately invalidates a user's
@@ -152,32 +174,65 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     // are explicitly configured.
     if let Some((email, password)) = e2e_fixture {
         let email = email.trim().to_lowercase();
-        bootstrap_workspace_owner(
-            &maintenance_pool,
-            workspace_id,
-            Uuid::new_v4(),
-            Uuid::new_v4(),
-            Uuid::new_v4(),
-            &email,
-        )
-        .await?;
-        create_bootstrap_password(&maintenance_pool, &email, password).await?;
+        bootstrap_repository
+            .ensure_bootstrap_workspace_owner(
+                workspace_id,
+                Uuid::new_v4(),
+                Uuid::new_v4(),
+                Uuid::new_v4(),
+                &email,
+            )
+            .await?;
+        bootstrap_repository
+            .ensure_bootstrap_local_password(&email, password)
+            .await?;
     }
-    let history_retention_days = std::env::var("ATTRIBUTE_VALUE_HISTORY_RETENTION_DAYS")
-        .unwrap_or_else(|_| "90".to_owned())
-        .parse()?;
-    CatalogRepository::new(maintenance_pool.clone())
+    let cleanup_started = Instant::now();
+    match CatalogRepository::system(maintenance_pool.clone())
         .purge_value_history(history_retention_days)
-        .await?;
+        .await
+    {
+        Ok(deleted_entries) => {
+            let elapsed_seconds = cleanup_started.elapsed().as_secs_f64();
+            metrics::counter!("catalog_value_history_cleanup_total", "outcome" => "success")
+                .increment(1);
+            metrics::counter!("catalog_value_history_entries_purged_total")
+                .increment(deleted_entries);
+            metrics::histogram!("catalog_value_history_cleanup_duration_seconds")
+                .record(elapsed_seconds);
+            tracing::info!(
+                retention_days = history_retention_days.get(),
+                deleted_entries,
+                elapsed_seconds,
+                "attribute value history cleanup completed"
+            );
+        }
+        Err(error) => {
+            let elapsed_seconds = cleanup_started.elapsed().as_secs_f64();
+            metrics::counter!("catalog_value_history_cleanup_total", "outcome" => "failed")
+                .increment(1);
+            metrics::histogram!("catalog_value_history_cleanup_duration_seconds")
+                .record(elapsed_seconds);
+            tracing::error!(
+                retention_days = history_retention_days.get(),
+                elapsed_seconds,
+                error = %error,
+                "attribute value history cleanup failed; refusing to report successful startup maintenance"
+            );
+            return Err(format!("attribute value history cleanup failed: {error}").into());
+        }
+    }
     maintenance_pool.close().await;
 
-    // Public authentication uses this unscoped pool. Authorization creates a
-    // separate, cached RLS-configured pool only after deriving a trusted
-    // workspace from the credential or browser session.
-    let connect_options = PgConnectOptions::from_str(&database_url)?;
-    let pool = PgPoolOptions::new()
-        .max_connections(REQUEST_POOL_CONNECTIONS)
-        .connect_with(connect_options.clone())
+    // Every workspace shares these bounded pools. Repository scope is carried
+    // in explicit SQL predicates, never in mutable connection state.
+    let request_pool = PgPoolOptions::new()
+        .max_connections(request_pool_connections)
+        .connect(&database_url)
+        .await?;
+    let task_pool = PgPoolOptions::new()
+        .max_connections(task_pool_connections)
+        .connect(&database_url)
         .await?;
 
     let smtp_host = std::env::var("SMTP_HOST").unwrap_or_else(|_| "127.0.0.1".to_owned());
@@ -192,6 +247,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         &mail_from,
         std::env::var("SMTP_USERNAME").ok(),
         std::env::var("SMTP_PASSWORD").ok(),
+        &std::env::var("SMTP_TLS_MODE").unwrap_or_else(|_| "starttls".to_owned()),
     )?);
     let official_registry = std::env::var("EXTENSION_OFFICIAL_REGISTRY")
         .unwrap_or_else(|_| DEFAULT_OFFICIAL_REGISTRY.to_owned())
@@ -208,56 +264,95 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     let workspace_onboarding_url = std::env::var("WORKSPACE_ONBOARDING_URL")
         .unwrap_or_else(|_| "http://127.0.0.1:5173/onboarding".to_owned());
 
-    let agent_dispatcher = match agent_provider.clone() {
-        Some(config) => Some(
-            agent_worker::start(
-                CatalogRepository::with_workspace_pool_factory(
-                    pool.clone(),
-                    connect_options.clone(),
-                ),
+    let task_repository = CatalogRepository::system(task_pool.clone());
+    // Agent provider calls are not safely resumable. On process restart mark
+    // any previously running run interrupted before its task can be reclaimed.
+    if agent_provider.is_some() {
+        task_repository.recover_interrupted_agent_runs().await?;
+    }
+    let extension_runtime =
+        ExtensionRuntime::new(object_store.clone(), ExtensionRuntimeConfig::default())
+            .map_err(|error| format!("invalid extension runtime configuration: {error}"))?;
+    let mut task_handlers: Vec<Arc<dyn api::task_worker::TaskHandler>> = agent_provider
+        .clone()
+        .map(|config| {
+            Arc::new(agent_worker::AgentTaskHandler::new(
+                task_repository.clone(),
                 config,
                 object_store.clone(),
-            )
-            .await,
+            )) as Arc<dyn api::task_worker::TaskHandler>
+        })
+        .into_iter()
+        .collect();
+    task_handlers.push(Arc::new(extension_runtime::WasmExtensionTaskHandler::new(
+        task_repository.clone(),
+        extension_runtime.clone(),
+    )));
+    task_handlers.push(Arc::new(
+        extension_runtime::ExtensionOperationTaskHandler::new(
+            task_repository.clone(),
+            extension_runtime.clone(),
         ),
-        None => None,
-    };
+    ));
+    task_handlers.push(workflow_runtime::task_handler(task_repository.clone()));
+    task_handlers.push(rule_runtime::task_handler(task_repository.clone()));
+    let blueprint_migration_config =
+        blueprint_migration_worker::BlueprintMigrationBatchConfig::from_env()
+            .map_err(|error| format!("invalid blueprint migration configuration: {error}"))?;
+    task_handlers.push(Arc::new(
+        blueprint_migration_worker::BlueprintMigrationBatchTaskHandler::with_config(
+            task_repository.clone(),
+            blueprint_migration_config,
+        ),
+    ));
+    // Reconcile only batches created before this deployment. New batches and
+    // their task envelopes commit atomically in the repository.
+    task_repository
+        .backfill_safe_blueprint_migration_tasks()
+        .await?;
 
     let (shutdown_sender, shutdown_receiver) = tokio::sync::watch::channel(());
-    let solution_pack_housekeeping = solution_pack_housekeeping::start(
-        CatalogRepository::with_workspace_pool_factory(pool.clone(), connect_options.clone()),
-        shutdown_receiver.clone(),
-    );
-    let (migration_batch_dispatcher, migration_worker) = blueprint_migration_worker::start(
-        CatalogRepository::with_workspace_pool_factory(pool.clone(), connect_options.clone()),
+    let solution_pack_housekeeping =
+        solution_pack_housekeeping::start(task_repository.clone(), shutdown_receiver.clone());
+    let task_worker_config = TaskWorkerConfig::from_env()
+        .map_err(|error| format!("invalid task worker configuration: {error}"))?;
+    // Registered kinds have atomically-enqueued producers and token-fenced
+    // handlers. Unmigrated kinds remain unregistered and cannot be leased.
+    let task_worker = task_worker::start(
+        task_repository.clone(),
+        TaskHandlerRegistry::new(task_handlers).expect("task handler kinds are unique"),
+        task_worker_config,
         shutdown_receiver.clone(),
     );
     let dispatcher_config = DispatcherConfig::from_env()
         .map_err(|error| format!("invalid event dispatcher configuration: {error}"))?;
-    let extension_runtime =
-        ExtensionRuntime::new(object_store.clone(), ExtensionRuntimeConfig::default())
-            .map_err(|error| format!("invalid extension runtime configuration: {error}"))?;
-    let workflow_repository =
-        CatalogRepository::with_workspace_pool_factory(pool.clone(), connect_options.clone());
+    let extension_event_delivery_coordinator = extension_runtime::start_event_delivery_coordinator(
+        task_repository.clone(),
+        shutdown_receiver.clone(),
+    );
+    let workflow_repository = CatalogRepository::system(task_pool.clone());
     let dispatcher_handles = event_dispatcher::start(
         workflow_repository.clone(),
-        workflow_runtime::add_to_registry(extension_runtime::registry_with_wasm(
-            extension_runtime.clone(),
+        rule_runtime::add_to_registry(workflow_runtime::add_to_registry(
+            api::event_dispatcher::EventHandlerRegistry::default_handlers(),
         )),
         dispatcher_config,
         shutdown_receiver.clone(),
     );
-    let workflow_worker = workflow_runtime::start(workflow_repository, shutdown_receiver);
+    let workflow_worker = workflow_runtime::start_schedule_coordinator(
+        workflow_repository.clone(),
+        shutdown_receiver.clone(),
+    );
+    let rule_worker =
+        rule_runtime::start_schedule_coordinator(workflow_repository, shutdown_receiver);
 
     let listener = tokio::net::TcpListener::bind(bind_addr).await?;
     tracing::info!(address = %listener.local_addr()?, "API listening");
     axum::serve(
         listener,
         router(AppState {
-            repository: CatalogRepository::with_workspace_pool_factory(pool, connect_options),
+            repository: CatalogRepository::system(request_pool.clone()),
             agent_provider,
-            agent_dispatcher,
-            migration_batch_dispatcher,
             registry,
             official_registry,
             object_store,
@@ -314,10 +409,37 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         handle.await?;
     }
     workflow_worker.await?;
-    migration_worker.await?;
+    rule_worker.await?;
+    extension_event_delivery_coordinator.await?;
+    task_worker.await??;
     solution_pack_housekeeping.await?;
+    request_pool.close().await;
+    task_pool.close().await;
 
     Ok(())
+}
+
+const MAX_GLOBAL_POOL_CONNECTIONS: u32 = 100;
+
+fn pool_connections(
+    name: &str,
+    default: u32,
+) -> Result<u32, Box<dyn std::error::Error + Send + Sync>> {
+    let value = std::env::var(name).ok();
+    parse_pool_connections(name, value.as_deref(), default).map_err(Into::into)
+}
+
+fn parse_pool_connections(name: &str, value: Option<&str>, default: u32) -> Result<u32, String> {
+    match value {
+        Some(value) => value
+            .parse::<u32>()
+            .ok()
+            .filter(|value| *value > 0 && *value <= MAX_GLOBAL_POOL_CONNECTIONS)
+            .ok_or_else(|| {
+                format!("{name} must be an integer between 1 and {MAX_GLOBAL_POOL_CONNECTIONS}")
+            }),
+        None => Ok(default),
+    }
 }
 
 fn positive_env(
@@ -334,65 +456,19 @@ fn positive_env(
     }
 }
 
-async fn bootstrap_workspace_owner(
-    pool: &sqlx::PgPool,
-    workspace_id: Uuid,
-    user_id: Uuid,
-    membership_id: Uuid,
-    grant_id: Uuid,
-    email: &str,
-) -> Result<(), sqlx::Error> {
-    let mut tx = pool.begin().await?;
-    let email = email.trim().to_lowercase();
-    sqlx::query("SELECT id FROM workspaces WHERE id = $1 FOR UPDATE")
-        .bind(workspace_id)
-        .execute(&mut *tx)
-        .await?;
-    let owner_exists: bool = sqlx::query_scalar("SELECT EXISTS (SELECT 1 FROM role_grants g JOIN workspace_memberships m ON m.id = g.membership_id WHERE g.workspace_id = $1 AND g.role_id = '00000000-0000-4000-8000-000000000101'::uuid AND m.state = 'active')").bind(workspace_id).fetch_one(&mut *tx).await?;
-    if !owner_exists {
-        sqlx::query("INSERT INTO users (id, email) VALUES ($1, $2) ON CONFLICT (email) DO NOTHING")
-            .bind(user_id)
-            .bind(&email)
-            .execute(&mut *tx)
-            .await?;
-        let persisted_user: Uuid =
-            sqlx::query_scalar("SELECT id FROM users WHERE email = $1 FOR UPDATE")
-                .bind(&email)
-                .fetch_one(&mut *tx)
-                .await?;
-        sqlx::query("INSERT INTO workspace_memberships (id, workspace_id, user_id) VALUES ($1, $2, $3) ON CONFLICT (workspace_id, user_id) DO NOTHING").bind(membership_id).bind(workspace_id).bind(persisted_user).execute(&mut *tx).await?;
-        let membership: Uuid = sqlx::query_scalar(
-            "SELECT id FROM workspace_memberships WHERE workspace_id = $1 AND user_id = $2",
-        )
-        .bind(workspace_id)
-        .bind(persisted_user)
-        .fetch_one(&mut *tx)
-        .await?;
-        sqlx::query("INSERT INTO role_grants (id, workspace_id, membership_id, role_id, scope_type, scope_target_id) VALUES ($1, $2, $3, '00000000-0000-4000-8000-000000000101'::uuid, 'workspace', $2) ON CONFLICT DO NOTHING").bind(grant_id).bind(workspace_id).bind(membership).execute(&mut *tx).await?;
-    }
-    tx.commit().await
-}
+#[cfg(test)]
+mod tests {
+    use super::*;
 
-async fn create_bootstrap_password(
-    pool: &sqlx::PgPool,
-    email: &str,
-    password: String,
-) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-    let password_hash = hash_password(&Password::new(password))?;
-    sqlx::query(
-        "INSERT INTO local_password_credentials (user_id, password_hash) SELECT id, $2 FROM users WHERE email = $1 ON CONFLICT (user_id) DO NOTHING",
-    )
-    .bind(email)
-    .bind(password_hash.as_phc())
-    .execute(pool)
-    .await?;
-    // Bootstrap passwords are supplied by trusted deployment configuration, so
-    // their configured owner addresses are verified before reset links can issue.
-    sqlx::query(
-        "UPDATE users SET email_verified_at = COALESCE(email_verified_at, now()) WHERE email = $1",
-    )
-    .bind(email)
-    .execute(pool)
-    .await?;
-    Ok(())
+    #[test]
+    fn pool_connection_configuration_is_positive_and_capped() {
+        assert_eq!(
+            parse_pool_connections("POOL", None, REQUEST_POOL_CONNECTIONS).unwrap(),
+            REQUEST_POOL_CONNECTIONS
+        );
+        assert_eq!(parse_pool_connections("POOL", Some("7"), 1).unwrap(), 7);
+        for invalid in ["0", "-1", "101", "invalid"] {
+            assert!(parse_pool_connections("POOL", Some(invalid), 1).is_err());
+        }
+    }
 }

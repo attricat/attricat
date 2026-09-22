@@ -31,6 +31,17 @@ describe('attribute values', () => {
     });
   });
 
+  it('round-trips JSON scalar fields without treating them as searchable text', () => {
+    const attribute = { code: 'metadata', value_type: 'json' as const };
+    expect(valueForField({ tags: ['new'] })).toBe('{"tags":["new"]}');
+    expect(scalarValueForField(attribute, '{"tags":["new"]}')).toEqual({
+      kind: 'scalar',
+      attribute_code: 'metadata',
+      value: { tags: ['new'] },
+    });
+    expect(scalarValueForField(attribute, '{not json}')).toBeUndefined();
+  });
+
   it('does not silently coerce invalid typed fields', () => {
     expect(
       scalarValueForField({ code: 'available', value_type: 'boolean' }, 'yes'),

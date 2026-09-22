@@ -1,14 +1,15 @@
 [package]
 name = "catalog-blueprint"
 version = "0.1.0"
-edition = "2024"
+edition.workspace = true
 rust-version.workspace = true
 publish.workspace = true
 
 [dependencies]
 catalog-validation = { path = "../validation" }
-serde = { version = "1", features = ["derive"] }
-serde_json = "1"
-sha2 = "0.10"
-thiserror = "2"
-toml = "0.8"
+catalog-rules = { path = "../rules" }
+serde.workspace = true
+serde_json.workspace = true
+sha2.workspace = true
+thiserror.workspace = true
+toml.workspace = true

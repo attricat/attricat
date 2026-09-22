@@ -11,6 +11,8 @@ or inaccessible configured bucket.
 | Setting | Default | Used by | Purpose |
 | --- | --- | --- | --- |
 | `DATABASE_URL` | Required | API and SQLx | PostgreSQL connection string. |
+| `DATABASE_REQUEST_POOL_CONNECTIONS` | `10` | API | Maximum connections in the single global request/session pool shared by all workspaces. Must be an integer from 1 to 100. |
+| `DATABASE_TASK_POOL_CONNECTIONS` | `10` | API | Maximum connections in the single global task/worker pool shared by all workspaces. Must be an integer from 1 to 100. The API logs the request + task + maintenance total at startup. |
 | `BIND_ADDR` | `127.0.0.1:3000` | API | Listener address. |
 | `CATALOG_WORKSPACE_ID` | Bootstrap `default` workspace UUID | API | Workspace initialized with the configured owner during startup; it is not an HTTP tenancy selector. |
 | `CATALOG_BOOTSTRAP_WORKSPACE_NAME` | `Default workspace` | API | Display name recorded while initializing the configured workspace. |
@@ -26,14 +28,13 @@ or inaccessible configured bucket.
 | `LLM_MODEL` | `gpt-4o-mini` | API only | Provider model identifier captured on each run, never a browser-selected setting. |
 | `LLM_REQUEST_TIMEOUT_SECONDS` | `60` | API only | Per-provider-request timeout, 1–3600 seconds. |
 | `LLM_RUN_TIMEOUT_SECONDS` | `300` | API only | Total agent-run timeout, 1–3600 seconds. |
-| `AGENT_DISPATCH_QUEUE_CAPACITY` | `256` | API only | Positive process-local queue capacity for durable agent runs. Increase for expected bursts; queued runs remain durable in PostgreSQL. |
 | `PREVIEW_MAX_RELATIONSHIP_DEPTH` | `3` | API | Maximum recursive relationship preview depth. |
 | `PREVIEW_MAX_RELATIONSHIP_ITEMS` | `10` | API | Maximum inline targets per relationship. |
 | `ENTITY_MAX_PAGE_SIZE` | `100` | API | Maximum page size for relationship browsing. |
 | `DATA_HEALTH_CACHE_TTL_SECONDS` | `300` | API | Data-health response cache lifetime. |
 | `INCOMING_RELATIONSHIP_MAX_PAGE_SIZE` | `50` | API | Maximum page size for incoming-relationship browsing. |
 | `RELATIONSHIP_FACET_MAX_NODES` | `100` | API | Maximum relationship nodes considered while building Explorer facets. |
-| `ATTRIBUTE_VALUE_HISTORY_RETENTION_DAYS` | `90` | API | Number of days of attribute-value history retained during API startup; must be a positive integer. |
+| `ATTRIBUTE_VALUE_HISTORY_RETENTION_DAYS` | `90` | API | Number of days of attribute-value history retained during API startup; must be a positive signed 64-bit integer. Invalid values stop startup before cleanup; a cleanup failure also stops startup rather than being reported as successful maintenance. |
 | `HTTP_REQUEST_TIMEOUT_SECONDS` | `30` | API | Positive wall-clock limit for a request after routing. Timed-out requests return `408`. |
 | `HTTP_MAX_CONCURRENT_REQUESTS` | `256` | API | Positive process-local in-flight request cap. Excess requests return `503` rather than waiting unboundedly. |
 | `HTTP_DEFAULT_BODY_BYTES` | `2097152` | API | Positive default body limit. Streaming upload routes explicitly disable it and enforce their file-specific limits. |
@@ -42,6 +43,12 @@ or inaccessible configured bucket.
 | `EVENT_DISPATCHER_RETRY_MAX_SECONDS` | `60` | API | Positive cap on exponential failed-delivery retry delay. |
 | `EVENT_DISPATCHER_MAX_ATTEMPTS` | `5` | API | Positive number of claims before a failed delivery becomes `dead_letter`. |
 | `EVENT_DISPATCHER_POLL_MILLIS` | `250` | API | Positive delay between dispatcher polls. |
+| `TASK_WORKER_ID` | Random process UUID | API | Stable 1–128-byte identity for the supervised generic task worker. |
+| `TASK_WORKER_CONCURRENCY` | `8` | API | Positive maximum number of registered generic-task handlers running at once. |
+| `TASK_WORKER_POLL_MILLIS` | `250` | API | Positive idle delay for the generic task worker. |
+| `TASK_WORKER_SHUTDOWN_GRACE_SECONDS` | `30` | API | Positive bounded drain period; unfinished generic task leases are allowed to expire. |
+| `BLUEPRINT_MIGRATION_PAGE_SIZE` | `100` | API | Entity migration candidate keyset page size; must be between 1 and 1000. |
+| `BLUEPRINT_MIGRATION_CONCURRENCY` | `4` | API | Maximum concurrent entity attempts within one migration batch; must be between 1 and 64. |
 | `CATALOG_API_URL` | `http://127.0.0.1:3000` | Vite | API target for the web app's `/api` development proxy. |
 | `EXTENSION_OFFICIAL_REGISTRY` | `attricat/attricat-extensions` | API | Canonical public GitHub `owner/repository` used as every workspace's immutable official extension source. |
 | `EXTENSIONS_MODE` | `enabled` | API | Deployment emergency gate. Set exactly `disabled` to block all new extension execution, artifacts, runtime descriptors, commands, storage, host calls, and event delivery without changing installations or grants. Invalid configured values fail closed. |
@@ -53,6 +60,7 @@ or inaccessible configured bucket.
 | `WEB_PORT` | `5173` | Vite | Listener port for the development web app. |
 | `SMTP_HOST` | `127.0.0.1` | API local development | Mailpit SMTP host. |
 | `SMTP_PORT` | `1025` | API local development | Mailpit SMTP port; `just setup` sets it to the worktree-specific port. |
+| `SMTP_TLS_MODE` | `starttls` | API | Required SMTP encryption mode: `starttls` or `implicit` in production. `disabled` is only for the trusted local Mailpit relay. Opportunistic TLS is rejected. |
 | `SMTP_USERNAME` | Unset | API | Optional SMTP username. |
 | `SMTP_PASSWORD` | Unset | API | Optional SMTP password; keep it in a secret manager outside local development. |
 | `MAIL_FROM` | `Catalog <no-reply@catalog.local>` | API local development | Sender address for lifecycle email. |
@@ -82,6 +90,18 @@ or inaccessible configured bucket.
 | `CATALOG_E2E_FIXTURE_PASSWORD` | Unset | API test environments | Optional test fixture user password paired with `CATALOG_E2E_FIXTURE_EMAIL`; do not set either in production. |
 | `RUSTFS_PORT` | `9000` | Docker Compose | Worktree-specific host port for the local RustFS S3 API. |
 | `RUSTFS_CONSOLE_PORT` | `9001` | Docker Compose | Worktree-specific host port for the local RustFS console. |
+
+## Durable API task queue
+
+The `tasks` table is the durable delivery envelope for the API-owned task queue. Its
+initial closed registry is reserved for agent runs, domain-event deliveries, workflow
+runs, rule runs, and blueprint migration batches. Task payloads are small reference
+objects only; diagnostics intentionally exclude them. Agent runs, extension-event
+deliveries, workflow runs, rule runs, and blueprint migration batches are all executed
+by the supervised worker. On shutdown it stops claiming, lets registered handlers
+heartbeat through the configured grace period, then allows unfinished leases to expire.
+File processing is excluded and continues to use its separate file-worker configuration
+and `file_processing_jobs` table.
 
 ## Agent provider
 
@@ -167,9 +187,7 @@ message, 5 MiB inline image attachment, 64 KiB serialized tool result, eight
 tool-call rounds per run, 64 KiB total provider response and undrained SSE
 frame buffers, 32 KiB assistant text, 16 KiB tool arguments, and 32 provider
 tool calls per response. The maximum provider request/run timeout remains one
-hour. `AGENT_DISPATCH_QUEUE_CAPACITY` is the only queue sizing setting because
-it is process-local operational capacity; it does not limit the durable queue.
-Provider failures, malformed responses, unknown tools, invalid tool arguments,
+hour. Provider failures, malformed responses, unknown tools, invalid tool arguments,
 and tool-round exhaustion are recorded as failed durable runs; provider
 response bodies and credentials are not retained. Schedules use six-field UTC cron expressions.
 An occurrence that overlaps a queued, running, or approval-waiting run is
@@ -178,7 +196,9 @@ recorded as skipped rather than executed concurrently.
 Mailpit is a local-development and E2E adapter only; it is not production mail
 configuration. Source `.catalog-worktree` after `just dev`, open
 `$MAILPIT_UI_URL` for manual inspection, and use its REST API
-for E2E mailbox retrieval. Production mail delivery is deliberately deferred.
+for E2E mailbox retrieval. Production SMTP requires `SMTP_TLS_MODE=starttls`
+or `implicit`; `disabled` is restricted to a trusted local relay. See
+[Production operations](operations.md) for rollout, rotation, and recovery.
 
 A failed durable job can be returned to the queue by an operator with
 `cargo run -p api --bin file-worker -- --retry <job-uuid>`. The command resets

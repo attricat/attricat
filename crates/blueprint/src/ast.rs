@@ -12,6 +12,7 @@ pub struct BlueprintDefinition {
     pub views: HashMap<String, ViewDefinition>,
     pub entity_schema: Option<serde_json::Value>,
     pub publication: PublicationPolicy,
+    pub rules: Vec<catalog_rules::CompiledRule>,
     pub attributes: Vec<AttributeDeclaration>,
 }
 
@@ -229,6 +230,10 @@ pub struct LocalAttributeDeclaration {
     pub code: String,
     pub value_type: String,
     pub value_schema: Option<serde_json::Value>,
+    /// An unresolved `provider:type@range` reference. The API resolver pins it
+    /// to an installed extension release before persistence.
+    pub extension_type: Option<String>,
+    pub extension_configuration: Option<serde_json::Value>,
     pub default_value: Option<serde_json::Value>,
     pub file_policy: Option<FilePolicy>,
     pub target_blueprint: Option<String>,
@@ -263,6 +268,9 @@ pub struct EffectiveAttribute {
     pub code: String,
     pub value_type: String,
     pub value_schema: Option<serde_json::Value>,
+    /// Host-pinned extension type metadata. It is declarative so persisted
+    /// values remain readable when the provider is unavailable.
+    pub extension_type: Option<serde_json::Value>,
     pub default_value: Option<serde_json::Value>,
     pub file_policy: Option<FilePolicy>,
     pub target_blueprint: Option<String>,
@@ -284,5 +292,6 @@ pub struct CompiledBlueprint {
     pub includes: Vec<IncludeRef>,
     pub views: HashMap<String, ViewDefinition>,
     pub entity_schema: Option<serde_json::Value>,
+    pub rules: Vec<catalog_rules::CompiledRule>,
     pub attributes: Vec<EffectiveAttribute>,
 }

@@ -110,8 +110,15 @@ metadata, and invokes a shared candidate-ID resolver. Main entity search and
 relationship-tree facet child/count paths use that resolver so their text-query
 semantics agree.
 
-No migration is required. Index and query-telemetry work remain deferred until
-representative catalogue data is available.
+No migration is required. Only `*:` global traversal is resource-bounded: all
+such terms in one request share caps for matching scalar rows, discovered
+entities, and relationship edges. Traversal is an ordered, three-level BFS;
+exhausting any cap fails the whole request with a typed `422` response (never a
+partial page). Its scalar, edge, and selected-ID reads run in one transaction
+with a 250 ms PostgreSQL `statement_timeout`. Counters, histograms, and warning
+logs record global-search outcomes and the consumed dimensions. Bare and
+qualified selectors retain their existing semantics and are not subject to
+these global caps.
 
 ## Coverage
 

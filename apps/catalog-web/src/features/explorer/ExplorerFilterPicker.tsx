@@ -25,6 +25,7 @@ import {
   type RelationshipFilterAttribute,
 } from './relationship-filter-types';
 import { maximumAttributeFilters, type AttributeFilter } from './search';
+import { isHiddenByDefault } from '../entities/attribute-visibility';
 
 type Props = {
   filters: AttributeFilter[];
@@ -71,6 +72,7 @@ export const ExplorerFilterPicker = ({
   const secondRelationships = firstTargets.flatMap((result, index) =>
     (result.data?.attributes ?? [])
       .filter(isRelationshipFilterAttribute)
+      .filter((attribute) => !isHiddenByDefault(attribute, 'explorer'))
       .map((attribute) => ({
         ...attribute,
         code: `${directRelationships[index].code}.${attribute.code}`,
@@ -90,6 +92,7 @@ export const ExplorerFilterPicker = ({
   const thirdRelationships = secondTargets.flatMap((result, index) =>
     (result.data?.attributes ?? [])
       .filter(isRelationshipFilterAttribute)
+      .filter((attribute) => !isHiddenByDefault(attribute, 'explorer'))
       .map((attribute) => ({
         ...attribute,
         code: `${secondRelationships[index].code}.${attribute.code}`,
@@ -101,7 +104,11 @@ export const ExplorerFilterPicker = ({
   const filterableAttributes = [
     ...new Map(
       [
-        ...attributes.filter(isFilterableAttribute),
+        ...attributes.filter(
+          (attribute) =>
+            isFilterableAttribute(attribute) &&
+            !isHiddenByDefault(attribute, 'explorer'),
+        ),
         ...pathAttributes.map(({ code, value_type }) => ({ code, value_type })),
         ...directRelationships,
         ...secondRelationships,

@@ -174,6 +174,7 @@ export const BlueprintViewsPreview = ({
         {activeView?.[0] === 'edit' ? (
           <EntityView
             attributes={attributes}
+            fallbackVisibilityScope="form"
             renderEditor={(attribute) => {
               const value = fields[attribute.code] ?? '';
               const update = (next: string) =>

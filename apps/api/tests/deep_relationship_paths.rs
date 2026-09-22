@@ -174,7 +174,7 @@ cardinality = "one""#,
     }
 
     let workspace = BOOTSTRAP_WORKSPACE_ID.parse().unwrap();
-    let repository = CatalogRepository::new(repository_pool)
+    let repository = CatalogRepository::system(repository_pool)
         .for_workspace(workspace)
         .await
         .unwrap();

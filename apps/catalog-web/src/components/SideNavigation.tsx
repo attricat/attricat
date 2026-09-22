@@ -15,6 +15,7 @@ import { QueryErrorNotice } from './QueryErrorNotice';
 import { RouterListItemButton } from './RouterLink';
 import {
   ExplorerIcon,
+  AppsIcon,
   ExplorerShortcutIcon,
   ManagementIcon,
 } from './system-icons';
@@ -47,7 +48,7 @@ const compactNavigationLabelSx = {
   textAlign: 'center',
 };
 
-type MobileNavigationSection = 'primary' | 'explore' | 'manage';
+type MobileNavigationSection = 'primary' | 'explore' | 'extensions' | 'manage';
 
 const mobileSectionForPathname = (
   pathname: string,
@@ -58,6 +59,11 @@ const mobileSectionForPathname = (
   )
     return 'manage';
   if (pathname === navigationRoutes.explore) return 'explore';
+  if (
+    pathname === navigationRoutes.extensionContributions ||
+    pathname.startsWith(`${navigationRoutes.extensionContributions}/`)
+  )
+    return 'extensions';
   return 'primary';
 };
 
@@ -65,8 +71,10 @@ type SideNavigationProps = {
   compact?: boolean;
   compactManageOpen?: boolean;
   compactExploreOpen?: boolean;
+  compactExtensionsOpen?: boolean;
   onCompactManageOpenChange?: (open: boolean) => void;
   onCompactExploreOpenChange?: (open: boolean) => void;
+  onCompactExtensionsOpenChange?: (open: boolean) => void;
   onNavigate?: () => void;
   onSignOut?: () => void;
 };
@@ -75,8 +83,10 @@ export const SideNavigation = ({
   compact = false,
   compactManageOpen,
   compactExploreOpen,
+  compactExtensionsOpen,
   onCompactManageOpenChange,
   onCompactExploreOpenChange,
+  onCompactExtensionsOpenChange,
   onNavigate,
   onSignOut,
 }: SideNavigationProps) => {
@@ -96,8 +106,14 @@ export const SideNavigation = ({
   const [localCompactExploreOpen, setLocalCompactExploreOpen] = useState(
     pathname === navigationRoutes.explore,
   );
+  const [localCompactExtensionsOpen, setLocalCompactExtensionsOpen] = useState(
+    pathname === navigationRoutes.extensionContributions ||
+      pathname.startsWith(`${navigationRoutes.extensionContributions}/`),
+  );
   const isCompactManageOpen = compactManageOpen ?? localCompactManageOpen;
   const isCompactExploreOpen = compactExploreOpen ?? localCompactExploreOpen;
+  const isCompactExtensionsOpen =
+    compactExtensionsOpen ?? localCompactExtensionsOpen;
   const setCompactManageOpen = (open: boolean) => {
     setLocalCompactManageOpen(open);
     onCompactManageOpenChange?.(open);
@@ -105,7 +121,18 @@ export const SideNavigation = ({
   const setCompactExplore = (open: boolean) => {
     setLocalCompactExploreOpen(open);
     onCompactExploreOpenChange?.(open);
-    if (open) setCompactManageOpen(false);
+    if (open) {
+      setCompactExtensionsOpen(false);
+      setCompactManageOpen(false);
+    }
+  };
+  const setCompactExtensionsOpen = (open: boolean) => {
+    setLocalCompactExtensionsOpen(open);
+    onCompactExtensionsOpenChange?.(open);
+    if (open) {
+      setCompactExplore(false);
+      setCompactManageOpen(false);
+    }
   };
   const session = useQuery({
     queryKey: authQueryKeys.session(),
@@ -176,7 +203,9 @@ export const SideNavigation = ({
               {t(
                 mobileSection === 'explore'
                   ? 'navigation.entityExplorer'
-                  : 'navigation.manage',
+                  : mobileSection === 'extensions'
+                    ? 'navigation.apps'
+                    : 'navigation.manage',
               )}
             </Typography>
           </>
@@ -244,6 +273,7 @@ export const SideNavigation = ({
                       return;
                     }
                     if (compact) {
+                      setCompactExtensionsOpen(false);
                       setCompactManageOpen(false);
                       setCompactExplore(false);
                     }
@@ -327,7 +357,53 @@ export const SideNavigation = ({
             <Box ref={setMobileExplorePanelTarget} sx={{ mt: 2 }} />
           </Box>
         )}
-        {showPrimaryNavigation && <ExtensionOutlet outlet="navigation" />}
+        {compact && (
+          <Tooltip placement="right" title={t('navigation.apps')}>
+            <ListItemButton
+              aria-expanded={isCompactExtensionsOpen}
+              aria-label={t('navigation.apps')}
+              component={Link}
+              onClick={() => setCompactExtensionsOpen(true)}
+              selected={
+                pathname === navigationRoutes.extensionContributions ||
+                pathname.startsWith(
+                  `${navigationRoutes.extensionContributions}/`,
+                )
+              }
+              sx={itemSx}
+              to={navigationRoutes.extensionContributions}
+            >
+              <ListItemIcon sx={{ minWidth: 0 }}>
+                <AppsIcon />
+              </ListItemIcon>
+              <Typography sx={compactNavigationLabelSx} variant="caption">
+                {t('navigation.apps')}
+              </Typography>
+            </ListItemButton>
+          </Tooltip>
+        )}
+        {!compact && mobileSection === 'primary' && (
+          <ListItemButton
+            aria-label={t('navigation.apps')}
+            component={Link}
+            onClick={() => setMobileSection('extensions')}
+            sx={{ mt: 1 }}
+            to={navigationRoutes.extensionContributions}
+          >
+            <ListItemIcon>
+              <AppsIcon />
+            </ListItemIcon>
+            <ListItemText primary={t('navigation.apps')} />
+            <ChevronRightIcon />
+          </ListItemButton>
+        )}
+        {!compact && mobileSection === 'extensions' && (
+          <ExtensionOutlet
+            navigationDisplay="all"
+            onNavigate={onNavigate}
+            outlet="navigation"
+          />
+        )}
         {compact && (
           <Tooltip placement="right" title={t('navigation.manage')}>
             <ListItemButton
@@ -335,6 +411,7 @@ export const SideNavigation = ({
               aria-label={t('navigation.manage')}
               component={Link}
               onClick={() => {
+                setCompactExtensionsOpen(false);
                 setCompactExplore(false);
                 setCompactManageOpen(true);
               }}
@@ -447,6 +524,37 @@ export const SideNavigation = ({
                 <ListItemText primary={t(item.labelKey)} />
               </ListItemButton>
             ))}
+          </List>
+        </Box>
+      )}
+      {compact && isCompactExtensionsOpen && (
+        <Box
+          aria-label={t('navigation.apps')}
+          component="nav"
+          sx={{
+            backgroundColor: 'background.paper',
+            borderColor: 'divider',
+            borderRight: 1,
+            boxShadow: 3,
+            height: '100%',
+            left: compactNavigationWidth,
+            overflowY: 'auto',
+            position: 'absolute',
+            top: 0,
+            width: managementSidebarWidth,
+            zIndex: 1,
+          }}
+        >
+          <Box sx={{ px: 3, py: 2 }}>
+            <Typography variant="h6">{t('navigation.apps')}</Typography>
+          </Box>
+          <Divider />
+          <List sx={{ px: 1, py: 1.5 }}>
+            <ExtensionOutlet
+              navigationDisplay="all"
+              onNavigate={onNavigate}
+              outlet="navigation"
+            />
           </List>
         </Box>
       )}

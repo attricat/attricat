@@ -6,11 +6,16 @@ import {
   CircularProgress,
   Divider,
   IconButton,
+  ListItemIcon,
+  ListItemText,
   Popover,
   Stack,
   Tooltip,
+  Typography,
 } from '@mui/material';
 import { useQuery } from '@tanstack/react-query';
+import { useRouterState } from '@tanstack/react-router';
+import { RouterListItemButton } from '../../components/RouterLink';
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { z } from 'zod';
@@ -54,8 +59,58 @@ const outletPolicies = {
 const supportsOutlet = (contribution: ExtensionContribution, outlet: Outlet) =>
   contribution.outlet === outlet &&
   (contribution.kind === 'embedded' ||
+    (outlet === 'navigation' &&
+      contribution.kind === 'navigation' &&
+      contribution.route !== null) ||
     (outlet === 'explorer_row_action' && contribution.kind === 'action') ||
     (outlet === 'blueprint_detail_panel' && contribution.kind === 'panel'));
+
+const ExtensionNavigationItem = ({
+  contribution,
+  onNavigate,
+}: {
+  contribution: ExtensionContribution;
+  onNavigate?: () => void;
+}) => {
+  const { pathname } = useRouterState({ select: (state) => state.location });
+  if (contribution.kind !== 'navigation' || !contribution.route) return null;
+  const target = `/extensions/${contribution.extension_id}/${contribution.route}`;
+  return (
+    <RouterListItemButton
+      aria-label={contribution.title ?? contribution.id}
+      onClick={onNavigate}
+      selected={pathname === target}
+      to="/extensions/$extensionId/$contributionId"
+      params={{
+        extensionId: contribution.extension_id,
+        contributionId: contribution.route,
+      }}
+    >
+      <ListItemIcon>
+        <ExtensionIcon />
+      </ListItemIcon>
+      <ListItemText primary={contribution.title ?? contribution.id} />
+    </RouterListItemButton>
+  );
+};
+
+const OutletContribution = ({
+  contribution,
+  context,
+  onNavigate,
+}: {
+  contribution: ExtensionContribution;
+  context?: Record<string, unknown>;
+  onNavigate?: () => void;
+}) =>
+  contribution.kind === 'navigation' ? (
+    <ExtensionNavigationItem
+      contribution={contribution}
+      onNavigate={onNavigate}
+    />
+  ) : (
+    <ExtensionFrame contribution={contribution} context={context} />
+  );
 
 // New outlet contexts are deliberately small, strict, and versioned. They are
 // the only page data an extension frame receives for these surfaces.
@@ -89,6 +144,8 @@ const hasValidContext = (
 type Props = {
   outlet: Outlet;
   context?: Record<string, unknown>;
+  navigationDisplay?: 'grouped' | 'all';
+  onNavigate?: () => void;
   runtimeScope?: ExtensionRuntimeScope;
 };
 
@@ -97,7 +154,13 @@ type Props = {
  * Contributions arrive in the host-computed display order; this component only
  * applies the fixed capacity, grouping, and overflow policy for the outlet.
  */
-export const ExtensionOutlet = ({ outlet, context, runtimeScope }: Props) => {
+export const ExtensionOutlet = ({
+  outlet,
+  context,
+  navigationDisplay = 'grouped',
+  onNavigate,
+  runtimeScope,
+}: Props) => {
   const { t } = useTranslation();
   const runtime = useQuery({
     queryKey: extensionQueryKeys.runtime(runtimeScope),
@@ -172,6 +235,35 @@ export const ExtensionOutlet = ({ outlet, context, runtimeScope }: Props) => {
     );
   }
   if (policy.kind === 'navigation') {
+    if (navigationDisplay === 'all') {
+      const appsByExtension = new Map<string, ExtensionContribution[]>();
+      contributions
+        .filter((item) => item.kind === 'navigation')
+        .forEach((item) => {
+          const apps = appsByExtension.get(item.extension_id) ?? [];
+          apps.push(item);
+          appsByExtension.set(item.extension_id, apps);
+        });
+      return (
+        <Stack spacing={2}>
+          {Array.from(appsByExtension.values()).map((apps) => (
+            <Stack key={apps[0].extension_id} spacing={0.5}>
+              <Typography component="h2" variant="overline">
+                {apps[0].extension_name}
+              </Typography>
+              {apps.map((item) => (
+                <OutletContribution
+                  contribution={item}
+                  context={context}
+                  key={contributionKey(item)}
+                  onNavigate={onNavigate}
+                />
+              ))}
+            </Stack>
+          ))}
+        </Stack>
+      );
+    }
     const promoted = contributions.filter(
       (item) => item.navigation_group === 'promoted',
     );
@@ -183,10 +275,11 @@ export const ExtensionOutlet = ({ outlet, context, runtimeScope }: Props) => {
     return (
       <Stack spacing={1}>
         {visible.map((item) => (
-          <ExtensionFrame
+          <OutletContribution
             contribution={item}
             context={context}
             key={contributionKey(item)}
+            onNavigate={onNavigate}
           />
         ))}
         {grouped.length > 0 && (
@@ -194,6 +287,7 @@ export const ExtensionOutlet = ({ outlet, context, runtimeScope }: Props) => {
             context={context}
             contributions={grouped}
             label={t('extensions.groupedNavigation')}
+            onNavigate={onNavigate}
           />
         )}
       </Stack>
@@ -226,10 +320,12 @@ const ExtensionActionOverflow = ({
   context,
   contributions,
   label,
+  onNavigate,
 }: {
   context?: Record<string, unknown>;
   contributions: ExtensionContribution[];
   label: string;
+  onNavigate?: () => void;
 }) => {
   const [anchor, setAnchor] = useState<HTMLElement | null>(null);
   return (
@@ -251,10 +347,11 @@ const ExtensionActionOverflow = ({
       >
         <Stack spacing={1} sx={{ p: 1 }}>
           {contributions.map((contribution) => (
-            <ExtensionFrame
+            <OutletContribution
               context={context}
               contribution={contribution}
               key={contributionKey(contribution)}
+              onNavigate={onNavigate}
             />
           ))}
         </Stack>

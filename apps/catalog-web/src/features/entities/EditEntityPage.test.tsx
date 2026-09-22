@@ -58,6 +58,8 @@ describe('EditEntityPage', () => {
         id: '123e4567-e89b-12d3-a456-426614174001',
         is_sample: true,
       },
+      reusable_attributes: [],
+      reusable_values: [],
       values: [],
     } as unknown as Awaited<ReturnType<typeof getEntityForm>>);
     vi.mocked(getCurrentBlueprint).mockResolvedValue(blueprint as never);

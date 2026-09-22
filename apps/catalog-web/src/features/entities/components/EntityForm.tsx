@@ -11,6 +11,7 @@ import {
 } from '@mui/material';
 import {
   listEntityBlueprints,
+  type Attribute,
   type BlueprintWithAttributes,
   type FormAttributeValue,
 } from '../api';
@@ -25,6 +26,7 @@ import { EntityView } from '../../views/components/EntityView';
 import { useState, type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
 import { EntityAttributeEditor } from './EntityAttributeEditor';
+import { isHiddenByDefault } from '../attribute-visibility';
 
 type EntityFormProps = {
   blueprint?: BlueprintWithAttributes;
@@ -32,13 +34,17 @@ type EntityFormProps = {
   contextId?: string | null;
   contextPicker?: ReactNode;
   defaultContextId?: string | null;
+  footerActions?: ReactNode;
   existingValues?: FormAttributeValue[];
+  reusableAttributes?: Attribute[];
   resolvedValues?: Record<
     string,
     { value: unknown; source_context: { id: string; code: string } }
   >;
+  formId?: string;
   isLoadingBlueprint?: boolean;
   showBlueprintMetadata?: boolean;
+  showSubmitButton?: boolean;
   showAllAttributes?: boolean;
   highlightedAttributes?: readonly string[];
   migrationReviewMessages?: Readonly<Record<string, string>>;
@@ -61,10 +67,14 @@ export const EntityForm = ({
   contextId = null,
   contextPicker,
   defaultContextId = null,
+  footerActions,
   existingValues = [],
+  reusableAttributes = [],
   resolvedValues = {},
+  formId,
   isLoadingBlueprint = false,
   showBlueprintMetadata = true,
+  showSubmitButton = true,
   showAllAttributes = false,
   highlightedAttributes = [],
   migrationReviewMessages = {},
@@ -79,18 +89,29 @@ export const EntityForm = ({
   const { t } = useTranslation();
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
   const [formError, setFormError] = useState<string>();
+  const editView = blueprint?.blueprint.views.edit;
+  const usesDefaultEditView = Boolean(
+    blueprint && !showAllAttributes && !editView,
+  );
   const blueprints = useQuery({
     queryKey: entityQueryKeys.blueprints(),
     queryFn: ({ signal }) => listEntityBlueprints(signal),
     enabled: !blueprint,
   });
+  const attributes = blueprint
+    ? [...blueprint.attributes, ...reusableAttributes]
+    : [];
   const validateFields = (fields: Record<string, string>) => {
     if (!blueprint) return { fieldErrors: {} };
-    const editableAttributes = blueprint.attributes.filter(
+    const editableAttributes = attributes.filter(
       (attribute) =>
         !attribute.readonly &&
+        attribute.extension_type?.available !== false &&
         (contextId === defaultContextId ||
-          attribute.context_editable !== 'default'),
+          attribute.context_editable !== 'default') &&
+        (!usesDefaultEditView ||
+          attribute.code.includes(':') ||
+          !isHiddenByDefault(attribute, 'form')),
     );
     return validateEntityForm(
       editableAttributes,
@@ -118,11 +139,15 @@ export const EntityForm = ({
         return;
       }
       if (blueprint) {
-        const editableAttributes = blueprint.attributes.filter(
+        const editableAttributes = attributes.filter(
           (attribute) =>
             !attribute.readonly &&
+            attribute.extension_type?.available !== false &&
             (contextId === defaultContextId ||
-              attribute.context_editable !== 'default'),
+              attribute.context_editable !== 'default') &&
+            (!usesDefaultEditView ||
+              attribute.code.includes(':') ||
+              !isHiddenByDefault(attribute, 'form')),
         );
         const validation = validateFields(value.fields);
         setFieldErrors(validation.fieldErrors);
@@ -165,6 +190,7 @@ export const EntityForm = ({
   return (
     <Paper
       component="form"
+      id={formId}
       onSubmit={(event) => {
         event.preventDefault();
         void form.handleSubmit();
@@ -211,97 +237,181 @@ export const EntityForm = ({
         {blueprint && (
           <form.Field name="fields">
             {(field) => (
-              <EntityView
-                attributes={blueprint.attributes}
-                values={resolvedValues}
-                view={
-                  showAllAttributes ? undefined : blueprint.blueprint.views.edit
-                }
-                renderEditor={(attribute) => {
-                  const value = field.state.value[attribute.code] ?? '';
-                  const localValueExists = existingValues.some(
-                    (item) =>
-                      item.attribute_code === attribute.code &&
-                      (item.context_id ?? null) === contextId,
-                  );
-                  const resolvedValue = resolvedValues[attribute.code];
-                  const inherited =
-                    !localValueExists &&
-                    resolvedValue !== undefined &&
-                    resolvedValue.source_context.id !== contextId;
-                  const defaultOnly =
-                    contextId !== defaultContextId &&
-                    attribute.context_editable === 'default';
-                  const readonly = attribute.readonly === true;
-                  const requiresMigrationReview =
-                    highlightedAttributes.includes(attribute.code);
-                  const migrationReviewMessage =
-                    migrationReviewMessages[attribute.code];
-                  const helperText = readonly
-                    ? t('entities.managedBySystem')
-                    : defaultOnly
-                      ? t('entities.managedInDefault')
-                      : inherited
-                        ? attribute.value_type === 'relationship'
-                          ? t('entities.inheritedFromContext', {
-                              context: resolvedValue.source_context.code,
-                            })
-                          : t('entities.inheritedValue', {
-                              context: resolvedValue.source_context.code,
-                              value:
-                                typeof resolvedValue.value === 'object'
-                                  ? JSON.stringify(resolvedValue.value)
-                                  : String(resolvedValue.value),
-                            })
-                        : undefined;
-                  const handleChange = (nextValue: string) => {
-                    const nextFields = {
-                      ...field.state.value,
-                      [attribute.code]: nextValue,
+              <>
+                <EntityView
+                  attributes={blueprint.attributes}
+                  values={resolvedValues}
+                  fallbackVisibilityScope={
+                    showAllAttributes ? undefined : 'form'
+                  }
+                  view={showAllAttributes ? undefined : editView}
+                  renderEditor={(attribute) => {
+                    const value = field.state.value[attribute.code] ?? '';
+                    const localValueExists = existingValues.some(
+                      (item) =>
+                        item.attribute_code === attribute.code &&
+                        (item.context_id ?? null) === contextId,
+                    );
+                    const resolvedValue = resolvedValues[attribute.code];
+                    const inherited =
+                      !localValueExists &&
+                      resolvedValue !== undefined &&
+                      resolvedValue.source_context.id !== contextId;
+                    const defaultOnly =
+                      contextId !== defaultContextId &&
+                      attribute.context_editable === 'default';
+                    const readonly = attribute.readonly === true;
+                    const requiresMigrationReview =
+                      highlightedAttributes.includes(attribute.code);
+                    const migrationReviewMessage =
+                      migrationReviewMessages[attribute.code];
+                    const helperText = readonly
+                      ? t('entities.managedBySystem')
+                      : defaultOnly
+                        ? t('entities.managedInDefault')
+                        : inherited
+                          ? attribute.value_type === 'relationship'
+                            ? t('entities.inheritedFromContext', {
+                                context: resolvedValue.source_context.code,
+                              })
+                            : t('entities.inheritedValue', {
+                                context: resolvedValue.source_context.code,
+                                value:
+                                  typeof resolvedValue.value === 'object'
+                                    ? JSON.stringify(resolvedValue.value)
+                                    : String(resolvedValue.value),
+                              })
+                          : undefined;
+                    const handleChange = (nextValue: string) => {
+                      const nextFields = {
+                        ...field.state.value,
+                        [attribute.code]: nextValue,
+                      };
+                      const validation = validateFields(nextFields);
+                      setFieldErrors(validation.fieldErrors);
+                      setFormError(validation.formError);
+                      field.handleChange(nextFields);
                     };
-                    const validation = validateFields(nextFields);
-                    setFieldErrors(validation.fieldErrors);
-                    setFormError(validation.formError);
-                    field.handleChange(nextFields);
-                  };
-                  return (
-                    <EntityAttributeEditor
-                      attribute={attribute}
-                      contextId={contextId}
-                      disabled={readonly || defaultOnly}
-                      entityId={entityId}
-                      files={
-                        existingValues.find(
-                          (
-                            item,
-                          ): item is Extract<
-                            FormAttributeValue,
-                            { kind: 'file' }
-                          > =>
-                            item.kind === 'file' &&
+                    return (
+                      <EntityAttributeEditor
+                        attribute={attribute}
+                        contextId={contextId}
+                        disabled={readonly || defaultOnly}
+                        entityId={entityId}
+                        files={
+                          existingValues.find(
+                            (
+                              item,
+                            ): item is Extract<
+                              FormAttributeValue,
+                              { kind: 'file' }
+                            > =>
+                              item.kind === 'file' &&
+                              item.attribute_code === attribute.code &&
+                              (item.context_id ?? null) === contextId,
+                          )?.files ?? []
+                        }
+                        error={fieldErrors[attribute.code]}
+                        helperText={helperText}
+                        migrationReviewMessage={migrationReviewMessage}
+                        onChange={handleChange}
+                        showMigrationBadge={requiresMigrationReview}
+                        value={value}
+                      />
+                    );
+                  }}
+                />
+                {reusableAttributes.length > 0 && (
+                  <>
+                    <Typography sx={{ mt: 3 }} variant="h6">
+                      {t('entities.additionalAttributes')}
+                    </Typography>
+                    <EntityView
+                      attributes={reusableAttributes}
+                      values={resolvedValues}
+                      renderEditor={(attribute) => {
+                        const value = field.state.value[attribute.code] ?? '';
+                        const localValueExists = existingValues.some(
+                          (item) =>
                             item.attribute_code === attribute.code &&
                             (item.context_id ?? null) === contextId,
-                        )?.files ?? []
-                      }
-                      error={fieldErrors[attribute.code]}
-                      helperText={helperText}
-                      migrationReviewMessage={migrationReviewMessage}
-                      onChange={handleChange}
-                      showMigrationBadge={requiresMigrationReview}
-                      value={value}
+                        );
+                        const resolvedValue = resolvedValues[attribute.code];
+                        const inherited =
+                          !localValueExists &&
+                          resolvedValue !== undefined &&
+                          resolvedValue.source_context.id !== contextId;
+                        const defaultOnly =
+                          contextId !== defaultContextId &&
+                          attribute.context_editable === 'default';
+                        return (
+                          <EntityAttributeEditor
+                            attribute={attribute}
+                            contextId={contextId}
+                            disabled={
+                              attribute.readonly === true || defaultOnly
+                            }
+                            entityId={entityId}
+                            files={
+                              existingValues.find(
+                                (
+                                  item,
+                                ): item is Extract<
+                                  FormAttributeValue,
+                                  { kind: 'file' }
+                                > =>
+                                  item.kind === 'file' &&
+                                  item.attribute_code === attribute.code &&
+                                  (item.context_id ?? null) === contextId,
+                              )?.files ?? []
+                            }
+                            error={fieldErrors[attribute.code]}
+                            migrationReviewMessage={undefined}
+                            showMigrationBadge={false}
+                            helperText={
+                              defaultOnly
+                                ? t('entities.managedInDefault')
+                                : inherited
+                                  ? t('entities.inheritedFromContext', {
+                                      context:
+                                        resolvedValue.source_context.code,
+                                    })
+                                  : undefined
+                            }
+                            onChange={(nextValue) => {
+                              const nextFields = {
+                                ...field.state.value,
+                                [attribute.code]: nextValue,
+                              };
+                              const validation = validateFields(nextFields);
+                              setFieldErrors(validation.fieldErrors);
+                              setFormError(validation.formError);
+                              field.handleChange(nextFields);
+                            }}
+                            value={value}
+                          />
+                        );
+                      }}
                     />
-                  );
-                }}
-              />
+                  </>
+                )}
+              </>
             )}
           </form.Field>
         )}
         {(error || formError) && (
           <Alert severity="error">{error?.message ?? formError}</Alert>
         )}
-        <Button disabled={isLoadingBlueprint} type="submit" variant="contained">
-          {isLoadingBlueprint ? t('entities.loadingBlueprint') : submitLabel}
-        </Button>
+        {footerActions}
+        {showSubmitButton && (
+          <Button
+            disabled={isLoadingBlueprint}
+            type="submit"
+            variant="contained"
+          >
+            {isLoadingBlueprint ? t('entities.loadingBlueprint') : submitLabel}
+          </Button>
+        )}
       </Stack>
     </Paper>
   );

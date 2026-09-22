@@ -3,12 +3,12 @@ use std::{fs, path::PathBuf};
 use sqlx::PgPool;
 use uuid::Uuid;
 
-const REMOVE_CONTEXTS_MIGRATION: &str = "20261013000000_remove_solution_pack_contexts.sql";
+const REMOVE_CONTEXTS_MIGRATION: &str = "20261023000000_remove_solution_pack_contexts.sql";
 const EXISTING_BLUEPRINT_MIGRATION: &str =
-    "20261014000000_solution_pack_existing_blueprint_mappings.sql";
-const PLAN_EVIDENCE_MIGRATION: &str = "20261015000000_solution_pack_plan_evidence_hash.sql";
-const LATER_RELEASE_MIGRATION: &str = "20261016000000_solution_pack_later_releases.sql";
-const PRESENTATION_ASSET_MIGRATION: &str = "20261017000000_presentation_assets.sql";
+    "20261024000000_solution_pack_existing_blueprint_mappings.sql";
+const PLAN_EVIDENCE_MIGRATION: &str = "20261025000000_solution_pack_plan_evidence_hash.sql";
+const LATER_RELEASE_MIGRATION: &str = "20261026000000_solution_pack_later_releases.sql";
+const PRESENTATION_ASSET_MIGRATION: &str = "20261027000000_presentation_assets.sql";
 
 async fn apply_migration(pool: &PgPool, path: &PathBuf) {
     let sql = fs::read_to_string(path).unwrap();

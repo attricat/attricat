@@ -17,6 +17,7 @@ const contribution = {
   display_order: 0,
   navigation_group: null,
   extension_id: 'acme.test',
+  extension_name: 'Acme Test',
   release_id: '123e4567-e89b-12d3-a456-426614174000',
   configuration: {},
   capabilities: ['client.navigation'],
@@ -24,6 +25,7 @@ const contribution = {
   version: 1,
   kind: 'embedded',
   outlet: 'entity_preview_panel',
+  route: null,
   title: null,
 };
 

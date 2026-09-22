@@ -21,7 +21,8 @@ Stop `just dev` with `Ctrl-C`. Its exit trap also runs `just down`, stopping
 and removing the local containers.
 
 See [Configuration](configuration.md) for connection, proxy, file-storage, and API limit
-settings. The local RustFS-backed production-compatibility check is opt-in and
+settings, and [Production operations](operations.md) for rollout, recovery, and
+backup/restore procedures. The local RustFS-backed production-compatibility check is opt-in and
 uses the same `S3_*` settings as the API:
 
 ```sh
@@ -34,6 +35,8 @@ runs the ignored RustFS compatibility test.
 
 ## Learn The Model
 
+- [Backend crate architecture](backend-architecture.md): compilation boundaries,
+  dependency direction, ownership, and compatibility policy.
 - [Blueprint authoring](blueprints.md): schema definitions, versions, contexts,
   views, and validation.
 - [Database model](database.md): persisted model, value history, projections,

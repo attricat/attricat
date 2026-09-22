@@ -26,6 +26,17 @@ const scalarValueSchemas = {
     .transform((value) => value.split(/\s+/, 2))
     .pipe(z.tuple([z.iso.time(), timeZoneSchema]))
     .transform(([time, time_zone]) => ({ time, time_zone })),
+  [attributeValueTypes.json]: z.string().transform((value, context) => {
+    try {
+      return JSON.parse(value);
+    } catch {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: 'Expected JSON',
+      });
+      return z.NEVER;
+    }
+  }),
 };
 
 export const valueForField = (
@@ -37,7 +48,10 @@ export const valueForField = (
     | undefined,
 ): string => {
   if (typeof value === 'object' && value !== null) {
-    return `${value.time} ${value.time_zone}`;
+    if ('time' in value && 'time_zone' in value) {
+      return `${value.time} ${value.time_zone}`;
+    }
+    return JSON.stringify(value);
   }
   return value === undefined ? '' : String(value);
 };

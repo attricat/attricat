@@ -32,7 +32,7 @@ async fn workspace_owner(pool: &PgPool) -> (Uuid, Uuid, Uuid) {
 #[sqlx::test]
 async fn custom_roles_are_managed_by_the_repository(pool: PgPool) {
     let (workspace, owner, membership) = workspace_owner(&pool).await;
-    let repository = CatalogRepository::new(pool.clone());
+    let repository = CatalogRepository::system(pool.clone());
     let reader = repository
         .create_workspace_role(
             owner,

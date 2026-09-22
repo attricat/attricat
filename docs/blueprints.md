@@ -57,6 +57,34 @@ readonly = true
 Blank contextual string fields remove their override instead of storing an empty
 string. Missing contextual values resolve according to `context_fallback`.
 
+### Attribute tags
+
+Attribute `tags` are free-form metadata for Catalog extensions and domain
+integrations. Catalog reserves the following visibility tags as default UI
+hints:
+
+| Tag | Default omission surface |
+| --- | --- |
+| `hidden` | Every native default surface listed below |
+| `hidden:form` | Fallback create and edit forms |
+| `hidden:detail` | Fallback entity preview/detail views |
+| `hidden:explorer` | Explorer facet and filter candidates |
+| `hidden:metadata` | The blueprint Attributes metadata table |
+
+Tags compose: `hidden` applies to every surface, while a scoped tag applies only
+to its named surface. They affect automatic/fallback discovery only; an
+explicit blueprint view may deliberately render a tagged attribute. Tags are
+not access control: attribute metadata and values remain available through the
+API, CLI, agents, and extensions according to their existing permissions. Raw
+blueprint TOML remains available to blueprint administrators.
+
+```toml
+[[attributes]]
+code = "price_amount"
+value_type = "integer"
+tags = ["hidden:form", "hidden:detail"]
+```
+
 Scalar attributes may set `default_value`. The value is stored in the default
 context when an entity is created, unless the create request supplies a value
 for that attribute in the default context. Defaults support `string`, `number`,
@@ -293,6 +321,38 @@ blueprints can define an `entity_schema` for cross-field validation. Both use
 JSON Schema Draft 2020-12 and are enforced by the API before values are stored.
 See [JSON Schema Validation](json-schema-validation.md) for authoring syntax,
 context behavior, and error handling.
+
+## Entity migration status
+
+When a published entity blueprint revision is storage-compatible with its
+immediately preceding published revision, **Migrate compatible entities** starts
+a background migration batch. The batch examines every active entity pinned to
+an older version of that blueprint, not only entities on the immediately
+preceding version. Each entity is migrated when its individual preview is
+`ready`; incompatible entities remain available for review. Open the blueprint
+in **Manage → Blueprints** and select the **Migrations** tab to inspect every
+batch for that blueprint. While a batch for the current target version is
+`queued` or `running`, the migration action is disabled so another batch cannot
+be started for that version.
+
+The table shows the target version, current status, processed/total progress,
+migrated, needs-review and failed counts, creation/start/completion timestamps,
+and batch ID. While any batch is `queued` or `running`, the page refreshes
+automatically every two seconds; **Refresh** requests the latest state
+immediately. A completed batch remains in the history. The UI reads this state
+from `GET /api/blueprints/{blueprint_id}/migration-batches`; migration batch rows
+in `blueprint_migration_batches` remain the source of truth.
+
+Batch statuses are:
+
+- `draft`: created but not queued (retained for compatibility with older rows),
+- `queued`: persisted and waiting for a worker,
+- `running`: claimed by a migration worker,
+- `completed`: the worker inspected every eligible entity and finished, and
+- `superseded`: replaced by a newer batch.
+
+`completed` describes the batch lifecycle. Individual entities that could not be
+migrated remain recorded in `entity_blueprint_migrations` for separate review.
 
 ## Validation
 
