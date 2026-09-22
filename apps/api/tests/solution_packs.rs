@@ -11,6 +11,7 @@ use reqwest::header::SET_COOKIE;
 use sha2::{Digest, Sha256};
 use support::*;
 
+const SAMPLE: &[u8] = br#"{"format_version":1,"kind":"solution_pack_sample_data","classification":"synthetic","entities":[{"key":"sample-entities/navy-shirt","blueprint":"blueprints/product","facts":[{"attribute":"blueprints/product/attributes/name","value":"Sample Navy Shirt"}],"relationships":[]}]}"#;
 const PRODUCT_BLUEPRINT: &[u8] = br#"
 format_version = 1
 code = "product"
@@ -97,6 +98,58 @@ fn digest(bytes: &[u8]) -> String {
 
 fn valid_archive() -> Vec<u8> {
     archive_with_blueprint(PRODUCT_BLUEPRINT)
+}
+
+fn archive_with_sample_data() -> Vec<u8> {
+    archive_with_sample_blueprint(PRODUCT_BLUEPRINT)
+}
+
+fn archive_with_sample_blueprint(blueprint: &[u8]) -> Vec<u8> {
+    let manifest = serde_json::to_vec(&json!({
+        "manifest_version":1,
+        "id":"attricat.samples",
+        "name":"Sample pack",
+        "version":"1.0.0",
+        "description":"Explicit synthetic samples",
+        "catalog":{"host_api":"^1.0"},
+        "resources":{
+            "blueprints":[{"key":"blueprints/product","path":"blueprints/product.toml","required":true,"sha256":digest(blueprint)}],
+            "sample_data":{"key":"sample-data/default","path":"sample-data/sample-data.json","sha256":digest(SAMPLE)}
+        }
+    })).unwrap();
+    let mut tar_bytes = Vec::new();
+    {
+        let mut tar = tar::Builder::new(&mut tar_bytes);
+        append_file(&mut tar, "solution-pack.json", &manifest);
+        append_file(&mut tar, "blueprints/product.toml", blueprint);
+        append_file(&mut tar, "sample-data/sample-data.json", SAMPLE);
+        tar.finish().unwrap();
+    }
+    zstd::stream::encode_all(Cursor::new(tar_bytes), 0).unwrap()
+}
+
+fn archive_with_sample(version: &str, blueprint: &[u8], sample: &[u8]) -> Vec<u8> {
+    let manifest = serde_json::to_vec(&json!({
+        "manifest_version":1,
+        "id":"attricat.samples",
+        "name":"Sample pack",
+        "version":version,
+        "description":"Explicit synthetic samples",
+        "catalog":{"host_api":"^1.0"},
+        "resources":{
+            "blueprints":[{"key":"blueprints/product","path":"blueprints/product.toml","required":true,"sha256":digest(blueprint)}],
+            "sample_data":{"key":"sample-data/default","path":"sample-data/sample-data.json","sha256":digest(sample)}
+        }
+    })).unwrap();
+    let mut tar_bytes = Vec::new();
+    {
+        let mut tar = tar::Builder::new(&mut tar_bytes);
+        append_file(&mut tar, "solution-pack.json", &manifest);
+        append_file(&mut tar, "blueprints/product.toml", blueprint);
+        append_file(&mut tar, "sample-data/sample-data.json", sample);
+        tar.finish().unwrap();
+    }
+    zstd::stream::encode_all(Cursor::new(tar_bytes), 0).unwrap()
 }
 
 fn archive_with_rejected_context_resource() -> Vec<u8> {
@@ -811,6 +864,24 @@ async fn create_plan_from_application(
         .unwrap()
 }
 
+async fn create_sample_plan_from_application(
+    client: &Client,
+    base_url: &str,
+    archive: Vec<u8>,
+    prefix: &str,
+    application_id: Uuid,
+) -> reqwest::Response {
+    client
+        .post(format!(
+            "{base_url}/solution-packs/plans?prefix={prefix}&blueprint_publication=publish&include_sample_data=true&from_application={application_id}"
+        ))
+        .header("content-type", "application/zstd")
+        .body(archive)
+        .send()
+        .await
+        .unwrap()
+}
+
 async fn create_plan_with_maps(
     client: &Client,
     base_url: &str,
@@ -1128,6 +1199,693 @@ async fn inspection_requires_browser_session_csrf(pool: PgPool) {
             .status(),
         StatusCode::CREATED
     );
+    server.abort();
+}
+
+#[sqlx::test(migrations = "./migrations")]
+async fn sample_matcher_rejects_an_omitted_effective_default(pool: PgPool) {
+    const BLUEPRINT: &[u8] = br#"
+format_version = 1
+code = "product"
+name = "Product"
+kind = "entity"
+[views.dropdown_option]
+type = "dropdown_option"
+fields = ["name"]
+[[attributes]]
+code = "name"
+value_type = "string"
+[[attributes]]
+code = "contact"
+value_type = "string"
+default_value = "Jane@example.com"
+"#;
+    let (base_url, server) = start_server(pool).await;
+    let response = inspect(
+        &authenticated_client(),
+        &base_url,
+        archive_with_sample_blueprint(BLUEPRINT),
+    )
+    .await;
+    assert_eq!(response.status(), StatusCode::UNPROCESSABLE_ENTITY);
+    assert!(response.text().await.unwrap().contains("prohibited-v1"));
+    server.abort();
+}
+
+#[sqlx::test(migrations = "./migrations")]
+async fn matcher_substrings_cover_explicit_defaulted_and_encoded_values(pool: PgPool) {
+    let (base_url, server) = start_server(pool.clone()).await;
+    let client = authenticated_client();
+    let base64 = format!("x{}", "QUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFB");
+    for prohibited in [
+        "dead192.0.2.1beef".to_owned(),
+        base64,
+        "ſabcdefabcdefabcdefabcdefſ".to_owned(),
+        "000000002026-09-18".to_owned(),
+        "x2026-09-18y".to_owned(),
+        "ſ2026-09-18€".to_owned(),
+        "000000002026-09-18T09:00:00Z9".to_owned(),
+    ] {
+        let encoded = prohibited
+            .as_bytes()
+            .iter()
+            .map(|byte| format!("%{byte:02X}"))
+            .collect::<String>();
+        let variants = [
+            prohibited.clone(),
+            encoded.clone(),
+            encoded.replace('%', "%25"),
+        ];
+        for candidate in variants {
+            let default_json = serde_json::to_string(&candidate).unwrap();
+            let blueprint = format!(
+                "format_version = 1\ncode = \"product\"\nname = \"Product\"\nkind = \"entity\"\n[views.dropdown_option]\ntype = \"dropdown_option\"\nfields = [\"contact\"]\n[[attributes]]\ncode = \"contact\"\nvalue_type = \"string\"\ndefault_value = {default_json}\n"
+            );
+            let omitted = br#"{"format_version":1,"kind":"solution_pack_sample_data","classification":"synthetic","entities":[{"key":"sample-entities/item","blueprint":"blueprints/product","facts":[],"relationships":[]}] }"#;
+            assert_eq!(
+                inspect(
+                    &client,
+                    &base_url,
+                    archive_with_sample("1.0.0", blueprint.as_bytes(), omitted)
+                )
+                .await
+                .status(),
+                StatusCode::UNPROCESSABLE_ENTITY,
+                "accepted prohibited default variant {candidate} derived from {prohibited}"
+            );
+
+            let sample = serde_json::to_vec(&json!({
+                "format_version":1,
+                "kind":"solution_pack_sample_data",
+                "classification":"synthetic",
+                "entities":[{"key":"sample-entities/item","blueprint":"blueprints/product","facts":[{"attribute":"blueprints/product/attributes/name","value":candidate}],"relationships":[]}]
+            })).unwrap();
+            assert_eq!(
+                inspect(
+                    &client,
+                    &base_url,
+                    archive_with_sample("1.0.0", PRODUCT_BLUEPRINT, &sample)
+                )
+                .await
+                .status(),
+                StatusCode::UNPROCESSABLE_ENTITY,
+                "accepted prohibited explicit variant derived from {prohibited}"
+            );
+        }
+    }
+
+    let prohibited_default_blueprint = br#"
+format_version = 1
+code = "product"
+name = "Product"
+kind = "entity"
+[views.dropdown_option]
+type = "dropdown_option"
+fields = ["contact"]
+[[attributes]]
+code = "contact"
+value_type = "string"
+default_value = "Jane@example.com"
+"#;
+    let safe_override = br#"{"format_version":1,"kind":"solution_pack_sample_data","classification":"synthetic","entities":[{"key":"sample-entities/item","blueprint":"blueprints/product","facts":[{"attribute":"blueprints/product/attributes/contact","value":"Sample contact"}],"relationships":[]}]}"#;
+    assert_eq!(
+        inspect(
+            &client,
+            &base_url,
+            archive_with_sample("1.0.0", prohibited_default_blueprint, safe_override)
+        )
+        .await
+        .status(),
+        StatusCode::OK
+    );
+    let plan = client
+        .post(format!("{base_url}/solution-packs/plans?prefix=override&blueprint_publication=publish&include_sample_data=true"))
+        .header("content-type", "application/zstd")
+        .body(archive_with_sample("1.0.0", prohibited_default_blueprint, safe_override))
+        .send().await.unwrap();
+    assert_eq!(
+        plan.status(),
+        StatusCode::CREATED,
+        "{}",
+        plan.text().await.unwrap()
+    );
+    let canonical: Value = sqlx::query_scalar(
+        "SELECT canonical_input FROM solution_pack_plan_sample_entities LIMIT 1",
+    )
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert_eq!(canonical["effective_defaults"], json!([]));
+    assert_eq!(canonical["entity"]["facts"][0]["value"], "Sample contact");
+    server.abort();
+}
+
+#[sqlx::test(migrations = "./migrations")]
+async fn sample_temporal_values_are_type_aware_and_strict(pool: PgPool) {
+    const DATE_BLUEPRINT: &[u8] = br#"
+format_version = 1
+code = "product"
+name = "Product"
+kind = "entity"
+[views.dropdown_option]
+type = "dropdown_option"
+fields = ["available_on"]
+[[attributes]]
+code = "available_on"
+value_type = "date"
+"#;
+    const VALID_DATE: &[u8] = br#"{"format_version":1,"kind":"solution_pack_sample_data","classification":"synthetic","entities":[{"key":"sample-entities/item","blueprint":"blueprints/product","facts":[{"attribute":"blueprints/product/attributes/available_on","value":"2026-09-18"}],"relationships":[]}]}"#;
+    let (base_url, server) = start_server(pool).await;
+    let client = authenticated_client();
+    let valid_date = inspect(
+        &client,
+        &base_url,
+        archive_with_sample("1.0.0", DATE_BLUEPRINT, VALID_DATE),
+    )
+    .await;
+    assert_eq!(
+        valid_date.status(),
+        StatusCode::OK,
+        "{}",
+        valid_date.text().await.unwrap()
+    );
+    let invalid_adjacent_native_date = br#"{"format_version":1,"kind":"solution_pack_sample_data","classification":"synthetic","entities":[{"key":"sample-entities/item","blueprint":"blueprints/product","facts":[{"attribute":"blueprints/product/attributes/available_on","value":"000000002026-09-18"}],"relationships":[]}] }"#;
+    assert_eq!(
+        inspect(
+            &client,
+            &base_url,
+            archive_with_sample("1.0.0", DATE_BLUEPRINT, invalid_adjacent_native_date),
+        )
+        .await
+        .status(),
+        StatusCode::UNPROCESSABLE_ENTITY,
+        "native-date exemption must follow strict native parsing"
+    );
+
+    let time_blueprint = b"format_version = 1\ncode = \"product\"\nname = \"Product\"\nkind = \"entity\"\n[views.dropdown_option]\ntype = \"dropdown_option\"\nfields = [\"temporal\"]\n[[attributes]]\ncode = \"temporal\"\nvalue_type = \"time\"\n";
+    let valid_time = serde_json::to_vec(&json!({
+        "format_version":1,"kind":"solution_pack_sample_data","classification":"synthetic",
+        "entities":[{"key":"sample-entities/item","blueprint":"blueprints/product","facts":[{"attribute":"blueprints/product/attributes/temporal","value":{"time":"12:34:56","time_zone":"America/New_York"}}],"relationships":[]}]
+    })).unwrap();
+    let response = inspect(
+        &client,
+        &base_url,
+        archive_with_sample("1.0.0", time_blueprint, &valid_time),
+    )
+    .await;
+    assert_eq!(
+        response.status(),
+        StatusCode::OK,
+        "{}",
+        response.text().await.unwrap()
+    );
+    let time_plan = client
+        .post(format!("{base_url}/solution-packs/plans?prefix=native_time&blueprint_publication=publish&include_sample_data=true"))
+        .header("content-type", "application/zstd")
+        .body(archive_with_sample("1.0.0", time_blueprint, &valid_time))
+        .send().await.unwrap();
+    assert_eq!(time_plan.status(), StatusCode::CREATED);
+    let time_plan = time_plan.json::<Value>().await.unwrap();
+    assert_eq!(
+        apply_plan(&client, &base_url, time_plan["id"].as_str().unwrap())
+            .await
+            .status(),
+        StatusCode::OK
+    );
+    for invalid_time in [
+        json!({"time":"25:00:00","time_zone":"UTC"}),
+        json!({"time":"12:34:56","time_zone":"Mars/Olympus"}),
+        json!({"time":"12:34:56","time_zone":"UTC","extra":"rejected"}),
+        json!({"time":"12:34:56","time_zone":"xQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFB"}),
+    ] {
+        let sample = serde_json::to_vec(&json!({
+            "format_version":1,"kind":"solution_pack_sample_data","classification":"synthetic",
+            "entities":[{"key":"sample-entities/item","blueprint":"blueprints/product","facts":[{"attribute":"blueprints/product/attributes/temporal","value":invalid_time}],"relationships":[]}]
+        })).unwrap();
+        assert_eq!(
+            inspect(
+                &client,
+                &base_url,
+                archive_with_sample("1.0.0", time_blueprint, &sample)
+            )
+            .await
+            .status(),
+            StatusCode::UNPROCESSABLE_ENTITY
+        );
+    }
+    let time_on_string = serde_json::to_vec(&json!({
+        "format_version":1,"kind":"solution_pack_sample_data","classification":"synthetic",
+        "entities":[{"key":"sample-entities/item","blueprint":"blueprints/product","facts":[{"attribute":"blueprints/product/attributes/name","value":{"time":"12:34:56","time_zone":"UTC"}}],"relationships":[]}]
+    })).unwrap();
+    assert_eq!(
+        inspect(
+            &client,
+            &base_url,
+            archive_with_sample("1.0.0", PRODUCT_BLUEPRINT, &time_on_string)
+        )
+        .await
+        .status(),
+        StatusCode::UNPROCESSABLE_ENTITY
+    );
+
+    let string_date = br#"{"format_version":1,"kind":"solution_pack_sample_data","classification":"synthetic","entities":[{"key":"sample-entities/item","blueprint":"blueprints/product","facts":[{"attribute":"blueprints/product/attributes/name","value":"2026-09-18"}],"relationships":[]}]}"#;
+    assert_eq!(
+        inspect(
+            &client,
+            &base_url,
+            archive_with_sample("1.0.0", PRODUCT_BLUEPRINT, string_date)
+        )
+        .await
+        .status(),
+        StatusCode::UNPROCESSABLE_ENTITY
+    );
+
+    for (value_type, invalid) in [
+        ("date", "2026-02-30"),
+        ("time", "25:00:00"),
+        ("datetime", "not-a-datetime"),
+    ] {
+        let blueprint = format!(
+            "format_version = 1\ncode = \"product\"\nname = \"Product\"\nkind = \"entity\"\n[views.dropdown_option]\ntype = \"dropdown_option\"\nfields = [\"temporal\"]\n[[attributes]]\ncode = \"temporal\"\nvalue_type = \"{value_type}\"\n"
+        );
+        let sample = serde_json::to_vec(&json!({
+            "format_version":1,
+            "kind":"solution_pack_sample_data",
+            "classification":"synthetic",
+            "entities":[{"key":"sample-entities/item","blueprint":"blueprints/product","facts":[{"attribute":"blueprints/product/attributes/temporal","value":invalid}],"relationships":[]}]
+        })).unwrap();
+        assert_eq!(
+            inspect(
+                &client,
+                &base_url,
+                archive_with_sample("1.0.0", blueprint.as_bytes(), &sample)
+            )
+            .await
+            .status(),
+            StatusCode::UNPROCESSABLE_ENTITY,
+            "accepted invalid {value_type}"
+        );
+    }
+
+    for (value_type, default_value) in [
+        ("date", "\"2026-02-30\""),
+        ("time", "{ time = \"25:00:00\", time_zone = \"UTC\" }"),
+        ("datetime", "\"not-a-datetime\""),
+    ] {
+        let blueprint = format!(
+            "format_version = 1\ncode = \"product\"\nname = \"Product\"\nkind = \"entity\"\n[views.dropdown_option]\ntype = \"dropdown_option\"\nfields = [\"temporal\"]\n[[attributes]]\ncode = \"temporal\"\nvalue_type = \"{value_type}\"\ndefault_value = {default_value}\n"
+        );
+        let empty = br#"{"format_version":1,"kind":"solution_pack_sample_data","classification":"synthetic","entities":[{"key":"sample-entities/item","blueprint":"blueprints/product","facts":[],"relationships":[]}]}"#;
+        assert_eq!(
+            inspect(
+                &client,
+                &base_url,
+                archive_with_sample("1.0.0", blueprint.as_bytes(), empty)
+            )
+            .await
+            .status(),
+            StatusCode::UNPROCESSABLE_ENTITY,
+            "accepted invalid defaulted {value_type}"
+        );
+    }
+    server.abort();
+}
+
+#[sqlx::test(migrations = "./migrations")]
+async fn sample_data_requires_opt_in_and_applies_with_ordinary_audit_and_event(pool: PgPool) {
+    let (base_url, server) = start_server(pool.clone()).await;
+    let client = authenticated_client();
+
+    let inspection = inspect(&client, &base_url, archive_with_sample_data()).await;
+    assert_eq!(inspection.status(), StatusCode::OK);
+    let inspection = inspection.json::<Value>().await.unwrap();
+    assert_eq!(inspection["sample_data"]["entity_count"], 1);
+    assert!(
+        inspection["warnings"][0]
+            .as_str()
+            .unwrap()
+            .contains("automation")
+    );
+    assert!(!inspection.to_string().contains("Sample Navy Shirt"));
+
+    let unselected = create_plan_with_publication(
+        &client,
+        &base_url,
+        archive_with_sample_data(),
+        "samples_none",
+        "publish",
+    )
+    .await;
+    assert_eq!(unselected.status(), StatusCode::CREATED);
+    let unselected = unselected.json::<Value>().await.unwrap();
+    assert_eq!(unselected["sample_data_selected"], false);
+    assert!(
+        unselected["actions"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .all(|action| action["resource_kind"] != "sample_entity")
+    );
+
+    let selected = client.post(format!("{base_url}/solution-packs/plans?prefix=samples&blueprint_publication=publish&include_sample_data=true"))
+        .header("content-type", "application/zstd").body(archive_with_sample_data()).send().await.unwrap();
+    assert_eq!(selected.status(), StatusCode::CREATED);
+    let selected = selected.json::<Value>().await.unwrap();
+    assert_eq!(selected["sample_data_selected"], true);
+    assert!(
+        selected["sample_automation_warning"]
+            .as_str()
+            .unwrap()
+            .contains("entity.created.v1")
+    );
+    assert!(!selected.to_string().contains("Sample Navy Shirt"));
+    let duplicate = client.post(format!("{base_url}/solution-packs/plans?prefix=samples_again&blueprint_publication=publish&include_sample_data=true"))
+        .header("content-type", "application/zstd").body(archive_with_sample_data()).send().await.unwrap();
+    assert_eq!(duplicate.status(), StatusCode::UNPROCESSABLE_ENTITY);
+
+    let applied = apply_plan(&client, &base_url, selected["id"].as_str().unwrap()).await;
+    assert_eq!(applied.status(), StatusCode::OK);
+    let applied = applied.json::<Value>().await.unwrap();
+    assert!(!applied.to_string().contains("Sample Navy Shirt"));
+    let started_at =
+        chrono::DateTime::parse_from_rfc3339(applied["started_at"].as_str().unwrap()).unwrap();
+    let resumable_until =
+        chrono::DateTime::parse_from_rfc3339(applied["resumable_until"].as_str().unwrap()).unwrap();
+    assert_eq!(resumable_until - started_at, chrono::Duration::days(30));
+    let entity_id: Uuid =
+        sqlx::query_scalar("SELECT id FROM entities WHERE 'attricat.sample'=ANY(system_tags)")
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+    assert_eq!(
+        sqlx::query_scalar::<_, i64>(
+            "SELECT count(*) FROM audit_events WHERE target->>'type'='entity' AND target->>'id'=$1"
+        )
+        .bind(entity_id.to_string())
+        .fetch_one(&pool)
+        .await
+        .unwrap(),
+        1
+    );
+    assert_eq!(sqlx::query_scalar::<_, i64>("SELECT count(*) FROM domain_events WHERE aggregate_id=$1 AND event_type='entity.created.v1'")
+        .bind(entity_id).fetch_one(&pool).await.unwrap(), 1);
+    assert_eq!(
+        sqlx::query_scalar::<_, i64>("SELECT count(*) FROM solution_pack_plan_sample_entities")
+            .fetch_one(&pool)
+            .await
+            .unwrap(),
+        0
+    );
+    let retained_audit_value: Value = sqlx::query_scalar(
+        "SELECT after_value FROM audit_event_changes WHERE entity_id=$1 AND attribute_code='name'",
+    )
+    .bind(entity_id)
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert_eq!(retained_audit_value, json!("Sample Navy Shirt"));
+    let retained_event: Value = sqlx::query_scalar(
+        "SELECT payload FROM domain_events WHERE aggregate_id=$1 AND event_type='entity.created.v1'",
+    )
+    .bind(entity_id)
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert_eq!(
+        retained_event["facts"][0]["after_value"],
+        "Sample Navy Shirt"
+    );
+    let detail = client
+        .get(format!("{base_url}/v1/entities/{entity_id}"))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(detail.status(), StatusCode::OK);
+    assert_eq!(
+        detail.json::<Value>().await.unwrap()["entity"]["is_sample"],
+        true
+    );
+    let search = client
+        .post(format!("{base_url}/v1/entities/search"))
+        .json(&json!({"blueprint":{"code":"samples_product"},"page":{"size":25}}))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(search.status(), StatusCode::OK);
+    assert_eq!(
+        search.json::<Value>().await.unwrap()["items"][0]["is_sample"],
+        true
+    );
+    let edited = client
+        .put(format!("{base_url}/v1/entities/{entity_id}"))
+        .json(&json!({"values":[],"relationships":[],"remove_values":[],"system_tags":[]}))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(edited.status(), StatusCode::OK);
+    assert_eq!(edited.json::<Value>().await.unwrap()["is_sample"], false);
+
+    server.abort();
+}
+
+#[sqlx::test(migrations = "./migrations")]
+async fn sample_dataset_reservation_survives_every_plan_and_application_state(pool: PgPool) {
+    let (base_url, server) = start_server(pool.clone()).await;
+    let client = authenticated_client();
+    for (index, state) in [
+        "ready",
+        "running",
+        "failed",
+        "invalid",
+        "abandoned",
+        "completed",
+        "expired",
+    ]
+    .into_iter()
+    .enumerate()
+    {
+        let version = format!("2.{}.0", index + 1);
+        let archive = archive_with_sample(&version, PRODUCT_BLUEPRINT, SAMPLE);
+        let first = client
+            .post(format!("{base_url}/solution-packs/plans?prefix=reservation_{index}&blueprint_publication=publish&include_sample_data=true"))
+            .header("content-type", "application/zstd")
+            .body(archive.clone())
+            .send().await.unwrap();
+        assert_eq!(
+            first.status(),
+            StatusCode::CREATED,
+            "first plan for {state}"
+        );
+        let first = first.json::<Value>().await.unwrap();
+        let plan_id = Uuid::parse_str(first["id"].as_str().unwrap()).unwrap();
+        if state == "expired" {
+            sqlx::query("UPDATE solution_pack_plans SET created_at=clock_timestamp()-interval '25 hours',expires_at=clock_timestamp()-interval '1 hour' WHERE id=$1")
+                .bind(plan_id).execute(&pool).await.unwrap();
+        } else if state != "ready" {
+            let application = apply_plan(&client, &base_url, first["id"].as_str().unwrap()).await;
+            assert_eq!(application.status(), StatusCode::OK, "apply for {state}");
+            let application = application.json::<Value>().await.unwrap();
+            if state != "completed" {
+                let application_id = Uuid::parse_str(application["id"].as_str().unwrap()).unwrap();
+                sqlx::query("UPDATE solution_pack_applications SET state=$2,completed_at=NULL,abandoned_at=CASE WHEN $2='abandoned' THEN clock_timestamp() ELSE NULL END WHERE id=$1")
+                    .bind(application_id).bind(state).execute(&pool).await.unwrap();
+            }
+        }
+        let duplicate = client
+            .post(format!("{base_url}/solution-packs/plans?prefix=reservation_again_{index}&blueprint_publication=publish&include_sample_data=true"))
+            .header("content-type", "application/zstd")
+            .body(archive)
+            .send().await.unwrap();
+        assert_eq!(
+            duplicate.status(),
+            StatusCode::UNPROCESSABLE_ENTITY,
+            "reservation was released in {state} state"
+        );
+    }
+    server.abort();
+}
+
+#[sqlx::test(migrations = "./migrations")]
+async fn later_sample_releases_create_reuse_conflict_and_record_removals(pool: PgPool) {
+    let sample = |entities: Value| {
+        serde_json::to_vec(&json!({
+            "format_version":1,
+            "kind":"solution_pack_sample_data",
+            "classification":"synthetic",
+            "entities":entities
+        }))
+        .unwrap()
+    };
+    let entity = |key: &str, name: &str| json!({"key":format!("sample-entities/{key}"),"blueprint":"blueprints/product","facts":[{"attribute":"blueprints/product/attributes/name","value":name}],"relationships":[]});
+    let initial_sample = sample(json!([
+        entity("navy-shirt", "Sample Navy Shirt"),
+        entity("cap", "Sample Cap")
+    ]));
+    let (base_url, server) = start_server(pool.clone()).await;
+    let client = authenticated_client();
+    let initial = client
+        .post(format!("{base_url}/solution-packs/plans?prefix=sample_lineage&blueprint_publication=publish&include_sample_data=true"))
+        .header("content-type", "application/zstd")
+        .body(archive_with_sample("1.0.0", PRODUCT_BLUEPRINT, &initial_sample))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(initial.status(), StatusCode::CREATED);
+    let initial = initial.json::<Value>().await.unwrap();
+    let applied = apply_plan(&client, &base_url, initial["id"].as_str().unwrap()).await;
+    assert_eq!(applied.status(), StatusCode::OK);
+    let application = applied.json::<Value>().await.unwrap();
+    let prior_application_id = application["id"].as_str().unwrap().parse::<Uuid>().unwrap();
+    let navy_id = application["steps"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|step| step["logical_key"] == "sample-entities/navy-shirt")
+        .unwrap()["target_id"]
+        .as_str()
+        .unwrap()
+        .parse::<Uuid>()
+        .unwrap();
+    let entity_count_before: i64 = sqlx::query_scalar("SELECT count(*) FROM entities")
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+    let edited = client
+        .put(format!("{base_url}/v1/entities/{navy_id}"))
+        .json(&json!({"values":[{"kind":"scalar","attribute_code":"name","value":"Locally edited sample"}],"relationships":[],"remove_values":[],"system_tags":[]}))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(edited.status(), StatusCode::OK);
+    assert_eq!(edited.json::<Value>().await.unwrap()["is_sample"], false);
+
+    let unchanged = create_sample_plan_from_application(
+        &client,
+        &base_url,
+        archive_with_sample("1.1.0", PRODUCT_BLUEPRINT, &initial_sample),
+        "sample_lineage_next",
+        prior_application_id,
+    )
+    .await;
+    let unchanged_status = unchanged.status();
+    let unchanged_body = unchanged.text().await.unwrap();
+    assert_eq!(unchanged_status, StatusCode::CREATED, "{unchanged_body}");
+    let unchanged = serde_json::from_str::<Value>(&unchanged_body).unwrap();
+    assert_eq!(unchanged["ready"], true);
+    let reuse = unchanged["actions"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|action| action["logical_key"] == "sample-entities/navy-shirt")
+        .unwrap();
+    assert_eq!(reuse["action"], "map");
+    assert_eq!(reuse["reason_code"], "unchanged_from_prior_application");
+    let reapplied = apply_plan(&client, &base_url, unchanged["id"].as_str().unwrap()).await;
+    assert_eq!(reapplied.status(), StatusCode::OK);
+    assert_eq!(
+        sqlx::query_scalar::<_, i64>("SELECT count(*) FROM entities")
+            .fetch_one(&pool)
+            .await
+            .unwrap(),
+        entity_count_before
+    );
+    let (name, tags): (String, Vec<String>) = sqlx::query_as(
+        "SELECT av.value_text,e.system_tags FROM entities e JOIN attributes a ON a.blueprint_id=e.blueprint_id AND a.blueprint_version=e.blueprint_version AND a.code='name' JOIN attribute_values av ON av.entity_id=e.id AND av.attribute_id=a.id AND av.active WHERE e.id=$1",
+    )
+    .bind(navy_id)
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert_eq!(name, "Locally edited sample");
+    assert!(!tags.contains(&"attricat.sample".to_owned()));
+
+    let changed_sample = sample(json!([
+        entity("navy-shirt", "Changed Sample Shirt"),
+        entity("cap", "Sample Cap")
+    ]));
+    let changed = create_sample_plan_from_application(
+        &client,
+        &base_url,
+        archive_with_sample("1.2.0", PRODUCT_BLUEPRINT, &changed_sample),
+        "sample_lineage_changed",
+        prior_application_id,
+    )
+    .await;
+    assert_eq!(changed.status(), StatusCode::CREATED);
+    let changed = changed.json::<Value>().await.unwrap();
+    assert_eq!(changed["ready"], false);
+    assert!(changed["actions"].as_array().unwrap().iter().any(|action| {
+        action["logical_key"] == "sample-entities/navy-shirt"
+            && action["action"] == "conflict"
+            && action["reason_code"] == "update_not_supported"
+    }));
+
+    let added_sample = sample(json!([
+        entity("navy-shirt", "Sample Navy Shirt"),
+        entity("cap", "Sample Cap"),
+        entity("belt", "Sample Belt")
+    ]));
+    let added = create_sample_plan_from_application(
+        &client,
+        &base_url,
+        archive_with_sample("1.3.0", PRODUCT_BLUEPRINT, &added_sample),
+        "sample_lineage_added",
+        prior_application_id,
+    )
+    .await;
+    assert_eq!(added.status(), StatusCode::CREATED);
+    let added = added.json::<Value>().await.unwrap();
+    assert!(
+        added["release_changes"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|change| {
+                change["logical_key"] == "sample-entities/belt" && change["change_kind"] == "added"
+            })
+    );
+
+    let removed_sample = sample(json!([entity("navy-shirt", "Sample Navy Shirt")]));
+    let removed = create_sample_plan_from_application(
+        &client,
+        &base_url,
+        archive_with_sample("1.4.0", PRODUCT_BLUEPRINT, &removed_sample),
+        "sample_lineage_removed",
+        prior_application_id,
+    )
+    .await;
+    assert_eq!(removed.status(), StatusCode::CREATED);
+    let removed = removed.json::<Value>().await.unwrap();
+    assert!(
+        removed["release_changes"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|change| {
+                change["logical_key"] == "sample-entities/cap" && change["change_kind"] == "removed"
+            })
+    );
+
+    sqlx::query("UPDATE entities SET deleted_at=clock_timestamp() WHERE id=$1")
+        .bind(navy_id)
+        .execute(&pool)
+        .await
+        .unwrap();
+    let missing = create_sample_plan_from_application(
+        &client,
+        &base_url,
+        archive_with_sample("1.5.0", PRODUCT_BLUEPRINT, &initial_sample),
+        "sample_lineage_missing",
+        prior_application_id,
+    )
+    .await;
+    assert_eq!(missing.status(), StatusCode::CREATED);
+    let missing = missing.json::<Value>().await.unwrap();
+    assert_eq!(missing["ready"], false);
+    assert!(missing["actions"].as_array().unwrap().iter().any(|action| {
+        action["logical_key"] == "sample-entities/navy-shirt"
+            && action["reason_code"] == "prior_sample_target_missing_or_changed"
+    }));
     server.abort();
 }
 
@@ -1736,6 +2494,8 @@ async fn valid_inspection_returns_only_safe_summaries_without_persisting(pool: P
             "guidance",
             "manifest",
             "resources",
+            "sample_data",
+            "warnings",
         ])
     );
     assert_eq!(body["guidance"]["setup_checklist_items"], 0);

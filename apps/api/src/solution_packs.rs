@@ -23,8 +23,14 @@ use sha2::{Digest, Sha256};
 use subtle::ConstantTimeEq;
 use thiserror::Error;
 
-use crate::extensions::{
-    ExtensionLayoutPlacement, classify_extension_layout_placement, valid_contribution_key,
+use crate::{
+    extensions::{
+        ExtensionLayoutPlacement, classify_extension_layout_placement, valid_contribution_key,
+    },
+    solution_pack_sample_data::{
+        ValidatedSampleData, explicit_fact_attribute_codes, prohibited_attribute_code,
+        prohibited_numeric, prohibited_scalar, validate_sample_data,
+    },
 };
 
 pub const SOLUTION_PACK_MANIFEST_VERSION: u32 = 1;
@@ -194,6 +200,16 @@ pub struct SolutionPackResources {
     pub workspace_settings: Vec<SolutionPackResource>,
     #[serde(default)]
     pub presentation_assets: Vec<SolutionPackPresentationAssetResource>,
+    #[serde(default, deserialize_with = "deserialize_optional_non_null")]
+    pub sample_data: Option<SolutionPackSampleDataResource>,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct SolutionPackSampleDataResource {
+    pub key: String,
+    pub path: String,
+    pub sha256: String,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -309,6 +325,7 @@ pub struct ValidatedSolutionPack {
     extension_layout: Option<SolutionPackExtensionLayout>,
     configuration_templates: BTreeMap<String, Value>,
     presentation_assets: BTreeMap<String, ValidatedPresentationAsset>,
+    sample_data: Option<ValidatedSampleData>,
     guidance: SolutionPackGuidance,
     checks: Vec<SolutionPackCheckDefinition>,
 }
@@ -332,6 +349,7 @@ pub struct SolutionPackBlueprint {
     dependencies: BTreeSet<String>,
     table_path_dependencies: BTreeSet<String>,
     kind: BlueprintKind,
+    effective_attributes: Vec<catalog_blueprint::EffectiveAttribute>,
     extension_layout: Vec<BlueprintExtensionLayoutEntry>,
 }
 
@@ -374,6 +392,10 @@ impl SolutionPackBlueprint {
 
     pub fn kind(&self) -> BlueprintKind {
         self.kind.clone()
+    }
+
+    pub fn effective_attributes(&self) -> &[catalog_blueprint::EffectiveAttribute] {
+        &self.effective_attributes
     }
 }
 
@@ -546,6 +568,7 @@ impl ValidatedSolutionPack {
         validate_blueprint_extension_layouts(&manifest, &blueprints)?;
         let configuration_templates = validate_configuration_templates(&manifest, &files)?;
         let presentation_assets = validate_presentation_assets(&manifest, &files)?;
+        let sample_data = validate_sample_resource(&manifest, &files, &blueprints)?;
         let (guidance, checks) =
             validate_guidance_and_checks(&manifest, &files, &extension_layout)?;
 
@@ -558,6 +581,7 @@ impl ValidatedSolutionPack {
             extension_layout,
             configuration_templates,
             presentation_assets,
+            sample_data,
             guidance,
             checks,
         })
@@ -601,6 +625,10 @@ impl ValidatedSolutionPack {
         self.presentation_assets.values()
     }
 
+    pub fn sample_data(&self) -> Option<&ValidatedSampleData> {
+        self.sample_data.as_ref()
+    }
+
     pub fn guidance(&self) -> &SolutionPackGuidance {
         &self.guidance
     }
@@ -633,9 +661,10 @@ fn validate_manifest(manifest: &SolutionPackManifest) -> Result<(), SolutionPack
     if manifest.resources.blueprints.is_empty()
         && manifest.resources.workspace_settings.is_empty()
         && manifest.resources.presentation_assets.is_empty()
+        && manifest.resources.sample_data.is_none()
     {
         return invalid(
-            "at least one blueprint, workspace setting, or presentation asset is required",
+            "at least one blueprint, workspace setting, presentation asset, or sample-data resource is required",
         );
     }
     if manifest.resources.blueprints.len() > MAX_SOLUTION_PACK_BLUEPRINTS {
@@ -678,6 +707,20 @@ fn validate_manifest(manifest: &SolutionPackManifest) -> Result<(), SolutionPack
         }
         if !paths.insert(&resource.path) {
             return invalid(format!("duplicate resource path '{}'", resource.path));
+        }
+    }
+    if let Some(resource) = &manifest.resources.sample_data {
+        if resource.key != "sample-data/default" || resource.path != "sample-data/sample-data.json"
+        {
+            return invalid("sample-data must use the fixed key and path");
+        }
+        parse_sha256(&resource.sha256).map_err(|()| {
+            SolutionPackError::Invalid(
+                "sample-data sha256 must be 64 lowercase hexadecimal characters".into(),
+            )
+        })?;
+        if !keys.insert(&resource.key) || !paths.insert(&resource.path) {
+            return invalid("duplicate sample-data key or path");
         }
     }
 
@@ -947,6 +990,13 @@ fn validate_declared_files(
         )
         .chain(
             manifest
+                .resources
+                .sample_data
+                .iter()
+                .map(|resource| resource.path.as_str()),
+        )
+        .chain(
+            manifest
                 .extensions
                 .iter()
                 .filter_map(|requirement| requirement.configuration_template.as_ref())
@@ -991,6 +1041,13 @@ fn validate_declared_files(
                     )
                 }),
         )
+        .chain(manifest.resources.sample_data.iter().map(|resource| {
+            (
+                resource.key.as_str(),
+                resource.path.as_str(),
+                resource.sha256.as_str(),
+            )
+        }))
         .chain(manifest.extensions.iter().filter_map(|requirement| {
             requirement.configuration_template.as_ref().map(|template| {
                 (
@@ -1016,6 +1073,155 @@ fn validate_declared_files(
         }
     }
     Ok(())
+}
+
+fn validate_sample_resource(
+    manifest: &SolutionPackManifest,
+    files: &BTreeMap<String, Vec<u8>>,
+    blueprints: &BTreeMap<String, SolutionPackBlueprint>,
+) -> Result<Option<ValidatedSampleData>, SolutionPackError> {
+    let Some(resource) = &manifest.resources.sample_data else {
+        return Ok(None);
+    };
+    let declared_blueprints = manifest
+        .resources
+        .blueprints
+        .iter()
+        .map(|blueprint| blueprint.key.as_str())
+        .collect::<BTreeSet<_>>();
+    let sample = validate_sample_data(&files[&resource.path], &declared_blueprints)
+        .map_err(SolutionPackError::Invalid)?;
+    validate_effective_sample_facts(&sample, blueprints)?;
+    Ok(Some(sample))
+}
+
+fn validate_effective_sample_facts(
+    sample: &ValidatedSampleData,
+    blueprints: &BTreeMap<String, SolutionPackBlueprint>,
+) -> Result<(), SolutionPackError> {
+    for entity in &sample.declaration.entities {
+        let blueprint = &blueprints[&entity.blueprint];
+        if blueprint.kind() != BlueprintKind::Entity {
+            return invalid(format!(
+                "sample entity '{}' must reference an entity blueprint",
+                entity.key
+            ));
+        }
+        let attributes = blueprint
+            .effective_attributes()
+            .iter()
+            .map(|attribute| (attribute.code.as_str(), attribute))
+            .collect::<HashMap<_, _>>();
+        let explicit_attributes = explicit_fact_attribute_codes(entity);
+        for attribute in blueprint.effective_attributes() {
+            prohibited_attribute_code(&attribute.code).map_err(SolutionPackError::Invalid)?;
+            if let Some(default) = attribute
+                .default_value
+                .as_ref()
+                .filter(|_| !explicit_attributes.contains(attribute.code.as_str()))
+            {
+                validate_sample_value_for_attribute(default, attribute, true)?;
+            }
+        }
+        for fact in &entity.facts {
+            let code = fact
+                .attribute
+                .rsplit('/')
+                .next()
+                .expect("validated attribute reference");
+            let attribute = attributes.get(code).ok_or_else(|| {
+                SolutionPackError::Invalid(format!(
+                    "sample entity '{}' references unknown attribute '{}'",
+                    entity.key, fact.attribute
+                ))
+            })?;
+            if attribute.readonly
+                || matches!(attribute.value_type.as_str(), "relationship" | "file")
+            {
+                return invalid(format!(
+                    "sample entity '{}' fact '{}' is read-only or non-scalar",
+                    entity.key, fact.attribute
+                ));
+            }
+            validate_sample_value_for_attribute(&fact.value, attribute, false)?;
+        }
+        for relationship in &entity.relationships {
+            let code = relationship
+                .attribute
+                .rsplit('/')
+                .next()
+                .expect("validated attribute reference");
+            let attribute = attributes.get(code).ok_or_else(|| {
+                SolutionPackError::Invalid(format!(
+                    "sample entity '{}' references unknown relationship '{}'",
+                    entity.key, relationship.attribute
+                ))
+            })?;
+            if attribute.readonly || attribute.value_type != "relationship" {
+                return invalid(format!(
+                    "sample entity '{}' relationship '{}' is not writable relationship data",
+                    entity.key, relationship.attribute
+                ));
+            }
+            if attribute.cardinality.as_deref() == Some("one") && relationship.targets.len() != 1 {
+                return invalid(format!(
+                    "sample entity '{}' relationship '{}' exceeds cardinality one",
+                    entity.key, relationship.attribute
+                ));
+            }
+        }
+    }
+    Ok(())
+}
+
+fn validate_sample_value_for_attribute(
+    value: &Value,
+    attribute: &catalog_blueprint::EffectiveAttribute,
+    defaulted: bool,
+) -> Result<(), SolutionPackError> {
+    let exact_time = value.as_object().and_then(|object| {
+        (object.len() == 2).then(|| {
+            (
+                object.get("time").and_then(Value::as_str),
+                object.get("time_zone").and_then(Value::as_str),
+            )
+        })
+    });
+    let valid_type = crate::repository::validates_native_value(&attribute.value_type, value)
+        && (value.is_object()
+            == (attribute.value_type == "time"
+                && exact_time
+                    .is_some_and(|(time, time_zone)| time.is_some() && time_zone.is_some())));
+    if !valid_type {
+        return invalid(format!(
+            "sample {} for attribute '{}' has the wrong native scalar type",
+            if defaulted { "default" } else { "fact" },
+            attribute.code
+        ));
+    }
+    prohibited_attribute_code(&attribute.code).map_err(SolutionPackError::Invalid)?;
+    match value {
+        Value::String(value) if matches!(attribute.value_type.as_str(), "date" | "datetime") => {
+            crate::solution_pack_sample_data::prohibited_temporal_scalar(&attribute.code, value)
+                .map_err(SolutionPackError::Invalid)
+        }
+        Value::Object(object) => {
+            let time = object["time"].as_str().expect("validated time string");
+            let time_zone = object["time_zone"]
+                .as_str()
+                .expect("validated time-zone string");
+            crate::solution_pack_sample_data::prohibited_temporal_scalar(&attribute.code, time)
+                .map_err(SolutionPackError::Invalid)?;
+            prohibited_scalar(&attribute.code, time_zone).map_err(SolutionPackError::Invalid)
+        }
+        Value::String(value) => {
+            prohibited_scalar(&attribute.code, value).map_err(SolutionPackError::Invalid)
+        }
+        Value::Number(value) => prohibited_numeric(&attribute.code, &value.to_string())
+            .map_err(SolutionPackError::Invalid),
+        Value::Bool(_) => Ok(()),
+        _ => unreachable!("type checked above"),
+    }
 }
 
 fn validate_presentation_assets(
@@ -2144,6 +2350,7 @@ fn validate_content(
         .into_iter()
         .map(|(key, mut blueprint)| {
             blueprint.portable.table_path_dependencies = table_path_dependencies[&key].clone();
+            blueprint.portable.effective_attributes = compiled[&key].attributes.clone();
             (key, blueprint.portable)
         })
         .collect();
@@ -2324,6 +2531,7 @@ fn prepare_blueprint(
             dependencies,
             table_path_dependencies: BTreeSet::new(),
             kind: definition.kind.clone(),
+            effective_attributes: Vec::new(),
             extension_layout,
         },
         native_definition: definition,
@@ -5473,6 +5681,47 @@ hidden = ["acme.shop:a_action"]
                 .map(|(path, bytes)| (path.as_bytes(), EntryType::Regular, *bytes)),
         );
         ValidatedSolutionPack::from_tar_zst(&custom_archive(&entries)).unwrap();
+    }
+
+    #[test]
+    fn published_sample_schema_allows_only_the_exact_native_time_object() {
+        let schema: Value = serde_json::from_str(include_str!(
+            "../../../contracts/solution-pack-sample-data-v1.schema.json"
+        ))
+        .unwrap();
+        catalog_validation::validate_json_schema_definition(&schema).unwrap();
+        let sample = |value: Value| {
+            json!({
+                "format_version":1,
+                "kind":"solution_pack_sample_data",
+                "classification":"synthetic",
+                "entities":[{
+                    "key":"sample-entities/item",
+                    "blueprint":"blueprints/product",
+                    "facts":[{"attribute":"blueprints/product/attributes/available_at","value":value}],
+                    "relationships":[]
+                }]
+            })
+        };
+        assert!(
+            catalog_validation::validate_json_schema(
+                &schema,
+                &sample(json!({"time":"12:34:56","time_zone":"UTC"})),
+            )
+            .unwrap()
+            .is_empty()
+        );
+        for invalid in [
+            json!({"time":"12:34:56"}),
+            json!({"time":"12:34:56","time_zone":"UTC","extra":true}),
+            json!({"copied":true}),
+        ] {
+            assert!(
+                !catalog_validation::validate_json_schema(&schema, &sample(invalid))
+                    .unwrap()
+                    .is_empty()
+            );
+        }
     }
 
     #[test]

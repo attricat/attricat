@@ -400,7 +400,7 @@ impl CatalogRepository {
         let target_entity = sqlx::query_as::<_, Entity>(
             r#"UPDATE entities SET blueprint_version = $2, updated_at = now()
                WHERE id = $1 AND workspace_id = $3
-               RETURNING id, blueprint_id, blueprint_version, projections, system_tags, system_metadata, created_at, updated_at, deleted_at"#,
+               RETURNING id, blueprint_id, blueprint_version, projections, system_tags, system_metadata, ('attricat.sample'=ANY(system_tags)) AS is_sample, created_at, updated_at, deleted_at"#,
         )
         .bind(entity.id)
         .bind(target_version)

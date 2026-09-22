@@ -1,8 +1,7 @@
 # Optional Solution-Pack Sample Data
 
-> **Status: accepted architecture decision; not implemented.** This document is
-> the prerequisite contract for a future bounded implementation. It does not
-> make sample data an available solution-pack capability.
+> **Status: implemented.** Format 1 is available through the administrator-only
+> solution-pack inspect, plan, and apply workflow described below.
 
 ## Decision
 
@@ -39,9 +38,39 @@ The strict manifest may index at most one sample resource:
 
 The declaration is strict JSON with `format_version: 1`,
 `kind: "solution_pack_sample_data"`, the required attestation
-`classification: "synthetic"`, and an ordered `entities` array. Unknown fields
-are rejected at every level. The first implementation is limited to one 1 MiB
-file, 256 entities, 128 facts per entity, and 4,096 total scalar and
+`classification: "synthetic"`, and an ordered `entities` array. The published
+schema is [`solution-pack-sample-data-v1.schema.json`](../contracts/solution-pack-sample-data-v1.schema.json).
+Its exact authoring shape is:
+
+```json
+{
+  "format_version": 1,
+  "kind": "solution_pack_sample_data",
+  "classification": "synthetic",
+  "entities": [{
+    "key": "sample-entities/navy-shirt",
+    "blueprint": "blueprints/product",
+    "facts": [{
+      "attribute": "blueprints/product/attributes/name",
+      "value": "Sample Navy Shirt"
+    }],
+    "relationships": [{
+      "attribute": "blueprints/product/attributes/category",
+      "targets": ["sample-entities/apparel"]
+    }]
+  }]
+}
+```
+
+Both entity arrays are required and may be empty. Relationship target arrays
+must be non-empty. Unknown fields, null/array values, arbitrary objects,
+duplicate attribute facts, and duplicate targets are rejected. The sole object
+value is the exact ordinary native-time shape
+`{"time": <string>, "time_zone": <string>}` on an attribute resolved as
+`time`; both keys are required and no other key is allowed. Authors cannot
+declare a label, tag, metadata, context, ID, or publication field; visible labeling is
+the host-owned marker described below. The first implementation is limited to
+one 1 MiB file, 256 entities, 128 facts per entity, and 4,096 total scalar and
 relationship facts.
 
 Each entity has an immutable logical key matching
@@ -49,8 +78,11 @@ Each entity has an immutable logical key matching
 facts addressed by logical attribute reference, and relationships. Blueprint
 references must resolve to entity blueprints declared by the same pack and to
 the exact published revision selected by the plan. Values are limited to the
-ordinary native scalar types supported by that attribute; `null`, arbitrary
-objects or arrays, files, binary values, and read-only attributes are rejected.
+ordinary native scalar types supported by that attribute, plus the exact
+bounded native-time object described above; `null`, every other object, arrays,
+files, binary values, and read-only attributes are rejected. Native-time
+objects are accepted only for a resolved `time` attribute, must pass the
+ordinary time/time-zone parser, and run matcher-v1 over both contained strings.
 Duplicate facts and duplicate relationship targets are rejected.
 
 Relationships may target only logical entity keys declared in the same sample
@@ -89,10 +121,12 @@ Validation covers the **complete effective initial fact set**, not only facts
 written in the sample file. Planning first resolves inherited attributes and
 materializes every ordinary default that entity creation would store, then runs
 all field-name and value matchers over explicit and defaulted facts together.
-A prohibited attribute code or default blocks the archive even when every
-sample entity omits that attribute. The canonical plan input and its digest
-include those materialized defaults; apply uses that reviewed input and the
-same exact blueprint revision.
+A prohibited attribute code or an effective default blocks the archive when a
+sample entity omits that attribute. An explicit fact suppresses its ordinary
+default exactly as ordinary create does, so the suppressed default is neither
+validated nor included in canonical evidence. The canonical plan input and its
+digest include exactly the defaults ordinary create will materialize; apply
+uses that reviewed input and the same exact blueprint revision.
 
 ### Prohibited matcher v1
 
@@ -121,7 +155,8 @@ their canonical JSON decimal representation and receive the database-ID,
 telephone, and encoded-blob matchers, preventing a numeric telephone bypass.
 Booleans have no prohibited lexical form. Native date, time, and datetime values
 receive strict ordinary type validation but are exempt from the string-only
-RFC 3339 and telephone matchers.
+RFC 3339 and telephone matchers. For the native-time object, `time` receives
+that temporal exemption while `time_zone` receives the complete string matcher.
 
 Attribute codes are split before case-folding at ASCII punctuation, whitespace,
 and lower-to-upper camel-case boundaries. ASCII case-folding means replacing
@@ -332,8 +367,10 @@ creates are not rolled back or deleted. No step may begin at or after
 `resumable_until`, and sample step transactions use a maximum five-minute lock
 and statement timeout.
 
-An authorized administrator may abandon a resumable application earlier. At
-`resumable_until`, the sweeper must abandon it no later than one hour after the
+An authorized administrator may abandon a resumable application earlier with
+`acli solution-pack applications abandon <application-id>` (or the permissioned
+`POST /solution-packs/applications/{application_id}/abandon` API). At
+`resumable_until`, the hourly API housekeeping worker abandons it no later than one hour after the
 deadline. Manual and automatic abandonment acquire the same application lock as
 apply and wait, for at most the step timeout, for an active step transaction.
 They reconcile the exact preallocated entity ID and durable step result: a

@@ -124,6 +124,12 @@ impl ValueType {
     }
 }
 
+pub(crate) fn validates_native_value(value_type: &str, value: &Value) -> bool {
+    ValueType::parse(value_type)
+        .and_then(|value_type| NativeValue::parse(value_type, value.clone()))
+        .is_ok()
+}
+
 impl NativeValue {
     pub(super) fn parse(value_type: ValueType, value: Value) -> Result<Self, RepositoryError> {
         let invalid = || RepositoryError::AttributeValueTypeMismatch;

@@ -118,6 +118,128 @@ async fn wait_for_tag(pool: &PgPool, entity_id: Uuid, tag: &str) {
 }
 
 #[sqlx::test]
+async fn sample_marker_is_preserved_by_ordinary_tag_add_automation(pool: PgPool) {
+    let (base_url, server) = start_server(pool.clone()).await;
+    let client = authenticated_client();
+    let blueprint = create_blueprint(
+        &client,
+        &base_url,
+        r#"
+format_version = 1
+code = "sample_workflow_product"
+name = "Sample workflow product"
+kind = "entity"
+[views.dropdown_option]
+type = "dropdown_option"
+fields = ["title"]
+[[attributes]]
+code = "title"
+value_type = "string"
+default_value = "untitled"
+"#,
+    )
+    .await;
+    let workflow: Value = client
+        .post(format!("{base_url}/workflows"))
+        .json(&json!({"definition":DEFINITION}))
+        .send()
+        .await
+        .unwrap()
+        .error_for_status()
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    let workflow_id = workflow["id"].as_str().unwrap();
+    client
+        .post(format!(
+            "{base_url}/workflows/{workflow_id}/versions/1/publish"
+        ))
+        .send()
+        .await
+        .unwrap()
+        .error_for_status()
+        .unwrap();
+    client
+        .post(format!(
+            "{base_url}/workflows/{workflow_id}/versions/1/enable"
+        ))
+        .send()
+        .await
+        .unwrap()
+        .error_for_status()
+        .unwrap();
+
+    let repository = CatalogRepository::new(pool.clone());
+    let (shutdown_tx, shutdown_rx) = watch::channel(());
+    let dispatcher = event_dispatcher::start(
+        repository.clone(),
+        workflow_runtime::add_to_registry(EventHandlerRegistry::default_handlers()),
+        DispatcherConfig::new(
+            Duration::from_millis(50),
+            Duration::from_millis(10),
+            Duration::from_millis(50),
+            5,
+            Duration::from_millis(10),
+        )
+        .unwrap(),
+        shutdown_rx.clone(),
+    );
+    tokio::time::sleep(Duration::from_millis(50)).await;
+
+    let ordinary = create_entity(&client, &base_url, &blueprint).await;
+    let ordinary_id = Uuid::parse_str(ordinary["id"].as_str().unwrap()).unwrap();
+    let rejected = client
+        .put(format!("{base_url}/v1/entities/{ordinary_id}"))
+        .json(&json!({"system_tags":["attricat.sample"]}))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(rejected.status(), StatusCode::UNPROCESSABLE_ENTITY);
+
+    let sample = create_entity(&client, &base_url, &blueprint).await;
+    let sample_id = Uuid::parse_str(sample["id"].as_str().unwrap()).unwrap();
+    sqlx::query("UPDATE entities SET system_tags=ARRAY['attricat.sample']::text[] WHERE id=$1")
+        .bind(sample_id)
+        .execute(&pool)
+        .await
+        .unwrap();
+
+    let worker = workflow_runtime::start(repository, shutdown_rx);
+    wait_for_tag(&pool, sample_id, "new").await;
+    let tags: Vec<String> = sqlx::query_scalar("SELECT system_tags FROM entities WHERE id=$1")
+        .bind(sample_id)
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+    assert!(tags.contains(&"attricat.sample".to_owned()));
+    assert!(tags.contains(&"new".to_owned()));
+
+    let preserved = client
+        .put(format!("{base_url}/v1/entities/{sample_id}"))
+        .json(&json!({"system_tags":["attricat.sample","new","manual"]}))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(preserved.status(), StatusCode::OK);
+    let removed = client
+        .put(format!("{base_url}/v1/entities/{sample_id}"))
+        .json(&json!({"system_tags":["new","manual"]}))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(removed.status(), StatusCode::OK);
+    assert_eq!(removed.json::<Value>().await.unwrap()["is_sample"], false);
+
+    shutdown_tx.send(()).unwrap();
+    for handle in dispatcher {
+        handle.await.unwrap();
+    }
+    worker.await.unwrap();
+    server.abort();
+}
+
+#[sqlx::test]
 async fn workflow_outbox_dispatcher_and_worker_are_idempotent_and_disable_safe(pool: PgPool) {
     let (base_url, server) = start_server(pool.clone()).await;
     let client = authenticated_client();

@@ -17,6 +17,7 @@ use crate::{
         CreateSolutionPackPlanRequest, SolutionPackApplication, SolutionPackApplicationSummary,
         SolutionPackCheckRun, SolutionPackCheckRunSummary, SolutionPackPlan,
     },
+    solution_pack_sample_data::SAMPLE_AUTOMATION_WARNING,
     solution_packs::{
         BlueprintMappingRequest, BlueprintPublication, MAX_SOLUTION_PACK_ARCHIVE_BYTES,
         MAX_SOLUTION_PACK_BLUEPRINTS, MAX_SOLUTION_PACK_CHECK_RUN_RESPONSE_BYTES,
@@ -33,6 +34,18 @@ pub(super) struct InspectionResponse {
     resources: ResourceSummaries,
     extensions: Vec<ExtensionRequirementSummary>,
     guidance: GuidanceInspectionSummary,
+    sample_data: Option<SampleDataInspectionSummary>,
+    warnings: Vec<&'static str>,
+}
+
+#[derive(Serialize)]
+struct SampleDataInspectionSummary {
+    key: String,
+    classification: &'static str,
+    entity_count: usize,
+    scalar_fact_count: usize,
+    relationship_fact_count: usize,
+    canonical_sha256: String,
 }
 
 #[derive(Serialize)]
@@ -239,6 +252,20 @@ pub(super) async fn inspect(
                 })
                 .collect(),
         },
+        sample_data: pack
+            .sample_data()
+            .map(|sample| SampleDataInspectionSummary {
+                key: "sample-data/default".to_owned(),
+                classification: "synthetic",
+                entity_count: sample.declaration.entities.len(),
+                scalar_fact_count: sample.scalar_fact_count,
+                relationship_fact_count: sample.relationship_fact_count,
+                canonical_sha256: sample.canonical_sha256.clone(),
+            }),
+        warnings: pack
+            .sample_data()
+            .map(|_| vec![SAMPLE_AUTOMATION_WARNING])
+            .unwrap_or_default(),
     };
     ensure_response_size(&response)?;
     Ok((StatusCode::OK, Json(response)))
@@ -250,6 +277,8 @@ pub(super) struct CreatePlanQuery {
     prefix: String,
     blueprint_publication: BlueprintPublication,
     from_application: Option<Uuid>,
+    #[serde(default)]
+    include_sample_data: bool,
 }
 
 /// Validates an uploaded archive again and persists an immutable dry-run. Raw
@@ -279,6 +308,7 @@ pub(super) async fn create_plan(
                 blueprint_mappings: &mappings,
                 asset_mappings: &asset_mappings,
                 prior_application_id: query.from_application,
+                include_sample_data: query.include_sample_data,
             },
             state.object_store.as_ref(),
         )
@@ -493,6 +523,24 @@ pub(super) async fn get_application(
     Ok(Json(application))
 }
 
+pub(super) async fn abandon_application(
+    ScopedRepository(repository): ScopedRepository,
+    application_id: Result<Path<Uuid>, PathRejection>,
+    body: Result<Bytes, BytesRejection>,
+) -> Result<Json<SolutionPackApplication>, ApiError> {
+    let Path(application_id) = application_id.map_err(ApiError::from_path_rejection)?;
+    if !body.map_err(ApiError::from_bytes_rejection)?.is_empty() {
+        return Err(ApiError::invalid_input(
+            "solution-pack abandonment body must be empty".to_owned(),
+        ));
+    }
+    let application = repository
+        .abandon_solution_pack_application(application_id)
+        .await?;
+    ensure_application_response_size(&application)?;
+    Ok(Json(application))
+}
+
 pub(super) async fn rerun_checks(
     ScopedRepository(repository): ScopedRepository,
     application_id: Result<Path<Uuid>, PathRejection>,
@@ -684,6 +732,8 @@ mod tests {
                 setup_checklist_items: 0,
                 checks: Vec::new(),
             },
+            sample_data: None,
+            warnings: Vec::new(),
         }
     }
 

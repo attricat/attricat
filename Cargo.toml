@@ -8,3 +8,5 @@ publish = false
 
 [workspace.dependencies]
 cron = "0.15"
+regex = "1"
+unicode-normalization = "0.1"

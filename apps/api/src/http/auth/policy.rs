@@ -46,6 +46,8 @@ pub(super) fn policy(method: &Method, path: &str) -> Option<Policy> {
         || (method == Method::POST && path == "/solution-packs/plans/{plan_id}/apply")
         || (method == Method::GET && path == "/solution-packs/applications")
         || (method == Method::GET && path == "/solution-packs/applications/{application_id}")
+        || (method == Method::POST
+            && path == "/solution-packs/applications/{application_id}/abandon")
         || path == "/solution-packs/applications/{application_id}/checks"
         || (method == Method::GET
             && path == "/solution-packs/applications/{application_id}/checks/{run_id}")
@@ -442,6 +444,10 @@ mod tests {
             (Method::POST, "/solution-packs/plans/{plan_id}/apply"),
             (Method::GET, "/solution-packs/applications"),
             (Method::GET, "/solution-packs/applications/{application_id}"),
+            (
+                Method::POST,
+                "/solution-packs/applications/{application_id}/abandon",
+            ),
             (
                 Method::GET,
                 "/solution-packs/applications/{application_id}/checks",

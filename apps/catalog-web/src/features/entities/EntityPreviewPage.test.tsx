@@ -134,6 +134,7 @@ describe('EntityPreviewPage', () => {
         id: '00000000-0000-4000-8000-000000000001',
         blueprint_id: blueprintId,
         blueprint_version: 7,
+        is_sample: true,
       },
       values: {},
     } as never);
@@ -154,6 +155,7 @@ describe('EntityPreviewPage', () => {
 
     renderPage();
 
+    expect(await screen.findByText('Sample')).toBeTruthy();
     const runtimeScope = { blueprintId, blueprintVersion: 7 };
     await waitFor(() =>
       expect(outletRender).toHaveBeenCalledWith(

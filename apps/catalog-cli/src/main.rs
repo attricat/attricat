@@ -885,6 +885,8 @@ enum SolutionPackApplicationsCommand {
     },
     /// Show one workspace-scoped application and its ordered steps.
     Show { application_id: Uuid },
+    /// Permanently abandon a resumable sample-selected application.
+    Abandon { application_id: Uuid },
 }
 
 #[derive(Subcommand)]
@@ -937,6 +939,9 @@ enum SolutionPackCommand {
         /// Reuse unchanged resources from one completed application.
         #[arg(long, conflicts_with_all = ["blueprint_maps", "asset_maps"])]
         from_application: Option<Uuid>,
+        /// Explicitly select the pack's optional synthetic sample entities.
+        #[arg(long)]
+        include_sample_data: bool,
     },
     /// Apply exactly the persisted immutable plan; no choices are recomputed.
     Apply { plan_id: Uuid },
@@ -2357,6 +2362,7 @@ async fn solution_pack_command(
             blueprint_maps,
             asset_maps,
             from_application: None,
+            include_sample_data: false,
         } if blueprint_maps.is_empty() && asset_maps.is_empty() => {
             request(
                 client,
@@ -2375,6 +2381,7 @@ async fn solution_pack_command(
             blueprint_maps,
             asset_maps,
             from_application,
+            include_sample_data,
         } => {
             let mut path = format!(
                 "/solution-packs/plans?prefix={}&blueprint_publication={}",
@@ -2384,6 +2391,9 @@ async fn solution_pack_command(
             if let Some(application_id) = from_application {
                 path.push_str("&from_application=");
                 path.push_str(&segment(application_id));
+            }
+            if include_sample_data {
+                path.push_str("&include_sample_data=true");
             }
             if blueprint_maps.is_empty() && asset_maps.is_empty() {
                 raw_upload(client, server, &path, &file, "application/zstd").await
@@ -2433,6 +2443,21 @@ async fn solution_pack_command(
                 Method::GET,
                 &format!(
                     "/solution-packs/applications/{}",
+                    segment(application_id)
+                ),
+                None,
+            )
+            .await
+        }
+        SolutionPackCommand::Applications {
+            command: SolutionPackApplicationsCommand::Abandon { application_id },
+        } => {
+            request(
+                client,
+                server,
+                Method::POST,
+                &format!(
+                    "/solution-packs/applications/{}/abandon",
                     segment(application_id)
                 ),
                 None,
@@ -4180,6 +4205,7 @@ value = "Blue shirt"
             "ecom",
             "--blueprint-publication",
             "publish",
+            "--include-sample-data",
         ]);
         assert!(create.is_ok());
         assert!(
@@ -4312,6 +4338,14 @@ value = "Blue shirt"
                     ),
                 )
                 .route(
+                    "/solution-packs/applications/{application_id}/abandon",
+                    axum::routing::post(
+                        |axum::extract::Path(id): axum::extract::Path<Uuid>| async move {
+                            axum::Json(json!({"abandoned": id}))
+                        },
+                    ),
+                )
+                .route(
                     "/solution-packs/applications/{application_id}/checks",
                     axum::routing::get(
                         |axum::extract::Path(id): axum::extract::Path<Uuid>,
@@ -4392,6 +4426,18 @@ value = "Blue shirt"
             solution_pack_command(
                 &client,
                 &url,
+                SolutionPackCommand::Applications {
+                    command: SolutionPackApplicationsCommand::Abandon { application_id },
+                },
+            )
+            .await
+            .unwrap(),
+            format!(r#"{{"abandoned":"{application_id}"}}"#)
+        );
+        assert_eq!(
+            solution_pack_command(
+                &client,
+                &url,
                 SolutionPackCommand::Checks {
                     command: SolutionPackChecksCommand::Rerun { application_id },
                 }
@@ -4467,6 +4513,7 @@ value = "Blue shirt"
                 blueprint_maps: Vec::new(),
                 asset_maps: Vec::new(),
                 from_application: None,
+                include_sample_data: false,
             },
         )
         .await;
@@ -4485,6 +4532,7 @@ value = "Blue shirt"
                 blueprint_maps: Vec::new(),
                 asset_maps: Vec::new(),
                 from_application: None,
+                include_sample_data: false,
             },
         )
         .await;
@@ -4517,6 +4565,7 @@ value = "Blue shirt"
                     blueprint_maps: vec![mapping.to_owned()],
                     asset_maps: Vec::new(),
                     from_application: None,
+                    include_sample_data: false,
                 },
             )
             .await;
@@ -4592,6 +4641,7 @@ value = "Blue shirt"
                 blueprint_maps: Vec::new(),
                 asset_maps: Vec::new(),
                 from_application: None,
+                include_sample_data: false,
             },
         )
         .await
@@ -4619,6 +4669,7 @@ value = "Blue shirt"
                 blueprint_maps: Vec::new(),
                 asset_maps: Vec::new(),
                 from_application: Some(prior_application_id),
+                include_sample_data: false,
             },
         )
         .await
@@ -4650,6 +4701,7 @@ value = "Blue shirt"
                     "assets/brand-logo=00000000-0000-4000-8000-000000000999".to_owned(),
                 ],
                 from_application: None,
+                include_sample_data: false,
             },
         )
         .await
@@ -4682,6 +4734,7 @@ value = "Blue shirt"
                 ],
                 asset_maps: Vec::new(),
                 from_application: None,
+                include_sample_data: false,
             },
         )
         .await;
@@ -4698,6 +4751,7 @@ value = "Blue shirt"
                 blueprint_maps: Vec::new(),
                 asset_maps: Vec::new(),
                 from_application: None,
+                include_sample_data: false,
             },
         )
         .await

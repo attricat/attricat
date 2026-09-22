@@ -21,6 +21,7 @@ use api::{
     http::{AppState, router},
     mail::SmtpMailDelivery,
     repository::CatalogRepository,
+    solution_pack_housekeeping,
     storage::{ObjectStore, S3ObjectStore, StorageConfig},
     telemetry::{init_metrics, init_tracing},
     workflow_runtime,
@@ -223,6 +224,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     };
 
     let (shutdown_sender, shutdown_receiver) = tokio::sync::watch::channel(());
+    let solution_pack_housekeeping = solution_pack_housekeeping::start(
+        CatalogRepository::with_workspace_pool_factory(pool.clone(), connect_options.clone()),
+        shutdown_receiver.clone(),
+    );
     let (migration_batch_dispatcher, migration_worker) = blueprint_migration_worker::start(
         CatalogRepository::with_workspace_pool_factory(pool.clone(), connect_options.clone()),
         shutdown_receiver.clone(),
@@ -310,6 +315,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     }
     workflow_worker.await?;
     migration_worker.await?;
+    solution_pack_housekeeping.await?;
 
     Ok(())
 }

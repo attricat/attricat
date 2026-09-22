@@ -101,6 +101,9 @@
               "maxContains": 1
             }
           ]
+        },
+        "sample_data": {
+          "$ref": "#/$defs/sampleDataResource"
         }
       },
       "anyOf": [
@@ -133,6 +136,11 @@
               "minItems": 1
             }
           }
+        },
+        {
+          "required": [
+            "sample_data"
+          ]
         }
       ]
     },
@@ -207,10 +215,19 @@
           "type": "boolean"
         },
         "purpose": {
-          "enum": ["logo", "icon", "illustration"]
+          "enum": [
+            "logo",
+            "icon",
+            "illustration"
+          ]
         },
         "media_type": {
-          "enum": ["image/png", "image/jpeg", "image/webp", "image/svg+xml"]
+          "enum": [
+            "image/png",
+            "image/jpeg",
+            "image/webp",
+            "image/svg+xml"
+          ]
         },
         "sha256": {
           "$ref": "#/$defs/digest"
@@ -218,8 +235,20 @@
       },
       "allOf": [
         {
-          "if": {"properties": {"media_type": {"const": "image/jpeg"}}},
-          "then": {"properties": {"purpose": {"const": "illustration"}}}
+          "if": {
+            "properties": {
+              "media_type": {
+                "const": "image/jpeg"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "purpose": {
+                "const": "illustration"
+              }
+            }
+          }
         }
       ]
     },
@@ -387,6 +416,26 @@
         }
       },
       "minProperties": 1
+    },
+    "sampleDataResource": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "key",
+        "path",
+        "sha256"
+      ],
+      "properties": {
+        "key": {
+          "const": "sample-data/default"
+        },
+        "path": {
+          "const": "sample-data/sample-data.json"
+        },
+        "sha256": {
+          "$ref": "#/$defs/digest"
+        }
+      }
     }
   }
 }

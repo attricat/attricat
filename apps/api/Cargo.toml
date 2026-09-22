@@ -23,6 +23,7 @@ chrono = { version = "0.4", default-features = false, features = ["clock", "serd
 chrono-tz = "0.10"
 rand = "0.8"
 quick-xml = "0.37"
+regex.workspace = true
 reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls", "stream"] }
 rust_decimal = { version = "1", features = ["serde"] }
 metrics = "0.23"
@@ -47,6 +48,7 @@ tokio = { version = "1", features = ["fs", "io-util", "macros", "net", "rt-multi
 tokio-stream = "0.1"
 toml = "0.8"
 url = "2"
+unicode-normalization.workspace = true
 uuid = { version = "1", features = ["serde", "v4"] }
 zstd = "0.13"
 wasmtime = { version = "48", default-features = false, features = ["async", "component-model", "cranelift", "runtime"] }

@@ -4,7 +4,8 @@
 > create planning, explicit exact reuse of existing published blueprints, and
 > durable application/history for blueprints are implemented. Packs may also declare and inspect
 > bounded, digest-verified presentation assets with durable private staging and immutable create or
-> exact-map application. Packs may also declare bounded extension
+> exact-map application. Packs may optionally declare strict synthetic sample
+> data selected only by an administrator at plan creation. Packs may also declare bounded extension
 > requirements, non-secret configuration templates, Explore navigation defaults,
 > bounded workspace extension layouts, and entity-blueprint extension layouts.
 > Administrators upload `.tar.zst` archives; broader resource types remain deferred.
@@ -13,7 +14,7 @@
 > existing-resource adoption, updates, workspace settings other than the two bounded defaults,
 > presentation-asset update/delete/ownership, prerequisites, or export are future target
 > design, not implemented v1 behavior. The optional sample-data architecture
-> contract is approved, but its runtime remains unimplemented. The explicitly
+> contract and bounded runtime are implemented. The explicitly
 > marked v1 sections below define the current product contract.
 
 A solution pack is a versioned, declarative bundle of catalog structure,
@@ -74,7 +75,7 @@ bounded workspace-setting boundary.
 | Workspace defaults | **Implemented subset:** append pinned Explore entries and compatible extension contributions without replacing unrelated navigation, layout data, or settings. Other settings remain deferred. |
 | Branding, themes, and static assets | **Implemented bounded subset:** declarations are digest/signature checked, SVG is normalized through a fail-closed static allowlist, normalized bytes are durably staged into immutable plans, and apply creates or explicitly maps ordinary private assets. Changed later-release assets block; removed assets are information only. |
 | Documentation and setup | **Implemented subset:** bounded safe Markdown guidance, release notes, a structured checklist, and six host-defined informational checks with immutable run history. |
-| Sample data | **Approved contract; not implemented:** optional, explicitly selected, visibly marked synthetic entities under the bounded [sample-data decision](solution-pack-sample-data.md). |
+| Sample data | **Implemented bounded subset:** optional, explicitly selected, visibly marked synthetic entities under the bounded [sample-data decision](solution-pack-sample-data.md). |
 
 Not every content type ships in the current implementation. The
 [initial delivery boundary](#initial-delivery-boundary) implements blueprint creation and explicit exact reuse, bounded Explore navigation and extension-layout defaults,
@@ -114,7 +115,7 @@ Before planning, Catalog validates at least:
 - host compatibility and supported resource contract versions;
 - uniqueness and referential integrity of logical resource keys; and
 - schemas for blueprints, settings, templates, and checks before any workspace
-  mutation, and the approved sample-data schema once that runtime is implemented.
+  mutation, and the strict sample-data schema when that optional resource is declared.
 
 Unknown manifest fields are rejected at the contract version where they occur.
 Archive validity does not imply that its proposed changes are safe for a
@@ -490,7 +491,7 @@ Public responses expose only bounded guidance, check key/title/type, run counts,
 and safe result evidence—never resource source, extension manifests, installed
 configuration, or template values.
 
-### Optional sample data (approved contract; not implemented)
+### Optional sample data
 
 The [optional sample-data architecture decision](solution-pack-sample-data.md)
 is approved as a prerequisite for later implementation. It requires explicit
@@ -500,7 +501,11 @@ reservation with original-plan retry and strictly-newer lineage, private value
 cleanup, ordinary audit and automation, default-context resolution, a visible
 removable sample marker, and same-file acyclic relationships.
 
-The decision does not make sample data a current capability. It also does not
+Planning selects sample data only with `--include-sample-data`; omission is a
+recorded non-selection and `apply` takes only the immutable plan ID. Inspection
+and selected plans expose counts and digests, never scalar values, together
+with the warning that ordinary audit and `entity.created.v1` processing may run
+automation and retain value copies. The feature does not
 claim semantic or provenance proof and does not introduce entity publication,
 update, delete, ownership, reconciliation, entity cleanup, or uninstall
 behavior.
@@ -556,6 +561,7 @@ planner uses an explicit prefix and blueprint publication preference:
 
 ```sh
 acli solution-pack plan --file pack.tar.zst --prefix ecom --blueprint-publication draft
+acli solution-pack plan --file pack.tar.zst --prefix ecom --blueprint-publication publish --include-sample-data
 acli solution-pack plan --file pack.tar.zst --prefix ecom --blueprint-publication publish \
   --map blueprints/product=shared_product --map blueprints/category=shared_category \
   --map-asset assets/brand-logo=<existing-asset-uuid>
@@ -565,6 +571,7 @@ acli solution-pack plan show <plan-id>
 acli solution-pack apply <plan-id>
 acli solution-pack applications list
 acli solution-pack applications show <application-id>
+acli solution-pack applications abandon <application-id>
 acli solution-pack checks rerun <application-id>
 acli solution-pack checks list <application-id> --limit 25 --offset 0
 acli solution-pack checks show <application-id> <run-id>

@@ -52,7 +52,7 @@ value_type = "string"
 
 #[sqlx::test]
 async fn incoming_relationships_are_deduplicated_and_paginated(pool: PgPool) {
-    let (base_url, server) = start_server(pool).await;
+    let (base_url, server) = start_server(pool.clone()).await;
     let client = authenticated_client();
     let category = create_blueprint(
         &client,
@@ -110,6 +110,11 @@ target_blueprint = "category"
     ];
     for source in &sources {
         let source_id = source["id"].as_str().unwrap();
+        sqlx::query("UPDATE entities SET system_tags=ARRAY['attricat.sample']::text[] WHERE id=$1")
+            .bind(source_id.parse::<Uuid>().unwrap())
+            .execute(&pool)
+            .await
+            .unwrap();
         client
             .put(format!("{base_url}/v1/entities/{source_id}"))
             .json(&json!({
@@ -148,6 +153,7 @@ target_blueprint = "category"
         .await
         .unwrap();
     assert_eq!(first["items"].as_array().unwrap().len(), 1);
+    assert_eq!(first["items"][0]["is_sample"], true);
 
     let second: Value = client
         .post(format!(
@@ -166,6 +172,7 @@ target_blueprint = "category"
         .await
         .unwrap();
     assert_eq!(second["items"].as_array().unwrap().len(), 1);
+    assert_eq!(second["items"][0]["is_sample"], true);
     assert!(second["next_cursor"].is_null());
 
     server.abort();

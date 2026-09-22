@@ -1,7 +1,14 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link } from '@tanstack/react-router';
 import { BlueprintIcon } from '../../components/system-icons';
-import { Alert, Box, CircularProgress, Paper, Tooltip } from '@mui/material';
+import {
+  Alert,
+  Box,
+  Chip,
+  CircularProgress,
+  Paper,
+  Tooltip,
+} from '@mui/material';
 import { createElement, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { PageContainer } from '../../components/PageContainer';
@@ -132,17 +139,22 @@ export const EntityPreviewPage = ({
       <PageHeader
         actions={
           blueprint.data && (
-            <Tooltip title={blueprint.data.blueprint.name}>
-              <RouterButton
-                params={{ blueprintId: blueprint.data.blueprint.id }}
-                size="small"
-                startIcon={<BlueprintIcon />}
-                to="/manage/blueprints/$blueprintId"
-                variant="text"
-              >
-                {t('entities.blueprint')}: {blueprint.data.blueprint.name}
-              </RouterButton>
-            </Tooltip>
+            <Box sx={{ alignItems: 'center', display: 'flex', gap: 1 }}>
+              {resolved.data?.entity.is_sample && (
+                <Chip color="info" label={t('entities.sample')} size="small" />
+              )}
+              <Tooltip title={blueprint.data.blueprint.name}>
+                <RouterButton
+                  params={{ blueprintId: blueprint.data.blueprint.id }}
+                  size="small"
+                  startIcon={<BlueprintIcon />}
+                  to="/manage/blueprints/$blueprintId"
+                  variant="text"
+                >
+                  {t('entities.blueprint')}: {blueprint.data.blueprint.name}
+                </RouterButton>
+              </Tooltip>
+            </Box>
           )
         }
         eyebrow={

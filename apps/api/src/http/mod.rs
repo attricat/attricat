@@ -367,6 +367,10 @@ pub fn router(state: AppState) -> Router {
             get(solution_packs::get_application),
         )
         .route(
+            "/solution-packs/applications/{application_id}/abandon",
+            post(solution_packs::abandon_application),
+        )
+        .route(
             "/solution-packs/applications/{application_id}/checks",
             get(solution_packs::list_check_runs).post(solution_packs::rerun_checks),
         )

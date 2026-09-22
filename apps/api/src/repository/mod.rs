@@ -90,6 +90,7 @@ pub(crate) use solution_packs::{
     SolutionPackCheckRun, SolutionPackCheckRunSummary, SolutionPackPlan,
 };
 pub(crate) use tokens::PersonalApiToken;
+pub(crate) use values::validates_native_value;
 pub use workflow_runs::WorkflowRun;
 pub(crate) use workflow_runs::{ClaimedWorkflowRun, WorkflowActionResult};
 pub(crate) use workspace_navigation::{ExploreNavigationEntry, ExploreNavigationItem};
@@ -805,10 +806,22 @@ impl CatalogRepository {
         &self,
         mut transaction: Transaction<'_, Postgres>,
         changes: Vec<AuditEventChange>,
+        event: NewDomainEvent,
+    ) -> Result<(), RepositoryError> {
+        self.stage_entity_mutation(&mut transaction, changes, event)
+            .await?;
+        transaction.commit().await?;
+        Ok(())
+    }
+
+    pub(in crate::repository) async fn stage_entity_mutation(
+        &self,
+        transaction: &mut Transaction<'_, Postgres>,
+        changes: Vec<AuditEventChange>,
         mut event: NewDomainEvent,
     ) -> Result<(), RepositoryError> {
         let retained_role = self
-            .reconcile_entity_publication(&mut transaction, event.aggregate_id, "entity_changed")
+            .reconcile_entity_publication(transaction, event.aggregate_id, "entity_changed")
             .await?;
         let publication_metadata = match retained_role {
             Some(role_code) => {
@@ -833,10 +846,7 @@ impl CatalogRepository {
             }
         };
         if let Some(audit_event_id) = self
-            .write_audit_event_with_publication_metadata(
-                &mut transaction,
-                Some(publication_metadata),
-            )
+            .write_audit_event_with_publication_metadata(transaction, Some(publication_metadata))
             .await?
         {
             for change in changes {
@@ -852,12 +862,11 @@ impl CatalogRepository {
                     .bind(change.change_kind)
                     .bind(change.before_value)
                     .bind(change.after_value)
-                    .execute(&mut *transaction)
+                    .execute(&mut **transaction)
                     .await?;
             }
         }
-        self.enqueue_event(&mut transaction, event).await?;
-        transaction.commit().await?;
+        self.enqueue_event(transaction, event).await?;
         Ok(())
     }
 

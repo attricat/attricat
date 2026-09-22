@@ -6,7 +6,7 @@ use support::*;
 async fn search_bulk_hydrates_direct_related_table_previews_without_multiplying_sources(
     pool: PgPool,
 ) {
-    let (base_url, server) = start_server(pool).await;
+    let (base_url, server) = start_server(pool.clone()).await;
     let client = authenticated_client();
     let category = create_blueprint(
         &client,
@@ -33,6 +33,17 @@ value_type = "string"
     .await;
     let first_category = create_entity(&client, &base_url, &category).await;
     let second_category = create_entity(&client, &base_url, &category).await;
+    sqlx::query("UPDATE entities SET system_tags=ARRAY['attricat.sample']::text[] WHERE id=$1")
+        .bind(
+            first_category["id"]
+                .as_str()
+                .unwrap()
+                .parse::<uuid::Uuid>()
+                .unwrap(),
+        )
+        .execute(&pool)
+        .await
+        .unwrap();
     let context: Value = client
         .post(format!("{base_url}/contexts"))
         .json(&json!({ "code": "regional", "data": {} }))
@@ -216,6 +227,7 @@ value_type = "integer"
         category["blueprint"]["version"]
     );
     assert_eq!(first_target["display"]["default"], "First");
+    assert_eq!(first_target["is_sample"], true);
     assert_eq!(first_target["preview"]["default"]["sku"], "A-1");
     assert_eq!(
         first_target["preview"]["regional"]["name"],

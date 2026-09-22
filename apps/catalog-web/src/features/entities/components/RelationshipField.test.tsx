@@ -29,7 +29,7 @@ const attribute = {
 };
 
 const page = (
-  items: { id: string; label: string }[],
+  items: { id: string; label: string; isSample?: boolean }[],
   nextCursor: string | null,
 ): EntitySearchResponse => ({
   blueprint: {
@@ -44,10 +44,11 @@ const page = (
     attributes: [],
     table_path_attributes: [],
   },
-  items: items.map(({ id, label }) => ({
+  items: items.map(({ id, label, isSample = false }) => ({
     id,
     blueprint_version: 1,
     schema_outdated: false,
+    is_sample: isSample,
     display: { default: label },
     match_explanations: [],
     preview: {},
@@ -117,6 +118,7 @@ describe('RelationshipField', () => {
           id,
           blueprint_id: blueprintId,
           blueprint_version: 1,
+          is_sample: false,
         },
         context: { default: { name: `Product ${id.slice(-2)}` } },
       }),
@@ -148,7 +150,12 @@ describe('RelationshipField', () => {
       table_path_attributes: [],
     });
     vi.mocked(getEntityPreview).mockResolvedValue({
-      entity: { id: firstId, blueprint_id: blueprintId, blueprint_version: 1 },
+      entity: {
+        id: firstId,
+        blueprint_id: blueprintId,
+        blueprint_version: 1,
+        is_sample: false,
+      },
       context: {},
     });
     const onChange = renderField(vi.fn(), attribute, firstId, true);
@@ -213,6 +220,17 @@ describe('RelationshipField', () => {
       query: 'later',
       signal: expect.any(AbortSignal),
     });
+  });
+
+  it('labels sample relationship options', async () => {
+    vi.mocked(searchEntities).mockResolvedValue(
+      page([{ id: firstId, label: 'First product', isSample: true }], null),
+    );
+    renderField();
+    const user = userEvent.setup();
+
+    await openSelector(user);
+    expect(await screen.findByText('Sample')).toBeTruthy();
   });
 
   it('discards draft changes when the modal is closed', async () => {

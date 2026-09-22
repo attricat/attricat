@@ -6,7 +6,7 @@ import UpgradeOutlinedIcon from '@mui/icons-material/UpgradeOutlined';
 import ViewListOutlinedIcon from '@mui/icons-material/ViewListOutlined';
 import VisibilityOutlinedIcon from '@mui/icons-material/VisibilityOutlined';
 import WarningAmberOutlinedIcon from '@mui/icons-material/WarningAmberOutlined';
-import { Alert, Tooltip, Typography } from '@mui/material';
+import { Alert, Box, Chip, Tooltip, Typography } from '@mui/material';
 import { createElement, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { listContexts } from '../contexts/api';
@@ -82,18 +82,23 @@ export const EditEntityPage = ({ entityId }: { entityId: string }) => {
       <PageHeader
         actions={
           entityForm.data && (
-            <Tooltip title={entityForm.data.blueprint.blueprint.name}>
-              <RouterButton
-                params={{ blueprintId: entityForm.data.entity.blueprint_id }}
-                size="small"
-                startIcon={<BlueprintIcon />}
-                to="/manage/blueprints/$blueprintId"
-                variant="text"
-              >
-                {t('entities.blueprint')}:{' '}
-                {entityForm.data.blueprint.blueprint.name}
-              </RouterButton>
-            </Tooltip>
+            <Box sx={{ alignItems: 'center', display: 'flex', gap: 1 }}>
+              {entityForm.data.entity.is_sample && (
+                <Chip color="info" label={t('entities.sample')} size="small" />
+              )}
+              <Tooltip title={entityForm.data.blueprint.blueprint.name}>
+                <RouterButton
+                  params={{ blueprintId: entityForm.data.entity.blueprint_id }}
+                  size="small"
+                  startIcon={<BlueprintIcon />}
+                  to="/manage/blueprints/$blueprintId"
+                  variant="text"
+                >
+                  {t('entities.blueprint')}:{' '}
+                  {entityForm.data.blueprint.blueprint.name}
+                </RouterButton>
+              </Tooltip>
+            </Box>
           )
         }
         eyebrow={

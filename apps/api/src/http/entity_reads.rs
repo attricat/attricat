@@ -102,6 +102,7 @@ pub(super) async fn get_preview(
             id: entity.id,
             blueprint_id: entity.blueprint_id,
             blueprint_version: entity.blueprint_version,
+            is_sample: entity.is_sample,
         },
         context,
     }))
