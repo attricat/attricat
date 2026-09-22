@@ -493,8 +493,8 @@ configuration, or template values.
 
 ### Optional sample data
 
-The [optional sample-data architecture decision](solution-pack-sample-data.md)
-is approved as a prerequisite for later implementation. It requires explicit
+The implemented [optional sample-data contract](solution-pack-sample-data.md)
+requires explicit
 `--include-sample-data` selection, synthetic author attestation plus fail-closed
 syntactic screening and trusted review, durable same-release identity
 reservation with original-plan retry and strictly-newer lineage, private value
@@ -787,9 +787,9 @@ starter packs:
 7. administrator-only CLI commands for plan review and apply; and
 8. export to an untrusted draft.
 
-Extension dependencies, permission review, configuration templates, and Explore
-navigation defaults follow the core planner. Other workspace/layout defaults,
-successor/update planning, implementation of the approved sample-data contract,
-and curated Ecommerce and Warehouse packs build on those contracts. Pack archives
-continue to be supplied explicitly as `.tar.zst` files; no repository-access path
-is planned.
+Extension requirements, configuration templates, Explore navigation defaults,
+presentation assets, and the bounded optional sample-data contract now build on
+the core planner. Other workspace/layout defaults, extension lifecycle approvals,
+blueprint successor/update planning, export, and curated Ecommerce and Warehouse
+packs remain future work. Pack archives continue to be supplied explicitly as
+`.tar.zst` files; no repository-access path is planned.

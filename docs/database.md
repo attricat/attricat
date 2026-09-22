@@ -104,13 +104,14 @@ not own resources and cannot uninstall a pack.
 Extension requirement evaluation is implemented, but extension installation,
 upgrade, configuration, grants, enablement, removal, and pack ownership remain
 outside solution-pack application. Generic settings beyond bounded Explore
-navigation and extension layout and export remain deferred. The optional
-sample-data architecture contract is approved, but its runtime and persistence
-are still deferred. That future persistence must durably reserve the exact
-workspace ID, pack ID, pack SemVer, archive digest, and canonical sample
-declaration digest tuple for the first sample-selected plan, never release it
-for a second plan, and make same-release idempotency a retry of the original
-plan/application. `--from-application` remains limited to a strictly newer
+navigation and extension layout, and export, remain deferred. Optional
+sample-data persistence durably reserves the
+exact workspace ID, pack ID, pack SemVer, archive digest, and canonical sample
+declaration digest tuple for the first sample-selected plan, never releases it
+for a second plan, and makes same-release idempotency a retry of the original
+plan/application. Private canonical sample staging is scrubbed on terminal
+completion, invalidation, abandonment, or expiry while bounded non-value lineage
+evidence remains. `--from-application` remains limited to a strictly newer
 SemVer release. Solution packs are installed only from administrator-uploaded
 `.tar.zst` archives; the server does not access source repositories or fetch
 remote pack releases.

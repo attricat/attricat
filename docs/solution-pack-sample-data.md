@@ -5,7 +5,7 @@
 
 ## Decision
 
-A pack may eventually contain one optional synthetic sample-data declaration.
+A pack may contain one optional synthetic sample-data declaration.
 An administrator must select it explicitly with `--include-sample-data` while
 creating a plan. It is never selected by the archive, by inspection, by a
 pack-defined default, or by `apply`; apply continues to accept only an immutable
