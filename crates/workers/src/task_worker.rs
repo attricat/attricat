@@ -144,6 +144,8 @@ async fn run(
     let mut running = JoinSet::new();
     let mut next_kind = 0;
     let mut stopping = false;
+    let mut metrics_tick = time::interval(Duration::from_secs(5));
+    metrics_tick.set_missed_tick_behavior(time::MissedTickBehavior::Skip);
     loop {
         if stopping {
             break;
@@ -191,6 +193,11 @@ async fn run(
                     tracing::error!(error = %error, "task worker task panicked");
                 }
             }
+            _ = metrics_tick.tick() => {
+                if let Err(error) = record_queue_metrics(&repository, &kinds).await {
+                    tracing::warn!(%error, "could not refresh task queue metrics");
+                }
+            }
             _ = time::sleep(config.poll_interval) => {}
         }
     }
@@ -209,6 +216,44 @@ async fn run(
         );
         running.abort_all();
         while running.join_next().await.is_some() {}
+    }
+    Ok(())
+}
+
+async fn record_queue_metrics(
+    repository: &CatalogRepository,
+    kinds: &[TaskKind],
+) -> Result<(), TaskError> {
+    const STATUSES: [&str; 3] = ["queued", "leased", "dead_letter"];
+    for kind in kinds {
+        for status in STATUSES {
+            gauge!("catalog_task_queue_depth", "kind" => kind.as_str(), "status" => status)
+                .set(0.0);
+            gauge!("catalog_task_queue_oldest_age_seconds", "kind" => kind.as_str(), "status" => status).set(0.0);
+            gauge!("catalog_task_queue_retries", "kind" => kind.as_str(), "status" => status)
+                .set(0.0);
+        }
+    }
+    for (kind, status, count, oldest_age, retries) in repository.task_queue_health(kinds).await? {
+        gauge!("catalog_task_queue_depth", "kind" => kind.clone(), "status" => status.clone())
+            .set(count as f64);
+        gauge!("catalog_task_queue_oldest_age_seconds", "kind" => kind.clone(), "status" => status.clone())
+            .set(oldest_age.max(0.0));
+        gauge!("catalog_task_queue_retries", "kind" => kind, "status" => status)
+            .set(retries as f64);
+    }
+
+    const OPERATION_STATUSES: [&str; 3] = ["pending", "leased", "dead_letter"];
+    for status in OPERATION_STATUSES {
+        gauge!("catalog_extension_operation_runs", "status" => status).set(0.0);
+        gauge!("catalog_extension_operation_oldest_age_seconds", "status" => status).set(0.0);
+        gauge!("catalog_extension_operation_retries", "status" => status).set(0.0);
+    }
+    for (status, count, oldest_age, retries) in repository.extension_operation_health().await? {
+        gauge!("catalog_extension_operation_runs", "status" => status.clone()).set(count as f64);
+        gauge!("catalog_extension_operation_oldest_age_seconds", "status" => status.clone())
+            .set(oldest_age.max(0.0));
+        gauge!("catalog_extension_operation_retries", "status" => status).set(retries as f64);
     }
     Ok(())
 }

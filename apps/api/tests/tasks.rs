@@ -77,6 +77,45 @@ async fn task_enqueue_is_transactional_and_deduplicated(pool: PgPool) {
 }
 
 #[sqlx::test]
+async fn task_queue_health_reports_only_actionable_statuses_without_payloads(pool: PgPool) {
+    let repository = CatalogRepository::system(pool.clone());
+    let workspace_id = workspace(&pool, "tasks-health").await;
+    let subject_id = Uuid::new_v4();
+    let mut transaction = pool.begin().await.unwrap();
+    let task_id = repository
+        .enqueue_task(&mut transaction, insert(workspace_id, subject_id))
+        .await
+        .unwrap()
+        .unwrap();
+    transaction.commit().await.unwrap();
+
+    let health = repository
+        .task_queue_health(&[TaskKind::RuleRunV1])
+        .await
+        .unwrap();
+    assert!(health.iter().any(|(kind, status, count, age, retries)| {
+        kind == TaskKind::RuleRunV1.as_str()
+            && status == "queued"
+            && *count == 1
+            && *age >= 0.0
+            && *retries == 0
+    }));
+
+    sqlx::query("UPDATE tasks SET status='succeeded',completed_at=now() WHERE id=$1")
+        .bind(task_id)
+        .execute(&pool)
+        .await
+        .unwrap();
+    assert!(
+        repository
+            .task_queue_health(&[TaskKind::RuleRunV1])
+            .await
+            .unwrap()
+            .is_empty()
+    );
+}
+
+#[sqlx::test]
 async fn queued_cancellation_and_dead_letter_replay_obey_kind_policy(pool: PgPool) {
     let repository = CatalogRepository::system(pool.clone());
     let workspace_id = workspace(&pool, "tasks-replay").await;

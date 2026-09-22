@@ -11,5 +11,6 @@
 /apps/docs/dist
 apps/catalog-web/test-results/
 apps/catalog-web/playwright-report/
+/deployment-evidence/
 
 apps/catalog-web/e2e/.auth.json

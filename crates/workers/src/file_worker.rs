@@ -327,12 +327,29 @@ impl FileWorker {
             .increment(1);
         Ok(())
     }
-    async fn record_metrics(&self) -> Result<(), sqlx::Error> {
-        let queued: i64 = sqlx::query_scalar(
-            "SELECT COUNT(*) FROM file_processing_jobs WHERE status IN ('queued','retryable')",
+    pub async fn record_metrics(&self) -> Result<(), sqlx::Error> {
+        const STATUSES: [&str; 4] = ["queued", "running", "retryable", "failed"];
+        for status in STATUSES {
+            gauge!("catalog_file_worker_queue_depth", "status" => status).set(0.0);
+            gauge!("catalog_file_worker_oldest_age_seconds", "status" => status).set(0.0);
+            gauge!("catalog_file_worker_retries", "status" => status).set(0.0);
+        }
+        let rows: Vec<(String, i64, f64, i64)> = sqlx::query_as(
+            "SELECT status,count(*)::bigint,COALESCE(extract(epoch FROM (clock_timestamp()-min(created_at))),0)::float8,COALESCE(sum(GREATEST(attempts-1,0)),0)::bigint FROM file_processing_jobs WHERE status IN ('queued','running','retryable','failed') GROUP BY status",
         )
-        .fetch_one(&self.pool)
+        .fetch_all(&self.pool)
         .await?;
+        let mut queued = 0_i64;
+        for (status, count, oldest_age, retries) in rows {
+            if matches!(status.as_str(), "queued" | "retryable") {
+                queued += count;
+            }
+            gauge!("catalog_file_worker_queue_depth", "status" => status.clone()).set(count as f64);
+            gauge!("catalog_file_worker_oldest_age_seconds", "status" => status.clone())
+                .set(oldest_age.max(0.0));
+            gauge!("catalog_file_worker_retries", "status" => status).set(retries as f64);
+        }
+        // Compatibility aggregate retained for existing dashboards.
         gauge!("catalog_file_worker_jobs_queued").set(queued as f64);
         Ok(())
     }

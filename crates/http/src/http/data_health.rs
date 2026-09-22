@@ -28,6 +28,10 @@ pub(super) async fn liveness() -> Json<Value> {
 pub(super) async fn readiness(State(state): State<AppState>) -> Response {
     let database = state.repository.readiness().await;
     let storage = state.object_store.readiness().await;
+    metrics::gauge!("catalog_database_ready").set(if database.is_ok() { 1.0 } else { 0.0 });
+    // Object-store readiness is also recorded at the storage boundary, but set
+    // it here so every readiness response has a complete dependency snapshot.
+    metrics::gauge!("catalog_object_store_ready").set(if storage.is_ok() { 1.0 } else { 0.0 });
     if database.is_ok() && storage.is_ok() {
         (StatusCode::OK, Json(json!({ "status": "ready" }))).into_response()
     } else {

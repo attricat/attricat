@@ -57,6 +57,15 @@ change summary, use a least-privileged provider account, and only grant
 [agent configuration](docs/configuration.md#agent-provider) and
 [agent API contract](docs/api.md#agents) for limits and operational behavior.
 
+## Production image
+
+Attricat ships as one immutable image with `migrate`, `api`, and `file-worker`
+commands. The API command also serves the compiled web UI; PostgreSQL, private
+S3-compatible storage, SMTP, and monitoring remain external services. See
+[`deploy/compose.yml`](deploy/compose.yml), the matching production environment
+example, and [Production operations](docs/operations.md) for rollout, backup,
+restore, and rollback.
+
 ## Documentation
 
 - Public documentation site: `apps/docs` (run with `pnpm --dir apps/docs dev`)
