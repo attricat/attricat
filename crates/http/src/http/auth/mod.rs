@@ -174,7 +174,7 @@ pub(super) async fn authorize(
     let matched = request
         .extensions()
         .get::<axum::extract::MatchedPath>()
-        .map(|matched| matched.as_str())
+        .map(|matched| super::canonical_route(matched.as_str()))
         .unwrap_or(path);
     // An invitee can have no membership yet, so acceptance deliberately skips
     // the active-membership policy while retaining normal credential validation.

@@ -90,7 +90,7 @@ services:
     depends_on:
       migrate:
         condition: service_completed_successfully
-    ports: ["127.0.0.1:3000:3000"]
+    ports: ["${ATTRICAT_BIND_IP:-0.0.0.0}:3000:3000"]
     healthcheck:
       test: ["CMD", "curl", "--fail", "--silent", "http://127.0.0.1:3000/health/ready"]
       interval: 2s

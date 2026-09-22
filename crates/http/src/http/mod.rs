@@ -202,6 +202,13 @@ async fn request_limits(
     }
 }
 
+fn canonical_route(route: &str) -> &str {
+    route
+        .strip_prefix("/api")
+        .filter(|suffix| suffix.starts_with('/'))
+        .unwrap_or(route)
+}
+
 async fn server_timing(
     State(state): State<AppState>,
     mut request: axum::extract::Request,
@@ -211,7 +218,7 @@ async fn server_timing(
     let route = request
         .extensions()
         .get::<axum::extract::MatchedPath>()
-        .map(|path| path.as_str().to_owned())
+        .map(|path| canonical_route(path.as_str()).to_owned())
         .unwrap_or_else(|| "unmatched".to_owned());
     let timing = RequestTiming::new(
         state.devtools_enabled && EXPLORER_TIMING_ROUTES.contains(&route.as_str()),
@@ -847,6 +854,19 @@ async fn metrics(State(state): State<AppState>) -> Response {
 #[cfg(test)]
 mod timing_tests {
     use super::*;
+
+    #[test]
+    fn api_aliases_use_the_canonical_route_for_middleware() {
+        assert_eq!(
+            canonical_route("/api/blueprints/{blueprint_id}"),
+            "/blueprints/{blueprint_id}"
+        );
+        assert_eq!(
+            canonical_route("/blueprints/{blueprint_id}"),
+            "/blueprints/{blueprint_id}"
+        );
+        assert_eq!(canonical_route("/apiary"), "/apiary");
+    }
 
     #[test]
     fn development_phases_are_gated_and_allowlisted() {

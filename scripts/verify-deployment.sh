@@ -9,8 +9,10 @@ cd "$root"
 compose=(docker compose -f deploy/compose.ci.yml)
 image="${ATTRICAT_IMAGE:-attricat:ci}"
 evidence="${DEPLOYMENT_EVIDENCE_DIR:-deployment-evidence}"
+session_cookies="$(mktemp)"
 mkdir -p "$evidence"
 cleanup() {
+  rm -f "$session_cookies"
   "${compose[@]}" down --volumes --remove-orphans >/dev/null 2>&1 || true
 }
 trap cleanup EXIT
@@ -64,6 +66,13 @@ assert_container_hardening api
 assert_container_hardening file-worker
 curl --fail --silent http://127.0.0.1:3000/ | grep -qi '<div id="root"'
 curl --fail --silent http://127.0.0.1:3000/api/health/ready | grep -q ready
+curl --fail --silent --cookie-jar "$session_cookies" \
+  --header 'content-type: application/json' \
+  --data '{"login_identifier":"default.local","email":"owner@example.test","password":"test-release-password"}' \
+  http://127.0.0.1:3000/api/auth/login >/dev/null
+for path in auth/session blueprints contexts workspace/navigation/sidebar extensions/runtime; do
+  curl --fail --silent --cookie "$session_cookies" "http://127.0.0.1:3000/api/$path" >/dev/null
+done
 assert_status 401 http://127.0.0.1:3001/metrics
 curl --fail --silent -H 'Authorization: Bearer release-test-token' http://127.0.0.1:3001/metrics \
   | grep -q catalog_file_worker_queue_depth
@@ -109,6 +118,7 @@ api_container="$(ATTRICAT_IMAGE="$rollback_image" "${compose[@]}" ps -q api)"
   echo "rollback_fixture_version=$rollback_version"
   echo "rollback_image_id=$rollback_image_id"
   echo 'smoke=passed'
+  echo 'api_alias_authorization=passed'
   echo 'dependency_outages=passed'
   echo 'runtime_utilities_absent=passed'
   echo 'rollback_seam=passed'

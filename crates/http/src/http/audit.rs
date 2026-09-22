@@ -35,7 +35,7 @@ pub(super) fn request_context(
     let route = request
         .extensions()
         .get::<axum::extract::MatchedPath>()
-        .map(|path| path.as_str().to_owned())
+        .map(|path| super::canonical_route(path.as_str()).to_owned())
         .unwrap_or_else(|| "unmatched".to_owned());
     let method = request.method().clone();
     let (authorization_scope, target) = audit_context(&method, &route, request.uri().path());
