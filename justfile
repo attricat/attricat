@@ -38,6 +38,36 @@ deny:
 
 ci: fmt-check check clippy test-rust deny
 
+# Build the production application image used by the local release stack.
+production-build image="attricat:local":
+    docker build --build-arg VCS_REF="$(git rev-parse HEAD)" --build-arg VERSION="$(git describe --always --dirty)" -t "{{image}}" .
+
+# Start the production image with disposable PostgreSQL, RustFS, and Mailpit services.
+production-up image="attricat:local":
+    ATTRICAT_IMAGE="{{image}}" docker compose -f deploy/compose.ci.yml up -d
+
+# Build the production image and start the local release stack.
+production-start image="attricat:local":
+    just production-build "{{image}}"
+    just production-up "{{image}}"
+
+# Follow logs from the local production stack.
+production-logs:
+    docker compose -f deploy/compose.ci.yml logs -f
+
+# Remove the local production stack and all of its disposable data.
+production-down:
+    docker compose -f deploy/compose.ci.yml down --volumes --remove-orphans
+
+# Exercise an already-built image through the complete release-path verification.
+production-verify image="attricat:local":
+    ATTRICAT_IMAGE="{{image}}" SKIP_IMAGE_BUILD=true scripts/verify-deployment.sh
+
+# Build and exercise the local production image.
+production-test image="attricat:local":
+    just production-build "{{image}}"
+    just production-verify "{{image}}"
+
 sql: _assert-env
     docker compose --env-file .env --project-name catalog-$POSTGRES_PORT -f apps/api/compose.yml exec postgres psql --username=postgres --dbname=catalog
 
