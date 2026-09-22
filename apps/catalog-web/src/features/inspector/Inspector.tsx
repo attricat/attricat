@@ -204,8 +204,9 @@ export const Inspector = () => {
             backgroundColor: 'rgba(255, 255, 255, 0.9)',
             bottom: 16,
             color: 'text.secondary',
+            left: '50%',
             position: 'fixed',
-            right: 16,
+            transform: 'translateX(-50%)',
             zIndex: (theme) => theme.zIndex.modal + 1,
             '&:hover': {
               backgroundColor: 'rgba(21, 101, 192, 0.14)',

@@ -724,6 +724,7 @@ pub fn router(state: AppState) -> Router {
             "/v1/entities/{entity_id}",
             get(entities::get_entity_form).put(entities::update_entity_form),
         )
+        .route("/agent/smart-fill", post(entities::smart_fill_entity_form))
         .route(
             "/v1/entities/{entity_id}/incoming-relationships",
             post(entities::list_incoming_relationships),

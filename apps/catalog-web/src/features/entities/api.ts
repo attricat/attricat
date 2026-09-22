@@ -15,6 +15,8 @@ import {
   getBlueprintRevisionRequestSchema,
   incomingRelationshipsPageSchema,
   resolvedEntityPreviewSchema,
+  smartFillEntityFormRequestSchema,
+  smartFillEntityFormResponseSchema,
   searchEntitiesRequestSchema,
   migrateEntityRequestSchema,
   updateEntityRequestSchema,
@@ -186,6 +188,17 @@ export const createEntity = (
     body: JSON.stringify(payload),
   });
 };
+export const smartFillEntityForm = (
+  input: z.input<typeof smartFillEntityFormRequestSchema>,
+) => {
+  const payload = smartFillEntityFormRequestSchema.parse(input);
+  return request('/api/agent/smart-fill', smartFillEntityFormResponseSchema, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  });
+};
+
 export const updateEntity = (
   id: string,
   input: z.input<typeof updateEntityRequestSchema>,

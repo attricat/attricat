@@ -585,6 +585,15 @@ export const createEntityRequestSchema = z.object({
   system_tags: z.array(z.string()).optional(),
   system_metadata: jsonObjectSchema.optional(),
 });
+export const smartFillEntityFormRequestSchema = z.object({
+  entity_id: uuidSchema,
+  context_id: uuidSchema.nullable(),
+  is_default_context: z.boolean(),
+  content: z.string().trim().min(1).max(32_768),
+});
+export const smartFillEntityFormResponseSchema = z.object({
+  fields: z.record(z.string(), z.string()),
+});
 export const updateEntityRequestSchema = z.object({
   values: z.array(newAttributeValueSchema),
   relationships: z.array(relationshipTargetsSchema),
