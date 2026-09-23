@@ -45,6 +45,7 @@ export const WorkspaceNavigationSection = ({
   const [entries, setEntries] = useState<
     ExploreNavigationEntry[] | undefined
   >();
+  const [roleDrafts, setRoleDrafts] = useState<Record<string, string>>({});
   const displayed = entries ?? navigation.data ?? [];
   const save = useMutation({
     mutationFn: updateExploreNavigation,
@@ -60,6 +61,7 @@ export const WorkspaceNavigationSection = ({
         queryKey: workspaceQueryKeys.sidebarExploreNavigation(),
       });
       setEntries(undefined);
+      setRoleDrafts({});
     },
   });
   if (!canManage)
@@ -85,15 +87,23 @@ export const WorkspaceNavigationSection = ({
             <TextField
               disabled={save.isPending}
               label={t('workspace.navigationBlueprint')}
-              onChange={(event) =>
+              onChange={(event) => {
+                setRoleDrafts((drafts) => {
+                  const next = { ...drafts };
+                  const previous = next[entry.blueprint_code];
+                  delete next[entry.blueprint_code];
+                  if (previous !== undefined)
+                    next[event.target.value] = previous;
+                  return next;
+                });
                 setEntries(
                   displayed.map((item, position) =>
                     position === index
                       ? { ...item, blueprint_code: event.target.value }
                       : item,
                   ),
-                )
-              }
+                );
+              }}
               select
               value={entry.blueprint_code}
               sx={{ minWidth: 250 }}
@@ -118,31 +128,44 @@ export const WorkspaceNavigationSection = ({
                 roles: (roles.data ?? []).map((role) => role.code).join(', '),
               })}
               label={t('workspace.navigationVisibleRoles')}
-              onChange={(event) =>
+              onChange={(event) => {
+                const draft = event.target.value;
+                setRoleDrafts((current) => ({
+                  ...current,
+                  [entry.blueprint_code]: draft,
+                }));
                 setEntries(
                   displayed.map((item, position) =>
                     position === index
                       ? {
                           ...item,
-                          visible_to_role_codes: event.target.value
+                          visible_to_role_codes: draft
                             .split(',')
                             .map((code) => code.trim())
                             .filter(Boolean),
                         }
                       : item,
                   ),
-                )
+                );
+              }}
+              value={
+                roleDrafts[entry.blueprint_code] ??
+                entry.visible_to_role_codes.join(', ')
               }
-              value={entry.visible_to_role_codes.join(', ')}
               sx={{ minWidth: 250 }}
             />
             <Button
               disabled={save.isPending}
-              onClick={() =>
+              onClick={() => {
+                setRoleDrafts((drafts) => {
+                  const next = { ...drafts };
+                  delete next[entry.blueprint_code];
+                  return next;
+                });
                 setEntries(
                   displayed.filter((_, position) => position !== index),
-                )
-              }
+                );
+              }}
             >
               {t('workspace.remove')}
             </Button>

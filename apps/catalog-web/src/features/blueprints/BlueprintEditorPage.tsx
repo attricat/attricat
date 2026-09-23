@@ -177,7 +177,10 @@ export const BlueprintEditorPage = ({
         />
         <Stack direction="row" spacing={1}>
           {!blueprintId && (
-            <Button onClick={() => setTemplateDialogOpen(true)}>
+            <Button
+              disabled={save.isPending}
+              onClick={() => setTemplateDialogOpen(true)}
+            >
               {t('blueprints.examples')}
             </Button>
           )}
@@ -321,7 +324,9 @@ export const BlueprintEditorPage = ({
           defaultLanguage="toml"
           height="100%"
           language="toml"
-          onChange={(value) => setEditedDefinition(value ?? '')}
+          onChange={(value) => {
+            if (!savePendingRef.current) setEditedDefinition(value ?? '');
+          }}
           onMount={(editor, monaco) => {
             editor.addCommand(
               monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyS,
@@ -338,6 +343,7 @@ export const BlueprintEditorPage = ({
           options={{
             automaticLayout: true,
             minimap: { enabled: false },
+            readOnly: save.isPending,
             scrollBeyondLastLine: false,
             tabSize: 2,
             wordWrap: 'on',
