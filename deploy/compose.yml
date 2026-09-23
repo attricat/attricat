@@ -1,0 +1,51 @@
+name: attricat
+
+x-app: &app
+  image: ${ATTRICAT_IMAGE:?Set ATTRICAT_IMAGE to an immutable tag or digest}
+  env_file:
+    - path: ${ATTRICAT_ENV_FILE:-.env.production}
+      required: true
+  restart: unless-stopped
+  read_only: true
+  tmpfs:
+    - /tmp:size=256m,mode=1777
+  security_opt:
+    - no-new-privileges:true
+
+services:
+  migrate:
+    <<: *app
+    command: ["migrate"]
+    restart: "no"
+
+  api:
+    <<: *app
+    command: ["api"]
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    ports:
+      - "${ATTRICAT_BIND_IP:-127.0.0.1}:${ATTRICAT_PORT:-3000}:3000"
+    healthcheck:
+      test: ["CMD", "curl", "--fail", "--silent", "http://127.0.0.1:3000/health/ready"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 15s
+
+  file-worker:
+    <<: *app
+    command: ["file-worker"]
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    environment:
+      FILE_WORKER_OPERATIONS_BIND_ADDR: 0.0.0.0:3001
+    expose:
+      - "3001"
+    healthcheck:
+      test: ["CMD", "curl", "--fail", "--silent", "http://127.0.0.1:3001/health/ready"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 10s

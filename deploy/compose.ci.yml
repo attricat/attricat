@@ -1,0 +1,115 @@
+name: attricat-release-test
+
+x-app: &app
+  read_only: true
+  tmpfs:
+    - /tmp:size=256m,mode=1777
+  security_opt:
+    - no-new-privileges:true
+
+x-environment: &environment
+  DATABASE_URL: postgres://postgres:postgres@postgres:5432/catalog
+  CATALOG_AUTO_MIGRATE: "false"
+  CATALOG_BOOTSTRAP_OWNER_EMAIL: owner@example.test
+  CATALOG_BOOTSTRAP_OWNER_PASSWORD: test-release-password
+  SESSION_COOKIE_SECURE: "false"
+  CATALOG_DEVTOOLS: "false"
+  S3_ENDPOINT: http://rustfs:9000
+  S3_REGION: us-east-1
+  S3_BUCKET: catalog-files
+  S3_ACCESS_KEY_ID: catalog-ci
+  S3_SECRET_ACCESS_KEY: catalog-ci-secret
+  S3_FORCE_PATH_STYLE: "true"
+  S3_UPLOAD_TIMEOUT_SECONDS: "10"
+  S3_DOWNLOAD_TIMEOUT_SECONDS: "10"
+  SMTP_HOST: mailpit
+  SMTP_PORT: "1025"
+  SMTP_TLS_MODE: disabled
+  MAIL_FROM: Catalog <no-reply@example.test>
+  PASSWORD_RESET_URL: http://127.0.0.1:3000/password-reset/confirm
+  WORKSPACE_INVITATION_URL: http://127.0.0.1:3000/invitations/accept
+  WORKSPACE_ONBOARDING_URL: http://127.0.0.1:3000/onboarding
+
+services:
+  postgres:
+    image: postgres:18-alpine
+    environment:
+      POSTGRES_DB: catalog
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_USER: postgres
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d catalog"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+  rustfs:
+    image: rustfs/rustfs:1.0.0-beta.12
+    command: ["/data"]
+    environment:
+      RUSTFS_ACCESS_KEY: catalog-ci
+      RUSTFS_SECRET_KEY: catalog-ci-secret
+    healthcheck:
+      test: ["CMD-SHELL", "curl --fail --silent http://127.0.0.1:9000/health/live >/dev/null"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+  rustfs-init:
+    image: amazon/aws-cli:2.31.0
+    depends_on:
+      rustfs:
+        condition: service_healthy
+    environment:
+      AWS_ACCESS_KEY_ID: catalog-ci
+      AWS_SECRET_ACCESS_KEY: catalog-ci-secret
+      AWS_DEFAULT_REGION: us-east-1
+    entrypoint: ["/bin/sh", "-ec"]
+    command:
+      - |
+        for bucket in catalog-files; do
+          aws --endpoint-url http://rustfs:9000 s3api head-bucket --bucket "$$bucket" >/dev/null 2>&1 ||
+            aws --endpoint-url http://rustfs:9000 s3api create-bucket --bucket "$$bucket"
+        done
+  mailpit:
+    image: axllent/mailpit:v1.28
+
+  migrate:
+    <<: *app
+    image: ${ATTRICAT_IMAGE:-attricat:ci}
+    command: ["migrate"]
+    environment: *environment
+    depends_on:
+      postgres:
+        condition: service_healthy
+      rustfs-init:
+        condition: service_completed_successfully
+  api:
+    <<: *app
+    image: ${ATTRICAT_IMAGE:-attricat:ci}
+    command: ["api"]
+    environment: *environment
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    ports: ["${ATTRICAT_BIND_IP:-0.0.0.0}:3000:3000"]
+    healthcheck:
+      test: ["CMD", "curl", "--fail", "--silent", "http://127.0.0.1:3000/health/ready"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+  file-worker:
+    <<: *app
+    image: ${ATTRICAT_IMAGE:-attricat:ci}
+    command: ["file-worker"]
+    environment:
+      <<: *environment
+      FILE_WORKER_OPERATIONS_BIND_ADDR: 0.0.0.0:3001
+      FILE_WORKER_METRICS_TOKEN: release-test-token
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    ports: ["127.0.0.1:3001:3001"]
+    healthcheck:
+      test: ["CMD", "curl", "--fail", "--silent", "http://127.0.0.1:3001/health/ready"]
+      interval: 2s
+      timeout: 3s
+      retries: 30

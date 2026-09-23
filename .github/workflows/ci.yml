@@ -43,3 +43,44 @@ jobs:
       - run: cargo clippy --locked --workspace --all-targets -- -D warnings
       - run: cargo test --locked --workspace
       - run: cargo deny check
+
+  release-path:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate deployment definitions
+        env:
+          ATTRICAT_IMAGE: attricat:ci
+          ATTRICAT_ENV_FILE: .env.production.example
+        run: |
+          bash -n scripts/docker-entrypoint.sh scripts/operations.sh scripts/verify-deployment.sh
+          docker compose -f deploy/compose.yml config >/dev/null
+          docker compose -f deploy/compose.ci.yml config >/dev/null
+      - name: Build and exercise release image and rollback
+        env:
+          ATTRICAT_IMAGE: attricat:ci
+        run: scripts/verify-deployment.sh
+      - name: Publish immutable commit image
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        env:
+          GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          echo "$GHCR_TOKEN" | docker login ghcr.io --username "$GITHUB_ACTOR" --password-stdin
+          target="ghcr.io/${GITHUB_REPOSITORY,,}:$GITHUB_SHA"
+          docker tag attricat:ci "$target"
+          docker push "$target"
+          docker image inspect --format 'published={{index .RepoDigests 0}}' "$target" | tee -a deployment-evidence/result.txt
+      - name: Upload deployment evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: deployment-evidence-${{ github.sha }}
+          path: |
+            deployment-evidence/
+            deploy/compose.yml
+            deploy/compose.ci.yml
+          if-no-files-found: warn

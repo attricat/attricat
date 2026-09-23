@@ -1,0 +1,11 @@
+.git
+.env
+.catalog-worktree
+node_modules
+**/node_modules
+**/dist
+target
+coverage
+playwright-report
+test-results
+*.log

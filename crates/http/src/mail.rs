@@ -72,6 +72,15 @@ impl SmtpMailDelivery {
     ) -> Result<Self, MailError> {
         let from = from.parse().map_err(|_| MailError::Configuration)?;
         let mode = SmtpTlsMode::parse(tls_mode)?;
+        let credentials = match (username, password) {
+            (Some(username), Some(password)) if mode != SmtpTlsMode::Disabled => {
+                Some(Credentials::new(username, password))
+            }
+            (None, None) => None,
+            // Never silently drop a partial credential and never permit a
+            // credential over the local-only plaintext transport.
+            _ => return Err(MailError::Configuration),
+        };
         let mut builder = match mode {
             SmtpTlsMode::Disabled => AsyncSmtpTransport::<Tokio1Executor>::builder_dangerous(host),
             SmtpTlsMode::StartTls => AsyncSmtpTransport::<Tokio1Executor>::starttls_relay(host)
@@ -80,8 +89,8 @@ impl SmtpMailDelivery {
                 .map_err(|_| MailError::Configuration)?,
         }
         .port(port);
-        if let (Some(username), Some(password)) = (username, password) {
-            builder = builder.credentials(Credentials::new(username, password));
+        if let Some(credentials) = credentials {
+            builder = builder.credentials(credentials);
         }
         Ok(Self {
             transport: builder.build(),
@@ -93,13 +102,61 @@ impl SmtpMailDelivery {
 #[cfg(test)]
 #[allow(clippy::items_after_test_module)]
 mod tests {
-    use super::SmtpTlsMode;
+    use super::{SmtpMailDelivery, SmtpTlsMode};
 
     #[test]
     fn tls_mode_rejects_downgrade_prone_values() {
         assert!(SmtpTlsMode::parse("starttls").is_ok());
         assert!(SmtpTlsMode::parse("implicit").is_ok());
         assert!(SmtpTlsMode::parse("opportunistic").is_err());
+    }
+
+    #[test]
+    fn plaintext_smtp_rejects_credentials_and_partial_credentials() {
+        assert!(
+            SmtpMailDelivery::new(
+                "localhost",
+                1025,
+                "Catalog <mail@example.test>",
+                None,
+                None,
+                "disabled"
+            )
+            .is_ok()
+        );
+        assert!(
+            SmtpMailDelivery::new(
+                "localhost",
+                1025,
+                "Catalog <mail@example.test>",
+                Some("user".into()),
+                Some("secret".into()),
+                "disabled"
+            )
+            .is_err()
+        );
+        assert!(
+            SmtpMailDelivery::new(
+                "localhost",
+                587,
+                "Catalog <mail@example.test>",
+                Some("user".into()),
+                None,
+                "starttls"
+            )
+            .is_err()
+        );
+        assert!(
+            SmtpMailDelivery::new(
+                "localhost",
+                587,
+                "Catalog <mail@example.test>",
+                Some("user".into()),
+                Some("secret".into()),
+                "starttls"
+            )
+            .is_ok()
+        );
     }
 }
 

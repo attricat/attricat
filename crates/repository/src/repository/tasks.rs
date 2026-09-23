@@ -390,6 +390,35 @@ impl CatalogRepository {
     pub async fn task_summary(&self, task_id: Uuid) -> Result<Option<TaskSummary>, TaskError> {
         Ok(sqlx::query_as("SELECT id, workspace_id, kind, subject_id, generation, status, attempts, failures, max_failures, available_at, created_at, completed_at, failed_at, cancelled_at, last_error_code FROM tasks WHERE id = $1").bind(task_id).fetch_optional(&self.pool).await?)
     }
+
+    /// Aggregate, payload-free process metrics for the registered worker kinds.
+    pub async fn task_queue_health(
+        &self,
+        kinds: &[TaskKind],
+    ) -> Result<Vec<(String, String, i64, f64, i64)>, TaskError> {
+        let kinds: Vec<String> = kinds.iter().map(ToString::to_string).collect();
+        if kinds.is_empty() {
+            return Ok(Vec::new());
+        }
+        Ok(sqlx::query_as(
+            "SELECT kind,status,count(*)::bigint,COALESCE(extract(epoch FROM (clock_timestamp()-min(created_at))),0)::float8,COALESCE(sum(failures),0)::bigint FROM tasks WHERE kind=ANY($1) AND status IN ('queued','leased','dead_letter') GROUP BY kind,status",
+        )
+        .bind(kinds)
+        .fetch_all(&self.pool)
+        .await?)
+    }
+
+    /// Extension-operation domain health complements the generic envelope
+    /// metrics with run status and lag visible to operators.
+    pub async fn extension_operation_health(
+        &self,
+    ) -> Result<Vec<(String, i64, f64, i64)>, TaskError> {
+        Ok(sqlx::query_as(
+            "SELECT status,count(*)::bigint,COALESCE(extract(epoch FROM (clock_timestamp()-min(created_at))),0)::float8,COALESCE(sum(GREATEST(attempts-1,0)),0)::bigint FROM extension_operation_runs WHERE status IN ('pending','leased','dead_letter') GROUP BY status",
+        )
+        .fetch_all(&self.pool)
+        .await?)
+    }
 }
 
 #[cfg(test)]

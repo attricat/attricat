@@ -17,7 +17,9 @@ catalog-storage = { path = "../../crates/storage" }
 catalog-workers = { path = "../../crates/workers" }
 dotenvy.workspace = true
 metrics.workspace = true
+metrics-exporter-prometheus.workspace = true
 sqlx.workspace = true
+subtle.workspace = true
 tokio.workspace = true
 tracing.workspace = true
 uuid.workspace = true

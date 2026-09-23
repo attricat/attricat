@@ -7,7 +7,7 @@ response status code. The
 
 ## Authorization
 
-`GET /health`, `POST /auth/discover`, `POST /auth/login`,
+`GET /health`, `GET /health/live`, `GET /health/ready`, `POST /auth/discover`, `POST /auth/login`,
 `POST /auth/password-reset`, `POST /auth/password-reset/confirm`, and
 `POST /onboarding/complete` are public. Browser requests authenticate
 with the opaque HttpOnly `catalog_session` cookie created by login; missing,
@@ -39,7 +39,8 @@ password, cookie, CSRF, expiry, and revocation contract is documented in
 
 | Method | Path | Purpose |
 | --- | --- | --- |
-| `GET` | `/health` | Confirm the migrated API is ready. |
+| `GET` | `/health`, `/health/live` | Process liveness only; dependencies are deliberately not probed. |
+| `GET` | `/health/ready` | Sanitized traffic-readiness check for PostgreSQL and required object storage. |
 | `POST` | `/solution-packs/inspect` | Validate a local solution-pack `.tar.zst` supplied as an `application/zstd` request body and return safe manifest metadata, the whole-archive SHA-256, blueprint logical-key summaries, bounded workspace-setting summaries, normalized presentation-asset metadata/digests, and extension requirement summaries (`solution_packs.manage`). The compressed body limit is 32 MiB and JSON summary is limited to 512 KiB. Inspection never returns resource bytes, archive paths, or private object keys. |
 | `GET` | `/presentation-assets` | List bounded immutable private presentation-asset metadata created by applied solution packs (`limit` 1–100, `offset` 0–10000; `solution_packs.manage`). Object keys are never returned. Use `acli presentation-asset list` to discover UUIDs for `solution-pack plan --map-asset`. Direct creation is intentionally unavailable so every object has durable plan staging and reconciliation evidence. |
 | `GET` | `/presentation-assets/{asset-id}` | Return same-workspace metadata only (`solution_packs.manage`); cross-workspace IDs return `404`. Use `acli presentation-asset show <uuid>`. |

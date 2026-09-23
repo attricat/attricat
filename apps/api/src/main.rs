@@ -117,8 +117,15 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         .max_connections(MAINTENANCE_POOL_CONNECTIONS)
         .connect(&database_url)
         .await?;
-    tracing::info!("running database migrations");
-    MIGRATOR.run(&maintenance_pool).await?;
+    let auto_migrate = boolean_env("CATALOG_AUTO_MIGRATE", true)?;
+    if auto_migrate {
+        tracing::info!("running database migrations");
+        MIGRATOR.run(&maintenance_pool).await?;
+    } else {
+        tracing::info!(
+            "automatic migrations disabled; expecting the migrate role to have completed"
+        );
+    }
     CatalogRepository::system(maintenance_pool.clone())
         .ensure_agent_permissions()
         .await?;
@@ -398,9 +405,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         }),
     )
     .with_graceful_shutdown(async move {
-        tokio::signal::ctrl_c()
-            .await
-            .expect("install shutdown signal handler");
+        shutdown_signal().await;
         tracing::info!("shutdown signal received");
         let _ = shutdown_sender.send(());
     })
@@ -417,6 +422,22 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     task_pool.close().await;
 
     Ok(())
+}
+
+async fn shutdown_signal() {
+    let ctrl_c = tokio::signal::ctrl_c();
+    #[cfg(unix)]
+    {
+        let mut terminate =
+            tokio::signal::unix::signal(tokio::signal::unix::SignalKind::terminate())
+                .expect("install SIGTERM handler");
+        tokio::select! {
+            result = ctrl_c => result.expect("install Ctrl-C handler"),
+            _ = terminate.recv() => {}
+        }
+    }
+    #[cfg(not(unix))]
+    ctrl_c.await.expect("install Ctrl-C handler");
 }
 
 const MAX_GLOBAL_POOL_CONNECTIONS: u32 = 100;
@@ -442,6 +463,20 @@ fn parse_pool_connections(name: &str, value: Option<&str>, default: u32) -> Resu
     }
 }
 
+fn boolean_env(name: &str, default: bool) -> Result<bool, String> {
+    let value = std::env::var(name).ok();
+    parse_boolean(name, value.as_deref(), default)
+}
+
+fn parse_boolean(name: &str, value: Option<&str>, default: bool) -> Result<bool, String> {
+    match value {
+        None => Ok(default),
+        Some("true") => Ok(true),
+        Some("false") => Ok(false),
+        Some(_) => Err(format!("{name} must be `true` or `false`")),
+    }
+}
+
 fn positive_env(
     name: &str,
     default: usize,
@@ -459,6 +494,14 @@ fn positive_env(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn boolean_configuration_is_strict() {
+        assert!(parse_boolean("BOOL", None, true).unwrap());
+        assert!(parse_boolean("BOOL", Some("true"), false).unwrap());
+        assert!(!parse_boolean("BOOL", Some("false"), true).unwrap());
+        assert!(parse_boolean("BOOL", Some("TRUE"), true).is_err());
+    }
 
     #[test]
     fn pool_connection_configuration_is_positive_and_capped() {

@@ -13,7 +13,9 @@ or inaccessible configured bucket.
 | `DATABASE_URL` | Required | API and SQLx | PostgreSQL connection string. |
 | `DATABASE_REQUEST_POOL_CONNECTIONS` | `10` | API | Maximum connections in the single global request/session pool shared by all workspaces. Must be an integer from 1 to 100. |
 | `DATABASE_TASK_POOL_CONNECTIONS` | `10` | API | Maximum connections in the single global task/worker pool shared by all workspaces. Must be an integer from 1 to 100. The API logs the request + task + maintenance total at startup. |
-| `BIND_ADDR` | `127.0.0.1:3000` | API | Listener address. |
+| `BIND_ADDR` | `127.0.0.1:3000` | API | Listener address. The production image sets `0.0.0.0:3000`. |
+| `CATALOG_AUTO_MIGRATE` | `true` | API | Applies embedded migrations during API startup. Production deployment sets this `false` and runs the image's singleton `migrate` role first. |
+| `WEB_DIST_DIR` | Unset | API | Optional compiled SPA directory. The production image sets `/srv/attricat/web`; API routes are then also available below `/api`. |
 | `CATALOG_WORKSPACE_ID` | Bootstrap `default` workspace UUID | API | Workspace initialized with the configured owner during startup; it is not an HTTP tenancy selector. |
 | `CATALOG_BOOTSTRAP_WORKSPACE_NAME` | `Default workspace` | API | Display name recorded while initializing the configured workspace. |
 | `CATALOG_BOOTSTRAP_OWNER_EMAIL` | `owner@example.test` | API | Initial owner email. Startup trims and lowercases it before idempotently creating the bootstrap user, membership, and owner grant. Set a real deployment email; it is never an API input. |
@@ -82,7 +84,9 @@ or inaccessible configured bucket.
 | `FILE_UPLOAD_MAX_BYTES` | `52428800` | API | Positive request-level byte limit for each streamed upload. A file attribute may set a lower `max_bytes` policy. |
 | `FILE_UPLOAD_MAX_FILES` | `10` | API | Positive request-level number of file parts. A `cardinality = "one"` attribute accepts exactly one. |
 | `FILE_WORKER_ID` | Random process UUID | File worker | Stable identifier written with claimed jobs. |
-| `FILE_WORKER_POLL_MILLISECONDS` | `500` | File worker | Delay between durable-job polls. |
+| `FILE_WORKER_POLL_MILLISECONDS` | `500` | File worker | Delay between durable-job polls. Queue metrics are refreshed during idle polls. |
+| `FILE_WORKER_OPERATIONS_BIND_ADDR` | `127.0.0.1:3001` | File worker | Private listener for `/health/live`, dependency-aware `/health/ready`, and `/metrics`. |
+| `FILE_WORKER_METRICS_TOKEN` | Unset on loopback | File worker | Bearer token for `/metrics`; required at startup when the operations listener is not loopback. |
 | `FILE_WORKER_MAX_PIXELS` | `40000000` | File worker | Maximum decoded image pixels accepted for processing. |
 | `FILE_WORKER_MAX_ATTEMPTS` | `5` | File worker | Attempts before a job becomes terminally failed. |
 | `FILE_DELETE_GRACE_SECONDS` | `86400` | File worker | Delay between an unreferenced file being soft-deleted and its object purge. |
@@ -197,7 +201,7 @@ Mailpit is a local-development and E2E adapter only; it is not production mail
 configuration. Source `.catalog-worktree` after `just dev`, open
 `$MAILPIT_UI_URL` for manual inspection, and use its REST API
 for E2E mailbox retrieval. Production SMTP requires `SMTP_TLS_MODE=starttls`
-or `implicit`; `disabled` is restricted to a trusted local relay. See
+or `implicit`; `disabled` is restricted to an unauthenticated trusted local relay. Startup rejects credentials with `disabled` and also rejects partial username/password configuration. See
 [Production operations](operations.md) for rollout, rotation, and recovery.
 
 A failed durable job can be returned to the queue by an operator with
@@ -240,7 +244,7 @@ requirement.
 
 ## Request authorization
 
-All catalog API routes except `/health`, `POST /auth/discover`, and `POST /auth/login` require an
+All catalog API routes except `/health`, `/health/live`, `/health/ready`, `POST /auth/discover`, `POST /auth/login`, password-reset endpoints, and public onboarding completion require an
 active browser session cookie. The API verifies its active membership and role
 grant for each request; absent or invalid sessions are `401`, while a valid
 identity without a matching grant is `403`. Unsafe requests must additionally
