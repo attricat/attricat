@@ -86,6 +86,58 @@ async fn batch_with_two_old_entities(
 }
 
 #[sqlx::test]
+async fn safe_batch_uses_the_nearest_published_ancestor_when_drafts_intervene(pool: PgPool) {
+    let repository = CatalogRepository::system(pool);
+    let source = repository
+        .create_blueprint(CreateBlueprint {
+            definition: DEFINITION.to_owned(),
+        })
+        .await
+        .unwrap();
+    repository
+        .publish_blueprint_revision(source.blueprint.id, 1)
+        .await
+        .unwrap();
+    repository
+        .create_blueprint_revision(
+            source.blueprint.id,
+            CreateBlueprint {
+                definition: format!(
+                    "{DEFINITION}\n# leave this revision as a draft\n\n[[attributes]]\ncode = \"draft_only\"\nvalue_type = \"string\"\n"
+                ),
+            },
+        )
+        .await
+        .unwrap();
+    repository
+        .create_blueprint_revision(
+            source.blueprint.id,
+            CreateBlueprint {
+                definition: format!("{DEFINITION}\n# publish after the draft\n"),
+            },
+        )
+        .await
+        .unwrap();
+    repository
+        .publish_blueprint_revision(source.blueprint.id, 3)
+        .await
+        .unwrap();
+
+    let impact = repository
+        .safe_blueprint_migration_impact(source.blueprint.id, 3)
+        .await
+        .unwrap();
+    assert_eq!(impact.eligible_entities, 0);
+    assert!(impact.removed_attribute_codes.is_empty());
+
+    let batch = repository
+        .start_safe_blueprint_migration_batch(source.blueprint.id, 3)
+        .await
+        .unwrap();
+    assert_eq!(batch.target_version, 3);
+}
+
+#[sqlx::test]
 async fn safe_batch_rejects_an_unsafe_older_source_revision(pool: PgPool) {
     let repository = CatalogRepository::system(pool.clone());
     let source = repository

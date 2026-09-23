@@ -196,17 +196,19 @@ impl CatalogRepository {
         target: &crate::model::BlueprintWithAttributes,
     ) -> Result<Vec<String>, RepositoryError> {
         let revisions = self.list_blueprint_revisions(blueprint_id).await?;
-        if !revisions.iter().any(|revision| {
-            revision.version == target_version - 1 && revision.status == "published"
-        }) {
+        if !revisions
+            .iter()
+            .any(|revision| revision.version < target_version && revision.status == "published")
+        {
             return Err(RepositoryError::BlueprintMigrationNotSafe);
         }
-        // Candidates can belong to *any* earlier revision. Aggregate removal
-        // requirements across every possible source, not only the predecessor.
+        // Draft revisions cannot have entities, so use the nearest published
+        // ancestor and every earlier published revision as migration sources.
+        // Aggregate removal requirements across all possible sources.
         let mut removed = std::collections::BTreeSet::new();
         for revision in revisions
             .iter()
-            .filter(|revision| revision.version < target_version)
+            .filter(|revision| revision.version < target_version && revision.status == "published")
         {
             let source = self
                 .get_blueprint_revision(blueprint_id, revision.version)

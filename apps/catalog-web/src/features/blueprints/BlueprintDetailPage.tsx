@@ -166,7 +166,11 @@ export const BlueprintDetailPage = ({
     latestPublished?.version,
   );
   const safeMigrationSourceVersion = latestPublished
-    ? latestPublished.version - 1
+    ? revisionItems.find(
+        (revision) =>
+          revision.version < latestPublished.version &&
+          revision.status === 'published',
+      )?.version
     : undefined;
   const safeMigrationSource = useQuery({
     queryKey: blueprintQueryKeys.revision(
