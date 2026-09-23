@@ -37,6 +37,42 @@ describe('ThumbnailPreview', () => {
     expect(vi.getTimerCount()).toBe(0);
   });
 
+  it('bounds remembered thumbnail sources across virtualized rows', () => {
+    const view = render(
+      <ThumbnailPreview
+        filename="first.png"
+        size={48}
+        source="/cache-first"
+        unavailable={false}
+      />,
+    );
+    fireEvent.load(view.container.querySelector('img')!);
+    for (let index = 0; index < 256; index += 1) {
+      view.rerender(
+        <ThumbnailPreview
+          filename="next.png"
+          size={48}
+          source={`/cache-${index}`}
+          unavailable={false}
+        />,
+      );
+      fireEvent.load(view.container.querySelector('img')!);
+    }
+    view.rerender(
+      <ThumbnailPreview
+        filename="first.png"
+        size={48}
+        source="/cache-first"
+        unavailable={false}
+      />,
+    );
+    expect(
+      screen
+        .getByRole('img', { name: 'Thumbnail for first.png' })
+        .getAttribute('aria-busy'),
+    ).toBe('true');
+  });
+
   it('cancels a pending retry when the thumbnail source changes or unmounts', () => {
     vi.useFakeTimers();
     const clearTimeout = vi.spyOn(window, 'clearTimeout');

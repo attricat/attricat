@@ -78,7 +78,12 @@ export const FileAttributeEditor = ({
   const { t } = useTranslation();
   const input = useRef<HTMLInputElement>(null);
   const [pending, setPending] = useState<PendingFile[]>([]);
-  const [uploaded, setUploaded] = useState<FileMetadata[]>(files);
+  const [newUploads, setNewUploads] = useState<FileMetadata[]>([]);
+  const uploadingIds = useRef(new Set<string>());
+  const uploaded = [
+    ...files,
+    ...newUploads.filter((item) => !files.some((file) => file.id === item.id)),
+  ];
   const policy = attribute.file_policy;
   if (!policy) return null;
 
@@ -96,7 +101,8 @@ export const FileAttributeEditor = ({
     ]);
   };
   const send = async (item: PendingFile) => {
-    if (!entityId) return;
+    if (!entityId || disabled || uploadingIds.current.has(item.id)) return;
+    uploadingIds.current.add(item.id);
     setPending((items) =>
       items.map((value) =>
         value.id === item.id
@@ -117,7 +123,7 @@ export const FileAttributeEditor = ({
             ),
           ),
       });
-      setUploaded((items) => [...items, ...result.files]);
+      setNewUploads((items) => [...items, ...result.files]);
       setPending((items) => items.filter((value) => value.id !== item.id));
     } catch (error) {
       setPending((items) =>
@@ -134,6 +140,8 @@ export const FileAttributeEditor = ({
             : value,
         ),
       );
+    } finally {
+      uploadingIds.current.delete(item.id);
     }
   };
   const uploadPending = async () => {
@@ -156,7 +164,7 @@ export const FileAttributeEditor = ({
         onDragOver={(event) => event.preventDefault()}
         onDrop={(event) => {
           event.preventDefault();
-          if (!disabled) add(event.dataTransfer.files);
+          if (!disabled && entityId) add(event.dataTransfer.files);
         }}
         sx={{
           border: '1px dashed',
@@ -171,10 +179,12 @@ export const FileAttributeEditor = ({
               .map((value) => `.${value.replace(/^\./, '')}`)
               .join(',') || undefined
           }
+          disabled={disabled || !entityId}
           hidden
           multiple={policy.cardinality === 'many'}
           onChange={(event) => {
-            if (!disabled && event.target.files) add(event.target.files);
+            if (!disabled && entityId && event.target.files)
+              add(event.target.files);
             event.target.value = '';
           }}
           ref={input}
@@ -190,7 +200,11 @@ export const FileAttributeEditor = ({
         {pending.length > 0 && (
           <Button
             color="primary"
-            disabled={disabled || !entityId}
+            disabled={
+              disabled ||
+              !entityId ||
+              pending.every((item) => item.error || item.progress > 0)
+            }
             onClick={startUploads}
             variant="contained"
           >

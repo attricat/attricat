@@ -23,6 +23,16 @@ const maxThumbnailRetries = 3;
 // range changes. Remember completed sources so a remounted thumbnail does not
 // show its loading treatment again.
 const loadedThumbnailSources = new Set<string>();
+const maxLoadedThumbnailSources = 256;
+
+const rememberLoadedThumbnail = (source: string) => {
+  loadedThumbnailSources.delete(source);
+  loadedThumbnailSources.add(source);
+  if (loadedThumbnailSources.size > maxLoadedThumbnailSources) {
+    const oldest = loadedThumbnailSources.values().next().value;
+    if (oldest) loadedThumbnailSources.delete(oldest);
+  }
+};
 
 const ThumbnailPreviewContent = ({
   filename,
@@ -83,7 +93,7 @@ const ThumbnailPreviewContent = ({
           component="img"
           onError={retry}
           onLoad={() => {
-            loadedThumbnailSources.add(source);
+            rememberLoadedThumbnail(source);
             setLoaded(true);
           }}
           src={`${source}${attempt ? `?retry=${attempt}` : ''}`}

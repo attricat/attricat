@@ -15,7 +15,7 @@ import {
   TextField,
   Typography,
 } from '@mui/material';
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { copyToClipboard } from '../../components/clipboard';
 import { SettingsPage } from '../../components/CenteredPage';
@@ -105,10 +105,16 @@ export const PersonalTokensPage = () => {
     queryFn: listTokenPermissions,
   });
   const [secret, setSecret] = useState<string>();
+  const creating = useRef(false);
+  const [isCreating, setIsCreating] = useState(false);
   const [error, setError] = useState<string>();
   const form = useForm({
     defaultValues: { label: '', permissions: [] as string[], expires_at: '' },
     onSubmit: async ({ value }) => {
+      if (creating.current) return;
+      creating.current = true;
+      setIsCreating(true);
+      setError(undefined);
       try {
         const expiresAt = value.expires_at
           ? new Date(value.expires_at)
@@ -131,6 +137,9 @@ export const PersonalTokensPage = () => {
         setError(
           reason instanceof Error ? reason.message : t('profile.createFailed'),
         );
+      } finally {
+        creating.current = false;
+        setIsCreating(false);
       }
     },
   });
@@ -254,7 +263,7 @@ export const PersonalTokensPage = () => {
               />
             )}
           </form.Field>
-          <Button type="submit" variant="contained">
+          <Button disabled={isCreating} type="submit" variant="contained">
             {t('profile.create')}
           </Button>
         </Stack>
