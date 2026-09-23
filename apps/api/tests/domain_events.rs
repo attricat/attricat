@@ -26,6 +26,25 @@ struct FollowOnContextHandler {
     calls: Arc<AtomicUsize>,
 }
 
+struct StalledHandler;
+
+#[async_trait]
+impl EventHandler for StalledHandler {
+    fn name(&self) -> &'static str {
+        "test.stalled"
+    }
+    fn event_types(&self) -> &'static [&'static str] {
+        &[CONTEXT_CREATED_V1]
+    }
+    async fn handle(
+        &self,
+        _event: api::domain_events::DomainEvent,
+        _context: EventHandlerCommandContext,
+    ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+        std::future::pending().await
+    }
+}
+
 #[async_trait]
 impl EventHandler for FollowOnContextHandler {
     fn name(&self) -> &'static str {
@@ -256,6 +275,34 @@ async fn consumer_starts_at_the_current_workspace_watermark(pool: sqlx::PgPool) 
 }
 
 #[sqlx::test(migrations = "./migrations")]
+async fn registration_waits_for_an_uncommitted_outbox_append(pool: sqlx::PgPool) {
+    let workspace_id = Uuid::parse_str("00000000-0000-4000-8000-000000000002").unwrap();
+    let mut append = pool.begin().await.unwrap();
+    sqlx::query("SELECT pg_advisory_xact_lock(hashtextextended($1, 0))")
+        .bind(format!("workflow-activation-boundary:{workspace_id}"))
+        .execute(&mut *append)
+        .await
+        .unwrap();
+    sqlx::query("INSERT INTO domain_events (id, workspace_id, event_type, aggregate_kind, aggregate_id, correlation_id, source_kind, source_name, payload) VALUES ($1,$2,'context.created.v1','context',$3,$4,'api','catalog_api','{}'::jsonb)")
+        .bind(Uuid::new_v4()).bind(workspace_id).bind(Uuid::new_v4()).bind(Uuid::new_v4())
+        .execute(&mut *append).await.unwrap();
+    let repository = CatalogRepository::system(pool.clone());
+    let registration = tokio::spawn(async move {
+        repository
+            .ensure_event_consumer("test.concurrent", &[CONTEXT_CREATED_V1])
+            .await
+            .unwrap()
+    });
+    tokio::time::sleep(Duration::from_millis(50)).await;
+    assert!(
+        !registration.is_finished(),
+        "registration must wait for the outbox boundary"
+    );
+    append.commit().await.unwrap();
+    assert_eq!(registration.await.unwrap().watermark, 1);
+}
+
+#[sqlx::test(migrations = "./migrations")]
 async fn delivery_claims_are_exclusive_and_completion_is_durable(pool: sqlx::PgPool) {
     use std::time::Duration;
 
@@ -455,7 +502,7 @@ async fn dispatcher_preserves_causal_lineage_and_suppresses_its_own_follow_on_ev
         repository,
         registry,
         DispatcherConfig::new(
-            Duration::from_millis(20),
+            Duration::from_secs(2),
             Duration::from_millis(5),
             Duration::from_millis(20),
             3,
@@ -492,6 +539,45 @@ async fn dispatcher_preserves_causal_lineage_and_suppresses_its_own_follow_on_ev
     assert_eq!(follow_on.1, event_id);
     assert_eq!(follow_on.2, "worker");
     assert_eq!(follow_on.3, "test-follow-on-context");
+}
+
+#[sqlx::test(migrations = "./migrations")]
+async fn stalled_handler_is_timed_out_and_delivery_is_retried(pool: sqlx::PgPool) {
+    let repository = CatalogRepository::system(pool.clone());
+    repository
+        .ensure_event_consumer("test.stalled", &[CONTEXT_CREATED_V1])
+        .await
+        .unwrap();
+    sqlx::query("INSERT INTO domain_events (id, workspace_id, event_type, aggregate_kind, aggregate_id, correlation_id, source_kind, source_name, payload) VALUES ($1, '00000000-0000-4000-8000-000000000002', 'context.created.v1', 'context', $2, $3, 'api', 'catalog_api', '{}'::jsonb)")
+        .bind(Uuid::new_v4()).bind(Uuid::new_v4()).bind(Uuid::new_v4()).execute(&pool).await.unwrap();
+    let registry = EventHandlerRegistry::new(vec![Arc::new(StalledHandler)]).unwrap();
+    let (shutdown, receiver) = tokio::sync::watch::channel(());
+    let handles = api::event_dispatcher::start(
+        repository,
+        registry,
+        DispatcherConfig::new(
+            Duration::from_millis(200),
+            Duration::from_millis(5),
+            Duration::from_millis(20),
+            1,
+            Duration::from_millis(5),
+        )
+        .unwrap(),
+        receiver,
+    );
+    tokio::time::timeout(Duration::from_secs(2), async {
+        loop {
+            let status: Option<String> = sqlx::query_scalar(
+                "SELECT status FROM event_deliveries WHERE consumer_id = (SELECT id FROM event_consumers WHERE name = 'test.stalled')"
+            ).fetch_optional(&pool).await.unwrap();
+            if status.as_deref() == Some("dead_letter") { break; }
+            tokio::time::sleep(Duration::from_millis(10)).await;
+        }
+    }).await.unwrap();
+    shutdown.send(()).unwrap();
+    for handle in handles {
+        handle.await.unwrap();
+    }
 }
 
 #[sqlx::test(migrations = "./migrations")]

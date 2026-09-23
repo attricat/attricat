@@ -25,6 +25,7 @@ const NORMALIZED_SVG: &[u8] = br##"<svg height="1" width="2" xmlns="http://www.w
 struct FlakyObjectStore {
     inner: FakeObjectStore,
     fail_next_range: AtomicBool,
+    corrupt_next_put: AtomicBool,
     ranges: Mutex<Vec<Option<String>>>,
     ignore_ranges: AtomicBool,
     stream_chunks_yielded: Arc<AtomicUsize>,
@@ -35,6 +36,7 @@ impl FlakyObjectStore {
         Self {
             inner: FakeObjectStore::available(),
             fail_next_range: AtomicBool::new(false),
+            corrupt_next_put: AtomicBool::new(false),
             ranges: Mutex::new(Vec::new()),
             ignore_ranges: AtomicBool::new(false),
             stream_chunks_yielded: Arc::new(AtomicUsize::new(0)),
@@ -44,7 +46,10 @@ impl FlakyObjectStore {
 
 #[async_trait]
 impl ObjectStore for FlakyObjectStore {
-    async fn put(&self, key: &str, object: StoredObject) -> Result<(), ObjectStoreError> {
+    async fn put(&self, key: &str, mut object: StoredObject) -> Result<(), ObjectStoreError> {
+        if self.corrupt_next_put.swap(false, Ordering::SeqCst) {
+            object.bytes = bytes::Bytes::from_static(b"corrupt");
+        }
         self.inner.put(key, object).await
     }
 
@@ -687,6 +692,30 @@ async fn later_release_records_added_and_removed_without_deleting_prior_asset(po
         1
     );
     assert_eq!(store.object_count().await, 2);
+    server.abort();
+}
+
+#[sqlx::test(migrations = "./migrations")]
+async fn plan_rejects_a_successfully_acknowledged_corrupt_asset_write(pool: PgPool) {
+    let store = Arc::new(FlakyObjectStore::new());
+    let (base_url, server) =
+        start_server_with_custom_object_store(pool.clone(), store.clone()).await;
+    store.corrupt_next_put.store(true, Ordering::SeqCst);
+    let response = authenticated_client()
+        .post(format!(
+            "{base_url}/solution-packs/plans?prefix=brand&blueprint_publication=draft"
+        ))
+        .header("content-type", "application/zstd")
+        .body(asset_archive("1.0.0", SAFE_SVG))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::SERVICE_UNAVAILABLE);
+    let (ready, state): (bool, String) = sqlx::query_as(
+        "SELECT p.ready,a.state FROM solution_pack_plans p JOIN solution_pack_plan_asset_objects a ON a.plan_id=p.id"
+    ).fetch_one(&pool).await.unwrap();
+    assert!(!ready);
+    assert_eq!(state, "cleanup_pending");
     server.abort();
 }
 

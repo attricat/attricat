@@ -95,14 +95,10 @@ pub(super) async fn authorize(
     mut request: Request,
     next: Next,
 ) -> Result<Response, ApiError> {
-    let path = request.uri().path();
-    if matches!(path, "/health" | "/health/live" | "/health/ready")
-        || path == "/auth/login"
-        || path == "/auth/discover"
-        || path == "/auth/password-reset"
-        || path == "/auth/password-reset/confirm"
-        || path == "/onboarding/complete"
-    {
+    // Production mounts the same API under /api; all policy and public-route
+    // checks must use the same canonical concrete path.
+    let path = super::canonical_route(request.uri().path());
+    if is_public_route(path) {
         return Ok(next.run(request).await);
     }
 
@@ -240,9 +236,54 @@ pub(super) async fn authorize(
     Ok(next.run(request).await)
 }
 
+fn is_public_route(path: &str) -> bool {
+    matches!(
+        path,
+        "/health"
+            | "/health/live"
+            | "/health/ready"
+            | "/auth/login"
+            | "/auth/discover"
+            | "/auth/password-reset"
+            | "/auth/password-reset/confirm"
+            | "/onboarding/complete"
+    )
+}
+
 fn cookie_value(header: Option<&str>, name: &str) -> Option<String> {
     header?
         .split(';')
         .filter_map(|part| part.trim().split_once('='))
         .find_map(|(key, value)| (key == name).then(|| value.to_owned()))
+}
+
+#[cfg(test)]
+mod route_tests {
+    use super::*;
+
+    #[test]
+    fn api_alias_uses_identical_public_and_scoped_policy_paths() {
+        for route in [
+            "/auth/login",
+            "/auth/discover",
+            "/health/ready",
+            "/onboarding/complete",
+        ] {
+            assert!(is_public_route(super::super::canonical_route(route)));
+            assert!(is_public_route(super::super::canonical_route(&format!(
+                "/api{route}"
+            ))));
+        }
+        let entity = Uuid::new_v4();
+        let path = format!("/entities/{entity}");
+        let alias = format!("/api{path}");
+        assert_eq!(
+            policy::target(
+                super::super::canonical_route(&alias),
+                policy::TargetKind::EntityId
+            )
+            .0,
+            Some(entity)
+        );
+    }
 }

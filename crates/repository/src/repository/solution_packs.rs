@@ -1957,18 +1957,19 @@ impl CatalogRepository {
             };
             let uploaded = match preexisting {
                 Some(exact) => exact,
-                None => match object_store.put(&key, object).await {
-                    Ok(()) => true,
-                    Err(_) => {
-                        get_object_for_integrity(object_store, &key, asset.stored_bytes.len())
-                            .await
-                            .is_ok_and(|stored| {
-                                stored.bytes.len() == asset.stored_bytes.len()
-                                    && format!("{:x}", Sha256::digest(&stored.bytes))
-                                        == asset.stored_sha256
-                            })
-                    }
-                },
+                None => {
+                    // A successful PUT acknowledgment does not prove that the
+                    // stored bytes are complete. Read back after either outcome
+                    // before marking the plan asset staged.
+                    let _ = object_store.put(&key, object).await;
+                    get_object_for_integrity(object_store, &key, asset.stored_bytes.len())
+                        .await
+                        .is_ok_and(|stored| {
+                            stored.bytes.len() == asset.stored_bytes.len()
+                                && format!("{:x}", Sha256::digest(&stored.bytes))
+                                    == asset.stored_sha256
+                        })
+                }
             };
             if !uploaded {
                 sqlx::query("UPDATE solution_pack_plan_asset_objects SET state='cleanup_pending',updated_at=now() WHERE workspace_id=$1 AND plan_id=$2 AND state IN ('uploading','staged')")

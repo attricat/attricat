@@ -143,6 +143,19 @@ impl From<EventDeliveryRow> for EventDelivery {
     }
 }
 
+async fn lock_outbox_boundary(
+    transaction: &mut Transaction<'_, Postgres>,
+    workspace_id: Uuid,
+) -> Result<(), RepositoryError> {
+    // A registration watermark must not pass an event with an allocated but
+    // uncommitted sequence. Workflow activation uses this same boundary.
+    sqlx::query("SELECT pg_advisory_xact_lock(hashtextextended($1, 0))")
+        .bind(format!("workflow-activation-boundary:{workspace_id}"))
+        .execute(&mut **transaction)
+        .await?;
+    Ok(())
+}
+
 /// Transport-neutral producer boundary. Implementations must append the event
 /// to the caller-owned transaction rather than publish it directly, preserving
 /// outbox atomicity.
@@ -171,10 +184,7 @@ impl EventPublisher for CatalogRepository {
         // boundary cannot overtake an event that has allocated a sequence but has
         // not committed yet.
         let workspace_id = self.workspace_id.unwrap_or(Self::DEFAULT_WORKSPACE_ID);
-        sqlx::query("SELECT pg_advisory_xact_lock(hashtextextended($1, 0))")
-            .bind(format!("workflow-activation-boundary:{workspace_id}"))
-            .execute(&mut **transaction)
-            .await?;
+        lock_outbox_boundary(transaction, workspace_id).await?;
         Ok(sqlx::query_as::<_, DomainEvent>(
             r#"INSERT INTO domain_events (
                     id, workspace_id, event_type, aggregate_kind, aggregate_id,
@@ -219,14 +229,30 @@ impl CatalogRepository {
         _event_types: &[&str],
     ) -> Result<EventConsumer, RepositoryError> {
         let workspace_id = self.workspace_id.unwrap_or(Self::DEFAULT_WORKSPACE_ID);
-        Ok(sqlx::query_as::<_, EventConsumer>(
+        // Polling existing consumers should not acquire the boundary lock or
+        // update their row on every dispatcher iteration.
+        if let Some(consumer) = sqlx::query_as::<_, EventConsumer>(
+            "SELECT id, workspace_id, name, watermark FROM event_consumers WHERE workspace_id=$1 AND name=$2",
+        )
+        .bind(workspace_id)
+        .bind(name)
+        .fetch_optional(&self.pool)
+        .await?
+        {
+            return Ok(consumer);
+        }
+        let mut transaction = self.pool.begin().await?;
+        lock_outbox_boundary(&mut transaction, workspace_id).await?;
+        let consumer = sqlx::query_as::<_, EventConsumer>(
             "INSERT INTO event_consumers (id, workspace_id, name, watermark) SELECT $1, $2, $3, COALESCE(max(sequence), 0) FROM domain_events WHERE workspace_id = $2 ON CONFLICT (workspace_id, name) DO UPDATE SET name = EXCLUDED.name RETURNING id, workspace_id, name, watermark",
         )
         .bind(Uuid::new_v4())
         .bind(workspace_id)
         .bind(name)
-        .fetch_one(&self.pool)
-        .await?)
+        .fetch_one(&mut *transaction)
+        .await?;
+        transaction.commit().await?;
+        Ok(consumer)
     }
 
     pub async fn create_event_consumer(
@@ -235,6 +261,7 @@ impl CatalogRepository {
     ) -> Result<EventConsumer, RepositoryError> {
         let workspace_id = self.workspace_id.unwrap_or(Self::DEFAULT_WORKSPACE_ID);
         let mut transaction = self.pool.begin().await?;
+        lock_outbox_boundary(&mut transaction, workspace_id).await?;
         let watermark = sqlx::query_scalar::<_, i64>(
             "SELECT COALESCE(max(sequence), 0) FROM domain_events WHERE workspace_id = $1",
         )

@@ -29,6 +29,7 @@ const DEFAULT_GRACE_SECONDS: i64 = 86_400;
 const STALE_LOCK_SECONDS: i64 = 300;
 const LEASE_HEARTBEAT_SECONDS: u64 = 60;
 const RECONCILE_INTERVAL: Duration = Duration::from_secs(30);
+const METRICS_INTERVAL: Duration = Duration::from_secs(5);
 const MAX_BACKOFF_SECONDS: i64 = 300;
 
 #[derive(Clone, Debug)]
@@ -98,6 +99,7 @@ pub struct FileWorker {
     store: Arc<dyn ObjectStore>,
     config: WorkerConfig,
     last_reconciled: Mutex<Option<Instant>>,
+    last_metrics: Mutex<Option<Instant>>,
 }
 
 impl FileWorker {
@@ -107,6 +109,7 @@ impl FileWorker {
             store,
             config,
             last_reconciled: Mutex::new(None),
+            last_metrics: Mutex::new(None),
         }
     }
 
@@ -168,7 +171,7 @@ impl FileWorker {
             return Err(error);
         }
         let Some(job) = self.claim().await? else {
-            self.record_metrics().await?;
+            self.record_metrics_if_due().await?;
             return Ok(false);
         };
         let kind = if job.kind == "purge" {
@@ -204,8 +207,27 @@ impl FileWorker {
                 result = &mut operation => { result?; break; }
             }
         }
-        self.record_metrics().await?;
+        self.record_metrics_if_due().await?;
         Ok(true)
+    }
+
+    async fn record_metrics_if_due(&self) -> Result<(), sqlx::Error> {
+        // Queue-depth aggregation scans job statuses; it should not run once
+        // per processed file when the queue is busy.
+        let due = {
+            let mut last = self.last_metrics.lock().expect("metrics clock poisoned");
+            if last.is_none_or(|at| at.elapsed() >= METRICS_INTERVAL) {
+                *last = Some(Instant::now());
+                true
+            } else {
+                false
+            }
+        };
+        if due && let Err(error) = self.record_metrics().await {
+            *self.last_metrics.lock().expect("metrics clock poisoned") = None;
+            return Err(error);
+        }
+        Ok(())
     }
 
     async fn renew_lease(&self, job: &ClaimedJob) -> Result<bool, sqlx::Error> {

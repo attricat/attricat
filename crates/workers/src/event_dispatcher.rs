@@ -231,18 +231,31 @@ async fn dispatch_handler(
         let context = EventHandlerCommandContext {
             repository: repository.for_event_handler(&delivery.event, handler.name()),
         };
-        match handler.handle(delivery.event.clone(), context).await {
-            Ok(()) => {
+        // Bound handler execution below the lease so a stalled dependency
+        // cannot indefinitely block deliveries in every later workspace.
+        // Handlers must be idempotent: cancellation can follow a durable write.
+        let result = tokio::time::timeout(
+            config.lease_duration / 2,
+            handler.handle(delivery.event.clone(), context),
+        )
+        .await;
+        match result {
+            Ok(Ok(())) => {
                 repository.complete_event_delivery(&delivery).await?;
                 metrics::counter!("catalog_event_deliveries_total", "outcome" => "completed")
                     .increment(1);
             }
-            Err(error) => {
+            failure => {
+                let error = match failure {
+                    Ok(Err(error)) => error.to_string(),
+                    Err(_) => "event handler timed out".to_owned(),
+                    Ok(Ok(())) => unreachable!(),
+                };
                 tracing::warn!(handler = handler.name(), event_id = %delivery.event.id, %error, "event handler failed");
                 repository
                     .retry_event_delivery(
                         &delivery,
-                        &error.to_string(),
+                        &error,
                         config.retry_delay(delivery.attempts),
                         config.max_attempts,
                     )
