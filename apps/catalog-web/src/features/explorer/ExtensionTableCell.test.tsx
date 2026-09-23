@@ -87,6 +87,28 @@ describe('ExtensionTableCell', () => {
     expect(JSON.stringify(recentTimings())).not.toContain('example.extension');
   });
 
+  it('retries a failed renderer when the cell context changes', () => {
+    const view = render(
+      <ExtensionTableCell
+        context={context}
+        contribution={contribution}
+        fallback="12"
+        frameAllowed
+      />,
+    );
+    fireEvent.click(view.container.querySelectorAll('button')[1]);
+    expect(view.container.querySelector('button')).toBeNull();
+    view.rerender(
+      <ExtensionTableCell
+        context={{ ...context, primary_value: 13 }}
+        contribution={contribution}
+        fallback="13"
+        frameAllowed
+      />,
+    );
+    expect(view.container.querySelector('button')).toBeTruthy();
+  });
+
   it('does not exceed the caller-provided virtual-cell frame budget', () => {
     render(
       <ExtensionTableCell

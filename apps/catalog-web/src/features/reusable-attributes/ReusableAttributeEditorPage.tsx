@@ -73,12 +73,12 @@ export const ReusableAttributeEditorPage = ({
   const definition =
     editedDefinition ?? attribute?.definition ?? newAttributeDefinition;
   const save = useMutation({
-    mutationFn: () =>
+    mutationFn: (submittedDefinition: string) =>
       attribute
         ? createReusableAttributeRevision(attribute.definition_id, {
-            definition,
+            definition: submittedDefinition,
           })
-        : createReusableAttribute({ definition }),
+        : createReusableAttribute({ definition: submittedDefinition }),
     onSuccess: async () => {
       await queryClient.invalidateQueries({
         queryKey: reusableAttributeQueryKeys.root(),
@@ -114,13 +114,14 @@ export const ReusableAttributeEditorPage = ({
           actions={
             <Stack direction="row" spacing={1}>
               <Button
+                disabled={save.isPending}
                 onClick={() => navigate({ to: '/manage/reusable-attributes' })}
               >
                 Cancel
               </Button>
               <Button
                 disabled={save.isPending}
-                onClick={() => save.mutate()}
+                onClick={() => save.mutate(definition)}
                 variant="contained"
               >
                 {attribute ? 'Save revision' : 'Create attribute'}
@@ -149,10 +150,13 @@ export const ReusableAttributeEditorPage = ({
               defaultLanguage="toml"
               height="100%"
               language="toml"
-              onChange={(value) => setEditedDefinition(value ?? '')}
+              onChange={(value) => {
+                if (!save.isPending) setEditedDefinition(value ?? '');
+              }}
               options={{
                 automaticLayout: true,
                 minimap: { enabled: false },
+                readOnly: save.isPending,
                 scrollBeyondLastLine: false,
                 tabSize: 2,
                 wordWrap: 'on',

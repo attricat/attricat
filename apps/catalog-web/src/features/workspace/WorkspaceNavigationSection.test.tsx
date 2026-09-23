@@ -23,6 +23,28 @@ vi.mock('./api', async (importOriginal) => ({
 }));
 
 describe('WorkspaceNavigationSection', () => {
+  it('allows typing multiple comma-separated roles without eating the delimiter', async () => {
+    vi.mocked(listExploreNavigation).mockResolvedValue([
+      { blueprint_code: 'product', visible_to_role_codes: [] },
+    ]);
+    vi.mocked(listEntityBlueprints).mockResolvedValue([
+      { code: 'product', name: 'Product' },
+    ] as never);
+    vi.mocked(listRoles).mockResolvedValue([]);
+    render(
+      <QueryClientProvider client={new QueryClient()}>
+        <WorkspaceNavigationSection canManage />
+      </QueryClientProvider>,
+    );
+    const roles = await screen.findByRole('textbox', {
+      name: 'Visible roles (comma separated)',
+    });
+    fireEvent.change(roles, { target: { value: 'reader,' } });
+    expect(roles).toHaveProperty('value', 'reader,');
+    fireEvent.change(roles, { target: { value: 'reader, editor' } });
+    expect(roles).toHaveProperty('value', 'reader, editor');
+  });
+
   it('prevents assigning the same blueprint to two shortcuts', async () => {
     vi.mocked(listExploreNavigation).mockResolvedValue([
       { blueprint_code: 'product', visible_to_role_codes: [] },

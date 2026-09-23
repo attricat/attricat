@@ -34,6 +34,7 @@ describe('MigrationBatchStatus', () => {
         id: '223e4567-e89b-12d3-a456-426614174000',
         blueprint_id: blueprintId,
         target_version: 2,
+        removal_policy: {},
         status: 'running',
         created_at: '2026-10-05T12:00:00Z',
         started_at: '2026-10-05T12:00:01Z',

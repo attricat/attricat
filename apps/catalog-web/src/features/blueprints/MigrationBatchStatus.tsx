@@ -26,6 +26,13 @@ const statusColor = (status: MigrationBatch['status']) => {
   return 'warning';
 };
 
+const removalPolicyLabel = (policy: MigrationBatch['removal_policy'] | undefined) => {
+  const codes = policy?.attribute_codes;
+  return Array.isArray(codes) && codes.every((code) => typeof code === 'string')
+    ? codes.join(', ')
+    : '—';
+};
+
 export const MigrationBatchStatus = ({
   batches,
 }: {
@@ -85,6 +92,7 @@ export const MigrationBatchStatus = ({
                 <TableCell>{t('blueprints.migrationProgress')}</TableCell>
                 <TableCell>{t('blueprints.migratedEntities')}</TableCell>
                 <TableCell>{t('blueprints.needsReviewEntities')}</TableCell>
+                <TableCell>{t('blueprints.removedAttributes')}</TableCell>
                 <TableCell>{t('blueprints.failedEntities')}</TableCell>
                 <TableCell>{t('blueprints.created')}</TableCell>
                 <TableCell>{t('blueprints.started')}</TableCell>
@@ -128,6 +136,9 @@ export const MigrationBatchStatus = ({
                   </TableCell>
                   <TableCell>{batch.migrated_entities}</TableCell>
                   <TableCell>{batch.needs_input_entities}</TableCell>
+                  <TableCell>
+                    {removalPolicyLabel(batch.removal_policy)}
+                  </TableCell>
                   <TableCell>{batch.failed_entities}</TableCell>
                   <TableCell>
                     {formatBlueprintDateTime(batch.created_at, emptyDate)}

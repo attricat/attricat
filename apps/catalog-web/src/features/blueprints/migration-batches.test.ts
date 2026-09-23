@@ -9,6 +9,7 @@ const batch = (
   id: '123e4567-e89b-12d3-a456-426614174000',
   blueprint_id: '223e4567-e89b-12d3-a456-426614174000',
   target_version: targetVersion,
+  removal_policy: {},
   status,
   created_at: '2026-10-05T12:00:00Z',
   started_at: null,

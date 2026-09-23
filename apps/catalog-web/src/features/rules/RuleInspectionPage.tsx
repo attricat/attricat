@@ -134,12 +134,14 @@ export const RuleInspectionPage = ({
             canManage={canManage}
             error={rules.isError}
             onRun={(id, dryRun) => run.mutate({ id, dryRun })}
+            running={run.isPending}
             rules={rules.data}
           />
         )}
         {section === 'findings' && (
           <FindingsSection
             onAcknowledge={(id) => acknowledge.mutate(id)}
+            acknowledging={acknowledge.isPending}
             canManage={canManage}
             error={findings.isError}
             findings={findings.data}
@@ -157,11 +159,13 @@ const RulesSection = ({
   canManage,
   error,
   onRun,
+  running,
   rules,
 }: {
   canManage: boolean;
   error: boolean;
   onRun: (id: string, dryRun: boolean) => void;
+  running: boolean;
   rules: Awaited<ReturnType<typeof listRules>> | undefined;
 }) => (
   <>
@@ -203,10 +207,15 @@ const RulesSection = ({
                 <TableCell>
                   {canManage && (
                     <>
-                      <Button size="small" onClick={() => onRun(rule.id, true)}>
+                      <Button
+                        disabled={running}
+                        size="small"
+                        onClick={() => onRun(rule.id, true)}
+                      >
                         Dry run
                       </Button>
                       <Button
+                        disabled={running}
                         size="small"
                         onClick={() => onRun(rule.id, false)}
                       >
@@ -225,11 +234,13 @@ const RulesSection = ({
 );
 
 const FindingsSection = ({
+  acknowledging,
   canManage,
   error,
   findings,
   onAcknowledge,
 }: {
+  acknowledging: boolean;
   canManage: boolean;
   error: boolean;
   findings: Awaited<ReturnType<typeof listFindings>> | undefined;
@@ -276,6 +287,7 @@ const FindingsSection = ({
                 <TableCell>
                   {canManage && finding.state === 'open' && (
                     <Button
+                      disabled={acknowledging}
                       size="small"
                       onClick={() => onAcknowledge(finding.id)}
                     >

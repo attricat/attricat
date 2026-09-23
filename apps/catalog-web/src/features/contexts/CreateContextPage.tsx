@@ -46,6 +46,7 @@ export const CreateContextPage = () => {
   const form = useForm({
     defaultValues: { code: '', data: '{}', parentId: '' },
     onSubmit: ({ value }) => {
+      if (create.isPending) return;
       setValidationError(undefined);
       let data: unknown;
       try {
@@ -83,6 +84,7 @@ export const CreateContextPage = () => {
           <form.Field name="code">
             {(field) => (
               <TextField
+                disabled={create.isPending}
                 label={t('contexts.code')}
                 onChange={(event) => field.handleChange(event.target.value)}
                 required
@@ -98,7 +100,9 @@ export const CreateContextPage = () => {
           <form.Field name="parentId">
             {(field) => (
               <TextField
-                disabled={contexts.isPending || contexts.isError}
+                disabled={
+                  create.isPending || contexts.isPending || contexts.isError
+                }
                 helperText={
                   contexts.isPending ? t('contexts.loadingContexts') : undefined
                 }
@@ -120,6 +124,7 @@ export const CreateContextPage = () => {
           <form.Field name="data">
             {(field) => (
               <TextField
+                disabled={create.isPending}
                 label={t('contexts.metadata')}
                 multiline
                 minRows={5}

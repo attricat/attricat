@@ -491,7 +491,7 @@ impl CatalogRepository {
         }
         input.relationships = effective_relationships;
 
-        let mut supplied_codes = HashSet::new();
+        let mut supplied_keys: HashSet<AttributeContextKey> = HashSet::new();
         let mut supplied_scalar_keys: HashSet<AttributeContextKey> = HashSet::new();
         let mut supplied_relationship_sets: HashSet<AttributeContextKey> = HashSet::new();
         let mut supplied_relationship_values = HashSet::new();
@@ -522,7 +522,7 @@ impl CatalogRepository {
                 let context_id = self
                     .resolve_context_id(&mut transaction, context_id)
                     .await?;
-                supplied_codes.insert(code);
+                supplied_keys.insert((code.to_owned(), context_id));
                 if let Some(target) = relationship_target {
                     supplied_relationship_values.insert((code.to_owned(), context_id, target));
                 } else {
@@ -540,7 +540,7 @@ impl CatalogRepository {
                 let context_id = self
                     .resolve_context_id(&mut transaction, relationship.context_id)
                     .await?;
-                supplied_codes.insert(code);
+                supplied_keys.insert((code.to_owned(), context_id));
                 supplied_relationship_sets.insert((code.to_owned(), context_id));
             }
         }
@@ -565,11 +565,13 @@ impl CatalogRepository {
                 migration_value_compatible(source, target, value, default_context_id)
             });
             let discarded = discarded_attributes.contains(source.code.as_str());
-            if !compatible && !discarded && !supplied_codes.contains(source.code.as_str()) {
+            let key = (source.code.clone(), value.context_id);
+            // A replacement in another context does not resolve this value;
+            // silently archiving it would lose data in the current context.
+            if !compatible && !discarded && !supplied_keys.contains(&key) {
                 unresolved.insert(source.code.clone());
                 continue;
             }
-            let key = (source.code.clone(), value.context_id);
             let replaced = if source.value_type == "relationship" {
                 supplied_relationship_sets.contains(&key)
                     || value.relationship_target_entity_id.is_some_and(|target| {
@@ -681,7 +683,11 @@ impl CatalogRepository {
                     kind: EventSourceKind::Api,
                     name: "catalog_api".to_owned(),
                 },
-                metadata: serde_json::json!({}),
+                metadata: input
+                    .removal_policy
+                    .as_ref()
+                    .map(|policy| serde_json::json!({"removal_policy": policy}))
+                    .unwrap_or_else(|| serde_json::json!({})),
                 payload: serde_json::to_value(EntityMigratedV1 {
                     entity_id: target_entity.id,
                     blueprint_id: target_entity.blueprint_id,

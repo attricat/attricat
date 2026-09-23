@@ -86,6 +86,7 @@ async fn compatible_scalar_migration_preserves_row_identity_without_history(pool
                 values: Vec::new(),
                 relationships: Vec::new(),
                 discard_attributes: Vec::new(),
+                removal_policy: None,
             },
         )
         .await
@@ -207,6 +208,7 @@ async fn supplied_scalar_replacement_archives_the_old_row_once(pool: PgPool) {
                 }],
                 relationships: Vec::new(),
                 discard_attributes: Vec::new(),
+                removal_policy: None,
             },
         )
         .await
@@ -357,6 +359,7 @@ cardinality = "one"
                 values: Vec::new(),
                 relationships: Vec::new(),
                 discard_attributes: Vec::new(),
+                removal_policy: None,
             },
         )
         .await
@@ -461,6 +464,7 @@ value_type = "string"
                 values: Vec::new(),
                 relationships: Vec::new(),
                 discard_attributes: vec!["obsolete".to_owned()],
+                removal_policy: None,
             },
         )
         .await
@@ -663,6 +667,105 @@ cardinality = "one"
 }
 
 #[sqlx::test]
+async fn migration_requires_replacements_in_every_affected_context(pool: PgPool) {
+    let repository = CatalogRepository::system(pool.clone());
+    let other_context = uuid::Uuid::new_v4();
+    sqlx::query("INSERT INTO attribute_contexts (id, code, data) VALUES ($1, 'migration-other', '{}'::jsonb)")
+        .bind(other_context).execute(&pool).await.unwrap();
+    let definition = format!(
+        "{SCALAR_DEFINITION}\n[[attributes]]\ncode = \"rating\"\nvalue_type = \"string\"\ncontext_editable = \"all\"\n"
+    );
+    let blueprint = repository
+        .create_blueprint(CreateBlueprint {
+            definition: definition.clone(),
+        })
+        .await
+        .unwrap();
+    repository
+        .publish_blueprint_revision(blueprint.blueprint.id, 1)
+        .await
+        .unwrap();
+    let entity = repository
+        .create_entity_with_values(
+            blueprint.blueprint.id,
+            1,
+            vec![
+                NewAttributeValue::Scalar {
+                    attribute_id: None,
+                    attribute_code: Some("title".into()),
+                    context_id: None,
+                    value: json!("name"),
+                },
+                NewAttributeValue::Scalar {
+                    attribute_id: None,
+                    attribute_code: Some("rating".into()),
+                    context_id: None,
+                    value: json!("one"),
+                },
+                NewAttributeValue::Scalar {
+                    attribute_id: None,
+                    attribute_code: Some("rating".into()),
+                    context_id: Some(other_context),
+                    value: json!("two"),
+                },
+            ],
+            Vec::new(),
+            json!({}),
+        )
+        .await
+        .unwrap();
+    repository
+        .create_blueprint_revision(
+            blueprint.blueprint.id,
+            CreateBlueprint {
+                definition: definition.replace(
+                    "value_type = \"string\"\ncontext_editable = \"all\"",
+                    "value_type = \"integer\"\ncontext_editable = \"all\"",
+                ),
+            },
+        )
+        .await
+        .unwrap();
+    repository
+        .publish_blueprint_revision(blueprint.blueprint.id, 2)
+        .await
+        .unwrap();
+    let preview = repository
+        .preview_entity_migration(entity.id)
+        .await
+        .unwrap();
+    let error = repository
+        .migrate_entity_to_latest(
+            entity.id,
+            MigrateEntityRequest {
+                migration_id: preview.migration_id,
+                expected_target_version: 2,
+                values: vec![NewAttributeValue::Scalar {
+                    attribute_id: None,
+                    attribute_code: Some("rating".into()),
+                    context_id: None,
+                    value: json!(1),
+                }],
+                relationships: Vec::new(),
+                discard_attributes: Vec::new(),
+            },
+        )
+        .await
+        .unwrap_err();
+    assert!(
+        matches!(error, api::repository::RepositoryError::MigrationNeedsResolution(ref codes) if codes.contains(&"rating".to_owned()))
+    );
+    assert_eq!(
+        sqlx::query_scalar::<_, i64>("SELECT count(*) FROM attribute_values WHERE entity_id = $1")
+            .bind(entity.id)
+            .fetch_one(&pool)
+            .await
+            .unwrap(),
+        3
+    );
+}
+
+#[sqlx::test]
 async fn migration_rejects_non_default_value_when_target_becomes_default_only(pool: PgPool) {
     let repository = CatalogRepository::system(pool.clone());
     let context_id = uuid::Uuid::new_v4();
@@ -750,6 +853,7 @@ context_editable = "all"
                 values: Vec::new(),
                 relationships: Vec::new(),
                 discard_attributes: Vec::new(),
+                removal_policy: None,
             },
         )
         .await

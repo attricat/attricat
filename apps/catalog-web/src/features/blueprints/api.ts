@@ -4,6 +4,7 @@ import {
   blueprintEntityPublicationSummarySchema,
   blueprintMigrationBatchSchema,
   blueprintMigrationBatchStatusSchema,
+  blueprintMigrationImpactSchema,
   blueprintSchema,
   blueprintWithAttributesSchema,
   type Blueprint,
@@ -63,11 +64,27 @@ export const listBlueprintMigrationBatches = (id: string) =>
     z.array(blueprintMigrationBatchStatusSchema),
   );
 
-export const startSafeBlueprintMigrationBatch = (id: string, version: number) =>
+export const getSafeBlueprintMigrationImpact = (id: string, version: number) =>
+  request(
+    `/api/blueprints/${encodeURIComponent(z.uuid().parse(id))}/versions/${z.number().int().positive().parse(version)}/safe-migration-impact`,
+    blueprintMigrationImpactSchema,
+  );
+
+export const startSafeBlueprintMigrationBatch = (
+  id: string,
+  version: number,
+  removalDisposition?: 'archive',
+) =>
   request(
     `/api/blueprints/${encodeURIComponent(z.uuid().parse(id))}/versions/${z.number().int().positive().parse(version)}/safe-migration-batches`,
     blueprintMigrationBatchSchema,
-    { method: 'POST' },
+    removalDisposition
+      ? {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ removal_disposition: removalDisposition }),
+        }
+      : { method: 'POST' },
   );
 
 export const publishBlueprintEntities = (

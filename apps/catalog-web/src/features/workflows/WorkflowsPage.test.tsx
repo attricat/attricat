@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { render, screen } from '@testing-library/react';
+import { render, screen, waitFor } from '@testing-library/react';
 import { forwardRef, type ComponentPropsWithoutRef } from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import i18n from '../../i18n';
@@ -51,6 +51,109 @@ describe('WorkflowsPage', () => {
     ).toBeDefined();
     expect(listWorkflows).not.toHaveBeenCalled();
     expect(listWorkflowRuns).not.toHaveBeenCalled();
+  });
+
+  it('does not report no runs while run history is still loading', async () => {
+    vi.mocked(currentSession).mockResolvedValue({
+      capabilities: { workflows_manage: false, workflows_read: true },
+    } as Awaited<ReturnType<typeof currentSession>>);
+    vi.mocked(listWorkflows).mockResolvedValue([
+      {
+        code: 'example',
+        compiled_plan: {},
+        created_at: '2026-01-01T00:00:00Z',
+        definition: '',
+        definition_hash: '',
+        enabled_version: null,
+        id: '223e4567-e89b-12d3-a456-426614174000',
+        manual_enabled: false,
+        name: 'Example workflow',
+        published_at: null,
+        status: 'draft',
+        version: 1,
+      },
+    ]);
+    let finishRuns!: (
+      runs: Awaited<ReturnType<typeof listWorkflowRuns>>,
+    ) => void;
+    vi.mocked(listWorkflowRuns).mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          finishRuns = resolve;
+        }),
+    );
+    const client = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    });
+    render(
+      <QueryClientProvider client={client}>
+        <WorkflowsPage />
+      </QueryClientProvider>,
+    );
+    expect(await screen.findByText('Example workflow')).toBeTruthy();
+    expect(screen.queryByText('No runs recorded')).toBeNull();
+    finishRuns([]);
+    await waitFor(() =>
+      expect(screen.getByText('No runs recorded')).toBeTruthy(),
+    );
+  });
+
+  it('uses the newest run even if run history is returned out of order', async () => {
+    vi.mocked(currentSession).mockResolvedValue({
+      capabilities: { workflows_manage: false, workflows_read: true },
+    } as Awaited<ReturnType<typeof currentSession>>);
+    const workflowId = '223e4567-e89b-12d3-a456-426614174000';
+    vi.mocked(listWorkflows).mockResolvedValue([
+      {
+        code: 'example',
+        compiled_plan: {},
+        created_at: '2026-01-01T00:00:00Z',
+        definition: '',
+        definition_hash: '',
+        enabled_version: null,
+        id: workflowId,
+        manual_enabled: false,
+        name: 'Example workflow',
+        published_at: null,
+        status: 'draft',
+        version: 1,
+      },
+    ]);
+    const run = {
+      attempts: 0,
+      cancelled_at: null,
+      causal_depth: 0,
+      completed_at: null,
+      created_at: '2026-01-01T00:00:00Z',
+      failed_at: null,
+      id: '123e4567-e89b-12d3-a456-426614174000',
+      last_error: null,
+      root_trigger_event_id: '423e4567-e89b-12d3-a456-426614174000',
+      source: 'event' as const,
+      status: 'completed' as const,
+      trigger_event_id: '323e4567-e89b-12d3-a456-426614174000',
+      trigger_sequence: 4,
+      workflow_id: workflowId,
+      workflow_version: 1,
+    };
+    vi.mocked(listWorkflowRuns).mockResolvedValue([
+      { ...run, created_at: '2026-01-03T00:00:00Z', status: 'completed' },
+      {
+        ...run,
+        id: '223e4567-e89b-12d3-a456-426614174001',
+        created_at: '2026-01-01T00:00:00Z',
+        status: 'pending',
+      },
+    ]);
+    const client = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    });
+    render(
+      <QueryClientProvider client={client}>
+        <WorkflowsPage />
+      </QueryClientProvider>,
+    );
+    expect(await screen.findByText('Completed')).toBeTruthy();
   });
 
   it('shows localized statuses without management controls to read-only users', async () => {

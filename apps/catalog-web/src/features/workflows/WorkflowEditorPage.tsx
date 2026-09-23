@@ -3,7 +3,7 @@ import { useForm } from '@tanstack/react-form';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from '@tanstack/react-router';
 import { Alert, Box, Button, Paper, Stack, Typography } from '@mui/material';
-import { useEffect } from 'react';
+import { useEffect, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
 import { PageContainer } from '../../components/PageContainer';
 import { PageHeader } from '../../components/PageHeader';
@@ -54,6 +54,7 @@ export const WorkflowEditorPage = ({
     enabled: Boolean(workflowId && sourceVersion && canManage),
   });
   const validate = useMutation({ mutationFn: validateWorkflow });
+  const hydratedSource = useRef<string | undefined>(undefined);
   const save = useMutation({
     mutationFn: (definition: string) =>
       workflowId
@@ -71,11 +72,17 @@ export const WorkflowEditorPage = ({
   });
   const form = useForm({
     defaultValues: { definition: workflowId ? '' : starterDefinition },
-    onSubmit: ({ value }) => save.mutate(value.definition),
+    onSubmit: ({ value }) => {
+      if (!save.isPending) save.mutate(value.definition);
+    },
   });
   useEffect(() => {
-    if (source.data) form.setFieldValue('definition', source.data.definition);
-  }, [form, source.data]);
+    const sourceKey = `${workflowId}:${sourceVersion}`;
+    if (source.data && hydratedSource.current !== sourceKey) {
+      form.setFieldValue('definition', source.data.definition);
+      hydratedSource.current = sourceKey;
+    }
+  }, [form, source.data, sourceVersion, workflowId]);
 
   if (session.isPending || (workflowId && source.isPending))
     return (
@@ -135,6 +142,7 @@ export const WorkflowEditorPage = ({
                   height="100%"
                   language="toml"
                   onChange={(value) => {
+                    if (save.isPending) return;
                     validate.reset();
                     field.handleChange(value ?? '');
                   }}
@@ -142,7 +150,7 @@ export const WorkflowEditorPage = ({
                     ariaLabel: t('workflows.tomlDefinition'),
                     automaticLayout: true,
                     minimap: { enabled: false },
-                    readOnly: source.isError,
+                    readOnly: source.isError || save.isPending,
                     scrollBeyondLastLine: false,
                     tabSize: 2,
                     wordWrap: 'on',
@@ -170,7 +178,12 @@ export const WorkflowEditorPage = ({
             <form.Subscribe selector={(state) => state.values.definition}>
               {(definition) => (
                 <Button
-                  disabled={validate.isPending || !definition.trim()}
+                  disabled={
+                    validate.isPending ||
+                    save.isPending ||
+                    source.isError ||
+                    !definition.trim()
+                  }
                   onClick={() => validate.mutate(definition)}
                   variant="outlined"
                 >

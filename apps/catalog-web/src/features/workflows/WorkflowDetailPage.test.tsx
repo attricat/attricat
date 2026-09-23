@@ -11,6 +11,7 @@ import {
   listWorkflowRuns,
   publishWorkflowRevision,
   replayWorkflowRun,
+  runWorkflowNow,
 } from './api';
 import { workflowQueryKeys } from './query-keys';
 import { WorkflowDetailPage } from './WorkflowDetailPage';
@@ -36,6 +37,7 @@ vi.mock('./api', () => ({
   listWorkflowRuns: vi.fn(),
   publishWorkflowRevision: vi.fn(),
   replayWorkflowRun: vi.fn(),
+  runWorkflowNow: vi.fn(),
 }));
 
 const workflow = {
@@ -103,11 +105,71 @@ describe('WorkflowDetailPage', () => {
     expect(screen.queryByRole('button', { name: 'New revision' })).toBeNull();
     const revisionsTab = screen.getByRole('tab', { name: 'Revision history' });
     expect(revisionsTab.getAttribute('aria-controls')).toBe(
-      'workflow-tabpanel-0',
+      screen.getByRole('tabpanel').id,
     );
     expect(screen.getByRole('tabpanel').getAttribute('aria-labelledby')).toBe(
       revisionsTab.id,
     );
+  });
+
+  it('gives each mounted workflow its own tab and panel IDs', async () => {
+    vi.mocked(currentSession).mockResolvedValue({
+      capabilities: { workflows_manage: false, workflows_read: true },
+    } as Awaited<ReturnType<typeof currentSession>>);
+    vi.mocked(listWorkflowRevisions).mockResolvedValue([workflow]);
+    vi.mocked(listWorkflowRuns).mockResolvedValue([]);
+    const client = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    });
+    render(
+      <QueryClientProvider client={client}>
+        <WorkflowDetailPage workflowId={workflow.id} />
+        <WorkflowDetailPage workflowId={workflow.id} />
+      </QueryClientProvider>,
+    );
+    const tabs = await screen.findAllByRole('tab', {
+      name: 'Revision history',
+    });
+    const panels = screen.getAllByRole('tabpanel');
+    expect(tabs[0].id).not.toBe(tabs[1].id);
+    expect(panels[0].id).not.toBe(panels[1].id);
+    tabs.forEach((tab, index) => {
+      expect(tab.getAttribute('aria-controls')).toBe(panels[index].id);
+      expect(panels[index].getAttribute('aria-labelledby')).toBe(tab.id);
+    });
+  });
+
+  it('locks the manual entity ID and submits a snapshot of the requested run', async () => {
+    vi.mocked(currentSession).mockResolvedValue({
+      capabilities: { workflows_manage: true, workflows_read: true },
+    } as Awaited<ReturnType<typeof currentSession>>);
+    vi.mocked(listWorkflowRevisions).mockResolvedValue([
+      {
+        ...workflow,
+        status: 'published',
+        enabled_version: 1,
+        manual_enabled: true,
+      },
+    ]);
+    vi.mocked(listWorkflowRuns).mockResolvedValue([]);
+    vi.mocked(runWorkflowNow).mockImplementation(() => new Promise(() => {}));
+    renderPage();
+    const user = userEvent.setup();
+    const entityId = await screen.findByRole('textbox', {
+      name: 'Manual run entity ID',
+    });
+    await user.type(entityId, '  entity-1  ');
+    await user.click(screen.getByRole('button', { name: 'Run now' }));
+    expect(runWorkflowNow).toHaveBeenCalledWith(
+      workflow.id,
+      'entity-1',
+      expect.any(String),
+    );
+    expect((entityId as HTMLInputElement).disabled).toBe(true);
+    expect(
+      (screen.getByRole('button', { name: 'Run now' }) as HTMLButtonElement)
+        .disabled,
+    ).toBe(true);
   });
 
   it('invalidates lifecycle and replay diagnostics after management actions', async () => {

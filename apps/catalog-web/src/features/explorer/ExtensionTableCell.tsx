@@ -26,7 +26,7 @@ type Props = {
  * sandbox has started, and permanently if the renderer is unavailable, slow,
  * or fails. The parent only creates this component for virtualized cells.
  */
-export const ExtensionTableCell = ({
+const ExtensionTableCellContent = ({
   contribution,
   context,
   fallback,
@@ -86,3 +86,10 @@ export const ExtensionTableCell = ({
     </Box>
   );
 };
+
+export const ExtensionTableCell = (props: Props) => (
+  <ExtensionTableCellContent
+    key={`${props.contribution?.release_id ?? ''}:${JSON.stringify(props.context)}`}
+    {...props}
+  />
+);

@@ -21,6 +21,9 @@ export const ContextsPage = () => {
     queryKey: contextQueryKeys.all(),
     queryFn: ({ signal }) => listContexts(signal),
   });
+  const contextCodes = new Map(
+    contexts.data?.map((context) => [context.id, context.code]) ?? [],
+  );
   return (
     <PageContainer>
       <PageHeader
@@ -50,7 +53,16 @@ export const ContextsPage = () => {
               <ListItem divider key={context.id}>
                 <ListItemText
                   primary={context.code}
-                  secondary={`${context.parent_id ? `${t('contexts.parent', { parent: contexts.data.find((parent) => parent.id === context.parent_id)?.code ?? t('contexts.unknown') })} · ` : `${t('contexts.root')} · `}${JSON.stringify(context.data)}`}
+                  secondary={[
+                    context.parent_id
+                      ? t('contexts.parent', {
+                          parent:
+                            contextCodes.get(context.parent_id) ??
+                            t('contexts.unknown'),
+                        })
+                      : t('contexts.root'),
+                    JSON.stringify(context.data),
+                  ].join(' · ')}
                 />
               </ListItem>
             ))}

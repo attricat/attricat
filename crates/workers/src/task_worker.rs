@@ -150,6 +150,7 @@ async fn run(
         if stopping {
             break;
         }
+        let mut claim_failed = false;
         while running.len() < config.concurrency {
             // Claim one registered kind at a time so the lease used at claim
             // is the registered per-kind policy, not a truncated global value.
@@ -157,13 +158,21 @@ async fn run(
             for offset in 0..kinds.len() {
                 let index = (next_kind + offset) % kinds.len();
                 let kind = kinds[index];
-                if let Some(task) = repository
+                match repository
                     .claim_task_for_kinds(&config.worker_id, kind.policy().lease_duration, &[kind])
-                    .await?
+                    .await
                 {
-                    next_kind = (index + 1) % kinds.len();
-                    claimed = Some(task);
-                    break;
+                    Ok(Some(task)) => {
+                        next_kind = (index + 1) % kinds.len();
+                        claimed = Some(task);
+                        break;
+                    }
+                    Ok(None) => {}
+                    Err(error) => {
+                        tracing::warn!(%error, "task claim failed; retrying after backoff");
+                        claim_failed = true;
+                        break;
+                    }
                 }
             }
             let Some(task) = claimed else {
@@ -180,6 +189,15 @@ async fn run(
                 .increment(1);
             let task_repository = repository.clone();
             running.spawn(execute(task_repository, handler, task));
+        }
+        if claim_failed {
+            // Keep the executor alive across transient database failures;
+            // respect shutdown even when the queue cannot be reached.
+            tokio::select! {
+                _ = time::sleep(Duration::from_secs(1)) => {}
+                _ = shutdown.changed() => { stopping = true; }
+            }
+            continue;
         }
         tokio::select! {
             _ = shutdown.changed() => {
@@ -384,6 +402,39 @@ mod tests {
     #[test]
     fn registry_rejects_duplicate_kinds() {
         assert!(TaskHandlerRegistry::new(vec![Arc::new(Duplicate), Arc::new(Duplicate)]).is_err());
+    }
+
+    #[tokio::test]
+    async fn claim_failure_does_not_stop_the_worker() {
+        let pool = sqlx::postgres::PgPoolOptions::new()
+            .acquire_timeout(Duration::from_millis(100))
+            .connect_lazy("postgres://postgres@127.0.0.1:1/catalog")
+            .unwrap();
+        let repository = CatalogRepository::system(pool);
+        let registry = TaskHandlerRegistry::new(vec![Arc::new(Duplicate)]).unwrap();
+        let (shutdown, receiver) = watch::channel(());
+        let worker = start(
+            repository,
+            registry,
+            TaskWorkerConfig {
+                worker_id: "test".into(),
+                concurrency: 1,
+                poll_interval: Duration::from_millis(10),
+                shutdown_grace: Duration::from_millis(10),
+            },
+            receiver,
+        );
+        time::sleep(Duration::from_millis(250)).await;
+        assert!(
+            !worker.is_finished(),
+            "transient claim failure must not kill the worker"
+        );
+        shutdown.send(()).unwrap();
+        time::timeout(Duration::from_secs(2), worker)
+            .await
+            .unwrap()
+            .unwrap()
+            .unwrap();
     }
 }
 

@@ -68,16 +68,22 @@ export const WorkflowsPage = () => {
       {},
     ),
   );
-  const runSummary = (id: string) => {
-    const matching = (runs.data ?? []).filter((run) => run.workflow_id === id);
-    const deadLetters = matching.filter(
-      (run) => run.status === 'dead_letter',
-    ).length;
-    const latest = matching.sort((a, b) =>
-      b.created_at.localeCompare(a.created_at),
-    )[0];
-    return { deadLetters, latest };
-  };
+  const runSummaries = new Map<
+    string,
+    {
+      deadLetters: number;
+      latest: Awaited<ReturnType<typeof listWorkflowRuns>>[number];
+    }
+  >();
+  for (const run of runs.data ?? []) {
+    const summary = runSummaries.get(run.workflow_id) ?? {
+      deadLetters: 0,
+      latest: run,
+    };
+    if (run.status === 'dead_letter') summary.deadLetters += 1;
+    if (run.created_at > summary.latest.created_at) summary.latest = run;
+    runSummaries.set(run.workflow_id, summary);
+  }
 
   if (session.isPending)
     return (
@@ -137,7 +143,7 @@ export const WorkflowsPage = () => {
               </TableHead>
               <TableBody>
                 {families.map((workflow) => {
-                  const summary = runSummary(workflow.id);
+                  const summary = runSummaries.get(workflow.id);
                   const enabled = workflow.enabled_version !== null;
                   return (
                     <TableRow hover key={workflow.id}>
@@ -180,7 +186,11 @@ export const WorkflowsPage = () => {
                         </Stack>
                       </TableCell>
                       <TableCell>
-                        {summary.deadLetters > 0 ? (
+                        {runs.isPending ? (
+                          t('workflows.loading')
+                        ) : runs.isError ? (
+                          t('workflows.notAvailable')
+                        ) : summary && summary.deadLetters > 0 ? (
                           <Chip
                             color="error"
                             label={t('workflows.deadLetters', {
@@ -188,7 +198,7 @@ export const WorkflowsPage = () => {
                             })}
                             size="small"
                           />
-                        ) : summary.latest ? (
+                        ) : summary ? (
                           <Stack spacing={0.25}>
                             <Chip
                               label={t(

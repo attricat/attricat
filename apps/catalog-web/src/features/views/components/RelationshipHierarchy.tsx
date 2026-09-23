@@ -46,6 +46,10 @@ export const RelationshipHierarchy = ({
       enabled: Boolean(contextId),
     })),
   });
+  if (!contextId)
+    return (
+      <Typography color="text.secondary">{t('views.noHierarchy')}</Typography>
+    );
   if (hierarchies.some((hierarchy) => hierarchy.isPending))
     return <Typography>{t('views.loadingHierarchy')}</Typography>;
   const failedHierarchy = hierarchies.find((hierarchy) => hierarchy.isError);

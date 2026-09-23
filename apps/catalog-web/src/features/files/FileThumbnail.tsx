@@ -160,11 +160,13 @@ export const FileThumbnail = ({
     (variant) => variant.kind === 'thumbnail',
   );
   const source =
-    currentFile?.status === 'ready'
-      ? fileDownloadUrl(currentFile.id, thumbnail?.kind)
+    currentFile?.status === 'ready' && thumbnail
+      ? fileDownloadUrl(currentFile.id, thumbnail.kind)
       : undefined;
   const unavailable =
-    currentFile?.status === 'failed' || currentFile?.status === 'deleted';
+    (currentFile?.status === 'ready' && !thumbnail) ||
+    currentFile?.status === 'failed' ||
+    currentFile?.status === 'deleted';
 
   return (
     <ThumbnailPreview

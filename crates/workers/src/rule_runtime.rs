@@ -256,7 +256,20 @@ pub fn start_schedule_coordinator(
 ) -> tokio::task::JoinHandle<()> {
     tokio::spawn(async move {
         loop {
-            for workspace in repository.active_workspace_ids().await.unwrap_or_default() {
+            let (workspaces, delay) = match repository.active_workspace_ids().await {
+                Ok(workspaces) => {
+                    metrics::gauge!("catalog_schedule_coordinator_healthy", "kind" => "rule")
+                        .set(1.0);
+                    (workspaces, Duration::from_millis(250))
+                }
+                Err(error) => {
+                    metrics::gauge!("catalog_schedule_coordinator_healthy", "kind" => "rule")
+                        .set(0.0);
+                    tracing::warn!(%error, "rule scheduler cannot discover workspaces");
+                    (Vec::new(), Duration::from_secs(5))
+                }
+            };
+            for workspace in workspaces {
                 match repository.for_workspace(workspace).await {
                     Ok(scoped) => {
                         if let Err(error) = scoped.backfill_rule_tasks().await {
@@ -269,7 +282,7 @@ pub fn start_schedule_coordinator(
                     Err(error) => tracing::error!(%error, "rule scheduler workspace scope failed"),
                 }
             }
-            tokio::select! { _ = tokio::time::sleep(Duration::from_millis(250)) => {}, _ = shutdown.changed() => return }
+            tokio::select! { _ = tokio::time::sleep(delay) => {}, _ = shutdown.changed() => return }
         }
     })
 }
