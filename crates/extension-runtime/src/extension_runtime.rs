@@ -1063,10 +1063,22 @@ impl HostState {
         let port = url
             .port_or_known_default()
             .ok_or_else(|| "HTTPS URL needs a port".to_owned())?;
-        let addresses: Vec<std::net::SocketAddr> = tokio::net::lookup_host((host, port))
-            .await
-            .map_err(|_| "destination DNS lookup failed")?
-            .collect();
+        // Admit the call before DNS so failed and slow lookups also consume the
+        // extension's network budget. A reqwest timeout does not cover this lookup.
+        if !allow_network_request(
+            self.installation.installed_release_id,
+            &self.installation.extension_id,
+        ) {
+            return Err("network request rate limit exceeded".into());
+        }
+        let addresses: Vec<std::net::SocketAddr> = tokio::time::timeout(
+            Duration::from_millis(rule.timeout_ms),
+            tokio::net::lookup_host((host, port)),
+        )
+        .await
+        .map_err(|_| "destination DNS lookup timed out")?
+        .map_err(|_| "destination DNS lookup failed")?
+        .collect();
         if addresses.is_empty()
             || addresses.iter().any(|address| {
                 !catalog_extension_manifest::extensions::is_public_destination(address.ip())
@@ -1123,12 +1135,6 @@ impl HostState {
                 reqwest::header::HeaderValue::from_str(&(item.prefix + &secret))
                     .map_err(|_| "secret cannot be used as a header")?,
             );
-        }
-        if !allow_network_request(
-            self.installation.installed_release_id,
-            &self.installation.extension_id,
-        ) {
-            return Err("network request rate limit exceeded".into());
         }
         let client = Client::builder()
             // Environment proxy settings would bypass the checked/pinned target

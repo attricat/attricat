@@ -255,7 +255,7 @@ impl CatalogRepository {
         Ok(())
     }
 
-    pub(super) async fn get_context_by_id(
+    pub async fn get_context_by_id(
         &self,
         id: Uuid,
     ) -> Result<Option<AttributeContext>, RepositoryError> {

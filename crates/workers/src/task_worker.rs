@@ -182,11 +182,11 @@ async fn run(
             running.spawn(execute(task_repository, handler, task));
         }
         tokio::select! {
-            changed = shutdown.changed() => {
-                if changed.is_ok() {
-                    stopping = true;
-                    tracing::info!(running = running.len(), "task worker stopped claiming; draining active tasks");
-                }
+            _ = shutdown.changed() => {
+                // A closed channel also means nobody can supervise this worker.
+                // Drain rather than spinning on the immediately-ready error.
+                stopping = true;
+                tracing::info!(running = running.len(), "task worker stopped claiming; draining active tasks");
             }
             joined = running.join_next(), if !running.is_empty() => {
                 if let Some(Err(error)) = joined {

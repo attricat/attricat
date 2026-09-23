@@ -103,12 +103,28 @@ pub(super) async fn smart_fill_entity_form(
         .entity_reusable_attributes(input.entity_id)
         .await?;
     let reusable_values = repository.reusable_form_values(input.entity_id).await?;
+    let is_default_context = match input.context_id {
+        Some(id) => {
+            repository
+                .get_context_by_id(id)
+                .await?
+                .ok_or_else(|| ApiError::invalid_input("unknown context".to_owned()))?
+                .code
+                == "default"
+        }
+        None => true,
+    };
+    if input.is_default_context != is_default_context {
+        return Err(ApiError::invalid_input(
+            "is_default_context does not match context_id".to_owned(),
+        ));
+    }
     let mut editable = Vec::new();
     for attribute in &blueprint.attributes {
         if !attribute.readonly
             && attribute.value_type != "relationship"
             && attribute.value_type != "file"
-            && (input.is_default_context || attribute.context_editable != "default")
+            && (is_default_context || attribute.context_editable != "default")
         {
             editable.push(json!({
                 "code": attribute.code,
@@ -121,7 +137,7 @@ pub(super) async fn smart_fill_entity_form(
         if !attribute.readonly
             && attribute.value_type != "relationship"
             && attribute.value_type != "file"
-            && (input.is_default_context || attribute.context_editable != "default")
+            && (is_default_context || attribute.context_editable != "default")
         {
             editable.push(json!({
                 "code": attribute.code,
@@ -130,11 +146,15 @@ pub(super) async fn smart_fill_entity_form(
             }));
         }
     }
-    let current_values = values
+    let allowed = editable
         .iter()
-        .chain(reusable_values.iter())
-        .filter(|value| matches!(value, crate::model::FormAttributeValue::Scalar { context_id, .. } if *context_id == input.context_id))
-        .collect::<Vec<_>>();
+        .filter_map(|field| field.get("code").and_then(Value::as_str))
+        .collect::<std::collections::HashSet<_>>();
+    let current_values = editable_scalar_values(
+        values.iter().chain(reusable_values.iter()),
+        input.context_id,
+        &allowed,
+    );
     let prompt = json!({
         "entity_id": input.entity_id,
         "context_id": input.context_id,
@@ -183,10 +203,6 @@ pub(super) async fn smart_fill_entity_form(
             serde_json::from_value::<std::collections::BTreeMap<String, String>>(value).ok()
         })
         .ok_or_else(|| ApiError::invalid_input("agent returned invalid form values".to_owned()))?;
-    let allowed = editable
-        .iter()
-        .filter_map(|field| field.get("code").and_then(Value::as_str))
-        .collect::<std::collections::HashSet<_>>();
     Ok(Json(SmartFillEntityFormResponse {
         fields: fields
             .into_iter()
@@ -194,6 +210,48 @@ pub(super) async fn smart_fill_entity_form(
             .collect(),
     }))
 }
+fn editable_scalar_values<'a>(
+    values: impl Iterator<Item = &'a crate::model::FormAttributeValue>,
+    context_id: Option<Uuid>,
+    allowed: &std::collections::HashSet<&str>,
+) -> Vec<&'a crate::model::FormAttributeValue> {
+    values
+        .filter(|value| matches!(value, crate::model::FormAttributeValue::Scalar { attribute_code, context_id: value_context, .. }
+            if *value_context == context_id && allowed.contains(attribute_code.as_str())))
+        .collect()
+}
+
+#[cfg(test)]
+mod smart_fill_tests {
+    use super::*;
+
+    #[test]
+    fn only_editable_scalar_values_in_the_requested_context_reach_the_provider() {
+        let context = Uuid::new_v4();
+        let values = [
+            crate::model::FormAttributeValue::Scalar {
+                attribute_code: "name".into(),
+                context_id: Some(context),
+                value: json!("ok"),
+            },
+            crate::model::FormAttributeValue::Scalar {
+                attribute_code: "private".into(),
+                context_id: Some(context),
+                value: json!("secret"),
+            },
+            crate::model::FormAttributeValue::Scalar {
+                attribute_code: "name".into(),
+                context_id: Some(Uuid::new_v4()),
+                value: json!("other"),
+            },
+        ];
+        let allowed = std::collections::HashSet::from(["name"]);
+        let filtered = editable_scalar_values(values.iter(), Some(context), &allowed);
+        assert_eq!(filtered.len(), 1);
+        assert_eq!(serde_json::to_value(filtered[0]).unwrap()["value"], "ok");
+    }
+}
+
 pub(super) async fn delete_entity(
     State(state): State<AppState>,
     super::auth::ScopedRepository(repository): super::auth::ScopedRepository,

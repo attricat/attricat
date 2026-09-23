@@ -127,9 +127,18 @@ impl OpenAiCompatibleClient {
         {
             return Err(ProviderError::Malformed);
         }
-        let body = response.bytes().await.map_err(map_request_error)?;
-        if body.len() > MAX_PROVIDER_BODY_BYTES {
-            return Err(ProviderError::Malformed);
+        let mut body = Vec::new();
+        let mut stream = response.bytes_stream();
+        while let Some(chunk) = stream.next().await {
+            let chunk = chunk.map_err(map_request_error)?;
+            if body
+                .len()
+                .checked_add(chunk.len())
+                .is_none_or(|size| size > MAX_PROVIDER_BODY_BYTES)
+            {
+                return Err(ProviderError::Malformed);
+            }
+            body.extend_from_slice(&chunk);
         }
         serde_json::from_slice(&body).map_err(|_| ProviderError::Malformed)
     }
@@ -445,6 +454,16 @@ mod tests {
             let result = client.stream(vec![], vec![], |_| {}).await;
             server.abort();
             assert!(result.is_ok());
+        });
+    }
+
+    #[test]
+    fn rejects_oversized_unframed_completion_without_content_length() {
+        tokio::runtime::Runtime::new().unwrap().block_on(async {
+            let (client, server) = mock_client("x".repeat(MAX_PROVIDER_BODY_BYTES + 1)).await;
+            let result = client.complete(vec![], vec![]).await;
+            server.abort();
+            assert!(matches!(result, Err(ProviderError::Malformed)));
         });
     }
 
