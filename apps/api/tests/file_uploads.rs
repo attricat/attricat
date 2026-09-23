@@ -118,6 +118,29 @@ async fn malformed_trailing_multipart_field_removes_staged_files(pool: PgPool) {
 }
 
 #[sqlx::test]
+async fn oversized_context_id_is_rejected_before_buffering_the_field(pool: PgPool) {
+    let (base_url, server) = start_server(pool.clone()).await;
+    let client = authenticated_client();
+    let blueprint = upload_blueprint(&client, &base_url).await;
+    let entity = create_entity(&client, &base_url, &blueprint).await;
+    let response = client
+        .post(format!(
+            "{base_url}/entities/{}/file-attributes/image/uploads",
+            entity["id"].as_str().unwrap()
+        ))
+        .multipart(
+            Form::new()
+                .text("context_id", "x".repeat(128 * 1024))
+                .part("file", png_part("image.png")),
+        )
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::UNPROCESSABLE_ENTITY);
+    server.abort();
+}
+
+#[sqlx::test]
 async fn text_upload_with_binary_tail_is_rejected(pool: PgPool) {
     let store = Arc::new(FakeObjectStore::available());
     let (base_url, server) = start_server_with_object_store(pool.clone(), store.clone()).await;

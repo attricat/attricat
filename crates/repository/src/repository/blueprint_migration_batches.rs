@@ -115,18 +115,9 @@ impl CatalogRepository {
         if target.blueprint.version != target_version || target.blueprint.kind != "entity" {
             return Err(RepositoryError::BlueprintMigrationNotSafe);
         }
-        let revisions = self.list_blueprint_revisions(blueprint_id).await?;
-        let Some(source_revision) = revisions.iter().find(|revision| {
-            revision.version == target_version - 1 && revision.status == "published"
-        }) else {
-            return Err(RepositoryError::BlueprintMigrationNotSafe);
-        };
-        let source = self
-            .get_blueprint_revision(blueprint_id, source_revision.version)
-            .await?
-            .ok_or(RepositoryError::NotFound("blueprint version"))?;
-        let removed_attribute_codes = safe_automatic_migration(&source, &target)
-            .ok_or(RepositoryError::BlueprintMigrationNotSafe)?;
+        let removed_attribute_codes = self
+            .safe_removed_attribute_codes(blueprint_id, target_version, &target)
+            .await?;
         let impact = self
             .safe_blueprint_migration_impact_for(
                 blueprint_id,
@@ -187,18 +178,46 @@ impl CatalogRepository {
         if target.blueprint.version != target_version || target.blueprint.kind != "entity" {
             return Err(RepositoryError::BlueprintMigrationNotSafe);
         }
-        let source = self
-            .get_blueprint_revision(blueprint_id, target_version - 1)
-            .await?
-            .ok_or(RepositoryError::NotFound("blueprint version"))?;
-        let removed_attribute_codes = safe_automatic_migration(&source, &target)
-            .ok_or(RepositoryError::BlueprintMigrationNotSafe)?;
+        let removed_attribute_codes = self
+            .safe_removed_attribute_codes(blueprint_id, target_version, &target)
+            .await?;
         self.safe_blueprint_migration_impact_for(
             blueprint_id,
             target_version,
             &removed_attribute_codes,
         )
         .await
+    }
+
+    async fn safe_removed_attribute_codes(
+        &self,
+        blueprint_id: Uuid,
+        target_version: i64,
+        target: &crate::model::BlueprintWithAttributes,
+    ) -> Result<Vec<String>, RepositoryError> {
+        let revisions = self.list_blueprint_revisions(blueprint_id).await?;
+        if !revisions.iter().any(|revision| {
+            revision.version == target_version - 1 && revision.status == "published"
+        }) {
+            return Err(RepositoryError::BlueprintMigrationNotSafe);
+        }
+        // Candidates can belong to *any* earlier revision. Aggregate removal
+        // requirements across every possible source, not only the predecessor.
+        let mut removed = std::collections::BTreeSet::new();
+        for revision in revisions
+            .iter()
+            .filter(|revision| revision.version < target_version)
+        {
+            let source = self
+                .get_blueprint_revision(blueprint_id, revision.version)
+                .await?
+                .ok_or(RepositoryError::NotFound("blueprint version"))?;
+            removed.extend(
+                safe_automatic_migration(&source, target)
+                    .ok_or(RepositoryError::BlueprintMigrationNotSafe)?,
+            );
+        }
+        Ok(removed.into_iter().collect())
     }
 
     async fn safe_blueprint_migration_impact_for(
@@ -431,6 +450,11 @@ impl CatalogRepository {
                         ) => {}
                 Ok(_) => return Ok("needs_input"),
                 Err(error) => {
+                    if retryable_batch_error(&error) {
+                        // Preserve this reservation so the task queue can retry
+                        // after transient database failures.
+                        return Err(error);
+                    }
                     self.record_batch_failure(migration.id, &error.to_string())
                         .await?;
                     return Ok("failed");
@@ -468,6 +492,9 @@ impl CatalogRepository {
         {
             Ok(_) => Ok("migrated"),
             Err(error) => {
+                if retryable_batch_error(&error) {
+                    return Err(error);
+                }
                 self.record_batch_failure(migration.id, &error.to_string())
                     .await?;
                 Ok("failed")
@@ -556,6 +583,10 @@ impl CatalogRepository {
     }
 }
 
+fn retryable_batch_error(error: &RepositoryError) -> bool {
+    matches!(error, RepositoryError::Database(_))
+}
+
 fn removal_policy_covers_preview(
     removal_policy: &serde_json::Value,
     issues: &[crate::model::MigrationIssue],
@@ -609,4 +640,19 @@ fn safe_automatic_migration(
         }
     }
     Some(removed)
+}
+
+#[cfg(test)]
+mod batch_error_tests {
+    use super::*;
+
+    #[test]
+    fn database_failures_remain_retryable_but_validation_failures_are_terminal() {
+        assert!(retryable_batch_error(&RepositoryError::Database(
+            sqlx::Error::PoolClosed
+        )));
+        assert!(!retryable_batch_error(
+            &RepositoryError::InvalidBlueprintDefinition("invalid".into())
+        ));
+    }
 }

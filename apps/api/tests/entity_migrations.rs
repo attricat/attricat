@@ -748,6 +748,7 @@ async fn migration_requires_replacements_in_every_affected_context(pool: PgPool)
                 }],
                 relationships: Vec::new(),
                 discard_attributes: Vec::new(),
+                removal_policy: None,
             },
         )
         .await

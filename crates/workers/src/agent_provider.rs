@@ -167,7 +167,7 @@ impl OpenAiCompatibleClient {
             .map_err(map_request_error)?;
         status(response.status())?;
         let mut stream = response.bytes_stream();
-        let mut buffer = String::new();
+        let mut buffer = Vec::new();
         let mut received_bytes: usize = 0;
         let mut content = String::new();
         let mut calls: Vec<PartialToolCall> = Vec::new();
@@ -187,9 +187,13 @@ impl OpenAiCompatibleClient {
             {
                 return Err(ProviderError::Malformed);
             }
-            buffer.push_str(std::str::from_utf8(&chunk).map_err(|_| ProviderError::Malformed)?);
+            // Network chunks may split a UTF-8 code point. Decode only after
+            // the ASCII SSE frame delimiter has arrived.
+            buffer.extend_from_slice(&chunk);
             while let Some((end, separator_length)) = sse_frame_end(&buffer) {
-                let frame = buffer[..end].to_owned();
+                let frame = std::str::from_utf8(&buffer[..end])
+                    .map_err(|_| ProviderError::Malformed)?
+                    .to_owned();
                 buffer.drain(..end + separator_length);
                 let data = frame
                     .lines()
@@ -257,9 +261,15 @@ impl OpenAiCompatibleClient {
         Err(ProviderError::Malformed)
     }
 }
-fn sse_frame_end(buffer: &str) -> Option<(usize, usize)> {
-    let lf = buffer.find("\n\n").map(|index| (index, 2));
-    let crlf = buffer.find("\r\n\r\n").map(|index| (index, 4));
+fn sse_frame_end(buffer: &[u8]) -> Option<(usize, usize)> {
+    let lf = buffer
+        .windows(2)
+        .position(|bytes| bytes == b"\n\n")
+        .map(|index| (index, 2));
+    let crlf = buffer
+        .windows(4)
+        .position(|bytes| bytes == b"\r\n\r\n")
+        .map(|index| (index, 4));
     match (lf, crlf) {
         (Some(lf), Some(crlf)) => Some(if lf.0 < crlf.0 { lf } else { crlf }),
         (Some(frame), None) | (None, Some(frame)) => Some(frame),
@@ -374,6 +384,7 @@ mod tests {
         http::{Response, header},
         routing::post,
     };
+    use futures_util::StreamExt;
     use url::Url;
 
     async fn mock_client(body: String) -> (OpenAiCompatibleClient, tokio::task::JoinHandle<()>) {
@@ -438,6 +449,53 @@ mod tests {
             let result = client.stream(vec![], vec![], |_| {}).await;
             server.abort();
             assert_eq!(result.unwrap().content.as_deref(), Some("hello"));
+        });
+    }
+
+    #[test]
+    fn accepts_utf8_code_points_split_across_network_chunks() {
+        tokio::runtime::Runtime::new().unwrap().block_on(async {
+            let frame = "data: {\"choices\":[{\"delta\":{\"content\":\"café\"}}]}\n\n";
+            let split = frame
+                .as_bytes()
+                .iter()
+                .position(|byte| *byte == 0xc3)
+                .unwrap()
+                + 1;
+            let chunks = vec![
+                bytes::Bytes::copy_from_slice(&frame.as_bytes()[..split]),
+                bytes::Bytes::copy_from_slice(&frame.as_bytes()[split..]),
+                bytes::Bytes::from_static(b"data: [DONE]\n\n"),
+            ];
+            let app = Router::new().route(
+                "/v1/chat/completions",
+                post(move || async move {
+                    let stream = futures_util::stream::iter(chunks).then(|chunk| async move {
+                        tokio::time::sleep(std::time::Duration::from_millis(10)).await;
+                        Ok::<_, std::convert::Infallible>(chunk)
+                    });
+                    Response::builder()
+                        .header(header::CONTENT_TYPE, "text/event-stream")
+                        .body(Body::from_stream(stream))
+                        .unwrap()
+                }),
+            );
+            let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+            let address = listener.local_addr().unwrap();
+            let server = tokio::spawn(async move {
+                axum::serve(listener, app).await.unwrap();
+            });
+            let config = AgentProviderConfig::from_values(|name| match name {
+                "LLM_API_KEY" => Some("test-key".to_owned()),
+                "LLM_BASE_URL" => Some(format!("http://{address}/v1")),
+                _ => None,
+            })
+            .unwrap()
+            .unwrap();
+            let client = OpenAiCompatibleClient::new(&config).unwrap();
+            let result = client.stream(vec![], vec![], |_| {}).await;
+            server.abort();
+            assert_eq!(result.unwrap().content.as_deref(), Some("café"));
         });
     }
 

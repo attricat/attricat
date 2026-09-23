@@ -230,6 +230,87 @@ async fn slow_provider() -> axum::http::StatusCode {
 }
 
 #[sqlx::test]
+async fn agent_deltas_are_persisted_before_the_provider_finishes(pool: PgPool) {
+    let (_, api_server) = start_server(pool.clone()).await;
+    let release = Arc::new(tokio::sync::Notify::new());
+    let provider_listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let provider_address = provider_listener.local_addr().unwrap();
+    let provider_release = release.clone();
+    let provider = tokio::spawn(async move {
+        axum::serve(provider_listener, Router::new().route("/v1/chat/completions", post(move || {
+            let release = provider_release.clone();
+            async move {
+                axum::response::Response::builder()
+                    .header("content-type", "text/event-stream")
+                    .body(axum::body::Body::from_stream(async_stream::stream! {
+                        yield Ok::<_, std::convert::Infallible>(bytes::Bytes::from_static(b"data: {\"choices\":[{\"delta\":{\"content\":\"hello\"}}]}\n\n"));
+                        release.notified().await;
+                        yield Ok(bytes::Bytes::from_static(b"data: [DONE]\n\n"));
+                    }))
+                    .unwrap()
+            }
+        }))).await.unwrap();
+    });
+    let config = AgentProviderConfig::from_values(|name| match name {
+        "LLM_API_KEY" => Some("test-key".to_owned()),
+        "LLM_BASE_URL" => Some(format!("http://{provider_address}/v1")),
+        _ => None,
+    })
+    .unwrap()
+    .unwrap();
+    let repository = CatalogRepository::system(pool.clone())
+        .for_workspace(BOOTSTRAP_WORKSPACE_ID.parse().unwrap())
+        .await
+        .unwrap();
+    let conversation = repository
+        .create_conversation(Some(BOOTSTRAP_OWNER_ID.parse().unwrap()), "streamed")
+        .await
+        .unwrap();
+    let run = repository
+        .create_agent_run_for_user(
+            conversation.id,
+            BOOTSTRAP_OWNER_ID.parse().unwrap(),
+            config.base_url.as_str(),
+            &config.model,
+        )
+        .await
+        .unwrap();
+    let client = api::agent_provider::OpenAiCompatibleClient::new(&config).unwrap();
+    let store: Arc<dyn api::storage::ObjectStore> = Arc::new(FakeObjectStore::available());
+    let worker_repository = repository.clone();
+    let worker = tokio::spawn(async move {
+        api::agent_runner::run(&worker_repository, &client, &store, run.id, conversation.id).await
+    });
+    timeout(Duration::from_secs(3), async {
+        loop {
+            if repository
+                .agent_run_events_after(run.id, -1)
+                .await
+                .unwrap()
+                .iter()
+                .any(|event| {
+                    event.event_type == "message_delta" && event.payload == json!({"text":"hello"})
+                })
+            {
+                break;
+            }
+            sleep(Duration::from_millis(20)).await;
+        }
+    })
+    .await
+    .expect("first delta should be visible before provider completion");
+    assert!(!worker.is_finished());
+    release.notify_one();
+    timeout(Duration::from_secs(3), worker)
+        .await
+        .unwrap()
+        .unwrap()
+        .unwrap();
+    api_server.abort();
+    provider.abort();
+}
+
+#[sqlx::test]
 async fn agent_run_timeout_is_durably_failed_without_provider_details(pool: PgPool) {
     let (base_url, api_server) = start_server(pool.clone()).await;
     let client = authenticated_client();

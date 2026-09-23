@@ -1,5 +1,8 @@
 //! Durable single-run orchestration.
-use std::sync::Arc;
+use std::{
+    sync::{Arc, Mutex},
+    time::Duration,
+};
 
 use crate::{
     agent_provider::{
@@ -88,13 +91,29 @@ async fn drive(
     for message in messages {
         request.push(request_message(repository, object_store, message).await);
     }
-    let mut deltas = String::new();
-    let answer = match provider
-        .stream(request, agent_tools::definitions(), |delta| {
-            deltas.push_str(delta);
-        })
-        .await
-    {
+    let pending = Arc::new(Mutex::new(String::new()));
+    let stream_pending = pending.clone();
+    let mut stream = Box::pin(
+        provider.stream(request, agent_tools::definitions(), move |delta| {
+            stream_pending
+                .lock()
+                .expect("agent delta buffer poisoned")
+                .push_str(delta);
+        }),
+    );
+    // The provider callback is synchronous. Flush while its future waits for
+    // network frames so subscribers see text before generation completes,
+    // without a database write for every token.
+    let mut tick = tokio::time::interval(Duration::from_millis(200));
+    tick.tick().await;
+    let result = loop {
+        tokio::select! {
+            result = &mut stream => break result,
+            _ = tick.tick() => flush_deltas(repository, run_id, &pending).await?,
+        }
+    };
+    flush_deltas(repository, run_id, &pending).await?;
+    let answer = match result {
         Ok(answer) => answer,
         Err(error) => {
             tracing::warn!(%run_id, %error, "agent provider request failed");
@@ -102,11 +121,6 @@ async fn drive(
             return Ok(());
         }
     };
-    if !deltas.is_empty() {
-        repository
-            .append_run_event(run_id, "message_delta", json!({"text": deltas}))
-            .await?;
-    }
     let AssistantMessage {
         content,
         tool_calls,
@@ -275,6 +289,20 @@ async fn drive(
         .await?;
     Ok(())
 }
+async fn flush_deltas(
+    repository: &CatalogRepository,
+    run_id: Uuid,
+    pending: &Mutex<String>,
+) -> Result<(), RepositoryError> {
+    let text = std::mem::take(&mut *pending.lock().expect("agent delta buffer poisoned"));
+    if !text.is_empty() {
+        repository
+            .append_run_event(run_id, "message_delta", json!({"text": text}))
+            .await?;
+    }
+    Ok(())
+}
+
 async fn request_message(
     repository: &CatalogRepository,
     object_store: &Arc<dyn ObjectStore>,

@@ -86,6 +86,85 @@ async fn batch_with_two_old_entities(
 }
 
 #[sqlx::test]
+async fn safe_batch_rejects_an_unsafe_older_source_revision(pool: PgPool) {
+    let repository = CatalogRepository::system(pool.clone());
+    let source = repository
+        .create_blueprint(CreateBlueprint {
+            definition: format!(
+                "{DEFINITION}\n[[attributes]]\ncode = \"legacy\"\nvalue_type = \"string\"\n"
+            ),
+        })
+        .await
+        .unwrap();
+    repository
+        .publish_blueprint_revision(source.blueprint.id, 1)
+        .await
+        .unwrap();
+    let old_entity = repository
+        .create_entity_with_values(
+            source.blueprint.id,
+            1,
+            vec![NewAttributeValue::Scalar {
+                attribute_id: None,
+                attribute_code: Some("legacy".to_owned()),
+                context_id: None,
+                value: json!("keep unless approved"),
+            }],
+            Vec::new(),
+            json!({}),
+        )
+        .await
+        .unwrap();
+    repository
+        .create_blueprint_revision(
+            source.blueprint.id,
+            CreateBlueprint {
+                definition: DEFINITION.to_owned(),
+            },
+        )
+        .await
+        .unwrap();
+    repository
+        .publish_blueprint_revision(source.blueprint.id, 2)
+        .await
+        .unwrap();
+    repository
+        .create_blueprint_revision(
+            source.blueprint.id,
+            CreateBlueprint {
+                definition: format!("{DEFINITION}\n# safe relative to revision two\n"),
+            },
+        )
+        .await
+        .unwrap();
+    repository
+        .publish_blueprint_revision(source.blueprint.id, 3)
+        .await
+        .unwrap();
+    let impact = repository
+        .safe_blueprint_migration_impact(source.blueprint.id, 3)
+        .await
+        .unwrap();
+    assert_eq!(impact.removed_attribute_codes, vec!["legacy"]);
+    assert!(impact.requires_removal_disposition);
+    let result = repository
+        .start_safe_blueprint_migration_batch(source.blueprint.id, 3)
+        .await;
+    assert!(matches!(
+        result,
+        Err(api::repository::RepositoryError::BlueprintMigrationNotSafe)
+    ));
+    assert_eq!(
+        sqlx::query_scalar::<_, i64>("SELECT blueprint_version FROM entities WHERE id=$1")
+            .bind(old_entity.id)
+            .fetch_one(&pool)
+            .await
+            .unwrap(),
+        1
+    );
+}
+
+#[sqlx::test]
 async fn safe_batch_task_is_transactional_and_migrates_each_entity_once(pool: PgPool) {
     let repository = CatalogRepository::system(pool.clone());
     let (batch_id, version_one_entity, version_two_entity) =

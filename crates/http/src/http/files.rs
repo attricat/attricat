@@ -24,6 +24,7 @@ use uuid::Uuid;
 /// signature-based MIME detection. All supported signatures fit within this
 /// prefix, so the remainder can be written directly to temporary storage.
 const SIGNATURE_SNIFF_BYTES: usize = 512;
+const MAX_CONTEXT_ID_BYTES: usize = 64;
 
 /// MIME types accepted by every upload entry point. Attribute policies may
 /// further restrict this set by MIME group, extension, size, or image-only.
@@ -136,12 +137,21 @@ pub(super) async fn upload(
                     cleanup(&staged).await;
                     return Err(ApiError::invalid_file("context_id may appear only once"));
                 }
-                let value = field
-                    .text()
+                let mut field = field;
+                let mut bytes = Vec::new();
+                while let Some(chunk) = field
+                    .chunk()
                     .await
-                    .map_err(|_| ApiError::invalid_file("context_id is invalid"))?;
+                    .map_err(|_| ApiError::invalid_file("context_id is invalid"))?
+                {
+                    if bytes.len().saturating_add(chunk.len()) > MAX_CONTEXT_ID_BYTES {
+                        return Err(ApiError::invalid_file("context_id is invalid"));
+                    }
+                    bytes.extend_from_slice(&chunk);
+                }
                 context_id = Some(
-                    value
+                    std::str::from_utf8(&bytes)
+                        .map_err(|_| ApiError::invalid_file("context_id is invalid"))?
                         .parse()
                         .map_err(|_| ApiError::invalid_file("context_id is invalid"))?,
                 );
