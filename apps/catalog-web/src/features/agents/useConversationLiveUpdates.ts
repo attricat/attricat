@@ -19,13 +19,18 @@ export const useConversationLiveUpdates = (runs: AgentRun[] | undefined) => {
   const { t } = useTranslation();
   const queryClient = useQueryClient();
   const [streamError, setStreamError] = useState<string | null>(null);
+  // Polling produces new run arrays even when the active subscriptions have
+  // not changed. Depend on their IDs instead of reconnecting on every poll.
+  const activeRunIds = (runs ?? [])
+    .filter((run) => activeRunStatuses.includes(run.status))
+    .map((run) => run.id)
+    .sort()
+    .join(',');
 
   useEffect(() => {
-    const sources =
-      runs
-        ?.filter((run) => activeRunStatuses.includes(run.status))
-        .map((run) => {
-          const source = new EventSource(agentRunEventsUrl(run.id));
+    const sources = activeRunIds
+      ? activeRunIds.split(',').map((id) => {
+          const source = new EventSource(agentRunEventsUrl(id));
           const update = () => {
             setStreamError(null);
             void queryClient.invalidateQueries({
@@ -37,10 +42,11 @@ export const useConversationLiveUpdates = (runs: AgentRun[] | undefined) => {
           source.onerror = () =>
             setStreamError(t('agents.liveUpdatesDisconnected'));
           return source;
-        }) ?? [];
+        })
+      : [];
 
     return () => sources.forEach((source) => source.close());
-  }, [queryClient, runs, t]);
+  }, [activeRunIds, queryClient, t]);
 
-  return streamError;
+  return activeRunIds ? streamError : null;
 };

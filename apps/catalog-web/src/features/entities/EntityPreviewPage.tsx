@@ -28,6 +28,7 @@ import { listContexts } from '../contexts/api';
 import { contextQueryKeys } from '../contexts/query-keys';
 import { defaultContextCode } from '../contexts/constants';
 import { listFindings } from '../rules/api';
+import { ruleQueryKeys } from '../rules/query-keys';
 import {
   getBlueprintRevision,
   getCurrentBlueprint,
@@ -128,7 +129,7 @@ export const EntityPreviewPage = ({
     enabled: Boolean(resolved.data?.entity.blueprint_id),
   });
   const findings = useQuery({
-    queryKey: ['rules', 'findings', entityId],
+    queryKey: ruleQueryKeys.findings(entityId),
     queryFn: () => listFindings(entityId),
   });
   const detailView = blueprint.data?.blueprint.views.detail;

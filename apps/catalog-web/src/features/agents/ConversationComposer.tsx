@@ -39,21 +39,22 @@ export const ConversationComposer = ({
   const attachmentInput = useRef<HTMLInputElement>(null);
   const send = useMutation({
     meta: { toast: false },
-    mutationFn: async () => {
-      let attachmentIds = uploadedAttachmentIds;
-      if (attachments.length > 0 && attachmentIds.length === 0) {
-        const uploaded = await uploadConversationFiles(
-          conversationId,
-          attachments,
-        );
+    mutationFn: async ({
+      content,
+      files,
+      previousAttachmentIds,
+    }: {
+      content: string;
+      files: File[];
+      previousAttachmentIds: string[];
+    }) => {
+      let attachmentIds = previousAttachmentIds;
+      if (files.length > 0 && attachmentIds.length === 0) {
+        const uploaded = await uploadConversationFiles(conversationId, files);
         attachmentIds = uploaded.files.map((file) => file.id);
         setUploadedAttachmentIds(attachmentIds);
       }
-      return sendMessage(
-        conversationId,
-        form.state.values.content,
-        attachmentIds,
-      );
+      return sendMessage(conversationId, content, attachmentIds);
     },
     onMutate: () => onSendingChange(true),
     onSuccess: () => {
@@ -70,7 +71,11 @@ export const ConversationComposer = ({
       (form.state.values.content.trim() || attachments.length) &&
       !send.isPending
     ) {
-      send.mutate();
+      send.mutate({
+        content: form.state.values.content,
+        files: attachments,
+        previousAttachmentIds: uploadedAttachmentIds,
+      });
     }
   };
 
@@ -103,6 +108,7 @@ export const ConversationComposer = ({
         <form.Field name="content">
           {(field) => (
             <TextField
+              disabled={send.isPending}
               fullWidth
               hiddenLabel
               slotProps={{ htmlInput: { 'aria-label': t('agents.message') } }}
@@ -127,6 +133,7 @@ export const ConversationComposer = ({
           )}
         </form.Field>
         <input
+          disabled={send.isPending}
           hidden
           multiple
           onChange={(event) => {
@@ -143,12 +150,16 @@ export const ConversationComposer = ({
               <Chip
                 key={`${file.name}:${file.size}:${file.lastModified}`}
                 label={file.name}
-                onDelete={() => {
-                  setAttachments((current) =>
-                    current.filter((item) => item !== file),
-                  );
-                  setUploadedAttachmentIds([]);
-                }}
+                onDelete={
+                  send.isPending
+                    ? undefined
+                    : () => {
+                        setAttachments((current) =>
+                          current.filter((item) => item !== file),
+                        );
+                        setUploadedAttachmentIds([]);
+                      }
+                }
                 size="small"
               />
             ))}
@@ -165,6 +176,7 @@ export const ConversationComposer = ({
           <Tooltip title={t('agents.addFiles')}>
             <IconButton
               aria-label={t('agents.addFiles')}
+              disabled={send.isPending}
               onClick={() => attachmentInput.current?.click()}
             >
               <AttachFileOutlinedIcon />

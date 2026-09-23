@@ -10,7 +10,7 @@ import {
   Tabs,
   Typography,
 } from '@mui/material';
-import { useState } from 'react';
+import { useId, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { BlueprintWithAttributes } from './api';
 import { BlueprintViewsPreview } from './BlueprintViewsPreview';
@@ -23,6 +23,7 @@ export const BlueprintVersionMetadata = ({
   blueprint: BlueprintWithAttributes;
 }) => {
   const { t } = useTranslation();
+  const tabId = useId();
   const [tab, setTab] = useState(0);
   const metadataAttributes = blueprint.attributes.filter(
     (attribute) => !isHiddenByDefault(attribute, 'metadata'),
@@ -44,41 +45,41 @@ export const BlueprintVersionMetadata = ({
         variant="scrollable"
       >
         <Tab
-          aria-controls="blueprint-metadata-tabpanel-0"
-          id="blueprint-metadata-tab-0"
+          aria-controls={`${tabId}-tabpanel-0`}
+          id={`${tabId}-tab-0`}
           label={t('blueprints.attributes', {
             count: metadataAttributes.length,
           })}
         />
         <Tab
-          aria-controls="blueprint-metadata-tabpanel-1"
-          id="blueprint-metadata-tab-1"
+          aria-controls={`${tabId}-tabpanel-1`}
+          id={`${tabId}-tab-1`}
           label={t('blueprints.views')}
         />
         <Tab
-          aria-controls="blueprint-metadata-tabpanel-2"
-          id="blueprint-metadata-tab-2"
+          aria-controls={`${tabId}-tabpanel-2`}
+          id={`${tabId}-tab-2`}
           label={t('blueprints.viewDefinition')}
         />
         <Tab
-          aria-controls="blueprint-metadata-tabpanel-3"
-          id="blueprint-metadata-tab-3"
+          aria-controls={`${tabId}-tabpanel-3`}
+          id={`${tabId}-tab-3`}
           label={t('blueprints.entitySchema')}
         />
         <Tab
-          aria-controls="blueprint-metadata-tabpanel-4"
-          id="blueprint-metadata-tab-4"
+          aria-controls={`${tabId}-tabpanel-4`}
+          id={`${tabId}-tab-4`}
           label={t('blueprints.includes')}
         />
         <Tab
-          aria-controls="blueprint-metadata-tabpanel-5"
-          id="blueprint-metadata-tab-5"
+          aria-controls={`${tabId}-tabpanel-5`}
+          id={`${tabId}-tab-5`}
           label={t('blueprints.publicationPolicy')}
         />
       </Tabs>
       <Box
-        aria-labelledby={`blueprint-metadata-tab-${tab}`}
-        id={`blueprint-metadata-tabpanel-${tab}`}
+        aria-labelledby={`${tabId}-tab-${tab}`}
+        id={`${tabId}-tabpanel-${tab}`}
         role="tabpanel"
         sx={{ mt: 2 }}
       >

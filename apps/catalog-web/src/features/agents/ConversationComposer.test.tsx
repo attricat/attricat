@@ -77,6 +77,44 @@ describe('ConversationComposer', () => {
     );
   });
 
+  it('locks the draft while uploading and sends the submitted snapshot', async () => {
+    const user = userEvent.setup();
+    renderComposer();
+    const file = new File(['data'], 'data.csv');
+    let finishUpload!: (
+      value: Awaited<ReturnType<typeof uploadConversationFiles>>,
+    ) => void;
+    vi.mocked(uploadConversationFiles).mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          finishUpload = resolve;
+        }),
+    );
+    vi.mocked(sendMessage).mockResolvedValue({
+      id: '123e4567-e89b-12d3-a456-426614174002',
+      status: 'queued',
+    });
+    const message = screen.getByRole('textbox', { name: 'Message' });
+    await user.type(message, 'Original');
+    await user.upload(document.querySelector('input[type="file"]')!, file);
+    await user.click(screen.getByRole('button', { name: 'Send' }));
+    await waitFor(() => expect(uploadConversationFiles).toHaveBeenCalledOnce());
+    expect(message.hasAttribute('disabled')).toBe(true);
+    expect(
+      screen
+        .getByRole('button', { name: 'Add files' })
+        .hasAttribute('disabled'),
+    ).toBe(true);
+    finishUpload({
+      files: [{ id: '123e4567-e89b-12d3-a456-426614174001' }],
+    } as never);
+    await waitFor(() =>
+      expect(sendMessage).toHaveBeenCalledWith(conversationId, 'Original', [
+        '123e4567-e89b-12d3-a456-426614174001',
+      ]),
+    );
+  });
+
   it('submits a message from Enter', async () => {
     const user = userEvent.setup();
     renderComposer();

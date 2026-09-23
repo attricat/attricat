@@ -37,22 +37,32 @@ export const NewConversationPage = () => {
   const attachmentInput = useRef<HTMLInputElement>(null);
   const start = useMutation({
     meta: { toast: false },
-    mutationFn: async () => {
-      let id = conversationId;
+    mutationFn: async ({
+      content,
+      files,
+      previousAttachmentIds,
+      existingConversationId,
+    }: {
+      content: string;
+      files: File[];
+      previousAttachmentIds: string[];
+      existingConversationId: string | null;
+    }) => {
+      let id = existingConversationId;
       if (!id) {
         const conversation = await createConversation(
-          conversationTitleFromFirstMessage(form.state.values.content),
+          conversationTitleFromFirstMessage(content),
         );
         id = conversation.id;
         setConversationId(id);
       }
-      let attachmentIds = uploadedAttachmentIds;
-      if (attachments.length > 0 && attachmentIds.length === 0) {
-        const uploaded = await uploadConversationFiles(id, attachments);
+      let attachmentIds = previousAttachmentIds;
+      if (files.length > 0 && attachmentIds.length === 0) {
+        const uploaded = await uploadConversationFiles(id, files);
         attachmentIds = uploaded.files.map((file) => file.id);
         setUploadedAttachmentIds(attachmentIds);
       }
-      await sendMessage(id, form.state.values.content, attachmentIds);
+      await sendMessage(id, content, attachmentIds);
       return id;
     },
     onSuccess: async (id) => {
@@ -68,7 +78,12 @@ export const NewConversationPage = () => {
       (form.state.values.content.trim() || attachments.length) &&
       !start.isPending
     ) {
-      start.mutate();
+      start.mutate({
+        content: form.state.values.content,
+        files: attachments,
+        previousAttachmentIds: uploadedAttachmentIds,
+        existingConversationId: conversationId,
+      });
     }
   };
 
@@ -98,6 +113,7 @@ export const NewConversationPage = () => {
           <form.Field name="content">
             {(field) => (
               <TextField
+                disabled={start.isPending}
                 fullWidth
                 hiddenLabel
                 maxRows={8}
@@ -122,6 +138,7 @@ export const NewConversationPage = () => {
             )}
           </form.Field>
           <input
+            disabled={start.isPending}
             hidden
             multiple
             onChange={(event) => {
@@ -138,12 +155,16 @@ export const NewConversationPage = () => {
                 <Chip
                   key={`${file.name}:${file.size}:${file.lastModified}`}
                   label={file.name}
-                  onDelete={() => {
-                    setAttachments((current) =>
-                      current.filter((item) => item !== file),
-                    );
-                    setUploadedAttachmentIds([]);
-                  }}
+                  onDelete={
+                    start.isPending
+                      ? undefined
+                      : () => {
+                          setAttachments((current) =>
+                            current.filter((item) => item !== file),
+                          );
+                          setUploadedAttachmentIds([]);
+                        }
+                  }
                   size="small"
                 />
               ))}
@@ -160,6 +181,7 @@ export const NewConversationPage = () => {
             <Tooltip title={t('agents.addFiles')}>
               <IconButton
                 aria-label={t('agents.addFiles')}
+                disabled={start.isPending}
                 onClick={() => attachmentInput.current?.click()}
               >
                 <AttachFileOutlinedIcon />

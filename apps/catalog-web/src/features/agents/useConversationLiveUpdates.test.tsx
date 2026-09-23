@@ -55,6 +55,31 @@ afterEach(() => {
 });
 
 describe('useConversationLiveUpdates', () => {
+  it('keeps the same stream across polling updates until active run IDs change', async () => {
+    const client = new QueryClient();
+    const view = render(
+      <QueryClientProvider client={client}>
+        <LiveUpdatesProbe runs={[run]} />
+      </QueryClientProvider>,
+    );
+    view.rerender(
+      <QueryClientProvider client={client}>
+        <LiveUpdatesProbe runs={[{ ...run, status: 'awaiting_approval' }]} />
+      </QueryClientProvider>,
+    );
+    expect(sources).toHaveLength(1);
+    expect(sources[0].close).not.toHaveBeenCalled();
+    sources[0].fail();
+    expect(await screen.findByRole('alert')).toBeTruthy();
+    view.rerender(
+      <QueryClientProvider client={client}>
+        <LiveUpdatesProbe runs={[{ ...run, status: 'completed' }]} />
+      </QueryClientProvider>,
+    );
+    expect(sources[0].close).toHaveBeenCalledOnce();
+    expect(screen.queryByRole('alert')).toBeNull();
+  });
+
   it('invalidates agent queries for run events and reports disconnects', async () => {
     const queryClient = new QueryClient();
     const invalidateQueries = vi.spyOn(queryClient, 'invalidateQueries');
