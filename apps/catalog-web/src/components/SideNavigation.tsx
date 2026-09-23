@@ -428,6 +428,9 @@ export const SideNavigation = ({
         )}
         {!compact && mobileSection === 'extensions' && (
           <ExtensionOutlet
+            canBrowseExtensions={
+              session.data?.capabilities?.extensions_read === true
+            }
             navigationDisplay="all"
             onNavigate={onNavigate}
             outlet="navigation"
@@ -594,6 +597,13 @@ export const SideNavigation = ({
           <Divider />
           <List sx={{ px: 1, py: 1.5 }}>
             <ExtensionOutlet
+              canBrowseExtensions={
+                session.data?.capabilities?.extensions_read === true
+              }
+              onBrowseExtensions={() => {
+                setCompactExtensionsOpen(false);
+                setCompactManageOpen(true);
+              }}
               navigationDisplay="all"
               onNavigate={onNavigate}
               outlet="navigation"

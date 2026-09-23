@@ -192,6 +192,57 @@ describe('ExtensionOutlet', () => {
     expect(link.getAttribute('aria-current')).toBe('page');
   });
 
+  it.each([{ runtime: [] }, { runtime: [contribution] }])(
+    'shows a link to extensions when no apps are contributed ($runtime)',
+    async ({ runtime }) => {
+      vi.mocked(getExtensionRuntime).mockResolvedValue(runtime);
+      const rootRoute = createRootRoute();
+      const appsRoute = createRoute({
+        getParentRoute: () => rootRoute,
+        path: '/extensions',
+        component: () => (
+          <ExtensionOutlet
+            canBrowseExtensions
+            navigationDisplay="all"
+            outlet="navigation"
+          />
+        ),
+      });
+      const router = createRouter({
+        history: createMemoryHistory({ initialEntries: ['/extensions'] }),
+        routeTree: rootRoute.addChildren([appsRoute]),
+      });
+      const queryClient = new QueryClient({
+        defaultOptions: { queries: { retry: false } },
+      });
+      render(
+        <QueryClientProvider client={queryClient}>
+          <RouterProvider router={router} />
+        </QueryClientProvider>,
+      );
+      expect(await screen.findByText('extensions.noApps')).toBeTruthy();
+      expect(
+        screen
+          .getByRole('link', { name: 'extensions.browseExtensions' })
+          .getAttribute('href'),
+      ).toBe('/manage/extensions');
+    },
+  );
+
+  it('does not offer extension management to users without access', async () => {
+    vi.mocked(getExtensionRuntime).mockResolvedValue([]);
+    const queryClient = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    });
+    render(
+      <QueryClientProvider client={queryClient}>
+        <ExtensionOutlet navigationDisplay="all" outlet="navigation" />
+      </QueryClientProvider>,
+    );
+    expect(await screen.findByText('extensions.noApps')).toBeTruthy();
+    expect(screen.queryByText('extensions.browseExtensions')).toBeNull();
+  });
+
   it('keeps one primary and three secondary entity actions before overflow', async () => {
     const actions = Array.from({ length: 5 }, (_, index) => ({
       ...contribution,

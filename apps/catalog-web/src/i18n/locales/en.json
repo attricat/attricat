@@ -686,6 +686,8 @@
   "extensions": {
     "appsDescription": "Apps can be contributed by extensions. Select an app from the navigation to get started.",
     "appsTitle": "Apps",
+    "noApps": "No apps here yet. Apps appear when an enabled extension provides them.",
+    "browseExtensions": "Browse extensions",
     "title": "Extensions",
     "description": "Discover trusted extensions and manage installed extension lifecycle.",
     "uploadArchive": "Upload archive",

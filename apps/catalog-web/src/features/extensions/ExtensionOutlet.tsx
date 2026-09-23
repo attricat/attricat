@@ -3,6 +3,7 @@ import { ExtensionIcon } from '../../components/system-icons';
 import {
   Alert,
   Box,
+  Button,
   CircularProgress,
   Divider,
   IconButton,
@@ -14,7 +15,7 @@ import {
   Typography,
 } from '@mui/material';
 import { useQuery } from '@tanstack/react-query';
-import { useRouterState } from '@tanstack/react-router';
+import { Link, useRouterState } from '@tanstack/react-router';
 import { RouterListItemButton } from '../../components/RouterLink';
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
@@ -145,6 +146,8 @@ type Props = {
   outlet: Outlet;
   context?: Record<string, unknown>;
   navigationDisplay?: 'grouped' | 'all';
+  canBrowseExtensions?: boolean;
+  onBrowseExtensions?: () => void;
   onNavigate?: () => void;
   runtimeScope?: ExtensionRuntimeScope;
 };
@@ -158,6 +161,8 @@ export const ExtensionOutlet = ({
   outlet,
   context,
   navigationDisplay = 'grouped',
+  canBrowseExtensions = false,
+  onBrowseExtensions,
   onNavigate,
   runtimeScope,
 }: Props) => {
@@ -244,6 +249,28 @@ export const ExtensionOutlet = ({
           apps.push(item);
           appsByExtension.set(item.extension_id, apps);
         });
+      if (appsByExtension.size === 0)
+        return (
+          <Box sx={{ px: 1, py: 1 }}>
+            <Typography color="text.secondary" variant="body2">
+              {t('extensions.noApps')}
+            </Typography>
+            {canBrowseExtensions && (
+              <Button
+                component={Link}
+                onClick={() => {
+                  onBrowseExtensions?.();
+                  onNavigate?.();
+                }}
+                size="small"
+                sx={{ mt: 1 }}
+                to="/manage/extensions"
+              >
+                {t('extensions.browseExtensions')}
+              </Button>
+            )}
+          </Box>
+        );
       return (
         <Stack spacing={2}>
           {Array.from(appsByExtension.values()).map((apps) => (

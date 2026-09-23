@@ -702,6 +702,8 @@
   "extensions": {
     "appsDescription": "Aplikacje są udostępniane przez zainstalowane rozszerzenia. Wybierz aplikację z nawigacji, aby rozpocząć.",
     "appsTitle": "Aplikacje",
+    "noApps": "Nie ma tu jeszcze aplikacji. Pojawią się, gdy włączone rozszerzenie je udostępni.",
+    "browseExtensions": "Przeglądaj rozszerzenia",
     "title": "Rozszerzenia",
     "description": "Odkrywaj zaufane rozszerzenia i zarządzaj cyklem życia zainstalowanych rozszerzeń.",
     "uploadArchive": "Prześlij archiwum",

@@ -84,8 +84,30 @@ vi.mock('../features/workspace/api', () => ({
 }));
 
 vi.mock('../features/extensions/ExtensionOutlet', () => ({
-  ExtensionOutlet: ({ navigationDisplay }: { navigationDisplay?: string }) =>
-    navigationDisplay === 'all' ? <span>Extension routes</span> : null,
+  ExtensionOutlet: ({
+    navigationDisplay,
+    onBrowseExtensions,
+    onNavigate,
+  }: {
+    navigationDisplay?: string;
+    onBrowseExtensions?: () => void;
+    onNavigate?: () => void;
+  }) =>
+    navigationDisplay === 'all' ? (
+      <>
+        <span>Extension routes</span>
+        <a
+          href="/manage/extensions"
+          onClick={(event) => {
+            event.preventDefault();
+            onBrowseExtensions?.();
+            onNavigate?.();
+          }}
+        >
+          Browse extensions
+        </a>
+      </>
+    ) : null,
 }));
 
 const renderNavigation = (
@@ -115,7 +137,7 @@ beforeEach(() => {
 
 describe('SideNavigation', () => {
   it('replaces the mobile primary navigation with sub-navigation and supports going back', async () => {
-    renderNavigation();
+    const onNavigate = renderNavigation();
 
     expect(
       screen.getByRole('heading', { name: /entity explorer/i }),
@@ -146,6 +168,8 @@ describe('SideNavigation', () => {
     expect(screen.getByRole('heading', { name: 'Apps' })).toBeTruthy();
     expect(screen.getByText('Extension routes')).toBeTruthy();
     expect(screen.queryByRole('link', { name: 'Agents' })).toBeNull();
+    fireEvent.click(screen.getByRole('link', { name: 'Browse extensions' }));
+    expect(onNavigate).toHaveBeenCalledOnce();
 
     fireEvent.click(
       screen.getByRole('button', { name: 'Back to main navigation' }),
@@ -202,6 +226,15 @@ describe('SideNavigation', () => {
       </QueryClientProvider>,
     );
     expect(screen.getByRole('heading', { name: 'Apps' })).toBeTruthy();
+  });
+
+  it('switches from the compact Apps pane to Manage when browsing extensions', () => {
+    renderNavigation(vi.fn(), { compact: true });
+    fireEvent.click(screen.getByRole('link', { name: 'Apps' }));
+    fireEvent.click(screen.getByRole('link', { name: 'Browse extensions' }));
+
+    expect(screen.queryByRole('navigation', { name: 'Apps' })).toBeNull();
+    expect(screen.getByRole('navigation', { name: 'Manage' })).toBeTruthy();
   });
 
   it('closes the compact Apps panel when navigating to Profile', () => {
