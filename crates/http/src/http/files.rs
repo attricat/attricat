@@ -12,7 +12,10 @@ use axum::{
     response::Response,
 };
 use sha2::{Digest, Sha256};
-use std::path::PathBuf;
+use std::{
+    ops::Deref,
+    path::{Path, PathBuf},
+};
 use tokio::{fs, io::AsyncWriteExt};
 use tracing::{Instrument, info_span};
 use uuid::Uuid;
@@ -36,14 +39,79 @@ const SUPPORTED_UPLOAD_MIME_TYPES: &[&str] = &[
     "application/vnd.openxmlformats-officedocument.presentationml.presentation",
 ];
 
+/// Owns the staged path even if a multipart stream fails or the request is
+/// cancelled before the handlers reach their explicit cleanup path.
+struct TempUpload(PathBuf);
+
+impl Deref for TempUpload {
+    type Target = Path;
+    fn deref(&self) -> &Path {
+        &self.0
+    }
+}
+
+impl AsRef<Path> for TempUpload {
+    fn as_ref(&self) -> &Path {
+        &self.0
+    }
+}
+
+impl Drop for TempUpload {
+    fn drop(&mut self) {
+        let _ = std::fs::remove_file(&self.0);
+    }
+}
+
 struct StagedFile {
     original_filename: String,
     display_filename: String,
     declared_mime: Option<String>,
-    path: PathBuf,
+    path: TempUpload,
     byte_size: u64,
     sha256: String,
     signature: Vec<u8>,
+    valid_text: bool,
+}
+
+#[derive(Default)]
+struct TextSniff {
+    incomplete: Vec<u8>,
+    invalid: bool,
+}
+
+impl TextSniff {
+    fn feed(&mut self, chunk: &[u8]) {
+        if self.invalid {
+            return;
+        }
+        if chunk.contains(&0) {
+            self.invalid = true;
+            return;
+        }
+        if self.incomplete.is_empty() {
+            self.validate(chunk);
+        } else {
+            // At most three bytes from a code point split between chunks.
+            let mut joined = std::mem::take(&mut self.incomplete);
+            joined.extend_from_slice(chunk);
+            self.validate(&joined);
+        }
+    }
+
+    fn validate(&mut self, bytes: &[u8]) {
+        if let Err(error) = std::str::from_utf8(bytes) {
+            if error.error_len().is_some() {
+                self.invalid = true;
+            } else {
+                self.incomplete
+                    .extend_from_slice(&bytes[error.valid_up_to()..]);
+            }
+        }
+    }
+
+    fn valid(&self) -> bool {
+        !self.invalid && self.incomplete.is_empty()
+    }
 }
 
 pub(super) async fn upload(
@@ -133,7 +201,9 @@ pub(super) async fn upload(
         }
         let mut uploads = Vec::with_capacity(staged.len());
         for file in &staged {
-            let Some(mime) = detected_mime(&file.signature, &file.display_filename) else {
+            let Some(mime) =
+                detected_mime(&file.signature, &file.display_filename, file.valid_text)
+            else {
                 cleanup(&staged).await;
                 return Err(ApiError::unsupported_media_type());
             };
@@ -262,7 +332,8 @@ pub(super) async fn upload_conversation(
     }
     let mut uploads = Vec::with_capacity(staged.len());
     for file in &staged {
-        let Some(mime) = detected_mime(&file.signature, &file.display_filename) else {
+        let Some(mime) = detected_mime(&file.signature, &file.display_filename, file.valid_text)
+        else {
             cleanup(&staged).await;
             return Err(ApiError::unsupported_media_type());
         };
@@ -552,13 +623,14 @@ async fn stage_field(
     declared_mime: Option<String>,
     max_bytes: u64,
 ) -> Result<StagedFile, ApiError> {
-    let path = std::env::temp_dir().join(format!("catalog-upload-{}", Uuid::new_v4()));
+    let path = TempUpload(std::env::temp_dir().join(format!("catalog-upload-{}", Uuid::new_v4())));
     let mut output = fs::File::create(&path)
         .await
         .map_err(|_| ApiError::internal("temporary upload could not be created"))?;
     let mut size = 0u64;
     let mut digest = Sha256::new();
     let mut signature = Vec::with_capacity(SIGNATURE_SNIFF_BYTES);
+    let mut text = TextSniff::default();
     while let Some(chunk) = field
         .chunk()
         .await
@@ -575,6 +647,7 @@ async fn stage_field(
             );
         }
         digest.update(&chunk);
+        text.feed(&chunk);
         output
             .write_all(&chunk)
             .await
@@ -596,6 +669,7 @@ async fn stage_field(
         byte_size: size,
         sha256: format!("{:x}", digest.finalize()),
         signature,
+        valid_text: text.valid(),
     })
 }
 fn sanitize_filename(name: &str) -> Option<String> {
@@ -612,7 +686,7 @@ fn extension(filename: &str) -> Option<String> {
         .map(|(_, extension)| extension.to_ascii_lowercase())
         .filter(|value| !value.is_empty())
 }
-fn detected_mime(signature: &[u8], filename: &str) -> Option<&'static str> {
+fn detected_mime(signature: &[u8], filename: &str, valid_text: bool) -> Option<&'static str> {
     if signature.starts_with(b"\x89PNG\r\n\x1a\n") {
         Some("image/png")
     } else if signature.starts_with(b"\xff\xd8\xff") {
@@ -636,7 +710,7 @@ fn detected_mime(signature: &[u8], filename: &str) -> Option<&'static str> {
             }
             _ => None,
         }
-    } else if std::str::from_utf8(signature).is_ok() && !signature.contains(&0) {
+    } else if valid_text {
         Some("text/plain")
     } else {
         None
@@ -712,11 +786,41 @@ mod tests {
     #[test]
     fn detects_signatures_without_trusting_file_name() {
         assert_eq!(
-            detected_mime(b"\x89PNG\r\n\x1a\nrest", "not-image.txt"),
+            detected_mime(b"\x89PNG\r\n\x1a\nrest", "not-image.txt", false),
             Some("image/png")
         );
-        assert_eq!(detected_mime(b"not a known file\0", "image.png"), None);
+        assert_eq!(
+            detected_mime(b"not a known file\0", "image.png", false),
+            None
+        );
     }
+    #[test]
+    fn text_sniff_validates_the_whole_stream_across_chunk_boundaries() {
+        let mut text = TextSniff::default();
+        text.feed(&vec![b'a'; SIGNATURE_SNIFF_BYTES]);
+        text.feed(b"\0binary");
+        assert!(!text.valid());
+        assert_eq!(
+            detected_mime(&vec![b'a'; SIGNATURE_SNIFF_BYTES], "fake.txt", text.valid()),
+            None
+        );
+
+        let mut unicode = TextSniff::default();
+        unicode.feed(b"prefix\xf0\x9f");
+        unicode.feed(b"\x98\x80");
+        assert!(unicode.valid());
+        unicode.feed(b"\xff");
+        assert!(!unicode.valid());
+    }
+
+    #[test]
+    fn staged_path_is_removed_when_request_is_dropped() {
+        let path = std::env::temp_dir().join(format!("catalog-upload-{}", Uuid::new_v4()));
+        std::fs::write(&path, b"partial upload").unwrap();
+        drop(TempUpload(path.clone()));
+        assert!(!path.exists());
+    }
+
     #[test]
     fn policy_constrains_type_extension_and_size() {
         let policy = policy();

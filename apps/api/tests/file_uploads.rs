@@ -61,6 +61,112 @@ fn png_part(name: &str) -> Part {
 }
 
 #[sqlx::test]
+async fn malformed_trailing_multipart_field_removes_staged_files(pool: PgPool) {
+    let (base_url, server) = start_server(pool.clone()).await;
+    let client = authenticated_client();
+    let blueprint = upload_blueprint(&client, &base_url).await;
+    let entity = create_entity(&client, &base_url, &blueprint).await;
+    let staged_paths = || -> std::collections::HashSet<_> {
+        std::fs::read_dir(std::env::temp_dir())
+            .unwrap()
+            .flatten()
+            .map(|entry| entry.path())
+            .filter(|path| {
+                path.file_name()
+                    .unwrap()
+                    .to_string_lossy()
+                    .starts_with("catalog-upload-")
+            })
+            .collect()
+    };
+    let before = staged_paths();
+    let boundary = "malformed-trailing-upload";
+    let mut body = format!("--{boundary}\r\nContent-Disposition: form-data; name=\"file\"; filename=\"ok.png\"\r\nContent-Type: image/png\r\n\r\n").into_bytes();
+    body.extend_from_slice(PNG);
+    body.extend_from_slice(
+        format!("\r\n--{boundary}\r\ninvalid header\r\n\r\ncontent\r\n--{boundary}--\r\n")
+            .as_bytes(),
+    );
+    let response = client
+        .post(format!(
+            "{base_url}/entities/{}/file-attributes/image/uploads",
+            entity["id"].as_str().unwrap()
+        ))
+        .header(
+            "content-type",
+            format!("multipart/form-data; boundary={boundary}"),
+        )
+        .body(body)
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::UNPROCESSABLE_ENTITY);
+    // Other upload tests share the process temp directory and may briefly
+    // stage a file in parallel. Allow those requests to finish before checking
+    // that this malformed request left no new persistent path behind.
+    for _ in 0..20 {
+        if staged_paths().difference(&before).next().is_none() {
+            break;
+        }
+        tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+    }
+    assert!(
+        staged_paths().difference(&before).next().is_none(),
+        "malformed multipart must not leak staged files"
+    );
+    server.abort();
+}
+
+#[sqlx::test]
+async fn text_upload_with_binary_tail_is_rejected(pool: PgPool) {
+    let store = Arc::new(FakeObjectStore::available());
+    let (base_url, server) = start_server_with_object_store(pool.clone(), store.clone()).await;
+    let client = authenticated_client();
+    let blueprint = create_blueprint(
+        &client,
+        &base_url,
+        r#"format_version = 1
+code = "text_upload_product"
+name = "Text upload product"
+kind = "entity"
+[views.dropdown_option]
+type = "dropdown_option"
+fields = ["document"]
+[[attributes]]
+code = "document"
+value_type = "file"
+allowed_mime_groups = ["text/plain"]
+allowed_extensions = ["txt"]
+max_bytes = 1024
+"#,
+    )
+    .await;
+    let entity = create_entity(&client, &base_url, &blueprint).await;
+    let mut bytes = vec![b'a'; 512];
+    bytes.extend_from_slice(b"\0binary tail");
+    let response = client
+        .post(format!(
+            "{base_url}/entities/{}/file-attributes/document/uploads",
+            entity["id"].as_str().unwrap()
+        ))
+        .multipart(
+            Form::new().part(
+                "file",
+                Part::bytes(bytes)
+                    .file_name("bad.txt")
+                    .mime_str("text/plain")
+                    .unwrap(),
+            ),
+        )
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::UNSUPPORTED_MEDIA_TYPE);
+    assert_eq!(store.object_count().await, 0);
+    server.abort();
+}
+
+#[sqlx::test]
 async fn uploads_files_to_the_fake_store_and_persists_derived_metadata(pool: PgPool) {
     let store = Arc::new(FakeObjectStore::available());
     let (base_url, server) = start_server_with_object_store(pool.clone(), store.clone()).await;
