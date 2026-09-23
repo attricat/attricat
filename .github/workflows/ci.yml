@@ -11,7 +11,7 @@ permissions:
   contents: read
 
 jobs:
-  rust:
+  rust-quality:
     runs-on: ubuntu-latest
     timeout-minutes: 30
     services:
@@ -30,8 +30,9 @@ jobs:
           --health-retries 5
     env:
       DATABASE_URL: postgres://postgres:postgres@localhost:5432/catalog
+      CARGO_INCREMENTAL: 0
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - uses: dtolnay/rust-toolchain@master
         with:
           toolchain: 1.95.0
@@ -41,8 +42,62 @@ jobs:
       - run: cargo fmt --all -- --check
       - run: cargo check --locked --workspace --all-targets
       - run: cargo clippy --locked --workspace --all-targets -- -D warnings
-      - run: cargo test --locked --workspace
       - run: cargo deny check
+
+  rust-test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    services:
+      postgres:
+        image: postgres:18
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: catalog
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d catalog"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    env:
+      DATABASE_URL: postgres://postgres:postgres@localhost:5432/catalog
+      CARGO_BUILD_JOBS: 2
+      CARGO_INCREMENTAL: 0
+      CARGO_PROFILE_TEST_DEBUG: 0
+    steps:
+      - uses: actions/checkout@v5
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: 1.95.0
+          targets: wasm32-unknown-unknown
+      - uses: taiki-e/install-action@wasm-tools
+      - name: Record initial disk usage
+        run: df -h
+      - run: cargo test --locked --workspace
+      - name: Record final disk usage
+        if: always()
+        run: |
+          df -h
+          du -sh target 2>/dev/null || true
+
+  web:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24
+      - run: corepack enable
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm --dir apps/catalog-web format:check
+      - run: pnpm --dir apps/catalog-web lint
+      - run: pnpm --dir apps/catalog-web typecheck
+      - run: pnpm --dir apps/catalog-web test
+      - run: pnpm --dir apps/catalog-web inspect:bundle
+      - run: pnpm --dir apps/docs build
 
   release-path:
     runs-on: ubuntu-latest
@@ -51,7 +106,7 @@ jobs:
       contents: read
       packages: write
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - name: Validate deployment definitions
         env:
           ATTRICAT_IMAGE: attricat:ci

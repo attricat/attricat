@@ -26,7 +26,9 @@ const statusColor = (status: MigrationBatch['status']) => {
   return 'warning';
 };
 
-const removalPolicyLabel = (policy: MigrationBatch['removal_policy'] | undefined) => {
+const removalPolicyLabel = (
+  policy: MigrationBatch['removal_policy'] | undefined,
+) => {
   const codes = policy?.attribute_codes;
   return Array.isArray(codes) && codes.every((code) => typeof code === 'string')
     ? codes.join(', ')
