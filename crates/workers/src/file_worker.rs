@@ -3,7 +3,11 @@
 //! The worker owns state transitions: HTTP only stages the original and queues a
 //! metadata job.  Claims and all state changes are database transactions, while
 //! object writes are deliberately idempotent (stable variant keys).
-use std::{io::Cursor, sync::Arc, time::Duration};
+use std::{
+    io::Cursor,
+    sync::{Arc, Mutex},
+    time::{Duration, Instant},
+};
 
 use chrono::{DateTime, Utc};
 use image::{DynamicImage, GenericImageView, ImageEncoder, ImageReader};
@@ -23,6 +27,8 @@ const THUMBNAIL_MAX_DIMENSION: u32 = 320;
 const DISPLAY_MAX_DIMENSION: u32 = 1600;
 const DEFAULT_GRACE_SECONDS: i64 = 86_400;
 const STALE_LOCK_SECONDS: i64 = 300;
+const LEASE_HEARTBEAT_SECONDS: u64 = 60;
+const RECONCILE_INTERVAL: Duration = Duration::from_secs(30);
 const MAX_BACKOFF_SECONDS: i64 = 300;
 
 #[derive(Clone, Debug)]
@@ -84,12 +90,14 @@ pub struct ClaimedJob {
     pub file_id: Uuid,
     pub kind: String,
     pub attempts: i32,
+    pub lease_token: Uuid,
 }
 
 pub struct FileWorker {
     pool: PgPool,
     store: Arc<dyn ObjectStore>,
     config: WorkerConfig,
+    last_reconciled: Mutex<Option<Instant>>,
 }
 
 impl FileWorker {
@@ -98,13 +106,14 @@ impl FileWorker {
             pool,
             store,
             config,
+            last_reconciled: Mutex::new(None),
         }
     }
 
     /// Atomically claims one due or abandoned job. SKIP LOCKED allows multiple
     /// worker processes to poll without serialising each other.
     pub async fn claim(&self) -> Result<Option<ClaimedJob>, sqlx::Error> {
-        let job = sqlx::query_as::<_, (Uuid, Uuid, Uuid, String, i32)>(
+        let job = sqlx::query_as::<_, (Uuid, Uuid, Uuid, String, i32, Uuid)>(
             r#"WITH candidate AS (
                  SELECT id FROM file_processing_jobs
                  WHERE (status IN ('queued', 'retryable') AND available_at <= now())
@@ -112,30 +121,52 @@ impl FileWorker {
                  ORDER BY available_at, id FOR UPDATE SKIP LOCKED LIMIT 1
                )
                UPDATE file_processing_jobs job SET status = 'running', locked_at = now(),
-                 worker_id = $2, attempts = job.attempts + 1, updated_at = now()
+                 worker_id = $2, lease_token = $3, attempts = job.attempts + 1, updated_at = now()
                FROM candidate WHERE job.id = candidate.id
-               RETURNING job.id, job.workspace_id, job.file_id, job.kind, job.attempts"#,
+               RETURNING job.id, job.workspace_id, job.file_id, job.kind, job.attempts, job.lease_token"#,
         )
         .bind(STALE_LOCK_SECONDS)
         .bind(&self.config.worker_id)
+        .bind(Uuid::new_v4())
         .fetch_optional(&self.pool)
         .await?;
         if job.is_some() {
             counter!("catalog_file_worker_jobs_claimed_total").increment(1);
         }
-        Ok(
-            job.map(|(id, workspace_id, file_id, kind, attempts)| ClaimedJob {
+        Ok(job.map(
+            |(id, workspace_id, file_id, kind, attempts, lease_token)| ClaimedJob {
                 id,
                 workspace_id,
                 file_id,
                 kind,
                 attempts,
-            }),
-        )
+                lease_token,
+            },
+        ))
     }
 
     pub async fn run_once(&self) -> Result<bool, sqlx::Error> {
-        self.reconcile().await?;
+        // Reconciliation is maintenance, not part of every job claim. Avoid
+        // rescanning the file population before each item in a busy queue.
+        let should_reconcile = {
+            let mut last = self
+                .last_reconciled
+                .lock()
+                .expect("reconcile clock poisoned");
+            if last.is_none_or(|at| at.elapsed() >= RECONCILE_INTERVAL) {
+                *last = Some(Instant::now());
+                true
+            } else {
+                false
+            }
+        };
+        if should_reconcile && let Err(error) = self.reconcile().await {
+            *self
+                .last_reconciled
+                .lock()
+                .expect("reconcile clock poisoned") = None;
+            return Err(error);
+        }
         let Some(job) = self.claim().await? else {
             self.record_metrics().await?;
             return Ok(false);
@@ -146,7 +177,7 @@ impl FileWorker {
             "metadata"
         };
         let span = info_span!("file_worker.job", job_id = %job.id, file_id = %job.file_id, kind);
-        async {
+        let operation = async {
             let result = match kind {
                 "purge" => self.purge(&job).await,
                 _ => self.process_file(&job).await,
@@ -157,10 +188,30 @@ impl FileWorker {
             }
             Ok::<(), sqlx::Error>(())
         }
-        .instrument(span)
-        .await?;
+        .instrument(span);
+        tokio::pin!(operation);
+        let mut heartbeat = tokio::time::interval(Duration::from_secs(LEASE_HEARTBEAT_SECONDS));
+        heartbeat.tick().await;
+        loop {
+            tokio::select! {
+                biased;
+                _ = heartbeat.tick() => {
+                    if !self.renew_lease(&job).await? {
+                        tracing::warn!(job_id = %job.id, "file job lease lost; cancelling processing");
+                        break;
+                    }
+                }
+                result = &mut operation => { result?; break; }
+            }
+        }
         self.record_metrics().await?;
         Ok(true)
+    }
+
+    async fn renew_lease(&self, job: &ClaimedJob) -> Result<bool, sqlx::Error> {
+        Ok(sqlx::query("UPDATE file_processing_jobs SET locked_at = now() WHERE id = $1 AND status = 'running' AND worker_id = $2 AND lease_token = $3 AND locked_at > now() - make_interval(secs => $4)")
+            .bind(job.id).bind(&self.config.worker_id).bind(job.lease_token).bind(STALE_LOCK_SECONDS)
+            .execute(&self.pool).await?.rows_affected() == 1)
     }
 
     async fn process_file(&self, job: &ClaimedJob) -> Result<(), WorkerError> {
@@ -169,6 +220,12 @@ impl FileWorker {
         // the end of the SELECT statement, allowing reconciliation to delete
         // the file between the read and the processing-state update.
         let mut transaction = self.pool.begin().await?;
+        let still_owned: bool = sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM file_processing_jobs WHERE id = $1 AND status = 'running' AND lease_token = $2 AND locked_at > now() - make_interval(secs => $3) FOR UPDATE)")
+            .bind(job.id).bind(job.lease_token).bind(STALE_LOCK_SECONDS)
+            .fetch_one(&mut *transaction).await?;
+        if !still_owned {
+            return Err(WorkerError::LeaseLost);
+        }
         let row = sqlx::query("SELECT original_key, mime_type FROM files WHERE id = $1 AND workspace_id = $2 AND deleted_at IS NULL FOR UPDATE")
             .bind(job.file_id).bind(job.workspace_id).fetch_optional(&mut *transaction).await?;
         let Some(row) = row else {
@@ -181,47 +238,50 @@ impl FileWorker {
         let mime: String = row.try_get("mime_type")?;
         transaction.commit().await?;
         if !mime.starts_with("image/") {
-            sqlx::query("UPDATE files SET status = 'ready', processing_error = NULL, updated_at = now() WHERE id = $1 AND workspace_id = $2 AND deleted_at IS NULL")
-                .bind(job.file_id).bind(job.workspace_id).execute(&self.pool).await?;
+            sqlx::query("UPDATE files SET status = 'ready', processing_error = NULL, updated_at = now() WHERE id = $1 AND workspace_id = $2 AND deleted_at IS NULL AND EXISTS (SELECT 1 FROM file_processing_jobs WHERE id = $3 AND status = 'running' AND lease_token = $4)")
+                .bind(job.file_id).bind(job.workspace_id).bind(job.id).bind(job.lease_token).execute(&self.pool).await?;
             return Ok(());
         }
         let object = self.store.get(&key).await.map_err(WorkerError::Storage)?;
-        let image = decode_and_orient(&object.bytes, self.config.max_pixels)?;
-        let (width, height) = image.dimensions();
-        self.put_variant(
-            job,
-            "thumbnail",
-            &image.thumbnail(THUMBNAIL_MAX_DIMENSION, THUMBNAIL_MAX_DIMENSION),
-        )
-        .await?;
-        self.put_variant(
-            job,
-            "display",
-            &image.resize(
-                DISPLAY_MAX_DIMENSION,
-                DISPLAY_MAX_DIMENSION,
-                image::imageops::FilterType::Lanczos3,
-            ),
-        )
-        .await?;
-        sqlx::query("UPDATE files SET status = 'ready', width = $2, height = $3, processing_error = NULL, updated_at = now() WHERE id = $1 AND workspace_id = $4 AND deleted_at IS NULL")
-            .bind(job.file_id).bind(width as i32).bind(height as i32).bind(job.workspace_id).execute(&self.pool).await?;
+        let max_pixels = self.config.max_pixels;
+        // Decoding/resizing/WebP encoding are synchronous CPU work. Running
+        // them on a blocking thread keeps the async lease heartbeat alive.
+        let (width, height, variants) = tokio::task::spawn_blocking(move || {
+            let image = decode_and_orient(&object.bytes, max_pixels)?;
+            let (width, height) = image.dimensions();
+            let variants = [
+                encode_variant(
+                    "thumbnail",
+                    &image.thumbnail(THUMBNAIL_MAX_DIMENSION, THUMBNAIL_MAX_DIMENSION),
+                )?,
+                encode_variant(
+                    "display",
+                    &image.resize(
+                        DISPLAY_MAX_DIMENSION,
+                        DISPLAY_MAX_DIMENSION,
+                        image::imageops::FilterType::Lanczos3,
+                    ),
+                )?,
+            ];
+            Ok::<_, WorkerError>((width, height, variants))
+        })
+        .await
+        .map_err(|error| WorkerError::Image(error.to_string()))??;
+        for variant in variants {
+            self.put_variant(job, variant).await?;
+        }
+        sqlx::query("UPDATE files SET status = 'ready', width = $2, height = $3, processing_error = NULL, updated_at = now() WHERE id = $1 AND workspace_id = $4 AND deleted_at IS NULL AND EXISTS (SELECT 1 FROM file_processing_jobs WHERE id = $5 AND status = 'running' AND lease_token = $6)")
+            .bind(job.file_id).bind(width as i32).bind(height as i32).bind(job.workspace_id).bind(job.id).bind(job.lease_token).execute(&self.pool).await?;
         Ok(())
     }
 
     async fn put_variant(
         &self,
         job: &ClaimedJob,
-        kind: &str,
-        image: &DynamicImage,
+        variant: EncodedVariant,
     ) -> Result<(), WorkerError> {
-        let rgba = image.to_rgba8();
-        let (width, height) = rgba.dimensions();
-        let mut bytes = Vec::new();
-        image::codecs::webp::WebPEncoder::new_lossless(&mut bytes)
-            .write_image(&rgba, width, height, image::ExtendedColorType::Rgba8)
-            .map_err(|error| WorkerError::Image(error.to_string()))?;
-        let key = format!("files/{}/{}.webp", job.file_id, kind);
+        let key = format!("files/{}/{}.webp", job.file_id, variant.kind);
+        let bytes = variant.bytes;
         self.store
             .put(
                 &key,
@@ -233,11 +293,14 @@ impl FileWorker {
             .await
             .map_err(WorkerError::Storage)?;
         let hash = format!("{:x}", sha2::Sha256::digest(&bytes));
-        sqlx::query(r#"INSERT INTO file_variants (id, workspace_id, file_id, kind, mime_type, width, height, byte_size, object_key, sha256)
-            VALUES ($1,$2,$3,$4,'image/webp',$5,$6,$7,$8,$9)
+        let changed = sqlx::query(r#"INSERT INTO file_variants (id, workspace_id, file_id, kind, mime_type, width, height, byte_size, object_key, sha256)
+            SELECT $1,$2,$3,$4,'image/webp',$5,$6,$7,$8,$9 WHERE EXISTS (SELECT 1 FROM file_processing_jobs WHERE id = $10 AND status = 'running' AND lease_token = $11)
             ON CONFLICT (file_id, kind) DO UPDATE SET mime_type = EXCLUDED.mime_type, width = EXCLUDED.width, height = EXCLUDED.height, byte_size = EXCLUDED.byte_size, object_key = EXCLUDED.object_key, sha256 = EXCLUDED.sha256, updated_at = now()"#)
-            .bind(Uuid::new_v4()).bind(job.workspace_id).bind(job.file_id).bind(kind).bind(width as i32).bind(height as i32).bind(bytes.len() as i64).bind(key).bind(hash)
-            .execute(&self.pool).await?;
+            .bind(Uuid::new_v4()).bind(job.workspace_id).bind(job.file_id).bind(variant.kind).bind(variant.width as i32).bind(variant.height as i32).bind(bytes.len() as i64).bind(key).bind(hash).bind(job.id).bind(job.lease_token)
+            .execute(&self.pool).await?.rows_affected();
+        if changed == 0 {
+            return Err(WorkerError::LeaseLost);
+        }
         Ok(())
     }
 
@@ -333,19 +396,27 @@ impl FileWorker {
     }
 
     pub async fn retry_job(&self, id: Uuid) -> Result<bool, sqlx::Error> {
-        Ok(sqlx::query("UPDATE file_processing_jobs SET status = 'queued', attempts = 0, available_at = now(), locked_at = NULL, worker_id = NULL, last_error = NULL, updated_at = now() WHERE id = $1 AND status = 'failed'").bind(id).execute(&self.pool).await?.rows_affected() == 1)
+        Ok(sqlx::query("UPDATE file_processing_jobs SET status = 'queued', attempts = 0, available_at = now(), locked_at = NULL, worker_id = NULL, lease_token = NULL, last_error = NULL, updated_at = now() WHERE id = $1 AND status = 'failed'").bind(id).execute(&self.pool).await?.rows_affected() == 1)
     }
     async fn complete(&self, job: &ClaimedJob) -> Result<(), sqlx::Error> {
-        sqlx::query("UPDATE file_processing_jobs SET status = 'completed', locked_at = NULL, worker_id = NULL, updated_at = now() WHERE id = $1 AND status = 'running' AND worker_id = $2")
-            .bind(job.id).bind(&self.config.worker_id).execute(&self.pool).await?;
-        counter!("catalog_file_worker_jobs_completed_total").increment(1);
+        let changed = sqlx::query("UPDATE file_processing_jobs SET status = 'completed', locked_at = NULL, worker_id = NULL, lease_token = NULL, updated_at = now() WHERE id = $1 AND status = 'running' AND worker_id = $2 AND lease_token = $3")
+            .bind(job.id).bind(&self.config.worker_id).bind(job.lease_token).execute(&self.pool).await?.rows_affected();
+        if changed == 1 {
+            counter!("catalog_file_worker_jobs_completed_total").increment(1);
+        } else {
+            tracing::warn!(job_id = %job.id, "file job lease lost before completion");
+        }
         Ok(())
     }
     async fn fail(&self, job: &ClaimedJob, error: &str) -> Result<(), sqlx::Error> {
         let terminal = job.attempts >= self.config.max_attempts;
         let backoff = (1_i64 << job.attempts.min(8)).min(MAX_BACKOFF_SECONDS);
-        sqlx::query("UPDATE file_processing_jobs SET status = $2, available_at = now() + make_interval(secs => $3), locked_at = NULL, worker_id = NULL, last_error = $4, updated_at = now() WHERE id = $1 AND status = 'running' AND worker_id = $5")
-            .bind(job.id).bind(if terminal { "failed" } else { "retryable" }).bind(backoff).bind(error).bind(&self.config.worker_id).execute(&self.pool).await?;
+        let changed = sqlx::query("UPDATE file_processing_jobs SET status = $2, available_at = now() + make_interval(secs => $3), locked_at = NULL, worker_id = NULL, lease_token = NULL, last_error = $4, updated_at = now() WHERE id = $1 AND status = 'running' AND worker_id = $5 AND lease_token = $6")
+            .bind(job.id).bind(if terminal { "failed" } else { "retryable" }).bind(backoff).bind(error).bind(&self.config.worker_id).bind(job.lease_token).execute(&self.pool).await?.rows_affected();
+        if changed != 1 {
+            tracing::warn!(job_id = %job.id, "file job lease lost before failure could be recorded");
+            return Ok(());
+        }
         if terminal {
             sqlx::query("UPDATE files SET status = 'failed', processing_error = $2, updated_at = now() WHERE id = $1 AND deleted_at IS NULL").bind(job.file_id).bind(error).execute(&self.pool).await?;
         }
@@ -381,8 +452,32 @@ impl FileWorker {
     }
 }
 
+struct EncodedVariant {
+    kind: &'static str,
+    width: u32,
+    height: u32,
+    bytes: Vec<u8>,
+}
+
+fn encode_variant(kind: &'static str, image: &DynamicImage) -> Result<EncodedVariant, WorkerError> {
+    let rgba = image.to_rgba8();
+    let (width, height) = rgba.dimensions();
+    let mut bytes = Vec::new();
+    image::codecs::webp::WebPEncoder::new_lossless(&mut bytes)
+        .write_image(&rgba, width, height, image::ExtendedColorType::Rgba8)
+        .map_err(|error| WorkerError::Image(error.to_string()))?;
+    Ok(EncodedVariant {
+        kind,
+        width,
+        height,
+        bytes,
+    })
+}
+
 #[derive(Debug, thiserror::Error)]
 enum WorkerError {
+    #[error("file job lease was lost")]
+    LeaseLost,
     #[error(transparent)]
     Database(#[from] sqlx::Error),
     #[error(transparent)]

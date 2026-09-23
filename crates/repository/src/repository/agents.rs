@@ -297,6 +297,24 @@ impl CatalogRepository {
         model: &str,
     ) -> Result<AgentRun, RepositoryError> {
         let mut tx = self.pool.begin().await?;
+        if !attachment_ids.is_empty() {
+            let workspace_id = self.workspace_id.unwrap_or(Self::DEFAULT_WORKSPACE_ID);
+            // Only files uploaded by this user for this conversation may enter
+            // a provider-visible run. Lock them through the attachment insert
+            // so retention and concurrent submissions cannot change ownership.
+            let authorized: Vec<Uuid> = sqlx::query_scalar(
+                "SELECT id FROM files WHERE workspace_id = $1 AND id = ANY($2) AND conversation_upload_conversation_id = $3 AND conversation_upload_user_id = $4 AND deleted_at IS NULL AND (attachment_expires_at > now() OR EXISTS (SELECT 1 FROM conversation_message_attachments a JOIN conversation_messages m ON m.id = a.message_id WHERE a.file_id = files.id AND a.workspace_id = files.workspace_id AND m.conversation_id = $3)) FOR UPDATE",
+            )
+            .bind(workspace_id)
+            .bind(attachment_ids)
+            .bind(conversation_id)
+            .bind(actor)
+            .fetch_all(&mut *tx)
+            .await?;
+            if authorized.len() != attachment_ids.len() {
+                return Err(RepositoryError::NotFound("file"));
+            }
+        }
         self.append_conversation_message_in_tx(
             &mut tx,
             conversation_id,

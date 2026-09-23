@@ -85,11 +85,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
             .await
     });
 
-    let poll = std::env::var("FILE_WORKER_POLL_MILLISECONDS")
-        .ok()
-        .map(|v| v.parse())
-        .transpose()?
-        .unwrap_or(500_u64);
+    let configured_poll = std::env::var("FILE_WORKER_POLL_MILLISECONDS").ok();
+    let poll = poll_interval(configured_poll.as_deref())?;
     tracing::info!(operations_address = %operations_addr, "file worker started");
     let shutdown = shutdown_signal();
     tokio::pin!(shutdown);
@@ -100,13 +97,24 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         }
         tokio::select! {
             _ = &mut shutdown => break,
-            _ = tokio::time::sleep(Duration::from_millis(poll)) => {}
+            _ = tokio::time::sleep(poll) => {}
         }
     }
     let _ = shutdown_sender.send(());
     operations_server.await??;
     tracing::info!("file worker stopped");
     Ok(())
+}
+
+fn poll_interval(raw: Option<&str>) -> Result<Duration, String> {
+    let millis = raw
+        .unwrap_or("500")
+        .parse::<u64>()
+        .map_err(|_| "FILE_WORKER_POLL_MILLISECONDS must be a positive integer")?;
+    if millis == 0 {
+        return Err("FILE_WORKER_POLL_MILLISECONDS must be a positive integer".into());
+    }
+    Ok(Duration::from_millis(millis))
 }
 
 async fn shutdown_signal() {
@@ -162,4 +170,16 @@ async fn worker_metrics(State(state): State<OperationsState>, headers: HeaderMap
         state.metrics.render(),
     )
         .into_response()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn poll_interval_rejects_zero_and_invalid_input() {
+        assert_eq!(poll_interval(None).unwrap(), Duration::from_millis(500));
+        assert!(poll_interval(Some("0")).is_err());
+        assert!(poll_interval(Some("n/a")).is_err());
+    }
 }

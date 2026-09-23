@@ -206,6 +206,7 @@ pub(super) async fn upload(
 /// by entity file attributes; only attribute-value persistence is omitted.
 pub(super) async fn upload_conversation(
     State(state): State<AppState>,
+    super::auth::AuthenticatedPrincipal(user_id, _): super::auth::AuthenticatedPrincipal,
     super::auth::ScopedRepository(repository): super::auth::ScopedRepository,
     ApiPath(conversation_id): ApiPath<Uuid>,
     mut multipart: Multipart,
@@ -298,7 +299,9 @@ pub(super) async fn upload_conversation(
             object_key: key.clone(),
         })
         .collect();
-    let result = repository.persist_conversation_uploads(records).await;
+    let result = repository
+        .persist_conversation_uploads(conversation_id, user_id, records)
+        .await;
     cleanup(&staged).await;
     match result {
         Ok(files) => {

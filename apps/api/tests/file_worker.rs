@@ -204,6 +204,62 @@ async fn worker_retries_terminal_failure_and_operator_retry(pool: PgPool) {
 }
 
 #[sqlx::test]
+async fn reconciliation_does_not_rescan_on_every_poll(pool: PgPool) {
+    let worker = worker(pool.clone(), Arc::new(FakeObjectStore::available()), 3, 60);
+    assert!(!worker.run_once().await.unwrap());
+    let file_id = Uuid::new_v4();
+    insert_file(&pool, file_id, &format!("files/{file_id}/original"), false).await;
+    assert!(!worker.run_once().await.unwrap());
+    let deleted: bool =
+        sqlx::query_scalar("SELECT deleted_at IS NOT NULL FROM files WHERE id = $1")
+            .bind(file_id)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+    assert!(!deleted);
+    worker.reconcile().await.unwrap();
+    let deleted: bool =
+        sqlx::query_scalar("SELECT deleted_at IS NOT NULL FROM files WHERE id = $1")
+            .bind(file_id)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+    assert!(deleted);
+}
+
+#[sqlx::test]
+async fn reclaimed_file_job_gets_a_new_fencing_token(pool: PgPool) {
+    let file_id = Uuid::new_v4();
+    insert_file(&pool, file_id, &format!("files/{file_id}/original"), true).await;
+    let job_id = queue_metadata_job(&pool, file_id).await;
+    let worker = worker(pool.clone(), Arc::new(FakeObjectStore::available()), 3, 60);
+    let first = worker.claim().await.unwrap().unwrap();
+    sqlx::query(
+        "UPDATE file_processing_jobs SET locked_at = now() - interval '301 seconds' WHERE id = $1",
+    )
+    .bind(job_id)
+    .execute(&pool)
+    .await
+    .unwrap();
+    let second = worker.claim().await.unwrap().unwrap();
+    assert_eq!(first.id, second.id);
+    assert_ne!(first.lease_token, second.lease_token);
+    assert_eq!(second.attempts, first.attempts + 1);
+    let stale_ack = sqlx::query("UPDATE file_processing_jobs SET status = 'completed' WHERE id = $1 AND status = 'running' AND worker_id = $2 AND lease_token = $3")
+        .bind(first.id).bind("file-worker-integration-test").bind(first.lease_token)
+        .execute(&pool).await.unwrap();
+    assert_eq!(stale_ack.rows_affected(), 0);
+    let (status, token): (String, Option<Uuid>) =
+        sqlx::query_as("SELECT status, lease_token FROM file_processing_jobs WHERE id = $1")
+            .bind(job_id)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+    assert_eq!(status, "running");
+    assert_eq!(token, Some(second.lease_token));
+}
+
+#[sqlx::test]
 async fn concurrent_reconcilers_enqueue_one_purge_job(pool: PgPool) {
     let file_id = Uuid::new_v4();
     insert_file(&pool, file_id, &format!("files/{file_id}/original"), false).await;

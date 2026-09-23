@@ -17,6 +17,8 @@ use crate::{
     repository::decode_search_cursor,
 };
 use axum::{Json, extract::State, http::StatusCode};
+use catalog_validation::validate_json_schema;
+use chrono::{DateTime, NaiveDate, NaiveTime};
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 use uuid::Uuid;
@@ -39,6 +41,14 @@ pub(super) struct SmartFillEntityFormRequest {
 #[derive(Serialize)]
 pub(super) struct SmartFillEntityFormResponse {
     fields: std::collections::BTreeMap<String, String>,
+}
+
+#[derive(Serialize)]
+struct SmartFillField {
+    code: String,
+    name: String,
+    value_type: String,
+    value_schema: Option<Value>,
 }
 
 const SMART_FILL_SYSTEM_PROMPT: &str = "You fill the editable scalar fields of one catalogue entity from pasted text. Use only the supplied field codes, preserve values not supported by the text, and never invent facts. Return exactly one propose_entity_form_values tool call. Values must be strings suitable for the browser form; do not propose relationship or file fields.";
@@ -126,11 +136,12 @@ pub(super) async fn smart_fill_entity_form(
             && attribute.value_type != "file"
             && (is_default_context || attribute.context_editable != "default")
         {
-            editable.push(json!({
-                "code": attribute.code,
-                "name": attribute.code,
-                "value_type": attribute.value_type,
-            }));
+            editable.push(SmartFillField {
+                code: attribute.code.clone(),
+                name: attribute.code.clone(),
+                value_type: attribute.value_type.clone(),
+                value_schema: attribute.value_schema.clone(),
+            });
         }
     }
     for attribute in &reusable_attributes {
@@ -139,16 +150,17 @@ pub(super) async fn smart_fill_entity_form(
             && attribute.value_type != "file"
             && (is_default_context || attribute.context_editable != "default")
         {
-            editable.push(json!({
-                "code": attribute.code,
-                "name": attribute.name,
-                "value_type": attribute.value_type,
-            }));
+            editable.push(SmartFillField {
+                code: attribute.code.clone(),
+                name: attribute.name.clone(),
+                value_type: attribute.value_type.clone(),
+                value_schema: attribute.value_schema.clone(),
+            });
         }
     }
     let allowed = editable
         .iter()
-        .filter_map(|field| field.get("code").and_then(Value::as_str))
+        .map(|field| field.code.as_str())
         .collect::<std::collections::HashSet<_>>();
     let current_values = editable_scalar_values(
         values.iter().chain(reusable_values.iter()),
@@ -206,10 +218,55 @@ pub(super) async fn smart_fill_entity_form(
     Ok(Json(SmartFillEntityFormResponse {
         fields: fields
             .into_iter()
-            .filter(|(code, _)| allowed.contains(code.as_str()))
+            .filter(|(code, value)| {
+                editable
+                    .iter()
+                    .any(|field| field.code == *code && smart_fill_value_is_valid(field, value))
+            })
             .collect(),
     }))
 }
+/// Parse a suggestion exactly as the browser will parse a scalar form field,
+/// then apply the attribute's JSON schema before offering it to the user.
+fn smart_fill_value_is_valid(field: &SmartFillField, proposed: &str) -> bool {
+    let value = proposed.trim();
+    if value.is_empty() {
+        return false;
+    }
+    let native = match field.value_type.as_str() {
+        "string" => Some(Value::String(value.to_owned())),
+        "number" => value
+            .parse::<f64>()
+            .ok()
+            .and_then(serde_json::Number::from_f64)
+            .map(Value::Number),
+        "integer" => value
+            .parse::<i64>()
+            .ok()
+            .filter(|value| (-9_007_199_254_740_991..=9_007_199_254_740_991).contains(value))
+            .map(|value| json!(value)),
+        "boolean" => value.parse::<bool>().ok().map(|value| json!(value)),
+        "date" => NaiveDate::parse_from_str(value, "%Y-%m-%d")
+            .ok()
+            .filter(|_| value.len() == 10)
+            .map(|_| json!(value)),
+        "datetime" => DateTime::parse_from_rfc3339(value)
+            .ok()
+            .map(|_| json!(value)),
+        "time" => value.split_once(' ').and_then(|(time, zone)| {
+            NaiveTime::parse_from_str(time, "%H:%M:%S%.f").ok()?;
+            zone.parse::<chrono_tz::Tz>().ok()?;
+            Some(json!({"time": time, "time_zone": zone}))
+        }),
+        "json" => serde_json::from_str(value).ok(),
+        _ => None,
+    };
+    let Some(native) = native else { return false };
+    field.value_schema.as_ref().is_none_or(|schema| {
+        validate_json_schema(schema, &native).is_ok_and(|errors| errors.is_empty())
+    })
+}
+
 fn editable_scalar_values<'a>(
     values: impl Iterator<Item = &'a crate::model::FormAttributeValue>,
     context_id: Option<Uuid>,
@@ -482,5 +539,33 @@ mod smart_fill_tests {
         let filtered = editable_scalar_values(values.iter(), Some(context), &allowed);
         assert_eq!(filtered.len(), 1);
         assert_eq!(serde_json::to_value(filtered[0]).unwrap()["value"], "ok");
+    }
+
+    #[test]
+    fn suggestions_must_match_the_browser_scalar_type_and_attribute_schema() {
+        let field = SmartFillField {
+            code: "state".into(),
+            name: "State".into(),
+            value_type: "string".into(),
+            value_schema: Some(json!({"type": "string", "enum": ["active", "inactive"]})),
+        };
+        assert!(smart_fill_value_is_valid(&field, "active"));
+        assert!(!smart_fill_value_is_valid(&field, "discontinued"));
+        let integer = SmartFillField {
+            value_type: "integer".into(),
+            value_schema: None,
+            ..field
+        };
+        assert!(smart_fill_value_is_valid(&integer, "42"));
+        assert!(!smart_fill_value_is_valid(&integer, "1.5"));
+        assert!(!smart_fill_value_is_valid(&integer, "9223372036854775808"));
+        assert!(!smart_fill_value_is_valid(&integer, "-9223372036854775808"));
+        let date = SmartFillField {
+            value_type: "date".into(),
+            value_schema: None,
+            ..integer
+        };
+        assert!(smart_fill_value_is_valid(&date, "2026-09-23"));
+        assert!(!smart_fill_value_is_valid(&date, "2026-9-23"));
     }
 }

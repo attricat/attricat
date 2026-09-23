@@ -691,16 +691,80 @@ async fn standalone_conversation_upload_survives_reconciliation_until_attached(p
             .unwrap();
     assert!(deleted_at.is_none());
 
-    CatalogRepository::system(pool.clone())
+    let repository = CatalogRepository::system(pool.clone())
         .for_workspace(BOOTSTRAP_WORKSPACE_ID.parse().unwrap())
         .await
-        .unwrap()
-        .append_conversation_message_with_attachments(
+        .unwrap();
+    let other_conversation = repository
+        .create_conversation(None, "Other conversation")
+        .await
+        .unwrap();
+    assert!(
+        repository
+            .submit_agent_message(
+                other_conversation.id,
+                BOOTSTRAP_OWNER_ID.parse().unwrap(),
+                json!("Steal attachment"),
+                &[file_id],
+                "https://provider.test/v1",
+                "test"
+            )
+            .await
+            .is_err()
+    );
+    assert!(
+        repository
+            .conversation_messages(other_conversation.id)
+            .await
+            .unwrap()
+            .is_empty()
+    );
+    let unrelated_file = Uuid::new_v4();
+    sqlx::query("INSERT INTO files (id, workspace_id, original_filename, display_filename, mime_type, byte_size, sha256, original_key, status) VALUES ($1, $2, 'private.pdf', 'private.pdf', 'application/pdf', 7, $3, 'files/private.pdf', 'ready')")
+        .bind(unrelated_file)
+        .bind(BOOTSTRAP_WORKSPACE_ID.parse::<Uuid>().unwrap())
+        .bind("0".repeat(64))
+        .execute(&pool).await.unwrap();
+    assert!(
+        repository
+            .submit_agent_message(
+                conversation_id,
+                BOOTSTRAP_OWNER_ID.parse().unwrap(),
+                json!("Unrelated file"),
+                &[unrelated_file],
+                "https://provider.test/v1",
+                "test"
+            )
+            .await
+            .is_err()
+    );
+    let other_user = Uuid::new_v4();
+    sqlx::query("INSERT INTO users (id, email) VALUES ($1, 'another-agent@example.test')")
+        .bind(other_user)
+        .execute(&pool)
+        .await
+        .unwrap();
+    assert!(
+        repository
+            .submit_agent_message(
+                conversation_id,
+                other_user,
+                json!("Another user's upload"),
+                &[file_id],
+                "https://provider.test/v1",
+                "test"
+            )
+            .await
+            .is_err()
+    );
+    repository
+        .submit_agent_message(
             conversation_id,
-            None,
-            "user",
+            BOOTSTRAP_OWNER_ID.parse().unwrap(),
             json!("Read the attachment"),
             &[file_id],
+            "https://provider.test/v1",
+            "test",
         )
         .await
         .unwrap();

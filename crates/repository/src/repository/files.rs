@@ -327,16 +327,28 @@ impl CatalogRepository {
     /// reconciliation until the message attachment transaction claims them.
     pub async fn persist_conversation_uploads(
         &self,
+        conversation_id: Uuid,
+        uploaded_by_user_id: Uuid,
         files: Vec<NewUploadedFile>,
     ) -> Result<Vec<UploadedFile>, RepositoryError> {
         let workspace_id = self.workspace_id.unwrap_or(Self::DEFAULT_WORKSPACE_ID);
         let mut transaction = self.pool.begin().await?;
+        let exists: bool = sqlx::query_scalar(
+            "SELECT EXISTS(SELECT 1 FROM conversations WHERE id = $1 AND workspace_id = $2 AND archived_at IS NULL)",
+        )
+        .bind(conversation_id)
+        .bind(workspace_id)
+        .fetch_one(&mut *transaction)
+        .await?;
+        if !exists {
+            return Err(RepositoryError::NotFound("conversation"));
+        }
         let mut result = Vec::with_capacity(files.len());
         for file in files {
             let id = Uuid::new_v4();
             let status = "queued".to_owned();
             sqlx::query(
-                "INSERT INTO files (id, workspace_id, original_filename, display_filename, mime_type, byte_size, sha256, original_key, status, attachment_expires_at) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,now() + make_interval(secs => $10))",
+                "INSERT INTO files (id, workspace_id, original_filename, display_filename, mime_type, byte_size, sha256, original_key, status, attachment_expires_at, conversation_upload_conversation_id, conversation_upload_user_id) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,now() + make_interval(secs => $10),$11,$12)",
             )
             .bind(id)
             .bind(workspace_id)
@@ -348,6 +360,8 @@ impl CatalogRepository {
             .bind(&file.object_key)
             .bind(&status)
             .bind(CONVERSATION_ATTACHMENT_LIFETIME_SECONDS)
+            .bind(conversation_id)
+            .bind(uploaded_by_user_id)
             .execute(&mut *transaction)
             .await?;
             sqlx::query("INSERT INTO file_processing_jobs (id, workspace_id, file_id, kind, status) VALUES ($1,$2,$3,'metadata','queued')")

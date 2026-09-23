@@ -17,9 +17,11 @@ catalog-extension-runtime = { path = "../extension-runtime" }
 catalog-repository = { path = "../repository" }
 catalog-rules = { path = "../rules" }
 catalog-storage = { path = "../storage" }
+catalog-validation = { path = "../validation" }
 catalog-workers = { path = "../workers" }
 catalog-workflow = { path = "../workflow" }
 chrono.workspace = true
+chrono-tz.workspace = true
 lettre.workspace = true
 metrics.workspace = true
 metrics-exporter-prometheus.workspace = true
