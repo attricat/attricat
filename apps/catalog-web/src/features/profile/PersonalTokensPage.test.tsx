@@ -45,7 +45,9 @@ describe('PersonalTokensPage', () => {
     fireEvent.submit(form);
     await waitFor(() => expect(createToken).toHaveBeenCalledOnce());
     expect(
-      screen.getByRole('button', { name: 'Create token' }).hasAttribute('disabled'),
+      screen
+        .getByRole('button', { name: 'Create token' })
+        .hasAttribute('disabled'),
     ).toBe(true);
   });
 });
