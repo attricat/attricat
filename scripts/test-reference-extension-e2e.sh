@@ -9,7 +9,7 @@ example_extension=$(cd "$root/../../attricat-extension-example" && pwd)
 if [[ -z "${CATALOG_API_URL:-}" && -n "${API_PORT:-}" ]]; then
   CATALOG_API_URL="http://127.0.0.1:$API_PORT"
 fi
-: "${CATALOG_API_URL:?Run 'just setup' and source .catalog-worktree first.}"
+: "${CATALOG_API_URL:?Run 'just setup' and source .worktree first.}"
 command -v jq >/dev/null || { echo 'jq is required' >&2; exit 1; }
 
 cli=(cargo run --quiet -p cli -- --token "$CATALOG_TOKEN")

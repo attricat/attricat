@@ -4,7 +4,7 @@ The API loads `.env` from the working directory at startup. Run `just setup`
 once before `just dev`; it creates `.env` from `.env.example` and assigns
 persistent, worktree-specific ports. Those port assignments, plus ready-to-open
 `WEB_URL`, `MAILPIT_UI_URL`, `JAEGER_UI_URL`, and `RUSTFS_UI_URL` values, are recorded in the ignored
-`.catalog-worktree` file. The API and file worker validate object-storage
+`.worktree` file. The API and file worker validate object-storage
 configuration and bucket access during startup; neither starts with a missing
 or inaccessible configured bucket.
 
@@ -198,7 +198,7 @@ An occurrence that overlaps a queued, running, or approval-waiting run is
 recorded as skipped rather than executed concurrently.
 
 Mailpit is a local-development and E2E adapter only; it is not production mail
-configuration. Source `.catalog-worktree` after `just dev`, open
+configuration. Source `.worktree` after `just dev`, open
 `$MAILPIT_UI_URL` for manual inspection, and use its REST API
 for E2E mailbox retrieval. Production SMTP requires `SMTP_TLS_MODE=starttls`
 or `implicit`; `disabled` is restricted to an unauthenticated trusted local relay. Startup rejects credentials with `disabled` and also rejects partial username/password configuration. See
@@ -212,7 +212,7 @@ RustFS is a local-development S3-compatible adapter, replacing the deprecated
 MinIO local stack. It is not a production provider selection: production uses
 the same generic `S3_*` settings for its chosen S3-compatible service. The
 local bucket is initialized as `catalog-files`; open `$RUSTFS_UI_URL` after
-sourcing `.catalog-worktree` to inspect it. Back up PostgreSQL file metadata
+sourcing `.worktree` to inspect it. Back up PostgreSQL file metadata
 and the configured bucket together once file uploads are enabled.
 
 ## File storage operations

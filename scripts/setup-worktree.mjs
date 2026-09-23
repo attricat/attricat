@@ -6,12 +6,12 @@ import net from "node:net";
  *
  * Each worktree receives stable, otherwise-unused PostgreSQL, API, web,
  * documentation ports, Mailpit SMTP, Mailpit UI, Jaeger OTLP,
- * Jaeger UI, RustFS S3, and RustFS Console ports in `.catalog-worktree`. The assignments are reused on later runs so
+ * Jaeger UI, RustFS S3, and RustFS Console ports in `.worktree`. The assignments are reused on later runs so
  * `just dev` can be stopped and restarted without changing its URLs. The
  * script creates `.env` from `.env.example` when necessary, while preserving
  * existing non-port configuration in an existing `.env` file.
  */
-const stateFile = new URL("../.catalog-worktree", import.meta.url);
+const stateFile = new URL("../.worktree", import.meta.url);
 const envFile = new URL("../.env", import.meta.url);
 const exampleEnvFile = new URL("../.env.example", import.meta.url);
 const portNames = [

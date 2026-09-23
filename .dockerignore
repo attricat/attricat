@@ -1,6 +1,6 @@
 .git
 .env
-.catalog-worktree
+.worktree
 node_modules
 **/node_modules
 **/dist

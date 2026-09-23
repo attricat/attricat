@@ -1,6 +1,6 @@
 /target
 .env
-.catalog-worktree
+.worktree
 .acli-session
 .catalog-generator/
 /node_modules

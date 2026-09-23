@@ -133,4 +133,4 @@ perf profile="smoke": _assert-env
     CATALOG_SERVER="$CATALOG_API_URL" PERF_PROFILE="{{profile}}" k6 run perf/explorer.js
 
 test-reference-extension-e2e: _assert-env
-	@source .catalog-worktree; CATALOG_API_URL="http://127.0.0.1:$API_PORT" scripts/test-reference-extension-e2e.sh
+	@source .worktree; CATALOG_API_URL="http://127.0.0.1:$API_PORT" scripts/test-reference-extension-e2e.sh

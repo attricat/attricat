@@ -691,7 +691,7 @@ creating an owner personal API token:
 ```sh
 just setup
 just dev # separate terminal
-source .catalog-worktree
+source .worktree
 export CATALOG_TOKEN=... # owner token for this worktree
 just test-reference-extension-e2e
 ```

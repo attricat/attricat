@@ -8,7 +8,7 @@
    from `.env.example`, and assigns persistent ports for this worktree.
 3. Run `just dev`. It starts PostgreSQL, Mailpit, Jaeger, and RustFS, then
    watches the API, file worker, and web app.
-4. Source `.catalog-worktree`, then open the worktree-specific `WEB_URL` and
+4. Source `.worktree`, then open the worktree-specific `WEB_URL` and
    `JAEGER_UI_URL`. Jaeger shows local API and file-worker traces.
 
 The API applies embedded SQLx migrations when it starts. To run them manually:
