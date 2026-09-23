@@ -72,6 +72,7 @@ jobs:
         with:
           toolchain: 1.95.0
           targets: wasm32-unknown-unknown
+      - uses: taiki-e/install-action@wasm-tools
       - name: Record initial disk usage
         run: df -h
       - run: cargo test --locked --workspace
