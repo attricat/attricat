@@ -18,7 +18,7 @@ import {
   TextField,
   Typography,
 } from '@mui/material';
-import { type ComponentType, useState } from 'react';
+import { type ComponentType, useId, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { PageContainer } from '../../components/PageContainer';
 import { PageHeader } from '../../components/PageHeader';
@@ -53,6 +53,7 @@ export const WorkflowDetailPage = ({ workflowId }: { workflowId: string }) => {
   const [tab, setTab] = useState(0);
   const [leftVersion, setLeftVersion] = useState<number>();
   const [manualEntityId, setManualEntityId] = useState('');
+  const tabId = useId();
   const session = useQuery({
     queryKey: authQueryKeys.session(),
     queryFn: currentSession,
@@ -89,8 +90,8 @@ export const WorkflowDetailPage = ({ workflowId }: { workflowId: string }) => {
     onSuccess: refresh,
   });
   const runNow = useMutation({
-    mutationFn: () =>
-      runWorkflowNow(workflowId, manualEntityId, crypto.randomUUID()),
+    mutationFn: (entityId: string) =>
+      runWorkflowNow(workflowId, entityId, crypto.randomUUID()),
     onSuccess: refresh,
   });
   const disable = useMutation({
@@ -172,8 +173,11 @@ export const WorkflowDetailPage = ({ workflowId }: { workflowId: string }) => {
                 current.manual_enabled && (
                   <Stack direction="row" spacing={1}>
                     <TextField
-                      aria-label="Manual run entity ID"
+                      disabled={runNow.isPending}
                       label="Entity ID"
+                      slotProps={{
+                        htmlInput: { 'aria-label': 'Manual run entity ID' },
+                      }}
                       onChange={(event) =>
                         setManualEntityId(event.target.value)
                       }
@@ -181,8 +185,8 @@ export const WorkflowDetailPage = ({ workflowId }: { workflowId: string }) => {
                       value={manualEntityId}
                     />
                     <Button
-                      disabled={runNow.isPending || !manualEntityId}
-                      onClick={() => runNow.mutate()}
+                      disabled={runNow.isPending || !manualEntityId.trim()}
+                      onClick={() => runNow.mutate(manualEntityId.trim())}
                       variant="outlined"
                     >
                       Run now
@@ -245,30 +249,30 @@ export const WorkflowDetailPage = ({ workflowId }: { workflowId: string }) => {
         variant="scrollable"
       >
         <Tab
-          aria-controls="workflow-tabpanel-0"
-          id="workflow-tab-0"
+          aria-controls={`${tabId}-panel-0`}
+          id={`${tabId}-tab-0`}
           label={t('workflows.revisions')}
         />
         <Tab
-          aria-controls="workflow-tabpanel-1"
-          id="workflow-tab-1"
+          aria-controls={`${tabId}-panel-1`}
+          id={`${tabId}-tab-1`}
           label={t('workflows.source')}
         />
         <Tab
-          aria-controls="workflow-tabpanel-2"
-          id="workflow-tab-2"
+          aria-controls={`${tabId}-panel-2`}
+          id={`${tabId}-tab-2`}
           label={t('workflows.compare')}
         />
         <Tab
-          aria-controls="workflow-tabpanel-3"
-          id="workflow-tab-3"
+          aria-controls={`${tabId}-panel-3`}
+          id={`${tabId}-tab-3`}
           label={t('workflows.runDiagnostics')}
         />
       </Tabs>
       {tab === 0 && (
         <Box
-          aria-labelledby="workflow-tab-0"
-          id="workflow-tabpanel-0"
+          aria-labelledby={`${tabId}-tab-0`}
+          id={`${tabId}-panel-0`}
           role="tabpanel"
         >
           <RevisionTable revisions={revisions.data} />
@@ -276,8 +280,8 @@ export const WorkflowDetailPage = ({ workflowId }: { workflowId: string }) => {
       )}
       {tab === 1 && (
         <Box
-          aria-labelledby="workflow-tab-1"
-          id="workflow-tabpanel-1"
+          aria-labelledby={`${tabId}-tab-1`}
+          id={`${tabId}-panel-1`}
           role="tabpanel"
         >
           <Source
@@ -288,8 +292,8 @@ export const WorkflowDetailPage = ({ workflowId }: { workflowId: string }) => {
       )}
       {tab === 2 && (
         <Box
-          aria-labelledby="workflow-tab-2"
-          id="workflow-tabpanel-2"
+          aria-labelledby={`${tabId}-tab-2`}
+          id={`${tabId}-panel-2`}
           role="tabpanel"
         >
           <Paper component="section" sx={{ mt: 3, p: 2 }}>
@@ -329,8 +333,8 @@ export const WorkflowDetailPage = ({ workflowId }: { workflowId: string }) => {
       )}
       {tab === 3 && (
         <Box
-          aria-labelledby="workflow-tab-3"
-          id="workflow-tabpanel-3"
+          aria-labelledby={`${tabId}-tab-3`}
+          id={`${tabId}-panel-3`}
           role="tabpanel"
         >
           <RunTable canManage={canManage} locale={locale} runs={workflowRuns} />
