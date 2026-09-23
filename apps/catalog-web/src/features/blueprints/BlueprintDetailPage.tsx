@@ -24,6 +24,7 @@ import { PageContainer } from '../../components/PageContainer';
 import { PageHeader } from '../../components/PageHeader';
 import {
   getBlueprintRevision,
+  getSafeBlueprintMigrationImpact,
   listBlueprintMigrationBatches,
   listBlueprintRevisions,
   publishBlueprintEntities,
@@ -87,8 +88,18 @@ export const BlueprintDetailPage = ({
     },
   });
   const safeMigration = useMutation({
-    mutationFn: (version: number) =>
-      startSafeBlueprintMigrationBatch(blueprintId, version),
+    mutationFn: ({
+      version,
+      removalDisposition,
+    }: {
+      version: number;
+      removalDisposition?: 'archive';
+    }) =>
+      startSafeBlueprintMigrationBatch(
+        blueprintId,
+        version,
+        removalDisposition,
+      ),
     onSuccess: async () => {
       setSafeMigrationConfirmationOpen(false);
       setPageTab(3);
@@ -174,7 +185,7 @@ export const BlueprintDetailPage = ({
     queryFn: () => getBlueprintRevision(blueprintId, latestPublished!.version),
     enabled: latestPublished !== undefined,
   });
-  const canStartSafeMigration =
+  const canStartSafeMigrationBase =
     latestPublished !== undefined &&
     safeMigrationSource.data !== undefined &&
     safeMigrationTarget.data !== undefined &&
@@ -182,6 +193,20 @@ export const BlueprintDetailPage = ({
       safeMigrationSource.data,
       safeMigrationTarget.data,
     );
+  const safeMigrationImpact = useQuery({
+    queryKey: [
+      ...blueprintQueryKeys.revision(
+        blueprintId,
+        latestPublished?.version ?? 0,
+      ),
+      'safe-migration-impact',
+    ],
+    queryFn: () =>
+      getSafeBlueprintMigrationImpact(blueprintId, latestPublished!.version),
+    enabled: latestPublished !== undefined && canStartSafeMigrationBase,
+  });
+  const canStartSafeMigration =
+    canStartSafeMigrationBase && safeMigrationImpact.data !== undefined;
   const safeMigrationWasEvaluated =
     latestPublished !== undefined &&
     safeMigrationSource.isSuccess &&
@@ -512,6 +537,25 @@ export const BlueprintDetailPage = ({
                   target: latestPublished?.version,
                 })}
               </DialogContentText>
+              {safeMigrationImpact.data && (
+                <DialogContentText sx={{ mt: 2 }}>
+                  {t('blueprints.migrationImpact', {
+                    entities: safeMigrationImpact.data.eligible_entities,
+                    values: safeMigrationImpact.data.removed_values,
+                    affectedEntities:
+                      safeMigrationImpact.data.entities_with_removed_values,
+                    attributes:
+                      safeMigrationImpact.data.removed_attribute_codes.join(
+                        ', ',
+                      ),
+                  })}
+                </DialogContentText>
+              )}
+              {safeMigrationImpact.data?.requires_removal_disposition && (
+                <Alert severity="warning" sx={{ mt: 2 }}>
+                  {t('blueprints.archiveRemovedValues')}
+                </Alert>
+              )}
             </DialogContent>
             <DialogActions>
               <Button
@@ -522,7 +566,15 @@ export const BlueprintDetailPage = ({
               </Button>
               <Button
                 disabled={safeMigration.isPending}
-                onClick={() => safeMigration.mutate(latestPublished!.version)}
+                onClick={() =>
+                  safeMigration.mutate({
+                    version: latestPublished!.version,
+                    removalDisposition: safeMigrationImpact.data
+                      ?.requires_removal_disposition
+                      ? 'archive'
+                      : undefined,
+                  })
+                }
                 variant="contained"
               >
                 {safeMigration.isPending
@@ -586,21 +638,21 @@ const isSafeAutomaticMigration = (
   return source.attributes.every((attribute) => {
     const targetAttribute = targetAttributes.get(attribute.code);
     return (
-      targetAttribute !== undefined &&
-      attribute.value_type === targetAttribute.value_type &&
-      JSON.stringify(attribute.value_schema) ===
-        JSON.stringify(targetAttribute.value_schema) &&
-      JSON.stringify(attribute.default_value) ===
-        JSON.stringify(targetAttribute.default_value) &&
-      JSON.stringify(attribute.file_policy) ===
-        JSON.stringify(targetAttribute.file_policy) &&
-      attribute.target_blueprint_code ===
-        targetAttribute.target_blueprint_code &&
-      attribute.cardinality === targetAttribute.cardinality &&
-      attribute.target_cardinality === targetAttribute.target_cardinality &&
-      attribute.context_fallback === targetAttribute.context_fallback &&
-      attribute.context_editable === targetAttribute.context_editable &&
-      attribute.readonly === targetAttribute.readonly
+      targetAttribute === undefined ||
+      (attribute.value_type === targetAttribute.value_type &&
+        JSON.stringify(attribute.value_schema) ===
+          JSON.stringify(targetAttribute.value_schema) &&
+        JSON.stringify(attribute.default_value) ===
+          JSON.stringify(targetAttribute.default_value) &&
+        JSON.stringify(attribute.file_policy) ===
+          JSON.stringify(targetAttribute.file_policy) &&
+        attribute.target_blueprint_code ===
+          targetAttribute.target_blueprint_code &&
+        attribute.cardinality === targetAttribute.cardinality &&
+        attribute.target_cardinality === targetAttribute.target_cardinality &&
+        attribute.context_fallback === targetAttribute.context_fallback &&
+        attribute.context_editable === targetAttribute.context_editable &&
+        attribute.readonly === targetAttribute.readonly)
     );
   });
 };

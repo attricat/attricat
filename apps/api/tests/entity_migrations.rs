@@ -86,6 +86,7 @@ async fn compatible_scalar_migration_preserves_row_identity_without_history(pool
                 values: Vec::new(),
                 relationships: Vec::new(),
                 discard_attributes: Vec::new(),
+                removal_policy: None,
             },
         )
         .await
@@ -207,6 +208,7 @@ async fn supplied_scalar_replacement_archives_the_old_row_once(pool: PgPool) {
                 }],
                 relationships: Vec::new(),
                 discard_attributes: Vec::new(),
+                removal_policy: None,
             },
         )
         .await
@@ -357,6 +359,7 @@ cardinality = "one"
                 values: Vec::new(),
                 relationships: Vec::new(),
                 discard_attributes: Vec::new(),
+                removal_policy: None,
             },
         )
         .await
@@ -461,6 +464,7 @@ value_type = "string"
                 values: Vec::new(),
                 relationships: Vec::new(),
                 discard_attributes: vec!["obsolete".to_owned()],
+                removal_policy: None,
             },
         )
         .await
@@ -849,6 +853,7 @@ context_editable = "all"
                 values: Vec::new(),
                 relationships: Vec::new(),
                 discard_attributes: Vec::new(),
+                removal_policy: None,
             },
         )
         .await

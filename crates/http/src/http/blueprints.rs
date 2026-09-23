@@ -8,8 +8,8 @@ use crate::{
     catalog_service::CatalogMutationService,
     model::{
         Blueprint, BlueprintEntityPublicationSummary, BlueprintMigrationBatch,
-        BlueprintMigrationBatchStatus, BlueprintWithAttributes, CreateBlueprint,
-        PublicationContextRequest,
+        BlueprintMigrationBatchStatus, BlueprintMigrationImpact, BlueprintWithAttributes,
+        CreateBlueprint, PublicationContextRequest, StartBlueprintMigrationBatchRequest,
     },
 };
 use axum::{Json, extract::State, http::StatusCode};
@@ -105,13 +105,32 @@ pub(super) async fn list_blueprint_migration_batches(
     ))
 }
 
+pub(super) async fn safe_blueprint_migration_impact(
+    State(_state): State<AppState>,
+    super::auth::ScopedRepository(repository): super::auth::ScopedRepository,
+    ApiPath((blueprint_id, version)): ApiPath<(Uuid, i64)>,
+) -> Result<Json<BlueprintMigrationImpact>, ApiError> {
+    Ok(Json(
+        repository
+            .safe_blueprint_migration_impact(blueprint_id, version)
+            .await?,
+    ))
+}
+
 pub(super) async fn start_safe_blueprint_migration_batch(
     State(state): State<AppState>,
     super::auth::ScopedRepository(repository): super::auth::ScopedRepository,
     ApiPath((blueprint_id, version)): ApiPath<(Uuid, i64)>,
+    input: Option<Json<StartBlueprintMigrationBatchRequest>>,
 ) -> Result<(StatusCode, Json<BlueprintMigrationBatch>), ApiError> {
     let batch = repository
-        .start_safe_blueprint_migration_batch(blueprint_id, version)
+        .start_safe_blueprint_migration_batch_with_removal_disposition(
+            blueprint_id,
+            version,
+            input
+                .as_ref()
+                .and_then(|Json(input)| input.removal_disposition.as_deref()),
+        )
         .await?;
     invalidate_data_health(&state).await;
     Ok((StatusCode::ACCEPTED, Json(batch)))

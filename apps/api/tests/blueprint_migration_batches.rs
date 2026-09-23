@@ -2,10 +2,11 @@ use api::{
     blueprint_migration_worker::{
         BlueprintMigrationBatchConfig, BlueprintMigrationBatchTaskHandler,
     },
-    model::CreateBlueprint,
+    model::{CreateBlueprint, NewAttributeValue},
     repository::CatalogRepository,
     task_worker::TaskHandler,
 };
+use serde_json::json;
 use sqlx::PgPool;
 
 const DEFINITION: &str = r#"
@@ -350,5 +351,119 @@ async fn expired_batch_task_cannot_checkpoint_and_reclaim_reuses_migration_rows(
         .await
         .unwrap(),
         "completed"
+    );
+}
+
+#[sqlx::test]
+async fn safe_batch_archives_explicitly_approved_removed_values(pool: PgPool) {
+    let repository = CatalogRepository::system(pool.clone());
+    let source = repository
+        .create_blueprint(CreateBlueprint {
+            definition: format!(
+                "{DEFINITION}\n[[attributes]]\ncode = \"obsolete\"\nvalue_type = \"string\"\n"
+            ),
+        })
+        .await
+        .unwrap();
+    repository
+        .publish_blueprint_revision(source.blueprint.id, 1)
+        .await
+        .unwrap();
+    let empty = repository
+        .create_entity_with_values(source.blueprint.id, 1, Vec::new(), Vec::new(), json!({}))
+        .await
+        .unwrap();
+    let populated = repository
+        .create_entity_with_values(
+            source.blueprint.id,
+            1,
+            vec![NewAttributeValue::Scalar {
+                attribute_id: None,
+                attribute_code: Some("obsolete".to_owned()),
+                context_id: None,
+                value: json!("archive me"),
+            }],
+            Vec::new(),
+            json!({}),
+        )
+        .await
+        .unwrap();
+    repository
+        .create_blueprint_revision(
+            source.blueprint.id,
+            CreateBlueprint {
+                definition: format!("{DEFINITION}\n# obsolete removed\n"),
+            },
+        )
+        .await
+        .unwrap();
+    repository
+        .publish_blueprint_revision(source.blueprint.id, 2)
+        .await
+        .unwrap();
+
+    let impact = repository
+        .safe_blueprint_migration_impact(source.blueprint.id, 2)
+        .await
+        .unwrap();
+    assert_eq!(impact.removed_attribute_codes, vec!["obsolete"]);
+    assert_eq!(impact.entities_with_removed_values, 1);
+    assert_eq!(impact.removed_values, 1);
+    assert!(impact.requires_removal_disposition);
+    assert!(
+        repository
+            .start_safe_blueprint_migration_batch(source.blueprint.id, 2)
+            .await
+            .is_err()
+    );
+
+    let batch = repository
+        .start_safe_blueprint_migration_batch_with_removal_disposition(
+            source.blueprint.id,
+            2,
+            Some("archive"),
+        )
+        .await
+        .unwrap();
+    let task = repository
+        .claim_task("removal-worker", std::time::Duration::from_secs(30))
+        .await
+        .unwrap()
+        .unwrap();
+    BlueprintMigrationBatchTaskHandler::new(repository.clone())
+        .handle(task)
+        .await
+        .unwrap();
+
+    assert_eq!(
+        sqlx::query_scalar::<_, i64>(
+            "SELECT count(*) FROM entities WHERE id IN ($1, $2) AND blueprint_version = 2",
+        )
+        .bind(empty.id)
+        .bind(populated.id)
+        .fetch_one(&pool)
+        .await
+        .unwrap(),
+        2
+    );
+    assert_eq!(
+        sqlx::query_scalar::<_, i64>(
+            "SELECT count(*) FROM attribute_value_history WHERE entity_id = $1",
+        )
+        .bind(populated.id)
+        .fetch_one(&pool)
+        .await
+        .unwrap(),
+        1
+    );
+    assert_eq!(
+        sqlx::query_scalar::<_, serde_json::Value>(
+            "SELECT removal_policy FROM blueprint_migration_batches WHERE id = $1",
+        )
+        .bind(batch.id)
+        .fetch_one(&pool)
+        .await
+        .unwrap()["attribute_codes"],
+        json!(["obsolete"])
     );
 }

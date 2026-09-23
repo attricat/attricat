@@ -67,7 +67,15 @@ export const blueprintMigrationBatchSchema = z.object({
   id: z.uuid(),
   blueprint_id: z.uuid(),
   target_version: z.number().int().positive(),
-  status: z.enum(['draft', 'queued', 'running', 'completed', 'superseded']),
+  status: z.enum([
+    'draft',
+    'queued',
+    'running',
+    'completed',
+    'failed',
+    'superseded',
+  ]),
+  removal_policy: z.record(z.string(), z.unknown()).default({}),
   created_at: z.string(),
   started_at: z.string().nullable(),
   completed_at: z.string().nullable(),
@@ -88,4 +96,16 @@ export const blueprintMigrationBatchStatusSchema =
 
 export type BlueprintMigrationBatchStatus = z.infer<
   typeof blueprintMigrationBatchStatusSchema
+>;
+
+export const blueprintMigrationImpactSchema = z.object({
+  eligible_entities: z.number().int().nonnegative(),
+  removed_attribute_codes: z.array(z.string()),
+  entities_with_removed_values: z.number().int().nonnegative(),
+  removed_values: z.number().int().nonnegative(),
+  requires_removal_disposition: z.boolean(),
+});
+
+export type BlueprintMigrationImpact = z.infer<
+  typeof blueprintMigrationImpactSchema
 >;

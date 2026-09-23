@@ -683,7 +683,11 @@ impl CatalogRepository {
                     kind: EventSourceKind::Api,
                     name: "catalog_api".to_owned(),
                 },
-                metadata: serde_json::json!({}),
+                metadata: input
+                    .removal_policy
+                    .as_ref()
+                    .map(|policy| serde_json::json!({"removal_policy": policy}))
+                    .unwrap_or_else(|| serde_json::json!({})),
                 payload: serde_json::to_value(EntityMigratedV1 {
                     entity_id: target_entity.id,
                     blueprint_id: target_entity.blueprint_id,
