@@ -691,6 +691,10 @@ pub fn router(state: AppState) -> Router {
             get(blueprints::list_blueprint_migration_batches),
         )
         .route(
+            "/blueprints/{blueprint_id}/versions/{version}/safe-migration-impact",
+            get(blueprints::safe_blueprint_migration_impact),
+        )
+        .route(
             "/blueprints/{blueprint_id}/versions/{version}/safe-migration-batches",
             post(blueprints::start_safe_blueprint_migration_batch),
         )

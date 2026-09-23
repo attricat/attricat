@@ -691,6 +691,33 @@ pub struct MigrateEntityRequest {
     pub relationships: Vec<RelationshipTargets>,
     #[serde(default)]
     pub discard_attributes: Vec<String>,
+    /// Set only by the bulk worker after the batch policy has been approved.
+    /// Never accepted from API clients; audit metadata is therefore trusted.
+    #[serde(default, skip_deserializing, skip_serializing_if = "Option::is_none")]
+    pub removal_policy: Option<BlueprintMigrationRemovalPolicy>,
+}
+
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct BlueprintMigrationRemovalPolicy {
+    pub disposition: String,
+    pub attribute_codes: Vec<String>,
+}
+
+#[derive(Clone, Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct StartBlueprintMigrationBatchRequest {
+    #[serde(default)]
+    pub removal_disposition: Option<String>,
+}
+
+#[derive(Clone, Debug, Serialize)]
+pub struct BlueprintMigrationImpact {
+    pub eligible_entities: i64,
+    pub removed_attribute_codes: Vec<String>,
+    pub entities_with_removed_values: i64,
+    pub removed_values: i64,
+    pub requires_removal_disposition: bool,
 }
 
 #[derive(Clone, Debug, Serialize)]
@@ -716,6 +743,7 @@ pub struct BlueprintMigrationBatch {
     pub blueprint_id: Uuid,
     pub target_version: i64,
     pub status: String,
+    pub removal_policy: Value,
     pub created_at: DateTime<Utc>,
     pub started_at: Option<DateTime<Utc>>,
     pub completed_at: Option<DateTime<Utc>>,
@@ -727,6 +755,7 @@ pub struct BlueprintMigrationBatchStatus {
     pub blueprint_id: Uuid,
     pub target_version: i64,
     pub status: String,
+    pub removal_policy: Value,
     pub created_at: DateTime<Utc>,
     pub started_at: Option<DateTime<Utc>>,
     pub completed_at: Option<DateTime<Utc>>,

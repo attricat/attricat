@@ -1,7 +1,10 @@
 use super::*;
 use crate::persistence_rows::{Db, IntoDomain};
 use crate::{
-    model::{BlueprintMigrationBatch, BlueprintMigrationBatchStatus, MigrateEntityRequest},
+    model::{
+        BlueprintMigrationBatch, BlueprintMigrationBatchStatus, BlueprintMigrationImpact,
+        BlueprintMigrationRemovalPolicy, MigrateEntityRequest,
+    },
     task_queue::{TaskInsert, TaskKind},
 };
 use chrono::{DateTime, Utc};
@@ -42,7 +45,7 @@ impl CatalogRepository {
                      AND scoped.blueprint_id = $2
                    GROUP BY m.batch_id
                )
-               SELECT b.id, b.blueprint_id, b.target_version, b.status,
+               SELECT b.id, b.blueprint_id, b.target_version, b.status, b.removal_policy,
                       b.created_at, b.started_at, b.completed_at,
                       COALESCE(s.processed_entities, 0) + (
                           SELECT COUNT(*) FROM entities e
@@ -79,9 +82,23 @@ impl CatalogRepository {
         blueprint_id: Uuid,
         target_version: i64,
     ) -> Result<BlueprintMigrationBatch, RepositoryError> {
+        self.start_safe_blueprint_migration_batch_with_removal_disposition(
+            blueprint_id,
+            target_version,
+            None,
+        )
+        .await
+    }
+
+    pub async fn start_safe_blueprint_migration_batch_with_removal_disposition(
+        &self,
+        blueprint_id: Uuid,
+        target_version: i64,
+        removal_disposition: Option<&str>,
+    ) -> Result<BlueprintMigrationBatch, RepositoryError> {
         let workspace_id = self.workspace_id.unwrap_or(Self::DEFAULT_WORKSPACE_ID);
         if let Some(existing) = sqlx::query_as::<_, Db<BlueprintMigrationBatch>>(
-            "SELECT id, blueprint_id, target_version, status, created_at, started_at, completed_at FROM blueprint_migration_batches WHERE workspace_id = $1 AND blueprint_id = $2 AND target_version = $3 AND status IN ('queued', 'running')",
+            "SELECT id, blueprint_id, target_version, status, removal_policy, created_at, started_at, completed_at FROM blueprint_migration_batches WHERE workspace_id = $1 AND blueprint_id = $2 AND target_version = $3 AND status IN ('queued', 'running')",
         )
         .bind(workspace_id)
         .bind(blueprint_id)
@@ -108,18 +125,37 @@ impl CatalogRepository {
             .get_blueprint_revision(blueprint_id, source_revision.version)
             .await?
             .ok_or(RepositoryError::NotFound("blueprint version"))?;
-        if !safe_automatic_migration(&source, &target) {
-            return Err(RepositoryError::BlueprintMigrationNotSafe);
-        }
+        let removed_attribute_codes = safe_automatic_migration(&source, &target)
+            .ok_or(RepositoryError::BlueprintMigrationNotSafe)?;
+        let impact = self
+            .safe_blueprint_migration_impact_for(
+                blueprint_id,
+                target_version,
+                &removed_attribute_codes,
+            )
+            .await?;
+        let removal_policy = match (impact.requires_removal_disposition, removal_disposition) {
+            (true, Some("archive")) => serde_json::to_value(BlueprintMigrationRemovalPolicy {
+                disposition: "archive".to_owned(),
+                attribute_codes: removed_attribute_codes,
+            })
+            .expect("removal policy serializes"),
+            (true, _) => return Err(RepositoryError::BlueprintMigrationNotSafe),
+            (false, Some(disposition)) if disposition != "archive" => {
+                return Err(RepositoryError::BlueprintMigrationNotSafe);
+            }
+            (false, _) => json!({}),
+        };
 
         let mut transaction = self.pool.begin().await?;
         let batch = sqlx::query_as::<_, Db<BlueprintMigrationBatch>>(
-            "INSERT INTO blueprint_migration_batches (id, workspace_id, blueprint_id, target_version, status) VALUES ($1, $2, $3, $4, 'queued') ON CONFLICT (workspace_id, blueprint_id, target_version) WHERE status IN ('queued', 'running') DO UPDATE SET workspace_id = EXCLUDED.workspace_id RETURNING id, blueprint_id, target_version, status, created_at, started_at, completed_at",
+            "INSERT INTO blueprint_migration_batches (id, workspace_id, blueprint_id, target_version, status, removal_policy) VALUES ($1, $2, $3, $4, 'queued', $5) ON CONFLICT (workspace_id, blueprint_id, target_version) WHERE status IN ('queued', 'running') DO UPDATE SET workspace_id = EXCLUDED.workspace_id RETURNING id, blueprint_id, target_version, status, removal_policy, created_at, started_at, completed_at",
         )
         .bind(Uuid::new_v4())
         .bind(workspace_id)
         .bind(blueprint_id)
         .bind(target_version)
+        .bind(removal_policy)
         .fetch_one(&mut *transaction)
         .await?;
         self.enqueue_task(
@@ -135,8 +171,71 @@ impl CatalogRepository {
             },
         )
         .await?;
-        transaction.commit().await?;
+        self.commit_mutation(transaction).await?;
         Ok(batch.into_domain())
+    }
+
+    pub async fn safe_blueprint_migration_impact(
+        &self,
+        blueprint_id: Uuid,
+        target_version: i64,
+    ) -> Result<BlueprintMigrationImpact, RepositoryError> {
+        let target = self
+            .get_current_blueprint(blueprint_id)
+            .await?
+            .ok_or(RepositoryError::NotFound("blueprint"))?;
+        if target.blueprint.version != target_version || target.blueprint.kind != "entity" {
+            return Err(RepositoryError::BlueprintMigrationNotSafe);
+        }
+        let source = self
+            .get_blueprint_revision(blueprint_id, target_version - 1)
+            .await?
+            .ok_or(RepositoryError::NotFound("blueprint version"))?;
+        let removed_attribute_codes = safe_automatic_migration(&source, &target)
+            .ok_or(RepositoryError::BlueprintMigrationNotSafe)?;
+        self.safe_blueprint_migration_impact_for(
+            blueprint_id,
+            target_version,
+            &removed_attribute_codes,
+        )
+        .await
+    }
+
+    async fn safe_blueprint_migration_impact_for(
+        &self,
+        blueprint_id: Uuid,
+        target_version: i64,
+        removed_attribute_codes: &[String],
+    ) -> Result<BlueprintMigrationImpact, RepositoryError> {
+        let workspace_id = self.workspace_id.unwrap_or(Self::DEFAULT_WORKSPACE_ID);
+        let eligible_entities = sqlx::query_scalar::<_, i64>(
+            "SELECT count(*) FROM entities WHERE workspace_id = $1 AND blueprint_id = $2 AND blueprint_version < $3 AND deleted_at IS NULL",
+        )
+        .bind(workspace_id)
+        .bind(blueprint_id)
+        .bind(target_version)
+        .fetch_one(&self.pool)
+        .await?;
+        let (entities_with_removed_values, removed_values) = if removed_attribute_codes.is_empty() {
+            (0, 0)
+        } else {
+            sqlx::query_as::<_, (i64, i64)>(
+                "SELECT count(DISTINCT e.id), count(av.id) FROM entities e JOIN attribute_values av ON av.entity_id = e.id AND av.workspace_id = e.workspace_id JOIN attributes a ON a.id = av.attribute_id AND a.workspace_id = e.workspace_id WHERE e.workspace_id = $1 AND e.blueprint_id = $2 AND e.blueprint_version < $3 AND e.deleted_at IS NULL AND a.blueprint_version = e.blueprint_version AND a.code = ANY($4)",
+            )
+            .bind(workspace_id)
+            .bind(blueprint_id)
+            .bind(target_version)
+            .bind(removed_attribute_codes)
+            .fetch_one(&self.pool)
+            .await?
+        };
+        Ok(BlueprintMigrationImpact {
+            eligible_entities,
+            removed_attribute_codes: removed_attribute_codes.to_vec(),
+            entities_with_removed_values,
+            removed_values,
+            requires_removal_disposition: removed_values > 0,
+        })
     }
 
     /// Transitional reconciliation for batches committed by an API version
@@ -180,7 +279,7 @@ impl CatalogRepository {
         let workspace_id = self.workspace_id.unwrap_or(Self::DEFAULT_WORKSPACE_ID);
         let mut transaction = self.pool.begin().await?;
         let batch = sqlx::query_as::<_, Db<BlueprintMigrationBatch>>(
-            "UPDATE blueprint_migration_batches SET status = 'running', started_at = COALESCE(started_at, now()) WHERE id = $1 AND workspace_id = $2 AND status IN ('queued', 'running') RETURNING id, blueprint_id, target_version, status, created_at, started_at, completed_at",
+            "UPDATE blueprint_migration_batches SET status = 'running', started_at = COALESCE(started_at, now()) WHERE id = $1 AND workspace_id = $2 AND status IN ('queued', 'running') RETURNING id, blueprint_id, target_version, status, removal_policy, created_at, started_at, completed_at",
         )
         .bind(batch_id)
         .bind(workspace_id)
@@ -324,7 +423,12 @@ impl CatalogRepository {
                 .preview_entity_migration_into(entity_id, Some(migration.id))
                 .await
             {
-                Ok(preview) if preview.status == "ready" => {}
+                Ok(preview)
+                    if preview.status == "ready"
+                        || removal_policy_covers_preview(
+                            &batch.removal_policy,
+                            &preview.issues,
+                        ) => {}
                 Ok(_) => return Ok("needs_input"),
                 Err(error) => {
                     self.record_batch_failure(migration.id, &error.to_string())
@@ -348,7 +452,16 @@ impl CatalogRepository {
                     expected_target_version: batch.target_version,
                     values: Vec::new(),
                     relationships: Vec::new(),
-                    discard_attributes: Vec::new(),
+                    discard_attributes: batch
+                        .removal_policy
+                        .get("attribute_codes")
+                        .and_then(serde_json::Value::as_array)
+                        .into_iter()
+                        .flatten()
+                        .filter_map(serde_json::Value::as_str)
+                        .map(str::to_owned)
+                        .collect(),
+                    removal_policy: serde_json::from_value(batch.removal_policy.clone()).ok(),
                 },
             )
             .await
@@ -443,33 +556,57 @@ impl CatalogRepository {
     }
 }
 
+fn removal_policy_covers_preview(
+    removal_policy: &serde_json::Value,
+    issues: &[crate::model::MigrationIssue],
+) -> bool {
+    let Some(policy) =
+        serde_json::from_value::<BlueprintMigrationRemovalPolicy>(removal_policy.clone()).ok()
+    else {
+        return false;
+    };
+    policy.disposition == "archive"
+        && !issues.is_empty()
+        && issues.iter().all(|issue| {
+            issue.kind == "removed"
+                && issue
+                    .attribute_code
+                    .as_ref()
+                    .is_some_and(|code| policy.attribute_codes.contains(code))
+        })
+}
+
 fn safe_automatic_migration(
     source: &crate::model::BlueprintWithAttributes,
     target: &crate::model::BlueprintWithAttributes,
-) -> bool {
+) -> Option<Vec<String>> {
     if source.blueprint.entity_schema != target.blueprint.entity_schema {
-        return false;
+        return None;
     }
     let target_attributes: HashMap<_, _> = target
         .attributes
         .iter()
         .map(|attribute| (attribute.code.as_str(), attribute))
         .collect();
-    source.attributes.iter().all(|source_attribute| {
-        target_attributes
-            .get(source_attribute.code.as_str())
-            .is_some_and(|target_attribute| {
-                source_attribute.value_type == target_attribute.value_type
-                    && source_attribute.value_schema == target_attribute.value_schema
-                    && source_attribute.default_value == target_attribute.default_value
-                    && source_attribute.file_policy == target_attribute.file_policy
-                    && source_attribute.target_blueprint_code
-                        == target_attribute.target_blueprint_code
-                    && source_attribute.cardinality == target_attribute.cardinality
-                    && source_attribute.target_cardinality == target_attribute.target_cardinality
-                    && source_attribute.context_fallback == target_attribute.context_fallback
-                    && source_attribute.context_editable == target_attribute.context_editable
-                    && source_attribute.readonly == target_attribute.readonly
-            })
-    })
+    let mut removed = Vec::new();
+    for source_attribute in &source.attributes {
+        let Some(target_attribute) = target_attributes.get(source_attribute.code.as_str()) else {
+            removed.push(source_attribute.code.clone());
+            continue;
+        };
+        if source_attribute.value_type != target_attribute.value_type
+            || source_attribute.value_schema != target_attribute.value_schema
+            || source_attribute.default_value != target_attribute.default_value
+            || source_attribute.file_policy != target_attribute.file_policy
+            || source_attribute.target_blueprint_code != target_attribute.target_blueprint_code
+            || source_attribute.cardinality != target_attribute.cardinality
+            || source_attribute.target_cardinality != target_attribute.target_cardinality
+            || source_attribute.context_fallback != target_attribute.context_fallback
+            || source_attribute.context_editable != target_attribute.context_editable
+            || source_attribute.readonly != target_attribute.readonly
+        {
+            return None;
+        }
+    }
+    Some(removed)
 }

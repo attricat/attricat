@@ -697,6 +697,7 @@ pub async fn execute_mutation(
                             values: input.values,
                             relationships: input.relationships,
                             discard_attributes: input.discard_attributes,
+                            removal_policy: None,
                         },
                     )
                     .await?;
