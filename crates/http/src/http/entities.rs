@@ -221,37 +221,6 @@ fn editable_scalar_values<'a>(
         .collect()
 }
 
-#[cfg(test)]
-mod smart_fill_tests {
-    use super::*;
-
-    #[test]
-    fn only_editable_scalar_values_in_the_requested_context_reach_the_provider() {
-        let context = Uuid::new_v4();
-        let values = [
-            crate::model::FormAttributeValue::Scalar {
-                attribute_code: "name".into(),
-                context_id: Some(context),
-                value: json!("ok"),
-            },
-            crate::model::FormAttributeValue::Scalar {
-                attribute_code: "private".into(),
-                context_id: Some(context),
-                value: json!("secret"),
-            },
-            crate::model::FormAttributeValue::Scalar {
-                attribute_code: "name".into(),
-                context_id: Some(Uuid::new_v4()),
-                value: json!("other"),
-            },
-        ];
-        let allowed = std::collections::HashSet::from(["name"]);
-        let filtered = editable_scalar_values(values.iter(), Some(context), &allowed);
-        assert_eq!(filtered.len(), 1);
-        assert_eq!(serde_json::to_value(filtered[0]).unwrap()["value"], "ok");
-    }
-}
-
 pub(super) async fn delete_entity(
     State(state): State<AppState>,
     super::auth::ScopedRepository(repository): super::auth::ScopedRepository,
@@ -483,4 +452,35 @@ pub(super) async fn remove_relationships(
         .await?;
     invalidate_data_health(&state).await;
     Ok((StatusCode::CREATED, Json(values)))
+}
+
+#[cfg(test)]
+mod smart_fill_tests {
+    use super::*;
+
+    #[test]
+    fn only_editable_scalar_values_in_the_requested_context_reach_the_provider() {
+        let context = Uuid::new_v4();
+        let values = [
+            crate::model::FormAttributeValue::Scalar {
+                attribute_code: "name".into(),
+                context_id: Some(context),
+                value: json!("ok"),
+            },
+            crate::model::FormAttributeValue::Scalar {
+                attribute_code: "private".into(),
+                context_id: Some(context),
+                value: json!("secret"),
+            },
+            crate::model::FormAttributeValue::Scalar {
+                attribute_code: "name".into(),
+                context_id: Some(Uuid::new_v4()),
+                value: json!("other"),
+            },
+        ];
+        let allowed = std::collections::HashSet::from(["name"]);
+        let filtered = editable_scalar_values(values.iter(), Some(context), &allowed);
+        assert_eq!(filtered.len(), 1);
+        assert_eq!(serde_json::to_value(filtered[0]).unwrap()["value"], "ok");
+    }
 }

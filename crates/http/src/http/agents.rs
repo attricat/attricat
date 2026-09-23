@@ -178,19 +178,12 @@ pub(super) async fn send_message(
         ));
     }
     let config = configured(&state)?;
-    repository
-        .append_conversation_message_with_attachments(
-            conversation_id,
-            None,
-            "user",
-            Value::String(input.content),
-            &input.attachment_ids,
-        )
-        .await?;
     let run = repository
-        .create_agent_run_for_user(
+        .submit_agent_message(
             conversation_id,
             user,
+            Value::String(input.content),
+            &input.attachment_ids,
             config.base_url.as_str(),
             &config.model,
         )

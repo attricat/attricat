@@ -88,6 +88,75 @@ async fn agent_conversation_reads_and_persisted_sse_replay(pool: PgPool) {
 }
 
 #[sqlx::test]
+async fn submitting_a_message_and_enqueuing_its_run_are_atomic(pool: PgPool) {
+    let workspace_id = BOOTSTRAP_WORKSPACE_ID.parse::<Uuid>().unwrap();
+    let conversation_id = Uuid::new_v4();
+    sqlx::query(
+        "INSERT INTO conversations (id, workspace_id, title) VALUES ($1, $2, 'Atomic send')",
+    )
+    .bind(conversation_id)
+    .bind(workspace_id)
+    .execute(&pool)
+    .await
+    .unwrap();
+    sqlx::query("INSERT INTO users (id, email) VALUES ($1, 'atomic-send@example.test')")
+        .bind(BOOTSTRAP_OWNER_ID.parse::<Uuid>().unwrap())
+        .execute(&pool)
+        .await
+        .unwrap();
+    let repository = CatalogRepository::system(pool.clone())
+        .for_workspace(workspace_id)
+        .await
+        .unwrap();
+    // The run's actor foreign key rejects the insert after the message insert.
+    assert!(
+        repository
+            .submit_agent_message(
+                conversation_id,
+                Uuid::new_v4(),
+                json!("failed send"),
+                &[],
+                "https://provider.test/v1",
+                "test"
+            )
+            .await
+            .is_err()
+    );
+    assert!(
+        repository
+            .conversation_messages(conversation_id)
+            .await
+            .unwrap()
+            .is_empty()
+    );
+
+    let run = repository
+        .submit_agent_message(
+            conversation_id,
+            BOOTSTRAP_OWNER_ID.parse().unwrap(),
+            json!("good send"),
+            &[],
+            "https://provider.test/v1",
+            "test",
+        )
+        .await
+        .unwrap();
+    let messages = repository
+        .conversation_messages(conversation_id)
+        .await
+        .unwrap();
+    assert_eq!(messages.len(), 1);
+    assert_eq!(messages[0].content, json!("good send"));
+    let task_id: Uuid =
+        sqlx::query_scalar("SELECT id FROM tasks WHERE subject_id = $1 AND kind = 'agent_run.v1'")
+            .bind(run.id)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+    assert_ne!(task_id, Uuid::nil());
+}
+
+#[sqlx::test]
 async fn reconciliation_retains_conversation_attachments(pool: PgPool) {
     let workspace_id = BOOTSTRAP_WORKSPACE_ID.parse::<Uuid>().unwrap();
     let conversation_id = Uuid::new_v4();

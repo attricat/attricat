@@ -2,6 +2,7 @@ use std::collections::HashMap;
 
 use chrono::{DateTime, Utc};
 use serde_json::Value;
+use sqlx::{Postgres, Transaction};
 use uuid::Uuid;
 
 use super::{CatalogRepository, RepositoryError};
@@ -219,47 +220,97 @@ impl CatalogRepository {
             return Err(RepositoryError::InvalidAgentState("invalid message role"));
         }
         let mut tx = self.pool.begin().await?;
-        self.ensure_task_fence(&mut tx).await?;
+        let message = self
+            .append_conversation_message_in_tx(
+                &mut tx,
+                conversation_id,
+                run_id,
+                role,
+                content,
+                attachment_ids,
+            )
+            .await?;
+        tx.commit().await?;
+        Ok(message)
+    }
+
+    async fn append_conversation_message_in_tx(
+        &self,
+        tx: &mut Transaction<'_, Postgres>,
+        conversation_id: Uuid,
+        run_id: Option<Uuid>,
+        role: &str,
+        content: Value,
+        attachment_ids: &[Uuid],
+    ) -> Result<ConversationMessage, RepositoryError> {
+        self.ensure_task_fence(tx).await?;
         let found = sqlx::query_scalar::<_, Uuid>(
             "SELECT id FROM conversations WHERE id = $1 AND workspace_id = $2 FOR UPDATE",
         )
         .bind(conversation_id)
         .bind(self.workspace_id.unwrap_or(Self::DEFAULT_WORKSPACE_ID))
-        .fetch_optional(&mut *tx)
+        .fetch_optional(&mut **tx)
         .await?;
         if found.is_none() {
             return Err(RepositoryError::NotFound("conversation"));
         }
         let sequence: i64 = sqlx::query_scalar("SELECT COALESCE(MAX(sequence) + 1, 0) FROM conversation_messages WHERE conversation_id = $1")
-            .bind(conversation_id).fetch_one(&mut *tx).await?;
+            .bind(conversation_id).fetch_one(&mut **tx).await?;
         let row: ConversationMessageRow = sqlx::query_as("INSERT INTO conversation_messages (id, conversation_id, run_id, sequence, role, content) VALUES ($1, $2, $3, $4, $5, $6) RETURNING id, conversation_id, run_id, sequence, role, content, created_at")
             .bind(Uuid::new_v4()).bind(conversation_id).bind(run_id).bind(sequence).bind(role).bind(content)
-            .fetch_one(&mut *tx).await?;
+            .fetch_one(&mut **tx).await?;
         let message: ConversationMessage = row.into();
         if !attachment_ids.is_empty() {
             let workspace_id = self.workspace_id.unwrap_or(Self::DEFAULT_WORKSPACE_ID);
             let files: Vec<Uuid> = sqlx::query_scalar("SELECT id FROM files WHERE workspace_id = $1 AND deleted_at IS NULL AND id = ANY($2) FOR UPDATE")
-                .bind(workspace_id).bind(attachment_ids).fetch_all(&mut *tx).await?;
+                .bind(workspace_id).bind(attachment_ids).fetch_all(&mut **tx).await?;
             if files.len() != attachment_ids.len() {
                 return Err(RepositoryError::NotFound("file"));
             }
             for (position, file_id) in attachment_ids.iter().enumerate() {
                 sqlx::query("INSERT INTO conversation_message_attachments (id, workspace_id, message_id, file_id, position) VALUES ($1, $2, $3, $4, $5)")
                     .bind(Uuid::new_v4()).bind(workspace_id).bind(message.id).bind(file_id).bind(position as i32)
-                    .execute(&mut *tx).await?;
+                    .execute(&mut **tx).await?;
             }
             sqlx::query("UPDATE files SET attachment_expires_at = NULL, updated_at = now() WHERE workspace_id = $1 AND id = ANY($2)")
                 .bind(workspace_id)
                 .bind(attachment_ids)
-                .execute(&mut *tx)
+                .execute(&mut **tx)
                 .await?;
         }
         sqlx::query("UPDATE conversations SET updated_at = now() WHERE id = $1")
             .bind(conversation_id)
-            .execute(&mut *tx)
+            .execute(&mut **tx)
+            .await?;
+        Ok(message)
+    }
+
+    /// Atomically records the user's message and queues its run. A failed
+    /// enqueue must not leave text that a later unrelated run will replay.
+    pub async fn submit_agent_message(
+        &self,
+        conversation_id: Uuid,
+        actor: Uuid,
+        content: Value,
+        attachment_ids: &[Uuid],
+        provider_base_url: &str,
+        model: &str,
+    ) -> Result<AgentRun, RepositoryError> {
+        let mut tx = self.pool.begin().await?;
+        self.append_conversation_message_in_tx(
+            &mut tx,
+            conversation_id,
+            None,
+            "user",
+            content,
+            attachment_ids,
+        )
+        .await?;
+        let run = self
+            .create_agent_run_in_tx(&mut tx, conversation_id, actor, provider_base_url, model)
             .await?;
         tx.commit().await?;
-        Ok(message)
+        Ok(run)
     }
 
     /// Creates a run tied to the authenticated human that initiated it. The
@@ -271,13 +322,28 @@ impl CatalogRepository {
         provider_base_url: &str,
         model: &str,
     ) -> Result<AgentRun, RepositoryError> {
-        let workspace_id = self.workspace_id.unwrap_or(Self::DEFAULT_WORKSPACE_ID);
         let mut tx = self.pool.begin().await?;
+        let run = self
+            .create_agent_run_in_tx(&mut tx, conversation_id, actor, provider_base_url, model)
+            .await?;
+        tx.commit().await?;
+        Ok(run)
+    }
+
+    async fn create_agent_run_in_tx(
+        &self,
+        tx: &mut Transaction<'_, Postgres>,
+        conversation_id: Uuid,
+        actor: Uuid,
+        provider_base_url: &str,
+        model: &str,
+    ) -> Result<AgentRun, RepositoryError> {
+        let workspace_id = self.workspace_id.unwrap_or(Self::DEFAULT_WORKSPACE_ID);
         let run: AgentRun = sqlx::query_as("INSERT INTO agent_runs (id, workspace_id, conversation_id, origin, status, provider_base_url, model, initiated_by_user_id) SELECT $1, $2, $3, 'interactive', 'queued', $4, $5, $6 WHERE EXISTS (SELECT 1 FROM conversations WHERE id = $3 AND workspace_id = $2) RETURNING id, conversation_id, origin, status, provider_base_url, model, started_at, finished_at, error_code, error_message, created_at")
             .bind(Uuid::new_v4()).bind(workspace_id).bind(conversation_id).bind(provider_base_url).bind(model).bind(actor)
-            .fetch_optional(&mut *tx).await?.ok_or(RepositoryError::NotFound("conversation"))?;
+            .fetch_optional(&mut **tx).await?.ok_or(RepositoryError::NotFound("conversation"))?;
         self.enqueue_task(
-            &mut tx,
+            tx,
             crate::task_queue::TaskInsert {
                 workspace_id,
                 kind: crate::task_queue::TaskKind::AgentRunV1,
@@ -289,7 +355,6 @@ impl CatalogRepository {
             },
         )
         .await?;
-        tx.commit().await?;
         Ok(run)
     }
 

@@ -55,6 +55,32 @@ impl CatalogRepository {
         })?;
         validate_schema(&declaration.schema, &configuration)
             .map_err(|error| RepositoryError::InvalidExtension(error.to_string()))?;
+        // Lifecycle and grant mutations lock this installation row. Hold that
+        // lock through the write and recheck access after acquiring it, so a
+        // stale invocation cannot restore configuration for a revoked release.
+        let mut transaction = self.pool.begin().await?;
+        let installation_id: Option<Uuid> = sqlx::query_scalar(
+            "SELECT i.id FROM extension_installations i JOIN workspaces w ON w.id = i.workspace_id WHERE i.workspace_id = $1 AND i.extension_id = $2 AND i.installed_release_id = $3 AND i.state = 'enabled' AND w.extensions_enabled FOR UPDATE OF i FOR SHARE OF w",
+        )
+        .bind(self.extension_workspace())
+        .bind(extension_id)
+        .bind(expected_release_id)
+        .fetch_optional(&mut *transaction)
+        .await?;
+        let installation_id = installation_id.ok_or_else(|| {
+            RepositoryError::InvalidExtension("extension invocation is no longer authorized".into())
+        })?;
+        let granted: bool = sqlx::query_scalar(
+            "SELECT EXISTS(SELECT 1 FROM extension_grants WHERE installation_id = $1 AND grant_kind = 'capability' AND grant_id = 'configuration.write')",
+        )
+        .bind(installation_id)
+        .fetch_one(&mut *transaction)
+        .await?;
+        if !granted {
+            return Err(RepositoryError::InvalidExtension(
+                "scoped configuration access is denied".into(),
+            ));
+        }
         sqlx::query(
             "INSERT INTO extension_scoped_configuration (workspace_id, extension_id, installed_release_id, scope_kind, blueprint_id, blueprint_version, attribute_id, configuration, configuration_version) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9) ON CONFLICT (workspace_id, extension_id, scope_kind, blueprint_id, blueprint_version, attribute_id) DO UPDATE SET installed_release_id = EXCLUDED.installed_release_id, configuration = EXCLUDED.configuration, configuration_version = EXCLUDED.configuration_version, updated_at = clock_timestamp()",
         )
@@ -67,8 +93,9 @@ impl CatalogRepository {
         .bind(scope.attribute_id)
         .bind(configuration)
         .bind(declaration.version as i32)
-        .execute(&self.pool)
+        .execute(&mut *transaction)
         .await?;
+        transaction.commit().await?;
         Ok(())
     }
 

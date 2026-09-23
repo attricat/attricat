@@ -43,9 +43,15 @@ impl WorkerConfig {
             })
         };
         let max_pixels = parse("FILE_WORKER_MAX_PIXELS", DEFAULT_MAX_PIXELS)?;
-        let max_attempts = parse("FILE_WORKER_MAX_ATTEMPTS", DEFAULT_MAX_ATTEMPTS as u64)? as i32;
-        let grace = parse("FILE_DELETE_GRACE_SECONDS", DEFAULT_GRACE_SECONDS as u64)?;
-        if max_pixels == 0 || max_attempts == 0 {
+        let max_attempts = checked_max_attempts(parse(
+            "FILE_WORKER_MAX_ATTEMPTS",
+            DEFAULT_MAX_ATTEMPTS as u64,
+        )?)?;
+        let grace = checked_grace(parse(
+            "FILE_DELETE_GRACE_SECONDS",
+            DEFAULT_GRACE_SECONDS as u64,
+        )?)?;
+        if max_pixels == 0 {
             return Err("file worker limits must be positive".into());
         }
         Ok(Self {
@@ -53,9 +59,22 @@ impl WorkerConfig {
                 .unwrap_or_else(|_| format!("file-worker-{}", Uuid::new_v4())),
             max_pixels,
             max_attempts,
-            delete_grace: Duration::from_secs(grace),
+            delete_grace: grace,
         })
     }
+}
+
+fn checked_max_attempts(value: u64) -> Result<i32, String> {
+    i32::try_from(value)
+        .ok()
+        .filter(|value| *value > 0)
+        .ok_or_else(|| "FILE_WORKER_MAX_ATTEMPTS must be between 1 and i32::MAX".into())
+}
+
+fn checked_grace(value: u64) -> Result<Duration, String> {
+    // Reconciliation binds grace as i64 seconds to PostgreSQL.
+    i64::try_from(value).map_err(|_| "FILE_DELETE_GRACE_SECONDS is too large".to_owned())?;
+    Ok(Duration::from_secs(value))
 }
 
 #[derive(Debug, Clone)]
@@ -250,7 +269,7 @@ impl FileWorker {
     /// Marks unreferenced files for delayed deletion and creates one durable
     /// purge job. Repeated runs are harmless and never delete before grace.
     pub async fn reconcile(&self) -> Result<(), sqlx::Error> {
-        let grace = self.config.delete_grace.as_secs() as i64;
+        let grace = i64::try_from(self.config.delete_grace.as_secs()).unwrap_or(i64::MAX);
         let mut transaction = self.pool.begin().await?;
 
         // Attachment creation locks its file before recording the attachment.
@@ -266,7 +285,7 @@ impl FileWorker {
               AND NOT EXISTS (SELECT 1 FROM attribute_file_references r WHERE r.workspace_id = f.workspace_id AND r.file_id = f.id)
               AND NOT EXISTS (SELECT 1 FROM conversation_message_attachments a WHERE a.workspace_id = f.workspace_id AND a.file_id = f.id)
             ORDER BY f.id
-            FOR UPDATE SKIP LOCKED"#,
+            LIMIT 256 FOR UPDATE SKIP LOCKED"#,
         )
         .fetch_all(&mut *transaction)
         .await?;
@@ -288,15 +307,22 @@ impl FileWorker {
         transaction.commit().await?;
         metrics::counter!("catalog_file_reconciliation_total", "outcome" => "success").increment(1);
         metrics::counter!("catalog_file_reconciliation_files_marked_total").increment(marked);
+        // Lock a bounded batch while inserting. A concurrent SELECT can still
+        // use an older snapshot, so the unique index is the final safeguard
+        // against duplicate purge jobs; ON CONFLICT handles that race.
+        let mut transaction = self.pool.begin().await?;
         let due: Vec<(Uuid, Uuid, DateTime<Utc>)> = sqlx::query_as(r#"SELECT f.workspace_id, f.id, f.purge_after FROM files f
             WHERE f.deleted_at IS NOT NULL AND f.purge_after <= now()
-              AND NOT EXISTS (SELECT 1 FROM file_processing_jobs j WHERE j.file_id = f.id AND j.kind = 'purge' AND j.status IN ('queued','running','retryable','completed'))"#)
-            .fetch_all(&self.pool).await?;
-        let due_count = due.len() as u64;
+              AND NOT EXISTS (SELECT 1 FROM file_processing_jobs j WHERE j.file_id = f.id AND j.kind = 'purge' AND j.status IN ('queued','running','retryable','completed'))
+            ORDER BY f.purge_after, f.id
+            LIMIT 256 FOR UPDATE OF f SKIP LOCKED"#)
+            .fetch_all(&mut *transaction).await?;
+        let mut due_count = 0;
         for (workspace_id, file_id, available_at) in due {
-            sqlx::query("INSERT INTO file_processing_jobs (id, workspace_id, file_id, kind, status, available_at) VALUES ($1,$2,$3,'purge','queued',$4)")
-                .bind(Uuid::new_v4()).bind(workspace_id).bind(file_id).bind(available_at).execute(&self.pool).await?;
+            due_count += sqlx::query("INSERT INTO file_processing_jobs (id, workspace_id, file_id, kind, status, available_at) VALUES ($1,$2,$3,'purge','queued',$4) ON CONFLICT DO NOTHING")
+                .bind(Uuid::new_v4()).bind(workspace_id).bind(file_id).bind(available_at).execute(&mut *transaction).await?.rows_affected();
         }
+        transaction.commit().await?;
         metrics::counter!("catalog_file_purge_jobs_queued_total").increment(due_count);
         tracing::info!(
             files_marked = marked,
@@ -399,6 +425,15 @@ fn decode_and_orient(bytes: &[u8], max_pixels: u64) -> Result<DynamicImage, Work
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn rejects_limits_that_would_wrap_during_database_conversion() {
+        assert!(checked_max_attempts(0).is_err());
+        assert!(checked_max_attempts(i32::MAX as u64 + 1).is_err());
+        assert!(checked_max_attempts(u64::MAX).is_err());
+        assert_eq!(checked_max_attempts(5).unwrap(), 5);
+        assert!(checked_grace(i64::MAX as u64 + 1).is_err());
+    }
 
     #[test]
     fn reads_image_dimensions_and_enforces_pixel_limit() {

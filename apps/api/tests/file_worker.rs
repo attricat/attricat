@@ -204,6 +204,31 @@ async fn worker_retries_terminal_failure_and_operator_retry(pool: PgPool) {
 }
 
 #[sqlx::test]
+async fn concurrent_reconcilers_enqueue_one_purge_job(pool: PgPool) {
+    let file_id = Uuid::new_v4();
+    insert_file(&pool, file_id, &format!("files/{file_id}/original"), false).await;
+    sqlx::query("UPDATE files SET status = 'deleted', deleted_at = now(), purge_after = now() - interval '1 second' WHERE id = $1")
+        .bind(file_id)
+        .execute(&pool)
+        .await
+        .unwrap();
+    let store = Arc::new(FakeObjectStore::available());
+    let first = worker(pool.clone(), store.clone(), 3, 60);
+    let second = worker(pool.clone(), store, 3, 60);
+    let (left, right) = tokio::join!(first.reconcile(), second.reconcile());
+    left.unwrap();
+    right.unwrap();
+    let count: i64 = sqlx::query_scalar(
+        "SELECT COUNT(*) FROM file_processing_jobs WHERE file_id = $1 AND kind = 'purge'",
+    )
+    .bind(file_id)
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert_eq!(count, 1);
+}
+
+#[sqlx::test]
 async fn reconciliation_delays_and_idempotently_purges_unreferenced_files(pool: PgPool) {
     let store = Arc::new(FakeObjectStore::available());
     let file_id = Uuid::new_v4();
