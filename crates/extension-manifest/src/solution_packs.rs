@@ -2045,9 +2045,9 @@ fn validate_guidance_and_checks(
                     }
                 }
                 SolutionPackCheckPredicate::ExtensionConfigurationMatches { extension } => {
-                    if !extensions
+                    if extensions
                         .get(extension.as_str())
-                        .is_some_and(|requirement| requirement.configuration_template.is_some())
+                        .is_none_or(|requirement| requirement.configuration_template.is_none())
                     {
                         return invalid(format!(
                             "check '{}' requires an extension configuration template",
