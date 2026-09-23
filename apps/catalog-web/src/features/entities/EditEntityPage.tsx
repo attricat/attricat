@@ -22,7 +22,7 @@ import {
   Tooltip,
   Typography,
 } from '@mui/material';
-import { createElement, useRef, useState } from 'react';
+import { createElement, useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { listContexts } from '../contexts/api';
 import { contextQueryKeys } from '../contexts/query-keys';
@@ -78,6 +78,7 @@ export const EditEntityPage = ({ entityId }: { entityId: string }) => {
   const [isSmartFillDialogOpen, setSmartFillDialogOpen] = useState(false);
   const [smartFillContent, setSmartFillContent] = useState('');
   const entityFormRef = useRef<EntityFormHandle>(null);
+  const smartFillTargetRef = useRef('');
   const [isReusableAttributeDialogOpen, setReusableAttributeDialogOpen] =
     useState(false);
   const [reusableSelectionType, setReusableSelectionType] = useState<
@@ -97,14 +98,15 @@ export const EditEntityPage = ({ entityId }: { entityId: string }) => {
     queryFn: () => getEntityForm(entityId),
   });
   const smartFill = useMutation({
-    mutationFn: () =>
-      smartFillEntityForm({
-        entity_id: entityId,
-        context_id: contextId,
-        is_default_context: contextId === defaultContextId,
-        content: smartFillContent,
-      }),
-    onSuccess: ({ fields }) => {
+    mutationFn: (input: Parameters<typeof smartFillEntityForm>[0]) =>
+      smartFillEntityForm(input),
+    onSuccess: ({ fields }, input) => {
+      // A context or entity change remounts the form while the request is in
+      // flight. Never apply suggestions to a different form.
+      if (
+        `${input.entity_id}:${input.context_id}` !== smartFillTargetRef.current
+      )
+        return;
       entityFormRef.current?.applySmartFillValues(fields);
       setSmartFillContent('');
       setSmartFillDialogOpen(false);
@@ -165,6 +167,9 @@ export const EditEntityPage = ({ entityId }: { entityId: string }) => {
   const defaultContextId =
     contexts.data?.find((context) => context.code === defaultContextCode)?.id ??
     null;
+  useEffect(() => {
+    smartFillTargetRef.current = `${entityId}:${contextId}`;
+  }, [entityId, contextId]);
   const resolvedPreview = useQuery({
     queryKey: entityQueryKeys.resolvedPreview(entityId, contextId ?? undefined),
     queryFn: () => {
@@ -357,7 +362,14 @@ export const EditEntityPage = ({ entityId }: { entityId: string }) => {
               </Button>
               <Button
                 disabled={!smartFillContent.trim() || smartFill.isPending}
-                onClick={() => smartFill.mutate()}
+                onClick={() =>
+                  smartFill.mutate({
+                    entity_id: entityId,
+                    context_id: contextId,
+                    is_default_context: contextId === defaultContextId,
+                    content: smartFillContent,
+                  })
+                }
                 variant="contained"
               >
                 {t('entities.applySmartFill')}

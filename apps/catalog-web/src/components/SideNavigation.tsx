@@ -95,9 +95,24 @@ export const SideNavigation = ({
   const { pathname, search } = useRouterState({
     select: (state) => state.location,
   });
-  const [mobileSection, setMobileSection] = useState<MobileNavigationSection>(
-    mobileSectionForPathname(pathname),
-  );
+  // Manual pane navigation applies only to the route where it was chosen.
+  // Browser history and outside links take precedence when the route changes.
+  const [mobileNavigation, setMobileNavigation] = useState({
+    pathname,
+    section: mobileSectionForPathname(pathname),
+  });
+  if (mobileNavigation.pathname !== pathname) {
+    setMobileNavigation({
+      pathname,
+      section: mobileSectionForPathname(pathname),
+    });
+  }
+  const mobileSection =
+    mobileNavigation.pathname === pathname
+      ? mobileNavigation.section
+      : mobileSectionForPathname(pathname);
+  const setMobileSection = (section: MobileNavigationSection) =>
+    setMobileNavigation({ pathname, section });
   const mobileSubNavigationOpen = mobileSection !== 'primary';
   const showPrimaryNavigation = compact || mobileSection === 'primary';
   const [localCompactManageOpen, setLocalCompactManageOpen] = useState(
@@ -645,6 +660,7 @@ export const SideNavigation = ({
                     if (compact) {
                       setCompactManageOpen(false);
                       setCompactExplore(false);
+                      setCompactExtensionsOpen(false);
                     }
                     onNavigate?.();
                   }}

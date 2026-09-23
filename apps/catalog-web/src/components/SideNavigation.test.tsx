@@ -13,6 +13,8 @@ import { currentSession } from '../features/auth/api';
 import { listSidebarExploreNavigation } from '../features/workspace/api';
 import { SideNavigation } from './SideNavigation';
 
+let currentPathname = '/';
+
 vi.mock('@tanstack/react-router', async () => {
   const { createElement, forwardRef } = await import('react');
 
@@ -66,7 +68,7 @@ vi.mock('@tanstack/react-router', async () => {
     }) =>
       select({
         location: {
-          pathname: '/',
+          pathname: currentPathname,
           search: { blueprint: 'products', locked: true },
         },
       }),
@@ -104,6 +106,7 @@ const renderNavigation = (
 };
 
 beforeEach(() => {
+  currentPathname = '/';
   vi.mocked(currentSession).mockResolvedValue(null);
   vi.mocked(listSidebarExploreNavigation).mockResolvedValue([
     { blueprint_code: 'products', blueprint_name: 'Products' },
@@ -169,6 +172,44 @@ describe('SideNavigation', () => {
     expect(
       screen.getByRole('navigation', { name: /entity explorer/i }),
     ).toBeTruthy();
+  });
+
+  it('follows route changes in the mobile drawer', () => {
+    const client = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    });
+    const view = render(
+      <QueryClientProvider client={client}>
+        <SideNavigation />
+      </QueryClientProvider>,
+    );
+    expect(
+      screen.getByRole('heading', { name: /entity explorer/i }),
+    ).toBeTruthy();
+
+    currentPathname = '/manage/extensions';
+    view.rerender(
+      <QueryClientProvider client={client}>
+        <SideNavigation />
+      </QueryClientProvider>,
+    );
+    expect(screen.getByRole('heading', { name: 'Manage' })).toBeTruthy();
+
+    currentPathname = '/extensions';
+    view.rerender(
+      <QueryClientProvider client={client}>
+        <SideNavigation />
+      </QueryClientProvider>,
+    );
+    expect(screen.getByRole('heading', { name: 'Apps' })).toBeTruthy();
+  });
+
+  it('closes the compact Apps panel when navigating to Profile', () => {
+    renderNavigation(vi.fn(), { compact: true });
+    fireEvent.click(screen.getByRole('link', { name: 'Apps' }));
+    expect(screen.getByRole('navigation', { name: 'Apps' })).toBeTruthy();
+    fireEvent.click(screen.getByRole('link', { name: 'Profile' }));
+    expect(screen.queryByRole('navigation', { name: 'Apps' })).toBeNull();
   });
 
   it('renders a pinned Explore item as a selected link without a nested button', async () => {
