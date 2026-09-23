@@ -1633,7 +1633,7 @@ fn sanitize_svg(source: &[u8], key: &str) -> Result<Vec<u8>, SolutionPackError> 
                         ));
                     }
                     let value = attribute
-                        .unescape_value()
+                        .normalized_value(quick_xml::XmlVersion::Implicit1_0)
                         .map_err(|_| {
                             SolutionPackError::Invalid(format!(
                                 "presentation asset '{key}' SVG has malformed attribute values"
@@ -1716,7 +1716,8 @@ fn sanitize_svg(source: &[u8], key: &str) -> Result<Vec<u8>, SolutionPackError> 
             | Event::DocType(_)
             | Event::PI(_)
             | Event::CData(_)
-            | Event::Comment(_) => {
+            | Event::Comment(_)
+            | Event::GeneralRef(_) => {
                 return invalid(format!(
                     "presentation asset '{key}' SVG contains forbidden XML content"
                 ));

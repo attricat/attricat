@@ -32,7 +32,7 @@ metrics-exporter-prometheus = "0.15"
 opentelemetry = "0.32"
 opentelemetry-otlp = { version = "0.32", default-features = false, features = ["trace", "grpc-tonic"] }
 opentelemetry_sdk = { version = "0.32", features = ["rt-tokio"] }
-quick-xml = "0.37"
+quick-xml = "0.41"
 rand = "0.8"
 regex = "1"
 reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls", "stream"] }
