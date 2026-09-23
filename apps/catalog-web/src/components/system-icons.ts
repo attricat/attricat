@@ -1,5 +1,6 @@
 // Canonical icons for Attricat concepts. Use these exports whenever a system
 // concept needs an icon; keep generic action and status icons local.
+export { BrandIcon } from './BrandIcon';
 export { default as AgentIcon } from '@mui/icons-material/SmartToyOutlined';
 export { default as AppsIcon } from '@mui/icons-material/AppsOutlined';
 export { default as AuditLogIcon } from '@mui/icons-material/FactCheckOutlined';

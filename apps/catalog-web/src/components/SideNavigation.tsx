@@ -16,6 +16,7 @@ import { RouterListItemButton } from './RouterLink';
 import {
   ExplorerIcon,
   AppsIcon,
+  BrandIcon,
   ExplorerShortcutIcon,
   ManagementIcon,
 } from './system-icons';
@@ -41,6 +42,7 @@ import {
 export const compactNavigationWidth = 88;
 export const expandedNavigationWidth = 264;
 export const managementSidebarWidth = 248;
+const navigationHeaderHeight = 64;
 
 const compactNavigationLabelSx = {
   fontSize: '0.65rem',
@@ -164,16 +166,14 @@ export const SideNavigation = ({
     ? {
         '&.Mui-selected': {
           '& .MuiListItemIcon-root': { color: 'inherit' },
-          '&:hover': { backgroundColor: 'primary.dark' },
-          backgroundColor: 'primary.main',
-          color: 'primary.contrastText',
+          color: 'primary.main',
         },
         borderRadius: 1.5,
         flexDirection: 'column',
         justifyContent: 'center',
         minHeight: 64,
-        mx: 0.5,
         px: 0.5,
+        width: '100%',
       }
     : undefined;
 
@@ -198,12 +198,22 @@ export const SideNavigation = ({
             ? {
                 alignItems: 'center',
                 display: 'flex',
-                height: 64,
+                height: navigationHeaderHeight,
                 justifyContent: 'center',
               }
             : mobileSubNavigationOpen
-              ? { alignItems: 'center', display: 'flex', height: 72, px: 1 }
-              : { px: 3, py: 2 }
+              ? {
+                  alignItems: 'center',
+                  display: 'flex',
+                  height: navigationHeaderHeight,
+                  px: 1,
+                }
+              : {
+                  alignItems: 'center',
+                  display: 'flex',
+                  height: navigationHeaderHeight,
+                  px: 3,
+                }
         }
       >
         {!compact && mobileSubNavigationOpen ? (
@@ -225,27 +235,31 @@ export const SideNavigation = ({
             </Typography>
           </>
         ) : (
-          <>
-            <Typography
-              aria-label={t('app.attricat')}
-              color="primary"
-              sx={{ fontWeight: 700 }}
-              variant="h6"
-            >
-              {compact ? 'A' : 'Attricat'}
-            </Typography>
+          <Box
+            aria-label={t('app.attricat')}
+            sx={{ alignItems: 'center', display: 'flex', gap: 1.5 }}
+          >
+            <BrandIcon color="primary" sx={{ fontSize: compact ? 32 : 28 }} />
             {!compact && (
-              <Typography color="text.secondary" variant="body2">
-                {t('app.dataManagement')}
-              </Typography>
+              <Box>
+                <Typography
+                  color="primary"
+                  sx={{ fontWeight: 700 }}
+                  variant="h6"
+                >
+                  {t('app.attricat')}
+                </Typography>
+                <Typography color="text.secondary" variant="body2">
+                  {t('app.dataManagement')}
+                </Typography>
+              </Box>
             )}
-          </>
+          </Box>
         )}
       </Box>
       <Divider />
       <List
         sx={{
-          alignItems: compact ? 'center' : undefined,
           display: compact ? 'flex' : 'block',
           flexDirection: compact ? 'column' : undefined,
           flexGrow: compact ? 0 : 1,
@@ -509,7 +523,14 @@ export const SideNavigation = ({
             zIndex: 1,
           }}
         >
-          <Box sx={{ px: 3, py: 2 }}>
+          <Box
+            sx={{
+              alignItems: 'center',
+              display: 'flex',
+              height: navigationHeaderHeight,
+              px: 3,
+            }}
+          >
             <Typography variant="h6">{t('navigation.manage')}</Typography>
           </Box>
           <Divider />
@@ -560,7 +581,14 @@ export const SideNavigation = ({
             zIndex: 1,
           }}
         >
-          <Box sx={{ px: 3, py: 2 }}>
+          <Box
+            sx={{
+              alignItems: 'center',
+              display: 'flex',
+              height: navigationHeaderHeight,
+              px: 3,
+            }}
+          >
             <Typography variant="h6">{t('navigation.apps')}</Typography>
           </Box>
           <Divider />
@@ -591,7 +619,14 @@ export const SideNavigation = ({
             zIndex: 1,
           }}
         >
-          <Box sx={{ px: 3, py: 2 }}>
+          <Box
+            sx={{
+              alignItems: 'center',
+              display: 'flex',
+              height: navigationHeaderHeight,
+              px: 3,
+            }}
+          >
             <Typography variant="h6">
               {t('navigation.entityExplorer')}
             </Typography>
@@ -640,7 +675,6 @@ export const SideNavigation = ({
           <Divider />
           <List
             sx={{
-              alignItems: compact ? 'center' : undefined,
               display: compact ? 'flex' : 'block',
               flexDirection: compact ? 'column' : undefined,
               px: compact ? 0.5 : 1,
