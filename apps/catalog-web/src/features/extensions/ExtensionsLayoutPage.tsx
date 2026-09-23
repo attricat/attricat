@@ -56,7 +56,14 @@ export const ExtensionsLayoutPage = () => {
     if (layout.data) {
       const serialized = JSON.stringify(layout.data, null, 2);
       if (hydratedLayout.current !== serialized) {
-        form.setFieldValue('layout', serialized);
+        // A background refetch must not overwrite an unsaved JSON draft.
+        if (
+          !form.state.isDirty ||
+          form.state.values.layout === hydratedLayout.current ||
+          form.state.values.layout === serialized
+        ) {
+          form.reset({ layout: serialized });
+        }
         hydratedLayout.current = serialized;
       }
     }

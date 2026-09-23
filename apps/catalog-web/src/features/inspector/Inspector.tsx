@@ -11,7 +11,7 @@ import {
   Typography,
 } from '@mui/material';
 import { useQuery } from '@tanstack/react-query';
-import { useEffect, useState, type ReactNode } from 'react';
+import { useEffect, useId, useState, type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
 import { currentSession } from '../auth/api';
 import { authQueryKeys } from '../auth/query-keys';
@@ -62,6 +62,7 @@ const readInspectorState = (): InspectorState => {
 
 export const Inspector = () => {
   const { t } = useTranslation();
+  const tabId = useId();
   const [inspectorState, setInspectorState] = useState(readInspectorState);
   const [timings, setTimings] = useState<TimingEntry[]>(recentTimings);
   const { activePane, expanded } = inspectorState;
@@ -306,6 +307,8 @@ export const Inspector = () => {
             >
               {panes.map(({ id, label }) => (
                 <Tab
+                  aria-controls={`${tabId}-${id}-panel`}
+                  id={`${tabId}-${id}-tab`}
                   key={id}
                   label={label}
                   sx={{
@@ -318,7 +321,14 @@ export const Inspector = () => {
                 />
               ))}
             </Tabs>
-            <Box sx={{ pt: 1 }}>{pane.content}</Box>
+            <Box
+              aria-labelledby={`${tabId}-${pane.id}-tab`}
+              id={`${tabId}-${pane.id}-panel`}
+              role="tabpanel"
+              sx={{ pt: 1 }}
+            >
+              {pane.content}
+            </Box>
           </Box>
         </Paper>
       )}

@@ -1,6 +1,7 @@
 import { useForm } from '@tanstack/react-form';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link, useNavigate } from '@tanstack/react-router';
+import { RouterButton } from '../../components/RouterLink';
 import AddIcon from '@mui/icons-material/Add';
 import PublishIcon from '@mui/icons-material/Publish';
 import {
@@ -102,7 +103,14 @@ const GroupDialog = ({
     (attribute) => attribute.status === 'published',
   );
   return (
-    <Dialog fullWidth maxWidth="sm" onClose={onClose} open>
+    <Dialog
+      fullWidth
+      maxWidth="sm"
+      onClose={() => {
+        if (!save.isPending) onClose();
+      }}
+      open
+    >
       <DialogTitle>New reusable attribute group</DialogTitle>
       <Box
         component="form"
@@ -175,7 +183,9 @@ const GroupDialog = ({
           </Stack>
         </DialogContent>
         <DialogActions>
-          <Button onClick={onClose}>Cancel</Button>
+          <Button disabled={save.isPending} onClick={onClose}>
+            Cancel
+          </Button>
           <Button
             disabled={save.isPending || !published.length}
             type="submit"
@@ -282,14 +292,13 @@ export const ReusableAttributesPage = () => {
                       />
                     </TableCell>
                     <TableCell align="right">
-                      <Button size="small">
-                        <Link
-                          params={{ definitionId: attribute.definition_id }}
-                          to="/manage/reusable-attributes/$definitionId"
-                        >
-                          Edit
-                        </Link>
-                      </Button>
+                      <RouterButton
+                        params={{ definitionId: attribute.definition_id }}
+                        size="small"
+                        to="/manage/reusable-attributes/$definitionId"
+                      >
+                        Edit
+                      </RouterButton>
                       {attribute.status === 'draft' && (
                         <Button
                           disabled={publish.isPending}

@@ -19,11 +19,11 @@ const normalizePreferences = (
 ): ExplorerColumnPreferences => {
   const knownIds = new Set(columnIds);
   const order = [
-    ...preferences.order.filter((id) => knownIds.has(id)),
-    ...columnIds.filter((id) => !preferences.order.includes(id)),
+    ...new Set(preferences.order.filter((id) => knownIds.has(id))),
   ];
+  order.push(...columnIds.filter((id) => !order.includes(id)));
   return {
-    hidden: preferences.hidden.filter((id) => knownIds.has(id)),
+    hidden: [...new Set(preferences.hidden.filter((id) => knownIds.has(id)))],
     order,
   };
 };

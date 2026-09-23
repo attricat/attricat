@@ -45,6 +45,17 @@ describe('explorer column preferences', () => {
     });
   });
 
+  it('deduplicates corrupt or old saved columns without losing new columns', () => {
+    setExplorerColumnPreferences(blueprintId, {
+      hidden: ['schema', 'schema'],
+      order: ['name', 'name', 'id'],
+    });
+    expect(getExplorerColumnPreferences(blueprintId, columns)).toEqual({
+      hidden: ['schema'],
+      order: ['name', 'id', 'display', 'schema'],
+    });
+  });
+
   it('clears saved choices for a blueprint', () => {
     setExplorerColumnPreferences(blueprintId, {
       hidden: ['schema'],
