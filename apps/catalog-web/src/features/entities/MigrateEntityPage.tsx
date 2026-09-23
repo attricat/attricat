@@ -78,9 +78,11 @@ export const MigrateEntityPage = ({ entityId }: { entityId: string }) => {
     mutationFn: ({
       values,
       relationships,
+      discardAttributes,
     }: {
       values: Parameters<typeof migrateEntity>[1]['values'];
       relationships: Parameters<typeof migrateEntity>[1]['relationships'];
+      discardAttributes: string[];
     }) => {
       if (!preview.data) throw new Error(t('entities.loadMigrationFirst'));
       return migrateEntity(entityId, {
@@ -144,6 +146,7 @@ export const MigrateEntityPage = ({ entityId }: { entityId: string }) => {
                   control={
                     <Checkbox
                       checked={discardAttributes.includes(issue.attribute_code)}
+                      disabled={migrate.isPending}
                       onChange={(event) =>
                         setDiscardAttributes((attributes) =>
                           event.target.checked
@@ -184,7 +187,11 @@ export const MigrateEntityPage = ({ entityId }: { entityId: string }) => {
             )}
             isLoadingBlueprint={migrate.isPending}
             onSubmit={({ values, relationships }) =>
-              migrate.mutate({ values, relationships })
+              migrate.mutate({
+                values,
+                relationships,
+                discardAttributes: [...discardAttributes],
+              })
             }
             showAllAttributes
             submitLabel={t('entities.upgradeEntity')}
