@@ -42,6 +42,69 @@ beforeEach(() => {
 });
 
 describe('FileAttributeEditor', () => {
+  it('queues at most one dropped file for a single-file attribute', () => {
+    const single = {
+      ...attribute,
+      file_policy: { ...attribute.file_policy!, cardinality: 'one' as const },
+    };
+    const view = render(
+      <FileAttributeEditor
+        attribute={single}
+        contextId={null}
+        disabled={false}
+        entityId={entityId}
+        files={[]}
+      />,
+    );
+    fireEvent.drop(view.container.querySelector('.MuiBox-root')!, {
+      dataTransfer: {
+        files: [file, new File(['more'], 'second.txt', { type: 'text/plain' })],
+      },
+    });
+    expect(screen.getByText('document.txt')).toBeTruthy();
+    expect(screen.queryByText('second.txt')).toBeNull();
+    expect(
+      (
+        screen.getByRole('button', {
+          name: 'Choose or drop files',
+        }) as HTMLButtonElement
+      ).disabled,
+    ).toBe(true);
+    fireEvent.drop(view.container.querySelector('.MuiBox-root')!, {
+      dataTransfer: {
+        files: [new File(['again'], 'third.txt', { type: 'text/plain' })],
+      },
+    });
+    expect(screen.queryByText('third.txt')).toBeNull();
+  });
+
+  it('does not show uploads from the previous entity after navigation', async () => {
+    const metadata = {
+      id: 'uploaded-id',
+      filename: 'previous.txt',
+      status: 'ready',
+    } as FileMetadata;
+    vi.mocked(uploadFiles).mockResolvedValue({ files: [metadata] } as Awaited<
+      ReturnType<typeof uploadFiles>
+    >);
+    const view = renderEditor([], entityId);
+    fireEvent.change(view.container.querySelector('input[type="file"]')!, {
+      target: { files: [file] },
+    });
+    fireEvent.click(screen.getByRole('button', { name: /Upload 1/ }));
+    expect(await screen.findByText('previous.txt')).toBeTruthy();
+    view.rerender(
+      <FileAttributeEditor
+        attribute={attribute}
+        contextId={null}
+        disabled={false}
+        entityId="another-entity"
+        files={[]}
+      />,
+    );
+    expect(screen.queryByText('previous.txt')).toBeNull();
+  });
+
   it('does not queue dropped files until an entity exists', () => {
     const view = renderEditor();
     fireEvent.drop(view.container.querySelector('.MuiBox-root')!, {

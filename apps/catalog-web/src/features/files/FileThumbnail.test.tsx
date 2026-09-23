@@ -1,8 +1,15 @@
 // @vitest-environment jsdom
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { act, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import '../../i18n';
-import { ThumbnailPreview } from './FileThumbnail';
+import { fileDownloadUrl, getFileMetadata } from './api';
+import { FileThumbnail, ThumbnailPreview } from './FileThumbnail';
+
+vi.mock('./api', () => ({
+  fileDownloadUrl: vi.fn(),
+  getFileMetadata: vi.fn(),
+}));
 
 afterEach(() => {
   vi.useRealTimers();
@@ -15,6 +22,32 @@ const retry = () => {
 };
 
 describe('ThumbnailPreview', () => {
+  it('does not download the original file when no thumbnail variant exists', async () => {
+    vi.mocked(getFileMetadata).mockResolvedValue({
+      id: 'file-id',
+      filename: 'document.pdf',
+      mime_type: 'application/pdf',
+      byte_size: 128,
+      sha256: 'a'.repeat(64),
+      status: 'ready',
+      variants: [],
+    });
+    const client = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    });
+    const { container } = render(
+      <QueryClientProvider client={client}>
+        <FileThumbnail
+          file={{ id: 'file-id', filename: 'document.pdf' }}
+          size={48}
+        />
+      </QueryClientProvider>,
+    );
+    expect(await screen.findByText('Thumbnail unavailable')).toBeTruthy();
+    expect(container.querySelector('img')).toBeNull();
+    expect(fileDownloadUrl).not.toHaveBeenCalled();
+  });
+
   it('stops retrying a broken thumbnail and shows an unavailable state', () => {
     vi.useFakeTimers();
     const { container } = render(

@@ -62,19 +62,21 @@ const acceptsFile = (file: File, attribute: Attribute) => {
   );
 };
 
-export const FileAttributeEditor = ({
-  attribute,
-  contextId,
-  disabled,
-  entityId,
-  files,
-}: {
+type FileAttributeEditorProps = {
   attribute: Attribute;
   contextId: string | null;
   disabled: boolean;
   entityId?: string;
   files: FileMetadata[];
-}) => {
+};
+
+const FileAttributeEditorContent = ({
+  attribute,
+  contextId,
+  disabled,
+  entityId,
+  files,
+}: FileAttributeEditorProps) => {
   const { t } = useTranslation();
   const input = useRef<HTMLInputElement>(null);
   const [pending, setPending] = useState<PendingFile[]>([]);
@@ -86,11 +88,15 @@ export const FileAttributeEditor = ({
   ];
   const policy = attribute.file_policy;
   if (!policy) return null;
+  const canQueueFile =
+    policy.cardinality !== 'one' ||
+    (uploaded.length === 0 && pending.length === 0);
 
   const add = (files: FileList | File[]) => {
-    const accepted = Array.from(files).filter((file) =>
-      acceptsFile(file, attribute),
-    );
+    if (!canQueueFile) return;
+    const accepted = Array.from(files)
+      .filter((file) => acceptsFile(file, attribute))
+      .slice(0, policy.cardinality === 'one' ? 1 : undefined);
     setPending((current) => [
       ...current,
       ...accepted.map((file) => ({
@@ -164,7 +170,8 @@ export const FileAttributeEditor = ({
         onDragOver={(event) => event.preventDefault()}
         onDrop={(event) => {
           event.preventDefault();
-          if (!disabled && entityId) add(event.dataTransfer.files);
+          if (!disabled && entityId && canQueueFile)
+            add(event.dataTransfer.files);
         }}
         sx={{
           border: '1px dashed',
@@ -179,11 +186,11 @@ export const FileAttributeEditor = ({
               .map((value) => `.${value.replace(/^\./, '')}`)
               .join(',') || undefined
           }
-          disabled={disabled || !entityId}
+          disabled={disabled || !entityId || !canQueueFile}
           hidden
           multiple={policy.cardinality === 'many'}
           onChange={(event) => {
-            if (!disabled && entityId && event.target.files)
+            if (!disabled && entityId && canQueueFile && event.target.files)
               add(event.target.files);
             event.target.value = '';
           }}
@@ -191,7 +198,7 @@ export const FileAttributeEditor = ({
           type="file"
         />
         <Button
-          disabled={disabled || !entityId}
+          disabled={disabled || !entityId || !canQueueFile}
           onClick={() => input.current?.click()}
           startIcon={<CloudUploadOutlinedIcon />}
         >
@@ -268,3 +275,10 @@ export const FileAttributeEditor = ({
     </Stack>
   );
 };
+
+export const FileAttributeEditor = (props: FileAttributeEditorProps) => (
+  <FileAttributeEditorContent
+    key={`${props.entityId ?? ''}:${props.attribute.code}:${props.contextId ?? ''}`}
+    {...props}
+  />
+);
