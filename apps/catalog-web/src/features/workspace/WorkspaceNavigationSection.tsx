@@ -48,7 +48,11 @@ export const WorkspaceNavigationSection = ({
   const displayed = entries ?? navigation.data ?? [];
   const save = useMutation({
     mutationFn: updateExploreNavigation,
-    onSuccess: () => {
+    onSuccess: (_, savedEntries) => {
+      queryClient.setQueryData(
+        workspaceQueryKeys.exploreNavigation(),
+        savedEntries,
+      );
       void queryClient.invalidateQueries({
         queryKey: workspaceQueryKeys.exploreNavigation(),
       });
@@ -79,6 +83,7 @@ export const WorkspaceNavigationSection = ({
         <Paper key={entry.blueprint_code} sx={{ p: 2 }}>
           <Stack direction={{ xs: 'column', md: 'row' }} spacing={1.5}>
             <TextField
+              disabled={save.isPending}
               label={t('workspace.navigationBlueprint')}
               onChange={(event) =>
                 setEntries(
@@ -94,12 +99,21 @@ export const WorkspaceNavigationSection = ({
               sx={{ minWidth: 250 }}
             >
               {(blueprints.data ?? []).map((blueprint) => (
-                <MenuItem key={blueprint.code} value={blueprint.code}>
+                <MenuItem
+                  disabled={displayed.some(
+                    (item, position) =>
+                      position !== index &&
+                      item.blueprint_code === blueprint.code,
+                  )}
+                  key={blueprint.code}
+                  value={blueprint.code}
+                >
                   {blueprint.name} ({blueprint.code})
                 </MenuItem>
               ))}
             </TextField>
             <TextField
+              disabled={save.isPending}
               helperText={t('workspace.navigationAvailableRoles', {
                 roles: (roles.data ?? []).map((role) => role.code).join(', '),
               })}
@@ -123,6 +137,7 @@ export const WorkspaceNavigationSection = ({
               sx={{ minWidth: 250 }}
             />
             <Button
+              disabled={save.isPending}
               onClick={() =>
                 setEntries(
                   displayed.filter((_, position) => position !== index),
@@ -132,7 +147,7 @@ export const WorkspaceNavigationSection = ({
               {t('workspace.remove')}
             </Button>
             <Button
-              disabled={index === 0}
+              disabled={save.isPending || index === 0}
               onClick={() => {
                 const next = [...displayed];
                 [next[index - 1], next[index]] = [next[index], next[index - 1]];
@@ -142,7 +157,7 @@ export const WorkspaceNavigationSection = ({
               {t('workspace.moveUp')}
             </Button>
             <Button
-              disabled={index === displayed.length - 1}
+              disabled={save.isPending || index === displayed.length - 1}
               onClick={() => {
                 const next = [...displayed];
                 [next[index + 1], next[index]] = [next[index], next[index + 1]];
@@ -156,7 +171,7 @@ export const WorkspaceNavigationSection = ({
       ))}
       <Stack direction="row" spacing={1}>
         <Button
-          disabled={!blueprints.data?.length}
+          disabled={save.isPending || !blueprints.data?.length}
           onClick={() => {
             const first = blueprints.data?.find(
               (blueprint) =>

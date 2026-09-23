@@ -12,7 +12,7 @@ import {
   TextField,
   Typography,
 } from '@mui/material';
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
   ensureActiveScopeTarget,
@@ -39,6 +39,8 @@ export const WorkspaceMembersSection = ({
   const { t } = useTranslation();
   const client = useQueryClient();
   const [error, setError] = useState<string>();
+  const submitting = useRef(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
   const members = useQuery({
     enabled: canManage,
     queryKey: workspaceQueryKeys.members(),
@@ -59,6 +61,10 @@ export const WorkspaceMembersSection = ({
       scope_target_id: workspaceId ?? '',
     },
     onSubmit: async ({ value }) => {
+      if (submitting.current) return;
+      submitting.current = true;
+      setIsSubmitting(true);
+      setError(undefined);
       try {
         const input = ensureActiveScopeTarget(
           {
@@ -76,13 +82,17 @@ export const WorkspaceMembersSection = ({
           ),
         );
         await grantMemberRole(value.member_id, input);
-        refresh();
+        void refresh();
+        form.reset();
       } catch (reason) {
         setError(
           reason instanceof Error
             ? reason.message
             : t('workspace.grantRoleFailed'),
         );
+      } finally {
+        submitting.current = false;
+        setIsSubmitting(false);
       }
     },
   });
@@ -204,7 +214,7 @@ export const WorkspaceMembersSection = ({
               />
             )}
           </form.Subscribe>
-          <Button type="submit" variant="contained">
+          <Button disabled={isSubmitting} type="submit" variant="contained">
             {t('workspace.grantRole')}
           </Button>
         </Stack>

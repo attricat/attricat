@@ -13,7 +13,7 @@ import {
   TextField,
   Typography,
 } from '@mui/material';
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { createRole, listPermissions, listRoles } from './api';
 import { workspaceQueryKeys } from './query-keys';
@@ -30,6 +30,8 @@ export const WorkspaceRolesSection = ({
   const { t } = useTranslation();
   const client = useQueryClient();
   const [error, setError] = useState<string>();
+  const submitting = useRef(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
   const [dialogAction, setDialogAction] = useState<RoleDialogAction>();
   const roles = useQuery({
     enabled: canManage,
@@ -46,15 +48,23 @@ export const WorkspaceRolesSection = ({
   const form = useForm({
     defaultValues: { code: '', permissions: [] as string[] },
     onSubmit: async ({ value }) => {
+      if (submitting.current) return;
+      submitting.current = true;
+      setIsSubmitting(true);
+      setError(undefined);
       try {
         await createRole(value);
-        refresh();
+        void refresh();
+        form.reset();
       } catch (reason) {
         setError(
           reason instanceof Error
             ? reason.message
             : t('workspace.createRoleFailed'),
         );
+      } finally {
+        submitting.current = false;
+        setIsSubmitting(false);
       }
     },
   });
@@ -164,7 +174,7 @@ export const WorkspaceRolesSection = ({
               </>
             )}
           </form.Field>
-          <Button type="submit" variant="contained">
+          <Button disabled={isSubmitting} type="submit" variant="contained">
             {t('workspace.createRole')}
           </Button>
         </Stack>

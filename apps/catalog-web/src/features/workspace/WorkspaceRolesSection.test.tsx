@@ -3,7 +3,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import '../../i18n';
-import { listPermissions, listRoles } from './api';
+import { createRole, listPermissions, listRoles } from './api';
 import { WorkspaceRolesSection } from './WorkspaceRolesSection';
 
 vi.mock('./api', () => ({
@@ -41,6 +41,23 @@ beforeEach(() => {
 });
 
 describe('WorkspaceRolesSection', () => {
+  it('prevents duplicate role creation while a request is pending', async () => {
+    vi.mocked(createRole).mockImplementation(() => new Promise(() => {}));
+    const view = renderRoles();
+    fireEvent.change(screen.getByRole('textbox', { name: 'Role code' }), {
+      target: { value: 'reviewer' },
+    });
+    const form = view.container.querySelector('form')!;
+    fireEvent.submit(form);
+    fireEvent.submit(form);
+    await waitFor(() => expect(createRole).toHaveBeenCalledOnce());
+    expect(
+      screen
+        .getByRole('button', { name: 'Create role' })
+        .hasAttribute('disabled'),
+    ).toBe(true);
+  });
+
   it.each([
     ['Rename role', 'Role code'],
     ['Duplicate role', 'New role code'],

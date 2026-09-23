@@ -12,7 +12,7 @@ import {
   TextField,
   Typography,
 } from '@mui/material';
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
   createInvitation,
@@ -37,6 +37,10 @@ export const WorkspaceInvitationsSection = ({
   const { t } = useTranslation();
   const client = useQueryClient();
   const [error, setError] = useState<string>();
+  const inviting = useRef(false);
+  const creatingUser = useRef(false);
+  const [isInviting, setIsInviting] = useState(false);
+  const [isCreatingUser, setIsCreatingUser] = useState(false);
   const invitations = useQuery({
     enabled: canManage,
     queryKey: workspaceQueryKeys.invitations(),
@@ -58,6 +62,10 @@ export const WorkspaceInvitationsSection = ({
       expires_at: '',
     },
     onSubmit: async ({ value }) => {
+      if (inviting.current) return;
+      inviting.current = true;
+      setIsInviting(true);
+      setError(undefined);
       try {
         const expiresAt = new Date(value.expires_at);
         if (Number.isNaN(expiresAt.getTime()) || expiresAt <= new Date()) {
@@ -83,13 +91,17 @@ export const WorkspaceInvitationsSection = ({
           ...input,
           expires_at: expiresAt.toISOString(),
         });
-        refresh();
+        void refresh();
+        form.reset();
       } catch (reason) {
         setError(
           reason instanceof Error
             ? reason.message
             : t('workspace.createInvitationFailed'),
         );
+      } finally {
+        inviting.current = false;
+        setIsInviting(false);
       }
     },
   });
@@ -103,6 +115,10 @@ export const WorkspaceInvitationsSection = ({
       expires_at: '',
     },
     onSubmit: async ({ value }) => {
+      if (creatingUser.current) return;
+      creatingUser.current = true;
+      setIsCreatingUser(true);
+      setError(undefined);
       try {
         const expiresAt = new Date(value.expires_at);
         if (Number.isNaN(expiresAt.getTime()) || expiresAt <= new Date())
@@ -127,13 +143,17 @@ export const WorkspaceInvitationsSection = ({
           ...input,
           expires_at: expiresAt.toISOString(),
         });
-        refresh();
+        void refresh();
+        userForm.reset();
       } catch (reason) {
         setError(
           reason instanceof Error
             ? reason.message
             : t('workspace.createUserFailed'),
         );
+      } finally {
+        creatingUser.current = false;
+        setIsCreatingUser(false);
       }
     },
   });
@@ -253,7 +273,7 @@ export const WorkspaceInvitationsSection = ({
               />
             )}
           </userForm.Field>
-          <Button type="submit" variant="contained">
+          <Button disabled={isCreatingUser} type="submit" variant="contained">
             {t('workspace.createUserInvite')}
           </Button>
         </Stack>
@@ -320,7 +340,7 @@ export const WorkspaceInvitationsSection = ({
               />
             )}
           </form.Field>
-          <Button type="submit" variant="contained">
+          <Button disabled={isInviting} type="submit" variant="contained">
             {t('workspace.createInvitation')}
           </Button>
         </Stack>
