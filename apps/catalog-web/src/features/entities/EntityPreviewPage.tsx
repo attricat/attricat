@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Link } from '@tanstack/react-router';
+import { Link, useNavigate } from '@tanstack/react-router';
 import { BlueprintIcon } from '../../components/system-icons';
 import {
   Alert,
@@ -30,6 +30,7 @@ import { defaultContextCode } from '../contexts/constants';
 import { listFindings } from '../rules/api';
 import { ruleQueryKeys } from '../rules/query-keys';
 import {
+  duplicateEntity,
   getBlueprintRevision,
   getCurrentBlueprint,
   getResolvedEntityPreview,
@@ -58,6 +59,7 @@ export const EntityPreviewPage = ({
 }) => {
   const { t } = useTranslation();
   const client = useQueryClient();
+  const navigate = useNavigate();
   const [selectedContext, setSelectedContext] = useState('');
   const contexts = useQuery({
     queryKey: contextQueryKeys.all(),
@@ -89,6 +91,16 @@ export const EntityPreviewPage = ({
   const unpublish = useMutation({
     mutationFn: (contextId: string) => unpublishEntity(entityId, contextId),
     onSuccess: invalidatePublications,
+  });
+  const duplicate = useMutation({
+    mutationFn: () => duplicateEntity(entityId),
+    onSuccess: (entity) => {
+      void client.invalidateQueries({ queryKey: entityQueryKeys.searches() });
+      void navigate({
+        params: { entityId: entity.id },
+        to: '/entities/$entityId/edit',
+      });
+    },
   });
   const publication = publications.data?.find(
     (item) => item.context_id === selectedContextId,
@@ -204,11 +216,15 @@ export const EntityPreviewPage = ({
             view: detailView,
           })
         : null}
-      {(publish.isError || publishAll.isError || unpublish.isError) && (
+      {(publish.isError ||
+        publishAll.isError ||
+        unpublish.isError ||
+        duplicate.isError) && (
         <Alert severity="error" sx={{ mt: 3 }}>
           {publish.error?.message ??
             publishAll.error?.message ??
-            unpublish.error?.message}
+            unpublish.error?.message ??
+            duplicate.error?.message}
         </Alert>
       )}
       <EntityPreviewToolbar
@@ -217,6 +233,8 @@ export const EntityPreviewPage = ({
         onOpenExtensions={() => setExtensionPanelOpen(true)}
         schemaOutdated={schemaOutdated}
         showExtensions={Boolean(resolved.data && blueprint.data)}
+        onDuplicate={() => duplicate.mutate()}
+        duplicatePending={duplicate.isPending}
         publication={publication}
         canPublish={session.data?.capabilities?.entities_publish === true}
         onPublish={() => selectedContextId && publish.mutate(selectedContextId)}

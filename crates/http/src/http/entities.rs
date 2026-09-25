@@ -300,6 +300,18 @@ pub(super) async fn create_entity_form(
     invalidate_data_health(&state).await;
     Ok((StatusCode::CREATED, Json(entity)))
 }
+pub(super) async fn duplicate_entity(
+    State(state): State<AppState>,
+    super::auth::ScopedRepository(repository): super::auth::ScopedRepository,
+    ApiPath(entity_id): ApiPath<Uuid>,
+) -> Result<(StatusCode, Json<Entity>), ApiError> {
+    let entity = CatalogMutationService::new(&repository)
+        .duplicate_entity(entity_id)
+        .await?;
+    invalidate_data_health(&state).await;
+    Ok((StatusCode::CREATED, Json(entity)))
+}
+
 pub(super) async fn get_entity_form(
     State(_state): State<AppState>,
     super::auth::ScopedRepository(repository): super::auth::ScopedRepository,

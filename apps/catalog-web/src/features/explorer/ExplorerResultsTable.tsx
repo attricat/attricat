@@ -1,4 +1,4 @@
-import { Link } from '@tanstack/react-router';
+import { Link, useNavigate } from '@tanstack/react-router';
 import { flexRender } from '@tanstack/react-table';
 import { useVirtualizer } from '@tanstack/react-virtual';
 import {
@@ -52,6 +52,7 @@ import { LoadMoreButton } from '../../components/LoadMoreButton';
 import { useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
+  duplicateEntity,
   getEntityPublications,
   publishEntity,
   unpublishEntity,
@@ -98,6 +99,8 @@ const EntityActionsMenu = ({
   publicationContextId,
   publish,
   publishing,
+  duplicate,
+  duplicating,
   unpublish,
   unpublishing,
 }: {
@@ -111,6 +114,8 @@ const EntityActionsMenu = ({
   publicationContextId: string | undefined;
   publish: () => void;
   publishing: boolean;
+  duplicate: () => void;
+  duplicating: boolean;
   unpublish: () => void;
   unpublishing: boolean;
 }) => {
@@ -131,6 +136,15 @@ const EntityActionsMenu = ({
         }}
       >
         {t('explorer.searchInfo')}
+      </MenuItem>
+      <MenuItem
+        disabled={duplicating}
+        onClick={() => {
+          onClose();
+          duplicate();
+        }}
+      >
+        {t('entities.duplicateEntity')}
       </MenuItem>
       {canPublish && publicationContextId && publication && (
         <>
@@ -325,6 +339,7 @@ export const ExplorerResultsTable = ({
     position: { left: number; top: number };
   } | null>(null);
   const queryClient = useQueryClient();
+  const navigate = useNavigate();
   const publicationQueries = useQueries({
     queries: items.map((entity) => ({
       queryKey: entityQueryKeys.publication(entity.id),
@@ -375,6 +390,18 @@ export const ExplorerResultsTable = ({
       return unpublishEntity(entityId, publicationContextId);
     },
     onSuccess: (_, entityId) => void invalidatePublication(entityId),
+  });
+  const duplicate = useMutation({
+    mutationFn: (entityId: string) => duplicateEntity(entityId),
+    onSuccess: (entity) => {
+      void queryClient.invalidateQueries({
+        queryKey: entityQueryKeys.searches(),
+      });
+      void navigate({
+        params: { entityId: entity.id },
+        to: '/entities/$entityId/edit',
+      });
+    },
   });
   const columnHelper = legacyCreateColumnHelper<EntityItem>();
   const tableView =
@@ -711,9 +738,11 @@ export const ExplorerResultsTable = ({
 
   return (
     <Paper component="section">
-      {(publish.isError || unpublish.isError) && (
+      {(publish.isError || unpublish.isError || duplicate.isError) && (
         <Alert severity="error" sx={{ m: 2 }}>
-          {publish.error?.message ?? unpublish.error?.message}
+          {publish.error?.message ??
+            unpublish.error?.message ??
+            duplicate.error?.message}
         </Alert>
       )}
       <Box
@@ -881,6 +910,8 @@ export const ExplorerResultsTable = ({
           publicationContextId={publicationContextId}
           publish={() => publish.mutate(activeActionEntity.id)}
           publishing={publish.isPending}
+          duplicate={() => duplicate.mutate(activeActionEntity.id)}
+          duplicating={duplicate.isPending}
           unpublish={() => unpublish.mutate(activeActionEntity.id)}
           unpublishing={unpublish.isPending}
         />
