@@ -1307,7 +1307,7 @@ async fn run(cli: Cli) -> Result<String, CliError> {
                 } => (
                     Method::POST,
                     "/saved-views".to_owned(),
-                    Some(json!({"kind": "explorer_search", "name": name, "description": description, "visibility": visibility, "state": json_object_argument(&state)?})),
+                    Some(saved_view_payload(&name, &description, &visibility, &state)?),
                     Some("savedView"),
                 ),
                 SavedViewCommand::Update {
@@ -1319,7 +1319,7 @@ async fn run(cli: Cli) -> Result<String, CliError> {
                 } => (
                     Method::PUT,
                     format!("/saved-views/{id}"),
-                    Some(json!({"kind": "explorer_search", "name": name, "description": description, "visibility": visibility, "state": json_object_argument(&state)?})),
+                    Some(saved_view_payload(&name, &description, &visibility, &state)?),
                     Some("savedView"),
                 ),
                 SavedViewCommand::Delete { id } => {
@@ -3426,6 +3426,21 @@ fn json_tags_argument(input: &str) -> Result<Value, CliError> {
         ));
     }
     Ok(value)
+}
+
+fn saved_view_payload(
+    name: &str,
+    description: &str,
+    visibility: &str,
+    state: &str,
+) -> Result<Value, CliError> {
+    Ok(json!({
+        "kind": "explorer_search",
+        "name": name,
+        "description": description,
+        "visibility": visibility,
+        "state": json_object_argument(state)?,
+    }))
 }
 
 fn json_object_argument(input: &str) -> Result<Value, CliError> {

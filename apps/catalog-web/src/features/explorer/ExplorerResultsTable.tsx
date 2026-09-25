@@ -165,37 +165,25 @@ const EntityActionsMenu = ({
       )}
       {canPublish && publicationContextId && publication && (
         <>
-          {publication.status === 'not_published' ? (
+          <MenuItem
+            disabled={publishing}
+            onClick={() => {
+              onClose();
+              publish();
+            }}
+          >
+            {t('entities.publish')}
+          </MenuItem>
+          {publication.status !== 'not_published' && (
             <MenuItem
-              disabled={publishing}
+              disabled={unpublishing}
               onClick={() => {
                 onClose();
-                publish();
+                unpublish();
               }}
             >
-              {t('entities.publish')}
+              {t('entities.unpublish')}
             </MenuItem>
-          ) : (
-            <>
-              <MenuItem
-                disabled={publishing}
-                onClick={() => {
-                  onClose();
-                  publish();
-                }}
-              >
-                {t('entities.publish')}
-              </MenuItem>
-              <MenuItem
-                disabled={unpublishing}
-                onClick={() => {
-                  onClose();
-                  unpublish();
-                }}
-              >
-                {t('entities.unpublish')}
-              </MenuItem>
-            </>
           )}
         </>
       )}
