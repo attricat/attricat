@@ -22,6 +22,13 @@ pub struct SavedView {
 const FIELDS: &str =
     "id,owner_user_id,kind,name,description,visibility,state,created_at,updated_at";
 
+fn state_hash(state: &Value) -> String {
+    format!(
+        "{:x}",
+        Sha256::digest(serde_json::to_vec(state).expect("JSON value serializes"))
+    )
+}
+
 impl CatalogRepository {
     pub async fn list_saved_views(&self, actor: Uuid) -> Result<Vec<SavedView>, RepositoryError> {
         let query = format!(
@@ -60,10 +67,7 @@ impl CatalogRepository {
         visibility: &str,
         state: &Value,
     ) -> Result<SavedView, RepositoryError> {
-        let hash = format!(
-            "{:x}",
-            Sha256::digest(serde_json::to_vec(state).expect("JSON value serializes"))
-        );
+        let hash = state_hash(state);
         let workspace = self.workspace_id_for_runtime();
         if visibility == "link" {
             let query = format!(
@@ -104,10 +108,7 @@ impl CatalogRepository {
         visibility: &str,
         state: &Value,
     ) -> Result<Option<SavedView>, RepositoryError> {
-        let hash = format!(
-            "{:x}",
-            Sha256::digest(serde_json::to_vec(state).expect("JSON value serializes"))
-        );
+        let hash = state_hash(state);
         let query = format!(
             "UPDATE saved_views SET name=$4,description=$5,visibility=$6,state=$7,state_hash=$8,updated_at=now() WHERE workspace_id=$1 AND id=$2 AND owner_user_id=$3 AND visibility<>'link' AND deleted_at IS NULL RETURNING {FIELDS}"
         );
@@ -125,7 +126,14 @@ impl CatalogRepository {
     }
 
     pub async fn delete_saved_view(&self, actor: Uuid, id: Uuid) -> Result<bool, RepositoryError> {
-        Ok(sqlx::query("UPDATE saved_views SET deleted_at=now() WHERE workspace_id=$1 AND id=$2 AND owner_user_id=$3 AND visibility<>'link' AND deleted_at IS NULL")
-            .bind(self.workspace_id_for_runtime()).bind(id).bind(actor).execute(&self.pool).await?.rows_affected() > 0)
+        let result = sqlx::query(
+            "UPDATE saved_views SET deleted_at=now() WHERE workspace_id=$1 AND id=$2 AND owner_user_id=$3 AND visibility<>'link' AND deleted_at IS NULL",
+        )
+        .bind(self.workspace_id_for_runtime())
+        .bind(id)
+        .bind(actor)
+        .execute(&self.pool)
+        .await?;
+        Ok(result.rows_affected() > 0)
     }
 }

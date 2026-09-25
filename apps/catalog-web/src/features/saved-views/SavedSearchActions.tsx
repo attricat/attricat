@@ -3,6 +3,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from '@tanstack/react-router';
 import {
   Alert,
+  Box,
   Button,
   Dialog,
   DialogActions,
@@ -239,59 +240,61 @@ export const SavedSearchActions = ({
       {list.isError && <Alert severity="error">{list.error.message}</Alert>}
       <Dialog open={open} onClose={() => setOpen(false)} fullWidth>
         <DialogTitle>{t('explorer.saveSearch')}</DialogTitle>
-        <DialogContent
-          component="form"
-          id="save-search-form"
-          onSubmit={(event) => {
-            event.preventDefault();
-            void form.handleSubmit();
-          }}
-        >
-          <Stack spacing={2} sx={{ pt: 1 }}>
-            <form.Field name="name">
-              {(field) => (
-                <TextField
-                  required
-                  label={t('explorer.searchName')}
-                  inputProps={{ maxLength: 120 }}
-                  value={field.state.value}
-                  onChange={(event) => field.handleChange(event.target.value)}
-                />
-              )}
-            </form.Field>
-            <form.Field name="description">
-              {(field) => (
-                <TextField
-                  label={t('explorer.searchDescription')}
-                  inputProps={{ maxLength: 500 }}
-                  value={field.state.value}
-                  onChange={(event) => field.handleChange(event.target.value)}
-                />
-              )}
-            </form.Field>
-            <form.Field name="visibility">
-              {(field) => (
-                <TextField
-                  select
-                  label={t('explorer.searchVisibility')}
-                  value={field.state.value}
-                  onChange={(event) =>
-                    field.handleChange(
-                      event.target.value as 'private' | 'workspace',
-                    )
-                  }
-                >
-                  <MenuItem value="private">
-                    {t('explorer.privateSearch')}
-                  </MenuItem>
-                  <MenuItem value="workspace">
-                    {t('explorer.workspaceSearch')}
-                  </MenuItem>
-                </TextField>
-              )}
-            </form.Field>
-            {error && <Alert severity="error">{error}</Alert>}
-          </Stack>
+        <DialogContent>
+          <Box
+            component="form"
+            id="save-search-form"
+            onSubmit={(event) => {
+              event.preventDefault();
+              void form.handleSubmit();
+            }}
+          >
+            <Stack spacing={2} sx={{ pt: 1 }}>
+              <form.Field name="name">
+                {(field) => (
+                  <TextField
+                    required
+                    label={t('explorer.searchName')}
+                    slotProps={{ htmlInput: { maxLength: 120 } }}
+                    value={field.state.value}
+                    onChange={(event) => field.handleChange(event.target.value)}
+                  />
+                )}
+              </form.Field>
+              <form.Field name="description">
+                {(field) => (
+                  <TextField
+                    label={t('explorer.searchDescription')}
+                    slotProps={{ htmlInput: { maxLength: 500 } }}
+                    value={field.state.value}
+                    onChange={(event) => field.handleChange(event.target.value)}
+                  />
+                )}
+              </form.Field>
+              <form.Field name="visibility">
+                {(field) => (
+                  <TextField
+                    select
+                    label={t('explorer.searchVisibility')}
+                    value={field.state.value}
+                    onChange={(event) =>
+                      field.handleChange(
+                        event.target.value as 'private' | 'workspace',
+                      )
+                    }
+                  >
+                    <MenuItem value="private">
+                      {t('explorer.privateSearch')}
+                    </MenuItem>
+                    <MenuItem value="workspace">
+                      {t('explorer.workspaceSearch')}
+                    </MenuItem>
+                  </TextField>
+                )}
+              </form.Field>
+              {error && <Alert severity="error">{error}</Alert>}
+            </Stack>
+          </Box>
         </DialogContent>
         <DialogActions>
           <Button onClick={() => setOpen(false)}>{t('common.cancel')}</Button>
