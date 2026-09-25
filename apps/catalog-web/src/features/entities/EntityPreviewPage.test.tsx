@@ -18,10 +18,12 @@ vi.mock('@tanstack/react-router', () => ({
   Link: ({ children }: { children: React.ReactNode }) => (
     <span>{children}</span>
   ),
+  useNavigate: () => vi.fn(),
 }));
 
 vi.mock('./api', async (importOriginal) => ({
   ...(await importOriginal<typeof import('./api')>()),
+  duplicateEntity: vi.fn(),
   getBlueprintRevision: vi.fn(),
   getCurrentBlueprint: vi.fn(),
   getEntityPublications: vi.fn(),

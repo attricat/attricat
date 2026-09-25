@@ -170,6 +170,7 @@
   "entities": {
     "createEntity": "Create entity",
     "editEntity": "Edit entity",
+    "duplicateEntity": "Duplicate entity",
     "upgradeEntity": "Upgrade entity",
     "chooseBlueprint": "Choose blueprint",
     "blueprint": "Blueprint",

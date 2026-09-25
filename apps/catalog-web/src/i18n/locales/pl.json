@@ -170,6 +170,7 @@
   "entities": {
     "createEntity": "Utwórz encję",
     "editEntity": "Edytuj encję",
+    "duplicateEntity": "Duplikuj encję",
     "upgradeEntity": "Zaktualizuj encję",
     "chooseBlueprint": "Wybierz schemat",
     "blueprint": "Schemat",
