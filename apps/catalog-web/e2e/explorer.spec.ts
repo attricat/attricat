@@ -80,6 +80,38 @@ test('shows explorer empty states and configured table fields', async ({
   await repeatedKeyboardSearch;
 });
 
+test('saves an Explorer search and restores it through a short URL', async ({
+  page,
+}) => {
+  const code = `saved_${suffix()}`;
+  await createEntityBlueprint(
+    code,
+    'Saved products',
+    '[[attributes]]\ncode = "title"\nvalue_type = "string"\ntags = ["searchable"]',
+  );
+  await page.goto(`/?blueprint=${code}&query=example`);
+  await expect(page.getByRole('button', { name: 'Save search' })).toBeEnabled();
+  await page.getByRole('button', { name: 'Save search' }).click();
+  await page
+    .getByRole('dialog', { name: 'Save search' })
+    .getByRole('textbox', { name: 'Name' })
+    .fill('My saved products');
+  await page
+    .getByRole('dialog', { name: 'Save search' })
+    .getByRole('button', { name: 'Save search' })
+    .click();
+  await expect
+    .poll(() => new URL(page.url()).searchParams.get('savedView'))
+    .toMatch(/^[0-9a-f-]{36}$/);
+  const url = page.url();
+  await page.reload();
+  await expect(page.getByLabel('Query')).toHaveValue('example');
+  await expect(
+    page.getByRole('button', { name: 'Delete saved search' }),
+  ).toBeVisible();
+  expect(page.url()).toBe(url);
+});
+
 test('applies and removes an attribute filter on mobile', async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
   const code = `attribute_filter_${suffix()}`;

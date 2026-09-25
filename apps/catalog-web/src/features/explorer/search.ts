@@ -14,6 +14,9 @@ const relationshipFacetSearchSchema = z.object({
 });
 
 export const explorerSearchSchema = z.object({
+  savedView: z.uuid().optional().catch(undefined),
+  viewState: z.uuid().optional().catch(undefined),
+  sourceView: z.uuid().optional().catch(undefined),
   blueprint: z.string().trim().min(1).optional().catch(undefined),
   version: z.coerce.number().int().positive().optional().catch(undefined),
   allVersions: z.boolean().optional().catch(undefined),
@@ -40,6 +43,16 @@ export const explorerSearchSchema = z.object({
 
 export type AttributeFilter = z.infer<typeof attributeFilterSearchSchema>;
 export type ExplorerSearch = z.infer<typeof explorerSearchSchema>;
+
+export const inlineExplorerSearch = (
+  search: ExplorerSearch,
+): ExplorerSearch => {
+  const state = { ...search };
+  delete state.savedView;
+  delete state.viewState;
+  delete state.sourceView;
+  return state;
+};
 
 export const parseExplorerSearch = (
   input: Record<string, unknown>,

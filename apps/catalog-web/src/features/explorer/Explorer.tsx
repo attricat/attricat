@@ -50,8 +50,16 @@ import { currentSession } from '../auth/api';
 import { authQueryKeys } from '../auth/query-keys';
 import { ApiRequestError } from '../../api/request';
 import { isHiddenByDefault } from '../entities/attribute-visibility';
+import { SavedSearchActions } from '../saved-views/SavedSearchActions';
+import type { SavedView } from '../saved-views/schemas';
 
-export const Explorer = ({ search: urlSearch }: { search: ExplorerSearch }) => {
+export const Explorer = ({
+  search: urlSearch,
+  savedView,
+}: {
+  search: ExplorerSearch;
+  savedView?: SavedView;
+}) => {
   const { t } = useTranslation();
   const theme = useTheme();
   const isWideDesktop = useMediaQuery(theme.breakpoints.up('lg'));
@@ -296,6 +304,7 @@ export const Explorer = ({ search: urlSearch }: { search: ExplorerSearch }) => {
       to: '/',
       search: {
         blueprint,
+        sourceView: search.sourceView,
         query: search.query,
         relationshipFacets: undefined,
         attributeFilters: undefined,
@@ -387,6 +396,11 @@ export const Explorer = ({ search: urlSearch }: { search: ExplorerSearch }) => {
               )}
             </Stack>
           )}
+          <SavedSearchActions
+            search={search}
+            savedView={savedView}
+            userId={session.data?.user_id}
+          />
           <ExplorerSearchForm
             blueprints={blueprints.data ?? []}
             currentVersion={currentBlueprint?.version}

@@ -54,6 +54,7 @@ mod presentation_assets;
 mod reusable_attributes;
 mod roles;
 mod rules;
+mod saved_views;
 mod sessions;
 mod solution_packs;
 mod tasks;
@@ -62,6 +63,8 @@ mod values;
 mod workflow_runs;
 mod workflows;
 mod workspace_navigation;
+
+pub use saved_views::SavedView;
 
 pub use agents::{
     AgentRun, AgentRunEvent, AgentToolCall, ApprovalDecision, Conversation, ConversationMessage,

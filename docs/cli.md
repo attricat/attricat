@@ -192,6 +192,17 @@ acli file download-original <file-id> --output original.bin [--range 'bytes=0-10
 acli file download-variant <file-id> <kind> --output preview.webp [--range 'bytes=0-1023']
 ```
 
+## Saved searches
+
+`acli saved-view list`, `acli saved-view get <id>`, `acli saved-view create --name <name> --state <json-or-file> [--visibility private|workspace] [--description <text>]`, `acli saved-view update <id> --name <name> --state <json-or-file>`, `acli saved-view delete <id>`, and `acli saved-view link --state <json-or-file>` operate on Explorer saved views. The state must contain at least a blueprint code, for example:
+
+```sh
+acli saved-view create --name 'Active assets' --visibility workspace \
+  --state '{"blueprint":"asset","attributeFilters":[{"field":"status","operator":"eq","value":"active"}]}'
+```
+
+The CLI returns JSON with an `id`; set `CATALOG_WEB_URL` (or `WEB_PORT` from `.worktree`) to also include a short Explorer `url`. The link command creates an unnamed shareable snapshot. Both commands require workspace access and `entities.read` (a link does not grant catalog permissions). See [saved views](saved-views.md).
+
 ## JSON, workflow, and binary inputs
 
 Options named `--permissions`, `--entries`, `--filters`,

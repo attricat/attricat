@@ -37,6 +37,13 @@ pub(super) fn policy(method: &Method, path: &str) -> Option<Policy> {
     } else {
         "blueprints.write"
     };
+    if path == "/saved-views"
+        || path == "/saved-views/{id}"
+        || path == "/view-state-links"
+        || path == "/view-state-links/{id}"
+    {
+        return Some(read(TargetKind::None));
+    }
     if path == "/solution-packs/inspect"
         || (method == Method::GET && path == "/presentation-assets")
         || (method == Method::GET && path == "/presentation-assets/{asset_id}")
