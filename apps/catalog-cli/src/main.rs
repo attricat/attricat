@@ -82,6 +82,11 @@ enum Command {
         #[command(subcommand)]
         command: EntityCommand,
     },
+    /// Create and share Explorer saved views.
+    SavedView {
+        #[command(subcommand)]
+        command: SavedViewCommand,
+    },
     Value {
         #[command(subcommand)]
         command: ValueCommand,
@@ -133,6 +138,43 @@ enum Command {
     Token {
         #[command(subcommand)]
         command: TokenCommand,
+    },
+}
+
+#[derive(Subcommand)]
+enum SavedViewCommand {
+    List,
+    Get {
+        id: Uuid,
+    },
+    Create {
+        #[arg(long)]
+        name: String,
+        #[arg(long)]
+        state: String,
+        #[arg(long, default_value = "private")]
+        visibility: String,
+        #[arg(long, default_value = "")]
+        description: String,
+    },
+    Update {
+        id: Uuid,
+        #[arg(long)]
+        name: String,
+        #[arg(long)]
+        state: String,
+        #[arg(long, default_value = "private")]
+        visibility: String,
+        #[arg(long, default_value = "")]
+        description: String,
+    },
+    Delete {
+        id: Uuid,
+    },
+    /// Create an unnamed short URL snapshot of an Explorer search.
+    Link {
+        #[arg(long)]
+        state: String,
     },
 }
 
@@ -1251,6 +1293,29 @@ async fn run(cli: Cli) -> Result<String, CliError> {
 
     match cli.command {
         Command::Health => request(&client, &server, Method::GET, "/health", None).await,
+        Command::SavedView { command } => {
+            let (method, path, payload, url_key) = match command {
+                SavedViewCommand::List => (Method::GET, "/saved-views".to_owned(), None, None),
+                SavedViewCommand::Get { id } => (Method::GET, format!("/saved-views/{id}"), None, None),
+                SavedViewCommand::Create { name, state, visibility, description } => (Method::POST, "/saved-views".to_owned(), Some(json!({"kind":"explorer_search", "name": name, "description": description, "visibility": visibility, "state": json_object_argument(&state)?})), Some("savedView")),
+                SavedViewCommand::Update { id, name, state, visibility, description } => (Method::PUT, format!("/saved-views/{id}"), Some(json!({"kind":"explorer_search", "name": name, "description": description, "visibility": visibility, "state": json_object_argument(&state)?})), Some("savedView")),
+                SavedViewCommand::Delete { id } => (Method::DELETE, format!("/saved-views/{id}"), None, None),
+                SavedViewCommand::Link { state } => (Method::POST, "/view-state-links".to_owned(), Some(json!({"kind":"explorer_search", "state": json_object_argument(&state)?})), Some("viewState")),
+            };
+            let body = request(&client, &server, method, &path, payload).await?;
+            if let Some(key) = url_key {
+                let mut output: Value = serde_json::from_str(&body).map_err(|_| CliError::InvalidResponse)?;
+                if let Some(id) = output.get("id").and_then(Value::as_str).map(str::to_owned) {
+                    let web = std::env::var("CATALOG_WEB_URL").ok().or_else(|| std::env::var("WEB_PORT").ok().map(|port| format!("http://127.0.0.1:{port}/")));
+                    if let Some(web) = web {
+                        let mut url = Url::parse(&web).map_err(|error| CliError::Input(format!("invalid CATALOG_WEB_URL: {error}")))?;
+                        url.set_path("/"); url.set_query(Some(&format!("{key}={id}")));
+                        output["url"] = json!(url.to_string());
+                    }
+                }
+                Ok(output.to_string())
+            } else { Ok(body) }
+        },
         Command::Auth { command } => auth_command(&client, &server, command, session_file.as_ref()).await,
         Command::Event { command } => match command {
             EventCommand::DeadLetters => {
@@ -3513,6 +3578,30 @@ fn segment(value: impl std::fmt::Display) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn saved_view_commands_accept_json_state_and_reject_bad_identifiers() {
+        assert!(
+            Cli::try_parse_from([
+                "acli",
+                "saved-view",
+                "create",
+                "--name",
+                "Assets",
+                "--state",
+                "{\"blueprint\":\"asset\"}"
+            ])
+            .is_ok()
+        );
+        assert!(
+            Cli::try_parse_from(["acli", "saved-view", "link", "--state", "state.json"]).is_ok()
+        );
+        assert!(Cli::try_parse_from(["acli", "saved-view", "get", "not-a-uuid"]).is_err());
+        assert_eq!(
+            json_object_argument("{\"blueprint\":\"asset\"}").unwrap(),
+            json!({"blueprint":"asset"})
+        );
+    }
 
     #[test]
     fn only_allows_plaintext_credential_transport_to_loopback() {

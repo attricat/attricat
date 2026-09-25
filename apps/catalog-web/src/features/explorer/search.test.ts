@@ -2,6 +2,17 @@ import { describe, expect, it } from 'vitest';
 import { parseExplorerSearch } from './search';
 
 describe('parseExplorerSearch', () => {
+  it('accepts saved-view references and drops malformed identifiers', () => {
+    const id = 'b67f5d16-d2be-4669-9870-b5a73282a26e';
+    expect(
+      parseExplorerSearch({ savedView: id, viewState: 'invalid' }),
+    ).toEqual({
+      savedView: id,
+      viewState: undefined,
+    });
+    expect(parseExplorerSearch({ viewState: id })).toEqual({ viewState: id });
+  });
+
   it('retains valid URL state and drops invalid version values', () => {
     expect(
       parseExplorerSearch({

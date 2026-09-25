@@ -18,6 +18,7 @@ mod presentation_assets;
 mod reusable_attributes;
 mod roles;
 mod rules;
+mod saved_views;
 mod sessions;
 mod solution_packs;
 mod tokens;
@@ -513,6 +514,18 @@ pub fn router(state: AppState) -> Router {
             post(data_health::refresh_data_health),
         )
         .route("/audit-events", get(audit_events::list))
+        .route(
+            "/saved-views",
+            get(saved_views::list).post(saved_views::create),
+        )
+        .route(
+            "/saved-views/{id}",
+            get(saved_views::get)
+                .put(saved_views::update)
+                .delete(saved_views::delete),
+        )
+        .route("/view-state-links", post(saved_views::create_link))
+        .route("/view-state-links/{id}", get(saved_views::get_link))
         .route(
             "/event-deliveries/dead-letters",
             get(event_deliveries::list),

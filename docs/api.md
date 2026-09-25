@@ -224,6 +224,20 @@ custom one-hop cell renderers. Blueprint responses expose
 whether every hop is single-valued; the Explorer uses that metadata for filter
 controls and sortable headers.
 
+## Saved views and share links
+
+All routes require an authenticated workspace principal with `entities.read`. `GET /saved-views` lists the current user's private and workspace-visible named views (up to 100). `GET /saved-views/{id}` reads a named view; `POST /saved-views` creates one; `PUT /saved-views/{id}` and `DELETE /saved-views/{id}` update/delete a view owned by the caller. Nonexistent or inaccessible views return 404.
+
+`POST /view-state-links` creates or reuses an unnamed link snapshot. `GET /view-state-links/{id}` reads a snapshot for an authorized workspace member. A link is not anonymous access and does not authorize the subsequent entity search.
+
+Creation and update payloads:
+
+```json
+{"kind":"explorer_search","name":"My assets","description":"Recently checked","visibility":"workspace","state":{"blueprint":"asset","attributeFilters":[{"field":"status","operator":"eq","value":"active"}]}}
+```
+
+Use `visibility: "private"` or `"workspace"` for named views. For a snapshot, omit `name`, `description` and `visibility` when posting to `/view-state-links`; send `kind` and `state`. Responses include `id`, `owner_user_id`, `kind`, `name`, `description`, `visibility`, `state`, `created_at`, `updated_at`. State uses the Explorer URL field names; see [saved views](saved-views.md) for semantics and limits.
+
 ## Entity system annotations
 
 Entities include `system_tags` (an array of unique, non-empty strings) and
