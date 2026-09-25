@@ -49,7 +49,7 @@ import {
   type Theme,
 } from '@mui/material';
 import { LoadMoreButton } from '../../components/LoadMoreButton';
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
   getEntityPublications,
@@ -68,6 +68,8 @@ import { extensionQueryKeys } from '../extensions/query-keys';
 import { extensionRuntimeRefetchInterval } from '../extensions/constants';
 import { ExtensionTableCell } from './ExtensionTableCell';
 import { ImageTableCell } from './ImageTableCell';
+import { maximumAgentSelection } from './agent-selection';
+import { SendSelectedToAgentDialog } from './SendSelectedToAgentDialog';
 import { explorerTableCellContextSchema } from './schemas';
 import { entityQueryKeys } from '../entities/query-keys';
 import {
@@ -317,6 +319,30 @@ export const ExplorerResultsTable = ({
   totalCountCapped: boolean;
 }) => {
   const { t } = useTranslation();
+  const [selectionMode, setSelectionMode] = useState(false);
+  const [selectedEntityIds, setSelectedEntityIds] = useState<Set<string>>(
+    () => new Set(),
+  );
+  const [agentSelection, setAgentSelection] = useState<EntityItem[] | null>(
+    null,
+  );
+  const selectedItems = items.filter((item) => selectedEntityIds.has(item.id));
+  const allLoadedSelected =
+    items.length > 0 &&
+    items
+      .slice(0, maximumAgentSelection)
+      .every((item) => selectedEntityIds.has(item.id));
+  useEffect(() => {
+    const loaded = new Set(items.map((item) => item.id));
+    setSelectedEntityIds((current) => {
+      const next = new Set([...current].filter((id) => loaded.has(id)));
+      return next.size === current.size ? current : next;
+    });
+  }, [items]);
+  const exitSelectionMode = () => {
+    setSelectionMode(false);
+    setSelectedEntityIds(new Set());
+  };
   const [searchInfoEntity, setSearchInfoEntity] = useState<EntityItem | null>(
     null,
   );
@@ -445,6 +471,56 @@ export const ExplorerResultsTable = ({
   // of opaque-origin frames.
   let cellFrames = 0;
   const takeCellFrame = () => cellFrames++ < maximumExplorerCellFrames;
+  // Render selection outside the legacy table's memoized column definitions so
+  // checkbox state follows selection changes even when result rows do not.
+  const selectionColumn = columnHelper.display({
+    id: 'select',
+    header: '',
+    cell: () => null,
+  }) as LegacyColumnDef<EntityItem, unknown>;
+  const selectionHeader = (
+    <Checkbox
+      checked={allLoadedSelected}
+      disabled={items.length === 0}
+      indeterminate={selectedItems.length > 0 && !allLoadedSelected}
+      onChange={() =>
+        setSelectedEntityIds(
+          allLoadedSelected
+            ? new Set()
+            : new Set(
+                items.slice(0, maximumAgentSelection).map((item) => item.id),
+              ),
+        )
+      }
+      slotProps={{
+        input: { 'aria-label': t('explorer.selectLoadedEntities') },
+      }}
+    />
+  );
+  const selectionCheckbox = (entity: EntityItem) => (
+    <Checkbox
+      checked={selectedEntityIds.has(entity.id)}
+      disabled={
+        !selectedEntityIds.has(entity.id) &&
+        selectedItems.length >= maximumAgentSelection
+      }
+      onChange={() =>
+        setSelectedEntityIds((current) => {
+          const next = new Set(current);
+          if (next.has(entity.id)) next.delete(entity.id);
+          else if (next.size < maximumAgentSelection) next.add(entity.id);
+          return next;
+        })
+      }
+      slotProps={{
+        input: {
+          'aria-label': t('explorer.selectEntity', {
+            entity: displayLabel(entity.display, entity.id),
+          }),
+        },
+      }}
+    />
+  );
   const columnDefinitions: LegacyColumnDef<EntityItem, unknown>[] = [
     // TanStack's column definitions are intentionally invariant in their
     // value type. The table only consumes the shared row shape, so normalize
@@ -660,6 +736,7 @@ export const ExplorerResultsTable = ({
   ];
   const actionColumn = columnDefinitions.pop();
   const columns = [
+    ...(selectionMode ? [selectionColumn] : []),
     ...columnPreferences.order.flatMap((id) => {
       const column = columnDefinitions.find(
         (definition) => definition.id === id,
@@ -727,21 +804,69 @@ export const ExplorerResultsTable = ({
           pl: 2,
         }}
       >
-        <Typography>
-          {totalCount === null
-            ? t('explorer.resultCount', { count: items.length })
-            : totalCountCapped
-              ? t('explorer.resultCountCapped', { count: totalCount })
-              : t('explorer.resultCount', { count: totalCount })}
-        </Typography>
-        <Tooltip title={t('explorer.columnPreferences')}>
-          <IconButton
-            aria-label={t('explorer.columnPreferences')}
-            onClick={() => setColumnPreferencesOpen(true)}
+        <Box
+          sx={{
+            alignItems: 'center',
+            display: 'flex',
+            flexWrap: 'wrap',
+            gap: 1,
+          }}
+        >
+          <Typography>
+            {totalCount === null
+              ? t('explorer.resultCount', { count: items.length })
+              : totalCountCapped
+                ? t('explorer.resultCountCapped', { count: totalCount })
+                : t('explorer.resultCount', { count: totalCount })}
+          </Typography>
+          {selectionMode && selectedItems.length > 0 && (
+            <>
+              <Typography>
+                {t('explorer.selectedCount', { count: selectedItems.length })}
+              </Typography>
+              <Button
+                onClick={() => setSelectedEntityIds(new Set())}
+                size="small"
+              >
+                {t('explorer.clearSelection')}
+              </Button>
+              <Button
+                onClick={() => setAgentSelection([...selectedItems])}
+                size="small"
+                variant="contained"
+              >
+                {t('explorer.sendToAgentConversation')}
+              </Button>
+            </>
+          )}
+          {selectionMode && (
+            <Typography variant="caption">
+              {t('explorer.selectionLimit', { count: maximumAgentSelection })}
+            </Typography>
+          )}
+        </Box>
+        <Box sx={{ alignItems: 'center', display: 'flex' }}>
+          <Button
+            onClick={() =>
+              selectionMode ? exitSelectionMode() : setSelectionMode(true)
+            }
+            size="small"
           >
-            <SettingsIcon />
-          </IconButton>
-        </Tooltip>
+            {t(
+              selectionMode
+                ? 'explorer.exitSelection'
+                : 'explorer.selectEntities',
+            )}
+          </Button>
+          <Tooltip title={t('explorer.columnPreferences')}>
+            <IconButton
+              aria-label={t('explorer.columnPreferences')}
+              onClick={() => setColumnPreferencesOpen(true)}
+            >
+              <SettingsIcon />
+            </IconButton>
+          </Tooltip>
+        </Box>
       </Box>
       <TableContainer
         ref={tableContainerRef}
@@ -780,12 +905,14 @@ export const ExplorerResultsTable = ({
                         : resultColumnCellSx(header.column.id)
                     }
                   >
-                    {header.isPlaceholder
-                      ? null
-                      : flexRender(
-                          header.column.columnDef.header,
-                          header.getContext(),
-                        )}
+                    {header.column.id === 'select'
+                      ? selectionHeader
+                      : header.isPlaceholder
+                        ? null
+                        : flexRender(
+                            header.column.columnDef.header,
+                            header.getContext(),
+                          )}
                   </TableCell>
                 ))}
               </TableRow>
@@ -844,10 +971,12 @@ export const ExplorerResultsTable = ({
                           : resultColumnCellSx(cell.column.id)
                       }
                     >
-                      {flexRender(
-                        cell.column.columnDef.cell,
-                        cell.getContext(),
-                      )}
+                      {cell.column.id === 'select'
+                        ? selectionCheckbox(row.original)
+                        : flexRender(
+                            cell.column.columnDef.cell,
+                            cell.getContext(),
+                          )}
                     </TableCell>
                   ))}
                 </TableRow>
@@ -883,6 +1012,17 @@ export const ExplorerResultsTable = ({
           publishing={publish.isPending}
           unpublish={() => unpublish.mutate(activeActionEntity.id)}
           unpublishing={unpublish.isPending}
+        />
+      )}
+      {agentSelection && (
+        <SendSelectedToAgentDialog
+          blueprintName={blueprint.blueprint.name}
+          entities={agentSelection}
+          onClose={() => setAgentSelection(null)}
+          onSuccess={() => {
+            setAgentSelection(null);
+            exitSelectionMode();
+          }}
         />
       )}
       <ExplorerColumnPreferencesDialog
