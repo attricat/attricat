@@ -27,6 +27,46 @@ pub(super) struct LinkInput {
     state: Value,
 }
 
+fn valid_attribute_filter(filter: &Value) -> bool {
+    filter.as_object().is_some_and(|filter| {
+        !filter
+            .keys()
+            .any(|key| !["field", "operator", "value"].contains(&key.as_str()))
+            && filter
+                .get("field")
+                .and_then(Value::as_str)
+                .is_some_and(|field| !field.is_empty())
+            && matches!(
+                filter.get("operator").and_then(Value::as_str),
+                Some("eq" | "contains" | "starts_with" | "gt" | "gte" | "lt" | "lte")
+            )
+            && filter
+                .get("value")
+                .is_some_and(|value| value.is_string() || value.is_number() || value.is_boolean())
+    })
+}
+
+fn valid_relationship_facet(facet: &Value) -> bool {
+    facet.as_object().is_some_and(|facet| {
+        !facet
+            .keys()
+            .any(|key| !["field", "selectedIds", "targetBlueprint"].contains(&key.as_str()))
+            && facet
+                .get("field")
+                .and_then(Value::as_str)
+                .is_some_and(|field| !field.is_empty())
+            && facet.get("selectedIds").is_none_or(|ids| {
+                ids.as_array().is_some_and(|ids| {
+                    ids.len() <= 100
+                        && ids
+                            .iter()
+                            .all(|id| id.as_str().is_some_and(|id| Uuid::parse_str(id).is_ok()))
+                })
+            })
+            && facet.get("targetBlueprint").is_none_or(Value::is_string)
+    })
+}
+
 fn validate_state(kind: &str, state: &Value) -> Result<(), ApiError> {
     if kind != "explorer_search" {
         return Err(ApiError::invalid_input(
@@ -68,24 +108,7 @@ fn validate_state(kind: &str, state: &Value) -> Result<(), ApiError> {
         let filters = filters.as_array().ok_or_else(|| {
             ApiError::invalid_input("attributeFilters must be an array".to_owned())
         })?;
-        if filters.len() > 20
-            || filters.iter().any(|f| {
-                f.as_object().is_none_or(|f| {
-                    f.keys()
-                        .any(|k| !["field", "operator", "value"].contains(&k.as_str()))
-                        || f.get("field")
-                            .and_then(Value::as_str)
-                            .is_none_or(str::is_empty)
-                        || !matches!(
-                            f.get("operator").and_then(Value::as_str),
-                            Some("eq" | "contains" | "starts_with" | "gt" | "gte" | "lt" | "lte")
-                        )
-                        || !f
-                            .get("value")
-                            .is_some_and(|v| v.is_string() || v.is_number() || v.is_boolean())
-                })
-            })
-        {
+        if filters.len() > 20 || !filters.iter().all(valid_attribute_filter) {
             return Err(ApiError::invalid_input(
                 "invalid attributeFilters".to_owned(),
             ));
@@ -95,27 +118,7 @@ fn validate_state(kind: &str, state: &Value) -> Result<(), ApiError> {
         let facets = facets.as_array().ok_or_else(|| {
             ApiError::invalid_input("relationshipFacets must be an array".to_owned())
         })?;
-        if facets.len() > 20
-            || facets.iter().any(|f| {
-                f.as_object().is_none_or(|f| {
-                    f.keys()
-                        .any(|k| !["field", "selectedIds", "targetBlueprint"].contains(&k.as_str()))
-                        || f.get("field")
-                            .and_then(Value::as_str)
-                            .is_none_or(str::is_empty)
-                        || f.get("selectedIds").is_some_and(|ids| {
-                            ids.as_array().is_none_or(|ids| {
-                                ids.len() > 100
-                                    || ids.iter().any(|id| {
-                                        id.as_str().is_none_or(|id| Uuid::parse_str(id).is_err())
-                                    })
-                            })
-                        })
-                        || f.get("targetBlueprint")
-                            .is_some_and(|v| v.as_str().is_none())
-                })
-            })
-        {
+        if facets.len() > 20 || !facets.iter().all(valid_relationship_facet) {
             return Err(ApiError::invalid_input(
                 "invalid relationshipFacets".to_owned(),
             ));
@@ -298,4 +301,33 @@ pub(super) async fn delete(
         return Err(ApiError::not_found("saved view"));
     }
     Ok(StatusCode::NO_CONTENT)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde_json::json;
+
+    #[test]
+    fn saved_search_filter_validation_preserves_optional_fields_and_limits() {
+        let state = json!({
+            "blueprint": "product",
+            "attributeFilters": [{"field": "name", "operator": "contains", "value": "shoe"}],
+            "relationshipFacets": [{"field": "brand", "selectedIds": [Uuid::new_v4()]}],
+        });
+        assert!(validate_state("explorer_search", &state).is_ok());
+        assert!(valid_relationship_facet(&json!({"field": "brand"})));
+        assert!(!valid_attribute_filter(
+            &json!({"field": "name", "operator": "eq"})
+        ));
+        assert!(!valid_relationship_facet(
+            &json!({"field": "brand", "selectedIds": ["invalid"]})
+        ));
+        assert!(!valid_relationship_facet(
+            &json!({"field": "brand", "selectedIds": "invalid"})
+        ));
+        assert!(!valid_relationship_facet(
+            &json!({"field": "brand", "unexpected": true})
+        ));
+    }
 }

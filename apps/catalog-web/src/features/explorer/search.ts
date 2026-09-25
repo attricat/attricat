@@ -54,6 +54,19 @@ export const inlineExplorerSearch = (
   return state;
 };
 
+export const inlineExplorerSearchParams = (search: ExplorerSearch) => {
+  const params = new URLSearchParams();
+  for (const [key, value] of Object.entries(inlineExplorerSearch(search))) {
+    if (value !== undefined) {
+      params.set(
+        key,
+        typeof value === 'object' ? JSON.stringify(value) : String(value),
+      );
+    }
+  }
+  return params;
+};
+
 export const parseExplorerSearch = (
   input: Record<string, unknown>,
 ): ExplorerSearch => explorerSearchSchema.parse(input);

@@ -1,7 +1,24 @@
 import { describe, expect, it } from 'vitest';
-import { parseExplorerSearch } from './search';
+import { inlineExplorerSearchParams, parseExplorerSearch } from './search';
 
 describe('parseExplorerSearch', () => {
+  it('serializes inline links without saved-view references', () => {
+    const params = inlineExplorerSearchParams({
+      blueprint: 'product',
+      allVersions: false,
+      sourceView: 'b67f5d16-d2be-4669-9870-b5a73282a26e',
+      sort: { field: 'name', direction: 'asc' },
+      attributeFilters: [{ field: 'price', operator: 'gte', value: 100 }],
+    });
+    expect(params.get('blueprint')).toBe('product');
+    expect(params.get('allVersions')).toBe('false');
+    expect(params.get('sort')).toBe('{"field":"name","direction":"asc"}');
+    expect(params.get('attributeFilters')).toBe(
+      '[{"field":"price","operator":"gte","value":100}]',
+    );
+    expect(params.has('sourceView')).toBe(false);
+  });
+
   it('accepts saved-view references and drops malformed identifiers', () => {
     const id = 'b67f5d16-d2be-4669-9870-b5a73282a26e';
     expect(

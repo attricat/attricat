@@ -15,7 +15,10 @@ import {
 } from '@mui/material';
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { inlineExplorerSearch, type ExplorerSearch } from '../explorer/search';
+import {
+  inlineExplorerSearchParams,
+  type ExplorerSearch,
+} from '../explorer/search';
 import {
   createSavedView,
   createViewStateLink,
@@ -132,7 +135,6 @@ export const SavedSearchActions = ({
     setBusy(true);
     setError('');
     try {
-      const inline = inlineExplorerSearch(search);
       const url = new URL(window.location.href);
       if (
         savedView &&
@@ -141,15 +143,7 @@ export const SavedSearchActions = ({
         url.search = `?savedView=${savedView.id}`;
       } else {
         // TanStack Router's default JSON query serialization matches Explorer's URL format.
-        const params = new URLSearchParams();
-        Object.entries(inline).forEach(([key, value]) => {
-          if (value !== undefined)
-            params.set(
-              key,
-              typeof value === 'object' ? JSON.stringify(value) : String(value),
-            );
-        });
-        url.search = params.toString();
+        url.search = inlineExplorerSearchParams(search).toString();
         if (url.href.length > maximumInlineLinkLength) {
           const view = await createViewStateLink(search);
           url.search = `?viewState=${view.id}`;
