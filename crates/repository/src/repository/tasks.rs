@@ -6,10 +6,21 @@ use sqlx::{Postgres, Transaction};
 use thiserror::Error;
 use uuid::Uuid;
 
-use super::CatalogRepository;
+use super::{CatalogRepository, RepositoryError};
 use crate::task_queue::{
     ParseTaskKindError, TaskInsert, TaskKind, TaskStatus, TaskValidationError,
 };
+
+/// Workspace-scoped aggregate diagnostics; never includes task payloads or errors.
+#[derive(Debug, serde::Serialize, sqlx::FromRow)]
+pub struct BackgroundProcessingStatus {
+    pub kind: String,
+    pub queued: i64,
+    pub running: i64,
+    pub failed: i64,
+    pub expired_leases: i64,
+    pub oldest_due_seconds: Option<f64>,
+}
 
 const MAX_LEASE_OWNER_BYTES: usize = 128;
 const MAX_ERROR_CODE_BYTES: usize = 128;
@@ -389,6 +400,30 @@ impl CatalogRepository {
 
     pub async fn task_summary(&self, task_id: Uuid) -> Result<Option<TaskSummary>, TaskError> {
         Ok(sqlx::query_as("SELECT id, workspace_id, kind, subject_id, generation, status, attempts, failures, max_failures, available_at, created_at, completed_at, failed_at, cancelled_at, last_error_code FROM tasks WHERE id = $1").bind(task_id).fetch_optional(&self.pool).await?)
+    }
+
+    /// Read-only diagnostics for a trusted request workspace, not global worker metrics.
+    /// Expired leases are a subset of running tasks, not an additional task count.
+    pub async fn background_processing_status_for_workspace(
+        &self,
+        workspace_id: Uuid,
+    ) -> Result<Vec<BackgroundProcessingStatus>, RepositoryError> {
+        Ok(sqlx::query_as(
+            r#"SELECT kind,
+                count(*) FILTER (WHERE status = 'queued') AS queued,
+                count(*) FILTER (WHERE status = 'leased') AS running,
+                count(*) FILTER (WHERE status = 'dead_letter') AS failed,
+                count(*) FILTER (WHERE status = 'leased' AND lease_until < now()) AS expired_leases,
+                extract(epoch FROM (now() - min(available_at) FILTER (
+                    WHERE status = 'queued' AND available_at <= now()
+                )))::float8 AS oldest_due_seconds
+            FROM tasks
+            WHERE workspace_id = $1 AND status IN ('queued', 'leased', 'dead_letter')
+            GROUP BY kind ORDER BY kind"#,
+        )
+        .bind(workspace_id)
+        .fetch_all(&self.pool)
+        .await?)
     }
 
     /// Aggregate, payload-free process metrics for the registered worker kinds.

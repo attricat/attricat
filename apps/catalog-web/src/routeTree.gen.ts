@@ -24,6 +24,7 @@ import { Route as LoginIndexRouteImport } from './routes/login/index'
 import { Route as LoginIdentifierRouteImport } from './routes/login/$identifier'
 import { Route as ManageIndexRouteImport } from './routes/manage/index'
 import { Route as ManageAuditLogRouteImport } from './routes/manage/audit-log'
+import { Route as ManageBackgroundProcessingRouteImport } from './routes/manage/background-processing'
 import { Route as ManageDataHealthRouteImport } from './routes/manage/data-health'
 import { Route as ManageExportsRouteImport } from './routes/manage/exports'
 import { Route as PasswordResetIndexRouteImport } from './routes/password-reset/index'
@@ -141,6 +142,12 @@ const ManageAuditLogRoute = ManageAuditLogRouteImport.update({
   path: '/manage/audit-log',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ManageBackgroundProcessingRoute =
+  ManageBackgroundProcessingRouteImport.update({
+    id: '/manage/background-processing',
+    path: '/manage/background-processing',
+    getParentRoute: () => rootRouteImport,
+  } as any)
 const ManageDataHealthRoute = ManageDataHealthRouteImport.update({
   id: '/manage/data-health',
   path: '/manage/data-health',
@@ -377,6 +384,7 @@ export interface FileRoutesByFullPath {
   '/invitations/accept': typeof InvitationsAcceptRoute
   '/login/$identifier': typeof LoginIdentifierRoute
   '/manage/audit-log': typeof ManageAuditLogRoute
+  '/manage/background-processing': typeof ManageBackgroundProcessingRoute
   '/manage/data-health': typeof ManageDataHealthRoute
   '/manage/exports': typeof ManageExportsRoute
   '/password-reset/confirm': typeof PasswordResetConfirmRoute
@@ -432,6 +440,7 @@ export interface FileRoutesByTo {
   '/invitations/accept': typeof InvitationsAcceptRoute
   '/login/$identifier': typeof LoginIdentifierRoute
   '/manage/audit-log': typeof ManageAuditLogRoute
+  '/manage/background-processing': typeof ManageBackgroundProcessingRoute
   '/manage/data-health': typeof ManageDataHealthRoute
   '/manage/exports': typeof ManageExportsRoute
   '/password-reset/confirm': typeof PasswordResetConfirmRoute
@@ -489,6 +498,7 @@ export interface FileRoutesById {
   '/invitations/accept': typeof InvitationsAcceptRoute
   '/login/$identifier': typeof LoginIdentifierRoute
   '/manage/audit-log': typeof ManageAuditLogRoute
+  '/manage/background-processing': typeof ManageBackgroundProcessingRoute
   '/manage/data-health': typeof ManageDataHealthRoute
   '/manage/exports': typeof ManageExportsRoute
   '/password-reset/confirm': typeof PasswordResetConfirmRoute
@@ -549,6 +559,7 @@ export interface FileRouteTypes {
     | '/invitations/accept'
     | '/login/$identifier'
     | '/manage/audit-log'
+    | '/manage/background-processing'
     | '/manage/data-health'
     | '/manage/exports'
     | '/password-reset/confirm'
@@ -604,6 +615,7 @@ export interface FileRouteTypes {
     | '/invitations/accept'
     | '/login/$identifier'
     | '/manage/audit-log'
+    | '/manage/background-processing'
     | '/manage/data-health'
     | '/manage/exports'
     | '/password-reset/confirm'
@@ -660,6 +672,7 @@ export interface FileRouteTypes {
     | '/invitations/accept'
     | '/login/$identifier'
     | '/manage/audit-log'
+    | '/manage/background-processing'
     | '/manage/data-health'
     | '/manage/exports'
     | '/password-reset/confirm'
@@ -718,6 +731,7 @@ export interface RootRouteChildren {
   EntitiesNewRoute: typeof EntitiesNewRoute
   InvitationsAcceptRoute: typeof InvitationsAcceptRoute
   ManageAuditLogRoute: typeof ManageAuditLogRoute
+  ManageBackgroundProcessingRoute: typeof ManageBackgroundProcessingRoute
   ManageDataHealthRoute: typeof ManageDataHealthRoute
   ManageExportsRoute: typeof ManageExportsRoute
   PasswordResetConfirmRoute: typeof PasswordResetConfirmRoute
@@ -859,6 +873,13 @@ declare module '@tanstack/react-router' {
       path: '/manage/audit-log'
       fullPath: '/manage/audit-log'
       preLoaderRoute: typeof ManageAuditLogRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/manage/background-processing': {
+      id: '/manage/background-processing'
+      path: '/manage/background-processing'
+      fullPath: '/manage/background-processing'
+      preLoaderRoute: typeof ManageBackgroundProcessingRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/manage/data-health': {
@@ -1239,6 +1260,7 @@ const rootRouteChildren: RootRouteChildren = {
   EntitiesNewRoute: EntitiesNewRoute,
   InvitationsAcceptRoute: InvitationsAcceptRoute,
   ManageAuditLogRoute: ManageAuditLogRoute,
+  ManageBackgroundProcessingRoute: ManageBackgroundProcessingRoute,
   ManageDataHealthRoute: ManageDataHealthRoute,
   ManageExportsRoute: ManageExportsRoute,
   PasswordResetConfirmRoute: PasswordResetConfirmRoute,

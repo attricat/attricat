@@ -41,7 +41,8 @@
     "dashboard": "Panel",
     "manage": "Zarządzanie",
     "signOut": "Wyloguj się",
-    "reusableAttributes": "Atrybuty wielokrotnego użytku"
+    "reusableAttributes": "Atrybuty wielokrotnego użytku",
+    "backgroundProcessing": "Przetwarzanie w tle"
   },
   "auth": {
     "signIn": "Zaloguj się",
@@ -644,7 +645,8 @@
     "extensionsDescription": "Zarządzaj zainstalowanymi integracjami i ich uprawnieniami.",
     "workflowsDescription": "Twórz i bezpiecznie obsługuj wersjonowane definicje przepływów pracy.",
     "rulesDescription": "Twórz i obsługuj katalogowe reguły jakości danych.",
-    "reusableAttributesDescription": "Twórz definicje, wersje i grupy atrybutów wielokrotnego użytku."
+    "reusableAttributesDescription": "Twórz definicje, wersje i grupy atrybutów wielokrotnego użytku.",
+    "backgroundProcessingDescription": "Monitoruj oczekujące, uruchomione i nieudane zadania API w tle."
   },
   "profile": {
     "never": "Nigdy",
@@ -905,5 +907,36 @@
     "collapse": "Zwiń Inspektor",
     "tools": "Narzędzia Inspektora",
     "status": "Inspektor · {{status}}"
+  },
+  "backgroundProcessing": {
+    "title": "Przetwarzanie w tle",
+    "description": "Zadania API w tle w tym obszarze roboczym. Przetwarzanie plików korzysta z osobnej kolejki i nie jest tutaj uwzględnione.",
+    "refresh": "Odśwież",
+    "refreshing": "Odświeżanie…",
+    "loading": "Ładowanie stanu przetwarzania w tle",
+    "forbidden": "Nie masz uprawnień do wyświetlania przetwarzania w tle w tym obszarze roboczym.",
+    "loadError": "Nie udało się wczytać stanu przetwarzania w tle. Spróbuj odświeżyć.",
+    "refreshError": "Odświeżenie nie powiodło się. Wyświetlany stan może być nieaktualny.",
+    "updated": "Ostatnia aktualizacja: {{time}} · Odświeżanie co 30 sekund",
+    "failures": "Niektóre zadania nie powiodły się i nie zostaną automatycznie ponowione. Sprawdź odpowiednią historię uruchomień lub skontaktuj się z administratorem.",
+    "expiredWarning": "Niektóre uruchomione zadania mają wygasłe dzierżawy. Mogły zostać przerwane i oczekują na odzyskanie przez proces roboczy.",
+    "empty": "Brak oczekujących, uruchomionych lub nieudanych zadań API w tym obszarze roboczym.",
+    "kind": "Typ zadania",
+    "queued": "W kolejce",
+    "running": "Uruchomione (dzierżawione)",
+    "failed": "Nieudane (końcowe)",
+    "expired": "Wygasłe dzierżawy",
+    "oldestDue": "Najdłuższe oczekiwanie",
+    "seconds": "{{value}} s",
+    "explanation": "Kolejka obejmuje zadania zaplanowane i ponowne próby. Najdłuższe oczekiwanie to czas od gotowości zadania do uruchomienia, bez zadań zaplanowanych na przyszłość. Wygasłe dzierżawy są uwzględnione w uruchomionych zadaniach. Jest to stan kolejki, a nie test dostępności procesów roboczych. Zadania zakończone i anulowane są pomijane.",
+    "kinds": {
+      "agent": "Uruchomienia agentów",
+      "event": "Dostarczanie zdarzeń",
+      "workflow": "Uruchomienia przepływów pracy",
+      "rule": "Uruchomienia reguł",
+      "migration": "Partie migracji schematów",
+      "extension": "Operacje rozszerzeń",
+      "other": "Inne zadania"
+    }
   }
 }

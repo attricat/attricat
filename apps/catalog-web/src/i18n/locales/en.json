@@ -41,7 +41,8 @@
     "dashboard": "Dashboard",
     "manage": "Manage",
     "signOut": "Sign out",
-    "reusableAttributes": "Reusable attributes"
+    "reusableAttributes": "Reusable attributes",
+    "backgroundProcessing": "Background processing"
   },
   "auth": {
     "signIn": "Sign in",
@@ -630,7 +631,8 @@
     "extensionsDescription": "Manage installed integrations and their permissions.",
     "workflowsDescription": "Create and safely operate versioned workflow definitions.",
     "rulesDescription": "Author and operate catalog-owned data quality rules.",
-    "reusableAttributesDescription": "Create reusable attribute definitions, revisions, and groups."
+    "reusableAttributesDescription": "Create reusable attribute definitions, revisions, and groups.",
+    "backgroundProcessingDescription": "Monitor queued, running, and failed API background tasks."
   },
   "profile": {
     "never": "Never",
@@ -885,5 +887,36 @@
     "collapse": "Collapse Inspector",
     "tools": "Inspector tools",
     "status": "Inspector · {{status}}"
+  },
+  "backgroundProcessing": {
+    "title": "Background processing",
+    "description": "API background tasks in this workspace. File processing is a separate queue and is not included here.",
+    "refresh": "Refresh",
+    "refreshing": "Refreshing…",
+    "loading": "Loading background processing status",
+    "forbidden": "You are not authorized to view background processing in this workspace.",
+    "loadError": "Could not load background processing status. Try refreshing.",
+    "refreshError": "Refresh failed. The displayed status may be outdated.",
+    "updated": "Last updated at {{time}} · Refreshes every 30 seconds",
+    "failures": "Some tasks failed and will not retry automatically. Check the corresponding run history or contact an administrator.",
+    "expiredWarning": "Some running tasks have expired leases. They may have been interrupted and are awaiting worker recovery.",
+    "empty": "No queued, running, or failed API tasks in this workspace.",
+    "kind": "Task type",
+    "queued": "Queued",
+    "running": "Running (leased)",
+    "failed": "Failed (dead letter)",
+    "expired": "Expired leases",
+    "oldestDue": "Oldest due wait",
+    "seconds": "{{value}} s",
+    "explanation": "Queued includes scheduled tasks and retries. Oldest due wait measures time since a queued task became eligible to run, excluding future tasks. Expired leases are included in Running. This is queue status, not a worker availability check. Completed and cancelled tasks are excluded.",
+    "kinds": {
+      "agent": "Agent runs",
+      "event": "Event deliveries",
+      "workflow": "Workflow runs",
+      "rule": "Rule runs",
+      "migration": "Blueprint migration batches",
+      "extension": "Extension operations",
+      "other": "Other tasks"
+    }
   }
 }

@@ -1,6 +1,7 @@
 import {
   AgentIcon,
   AuditLogIcon,
+  BackgroundProcessingIcon,
   BlueprintIcon,
   ContextIcon,
   DataHealthIcon,
@@ -16,6 +17,7 @@ import {
 
 type NavigationCapabilities = {
   audit_read?: boolean;
+  data_health_read?: boolean;
   extensions_read?: boolean;
   members_manage?: boolean;
   roles_manage?: boolean;
@@ -30,6 +32,7 @@ export const navigationRoutes = {
   blueprints: '/manage/blueprints',
   contexts: '/manage/contexts',
   dataHealth: '/manage/data-health',
+  backgroundProcessing: '/manage/background-processing',
   explore: '/',
   extensions: '/manage/extensions',
   extensionContributions: '/extensions',
@@ -87,6 +90,12 @@ export const managementNavigationItems = [
     to: navigationRoutes.dataHealth,
   },
   {
+    descriptionKey: 'management.backgroundProcessingDescription',
+    icon: BackgroundProcessingIcon,
+    labelKey: 'navigation.backgroundProcessing',
+    to: navigationRoutes.backgroundProcessing,
+  },
+  {
     descriptionKey: 'management.workspaceDescription',
     icon: WorkspaceIcon,
     labelKey: 'navigation.workspaceManagement',
@@ -135,6 +144,8 @@ export const getVisibleManagementNavigationItems = (
         capabilities?.tokens_manage,
       );
     }
+    if (item.to === navigationRoutes.backgroundProcessing)
+      return capabilities?.data_health_read;
     if (item.to === navigationRoutes.auditLog) return capabilities?.audit_read;
     if (item.to === navigationRoutes.extensions)
       return capabilities?.extensions_read;

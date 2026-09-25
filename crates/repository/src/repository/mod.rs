@@ -102,7 +102,7 @@ pub use solution_packs::{
     CreateSolutionPackPlanRequest, SolutionPackApplication, SolutionPackApplicationSummary,
     SolutionPackCheckRun, SolutionPackCheckRunSummary, SolutionPackPlan,
 };
-pub use tasks::{ClaimedTask, TaskError, TaskSummary};
+pub use tasks::{BackgroundProcessingStatus, ClaimedTask, TaskError, TaskSummary};
 pub use tokens::PersonalApiToken;
 pub use workflow_runs::WorkflowRun;
 pub use workflow_runs::{ClaimedWorkflowRun, WorkflowActionResult};

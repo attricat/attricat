@@ -15,6 +15,18 @@ use std::time::Duration;
 
 const MAX_DATA_HEALTH_CACHE_ENTRIES: usize = 256;
 
+pub(super) async fn background_processing_status(
+    State(state): State<AppState>,
+    ActiveWorkspace(workspace_id): ActiveWorkspace,
+) -> Result<Json<Vec<crate::repository::BackgroundProcessingStatus>>, ApiError> {
+    Ok(Json(
+        state
+            .repository
+            .background_processing_status_for_workspace(workspace_id)
+            .await?,
+    ))
+}
+
 /// Liveness only establishes that this process can serve HTTP. It never
 /// probes dependencies, so orchestration does not restart a healthy process
 /// during a database or object-store outage.

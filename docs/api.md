@@ -148,6 +148,7 @@ password, cookie, CSRF, expiry, and revocation contract is documented in
 | `GET` | `/files/{file_id}/download` | Download the original through the API, with one safe byte range. |
 | `GET` | `/files/{file_id}/variants/{kind}/download` | Download a ready generated variant through the API. |
 | `GET` | `/data-health/summary` | Read aggregate data-health metrics. |
+| `GET` | `/data-health/background-processing` | Read workspace-scoped API task queue counts and lag (`data_health.read`). |
 | `GET` | `/data-health/blueprints` | Read blueprint health metrics. |
 | `GET` | `/data-health/freshness` | Read value freshness metrics. |
 | `GET` | `/data-health/completeness` | Read completeness metrics. |
@@ -351,3 +352,24 @@ reaches a repository write.
 ## Workflow run operations
 
 `GET /workflow-runs` lists workspace-scoped run diagnostics and requires `workflows.read`. `POST /workflow-runs/{run_id}/replay` requeues only a terminal dead-letter run and requires `workflows.manage`. Neither endpoint exposes internal domain-event payloads.
+
+## Background processing status
+
+`GET /data-health/background-processing` requires `data_health.read` and returns
+uncached, payload-free aggregates for the authenticated workspace's API task queue:
+
+```json
+[{"kind":"rule_run.v1","queued":2,"running":1,"failed":0,"expired_leases":0,"oldest_due_seconds":12.5}]
+```
+
+Only kinds with queued, leased, or dead-letter tasks appear; an empty queue returns
+`[]`. `queued` includes future scheduled retries. `running` counts leased tasks;
+`expired_leases` is the subset whose lease has expired, which can indicate interrupted
+work awaiting recovery. `failed` counts terminal dead-letter tasks. Completed and
+cancelled tasks are excluded. `oldest_due_seconds` measures time since the oldest
+currently due queued task's `available_at`, or is `null` if none is due. No task
+payloads, identifiers, or raw errors are returned. These counts do not establish
+worker availability. The separate file-processing queue is not included.
+
+The Manage **Background processing** page displays these metrics and refreshes
+every 30 seconds, with a manual refresh option.
