@@ -20,6 +20,7 @@ import { EntityContextPicker } from './components/EntityContextPicker';
 import { EntitySchemaSubheader } from './components/EntitySchemaSubheader';
 import { EntityExtensionDrawer } from './components/EntityExtensionDrawer';
 import { EntityPreviewToolbar } from './components/EntityPreviewToolbar';
+import { DeleteEntityDialog } from './components/DeleteEntityDialog';
 import {
   ExtensionOutlet,
   ExtensionPopoverOutlet,
@@ -61,6 +62,7 @@ export const EntityPreviewPage = ({
   const client = useQueryClient();
   const navigate = useNavigate();
   const [selectedContext, setSelectedContext] = useState('');
+  const [deleteOpen, setDeleteOpen] = useState(false);
   const contexts = useQuery({
     queryKey: contextQueryKeys.all(),
     queryFn: ({ signal }) => listContexts(signal),
@@ -235,6 +237,11 @@ export const EntityPreviewPage = ({
         showExtensions={Boolean(resolved.data && blueprint.data)}
         onDuplicate={() => duplicate.mutate()}
         duplicatePending={duplicate.isPending}
+        canDelete={
+          session.data?.capabilities?.entities_delete === true &&
+          Boolean(resolved.data)
+        }
+        onDelete={() => setDeleteOpen(true)}
         publication={publication}
         canPublish={session.data?.capabilities?.entities_publish === true}
         onPublish={() => selectedContextId && publish.mutate(selectedContextId)}
@@ -246,6 +253,16 @@ export const EntityPreviewPage = ({
           publish.isPending || publishAll.isPending || unpublish.isPending
         }
       />
+      {deleteOpen && (
+        <DeleteEntityDialog
+          entityId={entityId}
+          onClose={() => setDeleteOpen(false)}
+          onDeleted={() => {
+            setDeleteOpen(false);
+            void navigate({ to: '/' });
+          }}
+        />
+      )}
       <EntitySchemaSubheader
         entityId={entityId}
         name={blueprint.data?.blueprint.name}

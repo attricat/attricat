@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   createEntity,
+  deleteEntity,
   getBlueprintByCode,
   getBlueprintRevision,
   getEntityChanges,
@@ -95,6 +96,14 @@ describe('entity API client', () => {
     });
     await getEntityForm(entityId);
     expect(fetchMock).toHaveBeenCalledWith(`/api/v1/entities/${entityId}`);
+  });
+
+  it('soft-deletes via the entity DELETE endpoint without parsing a response body', async () => {
+    fetchMock.mockResolvedValue({ ok: true, status: 204 });
+    await expect(deleteEntity(entityId)).resolves.toBeUndefined();
+    expect(fetchMock).toHaveBeenCalledWith(`/api/entities/${entityId}`, {
+      method: 'DELETE',
+    });
   });
 
   it('uses the publication endpoint contracts', async () => {

@@ -171,6 +171,8 @@
     "createEntity": "Utwórz encję",
     "editEntity": "Edytuj encję",
     "duplicateEntity": "Duplikuj encję",
+    "deleteEntity": "Usuń encję",
+    "deleteEntityConfirmation": "Usunąć tę encję? Zniknie z wyników wyszukiwania i podglądów, ale jej historia zostanie zachowana.",
     "upgradeEntity": "Zaktualizuj encję",
     "chooseBlueprint": "Wybierz schemat",
     "blueprint": "Schemat",

@@ -61,6 +61,7 @@ import {
   type EntityPublicationStatus,
 } from '../entities/api';
 import { EntityIdPopover } from '../entities/components/EntityIdPopover';
+import { DeleteEntityDialog } from '../entities/components/DeleteEntityDialog';
 import { displayLabel } from '../entities/entity-display';
 import { AttributeValue } from '../views/components/values/AttributeValue';
 import { ExtensionPopoverOutlet } from '../extensions/ExtensionOutlet';
@@ -93,8 +94,10 @@ const resultColumnCellSx = (columnId: string): SxProps<Theme> =>
 const EntityActionsMenu = ({
   blueprintId,
   canPublish,
+  canDelete,
   entity,
   onClose,
+  onDelete,
   onSearchInfo,
   position,
   publication,
@@ -108,8 +111,10 @@ const EntityActionsMenu = ({
 }: {
   blueprintId: string;
   canPublish: boolean;
+  canDelete: boolean;
   entity: EntityItem;
   onClose: () => void;
+  onDelete: () => void;
   onSearchInfo: (entity: EntityItem) => void;
   position: { left: number; top: number } | null;
   publication: EntityPublicationStatus | undefined;
@@ -148,6 +153,16 @@ const EntityActionsMenu = ({
       >
         {t('entities.duplicateEntity')}
       </MenuItem>
+      {canDelete && (
+        <MenuItem
+          onClick={() => {
+            onClose();
+            onDelete();
+          }}
+        >
+          {t('entities.deleteEntity')}
+        </MenuItem>
+      )}
       {canPublish && publicationContextId && publication && (
         <>
           {publication.status === 'not_published' ? (
@@ -312,6 +327,7 @@ export const ExplorerResultsTable = ({
   publicationContextCode,
   publicationContextId,
   canPublish,
+  canDelete,
   relationshipSortAvailable = true,
   sort,
   totalCount,
@@ -327,6 +343,7 @@ export const ExplorerResultsTable = ({
   publicationContextCode: string;
   publicationContextId: string | undefined;
   canPublish: boolean;
+  canDelete: boolean;
   relationshipSortAvailable?: boolean;
   sort?: { field: string; direction: 'asc' | 'desc' };
   totalCount: number | null;
@@ -334,6 +351,7 @@ export const ExplorerResultsTable = ({
 }) => {
   const { t } = useTranslation();
   const [selectionMode, setSelectionMode] = useState(false);
+  const [deleteEntityId, setDeleteEntityId] = useState<string | null>(null);
   const [selectedEntityIds, setSelectedEntityIds] = useState<Set<string>>(
     () => new Set(),
   );
@@ -1031,8 +1049,10 @@ export const ExplorerResultsTable = ({
         <EntityActionsMenu
           blueprintId={blueprint.blueprint.id}
           canPublish={canPublish}
+          canDelete={canDelete}
           entity={activeActionEntity}
           onClose={() => setActionMenu(null)}
+          onDelete={() => setDeleteEntityId(activeActionEntity.id)}
           onSearchInfo={setSearchInfoEntity}
           position={actionMenu.position}
           publication={publicationsByEntityId.get(activeActionEntity.id)}
@@ -1043,6 +1063,20 @@ export const ExplorerResultsTable = ({
           duplicating={duplicate.isPending}
           unpublish={() => unpublish.mutate(activeActionEntity.id)}
           unpublishing={unpublish.isPending}
+        />
+      )}
+      {deleteEntityId && (
+        <DeleteEntityDialog
+          entityId={deleteEntityId}
+          onClose={() => setDeleteEntityId(null)}
+          onDeleted={() => {
+            setSelectedEntityIds((current) => {
+              const next = new Set(current);
+              next.delete(deleteEntityId);
+              return next;
+            });
+            setDeleteEntityId(null);
+          }}
         />
       )}
       {agentSelection && (

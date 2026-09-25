@@ -23,7 +23,7 @@ Applied attribute and relationship filters appear as removable pills below the s
 
 ## Work with an entity
 
-Open a result to inspect its values, schema revision, files, relationships, and change history. If you can edit the entity, save changes from its detail page. Read-only fields remain visible but are managed by a system integration rather than the browser.
+Open a result to inspect its values, schema revision, files, relationships, and change history. If you can edit the entity, save changes from its detail page. Read-only fields remain visible but are managed by a system integration rather than the browser. Users with `entities.delete` permission can delete an entity from its preview toolbar or an Explorer result's actions menu. Deletion requires confirmation, hides the entity from normal reads and search results, and retains its history.
 
 When the entity's blueprint has a newer published revision, Attricat identifies the record as outdated. Review the migration before upgrading so changes to fields or validation are deliberate.
 

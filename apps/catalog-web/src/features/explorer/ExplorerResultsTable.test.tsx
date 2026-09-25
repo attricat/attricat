@@ -30,6 +30,10 @@ vi.mock('@tanstack/react-virtual', () => ({
     measureElement: vi.fn(),
   }),
 }));
+vi.mock('../entities/api', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../entities/api')>()),
+  deleteEntity: vi.fn(),
+}));
 vi.mock('../extensions/api', async (importOriginal) => ({
   ...(await importOriginal<typeof import('../extensions/api')>()),
   getExtensionRuntime: vi.fn().mockResolvedValue({ contributions: [] }),
@@ -43,6 +47,7 @@ vi.mock('../agents/api', () => ({
 }));
 
 import { createConversation, sendMessage } from '../agents/api';
+import { deleteEntity } from '../entities/api';
 
 const blueprint = {
   blueprint: {
@@ -75,7 +80,7 @@ const secondItem: EntityItem = {
   is_sample: false,
 };
 
-const renderTable = (items = [item, secondItem]) => {
+const renderTable = (items = [item, secondItem], canDelete = false) => {
   const queryClient = new QueryClient({
     defaultOptions: { queries: { retry: false, staleTime: Infinity } },
   });
@@ -88,6 +93,7 @@ const renderTable = (items = [item, secondItem]) => {
         <ExplorerResultsTable
           blueprint={blueprint}
           canPublish={false}
+          canDelete={canDelete}
           hasNextPage={false}
           isFetching={false}
           isFetchingNextPage={false}
@@ -109,6 +115,57 @@ describe('ExplorerResultsTable', () => {
     renderTable([item]);
     expect(screen.getByText('Sample')).toBeTruthy();
     expect(screen.queryByRole('checkbox')).toBeNull();
+  });
+
+  it('only offers deletion with permission and confirms before deleting', async () => {
+    const user = userEvent.setup();
+    const { unmount } = renderTable([item]);
+    await user.click(
+      screen.getByRole('button', { name: `Entity actions for ${item.id}` }),
+    );
+    expect(
+      screen.queryByRole('menuitem', { name: 'Delete entity' }),
+    ).toBeNull();
+    unmount();
+
+    vi.mocked(deleteEntity).mockResolvedValue(undefined);
+    renderTable([item], true);
+    await user.click(
+      screen.getByRole('button', { name: `Entity actions for ${item.id}` }),
+    );
+    await user.click(screen.getByRole('menuitem', { name: 'Delete entity' }));
+    expect(deleteEntity).not.toHaveBeenCalled();
+    await user.click(screen.getByRole('button', { name: 'Cancel' }));
+    expect(deleteEntity).not.toHaveBeenCalled();
+    await user.click(
+      screen.getByRole('button', { name: `Entity actions for ${item.id}` }),
+    );
+    await user.click(screen.getByRole('menuitem', { name: 'Delete entity' }));
+    await user.click(
+      within(screen.getByRole('dialog')).getByRole('button', {
+        name: 'Delete entity',
+      }),
+    );
+    await waitFor(() => expect(deleteEntity).toHaveBeenCalledWith(item.id));
+  });
+
+  it('keeps the confirmation open with an error when deletion fails', async () => {
+    const user = userEvent.setup();
+    vi.mocked(deleteEntity).mockRejectedValueOnce(
+      new Error('Cannot delete entity'),
+    );
+    renderTable([item], true);
+    await user.click(
+      screen.getByRole('button', { name: `Entity actions for ${item.id}` }),
+    );
+    await user.click(screen.getByRole('menuitem', { name: 'Delete entity' }));
+    await user.click(
+      within(screen.getByRole('dialog')).getByRole('button', {
+        name: 'Delete entity',
+      }),
+    );
+    expect(await screen.findByText('Cannot delete entity')).toBeTruthy();
+    expect(screen.getByRole('dialog')).toBeTruthy();
   });
 
   it('selects individual and loaded rows, clears and exits selection mode', async () => {

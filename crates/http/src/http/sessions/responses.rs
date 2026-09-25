@@ -43,6 +43,7 @@ pub(super) struct SessionCapabilities {
     rules_read: bool,
     rules_manage: bool,
     entities_publish: bool,
+    entities_delete: bool,
 }
 
 // Cookie issuance intentionally keeps the response inputs explicit at this boundary.
@@ -179,6 +180,10 @@ async fn session_capabilities(
         entities_publish: state
             .repository
             .is_authorized(user_id, workspace_id, "entities.publish", None, None)
+            .await?,
+        entities_delete: state
+            .repository
+            .is_authorized(user_id, workspace_id, "entities.delete", None, None)
             .await?,
     })
 }

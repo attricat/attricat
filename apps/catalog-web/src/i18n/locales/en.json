@@ -171,6 +171,8 @@
     "createEntity": "Create entity",
     "editEntity": "Edit entity",
     "duplicateEntity": "Duplicate entity",
+    "deleteEntity": "Delete entity",
+    "deleteEntityConfirmation": "Delete this entity? It will disappear from searches and previews, but its history will be retained.",
     "upgradeEntity": "Upgrade entity",
     "chooseBlueprint": "Choose blueprint",
     "blueprint": "Blueprint",

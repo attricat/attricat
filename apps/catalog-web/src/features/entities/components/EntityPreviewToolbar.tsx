@@ -1,5 +1,6 @@
 import CheckCircleOutlinedIcon from '@mui/icons-material/CheckCircleOutlined';
 import ContentCopyOutlinedIcon from '@mui/icons-material/ContentCopyOutlined';
+import DeleteOutlinedIcon from '@mui/icons-material/DeleteOutlined';
 import EditOutlinedIcon from '@mui/icons-material/EditOutlined';
 import HistoryOutlinedIcon from '@mui/icons-material/HistoryOutlined';
 import UpgradeOutlinedIcon from '@mui/icons-material/UpgradeOutlined';
@@ -19,6 +20,8 @@ type Props = {
   showExtensions: boolean;
   onDuplicate: () => void;
   duplicatePending: boolean;
+  canDelete: boolean;
+  onDelete: () => void;
   publication?: EntityPublicationStatus;
   canPublish: boolean;
   onPublish: () => void;
@@ -35,6 +38,8 @@ export const EntityPreviewToolbar = ({
   showExtensions,
   onDuplicate,
   duplicatePending,
+  canDelete,
+  onDelete,
   publication,
   canPublish,
   onPublish,
@@ -95,6 +100,17 @@ export const EntityPreviewToolbar = ({
             <CheckCircleOutlinedIcon color="success" fontSize="small" />
           </Tooltip>
         ))}
+      {canDelete && (
+        <Tooltip title={t('entities.deleteEntity')}>
+          <IconButton
+            aria-label={t('entities.deleteEntity')}
+            color="error"
+            onClick={onDelete}
+          >
+            <DeleteOutlinedIcon />
+          </IconButton>
+        </Tooltip>
+      )}
       <Box sx={{ flexGrow: 1 }} />
       {publication ? (
         <Tooltip

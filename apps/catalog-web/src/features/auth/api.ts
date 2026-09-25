@@ -22,6 +22,7 @@ const sessionSchema = z.object({
       rules_read: z.boolean().default(false),
       rules_manage: z.boolean().default(false),
       entities_publish: z.boolean().default(false),
+      entities_delete: z.boolean().default(false),
     })
     .optional(),
 });

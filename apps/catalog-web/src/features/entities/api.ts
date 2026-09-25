@@ -199,6 +199,14 @@ export const smartFillEntityForm = (
   });
 };
 
+export const deleteEntity = (id: string) =>
+  requestNoContent(
+    `/api/entities/${encodeURIComponent(uuidSchema.parse(id))}`,
+    {
+      method: 'DELETE',
+    },
+  );
+
 export const duplicateEntity = (id: string) =>
   request(
     `/api/v1/entities/${encodeURIComponent(uuidSchema.parse(id))}/duplicate`,

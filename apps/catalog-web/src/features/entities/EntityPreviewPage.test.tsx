@@ -1,29 +1,33 @@
 // @vitest-environment jsdom
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { render, screen, waitFor } from '@testing-library/react';
+import { render, screen, waitFor, within } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import '../../i18n';
 import { ToastProvider } from '../../components/ToastProvider';
 import { listContexts } from '../contexts/api';
 import { EntityPreviewPage } from './EntityPreviewPage';
 
-const { drawerRender, outletRender, popoverOutletRender } = vi.hoisted(() => ({
-  drawerRender: vi.fn(),
-  outletRender: vi.fn(),
-  popoverOutletRender: vi.fn(),
-}));
+const { drawerRender, outletRender, popoverOutletRender, navigate } =
+  vi.hoisted(() => ({
+    navigate: vi.fn(),
+    drawerRender: vi.fn(),
+    outletRender: vi.fn(),
+    popoverOutletRender: vi.fn(),
+  }));
 
 vi.mock('@tanstack/react-router', () => ({
   createLink: <T,>(component: T) => component,
   Link: ({ children }: { children: React.ReactNode }) => (
     <span>{children}</span>
   ),
-  useNavigate: () => vi.fn(),
+  useNavigate: () => navigate,
 }));
 
 vi.mock('./api', async (importOriginal) => ({
   ...(await importOriginal<typeof import('./api')>()),
   duplicateEntity: vi.fn(),
+  deleteEntity: vi.fn(),
   getBlueprintRevision: vi.fn(),
   getCurrentBlueprint: vi.fn(),
   getEntityPublications: vi.fn(),
@@ -62,6 +66,11 @@ vi.mock('../views/components/EntityView', () => ({
   }) => renderAttributeDecoration({ id: 'attribute-id', code: 'title' }),
 }));
 
+vi.mock('../auth/api', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../auth/api')>()),
+  currentSession: vi.fn().mockResolvedValue(null),
+}));
+
 vi.mock('../contexts/api', async (importOriginal) => ({
   ...(await importOriginal<typeof import('../contexts/api')>()),
   listContexts: vi.fn(),
@@ -86,9 +95,75 @@ const renderPage = (relationshipPickerToken?: string) => {
 
 describe('EntityPreviewPage', () => {
   beforeEach(async () => {
+    const { currentSession } = await import('../auth/api');
+    vi.mocked(currentSession).mockReset();
+    vi.mocked(currentSession).mockResolvedValue(null);
     const api = await import('./api');
     vi.mocked(api.getEntityPublications).mockResolvedValue([]);
   });
+  it('offers confirmed deletion only when permitted and navigates away afterwards', async () => {
+    const { currentSession } = await import('../auth/api');
+    const api = await import('./api');
+    const user = userEvent.setup();
+    vi.mocked(listContexts).mockResolvedValue([
+      {
+        id: '33333333-3333-4333-8333-333333333333',
+        code: 'default',
+        data: {},
+        parent_id: null,
+      },
+    ]);
+    vi.mocked(api.getResolvedEntityPreview).mockResolvedValue({
+      entity: {
+        id: '00000000-0000-4000-8000-000000000001',
+        blueprint_id: '22222222-2222-4222-8222-222222222222',
+        blueprint_version: 1,
+      },
+      values: {},
+    } as never);
+    vi.mocked(api.getBlueprintRevision).mockResolvedValue({
+      blueprint: {
+        id: '22222222-2222-4222-8222-222222222222',
+        name: 'Product',
+        code: 'product',
+        version: 1,
+        views: {},
+      },
+      attributes: [],
+    } as never);
+    vi.mocked(api.getCurrentBlueprint).mockResolvedValue({
+      blueprint: { version: 1 },
+    } as never);
+    vi.mocked(currentSession).mockResolvedValueOnce({
+      capabilities: { entities_delete: false },
+    } as never);
+    const { unmount } = renderPage();
+    await screen.findByText('Product');
+    expect(screen.queryByRole('button', { name: 'Delete entity' })).toBeNull();
+    unmount();
+
+    vi.mocked(currentSession).mockResolvedValueOnce({
+      capabilities: { entities_delete: true },
+    } as never);
+    vi.mocked(api.deleteEntity).mockResolvedValue(undefined);
+    renderPage();
+    await user.click(
+      await screen.findByRole('button', { name: 'Delete entity' }),
+    );
+    expect(api.deleteEntity).not.toHaveBeenCalled();
+    await user.click(
+      within(screen.getByRole('dialog')).getByRole('button', {
+        name: 'Delete entity',
+      }),
+    );
+    await waitFor(() =>
+      expect(api.deleteEntity).toHaveBeenCalledWith(
+        '00000000-0000-4000-8000-000000000001',
+      ),
+    );
+    await waitFor(() => expect(navigate).toHaveBeenCalledWith({ to: '/' }));
+  });
+
   it('returns a picker selection to its opener and closes the preview', () => {
     const postMessage = vi.fn();
     const close = vi.spyOn(window, 'close').mockImplementation(() => undefined);

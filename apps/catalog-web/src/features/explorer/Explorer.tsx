@@ -573,6 +573,9 @@ export const Explorer = ({
                   canPublish={
                     session.data?.capabilities?.entities_publish === true
                   }
+                  canDelete={
+                    session.data?.capabilities?.entities_delete === true
+                  }
                   hasNextPage={results.hasNextPage}
                   isFetching={results.isFetching}
                   isFetchingNextPage={results.isFetchingNextPage}
