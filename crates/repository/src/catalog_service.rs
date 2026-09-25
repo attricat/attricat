@@ -139,6 +139,10 @@ impl<'a> CatalogMutationService<'a> {
         self.repository.delete_entity(entity_id).await
     }
 
+    pub async fn duplicate_entity(&self, entity_id: Uuid) -> Result<Entity, RepositoryError> {
+        self.repository.duplicate_entity(entity_id).await
+    }
+
     pub async fn update_entity(
         &self,
         entity_id: Uuid,

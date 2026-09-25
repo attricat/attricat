@@ -199,6 +199,13 @@ export const smartFillEntityForm = (
   });
 };
 
+export const duplicateEntity = (id: string) =>
+  request(
+    `/api/v1/entities/${encodeURIComponent(uuidSchema.parse(id))}/duplicate`,
+    entitySchema,
+    { method: 'POST' },
+  );
+
 export const updateEntity = (
   id: string,
   input: z.input<typeof updateEntityRequestSchema>,

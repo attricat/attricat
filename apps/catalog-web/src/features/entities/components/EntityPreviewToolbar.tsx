@@ -1,4 +1,5 @@
 import CheckCircleOutlinedIcon from '@mui/icons-material/CheckCircleOutlined';
+import ContentCopyOutlinedIcon from '@mui/icons-material/ContentCopyOutlined';
 import EditOutlinedIcon from '@mui/icons-material/EditOutlined';
 import HistoryOutlinedIcon from '@mui/icons-material/HistoryOutlined';
 import UpgradeOutlinedIcon from '@mui/icons-material/UpgradeOutlined';
@@ -16,6 +17,8 @@ type Props = {
   onOpenExtensions: () => void;
   schemaOutdated?: boolean;
   showExtensions: boolean;
+  onDuplicate: () => void;
+  duplicatePending: boolean;
   publication?: EntityPublicationStatus;
   canPublish: boolean;
   onPublish: () => void;
@@ -30,6 +33,8 @@ export const EntityPreviewToolbar = ({
   onOpenExtensions,
   schemaOutdated,
   showExtensions,
+  onDuplicate,
+  duplicatePending,
   publication,
   canPublish,
   onPublish,
@@ -57,6 +62,17 @@ export const EntityPreviewToolbar = ({
         >
           <HistoryOutlinedIcon />
         </RouterIconButton>
+      </Tooltip>
+      <Tooltip title={t('entities.duplicateEntity')}>
+        <span>
+          <IconButton
+            aria-label={t('entities.duplicateEntity')}
+            disabled={duplicatePending}
+            onClick={onDuplicate}
+          >
+            <ContentCopyOutlinedIcon />
+          </IconButton>
+        </span>
       </Tooltip>
       {schemaOutdated !== undefined &&
         (schemaOutdated ? (

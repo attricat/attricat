@@ -200,6 +200,72 @@ impl CatalogRepository {
         Ok((entity, changes, event))
     }
 
+    pub async fn duplicate_entity(&self, entity_id: Uuid) -> Result<Entity, RepositoryError> {
+        let source = self
+            .get_entity(entity_id)
+            .await?
+            .ok_or(RepositoryError::NotFound("entity"))?;
+        let mut file_values = Vec::new();
+        let values = self
+            .form_values(entity_id)
+            .await?
+            .into_iter()
+            .filter_map(|value| match value {
+                FormAttributeValue::Scalar {
+                    attribute_code,
+                    context_id,
+                    value,
+                } => Some(NewAttributeValue::Scalar {
+                    attribute_id: None,
+                    attribute_code: Some(attribute_code),
+                    context_id,
+                    value,
+                }),
+                FormAttributeValue::Relationship {
+                    attribute_code,
+                    context_id,
+                    target_entity_id,
+                } => Some(NewAttributeValue::Relationship {
+                    attribute_id: None,
+                    attribute_code: Some(attribute_code),
+                    context_id,
+                    target_entity_id,
+                }),
+                FormAttributeValue::File {
+                    attribute_code,
+                    context_id,
+                    files,
+                } => {
+                    file_values.push((attribute_code, context_id, files));
+                    None
+                }
+            })
+            .collect();
+        let system_tags = source
+            .system_tags
+            .into_iter()
+            .filter(|tag| tag != "attricat.sample")
+            .collect();
+        let entity = self
+            .create_entity_with_values(
+                source.blueprint_id,
+                source.blueprint_version,
+                values,
+                system_tags,
+                source.system_metadata,
+            )
+            .await?;
+        for (attribute_code, context_id, files) in file_values {
+            for file in files {
+                self.link_file_to_attribute(entity.id, &attribute_code, context_id, file.id)
+                    .await?;
+            }
+        }
+        self.get_entity(entity.id)
+            .await?
+            .ok_or(RepositoryError::NotFound("entity"))
+    }
+
     pub async fn update_entity_with_values(
         &self,
         entity_id: Uuid,
