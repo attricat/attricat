@@ -556,6 +556,11 @@ passes that same object to `mount`. It may use only granted operations:
 - `catalog.command({ command_id, payload })` requires `client.commands` and
   invokes a declared, bounded server command. The host validates the caller,
   contribution, release, installation state, configuration, and grants.
+- `catalog.refresh({ target: 'current_entity' })` requires `client.refresh`
+  and an entity action, preview panel, or attribute decoration outlet with a
+  current entity. It invalidates the host's entity-scoped views and awaits
+  active refetches; it cannot select another entity or mutate server data.
+  Call it after a successful command that changes the current entity.
 - `catalog.storage.get/set/delete/list(...)` requires `storage.extension` and
   provides release-scoped extension storage. Storage requests and values are
   bounded; `set` and `delete` support an optional optimistic
@@ -579,9 +584,9 @@ context, and re-authorized by the host at execution time. The host owns focus,
 confirmation, notification, download, navigation, upload, error, and
 accessibility UI.
 
-`client.refresh` may target only the current entity, Explorer result set, or a
-documented dashboard resource. `client.confirmation` has bounded title,
-message, and severity. `client.download` accepts bounded data or a host artifact
+`client.refresh` currently supports only `current_entity` in entity outlets;
+other targets such as Explorer results require separate host implementations.
+`client.confirmation` has bounded title, message, and severity. `client.download` accepts bounded data or a host artifact
 reference with a validated filename and media type. `client.external_navigation`
 opens only allowlisted HTTPS URLs in a new tab. `client.files.read` and
 `client.files.upload` are restricted to file-detail context; upload selection

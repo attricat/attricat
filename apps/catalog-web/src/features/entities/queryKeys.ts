@@ -31,15 +31,25 @@ export const entityQueryKeys = {
     [...entityQueryKeys.publications(), entityId] as const,
   migrationPreview: (entityId: string) =>
     ['entity-migration-preview', entityId] as const,
+  resolvedPreviews: (entityId: string) =>
+    ['entity-resolved-preview', entityId] as const,
   resolvedPreview: (entityId: string, contextId: string | undefined) =>
-    ['entity-resolved-preview', entityId, contextId] as const,
+    [...entityQueryKeys.resolvedPreviews(entityId), contextId] as const,
+  hierarchies: (entityId: string) => ['entity-hierarchy', entityId] as const,
   hierarchy: (entityId: string, contextId: string, field: string) =>
-    ['entity-hierarchy', entityId, contextId, field] as const,
+    [...entityQueryKeys.hierarchies(entityId), contextId, field] as const,
+  incomingRelationshipResults: (entityId: string) =>
+    ['incoming-relationships', entityId] as const,
   incomingRelationships: (
     entityId: string,
     relationships: { source_blueprint: string; field: string }[],
     pageSize: number,
-  ) => ['incoming-relationships', entityId, relationships, pageSize] as const,
+  ) =>
+    [
+      ...entityQueryKeys.incomingRelationshipResults(entityId),
+      relationships,
+      pageSize,
+    ] as const,
   search: ({
     allVersions = false,
     blueprint,

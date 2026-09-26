@@ -28,6 +28,12 @@ describe('extension frame bootstrap', () => {
     expect(frameDocument).not.toContain("window.addEventListener('popstate'");
   });
 
+  it('exposes refresh only through the MessageChannel broker', () => {
+    expect(frameDocument).toContain(
+      "refresh: detail => call('refresh', detail)",
+    );
+  });
+
   it('exposes storage only through the MessageChannel broker', () => {
     expect(frameDocument).toContain(
       "storage: { get: detail => call('storage.get'",

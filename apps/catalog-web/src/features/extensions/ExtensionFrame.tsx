@@ -1,4 +1,5 @@
 import { Alert, Box, Skeleton, Typography } from '@mui/material';
+import { useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from '@tanstack/react-router';
 import { useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
@@ -13,6 +14,7 @@ import {
   maximumExtensionResponseBytes,
   maximumExtensionStorageKeyBytes,
 } from './constants';
+import { refreshCurrentEntity } from './refreshEntity';
 import {
   extensionCommand,
   extensionCommandRequestSchema,
@@ -76,7 +78,7 @@ const validateStorageRequest = (payload: unknown) => {
 export const frameDocument = `<!doctype html><meta charset="utf-8"><style>html,body{margin:0}</style><meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'nonce-catalog-bootstrap' blob:; connect-src 'none'; img-src data:; style-src 'unsafe-inline'"><body><div id="root"></div><script nonce="catalog-bootstrap">
 (() => { let port; let next = 0; const pending = new Map();
 const call = (method, payload) => new Promise((resolve, reject) => { const id = String(++next); pending.set(id, {resolve,reject}); port.postMessage({type:'catalog:request.v1',id,method,payload}); }); const rejectPending = () => { for (const item of pending.values()) item.reject(new Error('Host request cancelled')); pending.clear(); };
-window.addEventListener('message', async (event) => { if (event.source !== parent || event.data?.type !== 'catalog:init.v1' || !event.ports[0]) return; port = event.ports[0]; const capabilities = event.data.capabilities; port.onmessage = event => { const message = event.data; if (message?.type === 'catalog:shutdown.v1') { rejectPending(); Promise.resolve(cleanup?.()).finally(() => port.close()); return; } if (message?.type === 'catalog:context-update.v1') { if (!message.context || typeof message.context !== 'object' || Array.isArray(message.context)) return; globalThis.catalog.context = message.context; capabilities.includes('client.events') && root?.dispatchEvent(new CustomEvent('catalog:context-changed.v1', {detail: message.context})); return; } if (message?.type !== 'catalog:response.v1') return; const item = pending.get(message.id); if (!item) return; pending.delete(message.id); message.ok ? item.resolve(message.data) : item.reject(new Error(message.error || 'Host request failed')); }; let cleanup; let root; globalThis.catalog = { request: path => call('catalog.read', {path}), command: detail => call('command', detail), navigate: detail => call('navigate', detail), notify: detail => call('notify', detail), storage: { get: detail => call('storage.get', detail), set: detail => call('storage.set', detail), delete: detail => call('storage.delete', detail), list: detail => call('storage.list', detail) }, context: event.data.context, configuration: event.data.configuration }; try { const url = URL.createObjectURL(new Blob([event.data.artifact], {type:'text/javascript'})); const module = await import(url); URL.revokeObjectURL(url); if (typeof module.mount !== 'function') throw new Error('Extension must export mount(root, catalog)'); root = document.getElementById('root'); cleanup = await module.mount(root, globalThis.catalog); if (typeof cleanup !== 'function') cleanup = undefined; const resize = () => port.postMessage({type:'catalog:resize.v1', height: root.getBoundingClientRect().height}); new ResizeObserver(resize).observe(root); new MutationObserver(resize).observe(root, {childList:true, characterData:true, subtree:true}); if (event.data.capabilities.includes('client.events')) root.dispatchEvent(new CustomEvent('catalog:context-changed.v1', {detail:event.data.context})); port.postMessage({type:'catalog:ready.v1'}); resize(); } catch (error) { port.postMessage({type:'catalog:error.v1', error: String(error?.message || error)}); } }); })();
+window.addEventListener('message', async (event) => { if (event.source !== parent || event.data?.type !== 'catalog:init.v1' || !event.ports[0]) return; port = event.ports[0]; const capabilities = event.data.capabilities; port.onmessage = event => { const message = event.data; if (message?.type === 'catalog:shutdown.v1') { rejectPending(); Promise.resolve(cleanup?.()).finally(() => port.close()); return; } if (message?.type === 'catalog:context-update.v1') { if (!message.context || typeof message.context !== 'object' || Array.isArray(message.context)) return; globalThis.catalog.context = message.context; capabilities.includes('client.events') && root?.dispatchEvent(new CustomEvent('catalog:context-changed.v1', {detail: message.context})); return; } if (message?.type !== 'catalog:response.v1') return; const item = pending.get(message.id); if (!item) return; pending.delete(message.id); message.ok ? item.resolve(message.data) : item.reject(new Error(message.error || 'Host request failed')); }; let cleanup; let root; globalThis.catalog = { request: path => call('catalog.read', {path}), command: detail => call('command', detail), refresh: detail => call('refresh', detail), navigate: detail => call('navigate', detail), notify: detail => call('notify', detail), storage: { get: detail => call('storage.get', detail), set: detail => call('storage.set', detail), delete: detail => call('storage.delete', detail), list: detail => call('storage.list', detail) }, context: event.data.context, configuration: event.data.configuration }; try { const url = URL.createObjectURL(new Blob([event.data.artifact], {type:'text/javascript'})); const module = await import(url); URL.revokeObjectURL(url); if (typeof module.mount !== 'function') throw new Error('Extension must export mount(root, catalog)'); root = document.getElementById('root'); cleanup = await module.mount(root, globalThis.catalog); if (typeof cleanup !== 'function') cleanup = undefined; const resize = () => port.postMessage({type:'catalog:resize.v1', height: root.getBoundingClientRect().height}); new ResizeObserver(resize).observe(root); new MutationObserver(resize).observe(root, {childList:true, characterData:true, subtree:true}); if (event.data.capabilities.includes('client.events')) root.dispatchEvent(new CustomEvent('catalog:context-changed.v1', {detail:event.data.context})); port.postMessage({type:'catalog:ready.v1'}); resize(); } catch (error) { port.postMessage({type:'catalog:error.v1', error: String(error?.message || error)}); } }); })();
 </script>`;
 
 type Props = {
@@ -108,6 +110,7 @@ export const ExtensionFrame = ({
   const [height, setHeight] = useState(defaultExtensionFrameHeight);
   const [loadedFrame, setLoadedFrame] = useState<string>();
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
   const contextKey = JSON.stringify(context);
   useEffect(() => {
     contextRef.current = contextKey;
@@ -189,6 +192,14 @@ export const ExtensionFrame = ({
                 to: '/entities/$entityId',
                 params: { entityId: detail.entity_id },
               });
+              respond(true, null);
+            } else if (data.method === 'refresh') {
+              await refreshCurrentEntity(
+                queryClient,
+                contribution,
+                JSON.parse(contextRef.current) as Record<string, unknown>,
+                data.payload,
+              );
               respond(true, null);
             } else if (
               data.method === 'notify' &&
@@ -295,7 +306,16 @@ export const ExtensionFrame = ({
       port?.close();
       if (portRef.current === port) portRef.current = undefined;
     };
-  }, [contribution, frameKey, loadedFrame, navigate, onFailure, onReady, t]);
+  }, [
+    contribution,
+    frameKey,
+    loadedFrame,
+    navigate,
+    onFailure,
+    onReady,
+    queryClient,
+    t,
+  ]);
 
   useEffect(() => {
     if (!ready) return;
