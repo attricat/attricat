@@ -1,4 +1,3 @@
-import { Editor } from '@monaco-editor/react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from '@tanstack/react-router';
 import {
@@ -28,11 +27,8 @@ import {
   getBlueprintRevision,
 } from './api';
 import { blueprintQueryKeys } from './query-keys';
-import {
-  blueprintTemplates,
-  configureToml,
-  minimumTomlEditorHeight,
-} from './blueprint-editor-utils';
+import { blueprintTemplates } from './blueprint-editor-utils';
+import { TomlEditor } from '../../components/TomlEditor';
 
 type PendingUnsavedAction =
   { templateIndex: number; type: 'replace' } | { type: 'discard' };
@@ -310,47 +306,25 @@ export const BlueprintEditorPage = ({
           </Button>
         </DialogActions>
       </Dialog>
-      <Box
-        sx={{
-          border: 1,
-          borderColor: 'divider',
-          height: 'calc(100vh - 260px)',
-          minHeight: minimumTomlEditorHeight,
-          mt: 3,
+      <TomlEditor
+        height="calc(100vh - 260px)"
+        marginTop={3}
+        onChange={(value) => {
+          if (!savePendingRef.current) setEditedDefinition(value ?? '');
         }}
-      >
-        <Editor
-          beforeMount={configureToml}
-          defaultLanguage="toml"
-          height="100%"
-          language="toml"
-          onChange={(value) => {
-            if (!savePendingRef.current) setEditedDefinition(value ?? '');
-          }}
-          onMount={(editor, monaco) => {
-            editor.addCommand(
-              monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyS,
-              () => {
-                if (
-                  !savePendingRef.current &&
-                  (!blueprintId || isDirtyRef.current)
-                ) {
-                  save.mutate({ definition: definitionRef.current });
-                }
-              },
-            );
-          }}
-          options={{
-            automaticLayout: true,
-            minimap: { enabled: false },
-            readOnly: save.isPending,
-            scrollBeyondLastLine: false,
-            tabSize: 2,
-            wordWrap: 'on',
-          }}
-          value={definition}
-        />
-      </Box>
+        onMount={(editor, monaco) => {
+          editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyS, () => {
+            if (
+              !savePendingRef.current &&
+              (!blueprintId || isDirtyRef.current)
+            ) {
+              save.mutate({ definition: definitionRef.current });
+            }
+          });
+        }}
+        readOnly={save.isPending}
+        value={definition}
+      />
       <Typography color="text.secondary" sx={{ mt: 1 }} variant="body2">
         {blueprintId && !isDirty
           ? t('blueprints.makeChangeBeforeSaving')

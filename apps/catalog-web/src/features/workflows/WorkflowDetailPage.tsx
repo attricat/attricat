@@ -18,10 +18,11 @@ import {
   TextField,
   Typography,
 } from '@mui/material';
-import { type ComponentType, useId, useState } from 'react';
+import { type ComponentType, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { PageContainer } from '../../components/PageContainer';
 import { PageHeader } from '../../components/PageHeader';
+import { useTabAccessibility } from '../../components/useTabAccessibility';
 import { currentSession } from '../auth/api';
 import { authQueryKeys } from '../auth/query-keys';
 import {
@@ -33,14 +34,7 @@ import {
   runWorkflowNow,
 } from './api';
 import { workflowQueryKeys } from './query-keys';
-
-const dateTime = (value: string | null, locale: string, fallback: string) =>
-  value
-    ? new Intl.DateTimeFormat(locale, {
-        dateStyle: 'medium',
-        timeStyle: 'short',
-      }).format(new Date(value))
-    : fallback;
+import { formatWorkflowDateTime } from './date-time';
 
 const WorkflowRevisionLink = Link as unknown as ComponentType<{
   params: { version: string; workflowId: string };
@@ -53,7 +47,7 @@ export const WorkflowDetailPage = ({ workflowId }: { workflowId: string }) => {
   const [tab, setTab] = useState(0);
   const [leftVersion, setLeftVersion] = useState<number>();
   const [manualEntityId, setManualEntityId] = useState('');
-  const tabId = useId();
+  const tabId = useTabAccessibility();
   const session = useQuery({
     queryKey: authQueryKeys.session(),
     queryFn: currentSession,
@@ -248,42 +242,18 @@ export const WorkflowDetailPage = ({ workflowId }: { workflowId: string }) => {
         value={tab}
         variant="scrollable"
       >
-        <Tab
-          aria-controls={`${tabId}-panel-0`}
-          id={`${tabId}-tab-0`}
-          label={t('workflows.revisions')}
-        />
-        <Tab
-          aria-controls={`${tabId}-panel-1`}
-          id={`${tabId}-tab-1`}
-          label={t('workflows.source')}
-        />
-        <Tab
-          aria-controls={`${tabId}-panel-2`}
-          id={`${tabId}-tab-2`}
-          label={t('workflows.compare')}
-        />
-        <Tab
-          aria-controls={`${tabId}-panel-3`}
-          id={`${tabId}-tab-3`}
-          label={t('workflows.runDiagnostics')}
-        />
+        <Tab {...tabId.tab(0)} label={t('workflows.revisions')} />
+        <Tab {...tabId.tab(1)} label={t('workflows.source')} />
+        <Tab {...tabId.tab(2)} label={t('workflows.compare')} />
+        <Tab {...tabId.tab(3)} label={t('workflows.runDiagnostics')} />
       </Tabs>
       {tab === 0 && (
-        <Box
-          aria-labelledby={`${tabId}-tab-0`}
-          id={`${tabId}-panel-0`}
-          role="tabpanel"
-        >
+        <Box {...tabId.panel(0)}>
           <RevisionTable revisions={revisions.data} />
         </Box>
       )}
       {tab === 1 && (
-        <Box
-          aria-labelledby={`${tabId}-tab-1`}
-          id={`${tabId}-panel-1`}
-          role="tabpanel"
-        >
+        <Box {...tabId.panel(1)}>
           <Source
             definition={current.definition}
             title={t('workflows.source')}
@@ -291,11 +261,7 @@ export const WorkflowDetailPage = ({ workflowId }: { workflowId: string }) => {
         </Box>
       )}
       {tab === 2 && (
-        <Box
-          aria-labelledby={`${tabId}-tab-2`}
-          id={`${tabId}-panel-2`}
-          role="tabpanel"
-        >
+        <Box {...tabId.panel(2)}>
           <Paper component="section" sx={{ mt: 3, p: 2 }}>
             <TextField
               label={t('workflows.compareRevision')}
@@ -332,11 +298,7 @@ export const WorkflowDetailPage = ({ workflowId }: { workflowId: string }) => {
         </Box>
       )}
       {tab === 3 && (
-        <Box
-          aria-labelledby={`${tabId}-tab-3`}
-          id={`${tabId}-panel-3`}
-          role="tabpanel"
-        >
+        <Box {...tabId.panel(3)}>
           <RunTable canManage={canManage} locale={locale} runs={workflowRuns} />
         </Box>
       )}
@@ -378,14 +340,14 @@ const RevisionTable = ({
                   />
                 </TableCell>
                 <TableCell>
-                  {dateTime(
+                  {formatWorkflowDateTime(
                     revision.created_at,
                     locale,
                     t('workflows.notAvailable'),
                   )}
                 </TableCell>
                 <TableCell>
-                  {dateTime(
+                  {formatWorkflowDateTime(
                     revision.published_at,
                     locale,
                     t('workflows.notAvailable'),
@@ -480,7 +442,7 @@ const RunTable = ({
                 <TableCell>{run.source}</TableCell>
                 <TableCell>{run.attempts}</TableCell>
                 <TableCell>
-                  {dateTime(
+                  {formatWorkflowDateTime(
                     run.completed_at ?? run.failed_at ?? run.created_at,
                     locale,
                     t('workflows.notAvailable'),

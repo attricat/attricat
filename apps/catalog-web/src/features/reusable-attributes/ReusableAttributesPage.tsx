@@ -34,20 +34,8 @@ import {
   publishReusableAttributeRevision,
   type ReusableAttribute,
 } from './api';
+import { latestReusableAttributeRevisions } from './latest-revisions';
 import { reusableAttributeQueryKeys } from './query-keys';
-
-const latestRevisions = (attributes: ReusableAttribute[]) =>
-  Array.from(
-    attributes
-      .reduce((latest, attribute) => {
-        const current = latest.get(attribute.definition_id);
-        if (!current || attribute.version > current.version) {
-          latest.set(attribute.definition_id, attribute);
-        }
-        return latest;
-      }, new Map<string, ReusableAttribute>())
-      .values(),
-  );
 
 const GroupDialog = ({
   attributes,
@@ -218,7 +206,9 @@ export const ReusableAttributesPage = () => {
         queryKey: reusableAttributeQueryKeys.root(),
       }),
   });
-  const displayedAttributes = latestRevisions(attributes.data ?? []);
+  const displayedAttributes = latestReusableAttributeRevisions(
+    attributes.data ?? [],
+  );
 
   return (
     <PageContainer>

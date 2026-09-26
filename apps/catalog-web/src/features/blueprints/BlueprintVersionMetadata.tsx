@@ -10,7 +10,8 @@ import {
   Tabs,
   Typography,
 } from '@mui/material';
-import { useId, useState } from 'react';
+import { useState } from 'react';
+import { useTabAccessibility } from '../../components/useTabAccessibility';
 import { useTranslation } from 'react-i18next';
 import type { BlueprintWithAttributes } from './api';
 import { BlueprintViewsPreview } from './BlueprintViewsPreview';
@@ -23,7 +24,7 @@ export const BlueprintVersionMetadata = ({
   blueprint: BlueprintWithAttributes;
 }) => {
   const { t } = useTranslation();
-  const tabId = useId();
+  const tabId = useTabAccessibility();
   const [tab, setTab] = useState(0);
   const metadataAttributes = blueprint.attributes.filter(
     (attribute) => !isHiddenByDefault(attribute, 'metadata'),
@@ -45,44 +46,18 @@ export const BlueprintVersionMetadata = ({
         variant="scrollable"
       >
         <Tab
-          aria-controls={`${tabId}-tabpanel-0`}
-          id={`${tabId}-tab-0`}
+          {...tabId.tab(0)}
           label={t('blueprints.attributes', {
             count: metadataAttributes.length,
           })}
         />
-        <Tab
-          aria-controls={`${tabId}-tabpanel-1`}
-          id={`${tabId}-tab-1`}
-          label={t('blueprints.views')}
-        />
-        <Tab
-          aria-controls={`${tabId}-tabpanel-2`}
-          id={`${tabId}-tab-2`}
-          label={t('blueprints.viewDefinition')}
-        />
-        <Tab
-          aria-controls={`${tabId}-tabpanel-3`}
-          id={`${tabId}-tab-3`}
-          label={t('blueprints.entitySchema')}
-        />
-        <Tab
-          aria-controls={`${tabId}-tabpanel-4`}
-          id={`${tabId}-tab-4`}
-          label={t('blueprints.includes')}
-        />
-        <Tab
-          aria-controls={`${tabId}-tabpanel-5`}
-          id={`${tabId}-tab-5`}
-          label={t('blueprints.publicationPolicy')}
-        />
+        <Tab {...tabId.tab(1)} label={t('blueprints.views')} />
+        <Tab {...tabId.tab(2)} label={t('blueprints.viewDefinition')} />
+        <Tab {...tabId.tab(3)} label={t('blueprints.entitySchema')} />
+        <Tab {...tabId.tab(4)} label={t('blueprints.includes')} />
+        <Tab {...tabId.tab(5)} label={t('blueprints.publicationPolicy')} />
       </Tabs>
-      <Box
-        aria-labelledby={`${tabId}-tab-${tab}`}
-        id={`${tabId}-tabpanel-${tab}`}
-        role="tabpanel"
-        sx={{ mt: 2 }}
-      >
+      <Box {...tabId.panel(tab)} sx={{ mt: 2 }}>
         {tab === 4 && (
           <JsonMetadata
             label={t('blueprints.includes')}

@@ -22,14 +22,7 @@ import { currentSession } from '../auth/api';
 import { authQueryKeys } from '../auth/query-keys';
 import { listWorkflowRuns, listWorkflows, type Workflow } from './api';
 import { workflowQueryKeys } from './query-keys';
-
-const dateTime = (value: string | null, locale: string, fallback: string) =>
-  value
-    ? new Intl.DateTimeFormat(locale, {
-        dateStyle: 'medium',
-        timeStyle: 'short',
-      }).format(new Date(value))
-    : fallback;
+import { formatWorkflowDateTime } from './date-time';
 
 const WorkflowDetailLink = Link as unknown as ComponentType<{
   params: { workflowId: string };
@@ -210,7 +203,7 @@ export const WorkflowsPage = () => {
                               color="text.secondary"
                               variant="caption"
                             >
-                              {dateTime(
+                              {formatWorkflowDateTime(
                                 summary.latest.created_at,
                                 locale,
                                 t('workflows.notAvailable'),

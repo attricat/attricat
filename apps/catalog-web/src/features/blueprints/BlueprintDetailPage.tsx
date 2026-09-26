@@ -18,10 +18,11 @@ import {
   Tabs,
   Typography,
 } from '@mui/material';
-import { lazy, Suspense, useId, useState } from 'react';
+import { lazy, Suspense, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { PageContainer } from '../../components/PageContainer';
 import { PageHeader } from '../../components/PageHeader';
+import { useTabAccessibility } from '../../components/useTabAccessibility';
 import {
   getBlueprintRevision,
   getSafeBlueprintMigrationImpact,
@@ -59,7 +60,7 @@ export const BlueprintDetailPage = ({
   blueprintId: string;
 }) => {
   const { t } = useTranslation();
-  const tabId = useId();
+  const tabId = useTabAccessibility();
   const [leftSelection, setLeftSelection] = useState<number | null>(null);
   const [rightSelection, setRightSelection] = useState<number | null>(null);
   const [pageTab, setPageTab] = useState(0);
@@ -320,34 +321,17 @@ export const BlueprintDetailPage = ({
             variant="scrollable"
           >
             <Tab
-              aria-controls={`${tabId}-tabpanel-0`}
-              id={`${tabId}-tab-0`}
+              {...tabId.tab(0)}
               label={t('blueprints.versionMetadata', {
                 version: leftVersion,
               })}
             />
-            <Tab
-              aria-controls={`${tabId}-tabpanel-1`}
-              id={`${tabId}-tab-1`}
-              label={t('blueprints.revisionHistory')}
-            />
-            <Tab
-              aria-controls={`${tabId}-tabpanel-2`}
-              id={`${tabId}-tab-2`}
-              label={t('blueprints.compareDefinitions')}
-            />
-            <Tab
-              aria-controls={`${tabId}-tabpanel-3`}
-              id={`${tabId}-tab-3`}
-              label={t('blueprints.migrations')}
-            />
+            <Tab {...tabId.tab(1)} label={t('blueprints.revisionHistory')} />
+            <Tab {...tabId.tab(2)} label={t('blueprints.compareDefinitions')} />
+            <Tab {...tabId.tab(3)} label={t('blueprints.migrations')} />
           </Tabs>
           {pageTab === 0 && left.data && (
-            <Box
-              aria-labelledby={`${tabId}-tab-0`}
-              id={`${tabId}-tabpanel-0`}
-              role="tabpanel"
-            >
+            <Box {...tabId.panel(0)}>
               <BlueprintVersionMetadata blueprint={left.data} />
               <Box component="aside" sx={{ mt: 3 }}>
                 <ExtensionOutlet
@@ -362,11 +346,7 @@ export const BlueprintDetailPage = ({
             </Box>
           )}
           {pageTab === 1 && (
-            <Box
-              aria-labelledby={`${tabId}-tab-1`}
-              id={`${tabId}-tabpanel-1`}
-              role="tabpanel"
-            >
+            <Box {...tabId.panel(1)}>
               <RevisionHistory
                 blueprintId={blueprintId}
                 revisions={revisionItems}
@@ -375,10 +355,8 @@ export const BlueprintDetailPage = ({
           )}
           {pageTab === 2 && (
             <Paper
-              aria-labelledby={`${tabId}-tab-2`}
+              {...tabId.panel(2)}
               component="section"
-              id={`${tabId}-tabpanel-2`}
-              role="tabpanel"
               sx={{ mt: 3, p: 2.5 }}
             >
               <Typography component="h2" variant="h6">
@@ -451,11 +429,7 @@ export const BlueprintDetailPage = ({
             </Paper>
           )}
           {pageTab === 3 && (
-            <Box
-              aria-labelledby={`${tabId}-tab-3`}
-              id={`${tabId}-tabpanel-3`}
-              role="tabpanel"
-            >
+            <Box {...tabId.panel(3)}>
               <MigrationBatchStatus batches={migrationBatches} />
             </Box>
           )}

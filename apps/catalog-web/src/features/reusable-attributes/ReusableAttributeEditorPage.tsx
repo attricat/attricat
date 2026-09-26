@@ -1,4 +1,3 @@
-import { Editor } from '@monaco-editor/react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from '@tanstack/react-router';
 import { Alert, Box, Button, Paper, Stack, Typography } from '@mui/material';
@@ -10,11 +9,9 @@ import {
   createReusableAttributeRevision,
   listReusableAttributes,
 } from './api';
-import {
-  configureToml,
-  minimumTomlEditorHeight,
-} from '../blueprints/blueprint-editor-utils';
+import { TomlEditor } from '../../components/TomlEditor';
 import { reusableAttributeQueryKeys } from './query-keys';
+import { latestReusableAttributeRevisions } from './latest-revisions';
 
 const newAttributeDefinition = `code = "new_attribute"
 name = "New attribute"
@@ -66,9 +63,9 @@ export const ReusableAttributeEditorPage = ({
     queryKey: reusableAttributeQueryKeys.definitions(true),
     queryFn: ({ signal }) => listReusableAttributes(true, signal),
   });
-  const attribute = attributes.data
-    ?.filter((item) => item.definition_id === definitionId)
-    .sort((left, right) => right.version - left.version)[0];
+  const attribute = latestReusableAttributeRevisions(
+    attributes.data ?? [],
+  ).find((item) => item.definition_id === definitionId);
   const [editedDefinition, setEditedDefinition] = useState<string>();
   const definition =
     editedDefinition ?? attribute?.definition ?? newAttributeDefinition;
@@ -137,33 +134,14 @@ export const ReusableAttributeEditorPage = ({
             gridTemplateColumns: { lg: 'minmax(0, 1fr) 300px' },
           }}
         >
-          <Box
-            sx={{
-              border: 1,
-              borderColor: 'divider',
-              height: 'calc(100vh - 280px)',
-              minHeight: minimumTomlEditorHeight,
+          <TomlEditor
+            height="calc(100vh - 280px)"
+            onChange={(value) => {
+              if (!save.isPending) setEditedDefinition(value ?? '');
             }}
-          >
-            <Editor
-              beforeMount={configureToml}
-              defaultLanguage="toml"
-              height="100%"
-              language="toml"
-              onChange={(value) => {
-                if (!save.isPending) setEditedDefinition(value ?? '');
-              }}
-              options={{
-                automaticLayout: true,
-                minimap: { enabled: false },
-                readOnly: save.isPending,
-                scrollBeyondLastLine: false,
-                tabSize: 2,
-                wordWrap: 'on',
-              }}
-              value={definition}
-            />
-          </Box>
+            readOnly={save.isPending}
+            value={definition}
+          />
           <DefinitionPreview definition={definition} />
         </Box>
       </Stack>

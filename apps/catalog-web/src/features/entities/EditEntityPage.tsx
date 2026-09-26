@@ -41,7 +41,7 @@ import {
   listReusableAttributes,
 } from '../reusable-attributes/api';
 import { reusableAttributeQueryKeys } from '../reusable-attributes/query-keys';
-import type { ReusableAttribute } from '../reusable-attributes/schemas';
+import { latestReusableAttributeRevisions } from '../reusable-attributes/latest-revisions';
 import { RouterButton, RouterIconButton } from '../../components/RouterLink';
 import { EntityContextPicker } from './components/EntityContextPicker';
 import { EntityForm, type EntityFormHandle } from './components/EntityForm';
@@ -55,21 +55,6 @@ import { findEntityHeading } from '../views/components/blocks/EntityHeadingDefin
 import { resolveHeadingRenderer } from '../views/components/registry';
 
 const editEntityFormId = 'edit-entity-form';
-
-const mostRecentReusableAttributes = (attributes: ReusableAttribute[]) => {
-  const latestByDefinition = new Map<string, ReusableAttribute>();
-  for (const attribute of attributes) {
-    const current = latestByDefinition.get(attribute.definition_id);
-    if (!current || attribute.version > current.version) {
-      latestByDefinition.set(attribute.definition_id, attribute);
-    }
-  }
-  return [...latestByDefinition.values()].sort(
-    (first, second) =>
-      first.namespace.localeCompare(second.namespace) ||
-      first.code.localeCompare(second.code),
-  );
-};
 
 export const EditEntityPage = ({ entityId }: { entityId: string }) => {
   const { t } = useTranslation();
@@ -130,8 +115,12 @@ export const EditEntityPage = ({ entityId }: { entityId: string }) => {
     queryKey: reusableAttributeQueryKeys.groups(),
     queryFn: ({ signal }) => listReusableAttributeGroups(signal),
   });
-  const latestReusableAttributes = mostRecentReusableAttributes(
+  const latestReusableAttributes = latestReusableAttributeRevisions(
     reusableAttributes.data ?? [],
+  ).sort(
+    (first, second) =>
+      first.namespace.localeCompare(second.namespace) ||
+      first.code.localeCompare(second.code),
   );
   const attach = useMutation({
     mutationFn: (revisionId: string) =>
