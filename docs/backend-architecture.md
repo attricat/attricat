@@ -1,26 +1,23 @@
 # Backend crate architecture
 
-The API is a composition application built from focused workspace crates. The split keeps changes to HTTP handlers, domain contracts, persistence, object storage, workers, and the Wasmtime host in separate Cargo compilation units.
+The API is a composition application built from focused workspace crates. The split keeps changes to HTTP handlers, domain contracts, solution-pack planning, agent execution, persistence, object storage, workers, and the Wasmtime host in separate Cargo compilation units.
 
 ## Dependency direction
 
 ```text
-catalog-domain       catalog-events       catalog-extension-manifest
-      \                    |                    /
-       +------------- catalog-repository ------+
-       |                    |                   |
-       +---- catalog-storage|                   |
-                            v                   |
-                     catalog-workers            |
-                            v                   |
-                 catalog-extension-runtime <---+
-                            v
-                       catalog-http
-                            v
-                     apps/api (facade + binaries)
+apps/api → catalog-http → catalog-agent-runtime → catalog-workers
+                    │                 │                   │
+                    └→ catalog-extension-runtime ─────────┘
+catalog-workers → catalog-repository → catalog-solution-pack
+                       │                         │
+                       ├→ catalog-storage         └→ catalog-extension-manifest
+                       ├→ catalog-domain
+                       └→ catalog-events
 ```
 
-`catalog-storage` is an independent object-store port and S3 adapter. The extension runtime depends on the generic task-handler contract in `catalog-workers`; workers do not depend on Wasmtime. This keeps the graph acyclic while allowing the runtime crate to provide the extension task-handler adapter.
+Arrows point to dependencies and show key edges, not every edge; both runtime crates also depend directly on the repository and storage.
+
+`catalog-solution-pack` depends on extension manifest contracts, never the reverse. `catalog-storage` is an independent object-store port and S3 adapter. Both the agent runtime and the extension runtime depend on the generic task-handler contract in `catalog-workers`; workers depend on neither. This keeps the graph acyclic while allowing each runtime crate to provide its own task-handler adapter. HTTP depends on the agent runtime for provider-backed endpoints and configuration.
 
 No library crate may depend on `api`. `apps/api` alone owns process startup, database migration embedding, concrete dependency construction, and the `api` and `file-worker` binary names.
 
@@ -30,15 +27,17 @@ No library crate may depend on `api`. `apps/api` alone owns process startup, dat
 | --- | --- | --- |
 | `catalog-domain` | Domain DTOs, account value objects, agent/task contracts, and product safety limits | — |
 | `catalog-events` | Versioned event envelopes, names, and validation | SQLx row decoding only |
-| `catalog-extension-manifest` | Extension and solution-pack manifests, schemas, archive/sample-data validation, and containment policy | archive/image codecs |
+| `catalog-extension-manifest` | Extension manifests, archive validation, and containment policy | archive codecs |
+| `catalog-solution-pack` | Solution-pack contracts, archive/sample-data validation, and pure planning | image/archive codecs |
 | `catalog-repository` | SQLx repository, transactional application services, registry and installer coordination | SQLx/Reqwest |
 | `catalog-storage` | Object-store interface, S3 adapter, storage configuration | AWS SDK |
-| `catalog-workers` | Task/event workers, workflow/rule/agent/file execution, and provider deployment configuration | image/EXIF/provider clients |
+| `catalog-workers` | Task/event supervision and workflow/rule/file execution | image/EXIF clients |
+| `catalog-agent-runtime` | Agent provider, tools, execution, and task handler | provider clients |
 | `catalog-extension-runtime` | Wasmtime component host and WIT bindings | Wasmtime |
 | `catalog-http` | Axum routes, authentication, transport limits, mail delivery, and request telemetry | Axum/OTLP/Lettre |
 | `api` | Startup, migrations, dependency injection, compatibility re-exports | composition only |
 
-The facade intentionally preserves historical paths such as `api::model`, `api::repository`, and `api::http`. New library code should import the owning crate directly. These re-exports can be removed only as a separately reviewed compatibility change.
+The facade intentionally preserves historical paths such as `api::model`, `api::repository`, `api::solution_packs`, `api::agent_worker`, and `api::http`. New library code should import the owning crate directly. These re-exports can be removed only as a separately reviewed compatibility change.
 
 ## Stable assets
 

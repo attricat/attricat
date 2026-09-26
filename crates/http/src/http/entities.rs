@@ -24,7 +24,7 @@ use serde_json::{Value, json};
 use uuid::Uuid;
 
 use crate::agents::{MAX_CONVERSATION_MESSAGE_BYTES, MAX_TOOL_CALL_ARGUMENT_BYTES};
-use catalog_workers::{
+use catalog_agent_runtime::{
     agent_provider::{ChatMessage, OpenAiCompatibleClient},
     agent_tools::{ToolDefinition, ToolFunction},
 };

@@ -7,12 +7,14 @@ publish.workspace = true
 
 [dependencies]
 axum.workspace = true
+catalog-agent-runtime = { path = "../../crates/agent-runtime" }
 catalog-domain = { path = "../../crates/domain" }
 catalog-events = { path = "../../crates/events" }
 catalog-extension-manifest = { path = "../../crates/extension-manifest" }
 catalog-extension-runtime = { path = "../../crates/extension-runtime" }
 catalog-http = { path = "../../crates/http" }
 catalog-repository = { path = "../../crates/repository" }
+catalog-solution-pack = { path = "../../crates/solution-pack" }
 catalog-storage = { path = "../../crates/storage" }
 catalog-workers = { path = "../../crates/workers" }
 dotenvy.workspace = true

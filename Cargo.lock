@@ -119,12 +119,14 @@ dependencies = [
  "async-trait",
  "axum",
  "bytes",
+ "catalog-agent-runtime",
  "catalog-domain",
  "catalog-events",
  "catalog-extension-manifest",
  "catalog-extension-runtime",
  "catalog-http",
  "catalog-repository",
+ "catalog-solution-pack",
  "catalog-storage",
  "catalog-workers",
  "chrono",
@@ -869,6 +871,30 @@ dependencies = [
 ]
 
 [[package]]
+name = "catalog-agent-runtime"
+version = "0.1.0"
+dependencies = [
+ "async-trait",
+ "axum",
+ "base64 0.22.1",
+ "bytes",
+ "catalog-domain",
+ "catalog-repository",
+ "catalog-storage",
+ "catalog-workers",
+ "futures-util",
+ "reqwest",
+ "secrecy",
+ "serde",
+ "serde_json",
+ "thiserror 2.0.20",
+ "tokio",
+ "tracing",
+ "url",
+ "uuid",
+]
+
+[[package]]
 name = "catalog-artifact-test-component"
 version = "0.1.0"
 dependencies = [
@@ -923,24 +949,12 @@ dependencies = [
 name = "catalog-extension-manifest"
 version = "0.1.0"
 dependencies = [
- "base64 0.22.1",
- "catalog-blueprint",
  "catalog-validation",
- "chrono",
- "chrono-tz",
- "image",
- "quick-xml",
- "regex",
- "rust_decimal",
  "semver",
  "serde",
  "serde_json",
- "sha2 0.10.9",
- "subtle",
  "tar",
  "thiserror 2.0.20",
- "toml",
- "unicode-normalization",
  "url",
  "uuid",
  "zstd",
@@ -983,14 +997,15 @@ dependencies = [
  "axum",
  "base64 0.22.1",
  "bytes",
+ "catalog-agent-runtime",
  "catalog-domain",
  "catalog-extension-manifest",
  "catalog-extension-runtime",
  "catalog-repository",
  "catalog-rules",
+ "catalog-solution-pack",
  "catalog-storage",
  "catalog-validation",
- "catalog-workers",
  "catalog-workflow",
  "chrono",
  "chrono-tz",
@@ -1032,6 +1047,7 @@ dependencies = [
  "catalog-events",
  "catalog-extension-manifest",
  "catalog-rules",
+ "catalog-solution-pack",
  "catalog-storage",
  "catalog-validation",
  "catalog-workflow",
@@ -1065,6 +1081,34 @@ dependencies = [
  "thiserror 2.0.20",
  "toml",
  "uuid",
+]
+
+[[package]]
+name = "catalog-solution-pack"
+version = "0.1.0"
+dependencies = [
+ "base64 0.22.1",
+ "catalog-blueprint",
+ "catalog-extension-manifest",
+ "catalog-validation",
+ "chrono",
+ "chrono-tz",
+ "image",
+ "quick-xml",
+ "regex",
+ "rust_decimal",
+ "semver",
+ "serde",
+ "serde_json",
+ "sha2 0.10.9",
+ "subtle",
+ "tar",
+ "thiserror 2.0.20",
+ "toml",
+ "unicode-normalization",
+ "url",
+ "uuid",
+ "zstd",
 ]
 
 [[package]]

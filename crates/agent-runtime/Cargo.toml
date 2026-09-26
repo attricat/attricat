@@ -1,0 +1,28 @@
+[package]
+name = "catalog-agent-runtime"
+version = "0.1.0"
+edition.workspace = true
+rust-version.workspace = true
+publish.workspace = true
+
+[dependencies]
+async-trait.workspace = true
+base64.workspace = true
+catalog-domain = { path = "../domain" }
+catalog-repository = { path = "../repository" }
+catalog-storage = { path = "../storage" }
+catalog-workers = { path = "../workers" }
+futures-util.workspace = true
+reqwest.workspace = true
+secrecy.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+tokio.workspace = true
+tracing.workspace = true
+url.workspace = true
+uuid.workspace = true
+
+[dev-dependencies]
+axum.workspace = true
+bytes.workspace = true

@@ -11,14 +11,15 @@ async-trait.workspace = true
 axum.workspace = true
 base64.workspace = true
 bytes.workspace = true
+catalog-agent-runtime = { path = "../agent-runtime" }
 catalog-domain = { path = "../domain" }
 catalog-extension-manifest = { path = "../extension-manifest" }
 catalog-extension-runtime = { path = "../extension-runtime" }
 catalog-repository = { path = "../repository" }
+catalog-solution-pack = { path = "../solution-pack" }
 catalog-rules = { path = "../rules" }
 catalog-storage = { path = "../storage" }
 catalog-validation = { path = "../validation" }
-catalog-workers = { path = "../workers" }
 catalog-workflow = { path = "../workflow" }
 chrono.workspace = true
 chrono-tz.workspace = true
