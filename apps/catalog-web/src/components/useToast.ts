@@ -1,8 +1,7 @@
-import { useContext } from 'react';
-import { ToastContext } from './toast-context';
+import { useToastStore } from './toast-store';
 
 export const useToast = () => {
-  const context = useContext(ToastContext);
-  if (!context) throw new Error('useToast must be used within a ToastProvider');
-  return context;
+  const show = useToastStore((state) => state.show);
+  const dismiss = useToastStore((state) => state.dismiss);
+  return { show, dismiss };
 };

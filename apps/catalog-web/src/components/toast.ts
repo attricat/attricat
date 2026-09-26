@@ -1,5 +1,6 @@
 import type { AlertColor } from '@mui/material';
 import type { ReactNode } from 'react';
+import { useToastStore } from './toast-store';
 
 export type ToastOptions = {
   action?: ReactNode;
@@ -10,22 +11,10 @@ export type ToastOptions = {
   severity?: AlertColor;
 };
 
-const subscribers = new Set<(options: ToastOptions) => void>();
-const pendingToasts: ToastOptions[] = [];
-
-export const subscribeToToasts = (
-  subscriber: (options: ToastOptions) => void,
-) => {
-  subscribers.add(subscriber);
-  pendingToasts.splice(0).forEach(subscriber);
-  return () => {
-    subscribers.delete(subscriber);
-  };
-};
-
 /**
  * Imperative notification API for code that cannot use React hooks, including
- * extension bridges. React components should prefer useToast().
+ * extension bridges. React components should prefer useToast(). Notifications
+ * emitted before the UI mounts remain queued.
  */
 export const toast = {
   error: (
@@ -36,13 +25,7 @@ export const toast = {
     message: string,
     options: Omit<ToastOptions, 'message' | 'severity'> = {},
   ) => toast.show({ ...options, message, severity: 'info' }),
-  show: (options: ToastOptions) => {
-    if (!subscribers.size) {
-      pendingToasts.push(options);
-      return;
-    }
-    subscribers.forEach((subscriber) => subscriber(options));
-  },
+  show: (options: ToastOptions) => useToastStore.getState().show(options),
   success: (
     message: string,
     options: Omit<ToastOptions, 'message' | 'severity'> = {},
