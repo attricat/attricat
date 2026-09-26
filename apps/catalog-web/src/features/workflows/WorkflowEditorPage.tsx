@@ -8,14 +8,14 @@ import { PageContainer } from '../../components/PageContainer';
 import { PageHeader } from '../../components/PageHeader';
 import { currentSession } from '../auth/api';
 import { TomlEditor } from '../../components/TomlEditor';
-import { authQueryKeys } from '../auth/query-keys';
+import { authQueryKeys } from '../auth/queryKeys';
 import {
   createWorkflow,
   createWorkflowRevision,
   getWorkflowRevision,
   validateWorkflow,
 } from './api';
-import { workflowQueryKeys } from './query-keys';
+import { workflowQueryKeys } from './queryKeys';
 
 const starterDefinition = `format_version = 1
 code = "example-workflow"

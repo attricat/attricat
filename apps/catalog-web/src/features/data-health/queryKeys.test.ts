@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { dataHealthQueryKeys } from './query-keys';
+import { dataHealthQueryKeys } from './queryKeys';
 
 describe('data health query keys', () => {
   it('keeps every data-health query beneath its shared root', () => {

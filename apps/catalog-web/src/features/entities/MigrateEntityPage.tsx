@@ -11,14 +11,14 @@ import {
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { listContexts } from '../contexts/api';
-import { contextQueryKeys } from '../contexts/query-keys';
+import { contextQueryKeys } from '../contexts/queryKeys';
 import { defaultContextCode } from '../contexts/constants';
 import { migrateEntity, previewEntityMigration } from './api';
-import { valueForField } from './attribute-values';
+import { valueForField } from './attributeValues';
 import { EntityForm } from './components/EntityForm';
 import { EntityPage } from './components/EntityPage';
-import { valuesForForm } from './entity-form';
-import { entityQueryKeys } from './query-keys';
+import { valuesForForm } from './entityForm';
+import { entityQueryKeys } from './queryKeys';
 
 export const MigrateEntityPage = ({ entityId }: { entityId: string }) => {
   const { t } = useTranslation();

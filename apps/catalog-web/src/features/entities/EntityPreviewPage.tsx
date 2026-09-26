@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link, useNavigate } from '@tanstack/react-router';
-import { BlueprintIcon } from '../../components/system-icons';
+import { BlueprintIcon } from '../../components/systemIcons';
 import {
   Alert,
   Box,
@@ -26,10 +26,10 @@ import {
   ExtensionPopoverOutlet,
 } from '../extensions/ExtensionOutlet';
 import { listContexts } from '../contexts/api';
-import { contextQueryKeys } from '../contexts/query-keys';
+import { contextQueryKeys } from '../contexts/queryKeys';
 import { defaultContextCode } from '../contexts/constants';
 import { listFindings } from '../rules/api';
-import { ruleQueryKeys } from '../rules/query-keys';
+import { ruleQueryKeys } from '../rules/queryKeys';
 import {
   duplicateEntity,
   getBlueprintRevision,
@@ -40,8 +40,8 @@ import {
   publishEntityAllChannels,
   unpublishEntity,
 } from './api';
-import { attributeLabel } from './entity-display';
-import { entityQueryKeys } from './query-keys';
+import { attributeLabel } from './entityDisplay';
+import { entityQueryKeys } from './queryKeys';
 import { EntityView } from '../views/components/EntityView';
 import { RelationshipPickerActionBar } from './components/RelationshipPickerActionBar';
 import {
@@ -50,7 +50,7 @@ import {
 } from '../views/components/blocks/EntityHeadingDefinition';
 import { resolveHeadingRenderer } from '../views/components/registry';
 import { currentSession } from '../auth/api';
-import { authQueryKeys } from '../auth/query-keys';
+import { authQueryKeys } from '../auth/queryKeys';
 export const EntityPreviewPage = ({
   entityId,
   relationshipPickerToken,

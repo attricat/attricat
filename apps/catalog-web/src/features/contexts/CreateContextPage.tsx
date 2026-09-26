@@ -15,7 +15,7 @@ import { PageContainer } from '../../components/PageContainer';
 import { PageHeader } from '../../components/PageHeader';
 import { QueryErrorNotice } from '../../components/QueryErrorNotice';
 import { createContext, listContexts } from './api';
-import { contextQueryKeys } from './query-keys';
+import { contextQueryKeys } from './queryKeys';
 
 export const CreateContextPage = () => {
   const { t } = useTranslation();

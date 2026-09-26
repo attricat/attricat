@@ -22,7 +22,7 @@ import {
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { currentSession, logout } from '../features/auth/api';
-import { authQueryKeys } from '../features/auth/query-keys';
+import { authQueryKeys } from '../features/auth/queryKeys';
 import { MobileNavigationPanelProvider } from './MobileNavigationPanel';
 import { navigationRoutes } from './navigation';
 import {

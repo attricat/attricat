@@ -6,11 +6,11 @@ import { Link, useRouterState } from '@tanstack/react-router';
 import { createElement, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { currentSession } from '../features/auth/api';
-import { authQueryKeys } from '../features/auth/query-keys';
+import { authQueryKeys } from '../features/auth/queryKeys';
 import { ExtensionOutlet } from '../features/extensions/ExtensionOutlet';
 import { listSidebarExploreNavigation } from '../features/workspace/api';
-import { workspaceQueryKeys } from '../features/workspace/query-keys';
-import { useSetMobileExplorePanelTarget } from './mobile-navigation-panel-context';
+import { workspaceQueryKeys } from '../features/workspace/queryKeys';
+import { useSetMobileExplorePanelTarget } from './mobileNavigationPanelContext';
 import { QueryErrorNotice } from './QueryErrorNotice';
 import { RouterListItemButton } from './RouterLink';
 import {
@@ -19,7 +19,7 @@ import {
   BrandIcon,
   ExplorerShortcutIcon,
   ManagementIcon,
-} from './system-icons';
+} from './systemIcons';
 import {
   getVisibleManagementNavigationItems,
   navigationRoutes,

@@ -6,11 +6,11 @@ import { useTranslation } from 'react-i18next';
 import { PageContainer } from '../../components/PageContainer';
 import { PageHeader } from '../../components/PageHeader';
 import { currentSession } from '../auth/api';
-import { authQueryKeys } from '../auth/query-keys';
-import { installExtension, registryDetails } from './management-api';
-import { extensionManagementQueryKeys } from './management-query-keys';
+import { authQueryKeys } from '../auth/queryKeys';
+import { installExtension, registryDetails } from './managementApi';
+import { extensionManagementQueryKeys } from './managementQueryKeys';
 import { ErrorNotice } from './ExtensionErrorNotice';
-import { invalidateExtensions } from './extension-page-utils';
+import { invalidateExtensions } from './extensionPageUtils';
 
 export const MarketplaceExtensionPage = ({
   owner,

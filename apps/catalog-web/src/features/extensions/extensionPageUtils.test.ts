@@ -1,7 +1,7 @@
 import { QueryClient } from '@tanstack/react-query';
 import { expect, it } from 'vitest';
-import { invalidateExtensions } from './extension-page-utils';
-import { extensionQueryKeys } from './query-keys';
+import { invalidateExtensions } from './extensionPageUtils';
+import { extensionQueryKeys } from './queryKeys';
 
 it('invalidates every scoped and unscoped runtime descriptor', async () => {
   const client = new QueryClient();

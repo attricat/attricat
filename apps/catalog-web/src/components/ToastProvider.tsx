@@ -1,8 +1,8 @@
 import { Alert, Box, Stack } from '@mui/material';
 import { useEffect, type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
-import type { Toast } from './toast-queue';
-import { useToastStore } from './toast-store';
+import type { Toast } from './toastQueue';
+import { useToastStore } from './toastStore';
 
 const maximumVisibleToasts = 3;
 const defaultToastAutoHideDuration = 6_000;

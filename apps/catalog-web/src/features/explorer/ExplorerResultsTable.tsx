@@ -33,7 +33,7 @@ import {
 } from '../entities/api';
 import { DeleteEntityDialog } from '../entities/components/DeleteEntityDialog';
 import { getExtensionRuntime } from '../extensions/api';
-import { extensionQueryKeys } from '../extensions/query-keys';
+import { extensionQueryKeys } from '../extensions/queryKeys';
 import { extensionRuntimeRefetchInterval } from '../extensions/constants';
 import { EntityActionsMenu } from './EntityActionsMenu';
 import { ExplorerColumnPreferencesDialog } from './ExplorerColumnPreferencesDialog';
@@ -45,13 +45,13 @@ import {
 import { SendSelectedToAgentDialog } from './SendSelectedToAgentDialog';
 import { VirtualizedExplorerTable } from './VirtualizedExplorerTable';
 import { useExplorerSelection } from './useExplorerSelection';
-import { entityQueryKeys } from '../entities/query-keys';
+import { entityQueryKeys } from '../entities/queryKeys';
 import {
   clearExplorerColumnPreferences,
   getExplorerColumnPreferences,
   setExplorerColumnPreferences,
   type ExplorerColumnPreferences,
-} from './column-preferences';
+} from './columnPreferences';
 
 const maximumExplorerCellFrames = 32;
 

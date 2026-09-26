@@ -3,7 +3,7 @@ import { Alert, Box, Button, Paper, Stack, Typography } from '@mui/material';
 import { Link } from '@tanstack/react-router';
 import { useTranslation } from 'react-i18next';
 import { currentSession } from '../auth/api';
-import { authQueryKeys } from '../auth/query-keys';
+import { authQueryKeys } from '../auth/queryKeys';
 import { SettingsPage } from '../../components/CenteredPage';
 import { LanguageSwitcher } from '../../components/LanguageSwitcher';
 import { PersonalTokens } from './PersonalTokens';

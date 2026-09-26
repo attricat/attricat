@@ -1,4 +1,4 @@
-import { AgentIcon } from '../../components/system-icons';
+import { AgentIcon } from '../../components/systemIcons';
 import { useEffect, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
 import {

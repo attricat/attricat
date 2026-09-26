@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { getBackgroundProcessingStatus } from './api';
-import { backgroundProcessingQueryKeys } from './query-keys';
+import { backgroundProcessingQueryKeys } from './queryKeys';
 
 const fetchMock = vi.fn();
 vi.stubGlobal('fetch', fetchMock);

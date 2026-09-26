@@ -26,7 +26,7 @@ import {
   type AuditEvent,
   type AuditEventFilters,
 } from './api';
-import { auditQueryKeys } from './query-keys';
+import { auditQueryKeys } from './queryKeys';
 
 const pageSize = 50;
 const formatDate = (value: string, locale: string) =>

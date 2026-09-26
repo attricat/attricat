@@ -5,7 +5,7 @@ import { useTranslation } from 'react-i18next';
 import { PageContainer } from '../../components/PageContainer';
 import { PageHeader } from '../../components/PageHeader';
 import { currentSession } from '../auth/api';
-import { authQueryKeys } from '../auth/query-keys';
+import { authQueryKeys } from '../auth/queryKeys';
 import { useQuery } from '@tanstack/react-query';
 
 const extensionTabs = [

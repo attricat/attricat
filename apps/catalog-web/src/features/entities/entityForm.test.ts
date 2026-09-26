@@ -5,7 +5,7 @@ import {
   serializeAttributeValues,
   validateEntityForm,
   valuesForForm,
-} from './entity-form';
+} from './entityForm';
 import type { Attribute } from './api';
 
 const attributes = [

@@ -21,8 +21,8 @@ import { PageContainer } from '../../components/PageContainer';
 import { RouterButton } from '../../components/RouterLink';
 import { PageHeader } from '../../components/PageHeader';
 import { listBlueprints } from './api';
-import { formatBlueprintDateTime } from './date-time';
-import { blueprintQueryKeys } from './query-keys';
+import { formatBlueprintDateTime } from './dateTime';
+import { blueprintQueryKeys } from './queryKeys';
 
 export const BlueprintsPage = () => {
   const { t } = useTranslation();

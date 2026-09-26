@@ -26,13 +26,13 @@ import {
   resolveValueRenderer,
   resolveViewComponent,
 } from './registry';
-import { attributeLabel } from '../../entities/entity-display';
+import { attributeLabel } from '../../entities/entityDisplay';
 import { AttributeValue } from './values/AttributeValue';
 import { IncomingRelationshipListDisplay } from './IncomingRelationshipListDisplay';
 import {
   isHiddenByDefault,
   type AttributeVisibilityScope,
-} from '../../entities/attribute-visibility';
+} from '../../entities/attributeVisibility';
 
 type ResolvedValue = {
   value: unknown;

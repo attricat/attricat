@@ -20,8 +20,8 @@ import {
   serializeAttributeValues,
   validateEntityForm,
   valuesForForm,
-} from '../entity-form';
-import { entityQueryKeys } from '../query-keys';
+} from '../entityForm';
+import { entityQueryKeys } from '../queryKeys';
 import { EntityView } from '../../views/components/EntityView';
 import {
   forwardRef,
@@ -31,7 +31,7 @@ import {
 } from 'react';
 import { useTranslation } from 'react-i18next';
 import { EntityAttributeEditor } from './EntityAttributeEditor';
-import { isHiddenByDefault } from '../attribute-visibility';
+import { isHiddenByDefault } from '../attributeVisibility';
 
 export type EntityFormHandle = {
   applySmartFillValues: (values: Record<string, string>) => void;

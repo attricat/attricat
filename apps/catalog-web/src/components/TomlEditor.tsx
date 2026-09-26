@@ -4,7 +4,7 @@ import type { ComponentProps } from 'react';
 import {
   configureToml,
   minimumTomlEditorHeight,
-} from '../features/blueprints/blueprint-editor-utils';
+} from '../features/blueprints/blueprintEditorUtils';
 
 type EditorProps = ComponentProps<typeof Editor>;
 

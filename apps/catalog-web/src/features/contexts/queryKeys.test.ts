@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { contextQueryKeys } from './query-keys';
+import { contextQueryKeys } from './queryKeys';
 
 describe('context query keys', () => {
   it('preserves the shared cache key for context reads', () => {

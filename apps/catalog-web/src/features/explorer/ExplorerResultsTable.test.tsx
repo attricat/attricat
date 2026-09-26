@@ -6,7 +6,7 @@ import { describe, expect, it, vi } from 'vitest';
 import '../../i18n';
 import { ToastProvider } from '../../components/ToastProvider';
 import type { BlueprintWithAttributes, EntityItem } from '../entities/api';
-import { extensionQueryKeys } from '../extensions/query-keys';
+import { extensionQueryKeys } from '../extensions/queryKeys';
 import { ExplorerResultsTable } from './ExplorerResultsTable';
 
 const navigate = vi.fn();

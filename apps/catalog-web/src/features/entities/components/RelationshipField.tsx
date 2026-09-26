@@ -16,7 +16,7 @@ import {
 import { compactOutlinedActionButtonSx } from '../../../components/CompactOutlinedActionButton';
 import { LoadMoreButton } from '../../../components/LoadMoreButton';
 import { RelationshipSelectorDialog } from '../../../components/RelationshipSelectorDialog';
-import { RelationshipPickerIcon } from '../../../components/system-icons';
+import { RelationshipPickerIcon } from '../../../components/systemIcons';
 import { searchEntities, type Attribute } from '../api';
 import { RelationshipSelectionPills } from './RelationshipSelectionPills';
 import { useRelationshipSelectionLabels } from './useRelationshipSelectionLabels';
@@ -28,8 +28,8 @@ import {
   attributeLabel,
   displayLabel,
   dropdownOptionLabel,
-} from '../entity-display';
-import { entityQueryKeys } from '../query-keys';
+} from '../entityDisplay';
+import { entityQueryKeys } from '../queryKeys';
 
 export const RelationshipField = ({
   attribute,

@@ -2,7 +2,7 @@ import { useQuery } from '@tanstack/react-query';
 import { Alert, MenuItem, TextField } from '@mui/material';
 import { useTranslation } from 'react-i18next';
 import { listGrantTargets, selectedScopeTarget, type ScopeType } from './api';
-import { workspaceQueryKeys } from './query-keys';
+import { workspaceQueryKeys } from './queryKeys';
 
 type ScopeFieldsProps = {
   onScopeChange: (scope: ScopeType) => void;

@@ -7,7 +7,7 @@ import { PageContainer } from '../../components/PageContainer';
 import { PageHeader } from '../../components/PageHeader';
 import { getVisibleManagementNavigationItems } from '../../components/navigation';
 import { currentSession } from '../auth/api';
-import { authQueryKeys } from '../auth/query-keys';
+import { authQueryKeys } from '../auth/queryKeys';
 
 export const ManagementDashboardPage = () => {
   const { t } = useTranslation();

@@ -1,7 +1,7 @@
 import { z } from 'zod';
 import { attributeContextSchema } from '../contexts/api';
 import { fileMetadataSchema } from '../files/schemas';
-import { attributeValueKinds, attributeValueTypes } from './value-types';
+import { attributeValueKinds, attributeValueTypes } from './valueTypes';
 
 export const viewBlockTypes = {
   dropdownOption: 'dropdown_option',

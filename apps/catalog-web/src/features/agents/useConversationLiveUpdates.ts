@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useQueryClient } from '@tanstack/react-query';
 import { agentRunEventsUrl } from './api';
-import { agentQueryKeys } from './query-keys';
+import { agentQueryKeys } from './queryKeys';
 import type { AgentRun } from './schemas';
 
 const activeRunStatuses = ['queued', 'running', 'awaiting_approval'];

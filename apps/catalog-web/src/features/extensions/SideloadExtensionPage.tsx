@@ -7,10 +7,10 @@ import { useTranslation } from 'react-i18next';
 import { PageContainer } from '../../components/PageContainer';
 import { PageHeader } from '../../components/PageHeader';
 import { currentSession } from '../auth/api';
-import { authQueryKeys } from '../auth/query-keys';
-import { sideloadExtension } from './management-api';
+import { authQueryKeys } from '../auth/queryKeys';
+import { sideloadExtension } from './managementApi';
 import { ErrorNotice } from './ExtensionErrorNotice';
-import { invalidateExtensions } from './extension-page-utils';
+import { invalidateExtensions } from './extensionPageUtils';
 
 export const SideloadExtensionPage = () => {
   const { t } = useTranslation();

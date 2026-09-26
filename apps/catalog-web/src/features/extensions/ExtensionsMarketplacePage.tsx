@@ -3,11 +3,11 @@ import { Link } from '@tanstack/react-router';
 import { Box, Paper, Stack, Typography } from '@mui/material';
 import { useTranslation } from 'react-i18next';
 import { currentSession } from '../auth/api';
-import { authQueryKeys } from '../auth/query-keys';
+import { authQueryKeys } from '../auth/queryKeys';
 import { ErrorNotice } from './ExtensionErrorNotice';
-import { repositoryParts } from './extension-page-utils';
-import { discoverExtensions } from './management-api';
-import { extensionManagementQueryKeys } from './management-query-keys';
+import { repositoryParts } from './extensionPageUtils';
+import { discoverExtensions } from './managementApi';
+import { extensionManagementQueryKeys } from './managementQueryKeys';
 
 export const ExtensionsMarketplacePage = () => {
   const { t } = useTranslation();

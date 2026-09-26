@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { ruleQueryKeys } from './query-keys';
+import { ruleQueryKeys } from './queryKeys';
 
 describe('rule query keys', () => {
   it('scopes entity findings beneath the shared findings root', () => {

@@ -17,9 +17,9 @@ import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { LoadMoreButton } from '../../../components/LoadMoreButton';
 import { getIncomingRelationships } from '../../entities/api';
-import { displayLabel } from '../../entities/entity-display';
-import { entityQueryKeys } from '../../entities/query-keys';
-import type { ViewComponentDefinition } from './component-types';
+import { displayLabel } from '../../entities/entityDisplay';
+import { entityQueryKeys } from '../../entities/queryKeys';
+import type { ViewComponentDefinition } from './componentTypes';
 
 export const IncomingRelationshipListDisplay = ({
   entityId,

@@ -6,7 +6,7 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it, vi } from 'vitest';
 import '../i18n';
 import { AppLayout, SessionErrorState } from './AppLayout';
-import { authQueryKeys } from '../features/auth/query-keys';
+import { authQueryKeys } from '../features/auth/queryKeys';
 
 let pathname = '/catalog';
 let isDesktop = true;

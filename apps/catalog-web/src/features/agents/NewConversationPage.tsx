@@ -21,8 +21,8 @@ import { PageContainer } from '../../components/PageContainer';
 import { PageHeader } from '../../components/PageHeader';
 import { uploadConversationFiles } from '../files/api';
 import { createConversation, sendMessage } from './api';
-import { conversationTitleFromFirstMessage } from './conversation-title';
-import { agentQueryKeys } from './query-keys';
+import { conversationTitleFromFirstMessage } from './conversationTitle';
+import { agentQueryKeys } from './queryKeys';
 
 export const NewConversationPage = () => {
   const { t } = useTranslation();

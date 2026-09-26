@@ -8,13 +8,14 @@ These conventions apply to `apps/catalog-web`.
 - Use semicolons and two-space indentation.
 - Keep feature code under `src/features/<feature>`.
 - Prefer relative imports within and between features; no path aliases are configured.
+- Name non-component TypeScript files in camelCase (for example, `queryKeys.ts` and `latestRevisions.test.ts`); name React component files in PascalCase (for example, `EntityForm.tsx`). Keep file-based route filenames aligned with their URL segments, including kebab-case where appropriate, and retain tooling-required filenames such as `vite-env.d.ts`.
 
 ## Data Fetching
 
 - Keep API request functions in each feature's `api.ts` and their Zod request/response schemas in that feature's `schemas.ts`.
 - Route browser API calls through `src/api/request.ts`: use `request` for Zod-validated JSON, `requestNoContent` for successful empty responses, and `requestText` only for deliberately non-JSON or bounded extension responses. Do not call `fetch` or `apiFetch` from feature API clients.
 - Preserve endpoint-specific semantics by handling `ApiRequestError` at the feature boundary (for example, an unauthenticated session may map HTTP 401 to `null`); all other API failures must retain the shared structured error.
-- Define TanStack Query key factories in a feature-local `query-keys.ts` file.
+- Define TanStack Query key factories in a feature-local `queryKeys.ts` file.
 - Use those factories for every `queryKey` and invalidation so equivalent requests share the same cache entry and invalidation can reuse the same key definitions. Define a root key when a feature needs to invalidate all variants of a resource.
 
 ## Client State
@@ -42,7 +43,7 @@ These conventions apply to `apps/catalog-web`.
 
 ## Icons
 
-- Import icons assigned to Attricat concepts from `src/components/system-icons.ts` so the same concept is represented consistently across navigation, headings, menus, and other surfaces.
+- Import icons assigned to Attricat concepts from `src/components/systemIcons.ts` so the same concept is represented consistently across navigation, headings, menus, and other surfaces.
 - Keep generic action and status icons, such as add, edit, delete, close, expand, and warnings, local to the component using them.
 - Add a semantic export to the registry before introducing an icon for another system concept.
 

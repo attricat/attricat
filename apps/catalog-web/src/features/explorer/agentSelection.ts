@@ -1,5 +1,5 @@
 import type { EntityItem } from '../entities/api';
-import { displayLabel } from '../entities/entity-display';
+import { displayLabel } from '../entities/entityDisplay';
 
 export const maximumAgentSelection = 50;
 

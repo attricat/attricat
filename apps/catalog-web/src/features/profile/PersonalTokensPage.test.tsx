@@ -5,9 +5,9 @@ import { describe, expect, it, vi } from 'vitest';
 import '../../i18n';
 import { ToastProvider } from '../../components/ToastProvider';
 import { currentSession } from '../auth/api';
-import { authQueryKeys } from '../auth/query-keys';
+import { authQueryKeys } from '../auth/queryKeys';
 import { createToken, listTokenPermissions } from './api';
-import { profileQueryKeys } from './query-keys';
+import { profileQueryKeys } from './queryKeys';
 import { PersonalTokensPage } from './PersonalTokensPage';
 
 vi.mock('@tanstack/react-router', () => ({ useNavigate: () => vi.fn() }));

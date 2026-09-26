@@ -1,5 +1,5 @@
 import { AttributeValue } from './values/AttributeValue';
-import type { ViewComponentDefinition } from './component-types';
+import type { ViewComponentDefinition } from './componentTypes';
 
 export const fieldDisplayComponent = {
   id: 'catalog.field_display',

@@ -1,4 +1,4 @@
-import { scalarValueForField } from '../entities/attribute-values';
+import { scalarValueForField } from '../entities/attributeValues';
 import type { Attribute } from '../entities/api';
 
 export type SandboxValues = Record<string, { value: unknown }>;

@@ -17,13 +17,13 @@ import { PageContainer } from '../../components/PageContainer';
 import { PageHeader } from '../../components/PageHeader';
 import { RouterButton } from '../../components/RouterLink';
 import { listContexts } from '../contexts/api';
-import { contextQueryKeys } from '../contexts/query-keys';
+import { contextQueryKeys } from '../contexts/queryKeys';
 import {
   listPublicationChannels,
   updatePublicationChannel,
   type PublicationChannel,
 } from './api';
-import { exportQueryKeys } from './query-keys';
+import { exportQueryKeys } from './queryKeys';
 
 export const ExportsPage = () => {
   const { t } = useTranslation();

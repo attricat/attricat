@@ -3,7 +3,7 @@ import {
   attributeLabel,
   displayLabel,
   dropdownOptionLabel,
-} from './entity-display';
+} from './entityDisplay';
 
 describe('displayLabel', () => {
   it('uses an attribute name and humanizes its code as a fallback', () => {

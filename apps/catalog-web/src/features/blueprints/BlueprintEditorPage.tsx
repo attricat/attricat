@@ -26,8 +26,8 @@ import {
   createBlueprintRevision,
   getBlueprintRevision,
 } from './api';
-import { blueprintQueryKeys } from './query-keys';
-import { blueprintTemplates } from './blueprint-editor-utils';
+import { blueprintQueryKeys } from './queryKeys';
+import { blueprintTemplates } from './blueprintEditorUtils';
 import { TomlEditor } from '../../components/TomlEditor';
 
 type PendingUnsavedAction =

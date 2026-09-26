@@ -17,7 +17,7 @@ import { EntitySchemaSubheader } from './components/EntitySchemaSubheader';
 import { EntityToolbar } from './components/EntityToolbar';
 import { getEntityChanges, getEntityForm } from './api';
 import type { EntityAuditChange } from './api';
-import { entityQueryKeys } from './query-keys';
+import { entityQueryKeys } from './queryKeys';
 
 const groupChangesByEvent = (changes: EntityAuditChange[]) =>
   changes.reduce<Record<string, EntityAuditChange[]>>((groups, change) => {

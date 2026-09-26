@@ -8,7 +8,7 @@ other server-internal facts to a component.
 
 Contracts and helpers live in
 `apps/catalog-web/src/features/web-components/catalog-events.ts`. The host
-listener is `installCatalogEventBridge` in `catalog-event-bridge.ts`.
+listener is `installCatalogEventBridge` in `catalogEventBridge.ts`.
 
 ## Host to component
 

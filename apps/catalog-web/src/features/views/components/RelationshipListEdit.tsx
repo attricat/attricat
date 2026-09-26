@@ -1,4 +1,4 @@
-import type { ViewComponentDefinition } from './component-types';
+import type { ViewComponentDefinition } from './componentTypes';
 
 // EntityForm provides the editor because it owns form state.
 export const relationshipListEditComponent = {

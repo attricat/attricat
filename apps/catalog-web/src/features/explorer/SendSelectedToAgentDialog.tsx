@@ -16,10 +16,10 @@ import {
   Typography,
 } from '@mui/material';
 import { createConversation, sendMessage } from '../agents/api';
-import { agentQueryKeys } from '../agents/query-keys';
+import { agentQueryKeys } from '../agents/queryKeys';
 import type { EntityItem } from '../entities/api';
-import { displayLabel } from '../entities/entity-display';
-import { selectedEntitiesMessage } from './agent-selection';
+import { displayLabel } from '../entities/entityDisplay';
+import { selectedEntitiesMessage } from './agentSelection';
 
 export const SendSelectedToAgentDialog = ({
   blueprintName,

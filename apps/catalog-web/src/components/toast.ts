@@ -1,6 +1,6 @@
 import type { AlertColor } from '@mui/material';
 import type { ReactNode } from 'react';
-import { useToastStore } from './toast-store';
+import { useToastStore } from './toastStore';
 
 export type ToastOptions = {
   action?: ReactNode;

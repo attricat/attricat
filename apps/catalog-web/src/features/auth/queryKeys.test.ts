@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { authQueryKeys } from './query-keys';
+import { authQueryKeys } from './queryKeys';
 
 describe('auth query keys', () => {
   it('keeps the session key beneath the auth root', () => {

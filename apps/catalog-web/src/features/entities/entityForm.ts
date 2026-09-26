@@ -6,9 +6,9 @@ import type {
   FormAttributeValue,
   RelationshipTargets,
 } from './api';
-import { scalarValueForField, valueForField } from './attribute-values';
-import { jsonSchemaValidationErrors } from './json-schema';
-import { attributeValueKinds, attributeValueTypes } from './value-types';
+import { scalarValueForField, valueForField } from './attributeValues';
+import { jsonSchemaValidationErrors } from './jsonSchema';
+import { attributeValueKinds, attributeValueTypes } from './valueTypes';
 
 export type EntityFormValidation = {
   fieldErrors: Record<string, string>;

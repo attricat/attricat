@@ -1,6 +1,6 @@
 import { useMutation, useQuery } from '@tanstack/react-query';
 import { Link, useNavigate } from '@tanstack/react-router';
-import { BlueprintIcon } from '../../components/system-icons';
+import { BlueprintIcon } from '../../components/systemIcons';
 import AutoAwesomeOutlinedIcon from '@mui/icons-material/AutoAwesomeOutlined';
 import CheckCircleOutlinedIcon from '@mui/icons-material/CheckCircleOutlined';
 import UpgradeOutlinedIcon from '@mui/icons-material/UpgradeOutlined';
@@ -25,7 +25,7 @@ import {
 import { createElement, useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { listContexts } from '../contexts/api';
-import { contextQueryKeys } from '../contexts/query-keys';
+import { contextQueryKeys } from '../contexts/queryKeys';
 import { defaultContextCode } from '../contexts/constants';
 import {
   getEntityForm,
@@ -40,8 +40,8 @@ import {
   listReusableAttributeGroups,
   listReusableAttributes,
 } from '../reusable-attributes/api';
-import { reusableAttributeQueryKeys } from '../reusable-attributes/query-keys';
-import { latestReusableAttributeRevisions } from '../reusable-attributes/latest-revisions';
+import { reusableAttributeQueryKeys } from '../reusable-attributes/queryKeys';
+import { latestReusableAttributeRevisions } from '../reusable-attributes/latestRevisions';
 import { RouterButton, RouterIconButton } from '../../components/RouterLink';
 import { EntityContextPicker } from './components/EntityContextPicker';
 import { EntityForm, type EntityFormHandle } from './components/EntityForm';
@@ -49,8 +49,8 @@ import { EntitySchemaSubheader } from './components/EntitySchemaSubheader';
 import { EntityToolbar } from './components/EntityToolbar';
 import { PageContainer } from '../../components/PageContainer';
 import { PageHeader } from '../../components/PageHeader';
-import { valuesForForm } from './entity-form';
-import { entityQueryKeys } from './query-keys';
+import { valuesForForm } from './entityForm';
+import { entityQueryKeys } from './queryKeys';
 import { findEntityHeading } from '../views/components/blocks/EntityHeadingDefinition';
 import { resolveHeadingRenderer } from '../views/components/registry';
 

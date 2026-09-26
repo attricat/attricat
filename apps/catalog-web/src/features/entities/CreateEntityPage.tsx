@@ -3,13 +3,13 @@ import { useState } from 'react';
 import { useNavigate } from '@tanstack/react-router';
 import { useTranslation } from 'react-i18next';
 import { listContexts } from '../contexts/api';
-import { contextQueryKeys } from '../contexts/query-keys';
+import { contextQueryKeys } from '../contexts/queryKeys';
 import { defaultContextCode } from '../contexts/constants';
 import { createEntity, getBlueprintByCode } from './api';
 import { EntityForm } from './components/EntityForm';
 import { EntityPage } from './components/EntityPage';
-import { entityQueryKeys } from './query-keys';
-import { attributeValueKinds } from './value-types';
+import { entityQueryKeys } from './queryKeys';
+import { attributeValueKinds } from './valueTypes';
 
 export const CreateEntityPage = ({
   search,

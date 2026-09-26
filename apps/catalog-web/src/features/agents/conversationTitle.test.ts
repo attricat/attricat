@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { conversationTitleFromFirstMessage } from './conversation-title';
+import { conversationTitleFromFirstMessage } from './conversationTitle';
 
 describe('conversationTitleFromFirstMessage', () => {
   it('normalizes the first message into a readable title', () => {

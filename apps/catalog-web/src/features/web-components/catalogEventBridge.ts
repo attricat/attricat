@@ -6,7 +6,7 @@ import {
   notifyDetailSchema,
   type RefreshEntityDetail,
   refreshEntityDetailSchema,
-} from './catalog-events';
+} from './catalogEvents';
 
 export type CatalogEventBridgeOptions = {
   host: EventTarget;

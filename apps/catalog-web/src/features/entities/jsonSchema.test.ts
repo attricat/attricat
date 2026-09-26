@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { validatesJsonSchema } from './json-schema';
+import { validatesJsonSchema } from './jsonSchema';
 import { attributeSchema, blueprintSchema } from './schemas';
 
 const blueprintIdentity = {

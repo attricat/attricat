@@ -1,4 +1,4 @@
-import type { ViewComponentDefinition } from './component-types';
+import type { ViewComponentDefinition } from './componentTypes';
 
 export const tableEditComponent = {
   id: 'catalog.table_edit',

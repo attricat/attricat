@@ -15,7 +15,7 @@ import {
   type ExplorerRelationshipFacet,
 } from './ExplorerFacetSidebar';
 import { relationshipPickerMessageType } from '../entities/components/useRecentlyPreviewedEntities';
-import type { RelationshipFilterAttribute } from './relationship-filter-types';
+import type { RelationshipFilterAttribute } from './relationshipFilterTypes';
 
 vi.mock('../entities/api', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../entities/api')>();

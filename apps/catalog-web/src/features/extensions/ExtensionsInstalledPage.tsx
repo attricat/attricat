@@ -3,10 +3,10 @@ import { Link } from '@tanstack/react-router';
 import { Box, Chip, Paper, Stack, Typography } from '@mui/material';
 import { useTranslation } from 'react-i18next';
 import { currentSession } from '../auth/api';
-import { authQueryKeys } from '../auth/query-keys';
+import { authQueryKeys } from '../auth/queryKeys';
 import { ErrorNotice } from './ExtensionErrorNotice';
-import { installedExtensions } from './management-api';
-import { extensionManagementQueryKeys } from './management-query-keys';
+import { installedExtensions } from './managementApi';
+import { extensionManagementQueryKeys } from './managementQueryKeys';
 
 export const ExtensionsInstalledPage = () => {
   const { t } = useTranslation();

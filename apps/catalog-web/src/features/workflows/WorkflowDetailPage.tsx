@@ -24,7 +24,7 @@ import { PageContainer } from '../../components/PageContainer';
 import { PageHeader } from '../../components/PageHeader';
 import { useTabAccessibility } from '../../components/useTabAccessibility';
 import { currentSession } from '../auth/api';
-import { authQueryKeys } from '../auth/query-keys';
+import { authQueryKeys } from '../auth/queryKeys';
 import {
   disableWorkflow,
   enableWorkflowRevision,
@@ -33,8 +33,8 @@ import {
   publishWorkflowRevision,
   runWorkflowNow,
 } from './api';
-import { workflowQueryKeys } from './query-keys';
-import { formatWorkflowDateTime } from './date-time';
+import { workflowQueryKeys } from './queryKeys';
+import { formatWorkflowDateTime } from './dateTime';
 
 const WorkflowRevisionLink = Link as unknown as ComponentType<{
   params: { version: string; workflowId: string };

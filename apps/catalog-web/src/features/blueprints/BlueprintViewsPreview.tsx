@@ -16,7 +16,7 @@ import {
   Typography,
 } from '@mui/material';
 import type { Attribute, Blueprint, ViewDefinition } from '../entities/api';
-import { attributeValueTypes } from '../entities/value-types';
+import { attributeValueTypes } from '../entities/valueTypes';
 import { EntityView } from '../views/components/EntityView';
 import {
   entityHeadingComponentId,
@@ -24,7 +24,7 @@ import {
 } from '../views/components/blocks/EntityHeadingDefinition';
 import { resolveHeadingRenderer } from '../views/components/registry';
 import { AttributeValue } from '../views/components/values/AttributeValue';
-import { sandboxValuesForFields } from './sandbox-values';
+import { sandboxValuesForFields } from './sandboxValues';
 
 const inputPlaceholder = (attribute: Attribute) => {
   if (attribute.value_type === attributeValueTypes.date) return 'YYYY-MM-DD';

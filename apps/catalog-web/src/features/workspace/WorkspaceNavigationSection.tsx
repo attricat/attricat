@@ -11,14 +11,14 @@ import {
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { listEntityBlueprints } from '../entities/api';
-import { entityQueryKeys } from '../entities/query-keys';
+import { entityQueryKeys } from '../entities/queryKeys';
 import {
   listExploreNavigation,
   listRoles,
   updateExploreNavigation,
   type ExploreNavigationEntry,
 } from './api';
-import { workspaceQueryKeys } from './query-keys';
+import { workspaceQueryKeys } from './queryKeys';
 
 export const WorkspaceNavigationSection = ({
   canManage,

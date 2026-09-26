@@ -17,13 +17,13 @@ import { useTranslation } from 'react-i18next';
 import { PageContainer } from '../../components/PageContainer';
 import { PageHeader } from '../../components/PageHeader';
 import { currentSession } from '../auth/api';
-import { authQueryKeys } from '../auth/query-keys';
+import { authQueryKeys } from '../auth/queryKeys';
 import { getBackgroundProcessingStatus } from './api';
 import {
   backgroundProcessingRefreshInterval,
   taskKindTranslationKeys,
 } from './constants';
-import { backgroundProcessingQueryKeys } from './query-keys';
+import { backgroundProcessingQueryKeys } from './queryKeys';
 
 export const BackgroundProcessingPage = () => {
   const { t, i18n } = useTranslation();

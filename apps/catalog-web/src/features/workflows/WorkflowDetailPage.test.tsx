@@ -13,7 +13,7 @@ import {
   replayWorkflowRun,
   runWorkflowNow,
 } from './api';
-import { workflowQueryKeys } from './query-keys';
+import { workflowQueryKeys } from './queryKeys';
 import { WorkflowDetailPage } from './WorkflowDetailPage';
 
 vi.mock('@tanstack/react-router', () => ({

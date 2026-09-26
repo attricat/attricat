@@ -1,6 +1,6 @@
 import type { QueryClient } from '@tanstack/react-query';
-import { extensionQueryKeys } from './query-keys';
-import { extensionManagementQueryKeys } from './management-query-keys';
+import { extensionQueryKeys } from './queryKeys';
+import { extensionManagementQueryKeys } from './managementQueryKeys';
 
 export const repositoryParts = (repository: string) =>
   repository.replace(/^github:/, '').split('/', 2);

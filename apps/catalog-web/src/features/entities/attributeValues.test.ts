@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { scalarValueForField, valueForField } from './attribute-values';
+import { scalarValueForField, valueForField } from './attributeValues';
 
 describe('attribute values', () => {
   it('formats API scalar values for form fields', () => {

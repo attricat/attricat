@@ -3,14 +3,14 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import '../../i18n';
-import { authQueryKeys } from '../auth/query-keys';
+import { authQueryKeys } from '../auth/queryKeys';
 import { currentSession } from '../auth/api';
-import { workspaceExtensionLayout } from './management-api';
-import { extensionManagementQueryKeys } from './management-query-keys';
+import { workspaceExtensionLayout } from './managementApi';
+import { extensionManagementQueryKeys } from './managementQueryKeys';
 import { ExtensionsLayoutPage } from './ExtensionsLayoutPage';
 
 vi.mock('../auth/api', () => ({ currentSession: vi.fn() }));
-vi.mock('./management-api', () => ({
+vi.mock('./managementApi', () => ({
   workspaceExtensionLayout: vi.fn(),
   updateWorkspaceExtensionLayout: vi.fn(),
 }));

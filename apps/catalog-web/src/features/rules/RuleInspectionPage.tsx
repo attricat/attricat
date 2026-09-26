@@ -19,7 +19,7 @@ import {
 import { PageContainer } from '../../components/PageContainer';
 import { PageHeader } from '../../components/PageHeader';
 import { currentSession } from '../auth/api';
-import { authQueryKeys } from '../auth/query-keys';
+import { authQueryKeys } from '../auth/queryKeys';
 import {
   acknowledgeFinding,
   listFindings,
@@ -27,7 +27,7 @@ import {
   listRules,
   runRuleNow,
 } from './api';
-import { ruleQueryKeys } from './query-keys';
+import { ruleQueryKeys } from './queryKeys';
 
 const RouterTab = createLink(Tab);
 

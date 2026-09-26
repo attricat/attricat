@@ -3,7 +3,7 @@ import { useQuery } from '@tanstack/react-query';
 import { useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { fileDownloadUrl, getFileMetadata } from './api';
-import { fileQueryKeys } from './query-keys';
+import { fileQueryKeys } from './queryKeys';
 import type { FileMetadata } from './schemas';
 
 type ThumbnailFile = Pick<FileMetadata, 'id' | 'filename'>;

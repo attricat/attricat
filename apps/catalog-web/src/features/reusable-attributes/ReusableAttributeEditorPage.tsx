@@ -10,8 +10,8 @@ import {
   listReusableAttributes,
 } from './api';
 import { TomlEditor } from '../../components/TomlEditor';
-import { reusableAttributeQueryKeys } from './query-keys';
-import { latestReusableAttributeRevisions } from './latest-revisions';
+import { reusableAttributeQueryKeys } from './queryKeys';
+import { latestReusableAttributeRevisions } from './latestRevisions';
 
 const newAttributeDefinition = `code = "new_attribute"
 name = "New attribute"

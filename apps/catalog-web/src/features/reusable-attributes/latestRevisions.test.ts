@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { ReusableAttribute } from './api';
-import { latestReusableAttributeRevisions } from './latest-revisions';
+import { latestReusableAttributeRevisions } from './latestRevisions';
 
 const revision = (definition_id: string, version: number, id: string) =>
   ({ definition_id, version, id }) as ReusableAttribute;

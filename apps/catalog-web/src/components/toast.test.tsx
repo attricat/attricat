@@ -3,7 +3,7 @@ import { act, render, screen } from '@testing-library/react';
 import { beforeEach, describe, expect, it } from 'vitest';
 import { ToastProvider } from './ToastProvider';
 import { toast } from './toast';
-import { useToastStore } from './toast-store';
+import { useToastStore } from './toastStore';
 import { useToast } from './useToast';
 import '../i18n';
 

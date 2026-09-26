@@ -1,6 +1,6 @@
 import { DiffEditor } from '@monaco-editor/react';
 import { Box, Typography } from '@mui/material';
-import { configureToml } from './blueprint-editor-utils';
+import { configureToml } from './blueprintEditorUtils';
 
 export const TomlDiffEditor = ({
   original,

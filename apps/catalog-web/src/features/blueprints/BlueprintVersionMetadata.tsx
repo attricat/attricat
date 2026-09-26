@@ -16,7 +16,7 @@ import { useTranslation } from 'react-i18next';
 import type { BlueprintWithAttributes } from './api';
 import { BlueprintViewsPreview } from './BlueprintViewsPreview';
 import { JsonMetadata } from './BlueprintMetadata';
-import { isHiddenByDefault } from '../entities/attribute-visibility';
+import { isHiddenByDefault } from '../entities/attributeVisibility';
 
 export const BlueprintVersionMetadata = ({
   blueprint,

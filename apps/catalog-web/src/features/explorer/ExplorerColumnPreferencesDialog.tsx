@@ -15,7 +15,7 @@ import {
   Tooltip,
 } from '@mui/material';
 import { useTranslation } from 'react-i18next';
-import type { ExplorerColumnPreferences } from './column-preferences';
+import type { ExplorerColumnPreferences } from './columnPreferences';
 
 const columnPreferencesListMaxHeight = 480;
 

@@ -27,7 +27,7 @@ import {
   listSavedViews,
   updateSavedView,
 } from './api';
-import { savedViewQueryKeys } from './query-keys';
+import { savedViewQueryKeys } from './queryKeys';
 import type { SavedView } from './schemas';
 
 const maximumInlineLinkLength = 1800;

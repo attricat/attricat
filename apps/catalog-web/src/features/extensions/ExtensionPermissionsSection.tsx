@@ -2,7 +2,7 @@ import { Button, Chip, Paper, Stack, Typography } from '@mui/material';
 import { useMutation } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
 import { ErrorNotice } from './ExtensionErrorNotice';
-import { grantExtension, revokeExtensionGrant } from './management-api';
+import { grantExtension, revokeExtensionGrant } from './managementApi';
 
 type GrantKind =
   'capability' | 'host_permission' | 'event_publish' | 'event_subscribe';

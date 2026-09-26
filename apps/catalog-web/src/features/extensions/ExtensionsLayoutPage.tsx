@@ -4,14 +4,14 @@ import { Alert, Button, Paper, TextField, Typography } from '@mui/material';
 import { useEffect, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
 import { currentSession } from '../auth/api';
-import { authQueryKeys } from '../auth/query-keys';
+import { authQueryKeys } from '../auth/queryKeys';
 import { ErrorNotice } from './ExtensionErrorNotice';
-import { invalidateExtensions } from './extension-page-utils';
+import { invalidateExtensions } from './extensionPageUtils';
 import {
   updateWorkspaceExtensionLayout,
   workspaceExtensionLayout,
-} from './management-api';
-import { extensionManagementQueryKeys } from './management-query-keys';
+} from './managementApi';
+import { extensionManagementQueryKeys } from './managementQueryKeys';
 import { workspaceExtensionLayoutSchema } from './schemas';
 
 export const ExtensionsLayoutPage = () => {

@@ -1,4 +1,4 @@
-import { InspectorIcon } from '../../components/system-icons';
+import { InspectorIcon } from '../../components/systemIcons';
 import CloseIcon from '@mui/icons-material/Close';
 import {
   Box,
@@ -14,9 +14,9 @@ import { useQuery } from '@tanstack/react-query';
 import { useId, useState, type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
 import { currentSession } from '../auth/api';
-import { authQueryKeys } from '../auth/query-keys';
+import { authQueryKeys } from '../auth/queryKeys';
 import { getApiHealth } from './api';
-import { inspectorQueryKeys } from './query-keys';
+import { inspectorQueryKeys } from './queryKeys';
 import { useTimingStore } from './timing';
 
 type InspectorPane = {

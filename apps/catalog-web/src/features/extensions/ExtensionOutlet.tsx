@@ -1,5 +1,5 @@
 import MoreHorizIcon from '@mui/icons-material/MoreHoriz';
-import { ExtensionIcon } from '../../components/system-icons';
+import { ExtensionIcon } from '../../components/systemIcons';
 import {
   Alert,
   Box,
@@ -26,7 +26,7 @@ import {
   type ExtensionContribution,
   type ExtensionRuntimeScope,
 } from './api';
-import { extensionQueryKeys } from './query-keys';
+import { extensionQueryKeys } from './queryKeys';
 import { extensionRuntimeRefetchInterval } from './constants';
 
 type Outlet =

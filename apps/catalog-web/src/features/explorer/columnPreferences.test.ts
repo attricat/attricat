@@ -4,7 +4,7 @@ import {
   clearExplorerColumnPreferences,
   getExplorerColumnPreferences,
   setExplorerColumnPreferences,
-} from './column-preferences';
+} from './columnPreferences';
 
 const blueprintId = '123e4567-e89b-12d3-a456-426614174000';
 const columns = ['id', 'display', 'schema', 'name'];

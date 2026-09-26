@@ -4,7 +4,7 @@ import {
   installedExtensions,
   updateWorkspaceExtensionLayout,
   workspaceExtensionLayout,
-} from './management-api';
+} from './managementApi';
 
 const fetchMock = vi.fn();
 vi.stubGlobal('fetch', fetchMock);

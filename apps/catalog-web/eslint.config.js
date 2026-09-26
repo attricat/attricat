@@ -40,7 +40,7 @@ export default tseslint.config(
             '@mui/icons-material/TravelExploreOutlined',
           ].map((name) => ({
             message:
-              'Import canonical system icons from components/system-icons.',
+              'Import canonical system icons from components/systemIcons.',
             name,
           })),
         },
@@ -59,7 +59,7 @@ export default tseslint.config(
     },
   },
   {
-    files: ['src/components/system-icons.ts'],
+    files: ['src/components/systemIcons.ts'],
     rules: { 'no-restricted-imports': 'off' },
   },
   {

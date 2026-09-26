@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import { reduceToasts, type Toast } from './toast-queue';
+import { reduceToasts, type Toast } from './toastQueue';
 import type { ToastOptions } from './toast';
 
 type ToastStore = {

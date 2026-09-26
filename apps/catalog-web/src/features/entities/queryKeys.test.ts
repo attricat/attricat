@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { entityQueryKeys } from './query-keys';
+import { entityQueryKeys } from './queryKeys';
 
 describe('entity query keys', () => {
   it('keeps blueprint reads separate from relationship target searches', () => {

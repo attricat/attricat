@@ -14,7 +14,7 @@ import type {
   IncomingRelationshipRenderer,
   ValueRenderer,
   ViewComponentDefinition,
-} from './component-types';
+} from './componentTypes';
 
 export const viewComponents: readonly ViewComponentDefinition[] = [
   fieldDisplayComponent,

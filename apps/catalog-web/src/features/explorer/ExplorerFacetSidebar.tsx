@@ -18,13 +18,13 @@ import type { Attribute, Blueprint } from '../entities/api';
 import type { AttributeContext } from '../contexts/api';
 import { defaultContextCode } from '../contexts/constants';
 import { searchEntities } from '../entities/api';
-import { entityQueryKeys } from '../entities/query-keys';
+import { entityQueryKeys } from '../entities/queryKeys';
 import { compactOutlinedActionButtonSx } from '../../components/CompactOutlinedActionButton';
 import { RelationshipSelectorDialog } from '../../components/RelationshipSelectorDialog';
 import {
   RelationshipIcon,
   RelationshipPickerIcon,
-} from '../../components/system-icons';
+} from '../../components/systemIcons';
 import { RelationshipSelectionPills } from '../entities/components/RelationshipSelectionPills';
 import { useRelationshipSelectionLabels } from '../entities/components/useRelationshipSelectionLabels';
 import {
@@ -37,8 +37,8 @@ import {
   attributeLabel,
   dropdownOptionLabel,
   displayLabel,
-} from '../entities/entity-display';
-import type { RelationshipFilterAttribute } from './relationship-filter-types';
+} from '../entities/entityDisplay';
+import type { RelationshipFilterAttribute } from './relationshipFilterTypes';
 import type { AttributeFilter } from './search';
 
 export type ExplorerRelationshipFacet = {

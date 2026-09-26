@@ -18,13 +18,13 @@ import {
 import { useEffect, useMemo } from 'react';
 import { createPortal } from 'react-dom';
 import { useTranslation } from 'react-i18next';
-import { useMobileExplorePanelTarget } from '../../components/mobile-navigation-panel-context';
+import { useMobileExplorePanelTarget } from '../../components/mobileNavigationPanelContext';
 import { PageContainer } from '../../components/PageContainer';
 import { PageHeader } from '../../components/PageHeader';
 import { QueryErrorNotice } from '../../components/QueryErrorNotice';
 import { RouterButton } from '../../components/RouterLink';
 import { listContexts } from '../contexts/api';
-import { contextQueryKeys } from '../contexts/query-keys';
+import { contextQueryKeys } from '../contexts/queryKeys';
 import { defaultContextCode } from '../contexts/constants';
 import {
   getBlueprintByCode,
@@ -32,7 +32,7 @@ import {
   searchEntities,
 } from '../entities/api';
 import { listBlueprintRevisions } from '../blueprints/api';
-import { entityQueryKeys } from '../entities/query-keys';
+import { entityQueryKeys } from '../entities/queryKeys';
 import {
   ExplorerFacetSidebar,
   type ExplorerRelationshipFacet,
@@ -40,16 +40,16 @@ import {
 import {
   isRelationshipFilterAttribute,
   type RelationshipFilterAttribute,
-} from './relationship-filter-types';
+} from './relationshipFilterTypes';
 import { ActiveExplorerFilters } from './ActiveExplorerFilters';
 import { ExplorerResultsTable } from './ExplorerResultsTable';
 import { ExplorerSearchForm } from './ExplorerSearchForm';
 import type { AttributeFilter, ExplorerSearch } from './search';
-import { getLastBlueprint, setLastBlueprint } from './last-blueprint';
+import { getLastBlueprint, setLastBlueprint } from './lastBlueprint';
 import { currentSession } from '../auth/api';
-import { authQueryKeys } from '../auth/query-keys';
+import { authQueryKeys } from '../auth/queryKeys';
 import { ApiRequestError } from '../../api/request';
-import { isHiddenByDefault } from '../entities/attribute-visibility';
+import { isHiddenByDefault } from '../entities/attributeVisibility';
 import { SavedSearchActions } from '../saved-views/SavedSearchActions';
 import type { SavedView } from '../saved-views/schemas';
 

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { hasActiveMigrationForVersion } from './migration-batches';
+import { hasActiveMigrationForVersion } from './migrationBatches';
 import type { BlueprintMigrationBatchStatus } from './schemas';
 
 const batch = (

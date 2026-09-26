@@ -1,7 +1,7 @@
 import SettingsIcon from '@mui/icons-material/Settings';
 import { Box, Button, IconButton, Tooltip, Typography } from '@mui/material';
 import { useTranslation } from 'react-i18next';
-import { maximumAgentSelection } from './agent-selection';
+import { maximumAgentSelection } from './agentSelection';
 
 type Props = {
   itemCount: number;

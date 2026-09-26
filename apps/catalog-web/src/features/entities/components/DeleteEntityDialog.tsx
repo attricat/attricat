@@ -10,7 +10,7 @@ import {
 } from '@mui/material';
 import { useTranslation } from 'react-i18next';
 import { deleteEntity } from '../api';
-import { entityQueryKeys } from '../query-keys';
+import { entityQueryKeys } from '../queryKeys';
 
 export const DeleteEntityDialog = ({
   entityId,

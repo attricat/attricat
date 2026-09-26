@@ -1,7 +1,7 @@
 import { useQueries, useQuery } from '@tanstack/react-query';
 import { getBlueprintByCode, getEntityPreview } from '../api';
-import { dropdownOptionLabel } from '../entity-display';
-import { entityQueryKeys } from '../query-keys';
+import { dropdownOptionLabel } from '../entityDisplay';
+import { entityQueryKeys } from '../queryKeys';
 
 const MAX_RESOLVED_RELATIONSHIP_SELECTIONS = 10;
 

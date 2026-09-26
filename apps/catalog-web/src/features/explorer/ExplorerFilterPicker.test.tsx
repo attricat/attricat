@@ -9,7 +9,7 @@ import {
   type BlueprintWithAttributes,
 } from '../entities/api';
 import { ExplorerFilterPicker } from './ExplorerFilterPicker';
-import type { RelationshipFilterAttribute } from './relationship-filter-types';
+import type { RelationshipFilterAttribute } from './relationshipFilterTypes';
 
 vi.mock('../entities/api', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../entities/api')>();

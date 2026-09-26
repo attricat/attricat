@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { isHiddenByDefault } from './attribute-visibility';
+import { isHiddenByDefault } from './attributeVisibility';
 
 describe('isHiddenByDefault', () => {
   it('applies the global hidden tag to every surface', () => {

@@ -2,7 +2,7 @@ import { type ReactNode, useState } from 'react';
 import {
   MobileExplorePanelTargetContext,
   SetMobileExplorePanelTargetContext,
-} from './mobile-navigation-panel-context';
+} from './mobileNavigationPanelContext';
 
 export const MobileNavigationPanelProvider = ({
   children,

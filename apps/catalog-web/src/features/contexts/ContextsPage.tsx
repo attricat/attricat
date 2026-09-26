@@ -13,7 +13,7 @@ import {
 import { PageContainer } from '../../components/PageContainer';
 import { PageHeader } from '../../components/PageHeader';
 import { listContexts } from './api';
-import { contextQueryKeys } from './query-keys';
+import { contextQueryKeys } from './queryKeys';
 
 export const ContextsPage = () => {
   const { t } = useTranslation();

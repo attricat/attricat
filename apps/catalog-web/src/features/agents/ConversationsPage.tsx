@@ -14,7 +14,7 @@ import { PageContainer } from '../../components/PageContainer';
 import { PageHeader } from '../../components/PageHeader';
 import { listConversations } from './api';
 import { useTranslation } from 'react-i18next';
-import { agentQueryKeys } from './query-keys';
+import { agentQueryKeys } from './queryKeys';
 
 export const ConversationsPage = () => {
   const { i18n, t } = useTranslation();

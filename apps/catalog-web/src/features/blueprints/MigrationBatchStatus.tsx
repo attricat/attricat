@@ -16,7 +16,7 @@ import {
   Typography,
 } from '@mui/material';
 import { useTranslation } from 'react-i18next';
-import { formatBlueprintDateTime } from './date-time';
+import { formatBlueprintDateTime } from './dateTime';
 import type { BlueprintMigrationBatchStatus as MigrationBatch } from './schemas';
 
 const statusColor = (status: MigrationBatch['status']) => {

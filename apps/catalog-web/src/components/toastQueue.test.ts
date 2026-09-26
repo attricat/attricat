@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { reduceToasts, type Toast } from './toast-queue';
+import { reduceToasts, type Toast } from './toastQueue';
 
 const makeToast = (overrides: Partial<Toast> = {}): Toast => ({
   count: 1,

@@ -4,7 +4,7 @@ import { useTranslation } from 'react-i18next';
 import type { Attribute } from '../../../entities/api';
 import { fileDownloadUrl } from '../../../files/api';
 import { FileThumbnail } from '../../../files/FileThumbnail';
-import { formatAttributeValue } from './format-attribute-value';
+import { formatAttributeValue } from './formatAttributeValue';
 
 type RelationshipValue = {
   items?: { id: string; display?: string }[];

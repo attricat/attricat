@@ -11,7 +11,7 @@ import {
   installedExtensions,
   updateWorkspaceExtensionLayout,
   workspaceExtensionLayout,
-} from './management-api';
+} from './managementApi';
 
 vi.mock('@tanstack/react-router', () => ({
   createLink: <T,>(component: T) => component,
@@ -26,7 +26,7 @@ vi.mock('../auth/api', () => ({
   }),
 }));
 
-vi.mock('./management-api', () => ({
+vi.mock('./managementApi', () => ({
   discoverExtensions: vi.fn().mockResolvedValue([]),
   installedExtensions: vi.fn().mockResolvedValue([]),
   updateWorkspaceExtensionLayout: vi.fn().mockResolvedValue(undefined),

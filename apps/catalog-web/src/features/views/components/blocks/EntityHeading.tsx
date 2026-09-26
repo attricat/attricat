@@ -6,7 +6,7 @@ import {
   type ViewDefinition,
 } from '../../../entities/api';
 import { FieldErrorBoundary } from '../boundaries/FieldErrorBoundary';
-import { formatAttributeValue } from '../values/format-attribute-value';
+import { formatAttributeValue } from '../values/formatAttributeValue';
 import { findEntityHeading } from './EntityHeadingDefinition';
 
 type ResolvedValue = { value: unknown };

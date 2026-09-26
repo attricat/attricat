@@ -30,14 +30,14 @@ import {
   getDataHealthSummary,
   refreshDataHealth,
 } from './api';
-import { dataHealthQueryKeys } from './query-keys';
+import { dataHealthQueryKeys } from './queryKeys';
 import { DataHealthControls } from './DataHealthControls';
 import { DataHealthSummaryCards } from './DataHealthSummaryCards';
 import { dataHealthStaleTime, defaultStaleAfterDays } from './constants';
 import type { DataHealthSearch } from './schemas';
-import { formatDataHealthDate } from './date-format';
-import { SectionError } from './data-health-display';
-import { formatBytes } from './data-health-format';
+import { formatDataHealthDate } from './dateFormat';
+import { SectionError } from './SectionError';
+import { formatBytes } from './dataHealthFormat';
 
 export const DataHealthPage = ({ search }: { search: DataHealthSearch }) => {
   const { i18n, t } = useTranslation();

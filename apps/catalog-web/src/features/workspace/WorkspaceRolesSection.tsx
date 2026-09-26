@@ -16,7 +16,7 @@ import {
 import { useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { createRole, listPermissions, listRoles } from './api';
-import { workspaceQueryKeys } from './query-keys';
+import { workspaceQueryKeys } from './queryKeys';
 import {
   WorkspaceRoleActionDialog,
   type RoleDialogAction,

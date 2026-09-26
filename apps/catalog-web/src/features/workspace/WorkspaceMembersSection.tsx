@@ -24,7 +24,7 @@ import {
   transferOwnership,
   type ScopeType,
 } from './api';
-import { workspaceQueryKeys } from './query-keys';
+import { workspaceQueryKeys } from './queryKeys';
 import { ScopeFields } from './ScopeFields';
 
 export const WorkspaceMembersSection = ({

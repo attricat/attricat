@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { Attribute } from './api';
-import { resolvePreviewContext } from './preview-context';
+import { resolvePreviewContext } from './previewContext';
 
 const attributes = [
   { code: 'title', value_type: 'string', context_fallback: 'default' },

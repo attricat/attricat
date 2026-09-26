@@ -17,8 +17,8 @@ import {
 import { useTranslation } from 'react-i18next';
 import { LoadMoreButton } from '../../components/LoadMoreButton';
 import type { EntityItem } from '../entities/api';
-import { displayLabel } from '../entities/entity-display';
-import { maximumAgentSelection } from './agent-selection';
+import { displayLabel } from '../entities/entityDisplay';
+import { maximumAgentSelection } from './agentSelection';
 import type { ExplorerSelection } from './useExplorerSelection';
 
 const resultColumnCellSx = (columnId: string): SxProps<Theme> =>

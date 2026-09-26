@@ -319,8 +319,8 @@ assertions in tests.
 
 The web client accesses catalog data only through feature API modules. Within
 the entity feature, `api.ts` owns HTTP request and response contracts,
-`attribute-values.ts` owns typed scalar field formatting and parsing, and
-`entity-form.ts` coordinates scalar values with relationship target sets.
+`attributeValues.ts` owns typed scalar field formatting and parsing, and
+`entityForm.ts` coordinates scalar values with relationship target sets.
 Components render those feature helpers rather than constructing catalog
 payloads or interpreting EAV values directly.
 

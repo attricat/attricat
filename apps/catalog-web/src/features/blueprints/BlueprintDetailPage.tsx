@@ -33,20 +33,20 @@ import {
   publishBlueprintRevision,
   startSafeBlueprintMigrationBatch,
 } from './api';
-import { formatBlueprintDateTime } from './date-time';
+import { formatBlueprintDateTime } from './dateTime';
 import {
   ACTIVE_MIGRATION_POLL_INTERVAL_MS,
   hasActiveMigrationForVersion,
   isMigrationBatchActive,
-} from './migration-batches';
-import { blueprintQueryKeys } from './query-keys';
+} from './migrationBatches';
+import { blueprintQueryKeys } from './queryKeys';
 import { RevisionHistory } from './RevisionHistory';
 import { BlueprintVersionMetadata } from './BlueprintVersionMetadata';
 import { MigrationBatchStatus } from './MigrationBatchStatus';
 import { ExtensionOutlet } from '../extensions/ExtensionOutlet';
 import { listPublicationChannels } from '../exports/api';
-import { exportQueryKeys } from '../exports/query-keys';
-import { entityQueryKeys } from '../entities/query-keys';
+import { exportQueryKeys } from '../exports/queryKeys';
+import { entityQueryKeys } from '../entities/queryKeys';
 
 const TomlDiffEditor = lazy(() =>
   import('./TomlDiffEditor').then(({ TomlDiffEditor }) => ({

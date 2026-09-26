@@ -17,7 +17,7 @@ import { useTranslation } from 'react-i18next';
 import { PageContainer } from '../../components/PageContainer';
 import { PageHeader } from '../../components/PageHeader';
 import { currentSession } from '../auth/api';
-import { authQueryKeys } from '../auth/query-keys';
+import { authQueryKeys } from '../auth/queryKeys';
 import {
   configureExtension,
   extensionDetail,
@@ -25,10 +25,10 @@ import {
   registryDetails,
   removeExtension,
   upgradeExtension,
-} from './management-api';
-import { extensionManagementQueryKeys } from './management-query-keys';
+} from './managementApi';
+import { extensionManagementQueryKeys } from './managementQueryKeys';
 import { ErrorNotice } from './ExtensionErrorNotice';
-import { invalidateExtensions, repositoryParts } from './extension-page-utils';
+import { invalidateExtensions, repositoryParts } from './extensionPageUtils';
 import { ExtensionPermissionsSection } from './ExtensionPermissionsSection';
 
 export const InstalledExtensionPage = ({

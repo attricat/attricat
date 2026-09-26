@@ -20,7 +20,7 @@ import type {
   EntityPublicationStatus,
 } from '../entities/api';
 import { EntityIdPopover } from '../entities/components/EntityIdPopover';
-import { displayLabel } from '../entities/entity-display';
+import { displayLabel } from '../entities/entityDisplay';
 import { AttributeValue } from '../views/components/values/AttributeValue';
 import type { getExtensionRuntime } from '../extensions/api';
 import { ExtensionTableCell } from './ExtensionTableCell';

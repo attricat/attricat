@@ -1,7 +1,7 @@
 import { z } from 'zod';
 import type { Attribute, NewAttributeValue } from './api';
-import { validatesJsonSchema } from './json-schema';
-import { attributeValueKinds, attributeValueTypes } from './value-types';
+import { validatesJsonSchema } from './jsonSchema';
+import { attributeValueKinds, attributeValueTypes } from './valueTypes';
 
 const timeZoneSchema = z.string().refine((value) => {
   try {

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { sandboxValuesForFields } from './sandbox-values';
+import { sandboxValuesForFields } from './sandboxValues';
 
 const attribute = {
   code: 'price',

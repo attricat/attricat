@@ -13,7 +13,7 @@ import {
   Typography,
 } from '@mui/material';
 import type { Blueprint } from './api';
-import { formatBlueprintDateTime } from './date-time';
+import { formatBlueprintDateTime } from './dateTime';
 
 export const RevisionHistory = ({
   blueprintId,

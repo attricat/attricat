@@ -13,7 +13,7 @@ import {
 } from './api';
 import { ConversationComposer } from './ConversationComposer';
 import { ConversationTranscript } from './ConversationTranscript';
-import { agentQueryKeys } from './query-keys';
+import { agentQueryKeys } from './queryKeys';
 import { useConversationLiveUpdates } from './useConversationLiveUpdates';
 
 export type ConversationDetailPageProps = {

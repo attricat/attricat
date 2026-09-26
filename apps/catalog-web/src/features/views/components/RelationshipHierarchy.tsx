@@ -3,8 +3,8 @@ import { Link } from '@tanstack/react-router';
 import { Breadcrumbs, Stack, Typography } from '@mui/material';
 import { useTranslation } from 'react-i18next';
 import { getEntityHierarchy } from '../../entities/api';
-import { entityQueryKeys } from '../../entities/query-keys';
-import type { ViewComponentDefinition } from './component-types';
+import { entityQueryKeys } from '../../entities/queryKeys';
+import type { ViewComponentDefinition } from './componentTypes';
 
 export const RelationshipHierarchy = ({
   attribute,

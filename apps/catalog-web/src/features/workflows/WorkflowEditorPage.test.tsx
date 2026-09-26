@@ -6,7 +6,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import '../../i18n';
 import { currentSession } from '../auth/api';
 import { createWorkflow, getWorkflowRevision, validateWorkflow } from './api';
-import { workflowQueryKeys } from './query-keys';
+import { workflowQueryKeys } from './queryKeys';
 import { WorkflowEditorPage } from './WorkflowEditorPage';
 
 vi.mock('@monaco-editor/react', () => ({

@@ -3,7 +3,7 @@ import { Alert, CircularProgress } from '@mui/material';
 import { Explorer } from '../explorer/Explorer';
 import type { ExplorerSearch } from '../explorer/search';
 import { getSavedView } from './api';
-import { savedViewQueryKeys } from './query-keys';
+import { savedViewQueryKeys } from './queryKeys';
 
 export const SavedExplorer = ({ search }: { search: ExplorerSearch }) => {
   const id = search.savedView ?? search.viewState ?? '';

@@ -1,6 +1,6 @@
 import { Button, Paper } from '@mui/material';
 import { useTranslation } from 'react-i18next';
-import { RelationshipPickerIcon } from '../../../components/system-icons';
+import { RelationshipPickerIcon } from '../../../components/systemIcons';
 import { relationshipPickerMessageType } from './useRecentlyPreviewedEntities';
 
 export const RelationshipPickerActionBar = ({

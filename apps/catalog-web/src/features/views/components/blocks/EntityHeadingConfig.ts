@@ -1,4 +1,4 @@
-import type { ViewComponentDefinition } from '../component-types';
+import type { ViewComponentDefinition } from '../componentTypes';
 import { EntityHeading } from './EntityHeading';
 import { entityHeadingComponentId } from './EntityHeadingDefinition';
 

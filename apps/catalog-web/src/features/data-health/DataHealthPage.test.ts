@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { formatDataHealthDate } from './date-format';
+import { formatDataHealthDate } from './dateFormat';
 
 describe('formatDataHealthDate', () => {
   it('uses the active language and localized fallback', () => {

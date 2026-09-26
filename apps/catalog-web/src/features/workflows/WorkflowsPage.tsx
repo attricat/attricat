@@ -19,10 +19,10 @@ import { useTranslation } from 'react-i18next';
 import { PageContainer } from '../../components/PageContainer';
 import { PageHeader } from '../../components/PageHeader';
 import { currentSession } from '../auth/api';
-import { authQueryKeys } from '../auth/query-keys';
+import { authQueryKeys } from '../auth/queryKeys';
 import { listWorkflowRuns, listWorkflows, type Workflow } from './api';
-import { workflowQueryKeys } from './query-keys';
-import { formatWorkflowDateTime } from './date-time';
+import { workflowQueryKeys } from './queryKeys';
+import { formatWorkflowDateTime } from './dateTime';
 
 const WorkflowDetailLink = Link as unknown as ComponentType<{
   params: { workflowId: string };

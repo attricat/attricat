@@ -3,8 +3,8 @@ import { MenuItem, TextField, Tooltip } from '@mui/material';
 import { useTranslation } from 'react-i18next';
 import type { Attribute } from '../api';
 import type { FileMetadata } from '../../files/schemas';
-import { attributeLabel } from '../entity-display';
-import { attributeValueTypes } from '../value-types';
+import { attributeLabel } from '../entityDisplay';
+import { attributeValueTypes } from '../valueTypes';
 import { FileAttributeEditor } from '../../files/FileAttributeEditor';
 import { RelationshipField } from './RelationshipField';
 

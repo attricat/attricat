@@ -21,9 +21,9 @@ import { copyToClipboard } from '../../components/clipboard';
 import { SettingsPage } from '../../components/CenteredPage';
 import { useToast } from '../../components/useToast';
 import { currentSession } from '../auth/api';
-import { authQueryKeys } from '../auth/query-keys';
+import { authQueryKeys } from '../auth/queryKeys';
 import { createToken, listTokenPermissions } from './api';
-import { profileQueryKeys } from './query-keys';
+import { profileQueryKeys } from './queryKeys';
 
 const tokenPermissionPresets = [
   {

@@ -6,8 +6,8 @@ import {
   requestEntityRefresh,
   requestNavigation,
   requestNotification,
-} from './catalog-events';
-import { installCatalogEventBridge } from './catalog-event-bridge';
+} from './catalogEvents';
+import { installCatalogEventBridge } from './catalogEventBridge';
 
 const entityId = '123e4567-e89b-12d3-a456-426614174000';
 const contextId = '123e4567-e89b-12d3-a456-426614174001';

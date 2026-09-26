@@ -3,7 +3,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { render, screen } from '@testing-library/react';
 import { expect, it, vi } from 'vitest';
 import '../../i18n';
-import { blueprintQueryKeys } from './query-keys';
+import { blueprintQueryKeys } from './queryKeys';
 import { BlueprintDetailPage } from './BlueprintDetailPage';
 
 vi.mock('@tanstack/react-router', () => ({

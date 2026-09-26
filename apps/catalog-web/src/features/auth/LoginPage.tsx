@@ -7,7 +7,7 @@ import { useTranslation } from 'react-i18next';
 import { LanguageSwitcher } from '../../components/LanguageSwitcher';
 import { AuthFormShell, authFormWidth } from './AuthFormShell';
 import { discoverWorkspace, login } from './api';
-import { authQueryKeys } from './query-keys';
+import { authQueryKeys } from './queryKeys';
 
 const useLoginSubmission = () => {
   const [submitting, setSubmitting] = useState(false);

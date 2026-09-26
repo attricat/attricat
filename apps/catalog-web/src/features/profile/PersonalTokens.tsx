@@ -11,7 +11,7 @@ import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import i18n from '../../i18n';
 import { listTokens, revokeToken } from './api';
-import { profileQueryKeys } from './query-keys';
+import { profileQueryKeys } from './queryKeys';
 
 const formatTime = (value: string | null) =>
   value

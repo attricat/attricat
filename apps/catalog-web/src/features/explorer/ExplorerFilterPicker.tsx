@@ -13,19 +13,19 @@ import { useTranslation } from 'react-i18next';
 import { compactOutlinedActionButtonSx } from '../../components/CompactOutlinedActionButton';
 import { RelationshipSelectorDialog } from '../../components/RelationshipSelectorDialog';
 import { getBlueprintByCode, type Attribute } from '../entities/api';
-import { entityQueryKeys } from '../entities/query-keys';
-import { attributeLabel } from '../entities/entity-display';
+import { entityQueryKeys } from '../entities/queryKeys';
+import { attributeLabel } from '../entities/entityDisplay';
 import {
   isFilterableAttribute,
   operatorsForValueType,
   type AttributeFilterOperator,
-} from './attribute-filters';
+} from './attributeFilters';
 import {
   isRelationshipFilterAttribute,
   type RelationshipFilterAttribute,
-} from './relationship-filter-types';
+} from './relationshipFilterTypes';
 import { maximumAttributeFilters, type AttributeFilter } from './search';
-import { isHiddenByDefault } from '../entities/attribute-visibility';
+import { isHiddenByDefault } from '../entities/attributeVisibility';
 
 type Props = {
   filters: AttributeFilter[];

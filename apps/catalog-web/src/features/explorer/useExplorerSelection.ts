@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import type { EntityItem } from '../entities/api';
-import { maximumAgentSelection } from './agent-selection';
+import { maximumAgentSelection } from './agentSelection';
 
 export const useExplorerSelection = (items: EntityItem[]) => {
   const [selectionMode, setSelectionMode] = useState(false);

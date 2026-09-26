@@ -34,8 +34,8 @@ import {
   publishReusableAttributeRevision,
   type ReusableAttribute,
 } from './api';
-import { latestReusableAttributeRevisions } from './latest-revisions';
-import { reusableAttributeQueryKeys } from './query-keys';
+import { latestReusableAttributeRevisions } from './latestRevisions';
+import { reusableAttributeQueryKeys } from './queryKeys';
 
 const GroupDialog = ({
   attributes,

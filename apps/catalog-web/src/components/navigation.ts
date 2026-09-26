@@ -13,7 +13,7 @@ import {
   RuleIcon,
   WorkflowIcon,
   WorkspaceIcon,
-} from './system-icons';
+} from './systemIcons';
 
 type NavigationCapabilities = {
   audit_read?: boolean;
