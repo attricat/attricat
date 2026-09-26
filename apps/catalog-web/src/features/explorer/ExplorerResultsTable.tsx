@@ -1,5 +1,4 @@
 import { useNavigate } from '@tanstack/react-router';
-import { flexRender } from '@tanstack/react-table';
 import { useVirtualizer } from '@tanstack/react-virtual';
 import {
   useMutation,
@@ -15,25 +14,13 @@ import {
 } from '@tanstack/react-table/legacy';
 import {
   Alert,
-  Box,
-  Checkbox,
   Dialog,
   DialogContent,
   DialogTitle,
-  LinearProgress,
   Paper,
-  Table,
-  TableBody,
-  TableCell,
-  TableContainer,
-  TableHead,
-  TableRow,
   Typography,
-  type SxProps,
-  type Theme,
 } from '@mui/material';
-import { LoadMoreButton } from '../../components/LoadMoreButton';
-import { useEffect, useRef, useState } from 'react';
+import { useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
   duplicateEntity,
@@ -45,7 +32,6 @@ import {
   type EntityPublicationStatus,
 } from '../entities/api';
 import { DeleteEntityDialog } from '../entities/components/DeleteEntityDialog';
-import { displayLabel } from '../entities/entity-display';
 import { getExtensionRuntime } from '../extensions/api';
 import { extensionQueryKeys } from '../extensions/query-keys';
 import { extensionRuntimeRefetchInterval } from '../extensions/constants';
@@ -56,8 +42,9 @@ import {
   buildExplorerColumnDefinitions,
   type ExplorerTableColumn,
 } from './ExplorerResultColumns';
-import { maximumAgentSelection } from './agent-selection';
 import { SendSelectedToAgentDialog } from './SendSelectedToAgentDialog';
+import { VirtualizedExplorerTable } from './VirtualizedExplorerTable';
+import { useExplorerSelection } from './useExplorerSelection';
 import { entityQueryKeys } from '../entities/query-keys';
 import {
   clearExplorerColumnPreferences,
@@ -67,13 +54,6 @@ import {
 } from './column-preferences';
 
 const maximumExplorerCellFrames = 32;
-
-const resultColumnCellSx = (columnId: string): SxProps<Theme> =>
-  columnId === 'display'
-    ? { minWidth: 280 }
-    : columnId === 'id'
-      ? { textAlign: 'center', width: 48 }
-      : {};
 
 export const ExplorerResultsTable = ({
   blueprint,
@@ -109,31 +89,11 @@ export const ExplorerResultsTable = ({
   totalCountCapped: boolean;
 }) => {
   const { t } = useTranslation();
-  const [selectionMode, setSelectionMode] = useState(false);
+  const selection = useExplorerSelection(items);
   const [deleteEntityId, setDeleteEntityId] = useState<string | null>(null);
-  const [selectedEntityIds, setSelectedEntityIds] = useState<Set<string>>(
-    () => new Set(),
-  );
   const [agentSelection, setAgentSelection] = useState<EntityItem[] | null>(
     null,
   );
-  const selectedItems = items.filter((item) => selectedEntityIds.has(item.id));
-  const allLoadedSelected =
-    items.length > 0 &&
-    items
-      .slice(0, maximumAgentSelection)
-      .every((item) => selectedEntityIds.has(item.id));
-  useEffect(() => {
-    const loaded = new Set(items.map((item) => item.id));
-    setSelectedEntityIds((current) => {
-      const next = new Set([...current].filter((id) => loaded.has(id)));
-      return next.size === current.size ? current : next;
-    });
-  }, [items]);
-  const exitSelectionMode = () => {
-    setSelectionMode(false);
-    setSelectedEntityIds(new Set());
-  };
   const [searchInfoEntity, setSearchInfoEntity] = useState<EntityItem | null>(
     null,
   );
@@ -269,49 +229,6 @@ export const ExplorerResultsTable = ({
     header: '',
     cell: () => null,
   }) as LegacyColumnDef<EntityItem, unknown>;
-  const selectionHeader = (
-    <Checkbox
-      checked={allLoadedSelected}
-      disabled={items.length === 0}
-      indeterminate={selectedItems.length > 0 && !allLoadedSelected}
-      onChange={() =>
-        setSelectedEntityIds(
-          allLoadedSelected
-            ? new Set()
-            : new Set(
-                items.slice(0, maximumAgentSelection).map((item) => item.id),
-              ),
-        )
-      }
-      slotProps={{
-        input: { 'aria-label': t('explorer.selectLoadedEntities') },
-      }}
-    />
-  );
-  const selectionCheckbox = (entity: EntityItem) => (
-    <Checkbox
-      checked={selectedEntityIds.has(entity.id)}
-      disabled={
-        !selectedEntityIds.has(entity.id) &&
-        selectedItems.length >= maximumAgentSelection
-      }
-      onChange={() =>
-        setSelectedEntityIds((current) => {
-          const next = new Set(current);
-          if (next.has(entity.id)) next.delete(entity.id);
-          else if (next.size < maximumAgentSelection) next.add(entity.id);
-          return next;
-        })
-      }
-      slotProps={{
-        input: {
-          'aria-label': t('explorer.selectEntity', {
-            entity: displayLabel(entity.display, entity.id),
-          }),
-        },
-      }}
-    />
-  );
   const columnDefinitions = buildExplorerColumnDefinitions({
     blueprint,
     tableColumns,
@@ -327,7 +244,7 @@ export const ExplorerResultsTable = ({
   });
   const actionColumn = columnDefinitions.pop();
   const columns = [
-    ...(selectionMode ? [selectionColumn] : []),
+    ...(selection.selectionMode ? [selectionColumn] : []),
     ...columnPreferences.order.flatMap((id) => {
       const column = columnDefinitions.find(
         (definition) => definition.id === id,
@@ -390,140 +307,27 @@ export const ExplorerResultsTable = ({
         itemCount={items.length}
         totalCount={totalCount}
         totalCountCapped={totalCountCapped}
-        selectionMode={selectionMode}
-        selectedCount={selectedItems.length}
-        onClearSelection={() => setSelectedEntityIds(new Set())}
-        onSendSelection={() => setAgentSelection([...selectedItems])}
-        onToggleSelection={() =>
-          selectionMode ? exitSelectionMode() : setSelectionMode(true)
-        }
+        selectionMode={selection.selectionMode}
+        selectedCount={selection.selectedItems.length}
+        onClearSelection={selection.clearSelection}
+        onSendSelection={() => setAgentSelection([...selection.selectedItems])}
+        onToggleSelection={selection.toggleSelectionMode}
         onOpenColumnPreferences={() => setColumnPreferencesOpen(true)}
       />
-      <TableContainer
-        ref={tableContainerRef}
-        sx={{
-          // On desktop this leaves room for the sticky search form and result
-          // summary while using the rest of the viewport for rows.
-          height: {
-            xs: 'calc(100dvh - 220px)',
-            md: 'calc(100dvh - 165px)',
-          },
-          overflowY: 'auto',
-        }}
-      >
-        {isFetching && items.length > 0 && (
-          <LinearProgress
-            aria-label={t('explorer.loading')}
-            sx={{ position: 'sticky', top: 0, zIndex: 3 }}
-          />
-        )}
-        <Table aria-label={t('explorer.results')} size="small" stickyHeader>
-          <TableHead>
-            {table.getHeaderGroups().map((group) => (
-              <TableRow key={group.id}>
-                {group.headers.map((header) => (
-                  <TableCell
-                    key={header.id}
-                    sx={
-                      header.column.id === 'actions'
-                        ? {
-                            bgcolor: 'background.paper',
-                            boxShadow: 1,
-                            position: 'sticky',
-                            right: 0,
-                            zIndex: 3,
-                          }
-                        : resultColumnCellSx(header.column.id)
-                    }
-                  >
-                    {header.column.id === 'select'
-                      ? selectionHeader
-                      : header.isPlaceholder
-                        ? null
-                        : flexRender(
-                            header.column.columnDef.header,
-                            header.getContext(),
-                          )}
-                  </TableCell>
-                ))}
-              </TableRow>
-            ))}
-          </TableHead>
-          <TableBody>
-            {paddingTop > 0 && (
-              <TableRow>
-                <TableCell
-                  colSpan={columns.length}
-                  sx={{ height: paddingTop, p: 0 }}
-                />
-              </TableRow>
-            )}
-            {virtualRows.map((virtualRow) => {
-              if (virtualRow.index === rows.length) {
-                return (
-                  <TableRow data-index={virtualRow.index} key="load-more">
-                    <TableCell colSpan={columns.length} sx={{ py: 2 }}>
-                      <Box
-                        sx={{
-                          left: '50%',
-                          position: 'sticky',
-                          transform: 'translateX(-50%)',
-                          width: 'fit-content',
-                        }}
-                      >
-                        <LoadMoreButton
-                          isLoading={isFetchingNextPage}
-                          onLoadMore={onLoadMore}
-                        />
-                      </Box>
-                    </TableCell>
-                  </TableRow>
-                );
-              }
-              const row = rows[virtualRow.index];
-              return (
-                <TableRow
-                  data-index={virtualRow.index}
-                  key={row.id}
-                  ref={rowVirtualizer.measureElement}
-                >
-                  {row.getVisibleCells().map((cell) => (
-                    <TableCell
-                      key={cell.id}
-                      sx={
-                        cell.column.id === 'actions'
-                          ? {
-                              bgcolor: 'background.paper',
-                              boxShadow: 1,
-                              position: 'sticky',
-                              right: 0,
-                              zIndex: 1,
-                            }
-                          : resultColumnCellSx(cell.column.id)
-                      }
-                    >
-                      {cell.column.id === 'select'
-                        ? selectionCheckbox(row.original)
-                        : flexRender(
-                            cell.column.columnDef.cell,
-                            cell.getContext(),
-                          )}
-                    </TableCell>
-                  ))}
-                </TableRow>
-              );
-            })}
-            {paddingBottom > 0 && (
-              <TableRow>
-                <TableCell
-                  colSpan={columns.length}
-                  sx={{ height: paddingBottom, p: 0 }}
-                />
-              </TableRow>
-            )}
-          </TableBody>
-        </Table>
-      </TableContainer>
+      <VirtualizedExplorerTable
+        table={table}
+        columnsLength={columns.length}
+        virtualRows={virtualRows}
+        paddingTop={paddingTop}
+        paddingBottom={paddingBottom}
+        measureElement={rowVirtualizer.measureElement}
+        tableContainerRef={tableContainerRef}
+        selection={selection}
+        items={items}
+        isFetching={isFetching}
+        isFetchingNextPage={isFetchingNextPage}
+        onLoadMore={onLoadMore}
+      />
       {items.length === 0 && (
         <Typography sx={{ p: 2 }}>
           {t('explorer.noMatchingEntities')}
@@ -554,11 +358,7 @@ export const ExplorerResultsTable = ({
           entityId={deleteEntityId}
           onClose={() => setDeleteEntityId(null)}
           onDeleted={() => {
-            setSelectedEntityIds((current) => {
-              const next = new Set(current);
-              next.delete(deleteEntityId);
-              return next;
-            });
+            selection.removeEntity(deleteEntityId);
             setDeleteEntityId(null);
           }}
         />
@@ -570,7 +370,7 @@ export const ExplorerResultsTable = ({
           onClose={() => setAgentSelection(null)}
           onSuccess={() => {
             setAgentSelection(null);
-            exitSelectionMode();
+            selection.exitSelectionMode();
           }}
         />
       )}
