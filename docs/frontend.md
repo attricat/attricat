@@ -17,6 +17,12 @@ These conventions apply to `apps/catalog-web`.
 - Define TanStack Query key factories in a feature-local `query-keys.ts` file.
 - Use those factories for every `queryKey` and invalidation so equivalent requests share the same cache entry and invalidation can reuse the same key definitions. Define a root key when a feature needs to invalidate all variants of a resource.
 
+## Client State
+
+- Use Zustand for client-only state shared across independent components or updated outside React (for example, toast notifications and Inspector timings). Keep stores feature-local unless the state is truly app-wide, and subscribe to the smallest slice needed.
+- Keep server state in TanStack Query, navigable search/filter state in the router URL, submitted fields in TanStack Form, and component-scoped UI state in React. Do not move these into a global store just to avoid passing a prop or using a small context.
+- Bound and sanitize data before writing it to a shared store; do not store sensitive API responses in diagnostic state.
+
 ## Components
 
 - Keep route files thin and compose feature page components from

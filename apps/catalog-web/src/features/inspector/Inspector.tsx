@@ -11,13 +11,13 @@ import {
   Typography,
 } from '@mui/material';
 import { useQuery } from '@tanstack/react-query';
-import { useEffect, useId, useState, type ReactNode } from 'react';
+import { useId, useState, type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
 import { currentSession } from '../auth/api';
 import { authQueryKeys } from '../auth/query-keys';
 import { getApiHealth } from './api';
 import { inspectorQueryKeys } from './query-keys';
-import { recentTimings, subscribeTimings, type TimingEntry } from './timing';
+import { useTimingStore } from './timing';
 
 type InspectorPane = {
   id: string;
@@ -64,9 +64,8 @@ export const Inspector = () => {
   const { t } = useTranslation();
   const tabId = useId();
   const [inspectorState, setInspectorState] = useState(readInspectorState);
-  const [timings, setTimings] = useState<TimingEntry[]>(recentTimings);
+  const timings = useTimingStore((state) => state.entries);
   const { activePane, expanded } = inspectorState;
-  useEffect(() => subscribeTimings(() => setTimings(recentTimings())), []);
   const updateInspectorState = (updates: Partial<InspectorState>) => {
     const nextState = { ...inspectorState, ...updates };
     setInspectorState(nextState);

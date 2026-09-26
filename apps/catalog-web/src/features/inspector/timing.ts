@@ -1,3 +1,5 @@
+import { create } from 'zustand';
+
 export type TimingPhase = {
   name: string;
   duration: number;
@@ -24,16 +26,27 @@ const serverPhases = new Set([
   'sql-related-hydrate',
 ]);
 const framePhases = new Set(['frame-load', 'frame-fallback']);
-const entries: TimingEntry[] = [];
-const listeners = new Set<() => void>();
+type TimingStore = {
+  entries: TimingEntry[];
+  add: (phases: TimingPhase[]) => void;
+  clear: () => void;
+};
 
-const notify = () => listeners.forEach((listener) => listener());
+export const useTimingStore = create<TimingStore>((set) => ({
+  entries: [],
+  add: (phases) =>
+    set((state) => ({
+      entries: [{ phases, recordedAt: Date.now() }, ...state.entries].slice(
+        0,
+        maximumEntries,
+      ),
+    })),
+  clear: () => set({ entries: [] }),
+}));
 
 const addEntry = (phases: TimingPhase[]) => {
   if (!__CATALOG_DEVTOOLS__ || phases.length === 0) return;
-  entries.unshift({ phases, recordedAt: Date.now() });
-  entries.splice(maximumEntries);
-  notify();
+  useTimingStore.getState().add(phases);
 };
 
 /** Accept only the fixed, aggregate names emitted by the API. */
@@ -75,14 +88,6 @@ export const recordFrameTiming = (
   addEntry([{ name, duration }]);
 };
 
-export const recentTimings = () => [...entries];
-export const subscribeTimings = (listener: () => void) => {
-  listeners.add(listener);
-  return () => {
-    listeners.delete(listener);
-  };
-};
+export const recentTimings = () => [...useTimingStore.getState().entries];
 
-export const clearTimingsForTest = () => {
-  entries.length = 0;
-};
+export const clearTimingsForTest = () => useTimingStore.getState().clear();

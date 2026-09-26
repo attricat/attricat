@@ -4,6 +4,7 @@ import {
   recentTimings,
   recordFrameTiming,
   recordServerTiming,
+  useTimingStore,
 } from './timing';
 
 afterEach(clearTimingsForTest);
@@ -27,6 +28,19 @@ describe('development timing buffer', () => {
     ]);
     expect(JSON.stringify(recentTimings())).not.toContain('SELECT');
     expect(JSON.stringify(recentTimings())).not.toContain('request-123');
+  });
+
+  it('notifies store subscribers when entries are recorded and cleared', () => {
+    const lengths: number[] = [];
+    const unsubscribe = useTimingStore.subscribe((state) => {
+      lengths.push(state.entries.length);
+    });
+
+    recordFrameTiming('frame-load', 12);
+    clearTimingsForTest();
+    unsubscribe();
+
+    expect(lengths).toEqual([1, 0]);
   });
 
   it('bounds entries and records frame outcomes without contribution data', () => {
