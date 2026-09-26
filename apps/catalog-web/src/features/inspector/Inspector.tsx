@@ -201,7 +201,7 @@ export const Inspector = () => {
           onClick={() => updateInspectorState({ expanded: true })}
           size="small"
           sx={{
-            backgroundColor: 'rgba(255, 255, 255, 0.9)',
+            backgroundColor: 'background.paper',
             bottom: 16,
             color: 'text.secondary',
             left: '50%',
@@ -209,7 +209,7 @@ export const Inspector = () => {
             transform: 'translateX(-50%)',
             zIndex: (theme) => theme.zIndex.modal + 1,
             '&:hover': {
-              backgroundColor: 'rgba(21, 101, 192, 0.14)',
+              backgroundColor: 'action.hover',
               boxShadow: 4,
               color: 'primary.main',
             },

@@ -3,6 +3,7 @@ import TagOutlinedIcon from '@mui/icons-material/TagOutlined';
 import { IconButton, Popover, Stack, Tooltip, Typography } from '@mui/material';
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
+import { monoFontFamily } from '../../../app/theme';
 import { copyToClipboard } from '../../../components/clipboard';
 import { useToast } from '../../../components/useToast';
 
@@ -44,7 +45,7 @@ export const EntityIdPopover = ({
         open={Boolean(anchor)}
       >
         <Stack direction="row" spacing={1} sx={{ alignItems: 'center', p: 1 }}>
-          <Typography component="code" sx={{ fontFamily: 'monospace' }}>
+          <Typography component="code" sx={{ fontFamily: monoFontFamily }}>
             {entityId}
           </Typography>
           <Tooltip title={t('entities.copyEntityId')}>

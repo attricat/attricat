@@ -2,6 +2,17 @@
 
 Follow [Frontend Conventions](docs/frontend.md) for `apps/catalog-web`.
 
+## Attricat design system
+
+The canonical Attricat visual identity is maintained in the
+[design repository](https://github.com/attricat/design). A pinned snapshot of
+its tokens and brand assets lives in [`apps/catalog-web/design/`](apps/catalog-web/design/)
+for reproducible builds; see its README for the upstream revision. Before
+creating or significantly modifying UI, consult the upstream `STYLE.md` and
+MUI patterns. Do not introduce new colors, typography scales, spacing systems,
+border-radius conventions or visual patterns unless there is a specific reason
+to extend the design system. Check both light and dark modes.
+
 # Development
 
 The development server is already running via Process Compose when developing the app.

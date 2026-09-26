@@ -1,4 +1,9 @@
-import { CssBaseline, ThemeProvider, createTheme } from '@mui/material';
+import {
+  CssBaseline,
+  ThemeProvider,
+  createTheme,
+  useMediaQuery,
+} from '@mui/material';
 import { plPL } from '@mui/material/locale';
 import { RouterProvider } from '@tanstack/react-router';
 import { useEffect, useMemo } from 'react';
@@ -6,19 +11,25 @@ import { useTranslation } from 'react-i18next';
 import { ToastProvider } from '../components/ToastProvider';
 import { Inspector } from '../features/inspector/Inspector';
 import { router } from './router';
-import { theme } from './theme';
+import { makeTheme } from './theme';
+import { useColorMode } from './colorMode';
 
 export const AppProviders = () => {
   const { i18n } = useTranslation();
   const language = i18n.resolvedLanguage === 'pl' ? 'pl' : 'en';
+  const prefersDark = useMediaQuery('(prefers-color-scheme: dark)');
+  const preference = useColorMode((state) => state.preference);
+  const mode = preference ?? (prefersDark ? 'dark' : 'light');
   const localizedTheme = useMemo(
-    () => (language === 'pl' ? createTheme(theme, plPL) : createTheme(theme)),
-    [language],
+    () =>
+      language === 'pl' ? createTheme(makeTheme(mode), plPL) : makeTheme(mode),
+    [language, mode],
   );
 
   useEffect(() => {
     document.documentElement.lang = language;
-  }, [language]);
+    document.documentElement.style.colorScheme = mode;
+  }, [language, mode]);
 
   return (
     <ThemeProvider theme={localizedTheme}>

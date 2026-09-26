@@ -14,6 +14,10 @@ just setup
 just dev
 ```
 
+The web app uses a pinned snapshot of the [Attricat design system](apps/catalog-web/design/)
+for its visual tokens and brand assets. See the [upstream style guide](https://github.com/attricat/design/blob/main/STYLE.md)
+for UI changes.
+
 Run `just setup` once before any other `just` recipe. It assigns persistent,
 worktree-specific ports, writes them and ready-to-open `WEB_URL`, `DOCS_URL`,
 `MAILPIT_UI_URL`, `JAEGER_UI_URL`, and `RUSTFS_UI_URL` values to the ignored

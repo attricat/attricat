@@ -1,6 +1,8 @@
 import ArrowBackIcon from '@mui/icons-material/ArrowBack';
 import ChevronRightIcon from '@mui/icons-material/ChevronRight';
 import LogoutOutlinedIcon from '@mui/icons-material/LogoutOutlined';
+import DarkModeOutlinedIcon from '@mui/icons-material/DarkModeOutlined';
+import LightModeOutlinedIcon from '@mui/icons-material/LightModeOutlined';
 import { useQuery } from '@tanstack/react-query';
 import { Link, useRouterState } from '@tanstack/react-router';
 import { createElement, useState } from 'react';
@@ -37,7 +39,9 @@ import {
   ListSubheader,
   Tooltip,
   Typography,
+  useTheme,
 } from '@mui/material';
+import { useColorMode } from '../app/colorMode';
 
 export const compactNavigationWidth = 88;
 export const expandedNavigationWidth = 264;
@@ -93,6 +97,8 @@ export const SideNavigation = ({
   onSignOut,
 }: SideNavigationProps) => {
   const { t } = useTranslation();
+  const mode = useTheme().palette.mode;
+  const setColorMode = useColorMode((state) => state.setPreference);
   const setMobileExplorePanelTarget = useSetMobileExplorePanelTarget();
   const { pathname, search } = useRouterState({
     select: (state) => state.location,
@@ -239,21 +245,7 @@ export const SideNavigation = ({
             aria-label={t('app.attricat')}
             sx={{ alignItems: 'center', display: 'flex', gap: 1.5 }}
           >
-            <BrandIcon color="primary" sx={{ fontSize: compact ? 32 : 28 }} />
-            {!compact && (
-              <Box>
-                <Typography
-                  color="primary"
-                  sx={{ fontWeight: 700 }}
-                  variant="h6"
-                >
-                  {t('app.attricat')}
-                </Typography>
-                <Typography color="text.secondary" variant="body2">
-                  {t('app.dataManagement')}
-                </Typography>
-              </Box>
-            )}
+            <BrandIcon variant={compact ? 'mark' : 'wordmark'} />
           </Box>
         )}
       </Box>
@@ -725,6 +717,53 @@ export const SideNavigation = ({
                 </ListItemButton>
               </Tooltip>
             ))}
+            <Tooltip
+              placement="right"
+              title={
+                compact
+                  ? t(
+                      mode === 'dark'
+                        ? 'navigation.lightMode'
+                        : 'navigation.darkMode',
+                    )
+                  : ''
+              }
+            >
+              <ListItemButton
+                aria-label={t(
+                  mode === 'dark'
+                    ? 'navigation.lightMode'
+                    : 'navigation.darkMode',
+                )}
+                onClick={() => setColorMode(mode === 'dark' ? 'light' : 'dark')}
+                sx={itemSx}
+              >
+                <ListItemIcon sx={compact ? { minWidth: 0 } : undefined}>
+                  {mode === 'dark' ? (
+                    <LightModeOutlinedIcon />
+                  ) : (
+                    <DarkModeOutlinedIcon />
+                  )}
+                </ListItemIcon>
+                {compact ? (
+                  <Typography sx={compactNavigationLabelSx} variant="caption">
+                    {t(
+                      mode === 'dark'
+                        ? 'navigation.lightMode'
+                        : 'navigation.darkMode',
+                    )}
+                  </Typography>
+                ) : (
+                  <ListItemText
+                    primary={t(
+                      mode === 'dark'
+                        ? 'navigation.lightMode'
+                        : 'navigation.darkMode',
+                    )}
+                  />
+                )}
+              </ListItemButton>
+            </Tooltip>
             <Tooltip
               placement="right"
               title={compact ? t('navigation.signOut') : ''}

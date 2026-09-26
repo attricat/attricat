@@ -1,6 +1,11 @@
 # Frontend Conventions
 
-These conventions apply to `apps/catalog-web`.
+These conventions apply to `apps/catalog-web`. Follow the upstream
+[Attricat design style guide](https://github.com/attricat/design/blob/main/STYLE.md)
+and the [pinned token and asset snapshot](../apps/catalog-web/design/README.md)
+for visual changes. The app theme adapts those tokens to its version of MUI;
+do not duplicate raw colors or dimensions in feature components. Check both
+light and dark modes.
 
 ## TypeScript
 

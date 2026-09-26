@@ -14,7 +14,6 @@ import {
   Drawer,
   IconButton,
   Toolbar,
-  Typography,
   CircularProgress,
   useMediaQuery,
   useTheme,
@@ -24,6 +23,7 @@ import { useTranslation } from 'react-i18next';
 import { currentSession, logout } from '../features/auth/api';
 import { authQueryKeys } from '../features/auth/queryKeys';
 import { MobileNavigationPanelProvider } from './MobileNavigationPanel';
+import { BrandIcon } from './BrandIcon';
 import { navigationRoutes } from './navigation';
 import {
   compactNavigationWidth,
@@ -249,13 +249,9 @@ export const AppLayout = () => {
                 >
                   <MenuIcon />
                 </IconButton>
-                <Typography
-                  component="div"
-                  sx={{ flexGrow: 1, ml: 1 }}
-                  variant="h6"
-                >
-                  {t('app.attricat')}
-                </Typography>
+                <Box aria-label={t('app.attricat')} sx={{ flexGrow: 1, ml: 1 }}>
+                  <BrandIcon variant="wordmark" />
+                </Box>
               </Toolbar>
             </AppBar>
             <Drawer

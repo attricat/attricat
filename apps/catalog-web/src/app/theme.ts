@@ -1,30 +1,290 @@
-import { createTheme } from '@mui/material';
+import { createTheme, type Shadows } from '@mui/material/styles';
+import colors from '../../design/tokens/colors.json';
+import typography from '../../design/tokens/typography.json';
+import radius from '../../design/tokens/radius.json';
+import elevation from '../../design/tokens/elevation.json';
 
-export const theme = createTheme({
-  palette: { background: { default: '#f7f7f5' }, primary: { main: '#1565c0' } },
-  shape: { borderRadius: 4 },
-  typography: {
-    fontFamily: 'Inter, ui-sans-serif, system-ui, sans-serif',
-    body1: { fontSize: '0.875rem', lineHeight: 1.45 },
-    body2: { fontSize: '0.8125rem', lineHeight: 1.4 },
-    h2: { fontSize: '2.25rem', lineHeight: 1.1 },
-    h3: { fontSize: '1.75rem', lineHeight: 1.15 },
-    h4: { fontSize: '1.625rem', lineHeight: 1.25 },
-    h5: { fontSize: '1.25rem', lineHeight: 1.3 },
-    h6: { fontSize: '1.0625rem', lineHeight: 1.35 },
-    subtitle1: { fontSize: '0.9375rem', lineHeight: 1.4 },
-    subtitle2: { fontSize: '0.8125rem', lineHeight: 1.35 },
-  },
-  components: {
-    MuiCssBaseline: {
-      styleOverrides: {
-        'a:not(.MuiButtonBase-root), a:not(.MuiButtonBase-root):visited': {
-          color: '#1565c0',
-        },
+// These tokens are a pinned snapshot from attricat/design; see design/README.md.
+// These overrides adapt its MUI patterns to the version used by catalog-web.
+export type DesignMode = 'light' | 'dark';
+export const monoFontFamily = typography.families.mono;
+
+export const makeTheme = (mode: DesignMode) => {
+  const c = colors[mode];
+  const role = typography.roles;
+  const type = (r: typeof role.body) => ({
+    fontSize: r.size,
+    fontWeight: r.weight,
+    lineHeight: r.lineHeight,
+    letterSpacing: r.tracking,
+  });
+  const border = `1px solid ${c.border.default}`;
+
+  return createTheme({
+    palette: {
+      mode,
+      primary: { main: c.brand.primary, contrastText: c.brand.onPrimary },
+      secondary: { main: c.brand.accent },
+      success: { main: c.semantic.success.main },
+      warning: {
+        main: c.semantic.warning.main,
+        contrastText: c.semantic.warning.onMain,
+      },
+      error: { main: c.semantic.error.main },
+      info: { main: c.semantic.info.main },
+      background: {
+        default: c.background.default,
+        paper: c.background.surface,
+      },
+      text: {
+        primary: c.text.primary,
+        secondary: c.text.secondary,
+        disabled: c.text.disabled,
+      },
+      divider: c.border.default,
+      action: {
+        hover: c.action.hover,
+        selected: c.action.selected,
+        disabledBackground: c.action.disabled,
+        focus: c.action.hover,
       },
     },
-    MuiButton: { defaultProps: { size: 'small' } },
-    MuiTextField: { defaultProps: { size: 'small' } },
-    MuiFormControl: { defaultProps: { size: 'small' } },
-  },
-});
+    typography: {
+      fontFamily: typography.families.sans,
+      fontSize: 14,
+      h1: type(role.display),
+      h2: type(role.marketingHeading),
+      h3: type(role.appHeading),
+      h4: type(role.sectionHeading),
+      h5: type(role.sectionHeading),
+      h6: type(role.label),
+      body1: type(role.body),
+      body2: type(role.body),
+      subtitle1: type(role.label),
+      subtitle2: type(role.caption),
+      caption: type(role.caption),
+      overline: {
+        ...type(role.caption),
+        fontWeight: 600,
+        textTransform: 'uppercase',
+        letterSpacing: '0.09em',
+      },
+      button: { ...type(role.label), textTransform: 'none' },
+    },
+    spacing: 4,
+    shape: { borderRadius: radius.control },
+    shadows: Array.from({ length: 25 }, (_, index) =>
+      index === 0
+        ? 'none'
+        : index < 5
+          ? elevation[mode].raised
+          : elevation[mode].overlay,
+    ) as Shadows,
+    components: {
+      MuiCssBaseline: {
+        styleOverrides: {
+          body: {
+            scrollbarColor: `${c.border.strong} ${c.background.default}`,
+          },
+          '::selection': { backgroundColor: c.action.selected },
+          'a:not(.MuiButtonBase-root), a:not(.MuiButtonBase-root):visited': {
+            color: c.brand.primary,
+          },
+        },
+      },
+      MuiButton: {
+        defaultProps: { disableElevation: true, size: 'small' },
+        styleOverrides: {
+          root: {
+            borderRadius: radius.control,
+            fontWeight: 600,
+            minHeight: 36,
+            paddingInline: 14,
+            textTransform: 'none',
+          },
+          outlined: {
+            borderColor: c.border.default,
+            '&:hover': {
+              borderColor: c.brand.primary,
+              backgroundColor: c.action.hover,
+            },
+          },
+        },
+      },
+      MuiIconButton: {
+        defaultProps: { size: 'small' },
+        styleOverrides: {
+          root: {
+            borderRadius: radius.control,
+            '&:focus-visible': {
+              outline: `2px solid ${c.action.focus}`,
+              outlineOffset: 2,
+            },
+          },
+        },
+      },
+      MuiTextField: { defaultProps: { size: 'small', variant: 'outlined' } },
+      MuiFormControl: { defaultProps: { size: 'small' } },
+      MuiSelect: { defaultProps: { size: 'small' } },
+      MuiOutlinedInput: {
+        styleOverrides: {
+          root: {
+            borderRadius: radius.control,
+            backgroundColor: c.background.surface,
+            '& .MuiOutlinedInput-notchedOutline': {
+              borderColor: c.border.default,
+            },
+            '&:hover .MuiOutlinedInput-notchedOutline': {
+              borderColor: c.border.strong,
+            },
+          },
+          input: { fontSize: 14 },
+        },
+      },
+      MuiInputLabel: { styleOverrides: { root: { fontSize: 14 } } },
+      MuiCheckbox: {
+        defaultProps: { size: 'small' },
+        styleOverrides: { root: { padding: 6 } },
+      },
+      MuiSwitch: { defaultProps: { size: 'small' } },
+      MuiChip: {
+        defaultProps: { size: 'small' },
+        styleOverrides: {
+          root: { borderRadius: radius.small, fontSize: 12, fontWeight: 600 },
+          outlined: { borderColor: c.border.default },
+          colorWarning: {
+            '&.MuiChip-outlined': {
+              color: c.semantic.warning.foreground,
+              backgroundColor: c.semantic.warning.tint,
+              borderColor: c.semantic.warning.main,
+            },
+            '&.MuiChip-filled': { color: c.semantic.warning.onMain },
+          },
+        },
+      },
+      MuiAlert: {
+        styleOverrides: {
+          root: {
+            alignItems: 'center',
+            border,
+            borderRadius: radius.surface,
+            '&.MuiAlert-standardWarning, &.MuiAlert-outlinedWarning': {
+              color: c.semantic.warning.foreground,
+              backgroundColor: c.semantic.warning.tint,
+              '& .MuiAlert-icon': { color: c.semantic.warning.foreground },
+            },
+          },
+        },
+      },
+      MuiCard: {
+        defaultProps: { variant: 'outlined' },
+        styleOverrides: {
+          root: {
+            borderColor: c.border.default,
+            borderRadius: radius.surface,
+            backgroundImage: 'none',
+          },
+        },
+      },
+      MuiPaper: {
+        styleOverrides: {
+          root: { backgroundImage: 'none' },
+          outlined: { borderColor: c.border.default },
+        },
+      },
+      MuiDialog: {
+        styleOverrides: {
+          paper: {
+            border,
+            borderRadius: radius.dialog,
+            boxShadow: elevation[mode].overlay,
+          },
+        },
+      },
+      MuiTooltip: {
+        defaultProps: { arrow: true },
+        styleOverrides: {
+          tooltip: {
+            backgroundColor: c.background.elevated,
+            color: c.text.primary,
+            border,
+            boxShadow: elevation[mode].raised,
+            fontSize: 12,
+          },
+          arrow: { color: c.background.elevated },
+        },
+      },
+      MuiTabs: {
+        styleOverrides: {
+          root: { minHeight: 40, borderBottom: `1px solid ${c.border.subtle}` },
+          indicator: { height: 2 },
+        },
+      },
+      MuiTab: {
+        styleOverrides: {
+          root: {
+            textTransform: 'none',
+            minHeight: 40,
+            minWidth: 0,
+            padding: '8px 16px',
+            fontWeight: 600,
+          },
+        },
+      },
+      MuiAppBar: {
+        defaultProps: { elevation: 0, color: 'default' },
+        styleOverrides: {
+          root: {
+            backgroundImage: 'none',
+            backgroundColor: c.background.surface,
+            borderBottom: `1px solid ${c.border.subtle}`,
+          },
+        },
+      },
+      MuiDrawer: {
+        styleOverrides: {
+          paper: {
+            backgroundColor: c.background.surface,
+            backgroundImage: 'none',
+            borderRight: `1px solid ${c.border.subtle}`,
+          },
+        },
+      },
+      MuiTable: { defaultProps: { size: 'small' } },
+      MuiTableCell: {
+        styleOverrides: {
+          root: {
+            borderBottom: `1px solid ${c.border.subtle}`,
+            padding: '10px 16px',
+          },
+          head: {
+            color: c.text.secondary,
+            fontSize: 12,
+            fontWeight: 600,
+            backgroundColor: c.background.inset,
+            whiteSpace: 'nowrap',
+          },
+        },
+      },
+      MuiTableRow: {
+        styleOverrides: {
+          root: { '&:hover': { backgroundColor: c.action.hover } },
+        },
+      },
+      MuiMenu: {
+        styleOverrides: {
+          paper: { border, boxShadow: elevation[mode].overlay, marginTop: 4 },
+        },
+      },
+      MuiMenuItem: {
+        styleOverrides: { root: { fontSize: 14, minHeight: 36 } },
+      },
+      MuiDivider: {
+        styleOverrides: { root: { borderColor: c.border.subtle } },
+      },
+      MuiPaginationItem: {
+        styleOverrides: { root: { borderRadius: radius.control } },
+      },
+    },
+  });
+};

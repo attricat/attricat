@@ -41,6 +41,8 @@
     "dashboard": "Panel",
     "manage": "Zarządzanie",
     "signOut": "Wyloguj się",
+    "darkMode": "Tryb ciemny",
+    "lightMode": "Tryb jasny",
     "reusableAttributes": "Atrybuty wielokrotnego użytku",
     "backgroundProcessing": "Przetwarzanie w tle"
   },

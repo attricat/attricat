@@ -41,6 +41,8 @@
     "dashboard": "Dashboard",
     "manage": "Manage",
     "signOut": "Sign out",
+    "darkMode": "Dark mode",
+    "lightMode": "Light mode",
     "reusableAttributes": "Reusable attributes",
     "backgroundProcessing": "Background processing"
   },

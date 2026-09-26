@@ -9,8 +9,9 @@ export const PageContainer = ({
   maxWidth?: false | 'sm' | 'md' | 'lg' | 'xl';
 }) => (
   <Container
+    disableGutters
     maxWidth={maxWidth}
-    sx={{ ml: 0, mr: 'auto', py: { xs: 2, md: 3 } }}
+    sx={{ ml: 0, mr: 'auto', px: { xs: 4, md: 8 }, py: { xs: 6, md: 8 } }}
   >
     {children}
   </Container>

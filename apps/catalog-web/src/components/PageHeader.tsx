@@ -6,7 +6,7 @@ export const PageHeader = ({
   description,
   eyebrow,
   title,
-  titleVariant = 'h2',
+  titleVariant = 'h3',
 }: {
   actions?: ReactNode;
   description?: ReactNode;
@@ -21,17 +21,7 @@ export const PageHeader = ({
   >
     <Box>
       {eyebrow && (
-        <Typography
-          color="primary"
-          sx={{
-            fontWeight: 700,
-            fontSize: '0.6875rem',
-            letterSpacing: '.1em',
-            lineHeight: 1.3,
-            textTransform: 'uppercase',
-          }}
-          variant="overline"
-        >
+        <Typography color="primary" variant="overline">
           {eyebrow}
         </Typography>
       )}
@@ -44,18 +34,6 @@ export const PageHeader = ({
         <Typography color="text.secondary">{description}</Typography>
       )}
     </Box>
-    {actions && (
-      <Box
-        sx={{
-          '& a, & a:visited': { color: 'primary.main' },
-          '& .MuiButton-contained, & .MuiButton-contained:visited': {
-            color: '#fff !important',
-          },
-          alignSelf: { sm: 'center' },
-        }}
-      >
-        {actions}
-      </Box>
-    )}
+    {actions && <Box sx={{ alignSelf: { sm: 'center' } }}>{actions}</Box>}
   </Stack>
 );
