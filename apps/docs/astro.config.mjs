@@ -8,6 +8,13 @@ export default defineConfig({
   integrations: [
     starlight({
       title: 'Attricat Docs',
+      logo: {
+        dark: './src/assets/wordmark-dark.svg',
+        light: './src/assets/wordmark-light.svg',
+        alt: 'Attricat',
+        replacesTitle: true,
+      },
+      customCss: ['./src/styles/brand.css'],
       description: 'Guides for building and operating a versioned catalog.',
       defaultLocale: 'root',
       locales: {

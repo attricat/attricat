@@ -1,0 +1,202 @@
+/* Attricat design system snapshot: design@69392ef (tokens/colors.json, typography.json,
+   spacing.json, radius.json). Update with the wordmarks in src/assets when the design changes.
+   Starlight's gray scale runs from text (1) to borders (6) in both modes. */
+@layer starlight.base, starlight.reset, starlight.core, starlight.content, starlight.components, starlight.utils, attricat;
+
+@layer attricat {
+  :root {
+    --brand-primary: #83e5d4;
+    --brand-on-primary: #142421;
+    --brand-accent: #ffbc8d;
+    --brand-surface: #1d302b;
+    --brand-inset: #182a26;
+    --brand-border: #4a6059;
+    --brand-border-subtle: #375048;
+    --brand-hover: #29463f;
+    --brand-focus: #83e5d4;
+
+    --sl-color-white: #f4f9f7;
+    --sl-color-gray-1: #f4f9f7;
+    --sl-color-gray-2: #b9cbc5;
+    --sl-color-gray-3: #b9cbc5;
+    --sl-color-gray-4: #789087;
+    --sl-color-gray-5: #4a6059;
+    --sl-color-gray-6: #375048;
+    --sl-color-black: #1d302b;
+    --sl-color-accent-low: #275a4e;
+    --sl-color-accent: #83e5d4;
+    --sl-color-accent-high: #83e5d4;
+    --sl-color-text: #b9cbc5;
+    --sl-color-text-accent: var(--brand-primary);
+    --sl-color-text-invert: var(--brand-on-primary);
+    --sl-color-bg: #142421;
+    --sl-color-bg-nav: var(--brand-surface);
+    --sl-color-bg-sidebar: var(--brand-surface);
+    --sl-color-bg-inline-code: var(--brand-inset);
+    --sl-color-bg-accent: var(--brand-primary);
+    --sl-color-hairline: var(--brand-border-subtle);
+    --sl-color-hairline-light: var(--brand-border-subtle);
+    --sl-color-hairline-shade: var(--brand-border-subtle);
+    --sl-color-orange-low: #4a3b23;
+    --sl-color-orange: #ffe7ac;
+    --sl-color-orange-high: #ffe7ac;
+    --sl-color-green-low: #193a2a;
+    --sl-color-green: #78d7a2;
+    --sl-color-green-high: #78d7a2;
+    --sl-color-blue-low: #1c3546;
+    --sl-color-blue: #8cc9f2;
+    --sl-color-blue-high: #8cc9f2;
+    --sl-color-red-low: #402522;
+    --sl-color-red: #ff9590;
+    --sl-color-red-high: #ff9590;
+
+    --sl-font: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    --sl-font-mono: 'IBM Plex Mono', ui-monospace, SFMono-Regular, monospace;
+    --sl-text-body: 0.875rem;
+    --sl-text-body-sm: 0.8125rem;
+    --sl-text-code: 0.75rem;
+    --sl-text-h1: 1.5rem;
+    --sl-text-h2: 1.125rem;
+    --sl-text-h3: 1rem;
+    --sl-text-h4: 0.875rem;
+    --sl-line-height: 1.55;
+    --sl-line-height-headings: 1.25;
+    --sl-content-width: 45rem;
+    --sl-shadow-sm: none;
+    --sl-shadow-md: none;
+    --sl-shadow-lg: none;
+  }
+
+  :root[data-theme='light'] {
+    --brand-primary: #00766d;
+    --brand-on-primary: #ffffff;
+    --brand-accent: #b45225;
+    --brand-surface: #ffffff;
+    --brand-inset: #fcfdfc;
+    --brand-border: #d0dfd9;
+    --brand-border-subtle: #e6eeea;
+    --brand-hover: #e5f6f1;
+    --brand-focus: #00766d;
+
+    --sl-color-white: #172522;
+    --sl-color-gray-1: #172522;
+    --sl-color-gray-2: #425650;
+    --sl-color-gray-3: #425650;
+    --sl-color-gray-4: #657973;
+    --sl-color-gray-5: #d0dfd9;
+    --sl-color-gray-6: #e6eeea;
+    --sl-color-gray-7: #f7f9f8;
+    --sl-color-black: #ffffff;
+    --sl-color-accent-low: #c8ebe0;
+    --sl-color-accent: #00766d;
+    --sl-color-accent-high: #00766d;
+    --sl-color-text: #425650;
+    --sl-color-text-accent: var(--brand-primary);
+    --sl-color-text-invert: var(--brand-on-primary);
+    --sl-color-bg: #f7f9f8;
+    --sl-color-bg-nav: var(--brand-surface);
+    --sl-color-bg-sidebar: var(--brand-surface);
+    --sl-color-bg-inline-code: var(--brand-inset);
+    --sl-color-bg-accent: var(--brand-primary);
+    --sl-color-hairline: var(--brand-border-subtle);
+    --sl-color-hairline-light: var(--brand-border-subtle);
+    --sl-color-hairline-shade: var(--brand-border-subtle);
+    --sl-color-orange-low: #fff5dc;
+    --sl-color-orange: #765000;
+    --sl-color-orange-high: #765000;
+    --sl-color-green-low: #e8f5ec;
+    --sl-color-green: #20734a;
+    --sl-color-green-high: #20734a;
+    --sl-color-blue-low: #e8f2fa;
+    --sl-color-blue: #24689b;
+    --sl-color-blue-high: #24689b;
+    --sl-color-red-low: #fceae9;
+    --sl-color-red: #b33a38;
+    --sl-color-red-high: #b33a38;
+  }
+}
+
+/* The attricat layer takes precedence over Starlight's component styles. */
+@layer attricat {
+  :root {
+    --sl-nav-height: 4rem;
+  }
+
+  body {
+    color: var(--sl-color-white);
+  }
+
+  :where(a, button, input, select, summary):focus-visible {
+    outline: 2px solid var(--brand-focus);
+    outline-offset: 2px;
+  }
+
+  .site-title img {
+    min-width: 112px;
+  }
+
+  .hero {
+    border-bottom: 1px solid var(--brand-border-subtle);
+    padding-block: clamp(3rem, 8vw, 5rem);
+  }
+
+  .hero h1 {
+    font-size: clamp(2.25rem, 5vw, 3.5rem);
+    line-height: 1.08;
+    letter-spacing: -0.045em;
+    max-width: 18ch;
+  }
+
+  .hero .tagline {
+    font-size: 1rem;
+    line-height: 1.55;
+    max-width: 55ch;
+  }
+
+  .sl-link-button {
+    border-radius: 6px;
+    font-weight: 600;
+  }
+
+  .sl-link-button.primary {
+    background: var(--brand-primary);
+    border-color: var(--brand-primary);
+    color: var(--brand-on-primary);
+  }
+
+  .sl-link-button.primary:hover {
+    background: var(--brand-hover);
+    color: var(--brand-primary);
+  }
+
+  .sl-link-button.minimal {
+    color: var(--brand-primary);
+  }
+
+  .card-grid .card {
+    background: var(--brand-surface);
+    border: 1px solid var(--brand-border);
+    border-radius: 8px;
+    padding: 1.5rem;
+  }
+
+  .card-grid .card .icon {
+    color: var(--brand-primary);
+    background: transparent;
+    border: 0;
+    padding: 0;
+  }
+
+  .sl-markdown-content :where(pre, table, blockquote) {
+    border-radius: 8px;
+  }
+
+  .sl-markdown-content :where(code:not(pre code)) {
+    border: 1px solid var(--brand-border-subtle);
+    border-radius: 4px;
+  }
+
+  @media (max-width: 49.99rem) {
+    .hero { padding-block: 2.5rem; }
+  }
+}
