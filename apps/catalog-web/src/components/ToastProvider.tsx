@@ -1,20 +1,11 @@
 import { Alert, Box, Stack } from '@mui/material';
-import {
-  useCallback,
-  useEffect,
-  useMemo,
-  useReducer,
-  type ReactNode,
-} from 'react';
+import { useEffect, type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
-import { ToastContext } from './toast-context';
-import { reduceToasts, type Toast } from './toast-queue';
-import { subscribeToToasts, type ToastOptions } from './toast';
+import type { Toast } from './toast-queue';
+import { useToastStore } from './toast-store';
 
 const maximumVisibleToasts = 3;
 const defaultToastAutoHideDuration = 6_000;
-let nextToastId = 0;
-
 const ToastAlert = ({
   dismiss,
   toast,
@@ -94,28 +85,12 @@ const ToastAlert = ({
 };
 
 export const ToastProvider = ({ children }: { children: ReactNode }) => {
-  const [toasts, dispatch] = useReducer(reduceToasts, []);
-  const show = useCallback((options: ToastOptions) => {
-    dispatch({
-      toast: {
-        ...options,
-        id: nextToastId++,
-        severity: options.severity ?? 'info',
-      },
-      type: 'show',
-    });
-  }, []);
-  const dismiss = useCallback((id: number) => {
-    dispatch({ id, type: 'dismiss' });
-  }, []);
-
-  useEffect(() => subscribeToToasts(show), [show]);
-
-  const value = useMemo(() => ({ dismiss, show }), [dismiss, show]);
+  const toasts = useToastStore((state) => state.toasts);
+  const dismiss = useToastStore((state) => state.dismiss);
   const visibleToasts = toasts.slice(0, maximumVisibleToasts);
 
   return (
-    <ToastContext.Provider value={value}>
+    <>
       {children}
       <Stack
         aria-live="polite"
@@ -135,6 +110,6 @@ export const ToastProvider = ({ children }: { children: ReactNode }) => {
           </Box>
         ))}
       </Stack>
-    </ToastContext.Provider>
+    </>
   );
 };
