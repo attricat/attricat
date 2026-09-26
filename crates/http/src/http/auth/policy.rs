@@ -21,6 +21,17 @@ pub(super) enum TargetKind {
     PublicationChannelContext,
 }
 
+// Some operations need both workspace-member management and the narrower
+// authority to grant roles. Keep the extra check at the HTTP boundary so PATs
+// cannot inherit it implicitly from their owner's RBAC grants.
+pub(super) fn additional_permission(path: &str) -> Option<&'static str> {
+    match path {
+        "/workspace/members/{member_id}/grants"
+        | "/workspace/members/{member_id}/grants/{grant_id}" => Some("roles.grant"),
+        _ => None,
+    }
+}
+
 pub(super) fn policy(method: &Method, path: &str) -> Option<Policy> {
     let read = |target| Policy {
         permission: "entities.read",
@@ -400,6 +411,20 @@ pub(super) fn target(path: &str, kind: TargetKind) -> (Option<Uuid>, Option<Stri
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn role_grants_require_both_member_and_grant_permissions() {
+        for path in [
+            "/workspace/members/{member_id}/grants",
+            "/workspace/members/{member_id}/grants/{grant_id}",
+        ] {
+            assert_eq!(
+                policy(&Method::POST, path).unwrap().permission,
+                "members.manage"
+            );
+            assert_eq!(additional_permission(path), Some("roles.grant"));
+        }
+    }
 
     #[test]
     fn workflow_routes_require_read_or_manage_permissions() {

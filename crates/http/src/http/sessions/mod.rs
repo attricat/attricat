@@ -210,12 +210,18 @@ pub(super) async fn login(
 
 pub(super) async fn current_session(
     State(state): State<AppState>,
-    AuthenticatedPrincipal(user_id, _): AuthenticatedPrincipal,
+    AuthenticatedPrincipal(user_id, token_id): AuthenticatedPrincipal,
     ActiveWorkspace(workspace_id): ActiveWorkspace,
 ) -> Result<Json<SessionResponse>, ApiError> {
-    Ok(Json(
-        session_response_payload(&state, user_id, workspace_id).await?,
-    ))
+    let mut session = session_response_payload(&state, user_id, workspace_id).await?;
+    if let Some(token_id) = token_id {
+        let permissions = state
+            .repository
+            .personal_api_token_permissions(token_id)
+            .await?;
+        session.restrict_to_permissions(&permissions);
+    }
+    Ok(Json(session))
 }
 
 pub(super) async fn logout(

@@ -128,4 +128,8 @@ revocation time, and last-used time. `GET /personal-access-tokens` deliberately
 returns metadata only and `DELETE /personal-access-tokens/{id}` revokes only the
 caller's token. Token permissions restrict the owner’s RBAC grants rather than
 replace them, so a token cannot exceed its owner’s grants or bypass scoped
-roles. The CLI reads the bearer secret from `CATALOG_TOKEN` (or `--token`).
+roles. Role grant and revoke requests require both `members.manage` and
+`roles.grant` in the token as well as the owner's live grants. When requested
+with a personal token, `/auth/session` reports capabilities restricted to that
+token's permissions. The CLI reads the bearer secret from `CATALOG_TOKEN` (or
+`--token`).

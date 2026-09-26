@@ -79,6 +79,18 @@ impl CatalogRepository {
         })?)
     }
 
+    pub async fn personal_api_token_permissions(
+        &self,
+        token_id: Uuid,
+    ) -> Result<Vec<String>, RepositoryError> {
+        Ok(sqlx::query_scalar(
+            "SELECT permission_code FROM personal_api_token_permissions WHERE token_id = $1",
+        )
+        .bind(token_id)
+        .fetch_all(&self.pool)
+        .await?)
+    }
+
     pub async fn personal_api_token_permits(
         &self,
         token_id: Uuid,

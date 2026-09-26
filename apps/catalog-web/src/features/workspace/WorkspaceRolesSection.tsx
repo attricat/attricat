@@ -14,6 +14,7 @@ import {
   Typography,
 } from '@mui/material';
 import { useRef, useState } from 'react';
+import { authQueryKeys } from '../auth/queryKeys';
 import { useTranslation } from 'react-i18next';
 import { createRole, listPermissions, listRoles } from './api';
 import { workspaceQueryKeys } from './queryKeys';
@@ -43,8 +44,10 @@ export const WorkspaceRolesSection = ({
     queryKey: workspaceQueryKeys.permissions(),
     queryFn: listPermissions,
   });
-  const refresh = () =>
-    client.invalidateQueries({ queryKey: workspaceQueryKeys.roles() });
+  const refresh = () => {
+    void client.invalidateQueries({ queryKey: authQueryKeys.session() });
+    return client.invalidateQueries({ queryKey: workspaceQueryKeys.roles() });
+  };
   const form = useForm({
     defaultValues: { code: '', permissions: [] as string[] },
     onSubmit: async ({ value }) => {

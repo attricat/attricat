@@ -34,6 +34,7 @@ pub(super) struct SessionCapabilities {
     data_health_read: bool,
     members_manage: bool,
     roles_manage: bool,
+    roles_grant: bool,
     tokens_manage: bool,
     workspace_navigation_manage: bool,
     extensions_read: bool,
@@ -44,6 +45,28 @@ pub(super) struct SessionCapabilities {
     rules_manage: bool,
     entities_publish: bool,
     entities_delete: bool,
+}
+
+impl SessionResponse {
+    pub(super) fn restrict_to_permissions(&mut self, permissions: &[String]) {
+        let permits = |code: &str| permissions.iter().any(|value| value == code);
+        let c = &mut self.capabilities;
+        c.audit_read &= permits("audit.read");
+        c.data_health_read &= permits("data_health.read");
+        c.members_manage &= permits("members.manage");
+        c.roles_manage &= permits("roles.manage");
+        c.roles_grant &= permits("roles.grant");
+        c.tokens_manage &= permits("tokens.manage");
+        c.workspace_navigation_manage &= permits("workspace_navigation.manage");
+        c.extensions_read &= permits("extensions.read");
+        c.extensions_manage &= permits("extensions.manage");
+        c.workflows_read &= permits("workflows.read");
+        c.workflows_manage &= permits("workflows.manage");
+        c.rules_read &= permits("rules.read");
+        c.rules_manage &= permits("rules.manage");
+        c.entities_publish &= permits("entities.publish");
+        c.entities_delete &= permits("entities.delete");
+    }
 }
 
 // Cookie issuance intentionally keeps the response inputs explicit at this boundary.
@@ -138,6 +161,10 @@ async fn session_capabilities(
         roles_manage: state
             .repository
             .is_authorized(user_id, workspace_id, "roles.manage", None, None)
+            .await?,
+        roles_grant: state
+            .repository
+            .is_authorized(user_id, workspace_id, "roles.grant", None, None)
             .await?,
         tokens_manage: state
             .repository

@@ -87,6 +87,7 @@ export const WorkspaceManagementPage = ({
       {section === 'members' && (
         <WorkspaceMembersSection
           canManage={capabilities?.members_manage === true}
+          canGrantRoles={capabilities?.roles_grant === true}
           currentUserId={session.data?.user_id}
           workspaceId={session.data?.workspace_id}
         />

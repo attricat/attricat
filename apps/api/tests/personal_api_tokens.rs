@@ -79,6 +79,16 @@ async fn personal_api_tokens_are_one_time_secrets_and_enforce_permission_subsets
         })
         .build()
         .unwrap();
+    let session = token
+        .get(format!("{base_url}/auth/session"))
+        .send()
+        .await
+        .unwrap()
+        .json::<Value>()
+        .await
+        .unwrap();
+    assert_eq!(session["capabilities"]["tokens_manage"], false);
+    assert_eq!(session["capabilities"]["roles_grant"], false);
     assert_eq!(
         token
             .get(format!("{base_url}/blueprints"))
@@ -309,6 +319,110 @@ async fn expired_tokens_fail_and_token_auth_still_obeys_scoped_grants(pool: PgPo
             .unwrap()
             .status(),
         StatusCode::UNAUTHORIZED
+    );
+    server.abort();
+}
+
+#[sqlx::test]
+async fn member_management_token_cannot_grant_or_revoke_without_roles_grant(pool: PgPool) {
+    let (base_url, server) = start_server(pool.clone()).await;
+    let workspace: Uuid = BOOTSTRAP_WORKSPACE_ID.parse().unwrap();
+    let owner: Uuid = BOOTSTRAP_OWNER_ID.parse().unwrap();
+    let member: Uuid = sqlx::query_scalar(
+        "SELECT id FROM workspace_memberships WHERE workspace_id = $1 AND user_id = $2",
+    )
+    .bind(workspace)
+    .bind(owner)
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    let owner_client = authenticated_client();
+    let restricted = owner_client
+        .post(format!("{base_url}/personal-access-tokens"))
+        .json(&json!({"label":"members only", "permissions":["members.manage"]}))
+        .send()
+        .await
+        .unwrap()
+        .json::<Value>()
+        .await
+        .unwrap();
+    let grant_only = owner_client
+        .post(format!("{base_url}/personal-access-tokens"))
+        .json(&json!({"label":"grants only", "permissions":["roles.grant"]}))
+        .send()
+        .await
+        .unwrap()
+        .json::<Value>()
+        .await
+        .unwrap();
+    let permitted = owner_client
+        .post(format!("{base_url}/personal-access-tokens"))
+        .json(&json!({"label":"role grants", "permissions":["members.manage", "roles.grant"]}))
+        .send()
+        .await
+        .unwrap()
+        .json::<Value>()
+        .await
+        .unwrap();
+    let grant_url = format!("{base_url}/workspace/members/{member}/grants");
+    let grant = json!({
+        "role_id":"00000000-0000-4000-8000-000000000104",
+        "scope_type":"workspace", "scope_target_id":workspace
+    });
+    assert_eq!(
+        Client::new()
+            .post(&grant_url)
+            .bearer_auth(restricted["secret"].as_str().unwrap())
+            .json(&grant)
+            .send()
+            .await
+            .unwrap()
+            .status(),
+        StatusCode::FORBIDDEN
+    );
+    assert_eq!(
+        Client::new()
+            .post(&grant_url)
+            .bearer_auth(grant_only["secret"].as_str().unwrap())
+            .json(&grant)
+            .send()
+            .await
+            .unwrap()
+            .status(),
+        StatusCode::FORBIDDEN
+    );
+    let created = Client::new()
+        .post(&grant_url)
+        .bearer_auth(permitted["secret"].as_str().unwrap())
+        .json(&grant)
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(created.status(), StatusCode::CREATED);
+    let id = created.json::<Value>().await.unwrap()["id"]
+        .as_str()
+        .unwrap()
+        .to_owned();
+    let revoke_url = format!("{grant_url}/{id}");
+    assert_eq!(
+        Client::new()
+            .delete(&revoke_url)
+            .bearer_auth(restricted["secret"].as_str().unwrap())
+            .send()
+            .await
+            .unwrap()
+            .status(),
+        StatusCode::FORBIDDEN
+    );
+    assert_eq!(
+        Client::new()
+            .delete(&revoke_url)
+            .bearer_auth(permitted["secret"].as_str().unwrap())
+            .send()
+            .await
+            .unwrap()
+            .status(),
+        StatusCode::NO_CONTENT
     );
     server.abort();
 }

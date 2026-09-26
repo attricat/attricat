@@ -16,6 +16,25 @@ vi.mock('./api', async (importOriginal) => ({
 const workspaceId = '123e4567-e89b-12d3-a456-426614174000';
 
 describe('WorkspaceMembersSection', () => {
+  it('hides grant controls without roles.grant', async () => {
+    vi.mocked(listMembers).mockResolvedValue([
+      {
+        id: '123e4567-e89b-12d3-a456-426614174001',
+        email: 'member@example.test',
+        state: 'active',
+        grants: [{ id: 'grant-id', role_code: 'reader' }],
+      },
+    ] as never);
+    vi.mocked(listAssignableRoles).mockResolvedValue([]);
+    render(
+      <QueryClientProvider client={new QueryClient()}>
+        <WorkspaceMembersSection canManage workspaceId={workspaceId} />
+      </QueryClientProvider>,
+    );
+    await screen.findByRole('listitem');
+    expect(screen.queryByRole('button', { name: /Revoke/ })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Grant role' })).toBeNull();
+  });
   it('does not grant the same role twice during a pending request', async () => {
     vi.mocked(listMembers).mockResolvedValue([
       {
@@ -34,7 +53,11 @@ describe('WorkspaceMembersSection', () => {
     vi.mocked(grantMemberRole).mockImplementation(() => new Promise(() => {}));
     const view = render(
       <QueryClientProvider client={new QueryClient()}>
-        <WorkspaceMembersSection canManage workspaceId={workspaceId} />
+        <WorkspaceMembersSection
+          canManage
+          canGrantRoles
+          workspaceId={workspaceId}
+        />
       </QueryClientProvider>,
     );
     fireEvent.mouseDown(

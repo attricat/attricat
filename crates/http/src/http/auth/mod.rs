@@ -213,6 +213,23 @@ pub(super) async fn authorize(
         {
             return Err(ApiError::forbidden());
         }
+        if let Some(extra) = policy::additional_permission(matched) {
+            if !state
+                .repository
+                .is_authorized(principal, workspace, extra, None, None)
+                .await?
+            {
+                return Err(ApiError::forbidden());
+            }
+            if let Some(token_id) = token_id
+                && !state
+                    .repository
+                    .personal_api_token_permits(token_id, extra)
+                    .await?
+            {
+                return Err(ApiError::forbidden());
+            }
+        }
     } else if !path.starts_with("/auth/") && !accepting_invitation {
         return Err(ApiError::forbidden());
     }
