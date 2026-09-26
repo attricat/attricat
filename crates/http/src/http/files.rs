@@ -771,6 +771,7 @@ async fn delete_objects(state: &AppState, keys: &[String]) {
     }
 }
 fn storage_error(error: ObjectStoreError) -> ApiError {
+    tracing::error!(error = %error, "object storage operation failed");
     match error {
         ObjectStoreError::Unavailable | ObjectStoreError::TimedOut(_) => {
             ApiError::storage_unavailable()

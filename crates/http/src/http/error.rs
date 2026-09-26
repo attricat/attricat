@@ -216,7 +216,10 @@ impl ApiError {
 }
 impl From<RepositoryError> for ApiError {
     fn from(error: RepositoryError) -> Self {
-        match error {
+        // Preserve the cause only for server errors, not expected conflicts or
+        // validation failures, while keeping it out of the HTTP response.
+        let cause = error.to_string();
+        let response = match error {
             RepositoryError::NotFound(resource) => Self::not_found(resource),
             RepositoryError::InvitationInvalid => Self {
                 status: StatusCode::UNPROCESSABLE_ENTITY,
@@ -447,7 +450,11 @@ impl From<RepositoryError> for ApiError {
             }
             RepositoryError::Task(_) => Self::internal("task queue operation failed"),
             RepositoryError::Database(_) => Self::internal("database operation failed"),
+        };
+        if response.status.is_server_error() {
+            tracing::error!(error = %cause, "repository operation failed");
         }
+        response
     }
 }
 #[derive(Serialize)]
@@ -495,6 +502,9 @@ fn is_workspace_validation_error(message: &str) -> bool {
 
 impl IntoResponse for ApiError {
     fn into_response(self) -> Response {
+        if self.status.is_server_error() {
+            tracing::error!(code = self.code, message = %self.message, "API operation failed");
+        }
         (
             self.status,
             Json(json!(ErrorBody {

@@ -178,7 +178,10 @@ pub(super) async fn create_workspace_user(
             .deliver_workspace_invitation(&email, &delivery_url)
             .await
     }
-    .map_err(|_| ApiError::internal("workspace invitation email could not be delivered"))?;
+    .map_err(|error| {
+        tracing::error!(%error, "workspace invitation email delivery failed");
+        ApiError::internal("workspace invitation email could not be delivered")
+    })?;
     Ok((
         StatusCode::CREATED,
         Json(CreatedWorkspaceUser {
@@ -363,7 +366,10 @@ pub(super) async fn create_invitation(
         .mail_delivery
         .deliver_workspace_invitation(&email, &delivery_url)
         .await
-        .map_err(|_| ApiError::internal("workspace invitation email could not be delivered"))?;
+        .map_err(|error| {
+            tracing::error!(%error, "workspace invitation email delivery failed");
+            ApiError::internal("workspace invitation email could not be delivered")
+        })?;
     Ok((
         StatusCode::CREATED,
         Json(CreatedInvitation {

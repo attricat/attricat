@@ -127,7 +127,10 @@ pub(super) async fn request_password_reset(
         .mail_delivery
         .deliver_password_reset(&email, &reset_url)
         .await
-        .map_err(|_| ApiError::internal("password reset email could not be delivered"))?;
+        .map_err(|error| {
+            tracing::error!(%error, "password reset email delivery failed");
+            ApiError::internal("password reset email could not be delivered")
+        })?;
     Ok(axum::http::StatusCode::NO_CONTENT)
 }
 

@@ -57,6 +57,7 @@ use serde_json::Value;
 use tokio::sync::{Mutex, Semaphore};
 use tower_http::services::{ServeDir, ServeFile};
 use tracing::{Instrument, field::Empty};
+use uuid::Uuid;
 
 #[derive(Clone)]
 pub struct AppState {
@@ -210,6 +211,15 @@ fn canonical_route(route: &str) -> &str {
         .unwrap_or(route)
 }
 
+fn request_id(request: &axum::extract::Request) -> Uuid {
+    request
+        .headers()
+        .get("x-request-id")
+        .and_then(|value| value.to_str().ok())
+        .and_then(|value| value.parse::<Uuid>().ok())
+        .unwrap_or_else(Uuid::new_v4)
+}
+
 async fn server_timing(
     State(state): State<AppState>,
     mut request: axum::extract::Request,
@@ -221,14 +231,18 @@ async fn server_timing(
         .get::<axum::extract::MatchedPath>()
         .map(|path| canonical_route(path.as_str()).to_owned())
         .unwrap_or_else(|| "unmatched".to_owned());
+    // Use one validated ID for the response, request logs, and mutation audits.
+    let request_id = request_id(&request);
     let timing = RequestTiming::new(
         state.devtools_enabled && EXPLORER_TIMING_ROUTES.contains(&route.as_str()),
     );
+    request.extensions_mut().insert(request_id);
     request.extensions_mut().insert(timing.clone());
     let span = tracing::info_span!(
         "http.request",
         method = %method,
         route = %route,
+        request_id = %request_id,
         status = Empty,
         duration_ms = Empty
     );
@@ -264,6 +278,10 @@ async fn server_timing(
         None if phases.is_empty() => format!("app;dur={duration_ms:.2}"),
         None => format!("{phases}, app;dur={duration_ms:.2}"),
     };
+    response.headers_mut().insert(
+        HeaderName::from_static("x-request-id"),
+        HeaderValue::from_str(&request_id.to_string()).expect("UUID is a valid header value"),
+    );
     response.headers_mut().insert(
         server_timing,
         HeaderValue::from_str(&value).expect("server timing values are valid header values"),
@@ -892,6 +910,22 @@ mod timing_tests {
             "/blueprints/{blueprint_id}"
         );
         assert_eq!(canonical_route("/apiary"), "/apiary");
+    }
+
+    #[test]
+    fn request_ids_accept_only_uuids_and_generate_missing_ids() {
+        let id = Uuid::new_v4();
+        let request = axum::http::Request::builder()
+            .header("x-request-id", id.to_string())
+            .body(axum::body::Body::empty())
+            .unwrap();
+        assert_eq!(request_id(&request), id);
+
+        let invalid = axum::http::Request::builder()
+            .header("x-request-id", "not-a-uuid")
+            .body(axum::body::Body::empty())
+            .unwrap();
+        assert_ne!(request_id(&invalid), Uuid::nil());
     }
 
     #[test]

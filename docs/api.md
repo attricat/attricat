@@ -319,9 +319,12 @@ network rather than exposing it publicly.
 
 The API emits structured `tracing` events for startup, database migrations, each
 HTTP request, file uploads, downloads, and worker jobs. Request spans include
-the method, matched route template, response status, and duration; file spans
-include only internal IDs and bounded operation values, never object keys or
-filenames. 5xx responses are emitted at error level. Set `RUST_LOG` (for
+the method, matched route template, response status, duration, and a validated
+`x-request-id` UUID (also returned in the response and used for mutation audits).
+File spans include only internal IDs and bounded operation values, never object
+keys or filenames. 5xx responses are emitted at error level; repository, storage,
+and mail failures also log their server-side cause without exposing it to clients.
+Set `RUST_LOG` (for
 example, `RUST_LOG=api=debug`) to control output verbosity.
 
 ## Agents

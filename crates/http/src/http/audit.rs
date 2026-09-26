@@ -20,12 +20,18 @@ pub(super) fn request_context(
     request: &Request,
     principal: AuthenticatedPrincipal,
 ) -> AuditContext {
-    let request_id = parse_or_generate_id(
-        request
-            .headers()
-            .get(REQUEST_ID_HEADER)
-            .and_then(|value| value.to_str().ok()),
-    );
+    let request_id = request
+        .extensions()
+        .get::<Uuid>()
+        .copied()
+        .unwrap_or_else(|| {
+            parse_or_generate_id(
+                request
+                    .headers()
+                    .get(REQUEST_ID_HEADER)
+                    .and_then(|value| value.to_str().ok()),
+            )
+        });
     let correlation_id = parse_or_generate_id(
         request
             .headers()

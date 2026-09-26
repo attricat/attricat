@@ -347,6 +347,7 @@ async fn execute(repository: CatalogRepository, handler: Arc<dyn TaskHandler>, t
         Ok(TaskOutcome::DeadLettered) => Ok("dead_letter"),
         Err(error) => {
             let (code, message) = bounded_error(error.code, &error.message);
+            tracing::error!(task_id = %task.id, kind = %kind, %code, %message, "task handler failed");
             repository
                 .retry_task_at(
                     task.id,
