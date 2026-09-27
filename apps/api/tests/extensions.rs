@@ -460,7 +460,7 @@ fn append_file(tar: &mut tar::Builder<&mut Vec<u8>>, path: &str, bytes: &[u8]) {
 
 #[sqlx::test(migrations = "./migrations")]
 async fn extension_catalog_upsert_is_idempotent_and_emits_a_change_feed(pool: sqlx::PgPool) {
-    let repository = CatalogRepository::system(pool)
+    let repository = CatalogRepository::system(pool.clone())
         .for_workspace(Uuid::from_u128(0x00000000000040008000000000000002))
         .await
         .unwrap()
@@ -553,6 +553,66 @@ async fn extension_catalog_upsert_is_idempotent_and_emits_a_change_feed(pool: sq
         .await
         .unwrap();
     assert_eq!(snapshot.entities.len(), 1);
+    // An export filter must never include withdrawn approvals. A channel is
+    // only exportable while explicitly enabled by the workspace.
+    let channel = repository
+        .create_context(api::model::CreateAttributeContext {
+            code: format!("export_{}", Uuid::new_v4().simple()),
+            data: json!({}),
+            parent_id: None,
+        })
+        .await
+        .unwrap();
+    let channel_id = channel.id;
+    let workspace_id = Uuid::from_u128(0x00000000000040008000000000000002);
+    let page_for_channel = || {
+        repository.extension_catalog_page(api::repository::ExtensionCatalogPageRequest {
+            blueprint_id: blueprint.blueprint.id,
+            blueprint_version: entity_version,
+            context_id: Some(channel_id),
+            publication_context_id: Some(channel_id),
+            cursor: None,
+            limit: 10,
+        })
+    };
+    assert!(
+        page_for_channel().await.is_err(),
+        "unconfigured channel must be rejected"
+    );
+    sqlx::query(
+        "INSERT INTO publication_channels(workspace_id,context_id,enabled) VALUES($1,$2,true)",
+    )
+    .bind(workspace_id)
+    .bind(channel_id)
+    .execute(&pool)
+    .await
+    .unwrap();
+    assert!(page_for_channel().await.unwrap().entities.is_empty());
+    let publisher_id = Uuid::new_v4();
+    sqlx::query("INSERT INTO users(id,email) VALUES($1,$2)")
+        .bind(publisher_id)
+        .bind(format!("{publisher_id}@example.test"))
+        .execute(&pool)
+        .await
+        .unwrap();
+    sqlx::query("INSERT INTO entity_channel_publications(workspace_id,entity_id,context_id,published_at,published_by_user_id) VALUES($1,$2,$3,now(),$4)")
+        .bind(workspace_id).bind(entity_id).bind(channel_id).bind(publisher_id).execute(&pool).await.unwrap();
+    assert_eq!(page_for_channel().await.unwrap().entities.len(), 1);
+    sqlx::query("UPDATE entity_channel_publications SET published_at=NULL,published_by_user_id=NULL WHERE workspace_id=$1 AND entity_id=$2 AND context_id=$3")
+        .bind(workspace_id).bind(entity_id).bind(channel_id).execute(&pool).await.unwrap();
+    assert!(page_for_channel().await.unwrap().entities.is_empty());
+    sqlx::query(
+        "UPDATE publication_channels SET enabled=false WHERE workspace_id=$1 AND context_id=$2",
+    )
+    .bind(workspace_id)
+    .bind(channel_id)
+    .execute(&pool)
+    .await
+    .unwrap();
+    assert!(
+        page_for_channel().await.is_err(),
+        "disabled channel must be rejected"
+    );
     let changes = repository
         .extension_catalog_changes(blueprint.blueprint.id, entity_version, None, 1)
         .await

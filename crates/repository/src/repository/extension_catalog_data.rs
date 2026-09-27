@@ -188,6 +188,20 @@ impl CatalogRepository {
                 .await?;
             (snapshot_at, None, None)
         };
+        if let Some(channel_id) = request.publication_context_id {
+            let enabled: bool = sqlx::query_scalar(
+                "SELECT EXISTS(SELECT 1 FROM publication_channels WHERE workspace_id=$1 AND context_id=$2 AND enabled)",
+            )
+            .bind(workspace_id)
+            .bind(channel_id)
+            .fetch_one(&self.pool)
+            .await?;
+            if !enabled {
+                return Err(RepositoryError::InvalidExtension(
+                    "export publication channel is not enabled".into(),
+                ));
+            }
+        }
         if let Some(context_id) = request.context_id {
             let exists: Option<Uuid> = sqlx::query_scalar(
                 "SELECT id FROM attribute_contexts WHERE id=$1 AND workspace_id=$2",
@@ -206,7 +220,7 @@ impl CatalogRepository {
              WHERE e.workspace_id=$1 AND (e.deleted_at IS NULL OR e.deleted_at > $4) AND e.blueprint_id=$2 AND e.blueprint_version=$3 \
                AND e.created_at <= $4 \
                AND ($5::timestamptz IS NULL OR (e.created_at,e.id) > ($5,$6)) \
-               AND ($7::uuid IS NULL OR EXISTS (SELECT 1 FROM entity_channel_publications p WHERE p.workspace_id=e.workspace_id AND p.entity_id=e.id AND p.context_id=$7)) \
+               AND ($7::uuid IS NULL OR EXISTS (SELECT 1 FROM entity_channel_publications p WHERE p.workspace_id=e.workspace_id AND p.entity_id=e.id AND p.context_id=$7 AND p.published_at IS NOT NULL)) \
              ORDER BY e.created_at,e.id LIMIT $8",
         )
         .bind(workspace_id).bind(request.blueprint_id).bind(request.blueprint_version)

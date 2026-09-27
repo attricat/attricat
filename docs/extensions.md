@@ -451,6 +451,38 @@ the release and validated input/configuration snapshot, not credentials, URLs
 or request bodies. Output, progress, status and errors use the existing
 workspace-scoped run and artifact endpoints.
 
+### Blueprint-scoped import/export orchestration (target design)
+
+The existing operation and interval-schedule endpoints are **low-level extension
+primitives**, not the user-facing import/export configuration. A workspace
+operator should configure import/export on a blueprint family, choosing a
+connector release/declared operation, a value-resolution context, and (for
+exports) an enabled publication channel. A channel is a context designated
+exportable; the selected value-resolution context may differ from the channel.
+Exports must include only entities whose approval for that channel is currently
+published. Imports must specify their target blueprint and write context, and
+must not silently write to another blueprint or context.
+
+The host owns the configuration, permissions, trigger/schedule, idempotency,
+run progress, retry/cancellation and artifacts. Manual, event-triggered and
+interval runs must all enqueue through the **existing extension-operation task
+queue**; do not introduce a separate connector worker or allow an extension to
+schedule itself. Persist run-to-configuration linkage and a pinned release and
+scope. At dispatch and on each host catalog read/write, recheck the active
+release, grants and scope. In particular, an extension-provided page filter or
+upsert payload must never widen the host-selected blueprint/context/channel.
+A channel being disabled or publication being withdrawn must stop further
+export pages. Decide and document how to handle mid-run changes before enabling
+external delivery (an already transferred page cannot be recalled).
+
+The current connector WIT `catalog.page` has no publication-channel parameter
+and generic catalog calls can bypass a client-provided filter. Therefore this
+configuration is **not implemented by generic operation schedules**; adding
+blueprint fields to schedule input alone would not enforce it. A new versioned
+connector ABI (or run-bound host calls that derive scope entirely from the
+pinned run) is needed before enabling blueprint-scoped exports/imports. Preserve
+older generic operations as separate low-level APIs until they can be migrated.
+
 ## Client extension runtime (v1)
 
 Enabled `client_component` artifacts can expose a strict `ui` contribution:
