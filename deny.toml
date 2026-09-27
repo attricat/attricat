@@ -18,15 +18,11 @@ allow = [
   "ISC",
   "MIT",
   "MIT-0",
+  "AGPL-3.0-only",
   "0BSD",
   "Unicode-3.0",
   "Zlib",
 ]
-
-# Workspace crates are unpublished and have no repository LICENSE; audit only
-# third-party licenses until a project license is adopted.
-[licenses.private]
-ignore = true
 
 [sources]
 unknown-registry = "deny"

@@ -85,6 +85,14 @@ restore, and rollback.
 - [Demo catalog generator](examples/generate.md)
 - [Relationships walkthrough](examples/relationships/README.md)
 
+## License
+
+The code in this repository is licensed under the [GNU Affero General Public
+License, version 3](LICENSE) (`AGPL-3.0-only`). The pinned design-system assets
+in `apps/catalog-web/design/` come from the separate [Attricat design
+repository](https://github.com/attricat/design); see its licensing terms for
+those files. Third-party dependencies retain their respective licenses.
+
 ## Applications
 
 - `apps/api`: Axum API and SQLx migrations.
