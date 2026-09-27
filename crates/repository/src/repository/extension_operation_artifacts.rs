@@ -89,6 +89,7 @@ impl CatalogRepository {
             return Err(artifact_error("invalid artifact media type"));
         }
         let mut tx = self.pool.begin().await?;
+        self.ensure_task_fence(&mut tx).await?;
         // Serialize quota accounting for this workspace; aggregate reads alone
         // would permit concurrent streams to over-reserve the shared budget.
         sqlx::query("SELECT id FROM workspaces WHERE id=$1 FOR UPDATE")
@@ -117,9 +118,14 @@ impl CatalogRepository {
         {
             return Err(artifact_error("operation artifact quota exhausted"));
         }
+        let id = Uuid::new_v4();
+        // Reserve the deterministic object key before upload. If the process
+        // dies after put_file but before completion, retention can still delete
+        // the tracked orphan; incomplete keys never leave this repository.
+        let key = format!("extension-operation-artifacts/v1/{id}");
         let row = sqlx::query_as::<_, ExtensionOperationArtifact>(
-            "INSERT INTO extension_operation_artifacts(id,workspace_id,extension_id,installed_release_id,operation_run_id,direction,state,media_type) VALUES($1,$2,$3,$4,$5,'output','incomplete',$6) RETURNING id,workspace_id,extension_id,installed_release_id,operation_run_id,direction,state,content_length,media_type,checksum_sha256,object_key,created_at,completed_at",
-        ).bind(Uuid::new_v4()).bind(self.extension_workspace()).bind(extension_id).bind(release_id).bind(run_id).bind(media_type).fetch_one(&mut *tx).await?;
+            "INSERT INTO extension_operation_artifacts(id,workspace_id,extension_id,installed_release_id,operation_run_id,direction,state,media_type,object_key) VALUES($1,$2,$3,$4,$5,'output','incomplete',$6,$7) RETURNING id,workspace_id,extension_id,installed_release_id,operation_run_id,direction,state,content_length,media_type,checksum_sha256,object_key,created_at,completed_at",
+        ).bind(id).bind(self.extension_workspace()).bind(extension_id).bind(release_id).bind(run_id).bind(media_type).bind(key).fetch_one(&mut *tx).await?;
         tx.commit().await?;
         Ok(row)
     }
@@ -163,11 +169,12 @@ impl CatalogRepository {
             return Err(artifact_error("artifact chunk exceeds quota"));
         }
         let mut tx = self.pool.begin().await?;
+        self.ensure_task_fence(&mut tx).await?;
         sqlx::query("SELECT id FROM workspaces WHERE id=$1 FOR UPDATE")
             .bind(self.extension_workspace())
             .execute(&mut *tx)
             .await?;
-        let row: Option<(i64,)> = sqlx::query_as("SELECT content_length FROM extension_operation_artifacts WHERE id=$1 AND workspace_id=$2 AND operation_run_id=$3 AND direction='output' AND state='incomplete' FOR UPDATE")
+        let row: Option<(i64,)> = sqlx::query_as("SELECT content_length FROM extension_operation_artifacts WHERE id=$1 AND workspace_id=$2 AND operation_run_id=$3 AND direction='output' AND state='incomplete' AND EXISTS(SELECT 1 FROM extension_operation_runs WHERE id=$3 AND workspace_id=$2 AND status='leased') FOR UPDATE")
             .bind(artifact_id).bind(self.extension_workspace()).bind(run_id).fetch_optional(&mut *tx).await?;
         let Some((length,)) = row else {
             return Err(artifact_error("operation output artifact is not writable"));
@@ -211,9 +218,13 @@ impl CatalogRepository {
         {
             return Err(artifact_error("invalid artifact completion"));
         }
-        sqlx::query_as("UPDATE extension_operation_artifacts SET state='completed',checksum_sha256=$3,object_key=$4,completed_at=clock_timestamp(),updated_at=clock_timestamp() WHERE id=$1 AND workspace_id=$2 AND operation_run_id=$5 AND direction='output' AND state='incomplete' RETURNING id,workspace_id,extension_id,installed_release_id,operation_run_id,direction,state,content_length,media_type,checksum_sha256,object_key,created_at,completed_at")
-            .bind(artifact_id).bind(self.extension_workspace()).bind(checksum).bind(object_key).bind(run_id).fetch_optional(&self.pool).await?
-            .ok_or_else(|| artifact_error("operation output artifact is not completable"))
+        let mut tx = self.pool.begin().await?;
+        self.ensure_task_fence(&mut tx).await?;
+        let artifact = sqlx::query_as("UPDATE extension_operation_artifacts SET state='completed',checksum_sha256=$3,object_key=$4,completed_at=clock_timestamp(),updated_at=clock_timestamp() WHERE id=$1 AND workspace_id=$2 AND operation_run_id=$5 AND direction='output' AND state='incomplete' AND EXISTS(SELECT 1 FROM extension_operation_runs WHERE id=$5 AND workspace_id=$2 AND status='leased') RETURNING id,workspace_id,extension_id,installed_release_id,operation_run_id,direction,state,content_length,media_type,checksum_sha256,object_key,created_at,completed_at")
+            .bind(artifact_id).bind(self.extension_workspace()).bind(checksum).bind(object_key).bind(run_id).fetch_optional(&mut *tx).await?
+            .ok_or_else(|| artifact_error("operation output artifact is not completable"))?;
+        tx.commit().await?;
+        Ok(artifact)
     }
 
     pub async fn abort_extension_operation_artifact(
@@ -230,9 +241,17 @@ impl CatalogRepository {
     pub async fn abort_stale_extension_operation_artifacts(
         &self,
     ) -> Result<Vec<String>, RepositoryError> {
-        let rows: Vec<Option<String>> = sqlx::query_scalar("UPDATE extension_operation_artifacts SET state='aborted',aborted_at=clock_timestamp(),updated_at=clock_timestamp() WHERE workspace_id=$1 AND state='incomplete' AND updated_at < clock_timestamp() - interval '1 hour' RETURNING object_key")
-            .bind(self.extension_workspace()).fetch_all(&self.pool).await?;
-        Ok(rows.into_iter().flatten().collect())
+        sqlx::query("WITH aborted AS (UPDATE extension_operation_artifacts a SET state='aborted',aborted_at=clock_timestamp(),updated_at=clock_timestamp() WHERE a.workspace_id=$1 AND a.state='incomplete' AND a.updated_at < clock_timestamp() - interval '1 hour' AND NOT EXISTS (SELECT 1 FROM extension_operation_output_staging s JOIN extension_operation_runs r ON r.id=s.operation_run_id WHERE s.artifact_id=a.id AND r.status IN ('pending','leased','dead_letter')) RETURNING a.object_key) INSERT INTO extension_operation_object_cleanup(object_key,workspace_id) SELECT object_key,$1 FROM aborted WHERE object_key IS NOT NULL AND (object_key LIKE 'extension-operation-artifacts/v1/%' OR object_key LIKE 'extension-operation-http-inputs/v1/%') ON CONFLICT DO NOTHING")
+            .bind(self.extension_workspace()).execute(&self.pool).await?;
+        self.pending_extension_operation_object_deletions().await
+    }
+
+    pub async fn list_completed_extension_operation_artifacts(
+        &self,
+        run_id: Uuid,
+    ) -> Result<Vec<ExtensionOperationArtifact>, RepositoryError> {
+        sqlx::query_as("SELECT a.id,a.workspace_id,a.extension_id,a.installed_release_id,a.operation_run_id,a.direction,a.state,a.content_length,a.media_type,a.checksum_sha256,a.object_key,a.created_at,a.completed_at FROM extension_operation_artifacts a JOIN extension_operation_runs r ON r.id=a.operation_run_id WHERE a.operation_run_id=$1 AND a.workspace_id=$2 AND a.direction='output' AND a.state='completed' AND r.status='completed' ORDER BY a.created_at,a.id LIMIT 100")
+            .bind(run_id).bind(self.extension_workspace()).fetch_all(&self.pool).await.map_err(Into::into)
     }
 
     pub async fn completed_extension_operation_artifact(
@@ -240,7 +259,7 @@ impl CatalogRepository {
         run_id: Uuid,
         artifact_id: Uuid,
     ) -> Result<ExtensionOperationArtifact, RepositoryError> {
-        sqlx::query_as("SELECT id,workspace_id,extension_id,installed_release_id,operation_run_id,direction,state,content_length,media_type,checksum_sha256,object_key,created_at,completed_at FROM extension_operation_artifacts WHERE id=$1 AND operation_run_id=$2 AND workspace_id=$3 AND state='completed'")
+        sqlx::query_as("SELECT a.id,a.workspace_id,a.extension_id,a.installed_release_id,a.operation_run_id,a.direction,a.state,a.content_length,a.media_type,a.checksum_sha256,a.object_key,a.created_at,a.completed_at FROM extension_operation_artifacts a JOIN extension_operation_runs r ON r.id=a.operation_run_id WHERE a.id=$1 AND a.operation_run_id=$2 AND a.workspace_id=$3 AND a.state='completed' AND a.direction='output' AND r.status='completed'")
             .bind(artifact_id).bind(run_id).bind(self.extension_workspace()).fetch_optional(&self.pool).await?
             .ok_or(RepositoryError::NotFound("completed operation artifact"))
     }

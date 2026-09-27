@@ -27,6 +27,7 @@ type ClaimedOperationRunRow = (
     Value,
     String,
     i32,
+    String,
 );
 
 #[derive(Clone, Debug)]
@@ -41,6 +42,8 @@ pub struct StartExtensionOperation {
     pub source_reference: Value,
     pub destination_reference: Value,
     pub idempotency_key: String,
+    pub schedule_id: Option<Uuid>,
+    pub configuration_snapshot: Option<Value>,
 }
 
 #[derive(Clone, Debug)]
@@ -50,6 +53,7 @@ pub struct ClaimedExtensionOperationRun {
     pub installed_release_id: Uuid,
     pub operation_id: String,
     pub operation_handler: String,
+    pub abi_version: String,
     pub configuration: Value,
     pub input: Value,
     pub checkpoint: Value,
@@ -64,11 +68,13 @@ pub struct ClaimedExtensionOperationRun {
 #[derive(Clone, Debug, sqlx::FromRow)]
 pub struct ExtensionOperationRun {
     pub id: Uuid,
+    pub schedule_id: Option<Uuid>,
     pub extension_id: String,
     pub installed_release_id: Uuid,
     pub abi_version: String,
     pub operation_id: String,
     pub status: String,
+    pub outputs_expired: bool,
     pub progress: Value,
     pub checkpoint: Value,
     pub attempts: i32,
@@ -221,9 +227,21 @@ impl CatalogRepository {
         }
 
         let source_reference = input.source_reference.clone();
+        // A release that explicitly requires 1.4 uses the additive connector
+        // ABI; broad compatibility ranges retain the released 1.3 world.
+        let range = semver::VersionReq::parse(&manifest.catalog.host_api).map_err(|_| {
+            RepositoryError::InvalidExtension("invalid pinned host API range".into())
+        })?;
+        let abi = if range.matches(&semver::Version::new(1, 4, 0))
+            && !range.matches(&semver::Version::new(1, 3, 0))
+        {
+            "1.4.0"
+        } else {
+            "1.2.0"
+        };
         let id = Uuid::new_v4();
         let inserted: Option<Uuid> = sqlx::query_scalar(
-            "INSERT INTO extension_operation_runs(id,workspace_id,extension_id,installed_release_id,abi_version,operation_id,actor_user_id,actor_token_id,configuration_snapshot,input,source_reference,destination_reference,idempotency_key) VALUES($1,$2,$3,$4,'1.2.0',$5,$6,$7,$8,$9,$10,$11,$12) ON CONFLICT(workspace_id,extension_id,installed_release_id,operation_id,idempotency_key) DO NOTHING RETURNING id",
+            "INSERT INTO extension_operation_runs(id,workspace_id,extension_id,installed_release_id,abi_version,operation_id,actor_user_id,actor_token_id,configuration_snapshot,input,source_reference,destination_reference,idempotency_key,schedule_id) VALUES($1,$2,$3,$4,$13,$5,$6,$7,$8,$9,$10,$11,$12,$14) ON CONFLICT(workspace_id,extension_id,installed_release_id,operation_id,idempotency_key) DO NOTHING RETURNING id",
         )
         .bind(id)
         .bind(self.extension_workspace())
@@ -232,11 +250,13 @@ impl CatalogRepository {
         .bind(&input.operation_id)
         .bind(self.audit_context.as_ref().and_then(|audit| audit.actor_user_id))
         .bind(self.audit_context.as_ref().and_then(|audit| audit.actor_token_id))
-        .bind(configuration)
+        .bind(input.configuration_snapshot.unwrap_or(configuration))
         .bind(input.input)
         .bind(redact(&input.source_reference))
         .bind(redact(&input.destination_reference))
         .bind(&input.idempotency_key)
+        .bind(abi)
+        .bind(input.schedule_id)
         .fetch_optional(&mut *transaction)
         .await?;
         if let Some(run_id) = inserted {
@@ -286,7 +306,7 @@ impl CatalogRepository {
             .ensure_task_fence(&mut transaction)
             .await?;
         let row: Option<ClaimedOperationRunRow> = sqlx::query_as(
-            "SELECT status,cancellation_requested,lifecycle_started,extension_id,installed_release_id,operation_id,configuration_snapshot,input,checkpoint,idempotency_key,batch_number FROM extension_operation_runs WHERE id=$1 AND workspace_id=$2 FOR UPDATE",
+            "SELECT status,cancellation_requested,lifecycle_started,extension_id,installed_release_id,operation_id,configuration_snapshot,input,checkpoint,idempotency_key,batch_number,abi_version FROM extension_operation_runs WHERE id=$1 AND workspace_id=$2 FOR UPDATE",
         )
         .bind(task.subject_id)
         .bind(self.extension_workspace())
@@ -304,6 +324,7 @@ impl CatalogRepository {
             checkpoint,
             idempotency_key,
             batch_number,
+            abi_version,
         )) = row
         else {
             return Err(RepositoryError::InvalidExtension(
@@ -361,10 +382,15 @@ impl CatalogRepository {
             installed_release_id: release,
             operation_id,
             operation_handler: handler.0,
+            abi_version: abi_version.clone(),
             configuration,
             input,
             checkpoint,
-            batch_key: format!("{}:{}", idempotency_key, batch_number),
+            batch_key: if abi_version == "1.4.0" {
+                format!("{}:{}", task.subject_id, batch_number)
+            } else {
+                format!("{}:{}", idempotency_key, batch_number)
+            },
             max_checkpoint_bytes: handler.1,
             lifecycle_started,
             cancelling,
@@ -572,7 +598,7 @@ impl CatalogRepository {
     pub async fn replay_extension_operation(&self, id: Uuid) -> Result<bool, RepositoryError> {
         let mut transaction = self.pool.begin().await?;
         let changed = sqlx::query(
-            "UPDATE extension_operation_runs SET status='pending',cancellation_requested=false,cancellation_delivered=false,attempts=0,last_error_code=NULL,last_error_message=NULL,completed_at=NULL,cancelled_at=NULL,lease_token=NULL,lease_owner=NULL,lease_until=NULL,updated_at=clock_timestamp() WHERE id=$1 AND workspace_id=$2 AND status='dead_letter'",
+            "UPDATE extension_operation_runs SET status='pending',cancellation_requested=false,cancellation_delivered=false,attempts=0,last_error_code=NULL,last_error_message=NULL,completed_at=NULL,cancelled_at=NULL,lease_token=NULL,lease_owner=NULL,lease_until=NULL,updated_at=clock_timestamp() WHERE id=$1 AND workspace_id=$2 AND status='dead_letter' AND NOT outputs_expired",
         )
         .bind(id)
         .bind(self.extension_workspace())
@@ -594,11 +620,19 @@ impl CatalogRepository {
         &self,
     ) -> Result<Vec<ExtensionOperationRun>, RepositoryError> {
         Ok(sqlx::query_as(
-            "SELECT id,extension_id,installed_release_id,abi_version,operation_id,status,progress,checkpoint,attempts,last_error_code,created_at,completed_at FROM extension_operation_runs WHERE workspace_id=$1 ORDER BY created_at DESC",
+            "SELECT id,schedule_id,extension_id,installed_release_id,abi_version,operation_id,status,outputs_expired,progress,checkpoint,attempts,last_error_code,created_at,completed_at FROM extension_operation_runs WHERE workspace_id=$1 ORDER BY created_at DESC,id DESC LIMIT 200",
         )
         .bind(self.extension_workspace())
         .fetch_all(&self.pool)
         .await?)
+    }
+
+    pub async fn extension_operation_run(
+        &self,
+        id: Uuid,
+    ) -> Result<Option<ExtensionOperationRun>, RepositoryError> {
+        sqlx::query_as("SELECT id,schedule_id,extension_id,installed_release_id,abi_version,operation_id,status,outputs_expired,progress,checkpoint,attempts,last_error_code,created_at,completed_at FROM extension_operation_runs WHERE id=$1 AND workspace_id=$2")
+            .bind(id).bind(self.extension_workspace()).fetch_optional(&self.pool).await.map_err(Into::into)
     }
 }
 

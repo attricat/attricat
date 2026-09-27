@@ -42,6 +42,9 @@ mod entity_publications;
 mod entity_search;
 mod extension_catalog_data;
 mod extension_operation_artifacts;
+mod extension_operation_http_transfer;
+mod extension_operation_schedules;
+mod extension_operation_staging;
 mod extension_operations;
 mod extension_registries;
 mod extension_scoped_configuration;
@@ -82,6 +85,10 @@ pub use extension_catalog_data::{
     MAX_EXTENSION_LOOKUP_VALUE_BYTES,
 };
 pub use extension_operation_artifacts::{ExtensionOperationArtifact, MAX_OPERATION_ARTIFACT_BYTES};
+pub use extension_operation_http_transfer::{DeliveryState, ExtensionHttpDelivery};
+pub use extension_operation_schedules::{
+    CreateExtensionOperationSchedule, ExtensionOperationSchedule,
+};
 pub use extension_operations::{
     ClaimedExtensionOperationRun, ExtensionOperationRun, StartExtensionOperation,
 };

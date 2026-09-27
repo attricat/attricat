@@ -414,6 +414,18 @@ pub fn router(state: AppState) -> Router {
             get(extensions::list_operation_runs),
         )
         .route(
+            "/extension-operation-runs/{id}",
+            get(extensions::get_operation_run),
+        )
+        .route(
+            "/extension-operation-runs/{run_id}/artifacts",
+            get(extensions::list_operation_artifacts),
+        )
+        .route(
+            "/extension-operation-runs/{run_id}/deliveries",
+            get(extensions::list_operation_deliveries),
+        )
+        .route(
             "/extension-operation-runs/{run_id}/artifacts/{artifact_id}/download",
             get(extensions::download_operation_artifact),
         )
@@ -469,6 +481,18 @@ pub fn router(state: AppState) -> Router {
         .route(
             "/extensions/{extension_id}/operations",
             post(extensions::start_operation),
+        )
+        .route(
+            "/extensions/{extension_id}/operation-schedules",
+            post(extensions::create_operation_schedule),
+        )
+        .route(
+            "/extension-operation-schedules",
+            get(extensions::list_operation_schedules),
+        )
+        .route(
+            "/extension-operation-schedules/{id}",
+            axum::routing::patch(extensions::update_operation_schedule),
         )
         .route(
             "/extensions/{extension_id}/{contribution_id}/command",

@@ -20,7 +20,7 @@ use url::Url;
 pub const MANIFEST_VERSION: u32 = 1;
 /// The newest host contract accepted by manifests. Components importing
 /// `catalog:host@1.0.0` remain supported by the unchanged v1 WIT package.
-pub const SUPPORTED_HOST_API: &str = "1.3.0";
+pub const SUPPORTED_HOST_API: &str = "1.4.0";
 pub const MAX_EXTENSION_ARCHIVE_BYTES: usize = 32 * 1024 * 1024;
 pub const MAX_EXTENSION_UNPACKED_BYTES: usize = 128 * 1024 * 1024;
 pub const MAX_EXTENSION_ARCHIVE_ENTRIES: usize = 256;
@@ -238,6 +238,13 @@ pub struct HostPermission {
     pub max_response_bytes: u64,
     #[serde(default = "default_timeout")]
     pub timeout_ms: u64,
+    /// Only for v1.4 mediated artifact transfers. Zero disables bulk transfer.
+    #[serde(default)]
+    pub max_transfer_bytes: u64,
+    /// Explicit operator-reviewed declaration that this POST endpoint honors
+    /// the stable Idempotency-Key header for bulk deliveries.
+    #[serde(default)]
+    pub idempotent_delivery: bool,
 }
 fn default_request_limit() -> u64 {
     DEFAULT_HOST_REQUEST_BYTES
@@ -319,8 +326,8 @@ pub struct Server {
     /// browser access; the host resolves and authorizes each invocation.
     #[serde(default)]
     pub commands: Vec<ServerCommand>,
-    /// Long-running, checkpointed component operations. These use the immutable
-    /// catalog:host@1.2.0 operation ABI and are always release-pinned.
+    /// Long-running, checkpointed, release-pinned component operations. The
+    /// released 1.2/1.3 worlds remain immutable; 1.4 adds connector imports.
     #[serde(default)]
     pub operations: Vec<ServerOperation>,
 }
@@ -1040,6 +1047,7 @@ impl HostPermission {
             || self.max_request_bytes > MAX_HOST_REQUEST_BYTES
             || self.max_response_bytes > MAX_NETWORK_RESPONSE_BYTES
             || self.timeout_ms > MAX_HOST_TIMEOUT_MILLIS
+            || self.max_transfer_bytes > 1024 * 1024 * 1024
         {
             return Err(ManifestError::Invalid(format!(
                 "host permission '{}' has empty or unbounded rules",
@@ -1235,13 +1243,15 @@ impl Webhook {
 }
 
 fn require_operation_host_api(range: &VersionReq) -> Result<(), ManifestError> {
-    if (range.matches(&Version::new(1, 2, 0)) || range.matches(&Version::new(1, 3, 0)))
+    if (range.matches(&Version::new(1, 2, 0))
+        || range.matches(&Version::new(1, 3, 0))
+        || range.matches(&Version::new(1, 4, 0)))
         && !range.matches(&Version::new(1, 1, 0))
     {
         Ok(())
     } else {
         Err(ManifestError::Invalid(
-            "server operations require catalog.host_api compatible with 1.2 or 1.3 but not 1.1"
+            "server operations require catalog.host_api compatible with 1.2 or newer but not 1.1"
                 .into(),
         ))
     }
@@ -1836,6 +1846,8 @@ mod tests {
             max_checkpoint_bytes: 1024,
         }];
         assert!(value.validate(SUPPORTED_HOST_API).is_ok());
+        value.catalog.host_api = ">=1.4.0, <2.0.0".into();
+        assert!(value.validate(SUPPORTED_HOST_API).is_ok());
 
         value.catalog.host_api = ">=1.1.0, <2.0.0".into();
         assert!(value.validate(SUPPORTED_HOST_API).is_err());
@@ -2066,6 +2078,8 @@ mod tests {
             max_request_bytes: 1,
             max_response_bytes: 1,
             timeout_ms: 1,
+            max_transfer_bytes: 0,
+            idempotent_delivery: false,
         };
         assert!(rule.validate().is_ok());
         assert!(rule.allows_request(
