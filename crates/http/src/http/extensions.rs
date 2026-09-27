@@ -22,8 +22,8 @@ use crate::{
         validate_schema,
     },
     repository::{
-        BlueprintConnectorJob, CreateBlueprintConnectorJob, CreateExtensionOperationSchedule,
-        ExtensionGrant, ExtensionHttpDelivery, ExtensionInstallation, ExtensionLifecycleRecord,
+        BlueprintConnectorJob, CreateExtensionOperationSchedule, ExtensionGrant,
+        ExtensionHttpDelivery, ExtensionInstallation, ExtensionLifecycleRecord,
         ExtensionOperationArtifact, ExtensionOperationRun, ExtensionOperationSchedule,
         ExtensionStorageError, InstalledExtension, StartExtensionOperation,
     },
@@ -676,46 +676,8 @@ pub(super) async fn create_operation_schedule(
 
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
-pub(super) struct CreateConnectorJobRequest {
-    direction: String,
-    extension_id: String,
-    operation_id: String,
-    input: Value,
-    context_id: Option<Uuid>,
-    input_file_id: Option<Uuid>,
-    interval_seconds: Option<i32>,
-}
-
-#[derive(Deserialize)]
-#[serde(deny_unknown_fields)]
-pub(super) struct UpdateConnectorJobRequest {
-    enabled: bool,
-}
-
-#[derive(Deserialize)]
-#[serde(deny_unknown_fields)]
 pub(super) struct RunConnectorJobRequest {
     idempotency_key: String,
-}
-
-pub(super) async fn create_blueprint_connector_job(
-    ScopedRepository(repository): ScopedRepository,
-    Path(blueprint_id): Path<Uuid>,
-    ApiJson(input): ApiJson<CreateConnectorJobRequest>,
-) -> Result<(StatusCode, Json<BlueprintConnectorJob>), ApiError> {
-    let job = repository
-        .create_blueprint_connector_job(CreateBlueprintConnectorJob {
-            blueprint_id,
-            direction: input.direction,
-            extension_id: input.extension_id,
-            operation_id: input.operation_id,
-            input: input.input,
-            context_id: input.context_id,
-            input_file_id: input.input_file_id,
-            interval_seconds: input.interval_seconds,
-        })
-        .await?;
-    Ok((StatusCode::CREATED, Json(job)))
 }
 
 pub(super) async fn list_blueprint_connector_jobs(
@@ -727,18 +689,6 @@ pub(super) async fn list_blueprint_connector_jobs(
             .list_blueprint_connector_jobs(blueprint_id)
             .await?,
     ))
-}
-
-pub(super) async fn update_blueprint_connector_job(
-    ScopedRepository(repository): ScopedRepository,
-    Path(id): Path<Uuid>,
-    ApiJson(input): ApiJson<UpdateConnectorJobRequest>,
-) -> Result<Json<BlueprintConnectorJob>, ApiError> {
-    repository
-        .set_blueprint_connector_job_enabled(id, input.enabled)
-        .await?
-        .map(Json)
-        .ok_or_else(|| ApiError::not_found("blueprint connector job"))
 }
 
 pub(super) async fn run_blueprint_connector_job(

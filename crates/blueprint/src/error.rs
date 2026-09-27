@@ -18,6 +18,8 @@ pub enum BlueprintError {
     InvalidRule(String),
     #[error("rule '{rule}' references unknown attribute '{attribute}'")]
     RuleUnknownAttribute { rule: String, attribute: String },
+    #[error("invalid connector job: {0}")]
+    InvalidConnectorJob(String),
     #[error("publication retain_on_edit_roles contains duplicate role '{0}'")]
     DuplicatePublicationRole(String),
     #[error("{field} must contain only ASCII letters, numbers, hyphens, and underscores")]

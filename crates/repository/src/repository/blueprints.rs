@@ -476,6 +476,13 @@ impl CatalogRepository {
             .bind(self.workspace_id.unwrap_or(Self::DEFAULT_WORKSPACE_ID))
             .execute(&mut *transaction)
             .await?;
+            self.sync_blueprint_connector_jobs(
+                &mut transaction,
+                blueprint_id,
+                version,
+                &blueprint.definition,
+            )
+            .await?;
             sqlx::query("UPDATE rules SET status='published',published_at=COALESCE(published_at,now()) WHERE workspace_id=$1 AND blueprint_id=$2 AND blueprint_version=$3")
                 .bind(self.workspace_id.unwrap_or(Self::DEFAULT_WORKSPACE_ID)).bind(blueprint_id).bind(version).execute(&mut *transaction).await?;
             self.commit_mutation_with_event(
@@ -551,6 +558,13 @@ impl CatalogRepository {
             .fetch_one(&mut **transaction)
             .await?
             .into_domain();
+            self.sync_blueprint_connector_jobs(
+                transaction,
+                blueprint_id,
+                version,
+                &blueprint.definition,
+            )
+            .await?;
         }
         Ok(blueprint)
     }

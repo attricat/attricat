@@ -4,7 +4,7 @@ use api::{
     extension_installer::ExtensionInstaller,
     extension_runtime::{ExtensionOperationTaskHandler, ExtensionRuntime, ExtensionRuntimeConfig},
     model::{CreateAttributeContext, CreateBlueprint},
-    repository::{CatalogRepository, CreateBlueprintConnectorJob},
+    repository::CatalogRepository,
     storage::{FakeObjectStore, ObjectStore, StoredObject},
     task_worker::TaskHandler,
 };
@@ -13,6 +13,15 @@ use sha2::{Digest, Sha256};
 use std::{sync::Arc, time::Duration};
 use support::json;
 use uuid::Uuid;
+
+const EXPORT_JOB: &str = r#"
+[[connector_jobs]]
+code = "csv_export"
+direction = "export"
+extension_id = "attricat-connector-csv"
+operation_id = "export"
+input = {profile = {version = 1, blueprint_id = "00000000-0000-4000-8000-000000000001", blueprint_version = 1, context_id = "00000000-0000-4000-8000-000000000001", columns = [{header = "ID", attribute = "external_id", kind = "string"}]}}
+"#;
 
 const BLUEPRINT: &str = r#"
 format_version = 1
@@ -39,16 +48,6 @@ async fn scoped_export_fans_out_to_channels_via_existing_task_queue(pool: sqlx::
         .await
         .unwrap();
     let store = Arc::new(FakeObjectStore::available());
-    let blueprint = repository
-        .create_blueprint(CreateBlueprint {
-            definition: BLUEPRINT.into(),
-        })
-        .await
-        .unwrap();
-    repository
-        .publish_blueprint_revision(blueprint.blueprint.id, blueprint.blueprint.version)
-        .await
-        .unwrap();
     let channels = ["connector_web", "connector_market"];
     let mut channel_ids = Vec::new();
     for code in channels {
@@ -85,13 +84,21 @@ async fn scoped_export_fans_out_to_channels_via_existing_task_queue(pool: sqlx::
         .enable_extension("attricat-connector-csv")
         .await
         .unwrap();
-    let job = repository.create_blueprint_connector_job(CreateBlueprintConnectorJob {
-        blueprint_id: blueprint.blueprint.id,
-        direction: "export".into(), extension_id:"attricat-connector-csv".into(),
-        operation_id:"export".into(),
-        input:json!({"profile":{"version":1,"blueprint_id":blueprint.blueprint.id.to_string(),"blueprint_version":blueprint.blueprint.version,"context_id":channel_ids[0].to_string(),"columns":[{"header":"ID","attribute":"external_id","kind":"string"}]}}),
-        context_id:None, input_file_id:None, interval_seconds:None,
-    }).await.unwrap();
+    let blueprint = repository
+        .create_blueprint(CreateBlueprint {
+            definition: format!("{BLUEPRINT}\n{EXPORT_JOB}"),
+        })
+        .await
+        .unwrap();
+    repository
+        .publish_blueprint_revision(blueprint.blueprint.id, blueprint.blueprint.version)
+        .await
+        .unwrap();
+    let job = repository
+        .list_blueprint_connector_jobs(blueprint.blueprint.id)
+        .await
+        .unwrap()
+        .remove(0);
     let runs = repository
         .run_blueprint_connector_job(job.id, "first")
         .await
@@ -157,12 +164,52 @@ async fn scoped_export_fans_out_to_channels_via_existing_task_queue(pool: sqlx::
     sqlx::query("INSERT INTO files(id,workspace_id,original_filename,display_filename,mime_type,byte_size,sha256,original_key,status) VALUES($1,$2,'source.csv','source.csv','text/csv',$3,$4,$5,'ready')")
         .bind(file).bind(workspace).bind(csv.len() as i64).bind(format!("{:x}",Sha256::digest(csv))).bind(&key)
         .execute(&pool).await.unwrap();
-    let import_job = repository.create_blueprint_connector_job(CreateBlueprintConnectorJob {
-        blueprint_id: blueprint.blueprint.id, direction:"import".into(),
-        extension_id:"attricat-connector-csv".into(), operation_id:"import".into(),
-        input:json!({"profile":{"version":1,"blueprint_id":blueprint.blueprint.id.to_string(),"blueprint_version":blueprint.blueprint.version,"context_id":channel_ids[0].to_string(),"business_key":"external_id","columns":[{"header":"ID","attribute":"external_id","kind":"string"}]}}),
-        context_id:Some(channel_ids[0]), input_file_id:Some(file), interval_seconds:None,
+    let context_code: String =
+        sqlx::query_scalar("SELECT code FROM attribute_contexts WHERE id=$1")
+            .bind(channel_ids[0])
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+    let revision = repository.create_blueprint_revision(blueprint.blueprint.id, CreateBlueprint {
+        definition: format!(r#"{BLUEPRINT}
+{EXPORT_JOB}
+[[connector_jobs]]
+code = "csv_import"
+direction = "import"
+extension_id = "attricat-connector-csv"
+operation_id = "import"
+context = "{context_code}"
+input_file_id = "{file}"
+input = {{profile = {{version = 1, blueprint_id = "00000000-0000-4000-8000-000000000001", blueprint_version = 1, context_id = "00000000-0000-4000-8000-000000000001", business_key = "external_id", columns = [{{header = "ID", attribute = "external_id", kind = "string"}}]}}}}
+[[connector_jobs]]
+code = "scheduled_export"
+direction = "export"
+extension_id = "attricat-connector-csv"
+operation_id = "export"
+interval_seconds = 60
+input = {{profile = {{version = 1, blueprint_id = "00000000-0000-4000-8000-000000000001", blueprint_version = 1, context_id = "00000000-0000-4000-8000-000000000001", columns = [{{header = "ID", attribute = "external_id", kind = "string"}}]}}}}
+"#),
     }).await.unwrap();
+    repository
+        .publish_blueprint_revision(blueprint.blueprint.id, revision.blueprint.version)
+        .await
+        .unwrap();
+    let jobs = repository
+        .list_blueprint_connector_jobs(blueprint.blueprint.id)
+        .await
+        .unwrap();
+    assert_eq!(jobs.len(), 3);
+    assert_eq!(
+        jobs.iter()
+            .find(|item| item.code.as_deref() == Some("csv_export"))
+            .unwrap()
+            .id,
+        job.id
+    );
+    let import_job = jobs
+        .iter()
+        .find(|item| item.code.as_deref() == Some("csv_import"))
+        .unwrap();
     let import_runs = repository
         .run_blueprint_connector_job(import_job.id, "import-once")
         .await
@@ -234,12 +281,10 @@ async fn scoped_export_fans_out_to_channels_via_existing_task_queue(pool: sqlx::
         store.get(&key).await.unwrap().bytes.as_ref(),
         b"ID\nSKU-1\n"
     );
-    let scheduled = repository.create_blueprint_connector_job(CreateBlueprintConnectorJob {
-        blueprint_id: blueprint.blueprint.id, direction:"export".into(),
-        extension_id:"attricat-connector-csv".into(), operation_id:"export".into(),
-        input:json!({"profile":{"version":1,"blueprint_id":blueprint.blueprint.id.to_string(),"blueprint_version":blueprint.blueprint.version,"context_id":channel_ids[0].to_string(),"columns":[{"header":"ID","attribute":"external_id","kind":"string"}]}}),
-        context_id:None, input_file_id:None, interval_seconds:Some(60),
-    }).await.unwrap();
+    let scheduled = jobs
+        .iter()
+        .find(|item| item.code.as_deref() == Some("scheduled_export"))
+        .unwrap();
     sqlx::query("UPDATE blueprint_connector_jobs SET next_at=clock_timestamp()-interval '1 second' WHERE id=$1")
         .bind(scheduled.id).execute(&pool).await.unwrap();
     assert_eq!(
@@ -264,4 +309,66 @@ async fn scoped_export_fans_out_to_channels_via_existing_task_queue(pool: sqlx::
     .await
     .unwrap();
     assert_eq!(scheduled_runs, 1);
+    // Publication, not draft creation, validates the installed connector.
+    // A failed publish leaves the prior job declarations unchanged.
+    let invalid = repository
+        .create_blueprint_revision(
+            blueprint.blueprint.id,
+            CreateBlueprint {
+                definition: format!(
+                    "{BLUEPRINT}\n{}",
+                    EXPORT_JOB.replace("attricat-connector-csv", "missing-connector")
+                ),
+            },
+        )
+        .await
+        .unwrap();
+    assert!(
+        repository
+            .publish_blueprint_revision(blueprint.blueprint.id, invalid.blueprint.version)
+            .await
+            .is_err()
+    );
+    assert!(
+        repository
+            .list_blueprint_connector_jobs(blueprint.blueprint.id)
+            .await
+            .unwrap()
+            .iter()
+            .any(|item| item.code.as_deref() == Some("csv_import") && item.enabled)
+    );
+    // A later revision can remove and pause declarations without losing run history.
+    let replacement = repository
+        .create_blueprint_revision(
+            blueprint.blueprint.id,
+            CreateBlueprint {
+                definition: format!(
+                    "{BLUEPRINT}\n{}",
+                    EXPORT_JOB.replace(
+                        "code = \"csv_export\"",
+                        "code = \"csv_export\"\nenabled = false"
+                    )
+                ),
+            },
+        )
+        .await
+        .unwrap();
+    repository
+        .publish_blueprint_revision(blueprint.blueprint.id, replacement.blueprint.version)
+        .await
+        .unwrap();
+    let retained = repository
+        .list_blueprint_connector_jobs(blueprint.blueprint.id)
+        .await
+        .unwrap();
+    assert_eq!(retained.len(), 3);
+    assert!(retained.iter().all(|item| !item.enabled));
+    assert_eq!(
+        retained
+            .iter()
+            .find(|item| item.code.as_deref() == Some("csv_export"))
+            .unwrap()
+            .id,
+        job.id
+    );
 }

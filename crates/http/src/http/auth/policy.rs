@@ -559,7 +559,6 @@ mod tests {
     fn extension_management_routes_require_extension_permissions() {
         for path in [
             "/blueprints/{blueprint_id}/connector-jobs",
-            "/blueprint-connector-jobs/{id}",
             "/blueprint-connector-jobs/{id}/run",
             "/extension-operation-schedules",
             "/extension-operation-schedules/{id}",

@@ -12,8 +12,28 @@ pub struct BlueprintDefinition {
     pub views: HashMap<String, ViewDefinition>,
     pub entity_schema: Option<serde_json::Value>,
     pub publication: PublicationPolicy,
+    pub connector_jobs: Vec<ConnectorJobDefinition>,
     pub rules: Vec<catalog_rules::CompiledRule>,
     pub attributes: Vec<AttributeDeclaration>,
+}
+
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct ConnectorJobDefinition {
+    pub code: String,
+    pub direction: String,
+    pub extension_id: String,
+    pub operation_id: String,
+    pub input: toml::Value,
+    pub context: Option<String>,
+    pub input_file_id: Option<String>,
+    pub interval_seconds: Option<i32>,
+    #[serde(default = "default_connector_enabled")]
+    pub enabled: bool,
+}
+
+fn default_connector_enabled() -> bool {
+    true
 }
 
 #[derive(Clone, Debug, Default, Deserialize, PartialEq, Serialize)]

@@ -4,8 +4,9 @@ use catalog_validation::{is_valid_code, validate_json_schema_definition};
 use serde::Deserialize;
 
 use crate::{
-    AttributeDeclaration, BlueprintDefinition, BlueprintError, BlueprintKind, FilePolicy,
-    IncludeRef, LocalAttributeDeclaration, PublicationPolicy, ViewDefinition,
+    AttributeDeclaration, BlueprintDefinition, BlueprintError, BlueprintKind,
+    ConnectorJobDefinition, FilePolicy, IncludeRef, LocalAttributeDeclaration, PublicationPolicy,
+    ViewDefinition,
 };
 
 #[derive(Deserialize)]
@@ -22,6 +23,8 @@ struct RawBlueprintDefinition {
     entity_schema: Option<String>,
     #[serde(default)]
     publication: PublicationPolicy,
+    #[serde(default)]
+    connector_jobs: Vec<ConnectorJobDefinition>,
     /// Namespaced extension metadata is preserved in the immutable source
     /// definition and intentionally ignored by the core blueprint compiler.
     #[serde(default)]
@@ -110,6 +113,38 @@ pub fn parse(source: &str) -> Result<BlueprintDefinition, BlueprintError> {
         validate_code(role, "publication retain_on_edit_roles")?;
         if !publication_roles.insert(role) {
             return Err(BlueprintError::DuplicatePublicationRole(role.clone()));
+        }
+    }
+
+    let mut job_codes = HashSet::new();
+    if !raw.connector_jobs.is_empty() && raw.kind != BlueprintKind::Entity {
+        return Err(BlueprintError::InvalidConnectorJob(
+            "only entity blueprints can define connector jobs".into(),
+        ));
+    }
+    for job in &raw.connector_jobs {
+        validate_code(&job.code, "connector job code")?;
+        if !job_codes.insert(&job.code) {
+            return Err(BlueprintError::InvalidConnectorJob(format!(
+                "duplicate connector job code '{}'",
+                job.code
+            )));
+        }
+        if !matches!(job.direction.as_str(), "import" | "export")
+            || (job.direction == "import") != job.context.is_some()
+            || (job.direction == "export" && job.input_file_id.is_some())
+            || job
+                .interval_seconds
+                .is_some_and(|seconds| !(60..=2_592_000).contains(&seconds))
+            || !job.input.is_table()
+        {
+            return Err(BlueprintError::InvalidConnectorJob(format!(
+                "invalid connector job '{}'",
+                job.code
+            )));
+        }
+        if let Some(context) = &job.context {
+            validate_code(context, "connector job context")?;
         }
     }
 
@@ -365,6 +400,7 @@ pub fn parse(source: &str) -> Result<BlueprintDefinition, BlueprintError> {
         views: raw.views,
         entity_schema,
         publication: raw.publication,
+        connector_jobs: raw.connector_jobs,
         rules,
         attributes,
     })

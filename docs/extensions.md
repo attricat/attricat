@@ -453,34 +453,49 @@ workspace-scoped run and artifact endpoints.
 
 ### Blueprint connector jobs
 
-Blueprint connector jobs are host-owned configurations, separate from generic
-extension operations and schedules. The operator configures a published entity
-blueprint, direction (`export` or `import`), enabled connector extension and
-its declared operation, validated operation `input`, and optional
-`interval_seconds` (60–2592000). Imports require `context_id` and optionally
-`input_file_id` (a ready workspace file); exports do **not** select a channel
-at configuration time. Only releases using the `catalog:host@1.4.0` connector
-world are accepted. For the packaged CSV connector, supply its `profile` and
-columns as operation input; Attricat overwrites the profile's blueprint ID,
-version and context on each run.
+Blueprint connector jobs are declared **in the entity blueprint TOML**, not
+configured through a separate write API. For example (alongside the regular
+`format_version`, `code`, `name`, `kind`, views and attributes):
+
+```toml
+[[connector_jobs]]
+code = "csv_export"
+direction = "export"
+extension_id = "attricat-connector-csv"
+operation_id = "export"
+interval_seconds = 3600
+input = { profile = { version = 1, blueprint_id = "00000000-0000-4000-8000-000000000001", blueprint_version = 1, context_id = "00000000-0000-4000-8000-000000000001", columns = [{ header = "ID", attribute = "external_id", kind = "string" }] } }
+
+[[connector_jobs]]
+code = "csv_import"
+direction = "import"
+extension_id = "attricat-connector-csv"
+operation_id = "import"
+context = "en_GB" # workspace context code
+input_file_id = "<ready workspace file UUID>" # optional if using HTTPS transfer
+input = { profile = { version = 1, blueprint_id = "00000000-0000-4000-8000-000000000001", blueprint_version = 1, context_id = "00000000-0000-4000-8000-000000000001", business_key = "external_id", columns = [{ header = "ID", attribute = "external_id", kind = "string" }] } }
+```
+
+Connector jobs are validated against the enabled extension, its declared
+operation/schema, input file and import context **at blueprint publication**.
+An invalid connector rejects publication atomically. Publishing a new revision
+reconciles jobs by stable `code`; removed jobs become disabled while their run
+history remains available. Set `enabled = false` in the TOML to pause a job.
+For the packaged CSV connector, supply its `profile` and columns in `input`;
+Attricat overwrites the profile's blueprint ID, version and context on each
+run. Export declarations have no channel field: they cover all enabled
+publication channels. Only releases using the `catalog:host@1.4.0` connector
+world are accepted. Interval jobs accept 60–2592000 seconds.
 
 ```http
-POST /blueprints/{blueprint_id}/connector-jobs
-{"direction":"export","extension_id":"attricat-connector-csv","operation_id":"export","input":{"profile":{...}},"interval_seconds":3600}
 GET /blueprints/{blueprint_id}/connector-jobs
-PATCH /blueprint-connector-jobs/{id}
-{"enabled":false}
 POST /blueprint-connector-jobs/{id}/run
 {"idempotency_key":"manual-2026-01-01"}
 ```
 
-All these routes require `extensions.manage` in the workspace. An import
-configuration supplies `"direction":"import"`, `"context_id":"<uuid>"` and,
-for workspace-file input, `"input_file_id":"<ready file uuid>"`. The same
-connector may alternatively use its separately granted HTTPS transfer
-capability. Inputs are stored for execution but omitted from configuration
-list responses. Jobs can be paused with `PATCH .../{id}` and
-`{"enabled":false}`.
+These management routes require `extensions.manage` in the workspace. Inputs
+are stored for execution but omitted from the job list. Imports can instead
+use a separately granted HTTPS transfer capability.
 
 A manual run returns `run_ids`. Each enabled publication channel in the
 workspace gets **one run** for the selected blueprint at its latest published
@@ -500,8 +515,8 @@ remain available via `/extension-operation-runs`.
 
 This uses the released 1.4 connector ABI: the host enforces page filters from
 run metadata without extending the WIT signature. Existing unscoped operations
-and schedules remain available separately. No event trigger or blueprint editor
-UI is provided for connector jobs yet; use the management API or interval jobs.
+and schedules remain available separately. Catalog-event triggers are not
+configured for connector jobs yet; run them manually or on an interval.
 
 ## Client extension runtime (v1)
 

@@ -4,23 +4,15 @@ use serde_json::{Value, json};
 use uuid::Uuid;
 
 use super::{CatalogRepository, RepositoryError, StartExtensionOperation};
-
-#[derive(Clone, Debug)]
-pub struct CreateBlueprintConnectorJob {
-    pub blueprint_id: Uuid,
-    pub direction: String,
-    pub extension_id: String,
-    pub operation_id: String,
-    pub input: Value,
-    pub context_id: Option<Uuid>,
-    pub input_file_id: Option<Uuid>,
-    pub interval_seconds: Option<i32>,
-}
+use catalog_blueprint::parse;
+use sqlx::{Postgres, Transaction};
 
 #[derive(Clone, Debug, Serialize, sqlx::FromRow)]
 pub struct BlueprintConnectorJob {
     pub id: Uuid,
     pub blueprint_id: Uuid,
+    pub blueprint_version: Option<i64>,
+    pub code: Option<String>,
     pub direction: String,
     pub extension_id: String,
     pub operation_id: String,
@@ -33,104 +25,110 @@ pub struct BlueprintConnectorJob {
     pub enabled: bool,
 }
 
-const FIELDS: &str = "id,blueprint_id,direction,extension_id,operation_id,input,context_id,input_file_id,interval_seconds,next_at,enabled";
+const FIELDS: &str = "id,blueprint_id,blueprint_version,code,direction,extension_id,operation_id,input,context_id,input_file_id,interval_seconds,next_at,enabled";
 fn invalid(message: &str) -> RepositoryError {
     RepositoryError::InvalidExtension(message.into())
 }
 
 impl CatalogRepository {
-    pub async fn create_blueprint_connector_job(
+    /// Replace the live job declarations atomically with publication of the
+    /// immutable blueprint revision. Stable codes retain run history/IDs;
+    /// removed jobs are disabled, never deleted (runs reference them).
+    pub(super) async fn sync_blueprint_connector_jobs(
         &self,
-        job: CreateBlueprintConnectorJob,
-    ) -> Result<BlueprintConnectorJob, RepositoryError> {
-        if !matches!(job.direction.as_str(), "import" | "export")
-            || (job.direction == "import") != job.context_id.is_some()
-            || (job.direction == "export" && job.input_file_id.is_some())
-            || job
-                .interval_seconds
-                .is_some_and(|seconds| !(60..=2_592_000).contains(&seconds))
-            || !job.input.is_object()
-            || serde_json::to_vec(&job.input).map_or(true, |bytes| bytes.len() > 65_536)
-        {
-            return Err(invalid("invalid connector job configuration"));
-        }
-        // Require the extension to be installed, enabled and to declare the operation.
-        let release = self
-            .installed_extension(&job.extension_id)
-            .await?
-            .installed_release_id;
-        let installation = self
-            .runtime_extension_installation(&job.extension_id, release)
-            .await?
-            .ok_or_else(|| invalid("connector release is not enabled or authorized"))?;
-        let operation = installation
-            .manifest
-            .server
-            .as_ref()
-            .and_then(|server| {
-                server
-                    .operations
-                    .iter()
-                    .find(|op| op.id == job.operation_id)
-            })
-            .ok_or_else(|| invalid("connector operation is not declared"))?;
-        catalog_extension_manifest::validate_schema(&operation.request_schema, &job.input)
-            .map_err(|_| invalid("connector input does not match operation schema"))?;
-        // Scoped calls are supported only by the connector ABI; older operation
-        // worlds cannot be constrained to host-selected entity pages.
-        let range = semver::VersionReq::parse(&installation.manifest.catalog.host_api)
-            .map_err(|_| invalid("invalid connector host API range"))?;
-        if !range.matches(&semver::Version::new(1, 4, 0))
-            || range.matches(&semver::Version::new(1, 3, 0))
-        {
-            return Err(invalid("blueprint jobs require the 1.4 connector ABI"));
-        }
+        tx: &mut Transaction<'_, Postgres>,
+        blueprint_id: Uuid,
+        version: i64,
+        definition: &str,
+    ) -> Result<(), RepositoryError> {
+        let blueprint = parse(definition).map_err(RepositoryError::invalid_blueprint_definition)?;
         let ws = self.extension_workspace();
-        let exists: bool = sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM blueprints WHERE workspace_id=$1 AND id=$2 AND kind='entity' AND status='published' AND deleted_at IS NULL)")
-            .bind(ws).bind(job.blueprint_id).fetch_one(&self.pool).await?;
-        if !exists {
-            return Err(invalid("blueprint must be published"));
-        }
-        if let Some(context) = job.context_id {
-            let exists: bool = sqlx::query_scalar(
-                "SELECT EXISTS(SELECT 1 FROM attribute_contexts WHERE workspace_id=$1 AND id=$2)",
-            )
-            .bind(ws)
-            .bind(context)
-            .fetch_one(&self.pool)
-            .await?;
-            if !exists {
-                return Err(invalid("import context does not exist"));
+        let mut prepared = Vec::new();
+        for job in blueprint.connector_jobs {
+            let input = serde_json::to_value(&job.input)
+                .map_err(|_| invalid("invalid connector job input"))?;
+            if serde_json::to_vec(&input).map_or(true, |bytes| bytes.len() > 65_536) {
+                return Err(invalid("connector job input exceeds 64 KiB"));
             }
-        }
-        if let Some(file) = job.input_file_id {
-            let ready: bool = sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM files WHERE workspace_id=$1 AND id=$2 AND status='ready' AND deleted_at IS NULL)")
-                .bind(ws).bind(file).fetch_one(&self.pool).await?;
-            if !ready {
-                return Err(invalid("import input file is not ready"));
+            let release = self
+                .installed_extension(&job.extension_id)
+                .await?
+                .installed_release_id;
+            let installation = self
+                .runtime_extension_installation(&job.extension_id, release)
+                .await?
+                .ok_or_else(|| invalid("connector release is not enabled or authorized"))?;
+            let range = semver::VersionReq::parse(&installation.manifest.catalog.host_api)
+                .map_err(|_| invalid("invalid connector host API range"))?;
+            if !range.matches(&semver::Version::new(1, 4, 0))
+                || range.matches(&semver::Version::new(1, 3, 0))
+            {
+                return Err(invalid(
+                    "blueprint connector jobs require the 1.4 connector ABI",
+                ));
             }
+            let operation = installation
+                .manifest
+                .server
+                .as_ref()
+                .and_then(|server| {
+                    server
+                        .operations
+                        .iter()
+                        .find(|op| op.id == job.operation_id)
+                })
+                .ok_or_else(|| invalid("connector operation is not declared"))?;
+            catalog_extension_manifest::validate_schema(&operation.request_schema, &input)
+                .map_err(|_| invalid("connector input does not match operation schema"))?;
+            let context_id: Option<Uuid> = match job.context.as_deref() {
+                Some(code) => Some(
+                    sqlx::query_scalar(
+                        "SELECT id FROM attribute_contexts WHERE workspace_id=$1 AND code=$2",
+                    )
+                    .bind(ws)
+                    .bind(&code)
+                    .fetch_optional(&mut **tx)
+                    .await?
+                    .ok_or_else(|| invalid("import context does not exist"))?,
+                ),
+                None => None,
+            };
+            let input_file_id = job
+                .input_file_id
+                .as_deref()
+                .map(|value| {
+                    value
+                        .parse::<Uuid>()
+                        .map_err(|_| invalid("invalid import input file ID"))
+                })
+                .transpose()?;
+            if let Some(file) = input_file_id {
+                let ready: bool = sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM files WHERE workspace_id=$1 AND id=$2 AND status='ready' AND deleted_at IS NULL)")
+                    .bind(ws).bind(file).fetch_one(&mut **tx).await?;
+                if !ready {
+                    return Err(invalid("import input file is not ready"));
+                }
+            }
+            prepared.push((job, input, context_id, input_file_id));
         }
-        sqlx::query_as(&format!("INSERT INTO blueprint_connector_jobs(id,workspace_id,blueprint_id,direction,extension_id,operation_id,input,context_id,input_file_id,interval_seconds,next_at) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,CASE WHEN $10::integer IS NULL THEN NULL ELSE clock_timestamp()+($10*interval '1 second') END) RETURNING {FIELDS}"))
-            .bind(Uuid::new_v4()).bind(ws).bind(job.blueprint_id).bind(job.direction)
-            .bind(job.extension_id).bind(job.operation_id).bind(job.input).bind(job.context_id)
-            .bind(job.input_file_id).bind(job.interval_seconds).fetch_one(&self.pool).await.map_err(Into::into)
+        sqlx::query("UPDATE blueprint_connector_jobs SET enabled=false,updated_at=clock_timestamp() WHERE workspace_id=$1 AND blueprint_id=$2")
+            .bind(ws).bind(blueprint_id).execute(&mut **tx).await?;
+        for (job, input, context_id, file) in prepared {
+            sqlx::query("INSERT INTO blueprint_connector_jobs(id,workspace_id,blueprint_id,blueprint_version,code,direction,extension_id,operation_id,input,context_id,input_file_id,interval_seconds,next_at,enabled) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,CASE WHEN $12::integer IS NULL THEN NULL ELSE clock_timestamp()+($12*interval '1 second') END,$13) ON CONFLICT(workspace_id,blueprint_id,code) WHERE code IS NOT NULL DO UPDATE SET blueprint_version=$4,direction=$6,extension_id=$7,operation_id=$8,input=$9,context_id=$10,input_file_id=$11,interval_seconds=$12,next_at=CASE WHEN $12::integer IS NULL THEN NULL ELSE clock_timestamp()+($12*interval '1 second') END,enabled=$13,updated_at=clock_timestamp()")
+                .bind(Uuid::new_v4()).bind(ws).bind(blueprint_id).bind(version).bind(&job.code)
+                .bind(&job.direction).bind(&job.extension_id).bind(&job.operation_id).bind(input)
+                .bind(context_id).bind(file).bind(job.interval_seconds).bind(job.enabled)
+                .execute(&mut **tx).await?;
+        }
+        Ok(())
     }
 
     pub async fn list_blueprint_connector_jobs(
         &self,
         blueprint_id: Uuid,
     ) -> Result<Vec<BlueprintConnectorJob>, RepositoryError> {
-        sqlx::query_as(&format!("SELECT {FIELDS} FROM blueprint_connector_jobs WHERE workspace_id=$1 AND blueprint_id=$2 ORDER BY id"))
+        sqlx::query_as(&format!("SELECT {FIELDS} FROM blueprint_connector_jobs WHERE workspace_id=$1 AND blueprint_id=$2 AND code IS NOT NULL ORDER BY id"))
             .bind(self.extension_workspace()).bind(blueprint_id).fetch_all(&self.pool).await.map_err(Into::into)
-    }
-
-    pub async fn set_blueprint_connector_job_enabled(
-        &self,
-        id: Uuid,
-        enabled: bool,
-    ) -> Result<Option<BlueprintConnectorJob>, RepositoryError> {
-        sqlx::query_as(&format!("UPDATE blueprint_connector_jobs SET enabled=$3,updated_at=clock_timestamp(),next_at=CASE WHEN $3 AND interval_seconds IS NOT NULL THEN clock_timestamp()+(interval_seconds*interval '1 second') ELSE next_at END WHERE id=$1 AND workspace_id=$2 RETURNING {FIELDS}"))
-            .bind(id).bind(self.extension_workspace()).bind(enabled).fetch_optional(&self.pool).await.map_err(Into::into)
     }
 
     /// One run per enabled publication channel. No channel or entity filter is
@@ -144,7 +142,7 @@ impl CatalogRepository {
         if key.is_empty() || key.len() > 40 || !key.is_ascii() {
             return Err(invalid("invalid run key"));
         }
-        let job: BlueprintConnectorJob = sqlx::query_as(&format!("SELECT {FIELDS} FROM blueprint_connector_jobs WHERE workspace_id=$1 AND id=$2 AND enabled"))
+        let job: BlueprintConnectorJob = sqlx::query_as(&format!("SELECT {FIELDS} FROM blueprint_connector_jobs WHERE workspace_id=$1 AND id=$2 AND enabled AND code IS NOT NULL"))
             .bind(self.extension_workspace()).bind(id).fetch_optional(&self.pool).await?
             .ok_or_else(|| RepositoryError::NotFound("blueprint connector job"))?;
         let release = self
@@ -225,7 +223,7 @@ impl CatalogRepository {
 
     /// The existing extension-operation coordinator invokes this producer.
     pub async fn produce_due_blueprint_connector_jobs(&self) -> Result<usize, RepositoryError> {
-        let due: Vec<(Uuid, DateTime<Utc>, i32)> = sqlx::query_as("SELECT id,next_at,interval_seconds FROM blueprint_connector_jobs WHERE workspace_id=$1 AND enabled AND next_at<=clock_timestamp() ORDER BY next_at,id LIMIT 16")
+        let due: Vec<(Uuid, DateTime<Utc>, i32)> = sqlx::query_as("SELECT id,next_at,interval_seconds FROM blueprint_connector_jobs WHERE workspace_id=$1 AND enabled AND code IS NOT NULL AND next_at<=clock_timestamp() ORDER BY next_at,id LIMIT 16")
             .bind(self.extension_workspace()).fetch_all(&self.pool).await?;
         for (id, tick, interval) in &due {
             // The run key is deterministic on retry. An interrupted producer

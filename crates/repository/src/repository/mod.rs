@@ -74,7 +74,7 @@ pub use agents::{
     AgentRun, AgentRunEvent, AgentToolCall, ApprovalDecision, Conversation, ConversationMessage,
 };
 pub use audit_events::{AuditEventFilter, AuditEventPage};
-pub use blueprint_connector_jobs::{BlueprintConnectorJob, CreateBlueprintConnectorJob};
+pub use blueprint_connector_jobs::BlueprintConnectorJob;
 pub use catalog_domain::model::{FileMetadata, FileVariantMetadata};
 pub use domain_events::{EventConsumer, EventDelivery, EventPublisher, FailedEventDelivery};
 pub use entity_search::{

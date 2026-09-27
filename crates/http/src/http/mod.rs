@@ -488,12 +488,7 @@ pub fn router(state: AppState) -> Router {
         )
         .route(
             "/blueprints/{blueprint_id}/connector-jobs",
-            get(extensions::list_blueprint_connector_jobs)
-                .post(extensions::create_blueprint_connector_job),
-        )
-        .route(
-            "/blueprint-connector-jobs/{id}",
-            axum::routing::patch(extensions::update_blueprint_connector_job),
+            get(extensions::list_blueprint_connector_jobs),
         )
         .route(
             "/blueprint-connector-jobs/{id}/run",
