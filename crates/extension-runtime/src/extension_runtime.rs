@@ -1967,6 +1967,7 @@ pub fn start_event_delivery_coordinator(
                         }
                     }
                     scoped.produce_due_extension_operation_schedules().await?;
+                    scoped.produce_due_blueprint_connector_jobs().await?;
                     scoped
                         .ensure_event_consumer("catalog.extensions.wasm", &[])
                         .await?;
@@ -2785,6 +2786,18 @@ impl host_connector::catalog::host::catalog::Host for OperationState {
         let blueprint = parse_uuid(&blueprint_id, "blueprint ID")?;
         let version = i64::try_from(blueprint_version).map_err(|_| "invalid blueprint version")?;
         let context = parse_uuid(&context_id, "context ID")?;
+        if let Some((selected_blueprint, selected_context, selected_version, _, _)) = self
+            .repository
+            .connector_run_scope(self.run_id)
+            .await
+            .map_err(|error| error.to_string())?
+        {
+            if (blueprint, context, version)
+                != (selected_blueprint, selected_context, selected_version)
+            {
+                return Err("connector schema is outside the host-selected job scope".into());
+            }
+        }
         host.repository
             .get_context_by_id(context)
             .await
@@ -2822,13 +2835,35 @@ impl host_connector::catalog::host::catalog::Host for OperationState {
         let blueprint = parse_uuid(&blueprint_id, "blueprint ID")?;
         let version = i64::try_from(blueprint_version).map_err(|_| "invalid blueprint version")?;
         let context = parse_uuid(&context_id, "context ID")?;
+        let publication_context_id = if let Some((
+            selected_blueprint,
+            selected_context,
+            selected_version,
+            channel,
+            direction,
+        )) = self
+            .repository
+            .connector_run_scope(self.run_id)
+            .await
+            .map_err(|error| error.to_string())?
+        {
+            if direction != "export"
+                || (blueprint, context, version)
+                    != (selected_blueprint, selected_context, selected_version)
+            {
+                return Err("connector page is outside the host-selected export scope".into());
+            }
+            channel
+        } else {
+            None
+        };
         let page = host
             .repository
             .extension_catalog_page(ExtensionCatalogPageRequest {
                 blueprint_id: blueprint,
                 blueprint_version: version,
                 context_id: Some(context),
-                publication_context_id: None,
+                publication_context_id,
                 cursor: (!cursor.is_empty()).then_some(cursor),
                 limit,
             })
@@ -2878,6 +2913,19 @@ impl host_connector::catalog::host::catalog::Host for OperationState {
         host.require_active("catalog.write").await?;
         let version =
             i64::try_from(input.blueprint_version).map_err(|_| "invalid blueprint version")?;
+        if let Some((selected_blueprint, selected_context, selected_version, _, direction)) = self
+            .repository
+            .connector_run_scope(self.run_id)
+            .await
+            .map_err(|error| error.to_string())?
+        {
+            if direction != "import"
+                || (input.blueprint_id, input.context_id, version)
+                    != (selected_blueprint, selected_context, selected_version)
+            {
+                return Err("connector upsert is outside the host-selected import scope".into());
+            }
+        }
         let attrs = host
             .repository
             .list_attributes(input.blueprint_id, version)
@@ -2942,6 +2990,15 @@ impl host_connector::catalog::host::catalog_data::Host for OperationState {
         if request.len() > MAX_HOST_JSON_BYTES {
             return Err("request exceeds host JSON limit".into());
         }
+        if self
+            .repository
+            .connector_run_scope(self.run_id)
+            .await
+            .map_err(|error| error.to_string())?
+            .is_some()
+        {
+            return Err("scoped jobs must use host-filtered connector catalog calls".into());
+        }
         let mut host = HostState::new(self.installation.clone(), self.repository.clone(), 0);
         host.require_active("catalog.read").await?;
         host.catalog_read_call(&request).await
@@ -2950,6 +3007,15 @@ impl host_connector::catalog::host::catalog_data::Host for OperationState {
     async fn batch(&mut self, request: String) -> Result<String, String> {
         if request.len() > MAX_HOST_JSON_BYTES {
             return Err("request exceeds host JSON limit".into());
+        }
+        if self
+            .repository
+            .connector_run_scope(self.run_id)
+            .await
+            .map_err(|error| error.to_string())?
+            .is_some()
+        {
+            return Err("scoped jobs must use host-filtered connector catalog calls".into());
         }
         let input: CatalogCommandRequest = parse_storage_request(&request)?;
         let CatalogCommandRequest::Batch { batch } = input;

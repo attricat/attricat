@@ -89,7 +89,9 @@ pub(super) fn policy(method: &Method, path: &str) -> Option<Policy> {
             target: TargetKind::None,
         });
     }
-    if path == "/extension-operation-runs"
+    if path == "/blueprints/{blueprint_id}/connector-jobs"
+        || path.starts_with("/blueprint-connector-jobs/")
+        || path == "/extension-operation-runs"
         || path.starts_with("/extension-operation-runs/")
         || path == "/extension-operation-schedules"
         || path.starts_with("/extension-operation-schedules/")
@@ -556,6 +558,9 @@ mod tests {
     #[test]
     fn extension_management_routes_require_extension_permissions() {
         for path in [
+            "/blueprints/{blueprint_id}/connector-jobs",
+            "/blueprint-connector-jobs/{id}",
+            "/blueprint-connector-jobs/{id}/run",
             "/extension-operation-schedules",
             "/extension-operation-schedules/{id}",
             "/extensions/{extension_id}/operation-schedules",

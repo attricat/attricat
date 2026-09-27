@@ -22,10 +22,10 @@ use crate::{
         validate_schema,
     },
     repository::{
-        CreateExtensionOperationSchedule, ExtensionGrant, ExtensionHttpDelivery,
-        ExtensionInstallation, ExtensionLifecycleRecord, ExtensionOperationArtifact,
-        ExtensionOperationRun, ExtensionOperationSchedule, ExtensionStorageError,
-        InstalledExtension, StartExtensionOperation,
+        BlueprintConnectorJob, CreateBlueprintConnectorJob, CreateExtensionOperationSchedule,
+        ExtensionGrant, ExtensionHttpDelivery, ExtensionInstallation, ExtensionLifecycleRecord,
+        ExtensionOperationArtifact, ExtensionOperationRun, ExtensionOperationSchedule,
+        ExtensionStorageError, InstalledExtension, StartExtensionOperation,
     },
     storage::ObjectStoreError,
 };
@@ -252,6 +252,8 @@ fn empty_object() -> Value {
 pub(super) struct OperationRunResponse {
     id: Uuid,
     schedule_id: Option<Uuid>,
+    connector_job_id: Option<Uuid>,
+    connector_channel_id: Option<Uuid>,
     extension_id: String,
     installed_release_id: Uuid,
     abi_version: String,
@@ -270,6 +272,8 @@ impl From<ExtensionOperationRun> for OperationRunResponse {
         Self {
             id: value.id,
             schedule_id: value.schedule_id,
+            connector_job_id: value.connector_job_id,
+            connector_channel_id: value.connector_channel_id,
             extension_id: value.extension_id,
             installed_release_id: value.installed_release_id,
             abi_version: value.abi_version,
@@ -668,6 +672,84 @@ pub(super) async fn create_operation_schedule(
         })
         .await?;
     Ok((StatusCode::CREATED, Json(schedule)))
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+pub(super) struct CreateConnectorJobRequest {
+    direction: String,
+    extension_id: String,
+    operation_id: String,
+    input: Value,
+    context_id: Option<Uuid>,
+    input_file_id: Option<Uuid>,
+    interval_seconds: Option<i32>,
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+pub(super) struct UpdateConnectorJobRequest {
+    enabled: bool,
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+pub(super) struct RunConnectorJobRequest {
+    idempotency_key: String,
+}
+
+pub(super) async fn create_blueprint_connector_job(
+    ScopedRepository(repository): ScopedRepository,
+    Path(blueprint_id): Path<Uuid>,
+    ApiJson(input): ApiJson<CreateConnectorJobRequest>,
+) -> Result<(StatusCode, Json<BlueprintConnectorJob>), ApiError> {
+    let job = repository
+        .create_blueprint_connector_job(CreateBlueprintConnectorJob {
+            blueprint_id,
+            direction: input.direction,
+            extension_id: input.extension_id,
+            operation_id: input.operation_id,
+            input: input.input,
+            context_id: input.context_id,
+            input_file_id: input.input_file_id,
+            interval_seconds: input.interval_seconds,
+        })
+        .await?;
+    Ok((StatusCode::CREATED, Json(job)))
+}
+
+pub(super) async fn list_blueprint_connector_jobs(
+    ScopedRepository(repository): ScopedRepository,
+    Path(blueprint_id): Path<Uuid>,
+) -> Result<Json<Vec<BlueprintConnectorJob>>, ApiError> {
+    Ok(Json(
+        repository
+            .list_blueprint_connector_jobs(blueprint_id)
+            .await?,
+    ))
+}
+
+pub(super) async fn update_blueprint_connector_job(
+    ScopedRepository(repository): ScopedRepository,
+    Path(id): Path<Uuid>,
+    ApiJson(input): ApiJson<UpdateConnectorJobRequest>,
+) -> Result<Json<BlueprintConnectorJob>, ApiError> {
+    repository
+        .set_blueprint_connector_job_enabled(id, input.enabled)
+        .await?
+        .map(Json)
+        .ok_or_else(|| ApiError::not_found("blueprint connector job"))
+}
+
+pub(super) async fn run_blueprint_connector_job(
+    ScopedRepository(repository): ScopedRepository,
+    Path(id): Path<Uuid>,
+    ApiJson(input): ApiJson<RunConnectorJobRequest>,
+) -> Result<(StatusCode, Json<Value>), ApiError> {
+    let runs = repository
+        .run_blueprint_connector_job(id, &input.idempotency_key)
+        .await?;
+    Ok((StatusCode::ACCEPTED, Json(json!({"run_ids":runs}))))
 }
 
 pub(super) async fn list_operation_schedules(

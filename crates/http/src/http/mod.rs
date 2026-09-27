@@ -487,6 +487,19 @@ pub fn router(state: AppState) -> Router {
             post(extensions::create_operation_schedule),
         )
         .route(
+            "/blueprints/{blueprint_id}/connector-jobs",
+            get(extensions::list_blueprint_connector_jobs)
+                .post(extensions::create_blueprint_connector_job),
+        )
+        .route(
+            "/blueprint-connector-jobs/{id}",
+            axum::routing::patch(extensions::update_blueprint_connector_job),
+        )
+        .route(
+            "/blueprint-connector-jobs/{id}/run",
+            post(extensions::run_blueprint_connector_job),
+        )
+        .route(
             "/extension-operation-schedules",
             get(extensions::list_operation_schedules),
         )

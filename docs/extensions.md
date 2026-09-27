@@ -451,37 +451,57 @@ the release and validated input/configuration snapshot, not credentials, URLs
 or request bodies. Output, progress, status and errors use the existing
 workspace-scoped run and artifact endpoints.
 
-### Blueprint-scoped import/export orchestration (target design)
+### Blueprint connector jobs
 
-The existing operation and interval-schedule endpoints are **low-level extension
-primitives**, not the user-facing import/export configuration. A workspace
-operator should configure import/export on a blueprint family, choosing a
-connector release/declared operation, a value-resolution context, and (for
-exports) an enabled publication channel. A channel is a context designated
-exportable; the selected value-resolution context may differ from the channel.
-Exports must include only entities whose approval for that channel is currently
-published. Imports must specify their target blueprint and write context, and
-must not silently write to another blueprint or context.
+Blueprint connector jobs are host-owned configurations, separate from generic
+extension operations and schedules. The operator configures a published entity
+blueprint, direction (`export` or `import`), enabled connector extension and
+its declared operation, validated operation `input`, and optional
+`interval_seconds` (60–2592000). Imports require `context_id` and optionally
+`input_file_id` (a ready workspace file); exports do **not** select a channel
+at configuration time. Only releases using the `catalog:host@1.4.0` connector
+world are accepted. For the packaged CSV connector, supply its `profile` and
+columns as operation input; Attricat overwrites the profile's blueprint ID,
+version and context on each run.
 
-The host owns the configuration, permissions, trigger/schedule, idempotency,
-run progress, retry/cancellation and artifacts. Manual, event-triggered and
-interval runs must all enqueue through the **existing extension-operation task
-queue**; do not introduce a separate connector worker or allow an extension to
-schedule itself. Persist run-to-configuration linkage and a pinned release and
-scope. At dispatch and on each host catalog read/write, recheck the active
-release, grants and scope. In particular, an extension-provided page filter or
-upsert payload must never widen the host-selected blueprint/context/channel.
-A channel being disabled or publication being withdrawn must stop further
-export pages. Decide and document how to handle mid-run changes before enabling
-external delivery (an already transferred page cannot be recalled).
+```http
+POST /blueprints/{blueprint_id}/connector-jobs
+{"direction":"export","extension_id":"attricat-connector-csv","operation_id":"export","input":{"profile":{...}},"interval_seconds":3600}
+GET /blueprints/{blueprint_id}/connector-jobs
+PATCH /blueprint-connector-jobs/{id}
+{"enabled":false}
+POST /blueprint-connector-jobs/{id}/run
+{"idempotency_key":"manual-2026-01-01"}
+```
 
-The current connector WIT `catalog.page` has no publication-channel parameter
-and generic catalog calls can bypass a client-provided filter. Therefore this
-configuration is **not implemented by generic operation schedules**; adding
-blueprint fields to schedule input alone would not enforce it. A new versioned
-connector ABI (or run-bound host calls that derive scope entirely from the
-pinned run) is needed before enabling blueprint-scoped exports/imports. Preserve
-older generic operations as separate low-level APIs until they can be migrated.
+All these routes require `extensions.manage` in the workspace. An import
+configuration supplies `"direction":"import"`, `"context_id":"<uuid>"` and,
+for workspace-file input, `"input_file_id":"<ready file uuid>"`. The same
+connector may alternatively use its separately granted HTTPS transfer
+capability. Inputs are stored for execution but omitted from configuration
+list responses. Jobs can be paused with `PATCH .../{id}` and
+`{"enabled":false}`.
+
+A manual run returns `run_ids`. Each enabled publication channel in the
+workspace gets **one run** for the selected blueprint at its latest published
+revision, using that channel as the value-resolution context. The host enqueues
+all runs via the existing durable extension-operation background task queue;
+interval jobs use the existing operation coordinator to produce the same runs,
+skipping overlap. For imports there is one run for the configured context.
+The host stores job, blueprint/version, context and channel on each run (the
+job/channel IDs appear in the run list), and
+rejects connector `schema`, `page` and `upsert-batch` calls outside the
+run-bound scope. Scoped runs cannot use the generic catalog read/batch API to
+bypass that filter. Export pages include only entities **currently published**
+for the run's enabled channel. A disabled channel or withdrawn publication is
+excluded from subsequent pages; data already delivered externally cannot be
+recalled. Retried manual keys return the same run IDs. Run status and artifacts
+remain available via `/extension-operation-runs`.
+
+This uses the released 1.4 connector ABI: the host enforces page filters from
+run metadata without extending the WIT signature. Existing unscoped operations
+and schedules remain available separately. No event trigger or blueprint editor
+UI is provided for connector jobs yet; use the management API or interval jobs.
 
 ## Client extension runtime (v1)
 

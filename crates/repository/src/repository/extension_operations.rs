@@ -69,6 +69,8 @@ pub struct ClaimedExtensionOperationRun {
 pub struct ExtensionOperationRun {
     pub id: Uuid,
     pub schedule_id: Option<Uuid>,
+    pub connector_job_id: Option<Uuid>,
+    pub connector_channel_id: Option<Uuid>,
     pub extension_id: String,
     pub installed_release_id: Uuid,
     pub abi_version: String,
@@ -172,6 +174,14 @@ impl CatalogRepository {
         &self,
         input: StartExtensionOperation,
     ) -> Result<Uuid, RepositoryError> {
+        self.start_extension_operation_scoped(input, None).await
+    }
+
+    pub(crate) async fn start_extension_operation_scoped(
+        &self,
+        input: StartExtensionOperation,
+        scope: Option<(Uuid, Uuid, Uuid, i64, Option<Uuid>)>,
+    ) -> Result<Uuid, RepositoryError> {
         if input.idempotency_key.is_empty()
             || input.idempotency_key.len() > MAX_IDEMPOTENCY_BYTES
             || !input.idempotency_key.is_ascii()
@@ -241,7 +251,7 @@ impl CatalogRepository {
         };
         let id = Uuid::new_v4();
         let inserted: Option<Uuid> = sqlx::query_scalar(
-            "INSERT INTO extension_operation_runs(id,workspace_id,extension_id,installed_release_id,abi_version,operation_id,actor_user_id,actor_token_id,configuration_snapshot,input,source_reference,destination_reference,idempotency_key,schedule_id) VALUES($1,$2,$3,$4,$13,$5,$6,$7,$8,$9,$10,$11,$12,$14) ON CONFLICT(workspace_id,extension_id,installed_release_id,operation_id,idempotency_key) DO NOTHING RETURNING id",
+            "INSERT INTO extension_operation_runs(id,workspace_id,extension_id,installed_release_id,abi_version,operation_id,actor_user_id,actor_token_id,configuration_snapshot,input,source_reference,destination_reference,idempotency_key,schedule_id,connector_job_id,connector_blueprint_id,connector_context_id,connector_blueprint_version,connector_channel_id) VALUES($1,$2,$3,$4,$13,$5,$6,$7,$8,$9,$10,$11,$12,$14,$15,$16,$17,$18,$19) ON CONFLICT(workspace_id,extension_id,installed_release_id,operation_id,idempotency_key) DO NOTHING RETURNING id",
         )
         .bind(id)
         .bind(self.extension_workspace())
@@ -257,6 +267,11 @@ impl CatalogRepository {
         .bind(&input.idempotency_key)
         .bind(abi)
         .bind(input.schedule_id)
+        .bind(scope.map(|s| s.0))
+        .bind(scope.map(|s| s.1))
+        .bind(scope.map(|s| s.2))
+        .bind(scope.map(|s| s.3))
+        .bind(scope.and_then(|s| s.4))
         .fetch_optional(&mut *transaction)
         .await?;
         if let Some(run_id) = inserted {
@@ -620,7 +635,7 @@ impl CatalogRepository {
         &self,
     ) -> Result<Vec<ExtensionOperationRun>, RepositoryError> {
         Ok(sqlx::query_as(
-            "SELECT id,schedule_id,extension_id,installed_release_id,abi_version,operation_id,status,outputs_expired,progress,checkpoint,attempts,last_error_code,created_at,completed_at FROM extension_operation_runs WHERE workspace_id=$1 ORDER BY created_at DESC,id DESC LIMIT 200",
+            "SELECT id,schedule_id,connector_job_id,connector_channel_id,extension_id,installed_release_id,abi_version,operation_id,status,outputs_expired,progress,checkpoint,attempts,last_error_code,created_at,completed_at FROM extension_operation_runs WHERE workspace_id=$1 ORDER BY created_at DESC,id DESC LIMIT 200",
         )
         .bind(self.extension_workspace())
         .fetch_all(&self.pool)
@@ -631,7 +646,7 @@ impl CatalogRepository {
         &self,
         id: Uuid,
     ) -> Result<Option<ExtensionOperationRun>, RepositoryError> {
-        sqlx::query_as("SELECT id,schedule_id,extension_id,installed_release_id,abi_version,operation_id,status,outputs_expired,progress,checkpoint,attempts,last_error_code,created_at,completed_at FROM extension_operation_runs WHERE id=$1 AND workspace_id=$2")
+        sqlx::query_as("SELECT id,schedule_id,connector_job_id,connector_channel_id,extension_id,installed_release_id,abi_version,operation_id,status,outputs_expired,progress,checkpoint,attempts,last_error_code,created_at,completed_at FROM extension_operation_runs WHERE id=$1 AND workspace_id=$2")
             .bind(id).bind(self.extension_workspace()).fetch_optional(&self.pool).await.map_err(Into::into)
     }
 }
