@@ -571,6 +571,57 @@ impl CatalogRepository {
             .collect()
     }
 
+    /// Values at the page cursor's database-clock high-water mark. Historical
+    /// values survive writes to later pages; cursors expire before the value
+    /// history retention window. All branches retain workspace isolation.
+    pub async fn extension_catalog_values_at(
+        &self,
+        entity_id: Uuid,
+        snapshot_at: chrono::DateTime<chrono::Utc>,
+    ) -> Result<Vec<AttributeValue>, RepositoryError> {
+        if snapshot_at < chrono::Utc::now() - chrono::Duration::days(30) {
+            return Err(RepositoryError::InvalidExtension(
+                "catalog snapshot has expired".into(),
+            ));
+        }
+        let rows = sqlx::query_as::<_, CurrentNativeValueRow>(
+            r#"SELECT v.id,v.entity_id,v.attribute_id,v.relationship_target_entity_id,v.context_id,v.active,v.created_at,a.value_type,
+                v.value_text,v.value_number,v.value_integer,v.value_boolean,v.value_date,v.value_datetime,v.value_time,v.value_time_zone,v.value_json
+              FROM attribute_values v JOIN attributes a ON a.id=v.attribute_id AND a.workspace_id=v.workspace_id
+              WHERE v.entity_id=$1 AND v.workspace_id=$2 AND v.created_at <= $3
+                AND (v.relationship_target_entity_id IS NULL OR v.active)
+              UNION ALL
+              SELECT h.id,h.entity_id,h.attribute_id,h.relationship_target_entity_id,h.context_id,h.active,h.created_at,a.value_type,
+                h.value_text,h.value_number,h.value_integer,h.value_boolean,h.value_date,h.value_datetime,h.value_time,h.value_time_zone,h.value_json
+              FROM attribute_value_history h JOIN attributes a ON a.id=h.attribute_id AND a.workspace_id=h.workspace_id
+              WHERE h.entity_id=$1 AND h.workspace_id=$2 AND h.created_at <= $3 AND h.archived_at > $3
+                AND (h.relationship_target_entity_id IS NULL OR h.active)"#,
+        )
+        .bind(entity_id)
+        .bind(self.workspace_id.unwrap_or(Self::DEFAULT_WORKSPACE_ID))
+        .bind(snapshot_at)
+        .fetch_all(&self.pool)
+        .await?;
+        rows.into_iter()
+            .map(|row| {
+                Ok(AttributeValue {
+                    id: row.id,
+                    entity_id: row.entity_id,
+                    attribute_id: row.attribute_id,
+                    value: if row.relationship_target_entity_id.is_some() {
+                        Value::Null
+                    } else {
+                        native_value_json(row.native)?
+                    },
+                    relationship_target_entity_id: row.relationship_target_entity_id,
+                    active: row.active,
+                    context_id: row.context_id,
+                    created_at: row.created_at,
+                })
+            })
+            .collect()
+    }
+
     pub async fn value_history(
         &self,
         entity_id: Uuid,

@@ -108,6 +108,8 @@ pub struct ExtensionCatalogPageRequest {
 pub struct ExtensionCatalogPage {
     pub entities: Vec<Entity>,
     pub next_cursor: Option<String>,
+    #[serde(skip_serializing)]
+    pub snapshot_at: DateTime<Utc>,
 }
 
 /// A stable, ordered page of entity mutation events. `next_cursor` carries the
@@ -162,7 +164,8 @@ impl CatalogRepository {
             .map(decode_extension_cursor)
             .transpose()?;
         let (snapshot_at, created_at, entity_id) = if let Some(cursor) = cursor {
-            if cursor.workspace_id != workspace_id
+            if cursor.snapshot_at < Utc::now() - chrono::Duration::days(30)
+                || cursor.workspace_id != workspace_id
                 || cursor.blueprint_id != request.blueprint_id
                 || cursor.blueprint_version != request.blueprint_version
                 || cursor.context_id != request.context_id
@@ -187,7 +190,7 @@ impl CatalogRepository {
         };
         if let Some(context_id) = request.context_id {
             let exists: Option<Uuid> = sqlx::query_scalar(
-                "SELECT id FROM attribute_contexts WHERE id=$1 AND workspace_id=$2 AND deleted_at IS NULL",
+                "SELECT id FROM attribute_contexts WHERE id=$1 AND workspace_id=$2",
             )
             .bind(context_id)
             .bind(workspace_id)
@@ -200,7 +203,7 @@ impl CatalogRepository {
         let rows = sqlx::query_as::<_, Db<Entity>>(
             "SELECT e.id,e.blueprint_id,e.blueprint_version,e.projections,e.system_tags,e.system_metadata,('attricat.sample'=ANY(e.system_tags)) AS is_sample,e.created_at,e.updated_at,e.deleted_at \
              FROM entities e \
-             WHERE e.workspace_id=$1 AND e.deleted_at IS NULL AND e.blueprint_id=$2 AND e.blueprint_version=$3 \
+             WHERE e.workspace_id=$1 AND (e.deleted_at IS NULL OR e.deleted_at > $4) AND e.blueprint_id=$2 AND e.blueprint_version=$3 \
                AND e.created_at <= $4 \
                AND ($5::timestamptz IS NULL OR (e.created_at,e.id) > ($5,$6)) \
                AND ($7::uuid IS NULL OR EXISTS (SELECT 1 FROM entity_channel_publications p WHERE p.workspace_id=e.workspace_id AND p.entity_id=e.id AND p.context_id=$7)) \
@@ -230,6 +233,7 @@ impl CatalogRepository {
         Ok(ExtensionCatalogPage {
             entities,
             next_cursor,
+            snapshot_at,
         })
     }
 

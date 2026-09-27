@@ -22,8 +22,10 @@ use crate::{
         validate_schema,
     },
     repository::{
-        ExtensionGrant, ExtensionInstallation, ExtensionLifecycleRecord, ExtensionOperationRun,
-        ExtensionStorageError, InstalledExtension, StartExtensionOperation,
+        CreateExtensionOperationSchedule, ExtensionGrant, ExtensionHttpDelivery,
+        ExtensionInstallation, ExtensionLifecycleRecord, ExtensionOperationArtifact,
+        ExtensionOperationRun, ExtensionOperationSchedule, ExtensionStorageError,
+        InstalledExtension, StartExtensionOperation,
     },
     storage::ObjectStoreError,
 };
@@ -223,6 +225,25 @@ pub(super) struct StartOperationRequest {
     idempotency_key: String,
 }
 
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+pub(super) struct CreateScheduleRequest {
+    operation_id: String,
+    input: Value,
+    #[serde(default = "empty_object")]
+    source_reference: Value,
+    #[serde(default = "empty_object")]
+    destination_reference: Value,
+    interval_seconds: i32,
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+pub(super) struct UpdateScheduleRequest {
+    enabled: bool,
+    interval_seconds: i32,
+}
+
 fn empty_object() -> Value {
     json!({})
 }
@@ -230,11 +251,13 @@ fn empty_object() -> Value {
 #[derive(Serialize)]
 pub(super) struct OperationRunResponse {
     id: Uuid,
+    schedule_id: Option<Uuid>,
     extension_id: String,
     installed_release_id: Uuid,
     abi_version: String,
     operation_id: String,
     status: String,
+    outputs_expired: bool,
     progress: Value,
     attempts: i32,
     last_error_code: Option<String>,
@@ -246,11 +269,13 @@ impl From<ExtensionOperationRun> for OperationRunResponse {
     fn from(value: ExtensionOperationRun) -> Self {
         Self {
             id: value.id,
+            schedule_id: value.schedule_id,
             extension_id: value.extension_id,
             installed_release_id: value.installed_release_id,
             abi_version: value.abi_version,
             operation_id: value.operation_id,
             status: value.status,
+            outputs_expired: value.outputs_expired,
             progress: value.progress,
             attempts: value.attempts,
             last_error_code: value.last_error_code,
@@ -615,9 +640,52 @@ pub(super) async fn start_operation(
             source_reference: input.source_reference,
             destination_reference: input.destination_reference,
             idempotency_key: input.idempotency_key,
+            schedule_id: None,
+            configuration_snapshot: None,
         })
         .await?;
     Ok((StatusCode::ACCEPTED, Json(json!({"id": id}))))
+}
+
+pub(super) async fn create_operation_schedule(
+    ScopedRepository(repository): ScopedRepository,
+    Path(extension_id): Path<String>,
+    ApiJson(input): ApiJson<CreateScheduleRequest>,
+) -> Result<(StatusCode, Json<ExtensionOperationSchedule>), ApiError> {
+    let release = repository
+        .installed_extension(&extension_id)
+        .await?
+        .installed_release_id;
+    let schedule = repository
+        .create_extension_operation_schedule(CreateExtensionOperationSchedule {
+            extension_id,
+            release_id: release,
+            operation_id: input.operation_id,
+            input: input.input,
+            source_reference: input.source_reference,
+            destination_reference: input.destination_reference,
+            interval_seconds: input.interval_seconds,
+        })
+        .await?;
+    Ok((StatusCode::CREATED, Json(schedule)))
+}
+
+pub(super) async fn list_operation_schedules(
+    ScopedRepository(repository): ScopedRepository,
+) -> Result<Json<Vec<ExtensionOperationSchedule>>, ApiError> {
+    Ok(Json(repository.list_extension_operation_schedules().await?))
+}
+
+pub(super) async fn update_operation_schedule(
+    ScopedRepository(repository): ScopedRepository,
+    Path(id): Path<Uuid>,
+    ApiJson(input): ApiJson<UpdateScheduleRequest>,
+) -> Result<Json<ExtensionOperationSchedule>, ApiError> {
+    repository
+        .update_extension_operation_schedule(id, input.enabled, input.interval_seconds)
+        .await?
+        .map(Json)
+        .ok_or_else(|| ApiError::not_found("extension operation schedule"))
 }
 
 pub(super) async fn list_operation_runs(
@@ -631,6 +699,17 @@ pub(super) async fn list_operation_runs(
             .map(Into::into)
             .collect(),
     ))
+}
+
+pub(super) async fn get_operation_run(
+    ScopedRepository(repository): ScopedRepository,
+    Path(id): Path<Uuid>,
+) -> Result<Json<OperationRunResponse>, ApiError> {
+    repository
+        .extension_operation_run(id)
+        .await?
+        .map(|run| Json(run.into()))
+        .ok_or_else(|| ApiError::not_found("extension operation run"))
 }
 
 pub(super) async fn cancel_operation(
@@ -810,6 +889,50 @@ pub(super) async fn storage(
         }
     };
     Ok(Json(response))
+}
+
+#[derive(Serialize)]
+pub(super) struct OperationArtifactResponse {
+    id: Uuid,
+    media_type: String,
+    content_length: i64,
+    checksum_sha256: Option<String>,
+    completed_at: Option<chrono::DateTime<chrono::Utc>>,
+}
+
+impl From<ExtensionOperationArtifact> for OperationArtifactResponse {
+    fn from(artifact: ExtensionOperationArtifact) -> Self {
+        Self {
+            id: artifact.id,
+            media_type: artifact.media_type,
+            content_length: artifact.content_length,
+            checksum_sha256: artifact.checksum_sha256,
+            completed_at: artifact.completed_at,
+        }
+    }
+}
+
+pub(super) async fn list_operation_deliveries(
+    ScopedRepository(repository): ScopedRepository,
+    Path(run_id): Path<Uuid>,
+) -> Result<Json<Vec<ExtensionHttpDelivery>>, ApiError> {
+    Ok(Json(
+        repository.list_extension_http_deliveries(run_id).await?,
+    ))
+}
+
+pub(super) async fn list_operation_artifacts(
+    ScopedRepository(repository): ScopedRepository,
+    Path(run_id): Path<Uuid>,
+) -> Result<Json<Vec<OperationArtifactResponse>>, ApiError> {
+    Ok(Json(
+        repository
+            .list_completed_extension_operation_artifacts(run_id)
+            .await?
+            .into_iter()
+            .map(Into::into)
+            .collect(),
+    ))
 }
 
 /// Downloads a completed operation artifact through workspace authorization.

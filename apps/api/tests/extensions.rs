@@ -205,6 +205,73 @@ fn artifact_stream_component() -> Vec<u8> {
     std::fs::read(component).expect("component fixture must be readable")
 }
 
+fn transfer_test_component() -> Vec<u8> {
+    let root = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .parent()
+        .and_then(|path| path.parent())
+        .unwrap()
+        .to_owned();
+    assert!(
+        Command::new("cargo")
+            .current_dir(&root)
+            .args([
+                "build",
+                "-p",
+                "catalog-extension-transfer-test-component",
+                "--target",
+                "wasm32-unknown-unknown",
+                "--release",
+            ])
+            .status()
+            .unwrap()
+            .success()
+    );
+    let core = root.join(
+        "target/wasm32-unknown-unknown/release/catalog_extension_transfer_test_component.wasm",
+    );
+    let component = root.join("target/transfer-test.component.wasm");
+    assert!(
+        Command::new("wasm-tools")
+            .args(["component", "new"])
+            .arg(core)
+            .args(["-o"])
+            .arg(&component)
+            .status()
+            .unwrap()
+            .success()
+    );
+    std::fs::read(component).unwrap()
+}
+
+fn transfer_test_archive(component: &[u8]) -> Vec<u8> {
+    let operations: Vec<Value> = ["probe", "redirect", "fetch", "deliver"]
+        .iter().map(|id| json!({"id":id,"handler":id,"request_schema":{"type":"object"},"max_request_bytes":1024,"max_checkpoint_bytes":1024}))
+        .collect();
+    let manifest = serde_json::to_vec(&json!({
+        "manifest_version":1,"name":"Transfer probe","version":"1.0.0",
+        "description":"v1.4 real host transfer policy fixture","icons":{"48":"icon.png"},
+        "catalog":{"id":"acme.transfer-probe","host_api":">=1.4.0, <2.0.0"},
+        "permissions":["network.request","artifacts.read","artifacts.write"],
+        "host_permissions":[
+            {"id":"api","matches":["https://api.example.com/v1/*"],"methods":["GET"],"max_transfer_bytes":16777216},
+            {"id":"redirect","matches":["https://httpbin.org/redirect/*"],"methods":["GET"],"max_transfer_bytes":16777216,"timeout_ms":30000},
+            {"id":"source","matches":["https://httpbin.org/bytes/*"],"methods":["GET"],"max_transfer_bytes":16777216,"timeout_ms":30000},
+            {"id":"target","matches":["https://httpbin.org/*"],"methods":["PUT"],"max_transfer_bytes":16777216,"timeout_ms":30000}
+        ],
+        "artifacts":[{"id":"server","kind":"server_wasm","path":"server.wasm"}],
+        "configuration":{"version":1,"schema":{"type":"object","additionalProperties":false}},
+        "server":{"operations":operations}
+    })).unwrap();
+    let mut tar_bytes = Vec::new();
+    {
+        let mut tar = tar::Builder::new(&mut tar_bytes);
+        append_file(&mut tar, "manifest.json", &manifest);
+        append_file(&mut tar, "server.wasm", component);
+        tar.finish().unwrap();
+    }
+    zstd::stream::encode_all(Cursor::new(tar_bytes), 0).unwrap()
+}
+
 fn artifact_operation_release_archive(extension_id: &str, component: &[u8]) -> Vec<u8> {
     let manifest = serde_json::to_vec(&json!({
         "manifest_version": 1,
@@ -1161,6 +1228,9 @@ async fn operation_runs_keep_a_batch_key_across_crash_reclaim_and_fence_stale_ch
         source_reference: json!({"token": "hidden"}),
         destination_reference: json!({}),
         idempotency_key: "same-request".into(),
+        schedule_id: None,
+
+        configuration_snapshot: None,
     };
     let run_id = repository
         .start_extension_operation(request.clone())
@@ -2040,6 +2110,9 @@ async fn operation_artifacts_are_run_scoped_quota_bound_cleaned_and_downloadable
             source_reference: json!({"input_file_id": file_id}),
             destination_reference: json!({}),
             idempotency_key: "artifact-input".into(),
+            schedule_id: None,
+
+            configuration_snapshot: None,
         })
         .await
         .unwrap();
@@ -2266,12 +2339,8 @@ async fn operation_artifacts_are_run_scoped_quota_bound_cleaned_and_downloadable
         .send()
         .await
         .unwrap();
-    assert_eq!(response.status(), reqwest::StatusCode::OK);
-    assert_eq!(
-        response.headers()[reqwest::header::ETAG],
-        format!("\"{checksum}\"")
-    );
-    assert_eq!(response.bytes().await.unwrap().as_ref(), body);
+    // Finalized bytes remain invisible until the run itself completes.
+    assert_eq!(response.status(), reqwest::StatusCode::NOT_FOUND);
     assert_eq!(
         authenticated_client()
             .get(format!(
@@ -2397,6 +2466,9 @@ async fn artifact_wit_component_copies_a_large_approved_input_in_bounded_chunks(
             source_reference: json!({"input_file_id": file_id}),
             destination_reference: json!({}),
             idempotency_key: "copy-large-input".into(),
+            schedule_id: None,
+
+            configuration_snapshot: None,
         })
         .await
         .unwrap();
@@ -2432,6 +2504,792 @@ async fn artifact_wit_component_copies_a_large_approved_input_in_bounded_chunks(
             .await
             .is_ok()
     );
+}
+
+#[sqlx::test(migrations = "./migrations")]
+async fn packaged_v14_transfer_import_rejects_ssrf_without_network_io(pool: sqlx::PgPool) {
+    use api::{
+        extension_runtime::{
+            ExtensionOperationTaskHandler, ExtensionRuntime, ExtensionRuntimeConfig,
+        },
+        repository::StartExtensionOperation,
+        task_worker::TaskHandler,
+    };
+    use catalog_domain::task_queue::TaskKind;
+    use std::time::Duration;
+    let repository = CatalogRepository::system(pool.clone())
+        .for_workspace(Uuid::from_u128(0x00000000000040008000000000000002))
+        .await
+        .unwrap();
+    let store = Arc::new(FakeObjectStore::available());
+    ExtensionInstaller::new(repository.clone(), store.clone())
+        .install("test", &transfer_test_archive(&transfer_test_component()))
+        .await
+        .unwrap();
+    for cap in ["network.request", "artifacts.read", "artifacts.write"] {
+        repository
+            .grant_extension("acme.transfer-probe", "capability", cap)
+            .await
+            .unwrap();
+    }
+    for host in ["api", "redirect", "source", "target"] {
+        repository
+            .grant_extension("acme.transfer-probe", "host_permission", host)
+            .await
+            .unwrap();
+    }
+    repository
+        .enable_extension("acme.transfer-probe")
+        .await
+        .unwrap();
+    let release = repository
+        .installed_extension("acme.transfer-probe")
+        .await
+        .unwrap()
+        .installed_release_id;
+    let run = repository
+        .start_extension_operation(StartExtensionOperation {
+            extension_id: "acme.transfer-probe".into(),
+            expected_release_id: release,
+            operation_id: "probe".into(),
+            input: json!({}),
+            source_reference: json!({}),
+            destination_reference: json!({}),
+            idempotency_key: "unsafe-url".into(),
+            schedule_id: None,
+            configuration_snapshot: None,
+        })
+        .await
+        .unwrap();
+    let task = repository
+        .claim_task_for_kinds(
+            "transfer-test",
+            Duration::from_secs(60),
+            &[TaskKind::ExtensionOperationRunV1],
+        )
+        .await
+        .unwrap()
+        .unwrap();
+    let runtime = ExtensionRuntime::new(store, ExtensionRuntimeConfig::default()).unwrap();
+    ExtensionOperationTaskHandler::new(repository.clone(), runtime)
+        .handle(task)
+        .await
+        .unwrap();
+    let (status, progress): (String, Value) =
+        sqlx::query_as("SELECT status,progress FROM extension_operation_runs WHERE id=$1")
+            .bind(run)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+    assert_eq!(status, "completed");
+    assert_eq!(progress["unsafe_url_denied"], true);
+}
+
+// Opt in only when public HTTPS is reachable. No local/private address is
+// allowed by the broker, so a loopback test server cannot exercise this path.
+#[sqlx::test(migrations = "./migrations")]
+async fn packaged_v14_public_http_transfer_and_redirect_policy(pool: sqlx::PgPool) {
+    use api::{
+        extension_runtime::{
+            ExtensionOperationTaskHandler, ExtensionRuntime, ExtensionRuntimeConfig,
+        },
+        repository::StartExtensionOperation,
+        task_worker::TaskHandler,
+    };
+    use catalog_domain::task_queue::TaskKind;
+    use std::time::Duration;
+    if std::env::var("ATTRICAT_PUBLIC_HTTP_TRANSFER_TEST").as_deref() != Ok("1") {
+        return;
+    }
+    let repository = CatalogRepository::system(pool.clone())
+        .for_workspace(Uuid::from_u128(0x00000000000040008000000000000002))
+        .await
+        .unwrap();
+    let store = Arc::new(FakeObjectStore::available());
+    ExtensionInstaller::new(repository.clone(), store.clone())
+        .install("test", &transfer_test_archive(&transfer_test_component()))
+        .await
+        .unwrap();
+    for cap in ["network.request", "artifacts.read", "artifacts.write"] {
+        repository
+            .grant_extension("acme.transfer-probe", "capability", cap)
+            .await
+            .unwrap();
+    }
+    for host in ["api", "redirect", "source", "target"] {
+        repository
+            .grant_extension("acme.transfer-probe", "host_permission", host)
+            .await
+            .unwrap();
+    }
+    repository
+        .enable_extension("acme.transfer-probe")
+        .await
+        .unwrap();
+    let release = repository
+        .installed_extension("acme.transfer-probe")
+        .await
+        .unwrap()
+        .installed_release_id;
+    for operation in ["redirect", "fetch", "deliver"] {
+        let run = repository
+            .start_extension_operation(StartExtensionOperation {
+                extension_id: "acme.transfer-probe".into(),
+                expected_release_id: release,
+                operation_id: operation.into(),
+                input: json!({}),
+                source_reference: json!({}),
+                destination_reference: json!({}),
+                idempotency_key: format!("public-{operation}"),
+                schedule_id: None,
+                configuration_snapshot: None,
+            })
+            .await
+            .unwrap();
+        let task = repository
+            .claim_task_for_kinds(
+                "public-http",
+                Duration::from_secs(60),
+                &[TaskKind::ExtensionOperationRunV1],
+            )
+            .await
+            .unwrap()
+            .unwrap();
+        assert_eq!(task.subject_id, run);
+        let runtime =
+            ExtensionRuntime::new(store.clone(), ExtensionRuntimeConfig::default()).unwrap();
+        ExtensionOperationTaskHandler::new(repository.clone(), runtime)
+            .handle(task)
+            .await
+            .unwrap();
+        let (status, progress): (String, Value) =
+            sqlx::query_as("SELECT status,progress FROM extension_operation_runs WHERE id=$1")
+                .bind(run)
+                .fetch_one(&pool)
+                .await
+                .unwrap();
+        assert_eq!(status, "completed", "{operation}: {progress}");
+        match operation {
+            "redirect" => assert_eq!(progress["redirect_denied"], true),
+            "fetch" => assert_eq!(progress["source_bytes"], 32),
+            "deliver" => {
+                let deliveries = repository
+                    .list_extension_http_deliveries(run)
+                    .await
+                    .unwrap();
+                assert_eq!(deliveries.len(), 1);
+                assert_eq!(progress["delivery_outcome"], deliveries[0].state);
+            }
+            _ => unreachable!(),
+        }
+    }
+}
+
+#[sqlx::test(migrations = "./migrations")]
+async fn delivery_attempt_is_uncertain_until_confirmed_and_never_auto_resends(pool: sqlx::PgPool) {
+    use api::repository::{DeliveryState, StartExtensionOperation};
+    use catalog_domain::task_queue::TaskKind;
+    use std::time::Duration;
+    let workspace = Uuid::from_u128(0x00000000000040008000000000000002);
+    let repository = CatalogRepository::system(pool.clone())
+        .for_workspace(workspace)
+        .await
+        .unwrap();
+    ExtensionInstaller::new(repository.clone(), Arc::new(FakeObjectStore::available()))
+        .install("test", &operation_release_archive("acme.delivery"))
+        .await
+        .unwrap();
+    repository.enable_extension("acme.delivery").await.unwrap();
+    let release = repository
+        .installed_extension("acme.delivery")
+        .await
+        .unwrap()
+        .installed_release_id;
+    let run = repository
+        .start_extension_operation(StartExtensionOperation {
+            extension_id: "acme.delivery".into(),
+            expected_release_id: release,
+            operation_id: "import".into(),
+            input: json!({}),
+            source_reference: json!({}),
+            destination_reference: json!({}),
+            idempotency_key: "delivery-test".into(),
+            schedule_id: None,
+            configuration_snapshot: None,
+        })
+        .await
+        .unwrap();
+    let task = repository
+        .claim_task_for_kinds(
+            "delivery",
+            Duration::from_secs(30),
+            &[TaskKind::ExtensionOperationRunV1],
+        )
+        .await
+        .unwrap()
+        .unwrap();
+    repository
+        .begin_extension_operation_task(&task)
+        .await
+        .unwrap();
+    let scoped = repository.for_extension_operation_task(&task);
+    let artifact = scoped
+        .create_extension_operation_output_artifact(run, "acme.delivery", release, "text/plain")
+        .await
+        .unwrap();
+    scoped
+        .reserve_extension_operation_artifact_bytes(artifact.id, run, 3)
+        .await
+        .unwrap();
+    scoped
+        .complete_extension_operation_artifact(
+            artifact.id,
+            run,
+            &"a".repeat(64),
+            "extension-operation-artifacts/v1/test",
+        )
+        .await
+        .unwrap();
+    let digest = "b".repeat(64);
+    let attempt = scoped
+        .begin_extension_http_delivery(run, "stable-key", artifact.id, &digest)
+        .await
+        .unwrap();
+    let DeliveryState::Send(id) = attempt else {
+        panic!("first delivery must send");
+    };
+    assert!(matches!(
+        scoped
+            .begin_extension_http_delivery(run, "stable-key", artifact.id, &digest)
+            .await
+            .unwrap(),
+        DeliveryState::Uncertain
+    ));
+    assert_eq!(
+        scoped.list_extension_http_deliveries(run).await.unwrap()[0].state,
+        "uncertain"
+    );
+    assert!(
+        scoped
+            .begin_extension_http_delivery(run, "stable-key", artifact.id, &"c".repeat(64))
+            .await
+            .is_err()
+    );
+    scoped
+        .complete_extension_http_delivery(id, 204)
+        .await
+        .unwrap();
+    assert_eq!(
+        scoped.list_extension_http_deliveries(run).await.unwrap()[0].state,
+        "succeeded"
+    );
+    assert!(matches!(
+        scoped
+            .begin_extension_http_delivery(run, "stable-key", artifact.id, &digest)
+            .await
+            .unwrap(),
+        DeliveryState::Succeeded(204)
+    ));
+}
+
+#[sqlx::test(migrations = "./migrations")]
+async fn operation_schedules_are_workspace_scoped_and_occurrences_deduplicated(pool: sqlx::PgPool) {
+    use api::repository::CreateExtensionOperationSchedule;
+    let workspace = Uuid::from_u128(0x00000000000040008000000000000002);
+    let repository = CatalogRepository::system(pool.clone())
+        .for_workspace(workspace)
+        .await
+        .unwrap();
+    let store = Arc::new(FakeObjectStore::available());
+    ExtensionInstaller::new(repository.clone(), store.clone())
+        .install("test", &operation_release_archive("acme.schedule"))
+        .await
+        .unwrap();
+    repository.enable_extension("acme.schedule").await.unwrap();
+    let release = repository
+        .installed_extension("acme.schedule")
+        .await
+        .unwrap()
+        .installed_release_id;
+    let schedule = repository
+        .create_extension_operation_schedule(CreateExtensionOperationSchedule {
+            extension_id: "acme.schedule".into(),
+            release_id: release,
+            operation_id: "import".into(),
+            input: json!({}),
+            source_reference: json!({}),
+            destination_reference: json!({}),
+            interval_seconds: 60,
+        })
+        .await
+        .unwrap();
+    assert!(schedule.enabled);
+    let (base, server) = start_server_with_object_store(pool.clone(), store).await;
+    let response = authenticated_client()
+        .get(format!("{base}/extension-operation-schedules"))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(response.status(), reqwest::StatusCode::OK);
+    let body: Value = response.json().await.unwrap();
+    assert_eq!(body[0]["id"], schedule.id.to_string());
+    assert!(body[0].get("input").is_none());
+    let created = authenticated_client()
+        .post(format!(
+            "{base}/extensions/acme.schedule/operation-schedules"
+        ))
+        .json(&json!({"operation_id":"import","input":{},"interval_seconds":120}))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(created.status(), reqwest::StatusCode::CREATED);
+    let second_id: Uuid = created.json::<Value>().await.unwrap()["id"]
+        .as_str()
+        .unwrap()
+        .parse()
+        .unwrap();
+    let disabled = authenticated_client()
+        .patch(format!("{base}/extension-operation-schedules/{second_id}"))
+        .json(&json!({"enabled":false,"interval_seconds":120}))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(disabled.status(), reqwest::StatusCode::OK);
+    assert_eq!(disabled.json::<Value>().await.unwrap()["enabled"], false);
+    assert!(
+        reqwest::Client::new()
+            .get(format!("{base}/extension-operation-schedules"))
+            .send()
+            .await
+            .unwrap()
+            .status()
+            .is_client_error()
+    );
+    server.abort();
+    sqlx::query("UPDATE extension_operation_schedules SET next_at=clock_timestamp()-interval '1 second' WHERE id=$1")
+        .bind(schedule.id).execute(&pool).await.unwrap();
+    let (first, second) = tokio::join!(
+        repository.produce_due_extension_operation_schedules(),
+        repository.produce_due_extension_operation_schedules()
+    );
+    assert_eq!(first.unwrap() + second.unwrap(), 1);
+    let occurrences: i64 =
+        sqlx::query_scalar("SELECT count(*) FROM extension_operation_runs WHERE schedule_id=$1")
+            .bind(schedule.id)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+    assert_eq!(occurrences, 1);
+    // Overlap is skipped, never queued as a second task.
+    sqlx::query("UPDATE extension_operation_schedules SET next_at=clock_timestamp()-interval '1 second' WHERE id=$1")
+        .bind(schedule.id).execute(&pool).await.unwrap();
+    assert_eq!(
+        repository
+            .produce_due_extension_operation_schedules()
+            .await
+            .unwrap(),
+        1
+    );
+    let occurrences: i64 =
+        sqlx::query_scalar("SELECT count(*) FROM extension_operation_runs WHERE schedule_id=$1")
+            .bind(schedule.id)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+    assert_eq!(occurrences, 1);
+    let foreign_id = Uuid::new_v4();
+    sqlx::query("INSERT INTO workspaces(id,slug,name,login_identifier) VALUES($1,$2,'Foreign',$3)")
+        .bind(foreign_id)
+        .bind(format!("foreign-{}", &foreign_id.simple().to_string()[..8]))
+        .bind(format!(
+            "foreign-{}.local",
+            &foreign_id.simple().to_string()[..8]
+        ))
+        .execute(&pool)
+        .await
+        .unwrap();
+    let foreign = CatalogRepository::system(pool.clone())
+        .for_workspace(foreign_id)
+        .await
+        .unwrap();
+    assert!(
+        foreign
+            .list_extension_operation_schedules()
+            .await
+            .unwrap()
+            .is_empty()
+    );
+    assert!(
+        foreign
+            .update_extension_operation_schedule(schedule.id, false, 60)
+            .await
+            .unwrap()
+            .is_none()
+    );
+    repository
+        .update_extension_operation_schedule(schedule.id, false, 60)
+        .await
+        .unwrap()
+        .unwrap();
+    sqlx::query("UPDATE extension_operation_schedules SET next_at=clock_timestamp()-interval '1 second' WHERE id=$1")
+        .bind(schedule.id).execute(&pool).await.unwrap();
+    assert_eq!(
+        repository
+            .produce_due_extension_operation_schedules()
+            .await
+            .unwrap(),
+        0
+    );
+    let run: Uuid =
+        sqlx::query_scalar("SELECT id FROM extension_operation_runs WHERE schedule_id=$1")
+            .bind(schedule.id)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+    assert!(repository.cancel_extension_operation(run).await.unwrap());
+    repository
+        .update_extension_operation_schedule(schedule.id, true, 60)
+        .await
+        .unwrap();
+    repository.disable_extension("acme.schedule").await.unwrap();
+    sqlx::query("UPDATE extension_operation_schedules SET next_at=clock_timestamp()-interval '1 second' WHERE id=$1")
+        .bind(schedule.id).execute(&pool).await.unwrap();
+    repository
+        .produce_due_extension_operation_schedules()
+        .await
+        .unwrap();
+    let paused: Option<String> =
+        sqlx::query_scalar("SELECT paused_reason FROM extension_operation_schedules WHERE id=$1")
+            .bind(schedule.id)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+    assert_eq!(paused.as_deref(), Some("release_or_source_unavailable"));
+}
+
+/// Packaged component integration, enabled by pointing at the sibling archive.
+/// This exercises the actual WIT linker, snapshot page, staging, worker and S3
+/// abstraction rather than a mock component implementation.
+#[sqlx::test(migrations = "./migrations")]
+async fn packaged_csv_connector_exports_through_the_real_host(pool: sqlx::PgPool) {
+    use api::{
+        extension_runtime::{
+            ExtensionOperationTaskHandler, ExtensionRuntime, ExtensionRuntimeConfig,
+        },
+        repository::StartExtensionOperation,
+        task_worker::TaskHandler,
+    };
+    use catalog_domain::task_queue::TaskKind;
+    use std::time::Duration;
+    let Ok(path) = std::env::var("ATTRICAT_CONNECTOR_CSV_ARCHIVE") else {
+        return;
+    };
+    let archive = std::fs::read(path).unwrap();
+    let repository = CatalogRepository::system(pool.clone())
+        .for_workspace(Uuid::from_u128(0x00000000000040008000000000000002))
+        .await
+        .unwrap();
+    let store = Arc::new(FakeObjectStore::available());
+    let blueprint = repository
+        .create_blueprint(CreateBlueprint {
+            definition: SYNC_BLUEPRINT.into(),
+        })
+        .await
+        .unwrap();
+    repository
+        .publish_blueprint_revision(blueprint.blueprint.id, blueprint.blueprint.version)
+        .await
+        .unwrap();
+    let context = repository
+        .get_context_by_code("default")
+        .await
+        .unwrap()
+        .unwrap();
+    ExtensionInstaller::new(repository.clone(), store.clone())
+        .install("test", &archive)
+        .await
+        .unwrap();
+    for capability in [
+        "catalog.read",
+        "catalog.write",
+        "artifacts.read",
+        "artifacts.write",
+    ] {
+        repository
+            .grant_extension("attricat-connector-csv", "capability", capability)
+            .await
+            .unwrap();
+    }
+    repository
+        .enable_extension("attricat-connector-csv")
+        .await
+        .unwrap();
+    let release = repository
+        .installed_extension("attricat-connector-csv")
+        .await
+        .unwrap()
+        .installed_release_id;
+    let profile = json!({"version":1,"blueprint_id":blueprint.blueprint.id.to_string(),"blueprint_version":blueprint.blueprint.version,"context_id":context.id.to_string(),"columns":[{"header":"ID","attribute":"external_id","kind":"string"}]});
+    let run = repository
+        .start_extension_operation(StartExtensionOperation {
+            extension_id: "attricat-connector-csv".into(),
+            expected_release_id: release,
+            operation_id: "export".into(),
+            input: json!({"profile": profile}),
+            source_reference: json!({}),
+            destination_reference: json!({}),
+            idempotency_key: "csv-export".into(),
+            schedule_id: None,
+            configuration_snapshot: None,
+        })
+        .await
+        .unwrap();
+    let task = repository
+        .claim_task_for_kinds(
+            "csv-integration",
+            Duration::from_secs(60),
+            &[TaskKind::ExtensionOperationRunV1],
+        )
+        .await
+        .unwrap()
+        .unwrap();
+    let runtime = ExtensionRuntime::new(store.clone(), ExtensionRuntimeConfig::default()).unwrap();
+    ExtensionOperationTaskHandler::new(repository.clone(), runtime)
+        .handle(task)
+        .await
+        .unwrap();
+    let status: String =
+        sqlx::query_scalar("SELECT status FROM extension_operation_runs WHERE id=$1")
+            .bind(run)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+    let debug: (String, Option<String>, i32) = sqlx::query_as(
+        "SELECT status,last_error_message,batch_number FROM extension_operation_runs WHERE id=$1",
+    )
+    .bind(run)
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert_eq!(status, "completed", "{debug:?}");
+    let (artifact_id, key): (Uuid,String) = sqlx::query_as("SELECT id,object_key FROM extension_operation_artifacts WHERE operation_run_id=$1 AND direction='output' AND state='completed'")
+        .bind(run).fetch_one(&pool).await.unwrap();
+    repository
+        .completed_extension_operation_artifact(run, artifact_id)
+        .await
+        .unwrap();
+    assert_eq!(store.get(&key).await.unwrap().bytes.as_ref(), b"ID\n");
+    let (base, server) = start_server_with_object_store(pool.clone(), store.clone()).await;
+    let outputs: Value = authenticated_client()
+        .get(format!("{base}/extension-operation-runs/{run}/artifacts"))
+        .send()
+        .await
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    assert_eq!(outputs[0]["id"], artifact_id.to_string());
+    assert!(outputs[0].get("object_key").is_none());
+    server.abort();
+
+    // A real packaged import spans two worker leases, reopens the durable
+    // input, and commits two independently deduplicated Catalog upsert batches.
+    use api::{storage::StoredObject, task_worker::TaskOutcome};
+    use sha2::{Digest, Sha256};
+    let csv = format!(
+        "ID,Title\n{}",
+        (1..=17)
+            .map(|n| format!("SKU-{n},Name {n}\n"))
+            .collect::<String>()
+    );
+    let file_id = Uuid::new_v4();
+    let input_key = format!("files/{file_id}");
+    store
+        .put(
+            &input_key,
+            StoredObject {
+                bytes: csv.as_bytes().to_vec().into(),
+                content_type: Some("text/csv".into()),
+            },
+        )
+        .await
+        .unwrap();
+    sqlx::query("INSERT INTO files(id,workspace_id,original_filename,display_filename,mime_type,byte_size,sha256,original_key,status) VALUES($1,$2,'input.csv','input.csv','text/csv',$3,$4,$5,'ready')")
+        .bind(file_id).bind(Uuid::from_u128(0x00000000000040008000000000000002))
+        .bind(csv.len() as i64).bind(format!("{:x}", Sha256::digest(csv.as_bytes()))).bind(&input_key)
+        .execute(&pool).await.unwrap();
+    let import_profile = json!({"version":1,"blueprint_id":blueprint.blueprint.id.to_string(),"blueprint_version":blueprint.blueprint.version,"context_id":context.id.to_string(),"business_key":"external_id","columns":[{"header":"ID","attribute":"external_id","kind":"string"},{"header":"Title","attribute":"title","kind":"string"}]});
+    let import_run = repository
+        .start_extension_operation(StartExtensionOperation {
+            extension_id: "attricat-connector-csv".into(),
+            expected_release_id: release,
+            operation_id: "import".into(),
+            input: json!({"profile":import_profile}),
+            source_reference: json!({"input_file_id":file_id}),
+            destination_reference: json!({}),
+            idempotency_key: "csv-import".into(),
+            schedule_id: None,
+            configuration_snapshot: None,
+        })
+        .await
+        .unwrap();
+    for batch in 0..2 {
+        let task = repository
+            .claim_task_for_kinds(
+                "csv-restart",
+                Duration::from_secs(60),
+                &[TaskKind::ExtensionOperationRunV1],
+            )
+            .await
+            .unwrap()
+            .unwrap();
+        assert_eq!(task.subject_id, import_run);
+        let runtime =
+            ExtensionRuntime::new(store.clone(), ExtensionRuntimeConfig::default()).unwrap();
+        let result = ExtensionOperationTaskHandler::new(repository.clone(), runtime)
+            .handle(task.clone())
+            .await
+            .unwrap();
+        if batch == 0 {
+            assert!(matches!(result, TaskOutcome::Reschedule { .. }));
+            repository
+                .reschedule_task_at(
+                    task.id,
+                    &task.lease_owner,
+                    task.lease_token,
+                    chrono::Utc::now(),
+                )
+                .await
+                .unwrap();
+        }
+    }
+    let (status, batches): (String, i32) =
+        sqlx::query_as("SELECT status,batch_number FROM extension_operation_runs WHERE id=$1")
+            .bind(import_run)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+    assert_eq!(status, "completed");
+    assert_eq!(batches, 2);
+    let created: i64 = sqlx::query_scalar("SELECT count(*) FROM entities WHERE workspace_id=$1 AND blueprint_id=$2 AND deleted_at IS NULL")
+        .bind(Uuid::from_u128(0x00000000000040008000000000000002)).bind(blueprint.blueprint.id).fetch_one(&pool).await.unwrap();
+    assert_eq!(created, 17);
+    let second_profile = json!({"version":1,"blueprint_id":blueprint.blueprint.id.to_string(),"blueprint_version":blueprint.blueprint.version,"context_id":context.id.to_string(),"columns":[{"header":"ID","attribute":"external_id","kind":"string"}]});
+    let paged_export = repository
+        .start_extension_operation(StartExtensionOperation {
+            extension_id: "attricat-connector-csv".into(),
+            expected_release_id: release,
+            operation_id: "export".into(),
+            input: json!({"profile":second_profile}),
+            source_reference: json!({}),
+            destination_reference: json!({}),
+            idempotency_key: "csv-export-after-import".into(),
+            schedule_id: None,
+            configuration_snapshot: None,
+        })
+        .await
+        .unwrap();
+    for batch in 0..2 {
+        let task = repository
+            .claim_task_for_kinds(
+                "csv-export-restart",
+                Duration::from_secs(60),
+                &[TaskKind::ExtensionOperationRunV1],
+            )
+            .await
+            .unwrap()
+            .unwrap();
+        assert_eq!(task.subject_id, paged_export);
+        let runtime =
+            ExtensionRuntime::new(store.clone(), ExtensionRuntimeConfig::default()).unwrap();
+        let result = ExtensionOperationTaskHandler::new(repository.clone(), runtime)
+            .handle(task.clone())
+            .await
+            .unwrap();
+        if batch == 0 {
+            assert!(matches!(result, TaskOutcome::Reschedule { .. }));
+            // The next page must read values as of the first page's cursor,
+            // even if a Catalog write lands between worker leases.
+            let key_attribute = blueprint
+                .attributes
+                .iter()
+                .find(|a| a.code == "external_id")
+                .unwrap()
+                .id;
+            let last = repository
+                .extension_catalog_lookup(
+                    blueprint.blueprint.id,
+                    blueprint.blueprint.version,
+                    key_attribute,
+                    "SKU-17",
+                )
+                .await
+                .unwrap()
+                .unwrap();
+            repository
+                .append_values(
+                    last.id,
+                    api::model::AppendAttributeValues {
+                        values: vec![NewAttributeValue::Scalar {
+                            attribute_id: None,
+                            attribute_code: Some("external_id".into()),
+                            context_id: Some(context.id),
+                            value: json!("SKU-17-CHANGED"),
+                        }],
+                    },
+                )
+                .await
+                .unwrap();
+            repository
+                .reschedule_task_at(
+                    task.id,
+                    &task.lease_owner,
+                    task.lease_token,
+                    chrono::Utc::now(),
+                )
+                .await
+                .unwrap();
+        }
+    }
+    let (status, batches): (String, i32) =
+        sqlx::query_as("SELECT status,batch_number FROM extension_operation_runs WHERE id=$1")
+            .bind(paged_export)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+    assert_eq!(status, "completed");
+    assert_eq!(batches, 2);
+    let paged_key: String = sqlx::query_scalar("SELECT object_key FROM extension_operation_artifacts WHERE operation_run_id=$1 AND state='completed' AND direction='output'")
+        .bind(paged_export).fetch_one(&pool).await.unwrap();
+    let csv = String::from_utf8(store.get(&paged_key).await.unwrap().bytes.to_vec()).unwrap();
+    assert_eq!(csv.lines().count(), 18);
+    assert!(csv.starts_with("ID\n"));
+    assert!(csv.lines().any(|line| line == "SKU-17"));
+    assert!(!csv.contains("SKU-17-CHANGED"));
+    sqlx::query("UPDATE extension_operation_runs SET completed_at=clock_timestamp()-interval '31 days' WHERE id=$1")
+        .bind(run).execute(&pool).await.unwrap();
+    repository
+        .expire_extension_operation_storage()
+        .await
+        .unwrap();
+    assert!(
+        repository
+            .completed_extension_operation_artifact(run, artifact_id)
+            .await
+            .is_err()
+    );
+    for key in repository
+        .pending_extension_operation_object_deletions()
+        .await
+        .unwrap()
+    {
+        store.delete(&key).await.unwrap();
+        repository
+            .confirm_extension_operation_object_deletion(&key)
+            .await
+            .unwrap();
+    }
+    assert!(store.get(&key).await.is_err());
 }
 
 #[sqlx::test(migrations = "./migrations")]
@@ -2517,6 +3375,9 @@ async fn artifact_completion_faults_abort_metadata_and_delete_orphans(pool: sqlx
                 source_reference: json!({"input_file_id": file_id}),
                 destination_reference: json!({}),
                 idempotency_key: idempotency_key.into(),
+                schedule_id: None,
+
+                configuration_snapshot: None,
             })
             .await
             .unwrap();

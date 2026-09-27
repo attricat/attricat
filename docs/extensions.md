@@ -374,6 +374,83 @@ management API or written to audit metadata. Configuration and diagnostics are
 redacted before management-visible persistence; secret-, credential-, password-,
 token-, key-, and authorization-named fields are replaced with `[redacted]`.
 
+### Connector catalog calls (host API 1.4)
+
+Releases whose host API range includes 1.4 **but excludes 1.3** use the additive
+`wit-connectors/catalog-extension.wit` operation world. Earlier releases keep
+using the v1.3 world. In addition to artifacts, the new world imports
+`catalog-data.read` and `catalog-data.batch`. Both take/return the same JSON
+shapes as `catalog.read.v1` and `catalog.command.v1` respectively. Calls are
+limited to 64 KiB of JSON; page size is at most 100 and batches at most 100
+intents. The host refreshes the release and grant before each call, requires
+`catalog.read` or `catalog.write`, and uses the workspace-scoped repository.
+Batch requests must carry the current operation request's `batch-key`; that
+key is scoped to the run ID and batch number. Intent keys and input hashes are
+persisted transactionally with Catalog mutation, audit and outbox, so a replay
+of an already applied intent returns `already_applied` without duplicating it.
+Callers must keep intent keys stable across retries. The `catalog` interface
+also provides connector-shaped `schema`, `page` (1–16 rows), and `upsert-batch`
+operations. The upsert body carries `run_id`, the current `batch_key`, blueprint
+and context IDs, and up to 100 keyed rows with scalar attribute-code values.
+The host rejects mismatched business key values, rechecks grants and invokes
+Catalog's validated, audited, idempotent mutation service. Page cursors are
+workspace- and filter-bound and include a database-clock high-water mark;
+attribute values use retained history to return their as-of values across
+batches. Cursors expire after 30 days (before history retention expires).
+This is **not** a long-lived MVCC database snapshot: concurrent transactions
+committing after the first page and blueprint migrations/publication changes
+can affect entity membership. For an immutable externally delivered export,
+freeze the source or coordinate updates for the duration of the run.
+
+`artifacts.append-output(name, media-type, batch-key, bytes)` accepts 1–65536
+bytes per batch and stores an immutable, SHA-256-checked object segment under
+the current run and batch key. Replaying the same bytes is a no-op; a changed
+payload is rejected. `finalize-output(name)` assembles bounded segments into a
+checksummed, immutable S3-backed output. The host retains segments across
+worker restarts and enforces 1 GiB per output, 2 GiB per run and 8 GiB per
+workspace. A finalized output is not downloadable until its run completes.
+Completed output is retained for 30 days; staging for completed runs is swept
+after one hour, cancelled runs after one hour, dead-letter runs after 30 days.
+Object deletion is retried from durable tombstones. A dead-letter run cannot be
+replayed after its output has expired.
+
+`transfer.fetch-input` accepts bounded JSON control fields
+`{host_permission_id,url,transfer_key,offset,max_bytes,etag?,secret_headers?}`;
+it fetches one HTTPS byte range (up to 16 MiB) into a run-bound input artifact
+and returns its opaque `artifact_id`, ETag, offset and length. Open the ID with
+`artifacts.open-input`. Offsets beyond zero require an ETag; the server must
+honor the Range and return the same identity. Replaying a transfer key returns
+the existing artifact only when the request digest matches. Large sources are
+processed as multiple ranges/checkpoints without placing file bytes in JSON.
+`transfer.deliver-output` accepts `host_permission_id`, `url`, `method` (PUT or
+POST), `artifact_id`, `delivery_key` and optional named `secret_headers`; it
+streams a completed output with a stable `Idempotency-Key` header. An uncertain
+attempt is recorded **before** network I/O: a timeout, redirect or crash must
+not trigger an automatic resend. The response distinguishes `succeeded`,
+`failed` with an HTTP status, and `uncertain`. Operators can inspect the
+redacted delivery history at `GET /extension-operation-runs/{run_id}/deliveries`.
+POST is rejected unless the
+permission declares `idempotent_delivery: true`; only declare it for a target
+that documents support for that idempotency key. Both calls need
+`network.request`, a granted host permission with nonzero `max_transfer_bytes`
+(maximum 1 GiB), HTTPS, public DNS/IPs, and no redirects, proxies, URL query,
+URL credentials or ambient sockets. Grants and secrets are resolved anew per
+call. The legacy `network.request.v1` remains capped at 1 MiB and is not a
+file-transfer API.
+
+`POST /extensions/{extension_id}/operation-schedules` creates a pinned interval
+schedule with `operation_id`, bounded validated `input`, optional
+`source_reference: {"input_file_id":"<uuid>"}`, empty `destination_reference`,
+and `interval_seconds` (60–2592000). `GET /extension-operation-schedules`
+lists schedule IDs/status without returning inputs/configuration. `PATCH
+/extension-operation-schedules/{id}` accepts `{enabled,interval_seconds}`.
+Each due tick enqueues an occurrence-specific idempotent run through the normal
+task queue. Missed intervals and overlaps are skipped; disabled, quarantined,
+upgraded or grant-revoked releases pause occurrence creation. Schedules retain
+the release and validated input/configuration snapshot, not credentials, URLs
+or request bodies. Output, progress, status and errors use the existing
+workspace-scoped run and artifact endpoints.
+
 ## Client extension runtime (v1)
 
 Enabled `client_component` artifacts can expose a strict `ui` contribution:
@@ -683,7 +760,37 @@ Webhook delivery remains deferred as described above.
 
 ## Reference importer/exporter compatibility suite
 
-The maintained sibling checkout at `../../attricat-extension-example` contains
+The packaged CSV connector in `~/projects/attricat/attricat-connector-csv`
+can be exercised against this host with:
+
+```sh
+cd ~/projects/attricat/attricat-connector-csv && just pack
+cd /path/to/attricat-worktree
+ATTRICAT_CONNECTOR_CSV_ARCHIVE=$HOME/projects/attricat/attricat-connector-csv/dist/attricat-connector-csv-0.1.0.tar.zst \
+  cargo test -p api --test extensions packaged_csv_connector_exports_through_the_real_host
+```
+
+This test installs the actual packaged component into a migrated PostgreSQL
+workspace, grants its capabilities, runs an export, a 17-row multi-batch import and a multi-batch export
+through the production Wasmtime task handler, restarts the runtime between
+batches, and verifies output/download and 30-day retention. The
+`packaged_v14_transfer_import_rejects_ssrf_without_network_io` test packages
+a second component and exercises the actual v1.4 transfer WIT denial path.
+When public HTTPS is available, set `ATTRICAT_PUBLIC_HTTP_TRANSFER_TEST=1`
+and run `packaged_v14_public_http_transfer_and_redirect_policy` to exercise
+real bounded HTTPS input, denied redirects and idempotency-keyed PUT delivery
+through that packaged component. The test requires `httpbin.org`; it is
+opt-in to keep offline CI deterministic. For an
+S3-backed deployment, side-load the same archive via `acli extension sideload
+--file ...`, grant `catalog.read`, `catalog.write`, `artifacts.read`,
+`artifacts.write`, enable the release, then POST an export or import to
+`/extensions/attricat-connector-csv/operations` and inspect the run and
+`/extension-operation-runs/{run_id}/artifacts` afterward. The run list returns
+the most recent 200; `GET /extension-operation-runs/{id}` retrieves an older
+run by ID. Run history includes `schedule_id` and `outputs_expired`
+without exposing input or secrets.
+
+When available, the sibling checkout at `../../attricat-extension-example` contains
 packaged `attricat.reference-customer-importer` and
 `attricat.reference-customer-exporter` components plus the two-customer NDJSON
 fixture. They use only the released `catalog:host@1.3.0` artifact-operation ABI;

@@ -91,6 +91,9 @@ pub(super) fn policy(method: &Method, path: &str) -> Option<Policy> {
     }
     if path == "/extension-operation-runs"
         || path.starts_with("/extension-operation-runs/")
+        || path == "/extension-operation-schedules"
+        || path.starts_with("/extension-operation-schedules/")
+        || path == "/extensions/{extension_id}/operation-schedules"
         || path == "/extensions/{extension_id}/operations"
     {
         return Some(Policy {
@@ -552,6 +555,16 @@ mod tests {
 
     #[test]
     fn extension_management_routes_require_extension_permissions() {
+        for path in [
+            "/extension-operation-schedules",
+            "/extension-operation-schedules/{id}",
+            "/extensions/{extension_id}/operation-schedules",
+        ] {
+            assert_eq!(
+                policy(&Method::PATCH, path).unwrap().permission,
+                "extensions.manage"
+            );
+        }
         assert_eq!(
             policy(&Method::GET, "/extensions").unwrap().permission,
             "extensions.read"

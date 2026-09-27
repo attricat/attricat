@@ -43,10 +43,11 @@ use crate::{
     },
     model::{AppendAttributeValues, NewAttributeValue},
     repository::{
-        CatalogRepository, ClaimedTask, ExtensionCatalogPageRequest, ExtensionConfigurationScope,
+        CatalogRepository, ClaimedTask, DeliveryState, ExtensionCatalogBatch,
+        ExtensionCatalogIntent, ExtensionCatalogPageRequest, ExtensionConfigurationScope,
         ExtensionOperationArtifact, ExtensionRuntimeInstallation,
     },
-    storage::{ObjectStore, ObjectStoreError},
+    storage::{ObjectStore, ObjectStoreError, StoredObject},
     task_queue::TaskKind,
     task_worker::{TaskHandler, TaskHandlerError, TaskOutcome},
 };
@@ -60,6 +61,18 @@ wasmtime::component::bindgen!({
 mod host_operations {
     wasmtime::component::bindgen!({
         path: "wit-artifacts",
+        world: "catalog-extension-operation",
+        with: {
+            "catalog:host/artifacts.input-artifact": crate::extension_runtime::InputArtifactStream,
+            "catalog:host/artifacts.output-artifact": crate::extension_runtime::OutputArtifactStream,
+        },
+        imports: { default: async },
+        exports: { default: async },
+    });
+}
+mod host_connector {
+    wasmtime::component::bindgen!({
+        path: "wit-connectors",
         world: "catalog-extension-operation",
         with: {
             "catalog:host/artifacts.input-artifact": crate::extension_runtime::InputArtifactStream,
@@ -278,6 +291,7 @@ impl ExtensionRuntime {
     #[allow(clippy::too_many_arguments)]
     async fn invoke_operation_batch(
         &self,
+        abi_version: &str,
         installation: &ExtensionRuntimeInstallation,
         repository: CatalogRepository,
         run_id: uuid::Uuid,
@@ -290,6 +304,23 @@ impl ExtensionRuntime {
         lifecycle_started: bool,
         cancelling: bool,
     ) -> Result<(Value, Value, bool), ExtensionRuntimeError> {
+        if abi_version == "1.4.0" {
+            return self
+                .invoke_connector_batch(
+                    installation,
+                    repository,
+                    run_id,
+                    operation_handler,
+                    configuration,
+                    input,
+                    checkpoint,
+                    batch_key,
+                    max_checkpoint_bytes,
+                    lifecycle_started,
+                    cancelling,
+                )
+                .await;
+        }
         let component = self.component(installation).await?;
         let request = host_operations::exports::catalog::host::operations::OperationRequest {
             run_id: run_id.to_string(),
@@ -375,6 +406,125 @@ impl ExtensionRuntime {
         }
         let checkpoint_request =
             host_operations::exports::catalog::host::operations::OperationRequest {
+                checkpoint: result.checkpoint,
+                ..request
+            };
+        operations
+            .call_checkpoint(&mut store, &checkpoint_request)
+            .await
+            .map_err(|e| ExtensionRuntimeError::Runtime(e.to_string()))?
+            .map_err(ExtensionRuntimeError::Runtime)?;
+        if result.done {
+            operations
+                .call_finish(&mut store, &checkpoint_request)
+                .await
+                .map_err(|e| ExtensionRuntimeError::Runtime(e.to_string()))?
+                .map_err(ExtensionRuntimeError::Runtime)?;
+        }
+        Ok((next, progress, result.done))
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    async fn invoke_connector_batch(
+        &self,
+        installation: &ExtensionRuntimeInstallation,
+        repository: CatalogRepository,
+        run_id: uuid::Uuid,
+        operation_handler: &str,
+        configuration: &Value,
+        input: &Value,
+        checkpoint: &Value,
+        batch_key: &str,
+        max_checkpoint_bytes: u64,
+        lifecycle_started: bool,
+        cancelling: bool,
+    ) -> Result<(Value, Value, bool), ExtensionRuntimeError> {
+        let component = self.component(installation).await?;
+        let request = host_connector::exports::catalog::host::operations::OperationRequest {
+            run_id: run_id.to_string(),
+            operation_id: operation_handler.to_owned(),
+            configuration: serde_json::to_string(configuration)
+                .map_err(|e| ExtensionRuntimeError::Runtime(e.to_string()))?,
+            input: serde_json::to_string(input)
+                .map_err(|e| ExtensionRuntimeError::Runtime(e.to_string()))?,
+            checkpoint: serde_json::to_string(checkpoint)
+                .map_err(|e| ExtensionRuntimeError::Runtime(e.to_string()))?,
+            batch_key: batch_key.to_owned(),
+        };
+        let mut store = Store::new(
+            &self.engine,
+            OperationState::new(
+                self.config.max_memory_bytes,
+                installation.clone(),
+                repository.clone(),
+                self.object_store.clone(),
+                run_id,
+            )
+            .with_batch_key(batch_key),
+        );
+        store.limiter(|state| &mut state.limits);
+        store
+            .set_fuel(self.config.fuel)
+            .map_err(|e| ExtensionRuntimeError::Runtime(e.to_string()))?;
+        store.set_epoch_deadline(
+            (self.config.invocation_timeout.as_millis() / EPOCH_TICK_INTERVAL.as_millis()).max(1)
+                as u64,
+        );
+        let mut linker = Linker::new(&self.engine);
+        host_connector::CatalogExtensionOperation::add_to_linker::<
+            OperationState,
+            HasSelf<OperationState>,
+        >(&mut linker, |state| state)
+        .map_err(|error| ExtensionRuntimeError::Runtime(error.to_string()))?;
+        let bindings = host_connector::CatalogExtensionOperation::instantiate_async(
+            &mut store, &component, &linker,
+        )
+        .await
+        .map_err(|e| ExtensionRuntimeError::Runtime(e.to_string()))?;
+        let operations = bindings.catalog_host_operations();
+        if cancelling {
+            operations
+                .call_cancel(&mut store, &request)
+                .await
+                .map_err(|e| ExtensionRuntimeError::Runtime(e.to_string()))?
+                .map_err(ExtensionRuntimeError::Runtime)?;
+            return Ok((checkpoint.clone(), json!({"cancelled":true}), true));
+        }
+        if !lifecycle_started {
+            operations
+                .call_prepare(&mut store, &request)
+                .await
+                .map_err(|e| ExtensionRuntimeError::Runtime(e.to_string()))?
+                .map_err(ExtensionRuntimeError::Runtime)?;
+            operations
+                .call_start(&mut store, &request)
+                .await
+                .map_err(|e| ExtensionRuntimeError::Runtime(e.to_string()))?
+                .map_err(ExtensionRuntimeError::Runtime)?;
+        }
+        let result = operations
+            .call_process_batch(&mut store, &request)
+            .await
+            .map_err(|e| ExtensionRuntimeError::Runtime(e.to_string()))?
+            .map_err(ExtensionRuntimeError::Runtime)?;
+        let next: Value = serde_json::from_str(&result.checkpoint).map_err(|_| {
+            ExtensionRuntimeError::Runtime("operation returned invalid checkpoint".into())
+        })?;
+        let progress: Value = serde_json::from_str(&result.progress).map_err(|_| {
+            ExtensionRuntimeError::Runtime("operation returned invalid progress".into())
+        })?;
+        if !next.is_object()
+            || !progress.is_object()
+            || serde_json::to_vec(&next).map_or(true, |v| v.len() > MAX_HOST_JSON_BYTES)
+            || serde_json::to_vec(&next).map_or(true, |v| v.len() > max_checkpoint_bytes as usize)
+            || serde_json::to_vec(&progress).map_or(true, |v| v.len() > MAX_HOST_JSON_BYTES)
+        {
+            return Err(ExtensionRuntimeError::Runtime(
+                "operation returned oversized or non-object checkpoint".into(),
+            ));
+        }
+        let checkpoint_request =
+            host_connector::exports::catalog::host::operations::OperationRequest {
                 checkpoint: result.checkpoint,
                 ..request
             };
@@ -599,6 +749,7 @@ struct OperationState {
     repository: CatalogRepository,
     object_store: Arc<dyn ObjectStore>,
     run_id: Uuid,
+    batch_key: String,
     artifacts: ResourceTable,
 }
 
@@ -618,8 +769,14 @@ impl OperationState {
             repository,
             object_store,
             run_id,
+            batch_key: String::new(),
             artifacts: ResourceTable::new(),
         }
+    }
+
+    fn with_batch_key(mut self, batch_key: &str) -> Self {
+        self.batch_key = batch_key.to_owned();
+        self
     }
 
     fn require(&self, capability: &str) -> Result<(), String> {
@@ -647,12 +804,16 @@ async fn ensure_operation_artifact_access(
     repository: CatalogRepository,
     extension_id: String,
     release_id: Uuid,
+    capability: &str,
 ) -> Result<(), String> {
-    repository
+    let installation = repository
         .runtime_extension_installation(&extension_id, release_id)
         .await
         .map_err(|_| "extension authorization could not be checked")?
         .ok_or_else(|| "extension invocation is no longer authorized".to_owned())?;
+    if !installation.capability_grants.contains(capability) {
+        return Err(format!("missing capability '{capability}'"));
+    }
     Ok(())
 }
 
@@ -1479,6 +1640,7 @@ impl TaskHandler for ExtensionOperationTaskHandler {
                 code: "workspace",
                 message: e.to_string(),
             })?;
+        let repository = repository.for_extension_operation_task(&task);
         // Abandoned streams are temporary only. Completed artifacts are never
         // selected by this cleanup path and therefore remain immutable.
         for key in repository
@@ -1489,7 +1651,11 @@ impl TaskHandler for ExtensionOperationTaskHandler {
                 message: error.to_string(),
             })?
         {
-            let _ = self.runtime.object_store.delete(&key).await;
+            if self.runtime.object_store.delete(&key).await.is_ok() {
+                let _ = repository
+                    .confirm_extension_operation_object_deletion(&key)
+                    .await;
+            }
         }
         let Some(run) = repository
             .begin_extension_operation_task(&task)
@@ -1535,6 +1701,7 @@ impl TaskHandler for ExtensionOperationTaskHandler {
         let (checkpoint, progress, done) = match self
             .runtime
             .invoke_operation_batch(
+                &run.abi_version,
                 &installation,
                 repository.clone(),
                 run.id,
@@ -1583,6 +1750,7 @@ impl TaskHandler for ExtensionOperationTaskHandler {
             if !cancellation_requested {
                 self.runtime
                     .invoke_operation_batch(
+                        &run.abi_version,
                         &installation,
                         repository.clone(),
                         run.id,
@@ -1775,6 +1943,7 @@ impl TaskHandler for WasmExtensionTaskHandler {
 /// versions; execution is exclusively owned by `WasmExtensionTaskHandler`.
 pub fn start_event_delivery_coordinator(
     repository: CatalogRepository,
+    object_store: Arc<dyn ObjectStore>,
     mut shutdown: watch::Receiver<()>,
 ) -> tokio::task::JoinHandle<()> {
     tokio::spawn(async move {
@@ -1785,7 +1954,19 @@ pub fn start_event_delivery_coordinator(
                     // Incomplete operation output has no committed object key;
                     // this periodic lifecycle sweep makes interrupted streams
                     // unavailable even when no subsequent operation task runs.
+                    scoped.expire_extension_operation_storage().await?;
                     scoped.abort_stale_extension_operation_artifacts().await?;
+                    for key in scoped
+                        .pending_extension_operation_object_deletions()
+                        .await?
+                    {
+                        if object_store.delete(&key).await.is_ok() {
+                            scoped
+                                .confirm_extension_operation_object_deletion(&key)
+                                .await?;
+                        }
+                    }
+                    scoped.produce_due_extension_operation_schedules().await?;
                     scoped
                         .ensure_event_consumer("catalog.extensions.wasm", &[])
                         .await?;
@@ -1817,7 +1998,8 @@ mod tests {
 
     use super::{
         MAX_ARTIFACT_CHUNK_BYTES, NETWORK_RATE_LIMIT, allow_network_request, host_v11,
-        parse_bounded_json, to_configuration_scope, uses_v11, valid_secret_name,
+        parse_bounded_json, require_operation_batch_key, to_configuration_scope, transfer_url,
+        uses_v11, valid_secret_name,
     };
 
     #[test]
@@ -1825,6 +2007,27 @@ mod tests {
         assert!(!uses_v11("^1.0"));
         assert!(uses_v11(">=1.1.0, <2.0.0"));
         assert!(!uses_v11(">=1.0.0, <2.0.0"));
+    }
+
+    #[test]
+    fn bulk_transfer_denies_plaintext_urls_credentials_and_queries() {
+        assert!(transfer_url("https://example.com/v1/data").is_ok());
+        for url in [
+            "http://example.com/v1/data",
+            "https://user:pass@example.com/v1/",
+            "https://example.com/v1/?secret=x",
+            "https://example.com/v1/#fragment",
+        ] {
+            assert!(transfer_url(url).is_err());
+        }
+    }
+
+    #[test]
+    fn connector_batches_must_use_the_current_durable_key() {
+        assert!(require_operation_batch_key("run:0", "run:0").is_ok());
+        assert!(require_operation_batch_key("run:1", "run:0").is_err());
+        assert!(require_operation_batch_key("other:0", "run:0").is_err());
+        assert!(require_operation_batch_key("", "").is_err());
     }
 
     #[test]
@@ -1877,7 +2080,8 @@ impl host_operations::catalog::host::artifacts::Host for OperationState {
         artifact_id: String,
     ) -> Result<Resource<InputArtifactStream>, String> {
         let (repository, extension_id, release_id) = self.artifact_access("artifacts.read")?;
-        ensure_operation_artifact_access(repository, extension_id, release_id).await?;
+        ensure_operation_artifact_access(repository, extension_id, release_id, "artifacts.read")
+            .await?;
         let artifact = self
             .repository
             .extension_operation_input_artifact(
@@ -1901,7 +2105,8 @@ impl host_operations::catalog::host::artifacts::Host for OperationState {
         handle: Resource<InputArtifactStream>,
     ) -> Result<host_operations::catalog::host::artifacts::InputMetadata, String> {
         let (repository, extension_id, release_id) = self.artifact_access("artifacts.read")?;
-        ensure_operation_artifact_access(repository, extension_id, release_id).await?;
+        ensure_operation_artifact_access(repository, extension_id, release_id, "artifacts.read")
+            .await?;
         let artifact = self
             .artifacts
             .get(&handle)
@@ -1923,7 +2128,8 @@ impl host_operations::catalog::host::artifacts::Host for OperationState {
         max_bytes: u32,
     ) -> Result<Vec<u8>, String> {
         let (repository, extension_id, release_id) = self.artifact_access("artifacts.read")?;
-        ensure_operation_artifact_access(repository, extension_id, release_id).await?;
+        ensure_operation_artifact_access(repository, extension_id, release_id, "artifacts.read")
+            .await?;
         let max_bytes =
             usize::try_from(max_bytes).map_err(|_| "invalid artifact chunk".to_owned())?;
         if max_bytes == 0 || max_bytes > MAX_ARTIFACT_CHUNK_BYTES {
@@ -1969,7 +2175,8 @@ impl host_operations::catalog::host::artifacts::Host for OperationState {
         media_type: String,
     ) -> Result<Resource<OutputArtifactStream>, String> {
         let (repository, extension_id, release_id) = self.artifact_access("artifacts.write")?;
-        ensure_operation_artifact_access(repository, extension_id, release_id).await?;
+        ensure_operation_artifact_access(repository, extension_id, release_id, "artifacts.write")
+            .await?;
         let artifact = self
             .repository
             .create_extension_operation_output_artifact(
@@ -1997,7 +2204,8 @@ impl host_operations::catalog::host::artifacts::Host for OperationState {
         bytes: Vec<u8>,
     ) -> Result<(), String> {
         let (repository, extension_id, release_id) = self.artifact_access("artifacts.write")?;
-        ensure_operation_artifact_access(repository, extension_id, release_id).await?;
+        ensure_operation_artifact_access(repository, extension_id, release_id, "artifacts.write")
+            .await?;
         if bytes.is_empty() || bytes.len() > MAX_ARTIFACT_CHUNK_BYTES {
             return Err("artifact write chunk exceeds limit".into());
         }
@@ -2034,7 +2242,8 @@ impl host_operations::catalog::host::artifacts::Host for OperationState {
         checksum_sha256: String,
     ) -> Result<host_operations::catalog::host::artifacts::OutputMetadata, String> {
         let (repository, extension_id, release_id) = self.artifact_access("artifacts.write")?;
-        ensure_operation_artifact_access(repository, extension_id, release_id).await?;
+        ensure_operation_artifact_access(repository, extension_id, release_id, "artifacts.write")
+            .await?;
         let output = self
             .artifacts
             .delete(handle)
@@ -2094,7 +2303,8 @@ impl host_operations::catalog::host::artifacts::Host for OperationState {
 
     async fn abort(&mut self, handle: Resource<OutputArtifactStream>) -> Result<(), String> {
         let (repository, extension_id, release_id) = self.artifact_access("artifacts.write")?;
-        ensure_operation_artifact_access(repository, extension_id, release_id).await?;
+        ensure_operation_artifact_access(repository, extension_id, release_id, "artifacts.write")
+            .await?;
         let output = self
             .artifacts
             .delete(handle)
@@ -2116,6 +2326,1044 @@ impl host_operations::catalog::host::artifacts::HostInputArtifact for OperationS
 }
 
 impl host_operations::catalog::host::artifacts::HostOutputArtifact for OperationState {
+    async fn drop(&mut self, handle: Resource<OutputArtifactStream>) -> wasmtime::Result<()> {
+        if let Ok(output) = self.artifacts.delete(handle) {
+            // Resource destruction is the normal trap/unwind cleanup path.
+            // It must terminalize the durable record immediately rather than
+            // relying solely on the periodic abandoned-stream sweep.
+            let _ = self
+                .repository
+                .abort_extension_operation_artifact(output.artifact.id, self.run_id)
+                .await;
+            let _ = std::fs::remove_file(&output.path);
+        }
+        Ok(())
+    }
+}
+
+fn require_operation_batch_key(supplied: &str, current: &str) -> Result<(), String> {
+    if supplied != current || current.is_empty() {
+        return Err("batch key must match the current operation batch".into());
+    }
+    Ok(())
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct ConnectorUpsertBatch {
+    blueprint_id: Uuid,
+    blueprint_version: u64,
+    context_id: Uuid,
+    run_id: Uuid,
+    batch_key: String,
+    intents: Vec<ConnectorUpsertIntent>,
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct ConnectorUpsertIntent {
+    row: u64,
+    business_key: String,
+    key: String,
+    values: HashMap<String, Value>,
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct TransferFetch {
+    host_permission_id: String,
+    url: String,
+    transfer_key: String,
+    offset: u64,
+    max_bytes: u32,
+    #[serde(default)]
+    etag: Option<String>,
+    #[serde(default)]
+    secret_headers: Vec<SecretHeader>,
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct TransferDelivery {
+    host_permission_id: String,
+    url: String,
+    method: String,
+    artifact_id: Uuid,
+    delivery_key: String,
+    #[serde(default)]
+    secret_headers: Vec<SecretHeader>,
+}
+
+fn transfer_url(raw: &str) -> Result<Url, String> {
+    let url = Url::parse(raw).map_err(|_| "invalid HTTPS URL")?;
+    if url.scheme() != "https"
+        || url.query().is_some()
+        || url.fragment().is_some()
+        || url.username() != ""
+        || url.password().is_some()
+    {
+        return Err("only query-free HTTPS destinations are allowed".into());
+    }
+    Ok(url)
+}
+
+fn transfer_key_valid(key: &str) -> bool {
+    !key.is_empty() && key.len() <= 128 && key.is_ascii()
+}
+
+impl OperationState {
+    /// Same DNS pinning, no-proxy, TLS and no-redirect policy as network.request,
+    /// but without copying file content into JSON or exposing a socket to WASM.
+    async fn transfer_client(
+        host: &HostState,
+        permission: &str,
+        method: &str,
+        raw_url: &str,
+        secrets: &[SecretHeader],
+    ) -> Result<(Client, Url, reqwest::header::HeaderMap, u64), String> {
+        let url = transfer_url(raw_url)?;
+        let rule = host
+            .installation
+            .manifest
+            .host_permissions
+            .iter()
+            .chain(host.installation.manifest.optional_host_permissions.iter())
+            .find(|r| {
+                r.id == permission
+                    && r.max_transfer_bytes > 0
+                    && host.installation.host_permission_grants.contains(&r.id)
+                    && r.allows_request(&url, method)
+            })
+            .ok_or_else(|| "destination is not granted for bulk transfer".to_owned())?;
+        if method == "POST" && !rule.idempotent_delivery {
+            return Err(
+                "POST bulk delivery requires an explicit idempotent destination declaration".into(),
+            );
+        }
+        if !allow_network_request(
+            host.installation.installed_release_id,
+            &host.installation.extension_id,
+        ) {
+            return Err("network request rate limit exceeded".into());
+        }
+        let address = url.host_str().ok_or("HTTPS URL needs a host")?;
+        let port = url
+            .port_or_known_default()
+            .ok_or("HTTPS URL needs a port")?;
+        let resolved: Vec<_> = tokio::time::timeout(
+            Duration::from_millis(rule.timeout_ms),
+            tokio::net::lookup_host((address, port)),
+        )
+        .await
+        .map_err(|_| "destination DNS lookup timed out")?
+        .map_err(|_| "destination DNS lookup failed")?
+        .collect();
+        if resolved.is_empty()
+            || resolved.iter().any(|addr: &std::net::SocketAddr| {
+                !catalog_extension_manifest::extensions::is_public_destination(addr.ip())
+            })
+        {
+            return Err("destination resolves to an unsafe address".into());
+        }
+        let mut headers = reqwest::header::HeaderMap::new();
+        if secrets.len() > 4 {
+            return Err("too many secret headers".into());
+        }
+        for secret in secrets {
+            valid_secret_name(&secret.secret)?;
+            let name = reqwest::header::HeaderName::from_bytes(secret.header.as_bytes())
+                .map_err(|_| "invalid secret header")?;
+            if matches!(
+                name.as_str(),
+                "host"
+                    | "content-length"
+                    | "connection"
+                    | "transfer-encoding"
+                    | "range"
+                    | "if-match"
+                    | "idempotency-key"
+            ) || secret.prefix.len() > 512
+                || headers.contains_key(&name)
+            {
+                return Err("unsafe secret header".into());
+            }
+            let value = host
+                .repository
+                .workspace_extension_secret_value(&secret.secret)
+                .await
+                .map_err(|_| "secret lookup failed")?
+                .ok_or("secret reference unavailable")?;
+            headers.insert(
+                name,
+                reqwest::header::HeaderValue::from_str(&(secret.prefix.clone() + &value))
+                    .map_err(|_| "invalid secret header value")?,
+            );
+        }
+        let client = Client::builder()
+            .no_proxy()
+            .redirect(Policy::none())
+            .https_only(true)
+            .resolve_to_addrs(address, &resolved)
+            .connect_timeout(Duration::from_millis(rule.timeout_ms))
+            .timeout(Duration::from_millis(rule.timeout_ms))
+            .build()
+            .map_err(|_| "network client unavailable")?;
+        Ok((client, url, headers, rule.max_transfer_bytes))
+    }
+}
+
+impl host_connector::catalog::host::transfer::Host for OperationState {
+    async fn fetch_input(&mut self, request: String) -> Result<String, String> {
+        let input: TransferFetch = parse_host_request(&request, "transfer request")?;
+        if !transfer_key_valid(&input.transfer_key)
+            || input.max_bytes == 0
+            || input.max_bytes > 16 * 1024 * 1024
+            || input
+                .offset
+                .checked_add(u64::from(input.max_bytes))
+                .is_none()
+        {
+            return Err("invalid bounded transfer range".into());
+        }
+        if input.offset > 0 && input.etag.is_none() {
+            return Err("resumed input requires an ETag".into());
+        }
+        let mut host = HostState::new(self.installation.clone(), self.repository.clone(), 0);
+        host.require_active("network.request").await?;
+        let (client, url, mut headers, grant_bytes) = Self::transfer_client(
+            &host,
+            &input.host_permission_id,
+            "GET",
+            &input.url,
+            &input.secret_headers,
+        )
+        .await?;
+        if u64::from(input.max_bytes) > grant_bytes {
+            return Err("range exceeds granted bulk transfer limit".into());
+        }
+        let digest = format!("{:x}", Sha256::digest(request.as_bytes()));
+        if let Some((id, etag)) = self
+            .repository
+            .previous_extension_http_input(self.run_id, &input.transfer_key, &digest)
+            .await
+            .map_err(|error| error.to_string())?
+        {
+            return bounded_serialize(&json!({"artifact_id":id,"etag":etag,"replayed":true}));
+        }
+        let end = input.offset + u64::from(input.max_bytes) - 1;
+        headers.insert(
+            reqwest::header::ACCEPT_ENCODING,
+            reqwest::header::HeaderValue::from_static("identity"),
+        );
+        headers.insert(
+            reqwest::header::RANGE,
+            reqwest::header::HeaderValue::from_str(&format!("bytes={}-{}", input.offset, end))
+                .map_err(|_| "invalid range")?,
+        );
+        if let Some(etag) = &input.etag {
+            if etag.len() > 256 {
+                return Err("ETag is too long".into());
+            }
+            headers.insert(
+                reqwest::header::IF_MATCH,
+                reqwest::header::HeaderValue::from_str(etag).map_err(|_| "invalid ETag")?,
+            );
+        }
+        let response = client
+            .get(url)
+            .headers(headers)
+            .send()
+            .await
+            .map_err(|_| "source transfer failed")?;
+        if response.status().is_redirection() {
+            return Err("redirect responses are denied".into());
+        }
+        let status = response.status().as_u16();
+        if response
+            .headers()
+            .get(reqwest::header::CONTENT_ENCODING)
+            .is_some_and(|v| v != "identity")
+        {
+            return Err("compressed range responses are not supported".into());
+        }
+        if status != 200 && status != 206 {
+            return Err(format!("source returned HTTP {status}"));
+        }
+        if input.offset > 0 && status != 206 {
+            return Err("source ignored range request".into());
+        }
+        if status == 206 {
+            let expected = format!("bytes {}-", input.offset);
+            if !response
+                .headers()
+                .get(reqwest::header::CONTENT_RANGE)
+                .and_then(|v| v.to_str().ok())
+                .is_some_and(|v| v.starts_with(&expected))
+            {
+                return Err("source returned a mismatched range".into());
+            }
+        }
+        let etag = response
+            .headers()
+            .get(reqwest::header::ETAG)
+            .and_then(|v| v.to_str().ok())
+            .filter(|v| v.len() <= 256)
+            .map(str::to_owned);
+        if input
+            .etag
+            .as_deref()
+            .is_some_and(|expected| etag.as_deref() != Some(expected))
+        {
+            return Err("source identity changed".into());
+        }
+        if response
+            .content_length()
+            .is_some_and(|v| v > u64::from(input.max_bytes))
+        {
+            return Err("source range exceeds limit".into());
+        }
+        let media = response
+            .headers()
+            .get(reqwest::header::CONTENT_TYPE)
+            .and_then(|v| v.to_str().ok())
+            .filter(|v| !v.is_empty() && v.len() <= 255 && v.is_ascii())
+            .unwrap_or("application/octet-stream")
+            .to_owned();
+        let artifact = self
+            .repository
+            .begin_extension_http_input(
+                self.run_id,
+                &host.installation.extension_id,
+                host.installation.installed_release_id,
+                i64::from(input.max_bytes),
+                &media,
+            )
+            .await
+            .map_err(|error| error.to_string())?;
+        let path = std::env::temp_dir().join(format!("catalog-http-input-{}", artifact.id));
+        let result = async {
+            let mut file = File::create(&path).map_err(|_| "temporary transfer unavailable".to_owned())?;
+            let mut hash = Sha256::new();
+            let mut length = 0usize;
+            let mut stream = response.bytes_stream();
+            while let Some(chunk) = stream.next().await {
+                let chunk = chunk.map_err(|_| "source transfer interrupted".to_owned())?;
+                length = length.checked_add(chunk.len()).ok_or("source range exceeds limit")?;
+                if length > input.max_bytes as usize { return Err("source range exceeds limit".into()); }
+                file.write_all(&chunk).map_err(|_| "temporary transfer unavailable".to_owned())?;
+                hash.update(&chunk);
+            }
+            drop(file);
+            if length == 0 { return Err("source returned an empty range".into()); }
+            let object_key = artifact.object_key.as_deref().ok_or("source artifact has no key")?;
+            self.object_store.put_file(object_key, &path, Some(&media)).await.map_err(|_| "transfer storage unavailable".to_owned())?;
+            self.repository.complete_extension_http_input(artifact.id, self.run_id, &input.transfer_key, &digest, etag.as_deref(), length as i64, &format!("{:x}",hash.finalize())).await
+                .map_err(|error| error.to_string())?;
+            bounded_serialize(&json!({"artifact_id":artifact.id,"etag":etag,"offset":input.offset,"length":length,"replayed":false}))
+        }.await;
+        let _ = std::fs::remove_file(&path);
+        if result.is_err() {
+            let _ = self
+                .repository
+                .abort_extension_http_input(artifact.id, self.run_id)
+                .await;
+            if let Some(key) = &artifact.object_key {
+                let _ = self.object_store.delete(key).await;
+            }
+        }
+        result
+    }
+
+    async fn deliver_output(&mut self, request: String) -> Result<String, String> {
+        let input: TransferDelivery = parse_host_request(&request, "delivery request")?;
+        if !transfer_key_valid(&input.delivery_key)
+            || !matches!(input.method.as_str(), "PUT" | "POST")
+        {
+            return Err("invalid delivery method or key".into());
+        }
+        let mut host = HostState::new(self.installation.clone(), self.repository.clone(), 0);
+        host.require_active("network.request").await?;
+        let (client, url, mut headers, max_bytes) = Self::transfer_client(
+            &host,
+            &input.host_permission_id,
+            &input.method,
+            &input.url,
+            &input.secret_headers,
+        )
+        .await?;
+        let artifact = self
+            .repository
+            .extension_output_artifact(self.run_id, input.artifact_id)
+            .await
+            .map_err(|_| "output is not authorized")?;
+        if artifact.state != "completed"
+            || artifact.content_length <= 0
+            || artifact.content_length as u64 > max_bytes
+        {
+            return Err("output exceeds granted delivery limit or is not finalized".into());
+        }
+        let digest = format!(
+            "{:x}",
+            Sha256::digest(
+                format!(
+                    "{}:{}:{}:{}",
+                    input.host_permission_id, input.url, input.method, input.artifact_id
+                )
+                .as_bytes()
+            )
+        );
+        let attempt = self
+            .repository
+            .begin_extension_http_delivery(
+                self.run_id,
+                &input.delivery_key,
+                input.artifact_id,
+                &digest,
+            )
+            .await
+            .map_err(|error| error.to_string())?;
+        let id = match attempt {
+            DeliveryState::Succeeded(status) => {
+                return bounded_serialize(&json!({"outcome":"succeeded","status":status}));
+            }
+            DeliveryState::Failed(status) => {
+                return bounded_serialize(&json!({"outcome":"failed","status":status}));
+            }
+            DeliveryState::Uncertain => return bounded_serialize(&json!({"outcome":"uncertain"})),
+            DeliveryState::Send(id) => id,
+        };
+        // Once the durable uncertain marker exists we must not resend on any
+        // failure path, including a process crash before the HTTP request.
+        let idempotency = format!("{}:{}", self.run_id, input.delivery_key);
+        headers.insert(
+            "idempotency-key",
+            reqwest::header::HeaderValue::from_str(&idempotency)
+                .map_err(|_| "invalid delivery key")?,
+        );
+        let object_key = artifact.object_key.ok_or("output object unavailable")?;
+        let stream = self
+            .object_store
+            .get_stream(&object_key)
+            .await
+            .map_err(|_| "output storage unavailable")?;
+        let method =
+            Method::from_bytes(input.method.as_bytes()).map_err(|_| "invalid delivery method")?;
+        let response = client
+            .request(method, url)
+            .headers(headers)
+            .header(reqwest::header::CONTENT_TYPE, artifact.media_type)
+            .header(reqwest::header::CONTENT_LENGTH, artifact.content_length)
+            .body(reqwest::Body::wrap_stream(stream.stream))
+            .send()
+            .await;
+        let Ok(response) = response else {
+            return bounded_serialize(&json!({"outcome":"uncertain"}));
+        };
+        if response.status().is_redirection() {
+            return bounded_serialize(&json!({"outcome":"uncertain"}));
+        }
+        let status = response.status().as_u16();
+        self.repository
+            .complete_extension_http_delivery(id, status)
+            .await
+            .map_err(|_| "delivery confirmation could not be persisted")?;
+        bounded_serialize(
+            &json!({"outcome": if (200..300).contains(&status) { "succeeded" } else { "failed" },"status":status}),
+        )
+    }
+}
+
+impl host_connector::catalog::host::catalog::Host for OperationState {
+    async fn schema(
+        &mut self,
+        blueprint_id: String,
+        blueprint_version: u64,
+        context_id: String,
+    ) -> Result<String, String> {
+        let mut host = HostState::new(self.installation.clone(), self.repository.clone(), 0);
+        host.require_active("catalog.read").await?;
+        let blueprint = parse_uuid(&blueprint_id, "blueprint ID")?;
+        let version = i64::try_from(blueprint_version).map_err(|_| "invalid blueprint version")?;
+        let context = parse_uuid(&context_id, "context ID")?;
+        host.repository
+            .get_context_by_id(context)
+            .await
+            .map_err(|error| error.to_string())?
+            .ok_or_else(|| "context not found".to_owned())?;
+        host.repository
+            .get_blueprint_revision(blueprint, version)
+            .await
+            .map_err(|error| error.to_string())?
+            .ok_or_else(|| "blueprint revision not found".to_owned())?;
+        let attrs = host
+            .repository
+            .list_attributes(blueprint, version)
+            .await
+            .map_err(|error| error.to_string())?;
+        bounded_serialize(
+            &json!({"attributes": attrs.iter().map(|a| json!({"id":a.code,"kind":a.value_type})).collect::<Vec<_>>()}),
+        )
+    }
+
+    async fn page(
+        &mut self,
+        blueprint_id: String,
+        blueprint_version: u64,
+        context_id: String,
+        cursor: String,
+        limit: u32,
+    ) -> Result<String, String> {
+        let mut host = HostState::new(self.installation.clone(), self.repository.clone(), 0);
+        host.require_active("catalog.read").await?;
+        // Keep results within the WIT JSON bound even for wide blueprints.
+        if limit == 0 || limit > 16 {
+            return Err("connector page limit must be 1-16".into());
+        }
+        let blueprint = parse_uuid(&blueprint_id, "blueprint ID")?;
+        let version = i64::try_from(blueprint_version).map_err(|_| "invalid blueprint version")?;
+        let context = parse_uuid(&context_id, "context ID")?;
+        let page = host
+            .repository
+            .extension_catalog_page(ExtensionCatalogPageRequest {
+                blueprint_id: blueprint,
+                blueprint_version: version,
+                context_id: Some(context),
+                publication_context_id: None,
+                cursor: (!cursor.is_empty()).then_some(cursor),
+                limit,
+            })
+            .await
+            .map_err(|error| error.to_string())?;
+        let attributes = host
+            .repository
+            .list_attributes(blueprint, version)
+            .await
+            .map_err(|error| error.to_string())?;
+        let mut rows = Vec::with_capacity(page.entities.len());
+        for entity in page.entities {
+            let mut row = serde_json::Map::new();
+            for value in host
+                .repository
+                .extension_catalog_values_at(entity.id, page.snapshot_at)
+                .await
+                .map_err(|error| error.to_string())?
+            {
+                if value.context_id == Some(context) {
+                    if let Some(attribute) = attributes
+                        .iter()
+                        .find(|attribute| attribute.id == value.attribute_id)
+                    {
+                        row.insert(attribute.code.clone(), value.value);
+                    }
+                }
+            }
+            rows.push(row);
+        }
+        bounded_serialize(&json!({"rows":rows,"next_cursor":page.next_cursor}))
+    }
+
+    async fn upsert_batch(&mut self, request: String) -> Result<(), String> {
+        if request.len() > MAX_HOST_JSON_BYTES {
+            return Err("request exceeds host JSON limit".into());
+        }
+        let input: ConnectorUpsertBatch = parse_storage_request(&request)?;
+        require_operation_batch_key(&input.batch_key, &self.batch_key)?;
+        if input.run_id != self.run_id {
+            return Err("batch run ID does not match".into());
+        }
+        if input.intents.is_empty() || input.intents.len() > 100 {
+            return Err("batch must contain 1-100 intents".into());
+        }
+        let mut host = HostState::new(self.installation.clone(), self.repository.clone(), 0);
+        host.require_active("catalog.write").await?;
+        let version =
+            i64::try_from(input.blueprint_version).map_err(|_| "invalid blueprint version")?;
+        let attrs = host
+            .repository
+            .list_attributes(input.blueprint_id, version)
+            .await
+            .map_err(|error| error.to_string())?;
+        let mut intents = Vec::with_capacity(input.intents.len());
+        for row in input.intents {
+            let lookup = attrs
+                .iter()
+                .find(|a| a.code == row.business_key && !a.readonly)
+                .ok_or_else(|| "business key attribute is not writable".to_owned())?;
+            if row.values.get(&row.business_key) != Some(&Value::String(row.key.clone())) {
+                return Err("business key value does not match the lookup value".into());
+            }
+            if row.key.is_empty() || row.key.len() > 512 || row.values.len() > 128 {
+                return Err("invalid bounded upsert row".into());
+            }
+            let mut values = Vec::with_capacity(row.values.len());
+            for (code, value) in row.values {
+                if !attrs.iter().any(|a| a.code == code && !a.readonly) {
+                    return Err("upsert attribute is not writable".into());
+                }
+                values.push(NewAttributeValue::Scalar {
+                    attribute_id: None,
+                    attribute_code: Some(code),
+                    context_id: Some(input.context_id),
+                    value,
+                });
+            }
+            intents.push(ExtensionCatalogIntent::Upsert {
+                intent_key: row.row.to_string(),
+                blueprint_id: input.blueprint_id,
+                blueprint_version: version,
+                lookup_attribute_id: lookup.id,
+                lookup_value: row.key,
+                values,
+                relationships: Vec::new(),
+                system_tags: Vec::new(),
+                system_metadata: json!({}),
+            });
+        }
+        let repository = host
+            .repository
+            .for_extension(&host.installation.extension_id);
+        let outcomes = CatalogMutationService::new(&repository)
+            .execute_extension_catalog_batch(ExtensionCatalogBatch {
+                batch_key: input.batch_key,
+                dry_run: false,
+                intents,
+            })
+            .await
+            .map_err(|error| error.to_string())?;
+        if outcomes.iter().any(|outcome| outcome.error.is_some()) {
+            return Err("one or more catalog intents were rejected".into());
+        }
+        Ok(())
+    }
+}
+
+impl host_connector::catalog::host::catalog_data::Host for OperationState {
+    async fn read(&mut self, request: String) -> Result<String, String> {
+        if request.len() > MAX_HOST_JSON_BYTES {
+            return Err("request exceeds host JSON limit".into());
+        }
+        let mut host = HostState::new(self.installation.clone(), self.repository.clone(), 0);
+        host.require_active("catalog.read").await?;
+        host.catalog_read_call(&request).await
+    }
+
+    async fn batch(&mut self, request: String) -> Result<String, String> {
+        if request.len() > MAX_HOST_JSON_BYTES {
+            return Err("request exceeds host JSON limit".into());
+        }
+        let input: CatalogCommandRequest = parse_storage_request(&request)?;
+        let CatalogCommandRequest::Batch { batch } = input;
+        require_operation_batch_key(&batch.batch_key, &self.batch_key)?;
+        let mut host = HostState::new(self.installation.clone(), self.repository.clone(), 0);
+        host.require_active("catalog.write").await?;
+        let repository = host
+            .repository
+            .for_extension(&host.installation.extension_id);
+        let outcomes = CatalogMutationService::new(&repository)
+            .execute_extension_catalog_batch(batch)
+            .await
+            .map_err(|error| error.to_string())?;
+        bounded_serialize(&outcomes)
+    }
+}
+
+impl host_connector::catalog::host::artifacts::Host for OperationState {
+    async fn append_output(
+        &mut self,
+        name: String,
+        media_type: String,
+        batch_key: String,
+        bytes: Vec<u8>,
+    ) -> Result<(), String> {
+        let (repository, extension_id, release_id) = self.artifact_access("artifacts.write")?;
+        ensure_operation_artifact_access(repository, extension_id, release_id, "artifacts.write")
+            .await?;
+        require_operation_batch_key(&batch_key, &self.batch_key)?;
+        let hash = format!("{:x}", Sha256::digest(&bytes));
+        let chunk = self
+            .repository
+            .reserve_extension_output_chunk(
+                self.run_id,
+                &name,
+                &media_type,
+                &batch_key,
+                bytes.len(),
+                &hash,
+            )
+            .await
+            .map_err(|error| error.to_string())?;
+        if !chunk.uploaded {
+            self.object_store
+                .put(
+                    &chunk.key,
+                    StoredObject {
+                        bytes: bytes.into(),
+                        content_type: Some(media_type),
+                    },
+                )
+                .await
+                .map_err(|_| "output staging storage is unavailable".to_owned())?;
+            self.repository
+                .confirm_extension_output_chunk(chunk.id, self.run_id)
+                .await
+                .map_err(|error| error.to_string())?;
+        }
+        Ok(())
+    }
+
+    async fn finalize_output(&mut self, name: String) -> Result<String, String> {
+        let (repository, extension_id, release_id) = self.artifact_access("artifacts.write")?;
+        ensure_operation_artifact_access(repository, extension_id, release_id, "artifacts.write")
+            .await?;
+        let (media_type, existing, chunks) = self
+            .repository
+            .extension_output_chunks(self.run_id, &name)
+            .await
+            .map_err(|error| error.to_string())?;
+        if chunks.is_empty() {
+            return Err("output contains no chunks".into());
+        }
+        let artifact = match existing {
+            Some(id) => self
+                .repository
+                .extension_output_artifact(self.run_id, id)
+                .await
+                .map_err(|error| error.to_string())?,
+            None => {
+                let artifact = self
+                    .repository
+                    .create_extension_operation_output_artifact(
+                        self.run_id,
+                        &self.installation.extension_id,
+                        self.installation.installed_release_id,
+                        &media_type,
+                    )
+                    .await
+                    .map_err(|error| error.to_string())?;
+                let assigned = self
+                    .repository
+                    .set_extension_output_artifact(self.run_id, &name, artifact.id)
+                    .await
+                    .map_err(|error| error.to_string())?;
+                if assigned != artifact.id {
+                    let _ = self
+                        .repository
+                        .abort_extension_operation_artifact(artifact.id, self.run_id)
+                        .await;
+                    self.repository
+                        .extension_output_artifact(self.run_id, assigned)
+                        .await
+                        .map_err(|error| error.to_string())?
+                } else {
+                    artifact
+                }
+            }
+        };
+        if artifact.state == "completed" {
+            return Ok(artifact.id.to_string());
+        }
+        let path = std::env::temp_dir().join(format!("catalog-operation-finalize-{}", artifact.id));
+        let result = async {
+            let mut file =
+                File::create(&path).map_err(|_| "temporary output unavailable".to_owned())?;
+            let mut hasher = Sha256::new();
+            let mut length: i64 = 0;
+            for chunk in chunks {
+                let object = self
+                    .object_store
+                    .get(&chunk.object_key)
+                    .await
+                    .map_err(|_| "staged output unavailable".to_owned())?;
+                if object.bytes.len() != chunk.content_length as usize
+                    || format!("{:x}", Sha256::digest(&object.bytes)) != chunk.checksum_sha256
+                {
+                    return Err("staged output checksum mismatch".into());
+                }
+                length += chunk.content_length as i64;
+                if length > crate::repository::MAX_OPERATION_ARTIFACT_BYTES {
+                    return Err("output quota exhausted".into());
+                }
+                file.write_all(&object.bytes)
+                    .map_err(|_| "temporary output unavailable".to_owned())?;
+                hasher.update(&object.bytes);
+            }
+            drop(file);
+            if artifact.content_length == 0 {
+                self.repository
+                    .reserve_extension_operation_artifact_bytes(artifact.id, self.run_id, length)
+                    .await
+                    .map_err(|error| error.to_string())?;
+            } else if artifact.content_length != length {
+                return Err("output length changed across finalize retry".into());
+            }
+            let key = format!("extension-operation-artifacts/v1/{}", artifact.id);
+            self.object_store
+                .put_file(&key, &path, Some(&media_type))
+                .await
+                .map_err(|_| "output storage unavailable".to_owned())?;
+            let checksum = format!("{:x}", hasher.finalize());
+            self.repository
+                .complete_extension_operation_artifact(artifact.id, self.run_id, &checksum, &key)
+                .await
+                .map_err(|error| error.to_string())?;
+            Ok(artifact.id.to_string())
+        }
+        .await;
+        let _ = std::fs::remove_file(&path);
+        result
+    }
+
+    async fn open_input(
+        &mut self,
+        artifact_id: String,
+    ) -> Result<Resource<InputArtifactStream>, String> {
+        let (repository, extension_id, release_id) = self.artifact_access("artifacts.read")?;
+        ensure_operation_artifact_access(repository, extension_id, release_id, "artifacts.read")
+            .await?;
+        let artifact = self
+            .repository
+            .extension_operation_input_artifact(
+                self.run_id,
+                &self.installation.extension_id,
+                self.installation.installed_release_id,
+                &artifact_id,
+            )
+            .await
+            .map_err(|_| "operation input artifact is not authorized".to_owned())?;
+        self.artifacts
+            .push(InputArtifactStream {
+                artifact,
+                offset: 0,
+            })
+            .map_err(|_| "artifact handle limit reached".to_owned())
+    }
+
+    async fn describe_input(
+        &mut self,
+        handle: Resource<InputArtifactStream>,
+    ) -> Result<host_connector::catalog::host::artifacts::InputMetadata, String> {
+        let (repository, extension_id, release_id) = self.artifact_access("artifacts.read")?;
+        ensure_operation_artifact_access(repository, extension_id, release_id, "artifacts.read")
+            .await?;
+        let artifact = self
+            .artifacts
+            .get(&handle)
+            .map_err(|_| "invalid artifact handle".to_owned())?;
+        Ok(host_connector::catalog::host::artifacts::InputMetadata {
+            content_length: artifact.artifact.content_length as u64,
+            media_type: artifact.artifact.media_type.clone(),
+            checksum_sha256: artifact
+                .artifact
+                .checksum_sha256
+                .clone()
+                .unwrap_or_default(),
+        })
+    }
+
+    async fn read(
+        &mut self,
+        handle: Resource<InputArtifactStream>,
+        max_bytes: u32,
+    ) -> Result<Vec<u8>, String> {
+        let (repository, extension_id, release_id) = self.artifact_access("artifacts.read")?;
+        ensure_operation_artifact_access(repository, extension_id, release_id, "artifacts.read")
+            .await?;
+        let max_bytes =
+            usize::try_from(max_bytes).map_err(|_| "invalid artifact chunk".to_owned())?;
+        if max_bytes == 0 || max_bytes > MAX_ARTIFACT_CHUNK_BYTES {
+            return Err("artifact read chunk exceeds limit".into());
+        }
+        let (key, offset, length) = {
+            let stream = self
+                .artifacts
+                .get(&handle)
+                .map_err(|_| "invalid artifact handle".to_owned())?;
+            (
+                stream
+                    .artifact
+                    .object_key
+                    .clone()
+                    .ok_or_else(|| "artifact is unavailable".to_owned())?,
+                stream.offset,
+                stream.artifact.content_length,
+            )
+        };
+        if offset >= length {
+            return Ok(Vec::new());
+        }
+        let end = (offset + max_bytes as i64 - 1).min(length - 1);
+        let object = self
+            .object_store
+            .get_range(&key, Some(&format!("bytes={offset}-{end}")))
+            .await
+            .map_err(|_| "artifact storage is unavailable".to_owned())?;
+        if object.bytes.len() > max_bytes {
+            return Err("artifact storage returned oversized chunk".into());
+        }
+        let bytes = object.bytes.to_vec();
+        self.artifacts
+            .get_mut(&handle)
+            .map_err(|_| "invalid artifact handle".to_owned())?
+            .offset += bytes.len() as i64;
+        Ok(bytes)
+    }
+
+    async fn create_output(
+        &mut self,
+        media_type: String,
+    ) -> Result<Resource<OutputArtifactStream>, String> {
+        let (repository, extension_id, release_id) = self.artifact_access("artifacts.write")?;
+        ensure_operation_artifact_access(repository, extension_id, release_id, "artifacts.write")
+            .await?;
+        let artifact = self
+            .repository
+            .create_extension_operation_output_artifact(
+                self.run_id,
+                &self.installation.extension_id,
+                self.installation.installed_release_id,
+                &media_type,
+            )
+            .await
+            .map_err(|_| "operation artifact quota exhausted".to_owned())?;
+        let path = std::env::temp_dir().join(format!("catalog-operation-artifact-{}", artifact.id));
+        File::create(&path).map_err(|_| "temporary artifact storage is unavailable".to_owned())?;
+        self.artifacts
+            .push(OutputArtifactStream {
+                artifact,
+                path,
+                hasher: Sha256::new(),
+            })
+            .map_err(|_| "artifact handle limit reached".to_owned())
+    }
+
+    async fn write(
+        &mut self,
+        handle: Resource<OutputArtifactStream>,
+        bytes: Vec<u8>,
+    ) -> Result<(), String> {
+        let (repository, extension_id, release_id) = self.artifact_access("artifacts.write")?;
+        ensure_operation_artifact_access(repository, extension_id, release_id, "artifacts.write")
+            .await?;
+        if bytes.is_empty() || bytes.len() > MAX_ARTIFACT_CHUNK_BYTES {
+            return Err("artifact write chunk exceeds limit".into());
+        }
+        let artifact_id = self
+            .artifacts
+            .get(&handle)
+            .map_err(|_| "invalid artifact handle".to_owned())?
+            .artifact
+            .id;
+        self.repository
+            .reserve_extension_operation_artifact_bytes(
+                artifact_id,
+                self.run_id,
+                bytes.len() as i64,
+            )
+            .await
+            .map_err(|_| "operation artifact quota exhausted".to_owned())?;
+        let output = self
+            .artifacts
+            .get_mut(&handle)
+            .map_err(|_| "invalid artifact handle".to_owned())?;
+        OpenOptions::new()
+            .append(true)
+            .open(&output.path)
+            .and_then(|mut file| file.write_all(&bytes))
+            .map_err(|_| "temporary artifact storage is unavailable".to_owned())?;
+        output.hasher.update(&bytes);
+        Ok(())
+    }
+
+    async fn complete(
+        &mut self,
+        handle: Resource<OutputArtifactStream>,
+        checksum_sha256: String,
+    ) -> Result<host_connector::catalog::host::artifacts::OutputMetadata, String> {
+        let (repository, extension_id, release_id) = self.artifact_access("artifacts.write")?;
+        ensure_operation_artifact_access(repository, extension_id, release_id, "artifacts.write")
+            .await?;
+        let output = self
+            .artifacts
+            .delete(handle)
+            .map_err(|_| "invalid artifact handle".to_owned())?;
+        let actual = format!("{:x}", output.hasher.finalize());
+        if checksum_sha256 != actual {
+            let _ = self
+                .repository
+                .abort_extension_operation_artifact(output.artifact.id, self.run_id)
+                .await;
+            let _ = std::fs::remove_file(&output.path);
+            return Err("artifact checksum mismatch".into());
+        }
+        // The prefix is an immutable storage format contract. Future artifact
+        // layouts get a new version rather than changing how v1 objects read.
+        let key = format!("extension-operation-artifacts/v1/{}", output.artifact.id);
+        if self
+            .object_store
+            .put_file(&key, &output.path, Some(&output.artifact.media_type))
+            .await
+            .is_err()
+        {
+            let _ = self
+                .repository
+                .abort_extension_operation_artifact(output.artifact.id, self.run_id)
+                .await;
+            let _ = std::fs::remove_file(&output.path);
+            return Err("artifact storage is unavailable".into());
+        }
+        let artifact = match self
+            .repository
+            .complete_extension_operation_artifact(output.artifact.id, self.run_id, &actual, &key)
+            .await
+        {
+            Ok(artifact) => artifact,
+            Err(_) => {
+                // An object write can succeed before its database completion
+                // transaction. Delete that orphan before returning; the
+                // incomplete row is also terminalized so retry cannot expose it.
+                let _ = self.object_store.delete(&key).await;
+                let _ = self
+                    .repository
+                    .abort_extension_operation_artifact(output.artifact.id, self.run_id)
+                    .await;
+                let _ = std::fs::remove_file(&output.path);
+                return Err("operation output artifact is not completable".into());
+            }
+        };
+        let _ = std::fs::remove_file(&output.path);
+        Ok(host_connector::catalog::host::artifacts::OutputMetadata {
+            artifact_id: artifact.id.to_string(),
+            content_length: artifact.content_length as u64,
+            media_type: artifact.media_type,
+            checksum_sha256: actual,
+        })
+    }
+
+    async fn abort(&mut self, handle: Resource<OutputArtifactStream>) -> Result<(), String> {
+        let (repository, extension_id, release_id) = self.artifact_access("artifacts.write")?;
+        ensure_operation_artifact_access(repository, extension_id, release_id, "artifacts.write")
+            .await?;
+        let output = self
+            .artifacts
+            .delete(handle)
+            .map_err(|_| "invalid artifact handle".to_owned())?;
+        self.repository
+            .abort_extension_operation_artifact(output.artifact.id, self.run_id)
+            .await
+            .map_err(|_| "operation output artifact could not be aborted".to_owned())?;
+        let _ = std::fs::remove_file(&output.path);
+        Ok(())
+    }
+}
+
+impl host_connector::catalog::host::artifacts::HostInputArtifact for OperationState {
+    async fn drop(&mut self, handle: Resource<InputArtifactStream>) -> wasmtime::Result<()> {
+        self.artifacts.delete(handle)?;
+        Ok(())
+    }
+}
+
+impl host_connector::catalog::host::artifacts::HostOutputArtifact for OperationState {
     async fn drop(&mut self, handle: Resource<OutputArtifactStream>) -> wasmtime::Result<()> {
         if let Ok(output) = self.artifacts.delete(handle) {
             // Resource destruction is the normal trap/unwind cleanup path.

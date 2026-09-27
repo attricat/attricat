@@ -335,6 +335,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         .map_err(|error| format!("invalid event dispatcher configuration: {error}"))?;
     let extension_event_delivery_coordinator = extension_runtime::start_event_delivery_coordinator(
         task_repository.clone(),
+        object_store.clone(),
         shutdown_receiver.clone(),
     );
     let workflow_repository = CatalogRepository::system(task_pool.clone());

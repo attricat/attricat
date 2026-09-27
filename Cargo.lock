@@ -989,6 +989,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "catalog-extension-transfer-test-component"
+version = "0.1.0"
+dependencies = [
+ "serde_json",
+ "wit-bindgen",
+]
+
+[[package]]
 name = "catalog-http"
 version = "0.1.0"
 dependencies = [
