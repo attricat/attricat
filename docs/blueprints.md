@@ -32,8 +32,9 @@ context_editable = "default"
 
 `context_fallback` controls missing values in a non-default context:
 
-- `default` is the default and inherits the default-context value or set.
-- `none` leaves the attribute absent.
+- `default` is the default and uses the nearest ancestor with a value or set,
+  up to the root `default` context.
+- `none` leaves the attribute absent when it has no direct value.
 
 `context_editable` controls writes for every value type, including relationships:
 
@@ -42,8 +43,9 @@ context_editable = "default"
   read-only, and the API rejects writes.
 
 Set `readonly = true` to make an attribute preview-only in the Catalog web app.
-It is intended for values managed by system actions such as agents, extensions,
-rules, the API, or the CLI; those integrations can still write the attribute.
+It is intended for values managed through authorized API or CLI operations,
+including agent and extension actions; `readonly` does not restrict those
+server-side writes. Rules evaluate findings and do not write attribute values.
 The default is `false`. Read-only attributes remain visible in entity forms but
 cannot be changed, cleared, linked, or uploaded through the web UI.
 
