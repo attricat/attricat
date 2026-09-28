@@ -82,7 +82,7 @@ accepted fields:
   "id": "attricat.ecommerce",
   "name": "Ecommerce Catalog",
   "version": "1.2.0",
-  "description": "Product, category, brand, and channel foundations.",
+  "description": "Product and category blueprint foundations.",
   "catalog": {
     "host_api": ">=1.0.0 <2.0.0"
   },
@@ -656,8 +656,9 @@ that the current resource still matches the pack.
 ## No pack-level uninstall
 
 There is no detach or uninstall operation for a solution pack as a whole. Once
-a plan is applied, its blueprints, settings, assets, extensions, and
-sample entities are workspace state. The application record remains as audit
+a plan is applied, its created blueprints, settings, assets, and optional sample
+entities are ordinary workspace state. Extensions named as requirements were
+never installed or owned by the pack. The application record remains as audit
 and provenance history.
 
 Administrators may later edit or remove individual resources through their
