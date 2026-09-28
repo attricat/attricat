@@ -471,7 +471,11 @@ workflow management action is exposed to the agent. The agent may inspect a
 context by ID, then propose an approved parent/data replacement or deletion;
 it can also propose approved entity system-tag/metadata updates. Omitted
 annotation fields remain unchanged, and context deletion is rejected when the
-context is in use. All writes use the same audited mutation services as the API.
+context is in use. All writes use the same audited mutation services as the API. Read-only
+extension-operation and blueprint connector-job tools require
+`extensions.manage`; run lists are paged and omit inputs, checkpoints, progress
+objects, and internal storage references. No operation start, replay, cancel,
+or schedule mutation is exposed to agents.
 
 ## Workflow run operations
 

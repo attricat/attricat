@@ -1,6 +1,7 @@
 mod support;
 
 use api::{
+    agent_tools::execute_read,
     extension_installer::ExtensionInstaller,
     extension_runtime::{ExtensionOperationTaskHandler, ExtensionRuntime, ExtensionRuntimeConfig},
     model::{CreateAttributeContext, CreateBlueprint},
@@ -99,6 +100,27 @@ async fn scoped_export_fans_out_to_channels_via_existing_task_queue(pool: sqlx::
         .await
         .unwrap()
         .remove(0);
+    let (jobs_page, has_more) = repository
+        .blueprint_connector_jobs_page(blueprint.blueprint.id, 1, 0)
+        .await
+        .unwrap();
+    assert_eq!(jobs_page.len(), 1);
+    assert_eq!(jobs_page[0].id, job.id);
+    assert!(!has_more);
+    let (_, server) = support::start_server(pool.clone()).await;
+    let jobs = execute_read(
+        &repository,
+        support::BOOTSTRAP_OWNER_ID.parse().unwrap(),
+        support::BOOTSTRAP_WORKSPACE_ID.parse().unwrap(),
+        "list_blueprint_connector_jobs",
+        json!({"blueprint_id":blueprint.blueprint.id,"limit":1}),
+    )
+    .await
+    .unwrap();
+    assert_eq!(jobs["items"][0]["id"], job.id.to_string());
+    assert!(jobs["items"][0].get("input").is_none());
+    assert!(jobs["items"][0].get("input_file_id").is_none());
+    server.abort();
     let runs = repository
         .run_blueprint_connector_job(job.id, "first")
         .await

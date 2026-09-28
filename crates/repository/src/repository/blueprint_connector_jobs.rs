@@ -131,6 +131,20 @@ impl CatalogRepository {
             .bind(self.extension_workspace()).bind(blueprint_id).fetch_all(&self.pool).await.map_err(Into::into)
     }
 
+    pub async fn blueprint_connector_jobs_page(
+        &self,
+        blueprint_id: Uuid,
+        limit: i64,
+        offset: i64,
+    ) -> Result<(Vec<BlueprintConnectorJob>, bool), RepositoryError> {
+        let mut rows = sqlx::query_as(&format!("SELECT {FIELDS} FROM blueprint_connector_jobs WHERE workspace_id=$1 AND blueprint_id=$2 AND code IS NOT NULL ORDER BY id LIMIT $3 OFFSET $4"))
+            .bind(self.extension_workspace()).bind(blueprint_id).bind(limit + 1).bind(offset)
+            .fetch_all(&self.pool).await?;
+        let has_more = rows.len() as i64 > limit;
+        rows.truncate(limit as usize);
+        Ok((rows, has_more))
+    }
+
     /// One run per enabled publication channel. No channel or entity filter is
     /// supplied by the component: every catalog page is checked against this
     /// run's persisted scope by the host.

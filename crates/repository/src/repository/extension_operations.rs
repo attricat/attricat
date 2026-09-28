@@ -642,6 +642,21 @@ impl CatalogRepository {
         .await?)
     }
 
+    pub async fn extension_operation_runs_page(
+        &self,
+        extension_id: Option<&str>,
+        connector_job_id: Option<Uuid>,
+        limit: i64,
+        offset: i64,
+    ) -> Result<(Vec<ExtensionOperationRun>, bool), RepositoryError> {
+        let mut rows = sqlx::query_as("SELECT id,schedule_id,connector_job_id,connector_channel_id,extension_id,installed_release_id,abi_version,operation_id,status,outputs_expired,progress,checkpoint,attempts,last_error_code,created_at,completed_at FROM extension_operation_runs WHERE workspace_id=$1 AND ($2::text IS NULL OR extension_id=$2) AND ($3::uuid IS NULL OR connector_job_id=$3) ORDER BY created_at DESC,id DESC LIMIT $4 OFFSET $5")
+            .bind(self.extension_workspace()).bind(extension_id).bind(connector_job_id)
+            .bind(limit + 1).bind(offset).fetch_all(&self.pool).await?;
+        let has_more = rows.len() as i64 > limit;
+        rows.truncate(limit as usize);
+        Ok((rows, has_more))
+    }
+
     pub async fn extension_operation_run(
         &self,
         id: Uuid,

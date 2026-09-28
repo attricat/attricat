@@ -8,6 +8,7 @@ use std::{
 };
 
 use api::{
+    agent_tools::execute_read,
     extension_installer::{ExtensionInstaller, installed_artifact_key},
     model::{CreateBlueprint, NewAttributeValue},
     repository::{
@@ -1300,6 +1301,45 @@ async fn operation_runs_keep_a_batch_key_across_crash_reclaim_and_fence_stale_ch
         run_id,
         repository.start_extension_operation(request).await.unwrap()
     );
+    let (page, has_more) = repository
+        .extension_operation_runs_page(Some("acme.operations"), None, 1, 0)
+        .await
+        .unwrap();
+    assert_eq!(page.len(), 1);
+    assert_eq!(page[0].id, run_id);
+    assert!(!has_more);
+    assert!(
+        repository
+            .extension_operation_run(run_id)
+            .await
+            .unwrap()
+            .is_some()
+    );
+    let (_, server) = support::start_server(pool.clone()).await;
+    let owner = support::BOOTSTRAP_OWNER_ID.parse().unwrap();
+    let diagnostics = execute_read(
+        &repository,
+        owner,
+        workspace,
+        "list_extension_operation_runs",
+        json!({"extension_id":"acme.operations","limit":1}),
+    )
+    .await
+    .unwrap();
+    assert_eq!(diagnostics["items"][0]["id"], run_id.to_string());
+    assert!(!diagnostics.to_string().contains("hidden"));
+    assert!(diagnostics["items"][0].get("checkpoint").is_none());
+    let run = execute_read(
+        &repository,
+        owner,
+        workspace,
+        "get_extension_operation_run",
+        json!({"run_id":run_id}),
+    )
+    .await
+    .unwrap();
+    assert_eq!(run["id"], run_id.to_string());
+    server.abort();
 
     let first = repository
         .claim_task_for_kinds(

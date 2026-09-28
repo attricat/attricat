@@ -1254,6 +1254,15 @@ async fn agent_read_tools_enforce_initiator_permissions_and_scopes(pool: PgPool)
         ),
         ("list_rule_runs", json!({})),
         ("get_workflow_run", json!({"run_id":Uuid::new_v4()})),
+        ("list_extension_operation_runs", json!({})),
+        (
+            "get_extension_operation_run",
+            json!({"run_id":Uuid::new_v4()}),
+        ),
+        (
+            "list_blueprint_connector_jobs",
+            json!({"blueprint_id":Uuid::new_v4()}),
+        ),
         ("get_entity", json!({"entity_id": entity["id"]})),
         (
             "get_entity_context_preview",

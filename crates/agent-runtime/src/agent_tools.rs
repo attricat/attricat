@@ -167,6 +167,21 @@ pub fn definitions() -> Vec<ToolDefinition> {
             diagnostic_page_parameters(None),
         ),
         definition(
+            "list_extension_operation_runs",
+            "Read bounded extension and connector-operation status. Filter by extension ID or connector job ID; no progress, checkpoint, or input payloads. Requires extensions.manage.",
+            json!({"type":"object","properties":{"extension_id":{"type":"string"},"connector_job_id":{"type":"string","format":"uuid"},"limit":{"type":"integer","minimum":1,"maximum":25},"offset":{"type":"integer","minimum":0,"maximum":10000}},"additionalProperties":false}),
+        ),
+        definition(
+            "get_extension_operation_run",
+            "Inspect one extension-operation run's safe status by run ID, excluding inputs and checkpoints. Requires extensions.manage.",
+            json!({"type":"object","required":["run_id"],"properties":{"run_id":{"type":"string","format":"uuid"}},"additionalProperties":false}),
+        ),
+        definition(
+            "list_blueprint_connector_jobs",
+            "Read bounded connector-job declarations for one blueprint without stored inputs or file references. Requires extensions.manage.",
+            json!({"type":"object","required":["blueprint_id"],"properties":{"blueprint_id":{"type":"string","format":"uuid"},"limit":{"type":"integer","minimum":1,"maximum":25},"offset":{"type":"integer","minimum":0,"maximum":10000}},"additionalProperties":false}),
+        ),
+        definition(
             "get_entity_preview_link",
             "Get a navigable link to an existing entity's preview page. Use this for each entity you cite; return the link in your answer. The link is relative to the Attricat web app.",
             json!({"type":"object","required":["entity_id"],"properties":{"entity_id":{"type":"string","format":"uuid"}},"additionalProperties":false}),
@@ -314,6 +329,15 @@ pub fn definitions() -> Vec<ToolDefinition> {
     ]
 }
 
+fn safe_extension_operation_run(run: crate::repository::ExtensionOperationRun) -> Value {
+    json!({"id":run.id,"extension_id":run.extension_id,"operation_id":run.operation_id,
+        "installed_release_id":run.installed_release_id,"status":run.status,
+        "schedule_id":run.schedule_id,"connector_job_id":run.connector_job_id,
+        "connector_channel_id":run.connector_channel_id,"attempts":run.attempts,
+        "last_error_code":run.last_error_code,"outputs_expired":run.outputs_expired,
+        "created_at":run.created_at,"completed_at":run.completed_at})
+}
+
 fn safe_workflow_run(run: crate::repository::WorkflowRun) -> Value {
     json!({"id":run.id,"workflow_id":run.workflow_id,"workflow_version":run.workflow_version,
         "source":run.source,"status":run.status,"attempts":run.attempts,
@@ -419,6 +443,9 @@ pub fn kind(name: &str) -> Result<ToolKind, ToolError> {
         | "list_rule_runs"
         | "get_workflow_run"
         | "list_workflow_runs"
+        | "list_extension_operation_runs"
+        | "get_extension_operation_run"
+        | "list_blueprint_connector_jobs"
         | "get_entity_preview_link"
         | "view_image"
         | "read_file"
@@ -782,6 +809,38 @@ pub async fn execute_read(
             let (limit, offset) = diagnostic_page_arguments(input.limit, input.offset)?;
             let (items, has_more) = repository.workflow_runs_page(limit, offset).await?;
             json!({"items":items.into_iter().map(safe_workflow_run).collect::<Vec<_>>(),
+                "next_offset":next_history_offset(has_more, offset, limit)})
+        }
+        "list_extension_operation_runs" => {
+            #[derive(Deserialize)]
+            #[serde(deny_unknown_fields)]
+            struct Input { extension_id: Option<String>, connector_job_id: Option<Uuid>, limit: Option<i64>, offset: Option<i64> }
+            let input: Input = decode(arguments)?;
+            let (limit, offset) = diagnostic_page_arguments(input.limit, input.offset)?;
+            if input.extension_id.as_ref().is_some_and(|id| id.is_empty() || id.len() > 128) {
+                return Err(ToolError::InvalidArguments("extension_id must be 1-128 characters".into()));
+            }
+            let (items, has_more) = repository.extension_operation_runs_page(input.extension_id.as_deref(), input.connector_job_id, limit, offset).await?;
+            json!({"items":items.into_iter().map(safe_extension_operation_run).collect::<Vec<_>>(),
+                "next_offset":next_history_offset(has_more, offset, limit)})
+        }
+        "get_extension_operation_run" => {
+            safe_extension_operation_run(repository.extension_operation_run(parse_uuid(&arguments, "run_id")?).await?
+                .ok_or(RepositoryError::NotFound("extension operation run"))?)
+        }
+        "list_blueprint_connector_jobs" => {
+            #[derive(Deserialize)]
+            #[serde(deny_unknown_fields)]
+            struct Input { blueprint_id: Uuid, limit: Option<i64>, offset: Option<i64> }
+            let input: Input = decode(arguments)?;
+            let (limit, offset) = diagnostic_page_arguments(input.limit, input.offset)?;
+            let (items, has_more) = repository.blueprint_connector_jobs_page(input.blueprint_id, limit, offset).await?;
+            json!({"items":items.into_iter().map(|job| json!({
+                "id":job.id,"blueprint_id":job.blueprint_id,"blueprint_version":job.blueprint_version,
+                "code":job.code,"direction":job.direction,"extension_id":job.extension_id,
+                "operation_id":job.operation_id,"context_id":job.context_id,
+                "interval_seconds":job.interval_seconds,"next_at":job.next_at,"enabled":job.enabled
+            })).collect::<Vec<_>>(),
                 "next_offset":next_history_offset(has_more, offset, limit)})
         }
         "get_entity_preview_link" => {
@@ -2009,6 +2068,9 @@ async fn read_authorized(
         "list_workflow_runs" | "get_workflow_definition" | "get_workflow_run" => {
             ("workflows.read", None, None)
         }
+        "list_extension_operation_runs"
+        | "get_extension_operation_run"
+        | "list_blueprint_connector_jobs" => ("extensions.manage", None, None),
         "list_contexts" => ("contexts.read", None, Some("__context_list__")),
         "get_context" => (
             "contexts.read",
@@ -2185,6 +2247,40 @@ mod tests {
             change_summary("replace_entity_relationships", &payload).unwrap(),
             format!("Replace relationship targets on entity {id}: categories (1 targets).")
         );
+    }
+
+    #[test]
+    fn extension_diagnostic_tools_are_read_only_and_omit_private_state() {
+        for name in [
+            "list_extension_operation_runs",
+            "get_extension_operation_run",
+            "list_blueprint_connector_jobs",
+        ] {
+            assert_eq!(kind(name).unwrap(), ToolKind::Read);
+            assert!(definitions().iter().any(|tool| tool.function.name == name));
+        }
+        let run = crate::repository::ExtensionOperationRun {
+            id: uuid::Uuid::new_v4(),
+            schedule_id: None,
+            connector_job_id: None,
+            connector_channel_id: None,
+            extension_id: "example".into(),
+            installed_release_id: uuid::Uuid::new_v4(),
+            abi_version: "1.4".into(),
+            operation_id: "import".into(),
+            status: "pending".into(),
+            outputs_expired: false,
+            progress: json!({"secret":"hidden"}),
+            checkpoint: json!({"token":"hidden"}),
+            attempts: 0,
+            last_error_code: None,
+            created_at: chrono::Utc::now(),
+            completed_at: None,
+        };
+        let safe = super::safe_extension_operation_run(run);
+        assert!(!safe.to_string().contains("hidden"));
+        assert!(safe.get("progress").is_none());
+        assert!(safe.get("checkpoint").is_none());
     }
 
     #[test]
