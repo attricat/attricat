@@ -201,9 +201,16 @@ server rechecks target absence or exact mapped-blueprint revision, hash, and
 published state. Blocked, stale, or expired-before-start plans return `409`;
 inconsistent persisted plan evidence returns `422 invalid_input`. Concurrent or
 repeated apply requests converge on one application without duplicating
-resources. Authorized presentation-asset downloads return integrity-verified
-bytes with server-owned content type/length, inline disposition, digest ETag,
-`Cache-Control: private, no-store`, `nosniff`, and restrictive CSP.
+resources.
+
+### Presentation assets
+
+Only applied packs create presentation assets. The list and detail routes
+return metadata but never object keys; the content route returns
+integrity-verified bytes with server-owned content type/length, inline
+disposition, digest ETag, `Cache-Control: private, no-store`, `nosniff`, and
+restrictive CSP. Use `acli presentation-asset download <uuid> --output <path>`
+for an authorized download.
 
 Blueprint creation and revision routes create drafts. Only published revisions
 can create entities or serve as migration targets. See [Blueprint Publication](database.md#blueprint-publication).
