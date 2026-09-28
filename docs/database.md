@@ -489,8 +489,9 @@ No count is returned. A null `next_cursor` means the final page was reached.
 revision for response metadata. When `blueprint.version` is provided, results
 include only entities pinned to that revision; otherwise, results span all
 published revisions. Set `outdated` to `true` to include only entities not
-pinned to the latest published revision. Text search is case-insensitive across
-current scalar values; relationship values are not searched.
+pinned to the latest published revision. Bare text search is case-insensitive across current scalar values on the
+selected blueprint. Explicit relationship selectors and `*:` can search
+connected entities; see [Relationship-aware search](relationship-aware-search.md).
 
 ```json
 {
@@ -502,12 +503,13 @@ current scalar values; relationship values are not searched.
 }
 ```
 
-V1 uses ascending `created_at, id` ordering. `filters` must be empty until the
-blueprint value type system defines field operators. Cursors are opaque and
-bound to that ordering.
-
-Search also supports an optional relationship tree facet for contextual
-hierarchy filtering and roll-up counts. See [Relationship Tree Facets](search-facets.md).
+Without an explicit sort, results use ascending `created_at, id` order.
+`filters` accepts validated scalar and relationship-path field operators;
+configured table columns and built-in schema/publication fields can be sorted.
+Cursors are opaque and bound to the query and ordering. See the
+[API reference](api.md#scalar-filters) for operators and the
+[relationship tree facets guide](search-facets.md) for contextual hierarchy
+filtering and roll-up counts.
 
 ## Blueprint Compiler
 

@@ -4,9 +4,7 @@
 > behavior used by the Explorer and `POST /v1/entities/search`.
 
 Explore finds entities of the selected blueprint from values on the entity
-itself and values on entities connected to it through relationships. It also
-introduces a small, typed query language so that later search features extend a
-query plan rather than ad-hoc SQL text matching.
+itself and values on entities connected to it through relationships. It uses a typed query language parsed and validated before candidate resolution.
 
 The query pipeline is application-owned Rust code: it parses and validates the
 query, plans every term, performs breadth-first traversal, and combines
@@ -95,11 +93,11 @@ are out of scope. `*:` remains the only global multi-hop mode.
 string field. An empty or absent query preserves current browse behavior. Each
 non-empty-query result additionally returns `match_explanations` as described
 above. The Explore query field and URL query parameter preserve the supplied
-query text; the UI will show examples of supported selector and wildcard forms
-and can use explanation metadata to identify why a result matched. API errors
-are rendered through the existing Explore error alert.
+query text. The UI shows selector and wildcard examples; the API returns
+explanation metadata for clients to display why a result matched. API errors
+are rendered in the Explore error alert.
 
-No client-selected traversal depth is introduced initially. The server owns the
+There is no client-selected traversal depth. The server owns the
 default and hard cap so large traversals cannot be requested by a browser or
 CLI client.
 
@@ -128,6 +126,5 @@ deleted entities, inactive relationships, structured selectors (including
 selected-blueprint code and user-specified-name aliases in both `blueprint:term`
 and `blueprint.attribute:term` forms), wildcard matching, invalid or ambiguous
 syntax/selectors, AND intersections, pagination, facet counts/filtering, and
-deterministic per-term match explanations. Frontend tests must cover URL
-parsing/submission and request forwarding for structured query text, plus
-rendering or otherwise exposing the returned match rationale.
+deterministic per-term match explanations. Frontend coverage should verify URL parsing/submission, forwarding structured
+query text, and displaying returned match rationale.

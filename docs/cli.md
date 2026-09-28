@@ -46,20 +46,6 @@ acli auth password-reset-confirm --token-stdin --password-stdin
 acli --session-file session.json auth session|logout|renew
 acli metrics get --output metrics.prom
 
-acli solution-pack inspect --file pack.tar.zst
-acli solution-pack plan --file pack.tar.zst --prefix ecom --blueprint-publication draft|publish [--include-sample-data] [--map logical_key=existing_code ... --map-asset logical_key=asset_uuid ... | --from-application <uuid>]
-acli solution-pack plan show <plan-id>
-acli solution-pack apply <plan-id>
-acli solution-pack applications list [--limit 25 --offset 0]
-acli solution-pack applications show <application-id>
-acli solution-pack applications abandon <application-id>
-acli solution-pack checks rerun <application-id>
-acli solution-pack checks list <application-id> [--limit 25 --offset 0]
-acli solution-pack checks show <application-id> <run-id>
-acli presentation-asset list [--limit 25 --offset 0]
-acli presentation-asset show <asset-id>
-acli presentation-asset download <asset-id> --output <path>
-
 acli audit list [--limit 25 --offset 0] [--occurred-after <rfc3339>] [--occurred-before <rfc3339>] [--actor-user-id <uuid>] [--action-category <category>] [--target-type <type>] [--executor-type human|agent] [--agent-run-id <uuid>] [--agent-tool-call-id <uuid>]
 acli data-health summary [--stale-after-days <days>]
 acli data-health blueprints [--stale-after-days <days>]
@@ -442,10 +428,10 @@ attribute_code = "subtitle"
 
 ## Manual Test Data
 
-The Node.js generator creates at least 100 realistic fashion parent products and
-their applicable size variants, alongside categories, colors, relationships,
-contexts, and blueprints that exercise the supported blueprint features. Start
-the API, then run:
+The Node.js generator creates a deterministic fictional PC-parts catalog with
+manufacturers, categories, families, SKUs, and reference data. See
+[the generator guide](../examples/generate.md) for profiles and safety limits.
+Start the local stack, then run:
 
 ```sh
 cargo run -p cli -- --session-file .acli-session auth login <workspace-login-identifier> --email <email> --password-stdin
@@ -453,8 +439,8 @@ export CATALOG_TOKEN="$(cargo run -p cli -- --session-file .acli-session token c
 just generate
 ```
 
-See [`examples/generate.md`](../examples/generate.md) for configuration and a
-complete description of the generated data.
+The CLI loads the worktree's `.env`; keep the generated personal token out of
+committed files and shell history.
 
 ## Errors
 

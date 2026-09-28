@@ -422,9 +422,9 @@ This contract explicitly does not provide:
   or cyclic relationships; or
 - suppression of ordinary audit, workflow, extension, or domain-event behavior.
 
-## Implementation Acceptance Criteria
+## Verification boundaries
 
-A future implementation is acceptable only when tests demonstrate that:
+The implementation's tests cover these boundaries:
 
 1. strict schema, bounds, digest, and synthetic attestation fail closed, and
    the version-1 matcher passes every canonical, JSON-escaped, single-percent,
@@ -452,29 +452,9 @@ A future implementation is acceptable only when tests demonstrate that:
    completion, and permanent invalidation prove lock-safe access revocation and
    staging cleanup without deleting completed entities or needed retry evidence.
 
-## Implementation Sequence
-
-1. Publish the strict manifest/sample JSON Schemas, canonicalization, bounds,
-   digest, attestation, effective-default expansion, and matcher-v1 canonical,
-   encoding-transformation, residual-escape, and PEM grammar conformance tests.
-2. Add explicit CLI/API selection, safe inspection summaries, private plan
-   review, and warnings for automation and ordinary audit/outbox retention.
-3. Add the host marker, derived API `is_sample`, and frontend badges.
-4. Add a chosen-ID, caller-transaction ordinary entity-create seam without
-   changing entity validation, audit, or event behavior.
-5. Add private plan payload storage, synchronous expiry access revocation,
-   hourly purge, 30-day resumability, lock-safe abandonment, exact identity
-   reservation, application evidence, and the database uniqueness guard.
-6. Add DAG planning, original-plan retry/resume, and strictly-newer-release
-   lineage comparison.
-7. Integrate resumable apply and ambiguous-commit reconciliation.
-8. Add archive, API, UI, integration, retention, audit/outbox, retry,
-   abandonment, and concurrency tests covering every acceptance criterion
-   before enabling the capability.
-
 ## Consequences
 
-This design preserves ordinary entity behavior and makes duplicate prevention
+This contract preserves ordinary entity behavior and makes duplicate prevention
 and retention testable. It also intentionally rejects useful-looking ambiguous
 values, allows enabled automation to react to sample creates, and can leave a
 partially applied dataset after a permanent failure. Those costs are accepted

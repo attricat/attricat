@@ -134,7 +134,7 @@ password, cookie, CSRF, expiry, and revocation contract is documented in
 | `GET` | `/entities/{id}/values/current` | Read current direct values and edges. |
 | `POST` | `/entities/{id}/relationships/replace` | Replace relationship target sets. |
 | `POST` | `/entities/{id}/relationships/remove` | Remove relationship targets. |
-| `POST` | `/v1/entities/search` | Search entities in one blueprint revision, optionally by system tags. |
+| `POST` | `/v1/entities/search` | Search a selected blueprint across published revisions by default, or one explicit revision; supports text queries, validated filters, facets, and sorting. |
 | `POST` | `/v1/entities` | Create an entity atomically with form values and optional system annotations. |
 | `GET`, `PUT` | `/v1/entities/{id}` | Read or update an entity form atomically, including optional system annotations. |
 | `POST` | `/v1/entities/{id}/blueprint-migration/preview` | Assess migration to the highest published revision. |

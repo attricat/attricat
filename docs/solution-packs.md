@@ -77,10 +77,11 @@ bounded workspace-setting boundary.
 | Documentation and setup | **Implemented subset:** bounded safe Markdown guidance, release notes, a structured checklist, and six host-defined informational checks with immutable run history. |
 | Sample data | **Implemented bounded subset:** optional, explicitly selected, visibly marked synthetic entities under the bounded [sample-data decision](solution-pack-sample-data.md). |
 
-Not every content type ships in the current implementation. The
-[initial delivery boundary](#initial-delivery-boundary) implements blueprint creation and explicit exact reuse, bounded Explore navigation and extension-layout defaults,
-entity-blueprint extension layouts, read-only extension requirement evaluation,
-and bounded guided setup with informational check runs.
+The [implemented planning and application contract](#planning-and-application-implemented-v1)
+covers blueprint creation and explicit exact reuse, bounded Explore navigation
+and extension-layout defaults, read-only extension requirement evaluation, and
+informational setup checks. Other target behaviors above are not implied by
+having a manifest declaration.
 
 ## Package and distribution
 
@@ -125,8 +126,9 @@ particular workspace; the planner decides that separately.
 
 The manifest owns package metadata and indexes content files. Large resource
 bodies live in declared files rather than being hidden in the manifest. The
-following example is illustrative of the v1 contract; the implementation must
-publish a strict JSON Schema before accepting archives:
+following example illustrates the v1 contract. The strict
+[manifest schema](../contracts/solution-pack-manifest-v1.schema.json) defines
+accepted fields:
 
 ```json
 {
@@ -773,23 +775,11 @@ raw workspace dump. The exporter:
 Export does not imply ownership of third-party assets or permission to
 redistribute extension packages, fonts, logos, or customer content.
 
-## Longer-term delivery boundary
+## Delivery boundary
 
-The intended delivery sequence validates the architecture with blueprint
-starter packs:
-
-1. strict manifest/archive validation;
-2. logical identifiers, prefix selection, and recorded mapping snapshots;
-3. multiple pack IDs coexisting through independent application records;
-4. blueprint and view planning;
-5. deterministic dry runs with collision and cross-pack conflict choices;
-6. durable, idempotent application records and audit history;
-7. administrator-only CLI commands for plan review and apply; and
-8. export to an untrusted draft.
-
-Extension requirements, configuration templates, Explore navigation defaults,
-presentation assets, and the bounded optional sample-data contract now build on
-the core planner. Other workspace/layout defaults, extension lifecycle approvals,
-blueprint successor/update planning, export, and curated Ecommerce and Warehouse
-packs remain future work. Pack archives continue to be supplied explicitly as
-`.tar.zst` files; no repository-access path is planned.
+Archive validation, planning, application, extension requirement evaluation,
+bounded workspace defaults, presentation assets, and optional synthetic samples
+are available as described above. Other workspace defaults, extension lifecycle
+approvals, blueprint successor/update planning, export, and curated Ecommerce
+and Warehouse packs are not provided by the pack installer. Supply pack archives
+explicitly as `.tar.zst` files; Catalog does not fetch them from repositories.
