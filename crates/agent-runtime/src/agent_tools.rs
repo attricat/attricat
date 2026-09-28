@@ -107,6 +107,11 @@ pub fn definitions() -> Vec<ToolDefinition> {
             json!({"type":"object","additionalProperties":false}),
         ),
         definition(
+            "get_context",
+            "Read one attribute context by ID, including its parent and data; use before changing a context.",
+            json!({"type":"object","required":["context_id"],"properties":{"context_id":{"type":"string","format":"uuid"}},"additionalProperties":false}),
+        ),
+        definition(
             "get_entity",
             "Get one entity by UUID, including its current scalar values, relationship targets, and file metadata in `values`.",
             json!({"type":"object","required":["entity_id"],"properties":{"entity_id":{"type":"string","format":"uuid"}},"additionalProperties":false}),
@@ -287,6 +292,21 @@ pub fn definitions() -> Vec<ToolDefinition> {
             json!({"type":"object","required":["saved_view_id"],"properties":{"saved_view_id":{"type":"string","format":"uuid"},"name":{"type":"string"},"description":{"type":"string"},"visibility":{"type":"string","enum":["private","workspace"]},"blueprint":{"type":"string"},"version":{"type":"integer","minimum":1},"all_versions":{"type":"boolean"},"query":{"type":"string"},"attributeFilters":attribute_filter_parameters(),"relationshipFacets":{"type":"array","maxItems":20,"items":{"type":"object","required":["field","selectedIds"],"properties":{"field":{"type":"string"},"selectedIds":{"type":"array","minItems":1,"maxItems":100,"items":{"type":"string","format":"uuid"}}},"additionalProperties":false}}},"additionalProperties":false}),
         ),
         definition(
+            "update_entity_annotations",
+            "Replace specified system_tags and/or system_metadata on an entity without changing values or relationships. Omitted fields remain unchanged; [] or {} clears a field. Inspect get_entity first. Requires approval.",
+            json!({"type":"object","required":["entity_id"],"properties":{"entity_id":{"type":"string","format":"uuid"},"system_tags":{"type":"array","maxItems":100,"items":{"type":"string"}},"system_metadata":{"type":"object"}},"additionalProperties":false}),
+        ),
+        definition(
+            "update_context",
+            "Replace an existing context's parent and data together. Provide the complete data object and an existing parent_id; inspect get_context first. Requires approval.",
+            json!({"type":"object","required":["context_id","parent_id","data"],"properties":{"context_id":{"type":"string","format":"uuid"},"parent_id":{"type":"string","format":"uuid"},"data":{"type":"object"}},"additionalProperties":false}),
+        ),
+        definition(
+            "delete_context",
+            "Delete an unused non-root attribute context. Inspect get_context first; in-use contexts cannot be deleted. Requires approval.",
+            json!({"type":"object","required":["context_id"],"properties":{"context_id":{"type":"string","format":"uuid"}},"additionalProperties":false}),
+        ),
+        definition(
             "create_context",
             "Create an attribute context. This change requires approval.",
             json!({"type":"object","required":["code","data"],"properties":{"code":{"type":"string"},"data":{"type":"object"},"parent_id":{"type":"string","format":"uuid"}},"additionalProperties":false}),
@@ -387,6 +407,7 @@ pub fn kind(name: &str) -> Result<ToolKind, ToolError> {
         | "list_blueprints"
         | "get_blueprint_revision"
         | "list_contexts"
+        | "get_context"
         | "get_entity"
         | "get_entity_context_preview"
         | "get_entity_changes"
@@ -418,6 +439,9 @@ pub fn kind(name: &str) -> Result<ToolKind, ToolError> {
         | "remove_entity_relationships"
         | "migrate_entity"
         | "link_file"
+        | "update_entity_annotations"
+        | "update_context"
+        | "delete_context"
         | "create_context"
         | "create_saved_search"
         | "update_saved_search"
@@ -460,6 +484,30 @@ pub fn change_summary(name: &str, arguments: &Value) -> Result<String, ToolError
         "set_entity_values" => Ok(format!(
             "Set attribute values on entity {}.",
             required_string(arguments, "entity_id")?
+        )),
+        "update_entity_annotations" => Ok(format!(
+            "Update {} on entity {}.",
+            match (
+                arguments.get("system_tags"),
+                arguments.get("system_metadata")
+            ) {
+                (Some(_), Some(_)) => "system tags and metadata",
+                (Some(_), None) => "system tags",
+                (None, Some(_)) => "system metadata",
+                (None, None) =>
+                    return Err(ToolError::InvalidArguments(
+                        "provide tags and/or metadata".into()
+                    )),
+            },
+            required_string(arguments, "entity_id")?
+        )),
+        "update_context" => Ok(format!(
+            "Replace parent and data on context {}.",
+            required_string(arguments, "context_id")?
+        )),
+        "delete_context" => Ok(format!(
+            "Delete context {}.",
+            required_string(arguments, "context_id")?
         )),
         "remove_entity_values" => Ok(format!(
             "Remove {} scalar overrides on entity {}.",
@@ -612,6 +660,8 @@ pub async fn execute_read(
                 .await?,
         )
         .expect("models serialize"),
+        "get_context" => serde_json::to_value(repository.get_context_by_id(parse_uuid(&arguments, "context_id")?).await?
+            .ok_or(RepositoryError::NotFound("context"))?).expect("context serializes"),
         "list_saved_searches" => json!(repository.list_saved_views(actor).await?
             .into_iter().filter(|view| view.owner_user_id == actor && view.kind == "explorer_search")
             .map(|view| json!({"id":view.id,"name":view.name,"description":view.description,"visibility":view.visibility,"blueprint":view.state.get("blueprint"),"updated_at":view.updated_at}))
@@ -1612,6 +1662,80 @@ pub async fn execute_mutation(
                 .ok_or(RepositoryError::NotFound("saved search"))?;
             json!({"id":view.id,"name":view.name,"url":format!("/?savedView={}",view.id),"visibility":view.visibility,"state":view.state})
         }
+        "update_entity_annotations" => {
+            #[derive(Deserialize)]
+            #[serde(deny_unknown_fields)]
+            struct Input {
+                entity_id: Uuid,
+                system_tags: Option<Vec<String>>,
+                system_metadata: Option<Value>,
+            }
+            let input: Input = decode(arguments)?;
+            if input.system_tags.is_none() && input.system_metadata.is_none() {
+                return Err(ToolError::InvalidArguments(
+                    "provide tags and/or metadata".into(),
+                ));
+            }
+            if input
+                .system_tags
+                .as_ref()
+                .is_some_and(|tags| tags.len() > 100)
+                || input
+                    .system_metadata
+                    .as_ref()
+                    .is_some_and(|metadata| !metadata.is_object())
+            {
+                return Err(ToolError::InvalidArguments(
+                    "tags must have at most 100 entries and metadata must be an object".into(),
+                ));
+            }
+            serde_json::to_value(
+                CatalogMutationService::new(repository)
+                    .update_entity(
+                        input.entity_id,
+                        crate::model::UpdateEntityFormRequest {
+                            values: vec![],
+                            relationships: vec![],
+                            remove_values: vec![],
+                            system_tags: input.system_tags,
+                            system_metadata: input.system_metadata,
+                        },
+                    )
+                    .await?,
+            )
+            .expect("entity serializes")
+        }
+        "update_context" => {
+            #[derive(Deserialize)]
+            #[serde(deny_unknown_fields)]
+            struct Input {
+                context_id: Uuid,
+                parent_id: Uuid,
+                data: Value,
+            }
+            let input: Input = decode(arguments)?;
+            if !input.data.is_object() {
+                return Err(ToolError::InvalidArguments("data must be an object".into()));
+            }
+            serde_json::to_value(
+                CatalogMutationService::new(repository)
+                    .update_context(
+                        input.context_id,
+                        crate::model::UpdateAttributeContext {
+                            parent_id: input.parent_id,
+                            data: input.data,
+                        },
+                    )
+                    .await?,
+            )
+            .expect("context serializes")
+        }
+        "delete_context" => {
+            CatalogMutationService::new(repository)
+                .delete_context(parse_uuid(&arguments, "context_id")?)
+                .await?;
+            json!({"deleted":true})
+        }
         "create_context" => {
             let input: CreateAttributeContext = decode(arguments)?;
             serde_json::to_value(
@@ -1886,6 +2010,11 @@ async fn read_authorized(
             ("workflows.read", None, None)
         }
         "list_contexts" => ("contexts.read", None, Some("__context_list__")),
+        "get_context" => (
+            "contexts.read",
+            Some(parse_uuid(arguments, "context_id")?),
+            None,
+        ),
         "get_entity"
         | "get_entity_context_preview"
         | "get_entity_changes"
@@ -2055,6 +2184,24 @@ mod tests {
         assert_eq!(
             change_summary("replace_entity_relationships", &payload).unwrap(),
             format!("Replace relationship targets on entity {id}: categories (1 targets).")
+        );
+    }
+
+    #[test]
+    fn annotation_and_context_edits_require_approval() {
+        for name in [
+            "update_entity_annotations",
+            "update_context",
+            "delete_context",
+        ] {
+            assert_eq!(kind(name).unwrap(), ToolKind::Mutation);
+            assert!(definitions().iter().any(|tool| tool.function.name == name));
+        }
+        assert_eq!(kind("get_context").unwrap(), ToolKind::Read);
+        assert!(change_summary("update_entity_annotations", &json!({"entity_id":"id"})).is_err());
+        assert_eq!(
+            change_summary("update_context", &json!({"context_id":"id"})).unwrap(),
+            "Replace parent and data on context id."
         );
     }
 

@@ -17,6 +17,70 @@ use support::*;
 use tokio::time::{sleep, timeout};
 
 #[sqlx::test]
+async fn agent_annotation_and_context_edits_use_catalog_validation(pool: PgPool) {
+    let (base_url, server) = start_server(pool.clone()).await;
+    let client = authenticated_client();
+    let blueprint = create_blueprint(&client, &base_url,
+        "format_version = 1\ncode = \"annotation_product\"\nname = \"Annotation product\"\nkind = \"entity\"\n\n[views.dropdown_option]\ntype = \"dropdown_option\"\nfields = [\"title\"]\n\n[[attributes]]\ncode = \"title\"\nvalue_type = \"string\"").await;
+    let entity = create_entity(&client, &base_url, &blueprint).await;
+    let entity_id = entity["id"].as_str().unwrap();
+    let workspace: Uuid = BOOTSTRAP_WORKSPACE_ID.parse().unwrap();
+    let actor: Uuid = BOOTSTRAP_OWNER_ID.parse().unwrap();
+    let repository = CatalogRepository::system(pool)
+        .for_workspace(workspace)
+        .await
+        .unwrap();
+    let updated = execute_mutation(&repository, actor, "update_entity_annotations",
+        json!({"entity_id":entity_id,"system_tags":["reviewed"],"system_metadata":{"source":"agent"}})).await.unwrap();
+    assert_eq!(updated["system_tags"], json!(["reviewed"]));
+    assert_eq!(updated["system_metadata"]["source"], "agent");
+    let context = execute_mutation(
+        &repository,
+        actor,
+        "create_context",
+        json!({"code":"agent_region","data":{"region":"one"}}),
+    )
+    .await
+    .unwrap();
+    let id = context["id"].as_str().unwrap();
+    let read = execute_read(
+        &repository,
+        actor,
+        workspace,
+        "get_context",
+        json!({"context_id":id}),
+    )
+    .await
+    .unwrap();
+    assert_eq!(read["data"]["region"], "one");
+    let updated = execute_mutation(&repository, actor, "update_context",
+        json!({"context_id":id,"parent_id":"00000000-0000-4000-8000-000000000001","data":{"region":"two"}})).await.unwrap();
+    assert_eq!(updated["data"]["region"], "two");
+    assert_eq!(
+        execute_mutation(
+            &repository,
+            actor,
+            "delete_context",
+            json!({"context_id":id})
+        )
+        .await
+        .unwrap()["deleted"],
+        true
+    );
+    assert!(
+        execute_mutation(
+            &repository,
+            actor,
+            "update_entity_annotations",
+            json!({"entity_id":entity_id})
+        )
+        .await
+        .is_err()
+    );
+    server.abort();
+}
+
+#[sqlx::test]
 async fn agent_operational_diagnostics_are_bounded_and_omit_internal_payloads(pool: PgPool) {
     CatalogRepository::system(pool.clone())
         .ensure_rule_permissions()
@@ -1179,6 +1243,7 @@ async fn agent_read_tools_enforce_initiator_permissions_and_scopes(pool: PgPool)
     for (name, arguments) in [
         ("list_blueprints", json!({})),
         ("list_contexts", json!({})),
+        ("get_context", json!({"context_id":context["id"]})),
         ("data_health_summary", json!({})),
         ("list_rule_findings", json!({})),
         ("list_workflow_runs", json!({})),

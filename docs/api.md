@@ -467,8 +467,11 @@ Exact rule/workflow definition reads, paged rule-run summaries, and targeted
 workflow-run summaries provide follow-up context without compiled plans,
 internal cursors, trigger payloads, or error bodies. They require
 `data_health.read`, `rules.read`, and `workflows.read` respectively; no rule or
-workflow management action is exposed to the agent. Writes use the
-same audited mutation services as the API.
+workflow management action is exposed to the agent. The agent may inspect a
+context by ID, then propose an approved parent/data replacement or deletion;
+it can also propose approved entity system-tag/metadata updates. Omitted
+annotation fields remain unchanged, and context deletion is rejected when the
+context is in use. All writes use the same audited mutation services as the API.
 
 ## Workflow run operations
 
