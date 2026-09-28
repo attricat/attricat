@@ -134,12 +134,32 @@ pub fn definitions() -> Vec<ToolDefinition> {
         definition(
             "list_rule_findings",
             "Read a bounded page of rule findings without raw evidence; optionally filter by entity ID. Requires rules.read.",
-            diagnostic_page_parameters(true),
+            diagnostic_page_parameters(Some("entity_id")),
+        ),
+        definition(
+            "get_rule_definition",
+            "Inspect a rule's latest or exact revision and its authored definition; requires rules.read.",
+            json!({"type":"object","required":["rule_id"],"properties":{"rule_id":{"type":"string","format":"uuid"},"version":{"type":"integer","minimum":1}},"additionalProperties":false}),
+        ),
+        definition(
+            "get_workflow_definition",
+            "Inspect a workflow's latest or exact revision and its authored definition; requires workflows.read.",
+            json!({"type":"object","required":["workflow_id"],"properties":{"workflow_id":{"type":"string","format":"uuid"},"version":{"type":"integer","minimum":1}},"additionalProperties":false}),
+        ),
+        definition(
+            "list_rule_runs",
+            "Read bounded status and finding counts for recent rule runs, optionally filtering by rule ID. No error bodies or internal cursors; requires rules.read.",
+            diagnostic_page_parameters(Some("rule_id")),
+        ),
+        definition(
+            "get_workflow_run",
+            "Inspect one workflow run's safe status and attempt summary by ID, without its trigger payload or error body; requires workflows.read.",
+            json!({"type":"object","required":["run_id"],"properties":{"run_id":{"type":"string","format":"uuid"}},"additionalProperties":false}),
         ),
         definition(
             "list_workflow_runs",
             "Read a bounded page of workflow run status and attempt counts without event payloads or error bodies. Requires workflows.read.",
-            diagnostic_page_parameters(false),
+            diagnostic_page_parameters(None),
         ),
         definition(
             "get_entity_preview_link",
@@ -274,13 +294,20 @@ pub fn definitions() -> Vec<ToolDefinition> {
     ]
 }
 
-fn diagnostic_page_parameters(entity_filter: bool) -> Value {
+fn safe_workflow_run(run: crate::repository::WorkflowRun) -> Value {
+    json!({"id":run.id,"workflow_id":run.workflow_id,"workflow_version":run.workflow_version,
+        "source":run.source,"status":run.status,"attempts":run.attempts,
+        "created_at":run.created_at,"completed_at":run.completed_at,
+        "failed_at":run.failed_at,"has_error":run.last_error.is_some()})
+}
+
+fn diagnostic_page_parameters(filter: Option<&str>) -> Value {
     let mut properties = json!({
         "limit":{"type":"integer","minimum":1,"maximum":25},
         "offset":{"type":"integer","minimum":0,"maximum":10000}
     });
-    if entity_filter {
-        properties["entity_id"] = json!({"type":"string","format":"uuid"});
+    if let Some(filter) = filter {
+        properties[filter] = json!({"type":"string","format":"uuid"});
     }
     json!({"type":"object","properties":properties,"additionalProperties":false})
 }
@@ -366,6 +393,10 @@ pub fn kind(name: &str) -> Result<ToolKind, ToolError> {
         | "get_value_history"
         | "data_health_summary"
         | "list_rule_findings"
+        | "get_rule_definition"
+        | "get_workflow_definition"
+        | "list_rule_runs"
+        | "get_workflow_run"
         | "list_workflow_runs"
         | "get_entity_preview_link"
         | "view_image"
@@ -642,6 +673,57 @@ pub async fn execute_read(
             })).collect::<Vec<_>>(),
                 "next_offset":next_history_offset(has_more, offset, limit)})
         }
+        "get_rule_definition" => {
+            #[derive(Deserialize)]
+            #[serde(deny_unknown_fields)]
+            struct Input { rule_id: Uuid, version: Option<i64> }
+            let input: Input = decode(arguments)?;
+            let rule = match input.version {
+                Some(version) if version > 0 => repository.get_rule_revision(input.rule_id, version).await?,
+                None => repository.get_rule(input.rule_id).await?,
+                _ => return Err(ToolError::InvalidArguments("version must be positive".into())),
+            }.ok_or(RepositoryError::NotFound("rule revision"))?;
+            json!({"id":rule.id,"code":rule.code,"name":rule.name,"version":rule.version,
+                "status":rule.status,"enabled_version":rule.enabled_version,
+                "blueprint_id":rule.blueprint_id,"blueprint_version":rule.blueprint_version,
+                "definition":rule.definition})
+        }
+        "get_workflow_definition" => {
+            #[derive(Deserialize)]
+            #[serde(deny_unknown_fields)]
+            struct Input { workflow_id: Uuid, version: Option<i64> }
+            let input: Input = decode(arguments)?;
+            let workflow = match input.version {
+                Some(version) if version > 0 => repository.get_workflow_revision(input.workflow_id, version).await?,
+                None => repository.get_workflow(input.workflow_id).await?,
+                _ => return Err(ToolError::InvalidArguments("version must be positive".into())),
+            }.ok_or(RepositoryError::NotFound("workflow revision"))?;
+            json!({"id":workflow.id,"code":workflow.code,"name":workflow.name,
+                "version":workflow.version,"status":workflow.status,
+                "enabled_version":workflow.enabled_version,"definition":workflow.definition})
+        }
+        "list_rule_runs" => {
+            #[derive(Deserialize)]
+            #[serde(deny_unknown_fields)]
+            struct Input { rule_id: Option<Uuid>, limit: Option<i64>, offset: Option<i64> }
+            let input: Input = decode(arguments)?;
+            let (limit, offset) = diagnostic_page_arguments(input.limit, input.offset)?;
+            let (items, has_more) = repository.rule_runs_page(input.rule_id, limit, offset).await?;
+            json!({"items":items.into_iter().map(|run| json!({
+                "id":run.id,"rule_id":run.rule_id,"rule_version":run.rule_version,
+                "scope_entity_id":run.scope_entity_id,"source":run.source,
+                "status":run.status,"dry_run":run.dry_run,"attempts":run.attempts,
+                "candidates_evaluated":run.candidates_evaluated,"findings_created":run.findings_created,
+                "findings_resolved":run.findings_resolved,"has_error":run.last_error.is_some(),
+                "created_at":run.created_at,"completed_at":run.completed_at
+            })).collect::<Vec<_>>(),
+                "next_offset":next_history_offset(has_more, offset, limit)})
+        }
+        "get_workflow_run" => {
+            let run_id = parse_uuid(&arguments, "run_id")?;
+            safe_workflow_run(repository.get_workflow_run(run_id).await?
+                .ok_or(RepositoryError::NotFound("workflow run"))?)
+        }
         "list_workflow_runs" => {
             #[derive(Deserialize)]
             #[serde(deny_unknown_fields)]
@@ -649,12 +731,7 @@ pub async fn execute_read(
             let input: Input = decode(arguments)?;
             let (limit, offset) = diagnostic_page_arguments(input.limit, input.offset)?;
             let (items, has_more) = repository.workflow_runs_page(limit, offset).await?;
-            json!({"items":items.into_iter().map(|run| json!({
-                "id":run.id,"workflow_id":run.workflow_id,"workflow_version":run.workflow_version,
-                "source":run.source,"status":run.status,"attempts":run.attempts,
-                "created_at":run.created_at,"completed_at":run.completed_at,
-                "failed_at":run.failed_at,"has_error":run.last_error.is_some()
-            })).collect::<Vec<_>>(),
+            json!({"items":items.into_iter().map(safe_workflow_run).collect::<Vec<_>>(),
                 "next_offset":next_history_offset(has_more, offset, limit)})
         }
         "get_entity_preview_link" => {
@@ -1802,8 +1879,12 @@ async fn read_authorized(
         "blueprint_authoring_guide" => return Ok(true),
         "list_blueprints" | "get_blueprint_revision" => ("blueprints.read", None, None),
         "data_health_summary" => ("data_health.read", None, None),
-        "list_rule_findings" => ("rules.read", None, None),
-        "list_workflow_runs" => ("workflows.read", None, None),
+        "list_rule_findings" | "get_rule_definition" | "list_rule_runs" => {
+            ("rules.read", None, None)
+        }
+        "list_workflow_runs" | "get_workflow_definition" | "get_workflow_run" => {
+            ("workflows.read", None, None)
+        }
         "list_contexts" => ("contexts.read", None, Some("__context_list__")),
         "get_entity"
         | "get_entity_context_preview"
@@ -1984,6 +2065,10 @@ mod tests {
             "data_health_summary",
             "list_rule_findings",
             "list_workflow_runs",
+            "get_rule_definition",
+            "get_workflow_definition",
+            "list_rule_runs",
+            "get_workflow_run",
         ] {
             assert_eq!(kind(name).unwrap(), ToolKind::Read);
             assert!(definitions.iter().any(|tool| tool.function.name == name));
@@ -2001,6 +2086,14 @@ mod tests {
             .function
             .parameters;
         assert_eq!(schema["properties"]["limit"]["maximum"], 25);
+        let run_schema = &definitions
+            .iter()
+            .find(|tool| tool.function.name == "list_rule_runs")
+            .unwrap()
+            .function
+            .parameters;
+        assert!(run_schema["properties"].get("rule_id").is_some());
+        assert!(run_schema["properties"].get("entity_id").is_none());
     }
 
     #[test]

@@ -463,8 +463,11 @@ and `get_value_history` tools support inspection before approval-gated
 `remove_entity_values` and `restore_entity_value`. Read-only operational tools
 also provide a data-health summary, paged rule findings (excluding raw evidence),
 and paged workflow-run statuses (excluding event payloads and error bodies).
-They require `data_health.read`, `rules.read`, and `workflows.read` respectively;
-no rule or workflow management action is exposed to the agent. Writes use the
+Exact rule/workflow definition reads, paged rule-run summaries, and targeted
+workflow-run summaries provide follow-up context without compiled plans,
+internal cursors, trigger payloads, or error bodies. They require
+`data_health.read`, `rules.read`, and `workflows.read` respectively; no rule or
+workflow management action is exposed to the agent. Writes use the
 same audited mutation services as the API.
 
 ## Workflow run operations

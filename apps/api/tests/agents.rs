@@ -40,6 +40,28 @@ async fn agent_operational_diagnostics_are_bounded_and_omit_internal_payloads(po
             .bind(Uuid::new_v4()).bind(workspace).bind(rule_id).bind(entity_id.parse::<Uuid>().unwrap())
             .bind(format!("check-{index}")).execute(&pool).await.unwrap();
     }
+    client
+        .post(format!("{base_url}/rules/{rule_id}/versions/1/publish"))
+        .send()
+        .await
+        .unwrap()
+        .error_for_status()
+        .unwrap();
+    client
+        .post(format!("{base_url}/rules/{rule_id}/versions/1/enable"))
+        .send()
+        .await
+        .unwrap()
+        .error_for_status()
+        .unwrap();
+    client
+        .post(format!("{base_url}/rules/{rule_id}/run-now"))
+        .json(&json!({"entity_id":entity_id,"dry_run":true,"idempotency_key":"diagnostic"}))
+        .send()
+        .await
+        .unwrap()
+        .error_for_status()
+        .unwrap();
     let definition = "format_version = 2\ncode = \"diagnostic_workflow\"\nname = \"Diagnostic workflow\"\n[[triggers]]\ntype = \"manual\"\n[[actions]]\ntype = \"system_tags_add\"\ntags = [\"checked\"]";
     let workflow: Value = client
         .post(format!("{base_url}/workflows"))
@@ -121,6 +143,61 @@ async fn agent_operational_diagnostics_are_bounded_and_omit_internal_payloads(po
     assert_eq!(workflows["next_offset"], 1);
     assert!(workflows["items"][0].get("trigger_event").is_none());
     assert!(workflows["items"][0].get("last_error").is_none());
+    let rule_definition = execute_read(
+        &repository,
+        actor,
+        workspace,
+        "get_rule_definition",
+        json!({"rule_id":rule_id,"version":1}),
+    )
+    .await
+    .unwrap();
+    assert!(
+        rule_definition["definition"]
+            .as_str()
+            .unwrap()
+            .contains("required")
+    );
+    assert!(rule_definition.get("compiled_plan").is_none());
+    let workflow_definition = execute_read(
+        &repository,
+        actor,
+        workspace,
+        "get_workflow_definition",
+        json!({"workflow_id":workflow_id,"version":1}),
+    )
+    .await
+    .unwrap();
+    assert!(
+        workflow_definition["definition"]
+            .as_str()
+            .unwrap()
+            .contains("system_tags_add")
+    );
+    assert!(workflow_definition.get("compiled_plan").is_none());
+    let rule_runs = execute_read(
+        &repository,
+        actor,
+        workspace,
+        "list_rule_runs",
+        json!({"rule_id":rule_id,"limit":1}),
+    )
+    .await
+    .unwrap();
+    assert_eq!(rule_runs["items"].as_array().unwrap().len(), 1);
+    assert_eq!(rule_runs["items"][0]["rule_id"], rule_id.to_string());
+    assert!(rule_runs["items"][0].get("candidate_cursor").is_none());
+    let workflow_run = execute_read(
+        &repository,
+        actor,
+        workspace,
+        "get_workflow_run",
+        json!({"run_id":workflows["items"][0]["id"]}),
+    )
+    .await
+    .unwrap();
+    assert_eq!(workflow_run["id"], workflows["items"][0]["id"]);
+    assert!(workflow_run.get("trigger_event").is_none());
     server.abort();
 }
 
@@ -1105,6 +1182,13 @@ async fn agent_read_tools_enforce_initiator_permissions_and_scopes(pool: PgPool)
         ("data_health_summary", json!({})),
         ("list_rule_findings", json!({})),
         ("list_workflow_runs", json!({})),
+        ("get_rule_definition", json!({"rule_id":Uuid::new_v4()})),
+        (
+            "get_workflow_definition",
+            json!({"workflow_id":Uuid::new_v4()}),
+        ),
+        ("list_rule_runs", json!({})),
+        ("get_workflow_run", json!({"run_id":Uuid::new_v4()})),
         ("get_entity", json!({"entity_id": entity["id"]})),
         (
             "get_entity_context_preview",

@@ -242,6 +242,12 @@ impl CatalogRepository {
         Ok(sqlx::query_as("SELECT id,workflow_id,workflow_version,trigger_event_id,trigger_sequence,source,status,attempts,failed_at,completed_at,last_error,created_at,cancelled_at,root_trigger_event_id,causal_depth FROM workflow_runs WHERE workspace_id=$1 ORDER BY created_at DESC").bind(ws).fetch_all(&self.pool).await?)
     }
 
+    pub async fn get_workflow_run(&self, id: Uuid) -> Result<Option<WorkflowRun>, RepositoryError> {
+        let ws = self.workspace_id.unwrap_or(Self::DEFAULT_WORKSPACE_ID);
+        sqlx::query_as("SELECT id,workflow_id,workflow_version,trigger_event_id,trigger_sequence,source,status,attempts,failed_at,completed_at,last_error,created_at,cancelled_at,root_trigger_event_id,causal_depth FROM workflow_runs WHERE workspace_id=$1 AND id=$2")
+            .bind(ws).bind(id).fetch_optional(&self.pool).await.map_err(Into::into)
+    }
+
     pub async fn workflow_runs_page(
         &self,
         limit: i64,

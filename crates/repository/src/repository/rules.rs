@@ -105,6 +105,24 @@ impl CatalogRepository {
             .await?
             .into_domain())
     }
+    pub async fn get_rule_revision(
+        &self,
+        id: Uuid,
+        version: i64,
+    ) -> Result<Option<Rule>, RepositoryError> {
+        let ws = self.workspace_id.unwrap_or(Self::DEFAULT_WORKSPACE_ID);
+        let q = format!(
+            "SELECT {RULE_FIELDS} FROM rules r JOIN rule_lifecycles l ON l.rule_id=r.id WHERE r.workspace_id=$1 AND r.id=$2 AND r.version=$3"
+        );
+        Ok(sqlx::query_as::<_, Db<Rule>>(&q)
+            .bind(ws)
+            .bind(id)
+            .bind(version)
+            .fetch_optional(&self.pool)
+            .await?
+            .into_domain())
+    }
+
     pub async fn create_rule(&self, input: CreateRule) -> Result<Rule, RepositoryError> {
         let compiled = catalog_rules::compile(&input.definition)
             .map_err(|e| RepositoryError::InvalidRuleDefinition(e.to_string()))?;
@@ -388,6 +406,20 @@ impl CatalogRepository {
         let ws = self.workspace_id.unwrap_or(Self::DEFAULT_WORKSPACE_ID);
         Ok(sqlx::query_as::<_, Db<RuleFinding>>("SELECT id,rule_id,rule_version,entity_id,context_id,severity,message,evidence,state,acknowledged_at,resolved_at,created_at,updated_at FROM rule_findings WHERE workspace_id=$1 AND ($2::uuid IS NULL OR entity_id=$2) ORDER BY updated_at DESC").bind(ws).bind(entity_id).fetch_all(&self.pool).await?.into_domain())
     }
+    pub async fn rule_runs_page(
+        &self,
+        rule_id: Option<Uuid>,
+        limit: i64,
+        offset: i64,
+    ) -> Result<(Vec<RuleRun>, bool), RepositoryError> {
+        let ws = self.workspace_id.unwrap_or(Self::DEFAULT_WORKSPACE_ID);
+        let mut rows = sqlx::query_as::<_, Db<RuleRun>>("SELECT id,rule_id,rule_version,source,dry_run,scope_entity_id,status,candidate_cursor,candidates_evaluated,findings_created,findings_resolved,attempts,last_error,completed_at,created_at FROM rule_runs WHERE workspace_id=$1 AND ($2::uuid IS NULL OR rule_id=$2) ORDER BY created_at DESC,id DESC LIMIT $3 OFFSET $4")
+            .bind(ws).bind(rule_id).bind(limit + 1).bind(offset).fetch_all(&self.pool).await?;
+        let has_more = rows.len() as i64 > limit;
+        rows.truncate(limit as usize);
+        Ok((rows.into_domain(), has_more))
+    }
+
     pub async fn rule_findings_page(
         &self,
         entity_id: Option<Uuid>,
