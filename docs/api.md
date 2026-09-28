@@ -1,9 +1,9 @@
 # API Reference
 
-The API is JSON over HTTP. Successful responses are JSON; failures use an
-`error` object with a machine-readable code and message; the HTTP status is the
-response status code. The
-[CLI](cli.md) is the preferred interface for shell automation.
+Most API routes exchange JSON over HTTP; successful empty responses use `204`,
+and file, asset, and metrics routes return their documented content types.
+Failures return a JSON `error` object with a machine-readable code and message,
+alongside the HTTP status. Use the [CLI](cli.md) for shell automation.
 
 ## Authorization
 

@@ -1,9 +1,9 @@
 # Browser Authentication
 
 Catalog keeps account identity separate from authentication providers. The `users` and
-`workspace_memberships` tables contain no provider-specific identifier. This release
-adds local-password credentials, email-action persistence, and browser sessions.
-External identity adapters remain separate follow-up work.
+`workspace_memberships` tables contain no provider-specific identifier. Local
+password credentials, email actions, and browser sessions are implemented;
+external identity providers are not.
 
 ## External-provider identity adapter seam
 
@@ -13,12 +13,11 @@ verified `(issuer, subject)` pair, which is globally unique and links to one
 ordinary internal `users.id`. Provider-specific identifiers and claims never
 appear on `users` or `workspace_memberships`.
 
-An adapter validates its protocol callback before resolving the verified pair
-through the Rust account repository. It must not merge identities by email. A
-new provider identity may be linked only by an explicit authenticated
-account-linking action through that repository. The resulting user
-uses the same sessions, invalidation, membership, and RBAC evaluation as a
-local account.
+A future adapter would need to validate its protocol callback before
+resolving the verified pair through the Rust account repository. It must not
+merge identities by email; linking a new provider identity would require an
+explicit authenticated account-linking action. No OIDC/SAML callback or
+account-linking flow is available today.
 
 ## Local credentials
 
@@ -58,12 +57,12 @@ revokes lifecycle actions, and consumes valid verification or password actions i
 explicit transactions. Adapters pass only password hashes and token digests to that
 application layer; database migrations contain no authorization or lifecycle functions.
 
-The local-development and E2E delivery adapter sends through Mailpit SMTP. It
-builds reset links from `PASSWORD_RESET_URL` and must not record opaque secrets
-in logs, telemetry, database rows, or API responses. Mailpit's web UI is for
-local inspection; E2E retrieves captured messages and URLs through Mailpit's
-REST API. It is not production email delivery: replacing this boundary with a
-production provider remains a follow-up.
+The SMTP delivery adapter uses Mailpit for local development and E2E testing.
+It builds reset links from `PASSWORD_RESET_URL` and must not record opaque
+secrets in logs, telemetry, database rows, or API responses. Mailpit's web UI
+is for local inspection; E2E retrieves captured messages and URLs through its
+REST API. Production uses a separately operated SMTP service with TLS; see
+[production operations](operations.md#smtp-and-secret-rotation).
 
 ## Workspace sign-in routing
 
