@@ -189,6 +189,23 @@ configured in the selected blueprint's `views.table.columns` and `direction` is
 }
 ```
 
+The built-in `publication_status` sort orders entities in one enabled
+publication channel. Supply its context code as
+`{"sort":{"field":"publication_status","direction":"asc","context_code":"web"}}`.
+Ascending puts **not published** first (including entities without a channel
+publication row); descending puts **published** first. Sorting compares approval
+metadata for the specified channel, not an export snapshot. An omitted, unknown,
+or disabled context returns `422`. The opaque cursor binds to the context, so
+switching channels requires starting at the first page. The agent
+`search_entities` tool accepts the same sort object.
+
+The built-in `blueprint_version` field is also sortable without blueprint
+configuration: `{"sort":{"field":"blueprint_version","direction":"asc"}}`
+orders older revisions first when the blueprint version is omitted (all
+versions). Descending orders newer revisions first. Entity ID breaks ties
+within a version for stable keyset pagination. An explicit `blueprint.version`
+restricts results to that revision before sorting.
+
 The field may be local or a configured path with up to three relationship hops.
 Every relationship hop must declare `cardinality = "one"`. A relationship-path
 sort normally names an explicit published source version. When `version` is
@@ -201,8 +218,8 @@ version), or `multiple`. This summary uses the complete query/filter/facet/tag
 candidate set, not the current page. Sorted responses use an opaque keyset
 `next_cursor`; return it unchanged as `page.cursor` with the same sort. The
 cursor includes the effective source version, so a changed all-version result
-scope rejects the stale cursor. An invalid direction, unconfigured field, or
-non-scalar column also returns `422`.
+scope rejects the stale cursor. An invalid direction, unconfigured field (other
+than `blueprint_version`), or non-scalar column also returns `422`.
 
 When an explicit current version is selected, first-page responses also return
 `hidden_outdated_count` and `hidden_outdated_count_capped`. This count ignores

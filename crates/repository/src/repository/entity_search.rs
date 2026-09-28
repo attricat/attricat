@@ -39,6 +39,7 @@ pub struct EntitySearchSort {
     pub value_type: String,
     pub descending: bool,
     pub effective_source_version: Option<i64>,
+    pub publication_context_id: Option<Uuid>,
 }
 
 #[derive(Clone, Debug, serde::Serialize)]
@@ -65,6 +66,8 @@ struct SortedSearchCursor {
     field: String,
     descending: bool,
     effective_source_version: Option<i64>,
+    #[serde(default)]
+    publication_context_id: Option<Uuid>,
     is_null: bool,
     value: Option<String>,
     target_id: Uuid,
@@ -678,6 +681,7 @@ impl CatalogRepository {
             && (cursor.field != sort.field
                 || cursor.descending != sort.descending
                 || cursor.effective_source_version != sort.effective_source_version
+                || cursor.publication_context_id != sort.publication_context_id
                 || cursor.version != 4)
         {
             return Err(RepositoryError::InvalidBlueprintDefinition(
@@ -691,6 +695,24 @@ impl CatalogRepository {
             .unwrap_or(false);
         let cursor_id = cursor.as_ref().map(|cursor| cursor.id);
         let cursor_target_id = cursor.as_ref().map(|cursor| cursor.target_id);
+        if matches!(
+            sort.field.as_str(),
+            "blueprint_version" | "publication_status"
+        ) {
+            return self
+                .search_entity_previews_sorted_system(
+                    blueprint_id,
+                    blueprint_version,
+                    limit,
+                    matching_entity_ids,
+                    system_tags,
+                    outdated,
+                    current_blueprint_version,
+                    sort,
+                    cursor.as_ref(),
+                )
+                .await;
+        }
         if !sort.relationship_path.is_empty() {
             return self
                 .search_entity_previews_sorted_relationship(
@@ -816,6 +838,101 @@ impl CatalogRepository {
             .fetch_all(&self.pool)
             .await?;
         let mut rows = rows;
+        let next_cursor = if rows.len() > limit as usize {
+            rows.pop();
+            rows.last()
+                .map(|row| encode_sorted_search_cursor(sort, row))
+        } else {
+            None
+        };
+        Ok((
+            rows.into_iter().map(sorted_entity_preview).collect(),
+            next_cursor,
+        ))
+    }
+
+    /// Sort a built-in entity property independently of blueprint table columns.
+    /// Entity ID breaks ties so pagination cannot omit or duplicate rows.
+    #[allow(clippy::too_many_arguments)]
+    async fn search_entity_previews_sorted_system(
+        &self,
+        blueprint_id: Uuid,
+        blueprint_version: Option<i64>,
+        limit: i64,
+        matching_entity_ids: Option<&[Uuid]>,
+        system_tags: &[String],
+        outdated: bool,
+        current_blueprint_version: i64,
+        sort: &EntitySearchSort,
+        cursor: Option<&SortedSearchCursor>,
+    ) -> Result<(Vec<EntityPreview>, Option<String>), RepositoryError> {
+        let cursor_version = cursor
+            .map(|cursor| {
+                if cursor.is_null {
+                    return Err(RepositoryError::InvalidBlueprintDefinition(
+                        "page.cursor is invalid".to_owned(),
+                    ));
+                }
+                cursor
+                    .value
+                    .as_deref()
+                    .and_then(|value| value.parse::<i64>().ok())
+                    .ok_or_else(|| {
+                        RepositoryError::InvalidBlueprintDefinition(
+                            "page.cursor is invalid".to_owned(),
+                        )
+                    })
+            })
+            .transpose()?;
+        let comparison = if sort.descending { "<" } else { ">" };
+        let direction = if sort.descending { "DESC" } else { "ASC" };
+        let (expression, join) = if sort.field == "publication_status" {
+            (
+                "CASE WHEN p.published_at IS NULL THEN 0 ELSE 1 END",
+                "LEFT JOIN entity_channel_publications p ON p.workspace_id = e.workspace_id AND p.entity_id = e.id AND p.context_id = $11",
+            )
+        } else {
+            ("e.blueprint_version", "")
+        };
+        let sql = format!(
+            r#"SELECT e.id, e.blueprint_version, ('attricat.sample'=ANY(e.system_tags)) AS is_sample, e.created_at, e.projections -> 'preview' AS preview,
+                         b.views AS blueprint_views,
+                         (SELECT COALESCE(jsonb_object_agg(attribute.code, attribute.context_fallback), '{{}}'::jsonb)
+                            FROM attributes attribute WHERE attribute.blueprint_id = e.blueprint_id
+                              AND attribute.blueprint_version = e.blueprint_version AND attribute.deleted_at IS NULL) AS blueprint_context_fallback,
+                         ({expression})::text AS sort_value, false AS sort_is_null, e.id AS sort_target_id
+                  FROM entities e
+                  JOIN blueprints b ON b.id = e.blueprint_id AND b.version = e.blueprint_version
+                  {join}
+                  WHERE e.blueprint_id = $1 AND ($2::bigint IS NULL OR e.blueprint_version = $2)
+                    AND e.workspace_id = $10 AND e.deleted_at IS NULL
+                    AND ($3::uuid[] IS NULL OR e.id = ANY($3))
+                    AND ($4::text[] IS NULL OR e.system_tags @> $4)
+                    AND (NOT $5 OR e.blueprint_version <> $6)
+                    AND ($8::uuid IS NULL OR ({expression}) {comparison} $7::bigint
+                         OR (({expression}) = $7 AND e.id > $8))
+                  ORDER BY {expression} {direction}, e.id ASC
+                  LIMIT $9"#
+        );
+        let query = sqlx::query_as::<_, SortedEntityPreviewRow>(&sql)
+            .bind(blueprint_id)
+            .bind(blueprint_version)
+            .bind(matching_entity_ids)
+            .bind((!system_tags.is_empty()).then_some(system_tags))
+            .bind(outdated)
+            .bind(current_blueprint_version)
+            .bind(cursor_version)
+            .bind(cursor.map(|cursor| cursor.id))
+            .bind(limit + 1)
+            .bind(self.workspace_id.unwrap_or(Self::DEFAULT_WORKSPACE_ID));
+        let mut rows = if sort.field == "publication_status" {
+            query
+                .bind(sort.publication_context_id)
+                .fetch_all(&self.pool)
+                .await?
+        } else {
+            query.fetch_all(&self.pool).await?
+        };
         let next_cursor = if rows.len() > limit as usize {
             rows.pop();
             rows.last()
@@ -2558,6 +2675,7 @@ fn encode_sorted_search_cursor(sort: &EntitySearchSort, row: &SortedEntityPrevie
         field: sort.field.clone(),
         descending: sort.descending,
         effective_source_version: sort.effective_source_version,
+        publication_context_id: sort.publication_context_id,
         is_null: row.sort_is_null,
         value: row.sort_value.clone(),
         target_id: row.sort_target_id,

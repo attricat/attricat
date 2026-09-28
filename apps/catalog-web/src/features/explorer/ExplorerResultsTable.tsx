@@ -65,6 +65,7 @@ export const ExplorerResultsTable = ({
   onSortChange,
   publicationContextCode,
   publicationContextId,
+  publicationSortAvailable,
   canPublish,
   canDelete,
   relationshipSortAvailable = true,
@@ -81,6 +82,7 @@ export const ExplorerResultsTable = ({
   onSortChange: (field: string) => void;
   publicationContextCode: string;
   publicationContextId: string | undefined;
+  publicationSortAvailable: boolean;
   canPublish: boolean;
   canDelete: boolean;
   relationshipSortAvailable?: boolean;
@@ -233,6 +235,7 @@ export const ExplorerResultsTable = ({
     blueprint,
     tableColumns,
     publicationContextCode,
+    publicationSortAvailable,
     publicationsByEntityId,
     runtime: runtime.data,
     sort,

@@ -43,6 +43,7 @@ type ColumnOptions = {
   blueprint: BlueprintWithAttributes;
   tableColumns: ExplorerTableColumn[];
   publicationContextCode: string;
+  publicationSortAvailable: boolean;
   publicationsByEntityId: Map<string, EntityPublicationStatus | undefined>;
   runtime: Awaited<ReturnType<typeof getExtensionRuntime>> | undefined;
   sort?: { field: string; direction: 'asc' | 'desc' };
@@ -59,6 +60,7 @@ export const buildExplorerColumnDefinitions = ({
   blueprint,
   tableColumns,
   publicationContextCode,
+  publicationSortAvailable,
   publicationsByEntityId,
   runtime,
   sort,
@@ -99,9 +101,19 @@ export const buildExplorerColumnDefinitions = ({
     }) as LegacyColumnDef<EntityItem, unknown>,
     columnHelper.display({
       id: 'publication',
-      header: t('explorer.publicationForContext', {
-        context: publicationContextCode,
-      }),
+      header: () => {
+        const label = t('explorer.publicationForContext', { context: publicationContextCode });
+        if (!publicationSortAvailable) return label;
+        return (
+          <TableSortLabel
+            active={sort?.field === 'publication_status'}
+            direction={sort?.field === 'publication_status' ? sort.direction : 'asc'}
+            onClick={() => onSortChange('publication_status')}
+          >
+            {label}
+          </TableSortLabel>
+        );
+      },
       cell: (info) => {
         const publication = publicationsByEntityId.get(info.row.original.id);
         if (!publication) return '—';
@@ -116,7 +128,15 @@ export const buildExplorerColumnDefinitions = ({
     }) as LegacyColumnDef<EntityItem, unknown>,
     columnHelper.display({
       id: 'schema',
-      header: t('explorer.schema'),
+      header: () => (
+        <TableSortLabel
+          active={sort?.field === 'blueprint_version'}
+          direction={sort?.field === 'blueprint_version' ? sort.direction : 'asc'}
+          onClick={() => onSortChange('blueprint_version')}
+        >
+          {t('explorer.schema')}
+        </TableSortLabel>
+      ),
       cell: (info) => {
         const entity = info.row.original;
         return (

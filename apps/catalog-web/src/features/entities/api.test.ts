@@ -476,6 +476,18 @@ describe('entity API client', () => {
     });
   });
 
+  it('posts the selected publication channel for status sorting', async () => {
+    respond({ blueprint: blueprintWithAttributes, items: [], next_cursor: null });
+    await searchEntities({
+      blueprint: 'product',
+      sort: { field: 'publication_status', direction: 'asc', context_code: 'web' },
+    });
+    const request = fetchMock.mock.lastCall?.[1] as RequestInit;
+    expect(JSON.parse(request.body as string).sort).toEqual({
+      field: 'publication_status', direction: 'asc', context_code: 'web',
+    });
+  });
+
   it('posts typed attribute filters', async () => {
     respond({
       blueprint: blueprintWithAttributes,

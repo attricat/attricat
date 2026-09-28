@@ -835,6 +835,50 @@ async fn resolve_table_sort(
             ));
         }
     };
+    if sort.field == "publication_status" {
+        let code = sort.context_code.as_deref().ok_or_else(|| {
+            ApiError::invalid_input(
+                "sort.context_code is required for publication_status".to_owned(),
+            )
+        })?;
+        let channel = repository
+            .list_publication_channels()
+            .await?
+            .into_iter()
+            .find(|channel| channel.context_code == code && channel.enabled)
+            .ok_or_else(|| {
+                ApiError::invalid_input(
+                    "sort.context_code must be an enabled publication channel".to_owned(),
+                )
+            })?;
+        return Ok(Some(EntitySearchSort {
+            field: sort.field.clone(),
+            relationship_path: Vec::new(),
+            leaf_field: sort.field.clone(),
+            leaf_blueprint_id: blueprint.blueprint.id,
+            value_type: "integer".to_owned(),
+            descending,
+            effective_source_version,
+            publication_context_id: Some(channel.context_id),
+        }));
+    }
+    if sort.context_code.is_some() {
+        return Err(ApiError::invalid_input(
+            "sort.context_code is only valid for publication_status".to_owned(),
+        ));
+    }
+    if sort.field == "blueprint_version" {
+        return Ok(Some(EntitySearchSort {
+            field: sort.field.clone(),
+            relationship_path: Vec::new(),
+            leaf_field: sort.field.clone(),
+            leaf_blueprint_id: blueprint.blueprint.id,
+            value_type: "integer".to_owned(),
+            descending,
+            effective_source_version,
+            publication_context_id: None,
+        }));
+    }
     let configured = blueprint
         .blueprint
         .views
@@ -911,6 +955,7 @@ async fn resolve_table_sort(
         value_type,
         descending,
         effective_source_version,
+        publication_context_id: None,
     }))
 }
 

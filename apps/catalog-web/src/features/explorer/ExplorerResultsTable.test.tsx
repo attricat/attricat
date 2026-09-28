@@ -80,7 +80,13 @@ const secondItem: EntityItem = {
   is_sample: false,
 };
 
-const renderTable = (items = [item, secondItem], canDelete = false) => {
+const renderTable = (
+  items = [item, secondItem],
+  canDelete = false,
+  onSortChange = vi.fn(),
+  sort?: { field: string; direction: 'asc' | 'desc' },
+  publicationSortAvailable = true,
+) => {
   const queryClient = new QueryClient({
     defaultOptions: { queries: { retry: false, staleTime: Infinity } },
   });
@@ -99,9 +105,11 @@ const renderTable = (items = [item, secondItem], canDelete = false) => {
           isFetchingNextPage={false}
           items={items}
           onLoadMore={vi.fn()}
-          onSortChange={vi.fn()}
+          onSortChange={onSortChange}
+          sort={sort}
           publicationContextCode="default"
           publicationContextId={undefined}
+          publicationSortAvailable={publicationSortAvailable}
           totalCount={items.length}
           totalCountCapped={false}
         />
@@ -111,6 +119,26 @@ const renderTable = (items = [item, secondItem], canDelete = false) => {
 };
 
 describe('ExplorerResultsTable', () => {
+  it('sorts publication status for the selected channel', async () => {
+    const onSortChange = vi.fn();
+    renderTable([item], false, onSortChange);
+    await userEvent.setup().click(screen.getByRole('button', { name: /Publication/ }));
+    expect(onSortChange).toHaveBeenCalledWith('publication_status');
+  });
+
+  it('does not offer publication sorting when the channel is unavailable', () => {
+    renderTable([item], false, vi.fn(), undefined, false);
+    expect(screen.queryByRole('button', { name: /Publication/ })).toBeNull();
+  });
+
+  it('offers a sortable schema header even without configured table columns', async () => {
+    const onSortChange = vi.fn();
+    renderTable([item], false, onSortChange, { field: 'blueprint_version', direction: 'asc' });
+    const header = screen.getByRole('button', { name: /Schema/ });
+    expect(header.getAttribute('aria-sort')).toBeNull();
+    await userEvent.setup().click(header);
+    expect(onSortChange).toHaveBeenCalledWith('blueprint_version');
+  });
   it('shows the localized Sample badge and hides selection by default', () => {
     renderTable([item]);
     expect(screen.getByText('Sample')).toBeTruthy();

@@ -83,7 +83,16 @@ can select an older published revision, and provides an explicit **All
 versions** option. Current and historical single-version scopes can sort a
 configured scalar column in ascending or descending order. In an all-version
 scope, relationship sorting is enabled only when the complete matching result
-set contains one source revision.
+set contains one source revision. The built-in **Schema** column is sortable
+without any blueprint table-column configuration. Select **All versions** and
+click **Schema** for ascending version order (oldest/outdated first); click
+again for descending order (newest first). In a single-version scope every
+entity has the same schema version, so this sort only changes the ID tie order.
+The built-in **Publication** column is sortable when the selected context is an
+enabled publication channel. Click once for unpublished entities first and
+again for published entities first. Changing the selected context sorts by
+that channel instead; the agent `search_entities` tool can request the same
+order with `sort.field = "publication_status"` and `sort.context_code`.
 
 The table uses the API's version-bound keyset cursor for the selected field.
 Relationship-path sorting requires `cardinality = "one"` on every hop and uses

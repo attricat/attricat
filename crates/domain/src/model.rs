@@ -566,6 +566,9 @@ pub struct RelationshipFilter {
 pub struct SearchSort {
     pub field: String,
     pub direction: String,
+    /// Required when sorting publication status; identifies the selected channel.
+    #[serde(default)]
+    pub context_code: Option<String>,
 }
 
 #[derive(Clone, Debug, Default, Deserialize)]

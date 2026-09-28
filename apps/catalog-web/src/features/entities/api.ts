@@ -60,7 +60,7 @@ export type SearchEntitiesOptions = {
     selected_target_ids: string[];
   }[];
   signal?: AbortSignal;
-  sort?: { field: string; direction: 'asc' | 'desc' };
+  sort?: { field: string; direction: 'asc' | 'desc'; context_code?: string };
   version?: number;
 };
 

@@ -560,6 +560,7 @@ export const searchEntitiesRequestSchema = z.object({
     .object({
       field: z.string().min(1),
       direction: z.enum(['asc', 'desc']),
+      context_code: z.string().min(1).optional(),
     })
     .optional(),
   include_total: z.boolean().optional(),

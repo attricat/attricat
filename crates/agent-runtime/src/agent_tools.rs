@@ -94,8 +94,8 @@ pub fn definitions() -> Vec<ToolDefinition> {
         ),
         definition(
             "search_entities",
-            "Search entities of a blueprint by scalar values and system tags. Query terms are whitespace-separated AND terms. Bare free text searches scalar values on the selected blueprint only. Use *:value for global relationship-aware discovery through up to three incoming edges. Use attribute:value for a selected-blueprint attribute; use relationship:value or an explicit path with up to three relationship hops and a scalar leaf; and use blueprint:value or blueprint.attribute:value for the selected blueprint (code or name). A trailing * means prefix matching. Results include match_explanations with deterministic match witnesses and relationship paths. Omit blueprint.version to include every published revision; set outdated to true to return only entities that are not on the latest published revision. Use sort with a configured scalar table-column field and asc or desc direction; relationship table columns use paths of up to three hops. A relationship-path sort without blueprint.version is accepted only when the complete matching result uses one source version. Without sort, results are paginated in ascending creation order.",
-            json!({"type":"object","required":["blueprint"],"properties":{"blueprint":{"type":"object","required":["code"],"properties":{"code":{"type":"string"},"version":{"type":"integer","minimum":1}},"additionalProperties":false},"query":{"type":"string"},"system_tags":{"type":"array","items":{"type":"string"}},"outdated":{"type":"boolean"},"sort":{"type":"object","required":["field","direction"],"properties":{"field":{"type":"string"},"direction":{"type":"string","enum":["asc","desc"]}},"additionalProperties":false},"page":{"type":"object","properties":{"size":{"type":"integer","minimum":1,"maximum":100},"cursor":{"type":"string"}},"additionalProperties":false}},"additionalProperties":false}),
+            "Search entities of a blueprint by scalar values and system tags. Query terms are whitespace-separated AND terms. Bare free text searches scalar values on the selected blueprint only. Use *:value for global relationship-aware discovery through up to three incoming edges. Use attribute:value for a selected-blueprint attribute; use relationship:value or an explicit path with up to three relationship hops and a scalar leaf; and use blueprint:value or blueprint.attribute:value for the selected blueprint (code or name). A trailing * means prefix matching. Results include match_explanations with deterministic match witnesses and relationship paths. Omit blueprint.version to include every published revision; set outdated to true to return only entities that are not on the latest published revision. Use sort with a configured scalar table-column field, blueprint_version, or publication_status and asc or desc direction; ascending blueprint_version puts older schemas first, ascending publication_status puts unpublished entities first and requires sort.context_code for an enabled channel. Relationship table columns use paths of up to three hops. A relationship-path sort without blueprint.version is accepted only when the complete matching result uses one source version. Without sort, results are paginated in ascending creation order.",
+            json!({"type":"object","required":["blueprint"],"properties":{"blueprint":{"type":"object","required":["code"],"properties":{"code":{"type":"string"},"version":{"type":"integer","minimum":1}},"additionalProperties":false},"query":{"type":"string"},"system_tags":{"type":"array","items":{"type":"string"}},"outdated":{"type":"boolean"},"sort":{"type":"object","required":["field","direction"],"properties":{"field":{"type":"string"},"direction":{"type":"string","enum":["asc","desc"]},"context_code":{"type":"string"}},"additionalProperties":false},"page":{"type":"object","properties":{"size":{"type":"integer","minimum":1,"maximum":100},"cursor":{"type":"string"}},"additionalProperties":false}},"additionalProperties":false}),
         ),
         definition(
             "create_blueprint",
@@ -945,6 +945,50 @@ async fn resolve_agent_search_sort(
             ));
         }
     };
+    if sort.field == "publication_status" {
+        let code = sort.context_code.as_deref().ok_or_else(|| {
+            ToolError::InvalidArguments(
+                "sort.context_code is required for publication_status".to_owned(),
+            )
+        })?;
+        let channel = repository
+            .list_publication_channels()
+            .await?
+            .into_iter()
+            .find(|channel| channel.context_code == code && channel.enabled)
+            .ok_or_else(|| {
+                ToolError::InvalidArguments(
+                    "sort.context_code must be an enabled publication channel".to_owned(),
+                )
+            })?;
+        return Ok(Some(EntitySearchSort {
+            field: sort.field.clone(),
+            relationship_path: Vec::new(),
+            leaf_field: sort.field.clone(),
+            leaf_blueprint_id: blueprint.blueprint.id,
+            value_type: "integer".to_owned(),
+            descending,
+            effective_source_version,
+            publication_context_id: Some(channel.context_id),
+        }));
+    }
+    if sort.context_code.is_some() {
+        return Err(ToolError::InvalidArguments(
+            "sort.context_code is only valid for publication_status".to_owned(),
+        ));
+    }
+    if sort.field == "blueprint_version" {
+        return Ok(Some(EntitySearchSort {
+            field: sort.field.clone(),
+            relationship_path: Vec::new(),
+            leaf_field: sort.field.clone(),
+            leaf_blueprint_id: blueprint.blueprint.id,
+            value_type: "integer".to_owned(),
+            descending,
+            effective_source_version,
+            publication_context_id: None,
+        }));
+    }
     let configured = blueprint
         .blueprint
         .views
@@ -1023,6 +1067,7 @@ async fn resolve_agent_search_sort(
         value_type,
         descending,
         effective_source_version,
+        publication_context_id: None,
     }))
 }
 
@@ -1156,7 +1201,7 @@ mod tests {
             .expect("search_entities definition");
         assert_eq!(
             search.function.parameters,
-            json!({"type":"object","required":["blueprint"],"properties":{"blueprint":{"type":"object","required":["code"],"properties":{"code":{"type":"string"},"version":{"type":"integer","minimum":1}},"additionalProperties":false},"query":{"type":"string"},"system_tags":{"type":"array","items":{"type":"string"}},"outdated":{"type":"boolean"},"sort":{"type":"object","required":["field","direction"],"properties":{"field":{"type":"string"},"direction":{"type":"string","enum":["asc","desc"]}},"additionalProperties":false},"page":{"type":"object","properties":{"size":{"type":"integer","minimum":1,"maximum":100},"cursor":{"type":"string"}},"additionalProperties":false}},"additionalProperties":false})
+            json!({"type":"object","required":["blueprint"],"properties":{"blueprint":{"type":"object","required":["code"],"properties":{"code":{"type":"string"},"version":{"type":"integer","minimum":1}},"additionalProperties":false},"query":{"type":"string"},"system_tags":{"type":"array","items":{"type":"string"}},"outdated":{"type":"boolean"},"sort":{"type":"object","required":["field","direction"],"properties":{"field":{"type":"string"},"direction":{"type":"string","enum":["asc","desc"]},"context_code":{"type":"string"}},"additionalProperties":false},"page":{"type":"object","properties":{"size":{"type":"integer","minimum":1,"maximum":100},"cursor":{"type":"string"}},"additionalProperties":false}},"additionalProperties":false})
         );
     }
 

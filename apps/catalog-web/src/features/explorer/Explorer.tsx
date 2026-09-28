@@ -51,6 +51,8 @@ import { authQueryKeys } from '../auth/queryKeys';
 import { ApiRequestError } from '../../api/request';
 import { isHiddenByDefault } from '../entities/attributeVisibility';
 import { SavedSearchActions } from '../saved-views/SavedSearchActions';
+import { listPublicationChannels } from '../exports/api';
+import { exportQueryKeys } from '../exports/queryKeys';
 import type { SavedView } from '../saved-views/schemas';
 
 export const Explorer = ({
@@ -152,6 +154,16 @@ export const Explorer = ({
   const facetContextId = contexts.data?.find(
     (context) => context.code === facetContextCode,
   )?.id;
+  const channels = useQuery({
+    queryKey: exportQueryKeys.channels(),
+    queryFn: listPublicationChannels,
+  });
+  const publicationSortAvailable = channels.data?.some(
+    (channel) => channel.context_code === facetContextCode && channel.enabled,
+  ) ?? false;
+  const requestSort = search.sort?.field === 'publication_status'
+    ? { ...search.sort, context_code: facetContextCode }
+    : search.sort;
   const relationshipPathFields = [
     ...relationshipFields,
     ...(search.relationshipFacets ?? []).flatMap(
@@ -195,7 +207,7 @@ export const Explorer = ({
       filters: search.attributeFilters,
       query: search.query,
       relationshipFilters,
-      sort: search.sort,
+      sort: requestSort,
       version: effectiveVersion,
     }),
     queryFn: ({ pageParam, signal }) =>
@@ -207,7 +219,7 @@ export const Explorer = ({
         query: search.query,
         relationshipFilters,
         signal,
-        sort: search.sort,
+        sort: requestSort,
         version: effectiveVersion,
       }),
     initialPageParam: null as string | null,
@@ -582,6 +594,7 @@ export const Explorer = ({
                   items={resultItems}
                   publicationContextCode={facetContextCode}
                   publicationContextId={facetContextId}
+                  publicationSortAvailable={publicationSortAvailable}
                   totalCount={resultPages[0]?.total_count ?? null}
                   totalCountCapped={resultPages[0]?.total_count_capped ?? false}
                   onLoadMore={() => void results.fetchNextPage()}
