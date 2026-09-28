@@ -11,7 +11,7 @@ COPY contracts contracts
 COPY apps/catalog-web apps/catalog-web
 RUN pnpm --dir apps/catalog-web build
 
-FROM rust:1.95-bookworm AS rust-builder
+FROM rust:bookworm AS rust-builder
 # Wasmtime/Cranelift is memory-intensive under full dependency optimization.
 # Level 1 still produces an optimized runtime while keeping release builds viable
 # on ordinary CI runners; one cargo job prevents parallel compiler spikes.
