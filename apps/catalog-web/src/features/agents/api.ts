@@ -30,6 +30,12 @@ export const searchConversations = (query: string, cursor?: string) => {
 };
 export const getConversation = (id: string) =>
   request(`/api/agent/conversations/${uuidPathParam(id)}`, conversationSchema);
+export const updateConversationTitle = (id: string, title: string) =>
+  request(
+    `/api/agent/conversations/${uuidPathParam(id)}`,
+    conversationSchema,
+    json('PATCH', { title }),
+  );
 export const createConversation = (
   title = '',
   entity?: { entity_id: string; context_id?: string | null },

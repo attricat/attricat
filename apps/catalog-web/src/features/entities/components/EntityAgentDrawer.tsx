@@ -1,4 +1,5 @@
 import CloseIcon from '@mui/icons-material/Close';
+import EditOutlinedIcon from '@mui/icons-material/EditOutlined';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   Alert,
@@ -6,12 +7,15 @@ import {
   Button,
   Drawer,
   IconButton,
+  Tooltip,
   Typography,
 } from '@mui/material';
 import { useTranslation } from 'react-i18next';
+import { useState } from 'react';
 import { createConversation, listConversations } from '../../agents/api';
 import { agentQueryKeys } from '../../agents/queryKeys';
 import { isTitlePending } from '../../agents/titlePolling';
+import { RenameConversationDialog } from '../../agents/RenameConversationDialog';
 import {
   ConversationPanel,
   type DraftContext,
@@ -31,6 +35,7 @@ export const EntityAgentDrawer = ({
   draft?: DraftContext;
 }) => {
   const { t } = useTranslation();
+  const [renameOpen, setRenameOpen] = useState(false);
   const client = useQueryClient();
   const conversations = useQuery({
     queryKey: agentQueryKeys.conversations(),
@@ -59,8 +64,17 @@ export const EntityAgentDrawer = ({
   });
   const conversationId =
     existing?.id ?? (create.data && !existing ? create.data.id : undefined);
+  const closePanel = () => {
+    setRenameOpen(false);
+    onClose();
+  };
   return (
-    <Drawer anchor="right" onClose={onClose} open={open} variant="persistent">
+    <Drawer
+      anchor="right"
+      onClose={closePanel}
+      open={open}
+      variant="persistent"
+    >
       <Box
         sx={{
           display: 'flex',
@@ -71,10 +85,31 @@ export const EntityAgentDrawer = ({
         }}
       >
         <Box sx={{ alignItems: 'center', display: 'flex' }}>
-          <Typography sx={{ flexGrow: 1 }} variant="h6">
-            {t('entities.askAboutEntity')}
+          <Typography
+            sx={{
+              flexGrow: 1,
+              minWidth: 0,
+              overflow: 'hidden',
+              textOverflow: 'ellipsis',
+              whiteSpace: 'nowrap',
+            }}
+            variant="h6"
+          >
+            {existing?.title ??
+              create.data?.title ??
+              t('entities.askAboutEntity')}
           </Typography>
-          <IconButton aria-label={t('common.close')} onClick={onClose}>
+          {conversationId && (
+            <Tooltip title={t('agents.renameConversation')}>
+              <IconButton
+                aria-label={t('agents.renameConversation')}
+                onClick={() => setRenameOpen(true)}
+              >
+                <EditOutlinedIcon />
+              </IconButton>
+            </Tooltip>
+          )}
+          <IconButton aria-label={t('common.close')} onClick={closePanel}>
             <CloseIcon />
           </IconButton>
         </Box>
@@ -86,6 +121,13 @@ export const EntityAgentDrawer = ({
           {entityId}
           {contextId ? ` · ${contextId}` : ''}
         </Typography>
+        {renameOpen && conversationId && (
+          <RenameConversationDialog
+            conversationId={conversationId}
+            initialTitle={existing?.title ?? create.data?.title ?? ''}
+            onClose={() => setRenameOpen(false)}
+          />
+        )}
         {conversations.error && (
           <Alert
             severity="error"

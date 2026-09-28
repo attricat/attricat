@@ -9,6 +9,7 @@ import {
   listRuns,
   sendMessage,
   searchConversations,
+  updateConversationTitle,
 } from './api';
 
 const id = '123e4567-e89b-12d3-a456-426614174000';
@@ -65,6 +66,34 @@ describe('agent API client', () => {
       title: 'Entity',
       entity_id: id,
       context_id: id,
+    });
+  });
+
+  it('sends a manual conversation title update', async () => {
+    const conversation = {
+      id,
+      workspace_id: id,
+      created_by_user_id: null,
+      title: 'Pricing review',
+      title_source: 'manual',
+      entity_id: null,
+      context_id: null,
+      created_at: '2026-09-28T00:00:00Z',
+      updated_at: '2026-09-28T00:00:00Z',
+      archived_at: null,
+    };
+    fetchMock.mockResolvedValue({
+      ok: true,
+      json: () => Promise.resolve(conversation),
+    });
+    await expect(
+      updateConversationTitle(id, 'Pricing review'),
+    ).resolves.toEqual(conversation);
+    expect(fetchMock.mock.calls[0][0]).toBe(`/api/agent/conversations/${id}`);
+    expect(fetchMock.mock.calls[0][1]).toEqual({
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ title: 'Pricing review' }),
     });
   });
 
