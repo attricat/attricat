@@ -20,8 +20,6 @@ build and report the JavaScript loaded by `index.html` (including synchronous
 imports), separately from all lazy chunks. The report reads Vite's manifest, so
 it does not use a previous `dist` directory.
 
-Enabling TanStack Router automatic route code splitting reduced the initial
-JavaScript from **1,534.4 KiB (460.4 KiB gzip)** in the baseline build to
-**818.3 KiB (260.0 KiB gzip)**. The route chunks remain available on demand.
-Re-run the command when dependencies or routes change rather than comparing
-asset hashes.
+Route chunks load on demand. Re-run the command when dependencies or routes
+change; inspect its current size report rather than relying on historical build
+numbers or asset hashes.

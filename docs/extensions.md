@@ -826,13 +826,13 @@ Webhook delivery remains deferred as described above.
 
 ## Reference importer/exporter compatibility suite
 
-The packaged CSV connector in `~/projects/attricat/attricat-connector-csv`
-can be exercised against this host with:
+When the sibling `../../attricat-connector-csv` checkout is available, the
+packaged CSV connector can be exercised against this host from the repository
+root:
 
 ```sh
-cd ~/projects/attricat/attricat-connector-csv && just pack
-cd /path/to/attricat-worktree
-ATTRICAT_CONNECTOR_CSV_ARCHIVE=$HOME/projects/attricat/attricat-connector-csv/dist/attricat-connector-csv-0.1.0.tar.zst \
+(cd ../../attricat-connector-csv && just pack)
+ATTRICAT_CONNECTOR_CSV_ARCHIVE="$(pwd)/../../attricat-connector-csv/dist/attricat-connector-csv-0.1.0.tar.zst" \
   cargo test -p api --test extensions packaged_csv_connector_exports_through_the_real_host
 ```
 
