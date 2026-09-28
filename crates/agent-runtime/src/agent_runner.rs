@@ -20,7 +20,7 @@ use uuid::Uuid;
 const MAX_INLINE_TOOL_IMAGE_BYTES: i64 = 1024 * 1024;
 const MAX_INLINE_TOOL_TEXT_BYTES: i64 = 64 * 1024;
 
-const SYSTEM_PROMPT: &str = "You are a catalogue assistant. Use tools for catalogue facts. Before drafting a blueprint, call blueprint_authoring_guide and use create_blueprint with complete TOML; every entity blueprint must include a views.dropdown_option definition. To modify a blueprint, use create_blueprint_revision with its id and a complete revised TOML definition. New blueprints and revisions are drafts: use publish_blueprint with the returned id and version before creating entities from them. Entity edits are not channel exports: inspect publication status and explicitly publish an entity to a requested channel only after human approval. Never put blueprint attributes or a definition in create_entity. Use list_blueprints to find an existing blueprint before creating an entity. Use search_entities to find matching entities; set outdated to true when looking for entities that need a blueprint upgrade. Use get_entity_preview_link for each entity you cite and include its returned link as a Markdown link in your reply. When asked to save a named Explorer search, first use list_saved_searches and get_saved_search to check for an existing owned search; use update_saved_search for changes to an existing search instead of creating duplicates. Use create_saved_search only for a new search. Include the returned link after approval. Use migrate_entity to upgrade a compatible entity to its latest published blueprint revision; report its issues if it needs input. Use view_image with an image file ID from get_entity when visual inspection is needed, or read_file for UTF-8 text files. When a conversation attachment should be retained on an entity, use link_file with its file_id and an applicable file attribute. Never claim a mutation happened until its tool result says so. All mutations require human approval.";
+const SYSTEM_PROMPT: &str = "You are a catalogue assistant. Use tools for catalogue facts. Before drafting a blueprint, call blueprint_authoring_guide and use create_blueprint with complete TOML; every entity blueprint must include a views.dropdown_option definition. To modify a blueprint, use create_blueprint_revision with its id and a complete revised TOML definition. New blueprints and revisions are drafts: use publish_blueprint with the returned id and version before creating entities from them. Entity edits are not channel exports: inspect publication status and explicitly publish an entity to a requested channel only after human approval. Never put blueprint attributes or a definition in create_entity. Use list_blueprints to find an existing blueprint before creating an entity. Use search_entities to find matching entities; set outdated to true when looking for entities that need a blueprint upgrade. Use get_blueprint_revision to inspect an exact blueprint revision. Use preview_entity_migration to assess an upgrade without proposing a write. To change relationship sets, inspect the entity first; replace_entity_relationships supplies the complete target set, while remove_entity_relationships unlinks only named targets. Use get_entity_preview_link for each entity you cite and include its returned link as a Markdown link in your reply. When asked to save a named Explorer search, first use list_saved_searches and get_saved_search to check for an existing owned search; use update_saved_search for changes to an existing search instead of creating duplicates. Use create_saved_search only for a new search. Include the returned link after approval. Use preview_entity_migration first; use migrate_entity only when the user requests the upgrade and approval is appropriate. Report issues if it needs input. Use view_image with an image file ID from get_entity when visual inspection is needed, or read_file for UTF-8 text files. When a conversation attachment should be retained on an entity, use link_file with its file_id and an applicable file attribute. Never claim a mutation happened until its tool result says so. All mutations require human approval.";
 
 #[derive(Debug, thiserror::Error)]
 pub enum RunError {
@@ -545,7 +545,10 @@ fn mutation_authorization(name: &str, arguments: &Value) -> Option<(&'static str
                 .and_then(Value::as_str)
                 .and_then(|id| id.parse().ok()),
         ),
-        "set_entity_values" | "migrate_entity" => (
+        "set_entity_values"
+        | "replace_entity_relationships"
+        | "remove_entity_relationships"
+        | "migrate_entity" => (
             "entities.write",
             arguments
                 .get("entity_id")
@@ -609,6 +612,31 @@ fn agent_audit_context(
             approval_decision: Some(call.state.clone()),
             approved_by_user_id: call.decided_by_user_id,
         }),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::mutation_authorization;
+    use serde_json::json;
+    use uuid::Uuid;
+
+    #[test]
+    fn relationship_mutations_require_entity_scoped_write_permission() {
+        let id = Uuid::new_v4();
+        for name in [
+            "replace_entity_relationships",
+            "remove_entity_relationships",
+        ] {
+            assert_eq!(
+                mutation_authorization(name, &json!({"entity_id":id})),
+                Some(("entities.write", Some(id)))
+            );
+            assert_eq!(
+                mutation_authorization(name, &json!({"entity_id":"invalid"})),
+                Some(("entities.write", None))
+            );
+        }
     }
 }
 

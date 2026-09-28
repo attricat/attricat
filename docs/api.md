@@ -436,7 +436,15 @@ or run request returns `503 service_unavailable` when the API has no configured
 provider/worker. Runs retain provider/model snapshots and safe error codes, but
 never provider credentials or raw provider response bodies. Read tools run
 automatically; every mutation is emitted as an approval proposal before it
-reaches a repository write.
+reaches a repository write. Built-in tools include exact blueprint-revision
+inspection and read-only entity migration assessment, plus approved replacement
+or removal of relationship targets. Replacement sets the complete target list
+for each specified attribute/context (an empty list clears it); removal unlinks
+only named targets. The agent must inspect current values first. These tools
+use the initiating user's `blueprints.read` or entity-scoped permissions:
+`entities.write` for migration assessment and relationship changes, and
+`entities.read` for existing entity inspection. Writes use the same audited
+mutation services as the API.
 
 ## Workflow run operations
 

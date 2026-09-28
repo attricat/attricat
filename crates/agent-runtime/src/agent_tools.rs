@@ -95,6 +95,11 @@ pub fn definitions() -> Vec<ToolDefinition> {
             json!({"type":"object","additionalProperties":false}),
         ),
         definition(
+            "get_blueprint_revision",
+            "Get one exact blueprint revision by ID and version, including its TOML definition and attributes. Use this instead of listing every blueprint when inspecting a known revision.",
+            json!({"type":"object","required":["blueprint_id","version"],"properties":{"blueprint_id":{"type":"string","format":"uuid"},"version":{"type":"integer","minimum":1}},"additionalProperties":false}),
+        ),
+        definition(
             "list_contexts",
             "List attribute contexts.",
             json!({"type":"object","additionalProperties":false}),
@@ -160,9 +165,24 @@ pub fn definitions() -> Vec<ToolDefinition> {
             json!({"type":"object","required":["entity_id","values"],"properties":{"entity_id":{"type":"string","format":"uuid"},"values":{"type":"array","minItems":1,"items":{"type":"object","required":["kind","attribute_code","context_id","value"],"properties":{"kind":{"const":"scalar"},"attribute_code":{"type":"string"},"context_id":{"type":["string","null"],"format":"uuid"},"value":{}},"additionalProperties":false}}},"additionalProperties":false}),
         ),
         definition(
+            "replace_entity_relationships",
+            "Replace the complete target set for each specified relationship attribute and context on an entity. An empty target_entity_ids array clears that set. Inspect the entity first and review every target ID; this change requires approval.",
+            relationship_mutation_parameters(),
+        ),
+        definition(
+            "remove_entity_relationships",
+            "Remove only the specified existing relationship targets on an entity, preserving other targets. Inspect the entity first; this change requires approval.",
+            relationship_mutation_parameters(),
+        ),
+        definition(
             "migrate_entity",
-            "Upgrade an entity to the latest published revision of its blueprint. Call first with entity_id to assess compatibility; when issues require input, call again with replacement scalar values, relationship target sets, or discarded attribute codes. This change requires approval.",
+            "Upgrade an entity to the latest published revision of its blueprint. Call preview_entity_migration first to assess compatibility without a write. Supply replacement scalar values, relationship target sets, or discarded attribute codes if needed. This change requires approval; with no remediation input, a ready entity is migrated immediately after approval.",
             json!({"type":"object","required":["entity_id"],"properties":{"entity_id":{"type":"string","format":"uuid"},"values":{"type":"array"},"relationships":{"type":"array"},"discard_attributes":{"type":"array","items":{"type":"string"}}},"additionalProperties":false}),
+        ),
+        definition(
+            "preview_entity_migration",
+            "Assess an entity's migration to the latest published blueprint without changing it. Returns compatibility status, target version, and issues; inspect before proposing an upgrade.",
+            json!({"type":"object","required":["entity_id"],"properties":{"entity_id":{"type":"string","format":"uuid"}},"additionalProperties":false}),
         ),
         definition(
             "get_entity_publications",
@@ -217,6 +237,17 @@ pub fn definitions() -> Vec<ToolDefinition> {
     ]
 }
 
+fn relationship_mutation_parameters() -> Value {
+    json!({"type":"object","required":["entity_id","relationships"],"properties":{
+        "entity_id":{"type":"string","format":"uuid"},
+        "relationships":{"type":"array","minItems":1,"maxItems":20,"items":{
+            "type":"object","required":["attribute_code","target_entity_ids"],"properties":{
+                "attribute_code":{"type":"string"},"context_id":{"type":["string","null"],"format":"uuid"},
+                "target_entity_ids":{"type":"array","maxItems":100,"items":{"type":"string","format":"uuid"}}
+            },"additionalProperties":false
+        }}},"additionalProperties":false})
+}
+
 fn definition(name: &'static str, description: &'static str, parameters: Value) -> ToolDefinition {
     ToolDefinition {
         kind: "function",
@@ -232,6 +263,7 @@ pub fn kind(name: &str) -> Result<ToolKind, ToolError> {
     match name {
         "blueprint_authoring_guide"
         | "list_blueprints"
+        | "get_blueprint_revision"
         | "list_contexts"
         | "get_entity"
         | "get_entity_context_preview"
@@ -241,13 +273,16 @@ pub fn kind(name: &str) -> Result<ToolKind, ToolError> {
         | "search_entities"
         | "list_saved_searches"
         | "get_saved_search"
-        | "get_entity_publications" => Ok(ToolKind::Read),
+        | "get_entity_publications"
+        | "preview_entity_migration" => Ok(ToolKind::Read),
         "create_blueprint"
         | "create_blueprint_revision"
         | "publish_blueprint"
         | "create_entity"
         | "delete_entity"
         | "set_entity_values"
+        | "replace_entity_relationships"
+        | "remove_entity_relationships"
         | "migrate_entity"
         | "link_file"
         | "create_context"
@@ -293,6 +328,43 @@ pub fn change_summary(name: &str, arguments: &Value) -> Result<String, ToolError
             "Set attribute values on entity {}.",
             required_string(arguments, "entity_id")?
         )),
+        "replace_entity_relationships" | "remove_entity_relationships" => {
+            let action = if name == "replace_entity_relationships" {
+                "Replace"
+            } else {
+                "Remove"
+            };
+            let relationships = arguments
+                .get("relationships")
+                .and_then(Value::as_array)
+                .ok_or_else(|| {
+                    ToolError::InvalidArguments("relationships must be an array".into())
+                })?;
+            let details = relationships
+                .iter()
+                .map(|relationship| {
+                    let code = relationship
+                        .get("attribute_code")
+                        .and_then(Value::as_str)
+                        .ok_or_else(|| {
+                            ToolError::InvalidArguments("attribute_code is required".into())
+                        })?;
+                    let count = relationship
+                        .get("target_entity_ids")
+                        .and_then(Value::as_array)
+                        .ok_or_else(|| {
+                            ToolError::InvalidArguments("target_entity_ids must be an array".into())
+                        })?
+                        .len();
+                    Ok(format!("{code} ({count} targets)"))
+                })
+                .collect::<Result<Vec<_>, ToolError>>()?;
+            Ok(format!(
+                "{action} relationship targets on entity {}: {}.",
+                required_string(arguments, "entity_id")?,
+                details.join(", ")
+            ))
+        }
         "migrate_entity" => Ok(format!(
             "Upgrade entity {} to its latest published blueprint revision.",
             required_string(arguments, "entity_id")?
@@ -376,6 +448,15 @@ pub async fn execute_read(
         "list_blueprints" => {
             serde_json::to_value(repository.list_blueprints().await?).expect("models serialize")
         }
+        "get_blueprint_revision" => {
+            let blueprint_id = parse_uuid(&arguments, "blueprint_id")?;
+            let version = arguments.get("version").and_then(Value::as_i64)
+                .filter(|version| *version > 0)
+                .ok_or_else(|| ToolError::InvalidArguments("version must be positive".into()))?;
+            serde_json::to_value(repository.get_blueprint_revision(blueprint_id, version).await?
+                .ok_or(RepositoryError::NotFound("blueprint revision"))?)
+                .expect("blueprint serializes")
+        }
         "list_contexts" => serde_json::to_value(
             repository
                 .list_authorized_contexts(actor, workspace)
@@ -392,6 +473,11 @@ pub async fn execute_read(
                 .filter(|view| view.owner_user_id == actor && view.kind == "explorer_search")
                 .ok_or(RepositoryError::NotFound("saved search"))?;
             serde_json::to_value(view).expect("saved view serializes")
+        }
+        "preview_entity_migration" => {
+            let preview = repository.preview_entity_migration(parse_uuid(&arguments, "entity_id")?).await?;
+            json!({"migration_id":preview.migration_id,"source_version":preview.source_version,
+                "target_version":preview.target.blueprint.version,"status":preview.status,"issues":preview.issues})
         }
         "get_entity_publications" => serde_json::to_value(
             repository
@@ -823,6 +909,18 @@ pub async fn execute_mutation(
             )
             .expect("attribute values serialize")
         }
+        "replace_entity_relationships" | "remove_entity_relationships" => {
+            let (entity_id, relationships) =
+                decode_relationship_mutation(arguments, name == "remove_entity_relationships")?;
+            let service = CatalogMutationService::new(repository);
+            let input = crate::model::RelationshipMutation { relationships };
+            let updated = if name == "replace_entity_relationships" {
+                service.replace_relationships(entity_id, input).await?
+            } else {
+                service.remove_relationships(entity_id, input).await?
+            };
+            serde_json::to_value(updated).expect("relationship values serialize")
+        }
         "migrate_entity" => {
             #[derive(Deserialize)]
             #[serde(deny_unknown_fields)]
@@ -1226,6 +1324,50 @@ pub async fn execute_mutation(
     bounded(result)
 }
 
+fn decode_relationship_mutation(
+    arguments: Value,
+    removing: bool,
+) -> Result<(Uuid, Vec<crate::model::RelationshipTargets>), ToolError> {
+    #[derive(Deserialize)]
+    #[serde(deny_unknown_fields)]
+    struct Input {
+        entity_id: Uuid,
+        relationships: Vec<crate::model::RelationshipTargets>,
+    }
+    let input: Input = decode(arguments)?;
+    if input.relationships.is_empty() || input.relationships.len() > 20 {
+        return Err(ToolError::InvalidArguments(
+            "relationships must contain 1 to 20 sets".into(),
+        ));
+    }
+    let mut seen = std::collections::HashSet::new();
+    for relationship in &input.relationships {
+        let Some(code) = relationship
+            .attribute_code
+            .as_deref()
+            .filter(|code| !code.is_empty())
+        else {
+            return Err(ToolError::InvalidArguments(
+                "attribute_code is required".into(),
+            ));
+        };
+        if relationship.attribute_id.is_some()
+            || relationship.target_entity_ids.len() > 100
+            || (removing && relationship.target_entity_ids.is_empty())
+            || !seen.insert((code.to_owned(), relationship.context_id))
+            || relationship
+                .target_entity_ids
+                .iter()
+                .collect::<std::collections::HashSet<_>>()
+                .len()
+                != relationship.target_entity_ids.len()
+        {
+            return Err(ToolError::InvalidArguments("relationship sets require unique attribute/context and at most 100 unique targets (nonempty when removing)".into()));
+        }
+    }
+    Ok((input.entity_id, input.relationships))
+}
+
 fn agent_table_paths(blueprint: &crate::model::BlueprintWithAttributes) -> HashMap<String, String> {
     let mut paths: HashMap<_, _> = blueprint
         .table_path_attributes
@@ -1433,13 +1575,20 @@ async fn read_authorized(
     let (permission, target_id, target_code) = match name {
         // This is static product documentation, not workspace catalog data.
         "blueprint_authoring_guide" => return Ok(true),
-        "list_blueprints" => ("blueprints.read", None, None),
+        "list_blueprints" | "get_blueprint_revision" => ("blueprints.read", None, None),
         "list_contexts" => ("contexts.read", None, Some("__context_list__")),
         "get_entity"
         | "get_entity_context_preview"
         | "get_entity_preview_link"
         | "get_entity_publications" => (
             "entities.read",
+            Some(parse_uuid(arguments, "entity_id")?),
+            None,
+        ),
+        // HTTP migration previews require entity write authority even though
+        // the preview itself is non-mutating.
+        "preview_entity_migration" => (
+            "entities.write",
             Some(parse_uuid(arguments, "entity_id")?),
             None,
         ),
@@ -1550,6 +1699,51 @@ mod tests {
             )
             .unwrap(),
             "Save private Explorer search 'Spring' for blueprint 'product' with 0 attribute filters and 0 relationship facets."
+        );
+    }
+
+    #[test]
+    fn targeted_reads_and_relationship_mutations_have_distinct_safety_contracts() {
+        let definitions = definitions();
+        for name in ["get_blueprint_revision", "preview_entity_migration"] {
+            assert_eq!(kind(name).unwrap(), ToolKind::Read);
+            assert!(
+                definitions
+                    .iter()
+                    .any(|definition| definition.function.name == name)
+            );
+        }
+        for name in [
+            "replace_entity_relationships",
+            "remove_entity_relationships",
+        ] {
+            assert_eq!(kind(name).unwrap(), ToolKind::Mutation);
+            let definition = definitions
+                .iter()
+                .find(|definition| definition.function.name == name)
+                .unwrap();
+            assert_eq!(
+                definition.function.parameters["properties"]["relationships"]["maxItems"],
+                20
+            );
+        }
+        let id = uuid::Uuid::new_v4();
+        let payload = json!({"entity_id":id,"relationships":[{"attribute_code":"categories","target_entity_ids":[id]}]});
+        assert_eq!(
+            super::decode_relationship_mutation(payload.clone(), false)
+                .unwrap()
+                .1
+                .len(),
+            1
+        );
+        assert!(super::decode_relationship_mutation(json!({"entity_id":id,"relationships":[{"attribute_code":"categories","target_entity_ids":[]}]}), false).is_ok());
+        assert!(super::decode_relationship_mutation(json!({"entity_id":id,"relationships":[{"attribute_code":"categories","target_entity_ids":[]}]}), true).is_err());
+        assert!(super::decode_relationship_mutation(json!({"entity_id":id,"relationships":[{"attribute_code":"categories","target_entity_ids":[id,id]}]}), false).is_err());
+        assert!(super::decode_relationship_mutation(json!({"entity_id":id,"relationships":[{"attribute_code":"categories","target_entity_ids":[id]},{"attribute_code":"categories","target_entity_ids":[]}]}), false).is_err());
+        assert!(super::decode_relationship_mutation(json!({"entity_id":id,"relationships":[{"attribute_code":"categories","attribute_id":id,"target_entity_ids":[id]}]}), false).is_err());
+        assert_eq!(
+            change_summary("replace_entity_relationships", &payload).unwrap(),
+            format!("Replace relationship targets on entity {id}: categories (1 targets).")
         );
     }
 
