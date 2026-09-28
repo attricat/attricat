@@ -197,6 +197,71 @@ cardinality = "one""#,
         "agent results hydrate the related value that explains their order"
     );
 
+    let actor = BOOTSTRAP_OWNER_ID.parse().unwrap();
+    for (filters, relationship_filters, expected) in [
+        (
+            json!([{"field":"family.class.kind.name","operator":"eq","value":"Graphics Card"}]),
+            json!([]),
+            1,
+        ),
+        (
+            json!([{"field":"sku","operator":"eq","value":"ARC-1"}]),
+            json!([{"field":"family.class.kind","selected_target_ids":[kind_entity["id"]]}]),
+            1,
+        ),
+        (
+            json!([{"field":"sku","operator":"eq","value":"missing"}]),
+            json!([]),
+            0,
+        ),
+    ] {
+        let result = agent_tools::execute_read(
+            &repository,
+            actor,
+            workspace,
+            "search_entities",
+            json!({
+                "blueprint":{"code":"deep_sku"}, "filters":filters,
+                "relationship_filters":relationship_filters,
+            }),
+        )
+        .await
+        .unwrap();
+        assert_eq!(result["items"].as_array().unwrap().len(), expected);
+    }
+    let saved = agent_tools::execute_mutation(&repository, actor, "create_saved_search", json!({
+        "name":"Graphics SKUs", "blueprint":"deep_sku",
+        "attributeFilters":[{"field":"family.class.kind.name","operator":"eq","value":"Graphics Card"}],
+        "relationshipFacets":[{"field":"family.class.kind","selectedIds":[kind_entity["id"]]}],
+    })).await.unwrap();
+    let saved_id = saved["id"].as_str().unwrap().parse().unwrap();
+    let loaded = repository
+        .get_saved_view(actor, saved_id, false)
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(
+        loaded.state["attributeFilters"][0]["value"],
+        json!("Graphics Card")
+    );
+    assert_eq!(
+        loaded.state["relationshipFacets"][0]["selectedIds"][0],
+        kind_entity["id"]
+    );
+    assert!(
+        agent_tools::execute_mutation(
+            &repository,
+            actor,
+            "create_saved_search",
+            json!({
+                "name":"Bad filter", "blueprint":"deep_sku",
+                "attributeFilters":[{"field":"sku","operator":"gt","value":"ARC-1"}],
+            })
+        )
+        .await
+        .is_err()
+    );
+
     let kind_blueprint_id = kind["blueprint"]["id"].as_str().unwrap();
     let kind_draft: Value = client
         .post(format!(

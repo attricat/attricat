@@ -882,6 +882,7 @@ dependencies = [
  "catalog-repository",
  "catalog-storage",
  "catalog-workers",
+ "chrono",
  "futures-util",
  "reqwest",
  "secrecy",

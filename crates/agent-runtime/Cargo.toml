@@ -9,6 +9,7 @@ publish.workspace = true
 [dependencies]
 async-trait.workspace = true
 base64.workspace = true
+chrono.workspace = true
 catalog-domain = { path = "../domain" }
 catalog-repository = { path = "../repository" }
 catalog-storage = { path = "../storage" }

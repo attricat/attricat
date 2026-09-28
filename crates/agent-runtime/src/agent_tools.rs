@@ -16,10 +16,37 @@ use crate::{
     constants::{DEFAULT_ENTITY_PAGE_SIZE, DEFAULT_PAGE_SIZE},
     file_access::{AllowFileAccess, FileAccessOperation, authorize_file_read},
     repository::{CatalogRepository, EntitySearchSort, RepositoryError},
+    search_filters::{intersect_ids, resolve_agent_filter, resolve_agent_relationship_filter},
 };
 const BLUEPRINT_AUTHORING_GUIDE: &str = include_str!("../../../docs/blueprints.md");
 const VIEW_CONFIGURATION_GUIDE: &str = include_str!("../../../docs/views.md");
 const JSON_SCHEMA_GUIDE: &str = include_str!("../../../docs/json-schema-validation.md");
+const MAX_SEARCH_FILTERS: usize = 20;
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct SavedSearchRelationshipFacet {
+    field: String,
+    #[serde(rename = "selectedIds")]
+    selected_ids: Vec<Uuid>,
+}
+
+fn valid_saved_filter(filter: &crate::model::SearchFilter) -> bool {
+    !filter.field.is_empty()
+        && matches!(
+            filter.operator.as_str(),
+            "eq" | "contains" | "starts_with" | "gt" | "gte" | "lt" | "lte"
+        )
+        && (filter.value.is_string() || filter.value.is_number() || filter.value.is_boolean())
+}
+
+fn attribute_filter_parameters() -> Value {
+    json!({"type":"array","maxItems":20,"items":{"type":"object","required":["field","operator","value"],"properties":{"field":{"type":"string"},"operator":{"type":"string","enum":["eq","contains","starts_with","gt","gte","lt","lte"]},"value":{"type":["string","number","boolean"]}},"additionalProperties":false}})
+}
+
+fn relationship_filter_parameters() -> Value {
+    json!({"type":"array","maxItems":20,"items":{"type":"object","required":["field","selected_target_ids"],"properties":{"field":{"type":"string"},"selected_target_ids":{"type":"array","minItems":1,"maxItems":100,"items":{"type":"string","format":"uuid"}}},"additionalProperties":false}})
+}
 
 #[derive(Clone, Debug, Serialize)]
 pub struct ToolDefinition {
@@ -99,8 +126,8 @@ pub fn definitions() -> Vec<ToolDefinition> {
         ),
         definition(
             "search_entities",
-            "Search entities of a blueprint by scalar values and system tags. Query terms are whitespace-separated AND terms. Bare free text searches scalar values on the selected blueprint only. Use *:value for global relationship-aware discovery through up to three incoming edges. Use attribute:value for a selected-blueprint attribute; use relationship:value or an explicit path with up to three relationship hops and a scalar leaf; and use blueprint:value or blueprint.attribute:value for the selected blueprint (code or name). A trailing * means prefix matching. Results include match_explanations with deterministic match witnesses and relationship paths. Omit blueprint.version to include every published revision; set outdated to true to return only entities that are not on the latest published revision. Use sort with a configured scalar table-column field, blueprint_version, or publication_status and asc or desc direction; ascending blueprint_version puts older schemas first, ascending publication_status puts unpublished entities first and requires sort.context_code for an enabled channel. Relationship table columns use paths of up to three hops. A relationship-path sort without blueprint.version is accepted only when the complete matching result uses one source version. Without sort, results are paginated in ascending creation order.",
-            json!({"type":"object","required":["blueprint"],"properties":{"blueprint":{"type":"object","required":["code"],"properties":{"code":{"type":"string"},"version":{"type":"integer","minimum":1}},"additionalProperties":false},"query":{"type":"string"},"system_tags":{"type":"array","items":{"type":"string"}},"outdated":{"type":"boolean"},"sort":{"type":"object","required":["field","direction"],"properties":{"field":{"type":"string"},"direction":{"type":"string","enum":["asc","desc"]},"context_code":{"type":"string"}},"additionalProperties":false},"page":{"type":"object","properties":{"size":{"type":"integer","minimum":1,"maximum":100},"cursor":{"type":"string"}},"additionalProperties":false}},"additionalProperties":false}),
+            "Search entities of a blueprint by scalar values, attribute filters, relationship filters, and system tags. filters use {field, operator, value} with a scalar leaf; relationship_filters use {field, selected_target_ids} with a relationship path and target entity UUIDs. All filters combine with AND. Query terms are whitespace-separated AND terms. Bare free text searches scalar values on the selected blueprint only. Use *:value for global relationship-aware discovery through up to three incoming edges. Use attribute:value for a selected-blueprint attribute; use relationship:value or an explicit path with up to three relationship hops and a scalar leaf; and use blueprint:value or blueprint.attribute:value for the selected blueprint (code or name). A trailing * means prefix matching. Results include match_explanations with deterministic match witnesses and relationship paths. Omit blueprint.version to include every published revision; set outdated to true to return only entities that are not on the latest published revision. Use sort with a configured scalar table-column field, blueprint_version, or publication_status and asc or desc direction; ascending blueprint_version puts older schemas first, ascending publication_status puts unpublished entities first and requires sort.context_code for an enabled channel. Relationship table columns use paths of up to three hops. A relationship-path sort without blueprint.version is accepted only when the complete matching result uses one source version. Without sort, results are paginated in ascending creation order.",
+            json!({"type":"object","required":["blueprint"],"properties":{"blueprint":{"type":"object","required":["code"],"properties":{"code":{"type":"string"},"version":{"type":"integer","minimum":1}},"additionalProperties":false},"query":{"type":"string"},"filters":attribute_filter_parameters(),"relationship_filters":relationship_filter_parameters(),"system_tags":{"type":"array","items":{"type":"string"}},"outdated":{"type":"boolean"},"sort":{"type":"object","required":["field","direction"],"properties":{"field":{"type":"string"},"direction":{"type":"string","enum":["asc","desc"]},"context_code":{"type":"string"}},"additionalProperties":false},"page":{"type":"object","properties":{"size":{"type":"integer","minimum":1,"maximum":100},"cursor":{"type":"string"}},"additionalProperties":false}},"additionalProperties":false}),
         ),
         definition(
             "create_blueprint",
@@ -164,8 +191,8 @@ pub fn definitions() -> Vec<ToolDefinition> {
         ),
         definition(
             "create_saved_search",
-            "Save a named Explorer search for the initiating user. Find the blueprint code with list_blueprints first. The search is private unless visibility is workspace. This change requires approval. Return the saved search link to the user.",
-            json!({"type":"object","required":["name","blueprint"],"properties":{"name":{"type":"string"},"description":{"type":"string"},"visibility":{"type":"string","enum":["private","workspace"]},"blueprint":{"type":"string"},"version":{"type":"integer","minimum":1},"all_versions":{"type":"boolean"},"query":{"type":"string"}},"additionalProperties":false}),
+            "Save a named Explorer search for the initiating user. Find the blueprint code with list_blueprints first. attributeFilters use {field, operator, value}; relationshipFacets use {field, selectedIds} of target entity UUIDs. The search is private unless visibility is workspace. This change requires approval. Return the saved search link to the user.",
+            json!({"type":"object","required":["name","blueprint"],"properties":{"name":{"type":"string"},"description":{"type":"string"},"visibility":{"type":"string","enum":["private","workspace"]},"blueprint":{"type":"string"},"version":{"type":"integer","minimum":1},"all_versions":{"type":"boolean"},"query":{"type":"string"},"attributeFilters":attribute_filter_parameters(),"relationshipFacets":{"type":"array","maxItems":20,"items":{"type":"object","required":["field","selectedIds"],"properties":{"field":{"type":"string"},"selectedIds":{"type":"array","minItems":1,"maxItems":100,"items":{"type":"string","format":"uuid"}}},"additionalProperties":false}}},"additionalProperties":false}),
         ),
         definition(
             "create_context",
@@ -277,13 +304,21 @@ pub fn change_summary(name: &str, arguments: &Value) -> Result<String, ToolError
             required_string(arguments, "code")?
         )),
         "create_saved_search" => Ok(format!(
-            "Save {} Explorer search '{}' for blueprint '{}'.",
+            "Save {} Explorer search '{}' for blueprint '{}' with {} attribute filters and {} relationship facets.",
             arguments
                 .get("visibility")
                 .and_then(Value::as_str)
                 .unwrap_or("private"),
             required_string(arguments, "name")?,
             required_string(arguments, "blueprint")?,
+            arguments
+                .get("attributeFilters")
+                .and_then(Value::as_array)
+                .map_or(0, Vec::len),
+            arguments
+                .get("relationshipFacets")
+                .and_then(Value::as_array)
+                .map_or(0, Vec::len),
         )),
         _ => Err(ToolError::UnknownTool(name.to_owned())),
     }
@@ -390,6 +425,10 @@ pub async fn execute_read(
                 #[serde(default)]
                 query: Option<String>,
                 #[serde(default)]
+                filters: Vec<crate::model::SearchFilter>,
+                #[serde(default)]
+                relationship_filters: Vec<crate::model::RelationshipFilter>,
+                #[serde(default)]
                 system_tags: Vec<String>,
                 #[serde(default)]
                 outdated: bool,
@@ -404,6 +443,13 @@ pub async fn execute_read(
                 return Err(ToolError::InvalidArguments(
                     "blueprint.code must not be empty".to_owned(),
                 ));
+            }
+            if input.filters.len() > MAX_SEARCH_FILTERS
+                || input.relationship_filters.len() > MAX_SEARCH_FILTERS
+            {
+                return Err(ToolError::InvalidArguments(format!(
+                    "filters and relationship_filters must each contain at most {MAX_SEARCH_FILTERS} items"
+                )));
             }
             let limit = input.page.size.unwrap_or(DEFAULT_PAGE_SIZE);
             if limit == 0 || limit > DEFAULT_ENTITY_PAGE_SIZE {
@@ -447,9 +493,36 @@ pub async fn execute_read(
             } else {
                 None
             };
-            let matching = resolved
+            let mut matching = resolved
                 .as_ref()
                 .map(|resolved| resolved.ids.iter().copied().collect::<Vec<_>>());
+            let mut filters = Vec::with_capacity(input.filters.len());
+            for filter in &input.filters {
+                filters.push(resolve_agent_filter(repository, &search_blueprint, filter).await?);
+            }
+            if !filters.is_empty() {
+                let ids = repository
+                    .filter_entity_ids(current.blueprint.id, selected, &filters)
+                    .await?;
+                matching = Some(intersect_ids(matching, ids));
+            }
+            let mut relationship_filters = Vec::with_capacity(input.relationship_filters.len());
+            for filter in &input.relationship_filters {
+                relationship_filters.push(
+                    resolve_agent_relationship_filter(repository, &search_blueprint, filter)
+                        .await?,
+                );
+            }
+            if !relationship_filters.is_empty() {
+                let ids = repository
+                    .filter_relationship_entity_ids(
+                        current.blueprint.id,
+                        selected,
+                        &relationship_filters,
+                    )
+                    .await?;
+                matching = Some(intersect_ids(matching, ids));
+            }
             let versions = repository
                 .search_result_versions(
                     current.blueprint.id,
@@ -820,6 +893,10 @@ pub async fn execute_mutation(
                 #[serde(default)]
                 all_versions: bool,
                 query: Option<String>,
+                #[serde(default, rename = "attributeFilters")]
+                attribute_filters: Vec<crate::model::SearchFilter>,
+                #[serde(default, rename = "relationshipFacets")]
+                relationship_facets: Vec<SavedSearchRelationshipFacet>,
             }
             let input: Input = decode(arguments)?;
             let name = input.name.trim();
@@ -834,20 +911,47 @@ pub async fn execute_mutation(
                 || input.version.is_some_and(|v| v <= 0)
                 || (input.version.is_some() && input.all_versions)
                 || input.query.as_ref().is_some_and(|q| q.len() > 4096)
+                || input.attribute_filters.len() > MAX_SEARCH_FILTERS
+                || input.relationship_facets.len() > MAX_SEARCH_FILTERS
+                || input
+                    .attribute_filters
+                    .iter()
+                    .any(|filter| !valid_saved_filter(filter))
+                || input.relationship_facets.iter().any(|facet| {
+                    facet.field.is_empty()
+                        || facet.selected_ids.is_empty()
+                        || facet.selected_ids.len() > 100
+                })
             {
                 return Err(ToolError::InvalidArguments(
                     "invalid saved search input".to_owned(),
                 ));
             }
-            repository
+            let current = repository
                 .get_blueprint_by_code(blueprint)
                 .await?
                 .ok_or(RepositoryError::NotFound("blueprint"))?;
-            if let Some(version) = input.version {
+            let source = if let Some(version) = input.version {
                 repository
                     .get_published_blueprint_by_code_and_version(blueprint, version)
                     .await?
-                    .ok_or(RepositoryError::NotFound("published blueprint version"))?;
+                    .ok_or(RepositoryError::NotFound("published blueprint version"))?
+            } else {
+                current
+            };
+            for filter in &input.attribute_filters {
+                resolve_agent_filter(repository, &source, filter).await?;
+            }
+            for facet in &input.relationship_facets {
+                resolve_agent_relationship_filter(
+                    repository,
+                    &source,
+                    &crate::model::RelationshipFilter {
+                        field: facet.field.clone(),
+                        selected_target_ids: facet.selected_ids.clone(),
+                    },
+                )
+                .await?;
             }
             let mut state = json!({"blueprint": blueprint});
             if let Some(version) = input.version {
@@ -863,6 +967,27 @@ pub async fn execute_mutation(
                 .filter(|q| !q.is_empty())
             {
                 state["query"] = json!(query);
+            }
+            if !input.attribute_filters.is_empty() {
+                state["attributeFilters"] = json!(input.attribute_filters.iter().map(|filter| json!({"field":filter.field,"operator":filter.operator,"value":filter.value})).collect::<Vec<_>>());
+            }
+            if !input.relationship_facets.is_empty() {
+                state["relationshipFacets"] = json!(
+                    input
+                        .relationship_facets
+                        .iter()
+                        .map(|facet| json!({"field":facet.field,"selectedIds":facet.selected_ids}))
+                        .collect::<Vec<_>>()
+                );
+            }
+            if serde_json::to_vec(&state)
+                .expect("search state serializes")
+                .len()
+                > 32_768
+            {
+                return Err(ToolError::InvalidArguments(
+                    "search state exceeds 32 KiB".to_owned(),
+                ));
             }
             let view = repository
                 .create_saved_view(
@@ -1207,7 +1332,7 @@ mod tests {
                 &json!({"name":"Spring","blueprint":"product"})
             )
             .unwrap(),
-            "Save private Explorer search 'Spring' for blueprint 'product'."
+            "Save private Explorer search 'Spring' for blueprint 'product' with 0 attribute filters and 0 relationship facets."
         );
     }
 
@@ -1218,9 +1343,42 @@ mod tests {
             .find(|definition| definition.function.name == "search_entities")
             .expect("search_entities definition");
         assert_eq!(
-            search.function.parameters,
-            json!({"type":"object","required":["blueprint"],"properties":{"blueprint":{"type":"object","required":["code"],"properties":{"code":{"type":"string"},"version":{"type":"integer","minimum":1}},"additionalProperties":false},"query":{"type":"string"},"system_tags":{"type":"array","items":{"type":"string"}},"outdated":{"type":"boolean"},"sort":{"type":"object","required":["field","direction"],"properties":{"field":{"type":"string"},"direction":{"type":"string","enum":["asc","desc"]},"context_code":{"type":"string"}},"additionalProperties":false},"page":{"type":"object","properties":{"size":{"type":"integer","minimum":1,"maximum":100},"cursor":{"type":"string"}},"additionalProperties":false}},"additionalProperties":false})
+            search.function.parameters["properties"]["filters"],
+            super::attribute_filter_parameters()
         );
+        assert_eq!(
+            search.function.parameters["properties"]["relationship_filters"],
+            super::relationship_filter_parameters()
+        );
+        let saved = definitions()
+            .into_iter()
+            .find(|definition| definition.function.name == "create_saved_search")
+            .unwrap();
+        assert_eq!(
+            saved.function.parameters["properties"]["attributeFilters"],
+            super::attribute_filter_parameters()
+        );
+    }
+
+    #[test]
+    fn filter_inputs_reject_invalid_saved_values_and_intersect_results() {
+        let valid: crate::model::SearchFilter = serde_json::from_value(json!({
+            "field":"price", "operator":"gte", "value":100
+        }))
+        .unwrap();
+        assert!(super::valid_saved_filter(&valid));
+        let invalid: crate::model::SearchFilter = serde_json::from_value(json!({
+            "field":"price", "operator":"unknown", "value":100
+        }))
+        .unwrap();
+        assert!(!super::valid_saved_filter(&invalid));
+        let first = uuid::Uuid::new_v4();
+        let second = uuid::Uuid::new_v4();
+        assert_eq!(
+            crate::search_filters::intersect_ids(Some(vec![first, second]), vec![second]),
+            vec![second]
+        );
+        assert!(crate::search_filters::intersect_ids(Some(vec![first]), vec![second]).is_empty());
     }
 
     #[test]
