@@ -127,6 +127,10 @@ enum Command {
         #[command(subcommand)]
         command: ConnectorJobCommand,
     },
+    Agent {
+        #[command(subcommand)]
+        command: AgentCommand,
+    },
     SolutionPack {
         #[command(subcommand)]
         command: SolutionPackCommand,
@@ -1059,6 +1063,71 @@ enum ConnectorJobCommand {
     },
 }
 
+#[derive(Subcommand)]
+enum AgentCommand {
+    List,
+    Search {
+        #[arg(long)]
+        query: Option<String>,
+        #[arg(long)]
+        cursor: Option<String>,
+    },
+    Create {
+        #[arg(long, default_value = "")]
+        title: String,
+        #[arg(long, requires = "entity_id")]
+        context_id: Option<Uuid>,
+        #[arg(long)]
+        entity_id: Option<Uuid>,
+    },
+    Show {
+        conversation_id: Uuid,
+    },
+    Rename {
+        conversation_id: Uuid,
+        #[arg(long)]
+        title: String,
+    },
+    Archive {
+        conversation_id: Uuid,
+    },
+    Messages {
+        conversation_id: Uuid,
+    },
+    Runs {
+        conversation_id: Uuid,
+    },
+    Events {
+        run_id: Uuid,
+        #[arg(long)]
+        output: PathBuf,
+        #[arg(long)]
+        last_event_id: Option<Uuid>,
+    },
+    Send {
+        conversation_id: Uuid,
+        #[command(flatten)]
+        source: SourceInput,
+        #[arg(long = "attachment-id")]
+        attachment_ids: Vec<Uuid>,
+    },
+    Upload {
+        conversation_id: Uuid,
+        #[arg(long = "file", required = true)]
+        files: Vec<PathBuf>,
+    },
+    Approvals {
+        #[arg(long)]
+        conversation_id: Option<Uuid>,
+    },
+    Approve {
+        tool_call_id: Uuid,
+    },
+    Reject {
+        tool_call_id: Uuid,
+    },
+}
+
 #[derive(Clone, Copy, ValueEnum)]
 enum BlueprintPublicationArgument {
     Draft,
@@ -1932,6 +2001,7 @@ async fn run(cli: Cli) -> Result<String, CliError> {
         Command::ExtensionOperation { command } => extension_operation_command(&client, &server, command).await,
         Command::ExtensionSchedule { command } => extension_schedule_command(&client, &server, command).await,
         Command::ConnectorJob { command } => connector_job_command(&client, &server, command).await,
+        Command::Agent { command } => agent_command(&client, &server, command).await,
         Command::SolutionPack { command } => {
             solution_pack_command(&client, &server, command).await
         }
@@ -2898,6 +2968,217 @@ async fn connector_job_command(
     }
 }
 
+async fn agent_command(
+    client: &Client,
+    server: &Url,
+    command: AgentCommand,
+) -> Result<String, CliError> {
+    match command {
+        AgentCommand::List => {
+            request(client, server, Method::GET, "/agent/conversations", None).await
+        }
+        AgentCommand::Search { query, cursor } => {
+            let mut params = Vec::new();
+            if let Some(q) = query {
+                params.push(format!("q={}", segment(q)));
+            }
+            if let Some(cursor) = cursor {
+                params.push(format!("cursor={}", segment(cursor)));
+            }
+            let path = if params.is_empty() {
+                "/agent/conversations/search".to_owned()
+            } else {
+                format!("/agent/conversations/search?{}", params.join("&"))
+            };
+            request(client, server, Method::GET, &path, None).await
+        }
+        AgentCommand::Create {
+            title,
+            context_id,
+            entity_id,
+        } => {
+            request(
+                client,
+                server,
+                Method::POST,
+                "/agent/conversations",
+                Some(json!({"title":title,"entity_id":entity_id,"context_id":context_id})),
+            )
+            .await
+        }
+        AgentCommand::Show { conversation_id } => {
+            request(
+                client,
+                server,
+                Method::GET,
+                &format!("/agent/conversations/{conversation_id}"),
+                None,
+            )
+            .await
+        }
+        AgentCommand::Rename {
+            conversation_id,
+            title,
+        } => {
+            request(
+                client,
+                server,
+                Method::PATCH,
+                &format!("/agent/conversations/{conversation_id}"),
+                Some(json!({"title":title})),
+            )
+            .await
+        }
+        AgentCommand::Archive { conversation_id } => {
+            request(
+                client,
+                server,
+                Method::DELETE,
+                &format!("/agent/conversations/{conversation_id}"),
+                None,
+            )
+            .await
+        }
+        AgentCommand::Messages { conversation_id } => {
+            request(
+                client,
+                server,
+                Method::GET,
+                &format!("/agent/conversations/{conversation_id}/messages"),
+                None,
+            )
+            .await
+        }
+        AgentCommand::Runs { conversation_id } => {
+            request(
+                client,
+                server,
+                Method::GET,
+                &format!("/agent/conversations/{conversation_id}/runs"),
+                None,
+            )
+            .await
+        }
+        AgentCommand::Events {
+            run_id,
+            output,
+            last_event_id,
+        } => {
+            let mut request =
+                client.get(endpoint(server, &format!("/agent/runs/{run_id}/events"))?);
+            if let Some(id) = last_event_id {
+                request = request.header("Last-Event-ID", id.to_string());
+            }
+            download_response(
+                request
+                    .timeout(TRANSFER_TIMEOUT)
+                    .send()
+                    .await
+                    .map_err(|error| CliError::Transport(error.to_string()))?,
+                &output,
+            )
+            .await
+        }
+        AgentCommand::Send {
+            conversation_id,
+            source,
+            attachment_ids,
+        } => {
+            let content = read_agent_message(source)?;
+            if (content.trim().is_empty() && attachment_ids.is_empty())
+                || content.len() > 32768
+                || attachment_ids.len() > 16
+                || {
+                    let unique: std::collections::HashSet<_> = attachment_ids.iter().collect();
+                    unique.len() != attachment_ids.len()
+                }
+            {
+                return Err(CliError::Input("message requires content or attachments; content is limited to 32768 bytes and attachments to 16 unique IDs".into()));
+            }
+            request(
+                client,
+                server,
+                Method::POST,
+                &format!("/agent/conversations/{conversation_id}/messages"),
+                Some(json!({"content":content,"attachment_ids":attachment_ids})),
+            )
+            .await
+        }
+        AgentCommand::Upload {
+            conversation_id,
+            files,
+        } => {
+            multipart_upload(
+                client,
+                server,
+                &format!("/agent/conversations/{conversation_id}/uploads"),
+                files,
+                None,
+            )
+            .await
+        }
+        AgentCommand::Approvals { conversation_id } => {
+            let path = match conversation_id {
+                Some(id) => format!("/agent/approvals?conversation_id={id}"),
+                None => "/agent/approvals".to_owned(),
+            };
+            request(client, server, Method::GET, &path, None).await
+        }
+        AgentCommand::Approve { tool_call_id } => {
+            request(
+                client,
+                server,
+                Method::POST,
+                &format!("/agent/tool-calls/{tool_call_id}/approve"),
+                None,
+            )
+            .await
+        }
+        AgentCommand::Reject { tool_call_id } => {
+            request(
+                client,
+                server,
+                Method::POST,
+                &format!("/agent/tool-calls/{tool_call_id}/reject"),
+                None,
+            )
+            .await
+        }
+    }
+}
+
+fn read_agent_message(source: SourceInput) -> Result<String, CliError> {
+    const LIMIT: u64 = 32768;
+    let mut content = String::new();
+    match (source.file, source.stdin) {
+        (None, false) => return Ok(content),
+        (Some(file), false) => {
+            let input = fs::File::open(&file).map_err(|error| {
+                CliError::Input(format!("cannot read {}: {error}", file.display()))
+            })?;
+            input
+                .take(LIMIT + 1)
+                .read_to_string(&mut content)
+                .map_err(|error| CliError::Input(format!("cannot read message: {error}")))?;
+        }
+        (None, true) => {
+            io::stdin()
+                .take(LIMIT + 1)
+                .read_to_string(&mut content)
+                .map_err(|error| CliError::Input(format!("cannot read message: {error}")))?;
+        }
+        _ => {
+            return Err(CliError::Input(
+                "provide at most one of --file or --stdin".into(),
+            ));
+        }
+    }
+    if content.len() > LIMIT as usize {
+        return Err(CliError::Input("message exceeds 32768 bytes".into()));
+    }
+    Ok(content)
+}
+
 async fn solution_pack_command(
     client: &Client,
     server: &Url,
@@ -3435,6 +3716,10 @@ async fn raw_download(
         .send()
         .await
         .map_err(|error| CliError::Transport(error.to_string()))?;
+    download_response(response, output).await
+}
+
+async fn download_response(response: reqwest::Response, output: &Path) -> Result<String, CliError> {
     if !response.status().is_success() {
         return raw_response(response).await;
     }
@@ -4088,6 +4373,211 @@ fn segment(value: impl std::fmt::Display) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn agent_command_parser_requires_explicit_message_sources_and_ids() {
+        let id = "00000000-0000-4000-8000-000000000001";
+        assert!(
+            Cli::try_parse_from([
+                "acli",
+                "agent",
+                "send",
+                id,
+                "--stdin",
+                "--attachment-id",
+                id
+            ])
+            .is_ok()
+        );
+        assert!(
+            Cli::try_parse_from(["acli", "agent", "send", id, "--file", "msg.txt", "--stdin"])
+                .is_err()
+        );
+        assert!(Cli::try_parse_from(["acli", "agent", "upload", id]).is_err());
+        assert!(Cli::try_parse_from(["acli", "agent", "create", "--context-id", id]).is_err());
+        assert!(
+            Cli::try_parse_from([
+                "acli",
+                "agent",
+                "events",
+                id,
+                "--output",
+                "events.sse",
+                "--last-event-id",
+                id
+            ])
+            .is_ok()
+        );
+        assert!(Cli::try_parse_from(["acli", "agent", "approve", "not-a-uuid"]).is_err());
+        let oversized = tempfile::NamedTempFile::new().unwrap();
+        fs::write(oversized.path(), "x".repeat(32769)).unwrap();
+        assert!(
+            read_agent_message(SourceInput {
+                file: Some(oversized.path().to_owned()),
+                stdin: false
+            })
+            .is_err()
+        );
+    }
+
+    #[tokio::test]
+    async fn agent_commands_forward_requests_and_save_sse() {
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let address = listener.local_addr().unwrap();
+        let app = axum::Router::new()
+            .route(
+                "/agent/conversations/search",
+                axum::routing::get(|uri: axum::http::Uri| async move {
+                    axum::Json(json!({"query":uri.query()}))
+                }),
+            )
+            .route(
+                "/agent/conversations/{id}/messages",
+                axum::routing::post(|axum::Json(body): axum::Json<Value>| async move {
+                    axum::Json(body)
+                }),
+            )
+            .route(
+                "/agent/conversations/{id}/uploads",
+                axum::routing::post(|headers: axum::http::HeaderMap, body: axum::body::Bytes| async move {
+                    axum::Json(json!({"multipart":headers.get(axum::http::header::CONTENT_TYPE).unwrap().to_str().unwrap().starts_with("multipart/form-data;"),"has_file":body.windows(b"hello from file".len()).any(|bytes| bytes == b"hello from file")}))
+                }),
+            )
+            .route(
+                "/agent/tool-calls/{id}/approve",
+                axum::routing::post(|| async { axum::Json(json!({"state":"approved"})) }),
+            )
+            .route(
+                "/agent/runs/{id}/events",
+                axum::routing::get(|headers: axum::http::HeaderMap| async move {
+                    (
+                        [(axum::http::header::CONTENT_TYPE, "text/event-stream")],
+                        format!(
+                            "id: {}\ndata: {{\"ok\":true}}\n\n",
+                            headers.get("last-event-id").unwrap().to_str().unwrap()
+                        ),
+                    )
+                }),
+            );
+        let server = tokio::spawn(async move { axum::serve(listener, app).await.unwrap() });
+        let client = Client::new();
+        let url = Url::parse(&format!("http://{address}")).unwrap();
+        let id = Uuid::from_u128(1);
+        let searched: Value = serde_json::from_str(
+            &agent_command(
+                &client,
+                &url,
+                AgentCommand::Search {
+                    query: Some("two words".into()),
+                    cursor: Some("date|id".into()),
+                },
+            )
+            .await
+            .unwrap(),
+        )
+        .unwrap();
+        assert_eq!(searched["query"], "q=two+words&cursor=date%7Cid");
+        let file = tempfile::NamedTempFile::new().unwrap();
+        fs::write(file.path(), "hello from file").unwrap();
+        let sent: Value = serde_json::from_str(
+            &agent_command(
+                &client,
+                &url,
+                AgentCommand::Send {
+                    conversation_id: id,
+                    source: SourceInput {
+                        file: Some(file.path().to_owned()),
+                        stdin: false,
+                    },
+                    attachment_ids: vec![id],
+                },
+            )
+            .await
+            .unwrap(),
+        )
+        .unwrap();
+        assert_eq!(
+            sent,
+            json!({"content":"hello from file","attachment_ids":[id]})
+        );
+        let attachment_only: Value = serde_json::from_str(
+            &agent_command(
+                &client,
+                &url,
+                AgentCommand::Send {
+                    conversation_id: id,
+                    source: SourceInput {
+                        file: None,
+                        stdin: false,
+                    },
+                    attachment_ids: vec![id],
+                },
+            )
+            .await
+            .unwrap(),
+        )
+        .unwrap();
+        assert_eq!(attachment_only, json!({"content":"","attachment_ids":[id]}));
+        let uploaded: Value = serde_json::from_str(
+            &agent_command(
+                &client,
+                &url,
+                AgentCommand::Upload {
+                    conversation_id: id,
+                    files: vec![file.path().to_owned()],
+                },
+            )
+            .await
+            .unwrap(),
+        )
+        .unwrap();
+        assert_eq!(uploaded, json!({"multipart":true,"has_file":true}));
+        assert!(
+            agent_command(
+                &client,
+                &url,
+                AgentCommand::Send {
+                    conversation_id: id,
+                    source: SourceInput {
+                        file: None,
+                        stdin: false
+                    },
+                    attachment_ids: vec![id, id],
+                }
+            )
+            .await
+            .is_err()
+        );
+        let approved: Value = serde_json::from_str(
+            &agent_command(&client, &url, AgentCommand::Approve { tool_call_id: id })
+                .await
+                .unwrap(),
+        )
+        .unwrap();
+        assert_eq!(approved["state"], "approved");
+        let directory = tempfile::tempdir().unwrap();
+        let output = directory.path().join("events.sse");
+        assert_eq!(
+            agent_command(
+                &client,
+                &url,
+                AgentCommand::Events {
+                    run_id: id,
+                    output: output.clone(),
+                    last_event_id: Some(id)
+                }
+            )
+            .await
+            .unwrap(),
+            "null"
+        );
+        assert!(
+            fs::read_to_string(output)
+                .unwrap()
+                .contains(&format!("id: {id}"))
+        );
+        server.abort();
+    }
 
     #[test]
     fn saved_view_commands_accept_json_state_and_reject_bad_identifiers() {
