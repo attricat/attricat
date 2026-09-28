@@ -262,6 +262,89 @@ cardinality = "one""#,
         .is_err()
     );
 
+    let owned = agent_tools::execute_read(
+        &repository,
+        actor,
+        workspace,
+        "list_saved_searches",
+        json!({}),
+    )
+    .await
+    .unwrap();
+    assert!(
+        owned
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|view| view["id"] == saved["id"])
+    );
+    let before = agent_tools::execute_read(
+        &repository,
+        actor,
+        workspace,
+        "get_saved_search",
+        json!({"saved_view_id":saved_id}),
+    )
+    .await
+    .unwrap();
+    assert_eq!(
+        before["state"]["relationshipFacets"][0]["selectedIds"][0],
+        kind_entity["id"]
+    );
+    let mut browser_state = loaded.state.clone();
+    browser_state["sort"] = json!({"field":"sku","direction":"asc"});
+    browser_state["context"] = json!("default-channel");
+    repository
+        .update_saved_view(
+            actor,
+            saved_id,
+            "Graphics SKUs",
+            None,
+            "private",
+            &browser_state,
+        )
+        .await
+        .unwrap();
+    let updated = agent_tools::execute_mutation(
+        &repository,
+        actor,
+        "update_saved_search",
+        json!({
+            "saved_view_id": saved_id, "name": "Graphics SKUs updated", "query": "ARC*",
+            "relationshipFacets": [],
+        }),
+    )
+    .await
+    .unwrap();
+    assert_eq!(updated["id"], saved["id"]);
+    assert_eq!(updated["url"], saved["url"]);
+    assert_eq!(
+        updated["state"]["attributeFilters"][0]["value"],
+        json!("Graphics Card")
+    );
+    assert!(updated["state"].get("relationshipFacets").is_none());
+    assert_eq!(updated["state"]["query"], json!("ARC*"));
+    assert_eq!(updated["state"]["sort"], browser_state["sort"]);
+    assert_eq!(updated["state"]["context"], browser_state["context"]);
+    assert!(
+        agent_tools::execute_mutation(
+            &repository,
+            uuid::Uuid::new_v4(),
+            "update_saved_search",
+            json!({
+                "saved_view_id": saved_id, "name": "Unauthorized change",
+            })
+        )
+        .await
+        .is_err()
+    );
+    let after = repository
+        .get_saved_view(actor, saved_id, false)
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(after.name.as_deref(), Some("Graphics SKUs updated"));
+
     let kind_blueprint_id = kind["blueprint"]["id"].as_str().unwrap();
     let kind_draft: Value = client
         .post(format!(

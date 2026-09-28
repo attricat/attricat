@@ -190,9 +190,24 @@ pub fn definitions() -> Vec<ToolDefinition> {
             json!({"type":"object","required":["entity_id","attribute_code","file_id"],"properties":{"entity_id":{"type":"string","format":"uuid"},"attribute_code":{"type":"string"},"file_id":{"type":"string","format":"uuid"},"context_id":{"type":["string","null"],"format":"uuid"}},"additionalProperties":false}),
         ),
         definition(
+            "list_saved_searches",
+            "List saved Explorer searches owned by the initiating user, newest first. Use their IDs with get_saved_search and update_saved_search rather than creating duplicates.",
+            json!({"type":"object","additionalProperties":false}),
+        ),
+        definition(
+            "get_saved_search",
+            "Get an owned saved Explorer search by ID including its current state, before updating it.",
+            json!({"type":"object","required":["saved_view_id"],"properties":{"saved_view_id":{"type":"string","format":"uuid"}},"additionalProperties":false}),
+        ),
+        definition(
             "create_saved_search",
             "Save a named Explorer search for the initiating user. Find the blueprint code with list_blueprints first. attributeFilters use {field, operator, value}; relationshipFacets use {field, selectedIds} of target entity UUIDs. The search is private unless visibility is workspace. This change requires approval. Return the saved search link to the user.",
             json!({"type":"object","required":["name","blueprint"],"properties":{"name":{"type":"string"},"description":{"type":"string"},"visibility":{"type":"string","enum":["private","workspace"]},"blueprint":{"type":"string"},"version":{"type":"integer","minimum":1},"all_versions":{"type":"boolean"},"query":{"type":"string"},"attributeFilters":attribute_filter_parameters(),"relationshipFacets":{"type":"array","maxItems":20,"items":{"type":"object","required":["field","selectedIds"],"properties":{"field":{"type":"string"},"selectedIds":{"type":"array","minItems":1,"maxItems":100,"items":{"type":"string","format":"uuid"}}},"additionalProperties":false}}},"additionalProperties":false}),
+        ),
+        definition(
+            "update_saved_search",
+            "Update an existing saved Explorer search owned by the initiating user, preserving every omitted field. Get its ID with list_saved_searches and inspect it with get_saved_search first. Provide only changed fields; empty attributeFilters or relationshipFacets arrays clear those filters. This change requires approval. Return the existing saved search link.",
+            json!({"type":"object","required":["saved_view_id"],"properties":{"saved_view_id":{"type":"string","format":"uuid"},"name":{"type":"string"},"description":{"type":"string"},"visibility":{"type":"string","enum":["private","workspace"]},"blueprint":{"type":"string"},"version":{"type":"integer","minimum":1},"all_versions":{"type":"boolean"},"query":{"type":"string"},"attributeFilters":attribute_filter_parameters(),"relationshipFacets":{"type":"array","maxItems":20,"items":{"type":"object","required":["field","selectedIds"],"properties":{"field":{"type":"string"},"selectedIds":{"type":"array","minItems":1,"maxItems":100,"items":{"type":"string","format":"uuid"}}},"additionalProperties":false}}},"additionalProperties":false}),
         ),
         definition(
             "create_context",
@@ -224,6 +239,8 @@ pub fn kind(name: &str) -> Result<ToolKind, ToolError> {
         | "view_image"
         | "read_file"
         | "search_entities"
+        | "list_saved_searches"
+        | "get_saved_search"
         | "get_entity_publications" => Ok(ToolKind::Read),
         "create_blueprint"
         | "create_blueprint_revision"
@@ -235,6 +252,7 @@ pub fn kind(name: &str) -> Result<ToolKind, ToolError> {
         | "link_file"
         | "create_context"
         | "create_saved_search"
+        | "update_saved_search"
         | "publish_entity"
         | "unpublish_entity"
         | "publish_entity_to_all_channels" => Ok(ToolKind::Mutation),
@@ -303,6 +321,21 @@ pub fn change_summary(name: &str, arguments: &Value) -> Result<String, ToolError
             "Create attribute context '{}'.",
             required_string(arguments, "code")?
         )),
+        "update_saved_search" => Ok(format!(
+            "Update saved Explorer search {} ({} specified fields; {} attribute-filter and {} relationship-facet entries supplied).",
+            required_string(arguments, "saved_view_id")?,
+            arguments
+                .as_object()
+                .map_or(0, |fields| fields.len().saturating_sub(1)),
+            arguments
+                .get("attributeFilters")
+                .and_then(Value::as_array)
+                .map_or(0, Vec::len),
+            arguments
+                .get("relationshipFacets")
+                .and_then(Value::as_array)
+                .map_or(0, Vec::len),
+        )),
         "create_saved_search" => Ok(format!(
             "Save {} Explorer search '{}' for blueprint '{}' with {} attribute filters and {} relationship facets.",
             arguments
@@ -349,6 +382,17 @@ pub async fn execute_read(
                 .await?,
         )
         .expect("models serialize"),
+        "list_saved_searches" => json!(repository.list_saved_views(actor).await?
+            .into_iter().filter(|view| view.owner_user_id == actor && view.kind == "explorer_search")
+            .map(|view| json!({"id":view.id,"name":view.name,"description":view.description,"visibility":view.visibility,"blueprint":view.state.get("blueprint"),"updated_at":view.updated_at}))
+            .collect::<Vec<_>>()),
+        "get_saved_search" => {
+            let id = parse_uuid(&arguments, "saved_view_id")?;
+            let view = repository.get_saved_view(actor, id, false).await?
+                .filter(|view| view.owner_user_id == actor && view.kind == "explorer_search")
+                .ok_or(RepositoryError::NotFound("saved search"))?;
+            serde_json::to_value(view).expect("saved view serializes")
+        }
         "get_entity_publications" => serde_json::to_value(
             repository
                 .publication_statuses(parse_uuid(&arguments, "entity_id")?)
@@ -1000,6 +1044,174 @@ pub async fn execute_mutation(
                 .await?;
             json!({"id": view.id, "name": view.name, "url": format!("/?savedView={}", view.id), "visibility": view.visibility})
         }
+        "update_saved_search" => {
+            #[derive(Deserialize)]
+            #[serde(deny_unknown_fields)]
+            struct Input {
+                saved_view_id: Uuid,
+                name: Option<String>,
+                description: Option<String>,
+                visibility: Option<String>,
+                blueprint: Option<String>,
+                version: Option<i64>,
+                all_versions: Option<bool>,
+                query: Option<String>,
+                #[serde(rename = "attributeFilters")]
+                attribute_filters: Option<Vec<crate::model::SearchFilter>>,
+                #[serde(rename = "relationshipFacets")]
+                relationship_facets: Option<Vec<SavedSearchRelationshipFacet>>,
+            }
+            if arguments.as_object().is_none_or(|fields| fields.len() <= 1) {
+                return Err(ToolError::InvalidArguments(
+                    "provide at least one saved search change".to_owned(),
+                ));
+            }
+            let input: Input = decode(arguments)?;
+            let existing = repository
+                .get_saved_view(actor, input.saved_view_id, false)
+                .await?
+                .filter(|view| view.owner_user_id == actor && view.kind == "explorer_search")
+                .ok_or(RepositoryError::NotFound("saved search"))?;
+            let name = input
+                .name
+                .as_deref()
+                .unwrap_or(existing.name.as_deref().unwrap_or(""))
+                .trim();
+            let description = input
+                .description
+                .as_deref()
+                .or(existing.description.as_deref());
+            let visibility = input.visibility.as_deref().unwrap_or(&existing.visibility);
+            let mut state = existing.state.clone();
+            let blueprint = input
+                .blueprint
+                .as_deref()
+                .unwrap_or_else(|| state["blueprint"].as_str().unwrap_or(""))
+                .trim()
+                .to_owned();
+            if name.is_empty()
+                || name.len() > 120
+                || description.is_some_and(|value| value.len() > 500)
+                || !matches!(visibility, "private" | "workspace")
+                || blueprint.is_empty()
+                || blueprint.len() > 256
+                || input.version.is_some_and(|version| version <= 0)
+                || input.query.as_ref().is_some_and(|query| query.len() > 4096)
+                || input.attribute_filters.as_ref().is_some_and(|filters| {
+                    filters.len() > MAX_SEARCH_FILTERS
+                        || filters.iter().any(|filter| !valid_saved_filter(filter))
+                })
+                || input.relationship_facets.as_ref().is_some_and(|facets| {
+                    facets.len() > MAX_SEARCH_FILTERS
+                        || facets.iter().any(|facet| {
+                            facet.field.is_empty()
+                                || facet.selected_ids.is_empty()
+                                || facet.selected_ids.len() > 100
+                        })
+                })
+            {
+                return Err(ToolError::InvalidArguments(
+                    "invalid saved search input".to_owned(),
+                ));
+            }
+            if (blueprint != existing.state["blueprint"].as_str().unwrap_or("")
+                || input
+                    .version
+                    .is_some_and(|version| existing.state["version"] != json!(version))
+                || input.all_versions == Some(true))
+                && ((input.attribute_filters.is_none()
+                    && existing.state.get("attributeFilters").is_some())
+                    || (input.relationship_facets.is_none()
+                        && existing.state.get("relationshipFacets").is_some()))
+            {
+                return Err(ToolError::InvalidArguments("specify attributeFilters and relationshipFacets when changing blueprint or version to replace or clear old filters".to_owned()));
+            }
+            state["blueprint"] = json!(blueprint);
+            if let Some(version) = input.version {
+                state["version"] = json!(version);
+                state.as_object_mut().unwrap().remove("allVersions");
+            }
+            if let Some(all_versions) = input.all_versions {
+                if all_versions {
+                    state["allVersions"] = json!(true);
+                    state.as_object_mut().unwrap().remove("version");
+                } else {
+                    state.as_object_mut().unwrap().remove("allVersions");
+                }
+            }
+            if let Some(query) = input.query {
+                if query.trim().is_empty() {
+                    state.as_object_mut().unwrap().remove("query");
+                } else {
+                    state["query"] = json!(query.trim());
+                }
+            }
+            if let Some(filters) = input.attribute_filters.as_ref() {
+                if filters.is_empty() {
+                    state.as_object_mut().unwrap().remove("attributeFilters");
+                } else {
+                    state["attributeFilters"] = json!(filters.iter().map(|filter| json!({"field":filter.field,"operator":filter.operator,"value":filter.value})).collect::<Vec<_>>());
+                }
+            }
+            if let Some(facets) = input.relationship_facets.as_ref() {
+                if facets.is_empty() {
+                    state.as_object_mut().unwrap().remove("relationshipFacets");
+                } else {
+                    state["relationshipFacets"] = json!(facets.iter().map(|facet| json!({"field":facet.field,"selectedIds":facet.selected_ids})).collect::<Vec<_>>());
+                }
+            }
+            let current = repository
+                .get_blueprint_by_code(&blueprint)
+                .await?
+                .ok_or(RepositoryError::NotFound("blueprint"))?;
+            let source = if let Some(version) = state.get("version").and_then(Value::as_i64) {
+                repository
+                    .get_published_blueprint_by_code_and_version(&blueprint, version)
+                    .await?
+                    .ok_or(RepositoryError::NotFound("published blueprint version"))?
+            } else {
+                current
+            };
+            if let Some(filters) = input.attribute_filters.as_ref() {
+                for filter in filters {
+                    resolve_agent_filter(repository, &source, filter).await?;
+                }
+            }
+            if let Some(facets) = input.relationship_facets.as_ref() {
+                for facet in facets {
+                    resolve_agent_relationship_filter(
+                        repository,
+                        &source,
+                        &crate::model::RelationshipFilter {
+                            field: facet.field.clone(),
+                            selected_target_ids: facet.selected_ids.clone(),
+                        },
+                    )
+                    .await?;
+                }
+            }
+            if serde_json::to_vec(&state)
+                .expect("search state serializes")
+                .len()
+                > 32_768
+            {
+                return Err(ToolError::InvalidArguments(
+                    "search state exceeds 32 KiB".to_owned(),
+                ));
+            }
+            let view = repository
+                .update_saved_view(
+                    actor,
+                    input.saved_view_id,
+                    name,
+                    description,
+                    visibility,
+                    &state,
+                )
+                .await?
+                .ok_or(RepositoryError::NotFound("saved search"))?;
+            json!({"id":view.id,"name":view.name,"url":format!("/?savedView={}",view.id),"visibility":view.visibility,"state":view.state})
+        }
         "create_context" => {
             let input: CreateAttributeContext = decode(arguments)?;
             serde_json::to_value(
@@ -1250,7 +1462,9 @@ async fn read_authorized(
         // Match the HTTP search endpoint: collection searches require a
         // workspace-wide entities.read grant, rather than exposing partial
         // results for a scoped grant.
-        "search_entities" => ("entities.read", None, None),
+        "search_entities" | "list_saved_searches" | "get_saved_search" => {
+            ("entities.read", None, None)
+        }
         _ => return Err(ToolError::UnknownTool(name.to_owned())),
     };
     Ok(repository
@@ -1314,9 +1528,12 @@ mod tests {
     fn classifies_every_write_as_an_approval_required_mutation() {
         assert_eq!(kind("list_blueprints").unwrap(), ToolKind::Read);
         assert_eq!(kind("search_entities").unwrap(), ToolKind::Read);
+        assert_eq!(kind("list_saved_searches").unwrap(), ToolKind::Read);
+        assert_eq!(kind("get_saved_search").unwrap(), ToolKind::Read);
         assert_eq!(kind("get_entity_preview_link").unwrap(), ToolKind::Read);
         for name in [
             "create_saved_search",
+            "update_saved_search",
             "create_entity",
             "delete_entity",
             "set_entity_values",
@@ -1349,6 +1566,14 @@ mod tests {
         assert_eq!(
             search.function.parameters["properties"]["relationship_filters"],
             super::relationship_filter_parameters()
+        );
+        let update = definitions()
+            .into_iter()
+            .find(|definition| definition.function.name == "update_saved_search")
+            .unwrap();
+        assert_eq!(
+            update.function.parameters["properties"]["attributeFilters"],
+            super::attribute_filter_parameters()
         );
         let saved = definitions()
             .into_iter()
