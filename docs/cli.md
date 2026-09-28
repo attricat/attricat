@@ -181,18 +181,6 @@ acli extension-schedule update <schedule-id> --enabled true|false --interval-sec
 acli connector-job list <blueprint-id>
 acli connector-job run <job-id> --idempotency-key <key>
 
-acli agent list
-acli agent search [--query <text>] [--cursor <opaque-cursor>]
-acli agent create [--title <title>] [--entity-id <uuid> --context-id <uuid>]
-acli agent show|archive|messages|runs <conversation-id>
-acli agent rename <conversation-id> --title <title>
-acli agent upload <conversation-id> --file <path> [--file <path> ...]
-acli agent send <conversation-id> --stdin|--file <path> [--attachment-id <uuid> ...]
-acli agent send <conversation-id> --attachment-id <uuid>
-acli agent events <run-id> --output <events.sse> [--last-event-id <event-uuid>]
-acli agent approvals [--conversation-id <uuid>]
-acli agent approve|reject <tool-call-id>
-
 acli solution-pack inspect --file pack.tar.zst
 acli solution-pack plan --file pack.tar.zst --prefix ecom --blueprint-publication draft|publish [--include-sample-data] [--map logical_key=existing_code ... --map-asset logical_key=asset_uuid ... | --from-application <uuid>]
 acli solution-pack plan show <plan-id>
@@ -315,24 +303,6 @@ presentation-asset downloads, extension artifacts, and metrics stream to `--outp
 they do not put binary, JavaScript, or Prometheus text on stdout. An optional
 download `--range` is sent unchanged as the HTTP `Range` header. These transfer
 commands print `null` after success so normal command output remains JSON.
-
-## Agent conversations
-
-Agent commands use the same authenticated workspace and `agents.run` permission
-as the web UI. `send` reads message content from a UTF-8 file or stdin rather
-than argv; attachment-only messages need no source. Upload files first, then
-pass the returned file IDs as repeated `--attachment-id` options. Sending
-returns a queued run ID, not a synchronous assistant answer. `events` saves
-that run's SSE stream to `--output` (not stdout) and prints JSON `null` on
-success; `--last-event-id` replays only later events when reconnecting. A
-long-running stream times out after ten minutes; completed downloads replace
-`--output` atomically. `messages` and `runs` provide non-streaming inspection.
-
-Inspect `agent approvals` before using `approve`: it authorizes a proposed
-catalog mutation. Approval decisions are durable, cannot be reversed or
-repeated, and the server rechecks authorization before executing the write.
-Never automate blanket approval of unknown tool calls. Agent runs require a
-configured provider; conversation reads can still work without one.
 
 ## Event delivery operations
 
