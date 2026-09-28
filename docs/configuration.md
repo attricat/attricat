@@ -198,6 +198,8 @@ response bodies and credentials are not retained. Schedules use six-field UTC cr
 An occurrence that overlaps a queued, running, or approval-waiting run is
 recorded as skipped rather than executed concurrently.
 
+## Local mail and object storage
+
 Mailpit is a local-development and E2E adapter only; it is not production mail
 configuration. Source `.worktree` after `just dev`, open
 `$MAILPIT_UI_URL` for manual inspection, and use its REST API
@@ -245,17 +247,21 @@ requirement.
 
 ## Request authorization
 
-All catalog API routes except `/health`, `/health/live`, `/health/ready`, `POST /auth/discover`, `POST /auth/login`, password-reset endpoints, and public onboarding completion require an
-active browser session cookie. The API verifies its active membership and role
-grant for each request; absent or invalid sessions are `401`, while a valid
-identity without a matching grant is `403`. Unsafe requests must additionally
-provide the `X-Catalog-Csrf` synchronizer token.
+Most catalog API routes require either an active browser session or a personal
+API token with the relevant permission. Public routes include the health probes,
+authentication discovery/login, password reset, and onboarding completion;
+private monitoring routes have their own access rules. The API checks the
+credential's workspace and grants for each request; missing or invalid
+credentials return `401`, while a valid identity without the required grant
+returns `403`. Unsafe **cookie-authenticated** requests also require the
+`X-Catalog-Csrf` synchronizer token.
 
 Browser sessions are scoped to the workspace resolved from the submitted login
 identifier. Clients do not provide a workspace UUID or tenancy header.
 
-`CATALOG_SERVER` overrides the CLI's API URL. The CLI otherwise targets
-`http://127.0.0.1:3000`.
+The CLI resolves its API URL in this order: `--server`, `CATALOG_SERVER`,
+`CATALOG_API_URL` from the environment or worktree `.env`, then
+`http://127.0.0.1:3000`. See [the CLI guide](cli.md#start-locally).
 
 The API validates the five `EVENT_DISPATCHER_*` settings above during startup;
 zero, non-integer, or an unrepresentable `EVENT_DISPATCHER_MAX_ATTEMPTS` stops

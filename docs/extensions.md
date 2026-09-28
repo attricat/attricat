@@ -637,8 +637,9 @@ contextual actions—not an application-wide navigation tree.
   `context_version: 1`; it deliberately does not include search state or entity
   values.
 - **`explorer_table_cell`** (`embedded`, requiring
-  `client.explorer_table_cell`) is reserved for a future sandboxed Explorer
-  table-cell renderer. The current web runtime does not mount this outlet.
+  `client.explorer_table_cell`) mounts a sandboxed renderer for a configured
+  scalar Explorer table column when the enabled release declares a matching
+  cell-renderer contribution.
 - **`blueprint_detail_panel`** (`panel`, requiring
   `client.blueprint_detail_panel`) is a read-only region on a blueprint detail
   page. Its strict context is `blueprint_id`, `blueprint_version`, and

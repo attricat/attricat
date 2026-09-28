@@ -260,7 +260,8 @@ manifest and sandbox contract.
 `stack`, `grid`, `section`, `tabs`, and `accordion` are recursive layout
 blocks. `heading`, `text`, and `divider` are static blocks. `field` renders a
 typed attribute and `relationship_list` renders a relationship attribute.
-Table views currently support scalar fields only.
+Table views also support direct file fields with a compatible renderer and
+scalar leaves reached through relationship paths, as shown above.
 
 ### Incoming Relationships
 

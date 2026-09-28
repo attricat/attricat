@@ -5,15 +5,12 @@ product with contextual scalar overrides and constrained relationships. The
 product includes every native scalar type: string, number, integer, boolean,
 date, datetime, and a wall-clock time with an IANA timezone.
 
-Start the services in one terminal, then run the remaining commands from a
-second terminal at the repository root. The examples use `jq` to capture API
-IDs.
-
-```sh
-just dev
-```
-
-From the second terminal:
+Run `just setup` once before other `just` recipes, then start `just dev` in
+another terminal (unless the development stack is already running). From the
+repository root, use an authenticated CLI session or set `CATALOG_TOKEN` to a
+personal token with blueprint, context, and entity write permissions. These
+examples use `jq` to capture API IDs; see [CLI authentication](../../docs/cli.md#browser-authentication)
+for session setup. Run the following commands from the repository root:
 
 ```sh
 CATEGORY_BLUEPRINT_ID=$(cargo run -p cli -- blueprint create --file examples/relationships/category.toml | jq -r '.blueprint.id')
