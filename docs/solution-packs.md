@@ -592,8 +592,8 @@ the separately persisted raw stored-source hash remains an apply-time stale
 precondition. Catalog never searches for or suggests mappings and never mutates a
 mapped blueprint. Presentation assets similarly require `--map-asset logical_key=uuid`
 for exact reuse; otherwise a distinct ordinary asset is created, even when another asset
-has the same digest. `--map`, `--map-asset`, and `--from-application` are mutually
-exclusive as a group. The latter
+has the same digest. `--map` and `--map-asset` may be used together; `--from-application` cannot
+be combined with either. The latter
 UUID is a query choice while the archive remains a raw `application/zstd` request.
 The plan and application history retain the selected prior application plus ordered
 added/unchanged/changed/removed evidence and canonical definition hashes. Pack
@@ -621,10 +621,10 @@ Validation produces no workspace changes. An authorized administrator uploads a
 `.tar.zst` archive and creates an immutable, workspace-scoped plan with a prefix and
 `draft` or `publish` blueprint choice.
 
-V1 actions are:
+Blueprint and workspace-setting plan actions include:
 
-- `create`: create a required blueprint at its persisted target;
-- `map`: reuse only an explicitly selected exact published blueprint revision, including an unchanged target from a named prior application;
+- `create`: create a selected blueprint or presentation asset at its persisted target;
+- `map`: reuse only an explicitly selected exact published blueprint revision or immutable asset, including unchanged targets from a named prior application;
 - `append`: append absent Explore navigation or extension-layout entries;
 - `satisfied`: record exact workspace-setting entries without changing them;
 - `skip`: omit an optional resource or unmet optional navigation/layout entry;
