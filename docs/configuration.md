@@ -223,8 +223,9 @@ and the configured bucket together once file uploads are enabled.
 The API process streams multipart parts to private temporary files, verifies the
 file signature and immutable blueprint policy, then streams the staged object to
 S3. It does not return object-store URLs or accept object keys from clients.
-The file worker is the only component that reads originals for processing,
-writes generated variants, or deletes objects. Give API and worker credentials
+The file worker reads originals for processing, writes generated variants, and
+deletes objects. Authorized downloads through the API also read originals and
+variants. Give API and worker credentials
 only the minimum bucket permissions (`PutObject`, `GetObject`, `DeleteObject`,
 and `HeadBucket`); keep the bucket private and terminate TLS at the S3 endpoint.
 

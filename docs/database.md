@@ -128,6 +128,7 @@ reclaimed task. `task_workspace_service` records the last claimed workspace for
 least-recently-served fairness. Domain rows remain the source of business
 progress and results; task history is retained by default. The table excludes
 file processing, which continues to use `file_processing_jobs`.
+
 ### `blueprints`
 
 Blueprints define entity types and reusable mixins. A blueprint family is
@@ -171,8 +172,9 @@ they are never independently authored or edited.
 - `cardinality` and `target_cardinality` are directional blueprint metadata.
   Repository transactions enforce them; the database deliberately has no
   business-value check or uniqueness constraint for cardinality.
-- `tags` is a JSONB array compiled from the attribute TOML. Tags are generic,
-  unique, non-empty metadata with no reserved display tag.
+- `tags` is a JSONB array compiled from the attribute TOML. Tags are unique,
+  non-empty metadata; `hidden` and `hidden:<surface>` are native UI omission
+  hints, not access controls (see [attribute tags](blueprints.md#attribute-tags)).
 
 ### `entities`
 
@@ -182,8 +184,8 @@ Entities are catalog items.
 - Every value mutation validates the target attribute schema and the resolved
   entity schema before it commits. This includes values written by server-side
   computation.
-- `projections` is a JSONB field reserved for future denormalized read models;
-  EAV values remain the source of truth.
+- `projections` holds the derived `preview` cache; EAV values remain the source
+  of truth. Other named projections may be added separately.
 - `system_tags` and `system_metadata` are operator/automation-owned annotations,
   rather than blueprint attributes. They are not versioned, schema-validated as
   entity data, or included in projections. Tags use a GIN index so a workflow
@@ -210,7 +212,7 @@ does not retain publication snapshots or relationship dependencies.
 ### `attribute_contexts`
 
 Contexts define named catalog scopes with one deterministic inheritance path.
-Each workspace has its own persisted `default` context with a generated UUID.
+Each workspace has its own persisted `default` context with the fixed UUID below.
 It is the workspace's sole root; other contexts have exactly one parent. This
 supports progressive specialization such as `default -> PL ->
 PL-b2c -> PL-b2c-web` without a context-composition table.
@@ -274,7 +276,7 @@ the same contextual and historical behavior as all other attribute values.
 
 ### Files and processing jobs
 
-`files` stores immutable accepted-upload metadata: its workspace, SHA-256,
+`files` stores accepted-upload metadata: its workspace, SHA-256,
 verified MIME type, byte size, sanitized display filename, private original
 object key, status, and optional image dimensions. `file_variants` stores
 worker-produced variant metadata and object keys. File bytes are not stored in
