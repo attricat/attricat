@@ -41,13 +41,13 @@ password, cookie, CSRF, expiry, and revocation contract is documented in
 | --- | --- | --- |
 | `GET` | `/health`, `/health/live` | Process liveness only; dependencies are deliberately not probed. |
 | `GET` | `/health/ready` | Sanitized traffic-readiness check for PostgreSQL and required object storage. |
-| `POST` | `/solution-packs/inspect` | Validate a local solution-pack `.tar.zst` supplied as an `application/zstd` request body and return safe manifest metadata, the whole-archive SHA-256, blueprint logical-key summaries, bounded workspace-setting summaries, normalized presentation-asset metadata/digests, and extension requirement summaries (`solution_packs.manage`). The compressed body limit is 32 MiB and JSON summary is limited to 512 KiB. Inspection never returns resource bytes, archive paths, or private object keys. |
-| `GET` | `/presentation-assets` | List bounded immutable private presentation-asset metadata created by applied solution packs (`limit` 1–100, `offset` 0–10000; `solution_packs.manage`). Object keys are never returned. Use `acli presentation-asset list` to discover UUIDs for `solution-pack plan --map-asset`. Direct creation is intentionally unavailable so every object has durable plan staging and reconciliation evidence. |
+| `POST` | `/solution-packs/inspect` | Inspect an uploaded archive without applying it (`solution_packs.manage`); see [inspection](#solution-pack-plan-upload). |
+| `GET` | `/presentation-assets` | List immutable private asset metadata (`solution_packs.manage`; `limit` 1–100, `offset` 0–10000). Use IDs for explicit `--map-asset` reuse; direct creation is unavailable. |
 | `GET` | `/presentation-assets/{asset-id}` | Return same-workspace metadata only (`solution_packs.manage`); cross-workspace IDs return `404`. Use `acli presentation-asset show <uuid>`. |
-| `GET` | `/presentation-assets/{asset-id}/content` | Return bounded, integrity-verified normalized bytes from private object storage with server-owned content type/length, digest ETag, inline disposition, `Cache-Control: private, no-store`, `nosniff`, and restrictive CSP (`solution_packs.manage`). Use `acli presentation-asset download <uuid> --output <path>`. No create/update/delete endpoint exists. |
-| `POST` | `/solution-packs/plans?prefix=<prefix>&blueprint_publication=draft\|publish[&from_application=<uuid>][&include_sample_data=true]` | Revalidate an administrator-uploaded archive and persist an immutable, workspace-scoped dry-run (`solution_packs.manage`). `include_sample_data=true` explicitly selects optional synthetic sample entities; omission skips them. With no `--map` choices, including when `from_application` explicitly names one completed same-workspace prior application, the request remains a raw `application/zstd` body. The named application must have the same pack ID and a lower SemVer release. Unchanged exact published targets are reused; added keys create normally; changed definitions block; missing, unpublished, revision-drifted, or hash-drifted targets conflict; removed keys are evidence only. There is no history search or suggestion behavior. `from_application` and explicit maps are mutually exclusive. Explicit map reuse uses `multipart/form-data` with exactly one streamed `archive` part (`application/zstd`), repeated bounded `blueprint_map` JSON text parts shaped as `{"key":"blueprints/product","code":"shared_product"}`, and/or `asset_map` parts shaped as `{"key":"assets/brand-logo","id":"<uuid>"}`. The 32 MiB archive and structural limits apply. The archive is not retained. Responses are limited to 1 MiB and contain only safe source/digest metadata, optional prior application identity, ordered release-change evidence, mapping/action summaries, extension requirement outcomes, reasons, preconditions, readiness, and the fixed 24-hour expiry; blueprint definitions, normalized resource payloads, template values, and installed configuration are never returned. Presentation-asset create actions durably stage normalized bytes before a plan becomes ready; repeated `asset_map` parts shaped as `{"key":"assets/brand-logo","id":"<uuid>"}` request exact same-workspace reuse. Object keys, staged bytes, and archive paths are never returned. |
+| `GET` | `/presentation-assets/{asset-id}/content` | Download integrity-verified normalized bytes with private/no-store caching, a digest ETag, and restrictive content headers (`solution_packs.manage`). No create/update/delete endpoint exists. |
+| `POST` | `/solution-packs/plans` | Revalidate an uploaded archive and persist an immutable, workspace-scoped dry-run (`solution_packs.manage`). See [plan request and response](#solution-pack-plan-upload). |
 | `GET` | `/solution-packs/plans/{plan-id}` | Read a safe summary of an immutable plan in the authenticated workspace (`solution_packs.manage`). Cross-workspace IDs return `404`. |
-| `POST` | `/solution-packs/plans/{plan-id}/apply` | Start exactly one ready, unexpired immutable plan, or resume its existing application after expiry (`solution_packs.manage`). The request has no body or choice flags. Persisted target-absence and exact mapped-blueprint revision/hash/status preconditions are revalidated before each step. Workspace/state conflicts such as stale preconditions, blocked plans, or expiry before start return stable `409` errors; malformed or internally inconsistent persisted plan evidence returns `422 invalid_input`. Repeated and concurrent requests converge on one durable application and do not duplicate resources. |
+| `POST` | `/solution-packs/plans/{plan-id}/apply` | Start or resume one immutable application without a request body or choice flags (`solution_packs.manage`); see [apply semantics](#solution-pack-plan-upload). |
 | `GET` | `/solution-packs/applications?limit=25&offset=0` | List compact, bounded, workspace-scoped application provenance, including optional prior application identity, without mapping snapshots, steps, or normalized resource payloads (`solution_packs.manage`; limit 1–100, offset 0–10000). |
 | `GET` | `/solution-packs/applications/{application-id}` | Read safe application provenance, its ordered release-change snapshot, and ordered step results (`solution_packs.manage`). Blueprint source, normalized resource payloads, archive bytes, and secrets are never returned. |
 | `POST` | `/solution-packs/applications/{application-id}/abandon` | Permanently abandon a resumable sample-selected application and scrub its staged inputs; already committed entities remain ordinary workspace data (`solution_packs.manage`). |
@@ -156,6 +156,54 @@ password, cookie, CSRF, expiry, and revocation contract is documented in
 | `GET` | `/data-health/relationships` | Read relationship metrics. |
 | `GET` | `/data-health/storage` | Read storage metrics. |
 | `POST` | `/data-health/refresh` | Clear cached data-health responses. |
+
+### Solution-pack plan upload
+
+`POST /solution-packs/inspect` takes an `application/zstd` `.tar.zst` body (at
+most 32 MiB compressed). Its response is at most 512 KiB and contains safe
+manifest metadata, whole-archive SHA-256, blueprint keys, bounded setting
+summaries, normalized presentation-asset digests, and extension requirement
+summaries. Inspection never returns resource bytes, archive paths, or private
+object keys.
+
+`POST /solution-packs/plans` requires `prefix` and
+`blueprint_publication=draft|publish` query parameters. Optional
+`include_sample_data=true` explicitly selects synthetic sample entities;
+omitting it skips them. A `from_application=<uuid>` query parameter selects
+one completed application of the same pack in the same workspace, at a lower
+SemVer release. It cannot be combined with explicit maps. Catalog does not
+search history or suggest a mapping. Added keys create, unchanged exact
+published targets reuse, changed definitions block, and missing, unpublished,
+revision-drifted, or hash-drifted targets conflict; removed keys are evidence
+only.
+
+Without explicit maps, upload the archive as `application/zstd`, including
+when using `from_application`. For explicit reuse, send `multipart/form-data`
+with exactly one streamed `archive` part (`application/zstd`) and repeated
+`blueprint_map` JSON text parts such as
+`{"key":"blueprints/product","code":"shared_product"}` and/or `asset_map`
+parts such as `{"key":"assets/brand-logo","id":"<uuid>"}`. The 32 MiB
+compressed archive and structural limits still apply. The archive is not
+retained; asset-create actions privately stage normalized bytes before the
+plan is ready.
+
+The response is at most 1 MiB. It contains safe source/digest metadata,
+optional prior-application identity, ordered release-change evidence, mapping
+and action summaries, extension requirement outcomes, reasons, preconditions,
+readiness, and a fixed 24-hour expiry. It never includes blueprint definitions,
+normalized resource payloads, configuration templates or installed values,
+archive paths, staged bytes, or object keys. See [solution-pack planning](solution-packs.md#planning-and-application-implemented-v1)
+for apply-time behavior.
+
+`POST /solution-packs/plans/{plan-id}/apply` starts only a ready, unexpired plan,
+or resumes its existing application after plan expiry. Before each step the
+server rechecks target absence or exact mapped-blueprint revision, hash, and
+published state. Blocked, stale, or expired-before-start plans return `409`;
+inconsistent persisted plan evidence returns `422 invalid_input`. Concurrent or
+repeated apply requests converge on one application without duplicating
+resources. Authorized presentation-asset downloads return integrity-verified
+bytes with server-owned content type/length, inline disposition, digest ETag,
+`Cache-Control: private, no-store`, `nosniff`, and restrictive CSP.
 
 Blueprint creation and revision routes create drafts. Only published revisions
 can create entities or serve as migration targets. See [Blueprint Publication](database.md#blueprint-publication).

@@ -1,87 +1,33 @@
-# Solution Packs
+# Solution packs
 
-> **Status:** v1 archive validation, administrator inspection, immutable
-> create planning, explicit exact reuse of existing published blueprints, and
-> durable application/history for blueprints are implemented. Packs may also declare and inspect
-> bounded, digest-verified presentation assets with durable private staging and immutable create or
-> exact-map application. Packs may optionally declare strict synthetic sample
-> data selected only by an administrator at plan creation. Packs may also declare bounded extension
-> requirements, non-secret configuration templates, Explore navigation defaults,
-> bounded workspace extension layouts, and entity-blueprint extension layouts.
-> Administrators upload `.tar.zst` archives; broader resource types remain deferred.
->
-> **Scope of this document:** Sections that describe automatic or non-blueprint
-> existing-resource adoption, updates, workspace settings other than the two bounded defaults,
-> presentation-asset update/delete/ownership, prerequisites, or export are future target
-> design, not implemented v1 behavior. The optional sample-data architecture
-> contract and bounded runtime are implemented. The explicitly
-> marked v1 sections below define the current product contract.
+A solution pack is a versioned, declarative `.tar.zst` archive uploaded by an
+authorized workspace administrator. It can bootstrap blueprints, bounded
+workspace defaults, presentation assets, extension requirements, and setup
+guidance. It is not a backup, executable installer, or source of continuing
+ownership over the resulting workspace resources.
 
-A solution pack is a versioned, declarative bundle of catalog structure,
-workspace defaults, extension requirements, assets, and setup guidance. Packs
-let a workspace begin with a reviewed domain foundation—such as Ecommerce or
-Warehouse—without copying another workspace's database state.
+The CLI uploads the archive for server-side inspection and an immutable dry-run
+plan. Only an explicit apply mutates workspace resources. Ordinary users work
+with those resources rather than with the pack. A pack never installs, grants,
+configures, or enables an extension on its own.
 
-Authorized workspace administrators currently inspect packs and create or review
-dry-run plans through the Catalog CLI. Solution packs are an administrative
-bootstrap and authoring mechanism,
-not an end-user feature. Ordinary workspace users never need to discover,
-select, configure, inspect, or otherwise interact with a pack; they interact
-only with the resulting blueprints, navigation, extensions, and functionality.
-The server remains authoritative for validation, authorization, planning, and
-execution; the CLI does not mutate the database or unpack resources into a
-workspace directly.
+## Shipped boundary
 
-A pack is a starting point or template for a set of functionality. It is not a
-database export, backup, executable installer, or a way to bypass extension
-approval. It contains portable intent expressed through stable logical
-identifiers. Catalog resolves that intent to workspace-owned resources through
-a reviewed application plan. Once applied, those resources and settings belong
-to the workspace rather than remaining managed by the pack.
+- Create new blueprints or explicitly reuse exact published revisions; plan
+  added and unchanged resources from one named earlier application. Changed
+  definitions block, rather than updating an existing blueprint.
+- Merge only bounded Explore navigation and extension layout defaults. Evaluate
+  installed extension requirements without changing extension lifecycle state.
+- Create or explicitly map immutable presentation assets. Inspect bounded
+  guidance and rerun informational checks.
+- Create synthetic [sample data](solution-pack-sample-data.md) only when the
+  administrator explicitly opts in at plan creation. Ordinary audit and
+  automation apply to the created entities.
 
-## Target design principles (v1 implements creation and explicit blueprint reuse)
-
-- **Administrative:** packs are visible and operable only through authorized
-  administration workflows; ordinary users see only the resulting workspace.
-- **Declarative:** a pack describes desired resources and references; it does
-  not contain SQL, scripts, WASM, or arbitrary lifecycle hooks.
-- **Portable:** content never depends on workspace UUIDs, database IDs, object
-  storage keys, or deployment URLs.
-- **Reviewable:** every application begins with a dry-run plan that shows each
-  create, map, update, skip, permission request, and conflict.
-- **Safe by default:** collisions create choices rather than implicit adoption,
-  renaming, or replacement. Destructive and breaking changes require explicit
-  approval.
-- **Repeatable:** applying the same release with the same choices is idempotent.
-- **Composable:** a workspace may install multiple packs without implicit
-  precedence or last-writer-wins behavior.
-- **Versioned:** pack releases and their resource definitions are immutable;
-  applying one does not freeze or subordinate the resulting workspace state.
-- **Traceable:** Catalog records pack identity and version, archive digest,
-  selected options, mappings, actions, and application history.
-- **Trust preserving:** trusting a pack does not trust, enable, configure, or
-  grant permissions to an extension named by that pack.
-
-## Future target content at a glance
-
-The following table is roadmap design beyond the implemented v1 blueprint and
-bounded workspace-setting boundary.
-
-| Content | Target pack behavior |
-| --- | --- |
-| Blueprints, attributes, relationships, and views | Declared through logical keys and compiled into ordinary versioned blueprint definitions. |
-| Contexts and publication-channel defaults | Not pack content. Contexts are administrator-managed workspace operating structure and are never created, mapped, updated, or referenced by packs. |
-| Extension requirements | **Implemented subset:** declare installed-package ID/version compatibility and an optional bounded non-secret literal JSON configuration template. Stable manifest contribution references may supply workspace and new entity-blueprint layout defaults. Installation, upgrade, configuration, grants, and enablement remain separate ordinary approvals. |
-| Workspace defaults | **Implemented subset:** append pinned Explore entries and compatible extension contributions without replacing unrelated navigation, layout data, or settings. Other settings remain deferred. |
-| Branding, themes, and static assets | **Implemented bounded subset:** declarations are digest/signature checked, SVG is normalized through a fail-closed static allowlist, normalized bytes are durably staged into immutable plans, and apply creates or explicitly maps ordinary private assets. Changed later-release assets block; removed assets are information only. |
-| Documentation and setup | **Implemented subset:** bounded safe Markdown guidance, release notes, a structured checklist, and six host-defined informational checks with immutable run history. |
-| Sample data | **Implemented bounded subset:** optional, explicitly selected, visibly marked synthetic entities under the bounded [sample-data decision](solution-pack-sample-data.md). |
-
-The [implemented planning and application contract](#planning-and-application-implemented-v1)
-covers blueprint creation and explicit exact reuse, bounded Explore navigation
-and extension-layout defaults, read-only extension requirement evaluation, and
-informational setup checks. Other target behaviors above are not implied by
-having a manifest declaration.
+There is no pack-level uninstall, automatic adoption, generic settings merge,
+prerequisite-pack resolution, blueprint update, or export. Contexts and
+publication-channel defaults are not pack content. See [future design ideas](solution-packs-future.md)
+for proposals that are **not** accepted manifest syntax or available operations.
 
 ## Package and distribution
 
@@ -720,14 +666,3 @@ dependency, publication, data-retention, and destructive-change protections.
 Removing an application record is not a supported way to remove resources.
 Extensions are managed through the existing extension lifecycle, never removed
 merely because a pack originally requested them.
-
-## Delivery boundary
-
-Archive validation, planning, application, extension requirement evaluation,
-bounded workspace defaults, presentation assets, and optional synthetic samples
-are available as described above. Other workspace defaults, extension lifecycle
-approvals, blueprint successor/update planning, export, and curated Ecommerce
-and Warehouse packs are not provided by the pack installer. Supply pack archives
-explicitly as `.tar.zst` files; Catalog does not fetch them from repositories.
-See [future design ideas](solution-packs-future.md) separately; they are not
-manifest syntax or available operations.
