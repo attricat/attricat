@@ -4,12 +4,12 @@
 automation, agents, and shell scripts; successful API response JSON is written
 unchanged to stdout and structured errors are written to stderr.
 
-## Start Locally
+## Start locally
 
-```sh
-docker compose -f apps/api/compose.yml up -d
-DATABASE_URL=postgres://postgres:postgres@localhost:5432/catalog cargo run -p api
-```
+From the repository root, run `just setup` before any other `just` recipe,
+then run `just dev` in another terminal. See [Getting Started](index.md#getting-started)
+for prerequisites and the worktree-specific ports. Do not assume the API is on
+port 3000.
 
 By default, `acli` loads `.env` from the current directory without replacing
 variables already exported by the shell. In a worktree, its `CATALOG_API_URL`
@@ -19,8 +19,9 @@ that file.
 
 ```sh
 acli health
-acli --no-env --server http://127.0.0.1:3000 health
-CATALOG_SERVER=http://127.0.0.1:3000 acli health
+source .worktree
+acli --no-env --server "http://127.0.0.1:$API_PORT" health
+CATALOG_SERVER="http://127.0.0.1:$API_PORT" acli health
 ```
 
 During development, run the workspace binary without installing it:

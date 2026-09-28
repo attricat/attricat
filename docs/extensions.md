@@ -149,8 +149,8 @@ an optional exact numeric port, and a path prefix ending in `/*`. They reject
 queries, fragments, userinfo, wildcard schemes/hosts, arbitrary ports,
 localhost, and loopback/private/link-local/unspecified IP destinations.
 Redirects are disabled; a future redirect contract must re-check its target.
-WASM components receive no ambient sockets. #145 will call these host policy
-checks when it implements the mediated HTTP API.
+WASM components receive no ambient sockets. The mediated HTTPS API described
+below enforces the host policy at each call.
 
 ## Webhooks
 
@@ -195,7 +195,7 @@ descriptors. Server WASM execution, client components, storage, commands, mediat
 extension-owned event publication, and mediated network/secrets APIs are
 implemented. Webhook delivery remains follow-on work.
 
-## Server WASM runtime (#145)
+## Server WASM runtime
 
 A `server_wasm` artifact is a WebAssembly **component** using the checked-in
 `catalog:host@1.0.0` WIT package at `crates/extension-runtime/wit/catalog-extension.wit`.
@@ -228,9 +228,6 @@ intents. An upsert serializes its declared blueprint/attribute business key,
 creates only when it is absent, and rejects an ambiguous match. `events.emit.v1`
 is implemented only for a manifest-declared, per-contract event export as
 described in [Inter-extension events](#inter-extension-events).
-components with `storage.extension`. `events.emit.v1` is implemented only for a
-manifest-declared, per-contract event export as described in
-[Inter-extension events](#inter-extension-events).
 
 ### Mediated secrets and HTTPS
 
@@ -263,6 +260,7 @@ operations retain their #253 batch key across a pre-checkpoint replay; a
 destination extension must map that stable key to its destination idempotency
 key when it performs side effects. `network.request.v1` never grants ambient
 sockets.
+
 Registry source APIs expose `GET/POST /extension-registries`,
 `DELETE /extension-registries/{id}`, `GET /extension-registries/discover`, and
 `GET /extension-registries/extensions/{owner}/{repository}`. The final endpoint

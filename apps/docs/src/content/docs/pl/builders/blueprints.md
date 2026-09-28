@@ -43,4 +43,4 @@ Są to kody ról obszaru roboczego. Role muszą istnieć podczas publikowania re
 
 Atrybuty mogą być wartościami skalarnymi, relacjami lub plikami. Konfiguracja blueprintu steruje także walidacją, wartościami domyślnymi, dziedziczeniem kontekstowym oraz możliwością edycji pola w przeglądarce.
 
-Dokumentacja blueprintów będzie rozbudowywana o kolejne przykłady atrybutów i szczegóły walidacji.
+Pełna składnia atrybutów i reguły walidacji znajdują się w [dokumentacji blueprintów w repozytorium (po angielsku)](https://github.com/attricat/attricat/blob/main/docs/blueprints.md).

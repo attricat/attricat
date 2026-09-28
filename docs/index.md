@@ -58,14 +58,12 @@ runs the ignored RustFS compatibility test.
 - [API reference](api.md): HTTP routes and API behavior.
 - [Relationship tree facets](search-facets.md): filter explorer results through
   a contextual hierarchy with roll-up counts.
-- [Relationship-aware Explore search](relationship-aware-search.md): planned
+- [Relationship-aware Explore search](relationship-aware-search.md): explicit
   graph traversal and structured query-language semantics.
 - [Relationships walkthrough](../examples/relationships/README.md): create
   blueprints, entities, contextual values, and relationships end to end.
 - [Demo catalog generator](../examples/generate.md): create deterministic,
   industry-scoped demo and local performance data sets.
-- [Internal roadmap](roadmap.html): dated planning material, not a capability
-  reference.
 
 ## Customize The Web App
 

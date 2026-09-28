@@ -43,4 +43,4 @@ These are workspace role codes. The roles must exist when you publish the bluepr
 
 Attributes can be scalar values, relationships, or files. Blueprint configuration also controls validation, defaults, contextual inheritance, and whether browser users can edit a field.
 
-The blueprint reference will grow with additional attribute examples and validation details as the public documentation expands.
+For the full attribute syntax and validation rules, see [Blueprint authoring in the repository](https://github.com/attricat/attricat/blob/main/docs/blueprints.md).

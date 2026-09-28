@@ -18,7 +18,7 @@ pnpm --dir apps/docs build
 
 ## Visual style
 
-`src/styles/brand.css` maps the semantic colors, type, and radii from the pinned `design/` submodule into Starlight's light and dark themes. The wordmarks in `src/assets/` are copies of `design/assets/logos/wordmark-{light,dark}.svg` so the docs build can run independently. When updating the design submodule, refresh the CSS token snapshot and both wordmarks together, then check both themes and locales.
+`src/styles/brand.css` maps the semantic colors, type, and radii from the pinned [design snapshot](../catalog-web/design/README.md) into Starlight's light and dark themes. The wordmarks in `src/assets/` are copies of that snapshot's `assets/logos/wordmark-{light,dark}.svg`. When updating the snapshot, refresh the CSS tokens and both wordmarks together, then check both themes and locales.
 
 ## Content
 
