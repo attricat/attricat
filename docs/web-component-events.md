@@ -7,7 +7,7 @@ forward a transactional-outbox envelope, event metadata, payload, snapshots, or
 other server-internal facts to a component.
 
 Contracts and helpers live in
-`apps/catalog-web/src/features/web-components/catalog-events.ts`. The host
+`apps/catalog-web/src/features/web-components/catalogEvents.ts`. The host
 listener is `installCatalogEventBridge` in `catalogEventBridge.ts`.
 
 ## Host to component
