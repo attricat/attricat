@@ -188,7 +188,7 @@ describe('entity API client', () => {
   });
 
   it('loads entity changes from the timeline route', async () => {
-    respond([
+    respond({ items: [
       {
         audit_event_id: entityId,
         occurred_at: '2026-09-09T12:00:00Z',
@@ -208,9 +208,9 @@ describe('entity API client', () => {
         before_value: 'Old title',
         after_value: 'New title',
       },
-    ]);
-    await expect(getEntityChanges(entityId)).resolves.toHaveLength(1);
-    expect(fetchMock).toHaveBeenCalledWith(`/api/entities/${entityId}/changes`);
+    ], next_offset: 25 });
+    await expect(getEntityChanges(entityId, 0)).resolves.toMatchObject({ items: [expect.any(Object)], next_offset: 25 });
+    expect(fetchMock).toHaveBeenCalledWith(`/api/entities/${entityId}/changes?limit=25&offset=0`);
   });
 
   it('accepts file values in a migration preview', async () => {

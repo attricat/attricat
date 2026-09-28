@@ -1,4 +1,4 @@
-import { useQuery } from '@tanstack/react-query';
+import { useInfiniteQuery, useQuery } from '@tanstack/react-query';
 import { Link } from '@tanstack/react-router';
 import EditOutlinedIcon from '@mui/icons-material/EditOutlined';
 import VisibilityOutlinedIcon from '@mui/icons-material/VisibilityOutlined';
@@ -13,6 +13,7 @@ import {
 } from '@mui/material';
 import { PageContainer } from '../../components/PageContainer';
 import { PageHeader } from '../../components/PageHeader';
+import { LoadMoreButton } from '../../components/LoadMoreButton';
 import { EntitySchemaSubheader } from './components/EntitySchemaSubheader';
 import { EntityToolbar } from './components/EntityToolbar';
 import { getEntityChanges, getEntityForm } from './api';
@@ -27,10 +28,13 @@ const groupChangesByEvent = (changes: EntityAuditChange[]) =>
 
 export const EntityChangesPage = ({ entityId }: { entityId: string }) => {
   const { t } = useTranslation();
-  const changes = useQuery({
+  const changes = useInfiniteQuery({
     queryKey: entityQueryKeys.changes(entityId),
-    queryFn: () => getEntityChanges(entityId),
+    queryFn: ({ pageParam }) => getEntityChanges(entityId, pageParam),
+    initialPageParam: 0,
+    getNextPageParam: (page) => page.next_offset,
   });
+  const changeItems = changes.data?.pages.flatMap((page) => page.items) ?? [];
   const entityForm = useQuery({
     queryKey: entityQueryKeys.form(entityId),
     queryFn: () => getEntityForm(entityId),
@@ -68,7 +72,7 @@ export const EntityChangesPage = ({ entityId }: { entityId: string }) => {
       )}
       {changes.data && (
         <Box sx={{ mt: 3 }}>
-          {Object.entries(groupChangesByEvent(changes.data)).map(
+          {Object.entries(groupChangesByEvent(changeItems)).map(
             ([eventId, eventChanges]) => {
               const event = eventChanges[0];
               const actor =
@@ -122,8 +126,19 @@ export const EntityChangesPage = ({ entityId }: { entityId: string }) => {
               );
             },
           )}
-          {changes.data.length === 0 && (
+          {changeItems.length === 0 && (
             <Typography>{t('entities.noRecordedChanges')}</Typography>
+          )}
+          {changes.isFetchNextPageError && (
+            <Alert severity="error" sx={{ mb: 2 }}>
+              {changes.error.message}
+            </Alert>
+          )}
+          {changes.hasNextPage && (
+            <LoadMoreButton
+              isLoading={changes.isFetchingNextPage}
+              onLoadMore={() => void changes.fetchNextPage()}
+            />
           )}
         </Box>
       )}

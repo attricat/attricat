@@ -157,6 +157,21 @@ password, cookie, CSRF, expiry, and revocation contract is documented in
 | `GET` | `/data-health/storage` | Read storage metrics. |
 | `POST` | `/data-health/refresh` | Clear cached data-health responses. |
 
+### Entity change and value-history pagination
+
+`GET /entities/{id}/changes` and `GET /entities/{id}/values/history` retain
+legacy JSON-array responses when called without pagination parameters. Supply
+`limit` (1–50, default 25) or `offset` (0–10000, default 0) to receive
+`{ "items": [...], "next_offset": number | null }`. Use `next_offset` for the
+next page; the web entity-changes screen requests 25 at a time. Value-history
+pages sort by immutable creation time (newest first), rather than the legacy
+archive-time ordering. New writes between offset-based requests can shift
+pages; refresh from offset zero after an edit. Pagination stops at offset
+10000; older records remain available through the legacy response until a
+cursor-based history contract is introduced. Both routes require scoped
+`entities.read`. Built-in agent tools use bounded pages without calling these
+HTTP endpoints.
+
 ### Solution-pack plan upload
 
 `POST /solution-packs/inspect` takes an `application/zstd` `.tar.zst` body (at
@@ -443,7 +458,9 @@ for each specified attribute/context (an empty list clears it); removal unlinks
 only named targets. The agent must inspect current values first. These tools
 use the initiating user's `blueprints.read` or entity-scoped permissions:
 `entities.write` for migration assessment and relationship changes, and
-`entities.read` for existing entity inspection. Writes use the same audited
+`entities.read` for existing entity inspection. Bounded `get_entity_changes`
+and `get_value_history` tools support inspection before approval-gated
+`remove_entity_values` and `restore_entity_value`. Writes use the same audited
 mutation services as the API.
 
 ## Workflow run operations

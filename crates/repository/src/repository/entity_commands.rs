@@ -568,6 +568,38 @@ impl CatalogRepository {
         .into_domain())
     }
 
+    pub async fn entity_audit_changes_page(
+        &self,
+        entity_id: Uuid,
+        limit: i64,
+        offset: i64,
+    ) -> Result<(Vec<EntityAuditChange>, bool), RepositoryError> {
+        let mut rows = sqlx::query_as::<_, Db<EntityAuditChange>>(
+            r#"SELECT c.audit_event_id, e.occurred_at, e.actor_user_id,
+                      actor.display_name AS actor_display_name, actor.email AS actor_email,
+                      e.executor_type, e.agent_run_id, e.approval_decision, e.approved_by_user_id,
+                      approver.display_name AS approved_by_display_name,
+                      c.attribute_id, c.attribute_code, c.context_id, c.context_code,
+                      c.change_kind, c.before_value, c.after_value
+               FROM audit_event_changes c
+               JOIN audit_events e ON e.id = c.audit_event_id
+               LEFT JOIN users actor ON actor.id = e.actor_user_id
+               LEFT JOIN users approver ON approver.id = e.approved_by_user_id
+               WHERE c.entity_id = $1 AND c.workspace_id = $2
+               ORDER BY e.occurred_at DESC, c.id DESC
+               LIMIT $3 OFFSET $4"#,
+        )
+        .bind(entity_id)
+        .bind(self.workspace_id.unwrap_or(Self::DEFAULT_WORKSPACE_ID))
+        .bind(limit + 1)
+        .bind(offset)
+        .fetch_all(&self.pool)
+        .await?;
+        let has_more = rows.len() as i64 > limit;
+        rows.truncate(limit as usize);
+        Ok((rows.into_domain(), has_more))
+    }
+
     pub async fn get_entity(&self, entity_id: Uuid) -> Result<Option<Entity>, RepositoryError> {
         Ok(sqlx::query_as::<_, Db<Entity>>(
             r#"SELECT id, blueprint_id, blueprint_version, projections, system_tags, system_metadata, ('attricat.sample'=ANY(system_tags)) AS is_sample, created_at, updated_at, deleted_at

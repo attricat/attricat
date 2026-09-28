@@ -148,10 +148,15 @@ export const getCurrentBlueprint = (id: string) =>
     `/api/blueprints/${encodeURIComponent(uuidSchema.parse(id))}`,
     blueprintWithAttributesSchema,
   );
-export const getEntityChanges = (id: string) =>
+export const ENTITY_CHANGES_PAGE_SIZE = 25;
+
+export const getEntityChanges = (id: string, offset: number) =>
   request(
-    `/api/entities/${encodeURIComponent(uuidSchema.parse(id))}/changes`,
-    z.array(entityAuditChangeSchema),
+    `/api/entities/${encodeURIComponent(uuidSchema.parse(id))}/changes?limit=${ENTITY_CHANGES_PAGE_SIZE}&offset=${offset}`,
+    z.object({
+      items: z.array(entityAuditChangeSchema),
+      next_offset: z.number().int().nonnegative().nullable(),
+    }),
   );
 export const getEntityForm = (id: string) => {
   const entityId = uuidSchema.parse(id);

@@ -2,17 +2,16 @@ use super::{
     AppState,
     data_health::invalidate_data_health,
     error::ApiError,
-    extractors::{ApiJson, ApiPath},
+    extractors::{ApiJson, ApiPath, ApiQuery},
 };
 use crate::{
     catalog_read_service::CatalogReadService,
     catalog_service::CatalogMutationService,
     constants::DEFAULT_PAGE_SIZE,
     model::{
-        AppendAttributeValues, AttributeValue, AttributeValueHistory, CreateEntityFormRequest,
-        Entity, EntityAuditChange, EntityFormResponse, IncomingRelationshipsPage,
-        IncomingRelationshipsRequest, MigrateEntityRequest, PublicationContextRequest,
-        RelationshipMutation, UpdateEntityFormRequest,
+        AppendAttributeValues, AttributeValue, CreateEntityFormRequest, Entity, EntityFormResponse,
+        IncomingRelationshipsPage, IncomingRelationshipsRequest, MigrateEntityRequest,
+        PublicationContextRequest, RelationshipMutation, UpdateEntityFormRequest,
     },
     repository::decode_search_cursor,
 };
@@ -635,25 +634,71 @@ pub(super) async fn get_current_values(
     }
     Ok(Json(repository.current_values(entity_id).await?))
 }
+#[derive(Deserialize, Default)]
+#[serde(deny_unknown_fields)]
+pub(super) struct HistoryPageQuery {
+    limit: Option<i64>,
+    offset: Option<i64>,
+}
+
+fn checked_history_page(query: &HistoryPageQuery) -> Result<(i64, i64), ApiError> {
+    let limit = query.limit.unwrap_or(25);
+    let offset = query.offset.unwrap_or(0);
+    if !(1..=50).contains(&limit) || !(0..=10000).contains(&offset) {
+        return Err(ApiError::invalid_input(
+            "limit must be 1-50 and offset must be 0-10000".into(),
+        ));
+    }
+    Ok((limit, offset))
+}
+
+fn next_history_offset(has_more: bool, offset: i64, limit: i64) -> Option<i64> {
+    has_more
+        .then_some(offset + limit)
+        .filter(|next| *next <= 10000)
+}
+
 pub(super) async fn get_entity_changes(
     State(_state): State<AppState>,
     super::auth::ScopedRepository(repository): super::auth::ScopedRepository,
     ApiPath(entity_id): ApiPath<Uuid>,
-) -> Result<Json<Vec<EntityAuditChange>>, ApiError> {
+    ApiQuery(query): ApiQuery<HistoryPageQuery>,
+) -> Result<Json<Value>, ApiError> {
     if repository.get_entity(entity_id).await?.is_none() {
         return Err(ApiError::not_found("entity"));
     }
-    Ok(Json(repository.entity_audit_changes(entity_id).await?))
+    if query.limit.is_none() && query.offset.is_none() {
+        return Ok(Json(json!(
+            repository.entity_audit_changes(entity_id).await?
+        )));
+    }
+    let (limit, offset) = checked_history_page(&query)?;
+    let (items, has_more) = repository
+        .entity_audit_changes_page(entity_id, limit, offset)
+        .await?;
+    Ok(Json(
+        json!({"items": items, "next_offset": next_history_offset(has_more, offset, limit)}),
+    ))
 }
 pub(super) async fn get_value_history(
     State(_state): State<AppState>,
     super::auth::ScopedRepository(repository): super::auth::ScopedRepository,
     ApiPath(entity_id): ApiPath<Uuid>,
-) -> Result<Json<Vec<AttributeValueHistory>>, ApiError> {
+    ApiQuery(query): ApiQuery<HistoryPageQuery>,
+) -> Result<Json<Value>, ApiError> {
     if repository.get_entity(entity_id).await?.is_none() {
         return Err(ApiError::not_found("entity"));
     }
-    Ok(Json(repository.value_history(entity_id).await?))
+    if query.limit.is_none() && query.offset.is_none() {
+        return Ok(Json(json!(repository.value_history(entity_id).await?)));
+    }
+    let (limit, offset) = checked_history_page(&query)?;
+    let (items, has_more) = repository
+        .value_history_page(entity_id, limit, offset)
+        .await?;
+    Ok(Json(
+        json!({"items": items, "next_offset": next_history_offset(has_more, offset, limit)}),
+    ))
 }
 pub(super) async fn restore_value(
     State(state): State<AppState>,

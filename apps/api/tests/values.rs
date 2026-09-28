@@ -127,6 +127,86 @@ default_value = "Untitled"
 }
 
 #[sqlx::test]
+async fn paginates_entity_changes_and_value_history_without_breaking_legacy_reads(pool: PgPool) {
+    let (base_url, server) = start_server(pool).await;
+    let client = authenticated_client();
+    let blueprint = create_blueprint(&client, &base_url,
+        "format_version = 1\ncode = \"paged_history_product\"\nname = \"Paged product\"\nkind = \"entity\"\n\n[views.dropdown_option]\ntype = \"dropdown_option\"\nfields = [\"title\"]\n\n[[attributes]]\ncode = \"title\"\nvalue_type = \"string\"").await;
+    let entity = create_entity(&client, &base_url, &blueprint).await;
+    let id = entity["id"].as_str().unwrap();
+    for title in ["first", "second", "third", "fourth"] {
+        client
+            .post(format!("{base_url}/entities/{id}/values"))
+            .json(&json!({"values":[{"kind":"scalar","attribute_code":"title","value":title}]}))
+            .send()
+            .await
+            .unwrap()
+            .error_for_status()
+            .unwrap();
+    }
+    for path in ["changes", "values/history"] {
+        let url = format!("{base_url}/entities/{id}/{path}");
+        let legacy: Vec<Value> = client
+            .get(&url)
+            .send()
+            .await
+            .unwrap()
+            .error_for_status()
+            .unwrap()
+            .json()
+            .await
+            .unwrap();
+        assert!(legacy.len() >= 3);
+        let first: Value = client
+            .get(format!("{url}?limit=2&offset=0"))
+            .send()
+            .await
+            .unwrap()
+            .error_for_status()
+            .unwrap()
+            .json()
+            .await
+            .unwrap();
+        let second: Value = client
+            .get(format!("{url}?limit=2&offset=2"))
+            .send()
+            .await
+            .unwrap()
+            .error_for_status()
+            .unwrap()
+            .json()
+            .await
+            .unwrap();
+        assert_eq!(first["items"].as_array().unwrap().len(), 2);
+        assert_eq!(first["next_offset"], 2);
+        assert_ne!(first["items"], second["items"]);
+        assert!(!second["items"].as_array().unwrap().is_empty());
+        let tail: Value = client
+            .get(format!("{url}?limit=2&offset={}", legacy.len()))
+            .send()
+            .await
+            .unwrap()
+            .error_for_status()
+            .unwrap()
+            .json()
+            .await
+            .unwrap();
+        assert!(tail["items"].as_array().unwrap().is_empty());
+        assert_eq!(tail["next_offset"], Value::Null);
+        assert_eq!(
+            client
+                .get(format!("{url}?limit=51"))
+                .send()
+                .await
+                .unwrap()
+                .status(),
+            reqwest::StatusCode::UNPROCESSABLE_ENTITY
+        );
+    }
+    server.abort();
+}
+
+#[sqlx::test]
 async fn restores_a_scalar_value_from_synchronous_history(pool: PgPool) {
     let (base_url, server) = start_server(pool.clone()).await;
     let client = authenticated_client();

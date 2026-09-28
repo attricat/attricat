@@ -115,6 +115,16 @@ pub fn definitions() -> Vec<ToolDefinition> {
             json!({"type":"object","required":["entity_id","context_id"],"properties":{"entity_id":{"type":"string","format":"uuid"},"context_id":{"type":"string","format":"uuid"}},"additionalProperties":false}),
         ),
         definition(
+            "get_entity_changes",
+            "Read a bounded page of an entity's audited changes, newest first. Use next_offset to continue.",
+            history_page_parameters(),
+        ),
+        definition(
+            "get_value_history",
+            "Read a bounded page of an entity's retained prior attribute values. Inspect current values before restoring a history ID; use next_offset to continue.",
+            history_page_parameters(),
+        ),
+        definition(
             "get_entity_preview_link",
             "Get a navigable link to an existing entity's preview page. Use this for each entity you cite; return the link in your answer. The link is relative to the Attricat web app.",
             json!({"type":"object","required":["entity_id"],"properties":{"entity_id":{"type":"string","format":"uuid"}},"additionalProperties":false}),
@@ -163,6 +173,16 @@ pub fn definitions() -> Vec<ToolDefinition> {
             "set_entity_values",
             "Set scalar attribute values on an existing entity, optionally in a named attribute context. Each value replaces the current value for its attribute and context. Call get_entity and list_contexts first when the entity's current values or context IDs are unknown. This change requires approval.",
             json!({"type":"object","required":["entity_id","values"],"properties":{"entity_id":{"type":"string","format":"uuid"},"values":{"type":"array","minItems":1,"items":{"type":"object","required":["kind","attribute_code","context_id","value"],"properties":{"kind":{"const":"scalar"},"attribute_code":{"type":"string"},"context_id":{"type":["string","null"],"format":"uuid"},"value":{}},"additionalProperties":false}}},"additionalProperties":false}),
+        ),
+        definition(
+            "remove_entity_values",
+            "Remove current scalar overrides for the specified attribute codes and contexts. Inspect current values first; this change requires approval.",
+            json!({"type":"object","required":["entity_id","remove_values"],"properties":{"entity_id":{"type":"string","format":"uuid"},"remove_values":{"type":"array","minItems":1,"maxItems":20,"items":{"type":"object","required":["attribute_code"],"properties":{"attribute_code":{"type":"string"},"context_id":{"type":["string","null"],"format":"uuid"}},"additionalProperties":false}}},"additionalProperties":false}),
+        ),
+        definition(
+            "restore_entity_value",
+            "Restore one retained value-history entry by ID to its entity. Inspect get_value_history and get_entity first. This change requires approval.",
+            json!({"type":"object","required":["entity_id","history_id"],"properties":{"entity_id":{"type":"string","format":"uuid"},"history_id":{"type":"string","format":"uuid"}},"additionalProperties":false}),
         ),
         definition(
             "replace_entity_relationships",
@@ -237,6 +257,39 @@ pub fn definitions() -> Vec<ToolDefinition> {
     ]
 }
 
+fn history_page_parameters() -> Value {
+    json!({"type":"object","required":["entity_id"],"properties":{
+        "entity_id":{"type":"string","format":"uuid"},
+        "limit":{"type":"integer","minimum":1,"maximum":50},
+        "offset":{"type":"integer","minimum":0,"maximum":10000}
+    },"additionalProperties":false})
+}
+
+fn history_page_arguments(arguments: Value) -> Result<(Uuid, i64, i64), ToolError> {
+    #[derive(Deserialize)]
+    #[serde(deny_unknown_fields)]
+    struct Input {
+        entity_id: Uuid,
+        limit: Option<i64>,
+        offset: Option<i64>,
+    }
+    let input: Input = decode(arguments)?;
+    let limit = input.limit.unwrap_or(20);
+    let offset = input.offset.unwrap_or(0);
+    if !(1..=50).contains(&limit) || !(0..=10000).contains(&offset) {
+        return Err(ToolError::InvalidArguments(
+            "limit must be 1-50 and offset must be 0-10000".into(),
+        ));
+    }
+    Ok((input.entity_id, limit, offset))
+}
+
+fn next_history_offset(has_more: bool, offset: i64, limit: i64) -> Option<i64> {
+    has_more
+        .then_some(offset + limit)
+        .filter(|next| *next <= 10000)
+}
+
 fn relationship_mutation_parameters() -> Value {
     json!({"type":"object","required":["entity_id","relationships"],"properties":{
         "entity_id":{"type":"string","format":"uuid"},
@@ -267,6 +320,8 @@ pub fn kind(name: &str) -> Result<ToolKind, ToolError> {
         | "list_contexts"
         | "get_entity"
         | "get_entity_context_preview"
+        | "get_entity_changes"
+        | "get_value_history"
         | "get_entity_preview_link"
         | "view_image"
         | "read_file"
@@ -281,6 +336,8 @@ pub fn kind(name: &str) -> Result<ToolKind, ToolError> {
         | "create_entity"
         | "delete_entity"
         | "set_entity_values"
+        | "remove_entity_values"
+        | "restore_entity_value"
         | "replace_entity_relationships"
         | "remove_entity_relationships"
         | "migrate_entity"
@@ -326,6 +383,22 @@ pub fn change_summary(name: &str, arguments: &Value) -> Result<String, ToolError
         )),
         "set_entity_values" => Ok(format!(
             "Set attribute values on entity {}.",
+            required_string(arguments, "entity_id")?
+        )),
+        "remove_entity_values" => Ok(format!(
+            "Remove {} scalar overrides on entity {}.",
+            arguments
+                .get("remove_values")
+                .and_then(Value::as_array)
+                .ok_or_else(|| ToolError::InvalidArguments(
+                    "remove_values must be an array".into()
+                ))?
+                .len(),
+            required_string(arguments, "entity_id")?
+        )),
+        "restore_entity_value" => Ok(format!(
+            "Restore history entry {} on entity {}.",
+            required_string(arguments, "history_id")?,
             required_string(arguments, "entity_id")?
         )),
         "replace_entity_relationships" | "remove_entity_relationships" => {
@@ -485,6 +558,18 @@ pub async fn execute_read(
                 .await?,
         )
         .expect("publication status serializes"),
+        "get_entity_changes" | "get_value_history" => {
+            let (entity_id, limit, offset) = history_page_arguments(arguments)?;
+            // Keep the same deleted/not-found behavior as the HTTP endpoints.
+            repository.get_entity(entity_id).await?.ok_or(RepositoryError::NotFound("entity"))?;
+            if name == "get_entity_changes" {
+                let (items, has_more) = repository.entity_audit_changes_page(entity_id, limit, offset).await?;
+                json!({"items":items,"next_offset":next_history_offset(has_more, offset, limit)})
+            } else {
+                let (items, has_more) = repository.value_history_page(entity_id, limit, offset).await?;
+                json!({"items":items,"next_offset":next_history_offset(has_more, offset, limit)})
+            }
+        }
         "get_entity_preview_link" => {
             let id = parse_uuid(&arguments, "entity_id")?;
             repository
@@ -908,6 +993,59 @@ pub async fn execute_mutation(
                     .await?,
             )
             .expect("attribute values serialize")
+        }
+        "remove_entity_values" => {
+            #[derive(Deserialize)]
+            #[serde(deny_unknown_fields)]
+            struct Input {
+                entity_id: Uuid,
+                remove_values: Vec<crate::model::AttributeValueSelector>,
+            }
+            let input: Input = decode(arguments)?;
+            if input.remove_values.is_empty()
+                || input.remove_values.len() > 20
+                || input
+                    .remove_values
+                    .iter()
+                    .any(|value| value.attribute_code.is_empty())
+                || input
+                    .remove_values
+                    .iter()
+                    .map(|value| (&value.attribute_code, value.context_id))
+                    .collect::<std::collections::HashSet<_>>()
+                    .len()
+                    != input.remove_values.len()
+            {
+                return Err(ToolError::InvalidArguments(
+                    "remove_values must contain 1 to 20 distinct attribute/context selectors"
+                        .into(),
+                ));
+            }
+            serde_json::to_value(
+                CatalogMutationService::new(repository)
+                    .update_entity(
+                        input.entity_id,
+                        crate::model::UpdateEntityFormRequest {
+                            values: vec![],
+                            relationships: vec![],
+                            remove_values: input.remove_values,
+                            system_tags: None,
+                            system_metadata: None,
+                        },
+                    )
+                    .await?,
+            )
+            .expect("entity serializes")
+        }
+        "restore_entity_value" => {
+            let entity_id = parse_uuid(&arguments, "entity_id")?;
+            let history_id = parse_uuid(&arguments, "history_id")?;
+            serde_json::to_value(
+                CatalogMutationService::new(repository)
+                    .restore_value(entity_id, history_id)
+                    .await?,
+            )
+            .expect("value serializes")
         }
         "replace_entity_relationships" | "remove_entity_relationships" => {
             let (entity_id, relationships) =
@@ -1579,6 +1717,8 @@ async fn read_authorized(
         "list_contexts" => ("contexts.read", None, Some("__context_list__")),
         "get_entity"
         | "get_entity_context_preview"
+        | "get_entity_changes"
+        | "get_value_history"
         | "get_entity_preview_link"
         | "get_entity_publications" => (
             "entities.read",
@@ -1744,6 +1884,40 @@ mod tests {
         assert_eq!(
             change_summary("replace_entity_relationships", &payload).unwrap(),
             format!("Replace relationship targets on entity {id}: categories (1 targets).")
+        );
+    }
+
+    #[test]
+    fn entity_history_and_restore_tools_have_bounded_approval_contracts() {
+        let definitions = definitions();
+        for name in ["get_entity_changes", "get_value_history"] {
+            assert_eq!(kind(name).unwrap(), ToolKind::Read);
+            let schema = &definitions
+                .iter()
+                .find(|tool| tool.function.name == name)
+                .unwrap()
+                .function
+                .parameters;
+            assert_eq!(schema["properties"]["limit"]["maximum"], 50);
+        }
+        for name in ["remove_entity_values", "restore_entity_value"] {
+            assert_eq!(kind(name).unwrap(), ToolKind::Mutation);
+        }
+        let id = uuid::Uuid::new_v4();
+        assert_eq!(
+            super::history_page_arguments(json!({"entity_id":id})).unwrap(),
+            (id, 20, 0)
+        );
+        assert!(super::history_page_arguments(json!({"entity_id":id,"limit":51})).is_err());
+        assert!(super::history_page_arguments(json!({"entity_id":id,"offset":10001})).is_err());
+        assert_eq!(super::next_history_offset(true, 10000, 20), None);
+        assert_eq!(
+            change_summary(
+                "restore_entity_value",
+                &json!({"entity_id":id,"history_id":id})
+            )
+            .unwrap(),
+            format!("Restore history entry {id} on entity {id}.")
         );
     }
 

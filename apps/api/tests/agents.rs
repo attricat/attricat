@@ -3,7 +3,7 @@ mod support;
 use std::{sync::Arc, time::Duration};
 
 use api::{
-    agent_tools::{ToolError, execute_read},
+    agent_tools::{ToolError, execute_mutation, execute_read},
     agent_worker,
     agents::AgentProviderConfig,
     file_worker::{FileWorker, WorkerConfig},
@@ -15,6 +15,94 @@ use axum::{Router, routing::post};
 use reqwest::multipart::{Form, Part};
 use support::*;
 use tokio::time::{sleep, timeout};
+
+#[sqlx::test]
+async fn agent_history_reads_and_entity_value_edits_use_scoped_catalog_services(pool: PgPool) {
+    let (base_url, server) = start_server(pool.clone()).await;
+    let client = authenticated_client();
+    let blueprint = create_blueprint(&client, &base_url,
+        "format_version = 1\ncode = \"agent_history_product\"\nname = \"Agent history product\"\nkind = \"entity\"\n\n[views.dropdown_option]\ntype = \"dropdown_option\"\nfields = [\"title\"]\n\n[[attributes]]\ncode = \"title\"\nvalue_type = \"string\"").await;
+    let entity = create_entity(&client, &base_url, &blueprint).await;
+    let entity_id = entity["id"].as_str().unwrap();
+    for title in ["first", "second", "third"] {
+        client
+            .post(format!("{base_url}/entities/{entity_id}/values"))
+            .json(&json!({"values":[{"kind":"scalar","attribute_code":"title","value":title}]}))
+            .send()
+            .await
+            .unwrap()
+            .error_for_status()
+            .unwrap();
+    }
+    let workspace = BOOTSTRAP_WORKSPACE_ID.parse().unwrap();
+    let actor = BOOTSTRAP_OWNER_ID.parse().unwrap();
+    let repository = CatalogRepository::system(pool)
+        .for_workspace(workspace)
+        .await
+        .unwrap();
+    let changes = execute_read(
+        &repository,
+        actor,
+        workspace,
+        "get_entity_changes",
+        json!({"entity_id":entity_id,"limit":1}),
+    )
+    .await
+    .unwrap();
+    assert_eq!(changes["items"].as_array().unwrap().len(), 1);
+    assert_eq!(changes["next_offset"], 1);
+    let history = execute_read(
+        &repository,
+        actor,
+        workspace,
+        "get_value_history",
+        json!({"entity_id":entity_id,"limit":1}),
+    )
+    .await
+    .unwrap();
+    assert_eq!(history["items"].as_array().unwrap().len(), 1);
+    assert_eq!(history["next_offset"], 1);
+    let history_id = history["items"][0]["id"].clone();
+    execute_mutation(
+        &repository,
+        actor,
+        "remove_entity_values",
+        json!({"entity_id":entity_id,"remove_values":[{"attribute_code":"title"}]}),
+    )
+    .await
+    .unwrap();
+    let current: Value = client
+        .get(format!("{base_url}/entities/{entity_id}/values/current"))
+        .send()
+        .await
+        .unwrap()
+        .error_for_status()
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    assert!(current.as_array().unwrap().is_empty());
+    execute_mutation(
+        &repository,
+        actor,
+        "restore_entity_value",
+        json!({"entity_id":entity_id,"history_id":history_id}),
+    )
+    .await
+    .unwrap();
+    let current: Value = client
+        .get(format!("{base_url}/entities/{entity_id}/values/current"))
+        .send()
+        .await
+        .unwrap()
+        .error_for_status()
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    assert_eq!(current[0]["value"], "second");
+    server.abort();
+}
 
 #[sqlx::test]
 async fn agent_conversation_reads_and_persisted_sse_replay(pool: PgPool) {

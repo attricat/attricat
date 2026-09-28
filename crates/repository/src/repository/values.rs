@@ -642,6 +642,37 @@ impl CatalogRepository {
         rows.into_iter().map(history_attribute_value).collect()
     }
 
+    pub async fn value_history_page(
+        &self,
+        entity_id: Uuid,
+        limit: i64,
+        offset: i64,
+    ) -> Result<(Vec<AttributeValueHistory>, bool), RepositoryError> {
+        let rows = sqlx::query_as::<_, HistoryNativeValueRow>(
+            r#"SELECT h.id, h.entity_id, h.attribute_id, h.relationship_target_entity_id,
+                      h.active, h.context_id, h.created_at, h.archived_at, a.value_type,
+                      h.value_text, h.value_number, h.value_integer, h.value_boolean,
+                      h.value_date, h.value_datetime, h.value_time, h.value_time_zone, h.value_json
+               FROM attribute_value_history h
+               JOIN attributes a ON a.id = h.attribute_id
+               WHERE h.entity_id = $1
+               ORDER BY h.created_at DESC, h.id DESC
+               LIMIT $2 OFFSET $3"#,
+        )
+        .bind(entity_id)
+        .bind(limit + 1)
+        .bind(offset)
+        .fetch_all(&self.pool)
+        .await?;
+        let has_more = rows.len() as i64 > limit;
+        let items = rows
+            .into_iter()
+            .take(limit as usize)
+            .map(history_attribute_value)
+            .collect::<Result<Vec<_>, _>>()?;
+        Ok((items, has_more))
+    }
+
     pub async fn restore_value(
         &self,
         entity_id: Uuid,
