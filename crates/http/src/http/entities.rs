@@ -381,6 +381,15 @@ pub(super) async fn smart_fill_entity_form(
             .map(|code| (code.clone(), input.draft_values.get(code).cloned()))
             .collect::<std::collections::BTreeMap<_, _>>();
         repository.append_conversation_message(id, None, "assistant", json!({"draft_proposal":{"fields":fields,"explanation":explanation,"base_values":base_values}})).await?;
+        let title_repository = repository.clone();
+        tokio::spawn(async move {
+            catalog_agent_runtime::conversation_title::maybe_generate_title(
+                &title_repository,
+                &provider,
+                id,
+            )
+            .await;
+        });
     }
     Ok(Json(SmartFillEntityFormResponse {
         fields,

@@ -6,6 +6,7 @@ import { PageHeader } from '../../components/PageHeader';
 import { getConversation } from './api';
 import { agentQueryKeys } from './queryKeys';
 import { ConversationPanel } from './ConversationPanel';
+import { isTitlePending } from './titlePolling';
 
 export type ConversationDetailPageProps = { conversationId: string };
 
@@ -16,6 +17,8 @@ export const ConversationDetailPage = ({
   const conversation = useQuery({
     queryKey: agentQueryKeys.conversation(conversationId),
     queryFn: () => getConversation(conversationId),
+    refetchInterval: (query) =>
+      query.state.data && isTitlePending(query.state.data) ? 3_000 : false,
   });
   return (
     <PageContainer maxWidth={false}>

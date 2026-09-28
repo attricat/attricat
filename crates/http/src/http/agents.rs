@@ -156,6 +156,80 @@ pub(super) async fn list_conversations(
     Ok(Json(visible))
 }
 
+#[derive(Deserialize, Default)]
+pub(super) struct ConversationSearchQuery {
+    #[serde(default)]
+    q: String,
+    cursor: Option<String>,
+}
+
+#[derive(Serialize)]
+pub(super) struct ConversationSearchPage {
+    items: Vec<crate::repository::Conversation>,
+    next_cursor: Option<String>,
+}
+
+pub(super) async fn search_conversations(
+    AuthenticatedPrincipal(user, _): AuthenticatedPrincipal,
+    ActiveWorkspace(workspace): ActiveWorkspace,
+    ScopedRepository(repository): ScopedRepository,
+    ApiQuery(query): ApiQuery<ConversationSearchQuery>,
+) -> Result<Json<ConversationSearchPage>, ApiError> {
+    let search = query.q.trim();
+    if search.len() > 120 || search.contains('\0') {
+        return Err(ApiError::invalid_input(
+            "invalid conversation search".into(),
+        ));
+    }
+    if query
+        .cursor
+        .as_ref()
+        .is_some_and(|cursor| cursor.len() > 128)
+    {
+        return Err(ApiError::invalid_input("invalid cursor".into()));
+    }
+    let before = query
+        .cursor
+        .map(|cursor| {
+            let (date, id) = cursor
+                .split_once('|')
+                .ok_or_else(|| ApiError::invalid_input("invalid cursor".into()))?;
+            let date = date
+                .parse::<chrono::DateTime<chrono::Utc>>()
+                .map_err(|_| ApiError::invalid_input("invalid cursor".into()))?;
+            let id = id
+                .parse::<Uuid>()
+                .map_err(|_| ApiError::invalid_input("invalid cursor".into()))?;
+            Ok::<_, ApiError>((date, id))
+        })
+        .transpose()?;
+    const PAGE_SIZE: usize = 30;
+    let mut rows = repository
+        .search_conversations(search, before, (PAGE_SIZE + 1) as i64)
+        .await?;
+    let has_more = rows.len() > PAGE_SIZE;
+    rows.truncate(PAGE_SIZE);
+    let next_cursor = if has_more {
+        rows.last()
+            .map(|row| format!("{}|{}", row.updated_at.to_rfc3339(), row.id))
+    } else {
+        None
+    };
+    let mut items = Vec::new();
+    for conversation in rows {
+        if let Some(entity_id) = conversation.entity_id {
+            if !repository
+                .is_authorized(user, workspace, "entities.read", Some(entity_id), None)
+                .await?
+            {
+                continue;
+            }
+        }
+        items.push(conversation);
+    }
+    Ok(Json(ConversationSearchPage { items, next_cursor }))
+}
+
 pub(super) async fn get_conversation(
     AuthenticatedPrincipal(user, _): AuthenticatedPrincipal,
     ActiveWorkspace(workspace): ActiveWorkspace,

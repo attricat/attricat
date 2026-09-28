@@ -3,6 +3,7 @@ import { request } from '../../api/request';
 import {
   conversationCreateResponseSchema,
   conversationSchema,
+  conversationSearchPageSchema,
   messageSchema,
   runResponseSchema,
   runSchema,
@@ -19,6 +20,14 @@ const queryParam = (value: string) => encodeURIComponent(value);
 
 export const listConversations = () =>
   request('/api/agent/conversations', z.array(conversationSchema));
+export const searchConversations = (query: string, cursor?: string) => {
+  const params = new URLSearchParams({ q: query });
+  if (cursor) params.set('cursor', cursor);
+  return request(
+    `/api/agent/conversations/search?${params}`,
+    conversationSearchPageSchema,
+  );
+};
 export const getConversation = (id: string) =>
   request(`/api/agent/conversations/${uuidPathParam(id)}`, conversationSchema);
 export const createConversation = (

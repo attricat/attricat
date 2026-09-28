@@ -11,6 +11,7 @@ import {
 import { useTranslation } from 'react-i18next';
 import { createConversation, listConversations } from '../../agents/api';
 import { agentQueryKeys } from '../../agents/queryKeys';
+import { isTitlePending } from '../../agents/titlePolling';
 import {
   ConversationPanel,
   type DraftContext,
@@ -35,6 +36,8 @@ export const EntityAgentDrawer = ({
     queryKey: agentQueryKeys.conversations(),
     queryFn: listConversations,
     enabled: open,
+    refetchInterval: (query) =>
+      query.state.data?.some(isTitlePending) ? 3_000 : false,
   });
   const existing = conversations.data?.find(
     (item) =>

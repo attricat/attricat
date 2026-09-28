@@ -13,6 +13,7 @@ pub struct Conversation {
     pub workspace_id: Uuid,
     pub created_by_user_id: Option<Uuid>,
     pub title: String,
+    pub title_source: String,
     pub entity_id: Option<Uuid>,
     pub context_id: Option<Uuid>,
     pub created_at: DateTime<Utc>,
@@ -162,7 +163,7 @@ impl CatalogRepository {
         title: &str,
     ) -> Result<Conversation, RepositoryError> {
         let workspace_id = self.workspace_id.unwrap_or(Self::DEFAULT_WORKSPACE_ID);
-        Ok(sqlx::query_as("INSERT INTO conversations (id, workspace_id, created_by_user_id, title) VALUES ($1, $2, $3, $4) RETURNING id, workspace_id, created_by_user_id, title, entity_id, context_id, created_at, updated_at, archived_at")
+        Ok(sqlx::query_as("INSERT INTO conversations (id, workspace_id, created_by_user_id, title, title_source) VALUES ($1, $2, $3, $4, 'pending') RETURNING id, workspace_id, created_by_user_id, title, title_source, entity_id, context_id, created_at, updated_at, archived_at")
             .bind(Uuid::new_v4()).bind(workspace_id).bind(created_by_user_id).bind(title)
             .fetch_one(&self.pool).await?)
     }
@@ -175,7 +176,7 @@ impl CatalogRepository {
         context_id: Option<Uuid>,
     ) -> Result<Conversation, RepositoryError> {
         let workspace = self.workspace_id.unwrap_or(Self::DEFAULT_WORKSPACE_ID);
-        Ok(sqlx::query_as("INSERT INTO conversations (id, workspace_id, created_by_user_id, title, entity_id, context_id) VALUES ($1, $2, $3, $4, $5, $6) RETURNING id, workspace_id, created_by_user_id, title, entity_id, context_id, created_at, updated_at, archived_at")
+        Ok(sqlx::query_as("INSERT INTO conversations (id, workspace_id, created_by_user_id, title, entity_id, context_id, title_source) VALUES ($1, $2, $3, $4, $5, $6, 'pending') RETURNING id, workspace_id, created_by_user_id, title, title_source, entity_id, context_id, created_at, updated_at, archived_at")
             .bind(Uuid::new_v4()).bind(workspace).bind(actor).bind(title).bind(entity_id).bind(context_id)
             .fetch_one(&self.pool).await?)
     }
@@ -717,15 +718,29 @@ impl CatalogRepository {
 
 impl CatalogRepository {
     pub async fn list_conversations(&self) -> Result<Vec<Conversation>, RepositoryError> {
-        Ok(sqlx::query_as("SELECT id, workspace_id, created_by_user_id, title, entity_id, context_id, created_at, updated_at, archived_at FROM conversations WHERE workspace_id = $1 AND archived_at IS NULL ORDER BY updated_at DESC")
+        Ok(sqlx::query_as("SELECT id, workspace_id, created_by_user_id, title, title_source, entity_id, context_id, created_at, updated_at, archived_at FROM conversations WHERE workspace_id = $1 AND archived_at IS NULL ORDER BY updated_at DESC")
             .bind(self.workspace_id.unwrap_or(Self::DEFAULT_WORKSPACE_ID)).fetch_all(&self.pool).await?)
+    }
+
+    pub async fn search_conversations(
+        &self,
+        query: &str,
+        before: Option<(DateTime<Utc>, Uuid)>,
+        limit: i64,
+    ) -> Result<Vec<Conversation>, RepositoryError> {
+        let (before_date, before_id) =
+            before.map_or((None, None), |(date, id)| (Some(date), Some(id)));
+        Ok(sqlx::query_as("SELECT c.id, c.workspace_id, c.created_by_user_id, c.title, c.title_source, c.entity_id, c.context_id, c.created_at, c.updated_at, c.archived_at FROM conversations c WHERE c.workspace_id = $1 AND c.archived_at IS NULL AND ($2 = '' OR position(lower($2) in lower(c.title)) > 0 OR EXISTS (SELECT 1 FROM conversation_messages m WHERE m.conversation_id = c.id AND m.role = 'user' AND position(lower($2) in lower(m.content::text)) > 0)) AND ($3::timestamptz IS NULL OR (c.updated_at, c.id) < ($3, $4)) ORDER BY c.updated_at DESC, c.id DESC LIMIT $5")
+            .bind(self.workspace_id.unwrap_or(Self::DEFAULT_WORKSPACE_ID))
+            .bind(query).bind(before_date).bind(before_id).bind(limit)
+            .fetch_all(&self.pool).await?)
     }
 
     pub async fn get_conversation(
         &self,
         conversation_id: Uuid,
     ) -> Result<Conversation, RepositoryError> {
-        sqlx::query_as("SELECT id, workspace_id, created_by_user_id, title, entity_id, context_id, created_at, updated_at, archived_at FROM conversations WHERE id = $1 AND workspace_id = $2 AND archived_at IS NULL")
+        sqlx::query_as("SELECT id, workspace_id, created_by_user_id, title, title_source, entity_id, context_id, created_at, updated_at, archived_at FROM conversations WHERE id = $1 AND workspace_id = $2 AND archived_at IS NULL")
             .bind(conversation_id).bind(self.workspace_id.unwrap_or(Self::DEFAULT_WORKSPACE_ID)).fetch_optional(&self.pool).await?
             .ok_or(RepositoryError::NotFound("conversation"))
     }
@@ -735,9 +750,24 @@ impl CatalogRepository {
         conversation_id: Uuid,
         title: &str,
     ) -> Result<Conversation, RepositoryError> {
-        sqlx::query_as("UPDATE conversations SET title = $3, updated_at = now() WHERE id = $1 AND workspace_id = $2 AND archived_at IS NULL RETURNING id, workspace_id, created_by_user_id, title, entity_id, context_id, created_at, updated_at, archived_at")
+        sqlx::query_as("UPDATE conversations SET title = $3, title_source = 'manual', updated_at = now() WHERE id = $1 AND workspace_id = $2 AND archived_at IS NULL RETURNING id, workspace_id, created_by_user_id, title, title_source, entity_id, context_id, created_at, updated_at, archived_at")
             .bind(conversation_id).bind(self.workspace_id.unwrap_or(Self::DEFAULT_WORKSPACE_ID)).bind(title).fetch_optional(&self.pool).await?
             .ok_or(RepositoryError::NotFound("conversation"))
+    }
+
+    /// Only rename conversations that have never been named by a person or
+    /// by another completed generation. Concurrent runs cannot overwrite one another.
+    pub async fn set_generated_conversation_title(
+        &self,
+        conversation_id: Uuid,
+        title: &str,
+    ) -> Result<bool, RepositoryError> {
+        let result = sqlx::query("UPDATE conversations SET title = $3, title_source = 'generated', updated_at = now() WHERE id = $1 AND workspace_id = $2 AND archived_at IS NULL AND title_source = 'pending'")
+            .bind(conversation_id)
+            .bind(self.workspace_id.unwrap_or(Self::DEFAULT_WORKSPACE_ID))
+            .bind(title)
+            .execute(&self.pool).await?;
+        Ok(result.rows_affected() == 1)
     }
 
     /// Conversations are retained for run/message audit history, but hidden

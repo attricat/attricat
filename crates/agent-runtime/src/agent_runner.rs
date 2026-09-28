@@ -295,6 +295,16 @@ async fn drive(
     repository
         .transition_agent_run(run_id, "completed", None, None)
         .await?;
+    let title_repository = repository.clone();
+    let title_provider = provider.clone();
+    tokio::spawn(async move {
+        crate::conversation_title::maybe_generate_title(
+            &title_repository,
+            &title_provider,
+            conversation_id,
+        )
+        .await;
+    });
     Ok(())
 }
 async fn flush_deltas(

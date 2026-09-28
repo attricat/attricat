@@ -8,6 +8,7 @@ import {
   listMessages,
   listRuns,
   sendMessage,
+  searchConversations,
 } from './api';
 
 const id = '123e4567-e89b-12d3-a456-426614174000';
@@ -65,6 +66,17 @@ describe('agent API client', () => {
       entity_id: id,
       context_id: id,
     });
+  });
+
+  it('encodes search text and pagination cursor', async () => {
+    fetchMock.mockResolvedValue({
+      ok: true,
+      json: () => Promise.resolve({ items: [], next_cursor: null }),
+    });
+    await searchConversations('price & specs', 'date|id');
+    expect(fetchMock.mock.calls[0][0]).toBe(
+      '/api/agent/conversations/search?q=price+%26+specs&cursor=date%7Cid',
+    );
   });
 
   it('rejects malformed UUID path IDs before issuing requests', async () => {

@@ -88,6 +88,187 @@ async fn agent_conversation_reads_and_persisted_sse_replay(pool: PgPool) {
 }
 
 #[sqlx::test]
+async fn completed_conversation_gets_a_provider_generated_title(pool: PgPool) {
+    let (_, server) = start_server(pool.clone()).await;
+    let provider_listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let provider_address = provider_listener.local_addr().unwrap();
+    let provider_server = tokio::spawn(async move {
+        axum::serve(provider_listener, Router::new().route("/v1/chat/completions", post(|| async {
+            axum::Json(json!({"choices":[{"message":{"content":"\"Compare product prices\"","tool_calls":[]}}]}))
+        }))).await.unwrap();
+    });
+    let config = AgentProviderConfig::from_values(|name| match name {
+        "LLM_API_KEY" => Some("test-key".to_owned()),
+        "LLM_BASE_URL" => Some(format!("http://{provider_address}/v1")),
+        _ => None,
+    })
+    .unwrap()
+    .unwrap();
+    let provider = api::agent_provider::OpenAiCompatibleClient::new(&config).unwrap();
+    let repository = CatalogRepository::system(pool)
+        .for_workspace(BOOTSTRAP_WORKSPACE_ID.parse().unwrap())
+        .await
+        .unwrap();
+    let conversation = repository
+        .create_conversation(
+            Some(BOOTSTRAP_OWNER_ID.parse().unwrap()),
+            "Compare these items",
+        )
+        .await
+        .unwrap();
+    repository
+        .append_conversation_message(conversation.id, None, "user", json!("Compare prices"))
+        .await
+        .unwrap();
+    repository
+        .append_conversation_message(
+            conversation.id,
+            None,
+            "assistant",
+            json!("The second item is cheaper"),
+        )
+        .await
+        .unwrap();
+    catalog_agent_runtime::conversation_title::maybe_generate_title(
+        &repository,
+        &provider,
+        conversation.id,
+    )
+    .await;
+    let updated = repository.get_conversation(conversation.id).await.unwrap();
+    assert_eq!(updated.title, "Compare product prices");
+    assert_eq!(updated.title_source, "generated");
+    let draft = repository
+        .create_conversation(Some(BOOTSTRAP_OWNER_ID.parse().unwrap()), "Smart fill")
+        .await
+        .unwrap();
+    repository
+        .append_conversation_message(draft.id, None, "user", json!("Fill from the spec"))
+        .await
+        .unwrap();
+    repository
+        .append_conversation_message(
+            draft.id,
+            None,
+            "assistant",
+            json!({"draft_proposal":{"fields":{},"explanation":"Suggested a title"}}),
+        )
+        .await
+        .unwrap();
+    catalog_agent_runtime::conversation_title::maybe_generate_title(
+        &repository,
+        &provider,
+        draft.id,
+    )
+    .await;
+    assert_eq!(
+        repository
+            .get_conversation(draft.id)
+            .await
+            .unwrap()
+            .title_source,
+        "generated"
+    );
+    provider_server.abort();
+    server.abort();
+}
+
+#[sqlx::test]
+async fn conversation_search_paginates_and_manual_titles_win(pool: PgPool) {
+    let (base_url, server) = start_server(pool.clone()).await;
+    let repository = CatalogRepository::system(pool)
+        .for_workspace(BOOTSTRAP_WORKSPACE_ID.parse().unwrap())
+        .await
+        .unwrap();
+    let mut ids = Vec::new();
+    for n in 0..32 {
+        ids.push(
+            repository
+                .create_conversation(
+                    Some(BOOTSTRAP_OWNER_ID.parse().unwrap()),
+                    &format!("Review product {n}"),
+                )
+                .await
+                .unwrap()
+                .id,
+        );
+    }
+    repository
+        .append_conversation_message(ids[0], None, "user", json!("special request about sizing"))
+        .await
+        .unwrap();
+    let client = authenticated_client();
+    let first: Value = client
+        .get(format!("{base_url}/agent/conversations/search?q=review"))
+        .send()
+        .await
+        .unwrap()
+        .error_for_status()
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    assert_eq!(first["items"].as_array().unwrap().len(), 30);
+    let cursor = first["next_cursor"].as_str().unwrap();
+    let malformed = client
+        .get(format!(
+            "{base_url}/agent/conversations/search?cursor=invalid"
+        ))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(malformed.status(), StatusCode::UNPROCESSABLE_ENTITY);
+    let second: Value = client
+        .get(format!("{base_url}/agent/conversations/search"))
+        .query(&[("q", "review"), ("cursor", cursor)])
+        .send()
+        .await
+        .unwrap()
+        .error_for_status()
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    assert_eq!(second["items"].as_array().unwrap().len(), 2);
+    assert!(second["next_cursor"].is_null());
+    let matching: Value = client
+        .get(format!("{base_url}/agent/conversations/search?q=sizing"))
+        .send()
+        .await
+        .unwrap()
+        .error_for_status()
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    assert_eq!(matching["items"][0]["id"], ids[0].to_string());
+    assert!(
+        repository
+            .set_generated_conversation_title(ids[0], "Sizing research")
+            .await
+            .unwrap()
+    );
+    assert!(
+        !repository
+            .set_generated_conversation_title(ids[0], "Overwrite")
+            .await
+            .unwrap()
+    );
+    let manual = repository
+        .update_conversation_title(ids[1], "Human title")
+        .await
+        .unwrap();
+    assert_eq!(manual.title_source, "manual");
+    assert!(
+        !repository
+            .set_generated_conversation_title(ids[1], "Overwrite")
+            .await
+            .unwrap()
+    );
+    server.abort();
+}
+
+#[sqlx::test]
 async fn entity_conversations_validate_their_context_and_entity(pool: PgPool) {
     let (base_url, server) = start_server(pool).await;
     let client = authenticated_client();

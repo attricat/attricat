@@ -8,6 +8,7 @@ export const conversationSchema = z.object({
   workspace_id: id,
   created_by_user_id: id.nullable(),
   title: z.string(),
+  title_source: z.enum(['manual', 'pending', 'generated']),
   entity_id: id.nullable(),
   context_id: id.nullable(),
   created_at: dateTime,
@@ -59,6 +60,10 @@ export const toolCallSchema = z.object({
   decided_at: dateTime.nullable(),
   created_at: dateTime,
   completed_at: dateTime.nullable(),
+});
+export const conversationSearchPageSchema = z.object({
+  items: z.array(conversationSchema),
+  next_cursor: z.string().nullable(),
 });
 export const conversationCreateResponseSchema = z.object({
   id,

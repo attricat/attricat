@@ -300,6 +300,10 @@ pub fn router(state: AppState) -> Router {
             get(agents::list_conversations).post(agents::create_conversation),
         )
         .route(
+            "/agent/conversations/search",
+            get(agents::search_conversations),
+        )
+        .route(
             "/agent/conversations/{conversation_id}",
             get(agents::get_conversation)
                 .patch(agents::update_conversation)
