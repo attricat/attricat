@@ -49,7 +49,7 @@ acli metrics get --output metrics.prom
 acli audit list [--limit 25 --offset 0] [--occurred-after <rfc3339>] [--occurred-before <rfc3339>] [--actor-user-id <uuid>] [--action-category <category>] [--target-type <type>] [--executor-type human|agent] [--agent-run-id <uuid>] [--agent-tool-call-id <uuid>]
 acli data-health summary [--stale-after-days <days>]
 acli data-health blueprints [--stale-after-days <days>]
-acli data-health freshness|completeness|contexts|relationships|storage
+acli data-health freshness|completeness|contexts|relationships|storage|background-processing
 acli data-health refresh
 
 acli blueprint list [--include-drafts]
@@ -111,6 +111,19 @@ acli workflow run-now <workflow-id> --entity-id <entity-id> --idempotency-key <k
 acli workflow run-list
 acli workflow run-replay <run-id>
 
+acli rule list [--blueprint-id <uuid>]
+acli rule get <rule-id>
+acli rule validate|create --blueprint-id <uuid> --blueprint-version <version> [--context-id <uuid>] --file rule.toml
+acli rule validate|create --blueprint-id <uuid> --blueprint-version <version> [--context-id <uuid>] --stdin
+acli rule revision <rule-id> --blueprint-id <uuid> --blueprint-version <version> [--context-id <uuid>] --file rule-v2.toml
+acli rule publish|enable <rule-id> <version>
+acli rule disable <rule-id>
+acli rule run-now <rule-id> --idempotency-key <key> [--entity-id <uuid>] [--dry-run]
+acli rule run-list
+acli rule run-replay <run-id>
+acli rule findings [--entity-id <uuid>]
+acli rule acknowledge <finding-id>
+
 acli workspace navigation get|sidebar
 acli workspace navigation set --entries <json-or-file>
 acli workspace token-permission list
@@ -158,6 +171,15 @@ acli extension quarantine <extension-id> --diagnostic-code <code>
 acli extension artifact <extension-id> <contribution-id> --output contribution.js
 acli extension storage <extension-id> <contribution-id> <release-id> --body <json-or-file>
 acli extension command <extension-id> <contribution-id> --release-id <release-uuid> --command-id <id> --payload <json-or-file>
+acli extension-operation start <extension-id> --operation-id <id> --input <json-object-or-file> --idempotency-key <key> [--input-file-id <uuid>]
+acli extension-operation list
+acli extension-operation show|artifacts|deliveries|cancel|replay <run-id>
+acli extension-operation download <run-id> <artifact-id> --output <path>
+acli extension-schedule list
+acli extension-schedule create <extension-id> --operation-id <id> --input <json-object-or-file> --interval-seconds <60-2592000> [--input-file-id <uuid>]
+acli extension-schedule update <schedule-id> --enabled true|false --interval-seconds <60-2592000>
+acli connector-job list <blueprint-id>
+acli connector-job run <job-id> --idempotency-key <key>
 
 acli solution-pack inspect --file pack.tar.zst
 acli solution-pack plan --file pack.tar.zst --prefix ecom --blueprint-publication draft|publish [--include-sample-data] [--map logical_key=existing_code ... --map-asset logical_key=asset_uuid ... | --from-application <uuid>]
@@ -198,9 +220,11 @@ Options named `--permissions`, `--entries`, `--filters`,
 accept an inline JSON value or a path to a JSON file. Array options reject
 non-array JSON locally. This keeps complex request bodies out of shell quoting.
 
-`workflow validate`, `workflow create`, and `workflow revision` use the same
-exclusive `--file`/`--stdin` source contract as blueprint commands: the source
-is sent unchanged as the API's TOML `definition`.
+`workflow validate`, `workflow create`, `workflow revision`, and rule
+`validate`/`create`/`revision` use the same exclusive `--file`/`--stdin`
+source contract as blueprint commands: the source is sent unchanged as the
+API's TOML `definition`. Rule writes additionally require the blueprint ID
+and version; `--context-id` is optional.
 
 ## Browser authentication
 
@@ -240,6 +264,13 @@ migration is blocked or `--dry-run` is selected.
 Extension `configure` takes its configuration JSON directly; `storage --body`
 takes exactly one tagged storage request (`get`, `set`, `delete`, or `list`),
 and `command --payload` is the contribution-defined JSON payload.
+`extension-operation start` and `extension-schedule create` require an object
+`--input` (inline JSON or a file). `--input-file-id` attaches a ready workspace
+file as the operation's `source_reference`; the destination reference is empty.
+Run and schedule listings omit stored inputs and configuration. Use `download
+--output` for completed operation artifacts; it never writes bytes to stdout.
+See [extension operations](extensions.md#durable-server-operations-host-api-12)
+for release pinning, idempotency, and replay semantics.
 
 `file upload` streams each repeated `--file` as a `files` multipart part and
 sends `context_id` as the optional multipart text field. `extension sideload`,

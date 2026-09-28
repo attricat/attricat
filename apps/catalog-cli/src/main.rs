@@ -103,6 +103,10 @@ enum Command {
         #[command(subcommand)]
         command: WorkflowCommand,
     },
+    Rule {
+        #[command(subcommand)]
+        command: RuleCommand,
+    },
     ExtensionRegistry {
         #[command(subcommand)]
         command: ExtensionRegistryCommand,
@@ -110,6 +114,18 @@ enum Command {
     Extension {
         #[command(subcommand)]
         command: ExtensionCommand,
+    },
+    ExtensionOperation {
+        #[command(subcommand)]
+        command: ExtensionOperationCommand,
+    },
+    ExtensionSchedule {
+        #[command(subcommand)]
+        command: ExtensionScheduleCommand,
+    },
+    ConnectorJob {
+        #[command(subcommand)]
+        command: ConnectorJobCommand,
     },
     SolutionPack {
         #[command(subcommand)]
@@ -743,6 +759,7 @@ enum DataHealthCommand {
     Contexts,
     Relationships,
     Storage,
+    BackgroundProcessing,
     Refresh,
 }
 
@@ -787,6 +804,79 @@ enum WorkflowCommand {
     RunList,
     RunReplay {
         run_id: Uuid,
+    },
+}
+
+#[derive(Subcommand)]
+enum RuleCommand {
+    List {
+        #[arg(long)]
+        blueprint_id: Option<Uuid>,
+    },
+    Get {
+        rule_id: Uuid,
+    },
+    Validate {
+        #[arg(long)]
+        blueprint_id: Uuid,
+        #[arg(long)]
+        blueprint_version: i64,
+        #[arg(long)]
+        context_id: Option<Uuid>,
+        #[command(flatten)]
+        source: SourceInput,
+    },
+    Create {
+        #[arg(long)]
+        blueprint_id: Uuid,
+        #[arg(long)]
+        blueprint_version: i64,
+        #[arg(long)]
+        context_id: Option<Uuid>,
+        #[command(flatten)]
+        source: SourceInput,
+    },
+    Revision {
+        rule_id: Uuid,
+        #[arg(long)]
+        blueprint_id: Uuid,
+        #[arg(long)]
+        blueprint_version: i64,
+        #[arg(long)]
+        context_id: Option<Uuid>,
+        #[command(flatten)]
+        source: SourceInput,
+    },
+    Publish {
+        rule_id: Uuid,
+        version: i64,
+    },
+    Enable {
+        rule_id: Uuid,
+        version: i64,
+    },
+    Disable {
+        rule_id: Uuid,
+    },
+    RunNow {
+        rule_id: Uuid,
+        #[arg(long)]
+        idempotency_key: String,
+        #[arg(long)]
+        entity_id: Option<Uuid>,
+        #[arg(long, default_value_t = false)]
+        dry_run: bool,
+    },
+    RunList,
+    RunReplay {
+        run_id: Uuid,
+    },
+    Findings {
+        #[arg(long)]
+        entity_id: Option<Uuid>,
+    },
+    Acknowledge {
+        finding_id: Uuid,
     },
 }
 
@@ -892,6 +982,80 @@ enum ExtensionCommand {
         command_id: String,
         #[arg(long)]
         payload: String,
+    },
+}
+
+#[derive(Subcommand)]
+enum ExtensionOperationCommand {
+    Start {
+        extension_id: String,
+        #[arg(long)]
+        operation_id: String,
+        /// JSON object or path to a JSON file.
+        #[arg(long)]
+        input: String,
+        #[arg(long)]
+        idempotency_key: String,
+        #[arg(long)]
+        input_file_id: Option<Uuid>,
+    },
+    List,
+    Show {
+        run_id: Uuid,
+    },
+    Artifacts {
+        run_id: Uuid,
+    },
+    Deliveries {
+        run_id: Uuid,
+    },
+    Download {
+        run_id: Uuid,
+        artifact_id: Uuid,
+        #[arg(long)]
+        output: PathBuf,
+    },
+    Cancel {
+        run_id: Uuid,
+    },
+    Replay {
+        run_id: Uuid,
+    },
+}
+
+#[derive(Subcommand)]
+enum ExtensionScheduleCommand {
+    List,
+    Create {
+        extension_id: String,
+        #[arg(long)]
+        operation_id: String,
+        /// JSON object or path to a JSON file.
+        #[arg(long)]
+        input: String,
+        #[arg(long)]
+        input_file_id: Option<Uuid>,
+        #[arg(long, value_parser = clap::value_parser!(i32).range(60..=2592000))]
+        interval_seconds: i32,
+    },
+    Update {
+        schedule_id: Uuid,
+        #[arg(long, action = clap::ArgAction::Set)]
+        enabled: bool,
+        #[arg(long, value_parser = clap::value_parser!(i32).range(60..=2592000))]
+        interval_seconds: i32,
+    },
+}
+
+#[derive(Subcommand)]
+enum ConnectorJobCommand {
+    List {
+        blueprint_id: Uuid,
+    },
+    Run {
+        job_id: Uuid,
+        #[arg(long)]
+        idempotency_key: String,
     },
 }
 
@@ -1762,8 +1926,12 @@ async fn run(cli: Cli) -> Result<String, CliError> {
         Command::Audit { command } => audit_command(&client, &server, command).await,
         Command::DataHealth { command } => data_health_command(&client, &server, command).await,
         Command::Workflow { command } => workflow_command(&client, &server, command).await,
+        Command::Rule { command } => rule_command(&client, &server, command).await,
         Command::ExtensionRegistry { command } => extension_registry_command(&client, &server, command).await,
         Command::Extension { command } => extension_command(&client, &server, command).await,
+        Command::ExtensionOperation { command } => extension_operation_command(&client, &server, command).await,
+        Command::ExtensionSchedule { command } => extension_schedule_command(&client, &server, command).await,
+        Command::ConnectorJob { command } => connector_job_command(&client, &server, command).await,
         Command::SolutionPack { command } => {
             solution_pack_command(&client, &server, command).await
         }
@@ -2203,6 +2371,7 @@ async fn data_health_command(
         DataHealthCommand::Contexts => "/data-health/contexts".to_owned(),
         DataHealthCommand::Relationships => "/data-health/relationships".to_owned(),
         DataHealthCommand::Storage => "/data-health/storage".to_owned(),
+        DataHealthCommand::BackgroundProcessing => "/data-health/background-processing".to_owned(),
         DataHealthCommand::Refresh => {
             return request(client, server, Method::POST, "/data-health/refresh", None).await;
         }
@@ -2361,6 +2530,177 @@ async fn workflow_command(
     }
 }
 
+async fn rule_command(
+    client: &Client,
+    server: &Url,
+    command: RuleCommand,
+) -> Result<String, CliError> {
+    match command {
+        RuleCommand::List { blueprint_id } => {
+            let path = match blueprint_id {
+                Some(id) => format!("/rules?blueprint_id={id}"),
+                None => "/rules".to_owned(),
+            };
+            request(client, server, Method::GET, &path, None).await
+        }
+        RuleCommand::Get { rule_id } => {
+            request(
+                client,
+                server,
+                Method::GET,
+                &format!("/rules/{rule_id}"),
+                None,
+            )
+            .await
+        }
+        RuleCommand::Validate {
+            blueprint_id,
+            blueprint_version,
+            context_id,
+            source,
+        } => {
+            request(
+                client,
+                server,
+                Method::POST,
+                "/rules/validate",
+                Some(rule_body(
+                    blueprint_id,
+                    blueprint_version,
+                    context_id,
+                    source,
+                )?),
+            )
+            .await
+        }
+        RuleCommand::Create {
+            blueprint_id,
+            blueprint_version,
+            context_id,
+            source,
+        } => {
+            request(
+                client,
+                server,
+                Method::POST,
+                "/rules",
+                Some(rule_body(
+                    blueprint_id,
+                    blueprint_version,
+                    context_id,
+                    source,
+                )?),
+            )
+            .await
+        }
+        RuleCommand::Revision {
+            rule_id,
+            blueprint_id,
+            blueprint_version,
+            context_id,
+            source,
+        } => {
+            request(
+                client,
+                server,
+                Method::POST,
+                &format!("/rules/{rule_id}/versions"),
+                Some(rule_body(
+                    blueprint_id,
+                    blueprint_version,
+                    context_id,
+                    source,
+                )?),
+            )
+            .await
+        }
+        RuleCommand::Publish { rule_id, version } => {
+            request(
+                client,
+                server,
+                Method::POST,
+                &format!("/rules/{rule_id}/versions/{version}/publish"),
+                None,
+            )
+            .await
+        }
+        RuleCommand::Enable { rule_id, version } => {
+            request(
+                client,
+                server,
+                Method::POST,
+                &format!("/rules/{rule_id}/versions/{version}/enable"),
+                None,
+            )
+            .await
+        }
+        RuleCommand::Disable { rule_id } => {
+            request(
+                client,
+                server,
+                Method::POST,
+                &format!("/rules/{rule_id}/disable"),
+                None,
+            )
+            .await
+        }
+        RuleCommand::RunNow {
+            rule_id,
+            idempotency_key,
+            entity_id,
+            dry_run,
+        } => request(
+            client,
+            server,
+            Method::POST,
+            &format!("/rules/{rule_id}/run-now"),
+            Some(
+                json!({"idempotency_key":idempotency_key,"entity_id":entity_id,"dry_run":dry_run}),
+            ),
+        )
+        .await,
+        RuleCommand::RunList => request(client, server, Method::GET, "/rule-runs", None).await,
+        RuleCommand::RunReplay { run_id } => {
+            request(
+                client,
+                server,
+                Method::POST,
+                &format!("/rule-runs/{run_id}/replay"),
+                None,
+            )
+            .await
+        }
+        RuleCommand::Findings { entity_id } => {
+            let path = match entity_id {
+                Some(id) => format!("/rule-findings?entity_id={id}"),
+                None => "/rule-findings".to_owned(),
+            };
+            request(client, server, Method::GET, &path, None).await
+        }
+        RuleCommand::Acknowledge { finding_id } => {
+            request(
+                client,
+                server,
+                Method::POST,
+                &format!("/rule-findings/{finding_id}/acknowledge"),
+                None,
+            )
+            .await
+        }
+    }
+}
+
+fn rule_body(
+    blueprint_id: Uuid,
+    blueprint_version: i64,
+    context_id: Option<Uuid>,
+    source: SourceInput,
+) -> Result<Value, CliError> {
+    Ok(
+        json!({"blueprint_id":blueprint_id,"blueprint_version":blueprint_version,"context_id":context_id,"definition":read_source(source)?}),
+    )
+}
+
 async fn extension_registry_command(
     client: &Client,
     server: &Url,
@@ -2441,6 +2781,121 @@ async fn extension_command(
     ExtensionCommand::Storage { extension_id, contribution_id, release_id, body } => request(client,server,Method::POST,&format!("/extensions/{}/{}/storage/{}",segment(&extension_id),segment(&contribution_id),segment(release_id)),Some(json_input(&body,"--body")?)).await,
     ExtensionCommand::Command { extension_id, contribution_id, release_id, command_id, payload } => request(client,server,Method::POST,&format!("/extensions/{}/{}/command",segment(&extension_id),segment(&contribution_id)),Some(json!({"release_id":release_id,"command_id":command_id,"payload":json_input(&payload,"--payload")?}))).await,
 }
+}
+
+async fn extension_operation_command(
+    client: &Client,
+    server: &Url,
+    command: ExtensionOperationCommand,
+) -> Result<String, CliError> {
+    match command {
+        ExtensionOperationCommand::Start { extension_id, operation_id, input, idempotency_key, input_file_id } => {
+            request(client, server, Method::POST,
+                &format!("/extensions/{}/operations", segment(extension_id)),
+                Some(json!({"operation_id":operation_id,"input":json_object_argument(&input)?,
+                    "idempotency_key":idempotency_key,"source_reference":operation_source(input_file_id),
+                    "destination_reference":{}}))).await
+        }
+        ExtensionOperationCommand::List => request(client, server, Method::GET, "/extension-operation-runs", None).await,
+        ExtensionOperationCommand::Show { run_id } => request(client, server, Method::GET, &format!("/extension-operation-runs/{run_id}"), None).await,
+        ExtensionOperationCommand::Artifacts { run_id } => request(client, server, Method::GET, &format!("/extension-operation-runs/{run_id}/artifacts"), None).await,
+        ExtensionOperationCommand::Deliveries { run_id } => request(client, server, Method::GET, &format!("/extension-operation-runs/{run_id}/deliveries"), None).await,
+        ExtensionOperationCommand::Download { run_id, artifact_id, output } => raw_download(client, server, &format!("/extension-operation-runs/{run_id}/artifacts/{artifact_id}/download"), &output, None).await,
+        ExtensionOperationCommand::Cancel { run_id } => request(client, server, Method::POST, &format!("/extension-operation-runs/{run_id}/cancel"), None).await,
+        ExtensionOperationCommand::Replay { run_id } => request(client, server, Method::POST, &format!("/extension-operation-runs/{run_id}/replay"), None).await,
+    }
+}
+
+fn operation_source(file_id: Option<Uuid>) -> Value {
+    match file_id {
+        Some(id) => json!({"input_file_id":id}),
+        None => json!({}),
+    }
+}
+
+async fn extension_schedule_command(
+    client: &Client,
+    server: &Url,
+    command: ExtensionScheduleCommand,
+) -> Result<String, CliError> {
+    match command {
+        ExtensionScheduleCommand::List => {
+            request(
+                client,
+                server,
+                Method::GET,
+                "/extension-operation-schedules",
+                None,
+            )
+            .await
+        }
+        ExtensionScheduleCommand::Create {
+            extension_id,
+            operation_id,
+            input,
+            input_file_id,
+            interval_seconds,
+        } => {
+            request(
+                client,
+                server,
+                Method::POST,
+                &format!("/extensions/{}/operation-schedules", segment(extension_id)),
+                Some(
+                    json!({"operation_id":operation_id,"input":json_object_argument(&input)?,
+                    "source_reference":operation_source(input_file_id),"destination_reference":{},
+                    "interval_seconds":interval_seconds}),
+                ),
+            )
+            .await
+        }
+        ExtensionScheduleCommand::Update {
+            schedule_id,
+            enabled,
+            interval_seconds,
+        } => {
+            request(
+                client,
+                server,
+                Method::PATCH,
+                &format!("/extension-operation-schedules/{schedule_id}"),
+                Some(json!({"enabled":enabled,"interval_seconds":interval_seconds})),
+            )
+            .await
+        }
+    }
+}
+
+async fn connector_job_command(
+    client: &Client,
+    server: &Url,
+    command: ConnectorJobCommand,
+) -> Result<String, CliError> {
+    match command {
+        ConnectorJobCommand::List { blueprint_id } => {
+            request(
+                client,
+                server,
+                Method::GET,
+                &format!("/blueprints/{blueprint_id}/connector-jobs"),
+                None,
+            )
+            .await
+        }
+        ConnectorJobCommand::Run {
+            job_id,
+            idempotency_key,
+        } => {
+            request(
+                client,
+                server,
+                Method::POST,
+                &format!("/blueprint-connector-jobs/{job_id}/run"),
+                Some(json!({"idempotency_key":idempotency_key})),
+            )
+            .await
+        }
+    }
 }
 
 async fn solution_pack_command(
@@ -3997,6 +4452,337 @@ value = "Blue shirt"
             ])
             .is_ok()
         );
+    }
+
+    #[test]
+    fn rule_commands_require_definition_metadata_and_sources() {
+        let id = "00000000-0000-4000-8000-000000000001";
+        assert!(
+            Cli::try_parse_from([
+                "acli",
+                "rule",
+                "validate",
+                "--blueprint-id",
+                id,
+                "--blueprint-version",
+                "1",
+                "--stdin"
+            ])
+            .is_ok()
+        );
+        assert!(
+            Cli::try_parse_from([
+                "acli",
+                "rule",
+                "create",
+                "--blueprint-id",
+                id,
+                "--blueprint-version",
+                "1",
+                "--file",
+                "rule.toml"
+            ])
+            .is_ok()
+        );
+        assert!(Cli::try_parse_from(["acli", "rule", "validate", "--stdin"]).is_err());
+        assert!(
+            read_source(SourceInput {
+                file: None,
+                stdin: false
+            })
+            .is_err()
+        );
+        assert!(
+            Cli::try_parse_from([
+                "acli",
+                "rule",
+                "run-now",
+                id,
+                "--idempotency-key",
+                "check",
+                "--dry-run"
+            ])
+            .is_ok()
+        );
+        assert!(Cli::try_parse_from(["acli", "data-health", "background-processing"]).is_ok());
+    }
+
+    #[tokio::test]
+    async fn rule_routes_forward_definition_and_run_options() {
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let address = listener.local_addr().unwrap();
+        let app = axum::Router::new()
+            .route(
+                "/rules/validate",
+                axum::routing::post(|axum::Json(body): axum::Json<Value>| async move {
+                    axum::Json(body)
+                }),
+            )
+            .route(
+                "/rules/{rule_id}/run-now",
+                axum::routing::post(|axum::Json(body): axum::Json<Value>| async move {
+                    axum::Json(body)
+                }),
+            )
+            .route(
+                "/rule-findings",
+                axum::routing::get(|uri: axum::http::Uri| async move {
+                    axum::Json(json!({"query":uri.query()}))
+                }),
+            );
+        let server = tokio::spawn(async move { axum::serve(listener, app).await.unwrap() });
+        let client = Client::new();
+        let url = Url::parse(&format!("http://{address}")).unwrap();
+        let id = Uuid::from_u128(1);
+        let file = tempfile::NamedTempFile::new().unwrap();
+        fs::write(file.path(), "format_version = 1\n").unwrap();
+        let result = rule_command(
+            &client,
+            &url,
+            RuleCommand::Validate {
+                blueprint_id: id,
+                blueprint_version: 2,
+                context_id: None,
+                source: SourceInput {
+                    file: Some(file.path().to_owned()),
+                    stdin: false,
+                },
+            },
+        )
+        .await
+        .unwrap();
+        let body: Value = serde_json::from_str(&result).unwrap();
+        assert_eq!(
+            body,
+            json!({"blueprint_id":id,"blueprint_version":2,"context_id":null,"definition":"format_version = 1\n"})
+        );
+        let result = rule_command(
+            &client,
+            &url,
+            RuleCommand::RunNow {
+                rule_id: id,
+                idempotency_key: "check".into(),
+                entity_id: Some(id),
+                dry_run: true,
+            },
+        )
+        .await
+        .unwrap();
+        assert_eq!(
+            serde_json::from_str::<Value>(&result).unwrap(),
+            json!({"idempotency_key":"check","entity_id":id,"dry_run":true})
+        );
+        let result = rule_command(
+            &client,
+            &url,
+            RuleCommand::Findings {
+                entity_id: Some(id),
+            },
+        )
+        .await
+        .unwrap();
+        assert_eq!(
+            serde_json::from_str::<Value>(&result).unwrap()["query"],
+            format!("entity_id={id}")
+        );
+        server.abort();
+    }
+
+    #[test]
+    fn operation_commands_validate_arguments() {
+        let id = "00000000-0000-4000-8000-000000000001";
+        assert!(
+            Cli::try_parse_from([
+                "acli",
+                "extension-operation",
+                "start",
+                "example",
+                "--operation-id",
+                "export",
+                "--input",
+                "{}",
+                "--idempotency-key",
+                "once",
+                "--input-file-id",
+                id
+            ])
+            .is_ok()
+        );
+        assert!(
+            Cli::try_parse_from([
+                "acli",
+                "extension-operation",
+                "download",
+                id,
+                id,
+                "--output",
+                "export.csv"
+            ])
+            .is_ok()
+        );
+        assert!(
+            Cli::try_parse_from([
+                "acli",
+                "extension-operation",
+                "start",
+                "example",
+                "--input",
+                "{}"
+            ])
+            .is_err()
+        );
+        assert!(
+            Cli::try_parse_from([
+                "acli",
+                "extension-schedule",
+                "create",
+                "example",
+                "--operation-id",
+                "export",
+                "--input",
+                "{}",
+                "--interval-seconds",
+                "59"
+            ])
+            .is_err()
+        );
+        assert!(
+            Cli::try_parse_from([
+                "acli",
+                "extension-schedule",
+                "update",
+                id,
+                "--enabled",
+                "false",
+                "--interval-seconds",
+                "60"
+            ])
+            .is_ok()
+        );
+        assert!(
+            Cli::try_parse_from([
+                "acli",
+                "connector-job",
+                "run",
+                id,
+                "--idempotency-key",
+                "once"
+            ])
+            .is_ok()
+        );
+        assert!(json_object_argument("[]").is_err());
+        assert_eq!(
+            operation_source(Some(Uuid::from_u128(1))),
+            json!({"input_file_id":Uuid::from_u128(1)})
+        );
+    }
+
+    #[tokio::test]
+    async fn operation_commands_forward_bounded_requests() {
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let address = listener.local_addr().unwrap();
+        let app = axum::Router::new()
+            .route(
+                "/extensions/{extension_id}/operations",
+                axum::routing::post(
+                    |axum::extract::Path(id): axum::extract::Path<String>,
+                     axum::Json(body): axum::Json<Value>| async move {
+                        axum::Json(json!({"id":id,"body":body}))
+                    },
+                ),
+            )
+            .route(
+                "/extensions/{extension_id}/operation-schedules",
+                axum::routing::post(
+                    |axum::extract::Path(id): axum::extract::Path<String>,
+                     axum::Json(body): axum::Json<Value>| async move {
+                        axum::Json(json!({"id":id,"body":body}))
+                    },
+                ),
+            )
+            .route(
+                "/extension-operation-schedules/{id}",
+                axum::routing::patch(|axum::Json(body): axum::Json<Value>| async move {
+                    axum::Json(body)
+                }),
+            )
+            .route(
+                "/blueprint-connector-jobs/{id}/run",
+                axum::routing::post(|axum::Json(body): axum::Json<Value>| async move {
+                    axum::Json(body)
+                }),
+            );
+        let server = tokio::spawn(async move { axum::serve(listener, app).await.unwrap() });
+        let client = Client::new();
+        let url = Url::parse(&format!("http://{address}")).unwrap();
+        let id = Uuid::from_u128(1);
+        let start: Value = serde_json::from_str(
+            &extension_operation_command(
+                &client,
+                &url,
+                ExtensionOperationCommand::Start {
+                    extension_id: "example".into(),
+                    operation_id: "export".into(),
+                    input: "{\"limit\":1}".into(),
+                    idempotency_key: "once".into(),
+                    input_file_id: Some(id),
+                },
+            )
+            .await
+            .unwrap(),
+        )
+        .unwrap();
+        assert_eq!(
+            start["body"],
+            json!({"operation_id":"export","input":{"limit":1},"idempotency_key":"once","source_reference":{"input_file_id":id},"destination_reference":{}})
+        );
+        let schedule: Value = serde_json::from_str(
+            &extension_schedule_command(
+                &client,
+                &url,
+                ExtensionScheduleCommand::Create {
+                    extension_id: "example".into(),
+                    operation_id: "export".into(),
+                    input: "{}".into(),
+                    input_file_id: None,
+                    interval_seconds: 60,
+                },
+            )
+            .await
+            .unwrap(),
+        )
+        .unwrap();
+        assert_eq!(schedule["body"]["interval_seconds"], 60);
+        let updated: Value = serde_json::from_str(
+            &extension_schedule_command(
+                &client,
+                &url,
+                ExtensionScheduleCommand::Update {
+                    schedule_id: id,
+                    enabled: false,
+                    interval_seconds: 120,
+                },
+            )
+            .await
+            .unwrap(),
+        )
+        .unwrap();
+        assert_eq!(updated, json!({"enabled":false,"interval_seconds":120}));
+        let run: Value = serde_json::from_str(
+            &connector_job_command(
+                &client,
+                &url,
+                ConnectorJobCommand::Run {
+                    job_id: id,
+                    idempotency_key: "once".into(),
+                },
+            )
+            .await
+            .unwrap(),
+        )
+        .unwrap();
+        assert_eq!(run, json!({"idempotency_key":"once"}));
+        server.abort();
     }
 
     #[test]
