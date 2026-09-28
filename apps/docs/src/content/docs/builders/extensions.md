@@ -19,4 +19,4 @@ An enabled extension is trusted workspace software. Keep its permissions narrow 
 
 Extension authors package a strict manifest and target a supported Catalog host API contract. Test against a local Attricat workspace before publishing a release.
 
-See the [extension manifest and lifecycle contract](https://github.com/attricat/attricat/blob/main/docs/extensions.md) for package, permission, and runtime details. Webhook delivery and some declared client outlets are not implemented; check the contract's limitations before relying on a capability.
+See the [extension manifest and lifecycle contract](https://github.com/attricat/attricat/blob/main/docs/extensions.md) for package, permission, and runtime details. Webhook delivery is not implemented; check the contract's limitations before relying on a capability.

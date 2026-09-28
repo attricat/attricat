@@ -35,7 +35,7 @@ renderer:
 
 ```tsx
 import { AttributeValue } from "./values/AttributeValue";
-import type { ViewComponentDefinition } from "./component-types";
+import type { ViewComponentDefinition } from "./componentTypes";
 
 export const priceDisplayComponent = {
   id: "catalog.price_display",

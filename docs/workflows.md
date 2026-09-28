@@ -43,7 +43,7 @@ The Rust scheduler owns a durable cursor per revision/trigger. It skips downtime
 
 ## External effects
 
-Webhooks, network delivery, secrets, and external effects remain deferred. The extension network/secrets mediation runtime is not available, so workflows must not create raw clients or read secrets. A future outbound capability must be a permissioned mediated delivery queue with encrypted secret references, execution-time grant checks, bounded payloads, idempotency keys, retries and dead letters; it is not implemented by this slice.
+Webhooks, network delivery, secrets, and external effects remain deferred **for workflows**. Extensions have mediated network and secrets APIs, but workflows do not have an outbound delivery adapter or secret references; they must not create raw clients or read secrets. A future outbound capability must be a permissioned mediated delivery queue with encrypted secret references, execution-time grant checks, bounded payloads, idempotency keys, retries and dead letters; it is not implemented by this slice.
 
 ## Operations
 

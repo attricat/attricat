@@ -19,4 +19,4 @@ Włączone rozszerzenie jest zaufanym oprogramowaniem przestrzeni roboczej. Ogra
 
 Autorzy rozszerzeń pakują ścisły manifest i korzystają z obsługiwanego kontraktu API hosta Catalog. Przetestuj rozszerzenie w lokalnej przestrzeni roboczej Attricat przed publikacją wydania.
 
-Szczegóły pakietu, uprawnień i środowiska wykonawczego opisuje [kontrakt rozszerzeń w repozytorium (po angielsku)](https://github.com/attricat/attricat/blob/main/docs/extensions.md). Dostarczanie webhooków i część zadeklarowanych miejsc interfejsu nie są jeszcze zaimplementowane; przed użyciem danej funkcji sprawdź ograniczenia kontraktu.
+Szczegóły pakietu, uprawnień i środowiska wykonawczego opisuje [kontrakt rozszerzeń w repozytorium (po angielsku)](https://github.com/attricat/attricat/blob/main/docs/extensions.md). Dostarczanie webhooków nie jest jeszcze zaimplementowane; przed użyciem danej funkcji sprawdź ograniczenia kontraktu.

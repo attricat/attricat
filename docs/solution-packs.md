@@ -249,7 +249,7 @@ no-ops, and incompatible placements conflict without replacing unrelated data.
 Compatible installed contributions may be shared as declarative availability,
 but packs never mutate their lifecycle. Automatic or suggested resource mapping,
 non-blueprint compatibility mapping, configuration composition, and generic
-workspace-setting composition described below remain future design.
+workspace-setting composition remain outside the implemented contract.
 
 A workspace may apply multiple solution packs. This is a core composition
 requirement, not an exceptional migration path: for example, one workspace may
