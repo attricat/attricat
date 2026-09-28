@@ -7,9 +7,9 @@ Kontekst to węzeł w hierarchii przestrzeni roboczej. Używaj kontekstów, gdy 
 
 ## Dziedziczenie
 
-Każda encja ma wartości w kontekście domyślnym. Kontekst inny niż domyślny może zdefiniować własną wartość albo dziedziczyć wartość domyślną, zależnie od konfiguracji atrybutu w blueprintcie.
+Przestrzeń robocza ma główny kontekst domyślny; encja może przechowywać wartości w nim lub w kontekstach potomnych. Jeśli atrybut dziedziczy wartości, brak lokalnej wartości oznacza użycie wartości z najbliższego przodka, aż do kontekstu domyślnego. Atrybut z `context_fallback = "none"` nie dziedziczy wartości.
 
-Na przykład produkt może mieć opis domyślny i przetłumaczony opis w kontekście rynku. Gdy nie istnieje opis lokalny, Attricat wyświetla skonfigurowaną wartość dziedziczoną.
+Na przykład produkt może mieć opis domyślny i przetłumaczony opis w kontekście rynku. Potomny kontekst kanału bez własnego opisu użyje opisu rynku, jeśli włączono dziedziczenie.
 
 ## Edycja wartości
 
