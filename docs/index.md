@@ -2,8 +2,8 @@
 
 ## Getting Started
 
-1. Install a Docker-compatible runtime, Rust, Node.js 18 or newer, `just`,
-   `process-compose`, and `watchexec`.
+1. Install a Docker-compatible runtime, Rust, Node.js 24 (the CI version),
+   `pnpm` 11, `just`, `process-compose`, and `watchexec`.
 2. Run `just setup` once. It installs frontend dependencies, creates `.env`
    from `.env.example`, and assigns persistent ports for this worktree.
 3. Run `just dev`. It starts PostgreSQL, Mailpit, Jaeger, and RustFS, then

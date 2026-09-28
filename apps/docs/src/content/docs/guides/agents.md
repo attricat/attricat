@@ -13,7 +13,7 @@ Read-only work can run automatically. Every catalog mutation stops for a durable
 
 ## Approve changes deliberately
 
-Before approving a change, inspect its proposed arguments and change summary. Approving authorizes only that proposed action. Reject it when the request is broader than intended or the result needs adjustment.
+Before approving a change, inspect its proposed arguments and change summary. Approving authorizes only that proposed action. Reject it when the request is broader than intended or the result needs adjustment. An approved scheduled run is re-authorized as its initiating user before it writes.
 
 ## Keep access narrow
 

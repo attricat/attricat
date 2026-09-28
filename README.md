@@ -6,8 +6,8 @@ exact revision they were created with.
 
 ## Run Locally
 
-Install a Docker-compatible container runtime, Rust, Node.js 18 or newer,
-`just`, `process-compose`, and `watchexec`. Then, from the repository root:
+Install a Docker-compatible container runtime, Rust, Node.js 24 (the CI
+version), `pnpm` 11, `just`, `process-compose`, and `watchexec`. Then, from the repository root:
 
 ```sh
 just setup

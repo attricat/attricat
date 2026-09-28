@@ -219,14 +219,12 @@ Contexts are administrator-managed workspace operating structure, not solution-p
 resources. Pack manifests cannot declare context keys or hierarchy references,
 and application plans never create, map, or update contexts.
 
-If a proposed code or logical purpose collides, the plan requires one of these
-explicit choices:
-
-1. create a new resource with the proposed pack-prefixed code (the safe
-   default);
-2. map to an existing compatible resource after structural validation;
-3. select a different prefix or physical code; or
-4. skip an optional component and everything that requires it.
+If a proposed code collides, select a different prefix and create a new
+blueprint, or supply an explicit `--map` to an exactly compatible published
+blueprint. Asset reuse similarly requires an explicit `--map-asset` to an exact
+same-workspace asset. Unmet optional settings or contribution entries may be
+skipped; incompatible required entries block the plan. There is no per-resource
+rename, generic adoption, or arbitrary installer-option flow.
 
 Catalog never silently overwrites, renames, or maps an existing blueprint,
 setting, or asset. A successful application preserves its mapping as
@@ -236,8 +234,8 @@ supply `--map` choices or name exactly one completed application with
 candidate. The record does not make the resource pack-owned or prevent ordinary
 workspace changes. This allows packs with overlapping local names to coexist.
 
-The plan distinguishes a newly created resource from a compatible existing
-resource selected by the administrator. That distinction is historical
+The plan distinguishes a newly created resource from an exactly compatible
+existing resource selected by the administrator. That distinction is historical
 provenance only. Both become or remain ordinary workspace-owned resources as
 soon as the plan is applied.
 
