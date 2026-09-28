@@ -43,10 +43,14 @@ runs the ignored RustFS compatibility test.
   contexts, and publication behavior.
 - [Tags, labels, and classifications](classifications.md): model controlled
   vocabularies with entities, relationships, contexts, and hierarchies.
-- [Domain eventing](eventing.md): transactional outbox contract and delivery semantics.
-- [Extensions](extensions.md): strict manifest, permissions, webhook, and lifecycle contracts.
-- [Solution packs](solution-packs.md): uploaded portable templates with validated
-  blueprint application, extension requirement evaluation, and provenance.
+- [Domain eventing](eventing.md): transactional outbox and delivery semantics.
+- [Workflows](workflows.md): versioned triggers and bounded entity actions.
+- [Rules](rules.md): blueprint checks and finding lifecycles.
+- [Extensions](extensions.md): manifest, permissions, runtime, and lifecycle contracts;
+  webhook delivery is not implemented.
+- [Solution packs](solution-packs.md): uploaded templates, application, and provenance.
+  [Optional sample data](solution-pack-sample-data.md) has separate trust and
+  retention rules; [future pack ideas](solution-packs-future.md) are not features.
 - [Authentication and identity adapters](authentication.md): local password
   lifecycle plus the provider-neutral external identity seam.
 - [JSON Schema validation](json-schema-validation.md): attribute and entity
@@ -56,6 +60,7 @@ runs the ignored RustFS compatibility test.
 
 - [Catalog CLI](cli.md): automation and command-line workflows.
 - [API reference](api.md): HTTP routes and API behavior.
+- [Saved searches](saved-views.md): named views, share links, and access rules.
 - [Relationship tree facets](search-facets.md): filter explorer results through
   a contextual hierarchy with roll-up counts.
 - [Relationship-aware Explore search](relationship-aware-search.md): explicit
@@ -71,6 +76,7 @@ runs the ignored RustFS compatibility test.
 - [Component authoring](component-authoring.md): registered web components.
 - [Web-component event bridge](web-component-events.md): validated host and component DOM events.
 - [Frontend conventions](frontend.md): contributor conventions and tests.
+- [Performance validation](performance-validation.md): compile and Explorer workload measurements.
 
 ## Test The Web App
 
