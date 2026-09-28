@@ -525,25 +525,6 @@ Packs cannot contain or confer authority through:
 - undeclared remote downloads; or
 - customer production data in an official or reusable pack.
 
-## Options and dependency rules (future design)
-
-Optional components and installer options form a declared dependency graph.
-The manifest states requirements and incompatibilities using logical keys.
-Catalog rejects cycles and an option set that omits a transitive requirement.
-Changing an option after application requires a new plan, not an in-place toggle.
-
-A pack may declare that another pack release is a prerequisite template by
-immutable pack ID and SemVer range. Prerequisites never resolve by display name,
-repository name, or overlapping resource keys. The planner validates them
-against successful application records and does not silently apply a transitive
-pack. Missing prerequisites, version conflicts, and dependency cycles block the
-current plan. This check applies only when the new template is applied; it does
-not create ongoing ownership or lifecycle coupling between the packs.
-
-Defaults must be deterministic and safe. Security-sensitive choices—extension
-installation, grants, enabling, destructive changes, and sample-data import—are
-never selected only because a pack author marked them as default.
-
 ## CLI administration
 
 Solution-pack inspection, dry-run planning, application, and application history are administrator-only CLI workflows.
@@ -722,22 +703,6 @@ extension configuration, and data through their ordinary workflows. A later
 plan detects missing, unpublished, revision-changed, or hash-drifted retained
 targets as conflicts; it does not restore them or claim ownership.
 
-### Successor and update planning (future-only design)
-
-The implemented explicit-lineage comparison never emits an update or successor.
-Future advanced planning could review compatible updates or draft successor
-revisions, but it would still have no right to overwrite earlier output or make
-ambiguous choices automatically. In particular, any such future behavior must
-preserve these boundaries:
-
-- published blueprints are never edited in place;
-- workspace modifications are never silently reset to a pack baseline;
-- extension upgrades, grants, configuration, and enabling use the ordinary
-  extension lifecycle and approvals;
-- workspace settings preserve unrelated keys and user additions; and
-- removal of a resource from a later pack release never proposes deletion of
-  the corresponding workspace resource.
-
 Application-history commands show the explicitly selected prior application,
 release comparison, original mappings, and recorded results. They do not claim
 that the current resource still matches the pack.
@@ -756,23 +721,6 @@ Removing an application record is not a supported way to remove resources.
 Extensions are managed through the existing extension lifecycle, never removed
 merely because a pack originally requested them.
 
-## Export to draft (future design)
-
-Export creates a draft authoring tree, never an immediately trusted release or
-raw workspace dump. The exporter:
-
-1. lets an administrator select supported resources;
-2. replaces workspace IDs and physical cross-references with generated logical
-   keys;
-3. excludes secrets, grants, users, memberships, audit data, runtime state,
-   object-store keys, and all customer or sample entities; the approved
-   sample-data contract does not provide export;
-4. reports references that cannot be made portable; and
-5. emits files that must pass the same pack validator before review and release.
-
-Export does not imply ownership of third-party assets or permission to
-redistribute extension packages, fonts, logos, or customer content.
-
 ## Delivery boundary
 
 Archive validation, planning, application, extension requirement evaluation,
@@ -781,3 +729,5 @@ are available as described above. Other workspace defaults, extension lifecycle
 approvals, blueprint successor/update planning, export, and curated Ecommerce
 and Warehouse packs are not provided by the pack installer. Supply pack archives
 explicitly as `.tar.zst` files; Catalog does not fetch them from repositories.
+See [future design ideas](solution-packs-future.md) separately; they are not
+manifest syntax or available operations.
