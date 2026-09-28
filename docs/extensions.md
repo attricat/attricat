@@ -114,8 +114,7 @@ may not contain traversal segments. Catalog safely unpacks the selected trusted
 `catalog.host_api` and dependency ranges use SemVer ranges. A package is
 accepted only when the host API range matches the host's version, every
 declared artifact is present in the archive, configuration and dependencies
-validate, and every required capability is known and grantable. Artifact digest
-verification is deferred from the trusted-source MVP.
+validate, and every required capability is known and grantable.
 
 ## Capabilities and egress
 
@@ -819,10 +818,6 @@ read-only detail-page region with strict v1 context `{ "context_version": 1,
 search state, arbitrary entity values, and browser page state. Commands from an
 action still require `client.commands` and use the existing validated,
 authorized command broker.
-
-## Current implementation limitations
-
-Webhook delivery remains deferred as described above.
 
 ## Reference importer/exporter compatibility suite
 
