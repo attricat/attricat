@@ -19,6 +19,7 @@ import { RouterButton } from '../../components/RouterLink';
 import { EntityContextPicker } from './components/EntityContextPicker';
 import { EntitySchemaSubheader } from './components/EntitySchemaSubheader';
 import { EntityExtensionDrawer } from './components/EntityExtensionDrawer';
+import { EntityAgentDrawer } from './components/EntityAgentDrawer';
 import { EntityPreviewToolbar } from './components/EntityPreviewToolbar';
 import { DeleteEntityDialog } from './components/DeleteEntityDialog';
 import {
@@ -150,6 +151,7 @@ export const EntityPreviewPage = ({
   const heading = findEntityHeading(detailView);
   const HeadingRenderer = resolveHeadingRenderer(heading?.component);
   const [extensionPanelOpen, setExtensionPanelOpen] = useState(false);
+  const [agentPanelOpen, setAgentPanelOpen] = useState(false);
   const schemaOutdated =
     currentBlueprint.data && resolved.data
       ? currentBlueprint.data.blueprint.version >
@@ -232,7 +234,15 @@ export const EntityPreviewPage = ({
       <EntityPreviewToolbar
         entityId={entityId}
         extensionPanelOpen={extensionPanelOpen}
-        onOpenExtensions={() => setExtensionPanelOpen(true)}
+        onOpenExtensions={() => {
+          setAgentPanelOpen(false);
+          setExtensionPanelOpen(true);
+        }}
+        agentPanelOpen={agentPanelOpen}
+        onOpenAgent={() => {
+          setExtensionPanelOpen(false);
+          setAgentPanelOpen(true);
+        }}
         schemaOutdated={schemaOutdated}
         showExtensions={Boolean(resolved.data && blueprint.data)}
         onDuplicate={() => duplicate.mutate()}
@@ -376,6 +386,13 @@ export const EntityPreviewPage = ({
           )}
         </>
       )}
+      <EntityAgentDrawer
+        key={`${entityId}:${selectedContextId ?? ''}`}
+        entityId={entityId}
+        contextId={selectedContextId}
+        onClose={() => setAgentPanelOpen(false)}
+        open={agentPanelOpen}
+      />
       <EntityExtensionDrawer
         blueprintId={resolved.data?.entity.blueprint_id ?? ''}
         blueprintVersion={resolved.data?.entity.blueprint_version ?? 1}

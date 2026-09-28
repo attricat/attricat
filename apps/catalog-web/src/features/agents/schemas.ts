@@ -8,6 +8,8 @@ export const conversationSchema = z.object({
   workspace_id: id,
   created_by_user_id: id.nullable(),
   title: z.string(),
+  entity_id: id.nullable(),
+  context_id: id.nullable(),
   created_at: dateTime,
   updated_at: dateTime,
   archived_at: dateTime.nullable(),

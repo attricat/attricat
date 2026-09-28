@@ -8,13 +8,19 @@ import { ToastProvider } from '../../components/ToastProvider';
 import { listContexts } from '../contexts/api';
 import { EntityPreviewPage } from './EntityPreviewPage';
 
-const { drawerRender, outletRender, popoverOutletRender, navigate } =
-  vi.hoisted(() => ({
-    navigate: vi.fn(),
-    drawerRender: vi.fn(),
-    outletRender: vi.fn(),
-    popoverOutletRender: vi.fn(),
-  }));
+const {
+  drawerRender,
+  agentDrawerRender,
+  outletRender,
+  popoverOutletRender,
+  navigate,
+} = vi.hoisted(() => ({
+  navigate: vi.fn(),
+  drawerRender: vi.fn(),
+  agentDrawerRender: vi.fn(),
+  outletRender: vi.fn(),
+  popoverOutletRender: vi.fn(),
+}));
 
 vi.mock('@tanstack/react-router', () => ({
   createLink: <T,>(component: T) => component,
@@ -44,6 +50,13 @@ vi.mock('../extensions/ExtensionOutlet', () => ({
   },
   ExtensionPopoverOutlet: (props: unknown) => {
     popoverOutletRender(props);
+    return null;
+  },
+}));
+
+vi.mock('./components/EntityAgentDrawer', () => ({
+  EntityAgentDrawer: (props: unknown) => {
+    agentDrawerRender(props);
     return null;
   },
 }));
@@ -247,6 +260,16 @@ describe('EntityPreviewPage', () => {
     );
     expect(drawerRender).toHaveBeenCalledWith(
       expect.objectContaining({ blueprintId, blueprintVersion: 7 }),
+    );
+    await userEvent
+      .setup()
+      .click(screen.getByRole('button', { name: 'Ask about this entity' }));
+    expect(agentDrawerRender).toHaveBeenCalledWith(
+      expect.objectContaining({
+        entityId: '00000000-0000-4000-8000-000000000001',
+        contextId: '33333333-3333-4333-8333-333333333333',
+        open: true,
+      }),
     );
   });
 

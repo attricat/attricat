@@ -18,7 +18,15 @@ vi.mock('./api', () => ({
 
 const conversationId = '123e4567-e89b-12d3-a456-426614174000';
 
-const renderComposer = (onSent = vi.fn(), onSendingChange = vi.fn()) => {
+const renderComposer = (
+  onSent = vi.fn(),
+  onSendingChange = vi.fn(),
+  sendDraft?: (
+    content: string,
+    conversationId: string,
+    attachmentIds: string[],
+  ) => Promise<unknown>,
+) => {
   const queryClient = new QueryClient({
     defaultOptions: { mutations: { retry: false } },
   });
@@ -29,6 +37,7 @@ const renderComposer = (onSent = vi.fn(), onSendingChange = vi.fn()) => {
         conversationId={conversationId}
         onSendingChange={onSendingChange}
         onSent={onSent}
+        sendDraft={sendDraft}
       />
     </QueryClientProvider>,
   );
@@ -113,6 +122,26 @@ describe('ConversationComposer', () => {
         '123e4567-e89b-12d3-a456-426614174001',
       ]),
     );
+  });
+
+  it('reuses the composer and uploaded attachments for draft proposals', async () => {
+    const user = userEvent.setup();
+    const sendDraft = vi.fn().mockResolvedValue({ fields: {} });
+    renderComposer(vi.fn(), vi.fn(), sendDraft);
+    vi.mocked(uploadConversationFiles).mockResolvedValue({
+      files: [{ id: '123e4567-e89b-12d3-a456-426614174001' }],
+    } as never);
+    await user.upload(
+      document.querySelector('input[type="file"]')!,
+      new File(['spec'], 'spec.txt', { type: 'text/plain' }),
+    );
+    await user.click(screen.getByRole('button', { name: 'Send' }));
+    await waitFor(() =>
+      expect(sendDraft).toHaveBeenCalledWith('', conversationId, [
+        '123e4567-e89b-12d3-a456-426614174001',
+      ]),
+    );
+    expect(sendMessage).not.toHaveBeenCalled();
   });
 
   it('submits a message from Enter', async () => {

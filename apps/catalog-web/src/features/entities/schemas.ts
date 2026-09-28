@@ -590,10 +590,14 @@ export const smartFillEntityFormRequestSchema = z.object({
   entity_id: uuidSchema,
   context_id: uuidSchema.nullable(),
   is_default_context: z.boolean(),
-  content: z.string().trim().min(1).max(32_768),
+  content: z.string().max(32_768),
+  conversation_id: uuidSchema.optional(),
+  draft_values: z.record(z.string(), z.string()).optional(),
+  attachment_ids: z.array(uuidSchema).max(16).optional(),
 });
 export const smartFillEntityFormResponseSchema = z.object({
   fields: z.record(z.string(), z.string()),
+  explanation: z.string().optional(),
 });
 export const updateEntityRequestSchema = z.object({
   values: z.array(newAttributeValueSchema),

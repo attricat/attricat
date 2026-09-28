@@ -35,6 +35,7 @@ import { isHiddenByDefault } from '../attributeVisibility';
 
 export type EntityFormHandle = {
   applySmartFillValues: (values: Record<string, string>) => void;
+  getDraftValues: () => Record<string, string>;
 };
 
 type EntityFormProps = {
@@ -191,6 +192,7 @@ export const EntityForm = forwardRef<EntityFormHandle, EntityFormProps>(
     });
 
     useImperativeHandle(ref, () => ({
+      getDraftValues: () => ({ ...form.state.values.fields }),
       applySmartFillValues: (values) => {
         const editableCodes = new Set(
           editableAttributes

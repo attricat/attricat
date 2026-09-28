@@ -23,12 +23,18 @@ export type ConversationComposerProps = {
   conversationId: string;
   onSendingChange: (isSending: boolean) => void;
   onSent: () => void;
+  sendDraft?: (
+    content: string,
+    conversationId: string,
+    attachmentIds: string[],
+  ) => Promise<unknown>;
 };
 
 export const ConversationComposer = ({
   conversationId,
   onSendingChange,
   onSent,
+  sendDraft,
 }: ConversationComposerProps) => {
   const { t } = useTranslation();
   const form = useForm({ defaultValues: { content: '' } });
@@ -54,7 +60,9 @@ export const ConversationComposer = ({
         attachmentIds = uploaded.files.map((file) => file.id);
         setUploadedAttachmentIds(attachmentIds);
       }
-      return sendMessage(conversationId, content, attachmentIds);
+      return sendDraft
+        ? sendDraft(content, conversationId, attachmentIds)
+        : sendMessage(conversationId, content, attachmentIds);
     },
     onMutate: () => onSendingChange(true),
     onSuccess: () => {

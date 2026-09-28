@@ -21,11 +21,14 @@ export const listConversations = () =>
   request('/api/agent/conversations', z.array(conversationSchema));
 export const getConversation = (id: string) =>
   request(`/api/agent/conversations/${uuidPathParam(id)}`, conversationSchema);
-export const createConversation = (title = '') =>
+export const createConversation = (
+  title = '',
+  entity?: { entity_id: string; context_id?: string | null },
+) =>
   request(
     '/api/agent/conversations',
     conversationCreateResponseSchema,
-    json('POST', { title }),
+    json('POST', { title, ...entity }),
   );
 export const listMessages = (id: string) =>
   request(

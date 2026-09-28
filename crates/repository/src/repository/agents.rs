@@ -13,6 +13,8 @@ pub struct Conversation {
     pub workspace_id: Uuid,
     pub created_by_user_id: Option<Uuid>,
     pub title: String,
+    pub entity_id: Option<Uuid>,
+    pub context_id: Option<Uuid>,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
     pub archived_at: Option<DateTime<Utc>>,
@@ -160,9 +162,40 @@ impl CatalogRepository {
         title: &str,
     ) -> Result<Conversation, RepositoryError> {
         let workspace_id = self.workspace_id.unwrap_or(Self::DEFAULT_WORKSPACE_ID);
-        Ok(sqlx::query_as("INSERT INTO conversations (id, workspace_id, created_by_user_id, title) VALUES ($1, $2, $3, $4) RETURNING id, workspace_id, created_by_user_id, title, created_at, updated_at, archived_at")
+        Ok(sqlx::query_as("INSERT INTO conversations (id, workspace_id, created_by_user_id, title) VALUES ($1, $2, $3, $4) RETURNING id, workspace_id, created_by_user_id, title, entity_id, context_id, created_at, updated_at, archived_at")
             .bind(Uuid::new_v4()).bind(workspace_id).bind(created_by_user_id).bind(title)
             .fetch_one(&self.pool).await?)
+    }
+
+    pub async fn create_entity_conversation(
+        &self,
+        actor: Uuid,
+        title: &str,
+        entity_id: Uuid,
+        context_id: Option<Uuid>,
+    ) -> Result<Conversation, RepositoryError> {
+        let workspace = self.workspace_id.unwrap_or(Self::DEFAULT_WORKSPACE_ID);
+        Ok(sqlx::query_as("INSERT INTO conversations (id, workspace_id, created_by_user_id, title, entity_id, context_id) VALUES ($1, $2, $3, $4, $5, $6) RETURNING id, workspace_id, created_by_user_id, title, entity_id, context_id, created_at, updated_at, archived_at")
+            .bind(Uuid::new_v4()).bind(workspace).bind(actor).bind(title).bind(entity_id).bind(context_id)
+            .fetch_one(&self.pool).await?)
+    }
+
+    pub async fn verify_conversation_uploads(
+        &self,
+        conversation_id: Uuid,
+        actor: Uuid,
+        ids: &[Uuid],
+    ) -> Result<(), RepositoryError> {
+        if ids.is_empty() {
+            return Ok(());
+        }
+        let authorized: i64 = sqlx::query_scalar("SELECT count(*) FROM files WHERE workspace_id = $1 AND id = ANY($2) AND conversation_upload_conversation_id = $3 AND conversation_upload_user_id = $4 AND deleted_at IS NULL AND (attachment_expires_at > now() OR EXISTS (SELECT 1 FROM conversation_message_attachments a JOIN conversation_messages m ON m.id = a.message_id WHERE a.file_id = files.id AND a.workspace_id = files.workspace_id AND m.conversation_id = $3))")
+            .bind(self.workspace_id.unwrap_or(Self::DEFAULT_WORKSPACE_ID))
+            .bind(ids).bind(conversation_id).bind(actor).fetch_one(&self.pool).await?;
+        if authorized as usize != ids.len() {
+            return Err(RepositoryError::NotFound("file"));
+        }
+        Ok(())
     }
 
     pub async fn conversation_messages(
@@ -684,7 +717,7 @@ impl CatalogRepository {
 
 impl CatalogRepository {
     pub async fn list_conversations(&self) -> Result<Vec<Conversation>, RepositoryError> {
-        Ok(sqlx::query_as("SELECT id, workspace_id, created_by_user_id, title, created_at, updated_at, archived_at FROM conversations WHERE workspace_id = $1 AND archived_at IS NULL ORDER BY updated_at DESC")
+        Ok(sqlx::query_as("SELECT id, workspace_id, created_by_user_id, title, entity_id, context_id, created_at, updated_at, archived_at FROM conversations WHERE workspace_id = $1 AND archived_at IS NULL ORDER BY updated_at DESC")
             .bind(self.workspace_id.unwrap_or(Self::DEFAULT_WORKSPACE_ID)).fetch_all(&self.pool).await?)
     }
 
@@ -692,7 +725,7 @@ impl CatalogRepository {
         &self,
         conversation_id: Uuid,
     ) -> Result<Conversation, RepositoryError> {
-        sqlx::query_as("SELECT id, workspace_id, created_by_user_id, title, created_at, updated_at, archived_at FROM conversations WHERE id = $1 AND workspace_id = $2 AND archived_at IS NULL")
+        sqlx::query_as("SELECT id, workspace_id, created_by_user_id, title, entity_id, context_id, created_at, updated_at, archived_at FROM conversations WHERE id = $1 AND workspace_id = $2 AND archived_at IS NULL")
             .bind(conversation_id).bind(self.workspace_id.unwrap_or(Self::DEFAULT_WORKSPACE_ID)).fetch_optional(&self.pool).await?
             .ok_or(RepositoryError::NotFound("conversation"))
     }
@@ -702,7 +735,7 @@ impl CatalogRepository {
         conversation_id: Uuid,
         title: &str,
     ) -> Result<Conversation, RepositoryError> {
-        sqlx::query_as("UPDATE conversations SET title = $3, updated_at = now() WHERE id = $1 AND workspace_id = $2 AND archived_at IS NULL RETURNING id, workspace_id, created_by_user_id, title, created_at, updated_at, archived_at")
+        sqlx::query_as("UPDATE conversations SET title = $3, updated_at = now() WHERE id = $1 AND workspace_id = $2 AND archived_at IS NULL RETURNING id, workspace_id, created_by_user_id, title, entity_id, context_id, created_at, updated_at, archived_at")
             .bind(conversation_id).bind(self.workspace_id.unwrap_or(Self::DEFAULT_WORKSPACE_ID)).bind(title).fetch_optional(&self.pool).await?
             .ok_or(RepositoryError::NotFound("conversation"))
     }

@@ -5,6 +5,7 @@ import EditOutlinedIcon from '@mui/icons-material/EditOutlined';
 import HistoryOutlinedIcon from '@mui/icons-material/HistoryOutlined';
 import UpgradeOutlinedIcon from '@mui/icons-material/UpgradeOutlined';
 import ViewSidebarOutlinedIcon from '@mui/icons-material/ViewSidebarOutlined';
+import { AgentIcon } from '../../../components/systemIcons';
 import WarningAmberOutlinedIcon from '@mui/icons-material/WarningAmberOutlined';
 import { Box, Button, IconButton, Tooltip } from '@mui/material';
 import { useTranslation } from 'react-i18next';
@@ -16,6 +17,8 @@ type Props = {
   entityId: string;
   extensionPanelOpen: boolean;
   onOpenExtensions: () => void;
+  agentPanelOpen: boolean;
+  onOpenAgent: () => void;
   schemaOutdated?: boolean;
   showExtensions: boolean;
   onDuplicate: () => void;
@@ -34,6 +37,8 @@ export const EntityPreviewToolbar = ({
   entityId,
   extensionPanelOpen,
   onOpenExtensions,
+  agentPanelOpen,
+  onOpenAgent,
   schemaOutdated,
   showExtensions,
   onDuplicate,
@@ -164,6 +169,17 @@ export const EntityPreviewToolbar = ({
         >
           {t('entities.publishAllChannels')}
         </Button>
+      )}
+      {showExtensions && (
+        <Tooltip title={t('entities.askAboutEntity')}>
+          <IconButton
+            aria-label={t('entities.askAboutEntity')}
+            aria-expanded={agentPanelOpen}
+            onClick={onOpenAgent}
+          >
+            <AgentIcon />
+          </IconButton>
+        </Tooltip>
       )}
       {showExtensions && (
         <Tooltip title={t('entities.extensionContributions')}>

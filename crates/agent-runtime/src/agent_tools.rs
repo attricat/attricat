@@ -78,6 +78,11 @@ pub fn definitions() -> Vec<ToolDefinition> {
             json!({"type":"object","required":["entity_id"],"properties":{"entity_id":{"type":"string","format":"uuid"}},"additionalProperties":false}),
         ),
         definition(
+            "get_entity_context_preview",
+            "Get the resolved, inherited preview values for one entity in a selected attribute context. Use this to answer questions about what the entity preview displays.",
+            json!({"type":"object","required":["entity_id","context_id"],"properties":{"entity_id":{"type":"string","format":"uuid"},"context_id":{"type":"string","format":"uuid"}},"additionalProperties":false}),
+        ),
+        definition(
             "get_entity_preview_link",
             "Get a navigable link to an existing entity's preview page. Use this for each entity you cite; return the link in your answer. The link is relative to the Attricat web app.",
             json!({"type":"object","required":["entity_id"],"properties":{"entity_id":{"type":"string","format":"uuid"}},"additionalProperties":false}),
@@ -187,6 +192,7 @@ pub fn kind(name: &str) -> Result<ToolKind, ToolError> {
         | "list_blueprints"
         | "list_contexts"
         | "get_entity"
+        | "get_entity_context_preview"
         | "get_entity_preview_link"
         | "view_image"
         | "read_file"
@@ -321,6 +327,15 @@ pub async fn execute_read(
                 .await?
                 .ok_or(RepositoryError::NotFound("entity"))?;
             json!({"entity_id": id, "url": format!("/entities/{id}"), "label": "Entity preview"})
+        }
+        "get_entity_context_preview" => {
+            let entity_id = parse_uuid(&arguments, "entity_id")?;
+            let context_id = parse_uuid(&arguments, "context_id")?;
+            let preview = repository
+                .resolved_preview(entity_id, context_id, 1)
+                .await?
+                .ok_or(RepositoryError::NotFound("entity"))?;
+            serde_json::to_value(preview).expect("preview serializes")
         }
         "get_entity" => {
             let id = parse_uuid(&arguments, "entity_id")?;
@@ -1083,7 +1098,10 @@ async fn read_authorized(
         "blueprint_authoring_guide" => return Ok(true),
         "list_blueprints" => ("blueprints.read", None, None),
         "list_contexts" => ("contexts.read", None, Some("__context_list__")),
-        "get_entity" | "get_entity_preview_link" | "get_entity_publications" => (
+        "get_entity"
+        | "get_entity_context_preview"
+        | "get_entity_preview_link"
+        | "get_entity_publications" => (
             "entities.read",
             Some(parse_uuid(arguments, "entity_id")?),
             None,

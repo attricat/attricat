@@ -88,6 +88,68 @@ async fn agent_conversation_reads_and_persisted_sse_replay(pool: PgPool) {
 }
 
 #[sqlx::test]
+async fn entity_conversations_validate_their_context_and_entity(pool: PgPool) {
+    let (base_url, server) = start_server(pool).await;
+    let client = authenticated_client();
+    let context = Uuid::new_v4();
+    let invalid = client
+        .post(format!("{base_url}/agent/conversations"))
+        .json(&json!({"title":"Entity discussion","context_id":context}))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(invalid.status(), StatusCode::UNPROCESSABLE_ENTITY);
+    let missing = client
+        .post(format!("{base_url}/agent/conversations"))
+        .json(&json!({"title":"Entity discussion","entity_id":Uuid::new_v4()}))
+        .send()
+        .await
+        .unwrap();
+    assert!(!missing.status().is_success());
+    let blueprint = create_blueprint(&client, &base_url,
+        "format_version = 1\ncode = 'entity_chat_test'\nname = 'Entity chat test'\nkind = 'entity'\n\n[views.dropdown_option]\ntype = 'dropdown_option'\nfields = ['title']\n\n[[attributes]]\ncode = 'title'\nvalue_type = 'string'").await;
+    let entity = create_entity(&client, &base_url, &blueprint).await;
+    let selected_context: Value = client
+        .post(format!("{base_url}/contexts"))
+        .json(&json!({"code":"entity-chat-context","data":{}}))
+        .send()
+        .await
+        .unwrap()
+        .error_for_status()
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    let created: Value = client
+        .post(format!("{base_url}/agent/conversations"))
+        .json(&json!({"title":"About this entity","entity_id":entity["id"],"context_id":selected_context["id"]}))
+        .send()
+        .await
+        .unwrap()
+        .error_for_status()
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    let loaded: Value = client
+        .get(format!(
+            "{base_url}/agent/conversations/{}",
+            created["id"].as_str().unwrap()
+        ))
+        .send()
+        .await
+        .unwrap()
+        .error_for_status()
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    assert_eq!(loaded["entity_id"], entity["id"]);
+    assert_eq!(loaded["context_id"], selected_context["id"]);
+    server.abort();
+}
+
+#[sqlx::test]
 async fn submitting_a_message_and_enqueuing_its_run_are_atomic(pool: PgPool) {
     let workspace_id = BOOTSTRAP_WORKSPACE_ID.parse::<Uuid>().unwrap();
     let conversation_id = Uuid::new_v4();
@@ -479,6 +541,10 @@ async fn agent_read_tools_enforce_initiator_permissions_and_scopes(pool: PgPool)
         ("list_blueprints", json!({})),
         ("list_contexts", json!({})),
         ("get_entity", json!({"entity_id": entity["id"]})),
+        (
+            "get_entity_context_preview",
+            json!({"entity_id": entity["id"], "context_id": context["id"]}),
+        ),
     ] {
         assert!(matches!(
             execute_read(&repository, actor, workspace, name, arguments).await,

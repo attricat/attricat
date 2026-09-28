@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { forwardRef } from 'react';
 import { describe, expect, it, vi } from 'vitest';
@@ -11,7 +11,6 @@ import {
   getCurrentBlueprint,
   getEntityForm,
   getResolvedEntityPreview,
-  smartFillEntityForm,
 } from './api';
 import { EditEntityPage } from './EditEntityPage';
 
@@ -27,7 +26,6 @@ vi.mock('./api', async (importOriginal) => ({
   getCurrentBlueprint: vi.fn(),
   getEntityForm: vi.fn(),
   getResolvedEntityPreview: vi.fn(),
-  smartFillEntityForm: vi.fn(),
   updateEntity: vi.fn(),
 }));
 vi.mock('../contexts/api', async (importOriginal) => ({
@@ -35,6 +33,21 @@ vi.mock('../contexts/api', async (importOriginal) => ({
   listContexts: vi.fn(),
 }));
 const applySmartFillValues = vi.fn();
+const drawerSpy = vi.fn();
+vi.mock('./components/EntityAgentDrawer', () => ({
+  EntityAgentDrawer: (props: {
+    contextId?: string;
+    open: boolean;
+    draft: { onApply: (fields: Record<string, string>) => void };
+  }) => {
+    drawerSpy(props);
+    return props.open ? (
+      <button onClick={() => props.draft.onApply({ title: 'Suggested' })}>
+        Apply proposal
+      </button>
+    ) : null;
+  },
+}));
 vi.mock('./components/EntityForm', () => ({
   EntityForm: forwardRef(
     ({ contextPicker }: { contextPicker: React.ReactNode }, ref) => {
@@ -129,11 +142,16 @@ describe('EditEntityPage', () => {
     renderPage();
     await user.click(await screen.findByRole('button', { name: 'Smart fill' }));
 
-    expect(screen.getByLabelText('Source text')).toBeTruthy();
-    expect(screen.getByRole('button', { name: 'Apply to form' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Apply proposal' })).toBeTruthy();
+    expect(drawerSpy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        contextId: '123e4567-e89b-12d3-a456-426614174002',
+        open: true,
+      }),
+    );
   });
 
-  it('does not apply a delayed Smart Fill response to another context', async () => {
+  it('binds the editing sidebar to the selected context', async () => {
     applySmartFillValues.mockClear();
     const defaultId = '123e4567-e89b-12d3-a456-426614174002';
     const otherId = '123e4567-e89b-12d3-a456-426614174003';
@@ -158,30 +176,17 @@ describe('EditEntityPage', () => {
       { id: defaultId, code: 'default', data: {} },
       { id: otherId, code: 'other', data: {} },
     ] as never);
-    let resolveFill!: (value: { fields: Record<string, string> }) => void;
-    vi.mocked(smartFillEntityForm).mockImplementation(
-      () =>
-        new Promise((resolve) => {
-          resolveFill = resolve;
-        }),
-    );
     const user = userEvent.setup();
     renderPage();
     await user.click(await screen.findByRole('button', { name: 'Smart fill' }));
-    await user.type(screen.getByLabelText('Source text'), 'some text');
-    await user.click(screen.getByRole('button', { name: 'Apply to form' }));
-    expect(smartFillEntityForm).toHaveBeenCalledWith(
-      expect.objectContaining({ context_id: defaultId }),
+    expect(drawerSpy).toHaveBeenCalledWith(
+      expect.objectContaining({ contextId: defaultId, open: true }),
     );
     fireEvent.click(screen.getByRole('tab', { name: 'other', hidden: true }));
-    resolveFill({ fields: { title: 'Wrong context' } });
-    await waitFor(() =>
-      expect(
-        screen
-          .getByRole('button', { name: 'Apply to form' })
-          .hasAttribute('disabled'),
-      ).toBe(false),
+    expect(drawerSpy).toHaveBeenCalledWith(
+      expect.objectContaining({ contextId: otherId, open: true }),
     );
-    expect(applySmartFillValues).not.toHaveBeenCalled();
+    await user.click(screen.getByRole('button', { name: 'Apply proposal' }));
+    expect(applySmartFillValues).toHaveBeenCalledWith({ title: 'Suggested' });
   });
 });

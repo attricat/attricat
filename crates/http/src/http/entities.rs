@@ -17,6 +17,7 @@ use crate::{
     repository::decode_search_cursor,
 };
 use axum::{Json, extract::State, http::StatusCode};
+use base64::{Engine, engine::general_purpose::STANDARD};
 use catalog_validation::validate_json_schema;
 use chrono::{DateTime, NaiveDate, NaiveTime};
 use serde::{Deserialize, Serialize};
@@ -36,11 +37,18 @@ pub(super) struct SmartFillEntityFormRequest {
     context_id: Option<Uuid>,
     is_default_context: bool,
     content: String,
+    #[serde(default)]
+    conversation_id: Option<Uuid>,
+    #[serde(default)]
+    draft_values: std::collections::BTreeMap<String, String>,
+    #[serde(default)]
+    attachment_ids: Vec<Uuid>,
 }
 
 #[derive(Serialize)]
 pub(super) struct SmartFillEntityFormResponse {
     fields: std::collections::BTreeMap<String, String>,
+    explanation: String,
 }
 
 #[derive(Serialize)]
@@ -51,7 +59,7 @@ struct SmartFillField {
     value_schema: Option<Value>,
 }
 
-const SMART_FILL_SYSTEM_PROMPT: &str = "You fill the editable scalar fields of one catalogue entity from pasted text. Use only the supplied field codes, preserve values not supported by the text, and never invent facts. Return exactly one propose_entity_form_values tool call. Values must be strings suitable for the browser form; do not propose relationship or file fields.";
+const SMART_FILL_SYSTEM_PROMPT: &str = "You are an entity editing assistant. Answer the user's editing request using the selected entity context, current unsaved form draft and conversation history. Propose only fields that should change, using supplied editable scalar field codes. Never invent facts. Return exactly one propose_entity_form_values tool call with a short explanation of changes and uncertainties. The values are draft-only and require explicit user application and a separate save; never claim they were saved. Do not propose relationship or file fields.";
 
 fn smart_fill_definition() -> ToolDefinition {
     ToolDefinition {
@@ -61,12 +69,13 @@ fn smart_fill_definition() -> ToolDefinition {
             description: "Propose editable entity form field values. This does not save catalog data.",
             parameters: json!({
                 "type": "object",
-                "required": ["fields"],
+                "required": ["fields", "explanation"],
                 "properties": {
                     "fields": {
                         "type": "object",
                         "additionalProperties": { "type": "string" }
-                    }
+                    },
+                    "explanation": {"type": "string"}
                 },
                 "additionalProperties": false
             }),
@@ -81,7 +90,16 @@ pub(super) async fn smart_fill_entity_form(
     super::auth::ScopedRepository(repository): super::auth::ScopedRepository,
     ApiJson(input): ApiJson<SmartFillEntityFormRequest>,
 ) -> Result<Json<SmartFillEntityFormResponse>, ApiError> {
-    if input.content.trim().is_empty() || input.content.len() > MAX_CONVERSATION_MESSAGE_BYTES {
+    if (input.content.trim().is_empty() && input.attachment_ids.is_empty())
+        || input.content.len() > MAX_CONVERSATION_MESSAGE_BYTES
+        || input.draft_values.len() > 256
+        || input
+            .draft_values
+            .iter()
+            .map(|(key, value)| key.len() + value.len())
+            .sum::<usize>()
+            > MAX_CONVERSATION_MESSAGE_BYTES
+    {
         return Err(ApiError::invalid_input(
             "content must be between 1 and 32768 bytes".to_owned(),
         ));
@@ -167,13 +185,130 @@ pub(super) async fn smart_fill_entity_form(
         input.context_id,
         &allowed,
     );
+    if input.attachment_ids.len() > 16
+        || input
+            .attachment_ids
+            .iter()
+            .collect::<std::collections::HashSet<_>>()
+            .len()
+            != input.attachment_ids.len()
+    {
+        return Err(ApiError::invalid_input("invalid attachments".into()));
+    }
+    if !input.attachment_ids.is_empty() && input.conversation_id.is_none() {
+        return Err(ApiError::invalid_input(
+            "attachments require a conversation".into(),
+        ));
+    }
+    if let Some(id) = input.conversation_id {
+        repository
+            .verify_conversation_uploads(id, user, &input.attachment_ids)
+            .await?;
+    }
+    let history = if let Some(id) = input.conversation_id {
+        let conversation = repository.get_conversation(id).await?;
+        if conversation.entity_id != Some(input.entity_id)
+            || conversation.context_id != input.context_id
+        {
+            return Err(ApiError::invalid_input(
+                "conversation belongs to another entity or context".into(),
+            ));
+        }
+        let recent = repository.conversation_messages(id).await?;
+        let mut remaining_attachment_bytes = 65536usize;
+        let mut history = Vec::new();
+        for message in recent
+            .into_iter()
+            .rev()
+            .take(16)
+            .collect::<Vec<_>>()
+            .into_iter()
+            .rev()
+        {
+            let mut prior_files = Vec::new();
+            for attachment in &message.attachments {
+                let Ok(file) = repository.file_object(attachment.id, None).await else {
+                    continue;
+                };
+                if (file.mime_type.starts_with("text/") || file.mime_type == "application/json")
+                    && file.byte_size >= 0
+                    && (file.byte_size as usize) <= remaining_attachment_bytes
+                {
+                    if let Ok(object) = state.object_store.get(&file.object_key).await {
+                        if object.bytes.len() <= remaining_attachment_bytes {
+                            if let Ok(text) = std::str::from_utf8(&object.bytes) {
+                                remaining_attachment_bytes -= object.bytes.len();
+                                prior_files
+                                    .push(json!({"filename":file.display_filename,"text":text}));
+                            }
+                        }
+                    }
+                } else {
+                    prior_files.push(json!({"filename":file.display_filename,"note":"Reattach this file if its contents are needed."}));
+                }
+            }
+            history.push(
+                json!({"role":message.role,"content":message.content,"attachments":prior_files}),
+            );
+        }
+        history
+    } else {
+        Vec::new()
+    };
     let prompt = json!({
         "entity_id": input.entity_id,
         "context_id": input.context_id,
         "editable_fields": editable,
         "current_values": current_values,
-        "pasted_text": input.content,
+        "unsaved_draft_values": input.draft_values.iter().filter(|(code, _)| allowed.contains(code.as_str())).collect::<std::collections::BTreeMap<_, _>>(),
+        "conversation_history": history,
+        "user_request": input.content,
     });
+    let mut parts = vec![json!({"type":"text","text":prompt.to_string()})];
+    for file_id in &input.attachment_ids {
+        let file = repository.file_object(*file_id, None).await?;
+        if file.mime_type.starts_with("image/") {
+            let image = repository
+                .file_object(*file_id, Some("display"))
+                .await
+                .unwrap_or(file);
+            if image.byte_size > 1024 * 1024 {
+                return Err(ApiError::invalid_input("image is too large".into()));
+            }
+            let object = state
+                .object_store
+                .get(&image.object_key)
+                .await
+                .map_err(|_| ApiError::service_unavailable("attachment unavailable"))?;
+            if object.bytes.len() > 1024 * 1024 {
+                return Err(ApiError::invalid_input("image is too large".into()));
+            }
+            parts.push(json!({"type":"image_url","image_url":{"url":format!("data:{};base64,{}", image.mime_type, STANDARD.encode(object.bytes))}}));
+        } else if file.mime_type.starts_with("text/") || file.mime_type == "application/json" {
+            if file.byte_size > 65536 {
+                return Err(ApiError::invalid_input(
+                    "text attachment is too large".into(),
+                ));
+            }
+            let object = state
+                .object_store
+                .get(&file.object_key)
+                .await
+                .map_err(|_| ApiError::service_unavailable("attachment unavailable"))?;
+            if object.bytes.len() > 65536 {
+                return Err(ApiError::invalid_input(
+                    "text attachment is too large".into(),
+                ));
+            }
+            let text = std::str::from_utf8(&object.bytes)
+                .map_err(|_| ApiError::invalid_input("attachment is not UTF-8".into()))?;
+            parts.push(json!({"type":"text","text":format!("Attachment {}:\n{text}",file.display_filename)}));
+        } else {
+            return Err(ApiError::invalid_input(
+                "only images and text attachments are supported for draft proposals".into(),
+            ));
+        }
+    }
     let provider = OpenAiCompatibleClient::new(config)
         .map_err(|_| ApiError::service_unavailable("agent provider is unavailable"))?;
     let completion = provider
@@ -187,7 +322,7 @@ pub(super) async fn smart_fill_entity_form(
                 },
                 ChatMessage {
                     role: "user".to_owned(),
-                    content: prompt,
+                    content: Value::Array(parts),
                     tool_call_id: None,
                     tool_calls: None,
                 },
@@ -208,22 +343,48 @@ pub(super) async fn smart_fill_entity_form(
             "agent returned oversized form values".to_owned(),
         ));
     }
-    let fields = serde_json::from_str::<Value>(&call.function.arguments)
-        .ok()
+    let arguments = serde_json::from_str::<Value>(&call.function.arguments)
+        .map_err(|_| ApiError::invalid_input("agent returned invalid form values".to_owned()))?;
+    let explanation = arguments
+        .get("explanation")
+        .and_then(Value::as_str)
+        .unwrap_or("")
+        .chars()
+        .take(2048)
+        .collect::<String>();
+    let fields = Some(arguments)
         .and_then(|value| value.get("fields").cloned())
         .and_then(|value| {
             serde_json::from_value::<std::collections::BTreeMap<String, String>>(value).ok()
         })
         .ok_or_else(|| ApiError::invalid_input("agent returned invalid form values".to_owned()))?;
+    let fields = fields
+        .into_iter()
+        .filter(|(code, value)| {
+            editable
+                .iter()
+                .any(|field| field.code == *code && smart_fill_value_is_valid(field, value))
+        })
+        .collect::<std::collections::BTreeMap<_, _>>();
+    if let Some(id) = input.conversation_id {
+        repository
+            .append_conversation_message_with_attachments(
+                id,
+                None,
+                "user",
+                Value::String(input.content),
+                &input.attachment_ids,
+            )
+            .await?;
+        let base_values = fields
+            .keys()
+            .map(|code| (code.clone(), input.draft_values.get(code).cloned()))
+            .collect::<std::collections::BTreeMap<_, _>>();
+        repository.append_conversation_message(id, None, "assistant", json!({"draft_proposal":{"fields":fields,"explanation":explanation,"base_values":base_values}})).await?;
+    }
     Ok(Json(SmartFillEntityFormResponse {
-        fields: fields
-            .into_iter()
-            .filter(|(code, value)| {
-                editable
-                    .iter()
-                    .any(|field| field.code == *code && smart_fill_value_is_valid(field, value))
-            })
-            .collect(),
+        fields,
+        explanation,
     }))
 }
 /// Parse a suggestion exactly as the browser will parse a scalar form field,

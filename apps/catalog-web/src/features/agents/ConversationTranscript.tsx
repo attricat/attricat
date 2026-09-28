@@ -17,6 +17,7 @@ import {
 } from '@mui/material';
 import { fileDownloadUrl } from '../files/api';
 import { ConversationMessageContent } from './ConversationMessageContent';
+import { DraftProposal } from './DraftProposal';
 import type { AgentRun, AgentToolCall, ConversationMessage } from './schemas';
 
 export type ConversationTranscriptProps = {
@@ -27,6 +28,8 @@ export type ConversationTranscriptProps = {
   latestRun: AgentRun | undefined;
   messages: ConversationMessage[] | undefined;
   onDecideApproval: (approvalId: string, approved: boolean) => void;
+  onApplyDraft?: (fields: Record<string, string>) => void;
+  getDraftValues?: () => Record<string, string>;
 };
 
 export const ConversationTranscript = ({
@@ -37,6 +40,8 @@ export const ConversationTranscript = ({
   latestRun,
   messages,
   onDecideApproval,
+  onApplyDraft,
+  getDraftValues,
 }: ConversationTranscriptProps) => {
   const { t } = useTranslation();
   const conversationEnd = useRef<HTMLDivElement>(null);
@@ -100,6 +105,56 @@ export const ConversationTranscript = ({
                 content={message.content}
                 messageRole={message.role}
               />
+              {onApplyDraft &&
+                message.role === 'assistant' &&
+                typeof message.content === 'object' &&
+                message.content !== null &&
+                'draft_proposal' in message.content &&
+                (() => {
+                  const proposal = message.content.draft_proposal;
+                  if (
+                    !proposal ||
+                    typeof proposal !== 'object' ||
+                    !('fields' in proposal) ||
+                    !proposal.fields ||
+                    typeof proposal.fields !== 'object' ||
+                    Array.isArray(proposal.fields)
+                  )
+                    return null;
+                  const fields = Object.fromEntries(
+                    Object.entries(proposal.fields).filter(
+                      (entry): entry is [string, string] =>
+                        typeof entry[1] === 'string',
+                    ),
+                  );
+                  return (
+                    <DraftProposal
+                      proposal={{
+                        fields,
+                        baseValues:
+                          'base_values' in proposal &&
+                          typeof proposal.base_values === 'object' &&
+                          proposal.base_values !== null &&
+                          !Array.isArray(proposal.base_values)
+                            ? Object.fromEntries(
+                                Object.entries(proposal.base_values).filter(
+                                  (entry): entry is [string, string | null] =>
+                                    typeof entry[1] === 'string' ||
+                                    entry[1] === null,
+                                ),
+                              )
+                            : undefined,
+                        explanation:
+                          'explanation' in proposal &&
+                          typeof proposal.explanation === 'string'
+                            ? proposal.explanation
+                            : '',
+                      }}
+                      onApply={onApplyDraft}
+                      getDraftValues={getDraftValues}
+                    />
+                  );
+                })()}
               {message.attachments.length > 0 && (
                 <Stack
                   direction="row"

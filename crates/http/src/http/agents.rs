@@ -29,6 +29,10 @@ use crate::{
 pub(super) struct CreateConversation {
     #[serde(default)]
     title: String,
+    #[serde(default)]
+    entity_id: Option<Uuid>,
+    #[serde(default)]
+    context_id: Option<Uuid>,
 }
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -66,6 +70,7 @@ fn configured(state: &AppState) -> Result<&crate::agents::AgentProviderConfig, A
 
 pub(super) async fn create_conversation(
     AuthenticatedPrincipal(user, _): AuthenticatedPrincipal,
+    ActiveWorkspace(workspace): ActiveWorkspace,
     ScopedRepository(repository): ScopedRepository,
     ApiJson(input): ApiJson<CreateConversation>,
 ) -> Result<(StatusCode, Json<ConversationResponse>), ApiError> {
@@ -74,9 +79,36 @@ pub(super) async fn create_conversation(
             "title must be at most 512 characters".into(),
         ));
     }
-    let conversation = repository
-        .create_conversation(Some(user), &input.title)
-        .await?;
+    if input.context_id.is_some() && input.entity_id.is_none() {
+        return Err(ApiError::invalid_input(
+            "context_id requires entity_id".into(),
+        ));
+    }
+    let conversation = if let Some(entity_id) = input.entity_id {
+        if !repository
+            .is_authorized(user, workspace, "entities.read", Some(entity_id), None)
+            .await?
+        {
+            return Err(ApiError::forbidden());
+        }
+        repository
+            .get_entity(entity_id)
+            .await?
+            .ok_or_else(|| ApiError::not_found("entity"))?;
+        if let Some(context_id) = input.context_id {
+            repository
+                .get_context_by_id(context_id)
+                .await?
+                .ok_or_else(|| ApiError::invalid_input("unknown context".into()))?;
+        }
+        repository
+            .create_entity_conversation(user, &input.title, entity_id, input.context_id)
+            .await?
+    } else {
+        repository
+            .create_conversation(Some(user), &input.title)
+            .await?
+    };
     Ok((
         StatusCode::CREATED,
         Json(ConversationResponse {
@@ -86,17 +118,53 @@ pub(super) async fn create_conversation(
     ))
 }
 
+async fn readable_conversation(
+    repository: &crate::repository::CatalogRepository,
+    user: Uuid,
+    workspace: Uuid,
+    id: Uuid,
+) -> Result<crate::repository::Conversation, ApiError> {
+    let conversation = repository.get_conversation(id).await?;
+    if let Some(entity_id) = conversation.entity_id {
+        if !repository
+            .is_authorized(user, workspace, "entities.read", Some(entity_id), None)
+            .await?
+        {
+            return Err(ApiError::forbidden());
+        }
+    }
+    Ok(conversation)
+}
+
 pub(super) async fn list_conversations(
+    AuthenticatedPrincipal(user, _): AuthenticatedPrincipal,
+    ActiveWorkspace(workspace): ActiveWorkspace,
     ScopedRepository(repository): ScopedRepository,
 ) -> Result<Json<Vec<crate::repository::Conversation>>, ApiError> {
-    Ok(Json(repository.list_conversations().await?))
+    let mut visible = Vec::new();
+    for conversation in repository.list_conversations().await? {
+        if let Some(entity_id) = conversation.entity_id {
+            if !repository
+                .is_authorized(user, workspace, "entities.read", Some(entity_id), None)
+                .await?
+            {
+                continue;
+            }
+        }
+        visible.push(conversation);
+    }
+    Ok(Json(visible))
 }
 
 pub(super) async fn get_conversation(
+    AuthenticatedPrincipal(user, _): AuthenticatedPrincipal,
+    ActiveWorkspace(workspace): ActiveWorkspace,
     ScopedRepository(repository): ScopedRepository,
     ApiPath(conversation_id): ApiPath<Uuid>,
 ) -> Result<Json<crate::repository::Conversation>, ApiError> {
-    Ok(Json(repository.get_conversation(conversation_id).await?))
+    Ok(Json(
+        readable_conversation(&repository, user, workspace, conversation_id).await?,
+    ))
 }
 
 pub(super) async fn update_conversation(
@@ -125,20 +193,24 @@ pub(super) async fn delete_conversation(
 }
 
 pub(super) async fn list_messages(
+    AuthenticatedPrincipal(user, _): AuthenticatedPrincipal,
+    ActiveWorkspace(workspace): ActiveWorkspace,
     ScopedRepository(repository): ScopedRepository,
     ApiPath(conversation_id): ApiPath<Uuid>,
 ) -> Result<Json<Vec<crate::repository::ConversationMessage>>, ApiError> {
-    repository.get_conversation(conversation_id).await?;
+    readable_conversation(&repository, user, workspace, conversation_id).await?;
     Ok(Json(
         repository.conversation_messages(conversation_id).await?,
     ))
 }
 
 pub(super) async fn list_runs(
+    AuthenticatedPrincipal(user, _): AuthenticatedPrincipal,
+    ActiveWorkspace(workspace): ActiveWorkspace,
     ScopedRepository(repository): ScopedRepository,
     ApiPath(conversation_id): ApiPath<Uuid>,
 ) -> Result<Json<Vec<crate::repository::AgentRun>>, ApiError> {
-    repository.get_conversation(conversation_id).await?;
+    readable_conversation(&repository, user, workspace, conversation_id).await?;
     Ok(Json(
         repository
             .agent_runs_for_conversation(conversation_id)
@@ -149,7 +221,7 @@ pub(super) async fn list_runs(
 pub(super) async fn send_message(
     State(state): State<AppState>,
     AuthenticatedPrincipal(user, _): AuthenticatedPrincipal,
-    ActiveWorkspace(_workspace_id): ActiveWorkspace,
+    ActiveWorkspace(workspace_id): ActiveWorkspace,
     ScopedRepository(repository): ScopedRepository,
     ApiPath(conversation_id): ApiPath<Uuid>,
     ApiJson(input): ApiJson<SendMessage>,
@@ -177,6 +249,7 @@ pub(super) async fn send_message(
             "attachment_ids must not contain duplicates".into(),
         ));
     }
+    readable_conversation(&repository, user, workspace_id, conversation_id).await?;
     let config = configured(&state)?;
     let run = repository
         .submit_agent_message(

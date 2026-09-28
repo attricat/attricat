@@ -53,6 +53,20 @@ describe('agent API client', () => {
     });
   });
 
+  it('binds a new conversation to the entity and selected context', async () => {
+    fetchMock.mockResolvedValue({
+      ok: true,
+      status: 201,
+      json: () => Promise.resolve({ id, title: 'Entity' }),
+    });
+    await createConversation('Entity', { entity_id: id, context_id: id });
+    expect(JSON.parse(fetchMock.mock.calls[0][1].body)).toEqual({
+      title: 'Entity',
+      entity_id: id,
+      context_id: id,
+    });
+  });
+
   it('rejects malformed UUID path IDs before issuing requests', async () => {
     const malformedId = 'not-a-uuid';
 

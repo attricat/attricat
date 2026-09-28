@@ -58,8 +58,10 @@ const ToolCall = ({ call }: { call: unknown }) => {
   );
 };
 
-const entityPreviewPath = /^\/entities\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-const savedSearchPath = /^\/\?savedView=[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const entityPreviewPath =
+  /^\/entities\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const savedSearchPath =
+  /^\/\?savedView=[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const isCatalogLink = (url: string) =>
   entityPreviewPath.test(url) || savedSearchPath.test(url);
 
@@ -106,6 +108,15 @@ export const ConversationMessageContent = ({
   content: unknown;
   messageRole: string;
 }) => {
+  if (isRecord(content) && isRecord(content.draft_proposal)) {
+    return (
+      <Typography>
+        {typeof content.draft_proposal.explanation === 'string'
+          ? content.draft_proposal.explanation
+          : ''}
+      </Typography>
+    );
+  }
   if (isRecord(content) && Array.isArray(content.tool_calls)) {
     return (
       <Stack spacing={1} sx={{ mt: 1 }}>

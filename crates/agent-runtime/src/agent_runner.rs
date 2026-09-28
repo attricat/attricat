@@ -81,10 +81,18 @@ async fn drive(
         .await?;
         return Ok(());
     }
+    let conversation = repository.get_conversation(conversation_id).await?;
     let messages = repository.conversation_messages(conversation_id).await?;
+    let context_prompt = match conversation.entity_id {
+        Some(entity_id) => format!(
+            " This conversation is anchored to entity {entity_id} in attribute context {:?}. Before answering questions about what its preview shows, call get_entity_context_preview with this entity and context ID to see resolved inherited values (or get_entity when no context is selected). Ground all responses in this entity and its selected context, and do not assume values from another context apply here. For edits, always confirm before persisting changes.",
+            conversation.context_id
+        ),
+        None => String::new(),
+    };
     let mut request = vec![ChatMessage {
         role: "system".into(),
-        content: Value::String(SYSTEM_PROMPT.into()),
+        content: Value::String(format!("{SYSTEM_PROMPT}{context_prompt}")),
         tool_call_id: None,
         tool_calls: None,
     }];
@@ -308,6 +316,16 @@ async fn request_message(
     object_store: &Arc<dyn ObjectStore>,
     message: crate::repository::ConversationMessage,
 ) -> ChatMessage {
+    if message.role == "assistant"
+        && let Some(proposal) = message.content.get("draft_proposal")
+    {
+        return ChatMessage {
+            role: message.role,
+            content: Value::String(format!("Draft-only proposal (not saved): {proposal}")),
+            tool_call_id: None,
+            tool_calls: None,
+        };
+    }
     if message.role == "assistant"
         && let Some(tool_calls) = message.content.get("tool_calls")
         && let Ok(tool_calls) = serde_json::from_value::<Vec<ToolCall>>(tool_calls.clone())
