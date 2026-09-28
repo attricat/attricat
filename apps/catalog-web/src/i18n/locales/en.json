@@ -8,7 +8,9 @@
     "attricat": "Attricat",
     "catalog": "Catalog",
     "dataManagement": "Data management",
-    "loading": "Loading"
+    "loading": "Loading",
+    "findings": "Findings",
+    "runs": "Runs"
   },
   "errors": {
     "unexpectedTitle": "Something went wrong",

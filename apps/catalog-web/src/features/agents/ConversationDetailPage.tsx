@@ -3,6 +3,7 @@ import EditOutlinedIcon from '@mui/icons-material/EditOutlined';
 import { Alert, Box, Button } from '@mui/material';
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
+import { useResourcePageTitle } from '../../app/useResourcePageTitle';
 import { PageContainer } from '../../components/PageContainer';
 import { PageHeader } from '../../components/PageHeader';
 import { getConversation } from './api';
@@ -24,6 +25,7 @@ export const ConversationDetailPage = ({
     refetchInterval: (query) =>
       query.state.data && isTitlePending(query.state.data) ? 3_000 : false,
   });
+  useResourcePageTitle(conversation.data?.title, t('agents.agentConversation'));
   return (
     <PageContainer maxWidth={false}>
       <Box

@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { render, screen } from '@testing-library/react';
+import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
 import '../../i18n';
@@ -34,6 +34,9 @@ describe('ConversationDetailPage', () => {
     );
     await user.click(
       await screen.findByRole('button', { name: 'Change conversation title' }),
+    );
+    await waitFor(() =>
+      expect(document.title).toBe('Agent conversation · Original title · Attricat'),
     );
     expect(screen.getByRole('dialog')).toBeTruthy();
     expect(

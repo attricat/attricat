@@ -20,6 +20,7 @@ import {
 } from '@mui/material';
 import { type ComponentType, useState } from 'react';
 import { useTranslation } from 'react-i18next';
+import { useResourcePageTitle } from '../../app/useResourcePageTitle';
 import { PageContainer } from '../../components/PageContainer';
 import { PageHeader } from '../../components/PageHeader';
 import { useTabAccessibility } from '../../components/useTabAccessibility';
@@ -93,6 +94,7 @@ export const WorkflowDetailPage = ({ workflowId }: { workflowId: string }) => {
     onSuccess: refresh,
   });
   const current = revisions.data?.[0];
+  useResourcePageTitle(current?.name, t('navigation.workflows'));
   const compared = revisions.data?.find(
     (revision) =>
       revision.version ===

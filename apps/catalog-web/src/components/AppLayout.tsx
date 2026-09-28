@@ -18,8 +18,9 @@ import {
   useMediaQuery,
   useTheme,
 } from '@mui/material';
-import { useState } from 'react';
+import { useLayoutEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
+import { pageTitle } from '../app/pageTitle';
 import { currentSession, logout } from '../features/auth/api';
 import { authQueryKeys } from '../features/auth/queryKeys';
 import { MobileNavigationPanelProvider } from './MobileNavigationPanel';
@@ -94,6 +95,9 @@ export const AppLayout = () => {
   const pathname = useRouterState({
     select: (state) => state.location.pathname,
   });
+  useLayoutEffect(() => {
+    document.title = pageTitle(pathname, t);
+  }, [pathname, t]);
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const session = useQuery({

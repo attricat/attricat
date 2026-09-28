@@ -20,6 +20,7 @@ import {
 } from '@mui/material';
 import { lazy, Suspense, useState } from 'react';
 import { useTranslation } from 'react-i18next';
+import { useResourcePageTitle } from '../../app/useResourcePageTitle';
 import { PageContainer } from '../../components/PageContainer';
 import { PageHeader } from '../../components/PageHeader';
 import { useTabAccessibility } from '../../components/useTabAccessibility';
@@ -151,6 +152,7 @@ export const BlueprintDetailPage = ({
     enabled: rightVersion !== undefined,
   });
   const blueprint = revisionItems[0];
+  useResourcePageTitle(blueprint?.name, t('navigation.blueprints'));
   const latestPublished = revisionItems.find(
     (revision) => revision.status === 'published',
   );
