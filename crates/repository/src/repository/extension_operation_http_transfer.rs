@@ -23,6 +23,14 @@ pub struct ExtensionHttpDelivery {
     pub updated_at: DateTime<Utc>,
 }
 
+pub struct CompletedHttpInput<'a> {
+    pub transfer_key: &'a str,
+    pub request_digest: &'a str,
+    pub source_etag: Option<&'a str>,
+    pub length: i64,
+    pub sha256: &'a str,
+}
+
 #[derive(Debug)]
 pub enum DeliveryState {
     Send(Uuid),
@@ -102,21 +110,17 @@ impl CatalogRepository {
         &self,
         artifact: Uuid,
         run: Uuid,
-        key: &str,
-        digest: &str,
-        etag: Option<&str>,
-        length: i64,
-        sha256: &str,
+        input: CompletedHttpInput<'_>,
     ) -> Result<(), RepositoryError> {
         let mut tx = self.pool.begin().await?;
         self.ensure_task_fence(&mut tx).await?;
         let row: Option<Uuid> = sqlx::query_scalar("UPDATE extension_operation_artifacts SET state='completed',content_length=$4,checksum_sha256=$5,completed_at=clock_timestamp(),updated_at=clock_timestamp() WHERE id=$1 AND workspace_id=$2 AND operation_run_id=$3 AND direction='input' AND state='incomplete' AND content_length >= $4 AND EXISTS(SELECT 1 FROM extension_operation_runs WHERE id=$3 AND workspace_id=$2 AND status='leased') RETURNING id")
-            .bind(artifact).bind(self.extension_workspace()).bind(run).bind(length).bind(sha256).fetch_optional(&mut *tx).await?;
+            .bind(artifact).bind(self.extension_workspace()).bind(run).bind(input.length).bind(input.sha256).fetch_optional(&mut *tx).await?;
         if row.is_none() {
             return Err(denied());
         }
         sqlx::query("INSERT INTO extension_operation_http_inputs(workspace_id,operation_run_id,transfer_key,artifact_id,source_etag,request_digest) VALUES($1,$2,$3,$4,$5,$6)")
-            .bind(self.extension_workspace()).bind(run).bind(key).bind(artifact).bind(etag).bind(digest).execute(&mut *tx).await?;
+            .bind(self.extension_workspace()).bind(run).bind(input.transfer_key).bind(artifact).bind(input.source_etag).bind(input.request_digest).execute(&mut *tx).await?;
         tx.commit().await?;
         Ok(())
     }

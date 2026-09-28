@@ -203,7 +203,19 @@ impl CatalogRepository {
         let mut count = 0;
         for _ in 0..MAX_DUE_PER_POLL {
             let mut tx = self.pool.begin().await?;
-            let row: Option<(Uuid, String, Uuid, String, Value, Value, Value, Value, i32, DateTime<Utc>)> = sqlx::query_as(
+            type DueSchedule = (
+                Uuid,
+                String,
+                Uuid,
+                String,
+                Value,
+                Value,
+                Value,
+                Value,
+                i32,
+                DateTime<Utc>,
+            );
+            let row: Option<DueSchedule> = sqlx::query_as(
                 "SELECT id,extension_id,installed_release_id,operation_id,input,configuration_snapshot,source_reference,destination_reference,interval_seconds,next_at FROM extension_operation_schedules WHERE workspace_id=$1 AND enabled AND next_at<=clock_timestamp() ORDER BY next_at,id LIMIT 1 FOR NO KEY UPDATE SKIP LOCKED"
             ).bind(self.extension_workspace()).fetch_optional(&mut *tx).await?;
             let Some((

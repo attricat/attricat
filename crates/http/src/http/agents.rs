@@ -21,7 +21,7 @@ use crate::{
     agents::{
         MAX_CONVERSATION_ATTACHMENTS, MAX_CONVERSATION_MESSAGE_BYTES, MAX_CONVERSATION_TITLE_BYTES,
     },
-    repository::ApprovalDecision,
+    repository::{ApprovalDecision, RepositoryError},
 };
 
 #[derive(Deserialize)]
@@ -118,20 +118,19 @@ pub(super) async fn create_conversation(
     ))
 }
 
-async fn readable_conversation(
+pub(super) async fn readable_conversation(
     repository: &crate::repository::CatalogRepository,
     user: Uuid,
     workspace: Uuid,
     id: Uuid,
 ) -> Result<crate::repository::Conversation, ApiError> {
     let conversation = repository.get_conversation(id).await?;
-    if let Some(entity_id) = conversation.entity_id {
-        if !repository
+    if let Some(entity_id) = conversation.entity_id
+        && !repository
             .is_authorized(user, workspace, "entities.read", Some(entity_id), None)
             .await?
-        {
-            return Err(ApiError::forbidden());
-        }
+    {
+        return Err(ApiError::forbidden());
     }
     Ok(conversation)
 }
@@ -143,13 +142,12 @@ pub(super) async fn list_conversations(
 ) -> Result<Json<Vec<crate::repository::Conversation>>, ApiError> {
     let mut visible = Vec::new();
     for conversation in repository.list_conversations().await? {
-        if let Some(entity_id) = conversation.entity_id {
-            if !repository
+        if let Some(entity_id) = conversation.entity_id
+            && !repository
                 .is_authorized(user, workspace, "entities.read", Some(entity_id), None)
                 .await?
-            {
-                continue;
-            }
+        {
+            continue;
         }
         visible.push(conversation);
     }
@@ -217,13 +215,12 @@ pub(super) async fn search_conversations(
     };
     let mut items = Vec::new();
     for conversation in rows {
-        if let Some(entity_id) = conversation.entity_id {
-            if !repository
+        if let Some(entity_id) = conversation.entity_id
+            && !repository
                 .is_authorized(user, workspace, "entities.read", Some(entity_id), None)
                 .await?
-            {
-                continue;
-            }
+        {
+            continue;
         }
         items.push(conversation);
     }
@@ -242,6 +239,8 @@ pub(super) async fn get_conversation(
 }
 
 pub(super) async fn update_conversation(
+    AuthenticatedPrincipal(user, _): AuthenticatedPrincipal,
+    ActiveWorkspace(workspace): ActiveWorkspace,
     ScopedRepository(repository): ScopedRepository,
     ApiPath(conversation_id): ApiPath<Uuid>,
     ApiJson(input): ApiJson<UpdateConversation>,
@@ -251,6 +250,7 @@ pub(super) async fn update_conversation(
             "title must be at most 512 characters".into(),
         ));
     }
+    readable_conversation(&repository, user, workspace, conversation_id).await?;
     Ok(Json(
         repository
             .update_conversation_title(conversation_id, &input.title)
@@ -259,9 +259,12 @@ pub(super) async fn update_conversation(
 }
 
 pub(super) async fn delete_conversation(
+    AuthenticatedPrincipal(user, _): AuthenticatedPrincipal,
+    ActiveWorkspace(workspace): ActiveWorkspace,
     ScopedRepository(repository): ScopedRepository,
     ApiPath(conversation_id): ApiPath<Uuid>,
 ) -> Result<StatusCode, ApiError> {
+    readable_conversation(&repository, user, workspace, conversation_id).await?;
     repository.archive_conversation(conversation_id).await?;
     Ok(StatusCode::NO_CONTENT)
 }
@@ -345,14 +348,35 @@ pub(super) async fn send_message(
 }
 
 pub(super) async fn list_pending_approvals(
+    AuthenticatedPrincipal(user, _): AuthenticatedPrincipal,
+    ActiveWorkspace(workspace): ActiveWorkspace,
     ScopedRepository(repository): ScopedRepository,
     ApiQuery(query): ApiQuery<ApprovalQuery>,
 ) -> Result<Json<Vec<crate::repository::AgentToolCall>>, ApiError> {
-    Ok(Json(
-        repository
-            .pending_agent_tool_calls(query.conversation_id)
-            .await?,
-    ))
+    if let Some(id) = query.conversation_id {
+        readable_conversation(&repository, user, workspace, id).await?;
+    }
+    let calls = repository
+        .pending_agent_tool_calls(query.conversation_id)
+        .await?;
+    let mut visible = Vec::new();
+    for call in calls {
+        let run = repository.get_agent_run(call.run_id).await?;
+        let conversation = match repository.get_conversation(run.conversation_id).await {
+            Ok(conversation) => conversation,
+            Err(RepositoryError::NotFound(_)) => continue,
+            Err(error) => return Err(error.into()),
+        };
+        if let Some(entity_id) = conversation.entity_id
+            && !repository
+                .is_authorized(user, workspace, "entities.read", Some(entity_id), None)
+                .await?
+        {
+            continue;
+        }
+        visible.push(call);
+    }
+    Ok(Json(visible))
 }
 
 pub(super) async fn approve(
@@ -397,11 +421,13 @@ async fn decide_and_enqueue(
     workspace_id: Uuid,
     decision: ApprovalDecision,
 ) -> Result<Json<Value>, ApiError> {
+    let call = repository.get_agent_tool_call(tool_call_id).await?;
+    let run = repository.get_agent_run(call.run_id).await?;
+    readable_conversation(&repository, user, workspace_id, run.conversation_id).await?;
     let _ = configured(state)?;
     let call = repository
         .decide_tool_call(tool_call_id, user, decision)
         .await?;
-    let _ = workspace_id;
     Ok(Json(
         json!({"tool_call_id": call.id, "state": call.state, "run_id": call.run_id}),
     ))
@@ -410,11 +436,14 @@ async fn decide_and_enqueue(
 /// Streams durable events in sequence order. Event ids are database UUIDs, so a
 /// reconnecting client can use Last-Event-ID without relying on process memory.
 pub(super) async fn stream_events(
+    AuthenticatedPrincipal(user, _): AuthenticatedPrincipal,
+    ActiveWorkspace(workspace): ActiveWorkspace,
     ScopedRepository(repository): ScopedRepository,
     ApiPath(run_id): ApiPath<Uuid>,
     headers: HeaderMap,
 ) -> Result<Sse<impl tokio_stream::Stream<Item = Result<Event, Infallible>>>, ApiError> {
-    repository.get_agent_run(run_id).await?;
+    let run = repository.get_agent_run(run_id).await?;
+    readable_conversation(&repository, user, workspace, run.conversation_id).await?;
     let after = match headers
         .get("last-event-id")
         .and_then(|value| value.to_str().ok())

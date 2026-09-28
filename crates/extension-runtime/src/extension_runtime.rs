@@ -2658,7 +2658,13 @@ impl host_connector::catalog::host::transfer::Host for OperationState {
             if length == 0 { return Err("source returned an empty range".into()); }
             let object_key = artifact.object_key.as_deref().ok_or("source artifact has no key")?;
             self.object_store.put_file(object_key, &path, Some(&media)).await.map_err(|_| "transfer storage unavailable".to_owned())?;
-            self.repository.complete_extension_http_input(artifact.id, self.run_id, &input.transfer_key, &digest, etag.as_deref(), length as i64, &format!("{:x}",hash.finalize())).await
+            self.repository.complete_extension_http_input(artifact.id, self.run_id, crate::repository::CompletedHttpInput {
+                transfer_key: &input.transfer_key,
+                request_digest: &digest,
+                source_etag: etag.as_deref(),
+                length: length as i64,
+                sha256: &format!("{:x}",hash.finalize()),
+            }).await
                 .map_err(|error| error.to_string())?;
             bounded_serialize(&json!({"artifact_id":artifact.id,"etag":etag,"offset":input.offset,"length":length,"replayed":false}))
         }.await;
@@ -2791,12 +2797,10 @@ impl host_connector::catalog::host::catalog::Host for OperationState {
             .connector_run_scope(self.run_id)
             .await
             .map_err(|error| error.to_string())?
-        {
-            if (blueprint, context, version)
+            && (blueprint, context, version)
                 != (selected_blueprint, selected_context, selected_version)
-            {
-                return Err("connector schema is outside the host-selected job scope".into());
-            }
+        {
+            return Err("connector schema is outside the host-selected job scope".into());
         }
         host.repository
             .get_context_by_id(context)
@@ -2883,13 +2887,12 @@ impl host_connector::catalog::host::catalog::Host for OperationState {
                 .await
                 .map_err(|error| error.to_string())?
             {
-                if value.context_id == Some(context) {
-                    if let Some(attribute) = attributes
+                if value.context_id == Some(context)
+                    && let Some(attribute) = attributes
                         .iter()
                         .find(|attribute| attribute.id == value.attribute_id)
-                    {
-                        row.insert(attribute.code.clone(), value.value);
-                    }
+                {
+                    row.insert(attribute.code.clone(), value.value);
                 }
             }
             rows.push(row);
@@ -2918,13 +2921,11 @@ impl host_connector::catalog::host::catalog::Host for OperationState {
             .connector_run_scope(self.run_id)
             .await
             .map_err(|error| error.to_string())?
-        {
-            if direction != "import"
+            && (direction != "import"
                 || (input.blueprint_id, input.context_id, version)
-                    != (selected_blueprint, selected_context, selected_version)
-            {
-                return Err("connector upsert is outside the host-selected import scope".into());
-            }
+                    != (selected_blueprint, selected_context, selected_version))
+        {
+            return Err("connector upsert is outside the host-selected import scope".into());
         }
         let attrs = host
             .repository

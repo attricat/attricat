@@ -287,6 +287,7 @@ pub(super) async fn upload(
 pub(super) async fn upload_conversation(
     State(state): State<AppState>,
     super::auth::AuthenticatedPrincipal(user_id, _): super::auth::AuthenticatedPrincipal,
+    super::auth::ActiveWorkspace(workspace): super::auth::ActiveWorkspace,
     super::auth::ScopedRepository(repository): super::auth::ScopedRepository,
     ApiPath(conversation_id): ApiPath<Uuid>,
     mut multipart: Multipart,
@@ -296,7 +297,7 @@ pub(super) async fn upload_conversation(
         FileAccessOperation::ConversationUpload { conversation_id },
     )
     .await?;
-    repository.get_conversation(conversation_id).await?;
+    super::agents::readable_conversation(&repository, user_id, workspace, conversation_id).await?;
     let mut staged = Vec::new();
     while let Some(field) = multipart
         .next_field()

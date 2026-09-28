@@ -96,9 +96,8 @@ fn audit_permission(method: &Method, route: &str) -> &'static str {
         "entities.write"
     } else if route.starts_with("/solution-packs") || route.starts_with("/presentation-assets") {
         "solution_packs.manage"
-    } else if route.contains("connector-jobs") {
-        "extensions.manage"
-    } else if route.starts_with("/extension-registries")
+    } else if route.contains("connector-jobs")
+        || route.starts_with("/extension-registries")
         || route.starts_with("/extensions")
         || route.starts_with("/extension-operation-schedules")
     {

@@ -87,7 +87,9 @@ pub use extension_catalog_data::{
     MAX_EXTENSION_LOOKUP_VALUE_BYTES,
 };
 pub use extension_operation_artifacts::{ExtensionOperationArtifact, MAX_OPERATION_ARTIFACT_BYTES};
-pub use extension_operation_http_transfer::{DeliveryState, ExtensionHttpDelivery};
+pub use extension_operation_http_transfer::{
+    CompletedHttpInput, DeliveryState, ExtensionHttpDelivery,
+};
 pub use extension_operation_schedules::{
     CreateExtensionOperationSchedule, ExtensionOperationSchedule,
 };

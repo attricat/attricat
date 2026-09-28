@@ -86,7 +86,7 @@ impl CatalogRepository {
                         "SELECT id FROM attribute_contexts WHERE workspace_id=$1 AND code=$2",
                     )
                     .bind(ws)
-                    .bind(&code)
+                    .bind(code)
                     .fetch_optional(&mut **tx)
                     .await?
                     .ok_or_else(|| invalid("import context does not exist"))?,
@@ -233,11 +233,11 @@ impl CatalogRepository {
                 .bind(self.extension_workspace()).bind(id)
                 .bind(format!("job:{id}:{occurrence}:%"))
                 .fetch_one(&self.pool).await?;
-            if !other_active {
-                if let Err(error) = self.run_blueprint_connector_job(*id, &occurrence).await {
-                    tracing::warn!(job=%id, %error, "connector job occurrence could not be queued");
-                    continue;
-                }
+            if !other_active
+                && let Err(error) = self.run_blueprint_connector_job(*id, &occurrence).await
+            {
+                tracing::warn!(job=%id, %error, "connector job occurrence could not be queued");
+                continue;
             }
             let next = Utc::now() + Duration::seconds(i64::from(*interval));
             sqlx::query("UPDATE blueprint_connector_jobs SET next_at=$3,updated_at=clock_timestamp() WHERE id=$1 AND workspace_id=$2 AND next_at=$4")

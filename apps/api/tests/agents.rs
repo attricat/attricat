@@ -652,6 +652,191 @@ async fn agent_run_timeout_is_durably_failed_without_provider_details(pool: PgPo
 }
 
 #[sqlx::test]
+async fn entity_conversation_mutations_uploads_and_events_require_entity_read(pool: PgPool) {
+    let (base_url, server) = start_server(pool.clone()).await;
+    let owner = authenticated_client();
+    let blueprint = create_blueprint(
+        &owner,
+        &base_url,
+        "format_version = 1\ncode = 'conversation_access'\nname = 'Conversation access'\nkind = 'entity'\n\n[views.dropdown_option]\ntype = 'dropdown_option'\nfields = ['title']\n\n[[attributes]]\ncode = 'title'\nvalue_type = 'string'",
+    )
+    .await;
+    let entity = create_entity(&owner, &base_url, &blueprint).await;
+    let conversation: Value = owner
+        .post(format!("{base_url}/agent/conversations"))
+        .json(&json!({"entity_id": entity["id"], "title": "Private discussion"}))
+        .send()
+        .await
+        .unwrap()
+        .error_for_status()
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    let conversation_id = conversation["id"]
+        .as_str()
+        .unwrap()
+        .parse::<Uuid>()
+        .unwrap();
+    let workspace = BOOTSTRAP_WORKSPACE_ID.parse::<Uuid>().unwrap();
+    let run_id = Uuid::new_v4();
+    sqlx::query("INSERT INTO agent_runs (id, workspace_id, conversation_id, origin, status, provider_base_url, model, finished_at) VALUES ($1, $2, $3, 'manual', 'skipped', 'https://provider.test/v1', 'test', now())")
+        .bind(run_id).bind(workspace).bind(conversation_id).execute(&pool).await.unwrap();
+    let call_id = Uuid::new_v4();
+    sqlx::query("INSERT INTO agent_tool_calls (id, run_id, sequence, tool_name, arguments, state) VALUES ($1, $2, 0, 'test', '{}', 'pending_approval')")
+        .bind(call_id).bind(run_id).execute(&pool).await.unwrap();
+
+    let actor = Uuid::new_v4();
+    sqlx::query("INSERT INTO users (id, email) VALUES ($1, $2)")
+        .bind(actor)
+        .bind(format!("{actor}@example.test"))
+        .execute(&pool)
+        .await
+        .unwrap();
+    let membership = Uuid::new_v4();
+    sqlx::query(
+        "INSERT INTO workspace_memberships (id, workspace_id, user_id) VALUES ($1, $2, $3)",
+    )
+    .bind(membership)
+    .bind(workspace)
+    .bind(actor)
+    .execute(&pool)
+    .await
+    .unwrap();
+    let repository = CatalogRepository::system(pool.clone())
+        .for_workspace(workspace)
+        .await
+        .unwrap();
+    let role = repository
+        .create_workspace_role(
+            BOOTSTRAP_OWNER_ID.parse().unwrap(),
+            workspace,
+            "conversation-agent-only",
+            &["agents.run".to_owned()],
+        )
+        .await
+        .unwrap();
+    repository
+        .grant_workspace_member_role(
+            BOOTSTRAP_OWNER_ID.parse().unwrap(),
+            workspace,
+            membership,
+            role,
+            "workspace",
+            workspace,
+        )
+        .await
+        .unwrap();
+    let client = reqwest::Client::builder()
+        .default_headers(reqwest::header::HeaderMap::from_iter([
+            (
+                "x-catalog-user-id".parse().unwrap(),
+                actor.to_string().parse().unwrap(),
+            ),
+            (
+                "x-catalog-workspace-id".parse().unwrap(),
+                workspace.to_string().parse().unwrap(),
+            ),
+        ]))
+        .build()
+        .unwrap();
+    let conversation_url = format!("{base_url}/agent/conversations/{conversation_id}");
+    let rename = client
+        .patch(&conversation_url)
+        .json(&json!({"title": "Changed"}))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(rename.status(), reqwest::StatusCode::FORBIDDEN);
+    let delete = client.delete(&conversation_url).send().await.unwrap();
+    assert_eq!(delete.status(), reqwest::StatusCode::FORBIDDEN);
+    let upload = client
+        .post(format!("{conversation_url}/uploads"))
+        .multipart(Form::new().part("file", Part::bytes(b"hello".to_vec()).file_name("note.txt")))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(upload.status(), reqwest::StatusCode::FORBIDDEN);
+    let events = client
+        .get(format!("{base_url}/agent/runs/{run_id}/events"))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(events.status(), reqwest::StatusCode::FORBIDDEN);
+    let approvals: Value = client
+        .get(format!("{base_url}/agent/approvals"))
+        .send()
+        .await
+        .unwrap()
+        .error_for_status()
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    assert_eq!(approvals, json!([]));
+    let scoped_approvals = client
+        .get(format!(
+            "{base_url}/agent/approvals?conversation_id={conversation_id}"
+        ))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(scoped_approvals.status(), reqwest::StatusCode::FORBIDDEN);
+    let owner_approvals: Value = owner
+        .get(format!("{base_url}/agent/approvals"))
+        .send()
+        .await
+        .unwrap()
+        .error_for_status()
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    assert_eq!(owner_approvals[0]["id"], call_id.to_string());
+    for action in ["approve", "reject"] {
+        let decision = client
+            .post(format!("{base_url}/agent/tool-calls/{call_id}/{action}"))
+            .send()
+            .await
+            .unwrap();
+        assert_eq!(decision.status(), reqwest::StatusCode::FORBIDDEN);
+    }
+    let unchanged: Value = owner
+        .get(&conversation_url)
+        .send()
+        .await
+        .unwrap()
+        .error_for_status()
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    assert_eq!(unchanged["title"], "Private discussion");
+    let renamed: Value = owner
+        .patch(&conversation_url)
+        .json(&json!({"title": "Owner discussion"}))
+        .send()
+        .await
+        .unwrap()
+        .error_for_status()
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    assert_eq!(renamed["title"], "Owner discussion");
+    assert_eq!(
+        owner
+            .delete(&conversation_url)
+            .send()
+            .await
+            .unwrap()
+            .status(),
+        reqwest::StatusCode::NO_CONTENT
+    );
+    server.abort();
+}
+
+#[sqlx::test]
 async fn agent_read_tools_enforce_initiator_permissions_and_scopes(pool: PgPool) {
     let (base_url, server) = start_server(pool.clone()).await;
     let owner = authenticated_client();

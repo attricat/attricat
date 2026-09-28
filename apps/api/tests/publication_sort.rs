@@ -106,10 +106,6 @@ value_type = "string""#,
         assert_eq!(found.len(), 3);
         if channel == "pub_sort_web" && direction == "asc" {
             assert_eq!(found[0], second["id"]);
-        } else if channel == "pub_sort_app" {
-            assert_eq!(found[2], second["id"]);
-            assert!(found[..2].contains(&first["id"]));
-            assert!(found[..2].contains(&third["id"]));
         } else {
             assert_eq!(found[2], second["id"]);
             assert!(found[..2].contains(&first["id"]));

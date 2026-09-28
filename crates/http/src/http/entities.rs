@@ -234,14 +234,12 @@ pub(super) async fn smart_fill_entity_form(
                     && file.byte_size >= 0
                     && (file.byte_size as usize) <= remaining_attachment_bytes
                 {
-                    if let Ok(object) = state.object_store.get(&file.object_key).await {
-                        if object.bytes.len() <= remaining_attachment_bytes {
-                            if let Ok(text) = std::str::from_utf8(&object.bytes) {
-                                remaining_attachment_bytes -= object.bytes.len();
-                                prior_files
-                                    .push(json!({"filename":file.display_filename,"text":text}));
-                            }
-                        }
+                    if let Ok(object) = state.object_store.get(&file.object_key).await
+                        && object.bytes.len() <= remaining_attachment_bytes
+                        && let Ok(text) = std::str::from_utf8(&object.bytes)
+                    {
+                        remaining_attachment_bytes -= object.bytes.len();
+                        prior_files.push(json!({"filename":file.display_filename,"text":text}));
                     }
                 } else {
                     prior_files.push(json!({"filename":file.display_filename,"note":"Reattach this file if its contents are needed."}));

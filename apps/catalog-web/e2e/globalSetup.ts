@@ -243,7 +243,8 @@ export default async () => {
     S3_SECRET_ACCESS_KEY: 'catalog-e2e-secret',
     S3_FORCE_PATH_STYLE: 'true',
     S3_UPLOAD_TIMEOUT_SECONDS: '30',
-    S3_DOWNLOAD_TIMEOUT_SECONDS: '30',
+    // A cold WASM artifact fetch can exceed the production timeout on Colima.
+    S3_DOWNLOAD_TIMEOUT_SECONDS: '120',
     DATABASE_URL: database.getConnectionUri(),
     CATALOG_BOOTSTRAP_OWNER_ID: bootstrapOwnerId,
     CATALOG_BOOTSTRAP_OWNER_EMAIL: bootstrapOwnerEmail,
@@ -251,6 +252,8 @@ export default async () => {
     SESSION_COOKIE_SECURE: 'false',
     SMTP_HOST: '127.0.0.1',
     SMTP_PORT: e2eMailpitSmtpPort,
+    SMTP_TLS_MODE: 'disabled',
+    HTTP_REQUEST_TIMEOUT_SECONDS: '120',
     PASSWORD_RESET_URL: `${e2eWebUrl}/password-reset/confirm`,
     WORKSPACE_ONBOARDING_URL: `${e2eWebUrl}/onboarding`,
   });

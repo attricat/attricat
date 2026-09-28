@@ -789,6 +789,13 @@ impl CatalogRepository {
             .bind(conversation_id).bind(self.workspace_id.unwrap_or(Self::DEFAULT_WORKSPACE_ID)).fetch_all(&self.pool).await?)
     }
 
+    pub async fn get_agent_tool_call(&self, id: Uuid) -> Result<AgentToolCall, RepositoryError> {
+        sqlx::query_as("SELECT call.id, call.run_id, call.sequence, call.provider_call_id, call.tool_name, call.arguments, call.change_summary, call.result, call.error, call.state, call.decided_by_user_id, call.decided_at, call.created_at, call.completed_at FROM agent_tool_calls call JOIN agent_runs run ON run.id = call.run_id WHERE call.id = $1 AND run.workspace_id = $2")
+            .bind(id).bind(self.workspace_id.unwrap_or(Self::DEFAULT_WORKSPACE_ID))
+            .fetch_optional(&self.pool).await?
+            .ok_or(RepositoryError::NotFound("agent tool call"))
+    }
+
     pub async fn pending_agent_tool_calls(
         &self,
         conversation_id: Option<Uuid>,

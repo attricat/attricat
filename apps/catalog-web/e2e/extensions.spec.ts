@@ -11,7 +11,8 @@ import {
 test('side-loads the example extension and recalculates a blueprint formula', async ({
   page,
 }) => {
-  test.setTimeout(90_000);
+  // The first invocation fetches and compiles the packaged WASM on a cold host.
+  test.setTimeout(180_000);
   const archive = process.env.CATALOG_E2E_EXAMPLE_EXTENSION_ARCHIVE;
   if (!archive) throw new Error('E2E example extension archive is unavailable');
 
@@ -108,11 +109,11 @@ price_gross = "price_net * (1 + 0.23)"`,
         const preview = await request<{
           values: Record<string, { value: unknown }>;
         }>(`/entities/${entity.id}/resolved-preview?context_id=${context.id}`);
-        return Object.values(preview.values).some(({ value }) => value === 123);
+        return Object.values(preview.values).map(({ value }) => value);
       },
-      { timeout: 45_000 },
+      { timeout: 120_000 },
     )
-    .toBe(true);
+    .toContain(123);
 
   await page.goto('/');
   await page.getByLabel('Select a Blueprint').click();

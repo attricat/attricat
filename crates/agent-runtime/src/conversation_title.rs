@@ -90,13 +90,11 @@ pub async fn maybe_generate_title(
                 .first()
                 .and_then(|choice| choice.message.content.as_deref())
                 .and_then(normalize_title)
-            {
-                if let Err(error) = repository
+                && let Err(error) = repository
                     .set_generated_conversation_title(conversation_id, &title)
                     .await
-                {
-                    tracing::warn!(%conversation_id, %error, "conversation title could not be saved");
-                }
+            {
+                tracing::warn!(%conversation_id, %error, "conversation title could not be saved");
             }
         }
         Err(error) => {
