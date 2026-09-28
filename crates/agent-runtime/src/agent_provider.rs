@@ -24,6 +24,7 @@ pub struct OpenAiCompatibleClient {
     base_url: Url,
     api_key: String,
     model: String,
+    reasoning_effort: Option<String>,
 }
 
 #[derive(Clone, Debug, Serialize)]
@@ -38,6 +39,8 @@ pub struct ChatMessage {
 #[derive(Clone, Debug, Serialize)]
 pub struct ChatRequest {
     pub model: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub reasoning_effort: Option<String>,
     pub messages: Vec<ChatMessage>,
     pub tools: Vec<ToolDefinition>,
     /// Agent approvals are sequential, so a response must contain at most one
@@ -98,6 +101,7 @@ impl OpenAiCompatibleClient {
             base_url: config.base_url.clone(),
             api_key: config.api_key().to_owned(),
             model: config.model.clone(),
+            reasoning_effort: config.reasoning_effort.clone(),
         })
     }
     pub async fn complete(
@@ -112,6 +116,7 @@ impl OpenAiCompatibleClient {
             .bearer_auth(&self.api_key)
             .json(&ChatRequest {
                 model: self.model.clone(),
+                reasoning_effort: self.reasoning_effort.clone(),
                 messages,
                 tools,
                 parallel_tool_calls: false,
@@ -157,6 +162,7 @@ impl OpenAiCompatibleClient {
             .bearer_auth(&self.api_key)
             .json(&ChatRequest {
                 model: self.model.clone(),
+                reasoning_effort: self.reasoning_effort.clone(),
                 messages,
                 tools,
                 parallel_tool_calls: false,
@@ -430,15 +436,37 @@ mod tests {
     fn disables_parallel_tool_calls_in_provider_requests() {
         let request = ChatRequest {
             model: "test".into(),
+            reasoning_effort: None,
             messages: vec![],
             tools: vec![],
             parallel_tool_calls: false,
             stream: true,
         };
-        assert_eq!(
-            serde_json::to_value(request).unwrap()["parallel_tool_calls"],
-            false
-        );
+        let body = serde_json::to_value(request).unwrap();
+        assert_eq!(body["parallel_tool_calls"], false);
+        assert!(body.get("reasoning_effort").is_none());
+    }
+
+    #[test]
+    fn includes_configured_reasoning_effort() {
+        let config = AgentProviderConfig::from_values(|name| match name {
+            "LLM_API_KEY" => Some("test-key".to_owned()),
+            "LLM_REASONING_EFFORT" => Some("none".to_owned()),
+            _ => None,
+        })
+        .unwrap()
+        .unwrap();
+        let client = OpenAiCompatibleClient::new(&config).unwrap();
+        let body = serde_json::to_value(ChatRequest {
+            model: client.model.clone(),
+            reasoning_effort: client.reasoning_effort.clone(),
+            messages: vec![],
+            tools: vec![],
+            parallel_tool_calls: false,
+            stream: true,
+        })
+        .unwrap();
+        assert_eq!(body["reasoning_effort"], "none");
     }
 
     #[test]

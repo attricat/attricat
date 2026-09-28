@@ -4,6 +4,7 @@ import {
   AccordionSummary,
   Box,
   Chip,
+  Link,
   Stack,
   Typography,
 } from '@mui/material';
@@ -57,6 +58,11 @@ const ToolCall = ({ call }: { call: unknown }) => {
   );
 };
 
+const entityPreviewPath = /^\/entities\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const savedSearchPath = /^\/\?savedView=[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const isCatalogLink = (url: string) =>
+  entityPreviewPath.test(url) || savedSearchPath.test(url);
+
 const ToolResult = ({ content }: { content: Record<string, unknown> }) => {
   const { t } = useTranslation();
   const name =
@@ -69,6 +75,17 @@ const ToolResult = ({ content }: { content: Record<string, unknown> }) => {
         <Chip color="success" label={t('agents.toolResult')} size="small" />
         <Typography variant="body2">{name}</Typography>
       </Stack>
+      {isRecord(result) &&
+        typeof result.url === 'string' &&
+        isCatalogLink(result.url) && (
+          <Link href={result.url} target="_blank" rel="noopener noreferrer">
+            {typeof result.name === 'string'
+              ? result.name
+              : typeof result.entity_id === 'string'
+                ? result.entity_id
+                : result.url}
+          </Link>
+        )}
       <JsonDetails label={t('agents.showResultJson')}>{result}</JsonDetails>
     </Stack>
   );
@@ -115,7 +132,20 @@ export const ConversationMessageContent = ({
   if (typeof content === 'string' && messageRole === 'assistant') {
     return (
       <Box sx={markdownStyles}>
-        <ReactMarkdown>{content}</ReactMarkdown>
+        <ReactMarkdown
+          components={{
+            a: ({ href, children }) =>
+              href && isCatalogLink(href) ? (
+                <Link href={href} target="_blank" rel="noopener noreferrer">
+                  {children}
+                </Link>
+              ) : (
+                <a href={href}>{children}</a>
+              ),
+          }}
+        >
+          {content}
+        </ReactMarkdown>
       </Box>
     );
   }

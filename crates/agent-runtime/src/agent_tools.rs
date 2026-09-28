@@ -78,6 +78,11 @@ pub fn definitions() -> Vec<ToolDefinition> {
             json!({"type":"object","required":["entity_id"],"properties":{"entity_id":{"type":"string","format":"uuid"}},"additionalProperties":false}),
         ),
         definition(
+            "get_entity_preview_link",
+            "Get a navigable link to an existing entity's preview page. Use this for each entity you cite; return the link in your answer. The link is relative to the Attricat web app.",
+            json!({"type":"object","required":["entity_id"],"properties":{"entity_id":{"type":"string","format":"uuid"}},"additionalProperties":false}),
+        ),
+        definition(
             "view_image",
             "View an image file linked to an entity. Use get_entity first to find its file ID. The image is supplied to the model as a bounded display image.",
             json!({"type":"object","required":["file_id"],"properties":{"file_id":{"type":"string","format":"uuid"}},"additionalProperties":false}),
@@ -153,6 +158,11 @@ pub fn definitions() -> Vec<ToolDefinition> {
             json!({"type":"object","required":["entity_id","attribute_code","file_id"],"properties":{"entity_id":{"type":"string","format":"uuid"},"attribute_code":{"type":"string"},"file_id":{"type":"string","format":"uuid"},"context_id":{"type":["string","null"],"format":"uuid"}},"additionalProperties":false}),
         ),
         definition(
+            "create_saved_search",
+            "Save a named Explorer search for the initiating user. Find the blueprint code with list_blueprints first. The search is private unless visibility is workspace. This change requires approval. Return the saved search link to the user.",
+            json!({"type":"object","required":["name","blueprint"],"properties":{"name":{"type":"string"},"description":{"type":"string"},"visibility":{"type":"string","enum":["private","workspace"]},"blueprint":{"type":"string"},"version":{"type":"integer","minimum":1},"all_versions":{"type":"boolean"},"query":{"type":"string"}},"additionalProperties":false}),
+        ),
+        definition(
             "create_context",
             "Create an attribute context. This change requires approval.",
             json!({"type":"object","required":["code","data"],"properties":{"code":{"type":"string"},"data":{"type":"object"},"parent_id":{"type":"string","format":"uuid"}},"additionalProperties":false}),
@@ -177,6 +187,7 @@ pub fn kind(name: &str) -> Result<ToolKind, ToolError> {
         | "list_blueprints"
         | "list_contexts"
         | "get_entity"
+        | "get_entity_preview_link"
         | "view_image"
         | "read_file"
         | "search_entities"
@@ -190,6 +201,7 @@ pub fn kind(name: &str) -> Result<ToolKind, ToolError> {
         | "migrate_entity"
         | "link_file"
         | "create_context"
+        | "create_saved_search"
         | "publish_entity"
         | "unpublish_entity"
         | "publish_entity_to_all_channels" => Ok(ToolKind::Mutation),
@@ -258,6 +270,15 @@ pub fn change_summary(name: &str, arguments: &Value) -> Result<String, ToolError
             "Create attribute context '{}'.",
             required_string(arguments, "code")?
         )),
+        "create_saved_search" => Ok(format!(
+            "Save {} Explorer search '{}' for blueprint '{}'.",
+            arguments
+                .get("visibility")
+                .and_then(Value::as_str)
+                .unwrap_or("private"),
+            required_string(arguments, "name")?,
+            required_string(arguments, "blueprint")?,
+        )),
         _ => Err(ToolError::UnknownTool(name.to_owned())),
     }
 }
@@ -293,6 +314,14 @@ pub async fn execute_read(
                 .await?,
         )
         .expect("publication status serializes"),
+        "get_entity_preview_link" => {
+            let id = parse_uuid(&arguments, "entity_id")?;
+            repository
+                .get_entity(id)
+                .await?
+                .ok_or(RepositoryError::NotFound("entity"))?;
+            json!({"entity_id": id, "url": format!("/entities/{id}"), "label": "Entity preview"})
+        }
         "get_entity" => {
             let id = parse_uuid(&arguments, "entity_id")?;
             let (entity, values) = CatalogReadService::new(repository)
@@ -551,6 +580,7 @@ pub async fn execute_read(
 
 pub async fn execute_mutation(
     repository: &CatalogRepository,
+    actor: Uuid,
     name: &str,
     arguments: Value,
 ) -> Result<Value, ToolError> {
@@ -763,6 +793,73 @@ pub async fn execute_mutation(
             )
             .expect("file metadata serializes")
         }
+        "create_saved_search" => {
+            #[derive(Deserialize)]
+            #[serde(deny_unknown_fields)]
+            struct Input {
+                name: String,
+                blueprint: String,
+                description: Option<String>,
+                visibility: Option<String>,
+                version: Option<i64>,
+                #[serde(default)]
+                all_versions: bool,
+                query: Option<String>,
+            }
+            let input: Input = decode(arguments)?;
+            let name = input.name.trim();
+            let blueprint = input.blueprint.trim();
+            let visibility = input.visibility.as_deref().unwrap_or("private");
+            if name.is_empty()
+                || name.len() > 120
+                || blueprint.is_empty()
+                || blueprint.len() > 256
+                || !matches!(visibility, "private" | "workspace")
+                || input.description.as_ref().is_some_and(|s| s.len() > 500)
+                || input.version.is_some_and(|v| v <= 0)
+                || (input.version.is_some() && input.all_versions)
+                || input.query.as_ref().is_some_and(|q| q.len() > 4096)
+            {
+                return Err(ToolError::InvalidArguments(
+                    "invalid saved search input".to_owned(),
+                ));
+            }
+            repository
+                .get_blueprint_by_code(blueprint)
+                .await?
+                .ok_or(RepositoryError::NotFound("blueprint"))?;
+            if let Some(version) = input.version {
+                repository
+                    .get_published_blueprint_by_code_and_version(blueprint, version)
+                    .await?
+                    .ok_or(RepositoryError::NotFound("published blueprint version"))?;
+            }
+            let mut state = json!({"blueprint": blueprint});
+            if let Some(version) = input.version {
+                state["version"] = json!(version);
+            }
+            if input.all_versions {
+                state["allVersions"] = json!(true);
+            }
+            if let Some(query) = input
+                .query
+                .as_deref()
+                .map(str::trim)
+                .filter(|q| !q.is_empty())
+            {
+                state["query"] = json!(query);
+            }
+            let view = repository
+                .create_saved_view(
+                    actor,
+                    Some(name),
+                    input.description.as_deref(),
+                    visibility,
+                    &state,
+                )
+                .await?;
+            json!({"id": view.id, "name": view.name, "url": format!("/?savedView={}", view.id), "visibility": view.visibility})
+        }
         "create_context" => {
             let input: CreateAttributeContext = decode(arguments)?;
             serde_json::to_value(
@@ -941,7 +1038,7 @@ async fn read_authorized(
         "blueprint_authoring_guide" => return Ok(true),
         "list_blueprints" => ("blueprints.read", None, None),
         "list_contexts" => ("contexts.read", None, Some("__context_list__")),
-        "get_entity" | "get_entity_publications" => (
+        "get_entity" | "get_entity_preview_link" | "get_entity_publications" => (
             "entities.read",
             Some(parse_uuid(arguments, "entity_id")?),
             None,
@@ -1029,7 +1126,9 @@ mod tests {
     fn classifies_every_write_as_an_approval_required_mutation() {
         assert_eq!(kind("list_blueprints").unwrap(), ToolKind::Read);
         assert_eq!(kind("search_entities").unwrap(), ToolKind::Read);
+        assert_eq!(kind("get_entity_preview_link").unwrap(), ToolKind::Read);
         for name in [
+            "create_saved_search",
             "create_entity",
             "delete_entity",
             "set_entity_values",
@@ -1039,6 +1138,14 @@ mod tests {
             assert_eq!(kind(name).unwrap(), ToolKind::Mutation);
         }
         assert!(matches!(kind("fetch_url"), Err(ToolError::UnknownTool(_))));
+        assert_eq!(
+            change_summary(
+                "create_saved_search",
+                &json!({"name":"Spring","blueprint":"product"})
+            )
+            .unwrap(),
+            "Save private Explorer search 'Spring' for blueprint 'product'."
+        );
     }
 
     #[test]

@@ -28,6 +28,7 @@ or inaccessible configured bucket.
 | `LLM_API_KEY` | Unset (agents unavailable) | API only | Secret API key for the OpenAI-compatible provider. Never send, persist, or log it. |
 | `LLM_BASE_URL` | `https://api.openai.com/v1` | API only | Absolute HTTP(S) base URL for OpenAI-compatible Chat Completions. |
 | `LLM_MODEL` | `gpt-4o-mini` | API only | Provider model identifier captured on each run, never a browser-selected setting. |
+| `LLM_REASONING_EFFORT` | Unset | API only | Optional Chat Completions `reasoning_effort` value sent on every agent provider request when configured. Use a value supported by your provider/model (for example, `none` for models that reject function tools with reasoning enabled); omitted by default for providers that do not support it. This does not switch the adapter to the Responses API. |
 | `LLM_REQUEST_TIMEOUT_SECONDS` | `60` | API only | Per-provider-request timeout, 1–3600 seconds. |
 | `LLM_RUN_TIMEOUT_SECONDS` | `300` | API only | Total agent-run timeout, 1–3600 seconds. |
 | `PREVIEW_MAX_RELATIONSHIP_DEPTH` | `3` | API | Maximum recursive relationship preview depth. |

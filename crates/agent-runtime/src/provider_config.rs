@@ -22,6 +22,7 @@ pub struct AgentProviderConfig {
     api_key: SecretString,
     pub base_url: Url,
     pub model: String,
+    pub reasoning_effort: Option<String>,
     pub request_timeout: Duration,
     pub run_timeout: Duration,
 }
@@ -55,10 +56,17 @@ impl AgentProviderConfig {
         if model.trim().is_empty() || model.len() > MAX_AGENT_MODEL_BYTES {
             return Err(AgentConfigError::InvalidModel);
         }
+        let reasoning_effort = value("LLM_REASONING_EFFORT").filter(|effort| !effort.is_empty());
+        if reasoning_effort.as_ref().is_some_and(|effort| {
+            effort.trim() != effort || effort.len() > 64 || effort.chars().any(char::is_whitespace)
+        }) {
+            return Err(AgentConfigError::InvalidReasoningEffort);
+        }
         Ok(Some(Self {
             api_key: SecretString::from(api_key),
             base_url,
             model,
+            reasoning_effort,
             request_timeout: duration_value(
                 &value,
                 "LLM_REQUEST_TIMEOUT_SECONDS",
@@ -102,6 +110,8 @@ pub enum AgentConfigError {
     InvalidBaseUrl,
     #[error("LLM_MODEL must be non-empty and at most 512 characters")]
     InvalidModel,
+    #[error("LLM_REASONING_EFFORT must be a single token of at most 64 characters")]
+    InvalidReasoningEffort,
     #[error("{0} must be an integer between 1 and 3600 seconds")]
     InvalidDuration(&'static str),
 }
@@ -136,6 +146,15 @@ mod tests {
         .unwrap();
         assert_eq!(configured.base_url.as_str(), "https://api.openai.com/v1/");
         assert_eq!(configured.model, DEFAULT_LLM_MODEL);
+        assert_eq!(configured.reasoning_effort, None);
+        let configured = AgentProviderConfig::from_values(|name| match name {
+            "LLM_API_KEY" => Some("secret".to_owned()),
+            "LLM_REASONING_EFFORT" => Some("none".to_owned()),
+            _ => None,
+        })
+        .unwrap()
+        .unwrap();
+        assert_eq!(configured.reasoning_effort.as_deref(), Some("none"));
         for (name, value, expected) in [
             (
                 "LLM_BASE_URL",
@@ -143,6 +162,11 @@ mod tests {
                 AgentConfigError::InvalidBaseUrl,
             ),
             ("LLM_MODEL", " ", AgentConfigError::InvalidModel),
+            (
+                "LLM_REASONING_EFFORT",
+                "not valid",
+                AgentConfigError::InvalidReasoningEffort,
+            ),
             (
                 "LLM_REQUEST_TIMEOUT_SECONDS",
                 "0",
