@@ -388,6 +388,20 @@ impl CatalogRepository {
         let ws = self.workspace_id.unwrap_or(Self::DEFAULT_WORKSPACE_ID);
         Ok(sqlx::query_as::<_, Db<RuleFinding>>("SELECT id,rule_id,rule_version,entity_id,context_id,severity,message,evidence,state,acknowledged_at,resolved_at,created_at,updated_at FROM rule_findings WHERE workspace_id=$1 AND ($2::uuid IS NULL OR entity_id=$2) ORDER BY updated_at DESC").bind(ws).bind(entity_id).fetch_all(&self.pool).await?.into_domain())
     }
+    pub async fn rule_findings_page(
+        &self,
+        entity_id: Option<Uuid>,
+        limit: i64,
+        offset: i64,
+    ) -> Result<(Vec<RuleFinding>, bool), RepositoryError> {
+        let ws = self.workspace_id.unwrap_or(Self::DEFAULT_WORKSPACE_ID);
+        let mut rows = sqlx::query_as::<_, Db<RuleFinding>>("SELECT id,rule_id,rule_version,entity_id,context_id,severity,message,evidence,state,acknowledged_at,resolved_at,created_at,updated_at FROM rule_findings WHERE workspace_id=$1 AND ($2::uuid IS NULL OR entity_id=$2) ORDER BY updated_at DESC,id DESC LIMIT $3 OFFSET $4")
+            .bind(ws).bind(entity_id).bind(limit + 1).bind(offset).fetch_all(&self.pool).await?;
+        let has_more = rows.len() as i64 > limit;
+        rows.truncate(limit as usize);
+        Ok((rows.into_domain(), has_more))
+    }
+
     pub async fn acknowledge_rule_finding(&self, id: Uuid) -> Result<RuleFinding, RepositoryError> {
         let ws = self.workspace_id.unwrap_or(Self::DEFAULT_WORKSPACE_ID);
         let actor = self

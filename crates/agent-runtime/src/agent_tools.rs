@@ -13,7 +13,9 @@ use crate::{
     agents::MAX_TOOL_RESULT_BYTES,
     catalog_read_service::CatalogReadService,
     catalog_service::CatalogMutationService,
-    constants::{DEFAULT_ENTITY_PAGE_SIZE, DEFAULT_PAGE_SIZE},
+    constants::{
+        DEFAULT_ENTITY_PAGE_SIZE, DEFAULT_PAGE_SIZE, DEFAULT_STALE_AFTER_DAYS, MAX_STALE_AFTER_DAYS,
+    },
     file_access::{AllowFileAccess, FileAccessOperation, authorize_file_read},
     repository::{CatalogRepository, EntitySearchSort, RepositoryError},
     search_filters::{intersect_ids, resolve_agent_filter, resolve_agent_relationship_filter},
@@ -123,6 +125,21 @@ pub fn definitions() -> Vec<ToolDefinition> {
             "get_value_history",
             "Read a bounded page of an entity's retained prior attribute values. Inspect current values before restoring a history ID; use next_offset to continue.",
             history_page_parameters(),
+        ),
+        definition(
+            "data_health_summary",
+            "Read workspace-level entity, blueprint, freshness and relationship health counts. Requires data_health.read.",
+            json!({"type":"object","properties":{"stale_after_days":{"type":"integer","minimum":1,"maximum":MAX_STALE_AFTER_DAYS}},"additionalProperties":false}),
+        ),
+        definition(
+            "list_rule_findings",
+            "Read a bounded page of rule findings without raw evidence; optionally filter by entity ID. Requires rules.read.",
+            diagnostic_page_parameters(true),
+        ),
+        definition(
+            "list_workflow_runs",
+            "Read a bounded page of workflow run status and attempt counts without event payloads or error bodies. Requires workflows.read.",
+            diagnostic_page_parameters(false),
         ),
         definition(
             "get_entity_preview_link",
@@ -257,6 +274,31 @@ pub fn definitions() -> Vec<ToolDefinition> {
     ]
 }
 
+fn diagnostic_page_parameters(entity_filter: bool) -> Value {
+    let mut properties = json!({
+        "limit":{"type":"integer","minimum":1,"maximum":25},
+        "offset":{"type":"integer","minimum":0,"maximum":10000}
+    });
+    if entity_filter {
+        properties["entity_id"] = json!({"type":"string","format":"uuid"});
+    }
+    json!({"type":"object","properties":properties,"additionalProperties":false})
+}
+
+fn diagnostic_page_arguments(
+    limit: Option<i64>,
+    offset: Option<i64>,
+) -> Result<(i64, i64), ToolError> {
+    let limit = limit.unwrap_or(10);
+    let offset = offset.unwrap_or(0);
+    if !(1..=25).contains(&limit) || !(0..=10000).contains(&offset) {
+        return Err(ToolError::InvalidArguments(
+            "limit must be 1-25 and offset must be 0-10000".into(),
+        ));
+    }
+    Ok((limit, offset))
+}
+
 fn history_page_parameters() -> Value {
     json!({"type":"object","required":["entity_id"],"properties":{
         "entity_id":{"type":"string","format":"uuid"},
@@ -322,6 +364,9 @@ pub fn kind(name: &str) -> Result<ToolKind, ToolError> {
         | "get_entity_context_preview"
         | "get_entity_changes"
         | "get_value_history"
+        | "data_health_summary"
+        | "list_rule_findings"
+        | "list_workflow_runs"
         | "get_entity_preview_link"
         | "view_image"
         | "read_file"
@@ -569,6 +614,48 @@ pub async fn execute_read(
                 let (items, has_more) = repository.value_history_page(entity_id, limit, offset).await?;
                 json!({"items":items,"next_offset":next_history_offset(has_more, offset, limit)})
             }
+        }
+        "data_health_summary" => {
+            #[derive(Deserialize)]
+            #[serde(deny_unknown_fields)]
+            struct Input { stale_after_days: Option<u16> }
+            let input: Input = decode(arguments)?;
+            let days = input.stale_after_days.unwrap_or(DEFAULT_STALE_AFTER_DAYS);
+            if !(1..=MAX_STALE_AFTER_DAYS).contains(&days) {
+                return Err(ToolError::InvalidArguments("stale_after_days must be 1-3650".into()));
+            }
+            serde_json::to_value(repository.data_health_summary(i64::from(days)).await?)
+                .expect("health summary serializes")
+        }
+        "list_rule_findings" => {
+            #[derive(Deserialize)]
+            #[serde(deny_unknown_fields)]
+            struct Input { entity_id: Option<Uuid>, limit: Option<i64>, offset: Option<i64> }
+            let input: Input = decode(arguments)?;
+            let (limit, offset) = diagnostic_page_arguments(input.limit, input.offset)?;
+            let (items, has_more) = repository.rule_findings_page(input.entity_id, limit, offset).await?;
+            json!({"items":items.into_iter().map(|finding| json!({
+                "id":finding.id,"rule_id":finding.rule_id,"entity_id":finding.entity_id,
+                "context_id":finding.context_id,"severity":finding.severity,
+                "state":finding.state,"message":finding.message.chars().take(512).collect::<String>(),
+                "updated_at":finding.updated_at
+            })).collect::<Vec<_>>(),
+                "next_offset":next_history_offset(has_more, offset, limit)})
+        }
+        "list_workflow_runs" => {
+            #[derive(Deserialize)]
+            #[serde(deny_unknown_fields)]
+            struct Input { limit: Option<i64>, offset: Option<i64> }
+            let input: Input = decode(arguments)?;
+            let (limit, offset) = diagnostic_page_arguments(input.limit, input.offset)?;
+            let (items, has_more) = repository.workflow_runs_page(limit, offset).await?;
+            json!({"items":items.into_iter().map(|run| json!({
+                "id":run.id,"workflow_id":run.workflow_id,"workflow_version":run.workflow_version,
+                "source":run.source,"status":run.status,"attempts":run.attempts,
+                "created_at":run.created_at,"completed_at":run.completed_at,
+                "failed_at":run.failed_at,"has_error":run.last_error.is_some()
+            })).collect::<Vec<_>>(),
+                "next_offset":next_history_offset(has_more, offset, limit)})
         }
         "get_entity_preview_link" => {
             let id = parse_uuid(&arguments, "entity_id")?;
@@ -1714,6 +1801,9 @@ async fn read_authorized(
         // This is static product documentation, not workspace catalog data.
         "blueprint_authoring_guide" => return Ok(true),
         "list_blueprints" | "get_blueprint_revision" => ("blueprints.read", None, None),
+        "data_health_summary" => ("data_health.read", None, None),
+        "list_rule_findings" => ("rules.read", None, None),
+        "list_workflow_runs" => ("workflows.read", None, None),
         "list_contexts" => ("contexts.read", None, Some("__context_list__")),
         "get_entity"
         | "get_entity_context_preview"
@@ -1885,6 +1975,32 @@ mod tests {
             change_summary("replace_entity_relationships", &payload).unwrap(),
             format!("Replace relationship targets on entity {id}: categories (1 targets).")
         );
+    }
+
+    #[test]
+    fn diagnostic_tools_are_read_only_and_bounded() {
+        let definitions = definitions();
+        for name in [
+            "data_health_summary",
+            "list_rule_findings",
+            "list_workflow_runs",
+        ] {
+            assert_eq!(kind(name).unwrap(), ToolKind::Read);
+            assert!(definitions.iter().any(|tool| tool.function.name == name));
+        }
+        assert_eq!(
+            super::diagnostic_page_arguments(None, None).unwrap(),
+            (10, 0)
+        );
+        assert!(super::diagnostic_page_arguments(Some(26), None).is_err());
+        assert!(super::diagnostic_page_arguments(None, Some(-1)).is_err());
+        let schema = &definitions
+            .iter()
+            .find(|tool| tool.function.name == "list_rule_findings")
+            .unwrap()
+            .function
+            .parameters;
+        assert_eq!(schema["properties"]["limit"]["maximum"], 25);
     }
 
     #[test]

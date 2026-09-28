@@ -17,6 +17,114 @@ use support::*;
 use tokio::time::{sleep, timeout};
 
 #[sqlx::test]
+async fn agent_operational_diagnostics_are_bounded_and_omit_internal_payloads(pool: PgPool) {
+    CatalogRepository::system(pool.clone())
+        .ensure_rule_permissions()
+        .await
+        .unwrap();
+    let (base_url, server) = start_server(pool.clone()).await;
+    let client = authenticated_client();
+    let blueprint = create_blueprint(&client, &base_url,
+        "format_version = 1\ncode = \"diagnostic_product\"\nname = \"Diagnostic product\"\nkind = \"entity\"\n\n[views.dropdown_option]\ntype = \"dropdown_option\"\nfields = [\"title\"]\n\n[[attributes]]\ncode = \"title\"\nvalue_type = \"string\"").await;
+    let entity = create_entity(&client, &base_url, &blueprint).await;
+    let entity_id = entity["id"].as_str().unwrap();
+    let rule: Value = client.post(format!("{base_url}/rules"))
+        .json(&json!({"blueprint_id":blueprint["blueprint"]["id"],"blueprint_version":1,"context_id":null,
+            "definition":"format_version = 1\ncode = \"diagnostic_rule\"\nname = \"Diagnostic rule\"\nseverity = \"warning\"\n[[triggers]]\ntype = \"manual\"\n[predicate]\ntype = \"required\"\nattribute_code = \"title\""}))
+        .send().await.unwrap().error_for_status().unwrap().json().await.unwrap();
+    let rule_id: Uuid = rule["id"].as_str().unwrap().parse().unwrap();
+    let workspace: Uuid = BOOTSTRAP_WORKSPACE_ID.parse().unwrap();
+    let actor: Uuid = BOOTSTRAP_OWNER_ID.parse().unwrap();
+    for index in 0..2 {
+        sqlx::query("INSERT INTO rule_findings (id,workspace_id,rule_id,rule_version,entity_id,evaluation_key,severity,message,evidence) VALUES ($1,$2,$3,1,$4,$5,'warning','Check title','{\"secret\":\"hidden\"}')")
+            .bind(Uuid::new_v4()).bind(workspace).bind(rule_id).bind(entity_id.parse::<Uuid>().unwrap())
+            .bind(format!("check-{index}")).execute(&pool).await.unwrap();
+    }
+    let definition = "format_version = 2\ncode = \"diagnostic_workflow\"\nname = \"Diagnostic workflow\"\n[[triggers]]\ntype = \"manual\"\n[[actions]]\ntype = \"system_tags_add\"\ntags = [\"checked\"]";
+    let workflow: Value = client
+        .post(format!("{base_url}/workflows"))
+        .json(&json!({"definition":definition}))
+        .send()
+        .await
+        .unwrap()
+        .error_for_status()
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    let workflow_id = workflow["id"].as_str().unwrap();
+    client
+        .post(format!(
+            "{base_url}/workflows/{workflow_id}/versions/1/publish"
+        ))
+        .send()
+        .await
+        .unwrap()
+        .error_for_status()
+        .unwrap();
+    client
+        .post(format!(
+            "{base_url}/workflows/{workflow_id}/versions/1/enable"
+        ))
+        .send()
+        .await
+        .unwrap()
+        .error_for_status()
+        .unwrap();
+    for index in 0..2 {
+        client
+            .post(format!("{base_url}/workflows/{workflow_id}/run-now"))
+            .json(&json!({"entity_id":entity_id,"idempotency_key":format!("run-{index}")}))
+            .send()
+            .await
+            .unwrap()
+            .error_for_status()
+            .unwrap();
+    }
+    let repository = CatalogRepository::system(pool)
+        .for_workspace(workspace)
+        .await
+        .unwrap();
+    let health = execute_read(
+        &repository,
+        actor,
+        workspace,
+        "data_health_summary",
+        json!({}),
+    )
+    .await
+    .unwrap();
+    assert_eq!(health["active_entities"], 1);
+    let findings = execute_read(
+        &repository,
+        actor,
+        workspace,
+        "list_rule_findings",
+        json!({"entity_id":entity_id,"limit":1}),
+    )
+    .await
+    .unwrap();
+    assert_eq!(findings["items"].as_array().unwrap().len(), 1);
+    assert_eq!(findings["next_offset"], 1);
+    assert!(findings.to_string().contains("Check title"));
+    assert!(!findings.to_string().contains("hidden"));
+    let workflows = execute_read(
+        &repository,
+        actor,
+        workspace,
+        "list_workflow_runs",
+        json!({"limit":1}),
+    )
+    .await
+    .unwrap();
+    assert_eq!(workflows["items"].as_array().unwrap().len(), 1);
+    assert_eq!(workflows["next_offset"], 1);
+    assert!(workflows["items"][0].get("trigger_event").is_none());
+    assert!(workflows["items"][0].get("last_error").is_none());
+    server.abort();
+}
+
+#[sqlx::test]
 async fn agent_history_reads_and_entity_value_edits_use_scoped_catalog_services(pool: PgPool) {
     let (base_url, server) = start_server(pool.clone()).await;
     let client = authenticated_client();
@@ -994,6 +1102,9 @@ async fn agent_read_tools_enforce_initiator_permissions_and_scopes(pool: PgPool)
     for (name, arguments) in [
         ("list_blueprints", json!({})),
         ("list_contexts", json!({})),
+        ("data_health_summary", json!({})),
+        ("list_rule_findings", json!({})),
+        ("list_workflow_runs", json!({})),
         ("get_entity", json!({"entity_id": entity["id"]})),
         (
             "get_entity_context_preview",
