@@ -1,0 +1,130 @@
+---
+title: Przepływy pracy
+description: Automatyzuj małe, audytowalne zmiany jednej encji w odpowiedzi na zdarzenia katalogu, harmonogram lub ręczne wywołanie.
+---
+
+Przepływ pracy reaguje na wyzwalacz, stosując krótką listę akcji do jednej encji: dodaje lub usuwa tagi systemowe, aktualizuje metadane systemowe albo zapisuje wartość atrybutu. Przepływy pracy to wersjonowany TOML, podobnie jak Schematy, a każda wprowadzana przez nie zmiana przechodzi zwykłą walidację i trafia do dziennika audytu.
+
+Przepływy pracy nie mają skryptów, pętli, zapytań ani wywołań sieciowych i nie mogą zmienić niczego poza jedną encją, która je wyzwoliła. Do większych zadań napisz [rozszerzenie](/pl/extensions/build/).
+
+## Pierwszy przepływ pracy
+
+Oznacz produkt do przeglądu przy każdej zmianie jego tytułu:
+
+```toml
+format_version = 1
+code = "review-title-change"
+name = "Review title changes"
+
+[[triggers]]
+event_type = "attribute_value.changed.v1"
+
+[triggers.facts]
+"facts.0.attribute_code" = "title"
+
+[[actions]]
+type = "system_tags_add"
+tags = ["needs-review"]
+```
+
+Utwórz go, opublikuj i włącz w **Zarządzanie → Przepływy pracy** albo za pomocą CLI:
+
+```sh
+acli workflow validate --file review-title-change.toml
+acli workflow create --file review-title-change.toml
+acli workflow publish <workflow-id> 1
+acli workflow enable <workflow-id> 1
+```
+
+Włączenie zapisuje bieżący punkt w strumieniu zdarzeń. Przebiegi uruchamiają tylko zdarzenia po tym punkcie; przepływ pracy nie przetwarza historii.
+
+## Definicja
+
+| Klucz | Opis |
+| --- | --- |
+| `format_version` | `1` tylko dla wyzwalaczy zdarzeń. `2` dodaje wyzwalacze ręczne i harmonogramowe. |
+| `code` | Unikalny [kod](/pl/reference/blueprint/#kody). |
+| `name` | Nazwa wyświetlana. |
+| `triggers` | Jeden lub więcej wyzwalaczy. |
+| `actions` | Jedna lub więcej akcji, stosowanych po kolei. |
+
+## Wyzwalacze zdarzeń
+
+Wyzwalacz zdarzenia wskazuje jedno zdarzenie encji i opcjonalnie je zawęża:
+
+```toml
+[[triggers]]
+event_type = "entity.updated.v1"
+
+[triggers.envelope]
+source_kind = "api"
+
+[triggers.facts]
+"facts.0.attribute_code" = "price"
+"facts.0.context_code" = "PL"
+```
+
+`event_type` to jedno z: `entity.created.v1`, `entity.updated.v1`, `entity.migrated.v1`, `attribute_value.changed.v1`, `attribute_value.restored.v1` lub `relationship.changed.v1`.
+
+`envelope` dokładnie dopasowuje właściwości zdarzenia: `event_type`, `aggregate_kind`, `source_kind`, `source_name` lub `metadata.<key>`.
+
+`facts` dopasowuje fakty przenoszone przez zdarzenie. Każdy fakt opisuje jeden zmieniony atrybut. Jego pola to `attribute_id`, `attribute_code`, `context_id`, `context_code`, `relationship_target_entity_id`, `change_kind`, `before_value` i `after_value`. Odwołuj się do nich jako `facts.<index>.<field>`, gdzie indeks `0` oznacza pierwszy fakt.
+
+Akcje przepływu pracy wyzwolonego zdarzeniem dotyczą encji, której dotyczy zdarzenie.
+
+## Wyzwalacze ręczne i harmonogramowe
+
+Przy `format_version = 2` przepływ pracy można też uruchomić ręcznie lub według harmonogramu.
+
+```toml
+format_version = 2
+code = "nightly-flag"
+name = "Nightly flag"
+
+[[triggers]]
+type = "manual"
+
+[[triggers]]
+type = "schedule"
+cron = "0 0 2 * * *"
+timezone = "UTC"
+target_entity_id = "00000000-0000-0000-0000-000000000001"
+
+[[actions]]
+type = "system_metadata_merge"
+values = { last_nightly_check = "done" }
+```
+
+- **Ręczny**: uruchom przebieg dla jednej encji ze strony przepływu pracy albo poleceniem `acli workflow run-now <workflow-id> --entity-id <uuid> --idempotency-key <key>`. Zawsze używa włączonej wersji.
+- **Harmonogram**: sześciopolowy cron w UTC. `timezone` musi mieć wartość `"UTC"`, co zapobiega powtórzonym lub pominiętym przebiegom przy zmianie czasu. `target_entity_id` to encja, do której stosowane są akcje. Jeśli serwer nie działał w chwili, gdy przebieg był zaplanowany, wystąpienia opóźnione o więcej niż pięć minut są pomijane i zapisywane. Wystąpienie jest też pomijane, dopóki poprzedni przebieg wciąż oczekuje.
+
+Przebiegi ręczne i harmonogramowe nie mają zdarzenia, więc ich akcje muszą używać stałych wartości.
+
+## Akcje
+
+| `type` | Klucze | Efekt |
+| --- | --- | --- |
+| `system_tags_add` | `tags` (od 1 do 100, każdy do 128 bajtów) | Dodaje tagi systemowe. |
+| `system_tags_remove` | `tags` | Usuwa tagi systemowe. |
+| `system_metadata_merge` | `values` (tabela wartości skalarnych) | Ustawia klucze w metadanych systemowych. Klucze mogą być ścieżkami z kropkami. |
+| `system_metadata_delete` | `keys` | Usuwa klucze z metadanych systemowych. |
+| `attribute_write` | `attribute_code` i dokładnie jeden z `fixed` lub `event_field` | Zapisuje skalarną wartość atrybutu. `fixed` to literał; `event_field` kopiuje wartość ze zdarzenia, np. `facts.0.after_value`. |
+
+`attribute_write` przestrzega Schematu: obowiązują kontrole typów, schematy wartości i `readonly`.
+
+## Jak działają przebiegi
+
+- Każdy przebieg używa wersji, która była włączona w chwili jego rozpoczęcia, nawet jeśli później zostanie włączona nowsza.
+- Dostarczanie odbywa się co najmniej raz. Każda akcja jest zapisywana wraz z przebiegiem, więc ponowienie nigdy nie zastosuje jej dwukrotnie.
+- Nieudany przebieg jest ponawiany z rosnącymi opóźnieniami i po pięciu próbach staje się martwą wiadomością (dead letter). Odtwórz go z listy przebiegów przepływu pracy albo poleceniem `acli workflow run-replay <run-id>`.
+- Wyłączenie przepływu pracy anuluje jego przebiegi oczekujące w kolejce i trwające.
+- Zmiany wprowadzone przez przepływ pracy domyślnie nie wyzwalają ponownie przepływów pracy, a łańcuchy są ograniczone do głębokości ośmiu.
+
+## Jeszcze niedostępne
+
+- Wyzwalacze `extension_event` są akceptowane w definicjach z `format_version = 2`, ale żadne zdarzenie rozszerzenia nie jest jeszcze dostarczane do przepływów pracy.
+- Przepływy pracy nie mogą wywoływać webhooków, wysyłać e-maili ani odczytywać sekretów.
+
+## Uprawnienia
+
+`workflows.read` pozwala wyświetlać przepływy pracy i historię przebiegów. `workflows.manage` pozwala je tworzyć, publikować, włączać, wyłączać, uruchamiać i odtwarzać. Oba uprawnienia są domyślnie przyznane rolom właściciela i administratora.

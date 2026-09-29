@@ -1,13 +1,61 @@
 ---
-title: Schematy
-description: Definiuj wersjonowane schematy encji w katalogu.
+title: Tworzenie schematu
+description: Zbuduj schemat od pustego pliku do opublikowanej wersji z relacjami, widokami, walidacją i domieszką.
 ---
 
-Schemat definiuje typ encji albo wielokrotnie używany mixin. Opisuje atrybuty, walidację, relacje, pliki i widoki. Po opublikowaniu każda rewizja jest niezmienna.
+Schemat to dokument TOML opisujący jeden rodzaj rekordu katalogu: jego atrybuty, ich zachowanie w kontekstach, sposób walidacji i układ w aplikacji internetowej. Ten przewodnik krok po kroku buduje mały katalog produktów. Każdy użyty tu klucz jest opisany w [dokumentacji TOML schematu](/pl/reference/blueprint/).
 
-## Utwórz schemat
+## Gdzie pisać schematy
 
-Otwórz **Zarządzaj → Schematy** i utwórz nowy szkic. Nadaj mu stabilny kod i nazwę, a następnie zdefiniuj atrybuty w TOML.
+Schematy możesz pisać w dwóch miejscach:
+
+- W aplikacji internetowej, w **Zarządzanie → Schematy → Nowy schemat**. Edytor waliduje treść podczas pisania i pokazuje podgląd powstałego formularza.
+- W dowolnym edytorze tekstu, a następnie przesłać je przez CLI:
+
+  ```sh
+  acli blueprint create --file product.toml
+  ```
+
+Obie drogi zapisują TOML dokładnie w takiej postaci, w jakiej go napisano. Dobrze sprawdza się trzymanie plików schematów w systemie kontroli wersji obok kodu integracji; CLI wysyła je bez zmian.
+
+Do tworzenia szkiców potrzebujesz uprawnienia `blueprints.write`, a do ich publikowania `blueprints.publish`.
+
+## Krok 1: najmniejszy poprawny schemat
+
+```toml
+format_version = 1
+code = "category"
+name = "Category"
+kind = "entity"
+
+[[attributes]]
+code = "name"
+value_type = "string"
+
+[views.dropdown_option]
+type = "dropdown_option"
+fields = ["name"]
+```
+
+- `code` identyfikuje schemat przez cały czas jego istnienia. Wybierz go starannie; nie można go zmienić w kolejnych wersjach.
+- `kind = "entity"` oznacza, że można z niego tworzyć encje.
+- Każdy schemat encji potrzebuje `views.dropdown_option`. Określa on, jak Attricat opisuje kategorię wszędzie tam, gdzie pojawia się ona na liście: w selektorach relacji, etykietach filtrów i wynikach wyszukiwania.
+
+Zapisz to jako szkic. Szkic można dowolnie edytować, ale nie może jeszcze zawierać encji.
+
+## Krok 2: opublikuj
+
+Publikacja zamraża wersję. Od tej chwili nigdy się nie zmienia i można z niej tworzyć encje.
+
+W aplikacji internetowej otwórz schemat i wybierz **Opublikuj**. Za pomocą CLI:
+
+```sh
+acli blueprint publish <blueprint-id> 1
+```
+
+Aby zmienić opublikowany schemat, utwórz nową wersję. Następna sekcja wyjaśnia, dlaczego to ważne.
+
+## Krok 3: produkt z typowanymi atrybutami
 
 ```toml
 format_version = 1
@@ -16,31 +64,253 @@ name = "Product"
 kind = "entity"
 
 [[attributes]]
-code = "name"
+code = "title"
+value_type = "string"
+
+[[attributes]]
+code = "sku"
+value_type = "string"
+context_editable = "default"
+
+[[attributes]]
+code = "price"
+value_type = "number"
+value_schema = '{"type":"number","minimum":0}'
+
+[[attributes]]
+code = "stock_on_hand"
+value_type = "integer"
+default_value = 0
+
+[[attributes]]
+code = "available"
+value_type = "boolean"
+
+[[attributes]]
+code = "available_on"
+value_type = "date"
+
+[[attributes]]
+code = "order_cutoff"
+value_type = "time"
+
+[views.dropdown_option]
+type = "dropdown_option"
+fields = ["title", "sku"]
+separator = " / "
+```
+
+Kilka decyzji w tym pliku:
+
+- `sku` ma `context_editable = "default"`. SKU jest wszędzie takie samo, więc można je edytować tylko w kontekście domyślnym. W każdym innym kontekście jest wyświetlane jako tylko do odczytu.
+- `price` ma `value_schema`, który odrzuca liczby ujemne. Schemat to JSON zapisany w łańcuchu znaków TOML. Zobacz [Walidacja](/pl/builders/validation/).
+- `stock_on_hand` w nowych encjach zaczyna od `0` dzięki `default_value`.
+- `order_cutoff` jest typu `time`: to godzina zegarowa wraz ze strefą czasową IANA, np. 09:30 w `Europe/Warsaw`.
+
+## Krok 4: relacje
+
+Powiąż każdy produkt z jego kategoriami i jedną marką:
+
+```toml
+[[attributes]]
+code = "categories"
+value_type = "relationship"
+target_blueprint = "category"
+
+[[attributes]]
+code = "brand"
+value_type = "relationship"
+target_blueprint = "brand"
+cardinality = "one"
+```
+
+`target_blueprint` sprawia, że Attricat odrzuca powiązanie z czymkolwiek, co nie jest `category` (lub `brand`). `categories` pozwala na wiele celów; `brand` na jeden na produkt. Wiele produktów nadal może mieć tę samą markę. Jeśli cel musi należeć do dokładnie jednego źródła, ustaw także `target_cardinality = "one"`.
+
+Schematy docelowe muszą istnieć, zanim opublikujesz schemat produktu.
+
+Za pomocą relacji modeluje się w Attricat tagi, etykiety i taksonomie. [Modelowanie katalogu](/pl/builders/modeling/) wyjaśnia, dlaczego kategoria powinna być encją, a nie łańcuchem znaków.
+
+## Krok 5: zachowanie w kontekstach
+
+[Konteksty](/pl/guides/contexts/) pozwalają, by wartość różniła się zależnie od rynku, języka lub kanału. Każdy atrybut określa dwie rzeczy:
+
+- `context_fallback`: co pokazuje kontekst bez własnej wartości. Domyślne `"default"` dziedziczy wartość z najbliższego kontekstu nadrzędnego, który ją ma. `"none"` nie pokazuje niczego.
+- `context_editable`: gdzie można zapisać atrybut. Domyślne `"all"` pozwala na każdy kontekst. `"default"` pozwala tylko na kontekst główny.
+
+```toml
+[[attributes]]
+code = "description"
+value_type = "string"
+# Inherit from the parent market when a channel has no description.
+context_fallback = "default"
+
+[[attributes]]
+code = "promo_banner"
+value_type = "string"
+# A banner shown in one channel must not leak into its children.
+context_fallback = "none"
+```
+
+## Krok 6: pliki
+
+```toml
+[[attributes]]
+code = "main_photo"
+value_type = "file"
+allowed_mime_groups = ["image"]
+image_only = true
+max_bytes = 10485760
+
+[[attributes]]
+code = "manuals"
+value_type = "file"
+cardinality = "many"
+allowed_extensions = ["pdf"]
+```
+
+Atrybut plikowy domyślnie przechowuje jeden plik; `cardinality = "many"` zamienia go w uporządkowaną listę. Zasady są sprawdzane przy każdym przesłaniu: sygnatura zawartości pliku, typ MIME, rozszerzenie i rozmiar. Dla obrazów w tle generowane są warianty WebP `thumbnail` i `display`.
+
+## Krok 7: układ
+
+Bez widoków aplikacja internetowa pokazuje atrybuty w kolejności deklaracji. Dodaj widoki, gdy chcesz mieć karty, siatki lub dopracowaną tabelę w **Przeglądarce encji**.
+
+```toml
+[views.detail]
+type = "stack"
+
+[[views.detail.children]]
+type = "stack"
+component = { id = "catalog.entity_heading", version = 1 }
+
+[[views.detail.children.children]]
+type = "field"
+field = "title"
+
+[[views.detail.children.children]]
+type = "field"
+field = "sku"
+
+[[views.detail.children]]
+type = "tabs"
+
+[[views.detail.children.tabs]]
+label = "Overview"
+
+[[views.detail.children.tabs.children]]
+type = "grid"
+children = [
+  { type = "field", field = "price" },
+  { type = "field", field = "stock_on_hand" },
+]
+
+[[views.detail.children.tabs.children]]
+type = "relationship_list"
+field = "categories"
+
+[[views.detail.children.tabs]]
+label = "Media"
+
+[[views.detail.children.tabs.children]]
+type = "field"
+field = "main_photo"
+
+[views.table]
+type = "table"
+
+[[views.table.columns]]
+field = "main_photo"
+label = "Image"
+renderer = { id = "catalog.table_image", version = 1 }
+
+[[views.table.columns]]
+field = "title"
+
+[[views.table.columns]]
+field = "brand.name"
+label = "Brand"
+
+[[views.table.columns]]
+field = "price"
+```
+
+Stos `catalog.entity_heading` zamienia swoje pierwsze pole w tytuł strony, a pozostałe w podtytuł. Kolumna tabeli `brand.name` podąża za relacją `brand` i pokazuje `name` marki. Ponieważ `brand` ma `cardinality = "one"`, tę kolumnę można też sortować.
+
+[Widoki i układy](/pl/builders/views/) opisują wszystkie bloki i komponenty.
+
+## Krok 8: walidacja wielu pól
+
+`value_schema` sprawdza jedną wartość. `entity_schema` sprawdza całą encję, więc może wyrażać reguły typu „produkt w promocji wymaga ceny promocyjnej”. Ten przykład zakłada, że schemat ma też atrybut logiczny `on_sale` i liczbowy `sale_price`:
+
+```toml
+entity_schema = '''
+{
+  "type": "object",
+  "required": ["title", "sku"],
+  "if": { "properties": { "on_sale": { "const": true } }, "required": ["on_sale"] },
+  "then": { "required": ["sale_price"] }
+}
+'''
+```
+
+Umieść `entity_schema` razem z pozostałymi kluczami najwyższego poziomu, przed pierwszym `[[attributes]]`. W TOML klucz zapisany po nagłówku tabeli należy do tej tabeli.
+
+Attricat sprawdza schemat w każdym kontekście po każdej zmianie. Zapis, który pozostawiłby którykolwiek kontekst w niepoprawnym stanie, zostaje odrzucony z `422 entity_schema_mismatch` i nic nie jest zapisywane.
+
+## Krok 9: udostępnij atrybuty w domieszce
+
+Gdy kilka schematów potrzebuje tych samych pól, np. metadanych SEO, umieść je w domieszce:
+
+```toml
+format_version = 1
+code = "seo"
+name = "SEO fields"
+kind = "mixin"
+
+[[attributes]]
+code = "meta_title"
+value_type = "string"
+
+[[attributes]]
+code = "meta_description"
 value_type = "string"
 ```
 
-Schemat encji może tworzyć encje. Mixin dodaje atrybuty wielokrotnego użycia do innych schematów.
-
-## Publikuj świadomie
-
-Publikacja udostępnia rewizję schematu dla nowych encji. Istniejące encje pozostają przy rewizji, z którą zostały utworzone; zachowuje to znaczenie oraz zasady walidacji obowiązujące w tamtym czasie.
-
-Gdy publikujesz nowszą rewizję, przejrzyj kandydatów do migracji przed aktualizacją istniejących encji. Nie używaj ponownie kodów dla niezgodnego znaczenia.
-
-## Ponowna akceptacja publikacji
-
-Domyślnie każda edycja opublikowanej encji cofa jej publikację w kanałach i wymaga ponownej akceptacji. Rewizja schematu może wskazać zaufane role obszaru roboczego, których edycje zachowują istniejącą publikację encji:
+Opublikuj ją, a następnie dołącz do `product` i wybierz potrzebne atrybuty:
 
 ```toml
-[publication]
-retain_on_edit_roles = ["catalog_manager", "product_owner"]
+[[includes]]
+alias = "seo"
+code = "seo"
+version = 1
+
+[[attributes]]
+code = "meta_title"
+from = "seo.meta_title"
+
+[[attributes]]
+code = "meta_description"
+from = "seo.meta_description"
 ```
 
-Są to kody ról obszaru roboczego. Role muszą istnieć podczas publikowania rewizji schematu. To ustawienie nie nadaje uprawnień do edycji ani publikacji; użytkownicy nadal potrzebują zwykłych uprawnień obszaru roboczego. Dotyczy zmian wartości, relacji, metadanych, plików i aktualizacji encji. Zmiany kontekstu zawsze cofają publikację kanału, ponieważ mogą zmienić wynikowe dane wielu encji.
+Dołączenie przypina konkretną wersję domieszki. Opublikowanie wersji 2 `seo` nie zmienia `product`, dopóki nie opublikujesz nowej wersji `product`, która dołącza wersję 2.
 
-## Zachowanie atrybutów
+## Wersje a istniejące encje
 
-Atrybuty mogą być wartościami skalarnymi, relacjami lub plikami. Konfiguracja schematu steruje także walidacją, wartościami domyślnymi, dziedziczeniem kontekstowym oraz możliwością edycji pola w przeglądarce.
+Każda encja pamięta dokładną wersję schematu, z którą została utworzona. Gdy opublikujesz wersję 2 schematu `product`, istniejące produkty pozostają przy wersji 1: ich wartości i walidacja zachowują znaczenie z chwili zapisu.
 
-Pełna składnia atrybutów i reguły walidacji znajdują się w [dokumentacji schematów w repozytorium (po angielsku)](https://github.com/attricat/attricat/blob/main/docs/blueprints.md).
+Attricat oznacza je wtedy jako nieaktualne i proponuje migrację. Wersje, które tylko dodają opcjonalne atrybuty, można migrować zbiorczo. Zmiany, które usuwają atrybuty lub zmieniają ich typ albo dodają atrybuty wymagane, wymagają decyzji dla każdej encji. Zobacz [Wersje i migracja](/pl/builders/revisions/).
+
+Dwie praktyki oszczędzają później kłopotów:
+
+- Nigdy nie używaj ponownie kodu atrybutu w innym znaczeniu w późniejszej wersji. Zamiast tego dodaj nowy kod.
+- Dodawaj atrybuty zamiast je zmieniać. Wersje, które tylko dodają, migrują się bez niczyjej pomocy.
+
+## Więcej możliwości
+
+Schemat może też zawierać:
+
+- [Reguły](/pl/builders/rules/), które oznaczają problemy z jakością danych, np. brak tytułu.
+- [Politykę publikacji](/pl/guides/publishing/#zachowaj-publikację-po-zaufanych-edycjach), która pozwala zaufanym rolom edytować bez cofania zatwierdzeń w kanałach.
+- [Zadania konektorów](/pl/reference/blueprint/#zadania-konektorów), które importują lub eksportują encje przez rozszerzenie konektora.
+- Atrybuty, których typ pochodzi z [rozszerzenia](/pl/reference/blueprint/#typy-atrybutów-z-rozszerzeń).
+- [Układ paneli i akcji rozszerzeń](/pl/reference/blueprint/#extension_layout) na stronach encji.

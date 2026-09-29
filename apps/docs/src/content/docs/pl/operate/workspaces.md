@@ -1,24 +1,93 @@
 ---
-title: Zarządzanie przestrzenią roboczą
-description: Zarządzaj dostępem, rolami, zaproszeniami i nawigacją przestrzeni roboczej.
+title: Administracja obszarem roboczym
+description: Zarządzaj członkami, rolami, zaproszeniami, nawigacją paska bocznego, tokenami API i dziennikiem audytu.
 ---
 
-Administratorzy przestrzeni roboczej zarządzają dostępem do katalogu oraz uprawnieniami użytkowników. Otwórz **Zarządzaj → Zarządzanie przestrzenią roboczą**, aby pracować z członkami, rolami, zaproszeniami i nawigacją eksploratora.
+Obszar roboczy to jeden katalog z własnymi członkami, schematami, encjami, kontekstami i rozszerzeniami. Obszary robocze są całkowicie odseparowane: nic nie jest między nimi współdzielone.
 
-## Członkowie i role
+Większość zadań administracyjnych wykonasz w **Zarządzanie → Zarządzanie obszarem roboczym**, gdzie są cztery karty: **Członkowie**, **Role**, **Zaproszenia** i **Nawigacja**.
 
-Przyznawaj role według zasady najmniejszych uprawnień potrzebnych każdej osobie. Role wbudowane obejmują typowe obowiązki; role niestandardowe pozwalają administratorom stworzyć węższy zestaw uprawnień.
+## Logowanie
 
-Uważnie sprawdzaj zmiany ról. Rola może przyznawać dostęp do tworzenia i zmieniania danych katalogowych, zarządzania osobami, używania agentów lub obsługi rozszerzeń.
+Każdy obszar roboczy ma **identyfikator logowania**, który wygląda jak nazwa domeny, np. `acme.example` lub `default.local`. Użytkownicy wpisują go na stronie logowania, a potem podają adres e-mail i hasło. Identyfikator służy wyłącznie do kierowania logowania; Attricat nie sprawdza go w DNS.
+
+Sesje trwają osiem godzin. Pięć nieudanych prób logowania dla tego samego obszaru roboczego i adresu e-mail w ciągu piętnastu minut tymczasowo blokuje kolejne próby. **Nie pamiętasz hasła?** wysyła link do resetowania, który działa jednorazowo przez 30 minut. Ze względów bezpieczeństwa formularz resetowania nigdy nie ujawnia, czy dany adres ma konto.
+
+Obecnie jedyną metodą jest logowanie hasłem. Logowanie jednokrotne (SSO), uwierzytelnianie wieloskładnikowe i klucze dostępu nie są jeszcze dostępne.
+
+## Członkowie
+
+Karta **Członkowie** wyświetla wszystkie osoby w obszarze roboczym wraz z przydzielonymi im rolami. Możesz tutaj:
+
+- przydzielać i odbierać role;
+- ustawić członka jako **nieaktywnego**, co wylogowuje go i blokuje dostęp bez usuwania jego historii;
+- przenieść własność na innego aktywnego członka (tylko właściciele).
+
+Obszar roboczy zawsze ma co najmniej jednego aktywnego właściciela. Zmiany członkostwa i ról wylogowują osobę, której dotyczą, z istniejących sesji.
+
+## Role
+
+Rola to nazwany zestaw uprawnień. Czterech wbudowanych ról nie można zmieniać:
+
+| Rola | Może |
+| --- | --- |
+| `owner` | Wszystko, łącznie z przeniesieniem własności. |
+| `admin` | Wszystko oprócz własności i cyklu życia obszaru roboczego. |
+| `editor` | Odczytywać i zapisywać schematy, encje i konteksty; usuwać encje; odczytywać stan danych. Nie może publikować schematów ani encji ani administrować obszarem roboczym. |
+| `viewer` | Odczytywać schematy, encje, konteksty i stan danych. |
+
+Utwórz **role niestandardowe** na karcie **Role**, aby przyznać węższy lub inny zestaw uprawnień. Do roli możesz dodać tylko te uprawnienia, które masz sam. Zduplikuj rolę wbudowaną, aby zacząć od jej uprawnień. Wycofując rolę niestandardową, możesz przenieść jej przydziały na rolę zastępczą.
+
+Pełna lista uprawnień znajduje się w [dokumentacji uprawnień](/pl/reference/permissions/).
+
+### Przydziały z zakresem
+
+Przydział roli obowiązuje w jednym zakresie:
+
+| Zakres | Obejmuje |
+| --- | --- |
+| **Cały obszar roboczy** | Wszystko. |
+| **Rodzina schematów** | Jeden schemat i jego encje we wszystkich wersjach. |
+| **Encja** | Jedną encję. |
+| **Poddrzewo kontekstu** | Jeden kontekst i wszystko poniżej niego, ale nie jego kontekst nadrzędny ani konteksty równorzędne. |
+
+Przydziały sumują się. Osoba z rolą `viewer` w obszarze roboczym i `editor` w poddrzewie kontekstu `PL` może odczytywać wszystko i edytować wartości w `PL` oraz jego kontekstach podrzędnych.
+
+Rolę właściciela można przydzielić tylko w całym obszarze roboczym.
 
 ## Zaproszenia
 
-Zaproś istniejącego użytkownika albo utwórz użytkownika i wyślij zaproszenie wdrożeniowe. Zaproszenia wygasają, a odbiorca samodzielnie ustawia hasło przez jednorazowy link.
+Na karcie **Zaproszenia** zaproś osobę przez e-mail, podając rolę, zakres i datę wygaśnięcia. Otrzyma ona jednorazowy link. Osoba, która ma już konto, akceptuje zaproszenie i dołącza; nowa osoba najpierw ustawia hasło.
 
-## Nawigacja eksploratora
+Możesz też utworzyć użytkownika bezpośrednio i wysłać mu link wdrożeniowy. Oczekujące zaproszenie możesz w każdej chwili odwołać.
 
-Przypinaj opublikowane schematy encji, aby często używane obszary katalogu były łatwe do znalezienia. Każdy skrót można ograniczyć do ról przestrzeni roboczej, dzięki czemu użytkownicy widzą nawigację odpowiednią do swoich obowiązków.
+Wiadomości z zaproszeniami i linkami wdrożeniowymi wymagają [skonfigurowanego SMTP](/pl/reference/configuration/#e-mail).
 
-## Dziennik aktywności
+## Nawigacja
 
-Użyj **Zarządzaj → Dziennik aktywności / audytu**, aby sprawdzić udane zmiany w przestrzeni roboczej, w tym działania wykonane przez agentów. Podczas badania zmiany filtruj według czasu, osoby lub działania.
+Karta **Nawigacja** określa skróty do schematów na pasku bocznym przeglądarki encji. Przypnij opublikowane schematy encji i opcjonalnie ogranicz każdy skrót do wybranych ról, aby użytkownicy widzieli te części katalogu, nad którymi pracują.
+
+Zmiana nawigacji wymaga uprawnienia `workspace_navigation.manage`.
+
+## Osobiste tokeny API
+
+Skrypty, CLI i integracje uwierzytelniają się osobistymi tokenami API. Utwórz token w **Profil → Osobiste tokeny API** albo poleceniem `acli token create`.
+
+- Token ma etykietę, opcjonalną datę wygaśnięcia i jawną listę uprawnień. Nigdy nie może zrobić więcej niż jego właściciel: jeśli właściciel straci uprawnienie, token również je traci.
+- Sekret tokenu zaczyna się od `cat_pat_` i jest wyświetlany tylko raz. Przechowuj go w menedżerze sekretów.
+- Wysyłaj go jako `Authorization: Bearer cat_pat_…`. To token wyznacza obszar roboczy; żaden nagłówek ani parametr go nie wybiera.
+- Odwołuj tokeny, których już nie potrzebujesz. Lista tokenów pokazuje, kiedy każdy z nich był ostatnio użyty.
+
+Tworzenie tokenów wymaga uprawnienia `tokens.manage`.
+
+## Dziennik audytu
+
+**Zarządzanie → Aktywność / dziennik audytu** wyświetla każdą udaną zmianę w obszarze roboczym: kto ją wykonał (osoba, token lub agent), co się zmieniło, kiedy oraz identyfikator żądania. Filtruj według czasu, wykonawcy, kategorii działania, typu obiektu lub tego, czy zmianę wprowadziła osoba, czy agent.
+
+Wpisy audytu nigdy nie zawierają haseł, tokenów ani sekretów. Zmiany wprowadzone przez agenta pokazują uruchomienie agenta, narzędzie i osobę, która je zatwierdziła. Nieudane lub odrzucone żądania nie są rejestrowane, ponieważ niczego nie zmieniły.
+
+Odczyt dziennika audytu wymaga uprawnienia `audit.read`.
+
+```sh
+acli audit list --executor-type agent --occurred-after 2026-03-01T00:00:00Z
+```

@@ -1,30 +1,99 @@
 ---
 title: Explore entities
-description: Find, inspect, and maintain catalog records.
+description: Find entities with search, filters, relationship facets, and sorting, then save and share the result.
 ---
 
-Open **Entity explorer** to browse the entities available in your workspace.
+The **Entity explorer** is the home page of Attricat. It lists the entities of one blueprint at a time and lets you narrow them down with a search query, attribute filters, and relationship facets.
 
-## Find records
+## Choose what to browse
 
-Choose a blueprint to start exploring its entities. The version scope defaults to the current published revision; select an older published revision to inspect and sort it, or select **All versions** for a combined view. When current entities are shown, an informational notice links to hidden older entities and, when permitted, migration health.
+Pick a blueprint from the selector, or from a shortcut in the sidebar. Workspace administrators decide which blueprints appear as sidebar shortcuts.
 
-A bare search term matches scalar values on that blueprint only. Use `*:red` to explicitly search connected records through up to three relationship edges. Queries can target a field, for example `sku:123*`, or explicitly search a related scalar through up to three relationships, for example `family.product_type.name:red`.
+The **Version scope** selector controls which blueprint revisions you see:
 
-Use the context selector to see values as they resolve in a particular context. A value can come directly from that context or be inherited from its default value.
+- **Current** (the default) shows entities on the latest published revision. If older entities exist, a notice tells you how many are hidden and links to them.
+- A specific older **Version** shows only entities pinned to that revision.
+- **All versions** shows everything. Add the **Schema** column and sort by it to see the oldest entities first. See [Revisions and migration](/builders/revisions/).
 
-## Filter records
+## Search
 
-Relationship filters narrow results using connected records and hierarchies. Attribute filters appear directly below them and operate on scalar values in the default context. String attributes support equality, contains, and starts-with filters. Numbers, integers, dates, date-times, and times support equality and range comparisons; booleans support equality.
+Type in the search box and press Enter. A plain term such as `linen` matches values on the chosen blueprint's own attributes. It does not look inside related entities.
 
-Related-value sorting is available for a selected revision when each relationship hop is single-valued. In **All versions**, it is available only when the complete matching result set uses one source revision; otherwise the header explains why sorting is unavailable.
+To search further, qualify the term:
 
-Applied attribute and relationship filters appear as removable pills below the search box. Relationship pills use the target blueprint's dropdown-option view to name selected records. When that view cannot produce labels, the pill falls back to the number of selected records. Multiple filters are combined with each other and the text query, so every active condition must match. Filter selections remain in the page URL while editing and can be restored after a refresh. Use **Save search** to create a named, short `?savedView=<id>` link. Choose Private for a personal search or Workspace for one other authorized members can open. Select a saved search from the Explorer dropdown. Editing a saved search creates a draft URL; use **Save changes** to update the original or **Save search** to create a copy. **Copy link** copies the inline URL for small searches; for long searches it stores a snapshot and copies a short `?viewState=<id>` URL. Opening a link requires workspace membership and catalog read permission; sharing a link does not grant data access.
+| Query | Finds |
+| --- | --- |
+| `linen` | Entities with "linen" in any of their own text values. |
+| `sku:ABC*` | Entities whose `sku` starts with `ABC`. |
+| `colors:red` | Entities linked through `colors` to an entity with "red" in any value. |
+| `colors.name:red` | Same, but only the linked entity's `name`. |
+| `family.product_type.name:laptop` | Follows two relationships, then matches `name`. |
+| `*:red` | Entities with "red" on themselves or on anything linked within three steps. |
 
-## Work with an entity
+Several terms separated by spaces must all match. The full grammar is in [Search syntax](/guides/search-syntax/).
 
-Open a result to inspect its values, schema revision, files, relationships, and change history. If you can edit the entity, save changes from its detail page. Read-only fields remain visible but are managed by a system integration rather than the browser. Users with `entities.delete` permission can delete an entity from its preview toolbar or an Explorer result's actions menu. Deletion requires confirmation, hides the entity from normal reads and search results, and retains its history.
+Open **Search info** on a result to see why it matched, for example *red via 1 relationship*.
 
-When the entity's blueprint has a newer published revision, Attricat identifies the record as outdated. Review the migration before upgrading so changes to fields or validation are deliberate.
+## Filters
 
-See [Contexts](/guides/contexts/) for how inherited values work.
+**Add filter** narrows results by an attribute's value in the default context. Operators depend on the type:
+
+| Type | Operators |
+| --- | --- |
+| String | Equals, Contains, Starts with |
+| Number, integer, date, datetime, time | Equals, Greater than, Greater than or equal, Less than, Less than or equal |
+| Boolean | Equals |
+
+You can filter on an attribute of a related entity too, such as `brand.name`, through up to three relationships.
+
+You can also start a filter from the table: open a cell's menu and choose **Filter by**.
+
+Every active filter shows as a pill under the search box. All filters, facets, and the search query must match together.
+
+## Relationship facets
+
+Each relationship attribute of the blueprint gets a facet in the sidebar. Select one or more targets to keep only entities linked to them.
+
+When the target blueprint has a relationship to itself, such as `category.parent`, the facet becomes a tree:
+
+- Counts next to each node include everything below it. An entity assigned to two subcategories is counted once.
+- Selecting a parent also matches entities assigned to its descendants.
+- Several selections in one facet mean *any of these*. Selections in different facets must all match.
+- Counts reflect the search query and version scope, but not the facet's own selection, so you can still see sibling counts after choosing a node. Attribute filters do not affect facet counts.
+
+**Tree options** lets you pick which self-referencing field builds the tree and which context to resolve relationships in. Changing either clears the facet's selection.
+
+## Context
+
+The **Context** selector shows values as they resolve in a context: the context's own value if it has one, otherwise the value it inherits. See [Contexts](/guides/contexts/).
+
+If the selected context is a [publication channel](/guides/publishing/), the table gains a **Publication** column showing whether each entity is published there. It can be sorted to put unpublished entities first.
+
+## Sort and arrange columns
+
+Click a column header to sort. A column can be sorted when it holds a single scalar value per entity. Columns that follow a many-valued relationship are displayed but cannot be sorted.
+
+In **All versions**, sorting on a related value works only when every matching entity is on the same revision.
+
+**Columns** lets you show, hide, and reorder columns. The arrangement is saved in your browser.
+
+## Save and share searches
+
+Everything you set up in the Explorer is kept in the page URL, so reloading the page or sending the link restores it.
+
+- **Save search** stores the search under a name. Choose **Private** to keep it to yourself, or **Workspace** to share it with every member who can read entities. Open saved searches from the **Saved searches** list.
+- Changing a saved search marks it as having unsaved changes. **Save changes** updates it; **Save search** saves a copy.
+- **Share search** copies a link. Long searches are stored as a snapshot and shared as a short link.
+
+A link never grants access. The person opening it needs to be a member of the workspace with permission to read entities, and sees only what their role allows.
+
+## Act on several entities
+
+**Select entities** turns on selection mode. Select up to 50 loaded entities to:
+
+- send them to an [agent conversation](/guides/agents/) with instructions;
+- run bulk actions provided by installed extensions.
+
+## Open an entity
+
+Click a result to open its preview. From there you can edit it, see its history, or open related entities. See [Work with entities](/guides/entities/).

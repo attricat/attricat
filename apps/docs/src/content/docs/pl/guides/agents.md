@@ -1,22 +1,66 @@
 ---
 title: Agenci i zatwierdzenia
-description: Korzystaj z agentów konwersacyjnych, zachowując pełną kontrolę nad zmianami katalogu.
+description: Poproś agenta AI o sprawdzenie i zmianę katalogu. Każda zmiana czeka na Twoje zatwierdzenie.
 ---
 
-Agenci mogą sprawdzać przestrzeń roboczą i proponować zmiany katalogu w rozmowie. Są opcjonalni: zanim funkcja będzie dostępna, administrator musi skonfigurować zaufanego dostawcę.
+Agent Attricat to asystent konwersacyjny, który może odczytywać katalog i proponować w nim zmiany. Bez pytania może wyszukiwać encje, sprawdzać schematy, przeszukiwać katalog i przeglądać stan danych. Każda zmiana, którą chce wprowadzić, zatrzymuje się i czeka na zatwierdzenie przez człowieka.
+
+Agenci są opcjonalni. Zanim się pojawią, administrator musi [skonfigurować dostawcę AI](/pl/reference/configuration/#agenci).
 
 ## Rozpocznij rozmowę
 
-Otwórz **Rozmowy** i utwórz wątek dla konkretnego zadania. Opisz oczekiwany rezultat, a następnie przejrzyj odpowiedź agenta i wszystkie proponowane wywołania narzędzi.
+Otwórz **Agenci** na pasku bocznym i wybierz **Nowa rozmowa**. Nadaj wątkowi tytuł opisujący zadanie, na przykład *Clean up inactive suppliers*, i opisz, czego potrzebujesz.
 
-Odczyt danych może działać automatycznie. Każda zmiana katalogu zatrzymuje się i wymaga trwałego, wyraźnego zatwierdzenia.
+Rozmowę możesz też rozpocząć:
 
-## Zatwierdzaj zmiany świadomie
+- przyciskiem **Zapytaj o tę encję** na stronie encji;
+- przyciskiem **Wyślij do rozmowy z agentem** po zaznaczeniu encji w **Przeglądarce encji**.
 
-Przed zatwierdzeniem sprawdź proponowane argumenty i podsumowanie zmian. Zatwierdzenie autoryzuje tylko proponowane działanie. Odrzuć je, gdy żądanie jest zbyt szerokie lub wynik wymaga korekty.
+Dołącz pliki przyciskiem **Dodaj pliki**, maksymalnie 16 na wiadomość. Obrazy do 5 MiB są wysyłane do dostawcy, aby agent mógł je zobaczyć. Pozostałe pliki są opisywane nazwą i typem, a agent może je otworzyć swoimi narzędziami do plików.
 
-Zaplanowane uruchomienia działają według tej samej zasady: zatwierdzone uruchomienie jest ponownie autoryzowane jako użytkownik, który je rozpoczął, przed zapisem.
+## Co może agent
 
-## Ogranicz dostęp
+Agent działa w Twoim imieniu. Widzi i zmienia tylko to, na co pozwala Twoja rola.
 
-Dostawcy agentów otrzymują treść rozmowy i wyniki narzędzi. Używaj zaufanego konta dostawcy, przyznawaj `agents.run` tylko osobom, które mogą zlecać zmiany, i w razie potrzeby przeglądaj dziennik aktywności.
+**Bez zatwierdzenia** może:
+
+- wyświetlać i odczytywać schematy, konteksty, encje i ich historię;
+- wyszukiwać encje i odczytywać zapisane wyszukiwania;
+- wyświetlać podgląd migracji encji;
+- odczytywać stan danych, ustalenia reguł i uruchomienia przepływów pracy;
+- oglądać obrazy i odczytywać pliki tekstowe w obszarze roboczym;
+- odczytywać uruchomienia operacji rozszerzeń i zadania konektorów (z uprawnieniem `extensions.manage`).
+
+**Po Twoim zatwierdzeniu** może:
+
+- tworzyć schematy i ich wersje oraz publikować schematy;
+- tworzyć, aktualizować, migrować i usuwać encje; ustawiać, usuwać i przywracać wartości; zmieniać relacje; łączyć pliki;
+- aktualizować tagi systemowe i metadane;
+- publikować encje i cofać ich publikację;
+- tworzyć, aktualizować i usuwać konteksty;
+- tworzyć i aktualizować zapisane wyszukiwania.
+
+Nie może zarządzać regułami, przepływami pracy, rozszerzeniami, członkami ani rolami.
+
+## Zatwierdź lub odrzuć
+
+Gdy agent chce coś zmienić, rozmowa pokazuje **Wymagane zatwierdzenie** wraz z narzędziem, którego chce użyć. Rozwiń **Pokaż proponowane dane wejściowe JSON**, aby zobaczyć dokładnie, co zostanie wysłane.
+
+- **Zatwierdź** uruchamia tę jedną zmianę. W chwili jej wykonania Attricat ponownie sprawdza Twoje uprawnienia, więc zatwierdzenie nigdy nie pozwala agentowi zrobić więcej, niż możesz Ty.
+- **Odrzuć** zatrzymuje zmianę. Powiedz agentowi, co ma zrobić inaczej.
+
+Decyzja jest ostateczna. Dwukrotne zatwierdzenie nigdy nie uruchamia zmiany dwa razy.
+
+Czytaj propozycje uważnie. Zastąpienie relacji ustawia pełną listę dla danego atrybutu i kontekstu; pusta lista usuwa każde powiązanie.
+
+## Gdzie widać zmiany
+
+Zmiany wprowadzone przez agenta przechodzą tę samą walidację i audyt co Twoje edycje. Na stronie **Zmiany** encji oraz w **Zarządzanie → Aktywność / dziennik audytu** widać uruchomienie agenta, narzędzie, decyzję o zatwierdzeniu i osobę, która zatwierdziła zmianę.
+
+## Dane wysyłane do dostawcy
+
+Każde żądanie do dostawcy AI zawiera dotychczasową rozmowę i wyniki narzędzi agenta, które mogą zawierać dane katalogu. Wybierz dostawcę, którego warunki przechowywania danych odpowiadają Twojemu katalogowi. Attricat przechowuje rozmowę, ale nie przechowuje surowych odpowiedzi dostawcy ani jego danych uwierzytelniających.
+
+## Uprawnienia
+
+Korzystanie z agentów wymaga uprawnienia `agents.run`, które domyślnie mają role właściciela i administratora. Nadaj je osobom, które powinny móc zlecać zmiany w ten sposób.

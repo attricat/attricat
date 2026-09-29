@@ -15,7 +15,7 @@ export default defineConfig({
         replacesTitle: true,
       },
       customCss: ['./src/styles/brand.css'],
-      description: 'Guides for building and operating a versioned catalog.',
+      description: 'Documentation for building, using, extending, and operating an Attricat catalog.',
       defaultLocale: 'root',
       locales: {
         root: { label: 'English', lang: 'en' },
@@ -38,6 +38,16 @@ export default defineConfig({
               slug: 'introduction',
               translations: polish('Wprowadzenie'),
             },
+            {
+              label: 'Core concepts',
+              slug: 'start/concepts',
+              translations: polish('Podstawowe pojęcia'),
+            },
+            {
+              label: 'Quickstart',
+              slug: 'start/quickstart',
+              translations: polish('Szybki start'),
+            },
           ],
         },
         {
@@ -50,9 +60,24 @@ export default defineConfig({
               translations: polish('Przeglądanie encji'),
             },
             {
+              label: 'Search syntax',
+              slug: 'guides/search-syntax',
+              translations: polish('Składnia wyszukiwania'),
+            },
+            {
+              label: 'Work with entities',
+              slug: 'guides/entities',
+              translations: polish('Praca z encjami'),
+            },
+            {
               label: 'Contexts',
               slug: 'guides/contexts',
               translations: polish('Konteksty'),
+            },
+            {
+              label: 'Publishing',
+              slug: 'guides/publishing',
+              translations: polish('Publikacja'),
             },
             {
               label: 'Agents and approvals',
@@ -66,14 +91,80 @@ export default defineConfig({
           translations: polish('Budowanie katalogu'),
           items: [
             {
-              label: 'Blueprints',
-              slug: 'builders/blueprints',
-              translations: polish('Schematy'),
+              label: 'Model your catalog',
+              slug: 'builders/modeling',
+              translations: polish('Modelowanie katalogu'),
             },
             {
-              label: 'Extensions',
+              label: 'Author a blueprint',
+              slug: 'builders/blueprints',
+              translations: polish('Tworzenie schematu'),
+            },
+            {
+              label: 'Views and layouts',
+              slug: 'builders/views',
+              translations: polish('Widoki i układy'),
+            },
+            {
+              label: 'Validation',
+              slug: 'builders/validation',
+              translations: polish('Walidacja'),
+            },
+            {
+              label: 'Revisions and migration',
+              slug: 'builders/revisions',
+              translations: polish('Wersje i migracja'),
+            },
+            {
+              label: 'Data quality rules',
+              slug: 'builders/rules',
+              translations: polish('Reguły jakości danych'),
+            },
+            {
+              label: 'Workflows',
+              slug: 'builders/workflows',
+              translations: polish('Przepływy pracy'),
+            },
+            {
+              label: 'Solution packs',
+              slug: 'builders/solution-packs',
+              translations: polish('Pakiety rozwiązań'),
+            },
+          ],
+        },
+        {
+          label: 'Extensions',
+          translations: polish('Rozszerzenia'),
+          items: [
+            {
+              label: 'Install and manage',
               slug: 'builders/extensions',
-              translations: polish('Rozszerzenia'),
+              translations: polish('Instalacja i zarządzanie'),
+            },
+            {
+              label: 'Build an extension',
+              slug: 'extensions/build',
+              translations: polish('Tworzenie rozszerzenia'),
+            },
+            {
+              label: 'Manifest reference',
+              slug: 'extensions/manifest',
+              translations: polish('Dokumentacja manifestu'),
+            },
+            {
+              label: 'Server runtime',
+              slug: 'extensions/server',
+              translations: polish('Środowisko serwerowe'),
+            },
+            {
+              label: 'Client contributions',
+              slug: 'extensions/client',
+              translations: polish('Kontrybucje klienckie'),
+            },
+            {
+              label: 'Operations and connectors',
+              slug: 'extensions/operations',
+              translations: polish('Operacje i konektory'),
             },
           ],
         },
@@ -84,7 +175,58 @@ export default defineConfig({
             {
               label: 'Workspace administration',
               slug: 'operate/workspaces',
-              translations: polish('Zarządzanie przestrzenią roboczą'),
+              translations: polish('Zarządzanie obszarem roboczym'),
+            },
+            {
+              label: 'Deploy Attricat',
+              slug: 'operate/deployment',
+              translations: polish('Wdrożenie Attricat'),
+            },
+            {
+              label: 'Monitoring',
+              slug: 'operate/monitoring',
+              translations: polish('Monitorowanie'),
+            },
+            {
+              label: 'Backup and restore',
+              slug: 'operate/backup',
+              translations: polish('Kopie zapasowe i przywracanie'),
+            },
+          ],
+        },
+        {
+          label: 'Reference',
+          translations: polish('Dokumentacja techniczna'),
+          items: [
+            {
+              label: 'Configuration',
+              slug: 'reference/configuration',
+              translations: polish('Konfiguracja'),
+            },
+            {
+              label: 'Blueprint TOML',
+              slug: 'reference/blueprint',
+              translations: polish('Składnia TOML schematu'),
+            },
+            {
+              label: 'Permissions',
+              slug: 'reference/permissions',
+              translations: polish('Uprawnienia'),
+            },
+            {
+              label: 'CLI',
+              slug: 'reference/cli',
+              translations: polish('CLI'),
+            },
+            {
+              label: 'API',
+              slug: 'reference/api',
+              translations: polish('API'),
+            },
+            {
+              label: 'Events',
+              slug: 'reference/events',
+              translations: polish('Zdarzenia'),
             },
           ],
         },

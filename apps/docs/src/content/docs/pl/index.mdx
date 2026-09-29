@@ -4,30 +4,42 @@ head:
   - tag: meta
     attrs:
       name: description
-      content: Twórz wersjonowany katalog z Attricat.
+      content: Dokumentacja Attricat, wersjonowanego katalogu ustrukturyzowanych danych produktowych i referencyjnych.
 template: splash
 hero:
-  title: Twórz katalog, który zachowuje historię
-  tagline: Attricat to wersjonowany katalog dla zespołów potrzebujących elastycznych modeli danych, wartości zależnych od kontekstu i wiarygodnej historii zmian.
+  title: Katalog, który zachowuje swoją historię
+  tagline: Modeluj rekordy za pomocą wersjonowanych schematów, przechowuj wartości dla każdego rynku i kanału oraz zatwierdzaj to, co trafia do każdego kanału.
   actions:
-    - text: Zacznij
-      link: /pl/introduction/
+    - text: Szybki start
+      link: /pl/start/quickstart/
       icon: right-arrow
-    - text: Twórz schematy
+    - text: Utwórz schemat
       link: /pl/builders/blueprints/
       variant: minimal
 ---
 
-import { Card, CardGrid } from '@astrojs/starlight/components';
+import { Card, CardGrid, LinkCard } from '@astrojs/starlight/components';
 
 <CardGrid>
-  <Card title="Korzystaj z Attricat" icon="open-book">
-    Wyszukuj encje, pracuj z wartościami kontekstowymi i używaj agentów z wyraźnymi zatwierdzeniami.
+  <Card title="Korzystaj z katalogu" icon="open-book">
+    Znajduj encje za pomocą wyszukiwania, filtrów i faset. Edytuj wartości w poszczególnych kontekstach, publikuj w kanałach i pracuj z agentem.
   </Card>
-  <Card title="Buduj katalog" icon="setting">
-    Definiuj wersjonowane schematy i rozbudowuj produkt o zaufane integracje.
+  <Card title="Modeluj dane" icon="puzzle">
+    Pisz schematy w TOML, waliduj je za pomocą JSON Schema, projektuj układ stron i migruj encje między wersjami.
   </Card>
-  <Card title="Administruj bezpiecznie" icon="approve-check">
-    Zarządzaj dostępem do przestrzeni roboczej i zachowuj jasną historię udanych zmian.
+  <Card title="Automatyzuj i rozszerzaj" icon="rocket">
+    Dodawaj reguły jakości danych i przepływy pracy, instaluj rozszerzenia lub twórz własne w WebAssembly z interfejsem w piaskownicy.
   </Card>
+  <Card title="Uruchamiaj" icon="setting">
+    Wdrażaj jeden obraz kontenera, konfiguruj go zmiennymi środowiskowymi i monitoruj kolejki, metryki oraz zdarzenia.
+  </Card>
+</CardGrid>
+
+## Popularne strony
+
+<CardGrid>
+  <LinkCard title="Podstawowe pojęcia" href="/pl/start/concepts/" description="Obszary robocze, schematy, encje, konteksty, relacje i publikacja." />
+  <LinkCard title="Dokumentacja TOML schematu" href="/pl/reference/blueprint/" description="Wszystkie klucze akceptowane przez kompilator schematów." />
+  <LinkCard title="Dokumentacja konfiguracji" href="/pl/reference/configuration/" description="Wszystkie zmienne środowiskowe API i procesu obsługi plików." />
+  <LinkCard title="Składnia wyszukiwania" href="/pl/guides/search-syntax/" description="Kwalifikowane terminy, ścieżki relacji, symbole wieloznaczne i wyszukiwanie globalne." />
 </CardGrid>

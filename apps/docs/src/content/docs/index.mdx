@@ -4,30 +4,42 @@ head:
   - tag: meta
     attrs:
       name: description
-      content: Build a versioned, contextual catalog with Attricat.
+      content: Documentation for Attricat, a versioned catalog for structured product and reference data.
 template: splash
 hero:
-  title: Build a catalog that keeps its history
-  tagline: Attricat is a versioned catalog for teams that need flexible data models, contextual values, and trustworthy change history.
+  title: A catalog that keeps its history
+  tagline: Model records with versioned blueprints, keep values per market and channel, and approve what each channel receives.
   actions:
-    - text: Get started
-      link: /introduction/
+    - text: Quickstart
+      link: /start/quickstart/
       icon: right-arrow
-    - text: Build blueprints
+    - text: Author a blueprint
       link: /builders/blueprints/
       variant: minimal
 ---
 
-import { Card, CardGrid } from '@astrojs/starlight/components';
+import { Card, CardGrid, LinkCard } from '@astrojs/starlight/components';
 
 <CardGrid>
-  <Card title="Use Attricat" icon="open-book">
-    Search entities, work with contextual values, and use agents with explicit approvals.
+  <Card title="Use the catalog" icon="open-book">
+    Find entities with search, filters, and facets. Edit values per context, publish to channels, and work with the agent.
   </Card>
-  <Card title="Build your catalog" icon="setting">
-    Define versioned blueprints and extend the product with trusted integrations.
+  <Card title="Model your data" icon="puzzle">
+    Write blueprints in TOML, validate with JSON Schema, lay out pages, and migrate entities between revisions.
   </Card>
-  <Card title="Operate safely" icon="approve-check">
-    Manage workspace access and retain a clear record of successful changes.
+  <Card title="Automate and extend" icon="rocket">
+    Add data-quality rules and workflows, install extensions, or build your own with WebAssembly and sandboxed UI.
   </Card>
+  <Card title="Run it" icon="setting">
+    Deploy one container image, configure it with environment variables, and monitor queues, metrics, and events.
+  </Card>
+</CardGrid>
+
+## Popular pages
+
+<CardGrid>
+  <LinkCard title="Core concepts" href="/start/concepts/" description="Workspaces, blueprints, entities, contexts, relationships, and publication." />
+  <LinkCard title="Blueprint TOML reference" href="/reference/blueprint/" description="Every key the blueprint compiler accepts." />
+  <LinkCard title="Configuration reference" href="/reference/configuration/" description="Every environment variable for the API and file worker." />
+  <LinkCard title="Search syntax" href="/guides/search-syntax/" description="Qualified terms, relationship paths, wildcards, and global search." />
 </CardGrid>

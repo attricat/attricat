@@ -1,24 +1,93 @@
 ---
 title: Workspace administration
-description: Manage access, roles, invitations, and navigation for a workspace.
+description: Manage members, roles, invitations, sidebar navigation, API tokens, and the audit log.
 ---
 
-Workspace administrators manage who can access the catalog and what they can do. Open **Manage → Workspace management** to work with members, roles, invitations, and explorer navigation.
+A workspace is one catalog with its own members, blueprints, entities, contexts, and extensions. Workspaces are fully separated: nothing is shared between them.
 
-## Members and roles
+Most administration happens under **Manage → Workspace management**, which has four tabs: **Members**, **Roles**, **Invitations**, and **Navigation**.
 
-Assign roles based on the least privilege needed for each person's work. Built-in roles cover common responsibilities; custom roles let administrators compose a narrower set of permissions.
+## Signing in
 
-Review role changes carefully. A role can grant access to create and change catalog data, manage people, use agents, or operate extensions.
+Every workspace has a **sign-in identifier** that looks like a domain name, such as `acme.example` or `default.local`. People enter it on the sign-in page, then their email and password. The identifier only routes sign-in; Attricat does not look it up in DNS.
+
+Sessions last eight hours. Five failed sign-ins for the same workspace and email within fifteen minutes block further attempts for a while. **Forgot password** sends a reset link that works once, for 30 minutes. For security, the reset form never says whether an address has an account.
+
+Password sign-in is the only method today. Single sign-on, multi-factor authentication, and passkeys are not available yet.
+
+## Members
+
+**Members** lists everyone in the workspace with their role grants. From here you can:
+
+- grant or revoke roles;
+- set a member **inactive**, which signs them out and blocks access without deleting their history;
+- transfer ownership to another active member (owners only).
+
+A workspace always has at least one active owner. Membership and role changes sign the affected person out of existing sessions.
+
+## Roles
+
+A role is a named set of permissions. Four built-in roles cannot be changed:
+
+| Role | Can |
+| --- | --- |
+| `owner` | Everything, including transferring ownership. |
+| `admin` | Everything except workspace ownership and lifecycle. |
+| `editor` | Read and write blueprints, entities, and contexts; delete entities; read data health. Cannot publish blueprints or entities, or administer the workspace. |
+| `viewer` | Read blueprints, entities, contexts, and data health. |
+
+Create **custom roles** under **Roles** to give a narrower or different set. You can only put permissions into a role that you have yourself. Duplicate a built-in role to start from its permissions. Retiring a custom role can move its grants to a replacement role.
+
+The full permission list is in the [permissions reference](/reference/permissions/).
+
+### Scoped grants
+
+A role grant applies at one scope:
+
+| Scope | Applies to |
+| --- | --- |
+| **Entire workspace** | Everything. |
+| **Blueprint family** | One blueprint and its entities, across all revisions. |
+| **Entity** | One entity. |
+| **Context subtree** | One context and everything below it, but not its parent or siblings. |
+
+Grants add up. A person with `viewer` on the workspace and `editor` on the `PL` context subtree can read everything and edit values in `PL` and its children.
+
+The owner role can only be granted on the whole workspace.
 
 ## Invitations
 
-Invite an existing user or create a user and send an onboarding invitation. Invitations expire, and the recipient completes their own password setup through the one-time link.
+Under **Invitations**, invite someone by email with a role, a scope, and an expiry date. They receive a one-time link. Someone who already has an account accepts and joins; someone new sets their password first.
 
-## Explorer navigation
+You can also create a user directly and send them an onboarding link. Revoke a pending invitation at any time.
 
-Pin published entity blueprints to make common catalog areas easy to find. Each shortcut can be limited to workspace roles, so people see navigation appropriate to their responsibilities.
+Invitation and onboarding emails need [SMTP configured](/reference/configuration/#email).
 
-## Audit activity
+## Navigation
 
-Use **Manage → Activity / Audit log** to inspect successful workspace changes, including actions made through agents. Filter by time, actor, or action when investigating a change.
+**Navigation** controls the blueprint shortcuts in the Explorer sidebar. Pin published entity blueprints and, optionally, limit each shortcut to certain roles so people see the parts of the catalog they work on.
+
+Changing navigation needs `workspace_navigation.manage`.
+
+## Personal API tokens
+
+Scripts, the CLI, and integrations authenticate with personal API tokens. Create one under **Profile → Personal access tokens**, or with `acli token create`.
+
+- A token has a label, an optional expiry, and an explicit list of permissions. It can never do more than its owner: if the owner loses a permission, the token loses it too.
+- The token secret starts with `cat_pat_` and is shown once. Store it in a secret manager.
+- Send it as `Authorization: Bearer cat_pat_…`. The token decides the workspace; no header or parameter selects one.
+- Revoke tokens you no longer need. The token list shows when each was last used.
+
+Creating tokens needs `tokens.manage`.
+
+## Audit log
+
+**Manage → Activity / Audit log** lists every successful change in the workspace: who did it (person, token, or agent), what changed, when, and the request ID. Filter by time, actor, action category, target type, or whether a person or an agent made the change.
+
+Audit records never contain passwords, tokens, or secrets. Changes made by an agent show the agent run, the tool, and who approved it. Failed or denied requests are not recorded, because they changed nothing.
+
+Reading the audit log needs `audit.read`.
+
+```sh
+acli audit list --executor-type agent --occurred-after 2026-03-01T00:00:00Z
+```

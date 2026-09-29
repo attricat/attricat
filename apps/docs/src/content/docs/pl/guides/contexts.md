@@ -1,18 +1,76 @@
 ---
 title: Konteksty
-description: Modeluj wartości zależne od rynku, kanału, lokalizacji lub hierarchii.
+description: Przechowuj wartości różniące się zależnie od rynku, języka, kanału lub lokalizacji i kontroluj sposób ich dziedziczenia.
 ---
 
-Kontekst to węzeł w hierarchii przestrzeni roboczej. Używaj kontekstów, gdy encja potrzebuje wartości różniącej się zależnie od rynku, kanału, sklepu lub innego zakresu.
+Kontekst to miejsce, w którym wartości encji mogą się różnić. Typowe konteksty to rynki, języki, kanały sprzedaży i sklepy. Konteksty tworzą drzewo pod kontekstem głównym o nazwie `default`.
 
-## Dziedziczenie
+## Jak działa dziedziczenie
 
-Przestrzeń robocza ma główny kontekst domyślny; encja może przechowywać wartości w nim lub w kontekstach potomnych. Jeśli atrybut dziedziczy wartości, brak lokalnej wartości oznacza użycie wartości z najbliższego przodka, aż do kontekstu domyślnego. Atrybut z `context_fallback = "none"` nie dziedziczy wartości.
+Każda encja może mieć wartości w dowolnym kontekście. Gdy kontekst nie ma wartości dla atrybutu, Attricat sprawdza jego kontekst nadrzędny, następnie nadrzędny kontekstu nadrzędnego, aż do `default`, i pokazuje pierwszą znalezioną wartość.
 
-Na przykład produkt może mieć opis domyślny i przetłumaczony opis w kontekście rynku. Potomny kontekst kanału bez własnego opisu użyje opisu rynku, jeśli włączono dziedziczenie.
+```text
+default            description = "Linen shirt"
+└── PL             description = "Lniana koszula"
+    ├── PL-web     (no value → shows "Lniana koszula")
+    └── PL-shop    description = "Koszula z lnu, krój regularny"
+```
 
-## Edycja wartości
+Każdy atrybut może zmienić to zachowanie:
 
-Wybierz kontekst podczas wyświetlania lub edycji encji. Atrybuty skonfigurowane do edycji wyłącznie w kontekście domyślnym są tylko do odczytu poza nim. Inne atrybuty mogą zostać nadpisane, jeśli pozwalają na to uprawnienia.
+- `context_fallback = "none"` wyłącza dziedziczenie. Kontekst bez własnej wartości nie pokazuje niczego. Używaj tego dla wartości, które nie mogą przechodzić do kontekstów podrzędnych, na przykład promocji dla jednego kanału.
+- `context_editable = "default"` pozwala zapisywać wartość tylko w `default`. Inne konteksty pokazują ją tylko do odczytu. Używaj tego dla faktów globalnych, takich jak SKU.
 
-Twórz i organizuj konteksty w **Zarządzaj → Konteksty**. Wybierz jasną hierarchię przed dodaniem wielu nadpisań encji: dziedziczenie podąża za tą hierarchią.
+Wartości relacji są dziedziczone w ten sam sposób.
+
+## Tworzenie kontekstów
+
+Otwórz **Zarządzanie → Konteksty** i wybierz **Utwórz kontekst**.
+
+- **Kod**: litery, cyfry, łączniki i podkreślenia. Za pomocą kodu ludzie i integracje odwołują się do kontekstu.
+- **Kontekst nadrzędny**: miejsce kontekstu w drzewie. Pozostaw korzeń, aby utworzyć kontekst najwyższego poziomu.
+- **Metadane**: opcjonalny obiekt JSON opisujący kontekst, na przykład `{"language": "pl"}`.
+
+Za pomocą CLI:
+
+```sh
+acli context create --code PL --data '{"language":"pl"}'
+acli context create --code PL-web --parent-id <PL-context-id>
+```
+
+Kontekst `default` zawsze ma identyfikator `00000000-0000-4000-8000-000000000001`.
+
+## Zmiana drzewa
+
+Możesz przenieść kontekst pod inny kontekst nadrzędny. Zanim przeniesienie zostanie zapisane, Attricat sprawdza każdą encję względem jej nowego łańcucha dziedziczenia. Jeśli którakolwiek encja stałaby się nieprawidłowa, na przykład przez utratę wymaganej wartości, przeniesienie zostaje odrzucone.
+
+Nie można usunąć kontekstu, który jest w użyciu.
+
+## Praca w kontekście
+
+- W **Przeglądarce** selektor **Kontekst** pokazuje wartości rozstrzygnięte w danym kontekście.
+- Na stronie encji selektor **Kontekst** przełącza zarówno podgląd, jak i formularz edycji.
+- W fasetach relacji **Opcje drzewa** określają kontekst używany do rozwiązywania powiązań.
+
+## Najpierw zaplanuj drzewo
+
+Dziedziczenie podąża za drzewem, więc jego kształt decyduje o tym, ile musisz wpisywać. Umieść wymiar, który współdzieli najwięcej wartości, blisko korzenia. Typowy układ to rynek, a pod nim kanał:
+
+```text
+default
+├── PL
+│   ├── PL-web
+│   └── PL-marketplace
+└── DE
+    └── DE-web
+```
+
+Konteksty domyślnie nie są językami. Jeśli Twoje konteksty reprezentują ustawienia regionalne, zapisz to w ich metadanych i uzgodnij tę konwencję w zespole. Zobacz [Modelowanie katalogu](/pl/builders/modeling/#konteksty).
+
+## Konteksty jako kanały publikacji
+
+Każdy kontekst można włączyć jako kanał eksportu w **Zarządzanie → Eksporty**. Encje są wtedy publikowane w nim osobno. Zobacz [Publikowanie](/pl/guides/publishing/).
+
+## Uprawnienia
+
+Uprawnienie `contexts.read` jest potrzebne do wyświetlania kontekstów, a `contexts.write` do ich tworzenia, zmieniania lub usuwania oraz do włączania kanałów publikacji. Przyznanie roli można ograniczyć do poddrzewa kontekstów: obowiązuje ono wtedy w tym kontekście i we wszystkim pod nim, ale nie w kontekście nadrzędnym ani w kontekstach równorzędnych.
