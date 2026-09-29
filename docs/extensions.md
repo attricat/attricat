@@ -680,10 +680,17 @@ contextual actions—not an application-wide navigation tree.
   private health metrics and filter values are not passed to the frame. At most
   three cards are visible before overflow. The panel is read-only.
 
-The manifest also recognizes `entity_attribute_panel`,
-`blueprint_publish_check`, and `file_panel`. These three
-placements are **not mounted by the current web client**; do not depend on
-runtime display until host-owned contexts and placements are implemented.
+- **`blueprint_publish_check`** (`panel`, requiring
+  `client.blueprint_publish_check`) appears in the blueprint revision's publish
+  confirmation dialog. Its strict v1 context contains `context_version: 1`,
+  `blueprint_id`, and `blueprint_version`; the frame receives no draft contents.
+  This panel is **informational only**: it cannot block or approve publication,
+  call commands, or replace the host's server-side validation. Authoritative
+  publish-time checks require a separate server contract.
+
+The manifest also recognizes `entity_attribute_panel` and `file_panel`.
+These two placements are **not mounted by the current web client**; do not depend
+on runtime display until host-owned contexts and placements are implemented.
 
 All of the mounted frames use the same mediated `catalog` API and capability checks
 as route contributions. The host re-authorizes every broker call and unmounts

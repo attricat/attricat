@@ -83,6 +83,47 @@ const renderOutlet = () => {
 beforeEach(() => vi.clearAllMocks());
 
 describe('ExtensionOutlet', () => {
+  it('mounts only read-only publish panels for a strict blueprint revision', async () => {
+    vi.mocked(getExtensionRuntime).mockResolvedValue([
+      {
+        ...contribution,
+        id: 'publish-check',
+        kind: 'panel',
+        outlet: 'blueprint_publish_check',
+      },
+      {
+        ...contribution,
+        id: 'wrong-kind',
+        kind: 'action',
+        outlet: 'blueprint_publish_check',
+      },
+    ]);
+    const queryClient = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    });
+    const context = {
+      context_version: 1,
+      blueprint_id: '22222222-2222-4222-8222-222222222222',
+      blueprint_version: 1,
+    };
+    const { rerender } = render(
+      <QueryClientProvider client={queryClient}>
+        <ExtensionOutlet outlet="blueprint_publish_check" context={context} />
+      </QueryClientProvider>,
+    );
+    expect(await screen.findByText('publish-check')).toBeTruthy();
+    expect(screen.queryByText('wrong-kind')).toBeNull();
+    rerender(
+      <QueryClientProvider client={queryClient}>
+        <ExtensionOutlet
+          outlet="blueprint_publish_check"
+          context={{ ...context, draft: true }}
+        />
+      </QueryClientProvider>,
+    );
+    expect(screen.queryByText('publish-check')).toBeNull();
+  });
+
   it('renders only declared data-health panels in host-owned cards', async () => {
     vi.mocked(getExtensionRuntime).mockResolvedValue([
       {

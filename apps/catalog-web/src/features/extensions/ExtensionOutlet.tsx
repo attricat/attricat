@@ -44,7 +44,8 @@ type Outlet =
   | 'audit_event_panel'
   | 'explorer_action'
   | 'explorer_bulk_action'
-  | 'data_health_card';
+  | 'data_health_card'
+  | 'blueprint_publish_check';
 
 const contributionKey = (contribution: ExtensionContribution) =>
   `${contribution.extension_id}:${contribution.id}:${contribution.release_id}`;
@@ -81,6 +82,7 @@ const outletPolicies = {
     secondaryCapacity: 3,
   },
   data_health_card: { kind: 'card', visibleCapacity: 3 },
+  blueprint_publish_check: { kind: 'panel', visibleCapacity: 3 },
 } as const;
 
 const embeddedOutlets = new Set<Outlet>([
@@ -101,6 +103,7 @@ const panelOutlets = new Set<Outlet>([
   'blueprint_panel',
   'audit_event_panel',
   'data_health_card',
+  'blueprint_publish_check',
 ]);
 const supportsOutlet = (contribution: ExtensionContribution, outlet: Outlet) =>
   contribution.outlet === outlet &&
@@ -161,6 +164,13 @@ const OutletContribution = ({
 // New outlet contexts are deliberately small, strict, and versioned. They are
 // the only page data an extension frame receives for these surfaces.
 const outletContextSchemas = {
+  blueprint_publish_check: z
+    .object({
+      context_version: z.literal(1),
+      blueprint_id: z.uuid(),
+      blueprint_version: z.number().int().positive(),
+    })
+    .strict(),
   data_health_card: z.object({ context_version: z.literal(1) }).strict(),
   explorer_bulk_action: z
     .object({

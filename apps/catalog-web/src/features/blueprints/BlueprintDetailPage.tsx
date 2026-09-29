@@ -587,6 +587,22 @@ export const BlueprintDetailPage = ({
                   version: blueprint.version,
                 })}
               </DialogContentText>
+              {publishConfirmationOpen && (
+                <Box sx={{ mt: 2 }}>
+                  <ExtensionOutlet
+                    context={{
+                      context_version: 1,
+                      blueprint_id: blueprint.id,
+                      blueprint_version: blueprint.version,
+                    }}
+                    outlet="blueprint_publish_check"
+                    runtimeScope={{
+                      blueprintId: blueprint.id,
+                      blueprintVersion: blueprint.version,
+                    }}
+                  />
+                </Box>
+              )}
             </DialogContent>
             <DialogActions>
               <Button
