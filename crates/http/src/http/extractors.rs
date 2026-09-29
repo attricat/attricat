@@ -1,6 +1,6 @@
 use axum::{
     Json,
-    extract::{FromRequest, FromRequestParts, Path, Query, Request},
+    extract::{FromRequest, FromRequestParts, OptionalFromRequest, Path, Query, Request},
 };
 use serde::de::DeserializeOwned;
 
@@ -17,9 +17,25 @@ where
 {
     type Rejection = ApiError;
     async fn from_request(req: Request, state: &S) -> Result<Self, Self::Rejection> {
-        Json::<T>::from_request(req, state)
+        <Json<T> as FromRequest<S>>::from_request(req, state)
             .await
             .map(|Json(value)| Self(value))
+            .map_err(ApiError::from_json_rejection)
+    }
+}
+
+/// `Option<ApiJson<T>>` is `None` without a JSON content type; a malformed
+/// JSON body is still rejected with the API error envelope.
+impl<S, T> OptionalFromRequest<S> for ApiJson<T>
+where
+    S: Send + Sync,
+    T: DeserializeOwned + Send,
+{
+    type Rejection = ApiError;
+    async fn from_request(req: Request, state: &S) -> Result<Option<Self>, Self::Rejection> {
+        <Json<T> as OptionalFromRequest<S>>::from_request(req, state)
+            .await
+            .map(|value| value.map(|Json(value)| Self(value)))
             .map_err(ApiError::from_json_rejection)
     }
 }

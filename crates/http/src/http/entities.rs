@@ -334,14 +334,14 @@ pub(super) async fn smart_fill_entity_form(
         .next()
         .and_then(|choice| choice.message.tool_calls.into_iter().next())
         .filter(|call| call.function.name == "propose_entity_form_values")
-        .ok_or_else(|| ApiError::invalid_input("agent did not return form values".to_owned()))?;
+        .ok_or_else(|| ApiError::bad_gateway("agent did not return form values"))?;
     if call.function.arguments.len() > MAX_TOOL_CALL_ARGUMENT_BYTES {
-        return Err(ApiError::invalid_input(
-            "agent returned oversized form values".to_owned(),
+        return Err(ApiError::bad_gateway(
+            "agent returned oversized form values",
         ));
     }
     let arguments = serde_json::from_str::<Value>(&call.function.arguments)
-        .map_err(|_| ApiError::invalid_input("agent returned invalid form values".to_owned()))?;
+        .map_err(|_| ApiError::bad_gateway("agent returned invalid form values"))?;
     let explanation = arguments
         .get("explanation")
         .and_then(Value::as_str)
@@ -354,7 +354,7 @@ pub(super) async fn smart_fill_entity_form(
         .and_then(|value| {
             serde_json::from_value::<std::collections::BTreeMap<String, String>>(value).ok()
         })
-        .ok_or_else(|| ApiError::invalid_input("agent returned invalid form values".to_owned()))?;
+        .ok_or_else(|| ApiError::bad_gateway("agent returned invalid form values"))?;
     let fields = fields
         .into_iter()
         .filter(|(code, value)| {

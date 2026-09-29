@@ -29,9 +29,10 @@ pub(super) async fn list(
 ) -> Result<Json<AuditEventPage>, ApiError> {
     let limit = query.limit.unwrap_or(i64::from(DEFAULT_LIST_PAGE_SIZE));
     let offset = query.offset.unwrap_or(0);
-    if !(1..=100).contains(&limit) || offset < 0 {
+    // Deep OFFSET scans cost linear work; match the entity history bound.
+    if !(1..=100).contains(&limit) || !(0..=10_000).contains(&offset) {
         return Err(ApiError::invalid_input(
-            "limit must be between 1 and 100 and offset must not be negative".to_owned(),
+            "limit must be between 1 and 100 and offset must be between 0 and 10000".to_owned(),
         ));
     }
     if query

@@ -77,6 +77,15 @@ impl ApiError {
             message: "request exceeded the server time limit".to_owned(),
         }
     }
+    /// An upstream dependency (e.g. the LLM provider) returned an unusable
+    /// response to a valid request.
+    pub(super) fn bad_gateway(message: &'static str) -> Self {
+        Self {
+            status: StatusCode::BAD_GATEWAY,
+            code: "bad_gateway",
+            message: message.to_owned(),
+        }
+    }
     pub(super) fn internal(message: &'static str) -> Self {
         Self {
             status: StatusCode::INTERNAL_SERVER_ERROR,

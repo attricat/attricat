@@ -346,6 +346,14 @@ pub(super) enum StorageResponse {
     Page(StoragePageResponse),
 }
 
+/// Decompresses and validates a release archive off the async executor.
+async fn unpack_extension(archive: impl Into<Bytes>) -> Result<ExtensionPackage, ApiError> {
+    let archive = archive.into();
+    super::run_blocking(move || ExtensionPackage::from_tar_zst(&archive))
+        .await
+        .map_err(|error| ApiError::invalid_input(error.to_string()))
+}
+
 /// Only package validation failures are the client's fault; storage and
 /// repository failures keep their own status and never expose internals.
 fn install_error(error: ExtensionInstallError) -> ApiError {
@@ -465,38 +473,18 @@ async fn selected_release(
     let target = GitHubRepository::from_str(&format!("{}/{}", input.owner, input.repository))
         .map_err(|error| ApiError::invalid_input(error.to_string()))?
         .identity();
-    let mut sources = vec![state.official_registry.clone()];
-    sources.extend(
-        repository
-            .extension_registry_sources()
-            .await?
-            .into_iter()
-            .map(|source| GitHubRepository {
-                owner: source.owner,
-                repository: source.repository,
-            }),
-    );
-    for source in sources {
-        let entries =
-            state.registry.discover(&source).await.map_err(|_| {
-                ApiError::service_unavailable("extension registry discovery failed")
-            })?;
-        if let Some(extension) = entries.into_iter().find(|entry| entry.repository == target) {
-            let details = state
-                .registry
-                .extension_details(extension)
-                .await
-                .map_err(|_| {
-                    ApiError::service_unavailable("extension repository could not be resolved")
-                })?;
-            return details
-                .releases
-                .into_iter()
-                .find(|release| release.release_id == input.release_id)
-                .ok_or_else(|| ApiError::not_found("trusted extension release"));
-        }
-    }
-    Err(ApiError::not_found("trusted extension repository"))
+    let extension =
+        super::extension_registries::find_trusted_extension(state, repository, &target).await?;
+    let details = state
+        .registry
+        .extension_details(extension)
+        .await
+        .map_err(|_| ApiError::service_unavailable("extension repository could not be resolved"))?;
+    details
+        .releases
+        .into_iter()
+        .find(|release| release.release_id == input.release_id)
+        .ok_or_else(|| ApiError::not_found("trusted extension release"))
 }
 
 /// Installs a locally supplied archive. The archive goes through the exact
@@ -518,8 +506,9 @@ pub(super) async fn sideload(
             "extension archives must use application/zstd".into(),
         ));
     }
+    let package = unpack_extension(archive).await?;
     let installation = ExtensionInstaller::new(repository, state.object_store.clone())
-        .install("sideload", &archive)
+        .install_package("sideload", package)
         .await
         .map_err(install_error)?;
     Ok((StatusCode::CREATED, Json(installation.into())))
@@ -537,8 +526,9 @@ pub(super) async fn install(
         .await
         .map_err(|_| ApiError::service_unavailable("extension archive could not be downloaded"))?;
     let source = format!("{}@{}", release.source, release.tag_name);
+    let package = unpack_extension(archive).await?;
     let installation = ExtensionInstaller::new(repository, state.object_store.clone())
-        .install(&source, &archive)
+        .install_package(&source, package)
         .await
         .map_err(install_error)?;
     Ok((StatusCode::CREATED, Json(installation.into())))
@@ -558,8 +548,7 @@ pub(super) async fn upgrade(
     // Verify the package identity before passing it to the installer. Checking
     // only its returned installation would allow a selected archive to mutate
     // a different installed extension before this handler rejects the request.
-    let package = ExtensionPackage::from_tar_zst(&archive)
-        .map_err(|error| ApiError::invalid_input(error.to_string()))?;
+    let package = unpack_extension(archive).await?;
     if package.manifest().catalog.id != extension_id {
         return Err(ApiError::invalid_input(
             "selected release has a different extension ID".to_owned(),
@@ -567,7 +556,7 @@ pub(super) async fn upgrade(
     }
     let source = format!("{}@{}", release.source, release.tag_name);
     let installation = ExtensionInstaller::new(repository, state.object_store.clone())
-        .upgrade(&source, &archive)
+        .upgrade_package(&source, package)
         .await
         .map_err(install_error)?;
     Ok(Json(installation.into()))

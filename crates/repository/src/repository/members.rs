@@ -342,13 +342,16 @@ impl CatalogRepository {
         &self,
         actor_id: Uuid,
         workspace_id: Uuid,
+        membership_id: Uuid,
         grant_id: Uuid,
     ) -> Result<(), RepositoryError> {
-        let grant =
-            sqlx::query("SELECT role_id FROM role_grants WHERE id = $1 AND workspace_id = $2")
-                .bind(grant_id)
-                .bind(workspace_id)
-                .fetch_optional(&self.pool)
+        let grant = sqlx::query(
+            "SELECT role_id FROM role_grants WHERE id = $1 AND workspace_id = $2 AND membership_id = $3",
+        )
+        .bind(grant_id)
+        .bind(workspace_id)
+        .bind(membership_id)
+        .fetch_optional(&self.pool)
                 .await?
                 .ok_or(RepositoryError::NotFound("role grant"))?;
         self.require_member_permission(actor_id, workspace_id, "roles.grant")
@@ -362,9 +365,10 @@ impl CatalogRepository {
             .bind(workspace_id)
             .execute(&mut *tx)
             .await?;
-        let grant = sqlx::query("SELECT membership_id, role_id FROM role_grants WHERE id = $1 AND workspace_id = $2 FOR UPDATE")
+        let grant = sqlx::query("SELECT membership_id, role_id FROM role_grants WHERE id = $1 AND workspace_id = $2 AND membership_id = $3 FOR UPDATE")
             .bind(grant_id)
             .bind(workspace_id)
+            .bind(membership_id)
             .fetch_optional(&mut *tx)
             .await?
             .ok_or(RepositoryError::NotFound("role grant"))?;
@@ -464,6 +468,21 @@ impl CatalogRepository {
         self.require_member_permission(actor_id, workspace_id, "members.manage")
             .await?;
         Ok(sqlx::query_as("SELECT i.id, i.invitee_email, i.inviter_user_id, u.email AS inviter_email, i.role_id, r.code AS role_code, i.scope_type, i.scope_target_id, i.expires_at, i.accepted_at, i.accepted_by_user_id, i.revoked_at, i.created_at FROM workspace_invitations i JOIN users u ON u.id = i.inviter_user_id JOIN roles r ON r.id = i.role_id WHERE i.workspace_id = $1 ORDER BY i.created_at DESC").bind(workspace_id).fetch_all(&self.pool).await?)
+    }
+    pub async fn workspace_invitation(
+        &self,
+        actor_id: Uuid,
+        workspace_id: Uuid,
+        id: Uuid,
+    ) -> Result<WorkspaceInvitation, RepositoryError> {
+        self.require_member_permission(actor_id, workspace_id, "members.manage")
+            .await?;
+        sqlx::query_as("SELECT i.id, i.invitee_email, i.inviter_user_id, u.email AS inviter_email, i.role_id, r.code AS role_code, i.scope_type, i.scope_target_id, i.expires_at, i.accepted_at, i.accepted_by_user_id, i.revoked_at, i.created_at FROM workspace_invitations i JOIN users u ON u.id = i.inviter_user_id JOIN roles r ON r.id = i.role_id WHERE i.workspace_id = $1 AND i.id = $2")
+            .bind(workspace_id)
+            .bind(id)
+            .fetch_optional(&self.pool)
+            .await?
+            .ok_or(RepositoryError::NotFound("workspace invitation"))
     }
     pub async fn revoke_workspace_invitation(
         &self,

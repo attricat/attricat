@@ -188,10 +188,20 @@ pub(super) async fn search_entity_previews(
             "blueprint.code must not be empty".to_owned(),
         ));
     }
-    if input.filters.len() > MAX_SEARCH_FILTERS {
-        return Err(ApiError::invalid_input(format!(
-            "filters must contain at most {MAX_SEARCH_FILTERS} items"
-        )));
+    // Each filter and facet resolves with its own queries, so bound them all.
+    for (field, len) in [
+        ("filters", input.filters.len()),
+        ("relationship_filters", input.relationship_filters.len()),
+        (
+            "relationship_tree_facets",
+            input.relationship_tree_facets.len(),
+        ),
+    ] {
+        if len > MAX_SEARCH_FILTERS {
+            return Err(ApiError::invalid_input(format!(
+                "{field} must contain at most {MAX_SEARCH_FILTERS} items"
+            )));
+        }
     }
     let limit = input.page.size.unwrap_or(DEFAULT_PAGE_SIZE);
     if limit == 0 || limit > state.max_entity_page_size {
@@ -208,30 +218,19 @@ pub(super) async fn search_entity_previews(
         ))
         .await?
         .ok_or_else(|| ApiError::not_found("blueprint"))?;
-    let selected = match input.blueprint.version {
-        Some(version) => Some(
-            repository
+    let (selected, search_blueprint) = match input.blueprint.version {
+        Some(version) => {
+            let published = repository
                 .get_published_blueprint_by_code_and_version(code, version)
                 .instrument(tracing::info_span!(
                     "sql.operation",
                     label = "blueprint-load"
                 ))
                 .await?
-                .map(|b| b.blueprint.version)
-                .ok_or_else(|| ApiError::not_found("blueprint"))?,
-        ),
-        None => None,
-    };
-    let search_blueprint = match selected {
-        Some(version) => repository
-            .get_published_blueprint_by_code_and_version(code, version)
-            .instrument(tracing::info_span!(
-                "sql.operation",
-                label = "blueprint-load"
-            ))
-            .await?
-            .expect("selected version was checked above"),
-        None => current.clone(),
+                .ok_or_else(|| ApiError::not_found("blueprint"))?;
+            (Some(published.blueprint.version), published)
+        }
+        None => (None, current.clone()),
     };
     let query = input
         .query
@@ -976,17 +975,16 @@ pub(super) async fn relationship_tree_facet_children(
         .get_blueprint_by_code(&input.blueprint.code)
         .await?
         .ok_or_else(|| ApiError::not_found("blueprint"))?;
-    let version = match input.blueprint.version {
+    let published = match input.blueprint.version {
         Some(v) => Some(
             repository
                 .get_published_blueprint_by_code_and_version(&input.blueprint.code, v)
                 .await?
-                .ok_or_else(|| ApiError::not_found("blueprint"))?
-                .blueprint
-                .version,
+                .ok_or_else(|| ApiError::not_found("blueprint"))?,
         ),
         None => None,
     };
+    let version = published.as_ref().map(|b| b.blueprint.version);
     let relationship = source
         .attributes
         .iter()
@@ -1028,13 +1026,7 @@ pub(super) async fn relationship_tree_facet_children(
         .as_deref()
         .map(str::trim)
         .filter(|v| !v.is_empty());
-    let search_blueprint = match version {
-        Some(version) => repository
-            .get_published_blueprint_by_code_and_version(&input.blueprint.code, version)
-            .await?
-            .expect("selected version was checked above"),
-        None => source.clone(),
-    };
+    let search_blueprint = published.unwrap_or_else(|| source.clone());
     // Without a search term, the facet query already scopes its source blueprint
     // and does not need a materialized set of every source entity ID.
     let resolved = match query {

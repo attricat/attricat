@@ -71,6 +71,10 @@ where
             .lock()
             .expect("SQL operation lock is not poisoned")
             .remove(&id);
+        // The middleware unregisters on completion, but a cancelled request
+        // (client disconnect, timeout) never reaches that point. Span IDs are
+        // reused, so a leaked entry would also misattribute later timings.
+        unregister_request_timing(id);
     }
 
     fn on_event(&self, event: &Event<'_>, context: Context<'_, S>) {

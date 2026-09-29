@@ -47,7 +47,17 @@ impl ExtensionInstaller {
         source: &str,
         archive: &[u8],
     ) -> Result<ExtensionInstallation, ExtensionInstallError> {
-        let package = ExtensionPackage::from_tar_zst(archive)?;
+        self.install_package(source, ExtensionPackage::from_tar_zst(archive)?)
+            .await
+    }
+
+    /// Installs an already validated package. Callers on an async runtime
+    /// should unpack archives off the executor (e.g. with `spawn_blocking`).
+    pub async fn install_package(
+        &self,
+        source: &str,
+        package: ExtensionPackage,
+    ) -> Result<ExtensionInstallation, ExtensionInstallError> {
         let installed_release_id = Uuid::new_v4();
         let keys = self.stage_artifacts(&package, installed_release_id).await?;
         match self
@@ -68,7 +78,16 @@ impl ExtensionInstaller {
         source: &str,
         archive: &[u8],
     ) -> Result<ExtensionInstallation, ExtensionInstallError> {
-        let package = ExtensionPackage::from_tar_zst(archive)?;
+        self.upgrade_package(source, ExtensionPackage::from_tar_zst(archive)?)
+            .await
+    }
+
+    /// Upgrades to an already validated package; see [`Self::install_package`].
+    pub async fn upgrade_package(
+        &self,
+        source: &str,
+        package: ExtensionPackage,
+    ) -> Result<ExtensionInstallation, ExtensionInstallError> {
         let installed_release_id = Uuid::new_v4();
         let keys = self.stage_artifacts(&package, installed_release_id).await?;
         match self

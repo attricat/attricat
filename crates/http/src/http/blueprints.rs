@@ -121,7 +121,7 @@ pub(super) async fn start_safe_blueprint_migration_batch(
     State(state): State<AppState>,
     super::auth::ScopedRepository(repository): super::auth::ScopedRepository,
     ApiPath((blueprint_id, version)): ApiPath<(Uuid, i64)>,
-    input: Option<Json<StartBlueprintMigrationBatchRequest>>,
+    input: Option<ApiJson<StartBlueprintMigrationBatchRequest>>,
 ) -> Result<(StatusCode, Json<BlueprintMigrationBatch>), ApiError> {
     let batch = repository
         .start_safe_blueprint_migration_batch_with_removal_disposition(
@@ -129,7 +129,7 @@ pub(super) async fn start_safe_blueprint_migration_batch(
             version,
             input
                 .as_ref()
-                .and_then(|Json(input)| input.removal_disposition.as_deref()),
+                .and_then(|ApiJson(input)| input.removal_disposition.as_deref()),
         )
         .await?;
     invalidate_data_health(&state, &repository);
