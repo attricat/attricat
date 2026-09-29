@@ -689,7 +689,7 @@ pub async fn execute_read(
         .expect("models serialize"),
         "get_context" => serde_json::to_value(repository.get_context_by_id(parse_uuid(&arguments, "context_id")?).await?
             .ok_or(RepositoryError::NotFound("context"))?).expect("context serializes"),
-        "list_saved_searches" => json!(repository.list_saved_views(actor).await?
+        "list_saved_searches" => json!(repository.list_saved_views(actor, "").await?
             .into_iter().filter(|view| view.owner_user_id == actor && view.kind == "explorer_search")
             .map(|view| json!({"id":view.id,"name":view.name,"description":view.description,"visibility":view.visibility,"blueprint":view.state.get("blueprint"),"updated_at":view.updated_at}))
             .collect::<Vec<_>>()),

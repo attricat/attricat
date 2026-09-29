@@ -8,17 +8,28 @@ import {
   DialogContent,
   DialogTitle,
   IconButton,
+  InputAdornment,
+  LinearProgress,
   List,
   ListItem,
   ListItemButton,
   ListItemText,
+  TextField,
   Tooltip,
   Typography,
 } from '@mui/material';
-import { Trash2Icon } from 'lucide-react';
+import { keepPreviousData, useQuery } from '@tanstack/react-query';
+import { SearchIcon, Trash2Icon } from 'lucide-react';
+import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { smallIconSize } from '../../components/iconSizes';
 import type { ExplorerSearch } from '../explorer/search';
+import { listSavedViews } from './api';
+import {
+  SAVED_VIEW_SEARCH_DEBOUNCE_MS,
+  SAVED_VIEW_SEARCH_MAX_LENGTH,
+} from './constants';
+import { savedViewQueryKeys } from './queryKeys';
 import type { SavedSearchActions } from './useSavedSearchActions';
 
 export const SavedSearchesDialog = ({
@@ -33,17 +44,56 @@ export const SavedSearchesDialog = ({
   search: ExplorerSearch;
 }) => {
   const { t } = useTranslation();
-  const { busy, canDelete, canEdit, isDraft, list } = actions;
+  const { busy, canDelete, canEdit, isDraft } = actions;
+  const [filter, setFilter] = useState('');
+  const [searchText, setSearchText] = useState('');
+  useEffect(() => {
+    const timeout = window.setTimeout(
+      () => setSearchText(filter.trim()),
+      SAVED_VIEW_SEARCH_DEBOUNCE_MS,
+    );
+    return () => window.clearTimeout(timeout);
+  }, [filter]);
+  const list = useQuery({
+    queryKey: savedViewQueryKeys.list(searchText),
+    queryFn: ({ signal }) => listSavedViews(searchText, signal),
+    enabled: open,
+    placeholderData: keepPreviousData,
+  });
   const views = list.data ?? [];
 
   return (
     <Dialog open={open} onClose={onClose} fullWidth maxWidth="sm">
       <DialogTitle>{t('explorer.savedSearches')}</DialogTitle>
       <DialogContent dividers>
+        <TextField
+          fullWidth
+          label={t('explorer.filterSavedSearches')}
+          onChange={(event) => setFilter(event.target.value)}
+          size="small"
+          slotProps={{
+            htmlInput: { maxLength: SAVED_VIEW_SEARCH_MAX_LENGTH },
+            input: {
+              startAdornment: (
+                <InputAdornment position="start">
+                  <SearchIcon size={smallIconSize} />
+                </InputAdornment>
+              ),
+            },
+          }}
+          sx={{ mb: 1.5, mt: 0.5 }}
+          type="search"
+          value={filter}
+        />
+        {list.isFetching && list.isPlaceholderData && (
+          <LinearProgress sx={{ mb: 1 }} />
+        )}
         {list.isError && <Alert severity="error">{list.error.message}</Alert>}
         {list.isSuccess && views.length === 0 && (
           <Typography color="text.secondary" variant="body2">
-            {t('explorer.noSavedSearches')}
+            {searchText
+              ? t('explorer.noMatchingSavedSearches')
+              : t('explorer.noSavedSearches')}
           </Typography>
         )}
         {views.length > 0 && (

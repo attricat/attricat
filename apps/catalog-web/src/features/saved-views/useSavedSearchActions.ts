@@ -13,7 +13,6 @@ import {
   createViewStateLink,
   deleteSavedView,
   getSavedView,
-  listSavedViews,
   updateSavedView,
 } from './api';
 import {
@@ -47,10 +46,6 @@ export const useSavedSearchActions = ({
   const [saveOpen, setSaveOpen] = useState(false);
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
-  const list = useQuery({
-    queryKey: savedViewQueryKeys.list(),
-    queryFn: ({ signal }) => listSavedViews(signal),
-  });
   const originalView = useQuery({
     queryKey: savedViewQueryKeys.detail(search.sourceView ?? '', false),
     queryFn: ({ signal }) =>
@@ -158,7 +153,6 @@ export const useSavedSearchActions = ({
     discard,
     error,
     isDraft,
-    list,
     openSaveDialog,
     openView,
     remove,

@@ -313,7 +313,7 @@ controls and sortable headers.
 
 ## Saved views and share links
 
-All routes require an authenticated workspace principal with `entities.read`. `GET /saved-views` lists the current user's private and workspace-visible named views (up to 100). `GET /saved-views/{id}` reads a named view; `POST /saved-views` creates one; `PUT /saved-views/{id}` and `DELETE /saved-views/{id}` update/delete a view owned by the caller. Nonexistent or inaccessible views return 404.
+All routes require an authenticated workspace principal with `entities.read`. `GET /saved-views` lists the current user's private and workspace-visible named views (up to 100); the optional `q` parameter (at most 120 characters) keeps views whose name or description contains it, ignoring case. `GET /saved-views/{id}` reads a named view; `POST /saved-views` creates one; `PUT /saved-views/{id}` and `DELETE /saved-views/{id}` update/delete a view owned by the caller. Nonexistent or inaccessible views return 404.
 
 `POST /view-state-links` creates or reuses an unnamed link snapshot. `GET /view-state-links/{id}` reads a snapshot for an authorized workspace member. A link is not anonymous access and does not authorize the subsequent entity search.
 

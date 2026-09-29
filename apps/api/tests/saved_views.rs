@@ -27,6 +27,29 @@ async fn saved_views_are_scoped_and_link_snapshots_are_reusable(pool: PgPool) {
         .unwrap();
     assert_eq!(listed.as_array().unwrap().len(), 1);
     assert_eq!(listed[0]["state"], state);
+    for (search, expected) in [("LAPT", 1), ("desktops", 0)] {
+        let filtered: Value = client
+            .get(format!("{base_url}/saved-views"))
+            .query(&[("q", search)])
+            .send()
+            .await
+            .unwrap()
+            .json()
+            .await
+            .unwrap();
+        assert_eq!(filtered.as_array().unwrap().len(), expected, "{search}");
+    }
+    let too_long = "x".repeat(121);
+    assert_eq!(
+        client
+            .get(format!("{base_url}/saved-views"))
+            .query(&[("q", too_long.as_str())])
+            .send()
+            .await
+            .unwrap()
+            .status(),
+        422
+    );
     let loaded: Value = client
         .get(format!("{base_url}/saved-views/{id}"))
         .send()

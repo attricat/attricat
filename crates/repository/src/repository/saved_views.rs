@@ -30,13 +30,20 @@ fn state_hash(state: &Value) -> String {
 }
 
 impl CatalogRepository {
-    pub async fn list_saved_views(&self, actor: Uuid) -> Result<Vec<SavedView>, RepositoryError> {
+    /// Lists named views visible to `actor`, optionally narrowed to views whose
+    /// name or description contains `search` case-insensitively.
+    pub async fn list_saved_views(
+        &self,
+        actor: Uuid,
+        search: &str,
+    ) -> Result<Vec<SavedView>, RepositoryError> {
         let query = format!(
-            "SELECT {FIELDS} FROM saved_views WHERE workspace_id=$1 AND deleted_at IS NULL AND (owner_user_id=$2 OR visibility='workspace') AND visibility<>'link' ORDER BY updated_at DESC LIMIT 100"
+            "SELECT {FIELDS} FROM saved_views WHERE workspace_id=$1 AND deleted_at IS NULL AND (owner_user_id=$2 OR visibility='workspace') AND visibility<>'link' AND ($3 = '' OR position(lower($3) in lower(coalesce(name,''))) > 0 OR position(lower($3) in lower(coalesce(description,''))) > 0) ORDER BY updated_at DESC LIMIT 100"
         );
         Ok(sqlx::query_as(&query)
             .bind(self.workspace_id_for_runtime())
             .bind(actor)
+            .bind(search)
             .fetch_all(&self.pool)
             .await?)
     }

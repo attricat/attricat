@@ -203,7 +203,7 @@ acli file download-variant <file-id> <kind> --output preview.webp [--range 'byte
 
 ## Saved searches
 
-`acli saved-view list`, `acli saved-view get <id>`, `acli saved-view create --name <name> --state <json-or-file> [--visibility private|workspace] [--description <text>]`, `acli saved-view update <id> --name <name> --state <json-or-file>`, `acli saved-view delete <id>`, and `acli saved-view link --state <json-or-file>` operate on Explorer saved views. The state must contain at least a blueprint code, for example:
+`acli saved-view list [--query <text>]`, `acli saved-view get <id>`, `acli saved-view create --name <name> --state <json-or-file> [--visibility private|workspace] [--description <text>]`, `acli saved-view update <id> --name <name> --state <json-or-file>`, `acli saved-view delete <id>`, and `acli saved-view link --state <json-or-file>` operate on Explorer saved views. The state must contain at least a blueprint code, for example:
 
 ```sh
 acli saved-view create --name 'Active assets' --visibility workspace \

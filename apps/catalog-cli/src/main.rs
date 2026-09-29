@@ -159,7 +159,11 @@ enum Command {
 
 #[derive(Subcommand)]
 enum SavedViewCommand {
-    List,
+    List {
+        /// Only list views whose name or description contains this text.
+        #[arg(long)]
+        query: Option<String>,
+    },
     Get {
         id: Uuid,
     },
@@ -1459,7 +1463,17 @@ async fn run(cli: Cli) -> Result<String, CliError> {
         Command::Health => request(&client, &server, Method::GET, "/health", None).await,
         Command::SavedView { command } => {
             let (method, path, payload, url_key) = match command {
-                SavedViewCommand::List => (Method::GET, "/saved-views".to_owned(), None, None),
+                SavedViewCommand::List { query } => {
+                    let path = match query {
+                        Some(query) => {
+                            let mut params = url::form_urlencoded::Serializer::new(String::new());
+                            params.append_pair("q", &query);
+                            format!("/saved-views?{}", params.finish())
+                        }
+                        None => "/saved-views".to_owned(),
+                    };
+                    (Method::GET, path, None, None)
+                }
                 SavedViewCommand::Get { id } => {
                     (Method::GET, format!("/saved-views/{id}"), None, None)
                 }

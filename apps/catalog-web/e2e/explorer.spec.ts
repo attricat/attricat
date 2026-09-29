@@ -120,10 +120,24 @@ test('saves an Explorer search and restores it through a short URL', async ({
   });
   await expect(activator).toHaveAttribute('aria-pressed', 'true');
   await activator.click();
+  const savedSearchDialog = page.getByRole('dialog', {
+    name: 'Saved searches',
+  });
   await expect(
-    page.getByRole('dialog', { name: 'Saved searches' }).getByRole('button', {
+    savedSearchDialog.getByRole('button', {
       name: 'Delete saved search My saved products',
     }),
+  ).toBeVisible();
+  const filter = savedSearchDialog.getByRole('searchbox', {
+    name: 'Filter saved searches',
+  });
+  await filter.fill(`no match ${code}`);
+  await expect(
+    savedSearchDialog.getByText('No saved searches match this filter.'),
+  ).toBeVisible();
+  await filter.fill('MY SAVED PROD');
+  await expect(
+    savedSearchDialog.getByText('My saved products').first(),
   ).toBeVisible();
   expect(page.url()).toBe(url);
 });

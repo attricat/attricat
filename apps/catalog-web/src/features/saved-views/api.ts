@@ -19,8 +19,14 @@ const statePayload = (state: ExplorerSearch) => ({
   state: inlineExplorerSearch(state),
 });
 
-export const listSavedViews = (signal?: AbortSignal) =>
-  request(SAVED_VIEWS_PATH, z.array(savedViewSchema), { signal });
+export const listSavedViews = (search: string, signal?: AbortSignal) =>
+  request(
+    search
+      ? `${SAVED_VIEWS_PATH}?${new URLSearchParams({ q: search })}`
+      : SAVED_VIEWS_PATH,
+    z.array(savedViewSchema),
+    { signal },
+  );
 export const getSavedView = (id: string, link: boolean, signal?: AbortSignal) =>
   request(
     `${link ? VIEW_STATE_LINKS_PATH : SAVED_VIEWS_PATH}/${encodeURIComponent(id)}`,

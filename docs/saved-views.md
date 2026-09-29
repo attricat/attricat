@@ -9,14 +9,15 @@ search endpoint and checks current blueprint permissions and validation.
 - `/?savedView=<uuid>` opens a named search. **Private** views are readable by
   their owner; **Workspace** views are readable by authorized workspace members.
   Only the owner can update or delete a named view.
-- `/?viewState=<uuid>` opens an unnamed snapshot created by **Copy link** when
+- `/?viewState=<uuid>` opens an unnamed snapshot created by **Share search** when
   inline URL state is too large. Anyone with the ID *and* workspace access and
   `entities.read` can open it; treat it as shareable, not private. Snapshots are
   not listed.
 - Small searches remain inline in the Explorer URL. Changing filters does not
   write a saved view.
 
-Named views are listed newest first, up to 100. Views and snapshots belong to
+Named views are listed newest first, up to 100. The Explorer saved searches
+dialog filters them by name or description through the list endpoint. Views and snapshots belong to
 one workspace; a link never grants access to catalog data.
 
 ## State

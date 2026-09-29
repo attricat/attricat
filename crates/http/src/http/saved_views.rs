@@ -6,7 +6,7 @@ use uuid::Uuid;
 use super::{
     auth::{AuthenticatedPrincipal, ScopedRepository},
     error::ApiError,
-    extractors::{ApiJson, ApiPath},
+    extractors::{ApiJson, ApiPath, ApiQuery},
 };
 use crate::repository::SavedView;
 
@@ -19,6 +19,14 @@ pub(super) struct ViewInput {
     visibility: String,
     state: Value,
 }
+
+#[derive(Deserialize)]
+pub(super) struct ListQuery {
+    #[serde(default)]
+    q: String,
+}
+
+const MAX_LIST_SEARCH_LENGTH: usize = 120;
 
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -208,8 +216,13 @@ fn validate_named(input: &ViewInput) -> Result<(&str, Option<&str>), ApiError> {
 pub(super) async fn list(
     ScopedRepository(repository): ScopedRepository,
     AuthenticatedPrincipal(actor, _): AuthenticatedPrincipal,
+    ApiQuery(query): ApiQuery<ListQuery>,
 ) -> Result<Json<Vec<SavedView>>, ApiError> {
-    Ok(Json(repository.list_saved_views(actor).await?))
+    let search = query.q.trim();
+    if search.chars().count() > MAX_LIST_SEARCH_LENGTH || search.contains('\0') {
+        return Err(ApiError::invalid_input("invalid saved view search".into()));
+    }
+    Ok(Json(repository.list_saved_views(actor, search).await?))
 }
 pub(super) async fn get(
     ScopedRepository(repository): ScopedRepository,
