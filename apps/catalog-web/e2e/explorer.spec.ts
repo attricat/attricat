@@ -139,6 +139,16 @@ test('saves an Explorer search and restores it through a short URL', async ({
   await expect(
     savedSearchDialog.getByText('My saved products').first(),
   ).toBeVisible();
+  await savedSearchDialog
+    .getByRole('button', { name: 'Clear saved search' })
+    .click();
+  await expect(
+    page.getByRole('button', { name: 'Saved searches' }),
+  ).toHaveAttribute('aria-pressed', 'false');
+  await expect(page.getByLabel('Query')).toHaveValue('');
+  expect(new URL(page.url()).searchParams.get('savedView')).toBeNull();
+  await page.goto(url);
+  await expect(page.getByLabel('Query')).toHaveValue('example');
   expect(page.url()).toBe(url);
 });
 

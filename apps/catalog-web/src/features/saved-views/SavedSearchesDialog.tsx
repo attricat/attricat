@@ -158,6 +158,17 @@ export const SavedSearchesDialog = ({
         )}
       </DialogContent>
       <DialogActions>
+        {search.sourceView && (
+          <Button
+            disabled={busy}
+            onClick={() => {
+              void actions.clear();
+              onClose();
+            }}
+          >
+            {t('explorer.clearSavedSearch')}
+          </Button>
+        )}
         {isDraft && (
           <Button
             disabled={busy}

@@ -143,11 +143,18 @@ export const useSavedSearchActions = ({
     navigate({ to: '/', search: { savedView: id } });
   const discard = () =>
     search.sourceView ? openView(search.sourceView) : Promise.resolve();
+  // Leaves the saved search intact and returns to a fresh search of its blueprint.
+  const clear = () =>
+    navigate({
+      to: '/',
+      search: { blueprint: search.blueprint, locked: search.locked },
+    });
 
   return {
     busy,
     canDelete,
     canEdit,
+    clear,
     closeSaveDialog: () => setSaveOpen(false),
     copyLink,
     discard,

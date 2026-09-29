@@ -496,6 +496,7 @@
     "deleteSavedSearchConfirm": "Usunąć zapisane wyszukiwanie?",
     "linkCopied": "Skopiowano link",
     "savedSearches": "Zapisane wyszukiwania",
+    "clearSavedSearch": "Wyczyść zapisane wyszukiwanie",
     "filterSavedSearches": "Filtruj zapisane wyszukiwania",
     "noMatchingSavedSearches": "Żadne zapisane wyszukiwanie nie pasuje do filtra.",
     "savedSearchActive": "Zapisane wyszukiwanie: {{name}}",

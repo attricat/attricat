@@ -488,6 +488,7 @@
     "deleteSavedSearchConfirm": "Delete this saved search?",
     "linkCopied": "Link copied",
     "savedSearches": "Saved searches",
+    "clearSavedSearch": "Clear saved search",
     "filterSavedSearches": "Filter saved searches",
     "noMatchingSavedSearches": "No saved searches match this filter.",
     "savedSearchActive": "Saved search: {{name}}",
