@@ -11,6 +11,13 @@ import { AuditLogPage } from './AuditLogPage';
 vi.mock('./api', () => ({
   listAuditEvents: vi.fn(),
 }));
+const { outletMount } = vi.hoisted(() => ({ outletMount: vi.fn() }));
+vi.mock('../extensions/ExtensionOutlet', () => ({
+  ExtensionOutlet: (props: unknown) => {
+    outletMount(props);
+    return null;
+  },
+}));
 
 const event: AuditEvent = {
   action: 'entity.updated',
@@ -50,6 +57,7 @@ const renderPage = () => {
 describe('AuditLogPage', () => {
   beforeEach(() => {
     vi.mocked(listAuditEvents).mockReset();
+    outletMount.mockClear();
   });
 
   it('opens event details with a labelled button by mouse and keyboard', async () => {
@@ -71,6 +79,10 @@ describe('AuditLogPage', () => {
     expect(
       await screen.findByRole('heading', { name: 'Audit event' }),
     ).toBeTruthy();
+    expect(outletMount).toHaveBeenCalledWith({
+      outlet: 'audit_event_panel',
+      context: { context_version: 1, event_id: event.id },
+    });
 
     await user.keyboard('{Escape}');
     await waitFor(() =>

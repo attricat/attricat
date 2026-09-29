@@ -27,6 +27,7 @@ import {
   type AuditEventFilters,
 } from './api';
 import { auditQueryKeys } from './queryKeys';
+import { ExtensionOutlet } from '../extensions/ExtensionOutlet';
 
 const pageSize = 50;
 const formatDate = (value: string, locale: string) =>
@@ -303,6 +304,10 @@ const EventDrawer = ({
                 value={`${event.agent_tool_name}: ${event.agent_tool_call_id}`}
               />
             )}
+            <ExtensionOutlet
+              context={{ context_version: 1, event_id: event.id }}
+              outlet="audit_event_panel"
+            />
           </Box>
         )}
       </Box>

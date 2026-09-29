@@ -83,6 +83,46 @@ const renderOutlet = () => {
 beforeEach(() => vi.clearAllMocks());
 
 describe('ExtensionOutlet', () => {
+  it('mounts only audit panels with an event ID and no event payload', async () => {
+    vi.mocked(getExtensionRuntime).mockResolvedValue([
+      {
+        ...contribution,
+        id: 'audit-panel',
+        kind: 'panel',
+        outlet: 'audit_event_panel',
+      },
+      {
+        ...contribution,
+        id: 'wrong-kind',
+        kind: 'action',
+        outlet: 'audit_event_panel',
+      },
+    ]);
+    const queryClient = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    });
+    const context = {
+      context_version: 1,
+      event_id: '22222222-2222-4222-8222-222222222222',
+    };
+    const { rerender } = render(
+      <QueryClientProvider client={queryClient}>
+        <ExtensionOutlet outlet="audit_event_panel" context={context} />
+      </QueryClientProvider>,
+    );
+    expect(await screen.findByText('audit-panel')).toBeTruthy();
+    expect(screen.queryByText('wrong-kind')).toBeNull();
+    rerender(
+      <QueryClientProvider client={queryClient}>
+        <ExtensionOutlet
+          outlet="audit_event_panel"
+          context={{ ...context, metadata: { secret: 'private' } }}
+        />
+      </QueryClientProvider>,
+    );
+    expect(screen.queryByText('audit-panel')).toBeNull();
+  });
+
   it('mounts only read-only blueprint panels with a strict revision context', async () => {
     vi.mocked(getExtensionRuntime).mockResolvedValue([
       {

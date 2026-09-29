@@ -651,9 +651,15 @@ contextual actions—not an application-wide navigation tree.
   and `blueprint_version`. Unlike `blueprint_detail_panel`, it stays visible
   when switching between detail tabs.
 
+- **`audit_event_panel`** (`panel`, requiring `client.audit_event_panel`)
+  appears only inside an opened audit-event detail drawer. Its strict v1
+  context is `{ "context_version": 1, "event_id" }`; audit metadata, actor
+  details, and target values are never passed to the frame. The panel is
+  read-only and cannot invoke extension commands.
+
 The manifest also recognizes `explorer_action`, `explorer_bulk_action`,
 `entity_attribute_panel`, `blueprint_publish_check`, `file_panel`,
-`audit_event_panel`, and `data_health_card`. These seven
+and `data_health_card`. These six
 placements are **not mounted by the current web client**; do not depend on
 runtime display until host-owned contexts and placements are implemented.
 
