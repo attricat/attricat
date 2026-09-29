@@ -126,6 +126,8 @@ pub use workspace_navigation::{ExploreNavigationEntry, ExploreNavigationItem};
 pub struct UserAccount {
     pub display_name: Option<String>,
     pub email: String,
+    /// IANA time zone name; `None` follows the client's own zone.
+    pub time_zone: Option<String>,
 }
 
 #[derive(Clone)]
@@ -1046,11 +1048,32 @@ impl CatalogRepository {
     /// Returns only the authenticated principal's account fields. Callers must
     /// derive `user_id` from authentication rather than accepting it from a request.
     pub async fn user_account(&self, user_id: Uuid) -> Result<UserAccount, RepositoryError> {
-        sqlx::query_as("SELECT display_name, email FROM users WHERE id = $1")
+        sqlx::query_as("SELECT display_name, email, time_zone FROM users WHERE id = $1")
             .bind(user_id)
             .fetch_one(&self.pool)
             .await
             .map_err(RepositoryError::from)
+    }
+
+    /// Replaces the authenticated principal's display preferences. Callers
+    /// validate the zone name; `None` clears the preference.
+    pub async fn update_user_preferences(
+        &self,
+        user_id: Uuid,
+        time_zone: Option<&str>,
+    ) -> Result<(), RepositoryError> {
+        let mut transaction = self.pool.begin().await?;
+        let updated = sqlx::query(
+            "UPDATE users SET time_zone = $2, updated_at = clock_timestamp() WHERE id = $1 AND state = 'active'",
+        )
+        .bind(user_id)
+        .bind(time_zone)
+        .execute(&mut *transaction)
+        .await?;
+        if updated.rows_affected() == 0 {
+            return Err(RepositoryError::NotFound("user"));
+        }
+        self.commit_mutation(transaction).await
     }
 
     pub async fn is_active_user(&self, user_id: Uuid) -> Result<bool, RepositoryError> {

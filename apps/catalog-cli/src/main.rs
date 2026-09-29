@@ -225,6 +225,19 @@ enum AuthCommand {
         password_stdin: bool,
     },
     Session,
+    /// Update the authenticated user's display preferences.
+    Preferences {
+        /// IANA time zone used to render timestamps, for example `Europe/Warsaw` or `UTC`.
+        #[arg(
+            long,
+            value_name = "IANA_ZONE",
+            required_unless_present = "clear_time_zone"
+        )]
+        time_zone: Option<String>,
+        /// Follow each client's own time zone instead of a stored preference.
+        #[arg(long, conflicts_with = "time_zone")]
+        clear_time_zone: bool,
+    },
     Logout,
     Renew,
 }
@@ -2142,6 +2155,16 @@ async fn auth_command(
             .await
         }
         AuthCommand::Session => request(client, server, Method::GET, "/auth/session", None).await,
+        AuthCommand::Preferences { time_zone, .. } => {
+            request(
+                client,
+                server,
+                Method::PATCH,
+                "/auth/preferences",
+                Some(json!({ "time_zone": time_zone })),
+            )
+            .await
+        }
         AuthCommand::Logout => {
             let response = client
                 .post(endpoint(server, "/auth/logout")?)
@@ -4102,6 +4125,33 @@ fn segment(value: impl std::fmt::Display) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn auth_preferences_require_exactly_one_time_zone_choice() {
+        assert!(
+            Cli::try_parse_from([
+                "acli",
+                "auth",
+                "preferences",
+                "--time-zone",
+                "Europe/Warsaw"
+            ])
+            .is_ok()
+        );
+        assert!(Cli::try_parse_from(["acli", "auth", "preferences", "--clear-time-zone"]).is_ok());
+        assert!(Cli::try_parse_from(["acli", "auth", "preferences"]).is_err());
+        assert!(
+            Cli::try_parse_from([
+                "acli",
+                "auth",
+                "preferences",
+                "--time-zone",
+                "UTC",
+                "--clear-time-zone"
+            ])
+            .is_err()
+        );
+    }
 
     #[test]
     fn saved_view_commands_accept_json_state_and_reject_bad_identifiers() {

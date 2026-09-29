@@ -31,6 +31,7 @@ verified session; it is never selected by a client workspace header.
 
 `POST /auth/renew` atomically rotates the browser session, `POST /auth/logout`
 revokes it, and login, renew, and `GET /auth/session` return the active user identity,
+preferred `time_zone` (an IANA name, or `null` to follow the client),
 session-bound `workspace_id`, and human-facing workspace `login_identifier`. The local
 password, cookie, CSRF, expiry, and revocation contract is documented in
 [Browser Authentication](authentication.md).
@@ -77,6 +78,7 @@ password, cookie, CSRF, expiry, and revocation contract is documented in
 | `POST` | `/auth/login` | Sign in with a previously resolved workspace identifier, email, and password. |
 | `POST` | `/auth/password-reset` | Request a password-reset message for a local account. |
 | `POST` | `/auth/password-reset/confirm` | Consume a password-reset secret and set a new password. |
+| `PATCH` | `/auth/preferences` | Replace the authenticated user's display preferences, `{ "time_zone": "Europe/Warsaw" \| null }`, and return the updated session payload. Unknown IANA zone names return `422`. Use `acli auth preferences`. |
 | `POST` | `/onboarding/complete` | Complete the public onboarding flow with its verified invitation or lifecycle secret. |
 | `GET` | `/metrics` | Scrape Prometheus service metrics (`data_health.read`). |
 | `GET` | `/audit-events` | List workspace audit evidence (`audit.read`). |

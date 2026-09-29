@@ -44,6 +44,7 @@ acli auth login <workspace-login-identifier> --email <email> --password-stdin
 acli auth password-reset --email <email>
 acli auth password-reset-confirm --token-stdin --password-stdin
 acli --session-file session.json auth session|logout|renew
+acli auth preferences --time-zone <iana-zone>|--clear-time-zone
 acli metrics get --output metrics.prom
 
 acli audit list [--limit 25 --offset 0] [--occurred-after <rfc3339>] [--occurred-before <rfc3339>] [--actor-user-id <uuid>] [--action-category <category>] [--target-type <type>] [--executor-type human|agent] [--agent-run-id <uuid>] [--agent-tool-call-id <uuid>]
