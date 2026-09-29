@@ -645,7 +645,13 @@ contextual actions—not an application-wide navigation tree.
   `context_version: 1`, making it suitable for blueprint-level status,
   validation results, or documentation.
 
-All of these frames use the same mediated `catalog` API and capability checks
+The manifest also recognizes `explorer_action`, `explorer_bulk_action`,
+`entity_attribute_panel`, `blueprint_panel`, `blueprint_publish_check`,
+`file_panel`, `audit_event_panel`, and `data_health_card`. These eight
+placements are **not mounted by the current web client**; do not depend on
+runtime display until host-owned contexts and placements are implemented.
+
+All of the mounted frames use the same mediated `catalog` API and capability checks
 as route contributions. The host re-authorizes every broker call and unmounts
 contributions when their runtime access is removed.
 
@@ -810,6 +816,11 @@ the relevant catalog IDs: blueprint/revision/attribute, or
 entity/attribute/context. Extensions cannot provide DOM selectors, arbitrary
 host routes, React state, or inter-extension RPC.
 
+The `entity_header_action` outlet mounts compact extension actions immediately
+before the entity's host-owned toolbar. Its strict v1 context is
+`{ "context_version": 1, "entity_id", "blueprint_id", "blueprint_version" }`;
+the host shows one primary and three secondary actions before overflow. It
+requires `client.entity_header_action`; commands still need `client.commands`.
 The `explorer_row_action` outlet is host-controlled overflow UI for one entity;
 its strict v1 context is `{ "context_version": 1, "entity_id", "blueprint_id",
 "blueprint_version" }`. The `blueprint_detail_panel` outlet is a host-owned,

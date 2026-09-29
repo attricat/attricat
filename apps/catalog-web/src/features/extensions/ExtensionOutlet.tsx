@@ -35,6 +35,7 @@ type Outlet =
   | 'blueprint_attribute_configuration'
   | 'entity_attribute_decoration'
   | 'entity_action'
+  | 'entity_header_action'
   | 'explorer_row_action'
   | 'blueprint_detail_panel';
 
@@ -53,6 +54,11 @@ const outletPolicies = {
     primaryCapacity: 1,
     secondaryCapacity: 3,
   },
+  entity_header_action: {
+    kind: 'actionBar',
+    primaryCapacity: 1,
+    secondaryCapacity: 3,
+  },
   explorer_row_action: { kind: 'popover' },
   blueprint_detail_panel: { kind: 'panel', visibleCapacity: 3 },
 } as const;
@@ -60,6 +66,7 @@ const outletPolicies = {
 const supportsOutlet = (contribution: ExtensionContribution, outlet: Outlet) =>
   contribution.outlet === outlet &&
   (contribution.kind === 'embedded' ||
+    (outlet === 'entity_header_action' && contribution.kind === 'action') ||
     (outlet === 'navigation' &&
       contribution.kind === 'navigation' &&
       contribution.route !== null) ||
@@ -116,6 +123,14 @@ const OutletContribution = ({
 // New outlet contexts are deliberately small, strict, and versioned. They are
 // the only page data an extension frame receives for these surfaces.
 const outletContextSchemas = {
+  entity_header_action: z
+    .object({
+      blueprint_id: z.uuid(),
+      blueprint_version: z.number().int().positive(),
+      context_version: z.literal(1),
+      entity_id: z.uuid(),
+    })
+    .strict(),
   explorer_row_action: z
     .object({
       blueprint_id: z.uuid(),

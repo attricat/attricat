@@ -231,6 +231,21 @@ export const EntityPreviewPage = ({
             duplicate.error?.message}
         </Alert>
       )}
+      {resolved.data && blueprint.data && (
+        <ExtensionOutlet
+          context={{
+            context_version: 1,
+            entity_id: entityId,
+            blueprint_id: blueprint.data.blueprint.id,
+            blueprint_version: blueprint.data.blueprint.version,
+          }}
+          outlet="entity_header_action"
+          runtimeScope={{
+            blueprintId: blueprint.data.blueprint.id,
+            blueprintVersion: blueprint.data.blueprint.version,
+          }}
+        />
+      )}
       <EntityPreviewToolbar
         entityId={entityId}
         extensionPanelOpen={extensionPanelOpen}

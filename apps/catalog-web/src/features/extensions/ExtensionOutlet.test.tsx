@@ -83,6 +83,43 @@ const renderOutlet = () => {
 beforeEach(() => vi.clearAllMocks());
 
 describe('ExtensionOutlet', () => {
+  it('mounts only action contributions with a valid entity header context', async () => {
+    vi.mocked(getExtensionRuntime).mockResolvedValue([
+      { ...contribution, id: 'header-action', outlet: 'entity_header_action' },
+      {
+        ...contribution,
+        id: 'wrong-kind',
+        kind: 'panel',
+        outlet: 'entity_header_action',
+      },
+    ]);
+    const queryClient = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    });
+    const context = {
+      context_version: 1,
+      entity_id: '33333333-3333-4333-8333-333333333333',
+      blueprint_id: '22222222-2222-4222-8222-222222222222',
+      blueprint_version: 1,
+    };
+    const { rerender } = render(
+      <QueryClientProvider client={queryClient}>
+        <ExtensionOutlet outlet="entity_header_action" context={context} />
+      </QueryClientProvider>,
+    );
+    expect(await screen.findByText('header-action')).toBeTruthy();
+    expect(screen.queryByText('wrong-kind')).toBeNull();
+    rerender(
+      <QueryClientProvider client={queryClient}>
+        <ExtensionOutlet
+          outlet="entity_header_action"
+          context={{ ...context, unexpected: 'private' }}
+        />
+      </QueryClientProvider>,
+    );
+    expect(screen.queryByText('header-action')).toBeNull();
+  });
+
   it.each([
     'entity_preview_panel',
     'entity_action',
