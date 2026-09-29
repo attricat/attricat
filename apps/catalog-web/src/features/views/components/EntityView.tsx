@@ -44,6 +44,7 @@ type Props = {
   values: Record<string, ResolvedValue>;
   renderEditor?: (attribute: Attribute) => ReactNode;
   renderAttributeDecoration?: (attribute: Attribute) => ReactNode;
+  renderAttributePanel?: (attribute: Attribute) => ReactNode;
   skipComponentId?: string;
   contextId?: string;
   entityId?: string;
@@ -55,6 +56,7 @@ const ValueField = ({
   resolved,
   renderEditor,
   renderAttributeDecoration,
+  renderAttributePanel,
   component,
   contextId,
   entityId,
@@ -63,6 +65,7 @@ const ValueField = ({
   resolved?: ResolvedValue;
   renderEditor?: (attribute: Attribute) => ReactNode;
   renderAttributeDecoration?: (attribute: Attribute) => ReactNode;
+  renderAttributePanel?: (attribute: Attribute) => ReactNode;
   component?: ComponentReference | null;
   contextId?: string;
   entityId?: string;
@@ -110,6 +113,7 @@ const ValueField = ({
           </>
         )}
         {renderEditor && renderAttributeDecoration?.(attribute)}
+        {renderAttributePanel?.(attribute)}
       </Stack>
     </FieldErrorBoundary>
   );
@@ -160,6 +164,7 @@ export const EntityView = ({
   values,
   renderEditor,
   renderAttributeDecoration,
+  renderAttributePanel,
   skipComponentId,
   contextId,
   entityId,
@@ -285,6 +290,7 @@ export const EntityView = ({
           entityId={entityId}
           key={key}
           renderAttributeDecoration={renderAttributeDecoration}
+          renderAttributePanel={renderAttributePanel}
           renderEditor={renderEditor}
           resolved={values[attribute.code]}
         />

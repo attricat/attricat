@@ -83,6 +83,50 @@ const renderOutlet = () => {
 beforeEach(() => vi.clearAllMocks());
 
 describe('ExtensionOutlet', () => {
+  it('mounts only attribute panels with a strict entity and revision context', async () => {
+    vi.mocked(getExtensionRuntime).mockResolvedValue([
+      {
+        ...contribution,
+        id: 'attribute-panel',
+        kind: 'panel',
+        outlet: 'entity_attribute_panel',
+      },
+      {
+        ...contribution,
+        id: 'wrong-kind',
+        kind: 'embedded',
+        outlet: 'entity_attribute_panel',
+      },
+    ]);
+    const queryClient = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    });
+    const context = {
+      context_version: 1,
+      entity_id: '33333333-3333-4333-8333-333333333333',
+      attribute_id: '44444444-4444-4444-8444-444444444444',
+      blueprint_id: '22222222-2222-4222-8222-222222222222',
+      blueprint_version: 1,
+      context_id: null,
+    };
+    const { rerender } = render(
+      <QueryClientProvider client={queryClient}>
+        <ExtensionOutlet outlet="entity_attribute_panel" context={context} />
+      </QueryClientProvider>,
+    );
+    expect(await screen.findByText('attribute-panel')).toBeTruthy();
+    expect(screen.queryByText('wrong-kind')).toBeNull();
+    rerender(
+      <QueryClientProvider client={queryClient}>
+        <ExtensionOutlet
+          outlet="entity_attribute_panel"
+          context={{ ...context, value: 'private' }}
+        />
+      </QueryClientProvider>,
+    );
+    expect(screen.queryByText('attribute-panel')).toBeNull();
+  });
+
   it('mounts only read-only publish panels for a strict blueprint revision', async () => {
     vi.mocked(getExtensionRuntime).mockResolvedValue([
       {

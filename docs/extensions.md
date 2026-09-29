@@ -688,9 +688,17 @@ contextual actions—not an application-wide navigation tree.
   call commands, or replace the host's server-side validation. Authoritative
   publish-time checks require a separate server contract.
 
-The manifest also recognizes `entity_attribute_panel` and `file_panel`.
-These two placements are **not mounted by the current web client**; do not depend
-on runtime display until host-owned contexts and placements are implemented.
+- **`entity_attribute_panel`** (`panel`, requiring
+  `client.entity_attribute_panel`) appears below each rendered field in the
+  entity detail view when an enabled extension contributes that outlet. Its
+  strict v1 context contains `context_version: 1`, `entity_id`, `attribute_id`,
+  `blueprint_id`, `blueprint_version`, and nullable `context_id`. No field
+  values are passed automatically. The panel is read-only; it does not appear
+  for attributes outside the blueprint detail view.
+
+The manifest also recognizes `file_panel`, but it is **not mounted by the
+current web client**; do not depend on runtime display until its host-owned
+context and placement are implemented.
 
 All of the mounted frames use the same mediated `catalog` API and capability checks
 as route contributions. The host re-authorizes every broker call and unmounts

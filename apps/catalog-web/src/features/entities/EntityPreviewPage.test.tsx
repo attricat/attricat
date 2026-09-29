@@ -43,6 +43,10 @@ vi.mock('./api', async (importOriginal) => ({
   unpublishEntity: vi.fn(),
 }));
 
+vi.mock('../extensions/api', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../extensions/api')>()),
+  getExtensionRuntime: vi.fn(),
+}));
 vi.mock('../extensions/ExtensionOutlet', () => ({
   ExtensionOutlet: (props: unknown) => {
     outletRender(props);
@@ -71,12 +75,28 @@ vi.mock('./components/EntityExtensionDrawer', () => ({
 vi.mock('../views/components/EntityView', () => ({
   EntityView: ({
     renderAttributeDecoration,
+    renderAttributePanel,
   }: {
-    renderAttributeDecoration: (attribute: {
+    renderAttributeDecoration?: (attribute: {
       id: string;
       code: string;
     }) => React.ReactNode;
-  }) => renderAttributeDecoration({ id: 'attribute-id', code: 'title' }),
+    renderAttributePanel?: (attribute: {
+      id: string;
+      code: string;
+    }) => React.ReactNode;
+  }) => (
+    <>
+      {renderAttributeDecoration?.({
+        id: '44444444-4444-4444-8444-444444444444',
+        code: 'title',
+      })}
+      {renderAttributePanel?.({
+        id: '44444444-4444-4444-8444-444444444444',
+        code: 'title',
+      })}
+    </>
+  ),
 }));
 
 vi.mock('../auth/api', async (importOriginal) => ({
@@ -108,6 +128,9 @@ const renderPage = (relationshipPickerToken?: string) => {
 
 describe('EntityPreviewPage', () => {
   beforeEach(async () => {
+    const { getExtensionRuntime } = await import('../extensions/api');
+    vi.mocked(getExtensionRuntime).mockReset();
+    vi.mocked(getExtensionRuntime).mockResolvedValue([]);
     const { currentSession } = await import('../auth/api');
     vi.mocked(currentSession).mockReset();
     vi.mocked(currentSession).mockResolvedValue(null);
@@ -115,6 +138,11 @@ describe('EntityPreviewPage', () => {
     vi.mocked(api.getEntityPublications).mockResolvedValue([]);
   });
   it('offers confirmed deletion only when permitted and navigates away afterwards', async () => {
+    const { getExtensionRuntime } = await import('../extensions/api');
+    outletRender.mockClear();
+    vi.mocked(getExtensionRuntime).mockResolvedValue([
+      { outlet: 'entity_attribute_panel', kind: 'panel' },
+    ] as never);
     const { currentSession } = await import('../auth/api');
     const api = await import('./api');
     const user = userEvent.setup();
@@ -152,6 +180,23 @@ describe('EntityPreviewPage', () => {
     } as never);
     const { unmount } = renderPage();
     await screen.findByText('Product');
+    await waitFor(() =>
+      expect(outletRender).toHaveBeenCalledWith({
+        outlet: 'entity_attribute_panel',
+        context: {
+          context_version: 1,
+          entity_id: '00000000-0000-4000-8000-000000000001',
+          attribute_id: '44444444-4444-4444-8444-444444444444',
+          blueprint_id: '22222222-2222-4222-8222-222222222222',
+          blueprint_version: 1,
+          context_id: '33333333-3333-4333-8333-333333333333',
+        },
+        runtimeScope: {
+          blueprintId: '22222222-2222-4222-8222-222222222222',
+          blueprintVersion: 1,
+        },
+      }),
+    );
     expect(screen.queryByRole('button', { name: 'Delete entity' })).toBeNull();
     unmount();
 

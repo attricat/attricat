@@ -26,6 +26,9 @@ import {
   ExtensionOutlet,
   ExtensionPopoverOutlet,
 } from '../extensions/ExtensionOutlet';
+import { getExtensionRuntime } from '../extensions/api';
+import { extensionQueryKeys } from '../extensions/queryKeys';
+import { extensionRuntimeRefetchInterval } from '../extensions/constants';
 import { listContexts } from '../contexts/api';
 import { contextQueryKeys } from '../contexts/queryKeys';
 import { defaultContextCode } from '../contexts/constants';
@@ -133,6 +136,29 @@ export const EntityPreviewPage = ({
       resolved.data.entity.blueprint_version,
     ),
   });
+  const attributePanels = useQuery({
+    queryKey: extensionQueryKeys.runtime(
+      blueprint.data
+        ? {
+            blueprintId: blueprint.data.blueprint.id,
+            blueprintVersion: blueprint.data.blueprint.version,
+          }
+        : undefined,
+    ),
+    queryFn: () => {
+      if (!blueprint.data) throw new Error('Blueprint revision is unavailable');
+      return getExtensionRuntime({
+        blueprintId: blueprint.data.blueprint.id,
+        blueprintVersion: blueprint.data.blueprint.version,
+      });
+    },
+    enabled: Boolean(blueprint.data),
+    refetchInterval: extensionRuntimeRefetchInterval,
+    retry: false,
+  });
+  const hasAttributePanels = attributePanels.data?.some(
+    (item) => item.outlet === 'entity_attribute_panel' && item.kind === 'panel',
+  );
   const currentBlueprint = useQuery({
     queryKey: entityQueryKeys.currentBlueprint(
       resolved.data?.entity.blueprint_id ?? '',
@@ -367,6 +393,29 @@ export const EntityPreviewPage = ({
                         }}
                       />
                     )}
+                    renderAttributePanel={
+                      hasAttributePanels
+                        ? (attribute) => (
+                            <ExtensionOutlet
+                              context={{
+                                context_version: 1,
+                                entity_id: entityId,
+                                attribute_id: attribute.id,
+                                blueprint_id: blueprint.data.blueprint.id,
+                                blueprint_version:
+                                  blueprint.data.blueprint.version,
+                                context_id: selectedContextId ?? null,
+                              }}
+                              outlet="entity_attribute_panel"
+                              runtimeScope={{
+                                blueprintId: blueprint.data.blueprint.id,
+                                blueprintVersion:
+                                  blueprint.data.blueprint.version,
+                              }}
+                            />
+                          )
+                        : undefined
+                    }
                     values={resolved.data.values}
                     view={detailView}
                     skipComponentId={entityHeadingComponentId}
